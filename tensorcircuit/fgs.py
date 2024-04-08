@@ -29,6 +29,8 @@ def onehot_matrix(i: int, j: int, N: int) -> Tensor:
 # TODO(@refraction-ray): efficiency benchmark with jit
 # TODO(@refraction-ray): FGS mixed state support?
 # TODO(@refraction-ray): overlap?
+# TODO(@refraction-ray): entanglement asymmetry
+# TODO(@refraction-ray): fermionic logarithmic negativity
 
 
 class FGSSimulator:
@@ -497,6 +499,19 @@ class FGSSimulator:
             return keep
         else:
             return keep, prob
+
+    # @classmethod
+    # def product(cls, cm1, cm2):
+    #     L = cm1.shape([-1])//2
+    #     wtransform = cls.wmatrix(L)
+    #     gamma1 = -1.0j * (2*wtransform @ cm1 @ backend.adjoint(wtransform)-backend.eye(2*L))
+    #     gamma2 = -1.0j * (2*wtransform @ cm2 @ backend.adjoint(wtransform)-backend.eye(2*L))
+    #     den = backend.inv(1 + gamma1 @ gamma2)
+    #     idm = backend.eye(2 * L)
+    #     covm = idm - (idm - gamma2) @ den @ (idm - gamma1)
+    #     cm = (1.0j * covm + idm) / 2
+    #     cmatrix = backend.adjoint(wtransform) @ cm @ wtransform * 0.25
+    #     return cmatrix
 
     # def product(self, other):
     #     # self@other
