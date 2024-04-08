@@ -314,7 +314,7 @@ class FGSSimulator:
                     )
                 )
             r += backend.sqrt(backend.det(m + wprod))
-        r /= batch
+        r /= batch  # type: ignore
         return 1 / (1 - n) * backend.log(r)
 
     def entropy(self, subsystems_to_trace_out: Optional[List[int]] = None) -> Tensor:
@@ -1018,7 +1018,7 @@ class FGSTestSimulator:
         self, alpha: Tensor, n: int, subsystems_to_trace_out: List[int]
     ) -> Tensor:
         rho = quantum.reduced_density_matrix(self.state, subsystems_to_trace_out)
-        l = rho.shape[-1]
+        l = rho.shape[-1]  # type:ignore
         r = np.eye(l)
         L = int(np.log(l) / np.log(2) + 0.001)
         qa = np.diagonal(
@@ -1028,14 +1028,14 @@ class FGSTestSimulator:
         )
         qa = qa.reshape([-1])
         for i in range(n):
-            r = r @ (rho @ np.diag(np.exp(1.0j * (alpha[(i + 1) % n] - alpha[i]) * qa)))
+            r = r @ (rho @ np.diag(np.exp(1.0j * (alpha[(i + 1) % n] - alpha[i]) * qa)))  # type: ignore
         return np.trace(r)
 
     def renyi_entanglement_asymmetry(
         self, n: int, subsystems_to_trace_out: List[int]
     ) -> Tensor:
         rho = quantum.reduced_density_matrix(self.state, subsystems_to_trace_out)
-        l = rho.shape[-1]
+        l = rho.shape[-1]  # type: ignore
         L = int(np.log(l) / np.log(2) + 0.001)
 
         qa = np.diagonal(
