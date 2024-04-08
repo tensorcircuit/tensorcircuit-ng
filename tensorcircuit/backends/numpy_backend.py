@@ -393,7 +393,7 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     def vmap(
         self, f: Callable[..., Any], vectorized_argnums: Union[int, Sequence[int]] = 0
     ) -> Any:
-        logger.warning(
+        logger.info(
             "numpy backend has no intrinsic vmap like interface"
             ", use vectorize instead (plain for loop)"
         )
