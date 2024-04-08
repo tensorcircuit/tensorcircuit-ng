@@ -50,7 +50,7 @@ def xy_hamiltonian(theta, L):
     return hi
 
 
-def get_saq_sa(theta, l, L, k, batch=4096):
+def get_saq_sa(theta, l, L, k, batch=1024):
     traceout = [i for i in range(0, L // 2 - l // 2)] + [
         i for i in range(L // 2 + l // 2, L)
     ]
@@ -69,6 +69,19 @@ def asymptotic_saq(theta, l, k):
     )
 
 
+def get_saq_sa_dynamics(t, theta, l, L, k, batch=1024):
+    traceout = [i for i in range(0, L // 2 - l // 2)] + [
+        i for i in range(L // 2 + l // 2, L)
+    ]
+    hi = xy_hamiltonian(theta, L)
+    c = tc.FGSSimulator(L, hc=hi)
+    ht = generate_hopping_h(1.0, L)
+    c.evol_ghamiltonian(t * ht)
+    return np.real(
+        c.renyi_entanglement_asymmetry(k, traceout, batch=batch)
+    ), c.renyi_entropy(k, traceout)
+
+
 if __name__ == "__main__":
     # double check on Fig2 in 2207.14693
     print(get_saq_sa(np.pi / 4, 10, 200, 2), asymptotic_saq(np.pi / 4, 10, 2))
@@ -78,3 +91,8 @@ if __name__ == "__main__":
     print(saq, asymptotic_saq(np.pi / 3, 60, 2), saq - sa)
     saq, sa = get_saq_sa(3 / 2, 100, 600, 3)
     print(saq, asymptotic_saq(3 / 2, 100, 3), saq - sa)
+    # double check on dynamics point for Fig 3
+    saq, sa = get_saq_sa_dynamics(50, np.pi / 3, 60, 600, 2)
+    print(saq - sa)
+    saq, sa = get_saq_sa_dynamics(100, np.pi / 3, 60, 600, 2)
+    print(saq - sa)
