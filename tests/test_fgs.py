@@ -293,8 +293,12 @@ def test_entanglement_asymmetry(backend, highp):
                 sa_ans,
                 atol=2e-4,
             )
-            np.testing.assert_allclose(
-                c.renyi_entanglement_asymmetry(k, traceout, batch=400),
-                saq_ans,
-                atol=1e-1,
+            saq, std = c.renyi_entanglement_asymmetry(
+                k, traceout, batch=400, with_std=True
             )
+            np.testing.assert_allclose(
+                saq,
+                saq_ans,
+                atol=3 * std,
+            )
+            print(std)

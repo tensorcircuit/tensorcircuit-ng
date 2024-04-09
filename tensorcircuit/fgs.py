@@ -265,6 +265,7 @@ class FGSSimulator:
         subsystems_to_trace_out: List[int],
         batch: int = 100,
         status: Optional[Tensor] = None,
+        with_std: bool = False,
     ) -> Tensor:
         """
         Ref: https://arxiv.org/abs/2302.03330
@@ -281,7 +282,7 @@ class FGSSimulator:
         :return: _description_
         :rtype: Tensor
         """
-        r = 0
+        r = []
         if status is None:
             status = backend.implicit_randu([batch, n], -np.pi, np.pi)
         status = backend.cast(status, dtypestr)
@@ -313,9 +314,14 @@ class FGSSimulator:
                         backend.exp(1.0j * (alpha[(i + 1) % n] - alpha[i]) * na)
                     )
                 )
-            r += backend.sqrt(backend.det(m + wprod))
-        r /= batch  # type: ignore
-        return 1 / (1 - n) * backend.log(r)
+            r.append(backend.sqrt(backend.det(m + wprod)))
+        r = backend.stack(r)
+        r_mean = backend.real(backend.mean(r))
+        saq = 1 / (1 - n) * backend.log(r_mean)
+        if not with_std:
+            return saq
+        else:
+            return saq, backend.abs(1 / (1 - n) * backend.real(backend.std(r)) / saq)
 
     def entropy(self, subsystems_to_trace_out: Optional[List[int]] = None) -> Tensor:
         """
