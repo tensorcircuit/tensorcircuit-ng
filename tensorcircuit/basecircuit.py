@@ -569,6 +569,8 @@ class BaseCircuit(AbstractCircuit):
                     backend.set_random_state(key)
                     return self.perfect_sampling()
 
+                # TODO(@refraction-ray): status is not used here
+
                 r = []  # type: ignore
 
                 subkey = random_generator
