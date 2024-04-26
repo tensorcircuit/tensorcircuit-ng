@@ -44,9 +44,6 @@ def test_vmap_tf(tfb):
     assert r.numpy()[0, 0] == 3.0
 
 
-# @pytest.mark.skip(
-#     reason="pytorch backend to be fixed with newly added complex dtype support"
-# )
 def test_vmap_torch(torchb):
     r = universal_vmap()
     assert r.numpy()[0, 0] == 3.0

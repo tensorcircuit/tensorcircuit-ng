@@ -660,12 +660,12 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         self,
         f: Callable[..., Any],
         static_argnums: Optional[Union[int, Sequence[int]]] = None,
-        jit_compile: Optional[bool] = None,
+        jit_compile: bool = False,
         **kws: Any
     ) -> Any:
         if jit_compile is True:
             # experimental feature reusing the jit_compile flag for tf
-            return torch_jit_func(f)
+            return torchlib.compile(f)
         return f
         # return f  # do nothing here until I figure out what torch.jit is for and how does it work
         # see https://github.com/pytorch/pytorch/issues/36910
