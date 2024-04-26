@@ -660,7 +660,7 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         self,
         f: Callable[..., Any],
         static_argnums: Optional[Union[int, Sequence[int]]] = None,
-        jit_compile: bool = False,
+        jit_compile: Optional[bool] = None,
         **kws: Any
     ) -> Any:
         if jit_compile is True:
