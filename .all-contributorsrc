@@ -309,7 +309,17 @@
       "contributions": [
         "code",
         "test",
-        "doc"
+        "doc",
+        "example"
+      ]
+    },
+    {
+      "login": "Gopal-Dahale",
+      "name": "Gopal Ramesh Dahale",
+      "avatar_url": "https://avatars.githubusercontent.com/u/49199003?v=4",
+      "profile": "https://gopal-dahale.github.io/",
+      "contributions": [
+        "example"
       ]
     }
   ],
