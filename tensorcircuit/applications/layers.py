@@ -299,7 +299,7 @@ for gate in ["rx", "ry", "rz", "H", "I"]:
     generate_any_gate_layer(gate)
 
 for gates in itertools.product(*[["x", "y", "z"] for _ in range(2)]):
-    gates = gates[0] + gates[1]
+    gates = gates[0] + gates[1]  # type: ignore
     generate_double_gate(gates)  # type: ignore
     generate_double_gate_layer(gates)  # type: ignore
     generate_any_double_gate_layer(gates)  # type: ignore
@@ -505,7 +505,7 @@ try:
             generate_cirq_any_gate_layer(gate)
 
     for gates in itertools.product(*[["x", "y", "z"] for _ in range(2)]):
-        gates = gates[0] + gates[1]
+        gates = gates[0] + gates[1]  # type: ignore
         generate_cirq_double_gate(gates)  # type: ignore
         generate_cirq_double_gate_layer(gates)  # type: ignore
         generate_cirq_any_double_gate_layer(gates)  # type: ignore
