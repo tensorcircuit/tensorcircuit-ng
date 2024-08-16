@@ -1894,7 +1894,7 @@ def entanglement_negativity(rho: Tensor, transposed_sites: List[int]) -> Tensor:
     rhot = partial_transpose(rho, transposed_sites)
     es = backend.eigvalsh(rhot)
     rhot_m = backend.sum(backend.abs(es))
-    return (backend.log(rhot_m) - 1.0) / 2.0
+    return (rhot_m - 1.0) / 2.0
 
 
 @op2tensor

@@ -56,9 +56,10 @@ def get_saq_sa(theta, l, L, k, batch=1024):
     ]
     hi = xy_hamiltonian(theta, L)
     c = tc.FGSSimulator(L, hc=hi)
-    return np.real(
-        c.renyi_entanglement_asymmetry(k, traceout, batch=batch)
-    ), c.renyi_entropy(k, traceout)
+    return (
+        np.real(c.renyi_entanglement_asymmetry(k, traceout, batch=batch)),
+        c.renyi_entropy(k, traceout),
+    )
 
 
 def asymptotic_saq(theta, l, k):
@@ -77,9 +78,10 @@ def get_saq_sa_dynamics(t, theta, l, L, k, batch=1024):
     c = tc.FGSSimulator(L, hc=hi)
     ht = generate_hopping_h(1.0, L)
     c.evol_ghamiltonian(t * ht)
-    return np.real(
-        c.renyi_entanglement_asymmetry(k, traceout, batch=batch)
-    ), c.renyi_entropy(k, traceout)
+    return (
+        np.real(c.renyi_entanglement_asymmetry(k, traceout, batch=batch)),
+        c.renyi_entropy(k, traceout),
+    )
 
 
 if __name__ == "__main__":
