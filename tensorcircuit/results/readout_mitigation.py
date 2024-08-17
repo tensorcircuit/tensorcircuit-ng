@@ -10,6 +10,7 @@ import warnings
 from time import perf_counter
 
 import numpy as np
+import scipy
 import scipy.linalg as la
 import scipy.sparse.linalg as spla
 from scipy.optimize import minimize
@@ -732,9 +733,15 @@ class ReadoutMit:
 
         P = spla.LinearOperator((M.num_elems, M.num_elems), precond_matvec)
         vec = counts_to_vector(M.sorted_counts)
-        out, error = spla.gmres(
-            L, vec, tol=tol, atol=tol, maxiter=max_iter, M=P, callback=callback
-        )
+        if int(scipy.__version__.split(".")[1]) >= 14:
+            # API change since scipy 1.14
+            out, error = spla.gmres(
+                L, vec, rtol=tol, atol=tol, maxiter=max_iter, M=P, callback=callback
+            )
+        else:
+            out, error = spla.gmres(
+                L, vec, tol=tol, atol=tol, maxiter=max_iter, M=P, callback=callback
+            )
         if error:
             raise M3Error("GMRES did not converge: {}".format(error))
 

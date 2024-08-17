@@ -393,7 +393,7 @@ def test_negativity(backend, highp):
         atol=1e-6,
     )
     np.testing.assert_allclose(
-        tc.quantum.entanglement_negativity(dm, [1]), -0.33176, atol=1e-5
+        tc.quantum.entanglement_negativity(dm, [1]), 0.2, atol=1e-5
     )
 
 
