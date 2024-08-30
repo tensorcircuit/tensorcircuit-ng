@@ -1,12 +1,12 @@
-mypy==1.10.0
-pytest==6.2.4
+mypy==1.11.2
+pytest==7.4.4
 pytest-cov
 pytest-benchmark
 pytest-xdist
 black[jupyter]
 sphinx>=4.0
 pytest-lazy-fixture
-pylint==3.2.3
+pylint==3.2.6
 furo
 sphinx-copybutton
 nbsphinx

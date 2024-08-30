@@ -798,7 +798,7 @@ def set_contractor(
             )
     elif method == "custom_stateful":
         cf = custom_stateful  # type: ignore
-        cf = partial(
+        cf = partial(  # type: ignore
             cf,
             optimizer=optimizer,
             opt_conf=opt_conf,

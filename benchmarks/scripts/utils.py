@@ -285,7 +285,7 @@ class Opt:
         if self.tuning:
             if self.backend == "numpy":
                 self.params = tf.constant(self.params)
-            self.params = self.adam.update(grad, self.params)
+            self.params = self.adam.update(grad, tuple(self.params))
             if self.backend == "numpy":
                 self.params = self.params.numpy()
         print(e)

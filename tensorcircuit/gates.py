@@ -3,13 +3,19 @@ Declarations of single-qubit and two-qubit gates and their corresponding matrix.
 """
 
 import sys
+import warnings
 from copy import deepcopy
 from functools import reduce, partial
 from typing import Any, Callable, Optional, Sequence, List, Union, Tuple
 from operator import mul
-import warnings
 
 import numpy as np
+
+try:
+    from numpy import ComplexWarning
+except ImportError:  # np2.0 compatibility
+    from numpy.exceptions import ComplexWarning
+
 import tensornetwork as tn
 from scipy.stats import unitary_group
 
@@ -893,7 +899,7 @@ def multicontrol_gate(unitary: Tensor, ctrl: Union[int, Sequence[int]] = 1) -> O
     if isinstance(ctrl, int):
         ctrl = [ctrl]
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore", np.ComplexWarning)
+        warnings.simplefilter("ignore", ComplexWarning)
         ctrl0_int = int(ctrl[0] + eps)
     if ctrl0_int == 1:
         leftend = np.zeros([2, 2, 2])

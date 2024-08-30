@@ -93,7 +93,7 @@ class NoiseConf:
                     b2 = tuple(d["index"]) == tuple(_idx)
                     return b1 and b2
 
-                condition = partial(condition, _idx=idx)
+                condition = partial(condition, _idx=idx)  # type: ignore
                 self.nc.append((description, condition, krauslist))
 
         self.has_quantum = True

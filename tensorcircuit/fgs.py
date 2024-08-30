@@ -494,7 +494,7 @@ class FGSSimulator:
     def expectation_2body(
         self, i: int, j: int, now_i: bool = True, now_j: bool = True
     ) -> Tensor:
-        """
+        r"""
         expectation of two fermion terms
         convention: (c, c^\dagger)
         for i>L, c_{i-L}^\dagger is assumed
@@ -509,7 +509,7 @@ class FGSSimulator:
         return self.get_cmatrix(now_i, now_j)[i][(j + self.L) % (2 * self.L)]
 
     def expectation_4body(self, i: int, j: int, k: int, l: int) -> Tensor:
-        """
+        r"""
         expectation of four fermion terms using Wick Thm
         convention: (c, c^\dagger)
         for i>L, c_{i-L}^\dagger is assumed
