@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/https://github.com/tensorcircuit/tensorcircuit-ng">
+  <a href="https://github.com/tensorcircuit/tensorcircuit-ng">
     <img width=90% src="docs/source/statics/logong.png">
   </a>
 </p>
