@@ -1,4 +1,4 @@
-<h1 align="center"> TENSORCIRCUIT </h1>
+<h1 align="center"> TENSORCIRCUIT-NG </h1>
 
 <p align="center">
   <!-- tests (GitHub actions) -->

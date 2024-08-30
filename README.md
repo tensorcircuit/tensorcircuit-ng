@@ -29,9 +29,9 @@
 
 <p align="center"> English | <a href="README_cn.md"> 简体中文 </a></p>
 
-TensorCircuit is the next generation of quantum software framework with support for automatic differentiation, just-in-time compiling, hardware acceleration, and vectorized parallelism.
+TensorCircuit-NG is a high performance quantum software framework, supporting for automatic differentiation, just-in-time compiling, hardware acceleration, and vectorized parallelism, providing unified infrastructures and interfaces for quantum programming.
 
-TensorCircuit is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for highly efficient simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal, noisy and approximate cases. It also supports real quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions since v0.9.
+TensorCircuit is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for highly efficient simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal, noisy and approximate cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions since v0.9.
 
 ## Getting Started
 
@@ -132,16 +132,22 @@ print(tc.quantum.log_negativity(dm, [0]))
 The package is written in pure Python and can be obtained via pip as:
 
 ```python
-pip install tensorcircuit
+pip install tensorcircuit-ng
 ```
 
 We recommend you install this package with tensorflow also installed as:
 
 ```python
-pip install tensorcircuit[tensorflow]
+pip install "tensorcircuit-ng[tensorflow]"
 ```
 
 Other optional dependencies include `[torch]`, `[jax]`, `[qiskit]` and `[cloud]`.
+
+Try nightly build for the newest features:
+
+```python
+pip install tensorcircuit-nightly
+```
 
 We also have [Docker support](/docker).
 
@@ -246,7 +252,7 @@ We welcome [issues](https://github.com/tensorcircuit/tensorcircuit-ng/issues), [
 
 ### License
 
-TensorCircuit is open source, released under the Apache License, Version 2.0.
+TensorCircuit-NG is open source, released under the Apache License, Version 2.0.
 
 ### Contributors
 
