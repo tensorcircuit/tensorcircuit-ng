@@ -1,13 +1,13 @@
 <p align="center">
-  <a href="https://github.com/tencent-quantum-lab/tensorcircuit">
-    <img width=90% src="docs/source/statics/logov2.jpg">
+  <a href="https://github.com/https://github.com/tensorcircuit/tensorcircuit-ng">
+    <img width=90% src="docs/source/statics/logong.png">
   </a>
 </p>
 
 <p align="center">
   <!-- tests (GitHub actions) -->
-  <a href="https://github.com/tencent-quantum-lab/tensorcircuit/actions/workflows/ci.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/tencent-quantum-lab/tensorcircuit/ci.yml?branch=master" />
+  <a href="https://github.com/refraction-ray/tensorcircuit-dev/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/refraction-ray/tensorcircuit-dev/ci.yml?branch=master" />
   </a>
   <!-- docs -->
   <a href="https://tensorcircuit.readthedocs.io/">
