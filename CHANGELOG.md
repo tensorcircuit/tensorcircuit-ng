@@ -2,9 +2,15 @@
 
 ## Unreleased
 
+## 1.0.0
+
 ### Added
 
 - Add support for parameter expression in qiskit translation
+
+### Fixed
+
+- Fix support for numpy>2
 
 ## 0.12.0
 
