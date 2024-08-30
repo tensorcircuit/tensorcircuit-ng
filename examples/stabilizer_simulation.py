@@ -52,7 +52,7 @@ def convert_operation_list_to_stim_circuit(operation_list):
     return stim_circuit
 
 
-# ref: https://quantumcomputing.stackexchange.com/questions/16718/measuring-entanglement-entropy-using-a-stabilizer-circuit-simulator
+# https://quantumcomputing.stackexchange.com/questions/16718/measuring-entanglement-entropy-using-a-stabilizer-circuit-simulator
 def get_binary_matrix(z_stabilizers):
     N = len(z_stabilizers)
     binary_matrix = np.zeros((N, 2 * N))
@@ -99,7 +99,7 @@ def gf2_rank(matrix):
     return rank
 
 
-# ref: https://quantumcomputing.stackexchange.com/questions/27795/exact-probabilities-of-outcomes-for-clifford-circuits-with-mid-circuit-measureme
+# https://quantumcomputing.stackexchange.com/questions/27795/exact-probabilities-of-outcomes-for-clifford-circuits-with-mid-circuit-measureme
 def simulate_stim_circuit_with_mid_measurement(stim_circuit):
     simulator = stim.TableauSimulator()
 

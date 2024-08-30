@@ -336,7 +336,7 @@
   "skipCi": true,
   "repoType": "github",
   "repoHost": "https://github.com",
-  "projectName": "tensorcircuit",
-  "projectOwner": "tencent-quantum-lab",
+  "projectName": "tensorcircuit-ng",
+  "projectOwner": "tensorcircuit",
   "commitType": "docs"
 }

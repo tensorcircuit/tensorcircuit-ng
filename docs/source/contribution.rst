@@ -1,7 +1,7 @@
 Guide for Contributors
 ============================
 
-We welcome everyone’s contributions! The development of TensorCircuit is open-sourced and centered on `GitHub <https://github.com/tencent-quantum-lab/tensorcircuit>`_.
+We welcome everyone’s contributions! The development of TensorCircuit is open-sourced and centered on `GitHub <https://github.com/tensorcircuit/tensorcircuit-ng>`_.
 
 There are various ways to contribute:
 

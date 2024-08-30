@@ -1653,3 +1653,32 @@ def test_circuit_copy(backend):
     c1 = c.copy()
     c.rz(0, theta=0.1)
     assert c1.gate_count() == 1
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("npb")])
+def test_projected_subsystem(backend):
+    c = tc.Circuit(3)
+    c.h(0)
+    c.cnot(0, 1)
+    c.rx(1, theta=0.9)
+    c.cy(1, 2)
+    s = c.projected_subsystem(tc.backend.convert_to_tensor(np.array([1, 1, 1.0])), (0,))
+    np.testing.assert_allclose(s, np.array([0.43496, 0.900447j]), atol=1e-5)
+    s = c.projected_subsystem(
+        tc.backend.convert_to_tensor(np.array([0, 0, 0.0])), (0, 2)
+    )
+    np.testing.assert_allclose(s[0], 0.900447, atol=1e-5)
+
+    c = tc.DMCircuit(3)
+    c.h(0)
+    c.cnot(0, 1)
+    c.rx(1, theta=0.9)
+    c.cy(1, 2)
+    s = c.projected_subsystem(tc.backend.convert_to_tensor(np.array([1, 1, 1.0])), (0,))
+    assert tc.backend.shape_tuple(s) == (2, 2)
+    np.testing.assert_allclose(s[1, 1], 0.8108051, atol=1e-5)
+    s = c.projected_subsystem(
+        tc.backend.convert_to_tensor(np.array([1, 1, 1.0])), (1, 2)
+    )
+    assert tc.backend.shape_tuple(s) == (4, 4)
+    np.testing.assert_allclose(s[3, 3], 0.8108051, atol=1e-5)

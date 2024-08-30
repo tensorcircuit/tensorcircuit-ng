@@ -8,13 +8,12 @@ import warnings
 
 import cotengra as ctg
 import networkx as nx
-import numpy as np
 
 sys.path.insert(0, "../")
 import tensorcircuit as tc
 
 try:
-    import kahypar
+    import kahypar as _
 except ImportError:
     print("kahypar not installed, please install it to run this script.")
     exit()
@@ -42,10 +41,8 @@ def generate_circuit(param, g, n, nlayers):
 
 
 def trigger_cotengra_optimization(n, nlayers, graph):
-
     # define the loss function
     def loss_f(params, n, nlayers):
-
         c = generate_circuit(params, graph, n, nlayers)
 
         loss = c.expectation_ps(z=[0, 1, 2], reuse=False)

@@ -2,19 +2,19 @@
 
 <p align="center">
   <!-- tests (GitHub actions) -->
-  <a href="https://github.com/tencent-quantum-lab/tensorcircuit/actions/workflows/ci.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/tencent-quantum-lab/tensorcircuit/ci.yml?branch=master" />
+  <a href="https://github.com/tensorcircuit/tensorcircuit-ng/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/tensorcircuit/tensorcircuit-ng/ci.yml?branch=master" />
   </a>
   <!-- docs -->
   <a href="https://tensorcircuit.readthedocs.io/">
     <img src="https://img.shields.io/badge/docs-link-green.svg?logo=read-the-docs"/>
   </a>
   <!-- PyPI -->
-  <a href="https://pypi.org/project/tensorcircuit/">
-    <img src="https://img.shields.io/pypi/v/tensorcircuit.svg?logo=pypi"/>
+  <a href="https://pypi.org/project/tensorcircuit-ng/">
+    <img src="https://img.shields.io/pypi/v/tensorcircuit-ng.svg?logo=pypi"/>
   </a>
   <!-- binder -->
-  <a href="https://mybinder.org/v2/gh/refraction-ray/tc-env/master?urlpath=git-pull%3Frepo%3Dhttps%253A%252F%252Fgithub.com%252Ftencent-quantum-lab%252Ftensorcircuit%26urlpath%3Dlab%252Ftree%252Ftensorcircuit%252F%26branch%3Dmaster">
+  <a href="https://mybinder.org/v2/gh/refraction-ray/tc-env/master?urlpath=git-pull%3Frepo%3Dhttps%253A%252F%252Fgithub.com%252Ftensorcircuit%252Ftensorcircuit-ng%26urlpath%3Dlab%252Ftree%252Ftensorcircuit%252F%26branch%3Dmaster">
     <img src="https://mybinder.org/badge_logo.svg"/>
   </a>
   <!-- License -->
@@ -123,7 +123,7 @@ pip install tensorcircuit-nightly
 
 ### 现况
 
-该项目由 [Shi-Xin Zhang](https://github.com/refraction-ray) 创造并维护。当前核心作者包括 [Shi-Xin Zhang](https://github.com/refraction-ray) 和 [Yu-Qin Chen](https://github.com/yutuer21)。我们也感谢来自开源社区的[贡献](https://github.com/tencent-quantum-lab/tensorcircuit/graphs/contributors)。
+该项目由 [Shi-Xin Zhang](https://github.com/refraction-ray) 创造并维护。当前核心作者包括 [Shi-Xin Zhang](https://github.com/refraction-ray) 和 [Yu-Qin Chen](https://github.com/yutuer21)。我们也感谢来自开源社区的[贡献](https://github.com/tensorcircuit/tensorcircuit-ng/graphs/contributors)。
 
 ### 引用
 
@@ -135,7 +135,7 @@ pip install tensorcircuit-nightly
 
 有关贡献指南和说明，请参阅 [贡献](/CONTRIBUTING.md)。
 
-我们欢迎大家提出 [issues](https://github.com/tencent-quantum-lab/tensorcircuit/issues), [PR](https://github.com/tencent-quantum-lab/tensorcircuit/pulls), 和 [讨论](https://github.com/tencent-quantum-lab/tensorcircuit/discussions)，这些都托管在 GitHub 上。
+我们欢迎大家提出 [issues](https://github.com/tensorcircuit/tensorcircuit-ng/issues), [PR](https://github.com/tensorcircuit/tensorcircuit-ng/pulls), 和 [讨论](https://github.com/tensorcircuit/tensorcircuit-ng/discussions)，这些都托管在 GitHub 上。
 
 ### 协议
 

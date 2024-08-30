@@ -9,6 +9,12 @@ import warnings
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import numpy as np
+
+try:
+    from numpy import ComplexWarning
+except ImportError:  # np2.0 compatibility
+    from numpy.exceptions import ComplexWarning  # type: ignore
+
 import tensornetwork
 from scipy.linalg import expm, solve, schur
 from scipy.special import softmax, expit
@@ -214,7 +220,7 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
 
     def cast(self, a: Tensor, dtype: str) -> Tensor:
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore", np.ComplexWarning)
+            warnings.simplefilter("ignore", ComplexWarning)
             if isinstance(dtype, str):
                 return a.astype(getattr(np, dtype))
             return a.astype(dtype)
@@ -393,7 +399,7 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     def vmap(
         self, f: Callable[..., Any], vectorized_argnums: Union[int, Sequence[int]] = 0
     ) -> Any:
-        logger.warning(
+        logger.info(
             "numpy backend has no intrinsic vmap like interface"
             ", use vectorize instead (plain for loop)"
         )

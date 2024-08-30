@@ -1,24 +1,24 @@
 <p align="center">
-  <a href="https://github.com/tencent-quantum-lab/tensorcircuit">
-    <img width=90% src="docs/source/statics/logov2.jpg">
+  <a href="https://github.com/tensorcircuit/tensorcircuit-ng">
+    <img width=90% src="docs/source/statics/logong.png">
   </a>
 </p>
 
 <p align="center">
   <!-- tests (GitHub actions) -->
-  <a href="https://github.com/tencent-quantum-lab/tensorcircuit/actions/workflows/ci.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/tencent-quantum-lab/tensorcircuit/ci.yml?branch=master" />
+  <a href="https://github.com/tensorcircuit/tensorcircuit-ng/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/tensorcircuit/tensorcircuit-ng/ci.yml?branch=master" />
   </a>
   <!-- docs -->
   <a href="https://tensorcircuit.readthedocs.io/">
     <img src="https://img.shields.io/badge/docs-link-green.svg?logo=read-the-docs"/>
   </a>
   <!-- PyPI -->
-  <a href="https://pypi.org/project/tensorcircuit/">
-    <img src="https://img.shields.io/pypi/v/tensorcircuit.svg?logo=pypi"/>
+  <a href="https://pypi.org/project/tensorcircuit-ng/">
+    <img src="https://img.shields.io/pypi/v/tensorcircuit-ng.svg?logo=pypi"/>
   </a>
   <!-- binder -->
-  <a href="https://mybinder.org/v2/gh/refraction-ray/tc-env/master?urlpath=git-pull%3Frepo%3Dhttps%253A%252F%252Fgithub.com%252Ftencent-quantum-lab%252Ftensorcircuit%26urlpath%3Dlab%252Ftree%252Ftensorcircuit%252F%26branch%3Dmaster">
+  <a href="https://mybinder.org/v2/gh/refraction-ray/tc-env/master?urlpath=git-pull%3Frepo%3Dhttps%253A%252F%252Fgithub.com%252Ftensorcircuit%252Ftensorcircuit-ng%26urlpath%3Dlab%252Ftree%252Ftensorcircuit%252F%26branch%3Dmaster">
     <img src="https://mybinder.org/badge_logo.svg"/>
   </a>
   <!-- License -->
@@ -226,7 +226,7 @@ We also have [Docker support](/docker).
 
 ### Status
 
-This project is created and maintained by [Shi-Xin Zhang](https://github.com/refraction-ray) with current core authors [Shi-Xin Zhang](https://github.com/refraction-ray) and [Yu-Qin Chen](https://github.com/yutuer21). We also thank [contributions](https://github.com/tencent-quantum-lab/tensorcircuit/graphs/contributors) from the open source community.
+This project is created and maintained by [Shi-Xin Zhang](https://github.com/refraction-ray) with current core authors [Shi-Xin Zhang](https://github.com/refraction-ray) and [Yu-Qin Chen](https://github.com/yutuer21). We also thank [contributions](https://github.com/tensorcircuit/tensorcircuit-ng/graphs/contributors) from the open source community.
 
 ### Citation
 
@@ -236,13 +236,13 @@ If this project helps in your research, please cite our software whitepaper to a
 
 which is also a good introduction to the software.
 
-Research works citing TensorCircuit can be highlighted in [Research and Applications section](https://github.com/tencent-quantum-lab/tensorcircuit#research-and-applications).
+Research works citing TensorCircuit can be highlighted in [Research and Applications section](https://github.com/tensorcircuit/tensorcircuit-ng#research-and-applications).
 
 ### Guidelines
 
 For contribution guidelines and notes, see [CONTRIBUTING](/CONTRIBUTING.md).
 
-We welcome [issues](https://github.com/tencent-quantum-lab/tensorcircuit/issues), [PRs](https://github.com/tencent-quantum-lab/tensorcircuit/pulls), and [discussions](https://github.com/tencent-quantum-lab/tensorcircuit/discussions) from everyone, and these are all hosted on GitHub.
+We welcome [issues](https://github.com/tensorcircuit/tensorcircuit-ng/issues), [PRs](https://github.com/tensorcircuit/tensorcircuit-ng/pulls), and [discussions](https://github.com/tensorcircuit/tensorcircuit-ng/discussions) from everyone, and these are all hosted on GitHub.
 
 ### License
 

@@ -265,3 +265,40 @@ def test_overlap(backend):
     np.testing.assert_allclose(
         compute_overlap(tc.FGSSimulator), compute_overlap(tc.fgs.FGSTestSimulator), 1e-5
     )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_entanglement_asymmetry(backend, highp):
+    def discrete_c(c):
+        c.evol_sp(0, 1, 0.3)
+        c.evol_sp(1, 3, 1.1)
+        c.evol_hp(0, 1, -0.2)
+        c.evol_hp(2, 3, 1.4)
+        c.evol_hp(3, 4, -0.6)
+        c.evol_hp(4, 5, -0.8)
+        c.evol_sp(2, 6, 2.1)
+        return c
+
+    c = discrete_c(tc.fgs.FGSSimulator(7, filled=[0, 2, 4, 6]))
+    c1 = discrete_c(tc.fgs.FGSTestSimulator(7, filled=[0, 2, 4, 6]))
+    for k in [2, 3, 4]:
+        for traceout in [[1, 2, 4, 5], [2, 3, 5], [0, 3, 4, 5, 6]]:
+            print(k, traceout)
+            sa_ans = c1.renyi_entropy(k, traceout)
+            saq_ans = c1.renyi_entanglement_asymmetry(k, traceout)
+            np.testing.assert_allclose(
+                np.log(c.charge_moment([0 for _ in range(k)], k, traceout))
+                * 1
+                / (1 - k),
+                sa_ans,
+                atol=2e-4,
+            )
+            saq, std = c.renyi_entanglement_asymmetry(
+                k, traceout, batch=400, with_std=True
+            )
+            np.testing.assert_allclose(
+                saq,
+                saq_ans,
+                atol=4 * std,
+            )
+            print(std)

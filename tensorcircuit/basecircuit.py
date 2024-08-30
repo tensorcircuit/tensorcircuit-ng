@@ -569,6 +569,8 @@ class BaseCircuit(AbstractCircuit):
                     backend.set_random_state(key)
                     return self.perfect_sampling()
 
+                # TODO(@refraction-ray): status is not used here
+
                 r = []  # type: ignore
 
                 subkey = random_generator
@@ -919,3 +921,45 @@ class BaseCircuit(AbstractCircuit):
         return QuVector(edges)
 
     quvector = get_quvector
+
+    def projected_subsystem(self, traceout: Tensor, left: Tuple[int, ...]) -> Tensor:
+        """
+        remaining wavefunction or density matrix on qubits in left, with other qubits
+        fixed in 0 or 1 indicated by traceout
+
+        :param traceout: can be jitted
+        :type traceout: Tensor
+        :param left: cannot be jitted
+        :type left: Tuple
+        :return: _description_
+        :rtype: Tensor
+        """
+        end0, end1 = gates.array_to_tensor(np.array([1.0, 0]), np.array([0, 1.0]))
+        traceout = backend.cast(traceout, dtypestr)
+        nodes, front = self._copy()
+        L = self._nqubits
+        edges = []
+        for i in range(len(traceout)):
+            if i not in left:
+                b = traceout[i]
+                n = gates.Gate((1 - b) * end0 + b * end1)
+                nodes.append(n)
+                front[i] ^ n[0]
+            else:
+                edges.append(front[i])
+
+        if self.is_dm:
+            for i in range(len(traceout)):
+                if i not in left:
+                    b = traceout[i]
+                    n = gates.Gate((1 - b) * end0 + b * end1)
+                    nodes.append(n)
+                    front[i + L] ^ n[0]
+                else:
+                    edges.append(front[i + L])
+
+        t = contractor(nodes, output_edge_order=edges)
+        if self.is_dm:
+            rho = backend.reshapem(t.tensor)
+            return rho / (backend.trace(rho) + 1e-10)
+        return backend.reshape(t.tensor / backend.norm(t.tensor), [-1])

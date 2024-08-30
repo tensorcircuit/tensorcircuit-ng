@@ -29,6 +29,8 @@ def onehot_matrix(i: int, j: int, N: int) -> Tensor:
 # TODO(@refraction-ray): efficiency benchmark with jit
 # TODO(@refraction-ray): FGS mixed state support?
 # TODO(@refraction-ray): overlap?
+# TODO(@refraction-ray): entanglement asymmetry
+# TODO(@refraction-ray): fermionic logarithmic negativity
 
 
 class FGSSimulator:
@@ -210,6 +212,117 @@ class FGSSimulator:
         s = 1 / (2 * (1 - n)) * entropy
         return s
 
+    def charge_moment(
+        self,
+        alpha: Tensor,
+        n: int,
+        subsystems_to_trace_out: List[int],
+    ) -> Tensor:
+        """
+        Ref: https://arxiv.org/abs/2302.03330
+
+        :param alpha: to be integrated
+        :type alpha: Tensor
+        :param n: n-order, Renyi-n
+        :type n: int
+        :param subsystems_to_trace_out: _description_
+        :type subsystems_to_trace_out: List[int]
+        :return: _description_
+        :rtype: Tensor
+        """
+        m = self.get_reduced_cmatrix(subsystems_to_trace_out)
+        subL = backend.shape_tuple(m)[-1] // 2
+        gamma = 2 * m - backend.eye(2 * subL)
+        if n == 2:
+            eps = 1e-3
+        elif n == 3:
+            eps = 2e-2
+        else:  # >3
+            eps = 8e-2
+        na = np.concatenate([-np.ones([subL]), np.ones([subL])])
+        na = backend.convert_to_tensor(na)
+        na = backend.cast(na, dtypestr)
+        m = (backend.eye(2 * subL) - gamma) / 2
+        for _ in range(n - 1):
+            m = m @ (backend.eye(2 * subL) - gamma) / 2
+        # m = np.linalg.matrix_power((np.eye(2 * subL) - gamma) / 2, n)
+        wprod = backend.eye(2 * subL)
+        invm = backend.inv((1 + eps) * backend.eye(2 * subL) - gamma)
+        for i in range(n):
+            wprod = (
+                (((1 + eps) * backend.eye(2 * subL) - gamma) @ (wprod @ invm))
+                @ ((backend.eye(2 * subL) + gamma) / 2)
+                @ backend.diagflat(
+                    backend.exp(1.0j * (alpha[(i + 1) % n] - alpha[i]) * na)
+                )
+            )
+        r = backend.sqrt(backend.det(m + wprod))
+        return r
+
+    def renyi_entanglement_asymmetry(
+        self,
+        n: int,
+        subsystems_to_trace_out: List[int],
+        batch: int = 100,
+        status: Optional[Tensor] = None,
+        with_std: bool = False,
+    ) -> Tensor:
+        """
+        Ref: https://arxiv.org/abs/2302.03330
+
+        :param n: _description_
+        :type n: int
+        :param subsystems_to_trace_out: _description_
+        :type subsystems_to_trace_out: List[int]
+        :param batch: sample number, defaults 100
+        :type batch: int
+        :param status: random number for the sample, -pi to pi,
+            with shape [batch, n]
+        :type status: Optional[Tensor]
+        :return: _description_
+        :rtype: Tensor
+        """
+        r = []
+        if status is None:
+            status = backend.implicit_randu([batch, n], -np.pi, np.pi)
+        status = backend.cast(status, dtypestr)
+        m = self.get_reduced_cmatrix(subsystems_to_trace_out)
+        subL = backend.shape_tuple(m)[-1] // 2
+        gamma = 2 * m - backend.eye(2 * subL)
+        if n == 2:
+            eps = 1e-3
+        elif n == 3:
+            eps = 2e-2
+        else:  # >3
+            eps = 8e-2
+        na = np.concatenate([-np.ones([subL]), np.ones([subL])])
+        na = backend.convert_to_tensor(na)
+        na = backend.cast(na, dtypestr)
+        m = (backend.eye(2 * subL) - gamma) / 2
+        for _ in range(n - 1):
+            m = m @ (backend.eye(2 * subL) - gamma) / 2
+        # m = np.linalg.matrix_power((np.eye(2 * subL) - gamma) / 2, n)
+        invm = backend.inv((1 + eps) * backend.eye(2 * subL) - gamma)
+        for i in range(batch):
+            alpha = status[i]
+            wprod = backend.eye(2 * subL)
+            for i in range(n):
+                wprod = (
+                    (((1 + eps) * backend.eye(2 * subL) - gamma) @ (wprod @ invm))
+                    @ ((backend.eye(2 * subL) + gamma) / 2)
+                    @ backend.diagflat(
+                        backend.exp(1.0j * (alpha[(i + 1) % n] - alpha[i]) * na)
+                    )
+                )
+            r.append(backend.sqrt(backend.det(m + wprod)))
+        r = backend.stack(r)
+        r_mean = backend.real(backend.mean(r))
+        saq = 1 / (1 - n) * backend.log(r_mean)
+        if not with_std:
+            return saq
+        else:
+            return saq, backend.abs(1 / (1 - n) * backend.real(backend.std(r)) / saq)
+
     def entropy(self, subsystems_to_trace_out: Optional[List[int]] = None) -> Tensor:
         """
         compute von Neumann entropy for the fermion state
@@ -381,7 +494,7 @@ class FGSSimulator:
     def expectation_2body(
         self, i: int, j: int, now_i: bool = True, now_j: bool = True
     ) -> Tensor:
-        """
+        r"""
         expectation of two fermion terms
         convention: (c, c^\dagger)
         for i>L, c_{i-L}^\dagger is assumed
@@ -396,7 +509,7 @@ class FGSSimulator:
         return self.get_cmatrix(now_i, now_j)[i][(j + self.L) % (2 * self.L)]
 
     def expectation_4body(self, i: int, j: int, k: int, l: int) -> Tensor:
-        """
+        r"""
         expectation of four fermion terms using Wick Thm
         convention: (c, c^\dagger)
         for i>L, c_{i-L}^\dagger is assumed
@@ -497,6 +610,19 @@ class FGSSimulator:
             return keep
         else:
             return keep, prob
+
+    # @classmethod
+    # def product(cls, cm1, cm2):
+    #     L = cm1.shape([-1])//2
+    #     wtransform = cls.wmatrix(L)
+    #     gamma1 = -1.0j * (2*wtransform @ cm1 @ backend.adjoint(wtransform)-backend.eye(2*L))
+    #     gamma2 = -1.0j * (2*wtransform @ cm2 @ backend.adjoint(wtransform)-backend.eye(2*L))
+    #     den = backend.inv(1 + gamma1 @ gamma2)
+    #     idm = backend.eye(2 * L)
+    #     covm = idm - (idm - gamma2) @ den @ (idm - gamma1)
+    #     cm = (1.0j * covm + idm) / 2
+    #     cmatrix = backend.adjoint(wtransform) @ cm @ wtransform * 0.25
+    #     return cmatrix
 
     # def product(self, other):
     #     # self@other
@@ -893,6 +1019,43 @@ class FGSTestSimulator:
     def renyi_entropy(self, n: int, subsystems_to_trace_out: List[int]) -> Tensor:
         rm = quantum.reduced_density_matrix(self.state, subsystems_to_trace_out)
         return quantum.renyi_entropy(rm, n)
+
+    def charge_moment(
+        self, alpha: Tensor, n: int, subsystems_to_trace_out: List[int]
+    ) -> Tensor:
+        rho = quantum.reduced_density_matrix(self.state, subsystems_to_trace_out)
+        l = rho.shape[-1]  # type:ignore
+        r = np.eye(l)
+        L = int(np.log(l) / np.log(2) + 0.001)
+        qa = np.diagonal(
+            quantum.PauliStringSum2Dense(
+                [quantum.xyz2ps({"z": [i]}, L) for i in range(L)]
+            )
+        )
+        qa = qa.reshape([-1])
+        for i in range(n):
+            r = r @ (rho @ np.diag(np.exp(1.0j * (alpha[(i + 1) % n] - alpha[i]) * qa)))  # type: ignore
+        return np.trace(r)
+
+    def renyi_entanglement_asymmetry(
+        self, n: int, subsystems_to_trace_out: List[int]
+    ) -> Tensor:
+        rho = quantum.reduced_density_matrix(self.state, subsystems_to_trace_out)
+        l = rho.shape[-1]  # type: ignore
+        L = int(np.log(l) / np.log(2) + 0.001)
+
+        qa = np.diagonal(
+            quantum.PauliStringSum2Dense(
+                [quantum.xyz2ps({"z": [i]}, L) for i in range(L)]
+            )
+        )
+        qa = qa.reshape([-1])
+        mask = np.zeros([2**L, 2**L])
+        for i in range(2**L):
+            for j in range(2**L):
+                if qa[i] == qa[j]:
+                    mask[i, j] = 1
+        return quantum.renyi_entropy(mask * rho, n)
 
     def overlap(self, other: "FGSTestSimulator") -> Tensor:
         return backend.tensordot(backend.conj(self.state), other.state, 1)

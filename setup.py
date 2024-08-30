@@ -7,14 +7,14 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 
 setuptools.setup(
-    name="tensorcircuit",
+    name="tensorcircuit-ng",
     version=__version__,
     author=__author__,
-    author_email="shixinzhang@tencent.com",
+    author_email="znfesnpbh@gmail.com",
     description="High performance unified quantum computing framework for the NISQ era",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/tencent-quantum-lab/tensorcircuit",
+    url="https://github.com/tensorcircuit/tensorcircuit-ng",
     packages=setuptools.find_packages(),
     include_package_data=True,
     install_requires=["numpy", "scipy", "tensornetwork-ng", "networkx"],

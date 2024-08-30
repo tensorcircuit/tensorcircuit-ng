@@ -1,8 +1,8 @@
 TensorCircuit Documentation
 ===========================================================
 
-.. image:: https://github.com/tencent-quantum-lab/tensorcircuit/blob/master/docs/source/statics/logov2.jpg?raw=true
-    :target: https://github.com/tencent-quantum-lab/tensorcircuit
+.. image:: https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/docs/source/statics/logong.png?raw=true
+    :target: https://github.com/tensorcircuit/tensorcircuit-ng
 
 
 **Welcome and congratulations! You have found TensorCircuit.** 👏 
@@ -32,10 +32,10 @@ With the help of TensorCircuit, now get ready to efficiently and elegantly solve
 Relevant Links
 --------------------
 
-TensorCircuit is created and maintained by `Shi-Xin Zhang <https://github.com/refraction-ray>`_ and this version is released by `Tencent Quantum Lab <https://quantum.tencent.com/>`_.
+TensorCircuit is created and maintained by `Shi-Xin Zhang <https://github.com/refraction-ray>`_.
 
 The current core authors of TensorCircuit are `Shi-Xin Zhang <https://github.com/refraction-ray>`_ and `Yu-Qin Chen <https://github.com/yutuer21>`_.
-We also thank `contributions <https://github.com/tencent-quantum-lab/tensorcircuit/graphs/contributors>`_ from the open source community.
+We also thank `contributions <https://github.com/tensorcircuit/tensorcircuit-ng/graphs/contributors>`_ from the open source community.
 
 If you have any further questions or collaboration ideas, please use the issue tracker or forum below, or send email to shixinzhang#tencent.com.
 
@@ -43,7 +43,7 @@ If you have any further questions or collaboration ideas, please use the issue t
 .. card-carousel:: 2
 
    .. card:: Source code
-      :link: https://github.com/tencent-quantum-lab/tensorcircuit
+      :link: https://github.com/tensorcircuit/tensorcircuit-ng
       :shadow: md
 
       GitHub
@@ -64,21 +64,21 @@ If you have any further questions or collaboration ideas, please use the issue t
 
 
    .. card:: Issue Tracker
-      :link: https://github.com/tencent-quantum-lab/tensorcircuit/issues
+      :link: https://github.com/tensorcircuit/tensorcircuit-ng/issues
       :shadow: md
 
       GitHub Issues
 
 
    .. card:: Forum
-      :link: https://github.com/tencent-quantum-lab/tensorcircuit/discussions
+      :link: https://github.com/tensorcircuit/tensorcircuit-ng/discussions
       :shadow: md
 
       GitHub Discussions
 
 
    .. card:: PyPI
-      :link:  https://pypi.org/project/tensorcircuit
+      :link:  https://pypi.org/project/tensorcircuit-ng
       :shadow: md
 
       ``pip install``
@@ -92,16 +92,11 @@ If you have any further questions or collaboration ideas, please use the issue t
       
 
    .. card:: Application
-      :link: https://github.com/tencent-quantum-lab/tensorcircuit#research-and-applications
+      :link: https://github.com/tensorcircuit/tensorcircuit-ng#research-and-applications
       :shadow: md
 
       Research using TC
 
-
-   .. card:: Cloud
-      :link: https://quantum.tencent.com/cloud
-
-      Tencent Quantum Cloud
 
 
 

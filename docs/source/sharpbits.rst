@@ -196,7 +196,7 @@ TF and JAX backend manage the differentiation rules differently for complex-valu
 In TensorCircuit, currently we make the difference in AD transparent, namely, when switching the backend, the AD behavior and result for complex valued function can be different and determined by the nature behavior of the corresponding backend framework.
 All AD relevant ops such as ``grad`` or ``jacrev`` may be affected. Therefore, the user must be careful when dealing with AD on complex valued function in a backend agnostic way in TensorCircuit.
 
-See example script on computing Jacobian with different modes on different backends: `jacobian_cal.py <https://github.com/tencent-quantum-lab/tensorcircuit/blob/master/examples/jacobian_cal.py>`_.
+See example script on computing Jacobian with different modes on different backends: `jacobian_cal.py <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/jacobian_cal.py>`_.
 Also see the code below for a reference:
 
 .. code-block:: python

@@ -10,6 +10,12 @@ from functools import partial
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import numpy as np
+
+try:
+    from numpy import ComplexWarning
+except ImportError:  # np2.0 compatibility
+    from numpy.exceptions import ComplexWarning  # type: ignore
+
 import tensornetwork
 from scipy.sparse import coo_matrix
 from tensornetwork.backends.jax import jax_backend
@@ -323,7 +329,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
 
     def cast(self, a: Tensor, dtype: str) -> Tensor:
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore", np.ComplexWarning)
+            warnings.simplefilter("ignore", ComplexWarning)
             if isinstance(dtype, str):
                 return a.astype(getattr(jnp, dtype))
             return a.astype(dtype)

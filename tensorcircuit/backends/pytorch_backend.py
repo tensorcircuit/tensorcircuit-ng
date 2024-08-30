@@ -665,7 +665,7 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     ) -> Any:
         if jit_compile is True:
             # experimental feature reusing the jit_compile flag for tf
-            return torch_jit_func(f)
+            return torchlib.compile(f)
         return f
         # return f  # do nothing here until I figure out what torch.jit is for and how does it work
         # see https://github.com/pytorch/pytorch/issues/36910
