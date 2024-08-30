@@ -14,7 +14,7 @@ import numpy as np
 try:
     from numpy import ComplexWarning
 except ImportError:  # np2.0 compatibility
-    from numpy.exceptions import ComplexWarning
+    from numpy.exceptions import ComplexWarning  # type: ignore
 
 import tensornetwork as tn
 from scipy.stats import unitary_group
