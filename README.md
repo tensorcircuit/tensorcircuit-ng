@@ -27,7 +27,7 @@
 
 TensorCircuit-NG is a high performance quantum software framework, supporting for automatic differentiation, just-in-time compiling, hardware acceleration, and vectorized parallelism, providing unified infrastructures and interfaces for quantum programming.
 
-TensorCircuit is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for highly efficient simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal, noisy and approximate cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions since v0.9.
+TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for highly efficient simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal, noisy and approximate cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions since v0.9.
 
 ## Getting Started
 
@@ -228,11 +228,11 @@ We also have [Docker support](/docker).
 
 ### Status
 
-This project is created and maintained by [Shi-Xin Zhang](https://github.com/refraction-ray) with current core authors [Shi-Xin Zhang](https://github.com/refraction-ray) and [Yu-Qin Chen](https://github.com/yutuer21). We also thank [contributions](https://github.com/tensorcircuit/tensorcircuit-ng/graphs/contributors) from the open source community.
+This project is created and maintained by [Shi-Xin Zhang](https://github.com/refraction-ray) with current core authors [Shi-Xin Zhang](https://github.com/refraction-ray) and [Yu-Qin Chen](https://github.com/yutuer21) (see the [brief history](/HISTORY.md) of TensorCircuit and TensorCircuit-NG). We also thank [contributions](https://github.com/tensorcircuit/tensorcircuit-ng/graphs/contributors) from the open source community.
 
 ### Citation
 
-If this project helps in your research, please cite our software whitepaper to acknowledge the work put into the development of TensorCircuit.
+If this project helps in your research, please cite our software whitepaper to acknowledge the work put into the development of TensorCircuit-NG.
 
 [TensorCircuit: a Quantum Software Framework for the NISQ Era](https://quantum-journal.org/papers/q-2023-02-02-912/) (published in Quantum)
 

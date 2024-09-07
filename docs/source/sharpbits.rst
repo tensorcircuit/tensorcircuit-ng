@@ -2,7 +2,7 @@
 TensorCircuit: The Sharp Bits 🔪
 =================================
 
-Be fast is never for free, though much cheaper in TensorCircuit, but you have to be cautious especially in terms of AD, JIT compatibility.
+Be fast is never for free, though much cheaper in TensorCircuit-NG, but you have to be cautious especially in terms of AD, JIT compatibility.
 We will go through the main sharp edges 🔪 in this note.
 
 Jit Compatibility
@@ -193,7 +193,7 @@ AD Consistency
 
 TF and JAX backend manage the differentiation rules differently for complex-valued function (actually up to a complex conjuagte). See issue discussion `tensorflow issue <https://github.com/tensorflow/tensorflow/issues/3348>`_.
 
-In TensorCircuit, currently we make the difference in AD transparent, namely, when switching the backend, the AD behavior and result for complex valued function can be different and determined by the nature behavior of the corresponding backend framework.
+In TensorCircuit-NG, currently we make the difference in AD transparent, namely, when switching the backend, the AD behavior and result for complex valued function can be different and determined by the nature behavior of the corresponding backend framework.
 All AD relevant ops such as ``grad`` or ``jacrev`` may be affected. Therefore, the user must be careful when dealing with AD on complex valued function in a backend agnostic way in TensorCircuit.
 
 See example script on computing Jacobian with different modes on different backends: `jacobian_cal.py <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/jacobian_cal.py>`_.

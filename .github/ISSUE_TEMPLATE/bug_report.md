@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: a report on TensorCircuit related bug
+about: a report on TensorCircuit-NG related bug
 title: ""
 labels: bug
 assignees: ""

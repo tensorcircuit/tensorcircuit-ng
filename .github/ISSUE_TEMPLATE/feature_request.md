@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea or improvement for TensorCircuit
+about: Suggest an idea or improvement for TensorCircuit-NG
 title: ""
 labels: feature-request
 assignees: ""

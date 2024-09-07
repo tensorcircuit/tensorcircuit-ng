@@ -1,6 +1,6 @@
 ---
 name: Task Description
-about: Tasks from TensorCircuit Maintainer
+about: Tasks from TensorCircuit-NG Maintainer
 title: ""
 labels: good first issue
 assignees: ""

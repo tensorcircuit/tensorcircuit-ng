@@ -5,8 +5,8 @@ authors:
     given-names: "Shi-Xin"
   - family-names: "Chen"
     given-names: "Yu-Qin"
-title: "TensorCircuit"
-version: 0.7.0
+title: "TensorCircuit-NG"
+version: 1.0.0
 date-released: 2020-04-19
 url: "https://github.com/tensorcircuit/tensorcircuit-ng"
 preferred-citation:

@@ -45,7 +45,7 @@ To debug the installation issue or report bugs, please check the environment inf
 Circuit Object
 ------------------
 
-The basic object for TensorCircuit is ``tc.Circuit``. 
+The basic object for TensorCircuit-NG is ``tc.Circuit``. 
 
 Initialize the circuit with the number of qubits ``c=tc.Circuit(n)``.
 
@@ -154,7 +154,7 @@ We can also create new copied circuit via ``c.copy()`` which internally utilize 
 Programming Paradigm
 -------------------------
 
-The most common case and the most typical programming paradigm for TensorCircuit are to evaluate the circuit output and the corresponding quantum gradients, which is common in variational quantum algorithms.
+The most common case and the most typical programming paradigm for TensorCircuit-NG are to evaluate the circuit output and the corresponding quantum gradients, which is common in variational quantum algorithms.
 
 .. code-block:: python
 
@@ -182,7 +182,7 @@ The most common case and the most typical programming paradigm for TensorCircuit
     print(vgf(params, n))  # get the quantum loss and the gradient
 
 Also for a non-quantum example (linear regression) demonstrating the backend agnostic feature, variables with pytree support, AD/jit/vmap usage, and variational optimization loops. Please refer to the example script: `linear regression example <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/universal_lr.py>`_.
-This example might be more friendly to the machine learning community since it is purely classical while also showcasing the main features and paradigms of tensorcircuit.
+This example might be more friendly to the machine learning community since it is purely classical while also showcasing the main features and paradigms of tensorcircuit-ng.
 
 If the user has no intention to maintain the application code in a backend agnostic fashion, the API for ML frameworks can be more handily used and interleaved with the TensorCircuit API.
 
@@ -223,7 +223,7 @@ Automatic Differentiation, JIT, and Vectorized Parallelism
 
 For concepts of AD, JIT and VMAP, please refer to `Jax documentation <https://jax.readthedocs.io/en/latest/jax-101/index.html>`__ .
 
-The related API design in TensorCircuit closely follows the functional programming design pattern in Jax with some slight differences. So we strongly recommend users learn some basics about Jax no matter which ML backend they intend to use.
+The related API design in TensorCircuit-NG closely follows the functional programming design pattern in Jax with some slight differences. So we strongly recommend users learn some basics about Jax no matter which ML backend they intend to use.
 
 **AD Support:**
 
@@ -246,7 +246,7 @@ To learn more about vmap mechanism, one can refer to documentation or blogs on `
 Backend Agnosticism
 -------------------------
 
-TensorCircuit supports TensorFlow, Jax, and PyTorch backends. We recommend using TensorFlow or Jax backend since PyTorch lacks advanced jit and vmap features.
+TensorCircuit-NG supports TensorFlow, Jax, and PyTorch backends. We recommend using TensorFlow or Jax backend since PyTorch lacks advanced jit and vmap features.
 
 The backend can be set as ``K=tc.set_backend("jax")`` and ``K`` is the backend with a full set of APIs as a conventional ML framework, which can also be accessed by ``tc.backend``.
 
@@ -431,7 +431,7 @@ and the other part is implemented in `TensorCircuit package <modules.html#module
 Switch the Dtype
 --------------------
 
-TensorCircuit supports simulation using 32/64 bit precession. The default dtype is 32-bit as "complex64".
+TensorCircuit-NG supports simulation using 32/64 bit precession. The default dtype is 32-bit as "complex64".
 Change this by ``tc.set_dtype("complex128")``.
 
 ``tc.dtypestr`` always returns the current dtype string: either "complex64" or "complex128".
@@ -440,7 +440,7 @@ Change this by ``tc.set_dtype("complex128")``.
 Setup the Contractor
 ------------------------
 
-TensorCircuit is a tensornetwork contraction-based quantum circuit simulator. A contractor is for searching for the optimal contraction path of the circuit tensornetwork.
+TensorCircuit-NG is a tensornetwork contraction-based quantum circuit simulator. A contractor is for searching for the optimal contraction path of the circuit tensornetwork.
 
 There are various advanced contractors provided by third-party packages, such as `opt-einsum <https://github.com/dgasmith/opt_einsum>`__ and `cotengra <https://github.com/jcmgray/cotengra>`__.
 
@@ -498,7 +498,7 @@ Noisy Circuit Simulation
 
 **Monte Carlo State Simulator:**
 
-For the Monte Carlo trajectory noise simulator, the unitary Kraus channel can be handled easily. TensorCircuit also supports fully jittable and differentiable general Kraus channel Monte Carlo simulation, though.
+For the Monte Carlo trajectory noise simulator, the unitary Kraus channel can be handled easily. TensorCircuit-NG also supports fully jittable and differentiable general Kraus channel Monte Carlo simulation, though.
 
 .. code-block:: python
 
@@ -594,7 +594,7 @@ Readout error can be added in experiments for sampling and expectation value cal
 MPS and MPO
 ----------------
 
-TensorCircuit has its class for MPS and MPO originally defined in TensorNetwork as ``tc.QuVector``, ``tc.QuOperator``.
+TensorCircuit-NG has its class for MPS and MPO originally defined in TensorNetwork as ``tc.QuVector``, ``tc.QuOperator``.
 
 ``tc.QuVector`` can be extracted from ``tc.Circuit`` as the tensor network form for the output state (uncontracted) by ``c.quvector()``.
 

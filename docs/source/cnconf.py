@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.abspath("../ext/"))
 
 # -- Project information -----------------------------------------------------
 
-project = "tensorcircuit"
+project = "tensorcircuit-ng"
 copyright = "2020, The TensorCircuit Authors"
 author = "refraction-ray"
 

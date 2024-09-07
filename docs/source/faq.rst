@@ -1,11 +1,11 @@
 Frequently Asked Questions
 ============================
 
-How can I run TensorCircuit on GPU?
+How can I run TensorCircuit-NG on GPU?
 -----------------------------------------
 
-This is done directly through the ML backend. GPU support is determined by whether ML libraries are can run on GPU, we don't handle this within tensorcircuit.
-It is the users' responsibility to configure a GPU-compatible environment for these ML packages. Please refer to the installation documentation for these ML packages and directly use the official dockerfiles provided by TensorCircuit.
+This is done directly through the ML backend. GPU support is determined by whether ML libraries are can run on GPU, we don't handle this within tensorcircuit-ng.
+It is the users' responsibility to configure a GPU-compatible environment for these ML packages. Please refer to the installation documentation for these ML packages and directly use the official dockerfiles provided by TensorCircuit-NG.
 With GPU compatible environment, we can switch the use of GPU or CPU by a backend agnostic environment variable ``CUDA_VISIBLE_DEVICES``.
 
 
@@ -97,7 +97,7 @@ So one can try one of the following options:
 
 * ``tc.templates.measurements.parameterized_measurements(c, np.array([1, 3, 2, 0, 3, 0]), onehot=True)``
 
-Can I apply quantum operation based on previous classical measurement results in TensorCircuit?
+Can I apply quantum operation based on previous classical measurement results in TensorCircuit-NG?
 ----------------------------------------------------------------------------------------------------
 
 Try the following: (the pipeline is even fully jittable!)
@@ -154,7 +154,7 @@ Please refer to the following demos:
 How to understand difference between ``tc.array_to_tensor`` and ``tc.backend.convert_to_tensor``?
 ------------------------------------------------------------------------------------------------------
 
-``tc.array_to_tensor`` convert array to tensor as well as automatically cast the type to the default dtype of TensorCircuit,
+``tc.array_to_tensor`` convert array to tensor as well as automatically cast the type to the default dtype of TensorCircuit-NG,
 i.e. ``tc.dtypestr`` and it also support to specify dtype as ``tc.array_to_tensor( , dtype="complex128")``.
 Instead, ``tc.backend.convert_to_tensor`` keeps the dtype of the input array, and to cast it as complex dtype, we have to
 explicitly call ``tc.backend.cast`` after conversion. Besides, ``tc.array_to_tensor`` also accepts multiple inputs as

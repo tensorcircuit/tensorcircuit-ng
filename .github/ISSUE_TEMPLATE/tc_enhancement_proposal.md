@@ -1,6 +1,6 @@
 ---
 name: TensorCircuit Enhancement Proposal
-about: a design note describing a new major feature for TensorCircuit
+about: a design note describing a new major feature for TensorCircuit-NG
 title: ""
 labels: tep
 assignees: ""

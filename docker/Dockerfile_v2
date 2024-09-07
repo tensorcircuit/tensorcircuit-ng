@@ -26,7 +26,7 @@ RUN pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r /requirements-doc
 # RUN pip install nvidia-cudnn-cu11==8.6.0.163 ray
 RUN pip install -i https://pypi.tuna.tsinghua.edu.cn/simple nvidia-cudnn-cu11==8.6.0.163 ray
 
-RUN pip install tensorcircuit
+RUN pip install tensorcircuit-ng
 
 # requirements conflict for ray
 # jax must have cudnn>8.6 otherwise fail when init array on gpu, 

@@ -21,11 +21,11 @@
 
 <p align="center"> <a href="README.md">English</a> |  简体中文 </p>
 
-TensorCircuit 是下一代量子软件框架，完美支持自动微分、即时编译、硬件加速和向量并行化。
+TensorCircuit-NG 是下一代量子软件框架，完美支持自动微分、即时编译、硬件加速和向量并行化。
 
-TensorCircuit 建立在现代机器学习框架 Jax, TensorFlow, PyTorch 之上，支持机器学习后端无关的统一界面。 其特别适用于理想情况、含噪声情况及可控近似情况下，大规模量子经典混合范式和变分量子算法的高效模拟。
+TensorCircuit-NG 建立在现代机器学习框架 Jax, TensorFlow, PyTorch 之上，支持机器学习后端无关的统一界面。 其特别适用于理想情况、含噪声情况及可控近似情况下，大规模量子经典混合范式和变分量子算法的高效模拟。
 
-TensorCircuit 现在支持真实量子硬件连接和实验，并提供优雅的 CPU/GPU/QPU 混合部署训练方案（v0.9+）。
+TensorCircuit-NG 现在支持真实量子硬件连接和实验，并提供优雅的 CPU/GPU/QPU 混合部署训练方案（v0.9+）。
 
 ## 入门
 
@@ -75,13 +75,13 @@ print(g(theta))
 该包是用纯 Python 编写的，可以通过 pip 直接获取：
 
 ```python
-pip install tensorcircuit
+pip install tensorcircuit-ng
 ```
 
 我们推荐安装时同时安装 TensorFlow，这可以通过以下安装可选项实现：
 
 ```python
-pip install tensorcircuit[tensorflow]
+pip install tensorcircuit-ng[tensorflow]
 ```
 
 其他安装选项包括： `[torch]`, `[jax]`, `[qiskit]` 和 `[cloud]`。
@@ -89,7 +89,7 @@ pip install tensorcircuit[tensorflow]
 此外我们有每日发布的最新版本 pip package，可以尝鲜开发的最新功能，请通过以下方式安装:
 
 ```python
-pip uninstall tensorcircuit
+pip uninstall tensorcircuit-ng
 pip install tensorcircuit-nightly
 ```
 
@@ -135,7 +135,7 @@ pip install tensorcircuit-nightly
 
 ### 协议
 
-TensorCircuit 是基于 Apache License 2.0 的开源软件。
+TensorCircuit-NG 是基于 Apache License 2.0 的开源软件。
 
 ## 研究和应用
 

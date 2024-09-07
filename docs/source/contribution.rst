@@ -1,7 +1,7 @@
 Guide for Contributors
 ============================
 
-We welcome everyone’s contributions! The development of TensorCircuit is open-sourced and centered on `GitHub <https://github.com/tensorcircuit/tensorcircuit-ng>`_.
+We welcome everyone’s contributions! The development of TensorCircuit-NG is open-sourced and centered on `GitHub <https://github.com/tensorcircuit/tensorcircuit-ng>`_.
 
 There are various ways to contribute:
 
@@ -29,9 +29,9 @@ The following git workflow is recommended for contribution by PR:
     git config user.name <GitHub name>
     git config user.email <GitHub email>
 
-* Fork the TensorCircuit repository by clicking the Fork button on GitHub. This will create an independent version of the codebase in your own GitHub account.
+* Fork the TensorCircuit-NG repository by clicking the Fork button on GitHub. This will create an independent version of the codebase in your own GitHub account.
 
-* Clone your forked repository and set up an ``upstream`` reference to the official TensorCircuit repository.
+* Clone your forked repository and set up an ``upstream`` reference to the official TensorCircuit-NG repository.
 
 .. code-block:: bash
 
@@ -84,7 +84,7 @@ Extra packages may be required for specific development tasks.
 
   git push --set-upstream origin <name-of-change>
 
-* Create a PR from the official TensorCircuit repository and send it for review. Some comments and remarks attached with the PR are recommended. If the PR is not finally finished, please add [WIP] at the beginning of the title of your PR.
+* Create a PR from the official TensorCircuit-NG repository and send it for review. Some comments and remarks attached with the PR are recommended. If the PR is not finally finished, please add [WIP] at the beginning of the title of your PR.
 
 * The PR will be reviewed by the developers and may get approved or change requested. In the latter case, you can further revise the PR according to suggestions and feedback from the code reviewers.
 

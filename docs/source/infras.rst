@@ -1,5 +1,5 @@
 =================================
-TensorCircuit: What is inside?
+TensorCircuit-NG: What is inside?
 =================================
 
 This part of the documentation is mainly for advanced users and developers who want to learn more about what happened behind the scene and delve into the codebase.
@@ -84,12 +84,12 @@ Overview of Modules
     If you want to get an overview of the codebase, please read ``tc.circuit`` followed by ``tc.cons`` and ``tc.gates``.
 
 
-Relation between TensorCircuit and TensorNetwork
----------------------------------------------------
+Relation between TensorCircuit-NG and TensorNetwork-NG
+--------------------------------------------------------
 
-TensorCircuit has a strong connection with the `TensorNetwork package <https://github.com/google/TensorNetwork>`_ released by Google. Since the TensorNetwork package has poor documentation and tutorials, most of the time, we need to delve into the codebase of TensorNetwork to figure out what happened. In other words, to read the TensorCircuit codebase, one may have to frequently refer to the TensorNetwork codebase.
+TensorCircuit has a strong connection with the `TensorNetwork package <https://github.com/google/TensorNetwork>`_ released by Google. Since the TensorNetwork package has poor documentation and tutorials, most of the time, we need to delve into the codebase of TensorNetwork to figure out what happened. In other words, to read the TensorCircuit codebase, one may have to frequently refer to the TensorNetwork codebase. As TensorNetwork package is not maintained anymore, we rely on the TensorNetwork-NG package maintained by the same authors of TensorCircuit-NG.
 
-Inside TensorCircuit, we heavily utilize TensorNetwork-related APIs from the TensorNetwork package and highly customized several modules from TensorNetwork by inheritance and rewriting:
+Inside TensorCircuit-NG, we heavily utilize TensorNetwork-related APIs from the TensorNetwork package and highly customized several modules from TensorNetwork by inheritance and rewriting:
 
 - We implement our own /backends from TensorNetwork's /backends by adding much more APIs and fixing lots of bugs in TensorNetwork's implementations on certain backends via monkey patching. (The upstream is inactive and not that responsive anyhow.)
 
