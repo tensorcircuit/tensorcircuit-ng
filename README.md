@@ -17,10 +17,6 @@
   <a href="https://pypi.org/project/tensorcircuit-ng/">
     <img src="https://img.shields.io/pypi/v/tensorcircuit-ng.svg?logo=pypi"/>
   </a>
-  <!-- binder -->
-  <a href="https://mybinder.org/v2/gh/refraction-ray/tc-env/master?urlpath=git-pull%3Frepo%3Dhttps%253A%252F%252Fgithub.com%252Ftensorcircuit%252Ftensorcircuit-ng%26urlpath%3Dlab%252Ftree%252Ftensorcircuit%252F%26branch%3Dmaster">
-    <img src="https://mybinder.org/badge_logo.svg"/>
-  </a>
   <!-- License -->
   <a href="./LICENSE">
     <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?logo=apache"/>

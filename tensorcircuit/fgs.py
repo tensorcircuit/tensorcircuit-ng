@@ -29,7 +29,6 @@ def onehot_matrix(i: int, j: int, N: int) -> Tensor:
 # TODO(@refraction-ray): efficiency benchmark with jit
 # TODO(@refraction-ray): FGS mixed state support?
 # TODO(@refraction-ray): overlap?
-# TODO(@refraction-ray): entanglement asymmetry
 # TODO(@refraction-ray): fermionic logarithmic negativity
 
 
