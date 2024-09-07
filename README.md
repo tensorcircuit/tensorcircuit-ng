@@ -10,7 +10,7 @@
     <img src="https://img.shields.io/github/actions/workflow/status/tensorcircuit/tensorcircuit-ng/ci.yml?branch=master" />
   </a>
   <!-- docs -->
-  <a href="https://tensorcircuit.readthedocs.io/">
+  <a href="https://tensorcircuit-ng.readthedocs.io/">
     <img src="https://img.shields.io/badge/docs-link-green.svg?logo=read-the-docs"/>
   </a>
   <!-- PyPI -->
@@ -31,9 +31,9 @@ TensorCircuit is built on top of modern machine learning frameworks: Jax, Tensor
 
 ## Getting Started
 
-Please begin with [Quick Start](/docs/source/quickstart.rst) in the [full documentation](https://tensorcircuit.readthedocs.io/).
+Please begin with [Quick Start](/docs/source/quickstart.rst) in the [full documentation](https://tensorcircuit-ng.readthedocs.io/).
 
-For more information on software usage, sota algorithm implementation and engineer paradigm demonstration, please refer to 70+ [example scripts](/examples) and 30+ [tutorial notebooks](https://tensorcircuit.readthedocs.io/en/latest/#tutorials). API docstrings and test cases in [tests](/tests) are also informative.
+For more information on software usage, sota algorithm implementation and engineer paradigm demonstration, please refer to 70+ [example scripts](/examples) and 30+ [tutorial notebooks](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials). API docstrings and test cases in [tests](/tests) are also informative.
 
 The following are some minimal demos.
 
