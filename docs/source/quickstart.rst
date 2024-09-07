@@ -7,7 +7,7 @@ Installation
 
 - For x86 Linux, 
 
-``pip install tensorcircuit`` 
+``pip install tensorcircuit-ng`` 
 
 is in general enough. 
 Either pip from conda or other python env managers is fine.
@@ -38,7 +38,7 @@ To debug the installation issue or report bugs, please check the environment inf
 
 .. Note::
     We also provide a nightly build of tensorcircuit via PyPI which can be accessed by
-    ``pip uninstall tensorcircuit``, then
+    ``pip uninstall tensorcircuit-ng``, then
     ``pip install tensorcircuit-nightly``
 
 

@@ -6,7 +6,7 @@
     <img src="https://img.shields.io/github/actions/workflow/status/tensorcircuit/tensorcircuit-ng/ci.yml?branch=master" />
   </a>
   <!-- docs -->
-  <a href="https://tensorcircuit.readthedocs.io/">
+  <a href="https://tensorcircuit-ng.readthedocs.io/">
     <img src="https://img.shields.io/badge/docs-link-green.svg?logo=read-the-docs"/>
   </a>
   <!-- PyPI -->
@@ -29,9 +29,9 @@ TensorCircuit 现在支持真实量子硬件连接和实验，并提供优雅的
 
 ## 入门
 
-请从 [完整文档](https://tensorcircuit.readthedocs.io/zh/latest/) 中的 [快速上手](/docs/source/quickstart.rst) 开始。
+请从 [完整文档](https://tensorcircuit-ng.readthedocs.io/) 中的 [快速上手](/docs/source/quickstart.rst) 开始。
 
-有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 70+ [示例脚本](/examples) 和 30+ [案例教程](https://tensorcircuit.readthedocs.io/zh/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
+有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 70+ [示例脚本](/examples) 和 30+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
 
 以下是一些最简易的演示。
 

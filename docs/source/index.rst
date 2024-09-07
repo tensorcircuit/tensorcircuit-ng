@@ -1,16 +1,16 @@
-TensorCircuit Documentation
+TensorCircuit Next Generation
 ===========================================================
 
 .. image:: https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/docs/source/statics/logong.png?raw=true
     :target: https://github.com/tensorcircuit/tensorcircuit-ng
 
 
-**Welcome and congratulations! You have found TensorCircuit.** 👏 
+**Welcome and congratulations! You have found TensorCircuit: the Next Generation.** 👏 
 
 Introduction
 ---------------
 
-TensorCircuit is an open-source high-performance quantum computing software framework in Python.
+TensorCircuit-NG is an open-source high-performance quantum computing software framework in Python.
 
 * It is built for humans. 👽
 
@@ -24,7 +24,7 @@ TensorCircuit is an open-source high-performance quantum computing software fram
 
 * It is compatible with machine learning engineering paradigms: automatic differentiation, just-in-time compilation, vectorized parallelism and GPU acceleration. 🛠
 
-With the help of TensorCircuit, now get ready to efficiently and elegantly solve interesting and challenging quantum computing problems: from academic research prototype to industry application deployment.
+With the help of TensorCircuit-NG, now get ready to efficiently and elegantly solve interesting and challenging quantum computing problems: from academic research prototype to industry application deployment.
 
 
 
@@ -32,12 +32,12 @@ With the help of TensorCircuit, now get ready to efficiently and elegantly solve
 Relevant Links
 --------------------
 
-TensorCircuit is created and maintained by `Shi-Xin Zhang <https://github.com/refraction-ray>`_.
+TensorCircuit is created and now maintained as TensorCircuit-NG by `Shi-Xin Zhang <https://github.com/refraction-ray>`_.
 
-The current core authors of TensorCircuit are `Shi-Xin Zhang <https://github.com/refraction-ray>`_ and `Yu-Qin Chen <https://github.com/yutuer21>`_.
+The current core authors of TensorCircuit-NG are `Shi-Xin Zhang <https://github.com/refraction-ray>`_ and `Yu-Qin Chen <https://github.com/yutuer21>`_.
 We also thank `contributions <https://github.com/tensorcircuit/tensorcircuit-ng/graphs/contributors>`_ from the open source community.
 
-If you have any further questions or collaboration ideas, please use the issue tracker or forum below, or send email to shixinzhang#tencent.com.
+If you have any further questions or collaboration ideas, please use the issue tracker or forum below, or send email to shixinzhang#iphy.ac.cn
 
 
 .. card-carousel:: 2
@@ -101,31 +101,12 @@ If you have any further questions or collaboration ideas, please use the issue t
 
 
 
-..
-   * Source code: https://github.com/tencent-quantum-lab/tensorcircuit
-
-   * Documentation: https://tensorcircuit.readthedocs.io
-
-   * Software Whitepaper (published in Quantum): https://quantum-journal.org/papers/q-2023-02-02-912/
-
-   * Issue Tracker: https://github.com/tencent-quantum-lab/tensorcircuit/issues
-
-   * Forum: https://github.com/tencent-quantum-lab/tensorcircuit/discussions
-
-   * PyPI page: https://pypi.org/project/tensorcircuit
-
-   * DockerHub page: https://hub.docker.com/repository/docker/tensorcircuit/tensorcircuit
-
-   * Research and projects based on TensorCircuit: https://github.com/tencent-quantum-lab/tensorcircuit#research-and-applications
-
-   * Tencent Quantum Cloud Service: https://quantum.tencent.com/cloud/
-
 
 
 Unified Quantum Programming
 ------------------------------
 
-TensorCircuit is unifying infrastructures and interfaces for quantum computing.
+TensorCircuit-NG is unifying infrastructures and interfaces for quantum computing.
 
 .. grid:: 1 2 4 4
    :margin: 0
@@ -192,7 +173,7 @@ TensorCircuit is unifying infrastructures and interfaces for quantum computing.
 Reference Documentation
 ----------------------------
 
-The following documentation sections briefly introduce TensorCircuit to the users and developpers.
+The following documentation sections briefly introduce TensorCircuit-NG to the users and developpers.
 
 .. toctree::
    :maxdepth: 2
