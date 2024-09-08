@@ -4,7 +4,7 @@ Frequently Asked Questions
 What is the relation between TensorCircuit and TensorCircuit-NG?
 -------------------------------------------------------------------
 
-Both packages are created by `Shi-Xin Zhang <https://www.iop.cas.cn/rcjy/tpyjy/?id=6789>`_` (`@refraction-ray <https://github.com/refraction-ray>`_). For the history of the evolution of tensorcircuit, please refer to `history <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/HISTORY.md>`_.
+Both packages are created by `Shi-Xin Zhang <https://www.iop.cas.cn/rcjy/tpyjy/?id=6789>`_ (`@refraction-ray <https://github.com/refraction-ray>`_). For the history of the evolution of tensorcircuit, please refer to `history <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/HISTORY.md>`_.
 
 From users' perspective, TensorCircuit-NG maintains full compatibility with the TensorCircuit API, enhancing it with additional features and critical bug fixes. Only TensorCircuit-NG is kept up-to-date with the fast evolving scientific computing and machine learning ecosystem in Python.
 

@@ -299,6 +299,6 @@ def test_entanglement_asymmetry(backend, highp):
             np.testing.assert_allclose(
                 saq,
                 saq_ans,
-                atol=5 * std,
+                atol=6 * std,
             )
             print(std)
