@@ -29,7 +29,7 @@ TensorCircuit-NG is a high performance quantum software framework, supporting fo
 
 TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for highly efficient simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal, noisy and approximate cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions.
 
-TensorCircuit-NG is fully compatible with TensorCircuit with more new features and bug fixes.
+TensorCircuit-NG is [fully compatible](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng) with TensorCircuit with more new features and bug fixes.
 
 ## Getting Started
 

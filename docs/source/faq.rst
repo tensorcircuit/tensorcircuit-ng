@@ -4,9 +4,10 @@ Frequently Asked Questions
 What is the relation between TensorCircuit and TensorCircuit-NG?
 -------------------------------------------------------------------
 
-Both packages are created by Shi-Xin Zhang. For the history of the evolution of tensorcircuit, please refer to `history<https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/HISTORY.md>`_.
+Both packages are created by `Shi-Xin Zhang <https://www.iop.cas.cn/rcjy/tpyjy/?id=6789>`_` (`@refraction-ray <https://github.com/refraction-ray>`_). For the history of the evolution of tensorcircuit, please refer to `history <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/HISTORY.md>`_.
 
 From users' perspective, TensorCircuit-NG maintains full compatibility with the TensorCircuit API, enhancing it with additional features and critical bug fixes. Only TensorCircuit-NG is kept up-to-date with the fast evolving scientific computing and machine learning ecosystem in Python.
+
 TensorCircuit-NG is intended as a drop-in replacement for TensorCircuit, namely, by simply ``pip uninstall tensorcircuit`` and ``pip install tensorcircuit-ng``, your existing applications should continue to function seamlessly without requiring any modification to the codebase.
 
 
@@ -16,6 +17,7 @@ How can I run TensorCircuit-NG on GPU?
 
 This is done directly through the ML backend. GPU support is determined by whether ML libraries are can run on GPU, we don't handle this within tensorcircuit-ng.
 It is the users' responsibility to configure a GPU-compatible environment for these ML packages. Please refer to the installation documentation for these ML packages and directly use the official dockerfiles provided by TensorCircuit-NG.
+
 With GPU compatible environment, we can switch the use of GPU or CPU by a backend agnostic environment variable ``CUDA_VISIBLE_DEVICES``.
 
 

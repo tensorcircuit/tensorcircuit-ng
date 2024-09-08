@@ -16,7 +16,7 @@ TensorCircuit-NG is an open-source high-performance quantum computing software f
 
 * It is designed for speed, flexibility and elegance. 🚀
 
-* It is empowered by advanced tensor network simulator engine. 🔋
+* It is empowered by advanced tensor network simulator engines. 🔋
 
 * It is ready for quantum hardware access with CPU/GPU/QPU (local/cloud) hybrid solutions. 🖥
 
@@ -50,7 +50,7 @@ If you have any further questions or collaboration ideas, please use the issue t
 
 
    .. card:: Documentation
-      :link: https://tensorcircuit.readthedocs.io
+      :link: https://tensorcircuit-ng.readthedocs.io
       :shadow: md
 
       Readthedocs
