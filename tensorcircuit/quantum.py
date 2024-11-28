@@ -1705,7 +1705,6 @@ def reduced_density_matrix(
         if normalize:
             rho /= backend.trace(rho)
 
-
     else:
         w = state / backend.norm(state)
         freedomexp = backend.sizen(state)

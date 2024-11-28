@@ -13,7 +13,7 @@ from .utils import is_sequence
 Tensor = Any
 
 
-class QuantumNet(torch.nn.Module):
+class QuantumNet(torch.nn.Module):  # type: ignore
     def __init__(
         self,
         f: Callable[..., Any],
