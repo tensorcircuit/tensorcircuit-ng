@@ -331,6 +331,15 @@
       "contributions": [
         "example"
       ]
+    },
+    {
+      "login": "abhinavd",
+      "name": "Abhinav Deshpande",
+      "avatar_url": "https://avatars.githubusercontent.com/u/6169877?v=4",
+      "profile": "https://adeshpande.gitlab.io",
+      "contributions": [
+        "code"
+      ]
     }
   ],
   "contributorsPerLine": 6,
