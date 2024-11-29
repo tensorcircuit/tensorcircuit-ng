@@ -366,8 +366,8 @@ Reference paper: https://arxiv.org/abs/2308.01068 (published in PRApplied).
 
 ### More works
 
- <details>
-  <summary> More research works and code projects using TensorCircuit (click for details) </summary>
+<details>
+  <summary> More research works and code projects using TensorCircuit and TensorCircuit-NG (click for details) </summary>
 
 - Neural Predictor based Quantum Architecture Search: https://arxiv.org/abs/2103.06524 (published in Machine Learning: Science and Technology).
 
@@ -389,7 +389,7 @@ Reference paper: https://arxiv.org/abs/2308.01068 (published in PRApplied).
 
 - Practical advantage of quantum machine learning in ghost imaging: https://www.nature.com/articles/s42005-023-01290-1 (published in Communications Physics).
 
-- Zero and Finite Temperature Quantum Simulations Powered by Quantum Magic: https://arxiv.org/abs/2308.11616.
+- Zero and Finite Temperature Quantum Simulations Powered by Quantum Magic: https://arxiv.org/abs/2308.11616 (published in Quantum).
 
 - Comparison of Quantum Simulators for Variational Quantum Search: A Benchmark Study: https://arxiv.org/abs/2309.05924.
 
@@ -397,14 +397,32 @@ Reference paper: https://arxiv.org/abs/2308.01068 (published in PRApplied).
 
 - Generative quantum machine learning via denoising diffusion probabilistic models: https://arxiv.org/abs/2310.05866 (published in PRL).
 
-- Quantum imaginary time evolution and quantum annealing meet topological sector optimization: https://arxiv.org/abs/2310.04291.
+- Exploring the topological sector optimization on quantum computers: https://arxiv.org/abs/2310.04291 (published in PRApplied).
 
 - Google Summer of Code 2023 Projects (QML4HEP): https://github.com/ML4SCI/QMLHEP, https://github.com/Gopal-Dahale/qgnn-hep, https://github.com/salcc/QuantumTransformers.
+
+- Universal imaginary-time critical dynamics on a quantum computer: https://arxiv.org/abs/2308.05408 (published in PRB).
 
 - Absence of barren plateaus in finite local-depth circuits with long-range entanglement: https://arxiv.org/abs/2311.01393 (published in PRL).
 
 - Non-Markovianity benefits quantum dynamics simulation: https://arxiv.org/abs/2311.17622.
 
-  </details>
+- Variational post-selection for ground states and thermal states simulation: https://arxiv.org/abs/2402.07605 (published in PRB).
+
+- Subsystem information capacity in random circuits and Hamiltonian dynamics: https://arxiv.org/abs/2405.05076.
+
+- Symmetry restoration and quantum Mpemba effect in symmetric random circuits: https://arxiv.org/abs/2403.08459 (published in PRL).
+
+- Quantum Mpemba effects in many-body localization systems: https://arxiv.org/abs/2408.07750.
+
+- Supersymmetry dynamics on Rydberg atom arrays: https://arxiv.org/abs/2410.21386.
+
+- Dynamic parameterized quantum circuits: expressive and barren-plateau free: https://arxiv.org/abs/2411.05760.
+
+- Holographic deep thermalization: https://arxiv.org/abs/2411.03587.
+
+- Quantum deep generative prior with programmable quantum circuits: https://www.nature.com/articles/s42005-024-01765-9 (published in Communications Physics).
+
+</details>
 
 If you want to highlight your research work or projects here, feel free to add by opening PR.
