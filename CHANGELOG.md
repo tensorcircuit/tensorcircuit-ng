@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- Fix support for qiskit>1
+
+- tf>=2.16.2 fix the complex input issue for keras
+
 ## 1.0.0
 
 ### Added
