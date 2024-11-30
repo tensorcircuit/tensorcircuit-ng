@@ -53,8 +53,8 @@ max-module-lines=2000
 
 # Exceptions that will emit a warning when being caught. Defaults to
 # "BaseException, Exception".
-overgeneral-exceptions=BaseException,
-                       Exception
+overgeneral-exceptions=builtins.BaseException,
+                       builtins.Exception
 
 # Note how codecc doesn't accept goddnames in pylintrc, and how we use pylint disable invalid name per file instead
 # it is not neat at all, but this is codecc's badness :(

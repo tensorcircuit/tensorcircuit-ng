@@ -783,7 +783,14 @@ class AbstractCircuit:
         :return: circuit representation in openqasm format
         :rtype: str
         """
-        return self.to_qiskit(enable_instruction=True).qasm(**kws)  # type: ignore
+        qc = self.to_qiskit(enable_instruction=True)
+        try:
+            qasm_str = qc.qasm(**kws)  # type: ignore
+        except AttributeError:  # qiskit 1.0
+            from qiskit.qasm2 import dumps
+
+            qasm_str = dumps(qc)  # type: ignore
+        return qasm_str  # type: ignore
 
     @classmethod
     def from_openqasm(

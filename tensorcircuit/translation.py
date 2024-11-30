@@ -44,6 +44,17 @@ from .interfaces.tensortrans import tensor_to_numpy
 Tensor = Any
 
 
+def get_qiskit_qasm(qc: Any) -> str:
+
+    try:
+        qasm_str = qc.qasm(**kws)  # type: ignore
+    except AttributeError:  # qiskit 1.0
+        from qiskit.qasm2 import dumps
+
+        qasm_str = dumps(qc)
+    return qasm_str  # type: ignore
+
+
 def perm_matrix(n: int) -> Tensor:
     r"""
     Generate a permutation matrix P.
