@@ -250,10 +250,9 @@ class MaskedConv2D(Layer):  # type: ignore
         # Build the conv2d layer to initialize kernel variables
         self.conv.build(input_shape)
         # Use the initialized kernel to create the mask
-        kernel_shape = self.conv.kernel.get_shape()
-        self.kernel = self.add_weight("kernel", self.conv.kernel.shape)
-        self.bias = self.add_weight("bias", self.conv.bias.shape)
-
+        kernel_shape = self.conv.kernel.shape
+        self.kernel = self.add_weight(shape=self.conv.kernel.shape)
+        self.bias = self.add_weight(shape=self.conv.bias.shape)
         self.mask = np.zeros(shape=kernel_shape)
         self.mask[: kernel_shape[0] // 2, ...] = 1.0
         self.mask[kernel_shape[0] // 2, : kernel_shape[1] // 2, ...] = 1.0
@@ -261,8 +260,9 @@ class MaskedConv2D(Layer):  # type: ignore
             self.mask[kernel_shape[0] // 2, kernel_shape[1] // 2, ...] = 1.0
 
     def call(self, inputs: tf.Tensor) -> tf.Tensor:
-        self.conv.kernel = self.kernel * self.mask
-        self.conv.bias = self.bias
+        # self.conv.kernel = self.kernel * self.mask
+        # self.conv.bias = self.bias
+        self.conv.set_weights([self.kernel * self.mask, self.bias])
         return self.conv(inputs)
 
 

@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 from ..abstractcircuit import AbstractCircuit
 from ..circuit import Circuit
-from ..translation import qiskit_from_qasm_str_ordered_measure
+from ..translation import qiskit_from_qasm_str_ordered_measure, get_qiskit_qasm
 
 
 def _free_pi(s: str) -> str:
@@ -156,14 +156,14 @@ def qiskit_compile(
     ncircuit = RemoveBarriers()(ncircuit)
 
     if output.lower() in ["qasm", "openqasm"]:
-        r0 = ncircuit.qasm()
+        r0 = get_qiskit_qasm(ncircuit)
 
     elif output.lower() in ["qiskit", "ibm"]:
         r0 = ncircuit
 
     elif output.lower() in ["tc", "tensorcircuit"]:
-        s = _free_pi(ncircuit.qasm())
-        r0 = Circuit.from_openqasm(
+        s = _free_pi(get_qiskit_qasm(ncircuit))
+        r0 = Circuit.from_openqasm(  # type: ignore
             s,
             keep_measure_order=True,
         )
