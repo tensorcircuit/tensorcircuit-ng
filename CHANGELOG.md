@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.0.1
+
 ### Fixed
 
 - Fix support for qiskit>1

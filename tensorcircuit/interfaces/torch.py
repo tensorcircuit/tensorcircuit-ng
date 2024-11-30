@@ -12,7 +12,7 @@ from .tensortrans import general_args_to_backend
 
 Tensor = Any
 
-# TODO(@refraction-ray): new paradigm compatible with torch functional trasnformation
+# TODO(@refraction-ray): new paradigm compatible with torch functional transformation
 
 
 def torch_interface(
