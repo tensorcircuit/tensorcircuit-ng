@@ -186,3 +186,11 @@ VQEX 在 MBL 相位识别上的应用见 [教程](/docs/source/tutorials/vqex_mb
 关于神经网络编码的变分量子算法的实现和工作流, 见 [教程](/docs/source/tutorials/nnvqe.ipynb)。
 
 参考论文: https://arxiv.org/abs/2308.01068。
+
+## 用户
+
+我们的用户，开发者和合作伙伴：
+
+<p align="center">
+    <img width=90% src="docs/source/statics/logong.png">
+</p>

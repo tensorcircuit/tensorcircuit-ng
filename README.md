@@ -426,3 +426,11 @@ Reference paper: https://arxiv.org/abs/2308.01068 (published in PRApplied).
 </details>
 
 If you want to highlight your research work or projects here, feel free to add by opening PR.
+
+## Users
+
+Our users, developers, and partners:
+
+<p align="center">
+    <img width=90% src="docs/source/statics/user_logo.png">
+</p>
