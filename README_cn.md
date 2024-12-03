@@ -192,5 +192,5 @@ VQEX 在 MBL 相位识别上的应用见 [教程](/docs/source/tutorials/vqex_mb
 我们的用户，开发者和合作伙伴：
 
 <p align="center">
-    <img width=90% src="docs/source/statics/logong.png">
+    <img width=90% src="docs/source/statics/user_logo.png">
 </p>
