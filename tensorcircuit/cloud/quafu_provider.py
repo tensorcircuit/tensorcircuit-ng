@@ -48,8 +48,8 @@ def submit_task(
             source = c2qasm(circuit)
         else:
             source = [c2qasm(c) for c in circuit]  # type: ignore
-    user = User()
-    user.save_apitoken(token)
+    user = User(token)
+    user.save_apitoken()
 
     def c2task(source: str) -> Task:
         nq = int(source.split("\n")[2].split("[")[1].split("]")[0])  # type: ignore

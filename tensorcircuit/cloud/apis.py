@@ -18,18 +18,17 @@ logger = logging.getLogger(__name__)
 try:
     from . import tencent  # type: ignore
 except (ImportError, ModuleNotFoundError):
-    logger.warning("fail to load cloud provider module: tencent")
+    logger.info("fail to load cloud provider module: tencent")
 
 try:
     from . import local
 except (ImportError, ModuleNotFoundError):
-    logger.warning("fail to load cloud provider module: local")
+    logger.info("fail to load cloud provider module: local")
 
 try:
     from . import quafu_provider
 except (ImportError, ModuleNotFoundError):
-    pass
-    # logger.warning("fail to load cloud provider module: quafu")
+    logger.info("fail to load cloud provider module: quafu")
 
 package_name = "tensorcircuit"
 thismodule = sys.modules[__name__]

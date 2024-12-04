@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Changed
+
+- Downgrading some logger warning to info
+
+### Fixed
+
+- Fix quafu provider
+
 ## 1.0.1
 
 ### Fixed
