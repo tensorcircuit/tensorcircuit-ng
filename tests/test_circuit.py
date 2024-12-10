@@ -236,6 +236,21 @@ def test_jittable_depolarizing(backend):
             )
 
 
+@pytest.mark.parametrize("backend", [lf("jaxb")])  # too slow for np
+def test_large_scale_sample(backend):
+    L = 30
+    c = tc.Circuit(L)
+    c.h(0)
+    c.cnot([i for i in range(L - 1)], [i + 1 for i in range(L - 1)])
+    results = c.sample(
+        allow_state=False, batch=1024, format="count_dict_bin", jittable=False
+    )
+    assert (
+        results["0" * L] / results["1" * L] < 1.2
+        and results["0" * L] / results["1" * L] > 0.8
+    )
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("cpb")])
 def test_expectation(backend):
     c = tc.Circuit(2)

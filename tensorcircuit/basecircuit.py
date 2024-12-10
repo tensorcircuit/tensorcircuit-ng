@@ -528,6 +528,7 @@ class BaseCircuit(AbstractCircuit):
         format: Optional[str] = None,
         random_generator: Optional[Any] = None,
         status: Optional[Tensor] = None,
+        jittable: bool = True,
     ) -> Any:
         """
         batched sampling from state or circuit tensor network directly
@@ -547,6 +548,9 @@ class BaseCircuit(AbstractCircuit):
         :param status: external randomness given by tensor uniformly from [0, 1],
             if set, can overwrite random_generator
         :type status: Optional[Tensor]
+        :param jittable: when converting to count, whether keep the full size. if false, may be conflict
+            external jit, if true, may fail for large scale system with actual limited count results
+        :type jittable: bool, defaults true
         :return: List (if batch) of tuple (binary configuration tensor and corresponding probability)
             if the format is None, and consistent with format when given
         :rtype: Any
@@ -612,7 +616,7 @@ class BaseCircuit(AbstractCircuit):
                 if batch is None:
                     r = r[0]  # type: ignore
                 return r
-        return sample2all(sample=ch, n=self._nqubits, format=format, jittable=True)
+        return sample2all(sample=ch, n=self._nqubits, format=format, jittable=jittable)
 
     def sample_expectation_ps(
         self,

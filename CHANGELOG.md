@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Add `jittable` option in `c.sample()` method, friendly to switch off for large scale sample
+
 ### Changed
 
 - Downgrading some logger warning to info
