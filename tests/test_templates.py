@@ -66,10 +66,20 @@ def test_bell_block():
 
 
 def test_qft_block() -> None:
-    c = tc.Circuit(4)
-    c = tc.templates.blocks.qft(c, 0, 1, 2, 3)
-    s = c.perfect_sampling()
-    assert s[1] - 0.0624999 < 10e-6
+    n_qubits = 4
+    c = tc.Circuit(n_qubits)
+    c = tc.templates.blocks.qft(c, *range(n_qubits))
+    mat = c.quoperator().eval().reshape(2 ** (n_qubits), -1)
+    N = 2**n_qubits
+    ref = np.exp(
+        1j * 2 * np.pi * np.arange(N).reshape(-1, 1) * np.arange(N).reshape(1, -1) / N
+    ) / np.sqrt(N)
+    np.testing.assert_allclose(mat, ref, atol=1e-7)
+
+    c = tc.Circuit(n_qubits)
+    c = tc.templates.blocks.qft(c, *range(n_qubits), inverse=True)
+    mat = c.quoperator().eval().reshape(2 ** (n_qubits), -1)
+    np.testing.assert_allclose(mat, ref.T.conj(), atol=1e-7)
 
 
 def test_grid_coord():

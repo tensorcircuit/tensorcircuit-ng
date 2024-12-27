@@ -181,10 +181,10 @@ def qft(
             for i in range(len(index) // 2):
                 c.swap(index[i], index[len(index) - 1 - i])
         for i in range(len(index) - 1, -1, -1):
-            rotation = -np.pi / 2
+            rotation = -np.pi / 2 ** (len(index) - i - 1)
             for j in range(len(index) - 1, i, -1):
                 c.cphase(index[j], index[i], theta=rotation)
-                rotation /= 2
+                rotation *= 2
             c.H(index[i])
             if insert_barriers:
                 c.barrier_instruction(range(min(index), max(index) + 1))
