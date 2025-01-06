@@ -542,6 +542,20 @@ class BaseCircuit(AbstractCircuit):
         :type readout_error: Optional[Sequence[Any]]. Tensor, List, Tuple
         :param format: sample format, defaults to None as backward compatibility
             check the doc in :py:meth:`tensorcircuit.quantum.measurement_results`
+            Six formats of measurement counts results:
+
+                "sample_int": # np.array([0, 0])
+
+                "sample_bin": # [np.array([1, 0]), np.array([1, 0])]
+
+                "count_vector": # np.array([2, 0, 0, 0])
+
+                "count_tuple": # (np.array([0]), np.array([2]))
+
+                "count_dict_bin": # {"00": 2, "01": 0, "10": 0, "11": 0}
+
+                "count_dict_int": # {0: 2, 1: 0, 2: 0, 3: 0}
+
         :type format: Optional[str]
         :param random_generator: random generator,  defaults to None
         :type random_generator: Optional[Any], optional

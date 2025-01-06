@@ -25,11 +25,11 @@
 
 <p align="center"> English | <a href="README_cn.md"> 简体中文 </a></p>
 
-TensorCircuit-NG is a high performance quantum software framework, supporting for automatic differentiation, just-in-time compiling, hardware acceleration, and vectorized parallelism, providing unified infrastructures and interfaces for quantum programming.
+TensorCircuit-NG is an open-source high-performance quantum software framework, supporting for automatic differentiation, just-in-time compiling, hardware acceleration, and vectorized parallelism, providing unified infrastructures and interfaces for quantum programming. It can compose quantum circuits, neural networks and tensor networks seamlessly with high simulation efficiency and flexibility.
 
-TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for highly efficient simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal, noisy and approximate cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions.
+TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for large-scale simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal, noisy, approximate and analog cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions.
 
-TensorCircuit-NG is [fully compatible](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng) with TensorCircuit with more new features and bug fixes (support numpy>2 and qiskit>1).
+TensorCircuit-NG is [fully compatible](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng) with TensorCircuit with more new features and bug fixes (support latest `numpy>2` and `qiskit>1`).
 
 ## Getting Started
 
