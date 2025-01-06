@@ -19,7 +19,7 @@ The larger bond dimension we set, the better approximation ratio (of course the 
 Stacked gates
 ----------------
 
-Stacked gates is a simple grammar sugar to make constructing the circuit easily when multiple gate of the same type are applied on the different qubits, namely, the index for gate function can accept list of ints instead of one integer.
+Stacked-gate is a simple syntactic sugar rendering circuit construction easily when multiple gate of the same type are applied on different qubits, namely, the index for gate call can accept list of ints instead of one integer.
 
 .. code-block:: python
 
@@ -98,12 +98,14 @@ Analog circuit simulation
 
 TensorCircuit-NG support digital-analog hybrid simulation (say cases in Rydberg atom arrays), where the analog part is simulated by the neural differential equation solver given the API to specify a time dependent Hamiltonian.
 The simulation is still differentiable and jittable. Only jax backend is supported for analog simulation as the neural ode engine is built on top of jax. 
+
 This utility is super helpful for optimizing quantum control or investigating digital-analog hybrid variational quantum schemes.
-We support two modes of analog simulation, where :py:meth:`tensorcircuit.experimentaql.evol_global` evolve the state via a Hamiltonian define on the whole system, and :py:meth:`tensorcircuit.experimentaql.evol_local` evolve the state via a Hamiltonian define on a local subsystem.
+
+We support two modes of analog simulation, where :py:meth:`tensorcircuit.experimental.evol_global` evolve the state via a Hamiltonian define on the whole system, and :py:meth:`tensorcircuit.experimental.evol_local` evolve the state via a Hamiltonian define on a local subsystem.
 
 .. Note::
 
-    ``evol_global`` use sparse Hamiltonian while ``evol_local`` use dense Hamiltonian.
+    ``evol_global`` uses sparse Hamiltonian while ``evol_local`` uses dense Hamiltonian.
 
 
 .. code-block:: python
@@ -155,9 +157,9 @@ We wrap the tf-backend `SavedModel` as very easy-to-use function :py:meth:`tenso
 
 For the JAX-backend quantum function, one can first transform them into the tf-backend function via JAX experimental support: `jax2tf <https://github.com/google/jax/tree/main/jax/experimental/jax2tf>`_.
 
-**Updates**: jax now also support jitted function save/load via ``export`` module, see `jax documentation <https://jax.readthedocs.io/en/latest/export/export.html>_`.
+**Updates**: jax now also support jitted function save/load via ``export`` module, see `jax documentation <https://jax.readthedocs.io/en/latest/export/export.html>`_.
 
-We wrape the jax function export capability in ``experimental`` module and can be used as follows
+We wrap the jax function export capability in ``experimental`` module and can be used as follows
 
 .. code-block:: python
 
