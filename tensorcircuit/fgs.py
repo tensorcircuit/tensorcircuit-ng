@@ -181,6 +181,8 @@ class FGSSimulator:
             subsystems_to_trace_out = []
         keep = [i for i in range(self.L) if i not in subsystems_to_trace_out]
         keep += [i + self.L for i in range(self.L) if i not in subsystems_to_trace_out]
+        if len(keep) == 0:  # protect from empty keep
+            raise ValueError("the full system is traced out, no subsystems to keep")
         keep = backend.convert_to_tensor(keep)
 
         def slice_(a: Tensor) -> Tensor:

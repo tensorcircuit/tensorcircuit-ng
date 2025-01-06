@@ -14,6 +14,8 @@
 
 - Fix quafu provider
 
+- Raise ValueError for `FGSSimulator` when traced out sites correspond the full system
+
 ## 1.0.1
 
 ### Fixed

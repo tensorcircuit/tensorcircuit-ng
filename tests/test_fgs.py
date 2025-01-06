@@ -59,6 +59,12 @@ def test_cmatrix(backend, highp):
     )
 
 
+def test_full_trace():
+    c = tc.FGSSimulator(4)
+    with pytest.raises(ValueError):
+        c.entropy([0, 1, 2, 3])
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_otoc(backend, highp):
     c = tc.FGSSimulator(4, [0, 1])
