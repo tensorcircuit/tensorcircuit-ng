@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.0.2
+
 ### Added
 
 - Add `jittable` option in `c.sample()` method, friendly to switch off for large scale sample
