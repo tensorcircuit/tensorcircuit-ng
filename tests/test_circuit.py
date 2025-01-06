@@ -236,6 +236,21 @@ def test_jittable_depolarizing(backend):
             )
 
 
+@pytest.mark.parametrize("backend", [lf("jaxb")])  # too slow for np
+def test_large_scale_sample(backend):
+    L = 30
+    c = tc.Circuit(L)
+    c.h(0)
+    c.cnot([i for i in range(L - 1)], [i + 1 for i in range(L - 1)])
+    results = c.sample(
+        allow_state=False, batch=1024, format="count_dict_bin", jittable=False
+    )
+    assert (
+        results["0" * L] / results["1" * L] < 1.2
+        and results["0" * L] / results["1" * L] > 0.8
+    )
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("cpb")])
 def test_expectation(backend):
     c = tc.Circuit(2)
@@ -1482,7 +1497,7 @@ def test_gate_count():
     # {'x': 1, 'h': 2, 'rx': 1, 'multicontrol': 1, 'toffoli': 3}
 
 
-def test_to_openqasm():
+def test_to_openqasm(tmp_path):
     c = tc.Circuit(3)
     c.H(0)
     c.rz(2, theta=0.2)
@@ -1496,8 +1511,8 @@ def test_to_openqasm():
     c1 = tc.Circuit.from_openqasm(s)
     print(c1.draw())
     np.testing.assert_allclose(c.state(), c1.state())
-    c.to_openqasm(filename="test.qasm")
-    c2 = tc.Circuit.from_openqasm_file("test.qasm")
+    c.to_openqasm_file(os.path.join(tmp_path, "test.qasm"))
+    c2 = tc.Circuit.from_openqasm_file(os.path.join(tmp_path, "test.qasm"))
     np.testing.assert_allclose(c.state(), c2.state())
 
 

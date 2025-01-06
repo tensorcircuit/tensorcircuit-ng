@@ -22,7 +22,7 @@ try:
     from qiskit.circuit.parametervector import ParameterVectorElement
     from qiskit.circuit.quantumcircuitdata import CircuitInstruction
 except ImportError:
-    logger.warning(
+    logger.info(
         "Please first ``pip install -U qiskit`` to enable related functionality in translation module"
     )
     CircuitInstruction = Any

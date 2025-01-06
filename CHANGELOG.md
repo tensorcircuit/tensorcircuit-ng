@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Added
+
+- Add jax jitted function load/save utilities in experimental module
+
+- Add `circuit.to_openqasm_file` function for compatibility of qiskit>1
+
+## 1.0.2
+
+### Added
+
+- Add `jittable` option in `c.sample()` method, friendly to switch off for large scale sample
+
+### Changed
+
+- Downgrading some logger warning to info
+
+### Fixed
+
+- Fix quafu provider
+
+- Raise ValueError for `FGSSimulator` when traced out sites correspond the full system
+
 ## 1.0.1
 
 ### Fixed

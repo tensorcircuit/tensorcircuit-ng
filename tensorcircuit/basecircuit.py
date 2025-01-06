@@ -528,6 +528,7 @@ class BaseCircuit(AbstractCircuit):
         format: Optional[str] = None,
         random_generator: Optional[Any] = None,
         status: Optional[Tensor] = None,
+        jittable: bool = True,
     ) -> Any:
         """
         batched sampling from state or circuit tensor network directly
@@ -541,12 +542,29 @@ class BaseCircuit(AbstractCircuit):
         :type readout_error: Optional[Sequence[Any]]. Tensor, List, Tuple
         :param format: sample format, defaults to None as backward compatibility
             check the doc in :py:meth:`tensorcircuit.quantum.measurement_results`
+            Six formats of measurement counts results:
+
+                "sample_int": # np.array([0, 0])
+
+                "sample_bin": # [np.array([1, 0]), np.array([1, 0])]
+
+                "count_vector": # np.array([2, 0, 0, 0])
+
+                "count_tuple": # (np.array([0]), np.array([2]))
+
+                "count_dict_bin": # {"00": 2, "01": 0, "10": 0, "11": 0}
+
+                "count_dict_int": # {0: 2, 1: 0, 2: 0, 3: 0}
+
         :type format: Optional[str]
         :param random_generator: random generator,  defaults to None
         :type random_generator: Optional[Any], optional
         :param status: external randomness given by tensor uniformly from [0, 1],
             if set, can overwrite random_generator
         :type status: Optional[Tensor]
+        :param jittable: when converting to count, whether keep the full size. if false, may be conflict
+            external jit, if true, may fail for large scale system with actual limited count results
+        :type jittable: bool, defaults true
         :return: List (if batch) of tuple (binary configuration tensor and corresponding probability)
             if the format is None, and consistent with format when given
         :rtype: Any
@@ -612,7 +630,9 @@ class BaseCircuit(AbstractCircuit):
                 if batch is None:
                     r = r[0]  # type: ignore
                 return r
-        return sample2all(sample=ch, n=self._nqubits, format=format, jittable=True)
+        if self._nqubits > 35:
+            jittable = False
+        return sample2all(sample=ch, n=self._nqubits, format=format, jittable=jittable)
 
     def sample_expectation_ps(
         self,

@@ -25,11 +25,11 @@
 
 <p align="center"> English | <a href="README_cn.md"> 简体中文 </a></p>
 
-TensorCircuit-NG is a high performance quantum software framework, supporting for automatic differentiation, just-in-time compiling, hardware acceleration, and vectorized parallelism, providing unified infrastructures and interfaces for quantum programming.
+TensorCircuit-NG is an open-source high-performance quantum software framework, supporting for automatic differentiation, just-in-time compiling, hardware acceleration, and vectorized parallelism, providing unified infrastructures and interfaces for quantum programming. It can compose quantum circuits, neural networks and tensor networks seamlessly with high simulation efficiency and flexibility.
 
-TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for highly efficient simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal, noisy and approximate cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions.
+TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for large-scale simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal, noisy, approximate and analog cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions.
 
-TensorCircuit-NG is [fully compatible](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng) with TensorCircuit with more new features and bug fixes (support numpy>2 and qiskit>1).
+TensorCircuit-NG is [fully compatible](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng) with TensorCircuit with more new features and bug fixes (support latest `numpy>2` and `qiskit>1`).
 
 ## Getting Started
 
@@ -37,9 +37,11 @@ Please begin with [Quick Start](/docs/source/quickstart.rst) in the [full docume
 
 For more information on software usage, sota algorithm implementation and engineer paradigm demonstration, please refer to 70+ [example scripts](/examples) and 30+ [tutorial notebooks](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials). API docstrings and test cases in [tests](/tests) are also informative.
 
+For beginners, please refer to [quantum computing lectures with TC-NG](https://github.com/sxzgroup/qc_lecture) to learn both quantum computing basis and representative usage of TensorCircuit-NG.
+
 The following are some minimal demos.
 
-- Circuit manipulation:
+- Circuit construction:
 
 ```python
 import tensorcircuit as tc
@@ -60,7 +62,7 @@ tc.set_dtype("complex128")
 tc.set_contractor("greedy")
 ```
 
-- Automatic differentiations with jit:
+- Automatic differentiation with jit:
 
 ```python
 def forward(theta):
@@ -348,7 +350,7 @@ Reference paper: https://arxiv.org/abs/2303.08154 (published in PRR as a Letter)
 
 ### TenCirChem
 
-[TenCirChem](https://github.com/tencent-quantum-lab/TenCirChem) is an efficient and versatile quantum computation package for molecular properties. TenCirChem is based on TensorCircuit and is optimized for chemistry applications.
+[TenCirChem](https://github.com/tencent-quantum-lab/TenCirChem) is an efficient and versatile quantum computation package for molecular properties. TenCirChem is based on TensorCircuit and is optimized for chemistry applications. The latest version TenCirChem-NG is open source and available at [TenCirChem-NG](https://github.com/tensorcircuit/TenCirChem-NG).
 
 Reference paper: https://arxiv.org/abs/2303.10825 (published in JCTC).
 
@@ -363,6 +365,12 @@ Reference paper: https://arxiv.org/abs/2303.14877 (published in Communications P
 For the setup and simulation code of neural network encoded variational quantum eigensolver, see the [demo](/docs/source/tutorials/nnvqe.ipynb).
 
 Reference paper: https://arxiv.org/abs/2308.01068 (published in PRApplied).
+
+### Effective temperature in approximate ansatzes
+
+For the simulation implementation of quantum states based on neural networks, tensor networs and quantum circuits using TensorCircuit-NG, see the [project repo](https://github.com/sxzgroup/et).
+
+Reference paper: https://arxiv.org/abs/2411.18921.
 
 ### More works
 
@@ -426,3 +434,11 @@ Reference paper: https://arxiv.org/abs/2308.01068 (published in PRApplied).
 </details>
 
 If you want to highlight your research work or projects here, feel free to add by opening PR.
+
+## Users
+
+Our users, developers, and partners:
+
+<p align="center">
+    <img width=90% src="docs/source/statics/user_logo.png">
+</p>

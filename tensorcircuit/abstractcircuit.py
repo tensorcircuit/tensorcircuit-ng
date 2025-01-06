@@ -792,6 +792,16 @@ class AbstractCircuit:
             qasm_str = dumps(qc)  # type: ignore
         return qasm_str  # type: ignore
 
+    def to_openqasm_file(self, file: str, **kws: Any) -> None:
+        """
+        save the circuit to openqasm file
+
+        :param file: the file path to save the circuit
+        :type file: str
+        """
+        with open(file, "w") as f:
+            f.write(self.to_openqasm(**kws))
+
     @classmethod
     def from_openqasm(
         cls,

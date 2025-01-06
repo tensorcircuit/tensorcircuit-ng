@@ -33,6 +33,8 @@ TensorCircuit-NG 现在支持真实量子硬件连接和实验，并提供优雅
 
 有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 70+ [示例脚本](/examples) 和 30+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
 
+初学者也可以参考[量子计算教程](https://github.com/sxzgroup/qc_lecture)学习量子计算基础和 TensorCircuit-NG 的典型用法.
+
 以下是一些最简易的演示。
 
 - 电路操作:
@@ -186,3 +188,17 @@ VQEX 在 MBL 相位识别上的应用见 [教程](/docs/source/tutorials/vqex_mb
 关于神经网络编码的变分量子算法的实现和工作流, 见 [教程](/docs/source/tutorials/nnvqe.ipynb)。
 
 参考论文: https://arxiv.org/abs/2308.01068。
+
+### 变分多体态的等效温度
+
+关于基于神经网络、张量网络和量子线路的变分量子态的模拟优化和分析，见 [项目](https://github.com/sxzgroup/et).
+
+参考论文: https://arxiv.org/abs/2411.18921.
+
+## 用户
+
+我们的用户，开发者和合作伙伴：
+
+<p align="center">
+    <img width=90% src="docs/source/statics/user_logo.png">
+</p>

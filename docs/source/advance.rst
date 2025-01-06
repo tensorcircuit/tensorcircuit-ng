@@ -5,9 +5,7 @@ Advanced Usage
 MPS Simulator
 ----------------
 
-(Still experimental support)
-
-Very simple, we provide the same set of API for ``MPSCircuit`` as ``Circuit``, 
+Very straightforward to use, we provide the same set of API for ``MPSCircuit`` as ``Circuit``, 
 the only new line is to set the bond dimension for the new simulator.
 
 .. code-block:: python
@@ -15,7 +13,57 @@ the only new line is to set the bond dimension for the new simulator.
     c = tc.MPSCircuit(n)
     c.set_split_rules({"max_singular_values": 50})
 
-The larger bond dimension we set, the better approximation ratio (of course the more computational cost we pay)
+The larger bond dimension we set, the better approximation ratio (of course the more computational cost we pay).
+
+
+Stacked gates
+----------------
+
+Stacked gates is a simple grammar sugar to make constructing the circuit easily when multiple gate of the same type are applied on the different qubits, namely, the index for gate function can accept list of ints instead of one integer.
+
+.. code-block:: python
+
+    >>> import tensorcircuit as tc
+    >>> c = tc.Circuit(4)
+    >>> c.h(range(3))
+    >>> c.draw()
+         ┌───┐
+    q_0: ┤ H ├
+         ├───┤
+    q_1: ┤ H ├
+         ├───┤
+    q_2: ┤ H ├
+         └───┘
+    q_3: ─────
+
+
+    >>> c = tc.Circuit(4)
+    >>> c.cnot([0, 1], [2, 3])
+    >>> c.draw()
+
+    q_0: ──■───────
+           │
+    q_1: ──┼────■──
+         ┌─┴─┐  │
+    q_2: ┤ X ├──┼──
+         └───┘┌─┴─┐
+    q_3: ─────┤ X ├
+              └───┘
+
+    >>> c = tc.Circuit(4)
+    >>> c.rx(range(4), theta=tc.backend.convert_to_tensor([0.1, 0.2, 0.3, 0.4]))
+    >>> c.draw()
+         ┌─────────┐
+    q_0: ┤ Rx(0.1) ├
+         ├─────────┤
+    q_1: ┤ Rx(0.2) ├
+         ├─────────┤
+    q_2: ┤ Rx(0.3) ├
+         ├─────────┤
+    q_3: ┤ Rx(0.4) ├
+         └─────────┘
+
+
 
 Split Two-qubit Gates
 -------------------------
@@ -45,15 +93,92 @@ The two-qubit gates applied on the circuit can be decomposed via SVD, which may 
 
 Note ``max_singular_values`` must be specified to make the whole procedure static and thus jittable.
 
+Analog circuit simulation
+-----------------------------
+
+TensorCircuit-NG support digital-analog hybrid simulation (say cases in Rydberg atom arrays), where the analog part is simulated by the neural differential equation solver given the API to specify a time dependent Hamiltonian.
+The simulation is still differentiable and jittable. Only jax backend is supported for analog simulation as the neural ode engine is built on top of jax. 
+This utility is super helpful for optimizing quantum control or investigating digital-analog hybrid variational quantum schemes.
+We support two modes of analog simulation, where :py:meth:`tensorcircuit.experimentaql.evol_global` evolve the state via a Hamiltonian define on the whole system, and :py:meth:`tensorcircuit.experimentaql.evol_local` evolve the state via a Hamiltonian define on a local subsystem.
+
+.. Note::
+
+    ``evol_global`` use sparse Hamiltonian while ``evol_local`` use dense Hamiltonian.
+
+
+.. code-block:: python
+
+    # in this demo, we build a jittable and differentiable simulation function `hybrid_evol` 
+    # with both digital gates and local/global analog Hamiltonian evolutions
+
+    import optax
+    import tensorcircuit as tc
+    from tensorcircuit.experimental import evol_global, evol_local
+
+    K = tc.set_backend("jax")
+
+
+    def h_fun(t, b):
+        return b * tc.gates.x().tensor
+
+
+    hy = tc.quantum.PauliStringSum2COO([[2, 0]])
+
+
+    def h_fun2(t, b):
+        return b[2] * K.cos(b[0] * t + b[1]) * hy
+
+
+    @K.jit
+    @K.value_and_grad
+    def hybrid_evol(params):
+        c = tc.Circuit(2)
+        c.x([0, 1])
+        c = evol_local(c, [1], h_fun, 1.0, params[0])
+        c.cx(1, 0)
+        c.h(0)
+        c = evol_global(c, h_fun2, 1.0, params[1:])
+        return K.real(c.expectation_ps(z=[0, 1]))
+
+
+    b = K.implicit_randn([4])
+    v, gs = hybrid_evol(b)
+
+
 
 Jitted Function Save/Load
 -----------------------------
 
 To reuse the jitted function, we can save it on the disk via support from the TensorFlow `SavedModel <https://www.tensorflow.org/guide/saved_model>`_. That is to say, only jitted quantum function on the TensorFlow backend can be saved on the disk. 
 
+We wrap the tf-backend `SavedModel` as very easy-to-use function :py:meth:`tensorcircuit.keras.save_func` and :py:meth:`tensorcircuit.keras.load_func`.
+
 For the JAX-backend quantum function, one can first transform them into the tf-backend function via JAX experimental support: `jax2tf <https://github.com/google/jax/tree/main/jax/experimental/jax2tf>`_.
 
-We wrap the tf-backend `SavedModel` as very easy-to-use function :py:meth:`tensorcircuit.keras.save_func` and :py:meth:`tensorcircuit.keras.load_func`.
+**Updates**: jax now also support jitted function save/load via ``export`` module, see `jax documentation <https://jax.readthedocs.io/en/latest/export/export.html>_`.
+
+We wrape the jax function export capability in ``experimental`` module and can be used as follows
+
+.. code-block:: python
+
+    from tensorcircuit import experimental
+
+    K = tc.set_backend("jax")
+
+    @K.jit
+    def f(weights):
+        c = tc.Circuit(3)
+        c.rx(range(3), theta=weights)
+        return K.real(c.expectation_ps(z=[0]))
+
+    print(f(K.ones([3])))
+
+    experimental.jax_jitted_function_save("temp.bin", f, K.ones([3]))
+
+    f_load = tc.experimental.jax_jitted_function_load("temp.bin")
+    f_load(K.ones([3]))
+
+
 
 Parameterized Measurements
 -----------------------------

@@ -176,11 +176,21 @@ class FGSSimulator:
             return cmatrix
 
     def get_reduced_cmatrix(self, subsystems_to_trace_out: List[int]) -> Tensor:
+        """
+        get reduced correlation matrix by tracing out subsystems
+
+        :param subsystems_to_trace_out: list of sites to be traced out
+        :type subsystems_to_trace_out: List[int]
+        :return: reduced density matrix
+        :rtype: Tensor
+        """
         m = self.get_cmatrix()
         if subsystems_to_trace_out is None:
             subsystems_to_trace_out = []
         keep = [i for i in range(self.L) if i not in subsystems_to_trace_out]
         keep += [i + self.L for i in range(self.L) if i not in subsystems_to_trace_out]
+        if len(keep) == 0:  # protect from empty keep
+            raise ValueError("the full system is traced out, no subsystems to keep")
         keep = backend.convert_to_tensor(keep)
 
         def slice_(a: Tensor) -> Tensor:
