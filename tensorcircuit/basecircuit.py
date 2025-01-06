@@ -616,6 +616,8 @@ class BaseCircuit(AbstractCircuit):
                 if batch is None:
                     r = r[0]  # type: ignore
                 return r
+        if self._nqubits > 35:
+            jittable = False
         return sample2all(sample=ch, n=self._nqubits, format=format, jittable=jittable)
 
     def sample_expectation_ps(

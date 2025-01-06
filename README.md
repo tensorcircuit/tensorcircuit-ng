@@ -37,9 +37,11 @@ Please begin with [Quick Start](/docs/source/quickstart.rst) in the [full docume
 
 For more information on software usage, sota algorithm implementation and engineer paradigm demonstration, please refer to 70+ [example scripts](/examples) and 30+ [tutorial notebooks](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials). API docstrings and test cases in [tests](/tests) are also informative.
 
+For beginners, please refer to [quantum computing lectures with TC-NG](https://github.com/sxzgroup/qc_lecture) to learn both quantum computing basis and representative usage of TensorCircuit-NG.
+
 The following are some minimal demos.
 
-- Circuit manipulation:
+- Circuit construction:
 
 ```python
 import tensorcircuit as tc
@@ -60,7 +62,7 @@ tc.set_dtype("complex128")
 tc.set_contractor("greedy")
 ```
 
-- Automatic differentiations with jit:
+- Automatic differentiation with jit:
 
 ```python
 def forward(theta):

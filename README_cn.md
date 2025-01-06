@@ -33,6 +33,8 @@ TensorCircuit-NG 现在支持真实量子硬件连接和实验，并提供优雅
 
 有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 70+ [示例脚本](/examples) 和 30+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
 
+初学者也可以参考[量子计算教程](https://github.com/sxzgroup/qc_lecture)学习量子计算基础和 TensorCircuit-NG 的典型用法.
+
 以下是一些最简易的演示。
 
 - 电路操作:
