@@ -189,6 +189,12 @@ VQEX 在 MBL 相位识别上的应用见 [教程](/docs/source/tutorials/vqex_mb
 
 参考论文: https://arxiv.org/abs/2308.01068。
 
+### 变分多体态的等效温度
+
+关于基于神经网络、张量网络和量子线路的变分量子态的模拟优化和分析，见 [项目](https://github.com/sxzgroup/et).
+
+参考论文: https://arxiv.org/abs/2411.18921.
+
 ## 用户
 
 我们的用户，开发者和合作伙伴：

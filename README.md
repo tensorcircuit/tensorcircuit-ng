@@ -350,7 +350,7 @@ Reference paper: https://arxiv.org/abs/2303.08154 (published in PRR as a Letter)
 
 ### TenCirChem
 
-[TenCirChem](https://github.com/tencent-quantum-lab/TenCirChem) is an efficient and versatile quantum computation package for molecular properties. TenCirChem is based on TensorCircuit and is optimized for chemistry applications.
+[TenCirChem](https://github.com/tencent-quantum-lab/TenCirChem) is an efficient and versatile quantum computation package for molecular properties. TenCirChem is based on TensorCircuit and is optimized for chemistry applications. The latest version TenCirChem-NG is open source and available at [TenCirChem-NG](https://github.com/tensorcircuit/TenCirChem-NG).
 
 Reference paper: https://arxiv.org/abs/2303.10825 (published in JCTC).
 
@@ -365,6 +365,12 @@ Reference paper: https://arxiv.org/abs/2303.14877 (published in Communications P
 For the setup and simulation code of neural network encoded variational quantum eigensolver, see the [demo](/docs/source/tutorials/nnvqe.ipynb).
 
 Reference paper: https://arxiv.org/abs/2308.01068 (published in PRApplied).
+
+### Effective temperature in approximate ansatzes
+
+For the simulation implementation of quantum states based on neural networks, tensor networs and quantum circuits using TensorCircuit-NG, see the [project repo](https://github.com/sxzgroup/et).
+
+Reference paper: https://arxiv.org/abs/2411.18921.
 
 ### More works
 
