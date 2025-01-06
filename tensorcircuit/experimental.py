@@ -350,10 +350,6 @@ def parameter_shift_grad_v2(
     return grad_f
 
 
-# TODO(@refraction-ray): add SPSA gradient wrapper similar to parameter shift
-# -- using noisyopt package instead
-
-
 def finite_difference_differentiator(
     f: Callable[..., Any],
     argnums: Tuple[int, ...] = (0,),
@@ -456,7 +452,7 @@ def evol_local(
 
     :param c: _description_
     :type c: Circuit
-    :param index: _description_
+    :param index: qubit sites to evolve
     :type index: Sequence[int]
     :param h_fun: h_fun should return a dense Hamiltonian matrix
         with input arguments time and *args
@@ -525,3 +521,48 @@ def evol_global(
     ts = backend.cast(ts, dtype=rdtypestr)
     s1 = odeint(f, s, ts, *args, **solver_kws)
     return type(c)(n, inputs=s1[-1])
+
+
+def jax_jitted_function_save(filename: str, f: Callable[..., Any], *args: Any) -> None:
+    """
+    save a jitted jax function as a file
+
+    :param filename: _description_
+    :type filename: str
+    :param f: the jitted function
+    :type f: Callable[..., Any]
+    :param args: example function arguments for ``f``
+    """
+
+    from jax import export
+
+    f_export = export.export(f)(*args)  # type: ignore
+    barray = f_export.serialize()
+
+    with open(filename, "wb") as file:
+        file.write(barray)
+
+
+jax_func_save = jax_jitted_function_save
+
+
+def jax_jitted_function_load(filename: str) -> Callable[..., Any]:
+    """
+    load a jitted function from file
+
+    :param filename: _description_
+    :type filename: str
+    :return: the loaded function
+    :rtype: _type_
+    """
+    from jax import export
+
+    with open(filename, "rb") as f:
+        barray = f.read()
+
+    f_load = export.deserialize(barray)  # type: ignore
+
+    return f_load.call
+
+
+jax_func_load = jax_jitted_function_load

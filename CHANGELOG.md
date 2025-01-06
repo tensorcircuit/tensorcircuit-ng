@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- Add jax jitted function load/save utilities in experimental module
+
+- Add `circuit.to_openqasm_file` function for compatibility of qiskit>1
+
 ## 1.0.2
 
 ### Added

@@ -1497,7 +1497,7 @@ def test_gate_count():
     # {'x': 1, 'h': 2, 'rx': 1, 'multicontrol': 1, 'toffoli': 3}
 
 
-def test_to_openqasm():
+def test_to_openqasm(tmp_path):
     c = tc.Circuit(3)
     c.H(0)
     c.rz(2, theta=0.2)
@@ -1511,8 +1511,8 @@ def test_to_openqasm():
     c1 = tc.Circuit.from_openqasm(s)
     print(c1.draw())
     np.testing.assert_allclose(c.state(), c1.state())
-    c.to_openqasm(filename="test.qasm")
-    c2 = tc.Circuit.from_openqasm_file("test.qasm")
+    c.to_openqasm_file(os.path.join(tmp_path, "test.qasm"))
+    c2 = tc.Circuit.from_openqasm_file(os.path.join(tmp_path, "test.qasm"))
     np.testing.assert_allclose(c.state(), c2.state())
 
 

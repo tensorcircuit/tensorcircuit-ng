@@ -176,6 +176,14 @@ class FGSSimulator:
             return cmatrix
 
     def get_reduced_cmatrix(self, subsystems_to_trace_out: List[int]) -> Tensor:
+        """
+        get reduced correlation matrix by tracing out subsystems
+
+        :param subsystems_to_trace_out: list of sites to be traced out
+        :type subsystems_to_trace_out: List[int]
+        :return: reduced density matrix
+        :rtype: Tensor
+        """
         m = self.get_cmatrix()
         if subsystems_to_trace_out is None:
             subsystems_to_trace_out = []
