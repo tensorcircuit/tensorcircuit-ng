@@ -7,6 +7,7 @@ TensorCircuit Next Generation
 
 **Welcome and congratulations! You have found TensorCircuit: the Next Generation.** 👏 
 
+
 Introduction
 ---------------
 
@@ -22,9 +23,11 @@ TensorCircuit-NG is an open-source high-performance quantum computing software f
 
 * It is implemented with industry-standard machine learning frameworks: TensorFlow, JAX, and PyTorch. 🤖
 
+* It is flexible and powerful to build and simulate tensor networks, neural networks and quantum circuits together. 🧠
+
 * It is compatible with machine learning engineering paradigms: automatic differentiation, just-in-time compilation, vectorized parallelism and GPU acceleration. 🛠
 
-With the help of TensorCircuit-NG, now get ready to efficiently and elegantly solve interesting and challenging quantum computing problems: from academic research prototype to industry application deployment.
+With the help of TensorCircuit-NG, now get ready to efficiently and elegantly solve interesting and challenging quantum computing and quantum many-body problems: from academic research prototype to industry application deployment.
 
 
 
@@ -153,7 +156,7 @@ TensorCircuit-NG is unifying infrastructures and interfaces for quantum computin
       :columns: 12 6 3 3
       :shadow: md
 
-      ideal/noisy/approximate simulation
+      ideal/noisy/approximate/analog simulation
 
    .. grid-item-card:: Unified Representations
       :columns: 12 6 3 3
@@ -161,11 +164,11 @@ TensorCircuit-NG is unifying infrastructures and interfaces for quantum computin
 
       from/to_IR/qiskit/openqasm/json
 
-   .. grid-item-card:: Unified Pipelines
+   .. grid-item-card:: Unified Objects
       :columns: 12 6 3 3
       :shadow: md
 
-      stateless functional programming/stateful ML models
+      neural network/tensor network/quantum circuit
 
 
 

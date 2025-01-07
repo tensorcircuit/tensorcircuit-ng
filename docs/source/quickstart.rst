@@ -15,7 +15,7 @@ Either pip from conda or other python env managers is fine.
 Since there are many optional packages for various features, 
 the users may need to install more pip packages when required. 
 
-- For Linux with Nvidia GPU,
+For Nvidia GPU,
 please refer to the GPU aware installation guide of corresponding machine learning frameworks: 
 `TensorFlow <https://www.tensorflow.org/install/gpu>`_, 
 `Jax <https://github.com/google/jax#pip-installation-gpu-cuda>`_, 
@@ -27,7 +27,6 @@ Docker is also recommended (especially Linux + Nvidia GPU setup):
 
 For more details on docker setup, please refer to `docker readme <https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/docker>`_.
 
-- For Windows, due to the lack of support for Jax, we recommend to use docker or WSL, please refer to `TC via windows docker <contribs/development_windows.html>`_ or `TC via WSL <contribs/development_wsl2.html>`_.
 
 Overall, the installation of TensorCircuit-NG is simple, since it is purely in Python and hence very portable. 
 As long as the users can take care of the installation of ML frameworks on the corresponding system, TensorCircuit-NG will work as expected.
@@ -239,6 +238,7 @@ To learn more about the jit mechanism, one can refer to documentation or blogs o
 
 Inputs, parameters, measurements, circuit structures, and Monte Carlo noise can all be evaluated in parallel.
 To learn more about vmap mechanism, one can refer to documentation or blogs on ``tf.vectorized_map`` or ``jax.vmap``.
+One can also refer to `tutorial <https://tensorcircuit-ng.readthedocs.io/en/latest/whitepaper/6-3-vmap.html>`_ for more details on the vmap usage in TensorCircuit-NG.
 
 
 Backend Agnosticism
