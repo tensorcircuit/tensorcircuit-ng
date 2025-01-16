@@ -60,6 +60,21 @@ class ExtendedBackend:
         e = self.sqrt(e)
         return v @ self.diagflat(e) @ self.adjoint(v)
 
+    def sqrtmhpos(self: Any, a: Tensor) -> Tensor:
+        """
+        Return the sqrtm of a known-to-be PSD Hermitian matrix ``a``.
+
+        :param a: tensor in matrix form
+        :type a: Tensor
+        :return: sqrtm of ``a`` after setting the negative eigenvalues (if they exist) to zero
+        :rtype: Tensor
+        """
+        # maybe friendly for AD and also cosidering that several backend has no support for native sqrtm
+        e, v = self.eigh(a)
+        e = self.relu(e)
+        e = self.sqrt(e)
+        return v @ self.diagflat(e) @ self.adjoint(v)
+
     def eigvalsh(self: Any, a: Tensor) -> Tensor:
         """
         Get the eigenvalues of matrix ``a``.
