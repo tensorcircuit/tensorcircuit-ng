@@ -534,7 +534,7 @@ def jax_jitted_function_save(filename: str, f: Callable[..., Any], *args: Any) -
     :param args: example function arguments for ``f``
     """
 
-    from jax import export
+    from jax import export  # type: ignore
 
     f_export = export.export(f)(*args)  # type: ignore
     barray = f_export.serialize()
@@ -555,14 +555,14 @@ def jax_jitted_function_load(filename: str) -> Callable[..., Any]:
     :return: the loaded function
     :rtype: _type_
     """
-    from jax import export
+    from jax import export  # type: ignore
 
     with open(filename, "rb") as f:
         barray = f.read()
 
     f_load = export.deserialize(barray)  # type: ignore
 
-    return f_load.call
+    return f_load.call  # type: ignore
 
 
 jax_func_load = jax_jitted_function_load

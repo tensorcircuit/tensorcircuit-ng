@@ -6,7 +6,7 @@ from .utils import gpu_memory_share
 
 gpu_memory_share()
 
-from .about import about
+from .about import about, cite
 from .cons import (
     backend,
     set_backend,

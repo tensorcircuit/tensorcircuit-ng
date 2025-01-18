@@ -151,7 +151,8 @@ adaware_qr_jit = jax.jit(adaware_qr)
 
 @jax.custom_vjp
 def adaware_eigh(A: Array) -> Array:
-    return jnp.linalg.eigh(A)
+    e, v = jnp.linalg.eigh(A)
+    return e, v
 
 
 def jaxeigh_fwd(A: Array) -> Array:
