@@ -8,6 +8,12 @@
 
 - Add `circuit.to_openqasm_file` function for compatibility of qiskit>1
 
+- Add `tc.cite()` to get citation information
+
+### Fixed
+
+- Fix customized jax eigh operator by noting the return is a namedtuple
+
 ## 1.0.2
 
 ### Added

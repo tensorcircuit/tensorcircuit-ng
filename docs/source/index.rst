@@ -11,7 +11,7 @@ TensorCircuit Next Generation
 Introduction
 ---------------
 
-TensorCircuit-NG is an open-source high-performance quantum computing software framework in Python.
+TensorCircuit-NG is an open-source high-performance quantum software framework in Python.
 
 * It is built for humans. 👽
 
@@ -29,11 +29,14 @@ TensorCircuit-NG is an open-source high-performance quantum computing software f
 
 With the help of TensorCircuit-NG, now get ready to efficiently and elegantly solve interesting and challenging quantum computing and quantum many-body problems: from academic research prototype to industry application deployment.
 
+.. important::
+   Please cite the `whitepaper <https://quantum-journal.org/papers/q-2023-02-02-912/>`_ when using TensorCircuit or TensorCircuit-NG in your research. The bibtex information is provided by ``tc.cite()``.
 
 
 
-Relevant Links
+Useful Links
 --------------------
+
 
 TensorCircuit is created and now maintained as TensorCircuit-NG by `Shi-Xin Zhang <https://github.com/refraction-ray>`_.
 
@@ -168,7 +171,7 @@ TensorCircuit-NG is unifying infrastructures and interfaces for quantum computin
       :columns: 12 6 3 3
       :shadow: md
 
-      neural network/tensor network/quantum circuit
+      neural-net/tensor-net/quantum-circuit
 
 
 

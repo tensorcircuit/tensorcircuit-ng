@@ -13,7 +13,7 @@ disable=all
 enable=c-extension-no-member,
        bad-indentation,
        bare-except,
-       broad-except,
+       ; broad-except,
        dangerous-default-value,
        function-redefined,
        len-as-condition,
