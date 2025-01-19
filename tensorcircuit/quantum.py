@@ -1161,6 +1161,9 @@ def quimb2qop(qb_mpo: Any) -> QuOperator:
     return qop
 
 
+# TODO(@refraction-ray): Z2 analogy or more general analogies for the following u1 functions
+
+
 def u1_inds(n: int, m: int) -> Tensor:
     """
     Generate all the combination index of m down spins in n sites.
