@@ -524,3 +524,26 @@ def test_reduced_wavefunction(backend):
     c1.h(0)
     c1.cnot(0, 1)
     np.testing.assert_allclose(s1, c1.state(), atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_u1_mask(backend):
+    g = tc.templates.graphs.Line1D(8)
+    sumz = tc.quantum.heisenberg_hamiltonian(g, hzz=0, hxx=0, hyy=0, hz=1)
+    for i in range(9):
+        s = tc.quantum.u1_mask(8, i)
+        s /= tc.backend.norm(s)
+        c = tc.Circuit(8, inputs=s)
+        zexp = tc.templates.measurements.operator_expectation(c, sumz)
+        np.testing.assert_allclose(zexp, 8 - 2 * i, atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_u1_project(backend):
+    c = tc.Circuit(8)
+    c.x([0, 2, 4])
+    c.exp1(0, 1, unitary=tc.gates._swap_matrix, theta=0.6)
+    s = c.state()
+    s1 = tc.quantum.u1_project(s, 8, 3)
+    assert s1.shape[-1] == 56
+    np.testing.assert_allclose(tc.quantum.u1_enlarge(s1, 8, 3), s)

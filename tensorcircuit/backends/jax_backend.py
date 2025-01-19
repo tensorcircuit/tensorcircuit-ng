@@ -609,14 +609,16 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         return carry
 
     def scatter(self, operand: Tensor, indices: Tensor, updates: Tensor) -> Tensor:
-        rank = len(operand.shape)
-        dnums = libjax.lax.ScatterDimensionNumbers(
-            update_window_dims=(),
-            inserted_window_dims=tuple([i for i in range(rank)]),
-            scatter_dims_to_operand_dims=tuple([i for i in range(rank)]),
-        )
-        r = libjax.lax.scatter(operand, indices, updates, dnums)
-        return r
+        updates = jnp.reshape(updates, indices.shape)
+        return operand.at[indices].set(updates)
+        # rank = len(operand.shape)
+        # dnums = libjax.lax.ScatterDimensionNumbers(
+        #     update_window_dims=(),
+        #     inserted_window_dims=tuple([i for i in range(rank)]),
+        #     scatter_dims_to_operand_dims=tuple([i for i in range(rank)]),
+        # )
+        # r = libjax.lax.scatter(operand, indices, updates, dnums)
+        # return r
 
     def coo_sparse_matrix(
         self, indices: Tensor, values: Tensor, shape: Tensor

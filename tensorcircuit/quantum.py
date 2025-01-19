@@ -11,6 +11,7 @@ Quantum state and operator class backend by tensornetwork
 # pylint: disable=invalid-name
 
 import logging
+import math
 import os
 from functools import partial, reduce
 from operator import matmul, mul, or_
@@ -1158,6 +1159,96 @@ def quimb2qop(qb_mpo: Any) -> QuOperator:
         [],  # ignore_edges
     )
     return qop
+
+
+def u1_inds(n: int, m: int) -> Tensor:
+    """
+    Generate all the combination index of m down spins in n sites.
+
+    .. code-block:: python
+
+        print(u1_inds(5, 1))
+        # [1, 2, 4, 8, 16]
+
+
+    :param n: number of total sites
+    :type n: int
+    :param m: number of down spins (1 in 0, 1)
+    :type m: int
+    :return: index tensor
+    :rtype: Tensor
+    """
+    # m down spins
+    num_combinations = math.comb(n, m)
+    inds = np.zeros([num_combinations], dtype="int64")
+    if m == 0:
+        inds[0] = 0
+        return inds
+    combination = (1 << m) - 1
+
+    for i in range(num_combinations):
+        inds[i] = combination
+
+        # Find the next combination using Gosper's Hack
+        u = combination & -combination
+        v = u + combination
+        combination = v + (((v ^ combination) // u) >> 2)
+    return backend.convert_to_tensor(inds)
+
+
+def u1_mask(n: int, m: int) -> Tensor:
+    """
+    Return the 1d array of size 2**n filled with zero,
+    one only in elements corresponding to the m down spins
+
+    :param n: number of total sites
+    :type n: int
+    :param m: number of down spins (1 in 0, 1)
+    :type m: int
+    :return: _description_
+    :rtype: Tensor
+    """
+    inds = u1_inds(n, m)
+    m = backend.scatter(
+        backend.zeros([2**n]),
+        backend.reshape(inds, [-1, 1]),
+        backend.ones([math.comb(n, m)]),
+    )
+    return m
+
+
+def u1_project(s: Tensor, n: int, m: int) -> Tensor:
+    """
+    Project a state s to the subspace with m down spins in n sites
+
+    :param s: input state of size 2**n
+    :type s: Tensor
+    :param n: number of total sites
+    :type n: int
+    :param m: number of down spins (1 in 0, 1)
+    :type m: int
+    :return: projected state of size C_n^m
+    :rtype: Tensor
+    """
+    return backend.gather1d(s, u1_inds(n, m))
+
+
+def u1_enlarge(s: Tensor, n: int, m: int) -> Tensor:
+    """
+    Enlarge a state s in the subspace with m down spins in n sites to
+    the full Hilbert space wavefunction of size 2**n
+
+    :param s: input state of size C_n^m
+    :type s: Tensor
+    :param n: number of total sites
+    :type n: int
+    :param m: number of down spins (1 in 0, 1)
+    :type m: int
+    :return: enlarged state of size 2**n
+    :rtype: Tensor
+    """
+    inds = u1_inds(n, m)
+    return backend.scatter(backend.zeros([2**n]), backend.reshape(inds, [-1, 1]), s)
 
 
 def heisenberg_hamiltonian(

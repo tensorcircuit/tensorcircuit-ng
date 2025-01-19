@@ -4,11 +4,13 @@
 
 ### Added
 
-- Add jax jitted function load/save utilities in experimental module
+- Add jax jitted function load/save utilities in experimental.py
 
 - Add `circuit.to_openqasm_file` function for compatibility of qiskit>1
 
 - Add `tc.cite()` to get citation information
+
+- Add `u1_inds`, `u1_mask`, `u1_project`, and `u1_enlarge` functions in quantum.py as utilities in charged conservation systems
 
 ### Fixed
 
