@@ -1548,7 +1548,7 @@ class ExtendedBackend:
                                 if i == argnum
                                 else self.reshape(
                                     self.zeros(
-                                        [self.sizen(arg), self.sizen(arg)],
+                                        [self.sizen(args[argnum]), self.sizen(arg)],
                                         dtype=arg.dtype,
                                     ),
                                     [-1] + list(self.shape_tuple(arg)),
@@ -1636,6 +1636,7 @@ class ExtendedBackend:
                     ),
                     jj,
                 )
+                jj = [jji for ind, jji in enumerate(jj) if ind in argnums]
                 if len(jj) == 1:
                     jj = jj[0]
                 jjs.append(jj)

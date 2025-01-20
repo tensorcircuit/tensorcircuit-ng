@@ -16,6 +16,8 @@
 
 - Fix customized jax eigh operator by noting the return is a namedtuple
 
+- Fix some issues in `jacfwd` and `jacrev` when integrated with vmap
+
 ## 1.0.2
 
 ### Added
