@@ -261,7 +261,7 @@ def _merge_single_gates(
             e0 = n0[0]
         njs = [i for i, n in enumerate(nodes) if id(n) in [id(e0.node1), id(e0.node2)]]
         qjs = [i for i, n in enumerate(queue) if id(n) in [id(e0.node1), id(e0.node2)]]
-        new_node = tn.contract(e0)
+        new_node = tn.contract_parallel(e0)
         total_size += _sizen(new_node)
 
         logger.debug(
