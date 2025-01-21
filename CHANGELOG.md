@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.1.0
+
 ### Added
 
 - Add jax jitted function load/save utilities in experimental.py

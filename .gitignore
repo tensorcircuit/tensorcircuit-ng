@@ -1,4 +1,5 @@
 data
+git_stat_v2.sh
 *.token
 .prettierignore
 .idea/
