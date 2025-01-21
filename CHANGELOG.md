@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Add `jax_interface`
+
 ## 1.1.0
 
 ### Added

@@ -8,6 +8,7 @@ from pytest_lazyfixture import lazy_fixture as lf
 from scipy import optimize
 import tensorflow as tf
 import jax
+from jax import numpy as jnp
 
 thisfile = os.path.abspath(__file__)
 modulepath = os.path.dirname(os.path.dirname(thisfile))
@@ -427,3 +428,135 @@ def test_args_to_tensor(backend):
     assert tc.backend.shape_tuple(a[1]) == (2, 2, 2, 2)
     assert tc.backend.shape_tuple(b.eval()) == (2, 2, 2, 2, 2, 2)
     assert tc.backend.shape_tuple(c) == (2, 2, 2, 2)
+
+
+def test_jax_interface_basic(tfb):
+
+    def f(params):
+        c = tc.Circuit(1)
+        c.rx(0, theta=params[0])
+        c.ry(0, theta=params[1])
+        return tc.backend.real(c.expectation_ps(z=[0]))
+
+    f_jax = tc.interfaces.jax_interface(f, jit=True)
+    params = jnp.ones(2)
+
+    # Test forward pass
+    val = f_jax(params)
+    assert isinstance(val, jnp.ndarray)
+    np.testing.assert_allclose(val, 0.291927, atol=1e-5)
+
+    # Test gradient computation
+    val, grad = jax.value_and_grad(f_jax)(params)
+    assert isinstance(grad, jnp.ndarray)
+    assert grad.shape == params.shape
+
+
+def test_jax_interface_multiple_inputs(tfb):
+
+    def f(params1, params2):
+        c = tc.Circuit(2)
+        c.rx(0, theta=params1[0])
+        c.ry(1, theta=params2[0])
+        return tc.backend.real(c.expectation([tc.gates.z(), [0]]))
+
+    f_jax = tc.interfaces.jax_interface(f, jit=False)
+    p1 = jnp.array([1.0])
+    p2 = jnp.array([2.0])
+
+    # Test forward pass
+    val = f_jax(p1, p2)
+    assert isinstance(val, jnp.ndarray)
+
+    # Test gradient computation
+
+    val, (grad1, grad2) = jax.value_and_grad(f_jax, argnums=(0, 1))(p1, p2)
+    assert isinstance(grad1, jnp.ndarray)
+    assert isinstance(grad2, jnp.ndarray)
+    assert grad1.shape == p1.shape
+    assert grad2.shape == p2.shape
+
+
+@pytest.mark.skip(
+    reason="might fail when testing with other function",
+)
+def test_jax_interface_jit_dlpack(tfb):
+
+    def f(params):
+        c = tc.Circuit(2)
+        c.rx(range(2), theta=params)
+        return tc.backend.real(c.expectation([tc.gates.z(), [0]]))
+
+    # Test with JIT
+    f_jax = tc.interfaces.jax_interface(f, jit=True, enable_dlpack=True)
+    params = jnp.array([np.pi, np.pi], dtype=jnp.float32)
+
+    # First call compiles
+    val1 = f_jax(params)
+    # Second call should be faster
+    val2, gs = jax.value_and_grad(f_jax)(params)
+
+    assert isinstance(val1, jnp.ndarray)
+    assert isinstance(gs, jnp.ndarray)
+    np.testing.assert_allclose(val1, val2, atol=1e-5)
+
+
+def test_jax_interface_pure_callback(tfb):
+
+    def f(params):
+        # Use TF operation to test pure_callback
+        return tf.square(params)
+
+    def f_jax1(params):
+        return jnp.sum(tc.interfaces.jax_interface(f)(params))
+
+    def f_jax2(params):
+        return jnp.sum(
+            tc.interfaces.jax_interface(
+                f, jit=True, output_shape=[2], output_dtype=jnp.float32
+            )(params)
+        )
+
+    params = jnp.array([1.0, 2.0])
+
+    for f_jax in [f_jax1, f_jax2]:
+        val = f_jax(params)
+        assert isinstance(val, jnp.ndarray)
+        np.testing.assert_allclose(val, 5.0, atol=1e-5)
+
+        # Test gradient
+        grad = jax.grad(f_jax)(params)
+        assert isinstance(grad, jnp.ndarray)
+        np.testing.assert_allclose(grad, [2.0, 4.0], atol=1e-5)
+
+
+def test_jax_interface_multiple_outputs(tfb):
+
+    def f(params):
+        # Use TF operation to test pure_callback
+        return tf.square(params), params
+
+    def f_jax1(params):
+        r = tc.interfaces.jax_interface(f)(params)
+        return jnp.sum(r[0] + r[1] ** 2) / 2
+
+    def f_jax2(params):
+        r = tc.interfaces.jax_interface(
+            f,
+            jit=True,
+            output_shape=([2], [2]),
+            output_dtype=(jnp.float32, jnp.float32),
+        )(params)
+        return jnp.sum(r[0] + r[1] ** 2) / 2
+
+    params = jnp.array([1.0, 2.0])
+
+    for f_jax in [f_jax1, f_jax2]:
+        val = f_jax(params)
+        assert isinstance(val, jnp.ndarray)
+        np.testing.assert_allclose(val, 5.0, atol=1e-5)
+
+        # Test gradient
+        grad = jax.grad(f_jax)(params)
+        assert isinstance(grad, jnp.ndarray)
+        np.testing.assert_allclose(grad, [2.0, 4.0], atol=1e-5)
