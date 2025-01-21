@@ -173,14 +173,39 @@ class DMCircuit(BaseCircuit):
         self._nodes = [t]
 
     @staticmethod
-    def check_kraus(kraus: Sequence[Gate]) -> bool:  # TODO(@refraction-ray)
+    def check_kraus(kraus: Sequence[Gate]) -> bool:
+        """
+        Check if Kraus operators satisfy the completeness relation:
+        sum_i K_i^† K_i = I
+
+        :param kraus: Sequence of Kraus operators
+        :type kraus: Sequence[Gate]
+        :return: True if completeness relation is satisfied within tolerance
+        :rtype: bool
+        :raises ValueError: If completeness relation is not satisfied
+        """
+        # Convert all operators to tensors and get their shape
+        k_tensors = [k.tensor if isinstance(k, tn.Node) else k for k in kraus]
+        shape = k_tensors[0].shape
+        dim = shape[0]  # Assuming square matrices
+
+        # Sum K_i K_i^†
+        sum_kk = backend.zeros([dim, dim], dtype=k_tensors[0].dtype)
+        for k in k_tensors:
+            kdag = backend.conj(backend.transpose(k))
+            sum_kk = sum_kk + backend.matmul(kdag, k)
+
+        # Check if sum equals identity within tolerance
+        identity = backend.eye(dim, dtype=sum_kk.dtype)
+        if not np.allclose(sum_kk, identity, atol=1e-5):
+            raise ValueError("Kraus operators do not satisfy completeness relation")
+
         return True
 
     def apply_general_kraus(
         self, kraus: Sequence[Gate], index: Sequence[Tuple[int, ...]], **kws: Any
     ) -> None:
         # note the API difference for index arg between DM and DM2
-        self.check_kraus(kraus)
         assert len(kraus) == len(index) or len(index) == 1
         if len(index) == 1:
             index = [index[0] for _ in range(len(kraus))]
@@ -341,7 +366,6 @@ class DMCircuit2(DMCircuit):
             )
             for k in kraus
         ]
-        self.check_kraus(kraus)
         if not isinstance(
             index[0], int
         ):  # try best to be compatible with DMCircuit interface

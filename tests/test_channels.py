@@ -363,3 +363,47 @@ def test_readout_mitigate(backend):
     readout_error.append([0.7, 0.9])  # readout error of qubit 2
 
     mitigate_readout(nqubit, c, readout_error)
+
+
+def test_valid_kraus_operators():
+    # Test with phase damping channel - should pass
+    kraus = phasedampingchannel(0.3)
+    assert tc.DMCircuit.check_kraus(kraus) is True
+
+    # Test with depolarizing channel - should pass
+    kraus = depolarizingchannel(0.1, 0.1, 0.1)
+    assert tc.DMCircuit.check_kraus(kraus) is True
+
+    # Test with reset channel - should pass
+    kraus = resetchannel()
+    assert tc.DMCircuit.check_kraus(kraus) is True
+
+    # Test with amplitude damping channel - should pass
+    kraus = amplitudedampingchannel(0.2, 0.3)
+    assert tc.DMCircuit.check_kraus(kraus) is True
+
+
+def test_invalid_kraus_operators():
+    # Create invalid Kraus operators that don't sum to identity
+    invalid_kraus = [
+        tc.gates.Gate(np.array([[1.0, 0], [0, 1.0]])),
+        tc.gates.Gate(np.array([[1.0, 0], [0, 1.0]])),
+    ]
+
+    with pytest.raises(ValueError):
+        tc.DMCircuit.check_kraus(invalid_kraus)
+
+
+def test_single_kraus_operator():
+    # Test with single unitary operator (should pass)
+    kraus = [tc.gates.Gate(np.array([[1.0, 0], [0, 1.0]]))]
+    assert tc.DMCircuit.check_kraus(kraus) is True
+
+
+def test_non_square_matrices():
+    # Test with non-square matrices (should raise error during matmul)
+    invalid_kraus = [
+        tc.gates.Gate(np.array([[1.0, 0]])),
+    ]
+    with pytest.raises(ValueError):
+        tc.DMCircuit.check_kraus(invalid_kraus)
