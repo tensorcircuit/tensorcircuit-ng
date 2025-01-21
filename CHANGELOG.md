@@ -6,6 +6,8 @@
 
 - Add `jax_interface`
 
+- Add `merge_count` in `results` module
+
 ## 1.1.0
 
 ### Added

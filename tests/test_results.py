@@ -15,6 +15,39 @@ def test_marginal_count():
     assert counts.marginal_count(d, [2, 1, 0])["001"] == 4
 
 
+def test_merge_count():
+
+    c1 = {"00": 10, "01": 20, "11": 30}
+    c2 = {"00": 5, "10": 15, "11": 25}
+    c3 = {"01": 10, "10": 20}
+
+    # Test merging two count dicts
+    merged = counts.merge_count(c1, c2)
+    assert merged["00"] == 15
+    assert merged["01"] == 20
+    assert merged["10"] == 15
+    assert merged["11"] == 55
+
+    # Test merging three count dicts
+    merged = counts.merge_count(c1, c2, c3)
+    assert merged["00"] == 15
+    assert merged["01"] == 30
+    assert merged["10"] == 35
+    assert merged["11"] == 55
+
+    # Test merging single count dict
+    merged = counts.merge_count(c1)
+    assert merged == c1
+
+    # Test merging empty dicts
+    merged = counts.merge_count({}, {})
+    assert merged == {}
+
+    # Test merging empty with non-empty
+    merged = counts.merge_count({}, c1)
+    assert merged == c1
+
+
 def test_count2vec():
     assert counts.vec2count(counts.count2vec(d, normalization=False), prune=True) == d
 

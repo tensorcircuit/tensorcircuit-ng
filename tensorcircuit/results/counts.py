@@ -10,8 +10,6 @@ import numpy as np
 Tensor = Any
 ct = Dict[str, int]
 
-# TODO(@refraction-ray): merge_count
-
 
 def reverse_count(count: ct) -> ct:
     ncount = {}
@@ -105,6 +103,22 @@ def expectation(
         r += cr * v  # type: ignore
         shots += v
     return r / shots
+
+
+def merge_count(*counts: ct) -> ct:
+    """
+    Merge multiple count dictionaries by summing up their counts
+
+    :param counts: Variable number of count dictionaries
+    :type counts: ct
+    :return: Merged count dictionary
+    :rtype: ct
+    """
+    merged: ct = {}
+    for count in counts:
+        for k, v in count.items():
+            merged[k] = merged.get(k, 0) + v
+    return merged
 
 
 def plot_histogram(data: Any, **kws: Any) -> Any:
