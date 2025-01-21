@@ -219,6 +219,66 @@ Please refer to :py:meth:`tensorcircuit.templates.measurements.sparse_expectatio
 
 For different representations to evaluate Hamiltonian expectation in tensorcircuit, please refer to :doc:`tutorials/tfim_vqe_diffreph`.
 
+
+Fermion Gaussian State Simulator
+--------------------------------
+
+TensorCircuit-NG provides a powerful Fermion Gaussian State (FGS) simulator for efficient simulation of non-interacting fermionic systems (with or without U(1) symmtery). The simulator is particularly useful for studying quantum many-body physics and entanglement properties.
+
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+    import numpy as np
+
+    # Initialize a 4-site system with sites 0 and 2 occupied
+    sim = tc.FGSSimulator(L=4, filled=[0, 2])
+    
+    # Evolve with hopping terms
+    sim.evol_hp(i=0, j=1, chi=1.0)  # hopping between sites 0 and 1
+    
+    # Calculate entanglement entropy for subsystem of sites 0, 1
+    entropy = sim.entropy([2, 3])
+
+
+The simulator supports various operations including:
+
+1. State initialization from quadratic Hamiltonians ground states
+2. Time evolution (real and imaginary)
+3. Entanglement measures (von Neumann, Renyi entropies and entanglement asymmetry)
+4. Correlation matrix calculations
+5. Measurements
+
+
+Here's an example studying entanglement asymmetry in tilted ferromagnet states:
+
+.. code-block:: python
+
+    def xy_hamiltonian(theta, L):
+        # XY model with tilted field
+        gamma = 2 / (np.cos(theta) ** 2 + 1) - 1
+        mu = 4 * np.sqrt(1 - gamma**2) * np.ones([L])
+        
+        # Construct Hamiltonian terms
+        h = (generate_hopping_h(2.0, L) + 
+             generate_pairing_h(gamma * 2, L) + 
+             generate_chemical_h(mu))
+        return h
+
+    def get_saq_sa(theta, l, L, k, batch=1024):
+        # Calculate entanglement asymmetry in the middle subsystem with size l
+        traceout = [i for i in range(0, L//2 - l//2)] + \
+                  [i for i in range(L//2 + l//2, L)]
+        
+        # Get Hamiltonian ground state which is within FGS
+        hi = xy_hamiltonian(theta, L)
+        sim = tc.FGSSimulator(L, hc=hi)
+        
+        # Get both symmetry-resolved and standard entanglement
+        return (np.real(sim.renyi_entanglement_asymmetry(k, traceout, batch=batch)),
+                sim.renyi_entropy(k, traceout))
+
+
 Randoms, Jit, Backend Agnostic, and Their Interplay
 --------------------------------------------------------
 
