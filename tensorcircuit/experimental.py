@@ -20,6 +20,16 @@ def adaptive_vmap(
     static_argnums: Optional[Union[int, Sequence[int]]] = None,
     chunk_size: Optional[int] = None,
 ) -> Callable[..., Any]:
+    """
+    Vectorized map with adaptive chunking for memory efficiency.
+
+    :param f: Function to be vectorized
+    :param vectorized_argnums: Arguments to be vectorized over
+    :param static_argnums: Arguments that remain static during vectorization
+    :param chunk_size: Size of chunks for batch processing, None means no chunking
+        (naive vmap)
+    :return: Vectorized function
+    """
     if chunk_size is None:
         return backend.vmap(f, vectorized_argnums)  # type: ignore
 
@@ -94,6 +104,29 @@ def qng(
     postprocess: Optional[str] = "qng",
     mode: str = "fwd",
 ) -> Callable[..., Tensor]:
+    """
+    Compute quantum natural gradient for quantum circuit optimization.
+
+    :param f: Function that takes parameters and returns quantum state
+    :param kernel: Type of kernel to use ("qng" or "dynamics"), the former has the second term
+    :param postprocess: Post-processing method ("qng" or None)
+    :param mode: Mode of differentiation ("fwd" or "rev")
+    :return: Function computing QNG matrix
+
+    :Example:
+
+    >>> import tensorcircuit as tc
+    >>> def ansatz(params):
+    ...     c = tc.Circuit(2)
+    ...     c.rx(0, theta=params[0])
+    ...     c.ry(1, theta=params[1])
+    ...     return c.state()
+    >>> qng_fn = tc.experimental.qng(ansatz)
+    >>> params = tc.array_to_tensor([0.5, 0.8])
+    >>> qng_matrix = qng_fn(params)
+    >>> print(qng_matrix.shape)  # (2, 2)
+    """
+
     # for both qng and qng2 calculation, we highly recommended complex-dtype but real valued inputs
     def wrapper(params: Tensor, **kws: Any) -> Tensor:
         params = backend.cast(params, dtype=dtypestr)  # R->C protection
@@ -406,19 +439,46 @@ def hamiltonian_evol(
     callback: Optional[Callable[..., Any]] = None,
 ) -> Tensor:
     """
-    Fast implementation of static full Hamiltonian evolution
-    (default as imaginary time)
+    Fast implementation of time independent Hamiltonian evolution using eigendecomposition.
+    By default, performs imaginary time evolution.
 
-    :param tlist: _description_
+    :param tlist: Time points for evolution
     :type tlist: Tensor
-    :param h: _description_
+    :param h: Time-independent Hamiltonian matrix
     :type h: Tensor
-    :param psi0: _description_
+    :param psi0: Initial state vector
     :type psi0: Tensor
-    :param callback: _description_, defaults to None
+    :param callback: Optional function to process state at each time point
     :type callback: Optional[Callable[..., Any]], optional
-    :return: Tensor
-    :rtype: result dynamics on ``tlist``
+    :return: Evolution results at each time point. If callback is None, returns state vectors;
+            otherwise returns callback results
+    :rtype: Tensor
+
+    :Example:
+
+    >>> import tensorcircuit as tc
+    >>> import numpy as np
+    >>> # Define a simple 2-qubit Hamiltonian
+    >>> h = tc.array_to_tensor([
+    ...     [1.0, 0.0, 0.0, 0.0],
+    ...     [0.0, -1.0, 2.0, 0.0],
+    ...     [0.0, 2.0, -1.0, 0.0],
+    ...     [0.0, 0.0, 0.0, 1.0]
+    ... ])
+    >>> # Initial state |00⟩
+    >>> psi0 = tc.array_to_tensor([1.0, 0.0, 0.0, 0.0])
+    >>> # Evolution times
+    >>> times = tc.array_to_tensor([0.0, 0.5, 1.0])
+    >>> # Evolve and get states
+    >>> states = tc.experimental.hamiltonian_evol(times, h, psi0)
+    >>> print(states.shape)  # (3, 4)
+
+
+    Note:
+        1. The Hamiltonian must be time-independent
+        2. For time-dependent Hamiltonians, use ``evol_local`` or ``evol_global`` instead
+        3. The evolution is performed in imaginary time by default (factor -t in exponential)
+        4. The state is automatically normalized at each time point
     """
     es, u = backend.eigh(h)
     utpsi0 = backend.reshape(
