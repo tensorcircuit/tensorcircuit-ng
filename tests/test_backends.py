@@ -119,8 +119,12 @@ def test_backend_methods(backend):
     ans = np.array([[1, 0.5j], [-0.5j, 1]])
     ans2 = ans @ ans
     ansp = tc.backend.sqrtmh(tc.array_to_tensor(ans2))
-    print(ansp @ ansp, ans @ ans)
+    # print(ansp @ ansp, ans @ ans)
     np.testing.assert_allclose(ansp @ ansp, ans @ ans, atol=1e-4)
+    singularm = np.array([[4.0, 0], [0, -1e-3]])
+    np.testing.assert_allclose(
+        tc.backend.sqrtmh(singularm, psd=True), np.array([[2.0, 0], [0, 0]]), atol=1e-5
+    )
 
     np.testing.assert_allclose(
         tc.backend.sum(tc.array_to_tensor(np.arange(4))), 6, atol=1e-4

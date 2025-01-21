@@ -12,6 +12,8 @@
 
 - Add `u1_inds`, `u1_mask`, `u1_project`, and `u1_enlarge` functions in quantum.py as utilities in charged conservation systems
 
+- Add `psd` boolean to `sqrtmh` method for backends
+
 ### Fixed
 
 - Fix customized jax eigh operator by noting the return is a namedtuple

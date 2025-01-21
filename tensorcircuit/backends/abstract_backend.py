@@ -46,17 +46,22 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `expm`.".format(self.name)
         )
 
-    def sqrtmh(self: Any, a: Tensor) -> Tensor:
+    def sqrtmh(self: Any, a: Tensor, psd: bool = False) -> Tensor:
         """
         Return the sqrtm of a Hermitian matrix ``a``.
 
         :param a: tensor in matrix form
         :type a: Tensor
+        :param psd: whether the input ``a`` is guaranteed as a positive semidefinite matrix,
+            defaults False
+        :type psd: bool
         :return: sqrtm of ``a``
         :rtype: Tensor
         """
         # maybe friendly for AD and also cosidering that several backend has no support for native sqrtm
         e, v = self.eigh(a)
+        if psd:
+            e = self.relu(e)
         e = self.sqrt(e)
         return v @ self.diagflat(e) @ self.adjoint(v)
 
