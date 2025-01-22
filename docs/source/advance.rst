@@ -5,7 +5,9 @@ Advanced Usage
 MPS Simulator
 ----------------
 
-Very straightforward to use, we provide the same set of API for ``MPSCircuit`` as ``Circuit``, 
+TensorCircuit-NG provides Matrix Product State (MPS) simulation as an efficient alternative to exact simulation for quantum circuits. MPS simulation can handle larger quantum systems by trading off accuracy for computational efficiency.
+
+MPS simulator is very straightforward to use, we provide the same set of API for ``MPSCircuit`` as ``Circuit``, 
 the only new line is to set the bond dimension for the new simulator.
 
 .. code-block:: python
@@ -70,7 +72,7 @@ Split Two-qubit Gates
 
 The two-qubit gates applied on the circuit can be decomposed via SVD, which may further improve the optimality of the contraction pathfinding.
 
-`split` configuration can be set at circuit-level or gate-level.
+``split`` configuration can be set at circuit-level or gate-level.
 
 .. code-block:: python
 
@@ -153,7 +155,7 @@ Jitted Function Save/Load
 
 To reuse the jitted function, we can save it on the disk via support from the TensorFlow `SavedModel <https://www.tensorflow.org/guide/saved_model>`_. That is to say, only jitted quantum function on the TensorFlow backend can be saved on the disk. 
 
-We wrap the tf-backend `SavedModel` as very easy-to-use function :py:meth:`tensorcircuit.keras.save_func` and :py:meth:`tensorcircuit.keras.load_func`.
+We wrap the tf-backend ``SavedModel`` as very easy-to-use function :py:meth:`tensorcircuit.keras.save_func` and :py:meth:`tensorcircuit.keras.load_func`.
 
 For the JAX-backend quantum function, one can first transform them into the tf-backend function via JAX experimental support: `jax2tf <https://github.com/google/jax/tree/main/jax/experimental/jax2tf>`_.
 
