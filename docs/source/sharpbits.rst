@@ -228,16 +228,16 @@ Also see the code below for a reference:
     # [0.90929747 0.90929747]
 
 
-    VMAP outside grad-like function on tensorflow backend
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+VMAP outside grad-like function on tensorflow backend
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    Vmap (vectorized map) outside a grad-like function may cause incorrected results on TensorFlow backends due to a long existing `bug <https://github.com/tensorflow/tensorflow/issues/52148>`_ in TensorFlow codebase. So better always stick to the first-vmap-then-differentiated paradigm.
+Vmap (vectorized map) outside a grad-like function may cause incorrected results on TensorFlow backends due to a long existing `bug <https://github.com/tensorflow/tensorflow/issues/52148>`_ in TensorFlow codebase. So better always stick to the first-vmap-then-differentiated paradigm.
 
-    Grad over vmap function
-    ~~~~~~~~~~~~~~~~~~~~~~~~~
+Grad over vmap function
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    A related issue is the different behavior for `K.grad(K.vmap(f))` on different backends. For tensorflow backend, the function to be differentiated has a scalar output which is the sum of all outputs.
+A related issue is the different behavior for `K.grad(K.vmap(f))` on different backends. For tensorflow backend, the function to be differentiated has a scalar output which is the sum of all outputs.
 
-    However, for Jax backend, the function simply raise error as only scalar output function can be differentiated, no implicit sum of the vectorized ``f`` is assumed. For non-scalar output, one should use `jacrev` or `jacfwd` to get the gradient information.
+However, for Jax backend, the function simply raise error as only scalar output function can be differentiated, no implicit sum of the vectorized ``f`` is assumed. For non-scalar output, one should use `jacrev` or `jacfwd` to get the gradient information.
 
-    Specifically, `K.grad(K.vmap(f))` on TensorFlow backend is equilvalent to `K.grad(K.append(K.vamp(f), K.sum))` on Jax backend.
+Specifically, `K.grad(K.vmap(f))` on TensorFlow backend is equilvalent to `K.grad(K.append(K.vamp(f), K.sum))` on Jax backend.
