@@ -18,7 +18,7 @@ How can I run TensorCircuit-NG on GPU?
 This is done directly through the ML backend. GPU support is determined by whether ML libraries are can run on GPU, we don't handle this within tensorcircuit-ng.
 It is the users' responsibility to configure a GPU-compatible environment for these ML packages. Please refer to the installation documentation for these ML packages and directly use the official dockerfiles provided by TensorCircuit-NG.
 
-- TensorFlow: ``pip install "tensorflow[and-cuda]""``
+- TensorFlow: ``pip install "tensorflow[and-cuda]"``
 
 - Jax: ``pip install -U "jax[cuda12]"``
 
@@ -245,7 +245,7 @@ When performing measurements or sampling in TensorCircuit-NG, there are six diff
         {0: 2, 1: 0, 2: 2, 3: 0}  # {state_integer: frequency}
 
 
-For more input parameters, see API doc :py:meth:`tensorcircuit.Circuit.sample`.
+For more input parameters, see API doc :py:meth:`tensorcircuit.BaseCircuit.sample`.
 
 
 How to get the entanglement entropy from the circuit output?
