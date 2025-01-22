@@ -220,6 +220,135 @@ Please refer to :py:meth:`tensorcircuit.templates.measurements.sparse_expectatio
 For different representations to evaluate Hamiltonian expectation in tensorcircuit, please refer to :doc:`tutorials/tfim_vqe_diffreph`.
 
 
+Hamiltonian Matrix Building
+----------------------------
+
+TensorCircuit-NG provides multiple ways to build Hamiltonian matrices, especially for sparse Hamiltonians constructed from Pauli strings. This is crucial for quantum many-body physics simulations and variational quantum algorithms.
+
+**Pauli String Based Construction:**
+
+The most flexible way to build Hamiltonians is through Pauli strings:
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+    
+    # Define Pauli strings and their weights
+    # Each Pauli string is represented by a list of integers:
+    # 0: Identity, 1: X, 2: Y, 3: Z
+    pauli_strings = [
+        [1, 1, 0],  # X₁X₂I₃
+        [3, 3, 0],  # Z₁Z₂I₃
+        [0, 0, 1],  # I₁I₂X₃
+    ]
+    weights = [0.5, 1.0, -0.2]
+    
+    # Build sparse Hamiltonian
+    h_sparse = tc.quantum.PauliStringSum2COO(pauli_strings, weights)
+    
+    # Or dense Hamiltonian if preferred
+    h_dense = tc.quantum.PauliStringSum2Dense(pauli_strings, weights)
+
+
+**High-Level Hamiltonian Construction:**
+
+For common Hamiltonians like Heisenberg model:
+
+.. code-block:: python
+
+    # Create a 1D chain with 10 sites
+    g = tc.templates.graphs.Line1D(10, pbc=True)  # periodic boundary condition
+    
+    # XXZ model
+    h = tc.quantum.heisenberg_hamiltonian(
+        g,
+        hxx=1.0,  # XX coupling
+        hyy=1.0,  # YY coupling
+        hzz=1.2,  # ZZ coupling
+        hx=0.5,   # X field
+        sparse=True
+    )
+
+
+**Advanced Usage:**
+
+1. Converting between xyz and Pauli string representations:
+
+.. code-block:: python
+
+    # Convert Pauli string to xyz format
+    xyz_dict = tc.quantum.ps2xyz([1, 2, 2, 0])  # X₁Y₂Y₃I₄
+    print(xyz_dict)  # {'x': [0], 'y': [1, 2], 'z': []}
+    
+    # Convert back to Pauli string
+    ps = tc.quantum.xyz2ps(xyz_dict, n=4)
+    print(ps)  # [1, 2, 2, 0]
+
+
+2. Working with MPO format:
+
+TensorCircuit-NG supports conversion from different MPO (Matrix Product Operator) formats, particularly from TensorNetwork and Quimb libraries. This is useful when you want to leverage existing MPO implementations or convert between different frameworks.
+
+**TensorNetwork MPO:**
+
+For TensorNetwork MPOs, you can convert predefined models like the Transverse Field Ising (TFI) model:
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+    import tensornetwork as tn
+    
+    # Create TFI Hamiltonian MPO from TensorNetwork
+    nwires = 6
+    Jx = np.array([1.0] * (nwires - 1))  # XX coupling strength
+    Bz = np.array([-1.0] * nwires)       # Transverse field strength
+    
+    # Create TensorNetwork MPO
+    tn_mpo = tn.matrixproductstates.mpo.FiniteTFI(
+        Jx, Bz, 
+        dtype=np.complex64
+    )
+    
+    # Convert to TensorCircuit format
+    tc_mpo = tc.quantum.tn2qop(tn_mpo)
+    
+    # Get dense matrix representation
+    h_matrix = tc_mpo.eval_matrix()
+
+Note: TensorNetwork MPO currently only supports open boundary conditions.
+
+**Quimb MPO:**
+
+Quimb provides more flexible MPO construction options:
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+    import quimb.tensor as qtn
+    
+    # Create Ising Hamiltonian MPO using Quimb
+    nwires = 6
+    J = 4.0    # ZZ coupling
+    h = 2.0    # X field
+    qb_mpo = qtn.MPO_ham_ising(
+        nwires, 
+        J, h,
+        cyclic=True  # Periodic boundary conditions
+    )
+    
+    # Convert to TensorCircuit format
+    tc_mpo = tc.quantum.quimb2qop(qb_mpo)
+    
+    # Custom Hamiltonian construction
+    builder = qtn.SpinHam1D()
+    builder += 1.0, "Y"  # Add Y term with strength 1.0
+    builder += 0.5, "X"  # Add X term with strength 0.5
+    H = builder.build_mpo(3)  # Build for 3 sites
+    
+    # Convert to TensorCircuit MPO
+    h_tc = tc.quantum.quimb2qop(H)
+
+
 Fermion Gaussian State Simulator
 --------------------------------
 

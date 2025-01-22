@@ -224,21 +224,104 @@ The related API design in TensorCircuit-NG closely follows the functional progra
 
 **AD Support:**
 
-Gradients, vjps, jvps, natural gradients, Jacobians, and Hessians.
-AD is the base for all modern machine learning libraries.
+Automatic Differentiation (AD) is crucial for quantum circuit optimization. TensorCircuit-NG supports various differentiation operations:
 
+* Gradients: First-order derivatives
+* Vector-Jacobian products (vjps): Efficient backward-mode differentiation
+* Jacobian-vector products (jvps): Efficient forward-mode differentiation
+* Natural gradients: Geometry-aware optimization
+* Jacobians: Full derivative matrices
+* Hessians: Second-order derivatives
+
+Example of gradient computation:
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+    K = tc.set_backend("tensorflow")
+
+    def circuit(params):
+        c = tc.Circuit(2)
+        c.rx(0, theta=params[0])
+        c.ry(1, theta=params[1])
+        c.cnot(0, 1)
+        return K.real(c.expectation([tc.gates.z(), [0]]))
+
+    # Get value and gradient
+    params = K.ones([2])
+    value, grad = K.value_and_grad(circuit)(params)
+    print("Value:", value)
+    print("Gradient:", grad)
+
+    # Compute Hessian
+    hess = K.hessian(circuit)(params)
+    print("Hessian:", hess)
 
 **JIT Support:**
 
-Parameterized quantum circuits can run in a blink. Always use jit if the circuit will get evaluations multiple times, it can greatly boost the simulation with two or three order time reduction. But also be cautious, users need to be familiar with jit, otherwise, the jitted function may return unexpected results or recompile on every hit (wasting lots of time).
-To learn more about the jit mechanism, one can refer to documentation or blogs on ``tf.function`` or ``jax.jit``, though these two still have subtle differences.
+Just-In-Time (JIT) compilation significantly accelerates quantum circuit simulation by optimizing the computation graph. Key points:
 
+* Use JIT for functions that will be called multiple times
+* JIT compilation has some overhead, so it's most beneficial for repeated executions
+* Ensure input shapes and types are consistent to avoid recompilation
+* The input and output of the functions are all tensors, except static inputs.
+
+Example of JIT acceleration:
+
+.. code-block:: python
+
+    import time
+    
+    # Define a quantum circuit function
+    def noisy_circuit(key):
+        c = tc.Circuit(5)
+        for i in range(5):
+            c.h(i)
+            c.depolarizing(i, px=0.01, py=0.01, pz=0.01, status=key[i])
+        return c.expectation_ps(z=[0])
+
+    # Compare performance with and without JIT
+    start = time.time()
+    for _ in range(100):
+        noisy_circuit(K.ones([5]))
+    print("Without JIT:", time.time() - start)
+
+    jitted_circuit = K.jit(noisy_circuit)
+    start = time.time()
+    for _ in range(100):
+        jitted_circuit(K.ones([5]))
+    print("With JIT:", time.time() - start)
 
 **VMAP Support:**
 
-Inputs, parameters, measurements, circuit structures, and Monte Carlo noise can all be evaluated in parallel.
-To learn more about vmap mechanism, one can refer to documentation or blogs on ``tf.vectorized_map`` or ``jax.vmap``.
-One can also refer to `tutorial <https://tensorcircuit-ng.readthedocs.io/en/latest/whitepaper/6-3-vmap.html>`_ for more details on the vmap usage in TensorCircuit-NG.
+Vectorized mapping (vmap) enables parallel evaluation across multiple inputs or parameters:
+
+* Batch processing of quantum circuit input wavefunctions
+* Batch processing quantum circuit structure
+* Parallel parameter optimization
+* Efficient Monte Carlo sampling for noise simulation
+* Vectorized measurement operations
+
+Example of vmap for parallel circuit evaluation:
+
+.. code-block:: python
+
+    # Define a parameterized circuit
+    def param_circuit(params):
+        c = tc.Circuit(2)
+        c.rx(0, theta=params[0])
+        c.ry(1, theta=params[1])
+        return K.real(c.expectation([tc.gates.z(), [0]]))
+
+    # Create batch of parameters
+    batch_params = K.ones([10, 2])
+
+    # Vectorize the circuit evaluation
+    vmap_circuit = K.vmap(param_circuit)
+    results = vmap_circuit(batch_params)
+    
+
+For more advanced usage patterns and detailed examples of vmap, refer to our `vmap tutorial <https://tensorcircuit-ng.readthedocs.io/en/latest/whitepaper/6-3-vmap.html>`_.
 
 
 Backend Agnosticism
@@ -424,7 +507,6 @@ and the other part is implemented in `TensorCircuit package <modules.html#module
     'vvag',
     'zeros']
 
-​
 
 Switch the Dtype
 --------------------
@@ -432,7 +514,7 @@ Switch the Dtype
 TensorCircuit-NG supports simulation using 32/64 bit precession. The default dtype is 32-bit as "complex64".
 Change this by ``tc.set_dtype("complex128")``.
 
-``tc.dtypestr`` always returns the current dtype string: either "complex64" or "complex128".
+``tc.dtypestr`` always returns the current dtype string: either "complex64" or "complex128". Accordingly, ``tc.rdtypestr`` always returns the current real dtype string: either "float32" or "float64".
 
 
 Setup the Contractor
@@ -769,6 +851,79 @@ We also provider wrapper of quantum function for keras layer as :py:meth:`tensor
         l = layer(v)
     grad = tape.gradient(l, layer.trainable_variables)
 
+**JAX interfaces:**
+
+TensorCircuit-NG also newly introduces JAX interface to seamlessly integrate with JAX's ecosystem. 
+This allows you to use JAX's powerful features like automatic differentiation, JIT compilation, and vectorization with quantum circuits or functions running on any backend.
+
+Basic usage with JAX interface:
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+    import jax
+    import jax.numpy as jnp
+
+    # Set non-jax backend
+    tc.set_backend("tensorflow")
+
+    def circuit(params):
+        c = tc.Circuit(2)
+        c.rx(0, theta=params[0])
+        c.ry(1, theta=params[1])
+        c.cnot(0, 1)
+        return tc.backend.real(c.expectation_ps(z=[1]))
+
+    # Wrap the circuit with JAX interface
+    jax_circuit = tc.interfaces.jax_interface(circuit, jit=True)
+
+    # Now you can use JAX features
+    params = jnp.ones(2)
+    value, grad = jax.value_and_grad(jax_circuit)(params)
+    print("Value:", value)
+    print("Gradient:", grad)
+
+Some advanced features:
+
+1. DLPack support for efficient tensor conversion:
+
+.. code-block:: python
+
+    # Enable DLPack for zero-copy tensor conversion
+    jax_circuit = tc.interfaces.jax_interface(circuit, 
+                                            jit=True, 
+                                            enable_dlpack=True)
+
+2. Explicit output shape specification for better performance:
+
+.. code-block:: python
+
+    # Specify output shape and dtype
+    jax_circuit = tc.interfaces.jax_interface(circuit,
+                                            jit=True,
+                                            output_shape=(1,),
+                                            output_dtype=jnp.float32)
+
+3. Multiple outputs support:
+
+.. code-block:: python
+
+    def multi_output_circuit(params):
+    c = tc.Circuit(2)
+    c.rx(0, theta=params[0])
+    c.ry(1, theta=params[1])
+    z0 = c.expectation([tc.gates.z(), [0]])
+    z1 = c.expectation([tc.gates.z(), [1]])
+    return tc.backend.real(z0), tc.backend.real(z1)
+
+    jax_circuit = tc.interfaces.jax_interface(multi_output_circuit,
+                                            jit=True,
+                                            output_shape=[[], []],
+                                            output_dtype=[jnp.float32, jnp.float32])
+    # Now you can use JAX features
+    params = jnp.ones(2)
+    value, grad = jax.value_and_grad(tc.utils.append(jax_circuit, sum))(params)
+
 
 
 **Scipy Interface to Utilize Scipy Optimizers:**
@@ -827,3 +982,4 @@ See :py:meth:`tensorcircuit.templates.measurements.heisenberg_measurements`
 
 .. figure:: statics/bell_pair_block.png
     :scale: 50%
+
