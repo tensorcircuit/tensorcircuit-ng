@@ -18,15 +18,21 @@ How can I run TensorCircuit-NG on GPU?
 This is done directly through the ML backend. GPU support is determined by whether ML libraries are can run on GPU, we don't handle this within tensorcircuit-ng.
 It is the users' responsibility to configure a GPU-compatible environment for these ML packages. Please refer to the installation documentation for these ML packages and directly use the official dockerfiles provided by TensorCircuit-NG.
 
+- TensorFlow: ``pip install "tensorflow[and-cuda]""``
+
+- Jax: ``pip install -U "jax[cuda12]"``
+
 With GPU compatible environment, we can switch the use of GPU or CPU by a backend agnostic environment variable ``CUDA_VISIBLE_DEVICES``.
 
 
-When should I use GPU for the quantum simulation?
+When should I use GPU?
 ----------------------------------------------------
 
 In general, for a circuit with qubit count larger than 16 or for circuit simulation with large batch dimension more than 16, GPU simulation will be faster than CPU simulation.
 That is to say, for very small circuits and the very small batch dimensions of vectorization, GPU may show worse performance than CPU.
 But one have to carry out detailed benchmarks on the hardware choice, since the performance is determined by the hardware and task details.
+
+For tensor network tasks of more regular shape, such as MPS-MPO contraction, GPU can be much more favored and efficient than CPU.
 
 
 When should I jit the function?
@@ -109,7 +115,7 @@ So one can try one of the following options:
 
 * ``tc.templates.measurements.parameterized_measurements(c, np.array([1, 3, 2, 0, 3, 0]), onehot=True)``
 
-Can I apply quantum operation based on previous classical measurement results in TensorCircuit-NG?
+Can I apply quantum operation based on previous classical measurement results?
 ----------------------------------------------------------------------------------------------------
 
 Try the following: (the pipeline is even fully jittable!)
@@ -179,6 +185,68 @@ How to arrange the circuit gate placement in the visualization from ``c.tex()``?
 Try ``lcompress=True`` or ``rcompress=True`` option in :py:meth:`tensorcircuit.circuit.Circuit.tex` API to make the circuit align from the left or from the right.
 
 Or try ``c.unitary(0, unitary=tc.backend.eye(2), name="invisible")`` to add placeholder on the circuit which is invisible for circuit visualization.
+
+
+How many different formats for the circuit sample results?
+--------------------------------------------------------------------------
+
+When performing measurements or sampling in TensorCircuit-NG, there are six different formats available for the results:
+
+1. ``"sample_int"``
+    Returns measurement results as integer array.
+
+    .. code-block:: python
+
+        >>> c = tc.Circuit(2)
+        >>> c.h(0)
+        >>> c.sample(batch=3, format="sample_int")
+        array([0, 2, 0])  # Each number represents a measurement outcome
+
+2. ``"sample_bin"``
+    Returns measurement results as a list of binary arrays.
+
+    .. code-block:: python
+
+        >>> c.sample(batch=3, format="sample_bin")
+        Array([[0, 0],
+                [1, 0],
+                [1, 0]], dtype=int32)  # Each sub array represents a binary string
+
+3. ``"count_vector"``
+    Returns counts as a vector where index represents the state.
+
+    .. code-block:: python
+
+        >>> c.sample(batch=3, format="count_vector")
+        Array([1, 0, 2, 0], dtype=int32)  # [#|00⟩, #|01⟩, #|10⟩, #|11⟩]
+
+4. ``"count_tuple"``
+    Returns counts as a tuple of indices and their frequencies.
+
+    .. code-block:: python
+
+        >>> c.sample(batch=4, format="count_tuple", jittable=False)
+        (Array([0, 2], dtype=int32), Array([2, 1], dtype=int32))  # (int_states, frequencies)
+
+5. ``"count_dict_bin"``
+    Returns counts as a dictionary with binary strings as keys.
+
+    .. code-block:: python
+
+        >>> c.sample(batch=4, format="count_dict_bin")
+        {"00": 2, "01": 0, "10": 2, "11": 0}
+
+6. ``"count_dict_int"``
+    Returns counts as a dictionary with integers as keys.
+
+    .. code-block:: python
+
+        >>> c.sample(batch=4, format="count_dict_int")
+        {0: 2, 1: 0, 2: 2, 3: 0}  # {state_integer: frequency}
+
+
+For more input parameters, see API doc :py:meth:`tensorcircuit.Circuit.sample`.
+
 
 How to get the entanglement entropy from the circuit output?
 --------------------------------------------------------------------

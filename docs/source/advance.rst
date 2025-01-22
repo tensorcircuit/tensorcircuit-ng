@@ -18,8 +18,8 @@ the only new line is to set the bond dimension for the new simulator.
 The larger bond dimension we set, the better approximation ratio (of course the more computational cost we pay).
 
 
-Stacked gates
-----------------
+Stacked gates syntax
+------------------------
 
 Stacked-gate is a simple syntactic sugar rendering circuit construction easily when multiple gate of the same type are applied on different qubits, namely, the index for gate call can accept list of ints instead of one integer.
 
@@ -187,7 +187,7 @@ We wrap the jax function export capability in ``experimental`` module and can be
 Parameterized Measurements
 -----------------------------
 
-For plain measurements API on a ``tc.Circuit``, eg. `c = tc.Circuit(n=3)`, if we want to evaluate the expectation :math:`<Z_1Z_2>`, we need to call the API as ``c.expectation((tc.gates.z(), [1]), (tc.gates.z(), [2]))``. 
+For plain measurements API on a ``tc.Circuit``, eg. ``c = tc.Circuit(3)``, if we want to evaluate the expectation :math:`<Z_1Z_2>`, we need to call the API as ``c.expectation((tc.gates.z(), [1]), (tc.gates.z(), [2]))``. 
 
 In some cases, we may want to tell the software what to measure but in a tensor fashion. For example, if we want to get the above expectation, we can use the following API: :py:meth:`tensorcircuit.templates.measurements.parameterized_measurements`.
 
