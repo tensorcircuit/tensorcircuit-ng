@@ -2,7 +2,7 @@
 demonstration of vmap + grad like API
 """
 
-import os
+import sys
 
 sys.path.insert(0, "../")
 
