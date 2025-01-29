@@ -227,7 +227,7 @@ class DMCircuit(BaseCircuit):
 
     @staticmethod
     def apply_general_kraus_delayed(
-        krausf: Callable[..., Sequence[Gate]]
+        krausf: Callable[..., Sequence[Gate]],
     ) -> Callable[..., None]:
         def apply(self: "DMCircuit", *index: int, **vars: float) -> None:
             for key in ["status", "name"]:
@@ -391,7 +391,7 @@ class DMCircuit2(DMCircuit):
 
     @staticmethod
     def apply_general_kraus_delayed(
-        krausf: Callable[..., Sequence[Gate]]
+        krausf: Callable[..., Sequence[Gate]],
     ) -> Callable[..., None]:
         def apply(self: "DMCircuit2", *index: int, **vars: float) -> None:
             for key in ["status", "name"]:

@@ -19,6 +19,17 @@ class StabilizerCircuit(AbstractCircuit):
 
     # Add gate sets as class attributes
     clifford_gates = ["h", "x", "y", "z", "cnot", "cz", "swap", "s", "sd"]
+    gate_map = {
+        "h": "H",
+        "x": "X",
+        "y": "Y",
+        "z": "Z",
+        "cnot": "CNOT",
+        "cz": "CZ",
+        "swap": "SWAP",
+        "s": "S",
+        "sd": "S_DAG",
+    }
 
     def __init__(self, nqubits: int) -> None:
         self._nqubits = nqubits
@@ -55,36 +66,24 @@ class StabilizerCircuit(AbstractCircuit):
             "gate": gate,
             "index": index,
             "name": name,
-            "split": kws.get("split", False),
-            "mpo": kws.get("mpo", False),
+            "split": False,
+            "mpo": False,
         }
-        ir_dict = kws.get("ir_dict", None)
+        ir_dict = kws["ir_dict"]
         if ir_dict is not None:
             ir_dict.update(gate_dict)
         else:
             ir_dict = gate_dict
         self._qir.append(ir_dict)
 
-        # Convert negative indices
-        index = tuple([i if i >= 0 else self._nqubits + i for i in index])
-
         # Map TensorCircuit gates to Stim gates
-        gate_map = {
-            "h": "H",
-            "x": "X",
-            "y": "Y",
-            "z": "Z",
-            "cnot": "CNOT",
-            "cz": "CZ",
-            "swap": "SWAP",
-            "s": "S",
-            "sd": "S_DAG",
-        }
-        if name.lower() in gate_map:
-            self._stim_circuit.append(gate_map[name.lower()], list(index))
-            instruction = stim.Circuit()
-            instruction.append(gate_map[name.lower()], list(index))
-            self.current_sim.do(instruction)
+
+        if name.lower() in self.gate_map:
+            # self._stim_circuit.append(gate_map[name.lower()], list(index))
+            instruction = f"{self.gate_map[name.lower()]} {' '.join(map(str, index))}"
+            self._stim_circuit.append_from_stim_program_text(instruction)
+            # append is much slower
+            self.current_sim.do(stim.Circuit(instruction))
         else:
             raise ValueError(f"Gate {name} is not supported in stabilizer simulation")
 
@@ -125,7 +124,8 @@ class StabilizerCircuit(AbstractCircuit):
         # Convert negative indices
 
         # Add measurement instructions
-        self._stim_circuit.append("M", index)
+        self._stim_circuit.append_from_stim_program_text("M " + str(index))
+        # self.current_sim = None
         m = self.current_simulator().measure(index)
         # Sample once from the circuit using sampler
 
@@ -296,7 +296,74 @@ class StabilizerCircuit(AbstractCircuit):
         """
         Return the current tableau of the circuit.
         """
-        self.current_simulator().current_inverse_tableau() ** -1
+        return self.current_simulator().current_inverse_tableau() ** -1
+
+    def entanglement_entropy(self, cut: Sequence[int]) -> float:
+        """
+        Calculate the entanglement entropy for a subset of qubits using stabilizer formalism.
+
+        :param cut: Indices of qubits to calculate entanglement entropy for
+        :type cut: Sequence[int]
+        :return: Entanglement entropy
+        :rtype: float
+        """
+        # Get stabilizer tableau
+        tableau = self.current_tableau()
+        N = len(tableau)
+
+        # Pre-allocate binary matrix with proper dtype
+        # binary_matrix = np.zeros((N, 2 * N), dtype=np.int8)
+
+        # Vectorized conversion of stabilizers to binary matrix
+        # z_outputs = np.array([tableau.z_output(k) for k in range(N)])
+        # x_part = z_outputs == 1  # X
+        # z_part = z_outputs == 3  # Z
+        # y_part = z_outputs == 2  # Y
+
+        # binary_matrix[:, :N] = x_part | y_part
+        # binary_matrix[:, N:] = z_part | y_part
+
+        _, _, z2x, z2z, _, _ = tableau.to_numpy()
+        binary_matrix = np.concatenate([z2x, z2z], axis=1)
+        # Get reduced matrix for the cut using boolean indexing
+        cut_set = set(cut)
+        cut_indices = np.array(
+            [i for i in range(N) if i in cut_set]
+            + [i + N for i in range(N) if i in cut_set]
+        )
+        reduced_matrix = binary_matrix[:, cut_indices]
+
+        # Efficient rank calculation using Gaussian elimination
+        matrix = reduced_matrix.copy()
+        n_rows, n_cols = matrix.shape
+        rank = 0
+        row = 0
+
+        for col in range(n_cols):
+            # Vectorized pivot finding
+            pivot_rows = np.nonzero(matrix[row:, col])[0]
+            if len(pivot_rows) > 0:
+                pivot_row = pivot_rows[0] + row
+
+                # Swap rows if necessary
+                if pivot_row != row:
+                    matrix[row], matrix[pivot_row] = (
+                        matrix[pivot_row].copy(),
+                        matrix[row].copy(),
+                    )
+
+                # Vectorized elimination
+                eliminate_mask = matrix[row + 1 :, col] == 1
+                matrix[row + 1 :][eliminate_mask] ^= matrix[row]
+
+                rank += 1
+                row += 1
+
+                if row == n_rows:
+                    break
+
+        # Calculate entropy
+        return float((rank - len(cut)) * np.log(2))
 
 
 # Call _meta_apply at module level to register the gates

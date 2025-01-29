@@ -1,3 +1,7 @@
+"""
+Deprecated, please see stahilizer_entanglement_benchmark.py
+"""
+
 import numpy as np
 import stim
 

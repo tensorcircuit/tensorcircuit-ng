@@ -16,7 +16,7 @@ def yp(img, params):
     return K.real(c.expectation_ps(z=[nwires - 1]))
 
 
-model = tc.keras.QuantumLayer(yp, [(nlayer * 2 * nwires)])
+model = tc.keras.QuantumLayer(yp, [nlayer * 2 * nwires])
 
 imgs = K.implicit_randn(shape=[nbatch, nwires])
 
