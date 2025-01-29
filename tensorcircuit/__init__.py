@@ -31,6 +31,12 @@ from .densitymatrix import DMCircuit as DMCircuit_reference
 from .densitymatrix import DMCircuit2
 
 DMCircuit = DMCircuit2  # compatibility issue to still expose DMCircuit2
+
+try:
+    from .stabilizercircuit import StabilizerCircuit
+except ModuleNotFoundError:
+    pass
+
 from .gates import num_to_tensor, array_to_tensor
 from .vis import qir2tex, render_pdf
 from . import interfaces

@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add initial draft on stabilizer simulation using stim backend
+
 - Add `jax_interface`
 
 - Add `merge_count` in `results` module
