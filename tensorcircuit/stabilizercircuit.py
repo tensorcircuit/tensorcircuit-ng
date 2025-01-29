@@ -66,7 +66,7 @@ class StabilizerCircuit(AbstractCircuit):
             "gate": gate,
             "index": index,
             "name": name,
-            "split": False,
+            "split": None,
             "mpo": False,
         }
         ir_dict = kws["ir_dict"]
@@ -88,6 +88,22 @@ class StabilizerCircuit(AbstractCircuit):
             raise ValueError(f"Gate {name} is not supported in stabilizer simulation")
 
     apply = apply_general_gate
+
+    def random_gate(self, *index: int, recorded: bool = False) -> None:
+        """
+        Apply a random Clifford gate to the circuit.
+        This operation will not record in qir
+
+        :param index: Qubit indices to apply the gate to
+        :type index: int
+        :param recorded: Whether the gate is recorded in ``stim.Circuit``, defaults to False
+        :type recorded: bool, optional
+        """
+        m = len(index)
+        t = stim.Tableau.random(m)
+        self.current_sim.do_tableau(t, index)
+        if recorded:
+            self._stim_circuit += t.to_circuit()
 
     def measure(self, *index: int, with_prob: bool = False) -> Tensor:
         """

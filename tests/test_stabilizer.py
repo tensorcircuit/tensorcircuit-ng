@@ -134,3 +134,24 @@ def test_to_openqasm():
 
     c1 = tc.StabilizerCircuit.from_openqasm(qasm)
     print(c1.draw())
+
+
+def test_ee():
+    c = tc.Circuit(8)
+    for i in range(3):
+        c.h(i)
+        c.cx(i, i + 4)
+        c.sd(i + 2)
+    ee0 = tc.quantum.entanglement_entropy(c.state(), list(range(4)))
+    c1 = tc.StabilizerCircuit.from_openqasm(c.to_openqasm())
+    ee1 = c1.entanglement_entropy(list(range(4)))
+    np.testing.assert_allclose(ee0, ee1, atol=1e-6)
+
+
+def test_random_gates():
+    c = tc.StabilizerCircuit(4)
+    c.random_gate(0, 1, recorded=True)
+    c.random_gate(2, 3)
+    c.random_gate(1, 2)
+    print(c.entanglement_entropy(list(range(2))))
+    print(len(c.current_circuit()))
