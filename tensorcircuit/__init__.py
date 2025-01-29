@@ -34,6 +34,8 @@ DMCircuit = DMCircuit2  # compatibility issue to still expose DMCircuit2
 
 try:
     from .stabilizercircuit import StabilizerCircuit
+
+    CliffordCircuit = StabilizerCircuit
 except ModuleNotFoundError:
     pass
 

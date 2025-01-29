@@ -10,6 +10,9 @@ modulepath = os.path.dirname(os.path.dirname(thisfile))
 sys.path.insert(0, modulepath)
 import tensorcircuit as tc
 
+# Skip all tests if stim is not installed
+stim = pytest.importorskip("stim")
+
 
 def test_basic_gates():
     c = tc.StabilizerCircuit(2)
@@ -155,3 +158,30 @@ def test_random_gates():
     c.random_gate(1, 2)
     print(c.entanglement_entropy(list(range(2))))
     print(len(c.current_circuit()))
+
+
+def test_circuit_state():
+    c = tc.StabilizerCircuit(2)
+    c.h(1)
+    c1 = tc.Circuit(2)
+    c1.h(1)
+    np.testing.assert_allclose(c.state(), c1.state(), atol=1e-5)
+
+
+def test_circuit_inputs():
+    c = tc.StabilizerCircuit(2, inputs=[stim.PauliString("XX"), stim.PauliString("ZZ")])
+    c.cnot(0, 1)
+    c.h(0)
+    np.testing.assert_allclose(c.expectation_ps(z=[0]), 1, atol=1e-6)
+    np.testing.assert_allclose(c.expectation_ps(z=[1]), 1, atol=1e-6)
+
+
+def test_depolarize():
+    r = []
+    for _ in range(20):
+        c = tc.StabilizerCircuit(2)
+        c.h(0)
+        c.depolarizing(0, 1, p=0.2)
+        c.h(0)
+        r.append(c.expectation_ps(z=[0]))
+    assert 10 < np.sum(r) < 20

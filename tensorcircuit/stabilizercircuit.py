@@ -31,7 +31,15 @@ class StabilizerCircuit(AbstractCircuit):
         "sd": "S_DAG",
     }
 
-    def __init__(self, nqubits: int) -> None:
+    def __init__(self, nqubits: int, inputs: Tensor = None) -> None:
+        """
+        ``StabilizerCircuit`` class based on stim package
+
+        :param nqubits: Number of qubits
+        :type nqubits: int
+        :param inputs: initial state by stabilizers, defaults to None
+        :type inputs: Tensor, optional
+        """
         self._nqubits = nqubits
         self._stim_circuit = stim.Circuit()
         self._qir: List[Dict[str, Any]] = []
@@ -39,6 +47,8 @@ class StabilizerCircuit(AbstractCircuit):
         self.inputs = None
         self._extra_qir: List[Dict[str, Any]] = []
         self.current_sim = stim.TableauSimulator()
+        if inputs:
+            self.current_sim.set_state_from_stabilizers(inputs)
 
     def apply_general_gate(
         self,
@@ -88,6 +98,14 @@ class StabilizerCircuit(AbstractCircuit):
             raise ValueError(f"Gate {name} is not supported in stabilizer simulation")
 
     apply = apply_general_gate
+
+    def state(self) -> Tensor:
+        """
+        Return the wavefunction of the circuit.
+        Note that the state can have smaller qubit count if no gate is applied on later qubits
+        """
+        tab = self.current_tableau()
+        return tab.to_state_vector(endian="big")
 
     def random_gate(self, *index: int, recorded: bool = False) -> None:
         """
@@ -295,6 +313,20 @@ class StabilizerCircuit(AbstractCircuit):
     mid_measure = mid_measurement
     post_select = mid_measurement
     post_selection = mid_measurement
+
+    def depolarizing(self, *index: int, p: float) -> None:
+        """
+        Apply depolarizing noise to a qubit.
+
+        :param index: Index of the qubit to apply noise to
+        :type index: int
+        :param p: Noise parameter (probability of depolarizing)
+        :type p: float
+        """
+        self._stim_circuit.append_from_stim_program_text(
+            f"DEPOLARIZE1({p}) {' '.join(map(str, index))}"
+        )
+        self.current_sim.depolarize1(*index, p=p)
 
     def current_simulator(self) -> stim.TableauSimulator:
         """
