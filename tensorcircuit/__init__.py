@@ -31,11 +31,13 @@ from .densitymatrix import DMCircuit as DMCircuit_reference
 from .densitymatrix import DMCircuit2
 
 DMCircuit = DMCircuit2  # compatibility issue to still expose DMCircuit2
+DensityMatrixCircuit = DMCircuit
 
 try:
     from .stabilizercircuit import StabilizerCircuit
 
     CliffordCircuit = StabilizerCircuit
+    StabCircuit = StabilizerCircuit
 except ModuleNotFoundError:
     pass
 
@@ -50,6 +52,8 @@ from . import compiler
 from . import cloud
 from . import fgs
 from .fgs import FGSSimulator
+
+FGSCircuit = FGSSimulator
 
 try:
     from . import keras

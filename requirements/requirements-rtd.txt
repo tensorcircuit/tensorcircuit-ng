@@ -3,6 +3,7 @@ scipy
 cirq
 tensorflow
 tensornetwork
+stim
 graphviz
 networkx
 jax
