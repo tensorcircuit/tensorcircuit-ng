@@ -185,3 +185,33 @@ def test_depolarize():
         c.h(0)
         r.append(c.expectation_ps(z=[0]))
     assert 10 < np.sum(r) < 20
+
+
+def test_tableau_inputs():
+    c = tc.StabilizerCircuit(2)
+    c.x(1)
+    c.s(1)
+    it = c.current_inverse_tableau()
+    c1 = tc.StabilizerCircuit(2, tableau_inputs=it)
+    c1.s(1)
+    c1.x(1)
+    np.testing.assert_allclose(c1.state()[0], 1, atol=1e-6)
+
+
+def test_mipt():
+    resource = [stim.Tableau.random(2) for _ in range(1000)]
+
+    def ruc(n, nlayer, p):
+        c = tc.StabilizerCircuit(n)
+        status = np.random.choice(1000, size=[n, nlayer], replace=True)
+        for j in range(nlayer):
+            for i in range(0, n, 2):
+                c.tableau_gate(i, (i + 1) % n, tableau=resource[status[i, j]])
+            for i in range(1, n, 2):
+                c.tableau_gate(i, (i + 1) % n, tableau=resource[status[i, j]])
+            mask = np.random.random(n) < p
+            ids = list(np.where(mask)[0])
+            c.cond_measure_many(*ids)
+        return c.entanglement_entropy(list(range(n // 2)))
+
+    print(ruc(50, 10, 0.1))

@@ -31,7 +31,9 @@ class StabilizerCircuit(AbstractCircuit):
         "sd": "S_DAG",
     }
 
-    def __init__(self, nqubits: int, inputs: Tensor = None) -> None:
+    def __init__(
+        self, nqubits: int, inputs: Tensor = None, tableau_inputs: Tensor = None
+    ) -> None:
         """
         ``StabilizerCircuit`` class based on stim package
 
@@ -39,6 +41,8 @@ class StabilizerCircuit(AbstractCircuit):
         :type nqubits: int
         :param inputs: initial state by stabilizers, defaults to None
         :type inputs: Tensor, optional
+        :param tableau_inputs: initial state by **inverse** tableau, defaults to None
+        :type tableau_inputs: Tensor, optional
         """
         self._nqubits = nqubits
         self._stim_circuit = stim.Circuit()
@@ -49,6 +53,8 @@ class StabilizerCircuit(AbstractCircuit):
         self.current_sim = stim.TableauSimulator()
         if inputs:
             self.current_sim.set_state_from_stabilizers(inputs)
+        if tableau_inputs:
+            self.current_sim.set_inverse_tableau(tableau_inputs)
 
     def apply_general_gate(
         self,
@@ -123,6 +129,22 @@ class StabilizerCircuit(AbstractCircuit):
         if recorded:
             self._stim_circuit += t.to_circuit()
 
+    def tableau_gate(self, *index: int, tableau: Any, recorded: bool = False) -> None:
+        """
+        Apply a gate indicated by tableau to the circuit.
+        This operation will not record in qir
+
+        :param index: Qubit indices to apply the gate to
+        :type index: int
+        :param tableau: stim.Tableau representation of the gate
+        :type tableau: Any
+        :param recorded: Whether the gate is recorded in ``stim.Circuit``, defaults to False
+        :type recorded: bool, optional
+        """
+        self.current_sim.do_tableau(tableau, index)
+        if recorded:
+            self._stim_circuit += tableau.to_circuit()
+
     def measure(self, *index: int, with_prob: bool = False) -> Tensor:
         """
         Measure qubits in Z basis.
@@ -166,6 +188,27 @@ class StabilizerCircuit(AbstractCircuit):
         return m
 
     cond_measure = cond_measurement
+
+    def cond_measure_many(self, *index: int) -> Tensor:
+        """
+        Measure qubits in Z basis with state collapse.
+
+        :param index: Index of qubit to measure
+        :type index: int
+        :return: Measurement results and probability (if with_prob=True)
+        :rtype: Union[np.ndarray, Tuple[np.ndarray, float]]
+        """
+        # Convert negative indices
+
+        # Add measurement instructions
+        self._stim_circuit.append_from_stim_program_text(
+            "M " + " ".join(map(str, index))
+        )
+        # self.current_sim = None
+        m = self.current_simulator().measure_many(*index)
+        # Sample once from the circuit using sampler
+
+        return m
 
     def sample(
         self,
@@ -345,6 +388,12 @@ class StabilizerCircuit(AbstractCircuit):
         Return the current tableau of the circuit.
         """
         return self.current_simulator().current_inverse_tableau() ** -1
+
+    def current_inverse_tableau(self) -> stim.Tableau:
+        """
+        Return the current inverse tableau of the circuit.
+        """
+        return self.current_simulator().current_inverse_tableau()
 
     def entanglement_entropy(self, cut: Sequence[int]) -> float:
         """
