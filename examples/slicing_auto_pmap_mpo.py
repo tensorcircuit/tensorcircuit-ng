@@ -1,6 +1,6 @@
 """
 This script illustrates how to parallelize both the contraction path
-finding and sliced contraction computation
+finding and sliced contraction computation for MPO expectation
 """
 
 from functools import partial

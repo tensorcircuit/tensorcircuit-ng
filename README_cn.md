@@ -23,7 +23,7 @@
 
 TensorCircuit-NG 是下一代量子软件框架，完美支持自动微分、即时编译、硬件加速和向量并行化。
 
-TensorCircuit-NG 建立在现代机器学习框架 Jax, TensorFlow, PyTorch 之上，支持机器学习后端无关的统一界面。 其特别适用于理想情况、含噪声情况及可控近似情况下，大规模量子经典混合范式和变分量子算法的高效模拟。
+TensorCircuit-NG 建立在现代机器学习框架 Jax, TensorFlow, PyTorch 之上，支持机器学习后端无关的统一界面。 其特别适用于理想情况、含噪声情况、稳定子情况及可控近似情况下，大规模量子经典混合范式和变分量子算法的高效模拟。
 
 TensorCircuit-NG 现在支持真实量子硬件连接和实验，并提供优雅的 CPU/GPU/QPU 混合部署训练方案（v0.9+）。
 
@@ -31,7 +31,7 @@ TensorCircuit-NG 现在支持真实量子硬件连接和实验，并提供优雅
 
 请从 [完整文档](https://tensorcircuit-ng.readthedocs.io/) 中的 [快速上手](/docs/source/quickstart.rst) 开始。
 
-有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 70+ [示例脚本](/examples) 和 30+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
+有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 80+ [示例脚本](/examples) 和 30+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
 
 初学者也可以参考[量子计算教程](https://github.com/sxzgroup/qc_lecture)学习量子计算基础和 TensorCircuit-NG 的典型用法.
 
@@ -104,6 +104,8 @@ pip install tensorcircuit-nightly
 - 即时编译、自动微分、向量并行化兼容
 
 - GPU 支持、量子硬件支持、混合部署方案支持
+
+- 高性能原生，分布式多卡多节点支持
 
 - 效率
 

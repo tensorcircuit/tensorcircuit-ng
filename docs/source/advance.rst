@@ -351,6 +351,76 @@ Quimb provides more flexible MPO construction options:
     h_tc = tc.quantum.quimb2qop(H)
 
 
+
+Stabilizer Circuit Simulator
+-----------------------------
+
+TensorCircuit-NG provides a Stabilizer Circuit simulator for efficient simulation of Clifford circuits. 
+This simulator is particularly useful for quantum error correction, measurement induced phase transition, etc.
+
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+    
+    # Create a stabilizer circuit
+    c = tc.StabilizerCircuit(2)
+    
+    # Apply Clifford gates
+    c.h(0)
+    c.cnot(0, 1)
+    
+    # Measure qubits
+    results = c.measure(0, 1)  # Returns measurement outcomes
+    
+    # Sample multiple shots
+    samples = c.sample(batch=1000)  # Returns array of shape (1000, 2)
+
+**Supported Operations**
+
+The simulator supports common Clifford gates and operations:
+
+- Single-qubit gates: H, X, Y, Z, S, SDG (S dagger)
+- Two-qubit gates: CNOT, CZ, SWAP
+- Measurements: projective measurements (`c.measurement` doesn't affect the state while `c.cond_measure` collpases the state)
+- Post-selection (`c.post_select`)
+- Random Clifford gates (`c.random_gate`)
+- Gates defined by tableau (`c.tableau_gate`)
+- Entanglement calculation (`c.entanglement_entropy`)
+- Pauli string operator expectation (`c.expectation_ps`)
+- Openqasm and qir transformation as usual circuits
+- Initialization state provided by Pauli string stabilizer (`tc.StabCircuit(inputs=...)`) or inverse tableau (`tc.StabCircuit(tableau_inputs=)`)
+- Probabilistic noise (`c.depolarizing`)
+
+
+Example: Quantum Teleportation
+
+.. code-block:: python
+
+    c = tc.StabilizerCircuit(3)
+    
+    # Prepare Bell pair between qubits 1 and 2
+    c.h(1)
+    c.cnot(1, 2)
+    
+    # State to teleport on qubit 0 (must be Clifford)
+    c.x(0)
+    
+    # Teleportation circuit
+    c.cnot(0, 1)
+    c.h(0)
+    
+    # Measure and apply corrections
+    r0 = c.cond_measure(0)
+    r1 = c.cond_measure(1)
+    if r0 == 1:
+        c.z(2)
+    if r1 == 1:
+        c.x(2)
+
+
+
+
 Fermion Gaussian State Simulator
 --------------------------------
 
