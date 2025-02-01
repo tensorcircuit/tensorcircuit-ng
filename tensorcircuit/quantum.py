@@ -1,11 +1,5 @@
 """
 Quantum state and operator class backend by tensornetwork
-
-:IMPORT:
-
-.. code-block:: python
-
-    import tensorcircuit.quantum as qu
 """
 
 # pylint: disable=invalid-name
@@ -20,10 +14,10 @@ from typing import (
     Callable,
     Collection,
     Dict,
+    Iterable,
     List,
     Optional,
     Sequence,
-    Set,
     Tuple,
     Union,
 )
@@ -32,9 +26,7 @@ import numpy as np
 from tensornetwork.network_components import AbstractNode, CopyNode, Edge, Node, connect
 from tensornetwork.network_operations import (
     copy,
-    get_all_nodes,
     get_subgraph_dangling,
-    reachable,
     remove_node,
 )
 
@@ -50,6 +42,72 @@ logger = logging.getLogger(__name__)
 # Note the first version of part of this file is adapted from source code of tensornetwork: (Apache2)
 # https://github.com/google/TensorNetwork/blob/master/tensornetwork/quantum/quantum.py
 # For the reason of adoption instead of direct import: see https://github.com/google/TensorNetwork/issues/950
+
+
+def get_all_nodes(edges: Iterable[Edge]) -> List[Node]:
+    """Return the set of nodes connected to edges."""
+    nodes = []
+    for edge in edges:
+        if edge.node1 is not None and edge.node1 not in nodes:
+            nodes.append(edge.node1)
+        if edge.node2 is not None and edge.node2 not in nodes:
+            nodes.append(edge.node2)
+    return nodes
+
+
+def _reachable(nodes: List[AbstractNode]) -> List[AbstractNode]:
+    if not nodes:
+        raise ValueError("Reachable requires at least 1 node.")
+    node_que = []
+    node_que.extend(nodes)
+    seen_nodes = []
+    i = 0
+    while i < len(node_que):
+        node = node_que[i]
+        if node not in seen_nodes:
+            seen_nodes.append(node)
+        for e in sorted(node.edges, key=id):  # Sort edges by id for deterministic order
+            for n in sorted([n for n in e.get_nodes() if n is not None], key=id):
+                if n not in seen_nodes and n not in node_que[i + 1 :]:
+                    node_que.append(n)
+        i += 1
+    return seen_nodes
+
+
+def reachable(
+    inputs: Union[AbstractNode, Iterable[AbstractNode], Edge, Iterable[Edge]]
+) -> List[AbstractNode]:
+    """Computes all nodes reachable from `node` or `edge.node1` by connected edges.
+
+    Args:
+        inputs: A `AbstractNode`/`Edge` or collection of `AbstractNodes`/`Edges`
+
+    Returns:
+        A list of `AbstractNode` objects that can be reached from `node`
+        via connected edges.
+
+    Raises:
+        TypeError: If inputs contains other then `Edge` or `Node`.
+    """
+    if isinstance(inputs, AbstractNode):
+        inputs = [inputs]
+    if isinstance(inputs, Edge):
+        inputs = [inputs.node1]
+
+    processed_inputs = []
+    for inp in inputs:
+        if isinstance(inp, AbstractNode):
+            if inp not in processed_inputs:
+                processed_inputs.append(inp)
+        elif isinstance(inp, Edge):
+            if inp.node1 not in processed_inputs:
+                processed_inputs.append(inp.node1)
+        else:
+            raise TypeError(
+                f"input to `reachable` has to be an iterable of "
+                f"Nodes or Edges, got {type(inp)} instead."
+            )
+    return _reachable(processed_inputs)
 
 
 # general conventions left (first) out, right (then) in
@@ -300,8 +358,8 @@ class QuOperator:
             )
         self.out_edges = list(out_edges)
         self.in_edges = list(in_edges)
-        self.ignore_edges = set(ignore_edges) if ignore_edges else set()
-        self.ref_nodes = set(ref_nodes) if ref_nodes else set()
+        self.ignore_edges = list(ignore_edges) if ignore_edges else list()
+        self.ref_nodes = list(ref_nodes) if ref_nodes else list()
         self.check_network()
 
     @classmethod
@@ -391,9 +449,9 @@ class QuOperator:
         return cls(out_edges, in_edges)
 
     @property
-    def nodes(self) -> Set[AbstractNode]:
+    def nodes(self) -> List[AbstractNode]:
         """All tensor-network nodes involved in the operator."""
-        return reachable(get_all_nodes(self.out_edges + self.in_edges) | self.ref_nodes)  # type: ignore
+        return reachable(get_all_nodes(self.out_edges + self.in_edges) + self.ref_nodes)  # type: ignore
 
     @property
     def in_space(self) -> List[int]:
@@ -443,7 +501,7 @@ class QuOperator:
                     "ignore_edges contains non-dangling edge: {}".format(str(e))
                 )
 
-        known_edges = set(self.in_edges) | set(self.out_edges) | self.ignore_edges
+        known_edges = set(self.in_edges) | set(self.out_edges) | set(self.ignore_edges)
         all_dangling_edges = get_subgraph_dangling(self.nodes)
         if known_edges != all_dangling_edges:
             raise ValueError(
@@ -671,16 +729,16 @@ class QuOperator:
         nodes_dict, dangling_edges_dict = eliminate_identities(self.nodes)
         self.in_edges = [dangling_edges_dict[e] for e in self.in_edges]
         self.out_edges = [dangling_edges_dict[e] for e in self.out_edges]
-        self.ignore_edges = set(dangling_edges_dict[e] for e in self.ignore_edges)
-        self.ref_nodes = set(nodes_dict[n] for n in self.ref_nodes if n in nodes_dict)
+        self.ignore_edges = list(dangling_edges_dict[e] for e in self.ignore_edges)
+        self.ref_nodes = list(nodes_dict[n] for n in self.ref_nodes if n in nodes_dict)
         self.check_network()
         if final_edge_order:
             final_edge_order = [dangling_edges_dict[e] for e in final_edge_order]
-            self.ref_nodes = set(
+            self.ref_nodes = list(
                 [contractor(self.nodes, output_edge_order=final_edge_order)]
             )
         else:
-            self.ref_nodes = set([contractor(self.nodes, ignore_edge_order=True)])
+            self.ref_nodes = list([contractor(self.nodes, ignore_edge_order=True)])
         return self
 
     def eval(
@@ -1020,7 +1078,7 @@ class QuScalar(QuOperator):
         :rtype: QuScalar
         """
         n = Node(tensor)
-        return cls(set([n]))
+        return cls(list([n]))
 
 
 def ps2xyz(ps: List[int]) -> Dict[str, List[int]]:

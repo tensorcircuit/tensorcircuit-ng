@@ -10,6 +10,10 @@
 
 - Add `merge_count` in `results` module
 
+### Fixed
+
+- Better contractor infrastructures with "breakpoint" contractor to simply get the networks
+
 ## 1.1.0
 
 ### Added

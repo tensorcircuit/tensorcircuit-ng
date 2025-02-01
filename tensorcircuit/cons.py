@@ -8,7 +8,7 @@ import logging
 import sys
 import time
 from contextlib import contextmanager
-from functools import partial, reduce, wraps
+from functools import partial, reduce, wraps, lru_cache
 from operator import mul
 from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
 
@@ -439,6 +439,28 @@ def tn_greedy_contractor(
 # base = tn.contractors.opt_einsum_paths.path_contractors.base
 # utils = tn.contractors.opt_einsum_paths.utils
 
+_einsum_symbols_base = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
+@lru_cache(2**14)
+def get_symbol(i: int) -> str:
+    """Get the symbol corresponding to int ``i`` - runs through the usual 52
+    letters before resorting to unicode characters, starting at ``chr(192)``
+    and skipping surrogates. From cotengra codebase
+    """
+    if i < 52:
+        # use a-z, A-Z first
+        return _einsum_symbols_base[i]
+
+    # then proceed from 'À'
+    i += 140
+
+    if i >= 55296:
+        # Skip chr(57343) - chr(55296) as surrogates
+        i += 2048
+
+    return chr(i)
+
 
 def _get_path(
     nodes: List[tn.Node], algorithm: Any
@@ -451,6 +473,16 @@ def _get_path(
     return algorithm(input_sets, output_set, size_dict), nodes
 
 
+def _identity(*args: Any, **kws: Any) -> Any:
+    return args
+
+
+def _sort_tuple_list(input_list: List[Any], output_list: List[Any]) -> List[Any]:
+    sorted_elements = [(tuple(sorted(t)), i) for i, t in enumerate(input_list)]
+    sorted_elements.sort()
+    return [output_list[i] for _, i in sorted_elements]
+
+
 def _get_path_cache_friendly(
     nodes: List[tn.Node], algorithm: Any
 ) -> Tuple[List[Tuple[int, int]], List[tn.Node]]:
@@ -460,18 +492,21 @@ def _get_path_cache_friendly(
     for n in nodes:
         for e in n:
             if id(e) not in mapping_dict:
-                mapping_dict[id(e)] = i
+                mapping_dict[id(e)] = get_symbol(i)
                 i += 1
     # TODO(@refraction-ray): may be not that cache friendly, since the edge id correspondence is not that fixed?
-    input_sets = [set([mapping_dict[id(e)] for e in node.edges]) for node in nodes]
-    placeholder = [[1e20 for _ in range(100)]]
-    order = np.argsort(np.array(list(map(sorted, input_sets)) + placeholder, dtype=object))[:-1]  # type: ignore
-    nodes_new = [nodes[i] for i in order]
+    input_sets = [list([mapping_dict[id(e)] for e in node.edges]) for node in nodes]
+    # placeholder = [[1e20 for _ in range(100)]]
+    # order = np.argsort(np.array(list(map(sorted, input_sets)), dtype=object))  # type: ignore
+    # nodes_new = [nodes[i] for i in order]
+    nodes_new = _sort_tuple_list(input_sets, nodes)
     if isinstance(algorithm, list):
         return algorithm, nodes_new
 
-    input_sets = [set([mapping_dict[id(e)] for e in node.edges]) for node in nodes_new]
-    output_set = set([mapping_dict[id(e)] for e in tn.get_subgraph_dangling(nodes_new)])
+    input_sets = [list([mapping_dict[id(e)] for e in node.edges]) for node in nodes_new]
+    output_set = list(
+        [mapping_dict[id(e)] for e in tn.get_subgraph_dangling(nodes_new)]
+    )
     size_dict = {
         mapping_dict[id(edge)]: edge.dimension for edge in tn.get_all_edges(nodes_new)
     }
@@ -481,6 +516,9 @@ def _get_path_cache_friendly(
     logger.debug("path finder algorithm: %s" % algorithm)
     return algorithm(input_sets, output_set, size_dict), nodes_new
     # directly get input_sets, output_set and size_dict by using identity function as algorithm
+
+
+get_tn_info = partial(_get_path_cache_friendly, algorithm=_identity)
 
 
 # some contractor setup usages
@@ -513,7 +551,8 @@ opt = ctg.ReusableHyperOptimizer(
 
 def opt_reconf(inputs, output, size, **kws):
     tree = opt.search(inputs, output, size)
-    tree_r = tree.subtree_reconfigure_forest(progbar=True, num_trees=10, num_restarts=20, subtree_weight_what=("size", ))
+    tree_r = tree.subtree_reconfigure_forest(progbar=True, num_trees=10, 
+                        num_restarts=20, subtree_weight_what=("size", ))
     return tree_r.get_path()
 
 tc.set_contractor("custom", optimizer=opt_reconf)
