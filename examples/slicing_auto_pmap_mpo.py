@@ -22,7 +22,7 @@ K = tc.set_backend(backend)
 tc.set_dtype("complex128")
 
 
-def get_circuit(n, d, params):
+def circuit2nodes(n, d, params, tc_mpo):
     c = tc.Circuit(n)
     c.h(range(n))
     for i in range(d):
@@ -32,14 +32,15 @@ def get_circuit(n, d, params):
             c.rx(j, theta=params[j, i, 1])
         for j in range(n):
             c.ry(j, theta=params[j, i, 2])
-    return c
+
+    mps = c.get_quvector()
+    e = mps.adjoint() @ tc_mpo @ mps
+    return e.nodes
 
 
 def core(params, i, tree, n, d, tc_mpo):
-    c = get_circuit(n, d, params)
-    mps = c.get_quvector()
-    e = mps.adjoint() @ tc_mpo @ mps
-    _, nodes = tc.cons.get_tn_info(e.nodes)
+    nodes = circuit2nodes(n, d, params, tc_mpo)
+    _, nodes = tc.cons.get_tn_info(nodes)
     input_arrays = [node.tensor for node in nodes]
     sliced_arrays = tree.slice_arrays(input_arrays, i)
     return K.real(tree.contract_core(sliced_arrays, backend=backend))[0, 0]
@@ -52,24 +53,18 @@ if __name__ == "__main__":
     nqubit = 12
     d = 6
 
-    Jx = jax.numpy.array([1.0] * (nqubit - 1))  # XX coupling strength
-    Bz = jax.numpy.array([-1.0] * nqubit)  # Transverse field strength
-
-    # Create TensorNetwork MPO
-    tn_mpo = tn.matrixproductstates.mpo.FiniteTFI(Jx, Bz, dtype=np.complex64)
-    tc_mpo = tc.quantum.tn2qop(tn_mpo)
-
     # baseline results
     lattice = tc.templates.graphs.Line1D(nqubit, pbc=False)
     h = tc.quantum.heisenberg_hamiltonian(lattice, hzz=0, hyy=0, hxx=1.0, hz=-1.0)
     es0 = scipy.sparse.linalg.eigsh(K.numpy(h), k=1, which="SA")[0]
     print("exact ground state energy: ", es0)
 
-    params = K.implicit_randn(stddev=0.1, shape=[1, nqubit, d, 3], dtype=tc.rdtypestr)
-    params = K.tile(params, [num_device, 1, 1, 1])
+    params = K.implicit_randn(stddev=0.1, shape=[nqubit, d, 3], dtype=tc.rdtypestr)
+    replicated_params = K.reshape(params, [1] + list(params.shape))
+    replicated_params = K.tile(replicated_params, [num_device, 1, 1, 1])
 
     optimizer = optax.adam(5e-2)
-    base_opt_state = optimizer.init(params[0])
+    base_opt_state = optimizer.init(params)
     replicated_opt_state = jax.tree.map(
         lambda x: (
             jax.numpy.broadcast_to(x, (num_device,) + x.shape)
@@ -93,28 +88,32 @@ if __name__ == "__main__":
         params = optax.apply_updates(params, updates)
         return params, opt_state, loss
 
-    c = get_circuit(nqubit, d, params[0])
-    mps = c.get_quvector()
-    e = mps.adjoint() @ tc_mpo @ mps
-    tn_info, nodes = tc.cons.get_tn_info(e.nodes)
+    Jx = jax.numpy.array([1.0] * (nqubit - 1))  # XX coupling strength
+    Bz = jax.numpy.array([-1.0] * nqubit)  # Transverse field strength
+    # Create TensorNetwork MPO
+    tn_mpo = tn.matrixproductstates.mpo.FiniteTFI(Jx, Bz, dtype=np.complex64)
+    tc_mpo = tc.quantum.tn2qop(tn_mpo)
 
+    nodes = circuit2nodes(nqubit, d, params, tc_mpo)
+    tn_info, _ = tc.cons.get_tn_info(nodes)
+
+    # Create ReusableHyperOptimizer for finding optimal contraction paths
     opt = ctg.ReusableHyperOptimizer(
-        parallel=True,
+        parallel=True,  # Enable parallel path finding
         slicing_opts={
-            "target_slices": num_device,
-            # "target_size": 2**20,  # Add memory target
+            "target_slices": num_device,  # Split computation across available devices
+            # "target_size": 2**20,  # Optional: Set memory limit per slice
         },
-        max_repeats=256,
-        progbar=True,
-        minimize="combo",
+        max_repeats=256,  # Maximum number of path finding attempts
+        progbar=True,  # Show progress bar during optimization
+        minimize="combo",  # Optimize for both time and memory
     )
-
     tree = opt.search(*tn_info)
 
     inds = K.arange(num_device)
     for j in range(100):
         print(f"training loop: {j}-step")
-        params, replicated_opt_state, loss = para_vag(
-            params, inds, tree, nqubit, d, tc_mpo, replicated_opt_state
+        replicated_params, replicated_opt_state, loss = para_vag(
+            replicated_params, inds, tree, nqubit, d, tc_mpo, replicated_opt_state
         )
         print(loss[0])
