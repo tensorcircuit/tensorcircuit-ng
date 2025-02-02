@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.2.0
+
 ### Added
 
 - Add initial draft on stabilizer simulation using stim backend
@@ -13,6 +15,8 @@
 ### Fixed
 
 - Better contractor infrastructures with "breakpoint" contractor to simply get the networks
+
+- Contractor and quantum operator codebase refactored: enable distributed computation power
 
 ## 1.1.0
 
