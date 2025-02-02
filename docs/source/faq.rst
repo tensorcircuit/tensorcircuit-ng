@@ -8,7 +8,7 @@ Both packages are created by `Shi-Xin Zhang <https://www.iop.cas.cn/rcjy/tpyjy/?
 
 From users' perspective, TensorCircuit-NG maintains full compatibility with the TensorCircuit API, enhancing it with additional features and critical bug fixes. Only TensorCircuit-NG is kept up-to-date with the fast evolving scientific computing and machine learning ecosystem in Python.
 
-TensorCircuit-NG is intended as a drop-in replacement for TensorCircuit, namely, by simply ``pip uninstall tensorcircuit`` and ``pip install tensorcircuit-ng``, your existing applications should continue to function seamlessly without requiring any modification to the codebase.
+TensorCircuit-NG is intended as a drop-in replacement for TensorCircuit, namely, by simply ``pip uninstall tensorcircuit`` and ``pip install tensorcircuit-ng``, your existing applications should continue to function seamlessly without requiring any modification to the codebase (``import tensorcircuit`` still works).
 
 
 
@@ -33,6 +33,14 @@ That is to say, for very small circuits and the very small batch dimensions of v
 But one have to carry out detailed benchmarks on the hardware choice, since the performance is determined by the hardware and task details.
 
 For tensor network tasks of more regular shape, such as MPS-MPO contraction, GPU can be much more favored and efficient than CPU.
+
+
+How can I use multiple GPUs?
+----------------------------------------------------
+
+For different observables evaluation on different cards, see `example <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/vqe_parallel_pmap.py>`_.
+
+For distributed simulation of one circuit on multiple cards, see `example for expectation <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/slicing_auto_pmap_vqa.py>`_ and `example for MPO <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/slicing_auto_pmap_mpo.py>`_.
 
 
 When should I jit the function?
@@ -245,7 +253,7 @@ When performing measurements or sampling in TensorCircuit-NG, there are six diff
         {0: 2, 1: 0, 2: 2, 3: 0}  # {state_integer: frequency}
 
 
-For more input parameters, see API doc :py:meth:`tensorcircuit.BaseCircuit.sample`.
+For more input parameters, see API doc :py:meth:`tensorcircuit.circuit.Circuit.sample`.
 
 
 How to get the entanglement entropy from the circuit output?

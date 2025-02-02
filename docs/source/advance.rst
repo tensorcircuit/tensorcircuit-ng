@@ -382,15 +382,15 @@ The simulator supports common Clifford gates and operations:
 
 - Single-qubit gates: H, X, Y, Z, S, SDG (S dagger)
 - Two-qubit gates: CNOT, CZ, SWAP
-- Measurements: projective measurements (`c.measurement` doesn't affect the state while `c.cond_measure` collpases the state)
-- Post-selection (`c.post_select`)
-- Random Clifford gates (`c.random_gate`)
-- Gates defined by tableau (`c.tableau_gate`)
-- Entanglement calculation (`c.entanglement_entropy`)
-- Pauli string operator expectation (`c.expectation_ps`)
+- Measurements: projective measurements (``c.measurement`` doesn't affect the state while ``c.cond_measure`` collpases the state)
+- Post-selection (``c.post_select``)
+- Random Clifford gates (``c.random_gate``)
+- Gates defined by tableau (``c.tableau_gate``)
+- Entanglement calculation (``c.entanglement_entropy``)
+- Pauli string operator expectation (``c.expectation_ps``)
 - Openqasm and qir transformation as usual circuits
-- Initialization state provided by Pauli string stabilizer (`tc.StabCircuit(inputs=...)`) or inverse tableau (`tc.StabCircuit(tableau_inputs=)`)
-- Probabilistic noise (`c.depolarizing`)
+- Initialization state provided by Pauli string stabilizer (``tc.StabCircuit(inputs=...)``) or inverse tableau (`tc.StabCircuit(tableau_inputs=)`)
+- Probabilistic noise (``c.depolarizing``)
 
 
 Example: Quantum Teleportation
@@ -569,6 +569,6 @@ And a more neat approach to achieve this is as follows:
 
 It is worth noting that since ``Circuit.unitary_kraus`` and ``Circuit.general_kraus`` call ``implicit_rand*`` API, the correct usage of these APIs is the same as above.
 
-One may wonder why random numbers are dealt in such a complicated way, please refer to the `Jax design note <https://github.com/google/jax/blob/main/docs/design_notes/prng.md>`_ for some hints.
+One may wonder why random numbers are dealt in such a complicated way, please refer to the `Jax design note <https://jax.readthedocs.io/en/latest/jep/263-prng.html>`_ for some hints.
 
 If vmap is also involved apart from jit, I currently find no way to maintain the backend agnosticity as TensorFlow seems to have no support of vmap over random keys (ping me on GitHub if you think you have a way to do this). I strongly recommend the users using Jax backend in the vmap+random setup.
