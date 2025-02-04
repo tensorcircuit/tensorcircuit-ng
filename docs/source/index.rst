@@ -11,7 +11,7 @@ TensorCircuit Next Generation
 Introduction
 ---------------
 
-TensorCircuit-NG is an open-source high-performance quantum software framework in Python.
+`TensorCircuit-NG <https://github.com/tensorcircuit/tensorcircuit-ng>`_ is an open-source high-performance quantum software framework in Python.
 
 * It is built for humans. 👽
 
@@ -32,13 +32,19 @@ With the help of TensorCircuit-NG, now get ready to efficiently and elegantly so
 .. important::
    Please cite the `whitepaper <https://quantum-journal.org/papers/q-2023-02-02-912/>`_ when using TensorCircuit or TensorCircuit-NG in your research. The bibtex information is provided by ``tc.cite()``.
 
+.. note::
+   The TensorCircuit package is outdated. 
+   We recommend upgrading to TensorCircuit-NG for the latest features and improvements. 
+   You can upgrade by running the following command:
+   ``pip uninstall tensorcircuit && pip install tensorcircuit-ng``
 
 
 Useful Links
 --------------------
 
 
-TensorCircuit is created and now maintained as TensorCircuit-NG by `Shi-Xin Zhang <https://github.com/refraction-ray>`_.
+TensorCircuit is created and now maintained as 
+`TensorCircuit-NG <https://github.com/tensorcircuit/tensorcircuit-ng>`_ by `Shi-Xin Zhang <https://github.com/refraction-ray>`_.
 
 The current core authors of TensorCircuit-NG are `Shi-Xin Zhang <https://github.com/refraction-ray>`_ and `Yu-Qin Chen <https://github.com/yutuer21>`_.
 We also thank `contributions <https://github.com/tensorcircuit/tensorcircuit-ng/graphs/contributors>`_ from the open source community.
@@ -53,6 +59,13 @@ If you have any further questions or collaboration ideas, please use the issue t
       :shadow: md
 
       GitHub
+
+   
+   .. card:: PyPI
+      :link:  https://pypi.org/project/tensorcircuit-ng
+      :shadow: md
+
+      ``pip install tensorcircuit-ng``
 
 
    .. card:: Documentation
@@ -83,12 +96,6 @@ If you have any further questions or collaboration ideas, please use the issue t
       GitHub Discussions
 
 
-   .. card:: PyPI
-      :link:  https://pypi.org/project/tensorcircuit-ng
-      :shadow: md
-
-      ``pip install``
-
 
    .. card:: DockerHub
       :link: https://hub.docker.com/repository/docker/tensorcircuit/tensorcircuit
@@ -102,8 +109,6 @@ If you have any further questions or collaboration ideas, please use the issue t
       :shadow: md
 
       Research using TC
-
-
 
 
 
@@ -159,7 +164,7 @@ TensorCircuit-NG is unifying infrastructures and interfaces for quantum computin
       :columns: 12 6 3 3
       :shadow: md
 
-      ideal/noisy/approximate/analog simulation
+      ideal/noisy/approx/analog/stabilizer
 
    .. grid-item-card:: Unified Representations
       :columns: 12 6 3 3

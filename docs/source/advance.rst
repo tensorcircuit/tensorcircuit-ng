@@ -358,6 +358,8 @@ Stabilizer Circuit Simulator
 TensorCircuit-NG provides a Stabilizer Circuit simulator for efficient simulation of Clifford circuits. 
 This simulator is particularly useful for quantum error correction, measurement induced phase transition, etc.
 
+The stabilizer simulation is backend by Python package `Stim <https://github.com/quantumlib/Stim>`_, please ensure you have ``pip install stim`` first.
+
 
 .. code-block:: python
 
@@ -389,7 +391,7 @@ The simulator supports common Clifford gates and operations:
 - Entanglement calculation (``c.entanglement_entropy``)
 - Pauli string operator expectation (``c.expectation_ps``)
 - Openqasm and qir transformation as usual circuits
-- Initialization state provided by Pauli string stabilizer (``tc.StabCircuit(inputs=...)``) or inverse tableau (`tc.StabCircuit(tableau_inputs=)`)
+- Initialization state provided by Pauli string stabilizer (``tc.StabCircuit(inputs=...)``) or inverse tableau (``tc.StabCircuit(tableau_inputs=)``)
 - Probabilistic noise (``c.depolarizing``)
 
 
