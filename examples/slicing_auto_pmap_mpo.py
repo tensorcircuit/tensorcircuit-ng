@@ -5,6 +5,7 @@ finding and sliced contraction computation for MPO expectation
 
 from functools import partial
 import os
+import time
 
 num_device = 4
 os.environ["XLA_FLAGS"] = f"--xla_force_host_platform_device_count={num_device}"
@@ -113,7 +114,9 @@ if __name__ == "__main__":
     inds = K.arange(num_device)
     for j in range(100):
         print(f"training loop: {j}-step")
+        time0 = time.time()
         replicated_params, replicated_opt_state, loss = para_vag(
             replicated_params, inds, tree, nqubit, d, tc_mpo, replicated_opt_state
         )
+        print("running time:", time.time() - time0)
         print(loss[0])
