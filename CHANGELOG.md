@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v1.2.1
+
+### Fixed
+
+- Jax can be omited in the env
+
 ## v1.2.0
 
 ### Added

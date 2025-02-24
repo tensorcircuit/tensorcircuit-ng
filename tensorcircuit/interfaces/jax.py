@@ -5,9 +5,6 @@ Interface wraps quantum function as a jax function
 from typing import Any, Callable, Tuple, Optional, Union, Sequence
 from functools import wraps, partial
 
-import jax
-from jax import custom_vjp
-
 from ..cons import backend
 from .tensortrans import general_args_to_backend
 
@@ -22,6 +19,8 @@ def jax_wrapper(
     ] = None,
     output_dtype: Optional[Union[Any, Sequence[Any]]] = None,
 ) -> Callable[..., Any]:
+    import jax
+
     @wraps(fun)
     def fun_jax(*x: Any) -> Any:
         def wrapped_fun(*args: Any) -> Any:
@@ -129,6 +128,9 @@ def create_jax_function(
     output_shape: Optional[Union[Tuple[int, ...], Tuple[()]]] = None,
     output_dtype: Optional[Any] = None,
 ) -> Callable[..., Any]:
+    import jax
+    from jax import custom_vjp
+
     if jit:
         fun = backend.jit(fun)
 
