@@ -796,8 +796,10 @@ class BaseCircuit(AbstractCircuit):
         """
         # if isinstance(readout_error, tuple):
         #     readout_error = list[readout_error]  # type: ignore
-
-        nqubit = len(readout_error)  # type: ignore
+        try:
+            nqubit = int(readout_error.shape[0])  # type: ignore
+        except AttributeError:
+            nqubit = len(readout_error)  # type: ignore
         readoutlist = []
         for i in range(nqubit):
             readoutlist.append(

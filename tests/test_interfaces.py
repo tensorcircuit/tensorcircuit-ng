@@ -431,7 +431,6 @@ def test_args_to_tensor(backend):
 
 
 def test_jax_interface_basic(tfb):
-
     def f(params):
         c = tc.Circuit(1)
         c.rx(0, theta=params[0])
@@ -453,7 +452,6 @@ def test_jax_interface_basic(tfb):
 
 
 def test_jax_interface_multiple_inputs(tfb):
-
     def f(params1, params2):
         c = tc.Circuit(2)
         c.rx(0, theta=params1[0])
@@ -481,7 +479,6 @@ def test_jax_interface_multiple_inputs(tfb):
     reason="might fail when testing with other function",
 )
 def test_jax_interface_jit_dlpack(tfb):
-
     def f(params):
         c = tc.Circuit(2)
         c.rx(range(2), theta=params)
@@ -502,7 +499,6 @@ def test_jax_interface_jit_dlpack(tfb):
 
 
 def test_jax_interface_pure_callback(tfb):
-
     def f(params):
         # Use TF operation to test pure_callback
         return tf.square(params)
@@ -531,7 +527,6 @@ def test_jax_interface_pure_callback(tfb):
 
 
 def test_jax_interface_multiple_outputs(tfb):
-
     def f(params):
         # Use TF operation to test pure_callback
         return tf.square(params), params

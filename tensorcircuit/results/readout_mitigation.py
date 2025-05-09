@@ -723,7 +723,10 @@ class ReadoutMit:
         cals = self._form_cals(qubits)
         M = M3MatVec(dict(counts), cals, distance)
         L = spla.LinearOperator(
-            (M.num_elems, M.num_elems), matvec=M.matvec, rmatvec=M.rmatvec
+            (M.num_elems, M.num_elems),
+            matvec=M.matvec,
+            rmatvec=M.rmatvec,
+            dtype=np.float64,
         )
         diags = M.get_diagonal()
 

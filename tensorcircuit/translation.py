@@ -45,7 +45,6 @@ Tensor = Any
 
 
 def get_qiskit_qasm(qc: Any) -> str:
-
     try:
         qasm_str = qc.qasm()  # type: ignore
     except AttributeError:  # qiskit 1.0
