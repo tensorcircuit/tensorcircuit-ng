@@ -25,11 +25,11 @@
 
 <p align="center"> English | <a href="README_cn.md"> 简体中文 </a></p>
 
-TensorCircuit-NG is an open-source high-performance quantum software framework, supporting for automatic differentiation, just-in-time compiling, hardware acceleration, and vectorized parallelism, providing unified infrastructures and interfaces for quantum programming. It can compose quantum circuits, neural networks and tensor networks seamlessly with high simulation efficiency and flexibility.
+TensorCircuit-NG is the next-generation open-source high-performance quantum software framework, built upon tensornetwork engines, supporting for automatic differentiation, just-in-time compiling, hardware acceleration, and vectorized parallelism, providing unified infrastructures and interfaces for quantum programming. It can compose quantum circuits, neural networks and tensor networks seamlessly with high simulation efficiency and flexibility.
 
 TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for large-scale simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal, noisy, Clifford, approximate and analog cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions.
 
-TensorCircuit-NG is [fully compatible](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng) with TensorCircuit with more new features and bug fixes (support latest `numpy>2` and `qiskit>1`).
+TensorCircuit-NG is the actively maintained official version and a [fully compatible](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng) successor to TensorCircuit with more new features (stabilizer circuit and distributed simulation) and bug fixes (support latest `numpy>2` and `qiskit>1`).
 
 ## Getting Started
 
@@ -322,6 +322,8 @@ TensorCircuit-NG is open source, released under the Apache License, Version 2.0.
 
 ## Research and Applications
 
+TensorCircuit-NG is a powerful framework for driving research and applications in quantum computing. Below are examples of published academic works and open-source projects that utilize TensorCircuit-NG.
+
 ### DQAS
 
 For the application of Differentiable Quantum Architecture Search, see [applications](/tensorcircuit/applications).
@@ -375,6 +377,10 @@ Reference paper: https://arxiv.org/abs/2308.01068 (published in PRApplied).
 For the simulation implementation of quantum states based on neural networks, tensor networs and quantum circuits using TensorCircuit-NG, see the [project repo](https://github.com/sxzgroup/et).
 
 Reference paper: https://arxiv.org/abs/2411.18921.
+
+### A Unified Variational Framework for Quantum Excited States
+
+For the simulation code and data for variational optimization of simutaneous excited states, see the [project repo](https://github.com/sxzgroup/quantum_excited_state).
 
 ### More works
 
