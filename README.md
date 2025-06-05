@@ -37,7 +37,7 @@ Please begin with [Quick Start](/docs/source/quickstart.rst) in the [full docume
 
 For more information on software usage, sota algorithm implementation and engineer paradigm demonstration, please refer to 80+ [example scripts](/examples) and 30+ [tutorial notebooks](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials). API docstrings and test cases in [tests](/tests) are also informative.
 
-For beginners, please refer to [quantum computing lectures with TC-NG](https://github.com/sxzgroup/qc_lecture) to learn both quantum computing basis and representative usage of TensorCircuit-NG.
+For beginners, please refer to [quantum computing lectures with TC-NG](https://github.com/sxzgroup/qc_lecture) to learn both quantum computing basics and representative usage of TensorCircuit-NG.
 
 The following are some minimal demos.
 
@@ -157,7 +157,7 @@ We also have [Docker support](/docker).
 
 - JIT, AD, vectorized parallelism compatible
 
-- GPU support, quantum device access support, hybrid deployment support
+- GPU support, QPU access support, hybrid deployment support
 
 - HPC native, distributed simulation enabled, multiple devices/hosts support
 
@@ -372,7 +372,7 @@ For the setup and simulation code of neural network encoded variational quantum 
 
 Reference paper: https://arxiv.org/abs/2308.01068 (published in PRApplied).
 
-### Effective temperature in approximate ansatzes
+### Effective temperature in ansatzes
 
 For the simulation implementation of quantum states based on neural networks, tensor networs and quantum circuits using TensorCircuit-NG, see the [project repo](https://github.com/sxzgroup/et).
 
@@ -381,6 +381,8 @@ Reference paper: https://arxiv.org/abs/2411.18921.
 ### A Unified Variational Framework for Quantum Excited States
 
 For the simulation code and data for variational optimization of simutaneous excited states, see the [project repo](https://github.com/sxzgroup/quantum_excited_state).
+
+Reference paper: https://arxiv.org/abs/2504.21459.
 
 ### More works
 
@@ -425,7 +427,7 @@ For the simulation code and data for variational optimization of simutaneous exc
 
 - Non-Markovianity benefits quantum dynamics simulation: https://arxiv.org/abs/2311.17622.
 
-- Variational post-selection for ground states and thermal states simulation: https://arxiv.org/abs/2402.07605 (published in PRB).
+- Variational post-selection for ground states and thermal states simulation: https://arxiv.org/abs/2402.07605 (published in QST).
 
 - Subsystem information capacity in random circuits and Hamiltonian dynamics: https://arxiv.org/abs/2405.05076.
 
