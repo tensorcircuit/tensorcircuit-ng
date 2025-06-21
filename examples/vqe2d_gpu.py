@@ -78,3 +78,4 @@ for _ in range(1000):
     time0 = time.time()
     param, opt_state, losses = train_step(param, opt_state)
     print(K.mean(losses), time.time() - time0)
+    # ~0.017s per iteration on A800
