@@ -75,7 +75,7 @@ def heisenberg_time_evolution_mps(
 def compare_baseline():
     # Parameters
     nqubits = 10
-    total_time = 1
+    total_time = 2
     dt = 0.01
 
     # Heisenberg parameters
@@ -174,4 +174,4 @@ def benchmark_efficiency(nqubits, bond_d):
 
 if __name__ == "__main__":
     compare_baseline()
-    benchmark_efficiency(24, 64)
+    benchmark_efficiency(24, 48)

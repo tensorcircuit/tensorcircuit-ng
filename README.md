@@ -429,7 +429,7 @@ Reference paper: https://arxiv.org/abs/2504.21459.
 
 - Variational post-selection for ground states and thermal states simulation: https://arxiv.org/abs/2402.07605 (published in QST).
 
-- Subsystem information capacity in random circuits and Hamiltonian dynamics: https://arxiv.org/abs/2405.05076.
+- Subsystem information capacity in random circuits and Hamiltonian dynamics: https://arxiv.org/abs/2405.05076. Code implementation: https://github.com/sxzgroup/subsystem_information_capacity.
 
 - Symmetry restoration and quantum Mpemba effect in symmetric random circuits: https://arxiv.org/abs/2403.08459 (published in PRL).
 
