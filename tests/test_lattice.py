@@ -383,8 +383,45 @@ class TestCustomizeLattice:
             # Check if the ax.text method was called. For a 4-site lattice, it should be called 4 times.
             assert mock_text_method.call_count == lattice.num_sites
 
+    def test_custom_irregular_geometry_neighbors(self):
+        """
+        Tests neighbor finding on a more complex, non-grid-like custom geometry
+        to stress-test the distance shell and KDTree logic.
+        """
+        # Arrange: A "star-shaped" lattice with a central point,
+        # an inner shell, and an outer shell.
+        coords = [
+            [0.0, 0.0],  # Site 0: Center
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [-1.0, 0.0],
+            [0.0, -1.0],  # Sites 1-4: Inner shell (dist=1)
+            [2.0, 0.0],
+            [0.0, 2.0],
+            [-2.0, 0.0],
+            [0.0, -2.0],  # Sites 5-8: Outer shell (dist=2)
+        ]
+        ids = list(range(len(coords)))
+        lattice = CustomizeLattice(
+            dimensionality=2, identifiers=ids, coordinates=coords
+        )
+        lattice._build_neighbors(max_k=3)
 
-# --- Tests for TILattice using SquareLattice ---
+        # Assert 1: Neighbors of the central point (0) should be the distinct shells.
+        assert set(lattice.get_neighbors(0, k=1)) == {1, 2, 3, 4}
+        # The shell at dist=2.0 (d_sq=4.0) is the 3rd global shell, so we check k=3.
+        assert set(lattice.get_neighbors(0, k=3)) == {5, 6, 7, 8}
+
+        assert lattice.get_neighbors(0, k=2) == []
+
+        # Assert 2: Neighbors of a point on the inner shell, e.g., site 1 ([1.0, 0.0]).
+        # Its nearest neighbors (k=1) are the center (0) and the closest point on the outer shell (5).
+        # Both are at distance 1.0.
+        assert set(lattice.get_neighbors(1, k=1)) == {0, 5}
+
+        # Its next-nearest neighbors (k=2) are the other two points on the inner shell (2 and 4),
+        # both at distance sqrt(2).
+        assert set(lattice.get_neighbors(1, k=2)) == {2, 4}
 
 
 @pytest.fixture
@@ -803,6 +840,116 @@ class TestApiRobustness:
                 "two separate components of the lattice."
             )
 
+    def test_lattice_with_duplicate_coordinates(self):
+        """
+        Tests a pathological case where multiple sites share the exact same coordinates.
+        The neighbor-finding logic must still treat them as distinct sites and
+        correctly identify neighbors based on other non-overlapping sites.
+        """
+        # Arrange
+        # Site 'A' and 'B' are at the same position (0,0).
+        # Site 'C' is at (1,0), which should be a neighbor to both 'A' and 'B'.
+        ids = ["A", "B", "C"]
+        coords = [[0.0, 0.0], [0.0, 0.0], [1.0, 0.0]]
+
+        lattice = CustomizeLattice(
+            dimensionality=2, identifiers=ids, coordinates=coords
+        )
+        lattice._build_neighbors(max_k=1)  # Build nearest neighbors
+
+        # Act
+        idx_A = lattice.get_index("A")
+        idx_B = lattice.get_index("B")
+        idx_C = lattice.get_index("C")
+
+        neighbors_A = lattice.get_neighbors(idx_A, k=1)
+        neighbors_B = lattice.get_neighbors(idx_B, k=1)
+
+        # Assert
+        # 1. The distance between the overlapping points 'A' and 'B' is 0,
+        #    so they should NOT be considered neighbors of each other.
+        assert (
+            idx_B not in neighbors_A
+        ), "Overlapping sites should not be their own neighbors."
+        assert (
+            idx_A not in neighbors_B
+        ), "Overlapping sites should not be their own neighbors."
+
+        # 2. Both 'A' and 'B' should correctly identify 'C' as their neighbor.
+        #    This is the key test of robustness.
+        assert neighbors_A == [
+            idx_C
+        ], "Site 'A' failed to find its correct neighbor 'C'."
+        assert neighbors_B == [
+            idx_C
+        ], "Site 'B' failed to find its correct neighbor 'C'."
+
+        # 3. Conversely, 'C' should identify both 'A' and 'B' as its neighbors.
+        neighbors_C = lattice.get_neighbors(idx_C, k=1)
+        assert set(neighbors_C) == {
+            idx_A,
+            idx_B,
+        }, "Site 'C' failed to find both overlapping neighbors."
+
+    def test_neighbor_shells_with_tiny_separation(self):
+        """
+        Tests the numerical stability of neighbor shell identification.
+        Creates a lattice where the k=1 and k=2 shells are separated by a
+        distance much smaller than the default tolerance, and verifies that they
+        are still correctly identified as distinct shells.
+        """
+        # Arrange
+        # Let d1 be the distance to the first neighbor shell.
+        d1 = 1.0
+        # Let d2 be the distance to the second shell, which is extremely close to d1.
+        epsilon = 1e-8  # A tiny separation
+        d2 = d1 + epsilon
+
+        # Create a 1D lattice with these specific distances.
+        # Site 0 is origin. Site 1 is at d1. Site 2 is at d2.
+        ids = [0, 1, 2]
+        coords = [[0.0], [d1], [d2]]
+
+        # We explicitly use a tolerance LARGER than the separation,
+        # which SHOULD cause the shells to merge.
+        lattice_merged = CustomizeLattice(
+            dimensionality=1, identifiers=ids, coordinates=coords
+        )
+        # Use a tolerance that cannot distinguish d1 and d2.
+        lattice_merged._build_neighbors(max_k=2, tol=1e-7)
+
+        # Now, use a tolerance SMALLER than the separation,
+        # which SHOULD correctly distinguish the shells.
+        lattice_distinct = CustomizeLattice(
+            dimensionality=1, identifiers=ids, coordinates=coords
+        )
+        lattice_distinct._build_neighbors(max_k=2, tol=1e-9)
+
+        # Assert for the merged case
+        # With a large tolerance, site 1 and 2 should both be in the k=1 shell.
+        merged_neighbors_k1 = lattice_merged.get_neighbors(0, k=1)
+        assert set(merged_neighbors_k1) == {
+            1,
+            2,
+        }, "Shells were not merged with a large tolerance."
+        # There should be no k=2 shell.
+        merged_neighbors_k2 = lattice_merged.get_neighbors(0, k=2)
+        assert (
+            merged_neighbors_k2 == []
+        ), "A k=2 shell should not exist when shells are merged."
+
+        # Assert for the distinct case
+        # With a small tolerance, only site 1 should be in the k=1 shell.
+        distinct_neighbors_k1 = lattice_distinct.get_neighbors(0, k=1)
+        assert distinct_neighbors_k1 == [
+            1
+        ], "k=1 shell is incorrect with a small tolerance."
+        # Site 2 should now be in its own k=2 shell.
+        distinct_neighbors_k2 = lattice_distinct.get_neighbors(0, k=2)
+        assert distinct_neighbors_k2 == [
+            2
+        ], "k=2 shell is incorrect with a small tolerance."
+
 
 class TestTILattice:
     """
@@ -955,47 +1102,50 @@ class TestLongRangeNeighborFinding:
         """
         Tests neighbor finding with mixed PBC (periodic in x, open in y).
         This verifies that the neighbor finding logic correctly handles
-        anisotropy in periodic boundary conditions.
+        anisotropy in periodic boundary conditions and returns sorted indices.
         """
         # Arrange: Create a 3x3 square lattice, periodic in x, open in y.
         lattice = SquareLattice(size=(3, 3), pbc=(True, False))
 
-        # We will test two representative sites:
-        # 1. A site on the corner of the open boundary: (0, 0)
-        # 2. A site in the middle of the open boundary: (0, 1)
-
-        # --- Test corner site (0, 0) ---
+        # We will test a site on the corner of the open boundary: (0, 0)
         corner_site_idx = lattice.get_index((0, 0, 0))
 
-        # Act: Get its neighbors.
+        # --- Test corner site (0, 0, 0), which is index 0 ---
+        # Act
         corner_neighbors = lattice.get_neighbors(corner_site_idx, k=1)
-        corner_neighbor_idents = {lattice.get_identifier(i) for i in corner_neighbors}
 
-        # Assert:
-        # Expected neighbors for site (0,0):
-        # - Right neighbor: (1, 0, 0)
-        # - "Left" neighbor (wraps around periodically): (2, 0, 0)
-        # - Up neighbor: (0, 1, 0)
-        # - No "Down" neighbor due to open boundary.
-        expected_corner_idents = {(1, 0, 0), (2, 0, 0), (0, 1, 0)}
-        assert len(corner_neighbors) == 3
-        assert corner_neighbor_idents == expected_corner_idents
+        # Assert: The expected neighbors are (1,0,0), (2,0,0) [periodic], and (0,1,0)
+        # We get their indices and sort them to create the expected output.
+        expected_indices = sorted(
+            [
+                lattice.get_index((1, 0, 0)),  # Right neighbor
+                lattice.get_index((2, 0, 0)),  # "Left" neighbor (wraps around)
+                lattice.get_index((0, 1, 0)),  # "Up" neighbor
+            ]
+        )
 
-        # --- Test middle site on the edge (1, 0) ---
+        # The list returned by get_neighbors should be identical to our sorted list.
+        assert (
+            corner_neighbors == expected_indices
+        ), "Failed for corner site with mixed BC."
+
+        # --- Test middle site on the edge (1, 0, 0), which is index 1 ---
         edge_site_idx = lattice.get_index((1, 0, 0))
 
-        # Act: Get its neighbors.
+        # Act
         edge_neighbors = lattice.get_neighbors(edge_site_idx, k=1)
-        edge_neighbor_idents = {lattice.get_identifier(i) for i in edge_neighbors}
 
-        # Assert:
-        # Expected neighbors for site (1,0):
-        # - Left neighbor: (0, 0, 0)
-        # - Right neighbor: (2, 0, 0)
-        # - Up neighbor: (1, 1, 0)
-        expected_edge_idents = {(0, 0, 0), (2, 0, 0), (1, 1, 0)}
-        assert len(edge_neighbors) == 3
-        assert edge_neighbor_idents == expected_edge_idents
+        # Assert
+        expected_edge_indices = sorted(
+            [
+                lattice.get_index((0, 0, 0)),  # Left neighbor
+                lattice.get_index((2, 0, 0)),  # Right neighbor
+                lattice.get_index((1, 1, 0)),  # "Up" neighbor
+            ]
+        )
+        assert (
+            edge_neighbors == expected_edge_indices
+        ), "Failed for edge site with mixed BC."
 
 
 class TestAllTILattices:
@@ -1077,6 +1227,9 @@ class TestAllTILattices:
 
             neighbors = lattice.get_neighbors(test_site_idx, k=1)
             assert len(neighbors) == expected_count
+        if isinstance(LatticeClass, ChainLattice) and not init_args.get("pbc"):
+            if test_site_idx == 0:
+                assert 1 in neighbors
 
 
 class TestCustomizeLatticeDynamic:
@@ -1177,100 +1330,207 @@ class TestCustomizeLatticeDynamic:
     def test_modification_clears_distance_matrix_cache(self, initial_lattice):
         """
         Tests that add_sites and remove_sites correctly invalidate the
-        cached distance matrix.
+        cached distance matrix and that the recomputed matrix is correct.
         """
-        # Arrange 1: Compute neighbors and distance matrix
+        # Arrange 1: Compute, cache, and perform a meaningful check on the original matrix.
         lat = initial_lattice
-        lat._build_neighbors(max_k=1)
-        _ = lat.distance_matrix
-        assert lat._distance_matrix is not None  # Verify it's cached
+        original_matrix = lat.distance_matrix
+        assert lat._distance_matrix is not None
+        assert original_matrix.shape == (3, 3)
+        # Meaningful check: distance from 'A'(idx 0) to 'B'(idx 1) should be 1.0
+        np.testing.assert_allclose(original_matrix[0, 1], 1.0)
 
-        # Act 1: Add a site
-        lat.add_sites(identifiers=["D"], coordinates=[[5, 5]])
+        # Act 1: Add a site. This should invalidate the cache.
+        lat.add_sites(identifiers=["D"], coordinates=[[1, 1]])
 
-        # Assert 1: The distance matrix cache should now be cleared
-        assert lat._distance_matrix is None
+        # Assert 1: Check cache is cleared and the new matrix is correct.
+        assert lat._distance_matrix is None  # Verify cache invalidation
+        new_matrix_added = lat.distance_matrix
+        assert new_matrix_added.shape == (4, 4)
+        # Meaningful check: distance from 'B'(idx 1) to new site 'D'(idx 3) should be 1.0
+        # Coords: B=[1,0], D=[1,1]
+        np.testing.assert_allclose(new_matrix_added[1, 3], 1.0)
 
-        # Arrange 2: Re-compute and then remove a site
-        lat._build_neighbors(max_k=1)
-        _ = lat.distance_matrix
-        assert lat._distance_matrix is not None  # Verify it's cached again
-
-        # Act 2: Remove a site
+        # Act 2: Remove a site. This should also invalidate the cache.
         lat.remove_sites(identifiers=["A"])
 
-        # Assert 2: The distance matrix cache should be cleared again
-        assert lat._distance_matrix is None
+        # Assert 2: Check cache is cleared again and the final matrix is correct.
+        assert lat._distance_matrix is None  # Verify cache invalidation
+        final_matrix = lat.distance_matrix
+        assert final_matrix.shape == (3, 3)  # Now has 3 sites again
+        # Meaningful check: After removing 'A', the sites are B, C, D.
+        # 'B' is now at index 0 (coords [1,0])
+        # 'C' is now at index 1 (coords [0,1])
+        # 'D' is now at index 2 (coords [1,1])
+        # Distance from new 'B' (idx 0) to new 'D' (idx 2) should be 1.0
+        np.testing.assert_allclose(final_matrix[0, 2], 1.0)
 
-
-class TestDistanceMatrixCaching:
-    """
-    Tests that the _distance_matrix is correctly computed and cached
-    across different lattice types and neighbor-finding methods.
-    """
-
-    def test_matrix_is_cached_for_customize_lattice(self, simple_square_lattice):
+    def test_neighbor_finding_returns_sorted_list(self, simple_square_lattice):
         """
-        Verifies caching for CustomizeLattice after its KDTree-based
-        neighbor build.
-        """
-        # Arrange
-        lat = simple_square_lattice
-        # The fixture already calls _build_neighbors, but we can reset and re-call
-        # to make the test's intent clear.
-        lat._reset_computations()
-        assert lat._distance_matrix is None  # Verify it's initially None
-
-        # Act
-        lat._build_neighbors(max_k=1)
-        _ = lat.distance_matrix
-        # Assert
-        assert lat._distance_matrix is not None
-        assert lat._distance_matrix.shape == (lat.num_sites, lat.num_sites)
-        # Check a known distance: site 0 ([0,0]) to site 3 ([1,1]) is sqrt(2)
-        np.testing.assert_allclose(lat._distance_matrix[0, 3], np.sqrt(2))
-
-    def test_matrix_is_cached_for_tilattice_mixed_bc(self):
-        """
-        Verifies caching for a TILattice with mixed boundary conditions.
+        Ensures that the list of neighbors returned by get_neighbors is always sorted.
+        This provides a stricter check than set-based comparisons.
         """
         # Arrange
-        # Use a lattice with one periodic and one open boundary
-        lat = SquareLattice(size=(3, 3), pbc=(True, False))
-        assert lat._distance_matrix is None
+        lattice = simple_square_lattice
 
         # Act
-        lat._build_neighbors(max_k=1)
-        _ = lat.distance_matrix
-        # Assert
-        assert lat._distance_matrix is not None
-        assert lat._distance_matrix.shape == (9, 9)
-        # Check a PBC-affected distance: site (0,0) to (2,0) should be 1.0
-        idx1 = lat.get_index((0, 0, 0))
-        idx2 = lat.get_index((2, 0, 0))
-        np.testing.assert_allclose(lat._distance_matrix[idx1, idx2], 1.0)
-        # Check a non-PBC distance: site (0,0) to (0,2) should be 2.0
-        idx3 = lat.get_index((0, 2, 0))
-        np.testing.assert_allclose(lat._distance_matrix[idx1, idx3], 2.0)
+        # Get neighbors for the central site (index 1 in a 2x2 grid)
+        # Expected neighbors are 0, 3.
+        neighbors = lattice.get_neighbors(1, k=1)
 
-    def test_matrix_is_cached_for_tilattice_full_pbc(self):
+        # Assert
+        # We compare directly against a pre-sorted list, not a set.
+        # This will fail if the implementation returns [3, 0] instead of [0, 3].
+        assert neighbors == [
+            0,
+            3,
+        ], "The neighbor list should be sorted in ascending order."
+
+
+class TestDistanceMatrix:
+
+    # This is the upgraded, parameterized test.
+    @pytest.mark.parametrize(
+        # We define test scenarios as tuples:
+        # (build_k, check_site_identifier, expected_dist_sq)
+        # build_k: The number of neighbor shells to pre-build.
+        # check_site_identifier: The identifier of a site whose distance from the origin we will check.
+        # expected_dist_sq: The expected squared distance to that site.
+        "build_k, check_site_identifier, expected_dist_sq",
+        [
+            # Scenario 1: The most common case. Build only NN (k=1), but check a NNN (k=2) distance.
+            # A buggy cache would fail this.
+            (1, (1, 1, 0), 2.0),
+            # Scenario 2: Build up to k=2, but check a k=3 distance.
+            (2, (2, 0, 0), 4.0),
+            # Scenario 3: Build up to k=3, but check a k=4 distance.
+            (3, (2, 1, 0), 5.0),
+            # Scenario 4: A more complex, higher-order neighbor.
+            (5, (3, 1, 0), 10.0),
+        ],
+    )
+    def test_tilattice_full_pbc_distance_matrix_is_correct_regardless_of_build_k(
+        self, build_k, check_site_identifier, expected_dist_sq
+    ):
         """
-        Verifies caching for a TILattice with full periodic boundary conditions
-        after its efficient template-based neighbor build.
+        Tests that the distance matrix for a fully periodic TILattice is
+        always fully correct, no matter how many neighbor shells were pre-calculated.
+        This is a high-strength test designed to catch subtle caching bugs where
+        the cached matrix might only contain partial information.
         """
         # Arrange
-        lat = SquareLattice(size=(3, 3), pbc=True)
-        assert lat._distance_matrix is None
+        # Using a larger, non-square lattice to avoid accidental symmetries
+        lat = SquareLattice(size=(7, 9), pbc=True)
 
         # Act
-        lat._build_neighbors(max_k=1)
-        _ = lat.distance_matrix
+        # Step 1: Pre-build neighbors. This is where a faulty caching
+        # mechanism in the source code might be triggered.
+        lat._build_neighbors(max_k=build_k)
+
+        # Step 2: Access the distance_matrix property. A correct implementation
+        # will return a fully valid matrix.
+        dist_matrix = lat.distance_matrix
+
         # Assert
-        assert lat._distance_matrix is not None
-        assert lat._distance_matrix.shape == (9, 9)
-        # Check a PBC-affected distance: site (0,0) to (0,2) should be 1.0
-        idx1 = lat.get_index((0, 0, 0))
-        idx2 = lat.get_index((0, 2, 0))
-        np.testing.assert_allclose(lat._distance_matrix[idx1, idx2], 1.0)
-        # Check diagonal distance is zero
-        np.testing.assert_allclose(np.diag(lat._distance_matrix), 0)
+        # Find the indices for the sites we want to check.
+        origin_idx = lat.get_index((0, 0, 0))
+        check_site_idx = lat.get_index(check_site_identifier)
+
+        # The core assertion: check the distance.
+        actual_dist_sq = dist_matrix[origin_idx, check_site_idx] ** 2
+
+        error_message = (
+            f"Distance matrix failed when building k={build_k}. "
+            f"Checking distance to site {check_site_identifier} (expected sq={expected_dist_sq}) "
+            f"but got sq={actual_dist_sq} instead."
+        )
+
+        np.testing.assert_allclose(
+            actual_dist_sq, expected_dist_sq, err_msg=error_message
+        )
+
+    def test_tilattice_mixed_bc_distance_matrix_is_correct(self):
+        """
+        Tests that the distance matrix is correctly calculated for a TILattice
+        with mixed boundary conditions (e.g., periodic in x, open in y).
+        """
+        # Arrange
+        # pbc=(True, False) means periodic along x-axis, open along y-axis.
+        lat = SquareLattice(size=(5, 5), pbc=(True, False))
+
+        # Pre-build neighbors to engage the caching logic.
+        lat._build_neighbors(max_k=2)
+        dist_matrix = lat.distance_matrix
+
+        # Assert
+        origin_idx = lat.get_index((0, 0, 0))
+
+        # 1. Test a distance affected by the periodic boundary (x-direction)
+        # The distance between (0,0) and (4,0) should be 1.0 due to PBC wrap-around.
+        pbc_neighbor_idx = lat.get_index((4, 0, 0))
+        np.testing.assert_allclose(dist_matrix[origin_idx, pbc_neighbor_idx], 1.0)
+
+        # 2. Test a distance affected by the open boundary (y-direction)
+        # The distance between (0,0) and (0,4) should be 4.0 as there's no wrap-around.
+        obc_neighbor_idx = lat.get_index((0, 4, 0))
+        np.testing.assert_allclose(dist_matrix[origin_idx, obc_neighbor_idx], 4.0)
+
+        # 3. Test a general, off-axis point.
+        # Distance from (0,0) to (3,3) with x-pbc. The x-distance is min(3, 5-3=2) = 2.
+        # The y-distance is 3. So total distance is sqrt(2^2 + 3^2) = sqrt(13).
+        general_neighbor_idx = lat.get_index((3, 3, 0))
+        np.testing.assert_allclose(
+            dist_matrix[origin_idx, general_neighbor_idx], np.sqrt(13)
+        )
+
+    # --- This list and the following test are now at the correct indentation level ---
+    lattice_instances_for_invariant_test = [
+        SquareLattice(size=(4, 4), pbc=True),
+        SquareLattice(size=(4, 3), pbc=(True, False)),  # Mixed BC, non-square
+        HoneycombLattice(size=(3, 3), pbc=True),
+        TriangularLattice(size=(4, 4), pbc=False),
+        CustomizeLattice(
+            dimensionality=2,
+            identifiers=list(range(4)),
+            coordinates=[[0, 0], [1, 1], [0, 1], [1, 0]],
+        ),
+    ]
+
+    @pytest.mark.parametrize("lattice", lattice_instances_for_invariant_test)
+    def test_distance_matrix_invariants_for_all_lattice_types(self, lattice):
+        """
+        Tests that the distance matrix for any lattice type adheres to
+        fundamental mathematical properties (invariants): symmetry, zero diagonal,
+        and positive off-diagonal elements.
+        """
+        # Arrange
+        n = lattice.num_sites
+        if n < 2:
+            pytest.skip("Invariant test requires at least 2 sites.")
+
+        # Act
+        # We call the property directly, without building neighbors first,
+        # to test the on-demand computation path.
+        matrix = lattice.distance_matrix
+
+        # Assert
+        # 1. Symmetry: The matrix must be equal to its transpose.
+        np.testing.assert_allclose(
+            matrix,
+            matrix.T,
+            err_msg=f"Distance matrix for {type(lattice).__name__} is not symmetric.",
+        )
+
+        # 2. Zero Diagonal: All diagonal elements must be zero.
+        np.testing.assert_allclose(
+            np.diag(matrix),
+            np.zeros(n),
+            err_msg=f"Diagonal of distance matrix for {type(lattice).__name__} is not zero.",
+        )
+
+        # 3. Positive Off-diagonal: All non-diagonal elements must be > 0.
+        # We create a boolean mask for the off-diagonal elements.
+        off_diagonal_mask = ~np.eye(n, dtype=bool)
+        assert np.all(
+            matrix[off_diagonal_mask] > 1e-9
+        ), f"Found non-positive off-diagonal elements in distance matrix for {type(lattice).__name__}."

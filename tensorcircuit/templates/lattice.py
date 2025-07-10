@@ -479,18 +479,15 @@ class AbstractLattice(abc.ABC):
         if all_distances_sq.size == 0:
             return []
 
-        # Sort unique distances and filter out zero-distance (self-loops)
-        unique_sorted_dist = sorted(
-            [d for d in np.unique(all_distances_sq) if d > tol**2]
-        )
+        sorted_dist = np.sort(all_distances_sq[all_distances_sq > 1e-12])
 
-        if not unique_sorted_dist:
+        if sorted_dist.size == 0:
             return []
 
-        # Identify shells by checking if a new distance is significantly
-        # larger than the last identified shell distance.
-        dist_shells = [unique_sorted_dist[0]]
-        for d_sq in unique_sorted_dist[1:]:
+        # Identify shells using the user-provided tolerance.
+        dist_shells = [sorted_dist[0]]
+
+        for d_sq in sorted_dist[1:]:
             if len(dist_shells) >= max_k:
                 break
             # If the current distance is notably larger than the last shell's distance
@@ -719,7 +716,7 @@ class TILattice(AbstractLattice):
             )
             dist_matrix = self._get_distance_matrix_with_mic()
             dist_matrix_sq = dist_matrix**2
-
+            self._distance_matrix = dist_matrix
             # Part C: Identify neighbor shells from the correctly calculated distance matrix.
             # This logic is copied from the working `_find_neighbors_by_distance` method.
             all_distances_sq = dist_matrix_sq.flatten()
@@ -747,6 +744,7 @@ class TILattice(AbstractLattice):
                     current_k_map[i].sort()
 
                 self._neighbor_maps[k] = current_k_map
+
             return  # IMPORTANT: Exit the function here, as we are done.
 
         # Step 3: If we reach here, the system is fully periodic.
@@ -849,6 +847,41 @@ class TILattice(AbstractLattice):
 
                 if neighbors_of_i_for_k:
                     self._neighbor_maps[k][i] = sorted(neighbors_of_i_for_k)
+
+        logger.info("Caching the full distance matrix via translational invariance...")
+        dist_matrix_sq = np.zeros((self.num_sites, self.num_sites), dtype=float)
+        size_arr = np.array(self.size)
+
+        for i in range(self.num_sites):
+            ident_i = cast(Tuple[Any, ...], self._identifiers[i])
+            uc_i = np.array(ident_i[:-1])
+            basis_i = ident_i[-1]
+
+            uc_disp = -uc_i
+            relative_ucs_list = [
+                cast(Tuple[Any, ...], ident)[:-1] for ident in self._identifiers
+            ]
+            relative_ucs_arr = np.array(relative_ucs_list)
+            all_target_ucs = relative_ucs_arr + uc_disp
+
+            for dim in range(self.dimensionality):
+                if self.pbc[dim]:
+                    all_target_ucs[:, dim] %= size_arr[dim]
+
+            # Convert these relative unit cell coordinates back to site indices
+            all_target_basis = np.array(
+                [cast(Tuple[Any, ...], ident)[-1] for ident in self._identifiers]
+            )
+            all_target_idents = [
+                tuple(uc) + (basis,)
+                for uc, basis in zip(all_target_ucs, all_target_basis)
+            ]
+            target_indices = [self._ident_to_idx[ident] for ident in all_target_idents]
+
+            # Assign the entire row of distances from the lookup table
+            dist_matrix_sq[i, :] = ref_dist_matrix_sq[basis_i, target_indices]
+
+        self._distance_matrix = np.sqrt(dist_matrix_sq)
 
     def _compute_distance_matrix(self) -> Coordinates:
         """Computes the distance matrix using the Minimum Image Convention."""
@@ -1401,8 +1434,13 @@ class CustomizeLattice(AbstractLattice):
             k = k_idx + 1
             current_k_map: Dict[int, List[int]] = {}
             for i in range(self.num_sites):
-                # The previously found indices for site i (neighbors from shells 1 to k-1)
-                prev_found = found_indices[i] if k_idx > 0 else {i}
+
+                if k_idx == 0:
+                    co_located_indices = tree.query_ball_point(all_coords[i], r=1e-12)
+                    prev_found = set(co_located_indices)
+                else:
+                    prev_found = found_indices[i]
+
                 # The new neighbors are those in the current radius shell,
                 # excluding those already found in smaller shells.
                 new_neighbors = set(current_shell_indices[i]) - prev_found
@@ -1414,6 +1452,7 @@ class CustomizeLattice(AbstractLattice):
             found_indices = [
                 set(l) for l in current_shell_indices
             ]  # Update for next iteration
+        self._distance_matrix = np.sqrt(squareform(all_distances_sq))
 
         logger.info("Neighbor building complete using KDTree.")
 
