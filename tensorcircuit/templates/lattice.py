@@ -474,12 +474,14 @@ class AbstractLattice(abc.ABC):
         :return: A sorted list of squared distances representing the shells.
         :rtype: List[float]
         """
+        ZERO_THRESHOLD_SQ = 1e-12
+
         all_distances_sq = np.asarray(all_distances_sq)
         # Now, the .size call below is guaranteed to be safe.
         if all_distances_sq.size == 0:
             return []
 
-        sorted_dist = np.sort(all_distances_sq[all_distances_sq > 1e-12])
+        sorted_dist = np.sort(all_distances_sq[all_distances_sq > ZERO_THRESHOLD_SQ])
 
         if sorted_dist.size == 0:
             return []
@@ -684,18 +686,14 @@ class TILattice(AbstractLattice):
     def _build_neighbors(self, max_k: int = 2, **kwargs: Any) -> None:
         """Calculates neighbor relationships for the periodic lattice.
 
-        This optimized method leverages the translational symmetry of the lattice.
-        It first calculates neighbor relationships for only the reference sites
-        in the first unit cell (uc_coord=(0,...)). These relationships, defined
-        by unit cell displacements and basis site changes, serve as a template.
-        This template is then applied (translated) to all other unit cells in
-        the lattice to determine their neighbors efficiently. This avoids the
-        costly O(N^2) full distance matrix calculation for *finding neighbors*.
-        Note: For non-fully periodic systems, this falls back to a robust
-        distance-based method applying the Minimum Image Convention.
+        This method calculates neighbor relationships by computing the full N x N
+        distance matrix. It robustly handles all boundary conditions (fully
+        periodic, open, or mixed) by applying the Minimum Image Convention
+        (MIC) only to the periodic dimensions.
 
-        Finally, the full N x N distance matrix (respecting PBC) is always
-        computed and cached at the end of this process.
+        From this distance matrix, it identifies unique neighbor shells up to
+        the specified `max_k` and populates the neighbor maps. The computed
+        distance matrix is then cached for future use.
 
         :param max_k: The maximum number of neighbor shells to
             calculate. Defaults to 2.
@@ -705,183 +703,30 @@ class TILattice(AbstractLattice):
         :type tol: float, optional
         """
         tol = kwargs.get("tol", 1e-6)
-        # Step 1: Check if the system is fully periodic.
-        is_fully_periodic = all(self.pbc)
-        # Step 2: If not fully periodic, fall back to the robust but slower method.
-        if not is_fully_periodic:
-            logger.info(
-                "Lattice has open boundaries. Using a robust neighbor finding "
-                "method that applies the Minimum Image Convention (MIC) "
-                "only to periodic dimensions."
-            )
-            dist_matrix = self._get_distance_matrix_with_mic()
-            dist_matrix_sq = dist_matrix**2
-            self._distance_matrix = dist_matrix
-            # Part C: Identify neighbor shells from the correctly calculated distance matrix.
-            # This logic is copied from the working `_find_neighbors_by_distance` method.
-            all_distances_sq = dist_matrix_sq.flatten()
-            dist_shells_sq = self._identify_distance_shells(
-                all_distances_sq, max_k, tol
-            )
+        dist_matrix = self._get_distance_matrix_with_mic()
+        dist_matrix_sq = dist_matrix**2
+        self._distance_matrix = dist_matrix
+        all_distances_sq = dist_matrix_sq.flatten()
+        dist_shells_sq = self._identify_distance_shells(all_distances_sq, max_k, tol)
 
-            self._neighbor_maps = {k: {} for k in range(1, len(dist_shells_sq) + 1)}
-            for k_idx, target_d_sq in enumerate(dist_shells_sq):
-                k = k_idx + 1
-                current_k_map: Dict[int, List[int]] = {}
-                # Find pairs of sites (i,j) whose distance matches the current shell
-                match_indices = np.where(
-                    np.isclose(dist_matrix_sq, target_d_sq, rtol=0, atol=tol**2)
-                )
-                for i, j in zip(*match_indices):
-                    if i == j:  # Exclude self-loops
-                        continue
-                    if i not in current_k_map:
-                        current_k_map[i] = []
-                    current_k_map[i].append(j)
-
-                # Sort neighbors for deterministic output
-                for i in current_k_map:
-                    current_k_map[i].sort()
-
-                self._neighbor_maps[k] = current_k_map
-
-            return  # IMPORTANT: Exit the function here, as we are done.
-
-        # Step 3: If we reach here, the system is fully periodic.
-        # Proceed with the fast, template-based algorithm.
-        tol = kwargs.get("tol", 1e-6)
-
-        if self.num_sites < 2:
-            return
-
-        # 1. Calculate distances from each *reference basis site* to *all* other sites
-        # Generate supercell translation vectors for Minimum Image Convention (MIC).
-        # This block creates all 3^d combinations of unit cell shifts
-        # (e.g., -1, 0, 1) for each periodic dimension. These are then converted
-        # into real-space translation vectors (like L_x, L_y, L_x-L_y, etc.)
-        # to find neighbors in adjacent periodic images.
-        ref_dist_matrix_sq = np.full((self.num_basis, self.num_sites), np.inf)
-
-        # Generate supercell translation vectors for Minimum Image Convention (MIC)
-        pbc_dims = [d for d in range(self.dimensionality) if self.pbc[d]]
-        translations = np.zeros((1, self.dimensionality))
-        if pbc_dims:
-            shift_options = [np.array([-1, 0, 1])] * len(pbc_dims)
-            shifts_grid = np.meshgrid(*shift_options, indexing="ij")
-            all_shifts = np.stack(shifts_grid, axis=-1).reshape(-1, len(pbc_dims))
-            system_vectors = self.lattice_vectors * np.array(self.size)[:, np.newaxis]
-            pbc_system_vectors = system_vectors[pbc_dims]
-            translations = all_shifts @ pbc_system_vectors
-
-        all_coords = np.array(self._coordinates)
-        ref_coords = all_coords[: self.num_basis]
-
-        for i in range(self.num_basis):  # For each reference basis site
-            # Get distances to all periodic images of all other sites and find minimum
-            displacements = (
-                all_coords[np.newaxis, :, :]
-                + translations[:, np.newaxis, :]
-                - ref_coords[i]
-            )
-            all_d_sq = np.sum(displacements**2, axis=2)
-            ref_dist_matrix_sq[i, :] = np.min(all_d_sq, axis=0)
-
-        # 2. Identify the unique distance shells from these reference distances
-        dist_shells_sq = self._identify_distance_shells(
-            ref_dist_matrix_sq.flatten(), max_k, tol
-        )
-        if not dist_shells_sq:
-            return
-
-        # 3. Create "neighbor templates" based on identifier displacements
-        neighbor_templates: Dict[int, Dict[int, List[Tuple[Coordinates, int]]]] = {
-            b: {k: [] for k in range(1, len(dist_shells_sq) + 1)}
-            for b in range(self.num_basis)
-        }
-
+        self._neighbor_maps = {k: {} for k in range(1, len(dist_shells_sq) + 1)}
         for k_idx, target_d_sq in enumerate(dist_shells_sq):
             k = k_idx + 1
-            # Find which pairs (ref_basis_site, any_site) match this distance
+            current_k_map: Dict[int, List[int]] = {}
             match_indices = np.where(
-                np.isclose(ref_dist_matrix_sq, target_d_sq, rtol=0, atol=tol**2)
+                np.isclose(dist_matrix_sq, target_d_sq, rtol=0, atol=tol**2)
             )
-            # match_indices is a tuple of (array_of_basis_indices, array_of_site_indices)
-            for source_basis_idx, target_site_idx in zip(*match_indices):
-                source_ident = self._identifiers[source_basis_idx]  # (0,..,0,basis)
-                target_ident = self._identifiers[target_site_idx]
+            for i, j in zip(*match_indices):
+                if i == j:
+                    continue
+                if i not in current_k_map:
+                    current_k_map[i] = []
+                current_k_map[i].append(j)
 
-                # Rule: (uc_displacement, target_basis_index)
-                uc_disp = np.array(target_ident[:-1]) - np.array(source_ident[:-1])
-                target_basis = target_ident[-1]
-                neighbor_templates[source_basis_idx][k].append((uc_disp, target_basis))
+            for i in current_k_map:
+                current_k_map[i].sort()
 
-        # 4. Apply the templates to all sites in the lattice
-        self._neighbor_maps = {k: {} for k in range(1, len(dist_shells_sq) + 1)}
-        size_arr = np.array(self.size)
-
-        for i in range(self.num_sites):
-            source_ident = self._identifiers[i]
-            source_uc = np.array(source_ident[:-1])
-            source_basis = source_ident[-1]
-
-            for k, templates in neighbor_templates[source_basis].items():
-                neighbors_of_i_for_k = []
-                for uc_disp, target_basis in templates:
-                    target_uc = source_uc + uc_disp
-
-                    # Wrap target_uc according to PBC rules
-                    is_in_bounds = True
-                    for dim in range(self.dimensionality):
-                        if self.pbc[dim]:
-                            target_uc[dim] %= size_arr[dim]
-                        elif not (0 <= target_uc[dim] < size_arr[dim]):
-                            is_in_bounds = False
-                            break
-
-                    if is_in_bounds:
-                        target_ident = tuple(target_uc) + (target_basis,)
-                        # The identifier must exist in the map
-                        if target_ident in self._ident_to_idx:
-                            neighbor_idx = self._ident_to_idx[target_ident]
-                            neighbors_of_i_for_k.append(neighbor_idx)
-
-                if neighbors_of_i_for_k:
-                    self._neighbor_maps[k][i] = sorted(neighbors_of_i_for_k)
-
-        logger.info("Caching the full distance matrix via translational invariance...")
-        dist_matrix_sq = np.zeros((self.num_sites, self.num_sites), dtype=float)
-        size_arr = np.array(self.size)
-
-        for i in range(self.num_sites):
-            ident_i = cast(Tuple[Any, ...], self._identifiers[i])
-            uc_i = np.array(ident_i[:-1])
-            basis_i = ident_i[-1]
-
-            uc_disp = -uc_i
-            relative_ucs_list = [
-                cast(Tuple[Any, ...], ident)[:-1] for ident in self._identifiers
-            ]
-            relative_ucs_arr = np.array(relative_ucs_list)
-            all_target_ucs = relative_ucs_arr + uc_disp
-
-            for dim in range(self.dimensionality):
-                if self.pbc[dim]:
-                    all_target_ucs[:, dim] %= size_arr[dim]
-
-            # Convert these relative unit cell coordinates back to site indices
-            all_target_basis = np.array(
-                [cast(Tuple[Any, ...], ident)[-1] for ident in self._identifiers]
-            )
-            all_target_idents = [
-                tuple(uc) + (basis,)
-                for uc, basis in zip(all_target_ucs, all_target_basis)
-            ]
-            target_indices = [self._ident_to_idx[ident] for ident in all_target_idents]
-
-            # Assign the entire row of distances from the lookup table
-            dist_matrix_sq[i, :] = ref_dist_matrix_sq[basis_i, target_indices]
-
-        self._distance_matrix = np.sqrt(dist_matrix_sq)
+            self._neighbor_maps[k] = current_k_map
 
     def _compute_distance_matrix(self) -> Coordinates:
         """Computes the distance matrix using the Minimum Image Convention."""

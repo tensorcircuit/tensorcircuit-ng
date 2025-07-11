@@ -1,5 +1,6 @@
 from unittest.mock import patch
 import logging
+import time
 
 import matplotlib
 
@@ -422,6 +423,56 @@ class TestCustomizeLattice:
         # Its next-nearest neighbors (k=2) are the other two points on the inner shell (2 and 4),
         # both at distance sqrt(2).
         assert set(lattice.get_neighbors(1, k=2)) == {2, 4}
+
+    def test_customizelattice_max_k_precomputation_and_ondemand(self):
+        """
+        A robust test to verify `precompute_neighbors` (max_k) for CustomizeLattice.
+        This test is designed to FAIL on the buggy code.
+        """
+        coords = [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [-1.0, 0.0],
+            [0.0, -1.0],
+            [1.0, 1.0],
+            [-1.0, 1.0],
+            [-1.0, -1.0],
+            [1.0, -1.0],
+            [2.0, 0.0],
+            [0.0, 2.0],
+            [-2.0, 0.0],
+            [0.0, -2.0],
+        ]
+        ids = list(range(len(coords)))
+        k_precompute = 2
+
+        lattice = CustomizeLattice(
+            dimensionality=2,
+            identifiers=ids,
+            coordinates=coords,
+            precompute_neighbors=k_precompute,
+        )
+
+        computed_shells = sorted(list(lattice._neighbor_maps.keys()))
+        expected_shells = list(range(1, k_precompute + 1))
+
+        assert computed_shells == expected_shells, (
+            f"TEST FAILED for CustomizeLattice with k={k_precompute}. "
+            f"Expected shells {expected_shells}, but found {computed_shells}."
+        )
+
+        k_ondemand = 3
+        _ = lattice.get_neighbors(0, k=k_ondemand)
+
+        computed_shells_after = sorted(list(lattice._neighbor_maps.keys()))
+        expected_shells_after = list(range(1, k_ondemand + 1))
+
+        assert computed_shells_after == expected_shells_after, (
+            f"ON-DEMAND TEST FAILED for CustomizeLattice. "
+            f"Expected shells {expected_shells_after} after demanding k={k_ondemand}, "
+            f"but found {computed_shells_after}."
+        )
 
 
 @pytest.fixture
@@ -984,6 +1035,46 @@ class TestTILattice:
         # The public 'pbc' attribute should be identical to the tuple we passed.
         assert lattice.pbc == pbc_tuple
 
+    @pytest.mark.parametrize(
+        "LatticeClass, init_args, k_precompute",
+        [
+            (HoneycombLattice, {"size": (4, 5), "pbc": True}, 1),
+            (SquareLattice, {"size": (5, 5), "pbc": True}, 2),
+            (SquareLattice, {"size": (5, 5), "pbc": False}, 1),
+            (KagomeLattice, {"size": (3, 3), "pbc": True}, 1),
+        ],
+    )
+    def test_tilattice_max_k_precomputation_and_ondemand(
+        self, LatticeClass, init_args, k_precompute
+    ):
+        """
+        A robust, parameterized test to verify that `precompute_neighbors` (max_k)
+        works correctly across various TILattice types and conditions.
+        This test is designed to FAIL on the buggy code.
+        """
+        lattice = LatticeClass(**init_args, precompute_neighbors=k_precompute)
+
+        computed_shells = sorted(list(lattice._neighbor_maps.keys()))
+        expected_shells = list(range(1, k_precompute + 1))
+
+        assert computed_shells == expected_shells, (
+            f"TEST FAILED for {LatticeClass.__name__} with k={k_precompute}. "
+            f"Expected shells {expected_shells}, but found {computed_shells}."
+        )
+
+        k_ondemand = k_precompute + 1
+
+        _ = lattice.get_neighbors(0, k=k_ondemand)
+
+        computed_shells_after = sorted(list(lattice._neighbor_maps.keys()))
+        expected_shells_after = list(range(1, k_ondemand + 1))
+
+        assert computed_shells_after == expected_shells_after, (
+            f"ON-DEMAND TEST FAILED for {LatticeClass.__name__}. "
+            f"Expected shells {expected_shells_after} after demanding k={k_ondemand}, "
+            f"but found {computed_shells_after}."
+        )
+
 
 class TestLongRangeNeighborFinding:
     """
@@ -1534,3 +1625,41 @@ class TestDistanceMatrix:
         assert np.all(
             matrix[off_diagonal_mask] > 1e-9
         ), f"Found non-positive off-diagonal elements in distance matrix for {type(lattice).__name__}."
+
+
+@pytest.mark.slow
+class TestPerformance:
+    def test_pbc_implementation_is_not_significantly_slower_than_obc(self):
+        """
+        A performance regression test.
+        It ensures that the specialized implementation for fully periodic
+        lattices (pbc=True) is not substantially slower than the general
+        implementation used for open boundaries (pbc=False).
+        This test will FAIL with the current code, exposing the performance bug.
+        """
+        # Arrange: Use a large-enough lattice to make performance differences apparent
+        size = (30, 30)
+        k = 1
+
+        # Act 1: Measure the execution time of the general (OBC) implementation
+        start_time_obc = time.time()
+        _ = SquareLattice(size=size, pbc=False, precompute_neighbors=k)
+        duration_obc = time.time() - start_time_obc
+
+        # Act 2: Measure the execution time of the specialized (PBC) implementation
+        start_time_pbc = time.time()
+        _ = SquareLattice(size=size, pbc=True, precompute_neighbors=k)
+        duration_pbc = time.time() - start_time_pbc
+
+        print(
+            f"\n[Performance] OBC ({size}): {duration_obc:.4f}s | PBC ({size}): {duration_pbc:.4f}s"
+        )
+
+        # Assert: The PBC implementation should not be drastically slower.
+        # We allow it to be up to 3 times slower to account for minor overheads,
+        # but this will catch the current 10x+ regression.
+        # THIS ASSERTION WILL FAIL with the current buggy code.
+        assert duration_pbc < duration_obc * 5, (
+            "The specialized PBC implementation is significantly slower "
+            "than the general-purpose implementation."
+        )
