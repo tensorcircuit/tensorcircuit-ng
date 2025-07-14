@@ -305,6 +305,9 @@ TensorCircuit-NG is open source, released under the Apache License, Version 2.0.
       <td align="center" valign="top" width="16.66%"><a href="https://github.com/AbdullahKazi500"><img src="https://avatars.githubusercontent.com/u/75779966?v=4?s=100" width="100px;" alt="Chanandellar Bong"/><br /><sub><b>Chanandellar Bong</b></sub></a><br /><a href="#example-AbdullahKazi500" title="Examples">💡</a></td>
       <td align="center" valign="top" width="16.66%"><a href="https://adeshpande.gitlab.io"><img src="https://avatars.githubusercontent.com/u/6169877?v=4?s=100" width="100px;" alt="Abhinav Deshpande"/><br /><sub><b>Abhinav Deshpande</b></sub></a><br /><a href="https://github.com/tensorcircuit/tensorcircuit-ng/commits?author=abhinavd" title="Code">💻</a></td>
     </tr>
+    <tr>
+      <td align="center" valign="top" width="16.66%"><a href="https://github.com/Stellogic"><img src="https://avatars.githubusercontent.com/u/186928579?v=4?s=100" width="100px;" alt="Stellogic"/><br /><sub><b>Stellogic</b></sub></a><br /><a href="https://github.com/tensorcircuit/tensorcircuit-ng/commits?author=Stellogic" title="Code">💻</a> <a href="#example-Stellogic" title="Examples">💡</a> <a href="https://github.com/tensorcircuit/tensorcircuit-ng/commits?author=Stellogic" title="Tests">⚠️</a></td>
+    </tr>
   </tbody>
 </table>
 
