@@ -1,6 +1,7 @@
 # Change Log
 
 ## Unreleased
+- Add `Lattice` module (`tensorcircuit.templates.lattice`) for creating and manipulating various lattice geometries, including `SquareLattice`, `HoneycombLattice`, and `CustomizeLattice`.
 
 ## v1.2.1
 
