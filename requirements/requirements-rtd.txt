@@ -9,11 +9,11 @@ networkx
 jax
 optax
 torch
-sphinx
+sphinx>5.0
 ipykernel
 furo==2022.4.7
 sphinx-copybutton
-nbsphinx>5.0
+nbsphinx
 myst-parser
 urllib3==1.26.15
 sphinx-design
