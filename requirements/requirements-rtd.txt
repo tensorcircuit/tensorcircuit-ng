@@ -13,7 +13,7 @@ sphinx
 ipykernel
 furo==2022.4.7
 sphinx-copybutton
-nbsphinx
+nbsphinx>5.0
 myst-parser
 urllib3==1.26.15
 sphinx-design
