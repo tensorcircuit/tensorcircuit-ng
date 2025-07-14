@@ -11,7 +11,7 @@ optax
 torch
 sphinx>5.0
 ipykernel
-furo==2022.4.7
+furo
 sphinx-copybutton
 nbsphinx
 myst-parser
