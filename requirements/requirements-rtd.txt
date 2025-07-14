@@ -9,7 +9,7 @@ networkx
 jax
 optax
 torch
-sphinx==4.3.2
+sphinx
 ipykernel
 furo==2022.4.7
 sphinx-copybutton
