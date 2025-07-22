@@ -1,5 +1,5 @@
 """
-1D TEBD using MPSCircuit
+1D TEBD on imaginary time toward ground state with OBC
 """
 
 import time
@@ -7,6 +7,7 @@ from functools import partial
 import numpy as np
 import scipy
 import tensorcircuit as tc
+
 
 K = tc.set_backend("jax")
 tc.set_dtype("complex128")
@@ -20,31 +21,29 @@ def apply_trotter_step(
     mps_circuit = tc.MPSCircuit(nqubits, tensors=mps_tensors, split=split_rules)
     # Apply odd bonds (1-2, 3-4, ...)
 
-    for i in range(0, nqubits, 2):
-        mps_circuit.rxx(i, (i + 1) % nqubits, theta=hxx * dt_step)
-        mps_circuit.ryy(i, (i + 1) % nqubits, theta=hyy * dt_step)
-        mps_circuit.rzz(i, (i + 1) % nqubits, theta=hzz * dt_step)
+    for i in range(0, nqubits - 1, 2):
+        mps_circuit.rxx(i, (i + 1), theta=-2.0j * hxx * dt_step)
+        mps_circuit.ryy(i, (i + 1), theta=-2.0j * hyy * dt_step)
+        mps_circuit.rzz(i, (i + 1), theta=-2.0j * hzz * dt_step)
+    mps_circuit._mps.position(nqubits - 1, normalize=True)
 
     # Apply even bonds (2-3, 4-5, ...)
-    for i in range(1, nqubits, 2):
-        mps_circuit.rxx(i, (i + 1) % nqubits, theta=2 * hxx * dt_step)
-        mps_circuit.ryy(i, (i + 1) % nqubits, theta=2 * hyy * dt_step)
-        mps_circuit.rzz(i, (i + 1) % nqubits, theta=2 * hzz * dt_step)
-
-    for i in range(0, nqubits, 2):
-        mps_circuit.rxx(i, (i + 1) % nqubits, theta=hxx * dt_step)
-        mps_circuit.ryy(i, (i + 1) % nqubits, theta=hyy * dt_step)
-        mps_circuit.rzz(i, (i + 1) % nqubits, theta=hzz * dt_step)
+    for i in reversed(range(1, nqubits - 1, 2)):
+        mps_circuit.rxx(i, (i + 1), theta=-2.0j * hxx * dt_step)
+        mps_circuit.ryy(i, (i + 1), theta=-2.0j * hyy * dt_step)
+        mps_circuit.rzz(i, (i + 1), theta=-2.0j * hzz * dt_step)
+    mps_circuit._mps.position(0, normalize=True)
 
     for i in range(nqubits):
-        mps_circuit.rx(i, theta=2 * hx * dt_step)
-        mps_circuit.ry(i, theta=2 * hy * dt_step)
-        mps_circuit.rz(i, theta=2 * hz * dt_step)
+        mps_circuit.rx(i, theta=-2.0j * hx * dt_step)
+        mps_circuit.ry(i, theta=-2.0j * hy * dt_step)
+        mps_circuit.rz(i, theta=-2.0j * hz * dt_step)
+    # mps_circuit._mps.position(0, normalize=True)
 
     return mps_circuit._mps.tensors
 
 
-def heisenberg_time_evolution_mps(
+def heisenberg_imag_time_evolution_mps(
     nqubits: int,
     total_time: float,
     dt: float,
@@ -57,6 +56,7 @@ def heisenberg_time_evolution_mps(
     initial_state=None,
     split_rules=None,
 ):
+
     # Initialize MPS circuit
     if initial_state is not None:
         mps = tc.MPSCircuit(nqubits, wavefunction=initial_state, split=split_rules)
@@ -86,28 +86,27 @@ def heisenberg_time_evolution_mps(
     return tc.MPSCircuit(nqubits, tensors=tensors, split=split_rules)
 
 
-def compare_baseline():
+def compare_baseline(nqubits=12):
     # Parameters
-    nqubits = 10
-    total_time = 2
-    dt = 0.01
+    total_time = 6
+    dt = 0.02
 
     # Heisenberg parameters
-    hxx = 0.9
+    hxx = 0.8
     hyy = 1.0
-    hzz = 0.3
-    hz = -0.1
-    hy = 0.16
-    hx = 0.43
+    hzz = 2.0
+    hz = 0.01
+    hy = 0.0
+    hx = 0.0
 
-    split_rules = {"max_singular_values": 32}
+    split_rules = {"max_singular_values": 24}
 
     c = tc.Circuit(nqubits)
-    c.x(nqubits // 2)
+    c.x([2 * i for i in range(nqubits // 2)])
     initial_state = c.state()
 
     # TEBD evolution
-    final_mps = heisenberg_time_evolution_mps(
+    final_mps = heisenberg_imag_time_evolution_mps(
         nqubits=nqubits,
         total_time=total_time,
         dt=dt,
@@ -120,15 +119,14 @@ def compare_baseline():
         initial_state=initial_state,
         split_rules=split_rules,
     )
-
     # Exact evolution
-    g = tc.templates.graphs.Line1D(nqubits, pbc=True)
+    g = tc.templates.graphs.Line1D(nqubits, pbc=False)
     H = tc.quantum.heisenberg_hamiltonian(
         g, hxx=hxx, hyy=hyy, hzz=hzz, hz=hz, hy=hy, hx=hx, sparse=False
     )
-    U = scipy.linalg.expm(-1j * total_time * H)
+    U = scipy.linalg.expm(-total_time * H)
     exact_final = K.reshape(U @ K.reshape(initial_state, [-1, 1]), [-1])
-
+    exact_final /= K.norm(exact_final)
     # Compare results
     mps_state = final_mps.wavefunction()
     fidelity = np.abs(np.vdot(exact_final, mps_state)) ** 2
@@ -152,7 +150,7 @@ def compare_baseline():
 
 
 def benchmark_efficiency(nqubits, bond_d):
-    total_time = 0.1
+    total_time = 0.2
     dt = 0.01
     hxx = 0.9
     hyy = 1.0
@@ -161,7 +159,7 @@ def benchmark_efficiency(nqubits, bond_d):
 
     # TEBD evolution
     time0 = time.time()
-    final_mps = heisenberg_time_evolution_mps(
+    final_mps = heisenberg_imag_time_evolution_mps(
         nqubits=nqubits,
         total_time=total_time,
         dt=dt,
@@ -171,9 +169,9 @@ def benchmark_efficiency(nqubits, bond_d):
         split_rules=split_rules,
     )
     print(final_mps._mps.tensors[0])
-    print("cold start run:", (time.time() - time0) / 10)
+    print("1 step cold start run:", (time.time() - time0) / 20)
     time0 = time.time()
-    final_mps = heisenberg_time_evolution_mps(
+    final_mps = heisenberg_imag_time_evolution_mps(
         nqubits=nqubits,
         total_time=total_time,
         dt=dt,
@@ -183,9 +181,9 @@ def benchmark_efficiency(nqubits, bond_d):
         split_rules=split_rules,
     )
     print(final_mps._mps.tensors[0])
-    print("jitted run:", (time.time() - time0) / 10)
+    print("1 step jitted run:", (time.time() - time0) / 20)
 
 
 if __name__ == "__main__":
     compare_baseline()
-    benchmark_efficiency(32, 48)
+    benchmark_efficiency(32, 32)
