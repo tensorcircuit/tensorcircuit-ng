@@ -5,9 +5,6 @@ This script demonstrates the performance difference between the KDTree-based
 neighbor search and a baseline all-to-all distance matrix method.
 As shown by the results, the KDTree approach offers a significant speedup,
 especially when calculating for a large number of neighbor shells (large max_k).
-
-To run this script from the project's root directory:
-  python examples/templates/lattice_neighbor_benchmark.py
 """
 
 import timeit

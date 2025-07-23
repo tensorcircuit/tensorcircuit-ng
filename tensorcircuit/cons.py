@@ -23,6 +23,39 @@ from .simplify import _multi_remove
 
 logger = logging.getLogger(__name__)
 
+## monkey patch
+_NODE_CREATION_COUNTER = 0
+_original_node_init = tn.Node.__init__
+
+
+@wraps(_original_node_init)
+def _patched_node_init(self: Any, *args: Any, **kwargs: Any) -> None:
+    """Patched Node.__init__ to add a stable creation ID."""
+    global _NODE_CREATION_COUNTER
+    _original_node_init(self, *args, **kwargs)
+    self._stable_id_ = _NODE_CREATION_COUNTER
+    _NODE_CREATION_COUNTER += 1
+
+
+tn.Node.__init__ = _patched_node_init
+
+
+def _get_edge_stable_key(edge: tn.Edge) -> Tuple[int, int, int, int]:
+    n1, n2 = edge.node1, edge.node2
+    id1 = getattr(n1, "_stable_id_", -1)
+    id2 = getattr(n2, "_stable_id_", -1) if n2 is not None else -2  # -2 for dangling
+
+    if id1 > id2 or (id1 == id2 and edge.axis1 > edge.axis2):
+        id1, id2, ax1, ax2 = id2, id1, edge.axis2, edge.axis1
+    else:
+        ax1, ax2 = edge.axis1, edge.axis2
+    return (id1, ax1, id2, ax2)
+
+
+def sorted_edges(edges: Iterator[tn.Edge]) -> List[tn.Edge]:
+    return sorted(edges, key=_get_edge_stable_key)
+
+
 package_name = "tensorcircuit"
 thismodule = sys.modules[__name__]
 dtypestr = "complex64"
@@ -477,39 +510,29 @@ def _identity(*args: Any, **kws: Any) -> Any:
     return args
 
 
-def _sort_tuple_list(input_list: List[Any], output_list: List[Any]) -> List[Any]:
-    sorted_elements = [(tuple(sorted(t)), i) for i, t in enumerate(input_list)]
-    sorted_elements.sort()
-    return [output_list[i] for _, i in sorted_elements]
-
-
 def _get_path_cache_friendly(
     nodes: List[tn.Node], algorithm: Any
 ) -> Tuple[List[Tuple[int, int]], List[tn.Node]]:
     nodes = list(nodes)
-    mapping_dict = {}
-    i = 0
-    for n in nodes:
-        for e in n:
-            if id(e) not in mapping_dict:
-                mapping_dict[id(e)] = get_symbol(i)
-                i += 1
-    # TODO(@refraction-ray): may be not that cache friendly, since the edge id correspondence is not that fixed?
-    input_sets = [list([mapping_dict[id(e)] for e in node.edges]) for node in nodes]
-    # placeholder = [[1e20 for _ in range(100)]]
-    # order = np.argsort(np.array(list(map(sorted, input_sets)), dtype=object))  # type: ignore
-    # nodes_new = [nodes[i] for i in order]
-    nodes_new = _sort_tuple_list(input_sets, nodes)
+
+    nodes_new = sorted(nodes, key=lambda node: getattr(node, "_stable_id_", -1))
     if isinstance(algorithm, list):
         return algorithm, nodes_new
 
+    all_edges = tn.get_all_edges(nodes_new)
+    all_edges_sorted = sorted_edges(all_edges)
+    mapping_dict = {}
+    i = 0
+    for edge in all_edges_sorted:
+        if id(edge) not in mapping_dict:
+            mapping_dict[id(edge)] = get_symbol(i)
+            i += 1
+
     input_sets = [list([mapping_dict[id(e)] for e in node.edges]) for node in nodes_new]
     output_set = list(
-        [mapping_dict[id(e)] for e in tn.get_subgraph_dangling(nodes_new)]
+        [mapping_dict[id(e)] for e in sorted_edges(tn.get_subgraph_dangling(nodes_new))]
     )
-    size_dict = {
-        mapping_dict[id(edge)]: edge.dimension for edge in tn.get_all_edges(nodes_new)
-    }
+    size_dict = {mapping_dict[id(edge)]: edge.dimension for edge in all_edges_sorted}
     logger.debug("input_sets: %s" % input_sets)
     logger.debug("output_set: %s" % output_set)
     logger.debug("size_dict: %s" % size_dict)
