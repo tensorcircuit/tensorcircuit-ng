@@ -58,7 +58,7 @@ def generate_heisenberg_hamiltonian(
 
     hamiltonian_matrix = tc.quantum.PauliStringSum2COO(ls, weight=weights, numpy=True)
 
-    return cast(coo_matrix ,hamiltonian_matrix)
+    return cast(coo_matrix, hamiltonian_matrix)
 
 
 def generate_rydberg_hamiltonian(
@@ -136,4 +136,4 @@ def generate_rydberg_hamiltonian(
 
     hamiltonian_matrix = tc.quantum.PauliStringSum2COO(ls, weight=weights, numpy=True)
 
-    return cast(coo_matrix,hamiltonian_matrix)
+    return cast(coo_matrix, hamiltonian_matrix)
