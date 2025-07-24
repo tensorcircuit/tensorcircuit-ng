@@ -3,8 +3,6 @@ from typing import cast
 from scipy.sparse import coo_matrix
 import numpy as np
 import tensorcircuit as tc
-
-
 from .lattice import AbstractLattice
 
 
