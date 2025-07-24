@@ -901,6 +901,7 @@ class DistributedContractor:
         :param aggregate: Whether to aggregate (sum) the results across devices, defaults to True
         :type aggregate: bool, optional
         :param op: Optional post-processing function for the output, defaults to None (corresponding to `backend.real`)
+            op is a cache key, so dont directly pass lambda function for op
         :type op: Optional[Callable[[Tensor], Tensor]], optional
         :param output_dtype: dtype str for the output of `nodes_fn`, defaults to None (corresponding to `rdtypestr`)
         :type output_dtype: Optional[str], optional
@@ -939,6 +940,7 @@ class DistributedContractor:
         :param aggregate: Whether to aggregate (sum) the results across devices, defaults to True
         :type aggregate: bool, optional
         :param op: Optional post-processing function for the output, defaults to None (corresponding to identity)
+            op is a cache key, so dont directly pass lambda function for op
         :type op: Optional[Callable[[Tensor], Tensor]], optional
         :param output_dtype: dtype str for the output of `nodes_fn`, defaults to None (corresponding to `dtypestr`)
         :type output_dtype: Optional[str], optional
