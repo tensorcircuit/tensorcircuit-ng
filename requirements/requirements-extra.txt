@@ -10,3 +10,4 @@ mthree==1.1.0
 openfermion
 stim
 pylatexenc
+cotengra

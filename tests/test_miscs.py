@@ -280,3 +280,35 @@ def test_jax_function_load(jaxb, tmp_path):
         os.path.join(tmp_path, "temp.bin")
     )
     np.testing.assert_allclose(f_load(K.ones([3])), 0.5403, atol=1e-4)
+
+
+def test_distrubuted_contractor(jaxb):
+    def nodes_fn(params):
+        c = tc.Circuit(4)
+        c.rx(range(4), theta=params["x"])
+        c.cnot([0, 1, 2], [1, 2, 3])
+        c.ry(range(4), theta=params["y"])
+        return c.expectation_before([tc.gates.z(), [-1]], reuse=False)
+
+    params = {"x": np.ones([4]), "y": 0.3 * np.ones([4])}
+    dc = experimental.DistributedContractor(
+        nodes_fn,
+        params,
+        {
+            "slicing_reconf_opts": {"target_size": 2**3},
+            "max_repeats": 8,
+            "minimize": "write",
+            "parallel": False,
+        },
+    )
+    value, grad = dc.value_and_grad(params)
+    assert grad["y"].shape == (4,)
+
+    def baseline(params):
+        c = tc.Circuit(4)
+        c.rx(range(4), theta=params["x"])
+        c.cnot([0, 1, 2], [1, 2, 3])
+        c.ry(range(4), theta=params["y"])
+        return c.expectation_ps(z=[-1])
+
+    np.testing.assert_allclose(value, baseline(params), atol=1e-6)
