@@ -737,7 +737,12 @@ class DistributedContractor:
 
         logger.info("Initialization complete.")
 
-    def _get_single_slice_contraction_fn(self) -> Callable[[Any, Tensor, int], Tensor]:
+    def _get_single_slice_contraction_fn(
+        self, op: Optional[Callable[[Tensor], Tensor]] = None
+    ) -> Callable[[Any, Tensor, int], Tensor]:
+        if op is None:
+            op = backend.sum
+
         def single_slice_contraction(
             tree: ctg.ContractionTree, params: Tensor, slice_idx: int
         ) -> Tensor:
@@ -746,15 +751,24 @@ class DistributedContractor:
             input_arrays = [node.tensor for node in standardized_nodes]
             sliced_arrays = tree.slice_arrays(input_arrays, slice_idx)
             result = tree.contract_core(sliced_arrays, backend=self._backend)
-            return backend.sum(backend.real(result))
+            return op(result)
 
         return single_slice_contraction
 
     def _get_device_sum_vg_fn(
         self,
+        op: Optional[Callable[[Tensor], Tensor]] = None,
+        output_dtype: Optional[str] = None,
     ) -> Callable[[Any, Tensor, Tensor], Tuple[Tensor, Tensor]]:
-        base_fn = self._get_single_slice_contraction_fn()
+        post_processing = lambda x: backend.real(backend.sum(x))
+        if op is None:
+            op = post_processing
+        base_fn = self._get_single_slice_contraction_fn(op=op)
+        # to ensure the output is real so that can be differentiated
         single_slice_vg_fn = jaxlib.value_and_grad(base_fn, argnums=1)
+
+        if output_dtype is None:
+            output_dtype = rdtypestr
 
         def device_sum_fn(
             tree: ctg.ContractionTree, params: Tensor, slice_indices_for_device: Tensor
@@ -785,7 +799,7 @@ class DistributedContractor:
                 )
 
             initial_carry = (
-                backend.cast(backend.convert_to_tensor(0.0), dtype=rdtypestr),
+                backend.cast(backend.convert_to_tensor(0.0), dtype=output_dtype),
                 jaxlib.tree_util.tree_map(lambda x: jaxlib.numpy.zeros_like(x), params),
             )
             (final_value, final_grads), _ = jaxlib.lax.scan(
@@ -795,21 +809,14 @@ class DistributedContractor:
 
         return device_sum_fn
 
-    def _compile_value_and_grad(self) -> None:
-        if self._compiled_vg_fn is not None:
-            return
-        device_sum_fn = self._get_device_sum_vg_fn()
-        # `tree` is arg 0, `params` is arg 1, `indices` is arg 2
-        # `tree` is static and broadcast to all devices
-        self._compiled_vg_fn = jaxlib.pmap(
-            device_sum_fn,
-            in_axes=(None, None, 0),  # tree: broadcast, params: broadcast, indices: map
-            static_broadcasted_argnums=(0,),  # arg 0 (tree) is a static argument
-            devices=self.devices,
-        )
-
-    def _get_device_sum_v_fn(self) -> Callable[[Any, Tensor, Tensor], Tensor]:
-        base_fn = self._get_single_slice_contraction_fn()
+    def _get_device_sum_v_fn(
+        self,
+        op: Optional[Callable[[Tensor], Tensor]] = None,
+        output_dtype: Optional[str] = None,
+    ) -> Callable[[Any, Tensor, Tensor], Tensor]:
+        base_fn = self._get_single_slice_contraction_fn(op=op)
+        if output_dtype is None:
+            output_dtype = dtypestr
 
         def device_sum_fn(
             tree: ctg.ContractionTree, params: Tensor, slice_indices_for_device: Tensor
@@ -828,7 +835,7 @@ class DistributedContractor:
                 )
 
             initial_carry = backend.cast(
-                backend.convert_to_tensor(0.0), dtype=rdtypestr
+                backend.convert_to_tensor(0.0), dtype=output_dtype
             )
             final_value, _ = jaxlib.lax.scan(
                 scan_body, initial_carry, slice_indices_for_device
@@ -837,22 +844,28 @@ class DistributedContractor:
 
         return device_sum_fn
 
-    def _compile_value(self) -> None:
-        if self._compiled_v_fn is not None:
-            return
-        device_sum_fn = self._get_device_sum_v_fn()
-        self._compiled_v_fn = jaxlib.pmap(
-            device_sum_fn,
-            in_axes=(None, None, 0),
-            static_broadcasted_argnums=(0,),
-            devices=self.devices,
-        )
-
     # --- Public API ---
     def value_and_grad(
-        self, params: Tensor, aggregate: bool = True
+        self,
+        params: Tensor,
+        aggregate: bool = True,
+        op: Optional[Callable[[Tensor], Tensor]] = None,
+        output_dtype: Optional[str] = None,
     ) -> Tuple[Tensor, Tensor]:
-        self._compile_value_and_grad()
+        if self._compiled_vg_fn is None:
+            device_sum_fn = self._get_device_sum_vg_fn(op=op, output_dtype=output_dtype)
+            # `tree` is arg 0, `params` is arg 1, `indices` is arg 2
+            # `tree` is static and broadcast to all devices
+            self._compiled_vg_fn = jaxlib.pmap(
+                device_sum_fn,
+                in_axes=(
+                    None,
+                    None,
+                    0,
+                ),  # tree: broadcast, params: broadcast, indices: map
+                static_broadcasted_argnums=(0,),  # arg 0 (tree) is a static argument
+                devices=self.devices,
+            )
         # Pass `self.tree` as the first argument
         device_values, device_grads = self._compiled_vg_fn(  # type: ignore
             self.tree, params, self.batched_slice_indices
@@ -865,8 +878,21 @@ class DistributedContractor:
             return total_value, total_grad
         return device_values, device_grads
 
-    def value(self, params: Tensor, aggregate: bool = True) -> Tensor:
-        self._compile_value()
+    def value(
+        self,
+        params: Tensor,
+        aggregate: bool = True,
+        op: Optional[Callable[[Tensor], Tensor]] = None,
+        output_dtype: Optional[str] = None,
+    ) -> Tensor:
+        if self._compiled_v_fn is None:
+            device_sum_fn = self._get_device_sum_v_fn(op=op, output_dtype=output_dtype)
+            self._compiled_v_fn = jaxlib.pmap(
+                device_sum_fn,
+                in_axes=(None, None, 0),
+                static_broadcasted_argnums=(0,),
+                devices=self.devices,
+            )
         device_values = self._compiled_v_fn(  # type: ignore
             self.tree, params, self.batched_slice_indices
         )
@@ -874,6 +900,14 @@ class DistributedContractor:
             return backend.sum(device_values)
         return device_values
 
-    def grad(self, params: Tensor, aggregate: bool = True) -> Tensor:
-        _, grad = self.value_and_grad(params, aggregate=aggregate)
+    def grad(
+        self,
+        params: Tensor,
+        aggregate: bool = True,
+        op: Optional[Callable[[Tensor], Tensor]] = None,
+        output_dtype: Optional[str] = None,
+    ) -> Tensor:
+        _, grad = self.value_and_grad(
+            params, aggregate=aggregate, op=op, output_dtype=output_dtype
+        )
         return grad

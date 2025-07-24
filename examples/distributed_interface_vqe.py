@@ -112,5 +112,7 @@ if __name__ == "__main__":
         print(f"Step {i+1:03d} | " f"Loss: {loss:.8f} | " f"Time: {t1 - t0:.4f} s")
 
     print("\nOptimization finished.")
-    final_energy = DC.value(params)
+    final_energy = DC.value(
+        params, op=lambda x: K.real(K.sum(x)), output_dtype=tc.rdtypestr
+    )
     print(f"Final energy: {final_energy:.8f}")

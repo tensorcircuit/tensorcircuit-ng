@@ -441,27 +441,17 @@ class BaseCircuit(AbstractCircuit):
 
     measure = measure_jit
 
-    def amplitude(self, l: Union[str, Tensor]) -> Tensor:
+    def amplitude_before(self, l: Union[str, Tensor]) -> List[Gate]:
         r"""
-        Returns the amplitude of the circuit given the bitstring l.
+        Returns the tensornetwor nodes for the amplitude of the circuit given the bitstring l.
         For state simulator, it computes :math:`\langle l\vert \psi\rangle`,
         for density matrix simulator, it computes :math:`Tr(\rho \vert l\rangle \langle 1\vert)`
         Note how these two are different up to a square operation.
 
-        :Example:
-
-        >>> c = tc.Circuit(2)
-        >>> c.X(0)
-        >>> c.amplitude("10")
-        array(1.+0.j, dtype=complex64)
-        >>> c.CNOT(0, 1)
-        >>> c.amplitude("11")
-        array(1.+0.j, dtype=complex64)
-
         :param l: The bitstring of 0 and 1s.
         :type l: Union[str, Tensor]
-        :return: The amplitude of the circuit.
-        :rtype: tn.Node.tensor
+        :return: The tensornetwork nodes for the amplitude of the circuit.
+        :rtype: List[Gate]
         """
         no, d_edges = self._copy()
         ms = []
@@ -502,6 +492,32 @@ class BaseCircuit(AbstractCircuit):
         no.extend(ms)
         if self.is_dm:
             no.extend(msconj)
+        return no
+
+    def amplitude(self, l: Union[str, Tensor]) -> Tensor:
+        r"""
+        Returns the amplitude of the circuit given the bitstring l.
+        For state simulator, it computes :math:`\langle l\vert \psi\rangle`,
+        for density matrix simulator, it computes :math:`Tr(\rho \vert l\rangle \langle 1\vert)`
+        Note how these two are different up to a square operation.
+
+        :Example:
+
+        >>> c = tc.Circuit(2)
+        >>> c.X(0)
+        >>> c.amplitude("10")
+        array(1.+0.j, dtype=complex64)
+        >>> c.CNOT(0, 1)
+        >>> c.amplitude("11")
+        array(1.+0.j, dtype=complex64)
+
+        :param l: The bitstring of 0 and 1s.
+        :type l: Union[str, Tensor]
+        :return: The amplitude of the circuit.
+        :rtype: tn.Node.tensor
+        """
+        no = self.amplitude_before(l)
+
         return contractor(no).tensor
 
     def probability(self) -> Tensor:

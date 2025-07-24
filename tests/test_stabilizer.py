@@ -178,13 +178,13 @@ def test_circuit_inputs():
 
 def test_depolarize():
     r = []
-    for _ in range(20):
+    for _ in range(40):
         c = tc.StabilizerCircuit(2)
         c.h(0)
         c.depolarizing(0, 1, p=0.2)
         c.h(0)
         r.append(c.expectation_ps(z=[0]))
-    assert 4 < np.sum(r) < 20
+    assert 5 < np.sum(r) < 38
 
 
 def test_tableau_inputs():
