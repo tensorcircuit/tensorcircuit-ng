@@ -1,8 +1,9 @@
-import tensorcircuit as tc
+import typing
+from typing import cast
 from scipy.sparse import coo_matrix
 import numpy as np
+import tensorcircuit as tc
 
-import typing
 
 from .lattice import AbstractLattice
 
@@ -57,13 +58,9 @@ def generate_heisenberg_hamiltonian(
         ls.append(zz_string)
         weights.append(j_coupling)
 
-    hamiltonian_matrix = tc.quantum.PauliStringSum2COO(
-        ls, weight=weights, numpy=True
-    )
+    hamiltonian_matrix = tc.quantum.PauliStringSum2COO(ls, weight=weights, numpy=True)
 
-    return hamiltonian_matrix
-
-
+    return cast(coo_matrix ,hamiltonian_matrix)
 
 
 def generate_rydberg_hamiltonian(
@@ -139,8 +136,6 @@ def generate_rydberg_hamiltonian(
             ls.append(z_string)
             weights.append(float(z_coefficients[i]))
 
-    hamiltonian_matrix = tc.quantum.PauliStringSum2COO(
-        ls, weight=weights, numpy=True
-    )
+    hamiltonian_matrix = tc.quantum.PauliStringSum2COO(ls, weight=weights, numpy=True)
 
-    return hamiltonian_matrix
+    return cast(coo_matrix,hamiltonian_matrix)
