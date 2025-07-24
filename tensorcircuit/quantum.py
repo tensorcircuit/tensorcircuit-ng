@@ -71,7 +71,7 @@ def _reachable(nodes: List[AbstractNode]) -> List[AbstractNode]:
                 if n not in seen_nodes and n not in node_que[i + 1 :]:
                     node_que.append(n)
         i += 1
-    return seen_nodes
+    return sorted(seen_nodes, key=lambda node: getattr(node, "_stable_id_", -1))
 
 
 def reachable(
@@ -1164,7 +1164,7 @@ def tn2qop(tn_mpo: Any) -> QuOperator:
     nwires = len(tn_mpo)
     mpo = []
     for i in range(nwires):
-        mpo.append(Node(tn_mpo[i]))
+        mpo.append(Node(tn_mpo[i], name=f"mpo_{i}"))
 
     for i in range(nwires - 1):
         connect(mpo[i][1], mpo[i + 1][0])

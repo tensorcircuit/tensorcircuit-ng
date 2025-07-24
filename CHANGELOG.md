@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- Add `Lattice` module (`tensorcircuit.templates.lattice`) for creating and manipulating various lattice geometries, including `SquareLattice`, `HoneycombLattice`, and `CustomizeLattice`.
+
+- Add `DistributedContractor` in experimental module with new examples for fast implementation of distribution circuit simulation on jax backend.
+
+- Add `circuit.amplitude_before()` method to return the corresponding tensornetwork nodes.
+
+### Fixed
+
+- Fix the nodes order in contraction by giving each node a global `_stable_id_`.
+
 ## v1.2.1
 
 ### Fixed

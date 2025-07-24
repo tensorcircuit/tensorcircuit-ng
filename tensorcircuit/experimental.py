@@ -3,15 +3,18 @@ Experimental features
 """
 
 from functools import partial
-from typing import Any, Callable, Optional, Tuple, Sequence, Union
+import logging
+from typing import Any, Callable, Dict, Optional, Tuple, List, Sequence, Union
 
 import numpy as np
 
-from .cons import backend, dtypestr, contractor, rdtypestr
+from .cons import backend, dtypestr, contractor, rdtypestr, get_tn_info
 from .gates import Gate
 
 Tensor = Any
 Circuit = Any
+
+logger = logging.getLogger(__name__)
 
 
 def adaptive_vmap(
@@ -504,7 +507,7 @@ def evol_local(
     h_fun: Callable[..., Tensor],
     t: float,
     *args: Any,
-    **solver_kws: Any
+    **solver_kws: Any,
 ) -> Circuit:
     """
     ode evolution of time dependent Hamiltonian on circuit of given indices
@@ -626,3 +629,343 @@ def jax_jitted_function_load(filename: str) -> Callable[..., Any]:
 
 
 jax_func_load = jax_jitted_function_load
+
+
+PADDING_VALUE = -1
+jaxlib: Any
+ctg: Any
+
+
+class DistributedContractor:
+    """
+    A distributed tensor network contractor that parallelizes computations across multiple devices.
+
+    This class uses cotengra to find optimal contraction paths and distributes the computational
+    load across multiple devices (e.g., GPUs) for efficient tensor network calculations.
+    Particularly useful for large-scale quantum circuit simulations and variational quantum algorithms.
+
+    Example:
+        >>> def nodes_fn(params):
+        ...     c = tc.Circuit(4)
+        ...     c.rx(0, theta=params[0])
+        ...     return c.expectation_before([tc.gates.z(), [0]], reuse=False)
+        >>> dc = DistributedContractor(nodes_fn, params)
+        >>> value, grad = dc.value_and_grad(params)
+
+    :param nodes_fn: Function that takes parameters and returns a list of tensor network nodes
+    :type nodes_fn: Callable[[Tensor], List[Gate]]
+    :param params: Initial parameters used to determine the tensor network structure
+    :type params: Tensor
+    :param cotengra_options: Configuration options passed to the cotengra optimizer. Defaults to None
+    :type cotengra_options: Optional[Dict[str, Any]], optional
+    :param devices: List of devices to use. If None, uses all available local devices
+    :type devices: Optional[List[Any]], optional
+    """
+
+    def __init__(
+        self,
+        nodes_fn: Callable[[Tensor], List[Gate]],
+        params: Tensor,
+        cotengra_options: Optional[Dict[str, Any]] = None,
+        devices: Optional[List[Any]] = None,
+    ) -> None:
+        global jaxlib
+        global ctg
+
+        logger.info("Initializing DistributedContractor...")
+        import cotengra as ctg
+        import jax as jaxlib
+
+        self.nodes_fn = nodes_fn
+        if devices is None:
+            self.num_devices = jaxlib.local_device_count()
+            self.devices = jaxlib.local_devices()
+            # TODO(@refraction-ray): multi host support
+        else:
+            self.devices = devices
+            self.num_devices = len(devices)
+
+        if self.num_devices <= 1:
+            logger.info("DistributedContractor is running on a single device.")
+
+        self._params_template = params
+        self._backend = "jax"
+        self._compiled_v_fns: Dict[
+            Tuple[Callable[[Tensor], Tensor], str],
+            Callable[[Any, Tensor, Tensor], Tensor],
+        ] = {}
+        self._compiled_vg_fns: Dict[
+            Tuple[Callable[[Tensor], Tensor], str],
+            Callable[[Any, Tensor, Tensor], Tensor],
+        ] = {}
+
+        logger.info("Running cotengra pathfinder... (This may take a while)")
+        nodes = self.nodes_fn(self._params_template)
+        tn_info, _ = get_tn_info(nodes)
+        default_cotengra_options = {
+            "slicing_reconf_opts": {"target_size": 2**28},
+            "max_repeats": 128,
+            "progbar": True,
+            "minimize": "write",
+            "parallel": "auto",
+        }
+        if cotengra_options:
+            default_cotengra_options = cotengra_options
+
+        opt = ctg.ReusableHyperOptimizer(**default_cotengra_options)
+        self.tree = opt.search(*tn_info)
+        actual_num_slices = self.tree.nslices
+
+        print("\n--- Contraction Path Info ---")
+        stats = self.tree.contract_stats()
+        print(f"Path found with {actual_num_slices} slices.")
+        print(
+            f"Arithmetic Intensity (higher is better): {self.tree.arithmetic_intensity():.2f}"
+        )
+        print("flops (TFlops):", stats["flops"] / 2**40 / self.num_devices)
+        print("write (GB):", stats["write"] / 2**27 / actual_num_slices)
+        print("size (GB):", stats["size"] / 2**27)
+        print("-----------------------------\n")
+
+        slices_per_device = int(np.ceil(actual_num_slices / self.num_devices))
+        padded_size = slices_per_device * self.num_devices
+        slice_indices = np.arange(actual_num_slices)
+        padded_slice_indices = np.full(padded_size, PADDING_VALUE, dtype=np.int32)
+        padded_slice_indices[:actual_num_slices] = slice_indices
+        self.batched_slice_indices = backend.convert_to_tensor(
+            padded_slice_indices.reshape(self.num_devices, slices_per_device)
+        )
+        print(
+            f"Distributing across {self.num_devices} devices. Each device will sequentially process "
+            f"up to {slices_per_device} slices."
+        )
+
+        self._compiled_vg_fn = None
+        self._compiled_v_fn = None
+
+        logger.info("Initialization complete.")
+
+    def _get_single_slice_contraction_fn(
+        self, op: Optional[Callable[[Tensor], Tensor]] = None
+    ) -> Callable[[Any, Tensor, int], Tensor]:
+        if op is None:
+            op = backend.sum
+
+        def single_slice_contraction(
+            tree: ctg.ContractionTree, params: Tensor, slice_idx: int
+        ) -> Tensor:
+            nodes = self.nodes_fn(params)
+            _, standardized_nodes = get_tn_info(nodes)
+            input_arrays = [node.tensor for node in standardized_nodes]
+            sliced_arrays = tree.slice_arrays(input_arrays, slice_idx)
+            result = tree.contract_core(sliced_arrays, backend=self._backend)
+            return op(result)
+
+        return single_slice_contraction
+
+    def _get_device_sum_vg_fn(
+        self,
+        op: Optional[Callable[[Tensor], Tensor]] = None,
+        output_dtype: Optional[str] = None,
+    ) -> Callable[[Any, Tensor, Tensor], Tuple[Tensor, Tensor]]:
+        post_processing = lambda x: backend.real(backend.sum(x))
+        if op is None:
+            op = post_processing
+        base_fn = self._get_single_slice_contraction_fn(op=op)
+        # to ensure the output is real so that can be differentiated
+        single_slice_vg_fn = jaxlib.value_and_grad(base_fn, argnums=1)
+
+        if output_dtype is None:
+            output_dtype = rdtypestr
+
+        def device_sum_fn(
+            tree: ctg.ContractionTree, params: Tensor, slice_indices_for_device: Tensor
+        ) -> Tuple[Tensor, Tensor]:
+            def scan_body(
+                carry: Tuple[Tensor, Tensor], slice_idx: Tensor
+            ) -> Tuple[Tuple[Tensor, Tensor], None]:
+                acc_value, acc_grads = carry
+
+                def compute_and_add() -> Tuple[Tensor, Tensor]:
+                    value_slice, grads_slice = single_slice_vg_fn(
+                        tree, params, slice_idx
+                    )
+                    new_value = acc_value + value_slice
+                    new_grads = jaxlib.tree_util.tree_map(
+                        jaxlib.numpy.add, acc_grads, grads_slice
+                    )
+                    return new_value, new_grads
+
+                def do_nothing() -> Tuple[Tensor, Tensor]:
+                    return acc_value, acc_grads
+
+                return (
+                    jaxlib.lax.cond(
+                        slice_idx == PADDING_VALUE, do_nothing, compute_and_add
+                    ),
+                    None,
+                )
+
+            initial_carry = (
+                backend.cast(backend.convert_to_tensor(0.0), dtype=output_dtype),
+                jaxlib.tree_util.tree_map(lambda x: jaxlib.numpy.zeros_like(x), params),
+            )
+            (final_value, final_grads), _ = jaxlib.lax.scan(
+                scan_body, initial_carry, slice_indices_for_device
+            )
+            return final_value, final_grads
+
+        return device_sum_fn
+
+    def _get_device_sum_v_fn(
+        self,
+        op: Optional[Callable[[Tensor], Tensor]] = None,
+        output_dtype: Optional[str] = None,
+    ) -> Callable[[Any, Tensor, Tensor], Tensor]:
+        base_fn = self._get_single_slice_contraction_fn(op=op)
+        if output_dtype is None:
+            output_dtype = dtypestr
+
+        def device_sum_fn(
+            tree: ctg.ContractionTree, params: Tensor, slice_indices_for_device: Tensor
+        ) -> Tensor:
+            def scan_body(
+                carry_value: Tensor, slice_idx: Tensor
+            ) -> Tuple[Tensor, None]:
+                def compute_and_add() -> Tensor:
+                    return carry_value + base_fn(tree, params, slice_idx)
+
+                return (
+                    jaxlib.lax.cond(
+                        slice_idx == PADDING_VALUE, lambda: carry_value, compute_and_add
+                    ),
+                    None,
+                )
+
+            initial_carry = backend.cast(
+                backend.convert_to_tensor(0.0), dtype=output_dtype
+            )
+            final_value, _ = jaxlib.lax.scan(
+                scan_body, initial_carry, slice_indices_for_device
+            )
+            return final_value
+
+        return device_sum_fn
+
+    def _get_or_compile_fn(
+        self,
+        cache: Dict[
+            Tuple[Callable[[Tensor], Tensor], str],
+            Callable[[Any, Tensor, Tensor], Tensor],
+        ],
+        fn_getter: Callable[..., Any],
+        op: Optional[Callable[[Tensor], Tensor]],
+        output_dtype: Optional[str],
+    ) -> Callable[[Any, Tensor, Tensor], Tensor]:
+        """
+        Gets a compiled pmap-ed function from cache or compiles and caches it.
+
+        The cache key is a tuple of (op, output_dtype). Caution on lambda function!
+
+        Returns:
+            The compiled, pmap-ed JAX function.
+        """
+        cache_key = (op, output_dtype)
+        if cache_key not in cache:
+            device_fn = fn_getter(op=op, output_dtype=output_dtype)
+            compiled_fn = jaxlib.pmap(
+                device_fn,
+                in_axes=(
+                    None,
+                    None,
+                    0,
+                ),  # tree: broadcast, params: broadcast, indices: map
+                static_broadcasted_argnums=(0,),  # arg 0 (tree) is a static argument
+                devices=self.devices,
+            )
+            cache[cache_key] = compiled_fn  # type: ignore
+        return cache[cache_key]  # type: ignore
+
+    def value_and_grad(
+        self,
+        params: Tensor,
+        aggregate: bool = True,
+        op: Optional[Callable[[Tensor], Tensor]] = None,
+        output_dtype: Optional[str] = None,
+    ) -> Tuple[Tensor, Tensor]:
+        """
+        Calculates the value and gradient, compiling the pmap function if needed for the first call.
+
+        :param params: Parameters for the `nodes_fn` input
+        :type params: Tensor
+        :param aggregate: Whether to aggregate (sum) the results across devices, defaults to True
+        :type aggregate: bool, optional
+        :param op: Optional post-processing function for the output, defaults to None (corresponding to `backend.real`)
+            op is a cache key, so dont directly pass lambda function for op
+        :type op: Optional[Callable[[Tensor], Tensor]], optional
+        :param output_dtype: dtype str for the output of `nodes_fn`, defaults to None (corresponding to `rdtypestr`)
+        :type output_dtype: Optional[str], optional
+        """
+        compiled_vg_fn = self._get_or_compile_fn(
+            cache=self._compiled_vg_fns,
+            fn_getter=self._get_device_sum_vg_fn,
+            op=op,
+            output_dtype=output_dtype,
+        )
+
+        device_values, device_grads = compiled_vg_fn(
+            self.tree, params, self.batched_slice_indices
+        )
+
+        if aggregate:
+            total_value = backend.sum(device_values)
+            total_grad = jaxlib.tree_util.tree_map(
+                lambda x: backend.sum(x, axis=0), device_grads
+            )
+            return total_value, total_grad
+        return device_values, device_grads
+
+    def value(
+        self,
+        params: Tensor,
+        aggregate: bool = True,
+        op: Optional[Callable[[Tensor], Tensor]] = None,
+        output_dtype: Optional[str] = None,
+    ) -> Tensor:
+        """
+        Calculates the value, compiling the pmap function for the first call.
+
+        :param params: Parameters for the `nodes_fn` input
+        :type params: Tensor
+        :param aggregate: Whether to aggregate (sum) the results across devices, defaults to True
+        :type aggregate: bool, optional
+        :param op: Optional post-processing function for the output, defaults to None (corresponding to identity)
+            op is a cache key, so dont directly pass lambda function for op
+        :type op: Optional[Callable[[Tensor], Tensor]], optional
+        :param output_dtype: dtype str for the output of `nodes_fn`, defaults to None (corresponding to `dtypestr`)
+        :type output_dtype: Optional[str], optional
+        """
+        compiled_v_fn = self._get_or_compile_fn(
+            cache=self._compiled_v_fns,
+            fn_getter=self._get_device_sum_v_fn,
+            op=op,
+            output_dtype=output_dtype,
+        )
+
+        device_values = compiled_v_fn(self.tree, params, self.batched_slice_indices)
+
+        if aggregate:
+            return backend.sum(device_values)
+        return device_values
+
+    def grad(
+        self,
+        params: Tensor,
+        aggregate: bool = True,
+        op: Optional[Callable[[Tensor], Tensor]] = None,
+        output_dtype: Optional[str] = None,
+    ) -> Tensor:
+        _, grad = self.value_and_grad(
+            params, aggregate=aggregate, op=op, output_dtype=output_dtype
+        )
+        return grad

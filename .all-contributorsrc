@@ -340,6 +340,17 @@
       "contributions": [
         "code"
       ]
+    },
+    {
+      "login": "Stellogic",
+      "name": "Stellogic",
+      "avatar_url": "https://avatars.githubusercontent.com/u/186928579?v=4",
+      "profile": "https://github.com/Stellogic",
+      "contributions": [
+        "code",
+        "example",
+        "test"
+      ]
     }
   ],
   "contributorsPerLine": 6,
