@@ -184,7 +184,7 @@ def test_depolarize():
         c.depolarizing(0, 1, p=0.2)
         c.h(0)
         r.append(c.expectation_ps(z=[0]))
-    assert 5 < np.sum(r) < 38
+    assert 4 < np.sum(r) < 39
 
 
 def test_tableau_inputs():

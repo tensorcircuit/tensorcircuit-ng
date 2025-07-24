@@ -690,6 +690,14 @@ class DistributedContractor:
 
         self._params_template = params
         self._backend = "jax"
+        self._compiled_v_fns: Dict[
+            Tuple[Callable[[Tensor], Tensor], str],
+            Callable[[Any, Tensor, Tensor], Tensor],
+        ] = {}
+        self._compiled_vg_fns: Dict[
+            Tuple[Callable[[Tensor], Tensor], str],
+            Callable[[Any, Tensor, Tensor], Tensor],
+        ] = {}
 
         logger.info("Running cotengra pathfinder... (This may take a while)")
         nodes = self.nodes_fn(self._params_template)
@@ -844,20 +852,29 @@ class DistributedContractor:
 
         return device_sum_fn
 
-    # --- Public API ---
-    def value_and_grad(
+    def _get_or_compile_fn(
         self,
-        params: Tensor,
-        aggregate: bool = True,
-        op: Optional[Callable[[Tensor], Tensor]] = None,
-        output_dtype: Optional[str] = None,
-    ) -> Tuple[Tensor, Tensor]:
-        if self._compiled_vg_fn is None:
-            device_sum_fn = self._get_device_sum_vg_fn(op=op, output_dtype=output_dtype)
-            # `tree` is arg 0, `params` is arg 1, `indices` is arg 2
-            # `tree` is static and broadcast to all devices
-            self._compiled_vg_fn = jaxlib.pmap(
-                device_sum_fn,
+        cache: Dict[
+            Tuple[Callable[[Tensor], Tensor], str],
+            Callable[[Any, Tensor, Tensor], Tensor],
+        ],
+        fn_getter: Callable[..., Any],
+        op: Optional[Callable[[Tensor], Tensor]],
+        output_dtype: Optional[str],
+    ) -> Callable[[Any, Tensor, Tensor], Tensor]:
+        """
+        Gets a compiled pmap-ed function from cache or compiles and caches it.
+
+        The cache key is a tuple of (op, output_dtype). Caution on lambda function!
+
+        Returns:
+            The compiled, pmap-ed JAX function.
+        """
+        cache_key = (op, output_dtype)
+        if cache_key not in cache:
+            device_fn = fn_getter(op=op, output_dtype=output_dtype)
+            compiled_fn = jaxlib.pmap(
+                device_fn,
                 in_axes=(
                     None,
                     None,
@@ -866,10 +883,39 @@ class DistributedContractor:
                 static_broadcasted_argnums=(0,),  # arg 0 (tree) is a static argument
                 devices=self.devices,
             )
-        # Pass `self.tree` as the first argument
-        device_values, device_grads = self._compiled_vg_fn(  # type: ignore
+            cache[cache_key] = compiled_fn  # type: ignore
+        return cache[cache_key]  # type: ignore
+
+    def value_and_grad(
+        self,
+        params: Tensor,
+        aggregate: bool = True,
+        op: Optional[Callable[[Tensor], Tensor]] = None,
+        output_dtype: Optional[str] = None,
+    ) -> Tuple[Tensor, Tensor]:
+        """
+        Calculates the value and gradient, compiling the pmap function if needed for the first call.
+
+        :param params: Parameters for the `nodes_fn` input
+        :type params: Tensor
+        :param aggregate: Whether to aggregate (sum) the results across devices, defaults to True
+        :type aggregate: bool, optional
+        :param op: Optional post-processing function for the output, defaults to None (corresponding to `backend.real`)
+        :type op: Optional[Callable[[Tensor], Tensor]], optional
+        :param output_dtype: dtype str for the output of `nodes_fn`, defaults to None (corresponding to `rdtypestr`)
+        :type output_dtype: Optional[str], optional
+        """
+        compiled_vg_fn = self._get_or_compile_fn(
+            cache=self._compiled_vg_fns,
+            fn_getter=self._get_device_sum_vg_fn,
+            op=op,
+            output_dtype=output_dtype,
+        )
+
+        device_values, device_grads = compiled_vg_fn(
             self.tree, params, self.batched_slice_indices
         )
+
         if aggregate:
             total_value = backend.sum(device_values)
             total_grad = jaxlib.tree_util.tree_map(
@@ -885,17 +931,27 @@ class DistributedContractor:
         op: Optional[Callable[[Tensor], Tensor]] = None,
         output_dtype: Optional[str] = None,
     ) -> Tensor:
-        if self._compiled_v_fn is None:
-            device_sum_fn = self._get_device_sum_v_fn(op=op, output_dtype=output_dtype)
-            self._compiled_v_fn = jaxlib.pmap(
-                device_sum_fn,
-                in_axes=(None, None, 0),
-                static_broadcasted_argnums=(0,),
-                devices=self.devices,
-            )
-        device_values = self._compiled_v_fn(  # type: ignore
-            self.tree, params, self.batched_slice_indices
+        """
+        Calculates the value, compiling the pmap function for the first call.
+
+        :param params: Parameters for the `nodes_fn` input
+        :type params: Tensor
+        :param aggregate: Whether to aggregate (sum) the results across devices, defaults to True
+        :type aggregate: bool, optional
+        :param op: Optional post-processing function for the output, defaults to None (corresponding to identity)
+        :type op: Optional[Callable[[Tensor], Tensor]], optional
+        :param output_dtype: dtype str for the output of `nodes_fn`, defaults to None (corresponding to `dtypestr`)
+        :type output_dtype: Optional[str], optional
+        """
+        compiled_v_fn = self._get_or_compile_fn(
+            cache=self._compiled_v_fns,
+            fn_getter=self._get_device_sum_v_fn,
+            op=op,
+            output_dtype=output_dtype,
         )
+
+        device_values = compiled_v_fn(self.tree, params, self.batched_slice_indices)
+
         if aggregate:
             return backend.sum(device_values)
         return device_values
