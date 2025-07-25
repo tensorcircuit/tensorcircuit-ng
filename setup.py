@@ -22,7 +22,7 @@ setuptools.setup(
         "tensorflow": ["tensorflow"],
         "jax": ["jax", "jaxlib"],
         "torch": ["torch"],
-        "qiskit": ["qiskit"],
+        "qiskit": ["qiskit", "sympy", "symengine"],
         "cloud": ["qiskit", "mthree<2.8"],
     },
     classifiers=[
