@@ -485,6 +485,15 @@ Here's an example studying entanglement asymmetry in tilted ferromagnet states:
 Randoms, Jit, Backend Agnostic, and Their Interplay
 --------------------------------------------------------
 
+This section explains how random number generation interacts with JIT compilation and backend agnosticism in TensorCircuit. Understanding this interplay is crucial for reproducible and correct simulation results, especially when using JAX.
+
+**Key Management for Reproducibility:**
+In JAX, random number generation is deterministic and relies on explicit "keys" that manage the random state. This is different from TensorFlow or NumPy, where random states are often managed implicitly. For reproducible results and correct JIT compilation, JAX requires these keys to be passed and split explicitly.
+
+**Why Explicit Key Management?**
+When a JIT-compiled function is called multiple times with the same inputs, JAX aims to produce the same output. If random numbers were generated implicitly within a JIT-compiled function, subsequent calls would produce the same "random" numbers, which is often not the desired behavior for simulations requiring true randomness across runs. 
+Explicit key management ensures that each call to a random function, even within JIT, uses a new, distinct random state derived from a split key, thus maintaining the desired randomness and reproducibility.
+
 .. code-block:: python
 
     import tensorcircuit as tc
