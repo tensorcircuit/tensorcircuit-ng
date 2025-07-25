@@ -1,5 +1,7 @@
 import pytest
 import numpy as np
+import tensorcircuit as tc
+
 
 from tensorcircuit.templates.lattice import (
     ChainLattice,
@@ -7,8 +9,8 @@ from tensorcircuit.templates.lattice import (
     CustomizeLattice,
 )
 from tensorcircuit.templates.hamiltonians import (
-    generate_heisenberg_hamiltonian,
-    generate_rydberg_hamiltonian,
+    heisenberg_hamiltonian,
+    rydberg_hamiltonian,
 )
 
 PAULI_X = np.array([[0, 1], [1, 0]], dtype=complex)
@@ -19,7 +21,7 @@ PAULI_I = np.eye(2, dtype=complex)
 
 class TestHeisenbergHamiltonian:
     """
-    Test suite for the generate_heisenberg_hamiltonian function.
+    Test suite for the heisenberg_hamiltonian function.
     """
 
     def test_empty_lattice(self):
@@ -29,8 +31,8 @@ class TestHeisenbergHamiltonian:
         empty_lattice = CustomizeLattice(
             dimensionality=2, identifiers=[], coordinates=[]
         )
-        h = generate_heisenberg_hamiltonian(empty_lattice)
-        assert h.shape == (0, 0)
+        h = heisenberg_hamiltonian(empty_lattice)
+        assert h.shape == (1, 1)
         assert h.nnz == 0
 
     def test_single_site(self):
@@ -38,7 +40,7 @@ class TestHeisenbergHamiltonian:
         Test that a single-site lattice (no bonds) produces a 2x2 zero matrix.
         """
         single_site_lattice = ChainLattice(size=(1,), pbc=False)
-        h = generate_heisenberg_hamiltonian(single_site_lattice)
+        h = heisenberg_hamiltonian(single_site_lattice)
         assert h.shape == (2, 2)
         assert h.nnz == 0
 
@@ -49,7 +51,7 @@ class TestHeisenbergHamiltonian:
         """
         lattice = ChainLattice(size=(2,), pbc=False)
         j_coupling = -1.5  # Test with a non-trivial coupling constant
-        h_generated = generate_heisenberg_hamiltonian(lattice, j_coupling=j_coupling)
+        h_generated = heisenberg_hamiltonian(lattice, j_coupling=j_coupling)
 
         # Manually construct the expected Hamiltonian: H = J * (X_0X_1 + Y_0Y_1 + Z_0Z_1)
         xx = np.kron(PAULI_X, PAULI_X)
@@ -58,24 +60,24 @@ class TestHeisenbergHamiltonian:
         h_expected = j_coupling * (xx + yy + zz)
 
         assert h_generated.shape == (4, 4)
-        assert np.allclose(h_generated.toarray(), h_expected)
+        assert np.allclose(tc.backend.to_dense(h_generated), h_expected)
 
     def test_square_lattice_properties(self):
         """
         Test properties of a larger lattice (2x2 square) without full matrix comparison.
         """
         lattice = SquareLattice(size=(2, 2), pbc=True)  # 4 sites, 8 bonds with PBC
-        h = generate_heisenberg_hamiltonian(lattice, j_coupling=1.0)
+        h = heisenberg_hamiltonian(lattice, j_coupling=1.0)
 
         assert h.shape == (16, 16)
         assert h.nnz > 0
-        h_dense = h.toarray()
+        h_dense = tc.backend.to_dense(h)
         assert np.allclose(h_dense, h_dense.conj().T)
 
 
 class TestRydbergHamiltonian:
     """
-    Test suite for the generate_rydberg_hamiltonian function.
+    Test suite for the rydberg_hamiltonian function.
     """
 
     def test_single_site_rydberg(self):
@@ -84,12 +86,12 @@ class TestRydbergHamiltonian:
         """
         lattice = ChainLattice(size=(1,), pbc=False)
         omega, delta, c6 = 2.0, 0.5, 100.0
-        h_generated = generate_rydberg_hamiltonian(lattice, omega, delta, c6)
+        h_generated = rydberg_hamiltonian(lattice, omega, delta, c6)
 
         h_expected = (omega / 2.0) * PAULI_X + (delta / 2.0) * PAULI_Z
 
         assert h_generated.shape == (2, 2)
-        assert np.allclose(h_generated.toarray(), h_expected)
+        assert np.allclose(tc.backend.to_dense(h_generated), h_expected)
 
     def test_two_sites_rydberg(self):
         """
@@ -97,7 +99,7 @@ class TestRydbergHamiltonian:
         """
         lattice = ChainLattice(size=(2,), pbc=False, lattice_constant=1.5)
         omega, delta, c6 = 1.0, -0.5, 10.0
-        h_generated = generate_rydberg_hamiltonian(lattice, omega, delta, c6)
+        h_generated = rydberg_hamiltonian(lattice, omega, delta, c6)
 
         v_ij = c6 / (1.5**6)
 
@@ -110,7 +112,9 @@ class TestRydbergHamiltonian:
         h_expected = h1 + h2 + h3
 
         assert h_generated.shape == (4, 4)
-        assert np.allclose(h_generated.toarray(), h_expected)
+        h_generated_dense = tc.backend.to_dense(h_generated)
+
+        assert np.allclose(h_generated_dense, h_expected)
 
     def test_zero_distance_robustness(self):
         """
@@ -123,10 +127,29 @@ class TestRydbergHamiltonian:
         )
 
         try:
-            h = generate_rydberg_hamiltonian(lattice, omega=1.0, delta=1.0, c6=1.0)
+            h = rydberg_hamiltonian(lattice, omega=1.0, delta=1.0, c6=1.0)
             # The X terms contribute 8 non-zero elements.
             # The Z terms (Z0+Z1) have diagonal elements that cancel out,
             # resulting in only 2 non-zero elements. Total nnz = 8 + 2 = 10.
             assert h.nnz == 10
         except ZeroDivisionError:
             pytest.fail("The function failed to handle zero distance between sites.")
+
+    def test_anisotropic_heisenberg(self):
+        """
+        Test the anisotropic Heisenberg model with different Jx, Jy, Jz.
+        """
+        lattice = ChainLattice(size=(2,), pbc=False)
+        j_coupling = [-1.0, 0.5, 2.0]  # Jx, Jy, Jz
+        h_generated = heisenberg_hamiltonian(lattice, j_coupling=j_coupling)
+
+        # Manually construct the expected Hamiltonian
+        jx, jy, jz = j_coupling
+        xx = np.kron(PAULI_X, PAULI_X)
+        yy = np.kron(PAULI_Y, PAULI_Y)
+        zz = np.kron(PAULI_Z, PAULI_Z)
+        h_expected = jx * xx + jy * yy + jz * zz
+
+        h_generated_dense = tc.backend.to_dense(h_generated)
+        assert h_generated_dense.shape == (4, 4)
+        assert np.allclose(h_generated_dense, h_expected)

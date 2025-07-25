@@ -1,14 +1,24 @@
 import typing
-from typing import cast
-from scipy.sparse import coo_matrix
+from typing import Any, List, Tuple, Union
 import numpy as np
+from tensorcircuit.cons import dtypestr, backend
 import tensorcircuit as tc
 from .lattice import AbstractLattice
 
 
-def generate_heisenberg_hamiltonian(
-    lattice: AbstractLattice, j_coupling: float = 1.0
-) -> coo_matrix:
+def _create_empty_sparse_matrix(shape: Tuple[int, int]) -> Any:
+    """
+    Helper function to create a backend-agnostic empty sparse matrix.
+    """
+    indices = tc.backend.convert_to_tensor(backend.zeros((0, 2), dtype="int32"))
+    values = tc.backend.convert_to_tensor(backend.zeros((0,), dtype=dtypestr))  # type: ignore
+    return tc.backend.coo_sparse_matrix(indices=indices, values=values, shape=shape)  # type: ignore
+
+
+def heisenberg_hamiltonian(
+    lattice: AbstractLattice,
+    j_coupling: Union[float, List[float], Tuple[float, ...]] = 1.0,
+) -> Any:
     """
     Generates the sparse matrix of the Heisenberg Hamiltonian for a given lattice.
 
@@ -19,51 +29,49 @@ def generate_heisenberg_hamiltonian(
     :param lattice: An instance of a class derived from AbstractLattice,
         which provides the geometric information of the system.
     :type lattice: AbstractLattice
-    :param j_coupling: The coupling constant for the Heisenberg interaction. Defaults to 1.0.
-    :type j_coupling: float, optional
-    :return: The Hamiltonian represented as a SciPy COO sparse matrix.
-    :rtype: coo_matrix
+    :param j_coupling: The coupling constants. Can be a single float for an
+        isotropic model (Jx=Jy=Jz) or a list/tuple of 3 floats for an
+        anisotropic model (Jx, Jy, Jz). Defaults to 1.0.
+    :type j_coupling: Union[float, List[float], Tuple[float, ...]], optional
+    :return: The Hamiltonian as a backend-agnostic sparse matrix.
+    :rtype: Any
     """
     num_sites = lattice.num_sites
-    if num_sites == 0:
-        return coo_matrix((0, 0))
-
     neighbor_pairs = lattice.get_neighbor_pairs(k=1, unique=True)
-    if not neighbor_pairs:
-        return coo_matrix((2**num_sites, 2**num_sites))
+
+    if isinstance(j_coupling, (float, int)):
+        js = [float(j_coupling)] * 3
+    else:
+        if len(j_coupling) != 3:
+            raise ValueError("j_coupling must be a float or a list/tuple of 3 floats.")
+        js = [float(j) for j in j_coupling]
+
+    if num_sites == 0 or not neighbor_pairs:
+        return _create_empty_sparse_matrix(shape=(2**num_sites, 2**num_sites))
 
     pauli_map = {"X": 1, "Y": 2, "Z": 3}
 
     ls: typing.List[typing.List[int]] = []
     weights: typing.List[float] = []
 
+    pauli_terms = ["X", "Y", "Z"]
     for i, j in neighbor_pairs:
-        xx_string = [0] * num_sites
-        xx_string[i] = pauli_map["X"]
-        xx_string[j] = pauli_map["X"]
-        ls.append(xx_string)
-        weights.append(j_coupling)
+        for idx, pauli_char in enumerate(pauli_terms):
+            if abs(js[idx]) > 1e-9:
+                string = [0] * num_sites
+                string[i] = pauli_map[pauli_char]
+                string[j] = pauli_map[pauli_char]
+                ls.append(string)
+                weights.append(js[idx])
 
-        yy_string = [0] * num_sites
-        yy_string[i] = pauli_map["Y"]
-        yy_string[j] = pauli_map["Y"]
-        ls.append(yy_string)
-        weights.append(j_coupling)
+    hamiltonian_matrix = tc.quantum.PauliStringSum2COO(ls, weight=weights, numpy=False)
 
-        zz_string = [0] * num_sites
-        zz_string[i] = pauli_map["Z"]
-        zz_string[j] = pauli_map["Z"]
-        ls.append(zz_string)
-        weights.append(j_coupling)
-
-    hamiltonian_matrix = tc.quantum.PauliStringSum2COO(ls, weight=weights, numpy=True)
-
-    return cast(coo_matrix, hamiltonian_matrix)
+    return hamiltonian_matrix
 
 
-def generate_rydberg_hamiltonian(
+def rydberg_hamiltonian(
     lattice: AbstractLattice, omega: float, delta: float, c6: float
-) -> coo_matrix:
+) -> Any:
     """
     Generates the sparse matrix of the Rydberg atom array Hamiltonian.
 
@@ -84,12 +92,12 @@ def generate_rydberg_hamiltonian(
     :type delta: float
     :param c6: The Van der Waals interaction coefficient (C6).
     :type c6: float
-    :return: The Hamiltonian represented as a SciPy COO sparse matrix.
-    :rtype: coo_matrix
+    :return: The Hamiltonian as a backend-agnostic sparse matrix.
+    :rtype: Any
     """
     num_sites = lattice.num_sites
     if num_sites == 0:
-        return coo_matrix((0, 0))
+        return _create_empty_sparse_matrix(shape=(1, 1))
 
     pauli_map = {"X": 1, "Y": 2, "Z": 3}
     ls: typing.List[typing.List[int]] = []
@@ -132,8 +140,8 @@ def generate_rydberg_hamiltonian(
             z_string = [0] * num_sites
             z_string[i] = pauli_map["Z"]
             ls.append(z_string)
-            weights.append(float(z_coefficients[i]))
+            weights.append(z_coefficients[i])  # type: ignore
 
-    hamiltonian_matrix = tc.quantum.PauliStringSum2COO(ls, weight=weights, numpy=True)
+    hamiltonian_matrix = tc.quantum.PauliStringSum2COO(ls, weight=weights, numpy=False)
 
-    return cast(coo_matrix, hamiltonian_matrix)
+    return hamiltonian_matrix
