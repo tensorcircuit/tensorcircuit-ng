@@ -41,6 +41,7 @@ How can I use multiple GPUs?
 For different observables evaluation on different cards, see `example <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/vqe_parallel_pmap.py>`_.
 
 For distributed simulation of one circuit on multiple cards, see `example for expectation <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/slicing_auto_pmap_vqa.py>`_ and `example for MPO <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/slicing_auto_pmap_mpo.py>`_.
+We also introduce a new interface for the multi-GPU tensornetwork contraction, see `example for VQE <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/distributed_interface_vqe.py>`_ and `example for ammplitude <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/distributed_interface_amplitude.py>`_.
 
 
 When should I jit the function?
