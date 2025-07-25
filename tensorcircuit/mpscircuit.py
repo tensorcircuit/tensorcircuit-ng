@@ -260,6 +260,17 @@ class MPSCircuit(AbstractCircuit):
         index_to: int,
         split: Optional[Dict[str, Any]] = None,
     ) -> None:
+        """
+        Apply a series of SWAP gates to move a qubit from ``index_from`` to ``index_to``.
+
+        :param index_from: The starting index of the qubit.
+        :type index_from: int
+        :param index_to: The destination index of the qubit.
+        :type index_to: int
+        :param split: Truncation options for the SWAP gates. Defaults to None.
+            consistent with the split option of the class.
+        :type split: Optional[Dict[str, Any]], optional
+        """
         if split is None:
             split = self.split
         self.position(index_from)
@@ -437,7 +448,15 @@ class MPSCircuit(AbstractCircuit):
         split: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
-        Reduce the bond dimension between two adjacent sites by SVD
+        Reduce the bond dimension between two adjacent sites using SVD.
+
+        :param index_left: The index of the left tensor of the bond to be truncated.
+        :type index_left: int
+        :param center_left: If True, the orthogonality center will be on the left tensor after truncation.
+                            Otherwise, it will be on the right tensor. Defaults to True.
+        :type center_left: bool, optional
+        :param split: Truncation options for the SVD. Defaults to None.
+        :type split: Optional[Dict[str, Any]], optional
         """
         if split is None:
             split = self.split
@@ -463,7 +482,22 @@ class MPSCircuit(AbstractCircuit):
         split: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
-        Apply a MPO to the MPS
+        Apply a Matrix Product Operator (MPO) to the MPS.
+
+        The application involves three main steps:
+        1. Contract the MPO tensors with the corresponding MPS tensors.
+        2. Canonicalize the resulting tensors by moving the orthogonality center.
+        3. Truncate the bond dimensions to control complexity.
+
+        :param tensors: A sequence of tensors representing the MPO.
+        :type tensors: Sequence[Tensor]
+        :param index_left: The starting index on the MPS where the MPO is applied.
+        :type index_left: int
+        :param center_left: If True, the final orthogonality center will be at the left end of the MPO.
+                            Otherwise, it will be at the right end. Defaults to True.
+        :type center_left: bool, optional
+        :param split: Truncation options for bond dimension reduction. Defaults to None.
+        :type split: Optional[Dict[str, Any]], optional
         """
         # step 1:
         #     contract tensor
@@ -521,10 +555,17 @@ class MPSCircuit(AbstractCircuit):
         *index: int,
         split: Optional[Dict[str, Any]] = None,
     ) -> None:
+        """
+        Apply an n-qubit gate to the MPS by converting it to an MPO.
+
+        :param gate: The n-qubit gate to apply.
+        :type gate: Gate
+        :param index: The indices of the qubits to apply the gate to.
+        :type index: int
+        :param split: Truncation options for the MPO application. Defaults to None.
+        :type split: Optional[Dict[str, Any]], optional
+        """
         # TODO(@SUSYUSTC): jax autograd is wrong on this function
-        """
-        Apply a n-qubit gate by transforming the gate to MPO
-        """
         ordered = np.all(np.diff(index) > 0)
         if not ordered:
             order = np.argsort(index)

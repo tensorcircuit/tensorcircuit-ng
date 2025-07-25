@@ -231,6 +231,25 @@ class Circuit(BaseCircuit):
         pz: float,
         status: Optional[float] = None,
     ) -> float:
+        """
+        Apply a depolarizing channel to the circuit in a Monte Carlo way.
+        For each call, one of the Pauli gates (X, Y, Z) or an Identity gate is applied to the qubit
+        at the given index based on the probabilities `px`, `py`, and `pz`.
+
+        :param index: The index of the qubit to apply the depolarizing channel on.
+        :type index: int
+        :param px: The probability of applying an X gate.
+        :type px: float
+        :param py: The probability of applying a Y gate.
+        :type py: float
+        :param pz: The probability of applying a Z gate.
+        :type pz: float
+        :param status: A random number between 0 and 1 to determine which gate to apply. If None,
+                       a random number is generated automatically. Defaults to None.
+        :type status: Optional[float], optional
+        :return: Returns 0.0. The function modifies the circuit in place.
+        :rtype: float
+        """
         if status is None:
             status = backend.implicit_randu()[0]
         g = backend.cond(
@@ -323,6 +342,35 @@ class Circuit(BaseCircuit):
         status: Optional[float] = None,
         name: Optional[str] = None,
     ) -> Tensor:
+        """
+        Apply a unitary Kraus channel to the circuit using a Monte Carlo approach. This method is functionally
+        similar to `unitary_kraus` but uses `backend.switch` for selecting the Kraus operator, which can have
+        different performance characteristics on some backends.
+
+        A random Kraus operator from the provided list is applied to the circuit based on the given probabilities.
+        This method is jittable and suitable for simulating noisy quantum circuits where the noise is represented
+        by unitary Kraus operators.
+
+        .. warning::
+            This method may have issues with `vmap` due to potential concurrent access locks, potentially related with
+            `backend.switch`. `unitary_kraus` is generally recommended.
+
+        :param kraus: A sequence of `Gate` objects representing the unitary Kraus operators.
+        :type kraus: Sequence[Gate]
+        :param index: The qubit indices on which to apply the Kraus channel.
+        :type index: int
+        :param prob: A sequence of probabilities corresponding to each Kraus operator. If None, probabilities
+                     are derived from the operators themselves. Defaults to None.
+        :type prob: Optional[Sequence[float]], optional
+        :param status: A random number between 0 and 1 to determine which Kraus operator to apply. If None,
+                       a random number is generated automatically. Defaults to None.
+        :type status: Optional[float], optional
+        :param name: An optional name for the operation. Defaults to None.
+        :type name: Optional[str], optional
+        :return: A tensor indicating which Kraus operator was applied.
+        :rtype: Tensor
+        """
+
         # dont use, has issue conflicting with vmap, concurrent access lock emerged
         # potential issue raised from switch
         # general impl from Monte Carlo trajectory depolarizing above

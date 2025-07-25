@@ -147,14 +147,16 @@ class StabilizerCircuit(AbstractCircuit):
 
     def measure(self, *index: int, with_prob: bool = False) -> Tensor:
         """
-        Measure qubits in Z basis.
+        Measure qubits in the Z basis.
 
-        :param index: Indices of qubits to measure
+        :param index: Indices of the qubits to measure.
         :type index: int
-        :param with_prob: Return probability of measurement outcome, defaults to False
+        :param with_prob: If True, returns the theoretical probability of the measurement outcome.
+            defaults to False
         :type with_prob: bool, optional
-        :return: Measurement results and probability (if with_prob=True)
-        :rtype: Union[np.ndarray, Tuple[np.ndarray, float]]
+        :return: A tensor containing the measurement results.
+            If `with_prob` is True, a tuple containing the results and the probability is returned.
+        :rtype: Tensor
         """
         # Convert negative indices
 
@@ -162,20 +164,29 @@ class StabilizerCircuit(AbstractCircuit):
 
         # Add measurement instructions
         s1 = self.current_simulator().copy()
-        m = s1.measure_many(*index)
         # Sample once from the circuit using sampler
 
-        # TODO(@refraction-ray): correct probability
+        if with_prob:
+            num_random_measurements = 0
+            for i in index:
+                print(i, s1.peek_z(i))
+                if s1.peek_z(i) == 0:
+                    num_random_measurements += 1
+            probability = (0.5) ** num_random_measurements
+
+        m = s1.measure_many(*index)
+        if with_prob:
+            return m, probability
         return m
 
     def cond_measurement(self, index: int) -> Tensor:
         """
-        Measure qubits in Z basis with state collapse.
+        Measure a single qubit in the Z basis and collapse the state.
 
-        :param index: Index of qubit to measure
+        :param index: The index of the qubit to measure.
         :type index: int
-        :return: Measurement results and probability (if with_prob=True)
-        :rtype: Union[np.ndarray, Tuple[np.ndarray, float]]
+        :return: The measurement result (0 or 1).
+        :rtype: Tensor
         """
         # Convert negative indices
 
@@ -191,12 +202,12 @@ class StabilizerCircuit(AbstractCircuit):
 
     def cond_measure_many(self, *index: int) -> Tensor:
         """
-        Measure qubits in Z basis with state collapse.
+        Measure multiple qubits in the Z basis and collapse the state.
 
-        :param index: Index of qubit to measure
+        :param index: The indices of the qubits to measure.
         :type index: int
-        :return: Measurement results and probability (if with_prob=True)
-        :rtype: Union[np.ndarray, Tuple[np.ndarray, float]]
+        :return: A tensor containing the measurement results.
+        :rtype: Tensor
         """
         # Convert negative indices
 

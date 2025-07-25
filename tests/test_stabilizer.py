@@ -215,3 +215,12 @@ def test_mipt():
         return c.entanglement_entropy(list(range(n // 2)))
 
     print(ruc(50, 10, 0.1))
+
+
+def test_measure_with_prob():
+    c = tc.StabilizerCircuit(3)
+    c.h(0)
+    c.cnot(0, 1)
+    m, p = c.measure(0, 2, with_prob=True)
+    np.testing.assert_allclose(p, 0.5, atol=1e-6)
+    print(m)

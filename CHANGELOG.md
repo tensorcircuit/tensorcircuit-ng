@@ -10,9 +10,13 @@
 
 - Add `circuit.amplitude_before()` method to return the corresponding tensornetwork nodes.
 
+- Add `with_prob` for `stabilizercircuit.measure()`.
+
 ### Fixed
 
 - Fix the nodes order in contraction by giving each node a global `_stable_id_`.
+
+- Fix `to_dlpack` for jax version >= 0.7.
 
 ## v1.2.1
 

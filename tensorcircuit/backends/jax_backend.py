@@ -442,7 +442,14 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def to_dlpack(self, a: Tensor) -> Any:
         import jax.dlpack
 
-        return jax.dlpack.to_dlpack(a)
+        try:
+            return jax.dlpack.to_dlpack(a)  # type: ignore
+        except AttributeError:  # jax >v0.7
+            # jax.dlpack.to_dlpack was deprecated in JAX v0.6.0 and removed in JAX v0.7.0.
+            # Please use the newer DLPack API based on __dlpack__ and __dlpack_device__ instead.
+            # Typically, you can pass a JAX array directly to the `from_dlpack` function of
+            # another framework without using `to_dlpack`.
+            return a.__dlpack__()
 
     def set_random_state(
         self, seed: Optional[Union[int, PRNGKeyArray]] = None, get_only: bool = False

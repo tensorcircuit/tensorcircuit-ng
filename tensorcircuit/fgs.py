@@ -73,17 +73,26 @@ class FGSSimulator:
         cmatrix: Optional[Tensor] = None,
     ):
         """
-        _summary_
+        Initializes the Fermion Gaussian State (FGS) simulator.
 
-        :param L: system size
+        The state can be initialized in one of four ways:
+        1. By specifying the system size `L` and a list of `filled` sites, creating a product state.
+        2. By providing a quadratic Hamiltonian `hc`, the ground state of which is used as the initial state.
+        3. By directly providing the `alpha` matrix, which defines the Bogoliubov transformation.
+        4. For debugging, by providing a pre-computed correlation matrix `cmatrix`.
+
+        :param L: The number of fermionic sites (system size).
         :type L: int
-        :param filled: the fermion site that is fully occupied, defaults to None
+        :param filled: A list of site indices that are occupied by fermions in the initial state.
+            Defaults to None (no sites filled).
         :type filled: Optional[List[int]], optional
-        :param alpha: directly specify the alpha tensor as the input
+        :param alpha: The matrix defining the Bogoliubov transformation from the vacuum state, of shape `(2L, L)`.
+                      If provided, it directly specifies the initial state. Defaults to None.
         :type alpha: Optional[Tensor], optional
-        :param hc: the input is given as the ground state of quadratic Hamiltonian ``hc``
+        :param hc: A quadratic Hamiltonian. The ground state of this Hamiltonian will be used as the initial state.
+                   Defaults to None.
         :type hc: Optional[Tensor], optional
-        :param cmatrix: only used for debug, defaults to None
+        :param cmatrix: A pre-computed correlation matrix, primarily for debugging purposes. Defaults to None.
         :type cmatrix: Optional[Tensor], optional
         """
         if filled is None:
@@ -105,6 +114,19 @@ class FGSSimulator:
     def fermion_diagonalization(
         cls, hc: Tensor, L: int
     ) -> Tuple[Tensor, Tensor, Tensor]:
+        """
+        Diagonalizes a quadratic fermionic Hamiltonian.
+
+        This method computes the eigenvalues, eigenvectors, and the alpha matrix for a given
+        quadratic Hamiltonian `hc`.
+
+        :param hc: The quadratic Hamiltonian to be diagonalized.
+        :type hc: Tensor
+        :param L: The number of fermionic sites.
+        :type L: int
+        :return: A tuple containing the eigenvalues, eigenvectors, and the alpha matrix.
+        :rtype: Tuple[Tensor, Tensor, Tensor]
+        """
         es, u = backend.eigh(hc)
         es = es[::-1]
         u = u[:, ::-1]
@@ -115,6 +137,19 @@ class FGSSimulator:
     def fermion_diagonalization_2(
         cls, hc: Tensor, L: int
     ) -> Tuple[Tensor, Tensor, Tensor]:
+        """
+        Alternative method for diagonalizing a quadratic fermionic Hamiltonian.
+
+        This method uses a different approach based on the Schur decomposition to diagonalize
+        the Hamiltonian.
+
+        :param hc: The quadratic Hamiltonian to be diagonalized.
+        :type hc: Tensor
+        :param L: The number of fermionic sites.
+        :type L: int
+        :return: A tuple containing the eigenvalues, eigenvectors, and the alpha matrix.
+        :rtype: Tuple[Tensor, Tensor, Tensor]
+        """
         w = cls.wmatrix(L)
         hm = 0.25 * w @ hc @ backend.adjoint(w)
         hm = backend.real((-1.0j) * hm)
@@ -140,6 +175,16 @@ class FGSSimulator:
 
     @staticmethod
     def wmatrix(L: int) -> Tensor:
+        """
+        Constructs the transformation matrix W.
+
+        This matrix transforms from the fermionic basis to the Majorana basis.
+
+        :param L: The number of fermionic sites.
+        :type L: int
+        :return: The transformation matrix W.
+        :rtype: Tensor
+        """
         w = np.zeros([2 * L, 2 * L], dtype=complex)
         for i in range(2 * L):
             if i % 2 == 1:
@@ -152,6 +197,16 @@ class FGSSimulator:
 
     @staticmethod
     def init_alpha(filled: List[int], L: int) -> Tensor:
+        """
+        Initializes the alpha matrix for a given set of filled sites.
+
+        :param filled: A list of site indices that are occupied by fermions.
+        :type filled: List[int]
+        :param L: The number of fermionic sites.
+        :type L: int
+        :return: The initialized alpha matrix.
+        :rtype: Tensor
+        """
         alpha = np.zeros([2 * L, L])
         for i in range(L):
             if i not in filled:
@@ -163,9 +218,29 @@ class FGSSimulator:
         return alpha
 
     def get_alpha(self) -> Tensor:
+        """
+        Returns the current alpha matrix of the FGS.
+
+        :return: The alpha matrix.
+        :rtype: Tensor
+        """
         return self.alpha
 
     def get_cmatrix(self, now_i: bool = True, now_j: bool = True) -> Tensor:
+        """
+        Calculates the correlation matrix.
+
+        The correlation matrix is defined as :math:`C_{ij} = \langle c_i^\dagger c_j \rangle`.
+        This method can also compute out-of-time-ordered correlators (OTOC) by specifying
+        whether to use the current or initial state for the `i` and `j` indices.
+
+        :param now_i: If True, use the current state for the `i` index. Defaults to True.
+        :type now_i: bool, optional
+        :param now_j: If True, use the current state for the `j` index. Defaults to True.
+        :type now_j: bool, optional
+        :return: The correlation matrix.
+        :rtype: Tensor
+        """
         # otoc in FGS language, see: https://arxiv.org/pdf/1908.03292.pdf
         # https://journals.aps.org/prb/pdf/10.1103/PhysRevB.99.054205
         # otoc for non=hermitian system is more subtle due to the undefined normalization
@@ -197,11 +272,11 @@ class FGSSimulator:
 
     def get_reduced_cmatrix(self, subsystems_to_trace_out: List[int]) -> Tensor:
         """
-        get reduced correlation matrix by tracing out subsystems
+        Calculates the reduced correlation matrix by tracing out specified subsystems.
 
-        :param subsystems_to_trace_out: list of sites to be traced out
+        :param subsystems_to_trace_out: A list of site indices to be traced out.
         :type subsystems_to_trace_out: List[int]
-        :return: reduced density matrix
+        :return: The reduced correlation matrix.
         :rtype: Tensor
         """
         m = self.get_cmatrix()
@@ -222,13 +297,13 @@ class FGSSimulator:
 
     def renyi_entropy(self, n: int, subsystems_to_trace_out: List[int]) -> Tensor:
         """
-        compute renyi_entropy of order ``n`` for the fermion state
+        Computes the Renyi entropy of order n for a given subsystem.
 
-        :param n: _description_
+        :param n: The order of the Renyi entropy.
         :type n: int
-        :param subsystems_to_trace_out: system sites to be traced out
+        :param subsystems_to_trace_out: A list of site indices to be traced out, defining the subsystem.
         :type subsystems_to_trace_out: List[int]
-        :return: _description_
+        :return: The Renyi entropy of order n.
         :rtype: Tensor
         """
         m = self.get_reduced_cmatrix(subsystems_to_trace_out)
@@ -248,15 +323,17 @@ class FGSSimulator:
         subsystems_to_trace_out: List[int],
     ) -> Tensor:
         """
+        Computes the charge moment of order n.
+
         Ref: https://arxiv.org/abs/2302.03330
 
-        :param alpha: to be integrated
+        :param alpha: The alpha parameter for the charge moment calculation.
         :type alpha: Tensor
-        :param n: n-order, Renyi-n
+        :param n: The order of the charge moment (Renyi-n).
         :type n: int
-        :param subsystems_to_trace_out: _description_
+        :param subsystems_to_trace_out: A list of site indices to be traced out.
         :type subsystems_to_trace_out: List[int]
-        :return: _description_
+        :return: The charge moment.
         :rtype: Tensor
         """
         m = self.get_reduced_cmatrix(subsystems_to_trace_out)
@@ -297,18 +374,23 @@ class FGSSimulator:
         with_std: bool = False,
     ) -> Tensor:
         """
+        Computes the Renyi entanglement asymmetry.
+
         Ref: https://arxiv.org/abs/2302.03330
 
-        :param n: _description_
+        :param n: The order of the Renyi entanglement asymmetry.
         :type n: int
-        :param subsystems_to_trace_out: _description_
+        :param subsystems_to_trace_out: A list of site indices to be traced out.
         :type subsystems_to_trace_out: List[int]
-        :param batch: sample number, defaults 100
-        :type batch: int
-        :param status: random number for the sample, -pi to pi,
-            with shape [batch, n]
-        :type status: Optional[Tensor]
-        :return: _description_
+        :param batch: The number of samples to use for the Monte Carlo estimation. Defaults to 100.
+        :type batch: int, optional
+        :param status: A tensor of random numbers for the sampling. If None, it will be generated internally.
+                       Defaults to None.
+        :type status: Optional[Tensor], optional
+        :param with_std: If True, also return the standard deviation of the estimation. Defaults to False.
+        :type with_std: bool, optional
+        :return: The Renyi entanglement asymmetry.
+            If `with_std` is True, a tuple containing the asymmetry and its standard deviation is returned.
         :rtype: Tensor
         """
         r = []
@@ -354,11 +436,12 @@ class FGSSimulator:
 
     def entropy(self, subsystems_to_trace_out: Optional[List[int]] = None) -> Tensor:
         """
-        compute von Neumann entropy for the fermion state
+        Computes the von Neumann entropy of a subsystem.
 
-        :param subsystems_to_trace_out: _description_, defaults to None
+        :param subsystems_to_trace_out: A list of site indices to be traced out, defining the subsystem.
+                                      If None, the entropy of the entire system is computed. Defaults to None.
         :type subsystems_to_trace_out: Optional[List[int]], optional
-        :return: _description_
+        :return: The von Neumann entropy.
         :rtype: Tensor
         """
         m = self.get_reduced_cmatrix(subsystems_to_trace_out)  # type: ignore
@@ -374,9 +457,11 @@ class FGSSimulator:
 
     def evol_hamiltonian(self, h: Tensor) -> None:
         r"""
-        Evolve as :math:`e^{-i/2 \hat{h}}`
+        Evolves the state with a given Hamiltonian.
 
-        :param h: _description_
+        The evolution is given by :math:`e^{-i/2 \hat{h}}`.
+
+        :param h: The Hamiltonian for the evolution.
         :type h: Tensor
         """
         # e^{-i/2 H}
@@ -387,9 +472,11 @@ class FGSSimulator:
 
     def evol_ihamiltonian(self, h: Tensor) -> None:
         r"""
-        Evolve as :math:`e^{-1/2 \hat{h}}`
+        Evolves the state with a given Hamiltonian using imaginary time evolution.
 
-        :param h: _description_
+        The evolution is given by :math:`e^{-1/2 \hat{h}}`.
+
+        :param h: The Hamiltonian for the evolution.
         :type h: Tensor
         """
         # e^{-1/2 H}
@@ -401,9 +488,11 @@ class FGSSimulator:
 
     def evol_ghamiltonian(self, h: Tensor) -> None:
         r"""
-        Evolve as :math:`e^{-1/2 i \hat{h}}` with h generally non-Hermitian
+        Evolves the state with a general non-Hermitian Hamiltonian.
 
-        :param h: _description_
+        The evolution is given by :math:`e^{-1/2 i \hat{h}}`.
+
+        :param h: The non-Hermitian Hamiltonian for the evolution.
         :type h: Tensor
         """
         # e^{-1/2 H}
@@ -414,11 +503,28 @@ class FGSSimulator:
         self.otcmatrix = {}
 
     def orthogonal(self) -> None:
+        """Orthogonalizes the alpha matrix using QR decomposition."""
         q, _ = backend.qr(self.alpha)
         self.alpha = q
 
     @staticmethod
     def hopping(chi: Tensor, i: int, j: int, L: int) -> Tensor:
+        """
+        Constructs the hopping Hamiltonian between two sites.
+
+        The hopping Hamiltonian is given by :math:`\chi c_i^\dagger c_j + h.c.`.
+
+        :param chi: The hopping strength.
+        :type chi: Tensor
+        :param i: The index of the first site.
+        :type i: int
+        :param j: The index of the second site.
+        :type j: int
+        :param L: The number of fermionic sites.
+        :type L: int
+        :return: The hopping Hamiltonian.
+        :rtype: Tensor
+        """
         # chi * ci dagger cj + hc.
         chi = backend.convert_to_tensor(chi)
         chi = backend.cast(chi, dtypestr)
@@ -429,19 +535,35 @@ class FGSSimulator:
 
     def evol_hp(self, i: int, j: int, chi: Tensor = 0) -> None:
         r"""
-        The evolve Hamiltonian is :math:`\chi c_i^\dagger c_j +h.c.`
+        Evolves the state with a hopping Hamiltonian.
 
-        :param i: _description_
+        The evolution is governed by the Hamiltonian :math:`\chi c_i^\dagger c_j + h.c.`.
+
+        :param i: The index of the first site.
         :type i: int
-        :param j: _description_
+        :param j: The index of the second site.
         :type j: int
-        :param chi: _description_, defaults to 0
+        :param chi: The hopping strength. Defaults to 0.
         :type chi: Tensor, optional
         """
         self.evol_hamiltonian(self.hopping(chi, i, j, self.L))
 
     @staticmethod
     def chemical_potential(chi: Tensor, i: int, L: int) -> Tensor:
+        """
+        Constructs the chemical potential Hamiltonian for a single site.
+
+        The chemical potential Hamiltonian is given by :math:`\chi c_i^\dagger c_i`.
+
+        :param chi: The chemical potential strength.
+        :type chi: Tensor
+        :param i: The index of the site.
+        :type i: int
+        :param L: The number of fermionic sites.
+        :type L: int
+        :return: The chemical potential Hamiltonian.
+        :rtype: Tensor
+        """
         chi = backend.convert_to_tensor(chi)
         chi = backend.cast(chi, dtypestr)
         m = chi / 2 * onehot_matrix(i, i, 2 * L)
@@ -450,6 +572,22 @@ class FGSSimulator:
 
     @staticmethod
     def sc_pairing(chi: Tensor, i: int, j: int, L: int) -> Tensor:
+        """
+        Constructs the superconducting pairing Hamiltonian between two sites.
+
+        The superconducting pairing Hamiltonian is given by :math:`\chi c_i^\dagger c_j^\dagger + h.c.`.
+
+        :param chi: The pairing strength.
+        :type chi: Tensor
+        :param i: The index of the first site.
+        :type i: int
+        :param j: The index of the second site.
+        :type j: int
+        :param L: The number of fermionic sites.
+        :type L: int
+        :return: The superconducting pairing Hamiltonian.
+        :rtype: Tensor
+        """
         chi = backend.convert_to_tensor(chi)
         chi = backend.cast(chi, dtypestr)
         m = chi / 2 * onehot_matrix(i, j + L, 2 * L)
@@ -459,41 +597,57 @@ class FGSSimulator:
 
     def evol_sp(self, i: int, j: int, chi: Tensor = 0) -> None:
         r"""
-        The evolve Hamiltonian is :math:`chi c_i^\dagger c_j^\dagger +h.c.`
+        Evolves the state with a superconducting pairing Hamiltonian.
 
+        The evolution is governed by the Hamiltonian :math:`\chi c_i^\dagger c_j^\dagger + h.c.`.
 
-        :param i: _description_
+        :param i: The index of the first site.
         :type i: int
-        :param j: _description_
+        :param j: The index of the second site.
         :type j: int
-        :param chi: _description_, defaults to 0
+        :param chi: The pairing strength. Defaults to 0.
         :type chi: Tensor, optional
         """
         self.evol_hamiltonian(self.sc_pairing(chi, i, j, self.L))
 
     def evol_cp(self, i: int, chi: Tensor = 0) -> None:
         r"""
-        The evolve Hamiltonian is :math:`chi c_i^\dagger c_i`
+        Evolves the state with a chemical potential Hamiltonian.
 
-        :param i: _description_
+        The evolution is governed by the Hamiltonian :math:`\chi c_i^\dagger c_i`.
+
+        :param i: The index of the site.
         :type i: int
-        :param chi: _description_, defaults to 0
+        :param chi: The chemical potential strength. Defaults to 0.
         :type chi: Tensor, optional
         """
         self.evol_hamiltonian(self.chemical_potential(chi, i, self.L))
 
     def evol_icp(self, i: int, chi: Tensor = 0) -> None:
         r"""
-        The evolve Hamiltonian is :math:`chi c_i^\dagger c_i` with :math:`\exp^{-H/2}`
+        Evolves the state with a chemical potential Hamiltonian using imaginary time evolution.
 
-        :param i: _description_
+        The evolution is governed by :math:`e^{-H/2}` where :math:`H = \chi c_i^\dagger c_i`.
+
+        :param i: The index of the site.
         :type i: int
-        :param chi: _description_, defaults to 0
+        :param chi: The chemical potential strength. Defaults to 0.
         :type chi: Tensor, optional
         """
         self.evol_ihamiltonian(self.chemical_potential(chi, i, self.L))
 
     def get_bogoliubov_uv(self) -> Tuple[Tensor, Tensor]:
+        """
+        Returns the u and v matrices of the Bogoliubov transformation.
+
+        The Bogoliubov transformation is defined as:
+        :math:`b_k = u_{k,i} a_i + v_{k,i} a_i^\dagger`
+
+        where :math:`b_k` are the new fermionic operators and :math:`a_i` are the original ones.
+
+        :return: A tuple containing the u and v matrices.
+        :rtype: Tuple[Tensor, Tensor]
+        """
         return (
             backend.gather1d(
                 self.alpha, backend.convert_to_tensor([i for i in range(self.L)])
@@ -506,17 +660,27 @@ class FGSSimulator:
 
     def get_cmatrix_majorana(self) -> Tensor:
         r"""
-        correlation matrix defined in majorana basis
-        convention: :math:`gamma_0 = c_0 + c_0^\dagger`
-        :math:`gamma_1 = i(c_0 - c_0^\dagger)`
+        Calculates the correlation matrix in the Majorana basis.
 
-        :return: _description_
+        The Majorana operators are defined as:
+        :math:`\gamma_{2i} = c_i + c_i^\dagger`
+        :math:`\gamma_{2i+1} = -i(c_i - c_i^\dagger)`
+
+        :return: The correlation matrix in the Majorana basis.
         :rtype: Tensor
         """
         c = self.get_cmatrix()
         return self.wtransform @ c @ backend.adjoint(self.wtransform)
 
     def get_covariance_matrix(self) -> Tensor:
+        """
+        Calculates the covariance matrix.
+
+        The covariance matrix is defined from the Majorana correlation matrix.
+
+        :return: The covariance matrix.
+        :rtype: Tensor
+        """
         m = self.get_cmatrix_majorana()
         return -1.0j * (2 * m - backend.eye(self.L * 2))
 
@@ -524,34 +688,38 @@ class FGSSimulator:
         self, i: int, j: int, now_i: bool = True, now_j: bool = True
     ) -> Tensor:
         r"""
-        expectation of two fermion terms
-        convention: (c, c^\dagger)
-        for i>L, c_{i-L}^\dagger is assumed
+        Calculates the expectation value of a two-fermion term.
 
-        :param i: _description_
+        The convention for the operators is (c, c^\dagger). For i >= L, the operator is c_{i-L}^\dagger.
+
+        :param i: The index of the first fermion operator.
         :type i: int
-        :param j: _description_
+        :param j: The index of the second fermion operator.
         :type j: int
-        :return: _description_
+        :param now_i: Whether to use the current state for the first operator. Defaults to True.
+        :type now_i: bool, optional
+        :param now_j: Whether to use the current state for the second operator. Defaults to True.
+        :type now_j: bool, optional
+        :return: The expectation value of the two-fermion term.
         :rtype: Tensor
         """
         return self.get_cmatrix(now_i, now_j)[i][(j + self.L) % (2 * self.L)]
 
     def expectation_4body(self, i: int, j: int, k: int, l: int) -> Tensor:
         r"""
-        expectation of four fermion terms using Wick Thm
-        convention: (c, c^\dagger)
-        for i>L, c_{i-L}^\dagger is assumed
+        Calculates the expectation value of a four-fermion term using Wick's theorem.
 
-        :param i: _description_
+        The convention for the operators is (c, c^\dagger). For an index m >= L, the operator is c_{m-L}^\dagger.
+
+        :param i: The index of the first fermion operator.
         :type i: int
-        :param j: _description_
+        :param j: The index of the second fermion operator.
         :type j: int
-        :param k: _description_
+        :param k: The index of the third fermion operator.
         :type k: int
-        :param l: _description_
+        :param l: The index of the fourth fermion operator.
         :type l: int
-        :return: _description_
+        :return: The expectation value of the four-fermion term.
         :rtype: Tensor
         """
         e = (
@@ -563,12 +731,11 @@ class FGSSimulator:
 
     def post_select(self, i: int, keep: int = 1) -> None:
         """
-        post select (project) the fermion state to occupation eigenstate
-        <n_i> = ``keep``
+        Post-selects the state based on the occupation of a specific site.
 
-        :param i: _description_
+        :param i: The index of the site to post-select on.
         :type i: int
-        :param keep: _description_, defaults to 1
+        :param keep: The desired occupation number (0 or 1). Defaults to 1.
         :type keep: int, optional
         """
         # i is not jittable, keep is jittable
@@ -628,6 +795,20 @@ class FGSSimulator:
         self.alpha = q
 
     def cond_measure(self, ind: int, status: float, with_prob: bool = False) -> Tensor:
+        """
+        Performs a conditional measurement on a specific site.
+        The fermion Gaussian state is collapsed in the consistent way accordingly.
+
+        :param ind: The index of the site to measure.
+        :type ind: int
+        :param status: A random number between 0 and 1 to determine the measurement outcome.
+        :type status: float
+        :param with_prob: If True, also return the probabilities of the measurement outcomes. Defaults to False.
+        :type with_prob: bool, optional
+        :return: The measurement outcome (0 or 1). If `with_prob` is True,
+            a tuple containing the outcome and the probabilities is returned.
+        :rtype: Tensor
+        """
         p0 = backend.real(self.get_cmatrix()[ind, ind])
         prob = backend.convert_to_tensor([p0, 1 - p0])
         status = backend.convert_to_tensor(status)
