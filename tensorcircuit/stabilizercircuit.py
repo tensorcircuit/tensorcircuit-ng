@@ -169,7 +169,6 @@ class StabilizerCircuit(AbstractCircuit):
         if with_prob:
             num_random_measurements = 0
             for i in index:
-                print(i, s1.peek_z(i))
                 if s1.peek_z(i) == 0:
                     num_random_measurements += 1
             probability = (0.5) ** num_random_measurements

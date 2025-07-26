@@ -18,6 +18,7 @@ Jupyter Tutorials
     tutorials/mera.ipynb
     tutorials/gradient_benchmark.ipynb
     tutorials/contractors.ipynb
+    tutorials/stabilizer_circuits.ipynb
     tutorials/operator_spreading.ipynb
     tutorials/optimization_and_expressibility.ipynb
     tutorials/vqex_mbl.ipynb
