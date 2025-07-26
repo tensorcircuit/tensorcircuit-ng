@@ -170,6 +170,14 @@ def test_post_select(backend, highp):
             np.testing.assert_allclose(c.get_cmatrix(), c1.get_cmatrix(), atol=1e-5)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_post_select_cmatrix_refresh(backend, highp):
+    sim_post = tc.FGSSimulator(L=2, filled=[0])
+    sim_post.evol_hp(0, 1, np.pi / 4)
+    sim_post.post_select(0, keep=1)
+    np.testing.assert_allclose(1 - sim_post.get_cmatrix()[0, 0], 1, atol=1e-6)
+
+
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
 def test_jittable_measure(backend):
     @tc.backend.jit

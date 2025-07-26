@@ -20,6 +20,10 @@
 
 - Fix `to_dlpack` for jax version >= 0.7.
 
+- Fix large eps issue in entanglement calculation of FGS.
+
+- Fix cmatrix non-refresh issue for `post_select` in FGS.
+
 ## v1.2.1
 
 ### Fixed

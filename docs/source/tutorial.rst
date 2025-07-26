@@ -19,6 +19,7 @@ Jupyter Tutorials
     tutorials/gradient_benchmark.ipynb
     tutorials/contractors.ipynb
     tutorials/stabilizer_circuit.ipynb
+    tutorials/fermion_gaussian_states.ipynb
     tutorials/operator_spreading.ipynb
     tutorials/optimization_and_expressibility.ipynb
     tutorials/vqex_mbl.ipynb

@@ -310,7 +310,7 @@ class FGSSimulator:
         lbd, _ = backend.eigh(m)
         lbd = backend.real(lbd)
         lbd = backend.relu(lbd)
-        eps = 1e-6
+        eps = 1e-9
 
         entropy = backend.sum(backend.log(lbd**n + (1 - lbd) ** n + eps))
         s = 1 / (2 * (1 - n)) * entropy
@@ -449,7 +449,7 @@ class FGSSimulator:
         lbd = backend.real(lbd)
         lbd = backend.relu(lbd)
         #         lbd /= backend.sum(lbd)
-        eps = 1e-6
+        eps = 1e-9
         entropy = -backend.sum(
             lbd * backend.log(lbd + eps) + (1 - lbd) * backend.log(1 - lbd + eps)
         )
@@ -793,6 +793,7 @@ class FGSSimulator:
         alpha1 = alpha1 * mask02d + backend.tile(newcol[:, None], [1, self.L]) * mask12d
         q, _ = backend.qr(alpha1)
         self.alpha = q
+        self.cmatrix = None
 
     def cond_measure(self, ind: int, status: float, with_prob: bool = False) -> Tensor:
         """
