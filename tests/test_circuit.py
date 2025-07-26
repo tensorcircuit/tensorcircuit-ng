@@ -889,6 +889,19 @@ def test_circuit_quoperator(backend):
     np.testing.assert_allclose(qo.eval_matrix(), c.matrix(), atol=1e-5)
 
 
+def test_perm_matrix():
+    from tensorcircuit.translation import perm_matrix
+
+    p2 = perm_matrix(2)
+    np.testing.assert_allclose(
+        p2, np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+    )
+    p3 = perm_matrix(3)
+    v = np.arange(8)
+    vt = np.array([0, 4, 2, 6, 1, 5, 3, 7])
+    np.testing.assert_allclose(p3 @ v, vt)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_qir2cirq(backend):
     try:

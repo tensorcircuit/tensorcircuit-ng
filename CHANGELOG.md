@@ -12,6 +12,8 @@
 
 - Add `with_prob` for `stabilizercircuit.measure()`.
 
+- Add `tc.cons.function_nodes_capture` decorator and `tc.cons.runtime_nodes_capture` context manager for directly return nodes before real contraction.
+
 ### Fixed
 
 - Fix the nodes order in contraction by giving each node a global `_stable_id_`.

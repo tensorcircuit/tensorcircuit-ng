@@ -312,3 +312,23 @@ def test_distrubuted_contractor(jaxb):
         return c.expectation_ps(z=[-1])
 
     np.testing.assert_allclose(value, baseline(params), atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_runtime_nodes_capture(backend):
+    with tc.cons.runtime_nodes_capture() as captured:
+        c = tc.Circuit(3)
+        c.h(0)
+        c.amplitude("010")
+    len(captured["nodes"]) == 7
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_function_nodes_capture(backend):
+    @tc.cons.function_nodes_capture
+    def exp(theta):
+        c = tc.Circuit(3)
+        c.h(0)
+        return c.expectation_ps(z=[-3], reuse=False)
+
+    assert len(exp(0.3)) == 9
