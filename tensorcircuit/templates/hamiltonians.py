@@ -1,7 +1,6 @@
-import typing
 from typing import Any, List, Tuple, Union
 import numpy as np
-from tensorcircuit.cons import dtypestr, backend
+from ..cons import dtypestr, backend
 from ..quantum import PauliStringSum2COO
 from .lattice import AbstractLattice
 
@@ -53,8 +52,8 @@ def heisenberg_hamiltonian(
 
     pauli_map = {"X": 1, "Y": 2, "Z": 3}
 
-    ls: typing.List[typing.List[int]] = []
-    weights: typing.List[float] = []
+    ls: List[List[int]] = []
+    weights: List[float] = []
 
     pauli_terms = ["X", "Y", "Z"]
     for i, j in neighbor_pairs:
@@ -102,8 +101,8 @@ def rydberg_hamiltonian(
         raise ValueError("Cannot generate a Hamiltonian for a lattice with zero sites.")
 
     pauli_map = {"X": 1, "Y": 2, "Z": 3}
-    ls: typing.List[typing.List[int]] = []
-    weights: typing.List[float] = []
+    ls: List[List[int]] = []
+    weights: List[float] = []
 
     for i in range(num_sites):
         x_string = [0] * num_sites
