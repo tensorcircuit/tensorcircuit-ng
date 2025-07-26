@@ -1,7 +1,8 @@
 import pytest
 import numpy as np
-import tensorcircuit as tc
+from pytest_lazyfixture import lazy_fixture as lf
 
+import tensorcircuit as tc
 
 from tensorcircuit.templates.lattice import (
     ChainLattice,
@@ -44,7 +45,8 @@ class TestHeisenbergHamiltonian:
         assert h.shape == (2, 2)
         assert h.nnz == 0
 
-    def test_two_sites_chain(self):
+    @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+    def test_two_sites_chain(self, backend):
         """
         Test a two-site chain against a manually calculated Hamiltonian.
         This is the most critical test for scientific correctness.
@@ -60,7 +62,8 @@ class TestHeisenbergHamiltonian:
         h_expected = j_coupling * (xx + yy + zz)
 
         assert h_generated.shape == (4, 4)
-        assert np.allclose(tc.backend.to_dense(h_generated), h_expected)
+        print(tc.backend.to_dense(h_generated))
+        assert np.allclose(tc.backend.to_dense(h_generated), h_expected, atol=1e-5)
 
     def test_square_lattice_properties(self):
         """
@@ -135,7 +138,8 @@ class TestRydbergHamiltonian:
         except ZeroDivisionError:
             pytest.fail("The function failed to handle zero distance between sites.")
 
-    def test_anisotropic_heisenberg(self):
+    @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+    def test_anisotropic_heisenberg(self, backend):
         """
         Test the anisotropic Heisenberg model with different Jx, Jy, Jz.
         """

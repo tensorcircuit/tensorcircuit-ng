@@ -6,6 +6,8 @@
 
 - Add `Lattice` module (`tensorcircuit.templates.lattice`) for creating and manipulating various lattice geometries, including `SquareLattice`, `HoneycombLattice`, and `CustomizeLattice`.
 
+- Add `tc.templates.hamiltonians` for commom systems.
+
 - Add `DistributedContractor` in experimental module with new examples for fast implementation of distribution circuit simulation on jax backend.
 
 - Add `circuit.amplitude_before()` method to return the corresponding tensornetwork nodes.
