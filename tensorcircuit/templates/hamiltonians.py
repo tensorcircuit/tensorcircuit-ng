@@ -2,7 +2,7 @@ import typing
 from typing import Any, List, Tuple, Union
 import numpy as np
 from tensorcircuit.cons import dtypestr, backend
-import tensorcircuit as tc
+from ..quantum import PauliStringSum2COO
 from .lattice import AbstractLattice
 
 
@@ -10,9 +10,9 @@ def _create_empty_sparse_matrix(shape: Tuple[int, int]) -> Any:
     """
     Helper function to create a backend-agnostic empty sparse matrix.
     """
-    indices = tc.backend.convert_to_tensor(backend.zeros((0, 2), dtype="int32"))
-    values = tc.backend.convert_to_tensor(backend.zeros((0,), dtype=dtypestr))  # type: ignore
-    return tc.backend.coo_sparse_matrix(indices=indices, values=values, shape=shape)  # type: ignore
+    indices = backend.convert_to_tensor(backend.zeros((0, 2), dtype="int32"))
+    values = backend.convert_to_tensor(backend.zeros((0,), dtype=dtypestr))  # type: ignore
+    return backend.coo_sparse_matrix(indices=indices, values=values, shape=shape)  # type: ignore
 
 
 def heisenberg_hamiltonian(
@@ -46,8 +46,10 @@ def heisenberg_hamiltonian(
             raise ValueError("j_coupling must be a float or a list/tuple of 3 floats.")
         js = [float(j) for j in j_coupling]
 
-    if num_sites == 0 or not neighbor_pairs:
+    if not neighbor_pairs:
         return _create_empty_sparse_matrix(shape=(2**num_sites, 2**num_sites))
+    if num_sites == 0:
+        raise ValueError("Cannot generate a Hamiltonian for a lattice with zero sites.")
 
     pauli_map = {"X": 1, "Y": 2, "Z": 3}
 
@@ -64,7 +66,7 @@ def heisenberg_hamiltonian(
                 ls.append(string)
                 weights.append(js[idx])
 
-    hamiltonian_matrix = tc.quantum.PauliStringSum2COO(ls, weight=weights, numpy=False)
+    hamiltonian_matrix = PauliStringSum2COO(ls, weight=weights, numpy=False)
 
     return hamiltonian_matrix
 
@@ -97,7 +99,7 @@ def rydberg_hamiltonian(
     """
     num_sites = lattice.num_sites
     if num_sites == 0:
-        return _create_empty_sparse_matrix(shape=(1, 1))
+        raise ValueError("Cannot generate a Hamiltonian for a lattice with zero sites.")
 
     pauli_map = {"X": 1, "Y": 2, "Z": 3}
     ls: typing.List[typing.List[int]] = []
@@ -132,6 +134,11 @@ def rydberg_hamiltonian(
             ls.append(zz_string)
             weights.append(coefficient)
 
+            # The interaction term V_ij * n_i * n_j, when expanded using
+            # n_i = (1-Z_i)/2, becomes (V_ij/4)*(I - Z_i - Z_j + Z_i*Z_j).
+            # This contributes a positive term (+V_ij/4) to the ZZ interaction,
+            # but negative terms (-V_ij/4) to the single-site Z_i and Z_j operators.
+
             z_coefficients[i] -= coefficient
             z_coefficients[j] -= coefficient
 
@@ -142,6 +149,6 @@ def rydberg_hamiltonian(
             ls.append(z_string)
             weights.append(z_coefficients[i])  # type: ignore
 
-    hamiltonian_matrix = tc.quantum.PauliStringSum2COO(ls, weight=weights, numpy=False)
+    hamiltonian_matrix = PauliStringSum2COO(ls, weight=weights, numpy=False)
 
     return hamiltonian_matrix
