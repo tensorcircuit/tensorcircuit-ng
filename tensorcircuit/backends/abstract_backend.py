@@ -700,6 +700,9 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `is_tensor`.".format(self.name)
         )
 
+    def matvec(self: Any, A: Tensor, x: Tensor) -> Tensor:
+        return self.tensordot(A, x, axes=[[1], [0]])
+
     def cast(self: Any, a: Tensor, dtype: str) -> Tensor:
         """
         Cast the tensor dtype of a ``a``.

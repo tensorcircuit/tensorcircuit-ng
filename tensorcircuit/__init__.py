@@ -52,6 +52,7 @@ from . import compiler
 from . import cloud
 from . import fgs
 from .fgs import FGSSimulator
+from . import timeevol
 
 FGSCircuit = FGSSimulator
 

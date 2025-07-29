@@ -678,7 +678,14 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         sp_a: Tensor,
         b: Tensor,
     ) -> Tensor:
-        return tf.sparse.sparse_dense_matmul(sp_a, b)
+        is_vec = False
+        if len(b.shape) == 1:
+            b = self.reshape(b, [-1, 1])
+            is_vec = True
+        r = tf.sparse.sparse_dense_matmul(sp_a, b)
+        if is_vec:
+            return self.reshape(r, [-1])
+        return r
 
     def _densify(self) -> Tensor:
         @partial(self.jit, jit_compile=True)

@@ -2,14 +2,20 @@
 Experimental features
 """
 
+# pylint: disable=unused-import
+
 from functools import partial
 import logging
 from typing import Any, Callable, Dict, Optional, Tuple, List, Sequence, Union
 
 import numpy as np
 
-from .cons import backend, dtypestr, contractor, rdtypestr, get_tn_info
+from .cons import backend, dtypestr, rdtypestr, get_tn_info
 from .gates import Gate
+from .timeevol import hamiltonian_evol, evol_global, evol_local
+
+
+# for backward compatibility
 
 Tensor = Any
 Circuit = Any
@@ -433,157 +439,6 @@ def finite_difference_differentiator(
         return y, grad
 
     return tf_function  # type: ignore
-
-
-def hamiltonian_evol(
-    tlist: Tensor,
-    h: Tensor,
-    psi0: Tensor,
-    callback: Optional[Callable[..., Any]] = None,
-) -> Tensor:
-    """
-    Fast implementation of time independent Hamiltonian evolution using eigendecomposition.
-    By default, performs imaginary time evolution.
-
-    :param tlist: Time points for evolution
-    :type tlist: Tensor
-    :param h: Time-independent Hamiltonian matrix
-    :type h: Tensor
-    :param psi0: Initial state vector
-    :type psi0: Tensor
-    :param callback: Optional function to process state at each time point
-    :type callback: Optional[Callable[..., Any]], optional
-    :return: Evolution results at each time point. If callback is None, returns state vectors;
-            otherwise returns callback results
-    :rtype: Tensor
-
-    :Example:
-
-    >>> import tensorcircuit as tc
-    >>> import numpy as np
-    >>> # Define a simple 2-qubit Hamiltonian
-    >>> h = tc.array_to_tensor([
-    ...     [1.0, 0.0, 0.0, 0.0],
-    ...     [0.0, -1.0, 2.0, 0.0],
-    ...     [0.0, 2.0, -1.0, 0.0],
-    ...     [0.0, 0.0, 0.0, 1.0]
-    ... ])
-    >>> # Initial state |00⟩
-    >>> psi0 = tc.array_to_tensor([1.0, 0.0, 0.0, 0.0])
-    >>> # Evolution times
-    >>> times = tc.array_to_tensor([0.0, 0.5, 1.0])
-    >>> # Evolve and get states
-    >>> states = tc.experimental.hamiltonian_evol(times, h, psi0)
-    >>> print(states.shape)  # (3, 4)
-
-
-    Note:
-        1. The Hamiltonian must be time-independent
-        2. For time-dependent Hamiltonians, use ``evol_local`` or ``evol_global`` instead
-        3. The evolution is performed in imaginary time by default (factor -t in exponential)
-        4. The state is automatically normalized at each time point
-    """
-    es, u = backend.eigh(h)
-    utpsi0 = backend.reshape(
-        backend.transpose(u) @ backend.reshape(psi0, [-1, 1]), [-1]
-    )
-
-    @backend.jit
-    def _evol(t: Tensor) -> Tensor:
-        ebetah_utpsi0 = backend.exp(-t * es) * utpsi0
-        psi_exact = backend.conj(u) @ backend.reshape(ebetah_utpsi0, [-1, 1])
-        psi_exact = backend.reshape(psi_exact, [-1])
-        psi_exact = psi_exact / backend.norm(psi_exact)
-        if callback is None:
-            return psi_exact
-        return callback(psi_exact)
-
-    return backend.stack([_evol(t) for t in tlist])
-
-
-def evol_local(
-    c: Circuit,
-    index: Sequence[int],
-    h_fun: Callable[..., Tensor],
-    t: float,
-    *args: Any,
-    **solver_kws: Any,
-) -> Circuit:
-    """
-    ode evolution of time dependent Hamiltonian on circuit of given indices
-    [only jax backend support for now]
-
-    :param c: _description_
-    :type c: Circuit
-    :param index: qubit sites to evolve
-    :type index: Sequence[int]
-    :param h_fun: h_fun should return a dense Hamiltonian matrix
-        with input arguments time and *args
-    :type h_fun: Callable[..., Tensor]
-    :param t: evolution time
-    :type t: float
-    :return: _description_
-    :rtype: Circuit
-    """
-    from jax.experimental.ode import odeint
-
-    s = c.state()
-    n = c._nqubits
-    l = len(index)
-
-    def f(y: Tensor, t: Tensor, *args: Any) -> Tensor:
-        y = backend.reshape2(y)
-        y = Gate(y)
-        h = -1.0j * h_fun(t, *args)
-        h = backend.reshape2(h)
-        h = Gate(h)
-        edges = []
-        for i in range(n):
-            if i not in index:
-                edges.append(y[i])
-            else:
-                j = index.index(i)
-                edges.append(h[j])
-                h[j + l] ^ y[i]
-        y = contractor([y, h], output_edge_order=edges)
-        return backend.reshape(y.tensor, [-1])
-
-    ts = backend.stack([0.0, t])
-    ts = backend.cast(ts, dtype=rdtypestr)
-    s1 = odeint(f, s, ts, *args, **solver_kws)
-    return type(c)(n, inputs=s1[-1])
-
-
-def evol_global(
-    c: Circuit, h_fun: Callable[..., Tensor], t: float, *args: Any, **solver_kws: Any
-) -> Circuit:
-    """
-    ode evolution of time dependent Hamiltonian on circuit of all qubits
-    [only jax backend support for now]
-
-    :param c: _description_
-    :type c: Circuit
-    :param h_fun: h_fun should return a **SPARSE** Hamiltonian matrix
-        with input arguments time and *args
-    :type h_fun: Callable[..., Tensor]
-    :param t: _description_
-    :type t: float
-    :return: _description_
-    :rtype: Circuit
-    """
-    from jax.experimental.ode import odeint
-
-    s = c.state()
-    n = c._nqubits
-
-    def f(y: Tensor, t: Tensor, *args: Any) -> Tensor:
-        h = -1.0j * h_fun(t, *args)
-        return backend.sparse_dense_matmul(h, y)
-
-    ts = backend.stack([0.0, t])
-    ts = backend.cast(ts, dtype=rdtypestr)
-    s1 = odeint(f, s, ts, *args, **solver_kws)
-    return type(c)(n, inputs=s1[-1])
 
 
 def jax_jitted_function_save(filename: str, f: Callable[..., Any], *args: Any) -> None:
