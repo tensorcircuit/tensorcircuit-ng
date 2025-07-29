@@ -246,7 +246,7 @@ def test_krylov_evol_scan_impl(backend):
     g = tc.templates.graphs.Line1D(n, pbc=False)
 
     # Generate Heisenberg Hamiltonian
-    h = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, hxx=1.0, hyy=1.0, sparse=False)
+    h = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, hxx=1.0, hyy=1.0, sparse=True)
 
     c = tc.Circuit(n)
     c.x([1, 2])
@@ -260,6 +260,10 @@ def test_krylov_evol_scan_impl(backend):
         h, psi0, times, subspace_dimension=8, scan_impl=True
     )
 
+    states_scan_dense = tc.timeevol.krylov_evol(
+        tc.backend.to_dense(h), psi0, times, subspace_dimension=8, scan_impl=True
+    )
+
     # Perform Krylov evolution with regular implementation
     states_regular = tc.timeevol.krylov_evol(
         h, psi0, times, subspace_dimension=8, scan_impl=False
@@ -271,6 +275,7 @@ def test_krylov_evol_scan_impl(backend):
 
     # Results should be the same (up to numerical precision)
     np.testing.assert_allclose(states_scan, states_regular, atol=1e-5)
+    np.testing.assert_allclose(states_scan_dense, states_regular, atol=1e-5)
 
     # All states should be normalized
     for state in states_scan:

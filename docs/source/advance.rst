@@ -149,6 +149,151 @@ We support two modes of analog simulation, where :py:meth:`tensorcircuit.experim
     v, gs = hybrid_evol(b)
 
 
+Time Evolution
+------------------
+
+TensorCircuit-NG provides several methods for simulating quantum time evolution, including exact diagonalization, Krylov subspace methods, and ODE-based approaches. 
+These methods are essential for studying quantum dynamics, particularly in many-body systems, and all support automatic differentiation (AD) and JIT compilation for enhanced performance.
+
+**Exact Diagonalization:**
+
+For small systems where full diagonalization is feasible, the :py:meth:`tensorcircuit.timeevol.ed_evol` method provides exact time evolution by directly computing matrix exponentials:
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+    
+    # Create Heisenberg Hamiltonian for a 4-site chain
+    n = 4
+    g = tc.templates.graphs.Line1D(n, pbc=False)
+    h = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, hxx=1.0, hyy=1.0, sparse=False)
+    
+    # Initial Neel state: |↑↓↑↓⟩
+    c = tc.Circuit(n)
+    c.x([1, 3])  # Apply X gates to qubits 1 and 3
+    psi0 = c.state()
+    
+    # Imaginary time evolution times
+    times = tc.backend.convert_to_tensor([0.0, 0.5, 1.0, 2.0])
+    
+    # Evolve and get states
+    states = tc.timeevol.ed_evol(times, h, psi0)
+    
+
+    def evolve_and_measure(params):
+        # Parametrized Hamiltonian
+        h_param = tc.quantum.heisenberg_hamiltonian(
+            g, hzz=params[0], hxx=params[1], hyy=params[2], sparse=False
+        )
+        states = tc.timeevol.hamiltonian_evol(times, h_param, psi0)
+        # Measure observable on final state
+        circuit = tc.Circuit(n, inputs=states[-1])
+        return tc.backend.real(circuit.expectation_ps(z=[0]))
+
+This method is particularly efficient for time-independent Hamiltonians as it uses eigendecomposition to compute the evolution. 
+It provides exact results but is limited to small systems (typically <16 qubits) due to the exponential growth of the Hilbert space.
+
+**Krylov Subspace Methods:**
+
+For larger systems where exact diagonalization becomes intractable, the Krylov subspace method provides an efficient approximation. 
+The :py:meth:`tensorcircuit.timeevol.krylov_evol` function implements this approach:
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+    
+    # Create a Heisenberg Hamiltonian for a 1D chain
+    n = 10
+    g = tc.templates.graphs.Line1D(n, pbc=False)
+    h = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, hxx=1.0, hyy=1.0, sparse=True)
+    
+    # Initial domain wall state: |↑↑↑↑↑↓↓↓↓↓⟩
+    c = tc.Circuit(n)
+    c.x(range(n//2, n))
+    psi0 = c.state()
+    
+    # Real time evolution points
+    times = tc.backend.convert_to_tensor([0.0, 0.5, 1.0, 2.0])
+    
+    # Perform Krylov evolution with a 30-dimensional subspace
+    states = tc.timeevol.krylov_evol(h, psi0, times, subspace_dimension=30)
+    
+    # Krylov method also supports AD and JIT
+
+    def krylov_evolution(params):
+        # Parametrized initial state
+        c = tc.Circuit(n)
+        for i in range(n):
+            c.rx(i, theta=params[i])
+        psi0_param = c.state()
+        states = tc.timeevol.krylov_evol(h, psi0_param, [1.0], subspace_dimension=20)
+        # Measure total magnetization
+        circuit = tc.Circuit(n, inputs=states[0])
+        mz = sum(circuit.expectation_ps(z=[i]) for i in range(n))
+        return tc.backend.real(mz)
+
+The Krylov method constructs a small subspace that captures the essential dynamics, making it possible to simulate larger systems efficiently. 
+It supports both standard and scan-based jit-friendly implementations:
+
+.. code-block:: python
+
+    # Standard implementation (default)
+    states = tc.timeevol.krylov_evol(h, psi0, times, subspace_dimension=20, scan_impl=False)
+    
+    # Scan-based implementation for better JIT performance
+    states = tc.timeevol.krylov_evol(h, psi0, times, subspace_dimension=20, scan_impl=True)
+
+**ODE-Based Evolution:**
+
+For time-dependent Hamiltonians or when fine control over the evolution process is needed, TensorCircuit provides ODE-based evolution methods. 
+These methods solve the time-dependent Schrödinger equation directly:
+the usage can be found at Analog circuit simulation section
+
+
+**Comparison of Time Evolution Methods:**
+
++--------------------------+----------------+------------------+------------------+------------------+
+| Method                   | System Size    | Accuracy         | AD Support       | JIT Support      |
++==========================+================+==================+==================+==================+
+| ED Evolution             | < 16 qubits    | Exact            | ✅               | ✅               |
++--------------------------+----------------+------------------+------------------+------------------+
+| Krylov Evolution         | 16-30+ qubits  | Approximate      | ✅               | ✅ (JAX only)    |
++--------------------------+----------------+------------------+------------------+------------------+
+| ODE Local Evolution      | Any size       | Solver-dependent | ✅ (JAX only)    | ✅ (JAX only)    |
++--------------------------+----------------+------------------+------------------+------------------+
+| ODE Global Evolution     | ~ 20 qubits    | Solver-dependent | ✅ (JAX only)    | ✅ (JAX only)    |
++--------------------------+----------------+------------------+------------------+------------------+
+
+**Method Selection Guidelines:**
+
+1. **Exact diagonalization Evolution**: Best for small systems where exact results are required. Most efficient for time-independent Hamiltonians.
+
+2. **Krylov Evolution**: Ideal for large systems with time-independent Hamiltonians. Provides a good balance between accuracy and computational efficiency. The subspace dimension controls the trade-off between accuracy and speed.
+
+3. **ODE Local Evolution**: Suitable for time-dependent Hamiltonians acting on a few qubits. Most flexible for complex control protocols or digital-analog hybrid programs.
+
+4. **ODE Global Evolution**: Best for time-dependent Hamiltonians acting on the entire system. 
+
+**Advanced Usage:**
+
+Callback functions can be used to compute observables during evolution without storing all state vectors:
+
+.. code-block:: python
+
+    def compute_total_magnetization(state):
+        # Compute total magnetization ⟨∑Zᵢ⟩
+        n = int(tc.backend.log2(tc.backend.shape_tuple(state)[0]))
+        circuit = tc.Circuit(n, inputs=state)
+        total_mz = sum(circuit.expectation_ps(z=[i]) for i in range(n))
+        return tc.backend.real(total_mz)
+    
+    # Evolve with callback
+    magnetizations = tc.timeevol.krylov_evol(
+        h, psi0, times, subspace_dimension=20, callback=compute_total_magnetization
+    )
+
+All time evolution methods in TensorCircuit support automatic differentiation and JIT compilation, making them suitable for variational optimization and other machine learning applications in quantum physics.
+
 
 Jitted Function Save/Load
 -----------------------------
