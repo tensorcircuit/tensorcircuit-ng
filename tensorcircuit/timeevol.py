@@ -3,9 +3,13 @@ Analog time evolution engines
 """
 
 from typing import Any, Tuple, Optional, Callable, List, Sequence
+from functools import partial
+
+import numpy as np
 
 from .cons import backend, dtypestr, rdtypestr, contractor
 from .gates import Gate
+from .utils import arg_alias
 
 Tensor = Any
 Circuit = Any
@@ -64,7 +68,6 @@ def lanczos_iteration_scan(
         #     ortho_step, backend.arange(subspace_dimension), inner_init_carry
         # )
         # w_ortho = final_inner_carry[0]
-        # print(")}]", final_inner_carry, w_ortho)
 
         def ortho_step(w_carry: Any, elems_tuple: Tuple[Any, Any]) -> Any:
             k, j_from_elems = elems_tuple
@@ -261,7 +264,7 @@ def lanczos_iteration(
 def krylov_evol(
     hamiltonian: Tensor,
     initial_state: Tensor,
-    time_points: Tensor,
+    times: Tensor,
     subspace_dimension: int,
     callback: Optional[Callable[[Any], Any]] = None,
     scan_impl: bool = False,
@@ -273,8 +276,8 @@ def krylov_evol(
     :type hamiltonian: Tensor
     :param initial_state: Initial quantum state
     :type initial_state: Tensor
-    :param time_points: List of time points
-    :type time_points: Tensor
+    :param times: List of time points
+    :type times: Tensor
     :param subspace_dimension: Krylov subspace dimension
     :type subspace_dimension: int
     :param callback: Optional callback function applied to quantum state at
@@ -307,8 +310,8 @@ def krylov_evol(
     eigenvalues, eigenvectors = backend.eigh(projected_hamiltonian)
     eigenvalues = backend.cast(eigenvalues, dtypestr)
     eigenvectors = backend.cast(eigenvectors, dtypestr)
-    time_points = backend.convert_to_tensor(time_points)
-    time_points = backend.cast(time_points, dtypestr)
+    times = backend.convert_to_tensor(times)
+    times = backend.cast(times, dtypestr)
 
     # Transform projected state to eigenbasis: |psi_coeff> = U^† |psi_proj>
     eigenvectors_projected_state = backend.matvec(
@@ -317,7 +320,7 @@ def krylov_evol(
 
     # Calculate exp(-i*projected_H*t) * projected_state
     results = []
-    for t in time_points:
+    for t in times:
         # Calculate exp(-i*eigenvalues*t)
         exp_diagonal = backend.exp(-1j * eigenvalues * t)
 
@@ -341,22 +344,26 @@ def krylov_evol(
     return backend.stack(results)
 
 
+@partial(
+    arg_alias,
+    alias_dict={"h": ["hamiltonian"], "psi0": ["initial_state"], "tlist": ["times"]},
+)
 def hamiltonian_evol(
-    tlist: Tensor,
     h: Tensor,
     psi0: Tensor,
+    tlist: Tensor,
     callback: Optional[Callable[..., Any]] = None,
 ) -> Tensor:
     """
     Fast implementation of time independent Hamiltonian evolution using eigendecomposition.
     By default, performs imaginary time evolution.
 
-    :param tlist: Time points for evolution
-    :type tlist: Tensor
     :param h: Time-independent Hamiltonian matrix
     :type h: Tensor
     :param psi0: Initial state vector
     :type psi0: Tensor
+    :param tlist: Time points for evolution
+    :type tlist: Tensor
     :param callback: Optional function to process state at each time point
     :type callback: Optional[Callable[..., Any]], optional
     :return: Evolution results at each time point. If callback is None, returns state vectors;
@@ -392,9 +399,10 @@ def hamiltonian_evol(
     psi0 = backend.cast(psi0, dtypestr)
     es, u = backend.eigh(h)
     u = backend.cast(u, dtypestr)
-    utpsi0 = backend.reshape(
-        backend.transpose(u) @ backend.reshape(psi0, [-1, 1]), [-1]
-    )
+    utpsi0 = backend.convert_to_tensor(
+        backend.transpose(u) @ backend.reshape(psi0, [-1, 1])
+    )  # in case np.matrix...
+    utpsi0 = backend.reshape(utpsi0, [-1])
     es = backend.cast(es, dtypestr)
     tlist = backend.cast(backend.convert_to_tensor(tlist), dtypestr)
 
@@ -414,6 +422,7 @@ def hamiltonian_evol(
 ed_evol = hamiltonian_evol
 
 
+@partial(arg_alias, alias_dict={"h_fun": ["hamiltonian"], "t": ["times"]})
 def evol_local(
     c: Circuit,
     index: Sequence[int],
@@ -438,16 +447,58 @@ def evol_local(
     :return: _description_
     :rtype: Circuit
     """
+    s = c.state()
+    n = int(np.log2(s.shape[-1]) + 1e-7)
+    if isinstance(t, float):
+        t = backend.stack([0.0, t])
+    s1 = ode_evol_local(h_fun, s, t, index, None, *args, **solver_kws)
+    return type(c)(n, inputs=s1[-1])
+
+
+def ode_evol_local(
+    hamiltonian: Callable[..., Tensor],
+    initial_state: Tensor,
+    times: Tensor,
+    index: Sequence[int],
+    callback: Optional[Callable[..., Tensor]] = None,
+    *args: Any,
+    **solver_kws: Any,
+) -> Tensor:
+    """
+    ODE-based time evolution for a time-dependent Hamiltonian acting on a subsystem of qubits.
+
+    This function solves the time-dependent Schrodinger equation using numerical ODE integration.
+    The Hamiltonian is applied only to a specific subset of qubits (indices) in the system.
+
+    Note: This function currently only supports the JAX backend.
+
+    :param hamiltonian: A function that returns a dense Hamiltonian matrix for the specified
+        subsystem size. The function signature should be hamiltonian(time, *args) -> Tensor.
+    :type hamiltonian: Callable[..., Tensor]
+    :param initial_state: The initial quantum state vector of the full system.
+    :type initial_state: Tensor
+    :param times: Time points for which to compute the evolution. Should be a 1D array of times.
+    :type times: Tensor
+    :param index: Indices of qubits where the Hamiltonian is applied.
+    :type index: Sequence[int]
+    :param callback: Optional function to apply to the state at each time step.
+    :type callback: Optional[Callable[..., Tensor]]
+    :param args: Additional arguments to pass to the Hamiltonian function.
+    :param solver_kws: Additional keyword arguments to pass to the ODE solver.
+    :return: Evolved quantum states at the specified time points. If callback is provided,
+        returns the callback results; otherwise returns the state vectors.
+    :rtype: Tensor
+    """
     from jax.experimental.ode import odeint
 
-    s = c.state()
-    n = c._nqubits
+    s = initial_state
+    n = int(np.log2(backend.shape_tuple(initial_state)[-1]) + 1e-7)
     l = len(index)
 
     def f(y: Tensor, t: Tensor, *args: Any) -> Tensor:
         y = backend.reshape2(y)
         y = Gate(y)
-        h = -1.0j * h_fun(t, *args)
+        h = -1.0j * hamiltonian(t, *args)
         h = backend.reshape2(h)
         h = Gate(h)
         edges = []
@@ -461,15 +512,15 @@ def evol_local(
         y = contractor([y, h], output_edge_order=edges)
         return backend.reshape(y.tensor, [-1])
 
-    ts = backend.stack([0.0, t])
+    ts = backend.convert_to_tensor(times)
     ts = backend.cast(ts, dtype=rdtypestr)
     s1 = odeint(f, s, ts, *args, **solver_kws)
-    return type(c)(n, inputs=s1[-1])
+    if not callback:
+        return s1
+    return backend.stack([callback(s1[i]) for i in range(len(s1))])
 
 
-ode_evol_local = evol_local
-
-
+@partial(arg_alias, alias_dict={"h_fun": ["hamiltonian"], "t": ["times"]})
 def evol_global(
     c: Circuit, h_fun: Callable[..., Tensor], t: float, *args: Any, **solver_kws: Any
 ) -> Circuit:
@@ -487,19 +538,57 @@ def evol_global(
     :return: _description_
     :rtype: Circuit
     """
-    from jax.experimental.ode import odeint
-
     s = c.state()
     n = c._nqubits
-
-    def f(y: Tensor, t: Tensor, *args: Any) -> Tensor:
-        h = -1.0j * h_fun(t, *args)
-        return backend.sparse_dense_matmul(h, y)
-
-    ts = backend.stack([0.0, t])
-    ts = backend.cast(ts, dtype=rdtypestr)
-    s1 = odeint(f, s, ts, *args, **solver_kws)
+    if isinstance(t, float):
+        t = backend.stack([0.0, t])
+    s1 = ode_evol_global(h_fun, s, t, None, *args, **solver_kws)
     return type(c)(n, inputs=s1[-1])
 
 
-ode_evol_global = evol_global
+def ode_evol_global(
+    hamiltonian: Callable[..., Tensor],
+    initial_state: Tensor,
+    times: Tensor,
+    callback: Optional[Callable[..., Tensor]] = None,
+    *args: Any,
+    **solver_kws: Any,
+) -> Tensor:
+    """
+    ODE-based time evolution for a time-dependent Hamiltonian acting on the entire system.
+
+    This function solves the time-dependent Schrodinger equation using numerical ODE integration.
+    The Hamiltonian is applied to the full system and should be provided in sparse matrix format
+    for efficiency.
+
+    Note: This function currently only supports the JAX backend.
+
+    :param hamiltonian: A function that returns a sparse Hamiltonian matrix for the full system.
+        The function signature should be hamiltonian(time, *args) -> Tensor.
+    :type hamiltonian: Callable[..., Tensor]
+    :param initial_state: The initial quantum state vector.
+    :type initial_state: Tensor
+    :param times: Time points for which to compute the evolution. Should be a 1D array of times.
+    :type times: Tensor
+    :param callback: Optional function to apply to the state at each time step.
+    :type callback: Optional[Callable[..., Tensor]]
+    :param args: Additional arguments to pass to the Hamiltonian function.
+    :param solver_kws: Additional keyword arguments to pass to the ODE solver.
+    :return: Evolved quantum states at the specified time points. If callback is provided,
+        returns the callback results; otherwise returns the state vectors.
+    :rtype: Tensor
+    """
+    from jax.experimental.ode import odeint
+
+    s = initial_state
+    ts = backend.convert_to_tensor(times)
+    ts = backend.cast(ts, dtype=rdtypestr)
+
+    def f(y: Tensor, t: Tensor, *args: Any) -> Tensor:
+        h = -1.0j * hamiltonian(t, *args)
+        return backend.sparse_dense_matmul(h, y)
+
+    s1 = odeint(f, s, ts, *args, **solver_kws)
+    if not callback:
+        return s1
+    return backend.stack([callback(s1[i]) for i in range(len(s1))])

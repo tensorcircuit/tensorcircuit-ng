@@ -12,6 +12,10 @@
 
 - Fixed `scan` in tensorflow backend and numpy backend.
 
+### Changed
+
+- The order of arguments of `tc.timeevol.ed_evol` are changed for consistent interface with other evolution methods.
+
 ## v1.3.0
 
 ### Added

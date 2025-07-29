@@ -11,7 +11,7 @@ sys.path.insert(0, modulepath)
 import tensorcircuit as tc
 
 
-def test_ode_evol(jaxb):
+def test_circuit_ode_evol(jaxb):
     def h_square(t, b):
         return (tc.backend.sign(t - 1.0) + 1) / 2 * b * tc.gates.x().tensor
 
@@ -19,9 +19,7 @@ def test_ode_evol(jaxb):
     c.x(0)
     c.cx(0, 1)
     c.h(2)
-    c = tc.timeevol.ode_evol_local(
-        c, [1], h_square, 2.0, tc.backend.convert_to_tensor(0.2)
-    )
+    c = tc.timeevol.evol_local(c, [1], h_square, 2.0, tc.backend.convert_to_tensor(0.2))
     c.rx(1, theta=np.pi - 0.4)
     np.testing.assert_allclose(c.expectation_ps(z=[1]), 1.0, atol=1e-5)
 
@@ -34,11 +32,154 @@ def test_ode_evol(jaxb):
     c.x(0)
     c.cx(0, 1)
     c.h(2)
-    c = tc.timeevol.ode_evol_global(
+    c = tc.timeevol.evol_global(
         c, h_square_sparse, 2.0, tc.backend.convert_to_tensor(0.2)
     )
     c.rx(1, theta=np.pi - 0.4)
     np.testing.assert_allclose(c.expectation_ps(z=[1]), 1.0, atol=1e-5)
+
+
+def test_ode_evol_local(jaxb):
+    def local_hamiltonian(t, Omega, phi):
+        angle = phi * t
+        coeff = Omega * tc.backend.cos(2.0 * t)  # Amplitude modulation
+
+        # Single-qubit Rabi Hamiltonian (2x2 matrix)
+        hx = coeff * tc.backend.cos(angle) * tc.gates.x().tensor
+        hy = coeff * tc.backend.sin(angle) * tc.gates.y().tensor
+        return hx + hy
+
+    # Initial state: GHZ state |0000⟩ + |1111⟩
+    c = tc.Circuit(4)
+    c.h(0)
+    for i in range(3):
+        c.cnot(i, i + 1)
+    psi0 = c.state()
+
+    # Time points
+    times = tc.backend.arange(0.0, 3.0, 0.1)
+
+    # Evolve with local Hamiltonian acting on qubit 1
+    states = tc.timeevol.ode_evol_local(
+        local_hamiltonian,
+        psi0,
+        times,
+        [1],  # Apply to qubit 1
+        None,
+        1.0,
+        2.0,  # Omega=1.0, phi=2.0
+    )
+    assert tc.backend.shape_tuple(states) == (30, 16)
+
+
+def test_ode_evol_global(jaxb):
+    # Create a time-dependent transverse field Hamiltonian
+    # H(t) = -∑ᵢ Jᵢ(t) ZᵢZᵢ₊₁ - ∑ᵢ hᵢ(t) Xᵢ
+
+    # Time-dependent coefficients
+    def time_dep_J(t):
+        return 1.0 + 0.5 * tc.backend.sin(2.0 * t)
+
+    def time_dep_h(t):
+        return 0.5 * tc.backend.cos(1.5 * t)
+
+    zz_ham = tc.quantum.PauliStringSum2COO(
+        [[3, 3, 0, 0], [0, 3, 3, 0], [0, 0, 3, 3]], [1, 1, 1]
+    )
+    x_ham = tc.quantum.PauliStringSum2COO(
+        [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]], [1, 1, 1, 1]
+    )
+
+    # Hamiltonian construction function
+    def hamiltonian_func(t):
+        # Create time-dependent ZZ terms
+        zz_coeff = time_dep_J(t)
+
+        # Create time-dependent X terms
+        x_coeff = time_dep_h(t)
+
+        return zz_coeff * zz_ham + x_coeff * x_ham
+
+    # Initial state: |↑↓↑↓⟩
+    c = tc.Circuit(4)
+    c.x([1, 3])
+    psi0 = c.state()
+
+    # Time points for evolution
+    times = tc.backend.arange(0, 5, 0.5)
+
+    def zobs(state):
+        n = int(np.log2(state.shape[-1]))
+        c = tc.Circuit(n, inputs=state)
+        return tc.backend.real(c.expectation_ps(z=[0]))
+
+    # Perform global ODE evolution
+    states = tc.timeevol.ode_evol_global(hamiltonian_func, psi0, times, zobs)
+    assert tc.backend.shape_tuple(states) == (10,)
+
+    zz_ham = tc.quantum.PauliStringSum2COO([[3, 3, 0, 0], [0, 3, 3, 0]], [1, 1])
+    x_ham = tc.quantum.PauliStringSum2COO([[1, 0, 0, 0], [0, 1, 0, 0]], [1, 1])
+
+    # Example with parameterized Hamiltonian and optimization
+    def parametrized_hamiltonian(t, params):
+        # params = [J0, J1, h0, h1] - parameters to optimize
+        J_t = params[0] + params[1] * tc.backend.sin(2.0 * t)
+        h_t = params[2] + params[3] * tc.backend.cos(1.5 * t)
+
+        return J_t * zz_ham + h_t * x_ham
+
+    # Observable function: measure ZZ correlation
+    def zz_correlation(state):
+        n = int(np.log2(state.shape[0]))
+        circuit = tc.Circuit(n, inputs=state)
+        return circuit.expectation_ps(z=[0, 1])
+
+    @tc.backend.jit
+    @tc.backend.value_and_grad
+    def objective_function(params):
+        states = tc.timeevol.ode_evol_global(
+            parametrized_hamiltonian,
+            psi0,
+            tc.backend.convert_to_tensor([0, 1.0]),
+            None,
+            params,
+        )
+        # Measure ZZ correlation at final time
+        final_state = states[-1]
+        return tc.backend.real(zz_correlation(final_state))
+
+    print(objective_function(tc.backend.ones([4])))
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_ed_evol(backend):
+    n = 4
+    g = tc.templates.graphs.Line1D(n, pbc=False)
+    h = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, hxx=1.0, hyy=1.0, sparse=False)
+
+    # Initial Neel state: |↑↓↑↓⟩
+    c = tc.Circuit(n)
+    c.x([1, 3])  # Apply X gates to qubits 1 and 3
+    psi0 = c.state()
+
+    # Imaginary time evolution times
+    times = tc.backend.convert_to_tensor([0.0, 0.5, 1.0, 2.0])
+
+    # Evolve and get states
+    states = tc.timeevol.ed_evol(h, psi0, times)
+    print(states)
+
+    def evolve_and_measure(params):
+        # Parametrized Hamiltonian
+        h_param = tc.quantum.heisenberg_hamiltonian(
+            g, hzz=params[0], hxx=params[1], hyy=params[2], sparse=False
+        )
+        states = tc.timeevol.ed_evol(h_param, psi0, times)
+        # Measure observable on final state
+        circuit = tc.Circuit(n, inputs=states[-1])
+        return tc.backend.real(circuit.expectation_ps(z=[0]))
+
+    evolve_and_measure(tc.backend.ones([3]))
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -63,7 +204,7 @@ def test_hamiltonian_evol_basic(backend):
     )
 
     # Evolve and get states
-    states = tc.timeevol.hamiltonian_evol(times, h, psi0)
+    states = tc.timeevol.hamiltonian_evol(h, psi0, times)
 
     # Check output shape
     assert states.shape == (3, 4)
@@ -99,7 +240,7 @@ def test_hamiltonian_evol_with_callback(backend):
         return tc.backend.real(c.expectation_ps(z=[0]))
 
     # Evolve with callback
-    results = tc.timeevol.hamiltonian_evol(times, h, psi0, callback)
+    results = tc.timeevol.hamiltonian_evol(h, psi0, times, callback)
 
     # Check output shape - should be scalar for each time point
     assert results.shape == (3,)
@@ -121,7 +262,7 @@ def test_hamiltonian_evol_imaginary_time(backend):
     times = tc.backend.convert_to_tensor([0.0, 10.0])
 
     # Evolve
-    states = tc.timeevol.hamiltonian_evol(times, h, psi0)
+    states = tc.timeevol.hamiltonian_evol(h, psi0, times)
 
     # Ground state is |1⟩ (eigenvalue 1.0), so after long imaginary time
     # evolution, we should approach this state

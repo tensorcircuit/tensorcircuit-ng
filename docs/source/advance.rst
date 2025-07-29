@@ -157,13 +157,13 @@ These methods are essential for studying quantum dynamics, particularly in many-
 
 **Exact Diagonalization:**
 
-For small systems where full diagonalization is feasible, the :py:meth:`tensorcircuit.timeevol.ed_evol` method provides exact time evolution by directly computing matrix exponentials:
+For small systems where full diagonalization is feasible, the :py:meth:`tensorcircuit.timeevol.ed_evol` method provides exact time evolution by directly computing matrix exponentials
+(alias :py:meth:`tensorcircuit.timeevol.hamiltonian_evol`):
 
 .. code-block:: python
 
     import tensorcircuit as tc
     
-    # Create Heisenberg Hamiltonian for a 4-site chain
     n = 4
     g = tc.templates.graphs.Line1D(n, pbc=False)
     h = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, hxx=1.0, hyy=1.0, sparse=False)
@@ -177,7 +177,8 @@ For small systems where full diagonalization is feasible, the :py:meth:`tensorci
     times = tc.backend.convert_to_tensor([0.0, 0.5, 1.0, 2.0])
     
     # Evolve and get states
-    states = tc.timeevol.ed_evol(times, h, psi0)
+    states = tc.timeevol.ed_evol(h, psi0, times)
+    print(states)
     
 
     def evolve_and_measure(params):
@@ -185,13 +186,20 @@ For small systems where full diagonalization is feasible, the :py:meth:`tensorci
         h_param = tc.quantum.heisenberg_hamiltonian(
             g, hzz=params[0], hxx=params[1], hyy=params[2], sparse=False
         )
-        states = tc.timeevol.hamiltonian_evol(times, h_param, psi0)
+        states = tc.timeevol.ed_evol(h_param, psi0, times)
         # Measure observable on final state
         circuit = tc.Circuit(n, inputs=states[-1])
         return tc.backend.real(circuit.expectation_ps(z=[0]))
 
+    evolve_and_measure(tc.backend.ones([3]))
+
 This method is particularly efficient for time-independent Hamiltonians as it uses eigendecomposition to compute the evolution. 
 It provides exact results but is limited to small systems (typically <16 qubits) due to the exponential growth of the Hilbert space.
+
+.. note::
+
+    For real time evolution, the time should be chosen as ``times = 1.j * tc.backend.convert_to_tensor([0.0, 0.5, 1.0, 2.0])``
+
 
 **Krylov Subspace Methods:**
 
@@ -246,9 +254,147 @@ It supports both standard and scan-based jit-friendly implementations:
 **ODE-Based Evolution:**
 
 For time-dependent Hamiltonians or when fine control over the evolution process is needed, TensorCircuit provides ODE-based evolution methods. 
-These methods solve the time-dependent Schrödinger equation directly:
-the usage can be found at Analog circuit simulation section
+These methods solve the time-dependent Schrödinger equation directly by integrating the equation :math:`i\frac{d}{dt}|\psi(t)\rangle = H(t)|\psi(t)\rangle`.
 
+TensorCircuit provides two ODE-based evolution methods depending on whether the Hamiltonian acts on the entire system or just a local subsystem:
+
+1. **Global Evolution** (:py:meth:`tensorcircuit.timeevol.ode_evol_global`): For time-dependent Hamiltonians acting on the entire system. The Hamiltonian should be provided in sparse matrix format for efficiency.
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+    from jax import jit, value_and_grad
+    
+    # Set JAX backend for ODE support
+    K = tc.set_backend("jax")
+    
+     # H(t) = -∑ᵢ Jᵢ(t) ZᵢZᵢ₊₁ - ∑ᵢ hᵢ(t) Xᵢ
+
+    # Time-dependent coefficients
+    def time_dep_J(t):
+        return 1.0 + 0.5 * tc.backend.sin(2.0 * t)
+
+    def time_dep_h(t):
+        return 0.5 * tc.backend.cos(1.5 * t)
+
+    zz_ham = tc.quantum.PauliStringSum2COO(
+        [[3, 3, 0, 0], [0, 3, 3, 0], [0, 0, 3, 3]], [1, 1, 1]
+    )
+    x_ham = tc.quantum.PauliStringSum2COO(
+        [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]], [1, 1, 1, 1]
+    )
+
+    # Hamiltonian construction function
+    def hamiltonian_func(t):
+        # Create time-dependent ZZ terms
+        zz_coeff = time_dep_J(t)
+
+        # Create time-dependent X terms
+        x_coeff = time_dep_h(t)
+
+        return zz_coeff * zz_ham + x_coeff * x_ham
+
+    # Initial state: |↑↓↑↓⟩
+    c = tc.Circuit(4)
+    c.x([1, 3])
+    psi0 = c.state()
+
+    # Time points for evolution
+    times = tc.backend.arange(0, 5, 0.5)
+
+    # Perform global ODE evolution
+    states = tc.timeevol.ode_evol_global(hamiltonian_func, psi0, times)
+    assert tc.backend.shape_tuple(states) == (10, 16)
+
+    zz_ham = tc.quantum.PauliStringSum2COO([[3, 3, 0, 0], [0, 3, 3, 0]], [1, 1])
+    x_ham = tc.quantum.PauliStringSum2COO([[1, 0, 0, 0], [0, 1, 0, 0]], [1, 1])
+
+    # Example with parameterized Hamiltonian and optimization
+    def parametrized_hamiltonian(t, params):
+        # params = [J0, J1, h0, h1] - parameters to optimize
+        J_t = params[0] + params[1] * tc.backend.sin(2.0 * t)
+        h_t = params[2] + params[3] * tc.backend.cos(1.5 * t)
+
+        return J_t * zz_ham + h_t * x_ham
+
+    # Observable function: measure ZZ correlation
+    def zz_correlation(state):
+        n = int(np.log2(state.shape[0]))
+        circuit = tc.Circuit(n, inputs=state)
+        return circuit.expectation_ps(z=[0, 1])
+
+    @tc.backend.jit
+    @tc.backend.value_and_grad
+    def objective_function(params):
+        states = tc.timeevol.ode_evol_global(
+            parametrized_hamiltonian,
+            psi0,
+            tc.backend.convert_to_tensor([0, 1.0]),
+            None,
+            params,
+        )
+        # Measure ZZ correlation at final time
+        final_state = states[-1]
+        return tc.backend.real(zz_correlation(final_state))
+
+    print(objective_function(tc.backend.ones([4])))
+    
+
+
+2. **Local Evolution** (:py:meth:`tensorcircuit.timeevol.ode_evol_local`): For time-dependent Hamiltonians acting on a subsystem of qubits. The Hamiltonian should be provided in dense matrix format.
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+    import jax.numpy as jnp
+    from jax import jit
+    
+    # Set JAX backend for ODE support
+    tc.set_backend("jax")
+    K = tc.backend
+    
+    # Time-dependent local Hamiltonian on qubits 1 and 2
+    # H(t) = Ω(t) * (cos(φ(t)) * X + sin(φ(t)) * Y)
+    def local_hamiltonian(t, Omega, phi):
+        # Rabi oscillation Hamiltonian
+        angle = phi * t
+        coeff = Omega * jnp.cos(2.0 * t)  # Amplitude modulation
+        
+        # Single-qubit Rabi Hamiltonian (2x2 matrix)
+        hx = coeff * jnp.cos(angle) * tc.gates.x().tensor
+        hy = coeff * jnp.sin(angle) * tc.gates.y().tensor
+        return hx + hy
+    
+    # Initial state: GHZ state |0000⟩ + |1111⟩
+    c = tc.Circuit(4)
+    c.h(0)
+    for i in range(3):
+        c.cnot(i, i+1)
+    psi0 = c.state()
+    
+    times = tc.backend.arange(0.0, 3.0, 0.1)
+    
+    # Evolve with local Hamiltonian acting on qubit 1
+    states = tc.timeevol.ode_evol_local(
+        local_hamiltonian,
+        psi0,
+        times,
+        [1],  # Apply to qubit 1
+        None,
+        1.0, 
+        2.0 # Omega=1.0, phi=2.0
+    )
+    
+
+Both ODE-based methods support automatic differentiation and JIT compilation when using the JAX backend, making them suitable for optimization tasks in quantum control and variational quantum algorithms. 
+The methods integrate the time-dependent Schrödinger equation using JAX's ODE solvers, providing flexible and efficient simulation of quantum dynamics with time-dependent Hamiltonians.
+
+.. note::
+
+    1. ODE-based methods currently only support the JAX backend due to the dependency on JAX's ODE solvers.
+    2. Global evolution requires sparse Hamiltonian matrices for efficiency with large systems.
+    3. Local evolution requires dense Hamiltonian matrices and is suitable for subsystems with few qubits.
+    4. Both methods support callback functions to compute observables during evolution without storing all state vectors.
 
 **Comparison of Time Evolution Methods:**
 
@@ -266,7 +412,7 @@ the usage can be found at Analog circuit simulation section
 
 **Method Selection Guidelines:**
 
-1. **Exact diagonalization Evolution**: Best for small systems where exact results are required. Most efficient for time-independent Hamiltonians.
+1. **Exact diagonalization Evolution**: Best for small systems where exact results are required. Most efficient for time-independent Hamiltonians. Support imaginary time evolution.
 
 2. **Krylov Evolution**: Ideal for large systems with time-independent Hamiltonians. Provides a good balance between accuracy and computational efficiency. The subspace dimension controls the trade-off between accuracy and speed.
 
