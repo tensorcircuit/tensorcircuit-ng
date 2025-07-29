@@ -26,6 +26,7 @@ tensorcircuit
     ./api/simplify.rst
     ./api/stabilizercircuit.rst
     ./api/templates.rst
+    ./api/timeevol.rst
     ./api/torchnn.rst
     ./api/translation.rst
     ./api/utils.rst
