@@ -1389,9 +1389,21 @@ class ExtendedBackend:
         :rtype: Tensor
         """
         carry = init
-        for x in xs:
-            carry = f(carry, x)
+        # Check if `xs` is a PyTree (tuple or list) of arrays.
+        if isinstance(xs, (tuple, list)):
+            for x_slice_tuple in zip(*xs):
+                # x_slice_tuple will be (k_elems[i], j_elems[i]) at each step.
+                carry = f(carry, x_slice_tuple)
+        else:
+            # If xs is a single array, iterate normally.
+            for x in xs:
+                carry = f(carry, x)
+
         return carry
+        # carry = init
+        # for x in xs:
+        #     carry = f(carry, x)
+        # return carry
 
     def stop_gradient(self: Any, a: Tensor) -> Tensor:
         """

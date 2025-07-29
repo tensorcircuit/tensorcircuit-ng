@@ -236,3 +236,73 @@ def test_krylov_evol_subspace_accuracy(backend):
     # At least verify they have the correct shape
     assert state_small.shape == (1, 2**n)
     assert state_large.shape == (1, 2**n)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_krylov_evol_scan_impl(backend):
+    """Test krylov_evol with scan_impl=True"""
+    n = 4
+    # Create a 1D chain graph
+    g = tc.templates.graphs.Line1D(n, pbc=False)
+
+    # Generate Heisenberg Hamiltonian
+    h = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, hxx=1.0, hyy=1.0, sparse=False)
+
+    c = tc.Circuit(n)
+    c.x([1, 2])
+    psi0 = c.state()
+
+    # Evolution times
+    times = tc.backend.convert_to_tensor([0.0, 0.5])
+
+    # Perform Krylov evolution with scan implementation
+    states_scan = tc.timeevol.krylov_evol(
+        h, psi0, times, subspace_dimension=8, scan_impl=True
+    )
+
+    # Perform Krylov evolution with regular implementation
+    states_regular = tc.timeevol.krylov_evol(
+        h, psi0, times, subspace_dimension=8, scan_impl=False
+    )
+
+    # Check output shapes
+    assert states_scan.shape == (2, 2**n)
+    assert states_regular.shape == (2, 2**n)
+
+    # Results should be the same (up to numerical precision)
+    np.testing.assert_allclose(states_scan, states_regular, atol=1e-5)
+
+    # All states should be normalized
+    for state in states_scan:
+        norm = tc.backend.norm(state)
+        np.testing.assert_allclose(norm, 1.0, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_krylov_evol_gradient(backend):
+    """Test gradient computation with krylov_evol"""
+    n = 5
+    # Create a 1D chain graph
+    g = tc.templates.graphs.Line1D(n, pbc=False)
+
+    # Generate Heisenberg Hamiltonian
+    h = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, hxx=1.0, hyy=1.0, sparse=False)
+
+    c = tc.Circuit(n)
+    c.x([1, 2])
+    psi0 = c.state()
+
+    # Evolution time
+    t = tc.backend.convert_to_tensor([1.0])
+
+    # Define a simple loss function based on the evolved state
+    def loss_function(t):
+        states = tc.timeevol.krylov_evol(
+            h, psi0, t, subspace_dimension=8, scan_impl=True
+        )
+        # Compute the sum of absolute values of the final state as a simple loss
+        return tc.backend.sum(tc.backend.abs(states[0]))
+
+    grad_fn = tc.backend.jit(tc.backend.grad(loss_function))
+    gradient = grad_fn(t)
+    print(gradient)

@@ -98,6 +98,7 @@ def run_comprehensive_analysis(
     verbose: bool = True,
     backend_name: str = "numpy",
     use_jit: bool = False,
+    scan_impl: bool = False,
 ) -> Tuple[Dict, Dict]:
     """
     Run comprehensive analysis showing fidelity, magnetization error and runtime
@@ -111,6 +112,7 @@ def run_comprehensive_analysis(
     - verbose: Whether to show detailed output
     - backend_name: Backend name
     - use_jit: Whether to use JIT compilation
+    - scan_impl: Whether to use scan implementation in krylov_evol
     """
     if time_points is None:
         time_points = [1.0, 2.0, 5.0]
@@ -126,7 +128,7 @@ def run_comprehensive_analysis(
     if use_jit:
         # Create wrapper function to avoid passing backend parameter to JIT
         def krylov_evol_wrapper(h, psi0, tlist, m):
-            return krylov_evol(h, psi0, tlist, m)
+            return krylov_evol(h, psi0, tlist, m, scan_impl=scan_impl)
 
         # JIT compile function (static parameter is m)
         krylov_evol_jit = backend.jit(krylov_evol_wrapper, static_argnums=(3,))
@@ -135,7 +137,9 @@ def run_comprehensive_analysis(
         jit_info = " (using JIT compilation)"
     else:
         # Use regular version of function
-        krylov_function = krylov_evol
+        krylov_function = lambda h, psi0, tlist, m: krylov_evol(
+            h, psi0, tlist, m, scan_impl=scan_impl
+        )
         jit_info = ""
 
     if verbose:
@@ -256,50 +260,44 @@ def run_comprehensive_analysis(
         reference_m = None
 
         for m in subspace_dims:
-            try:
-                start_time = time.time()
-                # Use correct Krylov function (possibly JIT version)
-                # Key fix: Ensure correct parameters are passed to Krylov function
-                krylov_result = krylov_function(
-                    hamiltonian_sparse,
-                    initial_state,
-                    [t],
-                    int(m),  # Ensure m is integer
+
+            start_time = time.time()
+            krylov_result = krylov_function(
+                hamiltonian_sparse,
+                initial_state,
+                [t],
+                int(m),  # Ensure m is integer
+            )
+            print(krylov_result[0, 0])
+            krylov_time = time.time() - start_time
+
+            # Extract result (krylov_result is an array containing a single time point)
+            if hasattr(krylov_result, "shape") and len(krylov_result.shape) > 1:
+                evolved_state = krylov_result[
+                    0
+                ]  # Take the first (and only) time point result
+            else:
+                evolved_state = krylov_result
+
+            # Calculate magnetization
+            magnetization = compute_magnetization(evolved_state, backend)
+
+            results[t][m] = {
+                "state": evolved_state,
+                "magnetization": magnetization,
+                "time": krylov_time,
+            }
+
+            if verbose:
+                print(
+                    f"  m = {m:3d}: Time {krylov_time:.4f}s, Magnetization {magnetization.real:8.6f}"
                 )
-                krylov_time = time.time() - start_time
 
-                # Extract result (krylov_result is an array containing a single time point)
-                # Fix: Properly handle result shape
-                if hasattr(krylov_result, "shape") and len(krylov_result.shape) > 1:
-                    evolved_state = krylov_result[
-                        0
-                    ]  # Take the first (and only) time point result
-                else:
-                    evolved_state = krylov_result
-
-                # Calculate magnetization
-                magnetization = compute_magnetization(evolved_state, backend)
-
-                results[t][m] = {
-                    "state": evolved_state,
-                    "magnetization": magnetization,
-                    "time": krylov_time,
-                }
-
-                if verbose:
-                    print(
-                        f"  m = {m:3d}: Time {krylov_time:.4f}s, Magnetization {magnetization.real:8.6f}"
-                    )
-
-                # Set reference result (using largest m value, only when no exact result)
-                # Fix: Only use Krylov result as reference when no exact result available
-                if reference_result is None and t not in exact_results:
-                    reference_result = results[t][m]
-                    reference_m = m
-
-            except Exception as exc:
-                if verbose:
-                    print(f"  m = {m:3d}: Failed - {str(exc)}")
+            # Set reference result (using largest m value, only when no exact result)
+            # Fix: Only use Krylov result as reference when no exact result available
+            if reference_result is None and t not in exact_results:
+                reference_result = results[t][m]
+                reference_m = m
 
         # Compare with exact results (if available)
         if t in exact_results and reference_result:
@@ -427,6 +425,11 @@ Example usage:
         help="Backend selection (default: numpy)",
     )
     parser.add_argument("--jit", action="store_true", help="Enable JIT compilation")
+    parser.add_argument(
+        "--scan_impl",
+        action="store_true",
+        help="Use scan implementation in krylov_evol",
+    )
 
     args = parser.parse_args()
 
@@ -443,6 +446,7 @@ Example usage:
             verbose=not args.quiet,
             backend_name=args.backend,
             use_jit=args.jit,
+            scan_impl=args.scan_impl,
         )
     except KeyboardInterrupt:
         print("\nUser interrupted program execution")

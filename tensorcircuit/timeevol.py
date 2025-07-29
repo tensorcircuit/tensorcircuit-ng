@@ -11,6 +11,154 @@ Tensor = Any
 Circuit = Any
 
 
+def lanczos_iteration_scan(
+    hamiltonian: Any, initial_vector: Any, subspace_dimension: int
+) -> Tuple[Any, Any]:
+    """
+    Use Lanczos algorithm to construct orthogonal basis and projected Hamiltonian
+    of Krylov subspace, using `tc.backend.scan` for JIT compatibility.
+
+    :param hamiltonian: Sparse or dense Hamiltonian matrix
+    :type hamiltonian: Tensor
+    :param initial_vector: Initial quantum state vector
+    :type initial_vector: Tensor
+    :param subspace_dimension: Dimension of Krylov subspace
+    :type subspace_dimension: int
+    :return: Tuple containing (basis matrix, projected Hamiltonian)
+    :rtype: Tuple[Tensor, Tensor]
+    """
+    state_size = backend.shape_tuple(initial_vector)[0]
+
+    # Main scan body for the outer loop (iterating j)
+    def lanczos_step(carry: Tuple[Any, ...], j: int) -> Tuple[Any, ...]:
+        v, basis, alphas, betas = carry
+
+        if backend.is_sparse(hamiltonian):
+            w = backend.sparse_dense_matmul(hamiltonian, v)
+        else:
+            w = backend.matvec(hamiltonian, v)
+
+        alpha = backend.real(backend.sum(backend.conj(v) * w))
+        w = w - backend.cast(alpha, dtypestr) * v
+
+        # Inner scan for re-orthogonalization (iterating k)
+        # def ortho_step(inner_carry: Tuple[Any, Any], k: int) -> Tuple[Any, Any]:
+        #     w_carry, j_val = inner_carry
+
+        #     def do_projection() -> Any:
+        #         # `basis` is available here through closure
+        #         v_k = basis[:, k]
+        #         projection = backend.sum(backend.conj(v_k) * w_carry)
+        #         return w_carry - projection * v_k
+
+        #     def do_nothing() -> Any:
+        #         return w_carry
+
+        #     # Orthogonalize against v_0, ..., v_j
+        #     w_new = backend.cond(k <= j_val, do_projection, do_nothing)
+        #     return (w_new, j_val)  # Return the new carry for the inner loop
+
+        # # Pass `j` into the inner scan's carry
+        # inner_init_carry = (w, j)
+        # final_inner_carry = backend.scan(
+        #     ortho_step, backend.arange(subspace_dimension), inner_init_carry
+        # )
+        # w_ortho = final_inner_carry[0]
+        # print(")}]", final_inner_carry, w_ortho)
+
+        def ortho_step(w_carry: Any, elems_tuple: Tuple[Any, Any]) -> Any:
+            k, j_from_elems = elems_tuple
+
+            def do_projection() -> Any:
+                v_k = basis[:, k]
+                projection = backend.sum(backend.conj(v_k) * w_carry)
+                return w_carry - projection * v_k
+
+            def do_nothing() -> Any:
+                return backend.cast(w_carry, dtype=dtypestr)
+
+            w_new = backend.cond(k <= j_from_elems, do_projection, do_nothing)
+            return w_new
+
+        k_elems = backend.arange(subspace_dimension)
+        j_elems = backend.tile(backend.reshape(j, [1]), [subspace_dimension])
+        inner_elems = (k_elems, j_elems)
+        w_ortho = backend.scan(ortho_step, inner_elems, w)
+
+        beta = backend.norm(w_ortho)
+        beta = backend.real(beta)
+
+        # Update alphas and betas arrays
+        new_alphas = backend.scatter(
+            alphas, backend.reshape(j, [1, 1]), backend.reshape(alpha, [1])
+        )
+        new_betas = backend.scatter(
+            betas, backend.reshape(j, [1, 1]), backend.reshape(beta, [1])
+        )
+
+        def update_state_fn() -> Tuple[Any, Any]:
+            epsilon = 1e-15
+            next_v = w_ortho / backend.cast(beta + epsilon, dtypestr)
+
+            one_hot_update = backend.onehot(j + 1, subspace_dimension)
+            one_hot_update = backend.cast(one_hot_update, dtype=dtypestr)
+
+            # Create a mask to update only the (j+1)-th column
+            mask = 1.0 - backend.reshape(one_hot_update, [1, subspace_dimension])
+            new_basis = basis * mask + backend.reshape(
+                next_v, [-1, 1]
+            ) * backend.reshape(one_hot_update, [1, subspace_dimension])
+
+            return next_v, new_basis
+
+        def keep_state_fn() -> Tuple[Any, Any]:
+            return v, basis
+
+        next_v_carry, new_basis = backend.cond(
+            j < subspace_dimension - 1, update_state_fn, keep_state_fn
+        )
+
+        return (next_v_carry, new_basis, new_alphas, new_betas)
+
+    # Prepare initial state for the main scan
+    v0 = initial_vector / backend.norm(initial_vector)
+
+    init_basis = backend.zeros((state_size, subspace_dimension), dtype=dtypestr)
+    init_alphas = backend.zeros((subspace_dimension,), dtype=rdtypestr)
+    init_betas = backend.zeros((subspace_dimension,), dtype=rdtypestr)
+
+    one_hot_0 = backend.onehot(0, subspace_dimension)
+    one_hot_0 = backend.cast(one_hot_0, dtype=dtypestr)
+    init_basis = init_basis + backend.reshape(v0, [-1, 1]) * backend.reshape(
+        one_hot_0, [1, subspace_dimension]
+    )
+
+    init_carry = (v0, init_basis, init_alphas, init_betas)
+
+    # Run the main scan
+    final_carry = backend.scan(
+        lanczos_step, backend.arange(subspace_dimension), init_carry
+    )
+    basis_matrix, alphas_tensor, betas_tensor = (
+        final_carry[1],
+        final_carry[2],
+        final_carry[3],
+    )
+
+    betas_off_diag = betas_tensor[:-1]
+
+    diag_part = backend.diagflat(alphas_tensor)
+    if backend.shape_tuple(betas_off_diag)[0] > 0:
+        off_diag_part = backend.diagflat(betas_off_diag, k=1)
+        projected_hamiltonian = (
+            diag_part + off_diag_part + backend.conj(backend.transpose(off_diag_part))
+        )
+    else:
+        projected_hamiltonian = diag_part
+
+    return basis_matrix, projected_hamiltonian
+
+
 def lanczos_iteration(
     hamiltonian: Tensor, initial_vector: Tensor, subspace_dimension: int
 ) -> Tuple[Tensor, Tensor]:
@@ -116,6 +264,7 @@ def krylov_evol(
     time_points: Tensor,
     subspace_dimension: int,
     callback: Optional[Callable[[Any], Any]] = None,
+    scan_impl: bool = False,
 ) -> Any:
     """
     Perform quantum state time evolution using Krylov subspace method.
@@ -131,14 +280,23 @@ def krylov_evol(
     :param callback: Optional callback function applied to quantum state at
                   each evolution time point, return some observables
     :type callback: Optional[Callable[[Any], Any]], optional
+    :param scan_impl: whether use scan implementation, suitable for jit but may be slow on numpy
+        defaults False, True not work for tensorflow backend + jit, due to stupid issue of tensorflow
+        context separation and the notorious inaccesibletensor error
+    :type scan_impl: bool, optional
     :return: List of evolved quantum states, or list of callback function results
         (if callback provided)
     :rtype: Any
     """
     # TODO(@refraction-ray): stable and efficient AD is to be investigated
-    basis_matrix, projected_hamiltonian = lanczos_iteration(
-        hamiltonian, initial_state, subspace_dimension
-    )
+    if not scan_impl:
+        basis_matrix, projected_hamiltonian = lanczos_iteration(
+            hamiltonian, initial_state, subspace_dimension
+        )
+    else:
+        basis_matrix, projected_hamiltonian = lanczos_iteration_scan(
+            hamiltonian, initial_state, subspace_dimension
+        )
     initial_state = backend.cast(initial_state, dtypestr)
     # Project initial state to Krylov subspace: |psi_proj> = V_m^† |psi(0)>
     projected_state = backend.matvec(
@@ -148,6 +306,7 @@ def krylov_evol(
     # Perform spectral decomposition of projected Hamiltonian: T_m = U D U^†
     eigenvalues, eigenvectors = backend.eigh(projected_hamiltonian)
     eigenvalues = backend.cast(eigenvalues, dtypestr)
+    eigenvectors = backend.cast(eigenvectors, dtypestr)
     time_points = backend.convert_to_tensor(time_points)
     time_points = backend.cast(time_points, dtypestr)
 

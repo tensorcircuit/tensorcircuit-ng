@@ -200,6 +200,7 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         return softmax(a, axis=axis)
 
     def onehot(self, a: Tensor, num: int) -> Tensor:
+        a = np.asarray(a)
         res = np.eye(num)[a.reshape([-1])]
         return res.reshape(list(a.shape) + [num])
         # https://stackoverflow.com/questions/38592324/one-hot-encoding-using-numpy

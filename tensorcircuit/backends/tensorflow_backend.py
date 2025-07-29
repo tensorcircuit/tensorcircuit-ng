@@ -719,7 +719,10 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def scan(
         self, f: Callable[[Tensor, Tensor], Tensor], xs: Tensor, init: Tensor
     ) -> Tensor:
-        return tf.scan(f, xs, init)[-1]
+        stacked_results = tf.scan(f, xs, init)
+        final_state = tf.nest.map_structure(lambda x: x[-1], stacked_results)
+        return final_state
+        # return tf.scan(f, xs, init)[-1]
 
     def device(self, a: Tensor) -> str:
         dev = a.device

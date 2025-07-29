@@ -6,6 +6,12 @@
 
 - Add new module `tc.timeevol` for different types of time evolution solvers.
 
+### Fixed
+
+- Fixed `one_hot` in numpy backend.
+
+- Fixed `scan` in tensorflow backend and numpy backend.
+
 ## v1.3.0
 
 ### Added
