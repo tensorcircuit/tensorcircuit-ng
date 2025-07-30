@@ -61,6 +61,49 @@ def test_grad_torch(torchb):
     np.testing.assert_allclose(f(a), np.ones([2]), atol=1e-5)
 
 
+def test_sparse_tensor_matmul_monkey_patch(tfb):
+    """
+    Test the monkey-patched __matmul__ method for tf.SparseTensor.
+    This test specifically targets the line:
+    tf.SparseTensor.__matmul__ = sparse_tensor_matmul
+    """
+    # Create a sparse matrix in COO format
+    indices = tf.constant([[0, 0], [1, 1], [2, 3]], dtype=tf.int64)
+    values = tf.constant([1.0, 2.0, 3.0], dtype=tf.complex64)
+    shape = [4, 4]
+    sparse_matrix = tf.SparseTensor(indices=indices, values=values, dense_shape=shape)
+
+    # Test 1: Matrix-vector multiplication with 1D vector
+    vector_1d = tf.constant([1.0, 2.0, 3.0, 4.0], dtype=tf.complex64)
+    result_1d = sparse_matrix @ vector_1d  # Using the monkey-patched @ operator
+
+    expected_1d = tf.constant([1.0, 4.0, 12.0, 0.0], dtype=tf.complex64)
+
+    np.testing.assert_allclose(result_1d, expected_1d, atol=1e-6)
+    vector_1d = tc.backend.reshape(vector_1d, [4, 1])
+    result_1dn = sparse_matrix @ vector_1d  # Using the monkey-patched @ operator
+    expected_1d = tc.backend.reshape(expected_1d, [4, 1])
+
+    np.testing.assert_allclose(result_1dn, expected_1d, atol=1e-6)
+
+    # Test 2: Matrix-matrix multiplication with 2D matrix
+    matrix_2d = tf.constant(
+        [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]], dtype=tf.complex64
+    )
+    result_2d = sparse_matrix @ matrix_2d  # Using the monkey-patched @ operator
+
+    expected_2d = tf.sparse.sparse_dense_matmul(sparse_matrix, matrix_2d)
+
+    np.testing.assert_allclose(result_2d.numpy(), expected_2d.numpy(), atol=1e-6)
+
+    # Test 3: Verify that the operation is consistent with sparse_dense_matmul
+
+    reference_result = tc.backend.sparse_dense_matmul(sparse_matrix, vector_1d)
+    reference_result_squeezed = tc.backend.reshape(reference_result, [-1])
+
+    np.testing.assert_allclose(result_1d, reference_result_squeezed, atol=1e-6)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
 def test_backend_jv(backend, highp):
     def calculate_M(k, x_val):

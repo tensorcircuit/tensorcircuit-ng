@@ -279,7 +279,6 @@ def test_krylov_evol_heisenberg_6_sites(backend):
 
     # Generate Heisenberg Hamiltonian
     h = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, hxx=1.0, hyy=1.0, sparse=False)
-    print(h.dtype)
     # Initial state - all spins up except last one down
     psi0 = np.zeros((2**n,))
     psi0[62] = 1.0
@@ -454,15 +453,18 @@ def test_krylov_evol_gradient(backend):
     print(gradient)
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
-def test_chebyshev_evol_basic(backend, highp):
+@pytest.mark.parametrize(
+    "backend, sparse",
+    [[lf("npb"), True], [lf("npb"), False], [lf("jaxb"), True], [lf("jaxb"), False]],
+)
+def test_chebyshev_evol_basic(backend, highp, sparse):
     n = 6
     # Create a 1D chain graph
     g = tc.templates.graphs.Line1D(n, pbc=False)
 
     # Generate Heisenberg Hamiltonian (dense for better compatibility)
     h = tc.quantum.heisenberg_hamiltonian(
-        g, hzz=1.0, hxx=1.0, hyy=1.0, hx=0.2, sparse=False
+        g, hzz=1.0, hxx=1.0, hyy=1.0, hx=0.2, sparse=sparse
     )
 
     # Initial Neel state: |↑↓↑↓⟩
@@ -490,6 +492,8 @@ def test_chebyshev_evol_basic(backend, highp):
     np.testing.assert_allclose(norm, 1.0, atol=1e-3)
 
     # Compare with exact evolution for small system
+    if sparse is True:
+        h = tc.backend.to_dense(h)
     psi_exact = tc.timeevol.ed_evol(h, psi0, 1.0j * tc.backend.convert_to_tensor([t]))[
         0
     ]

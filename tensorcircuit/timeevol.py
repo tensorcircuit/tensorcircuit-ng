@@ -624,52 +624,76 @@ def chebyshev_evol(
     :return: Evolved state
     :rtype: Tensor
     """
-
+    # TODO(@refraction-ray): no support for tf backend as bessel function has no implementation
     E_max, E_min = spectral_bounds
     if E_max <= E_min:
         raise ValueError("E_max must be > E_min.")
 
     a = (E_max - E_min) / 2.0
     b = (E_max + E_min) / 2.0
-    tau = a * t  # tau is now a scalar
+    tau = a * t  # Rescaled time parameter
 
     def apply_h_norm(psi: Any) -> Any:
+        """Applies the normalized Hamiltonian to a state."""
         return ((hamiltonian @ psi) - b * psi) / a
 
-    T0 = initial_state
-    if k == 1:
-        T_k_vectors = T0[None, :]
-    else:
-        T1 = apply_h_norm(T0)
+    # Handle edge case where no evolution is needed.
+    if k == 0:
+        # The phase factor still applies even for zero evolution of the series part.
+        phase = backend.exp(-1j * b * t)
+        return phase * backend.zeros_like(initial_state)
 
-        def scan_body(carry, _):  # type: ignore
-            Tk, Tkm1 = carry
-            Tkp1 = 2 * apply_h_norm(Tk) - Tkm1
-            return (Tkp1, Tk), Tk
-
-        # 假设 backend.jaxy_scan 已正确实现
-        _, T_k_stack_1_onwards = backend.jaxy_scan(
-            scan_body, (T1, T0), xs=backend.arange(k - 1)
-        )
-        T_k_vectors = backend.concat([T0[None, :], T_k_stack_1_onwards], axis=0)
-
+    # --- 2. Calculate Chebyshev Expansion Coefficients ---
+    k_indices = backend.arange(k)
     bessel_vals = backend.special_jv(k, tau, M)
 
-    k_indices = backend.arange(k)
-    first_element = backend.ones([1])
+    # Prefactor is 1 for k=0 and 2 for k>0.
+    prefactor = backend.ones([k])
+    if k > 1:
+        # Using concat for backend compatibility (vs. jax's .at[1:].set(2.0))
+        prefactor = backend.concat(
+            [backend.ones([1]), backend.ones([k - 1]) * 2.0], axis=0
+        )
 
-    remaining_elements = backend.ones([k - 1]) * 2.0
-
-    prefactor = backend.concat([first_element, remaining_elements], axis=0)
     ik_powers = backend.power(0 - 1j, k_indices)
-
-    # coeffs 现在是一个清晰的 1D 向量，形状为 (n_terms,)
     coeffs = prefactor * ik_powers * bessel_vals
 
-    # 求和也变得更简单
-    psi_unphased = backend.einsum("k,kD->D", coeffs, T_k_vectors)
+    # --- 3. Iteratively build the result using a scan ---
 
-    # 加上全局相位
+    # Handle the simple case of k=1 separately.
+    if k == 1:
+        psi_unphased = coeffs[0] * initial_state
+    else:  # k >= 2, use the scan operation.
+        # Initialize the first two Chebyshev vectors and the initial sum.
+        T0 = initial_state
+        T1 = apply_h_norm(T0)
+        initial_sum = coeffs[0] * T0 + coeffs[1] * T1
+
+        # The carry for the scan holds the state needed for the next iteration:
+        # (current vector T_k, previous vector T_{k-1}, and the running sum).
+        initial_carry = (T1, T0, initial_sum)
+
+        def scan_body(carry, i):  # type: ignore
+            """The body of the scan operation."""
+            Tk, Tkm1, current_sum = carry
+
+            # Calculate the next Chebyshev vector using the recurrence relation.
+            Tkp1 = 2 * apply_h_norm(Tk) - Tkm1
+
+            # Add its contribution to the running sum.
+            new_sum = current_sum + coeffs[i] * Tkp1
+
+            # Return the updated carry for the next step. No intermediate output is needed.
+            return (Tkp1, Tk, new_sum)
+
+        # Run the scan over the remaining coefficients (from index 2 to k-1).
+        final_carry = backend.scan(scan_body, backend.arange(2, k), initial_carry)
+
+        # The final result is the sum accumulated in the last carry state.
+        psi_unphased = final_carry[2]
+
+    # --- 4. Final Step: Apply Phase Correction ---
+    # This undoes the energy shift from the Hamiltonian normalization.
     phase = backend.exp(-1j * b * t)
     psi_final = phase * psi_unphased
 
@@ -750,19 +774,19 @@ def estimate_spectral_bounds(
         r = backend.convert_to_tensor(r)  # in case np.matrix
         r = backend.reshape(r, [-1])
         if beta != 0:
-            r -= beta * q_prev
+            r -= backend.cast(beta, dtypestr) * q_prev
 
         alpha = backend.real(backend.sum(backend.conj(q) * r))
 
         alphas.append(alpha)
 
-        r -= alpha * q
+        r -= backend.cast(alpha, dtypestr) * q
 
         q_prev = q
         beta = backend.norm(r)
         q = r / beta
+        beta = backend.abs(beta)
         betas.append(beta)
-
         if beta < 1e-8:
             break
 

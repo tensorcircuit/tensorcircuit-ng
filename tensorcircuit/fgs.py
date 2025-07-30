@@ -227,7 +227,7 @@ class FGSSimulator:
         return self.alpha
 
     def get_cmatrix(self, now_i: bool = True, now_j: bool = True) -> Tensor:
-        """
+        r"""
         Calculates the correlation matrix.
 
         The correlation matrix is defined as :math:`C_{ij} = \langle c_i^\dagger c_j \rangle`.
@@ -509,7 +509,7 @@ class FGSSimulator:
 
     @staticmethod
     def hopping(chi: Tensor, i: int, j: int, L: int) -> Tensor:
-        """
+        r"""
         Constructs the hopping Hamiltonian between two sites.
 
         The hopping Hamiltonian is given by :math:`\chi c_i^\dagger c_j + h.c.`.
@@ -550,7 +550,7 @@ class FGSSimulator:
 
     @staticmethod
     def chemical_potential(chi: Tensor, i: int, L: int) -> Tensor:
-        """
+        r"""
         Constructs the chemical potential Hamiltonian for a single site.
 
         The chemical potential Hamiltonian is given by :math:`\chi c_i^\dagger c_i`.
@@ -572,7 +572,7 @@ class FGSSimulator:
 
     @staticmethod
     def sc_pairing(chi: Tensor, i: int, j: int, L: int) -> Tensor:
-        """
+        r"""
         Constructs the superconducting pairing Hamiltonian between two sites.
 
         The superconducting pairing Hamiltonian is given by :math:`\chi c_i^\dagger c_j^\dagger + h.c.`.
@@ -637,7 +637,7 @@ class FGSSimulator:
         self.evol_ihamiltonian(self.chemical_potential(chi, i, self.L))
 
     def get_bogoliubov_uv(self) -> Tuple[Tensor, Tensor]:
-        """
+        r"""
         Returns the u and v matrices of the Bogoliubov transformation.
 
         The Bogoliubov transformation is defined as:
