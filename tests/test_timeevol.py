@@ -452,3 +452,186 @@ def test_krylov_evol_gradient(backend):
     grad_fn = tc.backend.jit(tc.backend.grad(loss_function))
     gradient = grad_fn(t)
     print(gradient)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_chebyshev_evol_basic(backend, highp):
+    n = 6
+    # Create a 1D chain graph
+    g = tc.templates.graphs.Line1D(n, pbc=False)
+
+    # Generate Heisenberg Hamiltonian (dense for better compatibility)
+    h = tc.quantum.heisenberg_hamiltonian(
+        g, hzz=1.0, hxx=1.0, hyy=1.0, hx=0.2, sparse=False
+    )
+
+    # Initial Neel state: |↑↓↑↓⟩
+    c = tc.Circuit(n)
+    c.x([1, 3, 5])  # Apply X gates to qubits 1 and 3
+    psi0 = c.state()
+
+    # Evolution time
+    t = 2.0
+
+    # Estimate spectral bounds
+    e_max, e_min = tc.timeevol.estimate_spectral_bounds(h, n_iter=30)
+
+    # Estimate parameters
+    k = tc.timeevol.estimate_k(t, (e_max, e_min))
+    m = tc.timeevol.estimate_M(t, (e_max, e_min), k)
+
+    # Evolve using Chebyshev method
+    psi_chebyshev = tc.timeevol.chebyshev_evol(
+        h, psi0, t, (float(e_max) + 0.1, float(e_min) - 0.1), k, m
+    )
+
+    # Check that state is normalized (or close to it)
+    norm = tc.backend.norm(psi_chebyshev)
+    np.testing.assert_allclose(norm, 1.0, atol=1e-3)
+
+    # Compare with exact evolution for small system
+    psi_exact = tc.timeevol.ed_evol(h, psi0, 1.0j * tc.backend.convert_to_tensor([t]))[
+        0
+    ]
+
+    # States should be close (up to global phase)
+    fidelity = np.abs(np.vdot(np.asarray(psi_exact), np.asarray(psi_chebyshev))) ** 2
+    assert fidelity > 0.95  # Should be close, but not exact due to approximations
+
+
+def test_chebyshev_evol_vmap_on_t(jaxb, highp):
+    n = 4
+    # Create a 1D chain graph
+    g = tc.templates.graphs.Line1D(n, pbc=False)
+
+    # Generate Heisenberg Hamiltonian
+    h = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, hxx=1.0, hyy=1.0, sparse=False)
+
+    # Initial Neel state
+    c = tc.Circuit(n)
+    c.x([1, 3])
+    psi0 = c.state()
+
+    # Estimate spectral bounds
+    e_max, e_min = tc.timeevol.estimate_spectral_bounds(h, n_iter=20)
+
+    # Fixed parameters
+    k = 50
+    m = 150
+
+    # Define vectorized evolution function
+    def evolve_single_time(t):
+        return tc.timeevol.chebyshev_evol(
+            h, psi0, t, (float(e_max) + 0.1, float(e_min) - 0.1), k, m
+        )
+
+    # Vectorize over times
+    times = tc.backend.convert_to_tensor([0.5, 1.0, 1.5])
+    vmap_evolve = tc.backend.jit(tc.backend.vmap(evolve_single_time))
+    states_vmap = vmap_evolve(times)
+
+    # Check output shape
+    assert states_vmap.shape == (3, 2**n)
+
+    # Compare with sequential execution
+    states_sequential = []
+    for t in times:
+        state = tc.timeevol.chebyshev_evol(
+            h, psi0, float(t), (e_max + 0.1, e_min - 0.1), k, m
+        )
+        states_sequential.append(state)
+
+    states_sequential = tc.backend.stack(states_sequential)
+
+    # Results should be the same
+    np.testing.assert_allclose(states_vmap, states_sequential, atol=1e-5)
+
+
+def test_chebyshev_evol_jit_on_psi(jaxb, highp):
+    """Test JIT compilation capability of chebyshev_evol on psi parameter"""
+    n = 4
+    # Create a 1D chain graph
+    g = tc.templates.graphs.Line1D(n, pbc=False)
+
+    # Generate Heisenberg Hamiltonian
+    h = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, hxx=0.6, hyy=1.0, sparse=True)
+
+    # Estimate spectral bounds
+    e_max, e_min = tc.timeevol.estimate_spectral_bounds(h, n_iter=20)
+
+    # Fixed parameters
+    t = 1.0
+    k = 50
+    m = 150
+
+    # Define JIT-compiled evolution function with psi as argument
+    def evolve_state(psi):
+        return tc.timeevol.chebyshev_evol(
+            h, psi, t, (float(e_max) + 0.1, float(e_min) - 0.1), k, m
+        )
+
+    jit_evolve = tc.backend.jit(evolve_state)
+
+    # Test with different initial states
+    c1 = tc.Circuit(n)
+    c1.x([0, 2])
+    psi1 = c1.state()
+
+    c2 = tc.Circuit(n)
+    c2.h(0)
+    for i in range(n - 1):
+        c2.cnot(i, i + 1)
+    psi2 = c2.state()
+
+    # Run JIT-compiled evolution
+    result1_jit = jit_evolve(psi1)
+    result2_jit = jit_evolve(psi2)
+
+    # Run regular evolution for comparison
+    result1_regular = tc.timeevol.chebyshev_evol(
+        h, psi1, t, (e_max + 0.1, e_min - 0.1), k, m
+    )
+    result2_regular = tc.timeevol.chebyshev_evol(
+        h, psi2, t, (e_max + 0.1, e_min - 0.1), k, m
+    )
+    print(result1_jit)
+    # Results should be the same
+    np.testing.assert_allclose(result1_jit, result1_regular, atol=1e-5)
+    np.testing.assert_allclose(result2_jit, result2_regular, atol=1e-5)
+
+
+def test_chebyshev_evol_ad_on_t(jaxb, highp):
+    n = 5
+    # Create a 1D chain graph
+    g = tc.templates.graphs.Line1D(n, pbc=True)
+
+    # Generate Heisenberg Hamiltonian
+    h = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, hxx=1.0, hyy=1.0, sparse=True)
+
+    # Initial state
+    c = tc.Circuit(n)
+    c.x([1, 3])
+    psi0 = c.state()
+
+    # Estimate spectral bounds
+    e_max, e_min = tc.timeevol.estimate_spectral_bounds(h, n_iter=20)
+
+    # Fixed parameters
+    k = 50
+    m = 100
+
+    # Define loss function for gradient computation
+    def loss_function(t):
+        psi_t = tc.timeevol.chebyshev_evol(
+            h, psi0, t, (float(e_max) + 0.1, float(e_min) - 0.1), k, m
+        )
+        c = tc.Circuit(5, inputs=psi_t)
+        return tc.backend.real(c.expectation_ps(z=[2]))
+
+    # Compute gradient
+    grad_fn = tc.backend.jit(tc.backend.grad(loss_function))
+    t_test = tc.backend.convert_to_tensor(1.0)
+    gradient = grad_fn(t_test)
+    print(gradient)
+    # Gradient should be a scalar
+    assert gradient.shape == ()

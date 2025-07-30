@@ -3,8 +3,11 @@ Customized ops for ML framework
 """
 
 # pylint: disable=invalid-name
+# pylint: disable=unused-variable
+
 
 from typing import Any, Tuple, Sequence
+from functools import partial
 
 import jax
 import jax.numpy as jnp
@@ -174,3 +177,108 @@ def jaxeigh_bwd(r: Array, tangents: Array) -> Array:
 
 adaware_eigh.defvjp(jaxeigh_fwd, jaxeigh_bwd)
 adaware_eigh_jit = jax.jit(adaware_eigh)
+
+
+@partial(jax.jit, static_argnums=[0, 2])
+def bessel_jv_jax_rescaled(k: int, x: jnp.ndarray, M: int) -> jnp.ndarray:
+    """
+    Computes Bessel function Jv using Miller's algorithm with dynamic rescaling,
+    implemented in JAX.
+    """
+    if M <= k:
+        raise ValueError(
+            f"Recurrence length M ({M}) must be greater than the required order k ({k})."
+        )
+
+    # Use vmap to handle array inputs for x efficiently.
+    # We map _bessel_jv_scalar_rescaled over the last dimension of x.
+    return _bessel_jv_scalar_rescaled(k, M, x)
+
+
+def _bessel_jv_scalar_rescaled(k: int, M: int, x_val: jnp.ndarray) -> jnp.ndarray:
+    """
+    JAX implementation for a scalar input x_val.
+    This function will be vmapped for array inputs.
+    """
+    rescale_threshold = 1e250
+
+    # Define the body of the recurrence loop
+    def recurrence_body(i, state):  # type: ignore
+        # M - i is the current 'm' value in the original loop.
+        # Loop from M down to 1. jax.lax.fori_loop goes from lower to upper-1.
+        # So for m from M down to 1, we map i from 0 to M-1.
+        # Current m_val = M - i
+        # The loop range for m in numpy was `range(M, 0, -1)`, which means m goes from M, M-1, ..., 1.
+        # For lax.fori_loop (start, stop, body_fn, init_val), start is inclusive, stop is exclusive.
+        # So to iterate M times for m from M down to 1, we do i from 0 to M-1.
+        # m_val = M - i means that for i=0, m_val=M; for i=M-1, m_val=1.
+        m_val = M - i
+        f_m, f_m_p1, f_vals = state
+
+        # If x_val is near zero, this division could be an issue,
+        # but the outer lax.cond handles the x_val near zero case before this loop runs.
+        f_m_m1 = (2.0 * m_val / x_val) * f_m - f_m_p1
+
+        # --- Rescaling Step ---
+        # jax.lax.cond requires all branches to return the exact same type and shape.
+        def rescale_branch(vals):  # type: ignore
+            f_m_val, f_m_p1_val, f_vals_arr = vals
+            scale_factor = f_m_m1
+            # Return new f_m, f_m_p1, updated f_vals_arr, and the new f_m_m1 value (which is 1.0)
+            return (
+                f_m_val / scale_factor,
+                f_m_p1_val / scale_factor,
+                f_vals_arr / scale_factor,
+                1.0,
+            )
+
+        def no_rescale_branch(vals):  # type: ignore
+            f_m_val, f_m_p1_val, f_vals_arr = (
+                vals  # Unpack to keep signatures consistent
+            )
+            # Return original f_m, f_m_p1, original f_vals_arr, and the computed f_m_m1
+            return (f_m_val, f_m_p1_val, f_vals_arr, f_m_m1)
+
+        f_m_rescaled, f_m_p1_rescaled, f_vals_rescaled, f_m_m1_effective = jax.lax.cond(
+            jnp.abs(f_m_m1) > rescale_threshold,
+            rescale_branch,
+            no_rescale_branch,
+            (f_m, f_m_p1, f_vals),  # Arguments passed to branches
+        )
+
+        # Update f_vals at index m_val - 1. JAX uses .at[idx].set(val) for non-in-place updates.
+        f_vals_updated = f_vals_rescaled.at[m_val - 1].set(f_m_m1_effective)
+
+        # Return new state for the next iteration: (new f_m, new f_m_p1, updated f_vals)
+        return (f_m_m1_effective, f_m_rescaled, f_vals_updated)
+
+    # Initial state for the recurrence loop
+    f_m_p1_init = 0.0
+    f_m_init = 1e-30  # Start with a very small number
+    f_vals_init = jnp.zeros(M + 1).at[M].set(f_m_init)
+
+    # Use jax.lax.fori_loop for the backward recurrence
+    # Loop from i = 0 to M-1 (total M iterations)
+    # The 'body' function gets current 'i' and 'state', returns 'new_state'.
+    # We don't need the final f_m_p1, only f_m and f_vals.
+    final_f_m, _, f_vals = jax.lax.fori_loop(
+        0, M, recurrence_body, (f_m_init, f_m_p1_init, f_vals_init)
+    )
+
+    # Normalization using Neumann's sum rule
+    even_sum = jnp.sum(f_vals[2::2])
+    norm_const = f_vals[0] + 2.0 * even_sum
+
+    # Handle division by near-zero normalization constant
+    norm_const_safe = jnp.where(jnp.abs(norm_const) < 1e-12, 1e-12, norm_const)
+
+    # Conditional logic for x_val close to zero
+    def x_is_zero_case() -> jnp.ndarray:
+        # For x=0, J_0(0)=1, J_k(0)=0 for k>0
+        return jnp.zeros(k).at[0].set(1.0)
+
+    def x_is_not_zero_case() -> jnp.ndarray:
+        return f_vals[:k] / norm_const_safe  # type: ignore
+
+    # Use lax.cond to select between the two cases based on x_val
+    return jax.lax.cond(jnp.abs(x_val) < 1e-12, x_is_zero_case, x_is_not_zero_case)  # type: ignore

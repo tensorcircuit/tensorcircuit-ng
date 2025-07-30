@@ -9,6 +9,7 @@ os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
 import numpy as np
 import pytest
 from pytest_lazyfixture import lazy_fixture as lf
+import scipy
 import tensorflow as tf
 
 thisfile = os.path.abspath(__file__)
@@ -58,6 +59,62 @@ def test_grad_torch(torchb):
         return tc.backend.sum(x)
 
     np.testing.assert_allclose(f(a), np.ones([2]), atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_backend_jv(backend, highp):
+    def calculate_M(k, x_val):
+        safety_factor = 15
+        M = max(k, int(abs(x_val))) + int(safety_factor * np.sqrt(abs(x_val)))
+        M = max(M, k + 30)
+        return M
+
+    k_values = [5, 20, 50, 200, 500, 3000]
+    x_values = [0.0, 0.1, 1.0, 10.0, 100, 1000, 6000]
+    for k in k_values:
+        for x_val in x_values:
+            M = calculate_M(k, x_val)
+            f_vals = tc.backend.special_jv(k, x_val, M)
+            np.testing.assert_allclose(
+                f_vals, scipy.special.jv(np.arange(k), x_val), atol=1e-6
+            )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_backend_jaxy_scan(backend):
+    def body_fun(carry, x):
+        counter, decrementor = carry
+
+        # 更新状态
+        new_counter = counter + 1
+        new_decrementor = decrementor - 1
+        new_carry = (new_counter, new_decrementor)
+
+        y = counter + decrementor
+
+        return new_carry, y
+
+    init_val = (0, 100)
+
+    final_carry, stacked_ys = tc.backend.jaxy_scan(
+        f=body_fun,
+        init=init_val,
+        xs=tc.backend.arange(5),
+    )
+
+    expected_final_carry = (5, 95)
+    expected_stacked_ys = np.array([100, 100, 100, 100, 100])
+
+    assert final_carry == expected_final_carry
+
+    np.testing.assert_array_equal(np.asarray(stacked_ys), expected_stacked_ys)
+
+
+def test_backend_jv_grad(jaxb, highp):
+    def f(x):
+        return tc.backend.sum(tc.backend.special_jv(5, x, 100))
+
+    print(tc.backend.jit(tc.backend.value_and_grad(f))(0.2))
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])

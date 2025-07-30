@@ -592,3 +592,188 @@ def ode_evol_global(
     if not callback:
         return s1
     return backend.stack([callback(s1[i]) for i in range(len(s1))])
+
+
+def chebyshev_evol(
+    hamiltonian: Any,
+    initial_state: Tensor,
+    t: float,
+    spectral_bounds: Tuple[float, float],
+    k: int,
+    M: int,
+) -> Any:
+    """
+    Chebyshev evolution method by expanding the time evolution exponential operator
+    in Chebyshev series.
+    Note the state returned is not normalized. But the norm should be very close to 1 for
+    sufficiently large k and M, which can serve as a accuracy check of the final result.
+
+    :param hamiltonian: Hamiltonian matrix (sparse or dense)
+    :type hamiltonian: Any
+    :param initial_state: Initial state vector
+    :type initial_state: Tensor
+    :param time: Time to evolve
+    :type time: float
+    :param spectral_bounds: Spectral bounds for the Hamiltonian (Emax, Emin)
+    :type spectral_bounds: Tuple[float, float]
+    :param k: Number of Chebyshev coefficients, a good estimate is k > t*(Emax-Emin)/2
+    :type k: int
+    :param M: Number of iterations to estimate Bessel function, a good estimate is given
+        by `estimate_M` helper method.
+    :type M: int
+    :return: Evolved state
+    :rtype: Tensor
+    """
+
+    E_max, E_min = spectral_bounds
+    if E_max <= E_min:
+        raise ValueError("E_max must be > E_min.")
+
+    a = (E_max - E_min) / 2.0
+    b = (E_max + E_min) / 2.0
+    tau = a * t  # tau is now a scalar
+
+    def apply_h_norm(psi: Any) -> Any:
+        return ((hamiltonian @ psi) - b * psi) / a
+
+    T0 = initial_state
+    if k == 1:
+        T_k_vectors = T0[None, :]
+    else:
+        T1 = apply_h_norm(T0)
+
+        def scan_body(carry, _):  # type: ignore
+            Tk, Tkm1 = carry
+            Tkp1 = 2 * apply_h_norm(Tk) - Tkm1
+            return (Tkp1, Tk), Tk
+
+        # 假设 backend.jaxy_scan 已正确实现
+        _, T_k_stack_1_onwards = backend.jaxy_scan(
+            scan_body, (T1, T0), xs=backend.arange(k - 1)
+        )
+        T_k_vectors = backend.concat([T0[None, :], T_k_stack_1_onwards], axis=0)
+
+    bessel_vals = backend.special_jv(k, tau, M)
+
+    k_indices = backend.arange(k)
+    first_element = backend.ones([1])
+
+    remaining_elements = backend.ones([k - 1]) * 2.0
+
+    prefactor = backend.concat([first_element, remaining_elements], axis=0)
+    ik_powers = backend.power(0 - 1j, k_indices)
+
+    # coeffs 现在是一个清晰的 1D 向量，形状为 (n_terms,)
+    coeffs = prefactor * ik_powers * bessel_vals
+
+    # 求和也变得更简单
+    psi_unphased = backend.einsum("k,kD->D", coeffs, T_k_vectors)
+
+    # 加上全局相位
+    phase = backend.exp(-1j * b * t)
+    psi_final = phase * psi_unphased
+
+    return psi_final
+
+
+def estimate_k(t: float, spectral_bounds: Tuple[float, float]) -> int:
+    """
+    estimate k for chebyshev expansion
+
+    :param t: time
+    :type t: float
+    :param spectral_bounds: spectral bounds (Emax, Emin)
+    :type spectral_bounds: Tuple[float, float]
+    :return: k
+    :rtype: int
+    """
+    E_max, E_min = spectral_bounds
+    a = (E_max - E_min) / 2.0
+    tau = a * t  # tau is now a scalar
+    return max(int(1.1 * tau), int(tau + 20))
+
+
+def estimate_M(t: float, spectral_bounds: Tuple[float, float], k: int) -> int:
+    """
+    estimate M for Bessel function iterations
+
+    :param t: time
+    :type t: float
+    :param spectral_bounds: spectral bounds (Emax, Emin)
+    :type spectral_bounds: Tuple[float, float]
+    :param k: k
+    :type k: int
+    :return: M
+    :rtype: int
+    """
+    E_max, E_min = spectral_bounds
+    a = (E_max - E_min) / 2.0
+    tau = a * t  # tau is now a scalar
+    safety_factor = 15
+    M = max(k, int(abs(tau))) + int(safety_factor * np.sqrt(abs(tau)))
+    M = max(M, k + 30)
+    return M
+
+
+def estimate_spectral_bounds(
+    h: Any, n_iter: int = 30, psi0: Optional[Any] = None
+) -> Tuple[float, float]:
+    """
+    Lanczos algorithm to estimate the spectral bounds of a Hamiltonian.
+    Just for quick run before `chebyshev_evol`, non jit-able.
+
+    :param h: Hamiltonian matrix.
+    :type h: Any
+    :param n_iter: iteration number.
+    :type n_iter: int
+    :param psi0: Optional initial state.
+    :type psi0: Optional[Any]
+    :return: (E_max, E_min)。
+    """
+    shape = h.shape
+    D = shape[-1]
+    if psi0 is None:
+        psi0 = np.random.normal(size=[D])
+
+    psi0 = backend.convert_to_tensor(psi0) / backend.norm(psi0)
+    psi0 = backend.cast(psi0, dtypestr)
+
+    # Lanczos
+    alphas = []
+    betas = []
+    q_prev = backend.zeros(psi0.shape, dtype=psi0.dtype)
+    q = psi0
+    beta = 0
+
+    for _ in range(n_iter):
+        r = h @ q
+        r = backend.convert_to_tensor(r)  # in case np.matrix
+        r = backend.reshape(r, [-1])
+        if beta != 0:
+            r -= beta * q_prev
+
+        alpha = backend.real(backend.sum(backend.conj(q) * r))
+
+        alphas.append(alpha)
+
+        r -= alpha * q
+
+        q_prev = q
+        beta = backend.norm(r)
+        q = r / beta
+        betas.append(beta)
+
+        if beta < 1e-8:
+            break
+
+    alphas = backend.stack(alphas)
+    betas = backend.stack(betas)
+    T = (
+        backend.diagflat(alphas)
+        + backend.diagflat(betas[:-1], k=1)
+        + backend.diagflat(betas[:-1], k=-1)
+    )
+
+    ritz_values, _ = backend.eigh(T)
+
+    return backend.max(ritz_values), backend.min(ritz_values)

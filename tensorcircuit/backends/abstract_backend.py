@@ -808,6 +808,21 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `solve`.".format(self.name)
         )
 
+    def special_jv(self: Any, v: int, z: Tensor, M: int) -> Tensor:
+        """
+        Special function: Bessel function of the first kind.
+
+        :param v: The order of the Bessel function.
+        :type v: int
+        :param z: The argument of the Bessel function.
+        :type z: Tensor
+        :return: The value of the Bessel function [J_0, ...J_{v-1}(z)].
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `special_jv`.".format(self.name)
+        )
+
     def searchsorted(self: Any, a: Tensor, v: Tensor, side: str = "left") -> Tensor:
         """
         Find indices where elements should be inserted to maintain order.
@@ -1400,10 +1415,37 @@ class ExtendedBackend:
                 carry = f(carry, x)
 
         return carry
-        # carry = init
-        # for x in xs:
-        #     carry = f(carry, x)
-        # return carry
+
+    def jaxy_scan(
+        self: Any, f: Callable[[Tensor, Tensor], Tensor], init: Tensor, xs: Tensor
+    ) -> Tensor:
+        """
+        This API follows jax scan style. TF use plain for loop
+
+        :param f: _description_
+        :type f: Callable[[Tensor, Tensor], Tensor]
+        :param init: _description_
+        :type init: Tensor
+        :param xs: _description_
+        :type xs: Tensor
+        :raises ValueError: _description_
+        :return: _description_
+        :rtype: Tensor
+        """
+        if xs is None:
+            raise ValueError("Either xs or length must be provided.")
+        if xs is not None:
+            length = len(xs)
+        carry, outputs_to_stack = init, []
+        for i in range(length):
+            if isinstance(xs, (tuple, list)):
+                x = [ele[i] for ele in xs]
+            else:
+                x = xs[i]
+            new_carry, y = f(carry, x)
+            carry = new_carry
+            outputs_to_stack.append(y)
+        return carry, self.stack(outputs_to_stack)
 
     def stop_gradient(self: Any, a: Tensor) -> Tensor:
         """

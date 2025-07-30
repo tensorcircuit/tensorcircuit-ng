@@ -418,6 +418,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def solve(self, A: Tensor, b: Tensor, assume_a: str = "gen") -> Tensor:  # type: ignore
         return jsp.linalg.solve(A, b, assume_a=assume_a)
 
+    def special_jv(self, v: int, z: Tensor, M: int) -> Tensor:
+        from .jax_ops import bessel_jv_jax_rescaled
+
+        return bessel_jv_jax_rescaled(v, z, M)
+
     def searchsorted(self, a: Tensor, v: Tensor, side: str = "left") -> Tensor:
         if not self.is_tensor(a):
             a = self.convert_to_tensor(a)
@@ -614,6 +619,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
 
         carry, _ = libjax.lax.scan(f_jax, init, xs)
         return carry
+
+    def jaxy_scan(
+        self, f: Callable[[Tensor, Tensor], Tensor], init: Tensor, xs: Tensor
+    ) -> Tensor:
+        return libjax.lax.scan(f, init, xs)
 
     def scatter(self, operand: Tensor, indices: Tensor, updates: Tensor) -> Tensor:
         # updates = jnp.reshape(updates, indices.shape)

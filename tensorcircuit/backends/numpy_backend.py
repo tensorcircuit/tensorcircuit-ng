@@ -17,7 +17,7 @@ except ImportError:  # np2.0 compatibility
 
 import tensornetwork
 from scipy.linalg import expm, solve, schur
-from scipy.special import softmax, expit
+from scipy.special import softmax, expit, jv
 from scipy.sparse import coo_matrix, issparse
 from tensornetwork.backends.numpy import numpy_backend
 from .abstract_backend import ExtendedBackend
@@ -244,6 +244,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         # gen, sym, her, pos
         # https://stackoverflow.com/questions/44672029/difference-between-numpy-linalg-solve-and-numpy-linalg-lu-solve/44710451
         return solve(A, b, assume_a=assume_a)
+
+    def special_jv(self, v: int, z: Tensor, M: int) -> Tensor:
+        return jv(np.arange(v), z)
 
     def searchsorted(self, a: Tensor, v: Tensor, side: str = "left") -> Tensor:
         return np.searchsorted(a, v, side=side)  # type: ignore
