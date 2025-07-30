@@ -15,6 +15,7 @@ from typing import (
     Union,
     TYPE_CHECKING,
     cast,
+    Set,
 )
 
 logger = logging.getLogger(__name__)
@@ -1446,3 +1447,54 @@ class CustomizeLattice(AbstractLattice):
         logger.info(
             f"{len(ids_to_remove)} sites removed. Lattice now has {self.num_sites} sites."
         )
+
+
+def get_compatible_layers(bonds: List[Tuple[int, int]]) -> List[List[Tuple[int, int]]]:
+    """
+    Partitions a list of pairs (bonds) into compatible layers for parallel
+    gate application using a greedy edge-coloring algorithm.
+
+    This function takes a list of pairs, representing connections like
+    nearest-neighbor (NN) or next-nearest-neighbor (NNN) bonds, and
+    partitions them into the minimum number of sets ("layers") where no two
+    pairs in a set share an index. This is a general utility for scheduling
+    non-overlapping operations.
+
+    :Example:
+
+    >>> from tensorcircuit.templates.lattice import SquareLattice
+    >>> sq_lattice = SquareLattice(size=(2, 2), pbc=False)
+    >>> nn_bonds = sq_lattice.get_neighbor_pairs(k=1, unique=True)
+
+    >>> gate_layers = get_compatible_layers(nn_bonds)
+    >>> print(gate_layers)
+    [[[0, 1], [2, 3]], [[0, 2], [1, 3]]]
+
+    :param bonds: A list of tuples, where each tuple represents a bond (i, j)
+        of site indices to be scheduled.
+    :type bonds: List[Tuple[int, int]]
+    :return: A list of layers. Each layer is a list of tuples, where each
+        tuple represents a bond. All bonds within a layer are non-overlapping.
+    :rtype: List[List[Tuple[int, int]]]
+    """
+    uncolored_edges: Set[Tuple[int, int]] = {(min(bond), max(bond)) for bond in bonds}
+
+    layers: List[List[Tuple[int, int]]] = []
+
+    while uncolored_edges:
+        current_layer: List[Tuple[int, int]] = []
+        qubits_in_this_layer: Set[int] = set()
+
+        edges_to_process = sorted(list(uncolored_edges))
+
+        for edge in edges_to_process:
+            i, j = edge
+            if i not in qubits_in_this_layer and j not in qubits_in_this_layer:
+                current_layer.append(edge)
+                qubits_in_this_layer.add(i)
+                qubits_in_this_layer.add(j)
+
+        uncolored_edges -= set(current_layer)
+        layers.append(sorted(current_layer))
+
+    return layers
