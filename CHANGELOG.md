@@ -6,11 +6,23 @@
 
 - Add new module `tc.timeevol` for different types of time evolution solvers.
 
+- Add `special_jv` for numpy and jax backends.
+
+- Add `jaxy_scan` for numpy and jax backends, contrasting to the tf style original backend scan method.
+
+- Add `krylov_evol` method for krylov evolution.
+
+- Add `chebyshev_evol` method for chebyshev polynomial evolution.
+
+- Add `ode_evol_local` and `ode_evol_global` methods for local and global ODE evolution.
+
 ### Fixed
 
 - Fixed `one_hot` in numpy backend.
 
 - Fixed `scan` in tensorflow backend and numpy backend.
+
+- Fix potential np.matrix return from `PaulistringSum2Dense`.
 
 ### Changed
 
