@@ -96,10 +96,12 @@ class StabilizerCircuit(AbstractCircuit):
 
         if name.lower() in self.gate_map:
             # self._stim_circuit.append(gate_map[name.lower()], list(index))
-            instruction = f"{self.gate_map[name.lower()]} {' '.join(map(str, index))}"
+            gn = self.gate_map[name.lower()]
+            instruction = f"{gn} {' '.join(map(str, index))}"
             self._stim_circuit.append_from_stim_program_text(instruction)
             # append is much slower
-            self.current_sim.do(stim.Circuit(instruction))
+            # self.current_sim.do(stim.Circuit(instruction))
+            getattr(self.current_sim, gn.lower())(*index)
         else:
             raise ValueError(f"Gate {name} is not supported in stabilizer simulation")
 
