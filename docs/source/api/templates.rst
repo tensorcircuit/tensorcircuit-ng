@@ -7,5 +7,6 @@ tensorcircuit.templates
     templates/conversions.rst
     templates/dataset.rst
     templates/graphs.rst
+    templates/hamiltonians.rst
     templates/lattice.rst
     templates/measurements.rst

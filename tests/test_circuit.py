@@ -889,6 +889,19 @@ def test_circuit_quoperator(backend):
     np.testing.assert_allclose(qo.eval_matrix(), c.matrix(), atol=1e-5)
 
 
+def test_perm_matrix():
+    from tensorcircuit.translation import perm_matrix
+
+    p2 = perm_matrix(2)
+    np.testing.assert_allclose(
+        p2, np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+    )
+    p3 = perm_matrix(3)
+    v = np.arange(8)
+    vt = np.array([0, 4, 2, 6, 1, 5, 3, 7])
+    np.testing.assert_allclose(p3 @ v, vt)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_qir2cirq(backend):
     try:
@@ -1094,7 +1107,7 @@ def test_qiskit2tc():
         import qiskit.quantum_info as qi
         from qiskit import QuantumCircuit
         from qiskit.circuit.library import HamiltonianGate
-        from qiskit.circuit.library.standard_gates import MCXGate, SwapGate
+        from qiskit.circuit.library.standard_gates import MCXGate, SwapGate, CXGate
 
         from tensorcircuit.translation import perm_matrix
     except ImportError:
@@ -1150,12 +1163,13 @@ def test_qiskit2tc():
     mcx_g = MCXGate(3, ctrl_state="010")
     qisc.append(mcx_g, [0, 1, 2, 3])
     qisc.ccx(0, 1, 2, ctrl_state="01")
-    CCCRX = SwapGate().control(2, ctrl_state="01")
-    qisc.append(CCCRX, [0, 1, 2, 3])
+    CCswap = SwapGate().control(2, ctrl_state="01")
+    qisc.append(CCswap, [0, 1, 2, 3])
+    CCCX = CXGate().control(2, ctrl_state="01")
+    qisc.append(CCCX, [1, 2, 3, 4])
 
-    c = tc.Circuit.from_qiskit(qisc, n, np.eye(2**n))
-    tc_unitary = c.wavefunction()
-    tc_unitary = np.reshape(tc_unitary, [2**n, 2**n])
+    c = tc.Circuit.from_qiskit(qisc, n)
+    tc_unitary = c.matrix()
     qis_unitary = qi.Operator(qisc)
     qis_unitary = np.reshape(qis_unitary, [2**n, 2**n])
     p_mat = perm_matrix(n)

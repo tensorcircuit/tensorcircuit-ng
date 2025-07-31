@@ -4,7 +4,7 @@ Frequently Asked Questions
 What is the relation between TensorCircuit and TensorCircuit-NG?
 -------------------------------------------------------------------
 
-Both packages are created by `Shi-Xin Zhang <https://www.iop.cas.cn/rcjy/tpyjy/?id=6789>`_ (`@refraction-ray <https://github.com/refraction-ray>`_). For the history of the evolution of tensorcircuit, please refer to `history <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/HISTORY.md>`_.
+Both packages are created by `Shi-Xin Zhang <https://www.iop.cas.cn/rcjy/tpyjy/?id=6789>`_ (`@refraction-ray <https://github.com/refraction-ray>`_). For the history of the evolution of TensorCircuit-NG, please refer to `history <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/HISTORY.md>`_.
 
 From users' perspective, TensorCircuit-NG maintains full compatibility with the TensorCircuit API, enhancing it with additional features and critical bug fixes. Only TensorCircuit-NG is kept up-to-date with the fast evolving scientific computing and machine learning ecosystem in Python.
 
@@ -41,6 +41,7 @@ How can I use multiple GPUs?
 For different observables evaluation on different cards, see `example <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/vqe_parallel_pmap.py>`_.
 
 For distributed simulation of one circuit on multiple cards, see `example for expectation <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/slicing_auto_pmap_vqa.py>`_ and `example for MPO <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/slicing_auto_pmap_mpo.py>`_.
+We also introduce a new interface for the multi-GPU tensornetwork contraction, see `example for VQE <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/distributed_interface_vqe.py>`_ and `example for amplitude <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/distributed_interface_amplitude.py>`_.
 
 
 When should I jit the function?

@@ -360,6 +360,38 @@ tensornetwork.backends.tensorflow.tensorflow_backend.TensorFlowBackend.rq = _rq_
 tensornetwork.backends.tensorflow.tensorflow_backend.TensorFlowBackend.svd = _svd_tf
 
 
+def sparse_tensor_matmul(self: Tensor, other: Tensor) -> Tensor:
+    """
+    An implementation of matrix multiplication (@) for tf.SparseTensor.
+
+    This function is designed to be monkey-patched onto the tf.SparseTensor class.
+    It handles multiplication with a dense vector (rank-1 Tensor) by temporarily
+    promoting it to a matrix (rank-2 Tensor) for the underlying TensorFlow call.
+    """
+    # Ensure the 'other' tensor is of a compatible dtype
+    if not other.dtype.is_compatible_with(self.dtype):
+        other = tf.cast(other, self.dtype)
+
+    # tf.sparse.sparse_dense_matmul requires the dense tensor to be a 2D matrix.
+    # If we get a 1D vector, we need to reshape it.
+    is_vector = len(other.shape) == 1
+
+    if is_vector:
+        # Promote the vector to a column matrix [N] -> [N, 1]
+        other_matrix = tf.expand_dims(other, axis=1)
+    else:
+        other_matrix = other
+
+    # Perform the actual multiplication
+    result_matrix = tf.sparse.sparse_dense_matmul(self, other_matrix)
+
+    if is_vector:
+        # Demote the result matrix back to a vector [M, 1] -> [M]
+        return tf.squeeze(result_matrix, axis=1)
+    else:
+        return result_matrix
+
+
 class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend):  # type: ignore
     """
     See the original backend API at `tensorflow backend
@@ -378,6 +410,8 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
             )
         tf = tensorflow
         tf.sparse.SparseTensor.__add__ = tf.sparse.add
+        tf.SparseTensor.__matmul__ = sparse_tensor_matmul
+
         self.minor = int(tf.__version__.split(".")[1])
         self.name = "tensorflow"
         logger = tf.get_logger()  # .setLevel('ERROR')
@@ -678,7 +712,14 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         sp_a: Tensor,
         b: Tensor,
     ) -> Tensor:
-        return tf.sparse.sparse_dense_matmul(sp_a, b)
+        is_vec = False
+        if len(b.shape) == 1:
+            b = self.reshape(b, [-1, 1])
+            is_vec = True
+        r = tf.sparse.sparse_dense_matmul(sp_a, b)
+        if is_vec:
+            return self.reshape(r, [-1])
+        return r
 
     def _densify(self) -> Tensor:
         @partial(self.jit, jit_compile=True)
@@ -712,7 +753,10 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def scan(
         self, f: Callable[[Tensor, Tensor], Tensor], xs: Tensor, init: Tensor
     ) -> Tensor:
-        return tf.scan(f, xs, init)[-1]
+        stacked_results = tf.scan(f, xs, init)
+        final_state = tf.nest.map_structure(lambda x: x[-1], stacked_results)
+        return final_state
+        # return tf.scan(f, xs, init)[-1]
 
     def device(self, a: Tensor) -> str:
         dev = a.device

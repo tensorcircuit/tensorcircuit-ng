@@ -18,6 +18,8 @@ Jupyter Tutorials
     tutorials/mera.ipynb
     tutorials/gradient_benchmark.ipynb
     tutorials/contractors.ipynb
+    tutorials/stabilizer_circuit.ipynb
+    tutorials/fermion_gaussian_states.ipynb
     tutorials/operator_spreading.ipynb
     tutorials/optimization_and_expressibility.ipynb
     tutorials/vqex_mbl.ipynb
@@ -28,4 +30,5 @@ Jupyter Tutorials
     tutorials/imag_time_evo.ipynb
     tutorials/classical_shadows.ipynb
     tutorials/sklearn_svc.ipynb
+    tutorials/distributed_simulation.ipynb
     tutorials/qcloud_sdk_demo.ipynb

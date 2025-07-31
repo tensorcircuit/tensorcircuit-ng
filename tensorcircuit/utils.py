@@ -11,6 +11,13 @@ import time
 
 
 def gpu_memory_share(flag: bool = True) -> None:
+    """
+    Set the GPU memory growth mode
+
+    :param flag: whether to set the GPU memory growth mode, defaults to True
+    :type flag: bool
+    :return: None
+    """
     # TODO(@refraction-ray): the default torch behavior should be True
     # preallocate behavior for torch to be investigated
     if flag is True:

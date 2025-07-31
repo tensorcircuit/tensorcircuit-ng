@@ -13,8 +13,6 @@ logger = logging.getLogger(__name__)
 
 try:
     import qiskit.quantum_info as qi
-    import symengine
-    import sympy
     from qiskit import QuantumCircuit
     from qiskit.circuit import Parameter, ParameterExpression
     from qiskit.circuit.exceptions import CircuitError
@@ -27,6 +25,14 @@ except ImportError:
     )
     CircuitInstruction = Any
     QuantumCircuit = Any
+
+try:
+    import symengine
+    import sympy
+except ImportError:
+    logger.info(
+        "Please first ``pip install -U sympy symengine`` to enable `qiskit2tc` in translation module"
+    )
 
 try:
     import cirq
@@ -325,7 +331,9 @@ def qir2qiskit(
             qiskit_circ.append(gate, index_reversed)
         elif gate_name == "multicontrol":
             unitary = backend.numpy(backend.convert_to_tensor(parameters["unitary"]))
+            k = int(np.log(unitary.shape[-1]) / np.log(2) + 1e-7)
             ctrl_str = "".join(map(str, parameters["ctrl"]))[::-1]
+            unitary = perm_matrix(k) @ unitary @ perm_matrix(k)
             gate = UnitaryGate(unitary, label=qis_name).control(
                 len(ctrl_str), ctrl_state=ctrl_str
             )

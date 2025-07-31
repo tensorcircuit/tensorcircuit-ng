@@ -1433,7 +1433,7 @@ def PauliStringSum2Dense(
         return sparsem.todense()
     sparsem = backend.coo_sparse_matrix_from_numpy(sparsem)
     densem = backend.to_dense(sparsem)
-    return densem
+    return backend.convert_to_tensor(densem)
 
 
 # already implemented as backend method

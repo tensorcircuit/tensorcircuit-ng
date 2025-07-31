@@ -4,15 +4,57 @@
 
 ### Added
 
+- Add new module `tc.timeevol` for different types of time evolution solvers.
+
+- Add `special_jv` for numpy and jax backends.
+
+- Add `jaxy_scan` for numpy and jax backends, contrasting to the tf style original backend scan method.
+
+- Add `sparse_csr_from_coo` method for numpy and jax backends to convert COO format to CSR format, the latter is more efficient for `sparse_dense_matmul`.
+
+- Add `krylov_evol` method for krylov evolution.
+
+- Add `chebyshev_evol` method for chebyshev polynomial evolution.
+
+- Add `ode_evol_local` and `ode_evol_global` methods for local and global ODE evolution.
+
+### Fixed
+
+- Fixed `one_hot` in numpy backend.
+
+- Fixed `scan` in tensorflow backend and numpy backend.
+
+- Fix potential np.matrix return from `PaulistringSum2Dense`.
+
+### Changed
+
+- The order of arguments of `tc.timeevol.ed_evol` are changed for consistent interface with other evolution methods.
+
+## v1.3.0
+
+### Added
+
 - Add `Lattice` module (`tensorcircuit.templates.lattice`) for creating and manipulating various lattice geometries, including `SquareLattice`, `HoneycombLattice`, and `CustomizeLattice`.
+
+- Add `tc.templates.hamiltonians` for commom systems.
 
 - Add `DistributedContractor` in experimental module with new examples for fast implementation of distribution circuit simulation on jax backend.
 
 - Add `circuit.amplitude_before()` method to return the corresponding tensornetwork nodes.
 
+- Add `with_prob` for `stabilizercircuit.measure()`.
+
+- Add `tc.cons.function_nodes_capture` decorator and `tc.cons.runtime_nodes_capture` context manager for directly return nodes before real contraction.
+
 ### Fixed
 
 - Fix the nodes order in contraction by giving each node a global `_stable_id_`.
+
+- Fix `to_dlpack` for jax version >= 0.7.
+
+- Fix large eps issue in entanglement calculation of FGS.
+
+- Fix cmatrix non-refresh issue for `post_select` in FGS.
 
 ## v1.2.1
 

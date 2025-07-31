@@ -700,6 +700,9 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `is_tensor`.".format(self.name)
         )
 
+    def matvec(self: Any, A: Tensor, x: Tensor) -> Tensor:
+        return self.tensordot(A, x, axes=[[1], [0]])
+
     def cast(self: Any, a: Tensor, dtype: str) -> Tensor:
         """
         Cast the tensor dtype of a ``a``.
@@ -803,6 +806,21 @@ class ExtendedBackend:
         """
         raise NotImplementedError(
             "Backend '{}' has not implemented `solve`.".format(self.name)
+        )
+
+    def special_jv(self: Any, v: int, z: Tensor, M: int) -> Tensor:
+        """
+        Special function: Bessel function of the first kind.
+
+        :param v: The order of the Bessel function.
+        :type v: int
+        :param z: The argument of the Bessel function.
+        :type z: Tensor
+        :return: The value of the Bessel function [J_0, ...J_{v-1}(z)].
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `special_jv`.".format(self.name)
         )
 
     def searchsorted(self: Any, a: Tensor, v: Tensor, side: str = "left") -> Tensor:
@@ -1248,6 +1266,26 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `sparse_dense_matmul`.".format(self.name)
         )
 
+    def sparse_csr_from_coo(self: Any, coo: Tensor, strict: bool = False) -> Tensor:
+        """
+        transform a coo matrix to a csr matrix
+
+        :param coo: a coo matrix
+        :type coo: Tensor
+        :param strict: whether to enforce the transform, defaults to False,
+            corresponding to return the coo matrix if there is no implementation for specific backend.
+        :type strict: bool, optional
+        :return: a csr matrix
+        :rtype: Tensor
+        """
+        if strict:
+            raise NotImplementedError(
+                "Backend '{}' has not implemented `sparse_csr_from_coo`.".format(
+                    self.name
+                )
+            )
+        return coo
+
     def to_dense(self: Any, sp_a: Tensor) -> Tensor:
         """
         Convert a sparse matrix to dense tensor.
@@ -1386,9 +1424,48 @@ class ExtendedBackend:
         :rtype: Tensor
         """
         carry = init
-        for x in xs:
-            carry = f(carry, x)
+        # Check if `xs` is a PyTree (tuple or list) of arrays.
+        if isinstance(xs, (tuple, list)):
+            for x_slice_tuple in zip(*xs):
+                # x_slice_tuple will be (k_elems[i], j_elems[i]) at each step.
+                carry = f(carry, x_slice_tuple)
+        else:
+            # If xs is a single array, iterate normally.
+            for x in xs:
+                carry = f(carry, x)
+
         return carry
+
+    def jaxy_scan(
+        self: Any, f: Callable[[Tensor, Tensor], Tensor], init: Tensor, xs: Tensor
+    ) -> Tensor:
+        """
+        This API follows jax scan style. TF use plain for loop
+
+        :param f: _description_
+        :type f: Callable[[Tensor, Tensor], Tensor]
+        :param init: _description_
+        :type init: Tensor
+        :param xs: _description_
+        :type xs: Tensor
+        :raises ValueError: _description_
+        :return: _description_
+        :rtype: Tensor
+        """
+        if xs is None:
+            raise ValueError("Either xs or length must be provided.")
+        if xs is not None:
+            length = len(xs)
+        carry, outputs_to_stack = init, []
+        for i in range(length):
+            if isinstance(xs, (tuple, list)):
+                x = [ele[i] for ele in xs]
+            else:
+                x = xs[i]
+            new_carry, y = f(carry, x)
+            carry = new_carry
+            outputs_to_stack.append(y)
+        return carry, self.stack(outputs_to_stack)
 
     def stop_gradient(self: Any, a: Tensor) -> Tensor:
         """

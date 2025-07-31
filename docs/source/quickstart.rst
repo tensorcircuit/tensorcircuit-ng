@@ -10,26 +10,25 @@ Installation
 ``pip install tensorcircuit-ng`` 
 
 is in general enough. 
-Either pip from conda or other python env managers is fine.
 
 Since there are many optional packages for various features, 
-the users may need to install more pip packages when required. 
+the users may need to install more packages by pip when required. 
 
 For Nvidia GPU,
 please refer to the GPU aware installation guide of corresponding machine learning frameworks: 
-`TensorFlow <https://www.tensorflow.org/install/gpu>`_, 
-`Jax <https://github.com/google/jax#pip-installation-gpu-cuda>`_, 
+`TensorFlow <https://www.tensorflow.org/install/pip>`_ (``pip install 'tensorflow[and-cuda]'``), 
+`Jax <https://docs.jax.dev/en/latest/installation.html#pip-installation-nvidia-gpu-cuda-installed-via-pip-easier>`_ (``pip install 'jax[cuda-12]'``), 
 or `PyTorch <https://pytorch.org/get-started/locally/>`_.
 
-Docker is also recommended (especially Linux + Nvidia GPU setup): 
+Docker is also accessible: 
 
 ``sudo docker run -it --network host --gpus all tensorcircuit/tensorcircuit``.
 
 For more details on docker setup, please refer to `docker readme <https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/docker>`_.
 
 
-Overall, the installation of TensorCircuit-NG is simple, since it is purely in Python and hence very portable. 
-As long as the users can take care of the installation of ML frameworks on the corresponding system, TensorCircuit-NG will work as expected.
+Overall, the installation of TensorCircuit-NG is simple, since it is purely in Python and hence portable. 
+As long as the users can take care of the installation of ML frameworks on the corresponding operating system, TensorCircuit-NG will work as expected.
 
 To debug the installation issue or report bugs, please check the environment information by ``tc.about()``.
 
@@ -218,7 +217,7 @@ If the user has no intention to maintain the application code in a backend agnos
 Automatic Differentiation, JIT, and Vectorized Parallelism
 -------------------------------------------------------------
 
-For concepts of AD, JIT and VMAP, please refer to `Jax documentation <https://jax.readthedocs.io/en/latest/jax-101/index.html>`__ .
+For concepts of AD, JIT and VMAP, please refer to `Jax documentation <https://docs.jax.dev/en/latest/tutorials.html>`__ .
 
 The related API design in TensorCircuit-NG closely follows the functional programming design pattern in Jax with some slight differences. So we strongly recommend users learn some basics about Jax no matter which ML backend they intend to use.
 

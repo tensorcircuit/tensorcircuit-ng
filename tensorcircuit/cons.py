@@ -516,8 +516,8 @@ def _get_path_cache_friendly(
     nodes = list(nodes)
 
     nodes_new = sorted(nodes, key=lambda node: getattr(node, "_stable_id_", -1))
-    if isinstance(algorithm, list):
-        return algorithm, nodes_new
+    # if isinstance(algorithm, list):
+    #     return algorithm, [nodes_new]
 
     all_edges = tn.get_all_edges(nodes_new)
     all_edges_sorted = sorted_edges(all_edges)
@@ -693,6 +693,51 @@ def _base(
     return final_node
 
 
+class NodesReturn(Exception):
+    """
+    Intentionally stop execution to return a value.
+    """
+
+    def __init__(self, value_to_return: Any):
+        self.value = value_to_return
+        super().__init__(
+            f"Intentionally stopping execution to return: {value_to_return}"
+        )
+
+
+def _get_sorted_nodes(nodes: List[Any], *args: Any, **kws: Any) -> Any:
+    nodes_new = sorted(nodes, key=lambda node: getattr(node, "_stable_id_", -1))
+    raise NodesReturn(nodes_new)
+
+
+def function_nodes_capture(func: Callable[[Any], Any]) -> Callable[[Any], Any]:
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        with runtime_contractor(method="before"):
+            try:
+                result = func(*args, **kwargs)
+                return result
+            except NodesReturn as e:
+                return e.value
+
+    return wrapper
+
+
+@contextmanager
+def runtime_nodes_capture(key: str = "nodes") -> Iterator[Any]:
+    old_contractor = getattr(thismodule, "contractor")
+    set_contractor(method="before")
+    captured_value: Dict[str, List[tn.Node]] = {}
+    try:
+        yield captured_value
+    except NodesReturn as e:
+        captured_value[key] = e.value
+    finally:
+        for module in sys.modules:
+            if module.startswith(package_name):
+                setattr(sys.modules[module], "contractor", old_contractor)
+
+
 def custom(
     nodes: List[Any],
     optimizer: Any,
@@ -763,6 +808,16 @@ def custom_stateful(
 
 # only work for custom
 def contraction_info_decorator(algorithm: Callable[..., Any]) -> Callable[..., Any]:
+    """Decorator to add contraction information logging to an optimizer.
+
+    This decorator wraps an optimization algorithm and prints detailed information
+    about the contraction cost (FLOPs, size, write) and path finding time.
+
+    :param algorithm: The optimization algorithm to decorate.
+    :type algorithm: Callable[..., Any]
+    :return: The decorated optimization algorithm.
+    :rtype: Callable[..., Any]
+    """
     from cotengra import ContractionTree
 
     def new_algorithm(
@@ -868,6 +923,9 @@ def set_contractor(
             debug_level=debug_level,
             **kws,
         )
+
+    elif method == "before":  # a hack way to get the nodes
+        cf = _get_sorted_nodes
 
     else:
         # cf = getattr(tn.contractors, method, None)

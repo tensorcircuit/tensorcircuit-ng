@@ -1,4 +1,4 @@
-__version__ = "1.2.1"
+__version__ = "1.3.0"
 __author__ = "TensorCircuit Authors"
 __creator__ = "refraction-ray"
 
@@ -52,6 +52,7 @@ from . import compiler
 from . import cloud
 from . import fgs
 from .fgs import FGSSimulator
+from . import timeevol
 
 FGSCircuit = FGSSimulator
 

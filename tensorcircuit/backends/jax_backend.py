@@ -418,6 +418,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def solve(self, A: Tensor, b: Tensor, assume_a: str = "gen") -> Tensor:  # type: ignore
         return jsp.linalg.solve(A, b, assume_a=assume_a)
 
+    def special_jv(self, v: int, z: Tensor, M: int) -> Tensor:
+        from .jax_ops import bessel_jv_jax_rescaled
+
+        return bessel_jv_jax_rescaled(v, z, M)
+
     def searchsorted(self, a: Tensor, v: Tensor, side: str = "left") -> Tensor:
         if not self.is_tensor(a):
             a = self.convert_to_tensor(a)
@@ -442,7 +447,14 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def to_dlpack(self, a: Tensor) -> Any:
         import jax.dlpack
 
-        return jax.dlpack.to_dlpack(a)
+        try:
+            return jax.dlpack.to_dlpack(a)  # type: ignore
+        except AttributeError:  # jax >v0.7
+            # jax.dlpack.to_dlpack was deprecated in JAX v0.6.0 and removed in JAX v0.7.0.
+            # Please use the newer DLPack API based on __dlpack__ and __dlpack_device__ instead.
+            # Typically, you can pass a JAX array directly to the `from_dlpack` function of
+            # another framework without using `to_dlpack`.
+            return a.__dlpack__()
 
     def set_random_state(
         self, seed: Optional[Union[int, PRNGKeyArray]] = None, get_only: bool = False
@@ -608,6 +620,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         carry, _ = libjax.lax.scan(f_jax, init, xs)
         return carry
 
+    def jaxy_scan(
+        self, f: Callable[[Tensor, Tensor], Tensor], init: Tensor, xs: Tensor
+    ) -> Tensor:
+        return libjax.lax.scan(f, init, xs)
+
     def scatter(self, operand: Tensor, indices: Tensor, updates: Tensor) -> Tensor:
         # updates = jnp.reshape(updates, indices.shape)
         # return operand.at[indices].set(updates)
@@ -632,11 +649,20 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     ) -> Tensor:
         return sp_a @ b
 
+    def sparse_csr_from_coo(self, coo: Tensor, strict: bool = False) -> Tensor:
+        try:
+            return sparse.BCSR.from_bcoo(coo)  # type: ignore
+        except AttributeError as e:
+            if not strict:
+                return coo
+            else:
+                raise e
+
     def to_dense(self, sp_a: Tensor) -> Tensor:
         return sp_a.todense()
 
     def is_sparse(self, a: Tensor) -> bool:
-        return isinstance(a, sparse.BCOO)  # type: ignore
+        return isinstance(a, sparse.JAXSparse)  # type: ignore
 
     def device(self, a: Tensor) -> str:
         (dev,) = a.devices()

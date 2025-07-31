@@ -17,7 +17,7 @@ except ImportError:  # np2.0 compatibility
 
 import tensornetwork
 from scipy.linalg import expm, solve, schur
-from scipy.special import softmax, expit
+from scipy.special import softmax, expit, jv
 from scipy.sparse import coo_matrix, issparse
 from tensornetwork.backends.numpy import numpy_backend
 from .abstract_backend import ExtendedBackend
@@ -200,6 +200,7 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         return softmax(a, axis=axis)
 
     def onehot(self, a: Tensor, num: int) -> Tensor:
+        a = np.asarray(a)
         res = np.eye(num)[a.reshape([-1])]
         return res.reshape(list(a.shape) + [num])
         # https://stackoverflow.com/questions/38592324/one-hot-encoding-using-numpy
@@ -243,6 +244,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         # gen, sym, her, pos
         # https://stackoverflow.com/questions/44672029/difference-between-numpy-linalg-solve-and-numpy-linalg-lu-solve/44710451
         return solve(A, b, assume_a=assume_a)
+
+    def special_jv(self, v: int, z: Tensor, M: int) -> Tensor:
+        return jv(np.arange(v), z)
 
     def searchsorted(self, a: Tensor, v: Tensor, side: str = "left") -> Tensor:
         return np.searchsorted(a, v, side=side)  # type: ignore
@@ -328,6 +332,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         b: Tensor,
     ) -> Tensor:
         return sp_a @ b
+
+    def sparse_csr_from_coo(self, coo: Tensor, strict: bool = False) -> Tensor:
+        return coo.tocsr()
 
     def to_dense(self, sp_a: Tensor) -> Tensor:
         return sp_a.todense()

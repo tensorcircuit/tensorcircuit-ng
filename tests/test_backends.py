@@ -9,6 +9,7 @@ os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
 import numpy as np
 import pytest
 from pytest_lazyfixture import lazy_fixture as lf
+import scipy
 import tensorflow as tf
 
 thisfile = os.path.abspath(__file__)
@@ -58,6 +59,126 @@ def test_grad_torch(torchb):
         return tc.backend.sum(x)
 
     np.testing.assert_allclose(f(a), np.ones([2]), atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_sparse_csr_from_coo(backend):
+    # Create a sparse matrix in COO format
+    values = tc.backend.convert_to_tensor(np.array([1.0, 2.0, 3.0]))
+    values = tc.backend.cast(values, "complex64")
+    indices = tc.backend.convert_to_tensor(np.array([[0, 0], [1, 1], [2, 3]]))
+    indices = tc.backend.cast(indices, "int64")
+    coo_matrix = tc.backend.coo_sparse_matrix(indices, values, shape=[4, 4])
+
+    # Convert COO to CSR
+    csr_matrix = tc.backend.sparse_csr_from_coo(coo_matrix)
+
+    # Check that the result is still recognized as sparse
+    assert tc.backend.is_sparse(csr_matrix) is True
+
+    # Check that the conversion preserves values by comparing dense representations
+    coo_dense = tc.backend.to_dense(coo_matrix)
+    csr_dense = tc.backend.to_dense(csr_matrix)
+    np.testing.assert_allclose(coo_dense, csr_dense, atol=1e-5)
+
+
+def test_sparse_tensor_matmul_monkey_patch(tfb):
+    """
+    Test the monkey-patched __matmul__ method for tf.SparseTensor.
+    This test specifically targets the line:
+    tf.SparseTensor.__matmul__ = sparse_tensor_matmul
+    """
+    # Create a sparse matrix in COO format
+    indices = tf.constant([[0, 0], [1, 1], [2, 3]], dtype=tf.int64)
+    values = tf.constant([1.0, 2.0, 3.0], dtype=tf.complex64)
+    shape = [4, 4]
+    sparse_matrix = tf.SparseTensor(indices=indices, values=values, dense_shape=shape)
+
+    # Test 1: Matrix-vector multiplication with 1D vector
+    vector_1d = tf.constant([1.0, 2.0, 3.0, 4.0], dtype=tf.complex64)
+    result_1d = sparse_matrix @ vector_1d  # Using the monkey-patched @ operator
+
+    expected_1d = tf.constant([1.0, 4.0, 12.0, 0.0], dtype=tf.complex64)
+
+    np.testing.assert_allclose(result_1d, expected_1d, atol=1e-6)
+    vector_1d = tc.backend.reshape(vector_1d, [4, 1])
+    result_1dn = sparse_matrix @ vector_1d  # Using the monkey-patched @ operator
+    expected_1d = tc.backend.reshape(expected_1d, [4, 1])
+
+    np.testing.assert_allclose(result_1dn, expected_1d, atol=1e-6)
+
+    # Test 2: Matrix-matrix multiplication with 2D matrix
+    matrix_2d = tf.constant(
+        [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]], dtype=tf.complex64
+    )
+    result_2d = sparse_matrix @ matrix_2d  # Using the monkey-patched @ operator
+
+    expected_2d = tf.sparse.sparse_dense_matmul(sparse_matrix, matrix_2d)
+
+    np.testing.assert_allclose(result_2d.numpy(), expected_2d.numpy(), atol=1e-6)
+
+    # Test 3: Verify that the operation is consistent with sparse_dense_matmul
+
+    reference_result = tc.backend.sparse_dense_matmul(sparse_matrix, vector_1d)
+    reference_result_squeezed = tc.backend.reshape(reference_result, [-1])
+
+    np.testing.assert_allclose(result_1d, reference_result_squeezed, atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_backend_jv(backend, highp):
+    def calculate_M(k, x_val):
+        safety_factor = 15
+        M = max(k, int(abs(x_val))) + int(safety_factor * np.sqrt(abs(x_val)))
+        M = max(M, k + 30)
+        return M
+
+    k_values = [5, 20, 50, 200, 500, 3000]
+    x_values = [0.0, 0.1, 1.0, 10.0, 100, 1000, 6000]
+    for k in k_values:
+        for x_val in x_values:
+            M = calculate_M(k, x_val)
+            f_vals = tc.backend.special_jv(k, x_val, M)
+            np.testing.assert_allclose(
+                f_vals, scipy.special.jv(np.arange(k), x_val), atol=1e-6
+            )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_backend_jaxy_scan(backend):
+    def body_fun(carry, x):
+        counter, decrementor = carry
+
+        # 更新状态
+        new_counter = counter + 1
+        new_decrementor = decrementor - 1
+        new_carry = (new_counter, new_decrementor)
+
+        y = counter + decrementor
+
+        return new_carry, y
+
+    init_val = (0, 100)
+
+    final_carry, stacked_ys = tc.backend.jaxy_scan(
+        f=body_fun,
+        init=init_val,
+        xs=tc.backend.arange(5),
+    )
+
+    expected_final_carry = (5, 95)
+    expected_stacked_ys = np.array([100, 100, 100, 100, 100])
+
+    assert final_carry == expected_final_carry
+
+    np.testing.assert_array_equal(np.asarray(stacked_ys), expected_stacked_ys)
+
+
+def test_backend_jv_grad(jaxb, highp):
+    def f(x):
+        return tc.backend.sum(tc.backend.special_jv(5, x, 100))
+
+    print(tc.backend.jit(tc.backend.value_and_grad(f))(0.2))
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
