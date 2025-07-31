@@ -30,6 +30,11 @@ from tensornetwork.network_operations import (
     remove_node,
 )
 
+from tenpy.networks import MPO, MPS, Site
+from tenpy.linalg import np_conserved as npc
+import tensornetwork as tn
+from quimb.tensor import MatrixProductOperator
+
 from .cons import backend, contractor, dtypestr, npdtype, rdtypestr
 from .gates import Gate, num_to_tensor
 from .utils import arg_alias
@@ -1217,6 +1222,197 @@ def quimb2qop(qb_mpo: Any) -> QuOperator:
         [],  # ignore_edges
     )
     return qop
+
+
+# TODO(@Charlespkuer): Add more conversion functions for other packages
+def tenpy2qop(tenpy_obj: Union["MPS", "MPO"]) -> QuOperator:
+    """
+    Convert MPO or MPS from TeNPy to TensorCircuit QuOperator.
+
+    :param tenpy_obj: MPO or MPS object from the TeNPy package.
+    :type tenpy_obj: Union[tenpy.networks.mpo.MPO, tenpy.networks.mps.MPS]
+    :return: The corresponding state/operator as a QuOperator.
+    :rtype: QuOperator
+    """
+    tenpy_tensors = tenpy_obj._W if hasattr(tenpy_obj, "_W") else tenpy_obj._B
+    is_mpo = hasattr(tenpy_obj, "_W")
+    # nwires = len(tenpy_tensors)
+    mpo = []
+    out_edges = []
+    in_edges = []
+
+    for i, W in enumerate(tenpy_tensors):
+
+        if is_mpo:
+            W_numpy = W.to_numpy()
+            W_node = Node(W_numpy, axis_names=["wL", "wR", "p", "p*"])
+            mpo.append(W_node)
+            out_edges.append(W_node["p*"])
+            in_edges.append(W_node["p"])
+        else:
+            W_node = Node(W, axis_names=["wL", "wR", "p"])
+            mpo.append(W_node)
+            in_edges.append(W_node[-1])
+
+        if i == 0:
+            pass
+        else:
+            prev_node = mpo[-1]
+            _ = prev_node["wR"] ^ W_node["wL"]
+
+    qop = quantum_constructor(out_edges, in_edges, [], [])
+
+    return qop
+
+
+def qop2tenpy(qop: QuOperator) -> Any:
+    """
+    Convert TensorCircuit QuOperator to MPO or MPS from TeNPy.
+
+    :param qop: The corresponding state/operator as a QuOperator.
+    :return: MPO or MPS object from the TeNPy package.
+    :rtype: Union[tenpy.networks.mpo.MPO, tenpy.networks.mps.MPS]
+    """
+    if not qop.ref_nodes:
+        raise ValueError("QuOperator must have ref_nodes for conversion")
+
+    is_mps = len(qop.out_edges) == 0
+    is_mpo = len(qop.out_edges) > 0
+    tensors = []
+
+    for node in qop.ref_nodes:
+        tensor = node.tensor
+        if hasattr(tensor, "numpy"):
+            tensor = tensor.numpy()
+        tensors.append(tensor.copy())
+
+    if is_mpo:
+        dummy_sites = []
+        try:
+            phys_dim = tensors[0].shape[2]
+        except IndexError:
+            phys_dim = 2
+
+        for _ in range(len(tensors)):
+            leg = npc.LegCharge.from_trivial(phys_dim)
+            dummy_sites.append(Site(leg))
+
+        Ws = []
+        for tensor in tensors:
+            if len(tensor.shape) == 4:
+                Ws.append(tensor)
+            elif len(tensor.shape) == 3:
+                Ws.append(np.expand_dims(tensor, axis=-1))
+
+        return MPO.from_Ws(dummy_sites, Ws, bc="finite")
+
+    elif is_mps:
+        dummy_sites = []
+        try:
+            phys_dim = tensors[0].shape[1]
+        except IndexError:
+            phys_dim = 2
+
+        for _ in range(len(tensors)):
+            leg = npc.LegCharge.from_trivial(phys_dim)
+            dummy_sites.append(Site(leg))
+
+        Bs = []
+        for tensor in tensors:
+            if len(tensor.shape) == 3:
+                Bs.append(tensor)
+
+        return MPS.from_Bflat(dummy_sites, Bs, bc="finite")
+
+    raise ValueError("Cannot determine if QuOperator is MPO or MPS")
+
+
+def qop2quimb(qop: QuOperator) -> Any:
+    """
+    Convert QuOperator to MPO in Quimb package.
+
+    :param qop: MPO in the form of QuOperator
+    :return: MPO in the form of Quimb package
+    :rtype: quimb.tensor.tensor_gen.MatrixProductOperator
+    """
+    if not qop.ref_nodes:
+        raise ValueError("QuOperator must have ref_nodes for conversion to Quimb")
+
+    nodes = qop.ref_nodes
+    node_to_index = {node: i for i, node in enumerate(nodes)}
+
+    tensors_data = []
+    tensor_inds = []
+
+    for node in nodes:
+        all_edges = node.edges
+        inds = []
+        for edge in all_edges:
+            if edge in qop.out_edges:
+                inds.append(f"k{node_to_index[node]}")
+            elif edge in qop.in_edges:
+                inds.append(f"b{node_to_index[node]}")
+            elif edge in qop.ignore_edges:
+                connected_node = edge.node1 if edge.node2 == node else edge.node2
+                bond_name = (
+                    f"a{min(node_to_index[node], node_to_index[connected_node])}"
+                )
+                inds.append(bond_name)
+            else:
+                continue
+
+        tensors_data.append(node.tensor)
+        tensor_inds.append(inds)
+
+    mpo = MatrixProductOperator(tensors_data, shape="lrud")
+
+    for i, tensor in enumerate(mpo.tensors):
+        tensor.inds = tensor_inds[i]
+
+    return mpo
+
+
+def qop2tn(qop: QuOperator) -> Any:
+    """
+    Convert QuOperator back to MPO in TensorNetwork package.
+
+    :param qop: MPO in the form of QuOperator
+    :return: MPO in the form of TensorNetwork
+    :rtype: tn.matrixproductstates.MPO
+    """
+    if not qop.ref_nodes:
+        raise ValueError(
+            "QuOperator must have ref_nodes for conversion to TensorNetwork"
+        )
+
+    out_edges = qop.out_edges
+    ignore_edges = qop.ignore_edges
+    nodes = qop.ref_nodes
+
+    mpo_tensors = []
+    nwires = len(out_edges) if out_edges else len(qop.in_edges)
+
+    for i, node in enumerate(nodes):
+        tensor = tn.Node(
+            node.tensor,
+            name=f"mpo_site_{i}",
+            axis_names=(
+                [f"vL_{i}", "phys_in", "phys_out", f"vR_{i}"]
+                if out_edges
+                else [f"vL_{i}", "phys_in", f"vR_{i}"]
+            ),
+        )
+        mpo_tensors.append(tensor)
+
+    for i in range(nwires - 1):
+        tn.connect(mpo_tensors[i][f"vR_{i}"], mpo_tensors[i + 1][f"vL_{i+1}"])
+
+    # Handle dangling edges
+    for edge in out_edges + qop.in_edges:
+        if edge not in ignore_edges:
+            edge.dangling = True
+
+    return tn.matrixproductstates.MPO(mpo_tensors)
 
 
 # TODO(@refraction-ray): Z2 analogy or more general analogies for the following u1 functions
