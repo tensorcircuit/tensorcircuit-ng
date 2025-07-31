@@ -1266,6 +1266,26 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `sparse_dense_matmul`.".format(self.name)
         )
 
+    def sparse_csr_from_coo(self: Any, coo: Tensor, strict: bool = False) -> Tensor:
+        """
+        transform a coo matrix to a csr matrix
+
+        :param coo: a coo matrix
+        :type coo: Tensor
+        :param strict: whether to enforce the transform, defaults to False,
+            corresponding to return the coo matrix if there is no implementation for specific backend.
+        :type strict: bool, optional
+        :return: a csr matrix
+        :rtype: Tensor
+        """
+        if strict:
+            raise NotImplementedError(
+                "Backend '{}' has not implemented `sparse_csr_from_coo`.".format(
+                    self.name
+                )
+            )
+        return coo
+
     def to_dense(self: Any, sp_a: Tensor) -> Tensor:
         """
         Convert a sparse matrix to dense tensor.

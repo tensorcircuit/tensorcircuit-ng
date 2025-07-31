@@ -61,6 +61,27 @@ def test_grad_torch(torchb):
     np.testing.assert_allclose(f(a), np.ones([2]), atol=1e-5)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_sparse_csr_from_coo(backend):
+    # Create a sparse matrix in COO format
+    values = tc.backend.convert_to_tensor(np.array([1.0, 2.0, 3.0]))
+    values = tc.backend.cast(values, "complex64")
+    indices = tc.backend.convert_to_tensor(np.array([[0, 0], [1, 1], [2, 3]]))
+    indices = tc.backend.cast(indices, "int64")
+    coo_matrix = tc.backend.coo_sparse_matrix(indices, values, shape=[4, 4])
+
+    # Convert COO to CSR
+    csr_matrix = tc.backend.sparse_csr_from_coo(coo_matrix)
+
+    # Check that the result is still recognized as sparse
+    assert tc.backend.is_sparse(csr_matrix) is True
+
+    # Check that the conversion preserves values by comparing dense representations
+    coo_dense = tc.backend.to_dense(coo_matrix)
+    csr_dense = tc.backend.to_dense(csr_matrix)
+    np.testing.assert_allclose(coo_dense, csr_dense, atol=1e-5)
+
+
 def test_sparse_tensor_matmul_monkey_patch(tfb):
     """
     Test the monkey-patched __matmul__ method for tf.SparseTensor.

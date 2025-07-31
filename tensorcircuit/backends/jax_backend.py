@@ -649,11 +649,20 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     ) -> Tensor:
         return sp_a @ b
 
+    def sparse_csr_from_coo(self, coo: Tensor, strict: bool = False) -> Tensor:
+        try:
+            return sparse.BCSR.from_bcoo(coo)  # type: ignore
+        except AttributeError as e:
+            if not strict:
+                return coo
+            else:
+                raise e
+
     def to_dense(self, sp_a: Tensor) -> Tensor:
         return sp_a.todense()
 
     def is_sparse(self, a: Tensor) -> bool:
-        return isinstance(a, sparse.BCOO)  # type: ignore
+        return isinstance(a, sparse.JAXSparse)  # type: ignore
 
     def device(self, a: Tensor) -> str:
         (dev,) = a.devices()

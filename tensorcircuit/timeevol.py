@@ -32,6 +32,8 @@ def lanczos_iteration_scan(
     :rtype: Tuple[Tensor, Tensor]
     """
     state_size = backend.shape_tuple(initial_vector)[0]
+    if backend.is_sparse(hamiltonian):
+        hamiltonian = backend.sparse_csr_from_coo(hamiltonian)
 
     # Main scan body for the outer loop (iterating j)
     def lanczos_step(carry: Tuple[Any, ...], j: int) -> Tuple[Any, ...]:
@@ -195,6 +197,9 @@ def lanczos_iteration(
 
     # Add first basis vector
     basis_vectors.append(vector)
+
+    if backend.is_sparse(hamiltonian):
+        hamiltonian = backend.sparse_csr_from_coo(hamiltonian)
 
     # Lanczos iteration (fixed number of iterations for JIT compatibility)
     for j in range(subspace_dimension):
@@ -632,6 +637,9 @@ def chebyshev_evol(
     a = (E_max - E_min) / 2.0
     b = (E_max + E_min) / 2.0
     tau = a * t  # Rescaled time parameter
+
+    if backend.is_sparse(hamiltonian):
+        hamiltonian = backend.sparse_csr_from_coo(hamiltonian)
 
     def apply_h_norm(psi: Any) -> Any:
         """Applies the normalized Hamiltonian to a state."""

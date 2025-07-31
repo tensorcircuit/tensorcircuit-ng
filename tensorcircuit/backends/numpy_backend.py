@@ -333,6 +333,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     ) -> Tensor:
         return sp_a @ b
 
+    def sparse_csr_from_coo(self, coo: Tensor, strict: bool = False) -> Tensor:
+        return coo.tocsr()
+
     def to_dense(self, sp_a: Tensor) -> Tensor:
         return sp_a.todense()
 

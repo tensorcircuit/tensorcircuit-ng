@@ -10,6 +10,8 @@
 
 - Add `jaxy_scan` for numpy and jax backends, contrasting to the tf style original backend scan method.
 
+- Add `sparse_csr_from_coo` method for numpy and jax backends to convert COO format to CSR format, the latter is more efficient for `sparse_dense_matmul`.
+
 - Add `krylov_evol` method for krylov evolution.
 
 - Add `chebyshev_evol` method for chebyshev polynomial evolution.
