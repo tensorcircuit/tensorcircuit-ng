@@ -6,6 +6,7 @@ the Heisenberg Hamiltonian, a suitable ansatz, and the optimization process.
 
 import time
 import optax
+import cotengra
 import tensorcircuit as tc
 from tensorcircuit.templates.lattice import SquareLattice, get_compatible_layers
 from tensorcircuit.templates.hamiltonians import heisenberg_hamiltonian
@@ -13,14 +14,22 @@ from tensorcircuit.templates.hamiltonians import heisenberg_hamiltonian
 # Use JAX for high-performance, especially on GPU.
 K = tc.set_backend("jax")
 tc.set_dtype("complex64")
-# On Windows, cotengra's multiprocessing can cause issues, use threads instead.
-tc.set_contractor("cotengra-8192-8192", parallel="threads")
+optimizer = cotengra.ReusableHyperOptimizer(
+    methods=["greedy", "kahypar"],
+    parallel=8,
+    optlib="cmaes",
+    minimize="flops",
+    max_time=120,
+    max_repeats=4096,
+    progbar=True,
+)
+tc.set_contractor("custom", optimizer)
 
 
 def run_vqe():
     """Set up and run the VQE optimization for a 2D Heisenberg model."""
-    n, m, nlayers = 4, 4, 2
-    lattice = SquareLattice(size=(n, m), pbc=True, precompute_neighbors=1)
+    n, m, nlayers = 4, 4, 3
+    lattice = SquareLattice(size=(n, m), pbc=False, precompute_neighbors=1)
     h = heisenberg_hamiltonian(lattice, j_coupling=[1.0, 1.0, 0.8])  # Jx, Jy, Jz
     nn_bonds = lattice.get_neighbor_pairs(k=1, unique=True)
     gate_layers = get_compatible_layers(nn_bonds)
@@ -51,12 +60,8 @@ def run_vqe():
                 for j, k in layer:
                     c.rzz(int(j), int(k), theta=param[param_idx])
                     param_idx += 1
-            for layer in gate_layers:
-                for j, k in layer:
                     c.rxx(int(j), int(k), theta=param[param_idx])
                     param_idx += 1
-            for layer in gate_layers:
-                for j, k in layer:
                     c.ryy(int(j), int(k), theta=param[param_idx])
                     param_idx += 1
 
@@ -79,10 +84,11 @@ def run_vqe():
     for i in range(1000):
         time0 = time.time()
         param, opt_state, loss = train_step(param, opt_state)
+        print(loss)  # ensure no async for profile
         time1 = time.time()
         if i % 10 == 0:
             print(
-                f"Step {i:4d}: Loss = {loss:.6f} \t (Time per step: {time1 - time0:.4f}s)"
+                f"Step {i:4d}: Loss = {loss:.6f} \t (Time per step: {(time1 - time0)/10:.4f}s)"
             )
 
     print("Optimization finished.")

@@ -6,7 +6,7 @@ tc.set_dtype("complex64")
 K = tc.set_backend("jax")
 # jax is more GPU friendly for this task,
 # while tf is more CPU efficient for this task
-tc.set_contractor("cotengra-8192-8192")
+tc.set_contractor("cotengra-1024-8192")
 # more trials for better contraction path
 
 n, m, nlayers = 4, 4, 6
