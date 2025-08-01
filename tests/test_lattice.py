@@ -1,6 +1,5 @@
 from unittest.mock import patch
 import logging
-from typing import List, Set, Tuple
 
 # import time
 
@@ -1669,35 +1668,7 @@ class TestDistanceMatrix:
 #         )
 
 
-class MockLattice(AbstractLattice):
-    """A mock lattice class for testing purposes to precisely control neighbors."""
-
-    def __init__(self, neighbor_pairs: List[Tuple[int, int]]):
-        super().__init__(dimensionality=0)
-        # Ensure bonds are stored in a canonical sorted format for consistency
-        self._neighbor_pairs = [tuple(sorted(p)) for p in neighbor_pairs]
-
-    def get_neighbor_pairs(
-        self, k: int = 1, unique: bool = True
-    ) -> List[Tuple[int, int]]:
-        # The mock lattice only knows about k=1 neighbors
-        if k == 1:
-            return self._neighbor_pairs
-        return []
-
-    def _build_lattice(self, *args, **kwargs) -> None:
-        pass
-
-    def _build_neighbors(self, max_k: int = 1, **kwargs) -> None:
-        pass
-
-    def _compute_distance_matrix(self) -> np.ndarray:
-        return np.array([])
-
-
-def _validate_layers(
-    bonds: List[Tuple[int, int]], layers: List[List[Tuple[int, int]]]
-) -> None:
+def _validate_layers(bonds, layers) -> None:
     """
     A helper function to scientifically validate the output of get_compatible_layers.
     """
@@ -1711,7 +1682,7 @@ def _validate_layers(
     "exactly match the input bonds."
 
     for i, layer in enumerate(layers):
-        qubits_in_layer: Set[int] = set()
+        qubits_in_layer: set[int] = set()
         for edge in layer:
             q1, q2 = edge
             assert (
