@@ -23,6 +23,8 @@ from tensorcircuit.templates.lattice import (
     RectangularLattice,
     SquareLattice,
     TriangularLattice,
+    AbstractLattice,
+    get_compatible_layers,
 )
 
 
@@ -1664,3 +1666,85 @@ class TestDistanceMatrix:
 #             "The specialized PBC implementation is significantly slower "
 #             "than the general-purpose implementation."
 #         )
+
+
+def _validate_layers(bonds, layers) -> None:
+    """
+    A helper function to scientifically validate the output of get_compatible_layers.
+    """
+    # MODIFICATION: This function now takes the original bonds list for comparison.
+    expected_edges = set(tuple(sorted(b)) for b in bonds)
+    actual_edges = set(tuple(sorted(edge)) for layer in layers for edge in layer)
+
+    assert (
+        expected_edges == actual_edges
+    ), "Completeness check failed: The set of all edges in the layers must "
+    "exactly match the input bonds."
+
+    for i, layer in enumerate(layers):
+        qubits_in_layer: set[int] = set()
+        for edge in layer:
+            q1, q2 = edge
+            assert (
+                q1 not in qubits_in_layer
+            ), f"Compatibility check failed: Qubit {q1} is reused in layer {i}."
+            qubits_in_layer.add(q1)
+            assert (
+                q2 not in qubits_in_layer
+            ), f"Compatibility check failed: Qubit {q2} is reused in layer {i}."
+            qubits_in_layer.add(q2)
+
+
+@pytest.mark.parametrize(
+    "lattice_instance",
+    [
+        SquareLattice(size=(3, 2), pbc=False),
+        SquareLattice(size=(3, 3), pbc=True),
+        HoneycombLattice(size=(2, 2), pbc=False),
+    ],
+    ids=[
+        "SquareLattice_3x2_OBC",
+        "SquareLattice_3x3_PBC",
+        "HoneycombLattice_2x2_OBC",
+    ],
+)
+def test_layering_on_various_lattices(lattice_instance: AbstractLattice):
+    """Tests gate layering for various standard lattice types."""
+    bonds = lattice_instance.get_neighbor_pairs(k=1, unique=True)
+    layers = get_compatible_layers(bonds)
+
+    assert len(layers) > 0, "Layers should not be empty for non-trivial lattices."
+    _validate_layers(bonds, layers)
+
+
+def test_layering_on_1d_chain_pbc():
+    """Test layering on a 1D chain with periodic boundaries (a cycle graph)."""
+    lattice_even = ChainLattice(size=(6,), pbc=True)
+    bonds_even = lattice_even.get_neighbor_pairs(k=1, unique=True)
+    layers_even = get_compatible_layers(bonds_even)
+    _validate_layers(bonds_even, layers_even)
+
+    lattice_odd = ChainLattice(size=(5,), pbc=True)
+    bonds_odd = lattice_odd.get_neighbor_pairs(k=1, unique=True)
+    layers_odd = get_compatible_layers(bonds_odd)
+    assert len(layers_odd) == 3, "A 5-site cycle graph should be 3-colorable."
+    _validate_layers(bonds_odd, layers_odd)
+
+
+def test_layering_on_custom_star_graph():
+    """Test layering on a custom lattice forming a star graph."""
+    star_edges = [(0, 1), (0, 2), (0, 3)]
+    layers = get_compatible_layers(star_edges)
+    assert len(layers) == 3, "A star graph S_4 requires 3 layers."
+    _validate_layers(star_edges, layers)
+
+
+def test_layering_on_edge_cases():
+    """Test various edge cases: empty, single-site, and no-edge lattices."""
+    layers_empty = get_compatible_layers([])
+    assert layers_empty == [], "Layers should be empty for an empty set of bonds."
+
+    single_edge = [(0, 1)]
+    layers_single = get_compatible_layers(single_edge)
+    assert layers_single == [[(0, 1)]]
+    _validate_layers(single_edge, layers_single)
