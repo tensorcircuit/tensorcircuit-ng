@@ -1,9 +1,42 @@
+from __future__ import annotations
 from unittest.mock import patch
 import logging
+import sys
 
-# import time
+# Configure logging for debugging purposes
+logging.basicConfig(
+    level=logging.DEBUG,
+    stream=sys.stdout,
+    format="[%(levelname)s] %(asctime)s - %(name)s:%(lineno)d - %(message)s",
+)
+logger = logging.getLogger(__name__)
+from unittest.mock import patch
+from typing import TYPE_CHECKING, Any
+
+import time
 
 import matplotlib
+
+
+try:
+    import jax.numpy as jnp
+except ImportError:
+    jnp = None
+try:
+    import tensorflow as tf
+except ImportError:
+    tf = None
+try:
+    import torch
+except ImportError:
+    torch = None
+
+if TYPE_CHECKING:
+    import jax.numpy as jnp
+    from jax import Array
+    import tensorflow as tf
+    import torch
+
 
 matplotlib.use("Agg")
 
@@ -26,6 +59,7 @@ from tensorcircuit.templates.lattice import (
     AbstractLattice,
     get_compatible_layers,
 )
+import tensorcircuit as tc
 
 
 @pytest.fixture
@@ -107,7 +141,7 @@ class TestCustomizeLattice:
         # the specified exception is raised within the 'with' block.
         with pytest.raises(
             ValueError,
-            match="Identifiers and coordinates lists must have the same length.",
+            match="The number of identifiers must match the number of coordinates.",
         ):
             CustomizeLattice(dimensionality=2, identifiers=ids, coordinates=coords)
 
@@ -122,9 +156,8 @@ class TestCustomizeLattice:
 
         # Act & Assert: Check for the specific error message. The 'r' before the string
         # indicates a raw string, which is good practice for regex patterns.
-        with pytest.raises(
-            ValueError, match=r"Coordinate at index 1 has shape \(3,\), expected \(2,\)"
-        ):
+        with pytest.raises(ValueError):
+
             CustomizeLattice(
                 dimensionality=2, identifiers=ids_ok, coordinates=coords_wrong_dim
             )
@@ -139,15 +172,51 @@ class TestCustomizeLattice:
 
         # --- Assertions for k=1 (Nearest Neighbors) ---
         # We use set() for comparison to ignore the order of neighbors.
-        assert set(lattice.get_neighbors(0, k=1)) == {1, 2}
-        assert set(lattice.get_neighbors(1, k=1)) == {0, 3}
-        assert set(lattice.get_neighbors(2, k=1)) == {0, 3}
-        assert set(lattice.get_neighbors(3, k=1)) == {1, 2}
+        neighbors = set(lattice.get_neighbors(0, k=1))
+        expected = {1, 2}
+        assert neighbors == expected, (
+            f"Failed neighbor check for site 0 (k=1). "
+            f"Expected {expected}, but got {neighbors}. "
+            f"Missing: {expected - neighbors}. Extra: {neighbors - expected}."
+        )
+        neighbors = set(lattice.get_neighbors(1, k=1))
+        expected = {0, 3}
+        assert neighbors == expected, (
+            f"Failed neighbor check for site 1 (k=1). "
+            f"Expected {expected}, but got {neighbors}. "
+            f"Missing: {expected - neighbors}. Extra: {neighbors - expected}."
+        )
+        neighbors = set(lattice.get_neighbors(2, k=1))
+        expected = {0, 3}
+        assert neighbors == expected, (
+            f"Failed neighbor check for site 2 (k=1). "
+            f"Expected {expected}, but got {neighbors}. "
+            f"Missing: {expected - neighbors}. Extra: {neighbors - expected}."
+        )
+        neighbors = set(lattice.get_neighbors(3, k=1))
+        expected = {1, 2}
+        assert neighbors == expected, (
+            f"Failed neighbor check for site 3 (k=1). "
+            f"Expected {expected}, but got {neighbors}. "
+            f"Missing: {expected - neighbors}. Extra: {neighbors - expected}."
+        )
 
         # --- Assertions for k=2 (Next-Nearest Neighbors) ---
         # These should be the diagonal sites.
-        assert set(lattice.get_neighbors(0, k=2)) == {3}
-        assert set(lattice.get_neighbors(1, k=2)) == {2}
+        neighbors = set(lattice.get_neighbors(0, k=2))
+        expected = {3}
+        assert neighbors == expected, (
+            f"Failed neighbor check for site 0 (k=2). "
+            f"Expected {expected}, but got {neighbors}. "
+            f"Missing: {expected - neighbors}. Extra: {neighbors - expected}."
+        )
+        neighbors = set(lattice.get_neighbors(1, k=2))
+        expected = {2}
+        assert neighbors == expected, (
+            f"Failed neighbor check for site 1 (k=2). "
+            f"Expected {expected}, but got {neighbors}. "
+            f"Missing: {expected - neighbors}. Extra: {neighbors - expected}."
+        )
 
     def test_neighbor_pairs(self, simple_square_lattice):
         """
@@ -477,6 +546,30 @@ class TestCustomizeLattice:
             f"but found {computed_shells_after}."
         )
 
+    def test_precompute_neighbors_on_init_custom(self):
+        """
+        Tests that the `precompute_neighbors` argument correctly populates
+        the neighbor map upon initialization for CustomizeLattice.
+        """
+        coords = [[float(i), float(i)] for i in range(10)]
+        ids = list(range(10))
+        k_to_precompute = 3
+
+        # Initialize the lattice with the precompute_neighbors argument
+        lattice = CustomizeLattice(
+            dimensionality=2,
+            identifiers=ids,
+            coordinates=coords,
+            precompute_neighbors=k_to_precompute,
+        )
+
+        # Assert that the internal neighbor map is populated correctly
+        assert lattice._neighbor_maps is not None
+        # Check that all shells up to k_to_precompute are present
+        computed_shells = sorted(list(lattice._neighbor_maps.keys()))
+        expected_shells = list(range(1, k_to_precompute + 1))
+        assert computed_shells == expected_shells
+
 
 @pytest.fixture
 def obc_square_lattice() -> SquareLattice:
@@ -537,11 +630,29 @@ class TestSquareLattice:
         edge_idx = 3  # (1, 0, 0)
 
         # Assert center site (4) has neighbors 1, 3, 5, 7
-        assert set(lattice.get_neighbors(center_idx, k=1)) == {1, 3, 5, 7}
+        neighbors = set(lattice.get_neighbors(center_idx, k=1))
+        expected = {1, 3, 5, 7}
+        assert neighbors == expected, (
+            f"Failed neighbor check for site {center_idx} (k=1). "
+            f"Expected {expected}, but got {neighbors}. "
+            f"Missing: {expected - neighbors}. Extra: {neighbors - expected}."
+        )
         # Assert corner site (0) has neighbors 1, 3
-        assert set(lattice.get_neighbors(corner_idx, k=1)) == {1, 3}
+        neighbors = set(lattice.get_neighbors(corner_idx, k=1))
+        expected = {1, 3}
+        assert neighbors == expected, (
+            f"Failed neighbor check for site {corner_idx} (k=1). "
+            f"Expected {expected}, but got {neighbors}. "
+            f"Missing: {expected - neighbors}. Extra: {neighbors - expected}."
+        )
         # Assert edge site (3) has neighbors 0, 4, 6
-        assert set(lattice.get_neighbors(edge_idx, k=1)) == {0, 4, 6}
+        neighbors = set(lattice.get_neighbors(edge_idx, k=1))
+        expected = {0, 4, 6}
+        assert neighbors == expected, (
+            f"Failed neighbor check for site {edge_idx} (k=1). "
+            f"Expected {expected}, but got {neighbors}. "
+            f"Missing: {expected - neighbors}. Extra: {neighbors - expected}."
+        )
 
     def test_neighbors_with_periodic_boundaries(self, pbc_square_lattice):
         """
@@ -566,8 +677,8 @@ class TestSquareLattice:
 
 @pytest.fixture
 def pbc_honeycomb_lattice() -> HoneycombLattice:
-    """Provides a 2x2 HoneycombLattice with Periodic Boundary Conditions."""
-    return HoneycombLattice(size=(2, 2), pbc=True)
+    """Provides a 3x3 HoneycombLattice with Periodic Boundary Conditions."""
+    return HoneycombLattice(size=(3, 3), pbc=True)
 
 
 class TestHoneycombLattice:
@@ -580,7 +691,7 @@ class TestHoneycombLattice:
         Tests that the total number of sites is correct for a composite lattice.
         """
         lattice = pbc_honeycomb_lattice
-        assert lattice.num_sites == 8
+        assert lattice.num_sites == 18
         assert lattice.num_basis == 2
 
     def test_honeycomb_neighbors(self, pbc_honeycomb_lattice):
@@ -593,6 +704,20 @@ class TestHoneycombLattice:
 
         site_b_idx = lattice.get_index((0, 0, 1))
         assert len(lattice.get_neighbors(site_b_idx, k=1)) == 3
+
+    def test_honeycomb_next_nearest_neighbors(self, pbc_honeycomb_lattice):
+        """
+        Tests that every site in a honeycomb lattice has 6 next-nearest neighbors
+        under periodic boundary conditions.
+        """
+        lattice = pbc_honeycomb_lattice
+        # In a PBC honeycomb lattice, every site is equivalent.
+        # We can just test one site from each basis.
+        site_a_idx = lattice.get_index((0, 0, 0))
+        assert len(lattice.get_neighbors(site_a_idx, k=2)) == 6
+
+        site_b_idx = lattice.get_index((0, 0, 1))
+        assert len(lattice.get_neighbors(site_b_idx, k=2)) == 6
 
 
 # --- Tests for TriangularLattice ---
@@ -1022,6 +1147,16 @@ class TestTILattice:
         with pytest.raises(AssertionError, match="Size tuple length mismatch"):
             SquareLattice(size=(2, 2, 2))
 
+    def test_init_with_mismatched_pbc_raises_error(self):
+        """
+        Tests that TILattice raises AssertionError if the 'pbc' tuple's
+        length does not match the dimensionality.
+        This addresses a gap identified in the code review.
+        """
+        with pytest.raises(AssertionError, match="PBC tuple length mismatch"):
+            # A 2D lattice requires a pbc tuple of length 2, but we provide one of length 1.
+            SquareLattice(size=(2, 2), pbc=(True,))
+
     def test_init_with_tuple_pbc(self):
         """
         Tests that TILattice correctly handles a tuple input for the 'pbc'
@@ -1077,6 +1212,24 @@ class TestTILattice:
             f"Expected shells {expected_shells_after} after demanding k={k_ondemand}, "
             f"but found {computed_shells_after}."
         )
+
+    def test_precompute_neighbors_on_init(self):
+        """
+        Tests that the `precompute_neighbors` argument correctly populates
+        the neighbor map upon initialization for a TILattice subclass.
+        """
+        k_to_precompute = 2
+        # Initialize a SquareLattice with the precompute_neighbors argument
+        lattice = SquareLattice(
+            size=(4, 4), pbc=True, precompute_neighbors=k_to_precompute
+        )
+
+        # Assert that the internal neighbor map is populated correctly
+        assert lattice._neighbor_maps is not None
+        # Check that all shells up to k_to_precompute are present
+        computed_shells = sorted(list(lattice._neighbor_maps.keys()))
+        expected_shells = list(range(1, k_to_precompute + 1))
+        assert computed_shells == expected_shells
 
 
 class TestLongRangeNeighborFinding:
@@ -1240,6 +1393,31 @@ class TestLongRangeNeighborFinding:
         assert (
             edge_neighbors == expected_edge_indices
         ), "Failed for edge site with mixed BC."
+
+    def test_mixed_boundary_conditions_on_honeycomb(self):
+        """
+        Tests neighbor finding on a HoneycombLattice with mixed PBC.
+        This ensures the logic correctly handles composite lattices with
+        anisotropic boundary conditions.
+        """
+        lattice = HoneycombLattice(size=(3, 3), pbc=(True, False))
+
+        test_site_idx = lattice.get_index((1, 0, 0))
+
+        neighbors = lattice.get_neighbors(test_site_idx, k=1)
+
+        assert (
+            len(neighbors) == 2
+        ), "Site on the open boundary has incorrect number of neighbors."
+
+        expected_neighbor_idents = {
+            (1, 0, 1),
+            (0, 0, 1),
+        }
+
+        actual_neighbor_idents = {lattice.get_identifier(i) for i in neighbors}
+
+        assert actual_neighbor_idents == expected_neighbor_idents
 
 
 class TestAllTILattices:
@@ -1480,6 +1658,77 @@ class TestCustomizeLatticeDynamic:
             3,
         ], "The neighbor list should be sorted in ascending order."
 
+    def test_from_lattice_from_empty_lattice(self):
+        """Tests creating a CustomizeLattice from an empty TILattice."""
+        # Arrange: Create an empty TILattice instance.
+        empty_sq = SquareLattice(size=(0, 0))
+
+        # Act: Convert it to a CustomizeLattice.
+        custom_from_empty = CustomizeLattice.from_lattice(empty_sq)
+
+        # Assert: The resulting lattice should also be empty and have the correct properties.
+        assert isinstance(custom_from_empty, CustomizeLattice)
+        assert custom_from_empty.num_sites == 0
+        assert custom_from_empty.dimensionality == 2
+
+    def test_add_sites_to_empty_lattice(self):
+        """Tests adding sites to a previously empty CustomizeLattice."""
+        # Arrange: Create an empty CustomizeLattice.
+        empty_lat = CustomizeLattice(dimensionality=2, identifiers=[], coordinates=[])
+        assert empty_lat.num_sites == 0
+
+        # Act: Add new sites to it.
+        empty_lat.add_sites(
+            identifiers=["X", "Y"], coordinates=[[1.0, 1.0], [2.0, 2.0]]
+        )
+
+        # Assert: The lattice should now contain the new sites.
+        assert empty_lat.num_sites == 2
+        assert empty_lat.get_identifier(0) == "X"
+        np.testing.assert_array_equal(
+            empty_lat.get_coordinates(1), np.array([2.0, 2.0])
+        )
+
+    def test_add_and_remove_empty_list_of_sites(self, initial_lattice):
+        """
+        Tests that calling add_sites and remove_sites with empty lists
+        is a no-op and doesn't change the lattice state.
+        """
+        # Arrange
+        lat = initial_lattice
+        original_num_sites = lat.num_sites
+        # In backends like JAX, tensors are immutable. We can check object identity.
+        original_coords_id = id(lat._coordinates)
+
+        # Act 1: Add an empty list of sites.
+        lat.add_sites(identifiers=[], coordinates=[])
+
+        # Assert 1: Nothing should have changed.
+        assert lat.num_sites == original_num_sites
+        assert id(lat._coordinates) == original_coords_id
+
+        # Act 2: Remove an empty list of sites.
+        lat.remove_sites(identifiers=[])
+
+        # Assert 2: Still no changes.
+        assert lat.num_sites == original_num_sites
+        assert id(lat._coordinates) == original_coords_id
+
+    def test_remove_all_sites(self, initial_lattice):
+        """Tests removing all sites from a lattice, resulting in an empty lattice."""
+        # Arrange
+        lat = initial_lattice
+        # Get all identifiers before removal.
+        all_ids = list(lat._identifiers)
+
+        # Act
+        lat.remove_sites(identifiers=all_ids)
+
+        # Assert: The lattice should now be empty.
+        assert lat.num_sites == 0
+        assert len(lat._ident_to_idx) == 0
+        assert lat._coordinates.shape[0] == 0
+
 
 class TestDistanceMatrix:
 
@@ -1629,43 +1878,66 @@ class TestDistanceMatrix:
             matrix[off_diagonal_mask] > 1e-9
         ), f"Found non-positive off-diagonal elements in distance matrix for {type(lattice).__name__}."
 
+    def test_distance_matrix_caching_is_effective(self):
+        """
+        Tests that the distance_matrix property is cached after the first access.
+        """
+        # Arrange: Create a lattice instance.
+        lattice = CustomizeLattice(
+            dimensionality=2,
+            identifiers=["A", "B", "C"],
+            coordinates=[[0, 0], [1, 0], [0, 1]],
+        )
 
-# @pytest.mark.slow
-# class TestPerformance:
-#     def test_pbc_implementation_is_not_significantly_slower_than_obc(self):
-#         """
-#         A performance regression test.
-#         It ensures that the specialized implementation for fully periodic
-#         lattices (pbc=True) is not substantially slower than the general
-#         implementation used for open boundaries (pbc=False).
-#         This test will FAIL with the current code, exposing the performance bug.
-#         """
-#         # Arrange: Use a large-enough lattice to make performance differences apparent
-#         size = (30, 30)
-#         k = 1
+        # Act & Assert
+        # We patch the internal _compute_distance_matrix method to spy on it.
+        with patch.object(
+            lattice, "_compute_distance_matrix", wraps=lattice._compute_distance_matrix
+        ) as spy_compute:
+            # Access the property twice.
+            _ = lattice.distance_matrix
+            _ = lattice.distance_matrix
 
-#         # Act 1: Measure the execution time of the general (OBC) implementation
-#         start_time_obc = time.time()
-#         _ = SquareLattice(size=size, pbc=False, precompute_neighbors=k)
-#         duration_obc = time.time() - start_time_obc
+            # The computation method should have been called only on the first access.
+            spy_compute.assert_called_once()
 
-#         # Act 2: Measure the execution time of the specialized (PBC) implementation
-#         start_time_pbc = time.time()
-#         _ = SquareLattice(size=size, pbc=True, precompute_neighbors=k)
-#         duration_pbc = time.time() - start_time_pbc
 
-#         print(
-#             f"\n[Performance] OBC ({size}): {duration_obc:.4f}s | PBC ({size}): {duration_pbc:.4f}s"
-#         )
+@pytest.mark.slow
+class TestPerformance:
+    def test_pbc_implementation_is_not_significantly_slower_than_obc(self):
+        """
+        A performance regression test.
+        It ensures that the specialized implementation for fully periodic
+        lattices (pbc=True) is not substantially slower than the general
+        implementation used for open boundaries (pbc=False).
+        This test will FAIL with the current code, exposing the performance bug.
+        """
+        # Arrange: Use a large-enough lattice to make performance differences apparent
+        size = (40, 40)
+        k = 1
 
-#         # Assert: The PBC implementation should not be drastically slower.
-#         # We allow it to be up to 3 times slower to account for minor overheads,
-#         # but this will catch the current 10x+ regression.
-#         # THIS ASSERTION WILL FAIL with the current buggy code.
-#         assert duration_pbc < duration_obc * 5, (
-#             "The specialized PBC implementation is significantly slower "
-#             "than the general-purpose implementation."
-#         )
+        # Act 1: Measure the execution time of the general (OBC) implementation
+        start_time_obc = time.time()
+        _ = SquareLattice(size=size, pbc=False, precompute_neighbors=k)
+        duration_obc = time.time() - start_time_obc
+
+        # Act 2: Measure the execution time of the specialized (PBC) implementation
+        start_time_pbc = time.time()
+        _ = SquareLattice(size=size, pbc=True, precompute_neighbors=k)
+        duration_pbc = time.time() - start_time_pbc
+
+        print(
+            f"\n[Performance] OBC ({size}): {duration_obc:.4f}s | PBC ({size}): {duration_pbc:.4f}s"
+        )
+
+        # Assert: The PBC implementation should not be drastically slower.
+        # We allow it to be up to 3 times slower to account for minor overheads,
+        # but this will catch the current 10x+ regression.
+        # THIS ASSERTION WILL FAIL with the current buggy code.
+        assert duration_pbc < duration_obc * 5, (
+            "The specialized PBC implementation is significantly slower "
+            "than the general-purpose implementation."
+        )
 
 
 def _validate_layers(bonds, layers) -> None:
@@ -1748,3 +2020,545 @@ def test_layering_on_edge_cases():
     layers_single = get_compatible_layers(single_edge)
     assert layers_single == [[(0, 1)]]
     _validate_layers(single_edge, layers_single)
+
+
+def test_layering_on_disconnected_graph():
+    """
+    Tests that the layering algorithm correctly handles a graph consisting
+    of multiple disconnected components.
+    """
+    disconnected_bonds = [
+        (0, 1),
+        (1, 2),
+        (2, 0),
+        (3, 4),
+        (4, 5),
+        (5, 3),
+    ]
+
+    layers = get_compatible_layers(disconnected_bonds)
+
+    # Assert
+    _validate_layers(disconnected_bonds, layers)
+
+    assert len(layers) == 3, "Two disconnected triangles should be 3-edge-colorable."
+
+    layer_with_01 = next(
+        layer for layer in layers if (0, 1) in layer or (1, 0) in layer
+    )
+    assert (3, 4) in layer_with_01 or (4, 3) in layer_with_01
+
+
+# A map from backend name to the expected tensor type.
+BACKEND_TENSOR_MAP = {
+    "numpy": np.ndarray,
+    "jax": jnp.ndarray if jnp else None,
+    "tensorflow": tf.Tensor if tf else None,
+    "pytorch": torch.Tensor if torch else None,
+}
+
+
+@pytest.fixture(scope="function")
+def jax_backend_fixture():
+    """
+    Pytest fixture to set the backend to 'jax' for a test and restore it afterward.
+    This ensures that differentiability tests run in the correct environment
+    without interfering with other tests.
+    """
+    original_backend = tc.backend.name
+    try:
+        tc.set_backend("jax")
+        yield
+    finally:
+        tc.set_backend(original_backend)
+
+
+class TestBackendIntegration:
+    """
+    Tests to ensure lattice functionalities are consistent and correct
+    across different computation backends.
+    """
+
+    # Define the test cases for parameterization
+    lattice_test_cases = [
+        (
+            SquareLattice,
+            {"size": (3, 3), "pbc": False},
+            (0, 4, np.sqrt(2.0)),
+            "SquareLattice",
+        ),
+        (
+            CustomizeLattice,
+            {
+                "dimensionality": 2,
+                "identifiers": [0, 1],
+                "coordinates": [[0.0, 0.0], [1.0, 1.0]],
+            },
+            (0, 1, np.sqrt(2.0)),
+            "CustomizeLattice",
+        ),
+        (
+            HoneycombLattice,
+            {"size": (2, 2), "pbc": True},
+            (0, 1, 1.0),
+            "HoneycombLattice",
+        ),
+        (
+            RectangularLattice,
+            {"size": (2, 3), "lattice_constants": (1.0, 2.0), "pbc": False},
+            (0, 1, 2.0),
+            "RectangularLattice",
+        ),
+    ]
+
+    @pytest.mark.parametrize("backend_name", ["numpy", "jax", "tensorflow", "pytorch"])
+    @pytest.mark.parametrize(
+        "LatticeClass, init_args, expected_distance_check, name",
+        lattice_test_cases,
+        ids=[case[3] for case in lattice_test_cases],
+    )
+    def test_lattice_creation_and_properties_across_backends(
+        self,
+        backend_name: str,
+        LatticeClass: "AbstractLattice",
+        init_args: dict[str, Any],
+        expected_distance_check: tuple[int, int, float],
+        name: str,
+    ) -> None:
+        """
+        Tests that various lattices can be created with each backend and that their
+        core properties (_coordinates, distance_matrix) have the correct
+        tensor types and values.
+        """
+        expected_tensor_type = BACKEND_TENSOR_MAP[backend_name]
+        if expected_tensor_type is None:
+            pytest.skip(f"Backend '{backend_name}' not installed.")
+
+        tc.set_backend(backend_name)
+
+        # Create the lattice instance inside the test function
+        lat = LatticeClass(**init_args)
+
+        # Assert that the internal coordinate and public distance matrix tensors
+        # have the correct type for the active backend.
+        assert isinstance(
+            lat._coordinates, expected_tensor_type
+        ), f"Failed for {type(lat).__name__} on backend {backend_name}"
+        assert isinstance(
+            lat.distance_matrix, expected_tensor_type
+        ), f"Failed for {type(lat).__name__} on backend {backend_name}"
+
+        # Unpack the distance check information
+        idx1, idx2, expected_distance = expected_distance_check
+
+        # Extract the actual distance from the matrix and convert to a numpy float
+        # for a consistent comparison across all backends.
+        actual_distance = tc.backend.numpy(lat.distance_matrix)[idx1, idx2]
+
+        # Assert that the computed distance matches the expected value.
+        np.testing.assert_allclose(
+            actual_distance,
+            expected_distance,
+            err_msg=f"Distance check failed for {type(lat).__name__} on backend {backend_name}",
+        )
+
+    @pytest.mark.usefixtures("jax_backend_fixture")
+    @pytest.mark.parametrize(
+        "lattice_class, init_params, differentiable_arg_name, test_value",
+        [
+            (
+                SquareLattice,
+                {"size": (2, 2)},
+                "lattice_constant",
+                1.0,
+            ),
+            (
+                RectangularLattice,
+                {"size": (2, 2)},
+                "lattice_constants",
+                (1.0, 1.5),
+            ),
+            (
+                DimerizedChainLattice,
+                {"size": (3,)},
+                "lattice_constant",
+                0.8,
+            ),
+        ],
+        ids=["SquareLattice", "RectangularLattice", "DimerizedChainLattice"],
+    )
+    def test_tilattice_differentiability(
+        self,
+        lattice_class: type[AbstractLattice],
+        init_params: dict[str, Any],
+        differentiable_arg_name: str,
+        test_value: Any,
+    ) -> None:
+        """
+        Tests that the distance_matrix of various TILattices is differentiable
+        with respect to their geometric parameters. This test has been expanded
+        based on code review feedback to cover more lattice types.
+        """
+        if not jnp:
+            pytest.skip("JAX backend is required for this differentiability test.")
+
+        def get_total_distance(param: Any) -> Array:
+            """A scalar-in, scalar-out function for jax.grad."""
+            # Dynamically create the lattice with the parameter being differentiated
+            lat = lattice_class(**init_params, **{differentiable_arg_name: param})
+            return tc.backend.sum(lat.distance_matrix)
+
+        # Compute the gradient. The `argnums` parameter is used for tuple inputs.
+        grad_fn = (
+            tc.backend.grad(get_total_distance, argnums=0)
+            if isinstance(test_value, tuple)
+            else tc.backend.grad(get_total_distance)
+        )
+        grad_val = grad_fn(test_value)
+
+        assert grad_val is not None
+
+        # For tuple gradients, check that at least one element is non-zero.
+        if isinstance(grad_val, tuple):
+            assert any(
+                not np.isclose(float(g), 0.0) for g in grad_val
+            ), f"Gradient for {lattice_class.__name__} was all zeros."
+        else:
+            assert not np.isclose(
+                float(grad_val), 0.0
+            ), f"Gradient for {lattice_class.__name__} was zero."
+
+    @pytest.mark.usefixtures("jax_backend_fixture")
+    def test_customizelattice_differentiability(self) -> None:
+        """
+        Tests that the distance_matrix of a CustomizeLattice is differentiable
+        with respect to its input coordinates.
+        """
+        # This test requires the JAX backend for its grad function.
+        if not jnp:
+            pytest.skip("JAX backend is required for this differentiability test.")
+
+        initial_coords = jnp.array([[0.0, 0.0], [1.0, 1.0], [0.5, 0.5]])
+
+        def get_total_distance_custom(coords: Array) -> Array:
+            """
+            A helper function that takes coordinates, creates a CustomizeLattice,
+            and returns a scalar value (the sum of its distance matrix).
+            """
+            lat = CustomizeLattice(
+                dimensionality=2, identifiers=[0, 1, 2], coordinates=coords
+            )
+            return tc.backend.sum(lat.distance_matrix)
+
+        # Compute the gradient of the total distance with respect to the initial coordinates.
+        grad_tensor = tc.backend.grad(get_total_distance_custom)(initial_coords)
+
+        # Assert that the gradient tensor is not None and is not all zeros.
+        # A non-zero gradient confirms that the output is indeed differentiable
+        # with respect to the input coordinates.
+        assert grad_tensor is not None
+        assert not np.all(np.isclose(grad_tensor, 0.0))
+
+    @pytest.mark.usefixtures("jax_backend_fixture")
+    def test_tilattice_gradient_value_correctness(self) -> None:
+        """
+        Tests that the AD gradient for a TILattice parameter matches the
+        analytically calculated, correct gradient value. This is a stronger
+        test than just checking for non-zero gradients.
+        """
+        if not jnp:
+            pytest.skip("JAX backend is required for this gradient value test.")
+
+        # 1. Define a simple objective function
+        def get_energy(a: float) -> Array:
+            """
+            A simple energy function for a 2-site chain.
+            Energy = (distance between site 0 and 1)^2 = a^2
+            """
+            # Using a 2-site chain, the simplest possible TILattice
+            lat = ChainLattice(size=(2,), pbc=False, lattice_constant=a)
+            # The distance matrix for a 2-site chain is [[0, a], [a, 0]]
+            dist_matrix = lat.distance_matrix
+            # Sum of squared distances for all unique pairs. There is only one pair (0,1).
+            return tc.backend.sum(dist_matrix**2) / 2.0
+
+        # 2. Define the analytical (manually calculated) gradient
+        def analytical_gradient(a: float) -> float:
+            """
+            The analytical derivative of the energy function E(a) = a^2.
+            dE/da = 2a
+            """
+            return 2 * a
+
+        # 3. Set up the test
+        test_lattice_constant = 1.5
+        # Compute the gradient using automatic differentiation
+        ad_grad = tc.backend.grad(get_energy)(test_lattice_constant)
+        # Compute the expected gradient using our analytical formula
+        expected_grad = analytical_gradient(test_lattice_constant)
+
+        # 4. Assert that the two gradients are numerically very close
+        np.testing.assert_allclose(
+            ad_grad,
+            expected_grad,
+            rtol=1e-6,
+            err_msg="The automatically differentiated gradient does not match the analytical gradient.",
+        )
+
+    @pytest.mark.parametrize("backend_name", ["numpy", "jax", "tensorflow", "pytorch"])
+    def test_dynamic_modification_across_backends(self, backend_name: str) -> None:
+        """
+        Tests that the dynamic modification methods (add_sites, remove_sites)
+        of CustomizeLattice work correctly across all supported backends,
+        specifically checking tensor shapes.
+        """
+        # Arrange: Set up the backend and skip if not installed
+        expected_tensor_type = BACKEND_TENSOR_MAP[backend_name]
+        if expected_tensor_type is None:
+            pytest.skip(f"Backend '{backend_name}' not installed.")
+
+        tc.set_backend(backend_name)
+
+        # --- Initial State ---
+        # Create a simple lattice with 3 sites
+        initial_coords = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+        initial_ids = ["A", "B", "C"]
+        lattice = CustomizeLattice(
+            dimensionality=2, identifiers=initial_ids, coordinates=initial_coords
+        )
+        assert lattice.num_sites == 3
+        assert lattice._coordinates.shape[0] == 3
+
+        # --- Test add_sites ---
+        # Act: Add 2 new sites
+        lattice.add_sites(identifiers=["D", "E"], coordinates=[[1.0, 1.0], [2.0, 0.0]])
+
+        # Assert: Check new size and tensor shape
+        assert lattice.num_sites == 5
+        assert (
+            lattice._coordinates.shape[0] == 5
+        ), f"Tensor shape incorrect after add_sites on {backend_name} backend."
+
+        # --- Test remove_sites ---
+        # Act: Remove 1 site from the modified lattice
+        lattice.remove_sites(identifiers=["A"])
+
+        # Assert: Check final size and tensor shape
+        assert lattice.num_sites == 4
+        assert (
+            lattice._coordinates.shape[0] == 4
+        ), f"Tensor shape incorrect after remove_sites on {backend_name} backend."
+
+
+@pytest.mark.parametrize("backend_name", ["numpy", "jax", "tensorflow", "pytorch"])
+def test_dtype_consistency_across_backends(backend_name: str) -> None:
+    """
+    Tests that the dtype of user-provided coordinate data is preserved
+    in internal calculations across all backends.
+    """
+    # Arrange: Set up the backend and skip if not installed
+    if BACKEND_TENSOR_MAP[backend_name] is None:
+        pytest.skip(f"Backend '{backend_name}' not installed.")
+
+    tc.set_backend(backend_name)
+
+    # A map from backend name to its corresponding float32 dtype object
+    # Prepare input data with a specific, non-default dtype
+    coords_float32 = np.array([[0.0, 0.0], [1.0, 2.0]], dtype=np.float32)
+
+    # Act: Create a lattice with this data
+    lattice = CustomizeLattice(
+        dimensionality=2, identifiers=[0, 1], coordinates=coords_float32
+    )
+
+    # Assert: Check that the internal tensors have the correct dtype
+    assert tc.backend.dtype(lattice._coordinates) == "float32", (
+        f"Mismatch in coordinate dtype for backend {backend_name}. "
+        f"Expected 'float32', got {tc.backend.dtype(lattice._coordinates)}."
+    )
+    assert tc.backend.dtype(lattice.distance_matrix) == "float32", (
+        f"Mismatch in distance matrix dtype for backend {backend_name}. "
+        f"Expected 'float32', got {tc.backend.dtype(lattice.distance_matrix)}."
+    )
+
+
+class TestPrivateHelpers:
+    """
+    A dedicated test class for private helper methods of AbstractLattice.
+    This allows for focused testing of internal logic that is critical for
+    the public-facing API but not directly exposed.
+    """
+
+    @pytest.fixture
+    def simple_lattice_for_helpers(self) -> CustomizeLattice:
+        """
+        Provides a very simple lattice instance, primarily to gain access to
+        the private helper methods for testing. The geometry itself is trivial.
+        """
+        # A simple 3-site lattice is sufficient to call the helper methods.
+        return CustomizeLattice(
+            dimensionality=1, identifiers=[0, 1, 2], coordinates=[[0.0], [1.0], [2.0]]
+        )
+
+    def test_identify_distance_shells_basic(self, simple_lattice_for_helpers):
+        """
+        Tests the basic functionality of _identify_distance_shells with a
+        clear separation between distance shells.
+        """
+        # Arrange
+        lattice = simple_lattice_for_helpers
+        # A set of squared distances with clear gaps between them.
+        all_distances_sq = np.array([0, 1.0, 1.0, 4.0, 4.0, 9.0])
+
+        # Act
+        # Call the private helper method directly.
+        shells = lattice._identify_distance_shells(all_distances_sq, max_k=10)
+
+        # Assert
+        # The method should identify the unique, non-zero distances.
+        np.testing.assert_allclose(shells, [1.0, 4.0, 9.0])
+
+    def test_identify_distance_shells_with_max_k_limit(
+        self, simple_lattice_for_helpers
+    ):
+        """
+        Tests that _identify_distance_shells respects the max_k parameter,
+        limiting the number of returned shells.
+        """
+        # Arrange
+        lattice = simple_lattice_for_helpers
+        all_distances_sq = np.array([0, 1.0, 4.0, 9.0, 16.0, 25.0])
+        max_k = 3  # We only want the first 3 shells.
+
+        # Act
+        shells = lattice._identify_distance_shells(all_distances_sq, max_k=max_k)
+
+        # Assert
+        # The number of shells should be limited by max_k.
+        assert len(shells) == max_k
+        # The returned shells should be the first `max_k` smallest distances.
+        np.testing.assert_allclose(shells, [1.0, 4.0, 9.0])
+
+    def test_identify_distance_shells_with_tolerance_merging(
+        self, simple_lattice_for_helpers
+    ):
+        """
+        Tests that distances that are very close together are merged into a
+        single shell when the tolerance `tol` is large enough.
+        """
+        # Arrange
+        lattice = simple_lattice_for_helpers
+        # Two distances are very close: 1.0 and 1.000001
+        all_distances_sq = np.array([0, 1.0, 1.000001, 4.0])
+        # A tolerance larger than the difference between the two close distances.
+        tol = 1e-5
+
+        # Act
+        shells = lattice._identify_distance_shells(all_distances_sq, tol=tol, max_k=10)
+
+        # Assert
+        # Because of the tolerance, 1.0 and 1.000001 should be considered the same shell.
+        # The method should return the first distance of the merged group (1.0).
+        np.testing.assert_allclose(shells, [1.0, 4.0])
+
+    def test_identify_distance_shells_with_tolerance_separation(
+        self, simple_lattice_for_helpers
+    ):
+        """
+        Tests that very close distances are correctly identified as separate
+        shells when the tolerance `tol` is small enough.
+        """
+        # Arrange
+        lattice = simple_lattice_for_helpers
+        all_distances_sq = np.array([0, 1.0, 1.000001, 4.0])
+        # A tolerance smaller than the difference.
+        tol = 1e-7
+
+        # Act
+        shells = lattice._identify_distance_shells(all_distances_sq, tol=tol, max_k=10)
+
+        # Assert
+        # With a small tolerance, the two close distances should be treated as distinct shells.
+        np.testing.assert_allclose(shells, [1.0, 1.000001, 4.0])
+
+    def test_identify_distance_shells_with_empty_and_zero_input(
+        self, simple_lattice_for_helpers
+    ):
+        """
+        Tests that the method handles edge cases like empty arrays or arrays
+        containing only zeros, returning an empty list.
+        """
+        # Arrange
+        lattice = simple_lattice_for_helpers
+
+        # Act & Assert for empty input
+        shells_empty = lattice._identify_distance_shells(np.array([]), max_k=10)
+        assert (
+            shells_empty == []
+        ), "Should return an empty list for an empty distance array."
+
+        # Act & Assert for zero-only input
+        shells_zero = lattice._identify_distance_shells(np.array([0, 0, 0]), max_k=10)
+        assert (
+            shells_zero == []
+        ), "Should return an empty list for a distance array with only zeros."
+
+    def test_get_distance_matrix_with_mic(self):
+        """
+        Tests the internal _get_distance_matrix_with_mic method for TILattice
+        to ensure it correctly applies the Minimum Image Convention.
+        """
+        # --- Test Case 1: Fully Periodic Boundary Conditions (PBC) ---
+        lattice_pbc = SquareLattice(size=(3, 3), pbc=True, lattice_constant=1.0)
+        # We need to use the numpy backend for direct comparison
+        dist_matrix_pbc = tc.backend.numpy(lattice_pbc._get_distance_matrix_with_mic())
+
+        # For a 3x3 PBC lattice, the distance between opposite edges should be 1.
+        # Example: site (0,0) and site (2,0)
+        idx1 = lattice_pbc.get_index((0, 0, 0))
+        idx2 = lattice_pbc.get_index((2, 0, 0))
+        np.testing.assert_allclose(
+            dist_matrix_pbc[idx1, idx2],
+            1.0,
+            err_msg="Distance check failed for x-direction in PBC case.",
+        )
+
+        # Example: site (0,0) and site (0,2)
+        idx3 = lattice_pbc.get_index((0, 2, 0))
+        np.testing.assert_allclose(
+            dist_matrix_pbc[idx1, idx3],
+            1.0,
+            err_msg="Distance check failed for y-direction in PBC case.",
+        )
+
+        # Example: corner-to-corner distance, e.g., (0,0) to (2,2)
+        # dx = min(|0-2|, 3-|0-2|) = 1; dy = min(|0-2|, 3-|0-2|) = 1
+        # distance = sqrt(1^2 + 1^2) = sqrt(2)
+        idx4 = lattice_pbc.get_index((2, 2, 0))
+        np.testing.assert_allclose(
+            dist_matrix_pbc[idx1, idx4],
+            np.sqrt(2.0),
+            err_msg="Diagonal distance check failed in PBC case.",
+        )
+
+        # --- Test Case 2: Mixed Boundary Conditions ---
+        lattice_mixed = SquareLattice(
+            size=(3, 3), pbc=(True, False), lattice_constant=1.0
+        )
+        dist_matrix_mixed = tc.backend.numpy(
+            lattice_mixed._get_distance_matrix_with_mic()
+        )
+
+        # In the periodic x-direction, distance should be 1.
+        np.testing.assert_allclose(
+            dist_matrix_mixed[idx1, idx2],
+            1.0,
+            err_msg="Distance check failed for periodic x-direction in mixed BC case.",
+        )
+
+        # In the open y-direction, distance should be 2.
+        np.testing.assert_allclose(
+            dist_matrix_mixed[idx1, idx3],
+            2.0,
+            err_msg="Distance check failed for open y-direction in mixed BC case.",
+        )

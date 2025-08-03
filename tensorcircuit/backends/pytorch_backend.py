@@ -244,6 +244,9 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         # it doesn't support complex numbers which is more severe issue.
         # see https://github.com/pytorch/pytorch/issues/9983
 
+    def power(self, a: Tensor, b: Union[Tensor, float]) -> Tensor:
+        return torchlib.pow(a, b)
+
     def sin(self, a: Tensor) -> Tensor:
         return torchlib.sin(a)
 
@@ -369,6 +372,17 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def argmin(self, a: Tensor, axis: int = 0) -> Tensor:
         return torchlib.argmin(a, dim=axis)
 
+    def sort(self, a: Tensor, axis: int = -1) -> Tensor:
+        return torchlib.sort(a, dim=axis).values
+
+    def all(self, tensor: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
+        """
+        Corresponds to torch.all.
+        """
+        if axis is None:
+            return torchlib.all(tensor)
+        return torchlib.all(tensor, dim=axis)
+
     def unique_with_counts(self, a: Tensor, **kws: Any) -> Tuple[Tensor, Tensor]:
         return torchlib.unique(a, return_counts=True)  # type: ignore
 
@@ -424,6 +438,21 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         if not self.is_tensor(v):
             v = self.convert_to_tensor(v)
         return torchlib.searchsorted(a, v, side=side)
+
+    def where(
+        self,
+        condition: Tensor,
+        x: Optional[Tensor] = None,
+        y: Optional[Tensor] = None,
+    ) -> Tensor:
+        if x is None and y is None:
+            return torchlib.where(condition)
+        return torchlib.where(condition, x, y)
+
+    def equal(self, x1: Tensor, x2: Any) -> Tensor:
+        if not self.is_tensor(x2):
+            x2 = torchlib.tensor(x2, device=x1.device, dtype=x1.dtype)
+        return torchlib.eq(x1, x2)
 
     def reverse(self, a: Tensor) -> Tensor:
         return torchlib.flip(a, dims=(-1,))
@@ -706,6 +735,12 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
 
         return wrapper
 
+    def expand_dims(self, a: Tensor, axis: int) -> Tensor:
+        return torchlib.unsqueeze(a, dim=axis)
+
     vvag = vectorized_value_and_grad
+
+    def meshgrid(self, *args: Any, **kws: Any) -> Tensor:
+        return torchlib.meshgrid(*args, **kws)
 
     optimizer = torch_optimizer

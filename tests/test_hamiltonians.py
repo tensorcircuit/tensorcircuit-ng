@@ -157,3 +157,35 @@ class TestRydbergHamiltonian:
         h_generated_dense = tc.backend.to_dense(h_generated)
         assert h_generated_dense.shape == (4, 4)
         assert np.allclose(h_generated_dense, h_expected)
+
+    def test_heisenberg_hamiltonian_all_interactions(self):
+        """
+        Test the Heisenberg Hamiltonian with 'all' interaction scope.
+        For a 3-site chain, this should include interactions (0,1), (0,2), and (1,2).
+        """
+        lattice = ChainLattice(size=(3,), pbc=False)
+        j_coupling = 1.0
+        h_generated = heisenberg_hamiltonian(
+            lattice, j_coupling=j_coupling, interaction_scope="all"
+        )
+
+        # Manually construct the expected Hamiltonian for all-to-all interaction
+        # H = J * [ (X0X1 + Y0Y1 + Z0Z1) + (X0X2 + Y0Y2 + Z0Z2) + (X1X2 + Y1Y2 + Z1Z2) ]
+        xx_01 = np.kron(PAULI_X, np.kron(PAULI_X, PAULI_I))
+        yy_01 = np.kron(PAULI_Y, np.kron(PAULI_Y, PAULI_I))
+        zz_01 = np.kron(PAULI_Z, np.kron(PAULI_Z, PAULI_I))
+
+        xx_02 = np.kron(PAULI_X, np.kron(PAULI_I, PAULI_X))
+        yy_02 = np.kron(PAULI_Y, np.kron(PAULI_I, PAULI_Y))
+        zz_02 = np.kron(PAULI_Z, np.kron(PAULI_I, PAULI_Z))
+
+        xx_12 = np.kron(PAULI_I, np.kron(PAULI_X, PAULI_X))
+        yy_12 = np.kron(PAULI_I, np.kron(PAULI_Y, PAULI_Y))
+        zz_12 = np.kron(PAULI_I, np.kron(PAULI_Z, PAULI_Z))
+
+        h_expected = j_coupling * (
+            (xx_01 + yy_01 + zz_01) + (xx_02 + yy_02 + zz_02) + (xx_12 + yy_12 + zz_12)
+        )
+
+        assert h_generated.shape == (8, 8)
+        assert np.allclose(tc.backend.to_dense(h_generated), h_expected)

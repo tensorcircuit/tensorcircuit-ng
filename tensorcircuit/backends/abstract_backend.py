@@ -596,6 +596,84 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `argsort`.".format(self.name)
         )
 
+    def sort(self: Any, a: Tensor, axis: int = -1) -> Tensor:
+        """
+        Sort a tensor along the given axis.
+
+        :param a: [description]
+        :type a: Tensor
+        :param axis: [description], defaults to -1
+        :type axis: int, optional
+        :return: [description]
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `sort`.".format(self.name)
+        )
+
+    def all(self: Any, a: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
+        """
+        Test whether all array elements along a given axis evaluate to True.
+
+        :param a: Input tensor
+        :type a: Tensor
+        :param axis: Axis or axes along which a logical AND reduction is performed,
+            defaults to None
+        :type axis: Optional[Sequence[int]], optional
+        :return: A new boolean or tensor resulting from the AND reduction
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `all`.".format(self.name)
+        )
+
+    def meshgrid(self: Any, *args: Any, **kwargs: Any) -> Any:
+        """
+        Return coordinate matrices from coordinate vectors.
+
+        :param args: coordinate vectors
+        :type args: Any
+        :param kwargs: keyword arguments for meshgrid
+        :type kwargs: Any
+        :return: list of coordinate matrices
+        :rtype: Any
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `meshgrid`.".format(self.name)
+        )
+
+    def expand_dims(self: Any, a: Tensor, axis: int) -> Tensor:
+        """
+        Expand the shape of a tensor.
+        Insert a new axis that will appear at the `axis` position in the expanded
+        tensor shape.
+
+        :param a: Input tensor
+        :type a: Tensor
+        :param axis: Position in the expanded axes where the new axis is placed
+        :type axis: int
+        :return: Output tensor with the number of dimensions increased by one.
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `expand_dims`.".format(self.name)
+        )
+
+    def power(self: Any, a: Tensor, b: Union[Tensor, float]) -> Tensor:
+        """
+        First array elements raised to powers from second array, element-wise.
+
+        :param a: The bases
+        :type a: Tensor
+        :param b: The exponents
+        :type b: Union[Tensor, float]
+        :return: The bases in `a` raised to the powers in `b`.
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `power`.".format(self.name)
+        )
+
     def unique_with_counts(self: Any, a: Tensor, **kws: Any) -> Tuple[Tensor, Tensor]:
         """
         Find the unique elements and their corresponding counts of the given tensor ``a``.
@@ -1402,6 +1480,43 @@ class ExtendedBackend:
         # possibly the most weird thing introduced in the backend :(
         raise NotImplementedError(
             "Backend '{}' has not implemented `cond`.".format(self.name)
+        )
+
+    def where(
+        self: Any,
+        condition: Tensor,
+        x: Optional[Tensor] = None,
+        y: Optional[Tensor] = None,
+    ) -> Tensor:
+        """
+        Return a tensor of elements selected from either x or y, depending on condition.
+
+        :param condition: Where True, yield x, otherwise yield y.
+        :type condition: Tensor (bool)
+        :param x: Values from which to choose when condition is True.
+        :type x: Tensor
+        :param y: Values from which to choose when condition is False.
+        :type y: Tensor
+        :return: A tensor with elements from x where condition is True, and y otherwise.
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `where`.".format(self.name)
+        )
+
+    def equal(self: Any, x1: Tensor, x2: Tensor) -> Tensor:
+        """
+        Return the truth value of (x1 == x2) element-wise.
+
+        :param x1: Input tensor.
+        :type x1: Tensor
+        :param x2: Input tensor.
+        :type x2: Tensor
+        :return: Output tensor, element-wise truth value of (x1 == x2).
+        :rtype: Tensor (bool)
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `equal`.".format(self.name)
         )
 
     def switch(

@@ -75,6 +75,7 @@ class keras_optimizer:
 def _tensordot_tf(
     self: Any, a: Tensor, b: Tensor, axes: Union[int, Sequence[Sequence[int]]]
 ) -> Tensor:
+    b = tf.cast(b, a.dtype)
     return tf.tensordot(a, b, axes)
 
 
@@ -444,6 +445,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def expm(self, a: Tensor) -> Tensor:
         return tf.linalg.expm(a)
 
+    def power(self, a: Tensor, b: Union[Tensor, float]) -> Tensor:
+        return tf.math.pow(a, b)
+
     def sin(self, a: Tensor) -> Tensor:
         return tf.math.sin(a)
 
@@ -524,6 +528,23 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def max(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
         return tf.reduce_max(a, axis=axis)
 
+    def all(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
+        return tf.reduce_all(tf.cast(a, tf.bool), axis=axis)
+
+    def where(
+        self,
+        condition: Tensor,
+        x: Optional[Tensor] = None,
+        y: Optional[Tensor] = None,
+    ) -> Tensor:
+        if x is None and y is None:
+            # Return a tuple of tensors to be consistent with other backends
+            return tuple(tf.unstack(tf.where(condition), axis=1))
+        return tf.where(condition, x, y)
+
+    def equal(self, x1: Tensor, x2: Tensor) -> Tensor:
+        return tf.math.equal(x1, x2)
+
     def argmax(self, a: Tensor, axis: int = 0) -> Tensor:
         return tf.math.argmax(a, axis=axis)
 
@@ -532,6 +553,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
 
     def argsort(self, a: Tensor, axis: int = -1) -> Tensor:
         return tf.argsort(a, axis=axis)
+
+    def sort(self, a: Tensor, axis: int = -1) -> Tensor:
+        return tf.sort(a, axis=axis)
 
     def unique_with_counts(self, a: Tensor, **kws: Any) -> Tuple[Tensor, Tensor]:
         r = tf.unique_with_counts(a)
@@ -1058,4 +1082,13 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
 
     vvag = vectorized_value_and_grad
 
+    def meshgrid(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Backend-agnostic meshgrid function.
+        """
+        return tf.meshgrid(*args, **kwargs)
+
     optimizer = keras_optimizer
+
+    def expand_dims(self, a: Tensor, axis: int) -> Tensor:
+        return tf.expand_dims(a, axis)

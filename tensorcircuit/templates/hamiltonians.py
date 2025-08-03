@@ -17,13 +17,14 @@ def _create_empty_sparse_matrix(shape: Tuple[int, int]) -> Any:
 def heisenberg_hamiltonian(
     lattice: AbstractLattice,
     j_coupling: Union[float, List[float], Tuple[float, ...]] = 1.0,
+    interaction_scope: str = "neighbors",
 ) -> Any:
     """
     Generates the sparse matrix of the Heisenberg Hamiltonian for a given lattice.
 
     The Heisenberg Hamiltonian is defined as:
-    H = J * Σ_{<i,j>} (X_i X_j + Y_i Y_j + Z_i Z_j)
-    where the sum is over all unique nearest-neighbor pairs <i,j>.
+    H = J * Σ_{i,j} (X_i X_j + Y_i Y_j + Z_i Z_j)
+    where the sum is over a specified set of interacting pairs {i,j}.
 
     :param lattice: An instance of a class derived from AbstractLattice,
         which provides the geometric information of the system.
@@ -32,11 +33,23 @@ def heisenberg_hamiltonian(
         isotropic model (Jx=Jy=Jz) or a list/tuple of 3 floats for an
         anisotropic model (Jx, Jy, Jz). Defaults to 1.0.
     :type j_coupling: Union[float, List[float], Tuple[float, ...]], optional
+    :param interaction_scope: Defines the range of interactions.
+        - "neighbors": Includes only nearest-neighbor pairs (default).
+        - "all": Includes all unique pairs of sites.
+    :type interaction_scope: str, optional
     :return: The Hamiltonian as a backend-agnostic sparse matrix.
     :rtype: Any
     """
     num_sites = lattice.num_sites
-    neighbor_pairs = lattice.get_neighbor_pairs(k=1, unique=True)
+    if interaction_scope == "neighbors":
+        neighbor_pairs = lattice.get_neighbor_pairs(k=1, unique=True)
+    elif interaction_scope == "all":
+        neighbor_pairs = lattice.get_all_pairs()
+    else:
+        raise ValueError(
+            f"Invalid interaction_scope: '{interaction_scope}'. "
+            "Must be 'neighbors' or 'all'."
+        )
 
     if isinstance(j_coupling, (float, int)):
         js = [float(j_coupling)] * 3

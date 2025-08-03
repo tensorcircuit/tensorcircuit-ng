@@ -243,8 +243,10 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def copy(self, tensor: Tensor) -> Tensor:
         return jnp.array(tensor, copy=True)
 
-    def convert_to_tensor(self, tensor: Tensor) -> Tensor:
+    def convert_to_tensor(self, tensor: Tensor, **kwargs: Any) -> Tensor:
         result = jnp.asarray(tensor)
+        if "dtype" in kwargs and kwargs["dtype"] is not None:
+            result = self.cast(result, kwargs["dtype"])
         return result
 
     def abs(self, a: Tensor) -> Tensor:
@@ -353,6 +355,9 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         # currently expm in jax doesn't support AD, it will raise an AssertError,
         # see https://github.com/google/jax/issues/2645
 
+    def power(self, a: Tensor, b: Union[Tensor, float]) -> Tensor:
+        return jnp.power(a, b)
+
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return jnp.stack(a, axis=axis)
 
@@ -390,6 +395,9 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def argsort(self, a: Tensor, axis: int = -1) -> Tensor:
         return jnp.argsort(a, axis=axis)
 
+    def sort(self, a: Tensor, axis: int = -1) -> Tensor:
+        return jnp.sort(a, axis=axis)
+
     def unique_with_counts(  # type: ignore
         self, a: Tensor, *, size: Optional[int] = None, fill_value: Optional[int] = None
     ) -> Tuple[Tensor, Tensor]:
@@ -409,6 +417,12 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
 
     def cumsum(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
         return jnp.cumsum(a, axis)
+
+    def all(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
+        return jnp.all(a, axis=axis)
+
+    def equal(self, x1: Tensor, x2: Tensor) -> Tensor:
+        return jnp.equal(x1, x2)
 
     def is_tensor(self, a: Any) -> bool:
         if not isinstance(a, jnp.ndarray):
@@ -812,4 +826,23 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
 
     vvag = vectorized_value_and_grad
 
+    def meshgrid(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Backend-agnostic meshgrid function.
+        """
+        return jnp.meshgrid(*args, **kwargs)
+
     optimizer = optax_optimizer
+
+    def expand_dims(self, a: Tensor, axis: int) -> Tensor:
+        return jnp.expand_dims(a, axis)
+
+    def where(
+        self,
+        condition: Tensor,
+        x: Optional[Tensor] = None,
+        y: Optional[Tensor] = None,
+    ) -> Tensor:
+        if x is None and y is None:
+            return jnp.where(condition)
+        return jnp.where(condition, x, y)

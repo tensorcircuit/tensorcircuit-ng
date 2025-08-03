@@ -19,10 +19,9 @@ from typing import (
 )
 
 logger = logging.getLogger(__name__)
+import itertools
 import numpy as np
-
-from scipy.spatial import KDTree
-from scipy.spatial.distance import pdist, squareform
+from .. import backend
 
 
 # This block resolves a name resolution issue for the static type checker (mypy).
@@ -41,9 +40,11 @@ if TYPE_CHECKING:
     import matplotlib.axes
     from mpl_toolkits.mplot3d import Axes3D
 
+Tensor = Any
 SiteIndex = int
 SiteIdentifier = Hashable
-Coordinates = np.ndarray[Any, Any]
+Coordinates = Tensor
+
 NeighborMap = Dict[SiteIndex, List[SiteIndex]]
 
 
@@ -62,15 +63,32 @@ class AbstractLattice(abc.ABC):
 
     def __init__(self, dimensionality: int):
         """Initializes the base lattice class."""
+        logger.debug(
+            f"[DEBUG-LATTICE] Initializing AbstractLattice with dimensionality: {dimensionality}"
+        )
         self._dimensionality = dimensionality
 
-        # --- Internal Data Structures (to be populated by subclasses) ---
-        self._indices: List[SiteIndex] = []
-        self._identifiers: List[SiteIdentifier] = []
-        self._coordinates: List[Coordinates] = []
-        self._ident_to_idx: Dict[SiteIdentifier, SiteIndex] = {}
-        self._neighbor_maps: Dict[int, NeighborMap] = {}
-        self._distance_matrix: Optional[Coordinates] = None
+        # Core data structures for storing site information.
+        self._indices: List[SiteIndex] = []  # List of integer indices [0, 1, ..., N-1]
+        self._identifiers: List[SiteIdentifier] = (
+            []
+        )  # List of unique, hashable site identifiers
+        self._coordinates: Optional[Coordinates] = (
+            None  # N x D array of site coordinates
+        )
+
+        # Mappings for efficient lookups.
+        self._ident_to_idx: Dict[SiteIdentifier, SiteIndex] = (
+            {}
+        )  # Maps identifiers to indices
+
+        # Cached properties, computed on demand.
+        self._neighbor_maps: Dict[int, NeighborMap] = (
+            {}
+        )  # Caches neighbor info for different k
+        self._distance_matrix: Optional[Coordinates] = (
+            None  # Caches the full N x N distance matrix
+        )
 
     @property
     def num_sites(self) -> int:
@@ -95,12 +113,17 @@ class AbstractLattice(abc.ABC):
         subsequent calls. This computation can be expensive for large lattices.
         """
         if self._distance_matrix is None:
-            logger.info("Distance matrix not cached. Computing now...")
+            logger.debug("Distance matrix not cached. Computing now...")
+            logger.debug("[DEBUG-LATTICE] Computing distance matrix...")
             self._distance_matrix = self._compute_distance_matrix()
+            logger.debug("[DEBUG-LATTICE] ...distance matrix computed.")
         return self._distance_matrix
 
     def _validate_index(self, index: SiteIndex) -> None:
         """A private helper to check if a site index is within the valid range."""
+        logger.debug(
+            f"[DEBUG-LATTICE] Validating index: {index} against num_sites: {self.num_sites}"
+        )
         if not (0 <= index < self.num_sites):
             raise IndexError(
                 f"Site index {index} out of range (0-{self.num_sites - 1})"
@@ -116,7 +139,10 @@ class AbstractLattice(abc.ABC):
         :rtype: Coordinates
         """
         self._validate_index(index)
-        return self._coordinates[index]
+        assert self._coordinates is not None
+        coords = self._coordinates[index]
+        logger.debug(f"[DEBUG-LATTICE] get_coordinates for index {index}: {coords}")
+        return coords
 
     def get_identifier(self, index: SiteIndex) -> SiteIdentifier:
         """Gets the abstract identifier of a site by its integer index.
@@ -140,8 +166,14 @@ class AbstractLattice(abc.ABC):
         :rtype: SiteIndex
         """
         try:
-            return self._ident_to_idx[identifier]
+            logger.debug(f"[DEBUG-LATTICE] Getting index for identifier: {identifier}")
+            index = self._ident_to_idx[identifier]
+            logger.debug(f"[DEBUG-LATTICE] Found index: {index}")
+            return index
         except KeyError as e:
+            logger.debug(
+                f"[DEBUG-LATTICE] Identifier {identifier} not found in _ident_to_idx map."
+            )
             raise ValueError(
                 f"Identifier {identifier} not found in the lattice."
             ) from e
@@ -166,13 +198,26 @@ class AbstractLattice(abc.ABC):
             - The site's coordinates as a NumPy array.
         :rtype: Tuple[SiteIndex, SiteIdentifier, Coordinates]
         """
+        logger.debug(
+            f"[DEBUG-LATTICE] get_site_info called with: {index_or_identifier} (type: {type(index_or_identifier)})"
+        )
+        assert self._coordinates is not None
         if isinstance(index_or_identifier, int):  # SiteIndex is an int
             idx = index_or_identifier
             self._validate_index(idx)
+            logger.debug(
+                f"[DEBUG-LATTICE] Identified as SiteIndex. Returning info for index {idx}."
+            )
             return idx, self._identifiers[idx], self._coordinates[idx]
-        else:  # Identifier
+        else:
             ident = index_or_identifier
+            logger.debug(
+                f"[DEBUG-LATTICE] Identified as SiteIdentifier. Looking up index for {ident}."
+            )
             idx = self.get_index(ident)
+            logger.debug(
+                f"[DEBUG-LATTICE] Returning info for identifier {ident} (index {idx})."
+            )
             return idx, ident, self._coordinates[idx]
 
     def sites(self) -> Iterator[Tuple[SiteIndex, SiteIdentifier, Coordinates]]:
@@ -185,7 +230,9 @@ class AbstractLattice(abc.ABC):
             index, identifier, and coordinates.
         :rtype: Iterator[Tuple[SiteIndex, SiteIdentifier, Coordinates]]
         """
+        logger.debug("[DEBUG-LATTICE] Creating sites iterator.")
         for i in range(self.num_sites):
+            assert self._coordinates is not None
             yield i, self._identifiers[i], self._coordinates[i]
 
     def get_neighbors(self, index: SiteIndex, k: int = 1) -> List[SiteIndex]:
@@ -202,9 +249,13 @@ class AbstractLattice(abc.ABC):
             pre-calculated or if the site has no such neighbors.
         :rtype: List[SiteIndex]
         """
+        logger.debug(f"[DEBUG-LATTICE] Getting neighbors for index {index}, k={k}")
         if k not in self._neighbor_maps:
             logger.info(
                 f"Neighbors for k={k} not pre-computed. Building now up to max_k={k}."
+            )
+            logger.debug(
+                f"[DEBUG-LATTICE] Neighbor map for k={k} not found. Triggering _build_neighbors(max_k={k})."
             )
             self._build_neighbors(max_k=k)
 
@@ -231,13 +282,18 @@ class AbstractLattice(abc.ABC):
         :rtype: List[Tuple[SiteIndex, SiteIndex]]
         """
 
+        logger.debug(
+            f"[DEBUG-LATTICE] Getting neighbor pairs for k={k}, unique={unique}"
+        )
         if k not in self._neighbor_maps:
             logger.info(
                 f"Neighbor pairs for k={k} not pre-computed. Building now up to max_k={k}."
             )
+            logger.debug(
+                f"[DEBUG-LATTICE] Neighbor map for k={k} not found. Triggering _build_neighbors(max_k={k})."
+            )
             self._build_neighbors(max_k=k)
 
-        # After attempting to build, check again. If still not found, return empty.
         if k not in self._neighbor_maps:
             return []
 
@@ -251,8 +307,29 @@ class AbstractLattice(abc.ABC):
                     pairs.append((i, j))
         return sorted(pairs)
 
-    # Sorting provides a deterministic output order
-    # --- Abstract Methods for Subclass Implementation ---
+    def get_all_pairs(self) -> List[Tuple[SiteIndex, SiteIndex]]:
+        """
+        Returns a list of all unique pairs of site indices (i, j) where i < j.
+
+        This method provides all-to-all connectivity, useful for Hamiltonians
+        where every site interacts with every other site.
+
+        Note on Differentiability:
+        This method provides a static list of index pairs and is not differentiable
+        itself. However, it is designed to be used in combination with the fully
+        differentiable ``distance_matrix`` property. By using the pairs from this
+        method to index into the ``distance_matrix``, one can construct differentiable
+        objective functions based on all-pair interactions, effectively bypassing the
+        non-differentiable ``get_neighbor_pairs`` method for geometry optimization tasks.
+
+        :return: A list of tuples, where each tuple is a unique pair of site indices.
+        :rtype: List[Tuple[SiteIndex, SiteIndex]]
+        """
+        logger.debug("[DEBUG-LATTICE] Getting all unique pairs of sites.")
+        if self.num_sites < 2:
+            return []
+        # Use itertools.combinations to efficiently generate all unique pairs (i, j) with i < j.
+        return sorted(list(itertools.combinations(range(self.num_sites), 2)))
 
     @abc.abstractmethod
     def _build_lattice(self, *args: Any, **kwargs: Any) -> None:
@@ -325,6 +402,12 @@ class AbstractLattice(abc.ABC):
         :param kwargs: Additional keyword arguments to be passed directly to the
             `matplotlib.pyplot.scatter` function for customizing site appearance.
         """
+        logger.debug(
+            (
+                f"[DEBUG-LATTICE] show() called with: show_indices={show_indices}, "
+                f"show_identifiers={show_identifiers}, show_bonds_k={show_bonds_k}"
+            )
+        )
         try:
             import matplotlib.pyplot as plt
         except ImportError:
@@ -334,7 +417,8 @@ class AbstractLattice(abc.ABC):
             )
             return
 
-        # creat "fig_created_internally" as flag
+        # Flag to track if the Matplotlib figure was created by this method.
+        # This prevents calling plt.show() if the user provided their own Axes.
         fig_created_internally = False
 
         if self.num_sites == 0:
@@ -347,7 +431,8 @@ class AbstractLattice(abc.ABC):
             return
 
         if ax is None:
-            # when ax is none, make fig_created_internally true
+            # If no Axes object is provided, create a new figure and axes.
+            logger.debug("[DEBUG-LATTICE] `ax` is None, creating new figure.")
             fig_created_internally = True
             if self.dimensionality == 3:
                 fig = plt.figure(figsize=(8, 8))
@@ -355,9 +440,11 @@ class AbstractLattice(abc.ABC):
             else:
                 fig, ax = plt.subplots(figsize=(8, 8))
         else:
+            logger.debug("[DEBUG-LATTICE] Using provided `ax` object.")
             fig = ax.figure  # type: ignore
 
         coords = np.array(self._coordinates)
+        # Prepare arguments for the scatter plot, allowing user overrides.
         scatter_args = {"s": 100, "zorder": 2}
         scatter_args.update(kwargs)
         if self.dimensionality == 1:
@@ -369,13 +456,13 @@ class AbstractLattice(abc.ABC):
             ax.scatter(coords[:, 0], coords[:, 1], coords[:, 2], **scatter_args)  # type: ignore
 
         if show_indices or show_identifiers:
+            logger.debug("[DEBUG-LATTICE] Drawing site labels (indices/identifiers).")
             for i in range(self.num_sites):
                 label = str(self._identifiers[i]) if show_identifiers else str(i)
+                # Calculate a small offset for placing text labels to avoid overlap with sites.
                 offset = (
                     0.02 * np.max(np.ptp(coords, axis=0)) if coords.size > 0 else 0.1
                 )
-
-                # Robust Logic: Decide plotting strategy based on known dimensionality.
 
                 if self.dimensionality == 1:
                     ax.text(coords[i, 0], offset, label, fontsize=9, ha="center")
@@ -398,9 +485,8 @@ class AbstractLattice(abc.ABC):
                         zorder=3,
                     )
 
-                # Note: No 'else' needed as we already check dimensionality at the start.
-
         if show_bonds_k is not None:
+            logger.debug(f"[DEBUG-LATTICE] Drawing bonds for k={show_bonds_k}.")
             if show_bonds_k not in self._neighbor_maps:
                 logger.warning(
                     f"Cannot draw bonds. k={show_bonds_k} neighbors have not been calculated."
@@ -420,6 +506,7 @@ class AbstractLattice(abc.ABC):
                     if self.dimensionality > 2:
                         ax_3d = cast("Axes3D", ax)
                         for i, j in bonds:
+                            assert self._coordinates is not None
                             p1, p2 = self._coordinates[i], self._coordinates[j]
                             ax_3d.plot(
                                 [p1[0], p2[0]],
@@ -429,11 +516,12 @@ class AbstractLattice(abc.ABC):
                             )
                     else:
                         for i, j in bonds:
+                            assert self._coordinates is not None
                             p1, p2 = self._coordinates[i], self._coordinates[j]
                             if self.dimensionality == 1:  #  type: ignore
 
                                 ax.plot([p1[0], p2[0]], [0, 0], **plot_bond_kwargs)  # type: ignore
-                            else:  # dimensionality == 2
+                            else:
                                 ax.plot([p1[0], p2[0]], [p1[1], p2[1]], **plot_bond_kwargs)  # type: ignore
 
                 except ValueError as e:
@@ -449,7 +537,7 @@ class AbstractLattice(abc.ABC):
             ax.set_zlabel("z")
         ax.grid(True)
 
-        # 3.  whether plt.show()
+        # Display the plot only if the figure was created within this function.
         if fig_created_internally:
             plt.show()
 
@@ -475,39 +563,51 @@ class AbstractLattice(abc.ABC):
         :return: A sorted list of squared distances representing the shells.
         :rtype: List[float]
         """
+        logger.debug(
+            f"[DEBUG-LATTICE] Identifying up to {max_k} distance shells with tolerance {tol}."
+        )
+        # A small threshold to filter out zero distances (site to itself).
         ZERO_THRESHOLD_SQ = 1e-12
 
-        all_distances_sq = np.asarray(all_distances_sq)
+        all_distances_sq = backend.convert_to_tensor(all_distances_sq)
         # Now, the .size call below is guaranteed to be safe.
-        if all_distances_sq.size == 0:
+        if backend.sizen(all_distances_sq) == 0:
+            logger.debug(
+                "[DEBUG-LATTICE] No non-zero distances found, returning empty shells."
+            )
             return []
 
-        sorted_dist = np.sort(all_distances_sq[all_distances_sq > ZERO_THRESHOLD_SQ])
+        # Filter out self-distances and sort the remaining squared distances.
+        sorted_dist = backend.sort(
+            all_distances_sq[all_distances_sq > ZERO_THRESHOLD_SQ]
+        )
 
-        if sorted_dist.size == 0:
+        if backend.sizen(sorted_dist) == 0:
+            logger.debug(
+                "[DEBUG-LATTICE] Sorted distances are empty, returning empty shells."
+            )
             return []
 
-        # Identify shells using the user-provided tolerance.
         dist_shells = [sorted_dist[0]]
 
         for d_sq in sorted_dist[1:]:
             if len(dist_shells) >= max_k:
                 break
-            # If the current distance is notably larger than the last shell's distance
-            if d_sq > dist_shells[-1] + tol**2:
+            if backend.sqrt(d_sq) - backend.sqrt(dist_shells[-1]) > tol:
                 dist_shells.append(d_sq)
 
+        logger.debug(
+            f"[DEBUG-LATTICE] Identified distance shells (squared): {dist_shells}"
+        )
         return dist_shells
 
     def _build_neighbors_by_distance_matrix(
         self, max_k: int = 2, tol: float = 1e-6
     ) -> None:
         """A generic, distance-based neighbor finding method.
-
         This method calculates the full N x N distance matrix to find neighbor
         shells. It is computationally expensive for large N (O(N^2)) and is
         best suited for non-periodic or custom-defined lattices.
-
         :param max_k: The maximum number of neighbor shells to
             calculate. Defaults to 2.
         :type max_k: int, optional
@@ -515,29 +615,61 @@ class AbstractLattice(abc.ABC):
             comparisons. Defaults to 1e-6.
         :type tol: float, optional
         """
+        logger.debug(
+            f"[DEBUG-LATTICE] Building neighbors via distance matrix up to max_k={max_k}."
+        )
         if self.num_sites < 2:
             return
 
-        all_coords = np.array(self._coordinates)
-        dist_matrix_sq = np.sum(
-            (all_coords[:, np.newaxis, :] - all_coords[np.newaxis, :, :]) ** 2, axis=-1
+        all_coords = self._coordinates
+        # Vectorized computation of the squared distance matrix:
+        # (N, 1, D) - (1, N, D) -> (N, N, D) -> (N, N)
+        displacements = backend.expand_dims(all_coords, 1) - backend.expand_dims(
+            all_coords, 0
         )
+        dist_matrix_sq = backend.sum(backend.power(displacements, 2), axis=-1)
 
-        all_distances_sq = dist_matrix_sq.flatten()
+        # Flatten the matrix to a list of all squared distances to identify shells.
+        all_distances_sq = backend.reshape(dist_matrix_sq, [-1])
         dist_shells_sq = self._identify_distance_shells(all_distances_sq, max_k, tol)
 
-        self._neighbor_maps = {k: {} for k in range(1, len(dist_shells_sq) + 1)}
+        self._neighbor_maps = self._build_neighbor_map_from_distances(
+            dist_matrix_sq, dist_shells_sq, tol
+        )
+        self._distance_matrix = backend.sqrt(dist_matrix_sq)
+
+    def _build_neighbor_map_from_distances(
+        self,
+        dist_matrix_sq: Coordinates,
+        dist_shells_sq: List[float],
+        tol: float = 1e-6,
+    ) -> Dict[int, NeighborMap]:
+        """
+        Builds a neighbor map from a squared distance matrix and identified shells.
+        This is a generic helper function to reduce code duplication.
+        """
+        neighbor_maps: Dict[int, NeighborMap] = {
+            k: {} for k in range(1, len(dist_shells_sq) + 1)
+        }
         for k_idx, target_d_sq in enumerate(dist_shells_sq):
             k = k_idx + 1
             current_k_map: Dict[int, List[int]] = {}
-            for i in range(self.num_sites):
-                neighbor_indices = np.where(
-                    np.isclose(dist_matrix_sq[i], target_d_sq, rtol=0, atol=tol**2)
-                )[0]
-                if len(neighbor_indices) > 0:
-                    current_k_map[i] = sorted(neighbor_indices.tolist())
-            self._neighbor_maps[k] = current_k_map
-        self._distance_matrix = np.sqrt(dist_matrix_sq)
+            # For each shell, find all pairs of sites (i, j) with that distance.
+            is_close_matrix = backend.abs(dist_matrix_sq - target_d_sq) < tol
+            rows, cols = backend.where(is_close_matrix)
+
+            for i, j in zip(backend.numpy(rows), backend.numpy(cols)):
+                if i == j:
+                    continue
+                if i not in current_k_map:
+                    current_k_map[i] = []
+                current_k_map[i].append(j)
+
+            for i in current_k_map:
+                current_k_map[i].sort()
+
+            neighbor_maps[k] = current_k_map
+        return neighbor_maps
 
 
 class TILattice(AbstractLattice):
@@ -587,19 +719,22 @@ class TILattice(AbstractLattice):
         precompute_neighbors: Optional[int] = None,
     ):
         """Initializes the Translationally Invariant Lattice."""
+        logger.debug(f"[DEBUG-LATTICE] Initializing TILattice: {size}, pbc={pbc}")
         super().__init__(dimensionality)
-        assert lattice_vectors.shape == (
+
+        self.lattice_vectors = backend.convert_to_tensor(lattice_vectors)
+        self.basis_coords = backend.convert_to_tensor(basis_coords)
+
+        assert self.lattice_vectors.shape == (
             dimensionality,
             dimensionality,
         ), "Lattice vectors shape mismatch"
         assert (
-            basis_coords.shape[1] == dimensionality
+            self.basis_coords.shape[1] == dimensionality
         ), "Basis coordinates dimension mismatch"
         assert len(size) == dimensionality, "Size tuple length mismatch"
 
-        self.lattice_vectors = lattice_vectors
-        self.basis_coords = basis_coords
-        self.num_basis = basis_coords.shape[0]
+        self.num_basis = self.basis_coords.shape[0]
         self.size = size
         if isinstance(pbc, bool):
             self.pbc = tuple([pbc] * dimensionality)
@@ -607,131 +742,209 @@ class TILattice(AbstractLattice):
             assert len(pbc) == dimensionality, "PBC tuple length mismatch"
             self.pbc = tuple(pbc)
 
-        # Build the lattice sites and their neighbor relationships
         self._build_lattice()
         if precompute_neighbors is not None and precompute_neighbors > 0:
             logger.info(f"Pre-computing neighbors up to k={precompute_neighbors}...")
             self._build_neighbors(max_k=precompute_neighbors)
 
     def _build_lattice(self) -> None:
-        """Generates all site information for the periodic lattice.
-
-        This method iterates through each unit cell defined by `self.size`,
-        and for each unit cell, it iterates through all basis sites. It then
-        calculates the real-space coordinates and creates a unique identifier
-        for each site, populating the internal lattice data structures.
         """
+        Generates all site information for the periodic lattice in a vectorized manner.
+        """
+        logger.debug("[DEBUG-LATTICE] Starting _build_lattice for TILattice.")
+        ranges = [backend.arange(s) for s in self.size]
+
+        # Generate a grid of all integer unit cell coordinates.
+        grid = backend.meshgrid(*ranges, indexing="ij")
+        all_cell_coords = backend.reshape(
+            backend.stack(grid, axis=-1), (-1, self.dimensionality)
+        )
+
+        all_cell_coords = backend.cast(all_cell_coords, self.lattice_vectors.dtype)
+
+        cell_vectors = backend.tensordot(
+            all_cell_coords, self.lattice_vectors, axes=[[1], [0]]
+        )
+
+        cell_vectors = backend.cast(cell_vectors, self.basis_coords.dtype)
+
+        # Combine cell vectors with basis coordinates to get all site positions
+        # via broadcasting: (num_cells, 1, D) + (1, num_basis, D) -> (num_cells, num_basis, D)
+        all_coords = backend.expand_dims(cell_vectors, 1) + backend.expand_dims(
+            self.basis_coords, 0
+        )
+
+        self._coordinates = backend.reshape(all_coords, (-1, self.dimensionality))
+
+        self._indices = []
+        self._identifiers = []
+        self._ident_to_idx = {}
         current_index = 0
 
-        # Iterate over all unit cell coordinates elegantly using np.ndindex
-        for cell_coord in np.ndindex(self.size):
-            cell_coord_arr = np.array(cell_coord)
-            # R = n1*a1 + n2*a2 + ...
-            cell_vector = np.dot(cell_coord_arr, self.lattice_vectors)
-
-            # Iterate over the basis sites within the unit cell
+        # Generate integer indices and tuple-based identifiers for all sites.
+        # e.g., identifier = (uc_x, uc_y, basis_idx)
+        size_ranges = [range(s) for s in self.size]
+        for cell_coord_tuple in itertools.product(*size_ranges):
             for basis_index in range(self.num_basis):
-                basis_vec = self.basis_coords[basis_index]
-
-                # Calculate the real-space coordinate
-                coord = cell_vector + basis_vec
-                # Create a structured identifier
-                identifier = cell_coord + (basis_index,)
-
-                # Store site information
+                identifier = cell_coord_tuple + (basis_index,)
                 self._indices.append(current_index)
                 self._identifiers.append(identifier)
-                self._coordinates.append(coord)
                 self._ident_to_idx[identifier] = current_index
                 current_index += 1
 
+        logger.debug(
+            f"[DEBUG-LATTICE] Finished _build_lattice. Total sites: {self.num_sites}"
+        )
+
     def _get_distance_matrix_with_mic(self) -> Coordinates:
         """
-        Computes the full N x N distance matrix, correctly applying the
-        Minimum Image Convention (MIC) for all periodic dimensions.
+        Computes the full N x N distance matrix using backend operations,
+        correctly applying the Minimum Image Convention (MIC) for all
+        periodic dimensions in a memory-efficient manner.
         """
-        all_coords = np.array(self._coordinates)
-        size_arr = np.array(self.size)
-        system_vectors = self.lattice_vectors * size_arr[:, np.newaxis]
+        logger.debug(
+            "[DEBUG-LATTICE] Computing distance matrix with Minimum Image Convention."
+        )
 
-        # Generate translation vectors ONLY for periodic dimensions
+        size_arr = backend.convert_to_tensor(self.size)
+        size_arr = backend.cast(size_arr, self.lattice_vectors.dtype)
+
+        # Calculate the full system vectors that span the entire finite lattice.
+        system_vectors = self.lattice_vectors * backend.expand_dims(size_arr, axis=1)
+
         pbc_dims = [d for d in range(self.dimensionality) if self.pbc[d]]
-        translations = [np.zeros(self.dimensionality)]
-        if pbc_dims:
-            num_pbc_dims = len(pbc_dims)
-            pbc_system_vectors = system_vectors[pbc_dims, :]
 
-            # Create all 3^k - 1 non-zero shifts for k periodic dimensions
-            shift_options = [np.array([-1, 0, 1])] * num_pbc_dims
-            shifts_grid = np.meshgrid(*shift_options, indexing="ij")
-            all_shifts = np.stack(shifts_grid, axis=-1).reshape(-1, num_pbc_dims)
-            all_shifts = all_shifts[np.any(all_shifts != 0, axis=1)]
-
-            pbc_translations = all_shifts @ pbc_system_vectors
-            translations.extend(pbc_translations)
-
-        translations_arr = np.array(translations, dtype=float)
-
-        # Calculate the distance matrix applying MIC
-        dist_matrix_sq = np.full((self.num_sites, self.num_sites), np.inf, dtype=float)
-        for i in range(self.num_sites):
-            displacements = all_coords - all_coords[i]
-            image_displacements = (
-                displacements[:, np.newaxis, :] - translations_arr[np.newaxis, :, :]
+        if not pbc_dims:
+            # If no PBC, the only 'translation' is the zero vector.
+            translations_arr = backend.zeros(
+                [1, self.dimensionality], dtype=self.lattice_vectors.dtype
             )
-            image_d_sq = np.sum(image_displacements**2, axis=2)
-            dist_matrix_sq[i, :] = np.min(image_d_sq, axis=1)
+        else:
+            logger.debug(
+                f"[DEBUG-LATTICE] Applying MIC for periodic dimensions: {pbc_dims}"
+            )
+            num_pbc_dims = len(pbc_dims)
+            pbc_system_vectors = backend.gather1d(
+                system_vectors, backend.convert_to_tensor(pbc_dims)
+            )
 
-        return cast(Coordinates, np.sqrt(dist_matrix_sq))
+            # Generate all 3^d possible image shifts (-1, 0, 1) for periodic dimensions.
+            shift_options = [backend.convert_to_tensor([-1.0, 0.0, 1.0])] * num_pbc_dims
+            shifts_grid = backend.meshgrid(*shift_options, indexing="ij")
+            all_shifts = backend.reshape(
+                backend.stack(shifts_grid, axis=-1), (-1, num_pbc_dims)
+            )
+
+            translations_arr = backend.tensordot(
+                all_shifts, pbc_system_vectors, axes=[[1], [0]]
+            )
+
+        dist_sq_rows = []
+        # Iterate through each site `i` to compute its distance to all other sites `j`.
+        # This is done row-by-row to manage memory for very large lattices.
+        assert self._coordinates is not None
+        for i in range(self.num_sites):
+            # For each site `i`, calculate displacements to all other sites `j`.
+            displacements_i = self._coordinates - self._coordinates[i]  # Shape: (N, D)
+            # Then, for each displacement `d_ij`, find the minimum distance among
+            # `d_ij` and all its periodic images.
+            image_displacements_i = backend.expand_dims(
+                displacements_i, 1
+            ) - backend.expand_dims(translations_arr, 0)
+            image_d_sq_i = backend.sum(image_displacements_i**2, axis=2)
+            min_dist_sq_i = backend.min(image_d_sq_i, axis=1)
+            dist_sq_rows.append(min_dist_sq_i)
+
+        dist_matrix_sq = backend.stack(dist_sq_rows, axis=0)
+        safe_dist_matrix_sq = backend.where(dist_matrix_sq > 0, dist_matrix_sq, 0.0)
+        return backend.sqrt(safe_dist_matrix_sq)
+
+    def _get_distance_matrix_with_mic_vectorized(self) -> Coordinates:
+        """
+        Computes the full N x N distance matrix using a fully vectorized approach
+        to be compatible with JIT compilation (e.g., JAX).
+        """
+        logger.debug("[DEBUG-LATTICE] Computing distance matrix with MIC (vectorized).")
+        size_arr = backend.cast(
+            backend.convert_to_tensor(self.size), self.lattice_vectors.dtype
+        )
+        system_vectors = self.lattice_vectors * backend.expand_dims(size_arr, axis=1)
+
+        pbc_mask = backend.convert_to_tensor(self.pbc)
+
+        # Generate all 3^d possible image shifts (-1, 0, 1) for all dimensions
+        shift_options = [
+            backend.convert_to_tensor([-1.0, 0.0, 1.0])
+        ] * self.dimensionality
+        shifts_grid = backend.meshgrid(*shift_options, indexing="ij")
+        all_shifts = backend.reshape(
+            backend.stack(shifts_grid, axis=-1), (-1, self.dimensionality)
+        )
+
+        # Only apply shifts to periodic dimensions
+        masked_shifts = all_shifts * backend.cast(pbc_mask, all_shifts.dtype)
+
+        # Calculate all translation vectors due to PBC
+        translations_arr = backend.tensordot(
+            masked_shifts, system_vectors, axes=[[1], [0]]
+        )
+
+        # Vectorized computation of all displacements between any two sites
+        # Shape: (N, 1, D) - (1, N, D) -> (N, N, D)
+        displacements = backend.expand_dims(self._coordinates, 1) - backend.expand_dims(
+            self._coordinates, 0
+        )
+
+        # Consider all periodic images for each displacement
+        # Shape: (N, N, 1, D) - (1, 1, num_translations, D) -> (N, N, num_translations, D)
+        image_displacements = backend.expand_dims(
+            displacements, 2
+        ) - backend.expand_dims(backend.expand_dims(translations_arr, 0), 0)
+
+        # Sum of squares for distances
+        image_d_sq = backend.sum(backend.power(image_displacements, 2), axis=3)
+
+        # Find the minimum distance among all images (Minimum Image Convention)
+        min_dist_sq = backend.min(image_d_sq, axis=2)
+
+        safe_dist_matrix_sq = backend.where(min_dist_sq > 0, min_dist_sq, 0.0)
+        return backend.sqrt(safe_dist_matrix_sq)
 
     def _build_neighbors(self, max_k: int = 2, **kwargs: Any) -> None:
         """Calculates neighbor relationships for the periodic lattice.
 
-        This method calculates neighbor relationships by computing the full N x N
-        distance matrix. It robustly handles all boundary conditions (fully
-        periodic, open, or mixed) by applying the Minimum Image Convention
-        (MIC) only to the periodic dimensions.
+        This method computes neighbor information by first calculating the full
+        distance matrix using the Minimum Image Convention (MIC) to correctly
+        handle periodic boundary conditions. It then identifies unique distance
+        shells (e.g., nearest, next-nearest) and populates the neighbor maps
+        accordingly. This approach is general and works for any periodic lattice
+        geometry defined by the TILattice class.
 
-        From this distance matrix, it identifies unique neighbor shells up to
-        the specified `max_k` and populates the neighbor maps. The computed
-        distance matrix is then cached for future use.
-
-        :param max_k: The maximum number of neighbor shells to
-            calculate. Defaults to 2.
+        :param max_k: The maximum order of neighbors to compute (e.g., k=1 for
+            nearest neighbors, k=2 for next-nearest, etc.). Defaults to 2.
         :type max_k: int, optional
-        :param tol: The numerical tolerance for distance
-            comparisons. Defaults to 1e-6.
-        :type tol: float, optional
+        :param \**kwargs: Additional keyword arguments. May include:
+            - ``tol`` (float): The numerical tolerance used to determine if two
+              distances are equal when identifying shells. Defaults to 1e-6.
         """
+        logger.debug(
+            f"[DEBUG-LATTICE] Building neighbors for TILattice up to max_k={max_k}."
+        )
         tol = kwargs.get("tol", 1e-6)
-        dist_matrix = self._get_distance_matrix_with_mic()
+        dist_matrix = self._get_distance_matrix_with_mic_vectorized()
         dist_matrix_sq = dist_matrix**2
         self._distance_matrix = dist_matrix
-        all_distances_sq = dist_matrix_sq.flatten()
+        all_distances_sq = backend.reshape(dist_matrix_sq, [-1])
         dist_shells_sq = self._identify_distance_shells(all_distances_sq, max_k, tol)
-
-        self._neighbor_maps = {k: {} for k in range(1, len(dist_shells_sq) + 1)}
-        for k_idx, target_d_sq in enumerate(dist_shells_sq):
-            k = k_idx + 1
-            current_k_map: Dict[int, List[int]] = {}
-            match_indices = np.where(
-                np.isclose(dist_matrix_sq, target_d_sq, rtol=0, atol=tol**2)
-            )
-            for i, j in zip(*match_indices):
-                if i == j:
-                    continue
-                if i not in current_k_map:
-                    current_k_map[i] = []
-                current_k_map[i].append(j)
-
-            for i in current_k_map:
-                current_k_map[i].sort()
-
-            self._neighbor_maps[k] = current_k_map
+        self._neighbor_maps = self._build_neighbor_map_from_distances(
+            dist_matrix_sq, dist_shells_sq, tol
+        )
 
     def _compute_distance_matrix(self) -> Coordinates:
         """Computes the distance matrix using the Minimum Image Convention."""
-        return self._get_distance_matrix_with_mic()
+        if self.num_sites == 0:
+            return backend.zeros((0, 0))
+        return self._get_distance_matrix_with_mic_vectorized()
 
 
 class SquareLattice(TILattice):
@@ -759,20 +972,20 @@ class SquareLattice(TILattice):
     def __init__(
         self,
         size: Tuple[int, int],
-        lattice_constant: float = 1.0,
+        lattice_constant: Union[float, Any] = 1.0,
         pbc: Union[bool, Tuple[bool, bool]] = True,
         precompute_neighbors: Optional[int] = None,
     ):
         """Initializes the SquareLattice."""
         dimensionality = 2
 
-        # Define lattice vectors for a square lattice
-        lattice_vectors = np.array([[lattice_constant, 0.0], [0.0, lattice_constant]])
+        # Define orthogonal lattice vectors for a square.
+        lattice_vectors = backend.convert_to_tensor(
+            [[lattice_constant, 0.0], [0.0, lattice_constant]]
+        )
+        # A square lattice is a Bravais lattice, so it has a single-site basis.
+        basis_coords = backend.convert_to_tensor([[0.0, 0.0]])
 
-        # A square lattice has a single site in its basis
-        basis_coords = np.array([[0.0, 0.0]])
-
-        # Call the parent TILattice constructor with these parameters
         super().__init__(
             dimensionality=dimensionality,
             lattice_vectors=lattice_vectors,
@@ -808,7 +1021,7 @@ class HoneycombLattice(TILattice):
     def __init__(
         self,
         size: Tuple[int, int],
-        lattice_constant: float = 1.0,
+        lattice_constant: Union[float, Any] = 1.0,
         pbc: Union[bool, Tuple[bool, bool]] = True,
         precompute_neighbors: Optional[int] = None,
     ):
@@ -816,11 +1029,13 @@ class HoneycombLattice(TILattice):
         dimensionality = 2
         a = lattice_constant
 
-        # Define the primitive lattice vectors for the underlying triangular lattice
-        lattice_vectors = a * np.array([[1.5, np.sqrt(3) / 2], [1.5, -np.sqrt(3) / 2]])
-
-        # Define the coordinates of the two basis sites (A and B)
-        basis_coords = a * np.array([[0.0, 0.0], [1.0, 0.0]])  # Site A  # Site B
+        # Define the two primitive lattice vectors for the underlying triangular Bravais lattice.
+        lattice_vectors = [
+            [a * 1.5, a * backend.sqrt(backend.convert_to_tensor(3.0)) / 2],
+            [a * 1.5, -a * backend.sqrt(backend.convert_to_tensor(3.0)) / 2],
+        ]
+        # Define the two basis sites (A and B) within the unit cell.
+        basis_coords = [[0.0, 0.0], [a * 1.0, 0.0]]
 
         super().__init__(
             dimensionality=dimensionality,
@@ -855,7 +1070,7 @@ class TriangularLattice(TILattice):
     def __init__(
         self,
         size: Tuple[int, int],
-        lattice_constant: float = 1.0,
+        lattice_constant: Union[float, Any] = 1.0,
         pbc: Union[bool, Tuple[bool, bool]] = True,
         precompute_neighbors: Optional[int] = None,
     ):
@@ -863,11 +1078,13 @@ class TriangularLattice(TILattice):
         dimensionality = 2
         a = lattice_constant
 
-        # Define the primitive lattice vectors for a triangular lattice
-        lattice_vectors = a * np.array([[1.0, 0.0], [0.5, np.sqrt(3) / 2]])
-
-        # A triangular lattice is a Bravais lattice, with a single site in its basis
-        basis_coords = np.array([[0.0, 0.0]])
+        # Define the primitive lattice vectors for a triangular lattice.
+        lattice_vectors = [
+            [a * 1.0, 0.0],
+            [a * 0.5, a * backend.sqrt(backend.convert_to_tensor(3.0)) / 2],
+        ]
+        # A triangular lattice is a Bravais lattice with a single-site basis.
+        basis_coords = [[0.0, 0.0]]
 
         super().__init__(
             dimensionality=dimensionality,
@@ -896,13 +1113,16 @@ class ChainLattice(TILattice):
     def __init__(
         self,
         size: Tuple[int],
-        lattice_constant: float = 1.0,
+        lattice_constant: Union[float, Any] = 1.0,
         pbc: bool = True,
         precompute_neighbors: Optional[int] = None,
     ):
         dimensionality = 1
-        lattice_vectors = np.array([[lattice_constant]])
-        basis_coords = np.array([[0.0]])
+        # The lattice vector is just the lattice constant along one dimension.
+        lattice_vectors = [[lattice_constant]]
+        # A simple chain is a Bravais lattice with a single-site basis.
+        basis_coords = [[0.0]]
+
         super().__init__(
             dimensionality=dimensionality,
             lattice_vectors=lattice_vectors,
@@ -934,15 +1154,15 @@ class DimerizedChainLattice(TILattice):
     def __init__(
         self,
         size: Tuple[int],
-        lattice_constant: float = 1.0,
+        lattice_constant: Union[float, Any] = 1.0,
         pbc: bool = True,
         precompute_neighbors: Optional[int] = None,
     ):
         dimensionality = 1
-        # The unit cell vector connects two A sites, spanning length 2*a
-        lattice_vectors = np.array([[2 * lattice_constant]])
-        # Basis has site A at origin, site B at distance 'a'
-        basis_coords = np.array([[0.0], [lattice_constant]])
+        # The unit cell is twice the bond length, as it contains two sites.
+        lattice_vectors = [[2 * lattice_constant]]
+        # Two basis sites (A and B) separated by the bond length.
+        basis_coords = [[0.0], [lattice_constant]]
 
         super().__init__(
             dimensionality=dimensionality,
@@ -975,14 +1195,16 @@ class RectangularLattice(TILattice):
     def __init__(
         self,
         size: Tuple[int, int],
-        lattice_constants: Tuple[float, float] = (1.0, 1.0),
+        lattice_constants: Union[Tuple[float, float], Any] = (1.0, 1.0),
         pbc: Union[bool, Tuple[bool, bool]] = True,
         precompute_neighbors: Optional[int] = None,
     ):
         dimensionality = 2
         ax, ay = lattice_constants
-        lattice_vectors = np.array([[ax, 0.0], [0.0, ay]])
-        basis_coords = np.array([[0.0, 0.0]])
+        # Orthogonal lattice vectors with potentially different lengths.
+        lattice_vectors = [[ax, 0.0], [0.0, ay]]
+        # A rectangular lattice is a Bravais lattice with a single-site basis.
+        basis_coords = [[0.0, 0.0]]
 
         super().__init__(
             dimensionality=dimensionality,
@@ -1013,16 +1235,17 @@ class CheckerboardLattice(TILattice):
     def __init__(
         self,
         size: Tuple[int, int],
-        lattice_constant: float = 1.0,
+        lattice_constant: Union[float, Any] = 1.0,
         pbc: Union[bool, Tuple[bool, bool]] = True,
         precompute_neighbors: Optional[int] = None,
     ):
         dimensionality = 2
         a = lattice_constant
-        # Primitive vectors for a square lattice rotated by 45 degrees.
-        lattice_vectors = a * np.array([[1.0, 1.0], [1.0, -1.0]])
-        # Two-site basis
-        basis_coords = a * np.array([[0.0, 0.0], [1.0, 0.0]])
+        # The unit cell is a square rotated by 45 degrees.
+        lattice_vectors = [[a * 1.0, a * 1.0], [a * 1.0, a * -1.0]]
+        # Two basis sites (A and B) within the unit cell.
+        basis_coords = [[a * 0.0, a * 0.0], [a * 1.0, a * 0.0]]
+
         super().__init__(
             dimensionality=dimensionality,
             lattice_vectors=lattice_vectors,
@@ -1052,16 +1275,24 @@ class KagomeLattice(TILattice):
     def __init__(
         self,
         size: Tuple[int, int],
-        lattice_constant: float = 1.0,
+        lattice_constant: Union[float, Any] = 1.0,
         pbc: Union[bool, Tuple[bool, bool]] = True,
         precompute_neighbors: Optional[int] = None,
     ):
         dimensionality = 2
         a = lattice_constant
-        # Using a rectangular unit cell definition for simplicity
-        lattice_vectors = a * np.array([[2.0, 0.0], [1.0, np.sqrt(3)]])
-        # Three-site basis
-        basis_coords = a * np.array([[0.0, 0.0], [1.0, 0.0], [0.5, np.sqrt(3) / 2.0]])
+        # The Kagome lattice is based on a triangular Bravais lattice.
+        lattice_vectors = [
+            [a * 2.0, a * 0.0],
+            [a * 1.0, a * backend.sqrt(backend.convert_to_tensor(3.0))],
+        ]
+        # It has a three-site basis, forming the corners of the triangles.
+        basis_coords = [
+            [a * 0.0, a * 0.0],
+            [a * 1.0, a * 0.0],
+            [a * 0.5, a * backend.sqrt(backend.convert_to_tensor(3.0)) / 2.0],
+        ]
+
         super().__init__(
             dimensionality=dimensionality,
             lattice_vectors=lattice_vectors,
@@ -1092,31 +1323,23 @@ class LiebLattice(TILattice):
     def __init__(
         self,
         size: Tuple[int, int],
-        lattice_constant: float = 1.0,
+        lattice_constant: Union[float, Any] = 1.0,
         pbc: Union[bool, Tuple[bool, bool]] = True,
         precompute_neighbors: Optional[int] = None,
     ):
         """Initializes the LiebLattice."""
         dimensionality = 2
-        # Use a more descriptive name for clarity. In a Lieb lattice,
-        # the lattice_constant is the bond length between nearest neighbors.
         bond_length = lattice_constant
 
-        # The unit cell of a Lieb lattice is a square with side length
-        # equal to twice the bond length.
         unit_cell_side = 2 * bond_length
-        lattice_vectors = np.array([[unit_cell_side, 0.0], [0.0, unit_cell_side]])
-
-        # The three-site basis consists of a corner site, a site on the
-        # center of the horizontal edge, and a site on the center of the vertical edge.
-        # Their coordinates are defined directly in terms of the physical bond length.
-        basis_coords = np.array(
-            [
-                [0.0, 0.0],  # Corner site
-                [bond_length, 0.0],  # Horizontal edge center
-                [0.0, bond_length],  # Vertical edge center
-            ]
-        )
+        # The Lieb lattice is based on a square Bravais lattice.
+        lattice_vectors = [[unit_cell_side, 0.0], [0.0, unit_cell_side]]
+        # It has a three-site basis: one corner and two edge-centers.
+        basis_coords = [
+            [0.0, 0.0],  # Corner site
+            [bond_length, 0.0],  # x-edge center
+            [0.0, bond_length],  # y-edge center
+        ]
 
         super().__init__(
             dimensionality=dimensionality,
@@ -1147,14 +1370,16 @@ class CubicLattice(TILattice):
     def __init__(
         self,
         size: Tuple[int, int, int],
-        lattice_constant: float = 1.0,
+        lattice_constant: Union[float, Any] = 1.0,
         pbc: Union[bool, Tuple[bool, bool, bool]] = True,
         precompute_neighbors: Optional[int] = None,
     ):
         dimensionality = 3
         a = lattice_constant
-        lattice_vectors = np.array([[a, 0, 0], [0, a, 0], [0, 0, a]])
-        basis_coords = np.array([[0.0, 0.0, 0.0]])
+        # Orthogonal lattice vectors of equal length in 3D.
+        lattice_vectors = [[a, 0, 0], [0, a, 0], [0, 0, a]]
+        # A simple cubic lattice is a Bravais lattice with a single-site basis.
+        basis_coords = [[0.0, 0.0, 0.0]]
         super().__init__(
             dimensionality=dimensionality,
             lattice_vectors=lattice_vectors,
@@ -1194,29 +1419,40 @@ class CustomizeLattice(AbstractLattice):
         self,
         dimensionality: int,
         identifiers: List[SiteIdentifier],
-        coordinates: List[Union[List[float], Coordinates]],
+        coordinates: Any,
         precompute_neighbors: Optional[int] = None,
     ):
         """Initializes the CustomizeLattice."""
+        logger.debug(
+            f"[DEBUG-LATTICE] Initializing CustomizeLattice with {len(identifiers)} sites."
+        )
         super().__init__(dimensionality)
-        if len(identifiers) != len(coordinates):
-            raise ValueError(
-                "Identifiers and coordinates lists must have the same length."
+
+        self._coordinates = backend.convert_to_tensor(coordinates)
+        if len(identifiers) == 0:
+            self._coordinates = backend.reshape(
+                self._coordinates, (0, self.dimensionality)
             )
 
-        # The _build_lattice logic is simple enough to be in __init__
+        if len(identifiers) != backend.shape_tuple(self._coordinates)[0]:
+            raise ValueError(
+                "The number of identifiers must match the number of coordinates. "
+                f"Got {len(identifiers)} identifiers and "
+                f"{backend.shape_tuple(self._coordinates)[0]} coordinates."
+            )
+
         self._identifiers = list(identifiers)
-        self._coordinates = [np.array(c) for c in coordinates]
         self._indices = list(range(len(identifiers)))
         self._ident_to_idx = {ident: idx for idx, ident in enumerate(identifiers)}
 
-        # Validate coordinate dimensions
-        for i, coord in enumerate(self._coordinates):
-            if coord.shape != (dimensionality,):
-                raise ValueError(
-                    f"Coordinate at index {i} has shape {coord.shape}, "
-                    f"expected ({dimensionality},)"
-                )
+        if (
+            self.num_sites > 0
+            and backend.shape_tuple(self._coordinates)[1] != dimensionality
+        ):
+            raise ValueError(
+                f"Coordinates tensor has dimension {backend.shape_tuple(self._coordinates)[1]}, "
+                f"but expected dimensionality is {dimensionality}."
+            )
 
         logger.info(f"CustomizeLattice with {self.num_sites} sites created.")
 
@@ -1228,98 +1464,66 @@ class CustomizeLattice(AbstractLattice):
         pass
 
     def _build_neighbors(self, max_k: int = 1, **kwargs: Any) -> None:
-        """Calculates neighbors using a KDTree for efficiency.
-
-        This method uses a memory-efficient approach to identify neighbors without
-        initially computing the full N x N distance matrix. It leverages
-        `scipy.spatial.distance.pdist` to find unique distance shells and then
-        a `scipy.spatial.KDTree` for fast radius queries. This approach is
-        significantly more memory-efficient during the neighbor identification phase.
-
-        After the neighbors are identified, the full distance matrix is computed
-        from the pairwise distances and cached for potential future use.
-
-        :param max_k: The maximum number of neighbor shells to
-            calculate. Defaults to 1.
-        :type max_k: int, optional
-        :param tol: The numerical tolerance for distance
-            comparisons. Defaults to 1e-6.
-        :type tol: float, optional
         """
+        Calculates neighbor relationships using a distance matrix.
+
+        This method leverages the generic `_build_neighbors_by_distance_matrix`
+        to ensure differentiability, avoiding non-differentiable libraries
+        like SciPy's KDTree.
+        """
+        logger.debug(
+            f"[DEBUG-LATTICE] Building neighbors for CustomizeLattice up to max_k={max_k}."
+        )
         tol = kwargs.get("tol", 1e-6)
-        logger.info(f"Building neighbors for CustomizeLattice up to k={max_k}...")
         if self.num_sites < 2:
             return
 
-        all_coords = np.array(self._coordinates)
+        # For CustomizeLattice, we must use the distance matrix method.
+        dist_matrix = self._compute_distance_matrix()
+        dist_matrix_sq = dist_matrix**2
+        self._distance_matrix = dist_matrix
 
-        # 1. Use pdist for memory-efficient calculation of pairwise distances
-        #    to robustly identify the distance shells.
-        all_distances_sq = pdist(all_coords, metric="sqeuclidean")
+        all_distances_sq = backend.reshape(dist_matrix_sq, [-1])
         dist_shells_sq = self._identify_distance_shells(all_distances_sq, max_k, tol)
 
-        if not dist_shells_sq:
-            logger.info("No distinct neighbor shells found.")
-            return
+        self._neighbor_maps = self._build_neighbor_map_from_distances(
+            dist_matrix_sq, dist_shells_sq, tol
+        )
 
-        # 2. Build the KDTree for efficient querying.
-        tree = KDTree(all_coords)
-        self._neighbor_maps = {k: {} for k in range(1, len(dist_shells_sq) + 1)}
-
-        # 3. Find neighbors by isolating shells using inclusion-exclusion.
-        # `found_indices` will store all neighbors within a given radius.
-        found_indices: List[set[int]] = []
-        for k_idx, target_d_sq in enumerate(dist_shells_sq):
-            radius = np.sqrt(target_d_sq) + tol
-            # Query for all points within the new, larger radius.
-            current_shell_indices = tree.query_ball_point(
-                all_coords, r=radius, return_sorted=True
-            )
-
-            # Now, isolate the neighbors for the current shell k
-            k = k_idx + 1
-            current_k_map: Dict[int, List[int]] = {}
-            for i in range(self.num_sites):
-
-                if k_idx == 0:
-                    co_located_indices = tree.query_ball_point(all_coords[i], r=1e-12)
-                    prev_found = set(co_located_indices)
-                else:
-                    prev_found = found_indices[i]
-
-                # The new neighbors are those in the current radius shell,
-                # excluding those already found in smaller shells.
-                new_neighbors = set(current_shell_indices[i]) - prev_found
-
-                if new_neighbors:
-                    current_k_map[i] = sorted(list(new_neighbors))
-
-            self._neighbor_maps[k] = current_k_map
-            found_indices = [
-                set(l) for l in current_shell_indices
-            ]  # Update for next iteration
-        self._distance_matrix = np.sqrt(squareform(all_distances_sq))
-
-        logger.info("Neighbor building complete using KDTree.")
+        logger.info(f"Neighbor building complete for CustomizeLattice up to k={max_k}.")
 
     def _compute_distance_matrix(self) -> Coordinates:
-        """Computes the distance matrix from the stored coordinates.
-
-        This implementation uses scipy.pdist for a memory-efficient
-        calculation of pairwise distances, which is then converted to a
-        full square matrix.
         """
+        Computes the full N x N distance matrix using backend operations.
+        This implementation is fully differentiable.
+        """
+        logger.debug("[DEBUG-LATTICE] Computing distance matrix for CustomizeLattice.")
+        if self.num_sites == 0:
+            return backend.zeros((0, 0))
         if self.num_sites < 2:
-            return cast(Coordinates, np.empty((self.num_sites, self.num_sites)))
+            assert self._coordinates is not None
+            return backend.zeros(
+                (self.num_sites, self.num_sites), dtype=self._coordinates.dtype
+            )
 
-        all_coords = np.array(self._coordinates)
-        # Use pdist for memory-efficiency, then build the full matrix.
-        all_distances_sq = pdist(all_coords, metric="sqeuclidean")
-        dist_matrix_sq = squareform(all_distances_sq)
-        return cast(Coordinates, np.sqrt(dist_matrix_sq))
+        # Vectorized computation of displacements: (N, 1, D) - (1, N, D) -> (N, N, D)
+        displacements = backend.expand_dims(self._coordinates, 1) - backend.expand_dims(
+            self._coordinates, 0
+        )
+
+        dist_matrix_sq = backend.sum(backend.power(displacements, 2), axis=-1)
+
+        return backend.where(
+            backend.equal(dist_matrix_sq, 0),
+            0,
+            backend.sqrt(dist_matrix_sq),
+        )
 
     def _reset_computations(self) -> None:
         """Resets all cached data that depends on the lattice structure."""
+        logger.debug(
+            "[DEBUG-LATTICE] Resetting cached computations (_neighbor_maps, _distance_matrix)."
+        )
         self._neighbor_maps = {}
         self._distance_matrix = None
 
@@ -1336,9 +1540,15 @@ class CustomizeLattice(AbstractLattice):
         :return: A new CustomizeLattice instance with the same sites.
         :rtype: CustomizeLattice
         """
+        logger.debug(
+            f"[DEBUG-LATTICE] Creating CustomizeLattice from existing lattice: {type(lattice).__name__}"
+        )
         all_sites_info = list(lattice.sites())
 
         if not all_sites_info:
+            logger.debug(
+                "[DEBUG-LATTICE] Source lattice is empty, creating an empty CustomizeLattice."
+            )
             return cls(
                 dimensionality=lattice.dimensionality, identifiers=[], coordinates=[]
             )
@@ -1355,7 +1565,7 @@ class CustomizeLattice(AbstractLattice):
     def add_sites(
         self,
         identifiers: List[SiteIdentifier],
-        coordinates: List[Union[List[float], Coordinates]],
+        coordinates: Any,
     ) -> None:
         """Adds new sites to the lattice.
 
@@ -1363,21 +1573,32 @@ class CustomizeLattice(AbstractLattice):
         previously computed neighbor information is cleared and must be
         recalculated.
 
-        :param identifiers: A list of unique, hashable identifiers for the new sites.
+        :param identifiers: A list of unique identifiers for the new sites.
         :type identifiers: List[SiteIdentifier]
-        :param coordinates: A list of coordinates for the new sites.
-        :type coordinates: List[Union[List[float], np.ndarray]]
-        :raises ValueError: If input lists have mismatched lengths, or if any new
-            identifier already exists in the lattice.
+        :param coordinates: The coordinates for the new sites. Can be a list of lists,
+            a NumPy array, or a backend-compatible tensor (e.g., jax.numpy.ndarray).
+        :type coordinates: Any
         """
-        if len(identifiers) != len(coordinates):
+        if not identifiers:
+            logger.debug(
+                "[DEBUG-LATTICE] add_sites called with empty identifiers list. No action taken."
+            )
+            return
+
+        new_coords_tensor = backend.convert_to_tensor(coordinates)
+
+        if len(identifiers) != backend.shape_tuple(new_coords_tensor)[0]:
             raise ValueError(
                 "Identifiers and coordinates lists must have the same length."
             )
-        if not identifiers:
-            return  # Nothing to add
 
-        # Check for duplicate identifiers before making any changes
+        if backend.shape_tuple(new_coords_tensor)[1] != self.dimensionality:
+            raise ValueError(
+                f"New coordinate tensor has dimension {backend.shape_tuple(new_coords_tensor)[1]}, "
+                f"but expected dimensionality is {self.dimensionality}."
+            )
+
+        # Ensure that the new identifiers are unique and do not already exist.
         existing_ids = set(self._identifiers)
         new_ids = set(identifiers)
         if not new_ids.isdisjoint(existing_ids):
@@ -1385,21 +1606,14 @@ class CustomizeLattice(AbstractLattice):
                 f"Duplicate identifiers found: {new_ids.intersection(existing_ids)}"
             )
 
-        for i, coord in enumerate(coordinates):
-            coord_arr = np.asarray(coord)
-            if coord_arr.shape != (self.dimensionality,):
-                raise ValueError(
-                    f"New coordinate at index {i} has shape {coord_arr.shape}, "
-                    f"expected ({self.dimensionality},)"
-                )
-            self._coordinates.append(coord_arr)
-            self._identifiers.append(identifiers[i])
+        self._coordinates = backend.concat(
+            [self._coordinates, new_coords_tensor], axis=0
+        )
+        self._identifiers.extend(identifiers)
 
-        # Rebuild index mappings from scratch
         self._indices = list(range(len(self._identifiers)))
         self._ident_to_idx = {ident: idx for idx, ident in enumerate(self._identifiers)}
 
-        # Invalidate any previously computed neighbors or distance matrices
         self._reset_computations()
         logger.info(
             f"{len(identifiers)} sites added. Lattice now has {self.num_sites} sites."
@@ -1414,10 +1628,12 @@ class CustomizeLattice(AbstractLattice):
 
         :param identifiers: A list of identifiers for the sites to be removed.
         :type identifiers: List[SiteIdentifier]
-        :raises ValueError: If any of the specified identifiers do not exist.
         """
         if not identifiers:
-            return  # Nothing to remove
+            logger.debug(
+                "[DEBUG-LATTICE] remove_sites called with empty identifiers list. No action taken."
+            )
+            return
 
         ids_to_remove = set(identifiers)
         current_ids = set(self._identifiers)
@@ -1426,23 +1642,25 @@ class CustomizeLattice(AbstractLattice):
                 f"Non-existent identifiers provided for removal: {ids_to_remove - current_ids}"
             )
 
-        # Create new lists containing only the sites to keep
-        new_identifiers: List[SiteIdentifier] = []
-        new_coordinates: List[Coordinates] = []
-        for ident, coord in zip(self._identifiers, self._coordinates):
-            if ident not in ids_to_remove:
-                new_identifiers.append(ident)
-                new_coordinates.append(coord)
+        # Find the indices of the sites that we want to keep.
+        indices_to_keep = [
+            idx
+            for idx, ident in enumerate(self._identifiers)
+            if ident not in ids_to_remove
+        ]
 
-        # Replace old data with the new, filtered data
+        new_identifiers = [self._identifiers[i] for i in indices_to_keep]
+
+        self._coordinates = backend.gather1d(
+            self._coordinates,
+            backend.cast(backend.convert_to_tensor(indices_to_keep), "int32"),
+        )
+
         self._identifiers = new_identifiers
-        self._coordinates = new_coordinates
 
-        # Rebuild index mappings
         self._indices = list(range(len(self._identifiers)))
         self._ident_to_idx = {ident: idx for idx, ident in enumerate(self._identifiers)}
 
-        # Invalidate caches
         self._reset_computations()
         logger.info(
             f"{len(ids_to_remove)} sites removed. Lattice now has {self.num_sites} sites."
@@ -1477,24 +1695,31 @@ def get_compatible_layers(bonds: List[Tuple[int, int]]) -> List[List[Tuple[int, 
         tuple represents a bond. All bonds within a layer are non-overlapping.
     :rtype: List[List[Tuple[int, int]]]
     """
-    uncolored_edges: Set[Tuple[int, int]] = {(min(bond), max(bond)) for bond in bonds}
+    logger.debug(f"[DEBUG-LATTICE] Getting compatible layers for {len(bonds)} bonds.")
+    # Ensure all bonds are in a canonical form (i, j) with i < j and remove duplicates.
+    sorted_edges = sorted(list({(min(bond), max(bond)) for bond in bonds}))
 
     layers: List[List[Tuple[int, int]]] = []
+    unassigned_edges = set(sorted_edges)
 
-    while uncolored_edges:
+    # Greedily build layers until all edges have been assigned.
+    while unassigned_edges:
         current_layer: List[Tuple[int, int]] = []
         qubits_in_this_layer: Set[int] = set()
 
-        edges_to_process = sorted(list(uncolored_edges))
+        sorted_unassigned = sorted(list(unassigned_edges))
 
-        for edge in edges_to_process:
+        # Iterate through remaining edges and add an edge to the current layer
+        # if it doesn't conflict with (share a qubit with) edges already in the layer.
+        for edge in sorted_unassigned:
             i, j = edge
             if i not in qubits_in_this_layer and j not in qubits_in_this_layer:
                 current_layer.append(edge)
                 qubits_in_this_layer.add(i)
                 qubits_in_this_layer.add(j)
 
-        uncolored_edges -= set(current_layer)
-        layers.append(sorted(current_layer))
+        unassigned_edges -= set(current_layer)
+        layers.append(current_layer)
 
+    logger.debug(f"[DEBUG-LATTICE] Found {len(layers)} compatible layers.")
     return layers
