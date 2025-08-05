@@ -1,2 +1,0 @@
-physics-tenpy==1.0.6
-quimb==1.11.1
