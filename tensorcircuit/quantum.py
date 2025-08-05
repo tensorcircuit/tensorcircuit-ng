@@ -1240,59 +1240,50 @@ def tenpy2qop(tenpy_obj: Union["MPS", "MPO"]) -> QuOperator:
     is_mpo = hasattr(tenpy_obj, "_W")
     tenpy_tensors = tenpy_obj._W if is_mpo else tenpy_obj._B
     nwires = len(tenpy_tensors)
-
     if nwires == 0:
         return quantum_constructor([], [], [])
 
-    original_numpy_tensors = [W.to_ndarray() for W in tenpy_tensors]
-    vr_label = "wR" if is_mpo else "vR"
-    vl_label = "wL" if is_mpo else "vL"
-    modified_numpy_tensors = []
-
-    if nwires == 1:
-        tensor = original_numpy_tensors[0]
-        labels = tenpy_tensors[0]._labels
-        left_ax_idx = labels.index(vl_label)
-        tensor = np.take(tensor, indices=[0], axis=left_ax_idx)
-        right_ax_idx = labels.index(vr_label)
-        tensor = np.take(tensor, indices=[-1], axis=right_ax_idx)
-        modified_numpy_tensors.append(tensor)
-    else:
-        first_tensor = original_numpy_tensors[0]
-        first_labels = tenpy_tensors[0]._labels
-        left_ax_idx = first_labels.index(vl_label)
-        sliced_first = np.take(first_tensor, indices=[0], axis=left_ax_idx)
-        modified_numpy_tensors.append(sliced_first)
-        modified_numpy_tensors.extend(original_numpy_tensors[1:-1])
-        last_tensor = original_numpy_tensors[-1]
-        last_labels = tenpy_tensors[-1]._labels
-        right_ax_idx = last_labels.index(vr_label)
-        sliced_last = np.take(last_tensor, indices=[-1], axis=right_ax_idx)
-        modified_numpy_tensors.append(sliced_last)
-
     nodes = []
-    for i, t in enumerate(modified_numpy_tensors):
-        if is_mpo and t.ndim == 4:
-            t = t.transpose((0, 2, 3, 1))
-            axis_names = ["wL", "p", "p*", "wR"]
-        else:
-            axis_names = tenpy_tensors[i]._labels
-
-        nodes.append(Node(t, name=f"tensor_{i}", axis_names=axis_names))
-
-    for i in range(nwires - 1):
-        connect(nodes[i][vr_label], nodes[i + 1][vl_label])
-
     if is_mpo:
+        vr_label, vl_label = "wR", "wL"
+        original_tensors = [W.to_ndarray() for W in tenpy_tensors]
+        modified_tensors = []
+
+        for i, (tensor, tenpy_t) in enumerate(zip(original_tensors, tenpy_tensors)):
+            labels = tenpy_t._labels
+            if nwires == 1:
+                tensor = np.take(tensor, [0], axis=labels.index(vl_label))
+                tensor = np.take(tensor, [-1], axis=labels.index(vr_label))
+            else:
+                if i == 0:
+                    tensor = np.take(tensor, [0], axis=labels.index(vl_label))
+                elif i == nwires - 1:
+                    tensor = np.take(tensor, [-1], axis=labels.index(vr_label))
+            modified_tensors.append(tensor)
+
+        for i, t in enumerate(modified_tensors):
+            if t.ndim == 4:
+                t = t.transpose((0, 2, 3, 1))
+            nodes.append(
+                Node(t, name=f"tensor_{i}", axis_names=["wL", "p", "p*", "wR"])
+            )
+
+        for i in range(nwires - 1):
+            connect(nodes[i]["wR"], nodes[i + 1]["wL"])
+
         out_edges = [node["p*"] for node in nodes]
         in_edges = [node["p"] for node in nodes]
+        ignore_edges = [nodes[0]["wL"], nodes[-1]["wR"]]
     else:
-        in_edges = [node["p"] for node in nodes]
-        out_edges = []
+        nodes = [Node(W.to_ndarray()) for W in tenpy_tensors]
+        if nwires > 1:
+            for i in range(nwires - 1):
+                nodes[i][2] ^ nodes[i + 1][0]
+        out_edges = [n[1] for n in nodes]
+        in_edges = []
+        ignore_edges = [nodes[0][0], nodes[-1][2]]
 
-    qop = quantum_constructor(
-        out_edges, in_edges, [], [nodes[0][vl_label], nodes[-1][vr_label]]
-    )
+    qop = quantum_constructor(out_edges, in_edges, [], ignore_edges)
 
     return qop
 
@@ -1305,12 +1296,12 @@ def qop2tenpy(qop: QuOperator) -> Any:
     :return: MPO or MPS object from the TeNPy package.
     :rtype: Union[tenpy.networks.mpo.MPO, tenpy.networks.mps.MPS]
     """
-    is_mps = len(qop.out_edges) == 0
-    nwires = len(qop.in_edges)
+    is_mps = len(qop.in_edges) == 0
+    nwires = len(qop.out_edges) if is_mps else len(qop.in_edges)
 
     # Node sorting
     endpoint_nodes = {edge.node1 for edge in qop.ignore_edges if edge.node1}
-    physical_edges = set(qop.in_edges + qop.out_edges)
+    physical_edges = set(qop.out_edges) if is_mps else set(qop.in_edges + qop.out_edges)
     if len(endpoint_nodes) < 2 and len(qop.ref_nodes) > 1:
         inferred_endpoints = {
             node
@@ -1344,7 +1335,7 @@ def qop2tenpy(qop: QuOperator) -> Any:
         if sorted_nodes[0] is not qop.ignore_edges[0].node1:
             sorted_nodes = sorted_nodes[::-1]
 
-    physical_dim = qop.in_edges[0].dimension
+    physical_dim = qop.out_edges[0].dimension if is_mps else qop.in_edges[0].dimension
     sites = [Site(LegCharge.from_trivial(physical_dim), "q") for _ in range(nwires)]
 
     # MPS Conversion
@@ -1425,8 +1416,8 @@ def qop2quimb(qop: QuOperator) -> Any:
     :return: MPO in the form of Quimb package
     :rtype: quimb.tensor.tensor_gen.MatrixProductOperator
     """
-    is_mps = len(qop.in_edges) == 0 or len(qop.out_edges) == 0
-    nwires = len(qop.in_edges) if not is_mps else len(qop.out_edges)
+    is_mps = len(qop.in_edges) == 0
+    nwires = len(qop.out_edges) if is_mps else len(qop.in_edges)
 
     all_nodes_from_edges = set()
     for edge in qop.in_edges + qop.out_edges + qop.ignore_edges:
@@ -1485,8 +1476,9 @@ def qop2quimb(qop: QuOperator) -> Any:
                 site_index = qop.out_edges.index(edge)
                 inds[axis] = f"k{site_index}"
             elif edge in qop.in_edges:
-                site_index = qop.in_edges.index(edge)
-                inds[axis] = f"b{site_index}"
+                if not is_mps:
+                    site_index = qop.in_edges.index(edge)
+                    inds[axis] = f"b{site_index}"
             else:
                 neighbor = edge.node1 if edge.node2 is node else edge.node2
                 if neighbor in node_map:
@@ -1498,9 +1490,6 @@ def qop2quimb(qop: QuOperator) -> Any:
 
     tn = qtn.TensorNetwork(quimb_tensors)
     if is_mps:
-        if len(qop.out_edges) == 0:
-            reindex_map = {ind: f"k{ind[1:]}" for ind in tn.inds if ind.startswith("b")}
-            tn.reindex(reindex_map, inplace=True)
         return tn.as_network(qtn.MatrixProductState)
     else:
         return tn.as_network(qtn.MatrixProductOperator)
@@ -1519,7 +1508,7 @@ def qop2tn(qop: QuOperator) -> Any:
     nwires = len(qop.out_edges) if is_mps else len(qop.in_edges)
 
     endpoint_nodes = {edge.node1 for edge in qop.ignore_edges if edge.node1}
-    physical_edges = set(qop.in_edges + qop.out_edges)
+    physical_edges = set(qop.out_edges) if is_mps else set(qop.in_edges + qop.out_edges)
     if len(endpoint_nodes) < 2 and len(qop.ref_nodes) > 1:
         inferred_endpoints = {
             node

@@ -508,7 +508,7 @@ def test_qop2tenpy(backend):
     for i in range(nwires_mps - 1):
         mps_nodes[i][2] ^ mps_nodes[i + 1][0]
     qop_mps = tc.QuOperator(
-        [], [n[1] for n in mps_nodes], mps_nodes, [mps_nodes[0][0], mps_nodes[-1][2]]
+        [n[1] for n in mps_nodes], [], mps_nodes, [mps_nodes[0][0], mps_nodes[-1][2]]
     )
     tenpy_mps = tc.quantum.qop2tenpy(qop_mps)
     mat = qop_mps.eval_matrix()
@@ -686,6 +686,7 @@ def test_tenpy_roundtrip(backend):
 
     np.testing.assert_allclose(mat_original, mat_roundtrip, atol=1e-5)
 
+    # MPS roundtrip
     nwires_mps = 4
     chi_mps = 5
     sites_mps = [Site(LegCharge.from_trivial(phys_dim), "q") for _ in range(nwires_mps)]
@@ -924,6 +925,7 @@ def test_qop2tn(backend):
 
     np.testing.assert_allclose(mat_original, mat_roundtrip, atol=1e-5)
 
+    # MPS conversion
     tensors_mps_tc = [np.random.rand(1, phys_dim, chi).astype(dtype)]
     for _ in range(nwires - 2):
         tensors_mps_tc.append(np.random.rand(chi, phys_dim, chi).astype(dtype))
