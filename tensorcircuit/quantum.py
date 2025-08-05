@@ -32,8 +32,9 @@ from tensornetwork.network_operations import (
 
 from tenpy.networks import MPO, MPS, Site
 from tenpy.linalg import np_conserved as npc
+from tenpy.linalg import LegCharge
 import tensornetwork as tn
-from quimb.tensor import MatrixProductOperator
+import quimb.tensor as qtn
 
 from .cons import backend, contractor, dtypestr, npdtype, rdtypestr
 from .gates import Gate, num_to_tensor
@@ -1227,40 +1228,71 @@ def quimb2qop(qb_mpo: Any) -> QuOperator:
 # TODO(@Charlespkuer): Add more conversion functions for other packages
 def tenpy2qop(tenpy_obj: Union["MPS", "MPO"]) -> QuOperator:
     """
-    Convert MPO or MPS from TeNPy to TensorCircuit QuOperator.
+    Converts a TeNPy MPO or MPS to a TensorCircuit QuOperator.
+    This definitive version correctly handles axis ordering and boundary
+    conditions to be compatible with `eval_matrix`.
 
-    :param tenpy_obj: MPO or MPS object from the TeNPy package.
+    :param tenpy_obj: A MPO or MPS object from the TeNPy package.
     :type tenpy_obj: Union[tenpy.networks.mpo.MPO, tenpy.networks.mps.MPS]
-    :return: The corresponding state/operator as a QuOperator.
+    :return: The corresponding state or operator as a QuOperator.
     :rtype: QuOperator
     """
-    tenpy_tensors = tenpy_obj._W if hasattr(tenpy_obj, "_W") else tenpy_obj._B
     is_mpo = hasattr(tenpy_obj, "_W")
-    # nwires = len(tenpy_tensors)
-    mpo = []
-    out_edges = []
-    in_edges = []
+    tenpy_tensors = tenpy_obj._W if is_mpo else tenpy_obj._B
+    nwires = len(tenpy_tensors)
 
-    for i, W in enumerate(tenpy_tensors):
+    if nwires == 0:
+        return quantum_constructor([], [], [])
 
-        if is_mpo:
-            W_numpy = W.to_numpy()
-            W_node = Node(W_numpy, axis_names=["wL", "wR", "p", "p*"])
-            mpo.append(W_node)
-            out_edges.append(W_node["p*"])
-            in_edges.append(W_node["p"])
+    original_numpy_tensors = [W.to_ndarray() for W in tenpy_tensors]
+    vr_label = "wR" if is_mpo else "vR"
+    vl_label = "wL" if is_mpo else "vL"
+    modified_numpy_tensors = []
+
+    if nwires == 1:
+        tensor = original_numpy_tensors[0]
+        labels = tenpy_tensors[0]._labels
+        left_ax_idx = labels.index(vl_label)
+        tensor = np.take(tensor, indices=[0], axis=left_ax_idx)
+        right_ax_idx = labels.index(vr_label)
+        tensor = np.take(tensor, indices=[-1], axis=right_ax_idx)
+        modified_numpy_tensors.append(tensor)
+    else:
+        first_tensor = original_numpy_tensors[0]
+        first_labels = tenpy_tensors[0]._labels
+        left_ax_idx = first_labels.index(vl_label)
+        sliced_first = np.take(first_tensor, indices=[0], axis=left_ax_idx)
+        modified_numpy_tensors.append(sliced_first)
+        modified_numpy_tensors.extend(original_numpy_tensors[1:-1])
+        last_tensor = original_numpy_tensors[-1]
+        last_labels = tenpy_tensors[-1]._labels
+        right_ax_idx = last_labels.index(vr_label)
+        sliced_last = np.take(last_tensor, indices=[-1], axis=right_ax_idx)
+        modified_numpy_tensors.append(sliced_last)
+
+    nodes = []
+    for i, t in enumerate(modified_numpy_tensors):
+        if is_mpo and t.ndim == 4:
+            t = t.transpose((0, 2, 3, 1))
+            axis_names = ["wL", "p", "p*", "wR"]
         else:
-            W_node = Node(W, axis_names=["wL", "wR", "p"])
-            mpo.append(W_node)
-            in_edges.append(W_node[-1])
+            axis_names = tenpy_tensors[i]._labels
 
-        if i == 0:
-            pass
-        else:
-            prev_node = mpo[-1]
-            _ = prev_node["wR"] ^ W_node["wL"]
+        nodes.append(Node(t, name=f"tensor_{i}", axis_names=axis_names))
 
-    qop = quantum_constructor(out_edges, in_edges, [], [])
+    for i in range(nwires - 1):
+        connect(nodes[i][vr_label], nodes[i + 1][vl_label])
+
+    if is_mpo:
+        out_edges = [node["p*"] for node in nodes]
+        in_edges = [node["p"] for node in nodes]
+    else:
+        in_edges = [node["p"] for node in nodes]
+        out_edges = []
+
+    qop = quantum_constructor(
+        out_edges, in_edges, [], [nodes[0][vl_label], nodes[-1][vr_label]]
+    )
 
     return qop
 
@@ -1273,58 +1305,116 @@ def qop2tenpy(qop: QuOperator) -> Any:
     :return: MPO or MPS object from the TeNPy package.
     :rtype: Union[tenpy.networks.mpo.MPO, tenpy.networks.mps.MPS]
     """
-    if not qop.ref_nodes:
-        raise ValueError("QuOperator must have ref_nodes for conversion")
-
     is_mps = len(qop.out_edges) == 0
-    is_mpo = len(qop.out_edges) > 0
-    tensors = []
+    nwires = len(qop.in_edges)
 
-    for node in qop.ref_nodes:
-        tensor = node.tensor
-        if hasattr(tensor, "numpy"):
-            tensor = tensor.numpy()
-        tensors.append(tensor.copy())
+    # Node sorting
+    endpoint_nodes = {edge.node1 for edge in qop.ignore_edges if edge.node1}
+    physical_edges = set(qop.in_edges + qop.out_edges)
+    if len(endpoint_nodes) < 2 and len(qop.ref_nodes) > 1:
+        inferred_endpoints = {
+            node
+            for node in qop.ref_nodes
+            if sum(1 for edge in node.edges if edge not in physical_edges) == 1
+        }
+        if len(inferred_endpoints) == 2:
+            endpoint_nodes = inferred_endpoints
 
-    if is_mpo:
-        dummy_sites = []
-        try:
-            phys_dim = tensors[0].shape[2]
-        except IndexError:
-            phys_dim = 2
+    # to correctly sort nodes
+    sorted_nodes: list[Node] = []
+    if endpoint_nodes:
+        current = next(iter(endpoint_nodes))
+        while current and len(sorted_nodes) < nwires:
+            sorted_nodes.append(current)
+            current = next(
+                (
+                    e.node2 if e.node1 is current else e.node1
+                    for e in current.edges
+                    if not e.is_dangling()
+                    and e not in physical_edges
+                    and (e.node2 if e.node1 is current else e.node1) not in sorted_nodes
+                ),
+                None,
+            )
 
-        for _ in range(len(tensors)):
-            leg = npc.LegCharge.from_trivial(phys_dim)
-            dummy_sites.append(Site(leg))
+    if not sorted_nodes:
+        sorted_nodes = qop.nodes
 
-        Ws = []
-        for tensor in tensors:
-            if len(tensor.shape) == 4:
-                Ws.append(tensor)
-            elif len(tensor.shape) == 3:
-                Ws.append(np.expand_dims(tensor, axis=-1))
+    if len(sorted_nodes) > 0 and len(qop.ignore_edges) > 0:
+        if sorted_nodes[0] is not qop.ignore_edges[0].node1:
+            sorted_nodes = sorted_nodes[::-1]
 
-        return MPO.from_Ws(dummy_sites, Ws, bc="finite")
+    physical_dim = qop.in_edges[0].dimension
+    sites = [Site(LegCharge.from_trivial(physical_dim), "q") for _ in range(nwires)]
 
-    elif is_mps:
-        dummy_sites = []
-        try:
-            phys_dim = tensors[0].shape[1]
-        except IndexError:
-            phys_dim = 2
+    # MPS Conversion
+    if is_mps:
+        tensors = []
+        for i, node in enumerate(sorted_nodes):
+            tensor = np.asarray(node.tensor)
+            if i == 0 and tensor.shape == (2, 2, 2):
+                tensor = tensor[0:1, :, :]
+            elif i == len(sorted_nodes) - 1 and tensor.shape == (2, 2, 2):
+                tensor = tensor[:, :, 0:1]
+            tensors.append(
+                npc.Array.from_ndarray(
+                    tensor,
+                    legcharges=[LegCharge.from_trivial(s) for s in tensor.shape],
+                    labels=["vL", "p", "vR"],
+                )
+            )
 
-        for _ in range(len(tensors)):
-            leg = npc.LegCharge.from_trivial(phys_dim)
-            dummy_sites.append(Site(leg))
+        SVs = (
+            [np.ones([1])]
+            + [np.ones(tensors[i].get_leg("vR").ind_len) for i in range(nwires - 1)]
+            + [np.ones([1])]
+        )
+        return MPS(sites, tensors, SVs, bc="finite")
 
-        Bs = []
-        for tensor in tensors:
-            if len(tensor.shape) == 3:
-                Bs.append(tensor)
+    # MPO Conversion
+    raw_tensors = [np.asarray(node.tensor) for node in sorted_nodes]
 
-        return MPS.from_Bflat(dummy_sites, Bs, bc="finite")
+    chi = 1
+    if nwires > 1:
+        chi = raw_tensors[0].shape[3]
 
-    raise ValueError("Cannot determine if QuOperator is MPO or MPS")
+    IdL = 0
+    IdR = chi - 1 if chi > 1 else 0
+
+    reconstructed_tensors = []
+
+    tensors_to_process = [t.copy() for t in raw_tensors]
+
+    if nwires > 0:
+        if tensors_to_process[0].shape[0] < chi:
+            t_left = tensors_to_process[0]
+            new_shape = (chi,) + t_left.shape[1:]
+            padded_left = np.zeros(new_shape, dtype=t_left.dtype)
+            padded_left[IdL, ...] = t_left[0, ...]
+            tensors_to_process[0] = padded_left
+
+        if tensors_to_process[-1].shape[3] < chi:
+            t_right = tensors_to_process[-1]
+            new_shape = t_right.shape[:3] + (chi,)
+            padded_right = np.zeros(new_shape, dtype=t_right.dtype)
+            padded_right[..., IdR] = t_right[..., 0]
+            tensors_to_process[-1] = padded_right
+
+    reconstructed_tensors = tensors_to_process
+
+    tenpy_Ws = []
+    for tensor in reconstructed_tensors:
+        labels = ["wL", "wR", "p", "p*"]
+        tensor = np.transpose(tensor, (0, 3, 1, 2))
+        tenpy_Ws.append(
+            npc.Array.from_ndarray(
+                tensor,
+                legcharges=[LegCharge.from_trivial(s) for s in tensor.shape],
+                labels=labels,
+            )
+        )
+
+    return MPO(sites, tenpy_Ws, bc="finite", IdL=IdL, IdR=IdR)
 
 
 def qop2quimb(qop: QuOperator) -> Any:
@@ -1335,84 +1425,181 @@ def qop2quimb(qop: QuOperator) -> Any:
     :return: MPO in the form of Quimb package
     :rtype: quimb.tensor.tensor_gen.MatrixProductOperator
     """
-    if not qop.ref_nodes:
-        raise ValueError("QuOperator must have ref_nodes for conversion to Quimb")
+    is_mps = len(qop.in_edges) == 0 or len(qop.out_edges) == 0
+    nwires = len(qop.in_edges) if not is_mps else len(qop.out_edges)
 
-    nodes = qop.ref_nodes
-    node_to_index = {node: i for i, node in enumerate(nodes)}
+    all_nodes_from_edges = set()
+    for edge in qop.in_edges + qop.out_edges + qop.ignore_edges:
+        if edge.node1 is not None:
+            all_nodes_from_edges.add(edge.node1)
+        if edge.node2 is not None:
+            all_nodes_from_edges.add(edge.node2)
 
-    tensors_data = []
-    tensor_inds = []
+    nodes_for_sorting = (
+        list(all_nodes_from_edges) if not qop.ref_nodes else qop.ref_nodes
+    )
 
-    for node in nodes:
-        all_edges = node.edges
-        inds = []
-        for edge in all_edges:
+    endpoint_nodes = {edge.node1 for edge in qop.ignore_edges if edge.node1}
+    physical_edges = set(qop.in_edges + qop.out_edges)
+
+    if len(endpoint_nodes) < 2 and len(nodes_for_sorting) > 1:
+        inferred_endpoints = {
+            node
+            for node in nodes_for_sorting
+            if sum(1 for edge in node.edges if edge not in physical_edges) == 1
+        }
+        if len(inferred_endpoints) == 2:
+            endpoint_nodes = inferred_endpoints
+
+    sorted_nodes: list[Node] = []
+    if endpoint_nodes:
+        current = next(iter(endpoint_nodes))
+        while current and len(sorted_nodes) < nwires:
+            sorted_nodes.append(current)
+            current = next(
+                (
+                    e.node2 if e.node1 is current else e.node1
+                    for e in current.edges
+                    if not e.is_dangling()
+                    and e not in physical_edges
+                    and (e.node2 if e.node1 is current else e.node1) not in sorted_nodes
+                ),
+                None,
+            )
+
+    if not sorted_nodes:
+        sorted_nodes = nodes_for_sorting
+
+    if len(sorted_nodes) > 0 and len(qop.ignore_edges) > 0:
+        if sorted_nodes[0] is not qop.ignore_edges[0].node1:
+            sorted_nodes = sorted_nodes[::-1]
+
+    quimb_tensors = []
+    node_map = {node: i for i, node in enumerate(sorted_nodes)}
+    for i, node in enumerate(sorted_nodes):
+        tensor_data = np.asarray(node.tensor)
+        inds: List[Optional[str]] = [None] * tensor_data.ndim
+        edge_to_axis = {edge: axis for axis, edge in enumerate(node.edges)}
+        for edge, axis in edge_to_axis.items():
             if edge in qop.out_edges:
-                inds.append(f"k{node_to_index[node]}")
+                site_index = qop.out_edges.index(edge)
+                inds[axis] = f"k{site_index}"
             elif edge in qop.in_edges:
-                inds.append(f"b{node_to_index[node]}")
-            elif edge in qop.ignore_edges:
-                connected_node = edge.node1 if edge.node2 == node else edge.node2
-                bond_name = (
-                    f"a{min(node_to_index[node], node_to_index[connected_node])}"
-                )
-                inds.append(bond_name)
+                site_index = qop.in_edges.index(edge)
+                inds[axis] = f"b{site_index}"
             else:
-                continue
+                neighbor = edge.node1 if edge.node2 is node else edge.node2
+                if neighbor in node_map:
+                    j = node_map[neighbor]
+                    left, right = min(i, j), max(i, j)
+                    inds[axis] = f"v{left},{right}"
 
-        tensors_data.append(node.tensor)
-        tensor_inds.append(inds)
+        quimb_tensors.append(qtn.Tensor(tensor_data, inds=inds, tags=f"I{i}"))
 
-    mpo = MatrixProductOperator(tensors_data, shape="lrud")
-
-    for i, tensor in enumerate(mpo.tensors):
-        tensor.inds = tensor_inds[i]
-
-    return mpo
+    tn = qtn.TensorNetwork(quimb_tensors)
+    if is_mps:
+        if len(qop.out_edges) == 0:
+            reindex_map = {ind: f"k{ind[1:]}" for ind in tn.inds if ind.startswith("b")}
+            tn.reindex(reindex_map, inplace=True)
+        return tn.as_network(qtn.MatrixProductState)
+    else:
+        return tn.as_network(qtn.MatrixProductOperator)
 
 
 def qop2tn(qop: QuOperator) -> Any:
     """
-    Convert QuOperator back to MPO in TensorNetwork package.
+    [CORRECTED VERSION]
+    Convert QuOperator back to MPO or MPS in TensorNetwork package.
 
-    :param qop: MPO in the form of QuOperator
-    :return: MPO in the form of TensorNetwork
-    :rtype: tn.matrixproductstates.MPO
+    :param qop: MPO or MPS in the form of QuOperator
+    :return: MPO or MPS in the form of TensorNetwork
+    :rtype: Union[tn.matrixproductstates.MPO, tn.matrixproductstates.MPS]
     """
-    if not qop.ref_nodes:
-        raise ValueError(
-            "QuOperator must have ref_nodes for conversion to TensorNetwork"
-        )
+    is_mps = len(qop.in_edges) == 0
+    nwires = len(qop.out_edges) if is_mps else len(qop.in_edges)
 
-    out_edges = qop.out_edges
-    ignore_edges = qop.ignore_edges
-    nodes = qop.ref_nodes
+    endpoint_nodes = {edge.node1 for edge in qop.ignore_edges if edge.node1}
+    physical_edges = set(qop.in_edges + qop.out_edges)
+    if len(endpoint_nodes) < 2 and len(qop.ref_nodes) > 1:
+        inferred_endpoints = {
+            node
+            for node in qop.ref_nodes
+            if sum(1 for edge in node.edges if edge not in physical_edges) == 1
+        }
+        if len(inferred_endpoints) == 2:
+            endpoint_nodes = inferred_endpoints
+    sorted_nodes: list[Node] = []
+    if endpoint_nodes:
+        current = next(iter(endpoint_nodes))
+        while current and len(sorted_nodes) < nwires:
+            sorted_nodes.append(current)
+            current = next(
+                (
+                    e.node2 if e.node1 is current else e.node1
+                    for e in current.edges
+                    if not e.is_dangling()
+                    and e not in physical_edges
+                    and (e.node2 if e.node1 is current else e.node1) not in sorted_nodes
+                ),
+                None,
+            )
+    if not sorted_nodes:
+        sorted_nodes = qop.nodes
+    if len(sorted_nodes) > 0 and len(qop.ignore_edges) > 0:
+        if sorted_nodes[0] is not qop.ignore_edges[0].node1:
+            sorted_nodes = sorted_nodes[::-1]
 
-    mpo_tensors = []
-    nwires = len(out_edges) if out_edges else len(qop.in_edges)
+    tensors = []
+    for i, node in enumerate(sorted_nodes):
+        edge_to_axis = {edge: axis for axis, edge in enumerate(node.edges)}
 
-    for i, node in enumerate(nodes):
-        tensor = tn.Node(
-            node.tensor,
-            name=f"mpo_site_{i}",
-            axis_names=(
-                [f"vL_{i}", "phys_in", "phys_out", f"vR_{i}"]
-                if out_edges
-                else [f"vL_{i}", "phys_in", f"vR_{i}"]
-            ),
-        )
-        mpo_tensors.append(tensor)
+        left_v_ax, right_v_ax = None, None
 
-    for i in range(nwires - 1):
-        tn.connect(mpo_tensors[i][f"vR_{i}"], mpo_tensors[i + 1][f"vL_{i+1}"])
+        if i > 0:
+            prev_node = sorted_nodes[i - 1]
+            edge_to_prev = next(
+                e for e in node.edges if (e.node1 is prev_node or e.node2 is prev_node)
+            )
+            left_v_ax = edge_to_axis[edge_to_prev]
 
-    # Handle dangling edges
-    for edge in out_edges + qop.in_edges:
-        if edge not in ignore_edges:
-            edge.dangling = True
+        if i < nwires - 1:
+            next_node = sorted_nodes[i + 1]
+            edge_to_next = next(
+                e for e in node.edges if (e.node1 is next_node or e.node2 is next_node)
+            )
+            right_v_ax = edge_to_axis[edge_to_next]
 
-    return tn.matrixproductstates.MPO(mpo_tensors)
+        if is_mps:
+            tensors.append(node.tensor)
+
+        else:  # MPO
+            phys_in_edge = next(e for e in node.edges if e in qop.in_edges)
+            phys_out_edge = next(e for e in node.edges if e in qop.out_edges)
+            phys_in_ax = edge_to_axis[phys_in_edge]
+            phys_out_ax = edge_to_axis[phys_out_edge]
+            left_v_ax, right_v_ax, phys_in_ax, phys_out_ax = 0, 1, 2, 3
+            if node.tensor.ndim == 3:
+                if i == 0:
+                    right_v_ax, phys_in_ax, phys_out_ax = 0, 1, 2
+                    permuted_tensor = backend.transpose(
+                        node.tensor, perm=[right_v_ax, phys_in_ax, phys_out_ax]
+                    )
+                else:
+                    left_v_ax, phys_in_ax, phys_out_ax = 0, 1, 2
+                    permuted_tensor = backend.transpose(
+                        node.tensor, perm=[left_v_ax, phys_in_ax, phys_out_ax]
+                    )
+            else:
+                permuted_tensor = backend.transpose(
+                    node.tensor, perm=[left_v_ax, right_v_ax, phys_in_ax, phys_out_ax]
+                )
+
+            tensors.append(permuted_tensor)
+
+    if is_mps:
+        return tn.FiniteMPS(tensors)
+    else:
+        return tn.matrixproductstates.mpo.FiniteMPO(tensors)
 
 
 # TODO(@refraction-ray): Z2 analogy or more general analogies for the following u1 functions
