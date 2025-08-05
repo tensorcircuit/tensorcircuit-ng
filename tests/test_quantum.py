@@ -986,6 +986,159 @@ def test_qop2tn(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_tenpy2qop(backend):
+    try:
+        from tenpy.models.tf_ising import TFIChain
+        from tenpy.networks.mps import MPS
+    except ImportError:
+        pytest.skip("TeNPy is not installed")
+
+    nwires = 4
+    Jx = 1.0
+    Bz = -1.0
+    model_params = {"L": nwires, "J": Jx, "g": Bz, "bc_MPS": "finite", "verbose": 0}
+    model = TFIChain(model_params)
+    tenpy_mpo = model.H_MPO
+    qu_mpo = tc.quantum.tenpy2qop(tenpy_mpo)
+
+    # Compare with expected Hamiltonian
+    g = tc.templates.graphs.Line1D(nwires, pbc=False)
+    h_expected = tc.quantum.heisenberg_hamiltonian(
+        g, hzz=0, hxx=Jx, hyy=0, hz=Bz, hx=0, hy=0, sparse=False, numpy=True
+    )
+    h_actual = qu_mpo.eval_matrix()
+    np.testing.assert_allclose(h_actual, h_expected, atol=1e-5)
+
+    # Test MPS conversion - Neel state
+    psi = MPS.from_product_state(
+        model.lat, [[0, 1] * (nwires // 2)], bc=model.lat.bc_MPS
+    )
+    qu_mps = tc.quantum.tenpy2qop(psi)
+
+    # Compare with expected state vector
+    psi_expected = np.zeros(2**nwires)
+    psi_expected[0b0101 if nwires == 4 else 0b01] = 1.0  # |0101> for nwires=4
+    psi_actual = qu_mps.eval_matrix()
+    np.testing.assert_allclose(np.abs(psi_actual), np.abs(psi_expected), atol=1e-5)
+
+    # Test round-trip conversion if available
+    if hasattr(tc.quantum, "qop2tenpy"):
+        # MPO round-trip
+        tenpy_mpo_back = tc.quantum.qop2tenpy(qu_mpo, model.sites)
+        qu_mpo_back = tc.quantum.tenpy2qop(tenpy_mpo_back)
+        h_back = qu_mpo_back.eval_matrix()
+        np.testing.assert_allclose(h_back, h_expected, atol=1e-5)
+
+        # MPS round-trip
+        tenpy_mps_back = tc.quantum.qop2tenpy(qu_mps, model.sites)
+        qu_mps_back = tc.quantum.tenpy2qop(tenpy_mps_back)
+        psi_back = qu_mps_back.eval_matrix()
+        np.testing.assert_allclose(np.abs(psi_back), np.abs(psi_expected), atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_qop2tenpy(backend):
+    try:
+        from tenpy.networks.mps import MPS
+        from tenpy.networks.mpo import MPO
+    except ImportError:
+        pytest.skip("TeNPy not installed")
+
+    # Test MPS conversion
+    tensors = [np.random.rand(2, 2, 2) for _ in range(4)]
+    nodes = [tn.Node(t) for t in tensors]
+
+    for i in range(len(nodes) - 1):
+        nodes[i][2] ^ nodes[i + 1][0]
+
+    qop = qu.QuOperator(
+        out_edges=[nodes[0][0]],
+        in_edges=[nodes[-1][1]],
+        ref_nodes=nodes,
+    )
+
+    mps = qu.qop2tenpy(qop)
+    assert isinstance(mps, MPS)
+    assert len(mps.sites) == 4
+
+    # Test MPO conversion
+    tensors = [np.random.rand(2, 2, 2, 2) for _ in range(4)]
+    nodes = [tn.Node(t) for t in tensors]
+
+    for i in range(len(nodes) - 1):
+        nodes[i][3] ^ nodes[i + 1][0]  # 连接内部边
+
+    qop = qu.QuOperator(
+        out_edges=[nodes[0][1]],  # 悬挂边
+        in_edges=[nodes[0][2]],  # 悬挂边
+        ref_nodes=nodes,
+    )
+
+    mpo = qu.qop2tenpy(qop)
+    assert isinstance(mpo, MPO)
+    assert len(mpo.sites) == 4
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_tenpy_roundtrip(backend):
+    try:
+        from tenpy.networks.mps import MPS
+        from tenpy.networks.site import SpinHalfSite
+    except ImportError:
+        pytest.skip("TeNPy not installed")
+
+    # Create spin sites explicitly
+    sites = [SpinHalfSite(conserve=None) for _ in range(4)]
+    mps = MPS.from_product_state(sites, p_state=["up"] * 4)  # Use string state names
+
+    # MPS roundtrip
+    qop = qu.tenpy2qop(mps)
+    mps2 = qu.qop2tenpy(qop)
+    assert len(mps.sites) == len(mps2.sites)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_qop2quimb(backend):
+
+    # Create properly connected network
+    tensors = [np.random.rand(2, 2, 2) for _ in range(3)]
+    nodes = [tn.Node(t) for t in tensors]
+    edges = []
+    for i in range(len(nodes) - 1):
+        edges.append(nodes[i][2] ^ nodes[i + 1][0])
+    # Only pass dangling edges to QuOperator
+    qop = qu.QuOperator(
+        out_edges=[nodes[0][0]],
+        in_edges=[nodes[-1][1]],
+        ref_nodes=nodes,
+        ignore_edges=edges,
+    )
+
+    quimb_mpo = qu.qop2quimb(qop)
+    assert len(quimb_mpo.tensors) == 3
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_qop2tn(backend):
+    # Create properly connected network
+    tensors = [np.random.rand(2, 2, 2) for _ in range(3)]
+    nodes = [tn.Node(t) for t in tensors]
+    edges = []
+    for i in range(len(nodes) - 1):
+        edges.append(nodes[i][2] ^ nodes[i + 1][0])
+    # Only pass dangling edges to QuOperator
+    qop = qu.QuOperator(
+        out_edges=[nodes[0][0]],
+        in_edges=[nodes[-1][1]],
+        ref_nodes=nodes,
+        ignore_edges=edges,
+    )
+
+    tn_mpo = qu.qop2tn(qop)
+    assert len(tn_mpo.tensors) == 3
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_counts_2(backend):
     z0 = tc.backend.convert_to_tensor(np.array([0.1, 0, -0.3, 0]))
     x, y = tc.quantum.count_d2s(z0)
