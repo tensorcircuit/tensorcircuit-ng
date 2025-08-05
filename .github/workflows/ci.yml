@@ -23,6 +23,7 @@ jobs:
           pip install --no-cache-dir -r requirements/requirements-extra.txt
           pip install --no-cache-dir -r requirements/requirements-dev.txt
           pip install --no-cache-dir -r requirements/requirements-types.txt
+          pip install --no-cache-dir -r requirements/requirements-hyx.txt
       - name: black linter
         run: |
           black . --check
