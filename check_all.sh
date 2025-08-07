@@ -7,8 +7,7 @@ mypy tensorcircuit
 echo "pylint check"
 pylint tensorcircuit tests examples/*.py
 echo "pytest check"
-#pytest -n auto --cov=tensorcircuit -vv -W ignore::DeprecationWarning
-pytest tests/test_quantum.py -n auto --cov=tensorcircuit -vv -W ignore::DeprecationWarning
+pytest -n auto --cov=tensorcircuit -vv -W ignore::DeprecationWarning
 # for test on gpu machine, please set `export TF_FORCE_GPU_ALLOW_GROWTH=true` for tf
 # and `export XLA_PYTHON_CLIENT_PREALLOCATE=false` for jax to avoid OOM in testing
 echo "sphinx check"

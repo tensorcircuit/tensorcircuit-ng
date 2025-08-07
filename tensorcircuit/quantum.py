@@ -30,12 +30,6 @@ from tensornetwork.network_operations import (
     remove_node,
 )
 
-from tenpy.networks import MPO, MPS, Site
-from tenpy.linalg import np_conserved as npc
-from tenpy.linalg import LegCharge
-import tensornetwork as tn
-import quimb.tensor as qtn
-
 from .cons import backend, contractor, dtypestr, npdtype, rdtypestr
 from .gates import Gate, num_to_tensor
 from .utils import arg_alias
@@ -1157,76 +1151,8 @@ def generate_local_hamiltonian(
     return hop
 
 
-def tn2qop(tn_mpo: Any) -> QuOperator:
-    """
-    Convert MPO in TensorNetwork package to QuOperator.
-
-    :param tn_mpo: MPO in the form of TensorNetwork package
-    :type tn_mpo: ``tn.matrixproductstates.mpo.*``
-    :return: MPO in the form of QuOperator
-    :rtype: QuOperator
-    """
-    tn_mpo = tn_mpo.tensors
-    nwires = len(tn_mpo)
-    mpo = []
-    for i in range(nwires):
-        mpo.append(Node(tn_mpo[i], name=f"mpo_{i}"))
-
-    for i in range(nwires - 1):
-        connect(mpo[i][1], mpo[i + 1][0])
-    # TODO(@refraction-ray): whether in and out edge is in the correct order require further check
-    qop = quantum_constructor(
-        [mpo[i][-1] for i in range(nwires)],  # out_edges
-        [mpo[i][-2] for i in range(nwires)],  # in_edges
-        [],
-        [mpo[0][0], mpo[-1][1]],  # ignore_edges
-    )
-    return qop
-
-
-def quimb2qop(qb_mpo: Any) -> QuOperator:
-    """
-    Convert MPO in Quimb package to QuOperator.
-
-    :param tn_mpo: MPO in the form of Quimb package
-    :type tn_mpo: ``quimb.tensor.tensor_gen.*``
-    :return: MPO in the form of QuOperator
-    :rtype: QuOperator
-    """
-    qb_mpo = qb_mpo.tensors
-    nwires = len(qb_mpo)
-    assert nwires >= 3, "number of tensors must be larger than 2"
-    mpo = []
-    edges = []
-    for i in range(nwires):
-        mpo.append(Node(qb_mpo[i].data))
-        for j, ind in enumerate(qb_mpo[i].inds):
-            edges.append((i, j, ind))
-
-    out_edges = []
-    in_edges = []
-
-    for i, e1 in enumerate(edges):
-        if e1[2].startswith("k"):
-            out_edges.append(mpo[e1[0]][e1[1]])
-        elif e1[2].startswith("b"):
-            in_edges.append(mpo[e1[0]][e1[1]])
-        else:
-            for j, e2 in enumerate(edges[i + 1 :]):
-                if e2[2] == e1[2]:
-                    connect(mpo[e1[0]][e1[1]], mpo[e2[0]][e2[1]])
-
-    qop = quantum_constructor(
-        out_edges,  # out_edges
-        in_edges,  # in_edges
-        [],
-        [],  # ignore_edges
-    )
-    return qop
-
-
 # TODO(@Charlespkuer): Add more conversion functions for other packages
-def tenpy2qop(tenpy_obj: Union["MPS", "MPO"]) -> QuOperator:
+def tenpy2qop(tenpy_obj: Any) -> QuOperator:
     """
     Converts a TeNPy MPO or MPS to a TensorCircuit QuOperator.
     This definitive version correctly handles axis ordering and boundary
@@ -1296,6 +1222,13 @@ def qop2tenpy(qop: QuOperator) -> Any:
     :return: MPO or MPS object from the TeNPy package.
     :rtype: Union[tenpy.networks.mpo.MPO, tenpy.networks.mps.MPS]
     """
+    try:
+        from tenpy.networks import MPO, MPS, Site
+        from tenpy.linalg import np_conserved as npc
+        from tenpy.linalg import LegCharge
+    except ImportError:
+        raise ImportError("Please install TeNPy package to use this function.")
+
     is_mps = len(qop.in_edges) == 0
     nwires = len(qop.out_edges) if is_mps else len(qop.in_edges)
 
@@ -1408,6 +1341,47 @@ def qop2tenpy(qop: QuOperator) -> Any:
     return MPO(sites, tenpy_Ws, bc="finite", IdL=IdL, IdR=IdR)
 
 
+def quimb2qop(qb_mpo: Any) -> QuOperator:
+    """
+    Convert MPO in Quimb package to QuOperator.
+
+    :param tn_mpo: MPO in the form of Quimb package
+    :type tn_mpo: ``quimb.tensor.tensor_gen.*``
+    :return: MPO in the form of QuOperator
+    :rtype: QuOperator
+    """
+    qb_mpo = qb_mpo.tensors
+    nwires = len(qb_mpo)
+    assert nwires >= 3, "number of tensors must be larger than 2"
+    mpo = []
+    edges = []
+    for i in range(nwires):
+        mpo.append(Node(qb_mpo[i].data))
+        for j, ind in enumerate(qb_mpo[i].inds):
+            edges.append((i, j, ind))
+
+    out_edges = []
+    in_edges = []
+
+    for i, e1 in enumerate(edges):
+        if e1[2].startswith("k"):
+            out_edges.append(mpo[e1[0]][e1[1]])
+        elif e1[2].startswith("b"):
+            in_edges.append(mpo[e1[0]][e1[1]])
+        else:
+            for j, e2 in enumerate(edges[i + 1 :]):
+                if e2[2] == e1[2]:
+                    connect(mpo[e1[0]][e1[1]], mpo[e2[0]][e2[1]])
+
+    qop = quantum_constructor(
+        out_edges,  # out_edges
+        in_edges,  # in_edges
+        [],
+        [],  # ignore_edges
+    )
+    return qop
+
+
 def qop2quimb(qop: QuOperator) -> Any:
     """
     Convert QuOperator to MPO in Quimb package.
@@ -1416,6 +1390,10 @@ def qop2quimb(qop: QuOperator) -> Any:
     :return: MPO in the form of Quimb package
     :rtype: quimb.tensor.tensor_gen.MatrixProductOperator
     """
+    try:
+        import quimb.tensor as qtn
+    except ImportError:
+        raise ImportError("Please install Quimb package to use this function.")
     is_mps = len(qop.in_edges) == 0
     nwires = len(qop.out_edges) if is_mps else len(qop.in_edges)
 
@@ -1468,7 +1446,7 @@ def qop2quimb(qop: QuOperator) -> Any:
     quimb_tensors = []
     node_map = {node: i for i, node in enumerate(sorted_nodes)}
     for i, node in enumerate(sorted_nodes):
-        tensor_data = np.asarray(node.tensor)
+        tensor_data = node.tensor
         inds: List[Optional[str]] = [None] * tensor_data.ndim
         edge_to_axis = {edge: axis for axis, edge in enumerate(node.edges)}
         for edge, axis in edge_to_axis.items():
@@ -1495,15 +1473,84 @@ def qop2quimb(qop: QuOperator) -> Any:
         return tn.as_network(qtn.MatrixProductOperator)
 
 
+def tn2qop(tn_obj: Any) -> QuOperator:
+    """
+    Convert MPO in TensorNetwork package to QuOperator.
+
+    :param tn_mpo: MPO in the form of TensorNetwork package
+    :type tn_mpo: ``tn.matrixproductstates.mpo.*``
+    :return: MPO in the form of QuOperator
+    :rtype: QuOperator
+    """
+    tn_tensors = tn_obj.tensors
+    nwires = len(tn_tensors)
+
+    if nwires == 0:
+        return quantum_constructor([], [], [])
+
+    is_mps = all(len(t.shape) <= 3 for t in tn_tensors)
+
+    nodes = []
+    for i in range(nwires):
+        nodes.append(Node(tn_tensors[i], name=f"tensor_{i}"))
+
+    if is_mps:
+        for i in range(nwires - 1):
+            right_edge_idx = len(nodes[i].edges) - 1
+            connect(nodes[i][right_edge_idx], nodes[i + 1][0])
+
+        out_edges = []
+        for i, node in enumerate(nodes):
+            if len(node.edges) == 2:
+                physical_edge = next(e for e in node.edges if e.is_dangling())
+                out_edges.append(physical_edge)
+            else:
+                out_edges.append(node[1])
+
+        in_edges = []
+
+        ignore_edges = []
+        left_dangling = next(
+            (e for e in nodes[0].edges if e.is_dangling() and e not in out_edges), None
+        )
+        right_dangling = next(
+            (e for e in nodes[-1].edges if e.is_dangling() and e not in out_edges), None
+        )
+
+        if left_dangling:
+            ignore_edges.append(left_dangling)
+        if right_dangling:
+            ignore_edges.append(right_dangling)
+
+    else:
+        for i in range(nwires - 1):
+            connect(nodes[i][1], nodes[i + 1][0])
+
+        out_edges = [nodes[i][-1] for i in range(nwires)]
+        in_edges = [nodes[i][-2] for i in range(nwires)]
+        ignore_edges = [nodes[0][0], nodes[-1][1]]
+
+    qop = quantum_constructor(
+        out_edges,
+        in_edges,
+        [],
+        ignore_edges,
+    )
+    return qop
+
+
 def qop2tn(qop: QuOperator) -> Any:
     """
-    [CORRECTED VERSION]
     Convert QuOperator back to MPO or MPS in TensorNetwork package.
 
-    :param qop: MPO or MPS in the form of QuOperator
+    :param qop: MPO or MPS in the form of QuOperator, param in docstring
     :return: MPO or MPS in the form of TensorNetwork
     :rtype: Union[tn.matrixproductstates.MPO, tn.matrixproductstates.MPS]
     """
+    try:
+        import tensornetwork as tn
+    except ImportError:
+        raise ImportError("Please install TensorNetwork package to use this function.")
     is_mps = len(qop.in_edges) == 0
     nwires = len(qop.out_edges) if is_mps else len(qop.in_edges)
 
@@ -1586,7 +1633,7 @@ def qop2tn(qop: QuOperator) -> Any:
             tensors.append(permuted_tensor)
 
     if is_mps:
-        return tn.FiniteMPS(tensors)
+        return tn.FiniteMPS(tensors, canonicalize=False)
     else:
         return tn.matrixproductstates.mpo.FiniteMPO(tensors)
 

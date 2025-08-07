@@ -398,63 +398,6 @@ def test_negativity(backend, highp):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
-def test_tn2qop(backend):
-    nwires = 6
-    dtype = np.complex64
-    # only obc is supported, even if you supply nwires Jx terms
-    Jx = np.array([1.0 for _ in range(nwires - 1)])  # strength of xx interaction (OBC)
-    Bz = np.array([-1.0 for _ in range(nwires)])  # strength of transverse field
-    tn_mpo = tn.matrixproductstates.mpo.FiniteTFI(Jx, Bz, dtype=dtype)
-    qu_mpo = tc.quantum.tn2qop(tn_mpo)
-    h1 = qu_mpo.eval_matrix()
-    g = tc.templates.graphs.Line1D(nwires, pbc=False)
-    h2 = tc.quantum.heisenberg_hamiltonian(
-        g, hzz=0, hxx=1, hyy=0, hz=1, hx=0, hy=0, sparse=False, numpy=True
-    )
-    np.testing.assert_allclose(h1, h2, atol=1e-5)
-
-
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
-def test_qb2qop(backend):
-    try:
-        import quimb
-    except ImportError:
-        pytest.skip("quimb is not installed")
-    nwires = 6
-    qb_mpo = quimb.tensor.tensor_builder.MPO_ham_ising(nwires, 4, 2, cyclic=True)
-    qu_mpo = tc.quantum.quimb2qop(qb_mpo)
-    h1 = qu_mpo.eval_matrix()
-    g = tc.templates.graphs.Line1D(nwires, pbc=True)
-    h2 = tc.quantum.heisenberg_hamiltonian(
-        g, hzz=1, hxx=0, hyy=0, hz=0, hx=-1, hy=0, sparse=False, numpy=True
-    )
-    np.testing.assert_allclose(h1, h2, atol=1e-5)
-
-    # in out edge order test
-    builder = quimb.tensor.tensor_builder.SpinHam1D()
-    # new version quimb breaking API change: SpinHam1D -> SpinHam
-    builder += 1, "Y"
-    builder += 1, "X"
-    H = builder.build_mpo(3)
-    h = tc.quantum.quimb2qop(H)
-    m1 = h.eval_matrix()
-    g = tc.templates.graphs.Line1D(3, pbc=False)
-    m2 = tc.quantum.heisenberg_hamiltonian(
-        g, hzz=0, hxx=0, hyy=0, hz=0, hy=0.5, hx=0.5, sparse=False, numpy=True
-    )
-    np.testing.assert_allclose(m1, m2, atol=1e-5)
-
-    # test mps case
-
-    s1 = quimb.tensor.tensor_builder.MPS_rand_state(3, 4)
-    s2 = tc.quantum.quimb2qop(s1)
-    m1 = s1.to_dense()
-    m2 = s2.eval_matrix()
-    np.testing.assert_allclose(m1, m2, atol=1e-5)
-
-
-# TODO(@Charlespkuer): Add more conversion functions for other packages
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_tenpy2qop(backend):
     """
     Tests the conversion from TeNPy MPO/MPS to TensorCircuit QuOperator.
@@ -512,7 +455,7 @@ def test_qop2tenpy(backend):
     )
     tenpy_mps = tc.quantum.qop2tenpy(qop_mps)
     mat = qop_mps.eval_matrix()
-    vec_from_qop = tc.backend.reshape(mat, [-1])
+    vec_from_qop = np.ravel(mat)
     full_wavefunction_tensor = tenpy_mps.get_theta(0, tenpy_mps.L)
     vec_from_tenpy = np.ravel(full_wavefunction_tensor.to_ndarray())
     np.testing.assert_allclose(vec_from_qop, vec_from_tenpy, atol=1e-5)
@@ -567,7 +510,7 @@ def test_qop2tenpy(backend):
         contraction_nodes + [left_node, right_node],
         output_edge_order=output_edges + input_edges,
     )
-    mat_from_tenpy = tc.backend.reshape(
+    mat_from_tenpy = np.reshape(
         result_node.tensor, (2**mpo_contract_nwires, 2**mpo_contract_nwires)
     )
 
@@ -577,19 +520,22 @@ def test_qop2tenpy(backend):
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_tenpy_roundtrip(backend):
     try:
-        import tensornetwork as tn
         from tenpy.networks.mps import MPS
         from tenpy.networks.mpo import MPO
         from tenpy.networks.site import Site
         from tenpy.linalg.charges import LegCharge
         from tenpy.linalg import np_conserved as npc
     except ImportError:
-        pytest.skip("TeNPy or TensorNetwork is not installed")
+        pytest.skip("TeNPy is not installed")
 
+    tc.set_backend(backend)
+
+    # MPO roundtrip test
     nwires_mpo = 3
     chi_mpo = 4
     phys_dim = 2
     sites = [Site(LegCharge.from_trivial(phys_dim), "q") for _ in range(nwires_mpo)]
+
     t_left = np.random.rand(1, chi_mpo, phys_dim, phys_dim)
     Ws = [
         npc.Array.from_ndarray(
@@ -620,76 +566,39 @@ def test_tenpy_roundtrip(backend):
     qop_mpo = tc.quantum.tenpy2qop(mpo_original)
     mpo_roundtrip = tc.quantum.qop2tenpy(qop_mpo)
 
-    try:
-        mat_original = mpo_original.to_matrix()
-        mat_roundtrip = mpo_roundtrip.to_matrix()
-    except AttributeError:
-        # Inlined logic for mpo_original
-        contraction_nodes_orig = []
-        canonical_order_orig = ["wL", "wR", "p", "p*"]
-        for i in range(mpo_original.L):
-            W_tenpy_array = mpo_original.get_W(i)
-            W_transposed = W_tenpy_array.itranspose(canonical_order_orig)
-            contraction_nodes_orig.append(tn.Node(W_transposed.to_ndarray()))
-        for i in range(mpo_original.L - 1):
-            contraction_nodes_orig[i][1] ^ contraction_nodes_orig[i + 1][0]
-        chi_left_orig = contraction_nodes_orig[0].shape[0]
-        chi_right_orig = contraction_nodes_orig[-1].shape[1]
-        left_bc_vec_orig = np.zeros(chi_left_orig)
-        left_idx_orig = 0 if chi_left_orig == 1 else mpo_original.IdL
-        left_bc_vec_orig[left_idx_orig] = 1.0
-        right_bc_vec_orig = np.zeros(chi_right_orig)
-        right_idx_orig = 0 if chi_right_orig == 1 else mpo_original.IdR
-        right_bc_vec_orig[right_idx_orig] = 1.0
-        left_node_orig = tn.Node(left_bc_vec_orig)
-        right_node_orig = tn.Node(right_bc_vec_orig)
-        contraction_nodes_orig[0][0] ^ left_node_orig[0]
-        contraction_nodes_orig[-1][1] ^ right_node_orig[0]
-        output_edges_orig = [node[3] for node in contraction_nodes_orig]
-        input_edges_orig = [node[2] for node in contraction_nodes_orig]
-        result_node_orig = tn.contractors.auto(
-            contraction_nodes_orig + [left_node_orig, right_node_orig],
-            output_edge_order=output_edges_orig + input_edges_orig,
-        )
-        D_orig = np.prod(mpo_original.dim)
-        mat_original = tc.backend.reshape(result_node_orig.tensor, (D_orig, D_orig))
+    assert mpo_original.L == mpo_roundtrip.L
 
-        # Inlined logic for mpo_roundtrip
-        contraction_nodes_rt = []
-        canonical_order_rt = ["wL", "wR", "p", "p*"]
-        for i in range(mpo_roundtrip.L):
-            W_tenpy_array_rt = mpo_roundtrip.get_W(i)
-            W_transposed_rt = W_tenpy_array_rt.itranspose(canonical_order_rt)
-            contraction_nodes_rt.append(tn.Node(W_transposed_rt.to_ndarray()))
-        for i in range(mpo_roundtrip.L - 1):
-            contraction_nodes_rt[i][1] ^ contraction_nodes_rt[i + 1][0]
-        chi_left_rt = contraction_nodes_rt[0].shape[0]
-        chi_right_rt = contraction_nodes_rt[-1].shape[1]
-        left_bc_vec_rt = np.zeros(chi_left_rt)
-        left_idx_rt = 0 if chi_left_rt == 1 else mpo_roundtrip.IdL
-        left_bc_vec_rt[left_idx_rt] = 1.0
-        right_bc_vec_rt = np.zeros(chi_right_rt)
-        right_idx_rt = 0 if chi_right_rt == 1 else mpo_roundtrip.IdR
-        right_bc_vec_rt[right_idx_rt] = 1.0
-        left_node_rt = tn.Node(left_bc_vec_rt)
-        right_node_rt = tn.Node(right_bc_vec_rt)
-        contraction_nodes_rt[0][0] ^ left_node_rt[0]
-        contraction_nodes_rt[-1][1] ^ right_node_rt[0]
-        output_edges_rt = [node[3] for node in contraction_nodes_rt]
-        input_edges_rt = [node[2] for node in contraction_nodes_rt]
-        result_node_rt = tn.contractors.auto(
-            contraction_nodes_rt + [left_node_rt, right_node_rt],
-            output_edge_order=output_edges_rt + input_edges_rt,
-        )
-        D_rt = np.prod(mpo_roundtrip.dim)
-        mat_roundtrip = tc.backend.reshape(result_node_rt.tensor, (D_rt, D_rt))
+    IdL_rt = mpo_roundtrip.IdL
+    IdR_rt = mpo_roundtrip.IdR
+    if isinstance(IdL_rt, (list, np.ndarray)):
+        IdL_rt = IdL_rt[0] if len(IdL_rt) > 0 else 0
+    if isinstance(IdR_rt, (list, np.ndarray)):
+        IdR_rt = IdR_rt[0] if len(IdR_rt) > 0 else 0
 
-    np.testing.assert_allclose(mat_original, mat_roundtrip, atol=1e-5)
+    for i in range(mpo_original.L):
+        tensor_orig = mpo_original.get_W(i).to_ndarray()
+        tensor_rt = mpo_roundtrip.get_W(i).to_ndarray()
 
-    # MPS roundtrip
+        if i == 0:
+            if tensor_orig.shape[0] < tensor_rt.shape[0]:
+                tensor_rt_effective = tensor_rt[IdL_rt : IdL_rt + 1, ...]
+            else:
+                tensor_rt_effective = tensor_rt
+            np.testing.assert_allclose(tensor_orig, tensor_rt_effective, atol=1e-5)
+        elif i == mpo_original.L - 1:
+            if tensor_orig.shape[1] < tensor_rt.shape[1]:
+                tensor_rt_effective = tensor_rt[..., IdR_rt : IdR_rt + 1, :, :]
+            else:
+                tensor_rt_effective = tensor_rt
+            np.testing.assert_allclose(tensor_orig, tensor_rt_effective, atol=1e-5)
+        else:
+            np.testing.assert_allclose(tensor_orig, tensor_rt, atol=1e-5)
+
+    # MPS roundtrip test
     nwires_mps = 4
     chi_mps = 5
     sites_mps = [Site(LegCharge.from_trivial(phys_dim), "q") for _ in range(nwires_mps)]
+
     b_left = np.random.rand(1, phys_dim, chi_mps)
     Bs = [
         npc.Array.from_ndarray(
@@ -715,29 +624,62 @@ def test_tenpy_roundtrip(backend):
             legcharges=[LegCharge.from_trivial(s) for s in b_right.shape],
         )
     )
+
     SVs = [np.ones([1])]
     for B in Bs[:-1]:
         sv_dim = B.get_leg("vR").ind_len
         SVs.append(np.ones(sv_dim))
     SVs.append(np.ones([1]))
+
     mps_original = MPS(sites_mps, Bs, SVs)
 
     qop_mps = tc.quantum.tenpy2qop(mps_original)
     mps_roundtrip = tc.quantum.qop2tenpy(qop_mps)
 
+    assert mps_original.L == mps_roundtrip.L
+    for i in range(mps_original.L):
+        tensor_orig = mps_original.get_B(i, form="B").to_ndarray()
+        tensor_rt = mps_roundtrip.get_B(i, form="B").to_ndarray()
+        np.testing.assert_allclose(tensor_orig, tensor_rt, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_quimb2qop(backend):
     try:
-        vec_original = mps_original.to_ndarray()
-        vec_roundtrip = mps_roundtrip.to_ndarray()
-    except AttributeError:
-        full_theta_orig = mps_original.get_theta(0, mps_original.L)
-        state_tensor_orig = full_theta_orig.to_ndarray()
-        vec_original = state_tensor_orig.reshape(-1)
+        import quimb
+    except ImportError:
+        pytest.skip("quimb is not installed")
+    nwires = 6
+    qb_mpo = quimb.tensor.tensor_builder.MPO_ham_ising(nwires, 4, 2, cyclic=True)
+    qu_mpo = tc.quantum.quimb2qop(qb_mpo)
+    h1 = qu_mpo.eval_matrix()
+    g = tc.templates.graphs.Line1D(nwires, pbc=True)
+    h2 = tc.quantum.heisenberg_hamiltonian(
+        g, hzz=1, hxx=0, hyy=0, hz=0, hx=-1, hy=0, sparse=False, numpy=True
+    )
+    np.testing.assert_allclose(h1, h2, atol=1e-5)
 
-        full_theta_rt = mps_roundtrip.get_theta(0, mps_roundtrip.L)
-        state_tensor_rt = full_theta_rt.to_ndarray()
-        vec_roundtrip = state_tensor_rt.reshape(-1)
+    # in out edge order test
+    builder = quimb.tensor.tensor_builder.SpinHam1D()
+    # new version quimb breaking API change: SpinHam1D -> SpinHam
+    builder += 1, "Y"
+    builder += 1, "X"
+    H = builder.build_mpo(3)
+    h = tc.quantum.quimb2qop(H)
+    m1 = h.eval_matrix()
+    g = tc.templates.graphs.Line1D(3, pbc=False)
+    m2 = tc.quantum.heisenberg_hamiltonian(
+        g, hzz=0, hxx=0, hyy=0, hz=0, hy=0.5, hx=0.5, sparse=False, numpy=True
+    )
+    np.testing.assert_allclose(m1, m2, atol=1e-5)
 
-    np.testing.assert_allclose(vec_original, vec_roundtrip, atol=1e-5)
+    # test mps case
+
+    s1 = quimb.tensor.tensor_builder.MPS_rand_state(3, 4)
+    s2 = tc.quantum.quimb2qop(s1)
+    m1 = s1.to_dense()
+    m2 = s2.eval_matrix()
+    np.testing.assert_allclose(m1, m2, atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -800,15 +742,17 @@ def test_qop2quimb(backend):
     quimb_mps = tc.quantum.qop2quimb(qop_mps)
 
     mat_from_qop = qop_mps.eval_matrix()
-    vec_from_qop = tc.backend.reshape(mat_from_qop, [-1])
+    vec_from_qop = np.ravel(mat_from_qop)
 
     ket_inds_mps = [f"k{i}" for i in range(nwires_mps)]
-    vec_from_quimb = quimb_mps.to_dense(ket_inds_mps).flatten()
+    vec_from_quimb = np.ravel(quimb_mps.to_dense(ket_inds_mps))
 
-    vec_from_qop /= np.linalg.norm(vec_from_qop)
-    vec_from_quimb /= np.linalg.norm(vec_from_quimb)
+    vec_from_qop = vec_from_qop / np.linalg.norm(vec_from_qop)
+    vec_from_quimb = vec_from_quimb / np.linalg.norm(vec_from_quimb)
 
-    assert abs(abs(np.vdot(vec_from_qop, vec_from_quimb)) - 1.0) < 1e-5
+    np.testing.assert_allclose(
+        abs(np.vdot(vec_from_qop, vec_from_quimb)), 1.0, atol=1e-5
+    )
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -836,24 +780,76 @@ def test_quimb_roundtrip(backend):
     qop_mps = tc.quantum.quimb2qop(mps_original)
     mps_roundtrip = tc.quantum.qop2quimb(qop_mps)
     ket_inds_mps = [f"k{i}" for i in range(nwires_mps)]
-    vec_original = mps_original.to_dense(ket_inds_mps).flatten()
-    vec_roundtrip = mps_roundtrip.to_dense(ket_inds_mps).flatten()
-    assert abs(abs(np.vdot(vec_original, vec_roundtrip)) - 1.0) < 1e-5
+    vec_original = np.ravel(mps_original.to_dense(ket_inds_mps))
+    vec_roundtrip = np.ravel(mps_roundtrip.to_dense(ket_inds_mps))
+    np.testing.assert_allclose(
+        abs(np.vdot(vec_original, vec_roundtrip)), 1.0, atol=1e-5
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_tn2qop(backend):
+    nwires = 6
+    dtype = np.complex64
+
+    # MPO test
+    Jx = np.array([1.0 for _ in range(nwires - 1)])
+    Bz = np.array([-1.0 for _ in range(nwires)])
+    tn_mpo = tn.matrixproductstates.mpo.FiniteTFI(Jx, Bz, dtype=dtype)
+    qu_mpo = tc.quantum.tn2qop(tn_mpo)
+    h1 = qu_mpo.eval_matrix()
+    g = tc.templates.graphs.Line1D(nwires, pbc=False)
+    h2 = tc.quantum.heisenberg_hamiltonian(
+        g, hzz=0, hxx=1, hyy=0, hz=1, hx=0, hy=0, sparse=False, numpy=True
+    )
+    np.testing.assert_allclose(h1, h2, atol=1e-5)
+
+    # MPS test
+    mps_tensors = []
+    bond_dim = 1
+    phys_dim = 2
+
+    first_tensor = np.zeros((phys_dim, bond_dim), dtype=dtype)
+    first_tensor[0, 0] = 1.0
+    mps_tensors.append(first_tensor)
+
+    for _ in range(nwires - 2):
+        middle_tensor = np.zeros((bond_dim, phys_dim, bond_dim), dtype=dtype)
+        middle_tensor[0, 0, 0] = 1.0
+        mps_tensors.append(middle_tensor)
+
+    if nwires > 1:
+        last_tensor = np.zeros((bond_dim, phys_dim), dtype=dtype)
+        last_tensor[0, 0] = 1.0
+        mps_tensors.append(last_tensor)
+
+    mps_tensors = [np.array(t, dtype=dtype) for t in mps_tensors]
+
+    tn_mps = tn.FiniteMPS(mps_tensors, canonicalize=False)
+
+    # turn to QuOperator
+    qu_mps = tc.quantum.tn2qop(tn_mps)
+    assert qu_mps.is_vector()
+    assert len(qu_mps.out_edges) == nwires
+    assert len(qu_mps.in_edges) == 0
+    state_tensor = qu_mps.eval()
+    state_vector = np.ravel(state_tensor)
+    norm = tc.backend.norm(state_vector)
+    np.testing.assert_allclose(norm, 1.0, atol=1e-5)
+    expected_state = np.zeros(2**nwires, dtype=dtype)
+    expected_state[0] = 1.0
+
+    np.testing.assert_allclose(state_vector, expected_state, atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_qop2tn(backend):
-    try:
-        import tensornetwork as tn
-        import numpy as np
-    except ImportError:
-        pytest.skip("TensorNetwork is not installed.")
-
     nwires = 4
     chi = 5
     phys_dim = 2
     dtype = np.complex64
 
+    # MPO conversion test
     tensors_mpo_tc = [np.random.rand(1, chi, phys_dim, phys_dim).astype(dtype)]
     for _ in range(nwires - 2):
         tensors_mpo_tc.append(
@@ -871,61 +867,15 @@ def test_qop2tn(backend):
         ref_nodes=nodes_mpo_tc,
         ignore_edges=[nodes_mpo_tc[0][0], nodes_mpo_tc[-1][1]],
     )
+
     tn_mpo_rt = tc.quantum.qop2tn(qop_mpo)
-    tensors_for_tn_mpo = [tc.backend.numpy(n.tensor) for n in nodes_mpo_tc]
-    tn_mpo_orig = tn.matrixproductstates.mpo.FiniteMPO(tensors_for_tn_mpo)
+    qop_mpo_rt = tc.quantum.tn2qop(tn_mpo_rt)
 
-    try:
-        mat_original = tn_mpo_orig.todense()
-        mat_roundtrip = tn_mpo_rt.todense()
-    except AttributeError:
-        nodes_orig = [tn.Node(t) for t in tn_mpo_orig.tensors]
-        for i in range(len(nodes_orig) - 1):
-            nodes_orig[i][1] ^ nodes_orig[i + 1][0]
-        left_bc_vec_orig = np.zeros(nodes_orig[0].shape[0], dtype=dtype)
-        left_bc_vec_orig[0] = 1.0
-        left_node_orig = tn.Node(left_bc_vec_orig)
-        nodes_orig[0][0] ^ left_node_orig[0]
-        right_bc_vec_orig = np.zeros(nodes_orig[-1].shape[1], dtype=dtype)
-        right_bc_vec_orig[0] = 1.0
-        right_node_orig = tn.Node(right_bc_vec_orig)
-        nodes_orig[-1][1] ^ right_node_orig[0]
-        all_nodes_orig = nodes_orig + [left_node_orig, right_node_orig]
-        output_edges_orig = [n[3] for n in nodes_orig]
-        input_edges_orig = [n[2] for n in nodes_orig]
-        result_node_orig = tn.contractors.auto(
-            all_nodes_orig, output_edge_order=output_edges_orig + input_edges_orig
-        )
-        nwires_orig = len(tn_mpo_orig.tensors)
-        phys_dim_orig = tn_mpo_orig.tensors[0].shape[2]
-        D_orig = phys_dim_orig**nwires_orig
-        mat_original = tc.backend.reshape(result_node_orig.tensor, (D_orig, D_orig))
-
-        nodes_rt = [tn.Node(t) for t in tn_mpo_rt.tensors]
-        for i in range(len(nodes_rt) - 1):
-            nodes_rt[i][1] ^ nodes_rt[i + 1][0]
-        left_bc_vec_rt = np.zeros(nodes_rt[0].shape[0], dtype=dtype)
-        left_bc_vec_rt[0] = 1.0
-        left_node_rt = tn.Node(left_bc_vec_rt)
-        nodes_rt[0][0] ^ left_node_rt[0]
-        right_bc_vec_rt = np.zeros(nodes_rt[-1].shape[1], dtype=dtype)
-        right_bc_vec_rt[0] = 1.0
-        right_node_rt = tn.Node(right_bc_vec_rt)
-        nodes_rt[-1][1] ^ right_node_rt[0]
-        all_nodes_rt = nodes_rt + [left_node_rt, right_node_rt]
-        output_edges_rt = [n[3] for n in nodes_rt]
-        input_edges_rt = [n[2] for n in nodes_rt]
-        result_node_rt = tn.contractors.auto(
-            all_nodes_rt, output_edge_order=output_edges_rt + input_edges_rt
-        )
-        nwires_rt = len(tn_mpo_rt.tensors)
-        phys_dim_rt = tn_mpo_rt.tensors[0].shape[2]
-        D_rt = phys_dim_rt**nwires_rt
-        mat_roundtrip = tc.backend.reshape(result_node_rt.tensor, (D_rt, D_rt))
-
+    mat_original = qop_mpo.eval_matrix()
+    mat_roundtrip = qop_mpo_rt.eval_matrix()
     np.testing.assert_allclose(mat_original, mat_roundtrip, atol=1e-5)
 
-    # MPS conversion
+    # MPS conversion test
     tensors_mps_tc = [np.random.rand(1, phys_dim, chi).astype(dtype)]
     for _ in range(nwires - 2):
         tensors_mps_tc.append(np.random.rand(chi, phys_dim, chi).astype(dtype))
@@ -943,199 +893,68 @@ def test_qop2tn(backend):
     )
 
     tn_mps_rt = tc.quantum.qop2tn(qop_mps)
+    qop_mps_rt = tc.quantum.tn2qop(tn_mps_rt)
 
-    tensors_for_tn_mps = [tc.backend.numpy(n.tensor) for n in nodes_mps_tc]
-    tn_mps_orig = tn.FiniteMPS(tensors_for_tn_mps, canonicalize=False)
+    vec_original = np.ravel(qop_mps.eval_matrix())
+    vec_roundtrip = np.ravel(qop_mps_rt.eval_matrix())
 
-    try:
-        vec_original = tn_mps_orig.todense().flatten()
-        vec_roundtrip = tn_mps_rt.todense().flatten()
-    except AttributeError:
-        nodes_mps_orig = [tn.Node(t) for t in tn_mps_orig.tensors]
-        n_orig = len(nodes_mps_orig)
-        if n_orig > 1:
-            for i in range(n_orig - 1):
-                nodes_mps_orig[i][2] ^ nodes_mps_orig[i + 1][0]
-        physical_edges_orig = [n[1] for n in nodes_mps_orig]
-        dangling_edges_orig = (
-            [nodes_mps_orig[0][0]] + physical_edges_orig + [nodes_mps_orig[-1][2]]
-        )
-        result_node_orig = tn.contractors.auto(
-            nodes_mps_orig, output_edge_order=dangling_edges_orig
-        )
-        vec_original = tc.backend.reshape(result_node_orig.tensor, [-1])
+    vec_original = vec_original / np.linalg.norm(vec_original)
+    vec_roundtrip = vec_roundtrip / np.linalg.norm(vec_roundtrip)
 
-        nodes_mps_rt = [tn.Node(t) for t in tn_mps_rt.tensors]
-        n_rt = len(nodes_mps_rt)
-        if n_rt > 1:
-            for i in range(n_rt - 1):
-                nodes_mps_rt[i][2] ^ nodes_mps_rt[i + 1][0]
-        physical_edges_rt = [n[1] for n in nodes_mps_rt]
-        dangling_edges_rt = (
-            [nodes_mps_rt[0][0]] + physical_edges_rt + [nodes_mps_rt[-1][2]]
-        )
-        result_node_rt = tn.contractors.auto(
-            nodes_mps_rt, output_edge_order=dangling_edges_rt
-        )
-        vec_roundtrip = tc.backend.reshape(result_node_rt.tensor, [-1])
-
-    vec_original /= np.linalg.norm(vec_original)
-    vec_roundtrip /= np.linalg.norm(vec_roundtrip)
-
-    assert abs(abs(np.vdot(vec_original, vec_roundtrip)) - 1.0) < 1e-5
+    overlap = abs(np.vdot(vec_original, vec_roundtrip))
+    np.testing.assert_allclose(overlap, 1.0, atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
-def test_tenpy2qop(backend):
-    try:
-        from tenpy.models.tf_ising import TFIChain
-        from tenpy.networks.mps import MPS
-    except ImportError:
-        pytest.skip("TeNPy is not installed")
+def test_tn_roundtrip(backend):
+    # MPO roundtrip test
+    nwires_mpo = 4
+    dtype = np.complex64
 
-    nwires = 4
-    Jx = 1.0
-    Bz = -1.0
-    model_params = {"L": nwires, "J": Jx, "g": Bz, "bc_MPS": "finite", "verbose": 0}
-    model = TFIChain(model_params)
-    tenpy_mpo = model.H_MPO
-    qu_mpo = tc.quantum.tenpy2qop(tenpy_mpo)
+    Jx = np.array([1.0 for _ in range(nwires_mpo - 1)])
+    Bz = np.array([-1.0 for _ in range(nwires_mpo)])
+    tn_mpo_original = tn.matrixproductstates.mpo.FiniteTFI(Jx, Bz, dtype=dtype)
 
-    # Compare with expected Hamiltonian
-    g = tc.templates.graphs.Line1D(nwires, pbc=False)
-    h_expected = tc.quantum.heisenberg_hamiltonian(
-        g, hzz=0, hxx=Jx, hyy=0, hz=Bz, hx=0, hy=0, sparse=False, numpy=True
-    )
-    h_actual = qu_mpo.eval_matrix()
-    np.testing.assert_allclose(h_actual, h_expected, atol=1e-5)
+    qop_mpo = tc.quantum.tn2qop(tn_mpo_original)
+    tn_mpo_roundtrip = tc.quantum.qop2tn(qop_mpo)
 
-    # Test MPS conversion - Neel state
-    psi = MPS.from_product_state(
-        model.lat, [[0, 1] * (nwires // 2)], bc=model.lat.bc_MPS
-    )
-    qu_mps = tc.quantum.tenpy2qop(psi)
+    qop_mpo_original = tc.quantum.tn2qop(tn_mpo_original)
+    qop_mpo_roundtrip = tc.quantum.tn2qop(tn_mpo_roundtrip)
 
-    # Compare with expected state vector
-    psi_expected = np.zeros(2**nwires)
-    psi_expected[0b0101 if nwires == 4 else 0b01] = 1.0  # |0101> for nwires=4
-    psi_actual = qu_mps.eval_matrix()
-    np.testing.assert_allclose(np.abs(psi_actual), np.abs(psi_expected), atol=1e-5)
+    mat_original = qop_mpo_original.eval_matrix()
+    mat_roundtrip = qop_mpo_roundtrip.eval_matrix()
 
-    # Test round-trip conversion if available
-    if hasattr(tc.quantum, "qop2tenpy"):
-        # MPO round-trip
-        tenpy_mpo_back = tc.quantum.qop2tenpy(qu_mpo, model.sites)
-        qu_mpo_back = tc.quantum.tenpy2qop(tenpy_mpo_back)
-        h_back = qu_mpo_back.eval_matrix()
-        np.testing.assert_allclose(h_back, h_expected, atol=1e-5)
+    np.testing.assert_allclose(mat_original, mat_roundtrip, atol=1e-5)
 
-        # MPS round-trip
-        tenpy_mps_back = tc.quantum.qop2tenpy(qu_mps, model.sites)
-        qu_mps_back = tc.quantum.tenpy2qop(tenpy_mps_back)
-        psi_back = qu_mps_back.eval_matrix()
-        np.testing.assert_allclose(np.abs(psi_back), np.abs(psi_expected), atol=1e-5)
+    # MPS roundtrip test
+    nwires_mps = 4
+    chi_mps = 2
+    phys_dim = 2
 
-
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
-def test_qop2tenpy(backend):
-    try:
-        from tenpy.networks.mps import MPS
-        from tenpy.networks.mpo import MPO
-    except ImportError:
-        pytest.skip("TeNPy not installed")
-
-    # Test MPS conversion
-    tensors = [np.random.rand(2, 2, 2) for _ in range(4)]
-    nodes = [tn.Node(t) for t in tensors]
-
-    for i in range(len(nodes) - 1):
-        nodes[i][2] ^ nodes[i + 1][0]
-
-    qop = qu.QuOperator(
-        out_edges=[nodes[0][0]],
-        in_edges=[nodes[-1][1]],
-        ref_nodes=nodes,
+    mps_tensors = (
+        [np.random.rand(1, phys_dim, chi_mps).astype(dtype)]
+        + [
+            np.random.rand(chi_mps, phys_dim, chi_mps).astype(dtype)
+            for _ in range(nwires_mps - 2)
+        ]
+        + [np.random.rand(chi_mps, phys_dim, 1).astype(dtype)]
     )
 
-    mps = qu.qop2tenpy(qop)
-    assert isinstance(mps, MPS)
-    assert len(mps.sites) == 4
+    tn_mps_original = tn.FiniteMPS(mps_tensors, canonicalize=False)
+    qop_mps = tc.quantum.tn2qop(tn_mps_original)
+    tn_mps_roundtrip = tc.quantum.qop2tn(qop_mps)
 
-    # Test MPO conversion
-    tensors = [np.random.rand(2, 2, 2, 2) for _ in range(4)]
-    nodes = [tn.Node(t) for t in tensors]
+    qop_mps_original = tc.quantum.tn2qop(tn_mps_original)
+    qop_mps_roundtrip = tc.quantum.tn2qop(tn_mps_roundtrip)
 
-    for i in range(len(nodes) - 1):
-        nodes[i][3] ^ nodes[i + 1][0]  # 连接内部边
+    vec_original = np.ravel(qop_mps_original.eval_matrix())
+    vec_roundtrip = np.ravel(qop_mps_roundtrip.eval_matrix())
 
-    qop = qu.QuOperator(
-        out_edges=[nodes[0][1]],  # 悬挂边
-        in_edges=[nodes[0][2]],  # 悬挂边
-        ref_nodes=nodes,
-    )
+    vec_original = vec_original / np.linalg.norm(vec_original)
+    vec_roundtrip = vec_roundtrip / np.linalg.norm(vec_roundtrip)
 
-    mpo = qu.qop2tenpy(qop)
-    assert isinstance(mpo, MPO)
-    assert len(mpo.sites) == 4
-
-
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
-def test_tenpy_roundtrip(backend):
-    try:
-        from tenpy.networks.mps import MPS
-        from tenpy.networks.site import SpinHalfSite
-    except ImportError:
-        pytest.skip("TeNPy not installed")
-
-    # Create spin sites explicitly
-    sites = [SpinHalfSite(conserve=None) for _ in range(4)]
-    mps = MPS.from_product_state(sites, p_state=["up"] * 4)  # Use string state names
-
-    # MPS roundtrip
-    qop = qu.tenpy2qop(mps)
-    mps2 = qu.qop2tenpy(qop)
-    assert len(mps.sites) == len(mps2.sites)
-
-
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
-def test_qop2quimb(backend):
-
-    # Create properly connected network
-    tensors = [np.random.rand(2, 2, 2) for _ in range(3)]
-    nodes = [tn.Node(t) for t in tensors]
-    edges = []
-    for i in range(len(nodes) - 1):
-        edges.append(nodes[i][2] ^ nodes[i + 1][0])
-    # Only pass dangling edges to QuOperator
-    qop = qu.QuOperator(
-        out_edges=[nodes[0][0]],
-        in_edges=[nodes[-1][1]],
-        ref_nodes=nodes,
-        ignore_edges=edges,
-    )
-
-    quimb_mpo = qu.qop2quimb(qop)
-    assert len(quimb_mpo.tensors) == 3
-
-
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
-def test_qop2tn(backend):
-    # Create properly connected network
-    tensors = [np.random.rand(2, 2, 2) for _ in range(3)]
-    nodes = [tn.Node(t) for t in tensors]
-    edges = []
-    for i in range(len(nodes) - 1):
-        edges.append(nodes[i][2] ^ nodes[i + 1][0])
-    # Only pass dangling edges to QuOperator
-    qop = qu.QuOperator(
-        out_edges=[nodes[0][0]],
-        in_edges=[nodes[-1][1]],
-        ref_nodes=nodes,
-        ignore_edges=edges,
-    )
-
-    tn_mpo = qu.qop2tn(qop)
-    assert len(tn_mpo.tensors) == 3
+    overlap = abs(np.vdot(vec_original, vec_roundtrip))
+    np.testing.assert_allclose(overlap, 1.0, atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
