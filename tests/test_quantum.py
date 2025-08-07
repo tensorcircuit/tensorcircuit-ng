@@ -646,7 +646,6 @@ def test_tenpy_roundtrip(backend):
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_quimb2qop(backend):
     try:
-        import quimb.tensor as qtn
         import quimb.tensor.tensor_builder as qtb
     except ImportError:
         pytest.skip("quimb is not installed")
