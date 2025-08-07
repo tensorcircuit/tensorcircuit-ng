@@ -30,6 +30,7 @@ from tensornetwork.network_operations import (
     remove_node,
 )
 
+import tensornetwork as tn
 from .cons import backend, contractor, dtypestr, npdtype, rdtypestr
 from .gates import Gate, num_to_tensor
 from .utils import arg_alias
@@ -1163,6 +1164,11 @@ def tenpy2qop(tenpy_obj: Any) -> QuOperator:
     :return: The corresponding state or operator as a QuOperator.
     :rtype: QuOperator
     """
+    # MPO objects have _W attribute containing tensor list (documented in tenpy.networks.mpo.MPO)
+    # MPS objects have _B attribute containing tensor list (documented in tenpy.networks.mps.MPS)
+    # These are internal attributes that store the actual tensor data for each site
+    # Reference: https://tenpy.readthedocs.io/en/latest/reference/tenpy.networks.mpo.html
+    #           https://tenpy.readthedocs.io/en/latest/reference/tenpy.networks.mps.html
     is_mpo = hasattr(tenpy_obj, "_W")
     tenpy_tensors = tenpy_obj._W if is_mpo else tenpy_obj._B
     nwires = len(tenpy_tensors)
@@ -1217,6 +1223,12 @@ def tenpy2qop(tenpy_obj: Any) -> QuOperator:
 def qop2tenpy(qop: QuOperator) -> Any:
     """
     Convert TensorCircuit QuOperator to MPO or MPS from TeNPy.
+
+    Requirements: QuOperator must represent valid MPS/MPO structure:
+    - Linear chain topology with open boundaries only
+    - MPS: no input edges, consistent virtual bonds, rank-3 or 4(with empty input edges) tensors
+    - MPO: equal input/output edges, rank-4 tensors
+    - Cyclic boundary conditions NOT supported
 
     :param qop: The corresponding state/operator as a QuOperator.
     :return: MPO or MPS object from the TeNPy package.
@@ -1386,6 +1398,13 @@ def qop2quimb(qop: QuOperator) -> Any:
     """
     Convert QuOperator to MPO in Quimb package.
 
+    Requirements: QuOperator must represent valid MPS/MPO structure:
+    - Linear chain topology with open boundaries only
+    - MPS: no input edges, consistent virtual bonds between adjacent tensors
+    - MPO: equal input/output edges, rank-4 tensors
+    - Edge connectivity: each internal node connected to exactly 2 neighbors
+    - Cyclic boundary conditions NOT supported
+
     :param qop: MPO in the form of QuOperator
     :return: MPO in the form of Quimb package
     :rtype: quimb.tensor.tensor_gen.MatrixProductOperator
@@ -1547,10 +1566,6 @@ def qop2tn(qop: QuOperator) -> Any:
     :return: MPO or MPS in the form of TensorNetwork
     :rtype: Union[tn.matrixproductstates.MPO, tn.matrixproductstates.MPS]
     """
-    try:
-        import tensornetwork as tn
-    except ImportError:
-        raise ImportError("Please install TensorNetwork package to use this function.")
     is_mps = len(qop.in_edges) == 0
     nwires = len(qop.out_edges) if is_mps else len(qop.in_edges)
 

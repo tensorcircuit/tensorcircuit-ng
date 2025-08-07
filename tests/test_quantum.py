@@ -439,6 +439,10 @@ def test_tenpy2qop(backend):
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_qop2tenpy(backend):
+    try:
+        from tenpy.networks.mps import MPS
+    except ImportError:
+        pytest.skip("TeNPy is not installed")
     # MPS conversion
     nwires_mps = 4
     chi_mps = 2
@@ -479,42 +483,20 @@ def test_qop2tenpy(backend):
     tenpy_mpo = tc.quantum.qop2tenpy(qop_mpo)
     mat_from_qop = qop_mpo.eval_matrix()
 
-    mpo_contract_nwires = tenpy_mpo.L
-    canonical_order = ["wL", "wR", "p", "p*"]
-    contraction_nodes = []
-    for i in range(mpo_contract_nwires):
-        W_tenpy_array = tenpy_mpo.get_W(i)
-        existing_labels = [
-            label for label in canonical_order if label in W_tenpy_array._labels
-        ]
-        W_transposed = W_tenpy_array.itranspose(existing_labels)
-        contraction_nodes.append(tn.Node(W_transposed.to_ndarray()))
+    L = tenpy_mpo.L
+    sites = tenpy_mpo.sites
+    num_tests = 3
 
-    for i in range(mpo_contract_nwires - 1):
-        contraction_nodes[i][1] ^ contraction_nodes[i + 1][0]
+    for _ in range(num_tests):
+        random_config = [np.random.randint(0, 2) for _ in range(L)]
+        psi = MPS.from_product_state(sites, random_config, bc="finite")
 
-    chi_left = contraction_nodes[0].shape[0]
-    chi_right = contraction_nodes[-1].shape[1]
-    left_bc_vec = np.zeros(chi_left)
-    left_bc_vec[tenpy_mpo.IdL] = 1.0
-    right_bc_vec = np.zeros(chi_right)
-    right_bc_vec[tenpy_mpo.IdR] = 1.0
-    left_node = tn.Node(left_bc_vec)
-    right_node = tn.Node(right_bc_vec)
-    contraction_nodes[0][0] ^ left_node[0]
-    contraction_nodes[-1][1] ^ right_node[0]
+        exp_tenpy = tenpy_mpo.expectation_value(psi)
 
-    output_edges = [node[3] for node in contraction_nodes]
-    input_edges = [node[2] for node in contraction_nodes]
-    result_node = tn.contractors.auto(
-        contraction_nodes + [left_node, right_node],
-        output_edge_order=output_edges + input_edges,
-    )
-    mat_from_tenpy = np.reshape(
-        result_node.tensor, (2**mpo_contract_nwires, 2**mpo_contract_nwires)
-    )
+        psi_vector = psi.get_theta(0, L).to_ndarray().flatten()
+        exp_qop = np.real(np.dot(np.conj(psi_vector), np.dot(mat_from_qop, psi_vector)))
 
-    np.testing.assert_allclose(mat_from_qop, mat_from_tenpy, atol=1e-5)
+        np.testing.assert_allclose(exp_tenpy, exp_qop, atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])

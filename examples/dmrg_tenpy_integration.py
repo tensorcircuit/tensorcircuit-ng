@@ -65,17 +65,16 @@ mag_z_tenpy = psi_tenpy.expectation_value("Sz")
 avg_mag_z_tenpy = np.mean(mag_z_tenpy)
 print(f"   - TeNPy: Average magnetization <Sz> = {avg_mag_z_tenpy:.10f}")
 
-mag_z_tc_list = [circuit.expectation((tc.gates.z(), [i])) for i in range(L)]
-mag_z_tc_vector = tc.backend.stack(mag_z_tc_list)
-mag_z_tc_np = tc.backend.numpy(tc.backend.real(mag_z_tc_vector)) / -2.0
-avg_mag_z_tc = np.mean(mag_z_tc_np)
+mag_z_tc_raw = [circuit.expectation((tc.gates.z(), [i])) for i in range(L)]
+mag_z_tc_raw = tc.backend.real(tc.backend.stack(mag_z_tc_raw))
+mag_z_tc_avg = tc.backend.numpy(mag_z_tc_raw) / 2.0
+avg_mag_z_tc = np.mean(mag_z_tc_avg)
 print(f"   - TensorCircuit: Average magnetization <Sz> = {avg_mag_z_tc:.10f}")
 
 np.testing.assert_allclose(avg_mag_z_tenpy, avg_mag_z_tc, atol=1e-5)
 print("\n[SUCCESS] Average magnetization matches between TeNPy and TensorCircuit.")
 
-mag_z_tc = [circuit.expectation((tc.gates.z(), [i])) for i in range(L)]
-mag_z_tc = tc.backend.real(tc.backend.stack(mag_z_tc)) / 2.0
+mag_z_tc = mag_z_tc_avg
 print("\nComparing site-by-site magnetization:")
 print("TeNPy:", mag_z_tenpy)
 print("TC:   ", mag_z_tc)
