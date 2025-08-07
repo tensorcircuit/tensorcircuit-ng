@@ -646,11 +646,12 @@ def test_tenpy_roundtrip(backend):
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_quimb2qop(backend):
     try:
-        import quimb
+        import quimb.tensor as qtn
+        import quimb.tensor.tensor_builder as qtb
     except ImportError:
         pytest.skip("quimb is not installed")
     nwires = 6
-    qb_mpo = quimb.tensor.tensor_builder.MPO_ham_ising(nwires, 4, 2, cyclic=True)
+    qb_mpo = qtb.MPO_ham_ising(nwires, 4, 2, cyclic=True)
     qu_mpo = tc.quantum.quimb2qop(qb_mpo)
     h1 = qu_mpo.eval_matrix()
     g = tc.templates.graphs.Line1D(nwires, pbc=True)
@@ -660,7 +661,7 @@ def test_quimb2qop(backend):
     np.testing.assert_allclose(h1, h2, atol=1e-5)
 
     # in out edge order test
-    builder = quimb.tensor.tensor_builder.SpinHam1D()
+    builder = qtb.SpinHam1D()
     # new version quimb breaking API change: SpinHam1D -> SpinHam
     builder += 1, "Y"
     builder += 1, "X"
@@ -675,7 +676,7 @@ def test_quimb2qop(backend):
 
     # test mps case
 
-    s1 = quimb.tensor.tensor_builder.MPS_rand_state(3, 4)
+    s1 = qtb.MPS_rand_state(3, 4)
     s2 = tc.quantum.quimb2qop(s1)
     m1 = s1.to_dense()
     m2 = s2.eval_matrix()
