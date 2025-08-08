@@ -1153,6 +1153,91 @@ def generate_local_hamiltonian(
 
 
 # TODO(@Charlespkuer): Add more conversion functions for other packages
+def extract_tensors_from_qop(qop: QuOperator) -> Tuple[List[Node], bool, int]:
+    """
+    Extract and sort tensors from QuOperator for conversion to other tensor network formats.
+
+    :param qop: Input QuOperator
+    :return: Tuple of (sorted_nodes, is_mps, nwires)
+    """
+    is_mps = len(qop.in_edges) == 0
+    nwires = len(qop.out_edges) if is_mps else len(qop.in_edges)
+
+    # Collect all nodes from edges
+    all_nodes_from_edges = set()
+    for edge in qop.in_edges + qop.out_edges + qop.ignore_edges:
+        if edge.node1 is not None:
+            all_nodes_from_edges.add(edge.node1)
+        if edge.node2 is not None:
+            all_nodes_from_edges.add(edge.node2)
+
+    nodes_for_sorting = (
+        list(all_nodes_from_edges) if not qop.ref_nodes else qop.ref_nodes
+    )
+
+    # Find endpoint nodes
+    endpoint_nodes = set()
+    physical_edges = set(qop.out_edges) if is_mps else set(qop.in_edges + qop.out_edges)
+
+    if is_mps:
+        rank_2_nodes = {node for node in nodes_for_sorting if len(node.edges) == 2}
+        if len(rank_2_nodes) == 2:
+            endpoint_nodes = rank_2_nodes
+
+    if not endpoint_nodes:
+        endpoint_nodes = {edge.node1 for edge in qop.ignore_edges if edge.node1}
+
+    if not endpoint_nodes and len(nodes_for_sorting) > 1:
+        virtual_bond_counts = {}
+        for node in nodes_for_sorting:
+            virtual_bonds = sum(
+                1
+                for edge in node.edges
+                if edge not in physical_edges and not edge.is_dangling()
+            )
+            virtual_bond_counts[node] = virtual_bonds
+
+        min_bonds = min(virtual_bond_counts.values())
+        min_bond_nodes = {
+            node for node, count in virtual_bond_counts.items() if count == min_bonds
+        }
+
+        if len(min_bond_nodes) == 2:
+            endpoint_nodes = min_bond_nodes
+
+    if not endpoint_nodes:
+        if len(nodes_for_sorting) == 1:
+            endpoint_nodes = set(nodes_for_sorting)
+        elif len(nodes_for_sorting) >= 2:
+            endpoint_nodes = {nodes_for_sorting[0], nodes_for_sorting[-1]}
+
+    # Sort nodes along the chain
+    sorted_nodes: list[Node] = []
+    if endpoint_nodes and len(endpoint_nodes) >= 1:
+        current = next(iter(endpoint_nodes))
+        while current and len(sorted_nodes) < nwires:
+            sorted_nodes.append(current)
+            current = next(
+                (
+                    e.node2 if e.node1 is current else e.node1
+                    for e in current.edges
+                    if not e.is_dangling()
+                    and e not in physical_edges
+                    and (e.node2 if e.node1 is current else e.node1) not in sorted_nodes
+                ),
+                None,
+            )
+
+    # Fallback if chain sorting failed
+    if not sorted_nodes:
+        sorted_nodes = nodes_for_sorting
+    if len(sorted_nodes) > 0 and len(qop.ignore_edges) > 0:
+        if sorted_nodes[0] is not qop.ignore_edges[0].node1:
+            sorted_nodes = sorted_nodes[::-1]
+
+    return sorted_nodes, is_mps, nwires
+
+
 def tenpy2qop(tenpy_obj: Any) -> QuOperator:
     """
     Converts a TeNPy MPO or MPS to a TensorCircuit QuOperator.
@@ -1241,44 +1326,7 @@ def qop2tenpy(qop: QuOperator) -> Any:
     except ImportError:
         raise ImportError("Please install TeNPy package to use this function.")
 
-    is_mps = len(qop.in_edges) == 0
-    nwires = len(qop.out_edges) if is_mps else len(qop.in_edges)
-
-    # Node sorting
-    endpoint_nodes = {edge.node1 for edge in qop.ignore_edges if edge.node1}
-    physical_edges = set(qop.out_edges) if is_mps else set(qop.in_edges + qop.out_edges)
-    if len(endpoint_nodes) < 2 and len(qop.ref_nodes) > 1:
-        inferred_endpoints = {
-            node
-            for node in qop.ref_nodes
-            if sum(1 for edge in node.edges if edge not in physical_edges) == 1
-        }
-        if len(inferred_endpoints) == 2:
-            endpoint_nodes = inferred_endpoints
-
-    # to correctly sort nodes
-    sorted_nodes: list[Node] = []
-    if endpoint_nodes:
-        current = next(iter(endpoint_nodes))
-        while current and len(sorted_nodes) < nwires:
-            sorted_nodes.append(current)
-            current = next(
-                (
-                    e.node2 if e.node1 is current else e.node1
-                    for e in current.edges
-                    if not e.is_dangling()
-                    and e not in physical_edges
-                    and (e.node2 if e.node1 is current else e.node1) not in sorted_nodes
-                ),
-                None,
-            )
-
-    if not sorted_nodes:
-        sorted_nodes = qop.nodes
-
-    if len(sorted_nodes) > 0 and len(qop.ignore_edges) > 0:
-        if sorted_nodes[0] is not qop.ignore_edges[0].node1:
-            sorted_nodes = sorted_nodes[::-1]
+    sorted_nodes, is_mps, nwires = extract_tensors_from_qop(qop)
 
     physical_dim = qop.out_edges[0].dimension if is_mps else qop.in_edges[0].dimension
     sites = [Site(LegCharge.from_trivial(physical_dim), "q") for _ in range(nwires)]
@@ -1416,54 +1464,7 @@ def qop2quimb(qop: QuOperator) -> Any:
     except ImportError:
         raise ImportError("Please install Quimb package to use this function.")
 
-    is_mps = len(qop.in_edges) == 0
-    nwires = len(qop.out_edges) if is_mps else len(qop.in_edges)
-
-    all_nodes_from_edges = set()
-    for edge in qop.in_edges + qop.out_edges + qop.ignore_edges:
-        if edge.node1 is not None:
-            all_nodes_from_edges.add(edge.node1)
-        if edge.node2 is not None:
-            all_nodes_from_edges.add(edge.node2)
-
-    nodes_for_sorting = (
-        list(all_nodes_from_edges) if not qop.ref_nodes else qop.ref_nodes
-    )
-
-    endpoint_nodes = {edge.node1 for edge in qop.ignore_edges if edge.node1}
-    physical_edges = set(qop.in_edges + qop.out_edges)
-
-    if len(endpoint_nodes) < 2 and len(nodes_for_sorting) > 1:
-        inferred_endpoints = {
-            node
-            for node in nodes_for_sorting
-            if sum(1 for edge in node.edges if edge not in physical_edges) == 1
-        }
-        if len(inferred_endpoints) == 2:
-            endpoint_nodes = inferred_endpoints
-
-    sorted_nodes: list[Node] = []
-    if endpoint_nodes:
-        current = next(iter(endpoint_nodes))
-        while current and len(sorted_nodes) < nwires:
-            sorted_nodes.append(current)
-            current = next(
-                (
-                    e.node2 if e.node1 is current else e.node1
-                    for e in current.edges
-                    if not e.is_dangling()
-                    and e not in physical_edges
-                    and (e.node2 if e.node1 is current else e.node1) not in sorted_nodes
-                ),
-                None,
-            )
-
-    if not sorted_nodes:
-        sorted_nodes = nodes_for_sorting
-
-    if len(sorted_nodes) > 0 and len(qop.ignore_edges) > 0:
-        if sorted_nodes[0] is not qop.ignore_edges[0].node1:
-            sorted_nodes = sorted_nodes[::-1]
+    sorted_nodes, is_mps, _ = extract_tensors_from_qop(qop)
 
     quimb_tensors = []
     node_map = {node: i for i, node in enumerate(sorted_nodes)}
@@ -1579,39 +1580,7 @@ def qop2tn(qop: QuOperator) -> Any:
     :return: MPO or MPS in the form of TensorNetwork
     :rtype: Union[tn.matrixproductstates.MPO, tn.matrixproductstates.MPS]
     """
-    is_mps = len(qop.in_edges) == 0
-    nwires = len(qop.out_edges) if is_mps else len(qop.in_edges)
-
-    endpoint_nodes = {edge.node1 for edge in qop.ignore_edges if edge.node1}
-    physical_edges = set(qop.out_edges) if is_mps else set(qop.in_edges + qop.out_edges)
-    if len(endpoint_nodes) < 2 and len(qop.ref_nodes) > 1:
-        inferred_endpoints = {
-            node
-            for node in qop.ref_nodes
-            if sum(1 for edge in node.edges if edge not in physical_edges) == 1
-        }
-        if len(inferred_endpoints) == 2:
-            endpoint_nodes = inferred_endpoints
-    sorted_nodes: list[Node] = []
-    if endpoint_nodes:
-        current = next(iter(endpoint_nodes))
-        while current and len(sorted_nodes) < nwires:
-            sorted_nodes.append(current)
-            current = next(
-                (
-                    e.node2 if e.node1 is current else e.node1
-                    for e in current.edges
-                    if not e.is_dangling()
-                    and e not in physical_edges
-                    and (e.node2 if e.node1 is current else e.node1) not in sorted_nodes
-                ),
-                None,
-            )
-    if not sorted_nodes:
-        sorted_nodes = qop.nodes
-    if len(sorted_nodes) > 0 and len(qop.ignore_edges) > 0:
-        if sorted_nodes[0] is not qop.ignore_edges[0].node1:
-            sorted_nodes = sorted_nodes[::-1]
+    sorted_nodes, is_mps, nwires = extract_tensors_from_qop(qop)
 
     tensors = []
     for i, node in enumerate(sorted_nodes):
