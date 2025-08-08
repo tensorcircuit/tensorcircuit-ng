@@ -1318,8 +1318,10 @@ def qop2tenpy(qop: QuOperator) -> Any:
         IdL = IdR = 0
         reconstructed_tensors = raw_tensors
     else:
-        chi = max(raw_tensors[0].shape[3] if raw_tensors[0].ndim > 3 else 1,
-                  raw_tensors[-1].shape[0] if raw_tensors[-1].ndim > 3 else 1)
+        chi = max(
+            raw_tensors[0].shape[3] if raw_tensors[0].ndim > 3 else 1,
+            raw_tensors[-1].shape[0] if raw_tensors[-1].ndim > 3 else 1,
+        )
         IdL = 0
         IdR = chi - 1 if chi > 1 else 0
 
