@@ -1501,34 +1501,7 @@ def qop2quimb(qop: QuOperator) -> Any:
     tn = qtn.TensorNetwork(quimb_tensors)
 
     if is_mps:
-        result = tn.as_network(qtn.MatrixProductState)
-
-        qop_matrix = qop.eval_matrix()
-        original_norm = np.linalg.norm(np.ravel(qop_matrix))
-
-        ket_inds = [f"k{j}" for j in range(nwires)]
-        converted_dense = result.to_dense(ket_inds)
-        converted_norm = np.linalg.norm(np.ravel(converted_dense))
-
-        if converted_norm > 1e-12 and original_norm > 1e-12:
-            scale_factor = original_norm / converted_norm
-            new_tensors = []
-            for idx, tensor in enumerate(result.tensors):
-                if idx == 0:
-                    scaled_data = tensor.data * scale_factor
-                    new_tensor = qtn.Tensor(
-                        scaled_data, inds=tensor.inds, tags=tensor.tags
-                    )
-                else:
-                    new_tensor = qtn.Tensor(
-                        tensor.data, inds=tensor.inds, tags=tensor.tags
-                    )
-                new_tensors.append(new_tensor)
-
-            new_tn = qtn.TensorNetwork(new_tensors)
-            result = new_tn.as_network(qtn.MatrixProductState)
-
-        return result
+        return tn.as_network(qtn.MatrixProductState)
     else:
         return tn.as_network(qtn.MatrixProductOperator)
 
