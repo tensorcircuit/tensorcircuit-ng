@@ -666,6 +666,11 @@ def test_quimb2qop(backend):
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_qop2quimb(backend):
+    try:
+        import quimb.tensor as qtn  # pylint: disable=unused-import
+    except ImportError:
+        pytest.skip("quimb is not installed")
+
     # MPO Conversion
     nwires_mpo = 4
     chi_mpo = 3

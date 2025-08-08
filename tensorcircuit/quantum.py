@@ -23,6 +23,7 @@ from typing import (
 )
 
 import numpy as np
+import tensornetwork as tn
 from tensornetwork.network_components import AbstractNode, CopyNode, Edge, Node, connect
 from tensornetwork.network_operations import (
     copy,
@@ -30,7 +31,6 @@ from tensornetwork.network_operations import (
     remove_node,
 )
 
-import tensornetwork as tn
 from .cons import backend, contractor, dtypestr, npdtype, rdtypestr
 from .gates import Gate, num_to_tensor
 from .utils import arg_alias
