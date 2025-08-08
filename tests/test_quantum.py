@@ -643,7 +643,6 @@ def test_quimb2qop(backend):
 
     # in out edge order test
     builder = qtb.SpinHam1D()
-    # new version quimb breaking API change: SpinHam1D -> SpinHam
     builder += 1, "Y"
     builder += 1, "X"
     H = builder.build_mpo(3)
@@ -654,8 +653,6 @@ def test_quimb2qop(backend):
         g, hzz=0, hxx=0, hyy=0, hz=0, hy=0.5, hx=0.5, sparse=False, numpy=True
     )
     np.testing.assert_allclose(m1, m2, atol=1e-5)
-
-    # test mps case
 
     s1 = qtb.MPS_rand_state(3, 4)
     s2 = tc.quantum.quimb2qop(s1)
@@ -734,12 +731,7 @@ def test_qop2quimb(backend):
     ket_inds_mps = [f"k{i}" for i in range(nwires_mps)]
     vec_from_quimb = np.ravel(quimb_mps.to_dense(ket_inds_mps))
 
-    vec_from_qop = vec_from_qop / np.linalg.norm(vec_from_qop)
-    vec_from_quimb = vec_from_quimb / np.linalg.norm(vec_from_quimb)
-
-    np.testing.assert_allclose(
-        abs(np.vdot(vec_from_qop, vec_from_quimb)), 1.0, atol=1e-5
-    )
+    np.testing.assert_allclose(vec_from_qop, vec_from_quimb, atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])

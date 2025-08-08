@@ -1288,10 +1288,13 @@ def qop2tenpy(qop: QuOperator) -> Any:
         tensors = []
         for i, node in enumerate(sorted_nodes):
             tensor = np.asarray(node.tensor)
-            if i == 0 and tensor.shape == (2, 2, 2):
-                tensor = tensor[0:1, :, :]
-            elif i == len(sorted_nodes) - 1 and tensor.shape == (2, 2, 2):
-                tensor = tensor[:, :, 0:1]
+            if tensor.ndim == 3:
+                if i == 0:
+                    if tensor.shape[0] > 1:
+                        tensor = tensor[0:1, :, :]
+                elif i == len(sorted_nodes) - 1:
+                    if tensor.shape[2] > 1:
+                        tensor = tensor[:, :, 0:1]
             tensors.append(
                 npc.Array.from_ndarray(
                     tensor,
@@ -1396,7 +1399,7 @@ def quimb2qop(qb_mpo: Any) -> QuOperator:
 
 def qop2quimb(qop: QuOperator) -> Any:
     """
-    Convert QuOperator to MPO in Quimb package.
+    Convert QuOperator to MPO or MPS in Quimb package.
 
     Requirements: QuOperator must represent valid MPS/MPO structure:
     - Linear chain topology with open boundaries only
@@ -1413,6 +1416,7 @@ def qop2quimb(qop: QuOperator) -> Any:
         import quimb.tensor as qtn
     except ImportError:
         raise ImportError("Please install Quimb package to use this function.")
+
     is_mps = len(qop.in_edges) == 0
     nwires = len(qop.out_edges) if is_mps else len(qop.in_edges)
 
@@ -1464,30 +1468,67 @@ def qop2quimb(qop: QuOperator) -> Any:
 
     quimb_tensors = []
     node_map = {node: i for i, node in enumerate(sorted_nodes)}
+
     for i, node in enumerate(sorted_nodes):
         tensor_data = node.tensor
-        inds: List[Optional[str]] = [None] * tensor_data.ndim
-        edge_to_axis = {edge: axis for axis, edge in enumerate(node.edges)}
-        for edge, axis in edge_to_axis.items():
+        inds: List[str] = []
+
+        for axis, edge in enumerate(node.edges):
             if edge in qop.out_edges:
                 site_index = qop.out_edges.index(edge)
-                inds[axis] = f"k{site_index}"
-            elif edge in qop.in_edges:
-                if not is_mps:
-                    site_index = qop.in_edges.index(edge)
-                    inds[axis] = f"b{site_index}"
+                inds.append(f"k{site_index}")
+            elif edge in qop.in_edges and not is_mps:
+                site_index = qop.in_edges.index(edge)
+                inds.append(f"b{site_index}")
+            elif edge in qop.ignore_edges:
+                if i == 0:
+                    inds.append("_left_dangling")
+                elif i == len(sorted_nodes) - 1:
+                    inds.append("_right_dangling")
+                else:
+                    inds.append(f"_ignore_{i}_{axis}")
             else:
                 neighbor = edge.node1 if edge.node2 is node else edge.node2
                 if neighbor in node_map:
                     j = node_map[neighbor]
                     left, right = min(i, j), max(i, j)
-                    inds[axis] = f"v{left},{right}"
+                    inds.append(f"v{left}_{right}")
+                else:
+                    inds.append(f"_unconnected_{i}_{axis}")
 
         quimb_tensors.append(qtn.Tensor(tensor_data, inds=inds, tags=f"I{i}"))
 
     tn = qtn.TensorNetwork(quimb_tensors)
+
     if is_mps:
-        return tn.as_network(qtn.MatrixProductState)
+        result = tn.as_network(qtn.MatrixProductState)
+
+        qop_matrix = qop.eval_matrix()
+        original_norm = np.linalg.norm(np.ravel(qop_matrix))
+
+        ket_inds = [f"k{j}" for j in range(nwires)]
+        converted_dense = result.to_dense(ket_inds)
+        converted_norm = np.linalg.norm(np.ravel(converted_dense))
+
+        if converted_norm > 1e-12 and original_norm > 1e-12:
+            scale_factor = original_norm / converted_norm
+            new_tensors = []
+            for idx, tensor in enumerate(result.tensors):
+                if idx == 0:
+                    scaled_data = tensor.data * scale_factor
+                    new_tensor = qtn.Tensor(
+                        scaled_data, inds=tensor.inds, tags=tensor.tags
+                    )
+                else:
+                    new_tensor = qtn.Tensor(
+                        tensor.data, inds=tensor.inds, tags=tensor.tags
+                    )
+                new_tensors.append(new_tensor)
+
+            new_tn = qtn.TensorNetwork(new_tensors)
+            result = new_tn.as_network(qtn.MatrixProductState)
+
+        return result
     else:
         return tn.as_network(qtn.MatrixProductOperator)
 

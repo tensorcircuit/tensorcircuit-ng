@@ -9,13 +9,8 @@ import numpy as np
 from tenpy.networks.mps import MPS
 from tenpy.models.xxz_chain import XXZChain
 from tenpy.algorithms import dmrg
-import tensornetwork as tn
 
 import tensorcircuit as tc
-
-Node = tn.Node
-Edge = tn.Edge
-connect = tn.connect
 
 QuOperator = tc.quantum.QuOperator
 quantum_constructor = tc.quantum.quantum_constructor
@@ -34,8 +29,6 @@ M = XXZChain(model_params)
 print("\n2. Running DMRG in TeNPy to find the ground state...")
 product_state = ["up", "down"] * (L // 2)
 print(f"   - Initializing DMRG from the Neel state: {product_state}")
-
-print(f"   - Initializing DMRG from a random product state: {product_state}")
 
 psi0 = MPS.from_product_state(M.lat.mps_sites(), product_state, bc=M.lat.bc_MPS)
 dmrg_params = {
