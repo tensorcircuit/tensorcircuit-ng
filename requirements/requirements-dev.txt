@@ -12,3 +12,4 @@ sphinx-copybutton
 nbsphinx
 myst-parser
 sphinx-design
+build

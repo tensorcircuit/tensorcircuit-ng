@@ -40,11 +40,28 @@ jobs:
       - name: test scripts
         run: |
           pytest --cov=tensorcircuit --cov-report=xml -svv --benchmark-skip
+      - name: Generate nightly version number
+        id: version
+        run: |
+          BASE_VERSION=$(grep "__version__" tensorcircuit/__init__.py | sed -E 's/__version__ = "([^"]+)"/\1/')
+          DATE_VERSION=$(date +'%Y%m%d')
+          #    Example: "1.3.0" becomes "1.3.0.dev20231027"
+          NIGHTLY_VERSION="${BASE_VERSION}.dev${DATE_VERSION}"
+
+          echo "Base version: $BASE_VERSION"
+          echo "Generated nightly version: $NIGHTLY_VERSION"
+
+          echo "nightly_version=$NIGHTLY_VERSION" >> $GITHUB_OUTPUT
+      - name: Update version in source
+        run: |
+          # Use sed to replace the version in __init__.py
+          sed -i "s/__version__ = .*/__version__ = \"${{ steps.version.outputs.nightly_version }}\"/" tensorcircuit/__init__.py
+          echo "Updated __init__.py to version ${{ steps.version.outputs.nightly_version }}"
+          head tensorcircuit/__init__.py
+
       - name: setup build
         run: |
-          python3 .github/nightly_build/darkify.py
-          cat setup.py
-          python3 setup.py bdist_wheel sdist
+          python3 -m build
       - name: upload to pypi
         # if: startsWith(github.ref, 'refs/tags')
         uses: pypa/gh-action-pypi-publish@release/v1
