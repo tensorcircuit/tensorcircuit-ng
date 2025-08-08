@@ -297,7 +297,7 @@ class DMCircuit(BaseCircuit):
         reuse: bool = True,
         noise_conf: Optional[Any] = None,
         status: Optional[Tensor] = None,
-        **kws: Any
+        **kws: Any,
     ) -> tn.Node.tensor:
         """
         Compute the expectation of corresponding operators.

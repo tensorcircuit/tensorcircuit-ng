@@ -109,7 +109,7 @@ def prune(
     circuit: Union[AbstractCircuit, List[Dict[str, Any]]],
     rtol: float = 1e-3,
     atol: float = 1e-3,
-    **kws: Any
+    **kws: Any,
 ) -> Any:
     if isinstance(circuit, list):
         qir = circuit
@@ -251,7 +251,7 @@ def _merge(
 def merge(
     circuit: Union[AbstractCircuit, List[Dict[str, Any]]],
     rules: Optional[Dict[Tuple[str, ...], str]] = None,
-    **kws: Any
+    **kws: Any,
 ) -> Any:
     merge_rules = copy(default_merge_rules)
     if rules is not None:

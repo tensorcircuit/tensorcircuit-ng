@@ -661,7 +661,7 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         f: Callable[..., Any],
         static_argnums: Optional[Union[int, Sequence[int]]] = None,
         jit_compile: Optional[bool] = None,
-        **kws: Any
+        **kws: Any,
     ) -> Any:
         if jit_compile is True:
             # experimental feature reusing the jit_compile flag for tf

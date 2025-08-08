@@ -24,7 +24,7 @@ class QuantumLayer(Layer):  # type: ignore
         initializer: Union[Text, Sequence[Text]] = "glorot_uniform",
         constraint: Optional[Union[Text, Sequence[Text]]] = None,
         regularizer: Optional[Union[Text, Sequence[Text]]] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         """
         `QuantumLayer` wraps the quantum function `f` as a `keras.Layer`
@@ -103,7 +103,7 @@ class QuantumLayer(Layer):  # type: ignore
         inputs: tf.Tensor,
         training: Optional[bool] = None,
         mask: Optional[tf.Tensor] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> tf.Tensor:
         # input_shape = list(inputs.shape)
         # inputs = tf.reshape(inputs, (-1, input_shape[-1]))
@@ -154,7 +154,7 @@ class HardwareLayer(QuantumLayer):
         inputs: tf.Tensor,
         training: Optional[bool] = None,
         mask: Optional[tf.Tensor] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> tf.Tensor:
         if inputs is None:  # not possible
             result = self.f(*self.pqc_weights, **kwargs)

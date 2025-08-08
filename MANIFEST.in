@@ -5,3 +5,9 @@ include LICENSE
 include CHANGELOG.md
 include docs/source/*
 include tests/*
+prune examples
+prune develop
+prune benchmarks
+prune docs
+global-exclude __pycache__
+global-exclude .DS_Store

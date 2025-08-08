@@ -352,7 +352,7 @@ class NMF(Model):  # type: ignore
         spin_channel: int,
         *dimensions: int,
         _dtype: tf.DType = tf.float32,
-        probamp: Optional[tf.Tensor] = None
+        probamp: Optional[tf.Tensor] = None,
     ):
         super().__init__()
         self.w = self.add_weight(

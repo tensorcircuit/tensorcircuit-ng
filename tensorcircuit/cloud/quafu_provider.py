@@ -30,7 +30,7 @@ def submit_task(
     circuit: Optional[Union[AbstractCircuit, Sequence[AbstractCircuit]]] = None,
     source: Optional[Union[str, Sequence[str]]] = None,
     compile: bool = True,
-    **kws: Any
+    **kws: Any,
 ) -> Task:
     if source is None:
 

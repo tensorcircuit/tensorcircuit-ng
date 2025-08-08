@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tensorcircuit-ng"
+description = "High performance unified quantum computing framework for the NISQ era"
+readme = "README.md"
+license =  "Apache-2.0"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+authors = [
+  { name = "TensorCircuit Authors", email = "znfesnpbh@gmail.com" },
+]
+
+dynamic = ["version"]
+
+dependencies = [
+    "numpy",
+    "scipy",
+    "tensornetwork-ng",
+    "networkx",
+]
+
+[project.urls]
+Homepage = "https://github.com/tensorcircuit/tensorcircuit-ng"
+Repository = "https://github.com/tensorcircuit/tensorcircuit-ng"
+
+[project.optional-dependencies]
+tensorflow = ["tensorflow"]
+jax = ["jax", "jaxlib"]
+torch = ["torch"]
+qiskit = ["qiskit", "sympy", "symengine"]
+cloud = ["qiskit", "mthree<2.8"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.dynamic]
+version = { attr = "tensorcircuit.__version__" }
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore:Explicitly requested dtype*:UserWarning",
+]
+
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+strict = true
+warn_unused_ignores = false
+disallow_untyped_calls = false
+local_partial_types = false
+implicit_reexport = true
+
+[[tool.mypy.overrides]]
+# mypy simply cannot ignore files with wildcard patterns...
+# only module level * works...
+module = "tensorcircuit.backends.pytorch_ops"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "cirq.*"
+ignore_errors = true
+

@@ -91,7 +91,7 @@ def QAOA_block(
                 e2,
                 unitary=G._zz_matrix,
                 theta=paramzz * g[e1][e2].get("weight", 1.0),
-                **kws
+                **kws,
             )
     else:
         i = 0
@@ -157,7 +157,7 @@ def qft(
     *index: int,
     do_swaps: bool = True,
     inverse: bool = False,
-    insert_barriers: bool = False
+    insert_barriers: bool = False,
 ) -> Circuit:
     """
     This function applies quantum fourier transformation (QFT) to the selected circuit lines

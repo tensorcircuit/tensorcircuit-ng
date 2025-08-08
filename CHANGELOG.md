@@ -18,6 +18,8 @@
 
 - Add `ode_evol_local` and `ode_evol_global` methods for local and global ODE evolution.
 
+- Introducing pyproject.toml finally
+
 ### Fixed
 
 - Fixed `one_hot` in numpy backend.
