@@ -1313,33 +1313,30 @@ def qop2tenpy(qop: QuOperator) -> Any:
     # MPO Conversion
     raw_tensors = [np.asarray(node.tensor) for node in sorted_nodes]
 
-    chi = 1
-    if nwires > 1:
-        chi = raw_tensors[0].shape[3]
+    if nwires == 1:
+        chi = 1
+        IdL = IdR = 0
+        reconstructed_tensors = raw_tensors
+    else:
+        chi = max(raw_tensors[0].shape[3] if raw_tensors[0].ndim > 3 else 1,
+                  raw_tensors[-1].shape[0] if raw_tensors[-1].ndim > 3 else 1)
+        IdL = 0
+        IdR = chi - 1 if chi > 1 else 0
 
-    IdL = 0
-    IdR = chi - 1 if chi > 1 else 0
-
-    reconstructed_tensors = []
-
-    tensors_to_process = [t.copy() for t in raw_tensors]
-
-    if nwires > 0:
-        if tensors_to_process[0].shape[0] < chi:
-            t_left = tensors_to_process[0]
-            new_shape = (chi,) + t_left.shape[1:]
-            padded_left = np.zeros(new_shape, dtype=t_left.dtype)
-            padded_left[IdL, ...] = t_left[0, ...]
-            tensors_to_process[0] = padded_left
-
-        if tensors_to_process[-1].shape[3] < chi:
-            t_right = tensors_to_process[-1]
-            new_shape = t_right.shape[:3] + (chi,)
-            padded_right = np.zeros(new_shape, dtype=t_right.dtype)
-            padded_right[..., IdR] = t_right[..., 0]
-            tensors_to_process[-1] = padded_right
-
-    reconstructed_tensors = tensors_to_process
+        reconstructed_tensors = []
+        for i, tensor in enumerate(raw_tensors):
+            if i == 0 and tensor.shape[0] < chi:
+                new_shape = (chi,) + tensor.shape[1:]
+                padded_tensor = np.zeros(new_shape, dtype=tensor.dtype)
+                padded_tensor[IdL, ...] = tensor[0, ...]
+                reconstructed_tensors.append(padded_tensor)
+            elif i == nwires - 1 and len(tensor.shape) > 3 and tensor.shape[3] < chi:
+                new_shape = tensor.shape[:3] + (chi,)
+                padded_tensor = np.zeros(new_shape, dtype=tensor.dtype)
+                padded_tensor[..., IdR] = tensor[..., 0]
+                reconstructed_tensors.append(padded_tensor)
+            else:
+                reconstructed_tensors.append(tensor)
 
     tenpy_Ws = []
     for tensor in reconstructed_tensors:
@@ -1638,10 +1635,6 @@ def qop2tn(qop: QuOperator) -> Any:
             tensors.append(node.tensor)
 
         else:  # MPO
-            phys_in_edge = next(e for e in node.edges if e in qop.in_edges)
-            phys_out_edge = next(e for e in node.edges if e in qop.out_edges)
-            phys_in_ax = edge_to_axis[phys_in_edge]
-            phys_out_ax = edge_to_axis[phys_out_edge]
             left_v_ax, right_v_ax, phys_in_ax, phys_out_ax = 0, 1, 2, 3
             if node.tensor.ndim == 3:
                 if i == 0:
