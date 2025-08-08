@@ -28,36 +28,40 @@ TensorCircuit is a high-performance unified quantum computing framework designed
 
 - numpy
 - scipy
-- tensorflow
 - tensornetwork-ng
-- graphviz
+- networkx
+
+### Backend Dependencies (Optional)
+
+- tensorflow
 - jax
 - jaxlib
-- networkx
-- optax
+- torch
+- qiskit
+- sympy
+- symengine
+- mthree
 
 ### Development Dependencies
 
-- mypy (1.11.2)
-- pytest (7.4.4)
+- mypy
+- pytest
 - black (with jupyter support)
-- pylint (3.2.6)
+- pylint
 - sphinx (>=4.0)
 
 ### Configuration Files
 
 1. `requirements/` - Contains various requirement files:
 
-   - [requirements.txt](file:///Users/shixin/Nutstore%20Files/newwork/quantum-information/codebases/tensorcircuit/requirements/requirements.txt) - Core dependencies
-   - [requirements-dev.txt](file:///Users/shixin/Nutstore%20Files/newwork/quantum-information/codebases/tensorcircuit/requirements/requirements-dev.txt) - Development tools
-   - [requirements-extra.txt](file:///Users/shixin/Nutstore%20Files/newwork/quantum-information/codebases/tensorcircuit/requirements/requirements-extra.txt) - Optional dependencies
-   - [requirements-types.txt](file:///Users/shixin/Nutstore%20Files/newwork/quantum-information/codebases/tensorcircuit/requirements/requirements-types.txt) - Type checking dependencies
+   - [requirements.txt](requirements/requirements.txt) - Core dependencies
+   - [requirements-dev.txt](requirements/requirements-dev.txt) - Development tools
+   - [requirements-extra.txt](requirements/requirements-extra.txt) - Optional dependencies
+   - [requirements-types.txt](requirements/requirements-types.txt) - Type checking dependencies
 
-2. [mypy.ini](file:///Users/shixin/Nutstore%20Files/newwork/quantum-information/codebases/tensorcircuit/mypy.ini) - Type checking configuration with strict mode enabled
+2. [pyproject.toml](pyproject.toml) - Build system configuration with mypy and pytest settings
 
 3. `.pylintrc` - Code style enforcement with specific rules enabled
-
-4. [pytest.ini](file:///Users/shixin/Nutstore%20Files/newwork/quantum-information/codebases/tensorcircuit/pytest.ini) - Test configuration with deprecation warnings filtered
 
 ## Common Bash Commands
 
