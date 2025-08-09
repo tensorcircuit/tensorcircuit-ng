@@ -1591,13 +1591,7 @@ def qop2tn(qop: QuOperator) -> Any:
     """
     sorted_nodes, is_mps, _ = extract_tensors_from_qop(qop)
 
-    tensors = []
-    for _, node in enumerate(sorted_nodes):
-        if is_mps:
-            tensors.append(node.tensor)
-
-        else:  # MPO
-            tensors.append(node.tensor)
+    tensors = [node.tensor for node in sorted_nodes]
 
     if is_mps:
         return tn.FiniteMPS(tensors, canonicalize=False)
