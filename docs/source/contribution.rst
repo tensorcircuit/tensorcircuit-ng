@@ -45,6 +45,8 @@ The following git workflow is recommended for contribution by PR:
 
     pip install -r requirements/requirements.txt
     pip install -r requirements/requirements-dev.txt
+    pip install -r requirements/requirements-types.txt
+    pip install -r requirements/requirements-extra.txt
 
 Extra packages may be required for specific development tasks.
 
@@ -52,7 +54,7 @@ Extra packages may be required for specific development tasks.
 
 .. code-block:: bash
 
-    python setup.py develop
+    pip install -e .
 
 * Create a feature branch where you can make modifications and developments. DON'T open PR from your master/main branch.
 
@@ -60,7 +62,7 @@ Extra packages may be required for specific development tasks.
 
     git checkout -b <name-of-change>
 
-* Make sure your changes can pass all checks by running: ``./check_all.sh``. (See the :ref:`Checks` section below for details)
+* Make sure your changes can pass all checks by running: ``bash check_all.sh``. (See the :ref:`Checks` section below for details)
 
 * Once you are satisfied with your changes, create a commit as follows:
 
@@ -102,7 +104,7 @@ The scripts include the following components:
 
 * black
 
-* mypy: configure file is ``mypy.ini``, results strongly correlated with the version of numpy, we fix ``numpy==1.21.5`` as mypy standard in CI.
+* mypy: configure file is now in ``pyproject.toml``, results strongly correlated with the version of numpy, we fix ``numpy==1.21.5`` as mypy standard in CI.
 
 * pylint: configure file is ``.pylintrc``
 
@@ -246,7 +248,7 @@ And from GitHub page choose draft a release from tag.
 
 .. code-block:: bash
 
-    python setup.py sdist bdist_wheel
+    python -m build
     export VERSION=0.x.y
     twine upload dist/tensorcircuit-${VERSION}-py3-none-any.whl dist/tensorcircuit-${VERSION}.tar.gz
 
