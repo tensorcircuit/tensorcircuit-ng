@@ -12,9 +12,6 @@ from tenpy.algorithms import dmrg
 
 import tensorcircuit as tc
 
-QuOperator = tc.quantum.QuOperator
-quantum_constructor = tc.quantum.quantum_constructor
-
 print("1. Setting up the Heisenberg model in TeNPy using SpinChain...")
 L = 10
 model_params = {
@@ -58,16 +55,19 @@ mag_z_tenpy = psi_tenpy.expectation_value("Sz")
 avg_mag_z_tenpy = np.mean(mag_z_tenpy)
 print(f"   - TeNPy: Average magnetization <Sz> = {avg_mag_z_tenpy:.10f}")
 
-mag_z_tc_raw = [circuit.expectation((tc.gates.z(), [i])) for i in range(L)]
-mag_z_tc_raw = tc.backend.real(tc.backend.stack(mag_z_tc_raw))
-mag_z_tc_avg = tc.backend.numpy(mag_z_tc_raw) / 2.0
-avg_mag_z_tc = np.mean(mag_z_tc_avg)
+mag_z_tc = np.array(
+    [
+        tc.backend.numpy(tc.backend.real(circuit.expectation((tc.gates.z(), [i]))))
+        / 2.0
+        for i in range(L)
+    ]
+)
+avg_mag_z_tc = np.mean(mag_z_tc)
 print(f"   - TensorCircuit: Average magnetization <Sz> = {avg_mag_z_tc:.10f}")
 
 np.testing.assert_allclose(avg_mag_z_tenpy, avg_mag_z_tc, atol=1e-5)
 print("\n[SUCCESS] Average magnetization matches between TeNPy and TensorCircuit.")
 
-mag_z_tc = mag_z_tc_avg
 print("\nComparing site-by-site magnetization:")
 print("TeNPy:", mag_z_tenpy)
 print("TC:   ", mag_z_tc)

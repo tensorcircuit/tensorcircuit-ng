@@ -1215,16 +1215,6 @@ def extract_tensors_from_qop(qop: QuOperator) -> Tuple[List[Node], bool, int]:
 
         if len(min_dim_nodes) == 2:
             endpoint_nodes = min_dim_nodes
-        else:
-            min_bonds = min(virtual_bond_counts.values())
-            min_bond_nodes = {
-                node
-                for node, count in virtual_bond_counts.items()
-                if count == min_bonds
-            }
-
-            if len(min_bond_nodes) == 2:
-                endpoint_nodes = min_bond_nodes
 
     if not endpoint_nodes:
         if len(nodes_for_sorting) == 1:
@@ -1549,8 +1539,7 @@ def tn2qop(tn_obj: Any) -> QuOperator:
 
     if is_mps:
         for i in range(nwires - 1):
-            right_edge_idx = len(nodes[i].edges) - 1
-            connect(nodes[i][right_edge_idx], nodes[i + 1][0])
+            connect(nodes[i][-1], nodes[i + 1][0])
 
         out_edges = []
         for i, node in enumerate(nodes):
@@ -1600,50 +1589,15 @@ def qop2tn(qop: QuOperator) -> Any:
     :return: MPO or MPS in the form of TensorNetwork
     :rtype: Union[tn.matrixproductstates.MPO, tn.matrixproductstates.MPS]
     """
-    sorted_nodes, is_mps, nwires = extract_tensors_from_qop(qop)
+    sorted_nodes, is_mps, _ = extract_tensors_from_qop(qop)
 
     tensors = []
-    for i, node in enumerate(sorted_nodes):
-        edge_to_axis = {edge: axis for axis, edge in enumerate(node.edges)}
-
-        left_v_ax, right_v_ax = None, None
-
-        if i > 0:
-            prev_node = sorted_nodes[i - 1]
-            edge_to_prev = next(
-                e for e in node.edges if (e.node1 is prev_node or e.node2 is prev_node)
-            )
-            left_v_ax = edge_to_axis[edge_to_prev]
-
-        if i < nwires - 1:
-            next_node = sorted_nodes[i + 1]
-            edge_to_next = next(
-                e for e in node.edges if (e.node1 is next_node or e.node2 is next_node)
-            )
-            right_v_ax = edge_to_axis[edge_to_next]
-
+    for _, node in enumerate(sorted_nodes):
         if is_mps:
             tensors.append(node.tensor)
 
         else:  # MPO
-            left_v_ax, right_v_ax, phys_in_ax, phys_out_ax = 0, 1, 2, 3
-            if node.tensor.ndim == 3:
-                if i == 0:
-                    right_v_ax, phys_in_ax, phys_out_ax = 0, 1, 2
-                    permuted_tensor = backend.transpose(
-                        node.tensor, perm=[right_v_ax, phys_in_ax, phys_out_ax]
-                    )
-                else:
-                    left_v_ax, phys_in_ax, phys_out_ax = 0, 1, 2
-                    permuted_tensor = backend.transpose(
-                        node.tensor, perm=[left_v_ax, phys_in_ax, phys_out_ax]
-                    )
-            else:
-                permuted_tensor = backend.transpose(
-                    node.tensor, perm=[left_v_ax, right_v_ax, phys_in_ax, phys_out_ax]
-                )
-
-            tensors.append(permuted_tensor)
+            tensors.append(node.tensor)
 
     if is_mps:
         return tn.FiniteMPS(tensors, canonicalize=False)
