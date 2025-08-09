@@ -1,0 +1,153 @@
+from typing import Any, List, Tuple, Union
+import numpy as np
+from ..cons import dtypestr, backend
+from ..quantum import PauliStringSum2COO
+from .lattice import AbstractLattice
+
+
+def _create_empty_sparse_matrix(shape: Tuple[int, int]) -> Any:
+    """
+    Helper function to create a backend-agnostic empty sparse matrix.
+    """
+    indices = backend.convert_to_tensor(backend.zeros((0, 2), dtype="int32"))
+    values = backend.convert_to_tensor(backend.zeros((0,), dtype=dtypestr))  # type: ignore
+    return backend.coo_sparse_matrix(indices=indices, values=values, shape=shape)  # type: ignore
+
+
+def heisenberg_hamiltonian(
+    lattice: AbstractLattice,
+    j_coupling: Union[float, List[float], Tuple[float, ...]] = 1.0,
+) -> Any:
+    """
+    Generates the sparse matrix of the Heisenberg Hamiltonian for a given lattice.
+
+    The Heisenberg Hamiltonian is defined as:
+    H = J * Σ_{<i,j>} (X_i X_j + Y_i Y_j + Z_i Z_j)
+    where the sum is over all unique nearest-neighbor pairs <i,j>.
+
+    :param lattice: An instance of a class derived from AbstractLattice,
+        which provides the geometric information of the system.
+    :type lattice: AbstractLattice
+    :param j_coupling: The coupling constants. Can be a single float for an
+        isotropic model (Jx=Jy=Jz) or a list/tuple of 3 floats for an
+        anisotropic model (Jx, Jy, Jz). Defaults to 1.0.
+    :type j_coupling: Union[float, List[float], Tuple[float, ...]], optional
+    :return: The Hamiltonian as a backend-agnostic sparse matrix.
+    :rtype: Any
+    """
+    num_sites = lattice.num_sites
+    neighbor_pairs = lattice.get_neighbor_pairs(k=1, unique=True)
+
+    if isinstance(j_coupling, (float, int)):
+        js = [float(j_coupling)] * 3
+    else:
+        if len(j_coupling) != 3:
+            raise ValueError("j_coupling must be a float or a list/tuple of 3 floats.")
+        js = [float(j) for j in j_coupling]
+
+    if not neighbor_pairs:
+        return _create_empty_sparse_matrix(shape=(2**num_sites, 2**num_sites))
+    if num_sites == 0:
+        raise ValueError("Cannot generate a Hamiltonian for a lattice with zero sites.")
+
+    pauli_map = {"X": 1, "Y": 2, "Z": 3}
+
+    ls: List[List[int]] = []
+    weights: List[float] = []
+
+    pauli_terms = ["X", "Y", "Z"]
+    for i, j in neighbor_pairs:
+        for idx, pauli_char in enumerate(pauli_terms):
+            if abs(js[idx]) > 1e-9:
+                string = [0] * num_sites
+                string[i] = pauli_map[pauli_char]
+                string[j] = pauli_map[pauli_char]
+                ls.append(string)
+                weights.append(js[idx])
+
+    hamiltonian_matrix = PauliStringSum2COO(ls, weight=weights, numpy=False)
+
+    return hamiltonian_matrix
+
+
+def rydberg_hamiltonian(
+    lattice: AbstractLattice, omega: float, delta: float, c6: float
+) -> Any:
+    """
+    Generates the sparse matrix of the Rydberg atom array Hamiltonian.
+
+    The Hamiltonian is defined as:
+    H = Σ_i (Ω/2)X_i - Σ_i δ(1 - Z_i)/2 + Σ_{i<j} V_ij (1-Z_i)/2 (1-Z_j)/2
+      = Σ_i (Ω/2)X_i + Σ_i (δ/2)Z_i + Σ_{i<j} (V_ij/4)(Z_iZ_j - Z_i - Z_j)
+    where V_ij = C6 / |r_i - r_j|^6.
+
+    Note: Constant energy offset terms (proportional to the identity operator)
+    are ignored in this implementation.
+
+    :param lattice: An instance of a class derived from AbstractLattice,
+        which provides site coordinates and the distance matrix.
+    :type lattice: AbstractLattice
+    :param omega: The Rabi frequency (Ω) of the driving laser field.
+    :type omega: float
+    :param delta: The laser detuning (δ).
+    :type delta: float
+    :param c6: The Van der Waals interaction coefficient (C6).
+    :type c6: float
+    :return: The Hamiltonian as a backend-agnostic sparse matrix.
+    :rtype: Any
+    """
+    num_sites = lattice.num_sites
+    if num_sites == 0:
+        raise ValueError("Cannot generate a Hamiltonian for a lattice with zero sites.")
+
+    pauli_map = {"X": 1, "Y": 2, "Z": 3}
+    ls: List[List[int]] = []
+    weights: List[float] = []
+
+    for i in range(num_sites):
+        x_string = [0] * num_sites
+        x_string[i] = pauli_map["X"]
+        ls.append(x_string)
+        weights.append(omega / 2.0)
+
+    z_coefficients = np.zeros(num_sites)
+
+    for i in range(num_sites):
+        z_coefficients[i] += delta / 2.0
+
+    dist_matrix = lattice.distance_matrix
+
+    for i in range(num_sites):
+        for j in range(i + 1, num_sites):
+            distance = dist_matrix[i, j]
+
+            if distance < 1e-9:
+                continue
+
+            interaction_strength = c6 / (distance**6)
+            coefficient = interaction_strength / 4.0
+
+            zz_string = [0] * num_sites
+            zz_string[i] = pauli_map["Z"]
+            zz_string[j] = pauli_map["Z"]
+            ls.append(zz_string)
+            weights.append(coefficient)
+
+            # The interaction term V_ij * n_i * n_j, when expanded using
+            # n_i = (1-Z_i)/2, becomes (V_ij/4)*(I - Z_i - Z_j + Z_i*Z_j).
+            # This contributes a positive term (+V_ij/4) to the ZZ interaction,
+            # but negative terms (-V_ij/4) to the single-site Z_i and Z_j operators.
+
+            z_coefficients[i] -= coefficient
+            z_coefficients[j] -= coefficient
+
+    for i in range(num_sites):
+        if abs(z_coefficients[i]) > 1e-9:
+            z_string = [0] * num_sites
+            z_string[i] = pauli_map["Z"]
+            ls.append(z_string)
+            weights.append(z_coefficients[i])  # type: ignore
+
+    hamiltonian_matrix = PauliStringSum2COO(ls, weight=weights, numpy=False)
+
+    return hamiltonian_matrix
