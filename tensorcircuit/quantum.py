@@ -1157,23 +1157,26 @@ def extract_tensors_from_qop(qop: QuOperator) -> Tuple[List[Node], bool, int]:
     """
     Extract and sort tensors from QuOperator for conversion to other tensor network formats.
 
-    :param qop: Input QuOperator
-    :return: Tuple of (sorted_nodes, is_mps, nwires)
+    :param qop: Input QuOperator to extract tensors from
+    :type qop: QuOperator
+    :return: Tuple containing (sorted_nodes, is_mps, nwires) where:
+    - sorted_nodes: List of Node objects sorted in linear chain order
+    - is_mps: Boolean flag indicating if the structure is MPS (True) or MPO (False)
+    - nwires: Integer number of physical edges/qubits in the system
+    :rtype: Tuple[List[Node], bool, int]
     """
     is_mps = len(qop.in_edges) == 0
-    nwires = len(qop.out_edges) if is_mps else len(qop.in_edges)
+    nwires = len(qop.out_edges)
+    if not is_mps and len(qop.in_edges) != nwires:
+        raise ValueError(
+            "MPO must have the same number of input and output edges. "
+            f"Got {len(qop.in_edges)} and {nwires}."
+        )
 
     # Collect all nodes from edges
-    all_nodes_from_edges = set()
-    for edge in qop.in_edges + qop.out_edges + qop.ignore_edges:
-        if edge.node1 is not None:
-            all_nodes_from_edges.add(edge.node1)
-        if edge.node2 is not None:
-            all_nodes_from_edges.add(edge.node2)
-
-    nodes_for_sorting = (
-        list(all_nodes_from_edges) if not qop.ref_nodes else qop.ref_nodes
-    )
+    nodes_for_sorting = qop.nodes
+    if len(nodes_for_sorting) != nwires:
+        raise ValueError(f"Number of nodes  does not match number of wires.")
 
     # Find endpoint nodes
     endpoint_nodes = set()
@@ -1189,27 +1192,45 @@ def extract_tensors_from_qop(qop: QuOperator) -> Tuple[List[Node], bool, int]:
 
     if not endpoint_nodes and len(nodes_for_sorting) > 1:
         virtual_bond_counts = {}
-        for node in nodes_for_sorting:
-            virtual_bonds = sum(
-                1
-                for edge in node.edges
-                if edge not in physical_edges and not edge.is_dangling()
-            )
-            virtual_bond_counts[node] = virtual_bonds
+        virtual_bond_dim_sums = {}
 
-        min_bonds = min(virtual_bond_counts.values())
-        min_bond_nodes = {
-            node for node, count in virtual_bond_counts.items() if count == min_bonds
+        for node in nodes_for_sorting:
+            virtual_bonds = 0
+            virtual_dim_sum = 0
+
+            for edge in node.edges:
+                if edge not in physical_edges and not edge.is_dangling():
+                    virtual_bonds += 1
+                    virtual_dim_sum += edge.dimension
+
+            virtual_bond_counts[node] = virtual_bonds
+            virtual_bond_dim_sums[node] = virtual_dim_sum
+
+        min_dim_sum = min(virtual_bond_dim_sums.values())
+        min_dim_nodes = {
+            node
+            for node, dim_sum in virtual_bond_dim_sums.items()
+            if dim_sum == min_dim_sum
         }
 
-        if len(min_bond_nodes) == 2:
-            endpoint_nodes = min_bond_nodes
+        if len(min_dim_nodes) == 2:
+            endpoint_nodes = min_dim_nodes
+        else:
+            min_bonds = min(virtual_bond_counts.values())
+            min_bond_nodes = {
+                node
+                for node, count in virtual_bond_counts.items()
+                if count == min_bonds
+            }
+
+            if len(min_bond_nodes) == 2:
+                endpoint_nodes = min_bond_nodes
 
     if not endpoint_nodes:
         if len(nodes_for_sorting) == 1:
-            endpoint_nodes = set(nodes_for_sorting)
+            raise ValueError("Cannot determine chain structure: only one node found.")
         elif len(nodes_for_sorting) >= 2:
-            endpoint_nodes = {nodes_for_sorting[0], nodes_for_sorting[-1]}
+            raise ValueError(f"Cannot identify endpoint nodes for your nodes.")
 
     # Sort nodes along the chain
     sorted_nodes: list[Node] = []
@@ -1228,9 +1249,8 @@ def extract_tensors_from_qop(qop: QuOperator) -> Tuple[List[Node], bool, int]:
                 None,
             )
 
-    # Fallback if chain sorting failed
     if not sorted_nodes:
-        sorted_nodes = nodes_for_sorting
+        raise ValueError("No valid chain structure found in the QuOperator. ")
     if len(sorted_nodes) > 0 and len(qop.ignore_edges) > 0:
         if sorted_nodes[0] is not qop.ignore_edges[0].node1:
             sorted_nodes = sorted_nodes[::-1]
