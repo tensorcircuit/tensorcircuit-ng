@@ -1272,37 +1272,39 @@ def tenpy2qop(tenpy_obj: Any) -> QuOperator:
 
     nodes = []
     if is_mpo:
-        vr_label, vl_label = "wR", "wL"
-        original_tensors = [W.to_ndarray() for W in tenpy_tensors]
-        modified_tensors = []
+        original_tensors_obj = tenpy_tensors
 
-        for i, (tensor, tenpy_t) in enumerate(zip(original_tensors, tenpy_tensors)):
-            labels = tenpy_t._labels
+        for i, W_obj in enumerate(original_tensors_obj):
+            arr = W_obj.to_ndarray()
+            labels = W_obj.get_leg_labels()
+            wL_idx = labels.index("wL")
+            p_idx = labels.index("p")
+            p_star_idx = labels.index("p*")
+            wR_idx = labels.index("wR")
+
+            arr_reordered = arr.transpose((wL_idx, p_idx, p_star_idx, wR_idx))
             if nwires == 1:
-                tensor = np.take(tensor, [0], axis=labels.index(vl_label))
-                tensor = np.take(tensor, [-1], axis=labels.index(vr_label))
+                arr_reordered = arr_reordered[[0], :, :, :]
+                arr_reordered = arr_reordered[:, :, :, [-1]]
             else:
                 if i == 0:
-                    tensor = np.take(tensor, [0], axis=labels.index(vl_label))
+                    arr_reordered = arr_reordered[[0], :, :, :]
                 elif i == nwires - 1:
-                    tensor = np.take(tensor, [-1], axis=labels.index(vr_label))
-            modified_tensors.append(tensor)
+                    arr_reordered = arr_reordered[:, :, :, [-1]]
 
-        for i, t in enumerate(modified_tensors):
-            if t.ndim == 4:
-                t = t.transpose((0, 2, 3, 1))
-            nodes.append(
-                Node(t, name=f"tensor_{i}", axis_names=["wL", "p", "p*", "wR"])
+            node = Node(
+                arr_reordered, name=f"mpo_{i}", axis_names=["wL", "p", "p*", "wR"]
             )
+            nodes.append(node)
 
-        for i in range(nwires - 1):
-            connect(nodes[i]["wR"], nodes[i + 1]["wL"])
+        if nwires > 1:
+            for i in range(nwires - 1):
+                nodes[i][3] ^ nodes[i + 1][0]
 
-        out_edges = [node["p*"] for node in nodes]
-        in_edges = [node["p"] for node in nodes]
-        ignore_edges = [nodes[0]["wL"], nodes[-1]["wR"]]
+        out_edges = [n[2] for n in nodes]
+        in_edges = [n[1] for n in nodes]
+        ignore_edges = [nodes[0][0], nodes[-1][3]]
     else:  # MPS
-        nodes = []
         for i in range(nwires):
             B_obj = tenpy_obj.get_B(i)
             arr = B_obj.to_ndarray()
