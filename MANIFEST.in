@@ -3,8 +3,8 @@ include README_cn.md
 include HISTORY.md
 include LICENSE
 include CHANGELOG.md
-include docs/source/*
-include tests/*
+prune tests
+prune docs
 prune examples
 prune develop
 prune benchmarks
