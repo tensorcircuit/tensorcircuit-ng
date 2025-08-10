@@ -351,6 +351,17 @@
         "example",
         "test"
       ]
+    },
+    {
+      "login": "Charlespkuer",
+      "name": "Huang",
+      "avatar_url": "https://avatars.githubusercontent.com/u/112697147?v=4",
+      "profile": "https://github.com/Charlespkuer",
+      "contributions": [
+        "code",
+        "example",
+        "test"
+      ]
     }
   ],
   "contributorsPerLine": 6,
