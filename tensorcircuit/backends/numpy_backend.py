@@ -251,6 +251,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     def searchsorted(self, a: Tensor, v: Tensor, side: str = "left") -> Tensor:
         return np.searchsorted(a, v, side=side)  # type: ignore
 
+    def argsort(self, a: Tensor, axis: int = -1) -> Tensor:
+        return np.argsort(a, axis=axis)
+
     def set_random_state(
         self, seed: Optional[int] = None, get_only: bool = False
     ) -> Any:

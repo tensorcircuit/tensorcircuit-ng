@@ -7,6 +7,7 @@ import time
 import jax
 import numpy as np
 import quimb
+from quimb import tensor as qt
 import scipy
 import tensorflow as tf
 
@@ -90,7 +91,7 @@ print("--------------------")
 print("hamiltonian building with quimb")
 print("quimb version: ", quimb.__version__)
 
-builder = quimb.tensor.SpinHam1D()
+builder = qt.SpinHam1D()
 # spin operator instead of Pauli matrix
 builder += 4, "Z", "Z"
 builder += -2, "X"

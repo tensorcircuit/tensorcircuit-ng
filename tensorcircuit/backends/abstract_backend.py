@@ -581,6 +581,21 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `argmin`.".format(self.name)
         )
 
+    def argsort(self: Any, a: Tensor, axis: int = -1) -> Tensor:
+        """
+        return the indices that would sort an array.
+
+        :param a: the tensor to be sorted
+        :type a: Tensor
+        :param axis: the sorted axis, defaults to -1
+        :type axis: int
+        :return: the sorted indices
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `argsort`.".format(self.name)
+        )
+
     def unique_with_counts(self: Any, a: Tensor, **kws: Any) -> Tuple[Tensor, Tensor]:
         """
         Find the unique elements and their corresponding counts of the given tensor ``a``.

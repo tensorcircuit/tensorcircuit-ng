@@ -20,6 +20,8 @@
 
 - Introducing pyproject.toml finally
 
+- Add `argsort` method for backends
+
 ### Fixed
 
 - Fixed `one_hot` in numpy backend.

@@ -387,6 +387,9 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def argmin(self, a: Tensor, axis: int = 0) -> Tensor:
         return jnp.argmin(a, axis=axis)
 
+    def argsort(self, a: Tensor, axis: int = -1) -> Tensor:
+        return jnp.argsort(a, axis=axis)
+
     def unique_with_counts(  # type: ignore
         self, a: Tensor, *, size: Optional[int] = None, fill_value: Optional[int] = None
     ) -> Tuple[Tensor, Tensor]:

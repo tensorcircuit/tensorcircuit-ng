@@ -481,6 +481,26 @@ def test_arg_cmp(backend):
     )
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_argsort(backend):
+    # Test basic argsort functionality
+    a = tc.array_to_tensor(np.array([3, 1, 2]), dtype="float32")
+    result = tc.backend.argsort(a)
+    expected = np.array([1, 2, 0])  # indices that would sort the array
+    np.testing.assert_allclose(result, expected)
+
+    # Test argsort with 2D array, default axis=-1
+    b = tc.array_to_tensor(np.array([[3, 1, 2], [4, 0, 1]]), dtype="float32")
+    result = tc.backend.argsort(b)
+    expected = np.array([[1, 2, 0], [1, 2, 0]])
+    np.testing.assert_allclose(result, expected)
+
+    # Test argsort with 2D array, axis=0
+    result = tc.backend.argsort(b, axis=0)
+    expected = np.array([[0, 1, 1], [1, 0, 0]])
+    np.testing.assert_allclose(result, expected)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_tree_map(backend):
     def f(a, b):
