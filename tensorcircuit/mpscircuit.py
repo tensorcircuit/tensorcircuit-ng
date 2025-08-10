@@ -4,21 +4,24 @@ Quantum circuit: MPS state simulator
 
 # pylint: disable=invalid-name
 
-from functools import reduce
+from functools import reduce, partial
 from typing import Any, List, Optional, Sequence, Tuple, Dict, Union
 from copy import copy
+import logging
 
 import numpy as np
 import tensornetwork as tn
-from tensorcircuit.quantum import QuOperator, QuVector
 
 from . import gates
 from .cons import backend, npdtype, contractor, rdtypestr, dtypestr
+from .quantum import QuOperator, QuVector, extract_tensors_from_qop
 from .mps_base import FiniteMPS
 from .abstractcircuit import AbstractCircuit
+from .utils import arg_alias
 
 Gate = gates.Gate
 Tensor = Any
+logger = logging.getLogger(__name__)
 
 
 def split_tensor(
@@ -77,6 +80,10 @@ class MPSCircuit(AbstractCircuit):
 
     is_mps = True
 
+    @partial(
+        arg_alias,
+        alias_dict={"wavefunction": ["inputs"]},
+    )
     def __init__(
         self,
         nqubits: int,
@@ -118,8 +125,19 @@ class MPSCircuit(AbstractCircuit):
             ), "tensors and wavefunction cannot be used at input simutaneously"
             # TODO(@SUSYUSTC): find better way to address QuVector
             if isinstance(wavefunction, QuVector):
-                wavefunction = wavefunction.eval()
-            tensors = self.wavefunction_to_tensors(wavefunction, split=self.split)
+                try:
+                    nodes, is_mps, _ = extract_tensors_from_qop(wavefunction)
+                    if not is_mps:
+                        raise ValueError("wavefunction is not a valid MPS")
+                    tensors = [node.tensor for node in nodes]
+                except ValueError as e:
+                    logger.warning(repr(e))
+                    wavefunction = wavefunction.eval()
+                    tensors = self.wavefunction_to_tensors(
+                        wavefunction, split=self.split
+                    )
+            else:  # full wavefunction
+                tensors = self.wavefunction_to_tensors(wavefunction, split=self.split)
             assert len(tensors) == nqubits
             self._mps = FiniteMPS(tensors, canonicalize=False)
             self._mps.center_position = 0

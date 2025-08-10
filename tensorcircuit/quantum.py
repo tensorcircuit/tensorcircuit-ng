@@ -1181,7 +1181,6 @@ def extract_tensors_from_qop(qop: QuOperator) -> Tuple[List[Node], bool, int]:
     # Find endpoint nodes
     endpoint_nodes = set()
     physical_edges = set(qop.out_edges) if is_mps else set(qop.in_edges + qop.out_edges)
-
     if is_mps:
         rank_2_nodes = {node for node in nodes_for_sorting if len(node.edges) == 2}
         if len(rank_2_nodes) == 2:
@@ -1340,6 +1339,7 @@ def qop2tenpy(qop: QuOperator) -> Any:
     - Cyclic boundary conditions NOT supported
 
     :param qop: The corresponding state/operator as a QuOperator.
+    :type qop: QuOperator
     :return: MPO or MPS object from the TeNPy package.
     :rtype: Union[tenpy.networks.mpo.MPO, tenpy.networks.mps.MPS]
     """
@@ -1480,6 +1480,7 @@ def qop2quimb(qop: QuOperator) -> Any:
     - Cyclic boundary conditions NOT supported
 
     :param qop: MPO in the form of QuOperator
+    :type qop: QuOperator
     :return: MPO in the form of Quimb package
     :rtype: quimb.tensor.tensor_gen.MatrixProductOperator
     """

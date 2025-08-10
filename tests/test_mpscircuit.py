@@ -309,6 +309,7 @@ def test_circuits(backend, dtype):
     do_test_measure(circuits)
 
 
+# TODO(@refraction-ray): fails  (lf("jaxb"), lf("highp"))
 @pytest.mark.parametrize("backend, dtype", [(lf("tfb"), lf("highp"))])
 def test_circuits_jit(backend, dtype):
     def expec(params):
@@ -325,15 +326,48 @@ def test_circuits_jit(backend, dtype):
     expec_vg_jit = tc.backend.jit(expec_vg)
     exp = expec(params)
     exp_jit, exp_grad_jit = expec_vg_jit(params)
-    dir = tc.backend.convert_to_tensor(np.array([1.0, 2.0, 3.0], dtype=tc.dtypestr))
+    dir_ = tc.backend.convert_to_tensor(np.array([1.0, 2.0, 3.0], dtype=tc.dtypestr))
     epsilon = 1e-6
-    exp_p = expec(params + dir * epsilon)
-    exp_m = expec(params - dir * epsilon)
+    exp_p = expec(params + dir_ * epsilon)
+    exp_m = expec(params - dir_ * epsilon)
     exp_grad_dir_numerical = (exp_p - exp_m) / (epsilon * 2)
-    exp_grad_dir_jit = tc.backend.real(tc.backend.sum(exp_grad_jit * dir))
+    exp_grad_dir_jit = tc.backend.real(tc.backend.sum(exp_grad_jit * dir_))
+    np.testing.assert_allclose(exp, exp_jit, atol=1e-10)
     np.testing.assert_allclose(
-        tc.backend.numpy(exp), tc.backend.numpy(exp_jit), atol=1e-10
+        tc.backend.numpy(exp_grad_dir_numerical),
+        tc.backend.numpy(exp_grad_dir_jit),
+        atol=1e-6,
     )
+
+
+@pytest.mark.parametrize(
+    "backend, dtype", [(lf("tfb"), lf("highp")), (lf("jaxb"), lf("highp"))]
+)
+def test_simple_circuits_ad(backend, dtype):
+    def expec(params):
+        mps = tc.MPSCircuit(N, split=split)
+        mps.rx(0, theta=params[0])
+        mps.cx(0, 1)
+        mps.cx(1, 2)
+        mps.ry(2, theta=params[1])
+        mps.rzz(1, 3, theta=params[2])
+        x = [0, 2]
+        z = [1]
+        exp = mps.expectation_ps(x=x, z=z)
+        return tc.backend.real(exp)
+
+    params = tc.backend.ones((3,), dtype=tc.dtypestr)
+    expec_vg = tc.backend.value_and_grad(expec)
+    expec_vg_jit = tc.backend.jit(expec_vg)
+    exp = expec(params)
+    exp_jit, exp_grad_jit = expec_vg_jit(params)
+    dir_ = tc.backend.convert_to_tensor(np.array([1.0, 2.0, 3.0], dtype=tc.dtypestr))
+    epsilon = 1e-6
+    exp_p = expec(params + dir_ * epsilon)
+    exp_m = expec(params - dir_ * epsilon)
+    exp_grad_dir_numerical = (exp_p - exp_m) / (epsilon * 2)
+    exp_grad_dir_jit = tc.backend.real(tc.backend.sum(exp_grad_jit * dir_))
+    np.testing.assert_allclose(exp, exp_jit, atol=1e-6)
     np.testing.assert_allclose(
         tc.backend.numpy(exp_grad_dir_numerical),
         tc.backend.numpy(exp_grad_dir_jit),

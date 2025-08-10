@@ -120,7 +120,7 @@ print("or to create model-specific converters.")
 
 print("--- Scenario 3: Correcting XXZChain DMRG state with X-gates ---")
 
-L = 10
+L = 30
 xxz_model_params = {"L": L, "bc_MPS": "finite", "Jxx": 1.0, "Jz": 1.0, "conserve": None}
 xxz_M = XXZChain(xxz_model_params)
 psi0_xxz = MPS.from_product_state(

@@ -18,6 +18,8 @@
 
 - Add `ode_evol_local` and `ode_evol_global` methods for local and global ODE evolution.
 
+- Add transformation method between tensornetwork, quimb, tenpy and QuOperator in tc-ng including `qop2tenpy`, `qop2quimb`, `qop2tn`, `tenpy2qop`, support both MPS and MPO formats.
+
 ### Fixed
 
 - Fixed `one_hot` in numpy backend.
@@ -25,6 +27,8 @@
 - Fixed `scan` in tensorflow backend and numpy backend.
 
 - Fix potential np.matrix return from `PaulistringSum2Dense`.
+
+- `MPSCircuit` now will first try to transform `QuVector` input to tensors directly instead of evaluating it to dense wavefunction first.
 
 ### Changed
 
