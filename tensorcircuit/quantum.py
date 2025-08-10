@@ -1302,15 +1302,15 @@ def tenpy2qop(tenpy_obj: Any) -> QuOperator:
         in_edges = [node["p"] for node in nodes]
         ignore_edges = [nodes[0]["wL"], nodes[-1]["wR"]]
     else:
-        nodes = [Node(W.to_ndarray().transpose((0, 2, 1))) for W in tenpy_tensors]
+        nodes = [Node(W.to_ndarray()) for W in tenpy_tensors]
 
         if nwires > 1:
             for i in range(nwires - 1):
-                nodes[i][1] ^ nodes[i + 1][0]
+                nodes[i][2] ^ nodes[i + 1][0]
 
-        out_edges = [n[2] for n in nodes]
+        out_edges = [n[1] for n in nodes]
         in_edges = []
-        ignore_edges = [nodes[0][0], nodes[-1][1]]
+        ignore_edges = [nodes[0][0], nodes[-1][2]]
 
     qop = quantum_constructor(out_edges, in_edges, [], ignore_edges)
 
@@ -1349,7 +1349,6 @@ def qop2tenpy(qop: QuOperator) -> Any:
         for i, node in enumerate(sorted_nodes):
             tensor = np.asarray(node.tensor)
             if tensor.ndim == 3:
-                tensor = tensor.transpose((0, 2, 1))
                 if i == 0:
                     if tensor.shape[0] > 1:
                         tensor = tensor[0:1, :, :]
