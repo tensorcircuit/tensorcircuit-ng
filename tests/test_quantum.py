@@ -446,16 +446,21 @@ def test_qop2tenpy(backend):
     # MPS conversion
     nwires_mps = 4
     chi_mps = 2
+    phys_dim = 2
     mps_tensors = (
-        [np.random.rand(1, 2, chi_mps)]
-        + [np.random.rand(chi_mps, 2, chi_mps) for _ in range(nwires_mps - 2)]
-        + [np.random.rand(chi_mps, 2, 1)]
+        [np.random.rand(1, chi_mps, phys_dim)]
+        + [np.random.rand(chi_mps, chi_mps, phys_dim) for _ in range(nwires_mps - 2)]
+        + [np.random.rand(chi_mps, 1, phys_dim)]
     )
     mps_nodes = [tn.Node(t) for t in mps_tensors]
     for i in range(nwires_mps - 1):
-        mps_nodes[i][2] ^ mps_nodes[i + 1][0]
+        mps_nodes[i][1] ^ mps_nodes[i + 1][0]
+
     qop_mps = tc.QuOperator(
-        [n[1] for n in mps_nodes], [], mps_nodes, [mps_nodes[0][0], mps_nodes[-1][2]]
+        out_edges=[n[2] for n in mps_nodes],
+        in_edges=[],
+        ref_nodes=[],
+        ignore_edges=[mps_nodes[0][0], mps_nodes[-1][1]],
     )
     tenpy_mps = tc.quantum.qop2tenpy(qop_mps)
     mat = qop_mps.eval_matrix()
