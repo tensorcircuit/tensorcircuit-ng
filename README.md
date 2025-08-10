@@ -307,6 +307,7 @@ TensorCircuit-NG is open source, released under the Apache License, Version 2.0.
     </tr>
     <tr>
       <td align="center" valign="top" width="16.66%"><a href="https://github.com/Stellogic"><img src="https://avatars.githubusercontent.com/u/186928579?v=4?s=100" width="100px;" alt="Stellogic"/><br /><sub><b>Stellogic</b></sub></a><br /><a href="https://github.com/tensorcircuit/tensorcircuit-ng/commits?author=Stellogic" title="Code">💻</a> <a href="#example-Stellogic" title="Examples">💡</a> <a href="https://github.com/tensorcircuit/tensorcircuit-ng/commits?author=Stellogic" title="Tests">⚠️</a></td>
+      <td align="center" valign="top" width="16.66%"><a href="https://github.com/Charlespkuer"><img src="https://avatars.githubusercontent.com/u/112697147?v=4?s=100" width="100px;" alt="Huang"/><br /><sub><b>Huang</b></sub></a><br /><a href="https://github.com/tensorcircuit/tensorcircuit-ng/commits?author=Charlespkuer" title="Code">💻</a> <a href="#example-Charlespkuer" title="Examples">💡</a> <a href="https://github.com/tensorcircuit/tensorcircuit-ng/commits?author=Charlespkuer" title="Tests">⚠️</a></td>
     </tr>
   </tbody>
 </table>
