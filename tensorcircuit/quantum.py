@@ -1301,8 +1301,18 @@ def tenpy2qop(tenpy_obj: Any) -> QuOperator:
         out_edges = [node["p*"] for node in nodes]
         in_edges = [node["p"] for node in nodes]
         ignore_edges = [nodes[0]["wL"], nodes[-1]["wR"]]
-    else:
-        nodes = [Node(W.to_ndarray()) for W in tenpy_tensors]
+    else:  # MPS
+        nodes = []
+        for i in range(nwires):
+            B_obj = tenpy_obj.get_B(i)
+            arr = B_obj.to_ndarray()
+            labels = B_obj.get_leg_labels()
+            vL_idx = labels.index("vL")
+            p_idx = labels.index("p")
+            vR_idx = labels.index("vR")
+            arr_reordered = arr.transpose((vL_idx, p_idx, vR_idx))
+            node = Node(arr_reordered, name=f"mps_{i}", axis_names=["vL", "p", "vR"])
+            nodes.append(node)
 
         if nwires > 1:
             for i in range(nwires - 1):
