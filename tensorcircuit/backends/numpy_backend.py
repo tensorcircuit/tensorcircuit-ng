@@ -371,6 +371,7 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     ) -> Tensor:
         if x is None and y is None:
             return np.where(condition)
+        assert x is not None and y is not None
         return np.where(condition, x, y)
 
     def equal(self, x: Tensor, y: Tensor) -> Tensor:

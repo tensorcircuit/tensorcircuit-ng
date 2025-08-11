@@ -418,7 +418,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def cumsum(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
         return jnp.cumsum(a, axis)
 
-    def all(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
+    def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
         return jnp.all(a, axis=axis)
 
     def equal(self, x1: Tensor, x2: Tensor) -> Tensor:

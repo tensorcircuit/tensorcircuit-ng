@@ -528,7 +528,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def max(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
         return tf.reduce_max(a, axis=axis)
 
-    def all(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
+    def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
         return tf.reduce_all(tf.cast(a, tf.bool), axis=axis)
 
     def where(
