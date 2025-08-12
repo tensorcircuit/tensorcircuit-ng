@@ -63,9 +63,6 @@ class AbstractLattice(abc.ABC):
 
     def __init__(self, dimensionality: int):
         """Initializes the base lattice class."""
-        logger.debug(
-            f"[DEBUG-LATTICE] Initializing AbstractLattice with dimensionality: {dimensionality}"
-        )
         self._dimensionality = dimensionality
 
         # Core data structures for storing site information.
@@ -113,17 +110,11 @@ class AbstractLattice(abc.ABC):
         subsequent calls. This computation can be expensive for large lattices.
         """
         if self._distance_matrix is None:
-            logger.debug("Distance matrix not cached. Computing now...")
-            logger.debug("[DEBUG-LATTICE] Computing distance matrix...")
             self._distance_matrix = self._compute_distance_matrix()
-            logger.debug("[DEBUG-LATTICE] ...distance matrix computed.")
         return self._distance_matrix
 
     def _validate_index(self, index: SiteIndex) -> None:
         """A private helper to check if a site index is within the valid range."""
-        logger.debug(
-            f"[DEBUG-LATTICE] Validating index: {index} against num_sites: {self.num_sites}"
-        )
         if not (0 <= index < self.num_sites):
             raise IndexError(
                 f"Site index {index} out of range (0-{self.num_sites - 1})"
@@ -141,7 +132,6 @@ class AbstractLattice(abc.ABC):
         self._validate_index(index)
         assert self._coordinates is not None
         coords = self._coordinates[index]
-        logger.debug(f"[DEBUG-LATTICE] get_coordinates for index {index}: {coords}")
         return coords
 
     def get_identifier(self, index: SiteIndex) -> SiteIdentifier:
@@ -166,14 +156,9 @@ class AbstractLattice(abc.ABC):
         :rtype: SiteIndex
         """
         try:
-            logger.debug(f"[DEBUG-LATTICE] Getting index for identifier: {identifier}")
             index = self._ident_to_idx[identifier]
-            logger.debug(f"[DEBUG-LATTICE] Found index: {index}")
             return index
         except KeyError as e:
-            logger.debug(
-                f"[DEBUG-LATTICE] Identifier {identifier} not found in _ident_to_idx map."
-            )
             raise ValueError(
                 f"Identifier {identifier} not found in the lattice."
             ) from e
@@ -198,26 +183,14 @@ class AbstractLattice(abc.ABC):
             - The site's coordinates as a NumPy array.
         :rtype: Tuple[SiteIndex, SiteIdentifier, Coordinates]
         """
-        logger.debug(
-            f"[DEBUG-LATTICE] get_site_info called with: {index_or_identifier} (type: {type(index_or_identifier)})"
-        )
         assert self._coordinates is not None
         if isinstance(index_or_identifier, int):  # SiteIndex is an int
             idx = index_or_identifier
             self._validate_index(idx)
-            logger.debug(
-                f"[DEBUG-LATTICE] Identified as SiteIndex. Returning info for index {idx}."
-            )
             return idx, self._identifiers[idx], self._coordinates[idx]
         else:
             ident = index_or_identifier
-            logger.debug(
-                f"[DEBUG-LATTICE] Identified as SiteIdentifier. Looking up index for {ident}."
-            )
             idx = self.get_index(ident)
-            logger.debug(
-                f"[DEBUG-LATTICE] Returning info for identifier {ident} (index {idx})."
-            )
             return idx, ident, self._coordinates[idx]
 
     def sites(self) -> Iterator[Tuple[SiteIndex, SiteIdentifier, Coordinates]]:
@@ -230,7 +203,6 @@ class AbstractLattice(abc.ABC):
             index, identifier, and coordinates.
         :rtype: Iterator[Tuple[SiteIndex, SiteIdentifier, Coordinates]]
         """
-        logger.debug("[DEBUG-LATTICE] Creating sites iterator.")
         for i in range(self.num_sites):
             assert self._coordinates is not None
             yield i, self._identifiers[i], self._coordinates[i]
@@ -249,13 +221,9 @@ class AbstractLattice(abc.ABC):
             pre-calculated or if the site has no such neighbors.
         :rtype: List[SiteIndex]
         """
-        logger.debug(f"[DEBUG-LATTICE] Getting neighbors for index {index}, k={k}")
         if k not in self._neighbor_maps:
             logger.info(
                 f"Neighbors for k={k} not pre-computed. Building now up to max_k={k}."
-            )
-            logger.debug(
-                f"[DEBUG-LATTICE] Neighbor map for k={k} not found. Triggering _build_neighbors(max_k={k})."
             )
             self._build_neighbors(max_k=k)
 
@@ -282,15 +250,9 @@ class AbstractLattice(abc.ABC):
         :rtype: List[Tuple[SiteIndex, SiteIndex]]
         """
 
-        logger.debug(
-            f"[DEBUG-LATTICE] Getting neighbor pairs for k={k}, unique={unique}"
-        )
         if k not in self._neighbor_maps:
             logger.info(
                 f"Neighbor pairs for k={k} not pre-computed. Building now up to max_k={k}."
-            )
-            logger.debug(
-                f"[DEBUG-LATTICE] Neighbor map for k={k} not found. Triggering _build_neighbors(max_k={k})."
             )
             self._build_neighbors(max_k=k)
 
@@ -325,7 +287,6 @@ class AbstractLattice(abc.ABC):
         :return: A list of tuples, where each tuple is a unique pair of site indices.
         :rtype: List[Tuple[SiteIndex, SiteIndex]]
         """
-        logger.debug("[DEBUG-LATTICE] Getting all unique pairs of sites.")
         if self.num_sites < 2:
             return []
         # Use itertools.combinations to efficiently generate all unique pairs (i, j) with i < j.
@@ -402,12 +363,6 @@ class AbstractLattice(abc.ABC):
         :param kwargs: Additional keyword arguments to be passed directly to the
             `matplotlib.pyplot.scatter` function for customizing site appearance.
         """
-        logger.debug(
-            (
-                f"[DEBUG-LATTICE] show() called with: show_indices={show_indices}, "
-                f"show_identifiers={show_identifiers}, show_bonds_k={show_bonds_k}"
-            )
-        )
         try:
             import matplotlib.pyplot as plt
         except ImportError:
@@ -432,7 +387,6 @@ class AbstractLattice(abc.ABC):
 
         if ax is None:
             # If no Axes object is provided, create a new figure and axes.
-            logger.debug("[DEBUG-LATTICE] `ax` is None, creating new figure.")
             fig_created_internally = True
             if self.dimensionality == 3:
                 fig = plt.figure(figsize=(8, 8))
@@ -440,7 +394,6 @@ class AbstractLattice(abc.ABC):
             else:
                 fig, ax = plt.subplots(figsize=(8, 8))
         else:
-            logger.debug("[DEBUG-LATTICE] Using provided `ax` object.")
             fig = ax.figure  # type: ignore
 
         coords = np.array(self._coordinates)
@@ -456,7 +409,6 @@ class AbstractLattice(abc.ABC):
             ax.scatter(coords[:, 0], coords[:, 1], coords[:, 2], **scatter_args)  # type: ignore
 
         if show_indices or show_identifiers:
-            logger.debug("[DEBUG-LATTICE] Drawing site labels (indices/identifiers).")
             for i in range(self.num_sites):
                 label = str(self._identifiers[i]) if show_identifiers else str(i)
                 # Calculate a small offset for placing text labels to avoid overlap with sites.
@@ -486,7 +438,6 @@ class AbstractLattice(abc.ABC):
                     )
 
         if show_bonds_k is not None:
-            logger.debug(f"[DEBUG-LATTICE] Drawing bonds for k={show_bonds_k}.")
             if show_bonds_k not in self._neighbor_maps:
                 logger.warning(
                     f"Cannot draw bonds. k={show_bonds_k} neighbors have not been calculated."
@@ -563,18 +514,12 @@ class AbstractLattice(abc.ABC):
         :return: A sorted list of squared distances representing the shells.
         :rtype: List[float]
         """
-        logger.debug(
-            f"[DEBUG-LATTICE] Identifying up to {max_k} distance shells with tolerance {tol}."
-        )
         # A small threshold to filter out zero distances (site to itself).
         ZERO_THRESHOLD_SQ = 1e-12
 
         all_distances_sq = backend.convert_to_tensor(all_distances_sq)
         # Now, the .size call below is guaranteed to be safe.
         if backend.sizen(all_distances_sq) == 0:
-            logger.debug(
-                "[DEBUG-LATTICE] No non-zero distances found, returning empty shells."
-            )
             return []
 
         # Filter out self-distances and sort the remaining squared distances.
@@ -583,9 +528,6 @@ class AbstractLattice(abc.ABC):
         )
 
         if backend.sizen(sorted_dist) == 0:
-            logger.debug(
-                "[DEBUG-LATTICE] Sorted distances are empty, returning empty shells."
-            )
             return []
 
         dist_shells = [sorted_dist[0]]
@@ -596,9 +538,6 @@ class AbstractLattice(abc.ABC):
             if backend.sqrt(d_sq) - backend.sqrt(dist_shells[-1]) > tol:
                 dist_shells.append(d_sq)
 
-        logger.debug(
-            f"[DEBUG-LATTICE] Identified distance shells (squared): {dist_shells}"
-        )
         return dist_shells
 
     def _build_neighbors_by_distance_matrix(
@@ -615,9 +554,6 @@ class AbstractLattice(abc.ABC):
             comparisons. Defaults to 1e-6.
         :type tol: float, optional
         """
-        logger.debug(
-            f"[DEBUG-LATTICE] Building neighbors via distance matrix up to max_k={max_k}."
-        )
         if self.num_sites < 2:
             return
 
@@ -719,7 +655,6 @@ class TILattice(AbstractLattice):
         precompute_neighbors: Optional[int] = None,
     ):
         """Initializes the Translationally Invariant Lattice."""
-        logger.debug(f"[DEBUG-LATTICE] Initializing TILattice: {size}, pbc={pbc}")
         super().__init__(dimensionality)
 
         self.lattice_vectors = backend.convert_to_tensor(lattice_vectors)
@@ -751,7 +686,6 @@ class TILattice(AbstractLattice):
         """
         Generates all site information for the periodic lattice in a vectorized manner.
         """
-        logger.debug("[DEBUG-LATTICE] Starting _build_lattice for TILattice.")
         ranges = [backend.arange(s) for s in self.size]
 
         # Generate a grid of all integer unit cell coordinates.
@@ -792,19 +726,12 @@ class TILattice(AbstractLattice):
                 self._ident_to_idx[identifier] = current_index
                 current_index += 1
 
-        logger.debug(
-            f"[DEBUG-LATTICE] Finished _build_lattice. Total sites: {self.num_sites}"
-        )
-
     def _get_distance_matrix_with_mic(self) -> Coordinates:
         """
         Computes the full N x N distance matrix using backend operations,
         correctly applying the Minimum Image Convention (MIC) for all
         periodic dimensions in a memory-efficient manner.
         """
-        logger.debug(
-            "[DEBUG-LATTICE] Computing distance matrix with Minimum Image Convention."
-        )
 
         size_arr = backend.convert_to_tensor(self.size)
         size_arr = backend.cast(size_arr, self.lattice_vectors.dtype)
@@ -820,9 +747,6 @@ class TILattice(AbstractLattice):
                 [1, self.dimensionality], dtype=self.lattice_vectors.dtype
             )
         else:
-            logger.debug(
-                f"[DEBUG-LATTICE] Applying MIC for periodic dimensions: {pbc_dims}"
-            )
             num_pbc_dims = len(pbc_dims)
             pbc_system_vectors = backend.gather1d(
                 system_vectors, backend.convert_to_tensor(pbc_dims)
@@ -864,7 +788,6 @@ class TILattice(AbstractLattice):
         Computes the full N x N distance matrix using a fully vectorized approach
         to be compatible with JIT compilation (e.g., JAX).
         """
-        logger.debug("[DEBUG-LATTICE] Computing distance matrix with MIC (vectorized).")
         size_arr = backend.cast(
             backend.convert_to_tensor(self.size), self.lattice_vectors.dtype
         )
@@ -927,9 +850,6 @@ class TILattice(AbstractLattice):
             - ``tol`` (float): The numerical tolerance used to determine if two
               distances are equal when identifying shells. Defaults to 1e-6.
         """
-        logger.debug(
-            f"[DEBUG-LATTICE] Building neighbors for TILattice up to max_k={max_k}."
-        )
         tol = kwargs.get("tol", 1e-6)
         dist_matrix = self._get_distance_matrix_with_mic_vectorized()
         dist_matrix_sq = dist_matrix**2
@@ -1423,9 +1343,6 @@ class CustomizeLattice(AbstractLattice):
         precompute_neighbors: Optional[int] = None,
     ):
         """Initializes the CustomizeLattice."""
-        logger.debug(
-            f"[DEBUG-LATTICE] Initializing CustomizeLattice with {len(identifiers)} sites."
-        )
         super().__init__(dimensionality)
 
         self._coordinates = backend.convert_to_tensor(coordinates)
@@ -1471,9 +1388,6 @@ class CustomizeLattice(AbstractLattice):
         to ensure differentiability, avoiding non-differentiable libraries
         like SciPy's KDTree.
         """
-        logger.debug(
-            f"[DEBUG-LATTICE] Building neighbors for CustomizeLattice up to max_k={max_k}."
-        )
         tol = kwargs.get("tol", 1e-6)
         if self.num_sites < 2:
             return
@@ -1497,7 +1411,6 @@ class CustomizeLattice(AbstractLattice):
         Computes the full N x N distance matrix using backend operations.
         This implementation is fully differentiable.
         """
-        logger.debug("[DEBUG-LATTICE] Computing distance matrix for CustomizeLattice.")
         if self.num_sites == 0:
             return backend.zeros((0, 0))
         if self.num_sites < 2:
@@ -1521,9 +1434,6 @@ class CustomizeLattice(AbstractLattice):
 
     def _reset_computations(self) -> None:
         """Resets all cached data that depends on the lattice structure."""
-        logger.debug(
-            "[DEBUG-LATTICE] Resetting cached computations (_neighbor_maps, _distance_matrix)."
-        )
         self._neighbor_maps = {}
         self._distance_matrix = None
 
@@ -1540,15 +1450,9 @@ class CustomizeLattice(AbstractLattice):
         :return: A new CustomizeLattice instance with the same sites.
         :rtype: CustomizeLattice
         """
-        logger.debug(
-            f"[DEBUG-LATTICE] Creating CustomizeLattice from existing lattice: {type(lattice).__name__}"
-        )
         all_sites_info = list(lattice.sites())
 
         if not all_sites_info:
-            logger.debug(
-                "[DEBUG-LATTICE] Source lattice is empty, creating an empty CustomizeLattice."
-            )
             return cls(
                 dimensionality=lattice.dimensionality, identifiers=[], coordinates=[]
             )
@@ -1580,9 +1484,6 @@ class CustomizeLattice(AbstractLattice):
         :type coordinates: Any
         """
         if not identifiers:
-            logger.debug(
-                "[DEBUG-LATTICE] add_sites called with empty identifiers list. No action taken."
-            )
             return
 
         new_coords_tensor = backend.convert_to_tensor(coordinates)
@@ -1630,9 +1531,6 @@ class CustomizeLattice(AbstractLattice):
         :type identifiers: List[SiteIdentifier]
         """
         if not identifiers:
-            logger.debug(
-                "[DEBUG-LATTICE] remove_sites called with empty identifiers list. No action taken."
-            )
             return
 
         ids_to_remove = set(identifiers)
@@ -1695,7 +1593,6 @@ def get_compatible_layers(bonds: List[Tuple[int, int]]) -> List[List[Tuple[int, 
         tuple represents a bond. All bonds within a layer are non-overlapping.
     :rtype: List[List[Tuple[int, int]]]
     """
-    logger.debug(f"[DEBUG-LATTICE] Getting compatible layers for {len(bonds)} bonds.")
     # Ensure all bonds are in a canonical form (i, j) with i < j and remove duplicates.
     sorted_edges = sorted(list({(min(bond), max(bond)) for bond in bonds}))
 
@@ -1721,5 +1618,4 @@ def get_compatible_layers(bonds: List[Tuple[int, int]]) -> List[List[Tuple[int, 
         unassigned_edges -= set(current_layer)
         layers.append(current_layer)
 
-    logger.debug(f"[DEBUG-LATTICE] Found {len(layers)} compatible layers.")
     return layers
