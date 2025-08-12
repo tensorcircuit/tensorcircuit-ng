@@ -50,7 +50,9 @@ class optax_optimizer:
         return params
 
 
-def _convert_to_tensor_jax(self: Any, tensor: Tensor, dtype: Optional[str] = None) -> Tensor:
+def _convert_to_tensor_jax(
+    self: Any, tensor: Tensor, dtype: Optional[str] = None
+) -> Tensor:
     if not isinstance(tensor, (np.ndarray, jnp.ndarray)) and not jnp.isscalar(tensor):
         raise TypeError(
             ("Expected a `jnp.array`, `np.array` or scalar. " f"Got {type(tensor)}")
@@ -357,6 +359,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         return jsp.linalg.expm(a)
         # currently expm in jax doesn't support AD, it will raise an AssertError,
         # see https://github.com/google/jax/issues/2645
+
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return jnp.stack(a, axis=axis)
 

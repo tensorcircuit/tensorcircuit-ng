@@ -2035,9 +2035,6 @@ BACKEND_TENSOR_MAP = {
 }
 
 
-
-
-
 class TestBackendIntegration:
     """
     Tests to ensure lattice functionalities are consistent and correct
@@ -2474,7 +2471,9 @@ class TestPrivateHelpers:
         # --- Test Case 1: Fully Periodic Boundary Conditions (PBC) ---
         lattice_pbc = SquareLattice(size=(3, 3), pbc=True, lattice_constant=1.0)
         # We need to use the numpy backend for direct comparison
-        dist_matrix_pbc = tc.backend.numpy(lattice_pbc._get_distance_matrix_with_mic_vectorized())
+        dist_matrix_pbc = tc.backend.numpy(
+            lattice_pbc._get_distance_matrix_with_mic_vectorized()
+        )
 
         # For a 3x3 PBC lattice, the distance between opposite edges should be 1.
         # Example: site (0,0) and site (2,0)

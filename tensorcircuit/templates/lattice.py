@@ -733,20 +733,20 @@ class TILattice(AbstractLattice):
         Computes the full N x N distance matrix using a fully vectorized approach
         that correctly applies the Minimum Image Convention (MIC) for periodic
         boundary conditions.
-        
+
         This method uses full vectorization for optimal performance and compatibility
         with JIT compilation frameworks like JAX. The implementation processes all
         site pairs simultaneously rather than iterating row-by-row, which provides:
-        
+
         - Better performance through vectorized operations
         - Full compatibility with automatic differentiation
         - JIT compilation support (e.g., JAX, TensorFlow)
         - Consistent tensor operations throughout
-        
+
         The trade-off is higher memory usage compared to iterative approaches,
-        as it computes all pairwise distances simultaneously. For very large 
+        as it computes all pairwise distances simultaneously. For very large
         lattices (N > 10^4 sites), memory usage scales as O(N^2).
-        
+
         :return: Distance matrix with shape (N, N) where entry (i,j) is the
             minimum distance between sites i and j under periodic boundary conditions.
         :rtype: Coordinates
@@ -1364,7 +1364,7 @@ class CustomizeLattice(AbstractLattice):
         tol = kwargs.get("tol", 1e-6)
         use_kdtree = kwargs.get("use_kdtree", True)
         force_differentiable = kwargs.get("force_differentiable", False)
-        
+
         if self.num_sites < 2:
             return
 
@@ -1372,14 +1372,18 @@ class CustomizeLattice(AbstractLattice):
         if force_differentiable:
             use_kdtree = False
             logger.info("Using differentiable distance matrix method (forced)")
-        
+
         # Choose algorithm based on user preference
         if use_kdtree and not force_differentiable:
-            logger.info(f"Using KDTree method for {self.num_sites} sites up to k={max_k}")
+            logger.info(
+                f"Using KDTree method for {self.num_sites} sites up to k={max_k}"
+            )
             self._build_neighbors_kdtree(max_k, tol)
         else:
-            logger.info(f"Using differentiable distance matrix method for {self.num_sites} sites up to k={max_k}")
-            
+            logger.info(
+                f"Using differentiable distance matrix method for {self.num_sites} sites up to k={max_k}"
+            )
+
             # Use the existing distance matrix method
             self._build_neighbors_by_distance_matrix(max_k, tol)
 
@@ -1388,34 +1392,36 @@ class CustomizeLattice(AbstractLattice):
     def _build_neighbors_kdtree(self, max_k: int, tol: float) -> None:
         """
         Build neighbors using KDTree for optimal performance.
-        
+
         This method provides O(N log N) performance for neighbor finding but breaks
         differentiability due to scipy dependency. Use this method when:
         - Performance is critical
         - Differentiability is not required
         - Large lattices (N > 1000)
-        
+
         Note: This method uses numpy arrays directly and may not be compatible
         with all backend types (JAX, TensorFlow, etc.).
-        """        
+        """
         # Convert coordinates to numpy for KDTree
         coords_np = backend.numpy(self._coordinates)
-        
+
         # Build KDTree
         logger.info("Building KDTree...")
         tree = cKDTree(coords_np)
-        
+
         # For small lattices or cases with potential duplicate coordinates,
         # fall back to distance matrix method for robustness
         if self.num_sites < 1000:
-            logger.info("Small lattice detected, falling back to distance matrix method for robustness")
+            logger.info(
+                "Small lattice detected, falling back to distance matrix method for robustness"
+            )
             self._build_neighbors_by_distance_matrix(max_k, tol)
             return
-        
+
         # Find all distances for shell identification - use comprehensive sampling
         logger.info("Identifying distance shells...")
         distances_for_shells = []
-        
+
         # For robust shell identification, query all pairwise distances for smaller lattices
         # or use dense sampling for larger ones
         if self.num_sites <= 100:
@@ -1423,7 +1429,9 @@ class CustomizeLattice(AbstractLattice):
             for i in range(self.num_sites):
                 query_k = min(self.num_sites - 1, max_k * 20)
                 if query_k > 0:
-                    dists, _ = tree.query(coords_np[i], k=query_k + 1)  # +1 to exclude self
+                    dists, _ = tree.query(
+                        coords_np[i], k=query_k + 1
+                    )  # +1 to exclude self
                     distances_for_shells.extend(dists[1:])  # Skip distance to self
         else:
             # For larger lattices, use adaptive sampling but ensure we capture all shells
@@ -1431,57 +1439,65 @@ class CustomizeLattice(AbstractLattice):
             for i in range(0, self.num_sites, max(1, self.num_sites // sample_size)):
                 query_k = min(max_k * 20 + 50, self.num_sites - 1)
                 if query_k > 0:
-                    dists, _ = tree.query(coords_np[i], k=query_k + 1)  # +1 to exclude self
+                    dists, _ = tree.query(
+                        coords_np[i], k=query_k + 1
+                    )  # +1 to exclude self
                     distances_for_shells.extend(dists[1:])  # Skip distance to self
-        
+
         # Filter out zero distances (duplicate coordinates) before shell identification
         ZERO_THRESHOLD = 1e-12
         distances_for_shells = [d for d in distances_for_shells if d > ZERO_THRESHOLD]
-        
+
         if not distances_for_shells:
             logger.warning("No valid distances found for shell identification")
             self._neighbor_maps = {}
             return
-        
+
         # Use the same shell identification logic as distance matrix method
-        distances_for_shells_sq = [d*d for d in distances_for_shells]
-        dist_shells_sq = self._identify_distance_shells(distances_for_shells_sq, max_k, tol)
+        distances_for_shells_sq = [d * d for d in distances_for_shells]
+        dist_shells_sq = self._identify_distance_shells(
+            distances_for_shells_sq, max_k, tol
+        )
         dist_shells = [np.sqrt(d_sq) for d_sq in dist_shells_sq]
-        
+
         logger.info(f"Found {len(dist_shells)} distance shells: {dist_shells[:5]}...")
-        
+
         # Initialize neighbor maps
         self._neighbor_maps = {k: {} for k in range(1, len(dist_shells) + 1)}
-        
+
         # Build neighbor lists for each site
         logger.info("Building neighbor lists...")
         for i in range(self.num_sites):
             # Query enough neighbors to capture all shells
             query_k = min(max_k * 20 + 50, self.num_sites - 1)
             if query_k > 0:
-                distances, indices = tree.query(coords_np[i], k=query_k + 1)  # +1 for self
-                
+                distances, indices = tree.query(
+                    coords_np[i], k=query_k + 1
+                )  # +1 for self
+
                 # Skip the first entry (distance to self)
                 distances = distances[1:]
                 indices = indices[1:]
-                
+
                 # Filter out zero distances (duplicate coordinates)
-                valid_pairs = [(d, idx) for d, idx in zip(distances, indices) if d > ZERO_THRESHOLD]
-                
+                valid_pairs = [
+                    (d, idx) for d, idx in zip(distances, indices) if d > ZERO_THRESHOLD
+                ]
+
                 # Assign neighbors to shells
                 for shell_idx, shell_dist in enumerate(dist_shells):
                     k = shell_idx + 1
                     shell_neighbors = []
-                    
+
                     for dist, neighbor_idx in valid_pairs:
                         if abs(dist - shell_dist) <= tol:
                             shell_neighbors.append(int(neighbor_idx))
                         elif dist > shell_dist + tol:
                             break  # Distances are sorted, no more matches
-                    
+
                     if shell_neighbors:
                         self._neighbor_maps[k][i] = sorted(shell_neighbors)
-        
+
         # Set distance matrix to None - will compute on demand
         self._distance_matrix = None
         logger.info("KDTree neighbor building completed")

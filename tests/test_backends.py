@@ -1178,6 +1178,7 @@ def test_nested_vmap(backend):
 
 # Test new backend methods added for differentiable lattice support
 
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_sort(backend):
     """Test sort method."""
@@ -1194,7 +1195,7 @@ def test_backend_all(backend):
     a = tc.backend.convert_to_tensor([True, True, True])
     result = tc.backend.all(a)
     assert result == True
-    
+
     # Test with False
     b = tc.backend.convert_to_tensor([True, False, True])
     result = tc.backend.all(b)
@@ -1206,11 +1207,11 @@ def test_backend_meshgrid(backend):
     """Test meshgrid method."""
     x = tc.backend.convert_to_tensor([1, 2])
     y = tc.backend.convert_to_tensor([3, 4])
-    xx, yy = tc.backend.meshgrid(x, y, indexing='ij')
-    
+    xx, yy = tc.backend.meshgrid(x, y, indexing="ij")
+
     expected_xx = tc.backend.convert_to_tensor([[1, 1], [2, 2]])
     expected_yy = tc.backend.convert_to_tensor([[3, 4], [3, 4]])
-    
+
     np.testing.assert_allclose(xx, expected_xx)
     np.testing.assert_allclose(yy, expected_yy)
 
@@ -1221,11 +1222,9 @@ def test_backend_expand_dims(backend):
     a = tc.backend.convert_to_tensor([[1, 2], [3, 4]])
     result = tc.backend.expand_dims(a, axis=0)
     assert result.shape == (1, 2, 2)
-    
+
     result = tc.backend.expand_dims(a, axis=1)
     assert result.shape == (2, 1, 2)
-
-
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])

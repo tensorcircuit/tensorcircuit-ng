@@ -35,7 +35,9 @@ def _sum_numpy(
     # see https://github.com/google/TensorNetwork/issues/952
 
 
-def _convert_to_tensor_numpy(self: Any, a: Tensor, dtype: Optional[str] = None) -> Tensor:
+def _convert_to_tensor_numpy(
+    self: Any, a: Tensor, dtype: Optional[str] = None
+) -> Tensor:
     if not isinstance(a, np.ndarray) and not np.isscalar(a):
         a = np.array(a)
     a = np.asarray(a)

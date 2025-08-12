@@ -8,12 +8,14 @@ the total Lennard-Jones potential energy of a 2D square lattice.
 The optimization showcases the key Task 3 capability: making lattice parameters
 differentiable for variational material design.
 """
+
 import optax
 import numpy as np
 import matplotlib.pyplot as plt
 
 # Try to enable JAX 64-bit precision if available (safe fallback)
 import jax  # noqa: E402
+
 try:  # pragma: no cover - optional optimization
     from jax import config as jax_config  # type: ignore
 
@@ -34,12 +36,14 @@ def calculate_potential(log_a, epsilon=0.5, sigma=1.0):
     This version creates the lattice inside the function to demonstrate truly differentiable geometry.
     """
     lattice_constant = K.exp(log_a)
-    
+
     # Create lattice with the differentiable parameter
     size = (4, 4)  # Smaller size for demonstration
-    lattice = tc.templates.lattice.SquareLattice(size, lattice_constant=lattice_constant, pbc=True)
+    lattice = tc.templates.lattice.SquareLattice(
+        size, lattice_constant=lattice_constant, pbc=True
+    )
     d = lattice.distance_matrix
-    
+
     d_safe = K.where(d > 1e-9, d, K.convert_to_tensor(1e-9))
 
     term12 = K.power(sigma / d_safe, 12)
