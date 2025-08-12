@@ -1194,12 +1194,12 @@ def test_backend_all(backend):
     # Test all True
     a = tc.backend.convert_to_tensor([True, True, True])
     result = tc.backend.all(a)
-    assert result == True
+    assert result is True
 
     # Test with False
     b = tc.backend.convert_to_tensor([True, False, True])
     result = tc.backend.all(b)
-    assert result == False
+    assert result is False
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])

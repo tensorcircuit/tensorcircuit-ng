@@ -14,7 +14,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Try to enable JAX 64-bit precision if available (safe fallback)
-import jax  # noqa: E402
 
 try:  # pragma: no cover - optional optimization
     from jax import config as jax_config  # type: ignore
@@ -22,7 +21,6 @@ try:  # pragma: no cover - optional optimization
     jax_config.update("jax_enable_x64", True)
 except Exception:  # broad: environment may not have config attribute
     pass
-import jax.numpy as jnp  # noqa: E402
 import tensorcircuit as tc  # noqa: E402
 
 
