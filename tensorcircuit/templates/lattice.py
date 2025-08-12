@@ -1485,7 +1485,11 @@ class CustomizeLattice(AbstractLattice):
                 # Handle both single value and array cases
                 if isinstance(distances, np.ndarray) and len(distances) > 1:
                     distances_slice = distances[1:]
-                    indices_slice = indices[1:] if isinstance(indices, np.ndarray) else np.array([], dtype=int)
+                    indices_slice = (
+                        indices[1:]
+                        if isinstance(indices, np.ndarray)
+                        else np.array([], dtype=int)
+                    )
                 else:
                     # Single value or empty case - no neighbors to process
                     distances_slice = np.array([])
@@ -1493,7 +1497,9 @@ class CustomizeLattice(AbstractLattice):
 
                 # Filter out zero distances (duplicate coordinates)
                 valid_pairs = [
-                    (d, idx) for d, idx in zip(distances_slice, indices_slice) if d > ZERO_THRESHOLD
+                    (d, idx)
+                    for d, idx in zip(distances_slice, indices_slice)
+                    if d > ZERO_THRESHOLD
                 ]
 
                 # Assign neighbors to shells
