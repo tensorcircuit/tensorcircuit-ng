@@ -576,7 +576,8 @@ class BaseCircuit(AbstractCircuit):
         :param random_generator: random generator,  defaults to None
         :type random_generator: Optional[Any], optional
         :param status: external randomness given by tensor uniformly from [0, 1],
-            if set, can overwrite random_generator
+            if set, can overwrite random_generator, shape [batch] for `allow_state=True`
+            and shape [batch, nqubits] for `allow_state=False` using perfect sampling implementation
         :type status: Optional[Tensor]
         :param jittable: when converting to count, whether keep the full size. if false, may be conflict
             external jit, if true, may fail for large scale system with actual limited count results
@@ -597,20 +598,24 @@ class BaseCircuit(AbstractCircuit):
                     return r
                 r = [r]  # type: ignore
             else:
-
-                @backend.jit
-                def perfect_sampling(key: Any) -> Any:
-                    backend.set_random_state(key)
-                    return self.perfect_sampling()
-
-                # TODO(@refraction-ray): status is not used here
-
                 r = []  # type: ignore
+                if status is not None:
+                    assert backend.shape_tuple(status)[0] == batch
+                    for seed in status:
+                        r.append(self.perfect_sampling(seed))  # type: ignore
 
-                subkey = random_generator
-                for _ in range(batch):
-                    key, subkey = backend.random_split(subkey)
-                    r.append(perfect_sampling(key))  # type: ignore
+                else:
+
+                    @backend.jit
+                    def perfect_sampling(key: Any) -> Any:
+                        backend.set_random_state(key)
+                        return self.perfect_sampling()
+
+                    subkey = random_generator
+                    for _ in range(batch):
+                        key, subkey = backend.random_split(subkey)
+                        r.append(perfect_sampling(key))  # type: ignore
+
             if format is None:
                 return r
             r = backend.stack([ri[0] for ri in r])  # type: ignore

@@ -1285,6 +1285,7 @@ def test_batch_sample(backend):
     c.H(0)
     c.cnot(0, 1)
     print(c.sample())
+    print(c.sample(batch=8, status=np.random.uniform(size=[8, 3])))
     print(c.sample(batch=8))
     print(c.sample(random_generator=tc.backend.get_random_state(42)))
     print(c.sample(allow_state=True))
@@ -1299,6 +1300,14 @@ def test_batch_sample(backend):
             batch=8,
             allow_state=True,
             status=np.random.uniform(size=[8]),
+            format="sample_bin",
+        )
+    )
+    print(
+        c.sample(
+            batch=8,
+            allow_state=False,
+            status=np.random.uniform(size=[8, 3]),
             format="sample_bin",
         )
     )

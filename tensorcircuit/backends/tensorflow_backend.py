@@ -533,6 +533,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def argsort(self, a: Tensor, axis: int = -1) -> Tensor:
         return tf.argsort(a, axis=axis)
 
+    def shape_tuple(self, a: Tensor) -> Tuple[int, ...]:
+        return tuple(a.shape)
+
     def unique_with_counts(self, a: Tensor, **kws: Any) -> Tuple[Tensor, Tensor]:
         r = tf.unique_with_counts(a)
         order = tf.argsort(r.y)
