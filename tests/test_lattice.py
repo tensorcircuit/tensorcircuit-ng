@@ -1,22 +1,8 @@
-from __future__ import annotations
 from unittest.mock import patch
-import logging
-import sys
-
-# Configure logging for debugging purposes
-logging.basicConfig(
-    level=logging.DEBUG,
-    stream=sys.stdout,
-    format="[%(levelname)s] %(asctime)s - %(name)s:%(lineno)d - %(message)s",
-)
-logger = logging.getLogger(__name__)
-from unittest.mock import patch
-from typing import TYPE_CHECKING, Any
-
 import time
+import logging
 
 import matplotlib
-
 
 try:
     import jax.numpy as jnp
@@ -31,15 +17,7 @@ try:
 except ImportError:
     torch = None
 
-if TYPE_CHECKING:
-    import jax.numpy as jnp
-    from jax import Array
-    import tensorflow as tf
-    import torch
-
-
 matplotlib.use("Agg")
-
 
 import pytest
 import numpy as np
@@ -56,14 +34,13 @@ from tensorcircuit.templates.lattice import (
     RectangularLattice,
     SquareLattice,
     TriangularLattice,
-    AbstractLattice,
     get_compatible_layers,
 )
 import tensorcircuit as tc
 
 
 @pytest.fixture
-def simple_square_lattice() -> CustomizeLattice:
+def simple_square_lattice():
     """
     Provides a simple 2x2 square CustomizeLattice instance for neighbor tests.
     The sites are indexed as follows:
@@ -80,7 +57,7 @@ def simple_square_lattice() -> CustomizeLattice:
 
 
 @pytest.fixture
-def kagome_lattice_fragment() -> CustomizeLattice:
+def kagome_lattice_fragment():
     """
     Pytest fixture to provide a standard CustomizeLattice instance.
     This represents the Kagome fragment from the project requirements,
@@ -572,13 +549,13 @@ class TestCustomizeLattice:
 
 
 @pytest.fixture
-def obc_square_lattice() -> SquareLattice:
+def obc_square_lattice():
     """Provides a 3x3 SquareLattice with Open Boundary Conditions."""
     return SquareLattice(size=(3, 3), pbc=False)
 
 
 @pytest.fixture
-def pbc_square_lattice() -> SquareLattice:
+def pbc_square_lattice():
     """Provides a 3x3 SquareLattice with Periodic Boundary Conditions."""
     return SquareLattice(size=(3, 3), pbc=True)
 
@@ -676,7 +653,7 @@ class TestSquareLattice:
 
 
 @pytest.fixture
-def pbc_honeycomb_lattice() -> HoneycombLattice:
+def pbc_honeycomb_lattice():
     """Provides a 3x3 HoneycombLattice with Periodic Boundary Conditions."""
     return HoneycombLattice(size=(3, 3), pbc=True)
 
@@ -724,7 +701,7 @@ class TestHoneycombLattice:
 
 
 @pytest.fixture
-def pbc_triangular_lattice() -> TriangularLattice:
+def pbc_triangular_lattice():
     """
     Provides a 3x3 TriangularLattice with Periodic Boundary Conditions.
     A 3x3 size is used to ensure all 6 nearest neighbors are unique sites.
@@ -782,7 +759,7 @@ class TestTILatticeEdgeCases:
     """
 
     @pytest.fixture
-    def obc_1d_chain(self) -> ChainLattice:
+    def obc_1d_chain(self):
         """
         Provides a 5-site 1D chain with Open Boundary Conditions.
         """
@@ -808,7 +785,7 @@ class TestTILatticeEdgeCases:
         assert set(lattice.get_neighbors(middle_idx, k=1)) == {1, 3}
 
     @pytest.fixture
-    def nonsquare_lattice(self) -> SquareLattice:
+    def nonsquare_lattice(self):
         """Provides a non-square 2x3 lattice to test indexing."""
         return SquareLattice(size=(2, 3), pbc=False)
 
@@ -1239,7 +1216,7 @@ class TestLongRangeNeighborFinding:
     """
 
     @pytest.fixture(scope="class")
-    def large_pbc_square_lattice(self) -> SquareLattice:
+    def large_pbc_square_lattice(self):
         """
         Provides a single 6x8 SquareLattice with PBC for all tests in this class.
         Using scope="class" makes it more efficient as it's created only once.
@@ -1508,7 +1485,7 @@ class TestCustomizeLatticeDynamic:
     """Tests the dynamic modification capabilities of CustomizeLattice."""
 
     @pytest.fixture
-    def initial_lattice(self) -> CustomizeLattice:
+    def initial_lattice(self):
         """Provides a basic 3-site lattice for modification tests."""
         return CustomizeLattice(
             dimensionality=2,
@@ -1940,7 +1917,7 @@ class TestPerformance:
         )
 
 
-def _validate_layers(bonds, layers) -> None:
+def _validate_layers(bonds, layers):
     """
     A helper function to scientifically validate the output of get_compatible_layers.
     """
@@ -1980,7 +1957,7 @@ def _validate_layers(bonds, layers) -> None:
         "HoneycombLattice_2x2_OBC",
     ],
 )
-def test_layering_on_various_lattices(lattice_instance: AbstractLattice):
+def test_layering_on_various_lattices(lattice_instance):
     """Tests gate layering for various standard lattice types."""
     bonds = lattice_instance.get_neighbor_pairs(k=1, unique=True)
     layers = get_compatible_layers(bonds)
@@ -2058,19 +2035,7 @@ BACKEND_TENSOR_MAP = {
 }
 
 
-@pytest.fixture(scope="function")
-def jax_backend_fixture():
-    """
-    Pytest fixture to set the backend to 'jax' for a test and restore it afterward.
-    This ensures that differentiability tests run in the correct environment
-    without interfering with other tests.
-    """
-    original_backend = tc.backend.name
-    try:
-        tc.set_backend("jax")
-        yield
-    finally:
-        tc.set_backend(original_backend)
+
 
 
 class TestBackendIntegration:
@@ -2119,12 +2084,12 @@ class TestBackendIntegration:
     )
     def test_lattice_creation_and_properties_across_backends(
         self,
-        backend_name: str,
-        LatticeClass: "AbstractLattice",
-        init_args: dict[str, Any],
-        expected_distance_check: tuple[int, int, float],
-        name: str,
-    ) -> None:
+        backend_name,
+        LatticeClass,
+        init_args,
+        expected_distance_check,
+        name,
+    ):
         """
         Tests that various lattices can be created with each backend and that their
         core properties (_coordinates, distance_matrix) have the correct
@@ -2162,7 +2127,6 @@ class TestBackendIntegration:
             err_msg=f"Distance check failed for {type(lat).__name__} on backend {backend_name}",
         )
 
-    @pytest.mark.usefixtures("jax_backend_fixture")
     @pytest.mark.parametrize(
         "lattice_class, init_params, differentiable_arg_name, test_value",
         [
@@ -2189,11 +2153,12 @@ class TestBackendIntegration:
     )
     def test_tilattice_differentiability(
         self,
-        lattice_class: type[AbstractLattice],
-        init_params: dict[str, Any],
-        differentiable_arg_name: str,
-        test_value: Any,
-    ) -> None:
+        jaxb,
+        lattice_class,
+        init_params,
+        differentiable_arg_name,
+        test_value,
+    ):
         """
         Tests that the distance_matrix of various TILattices is differentiable
         with respect to their geometric parameters. This test has been expanded
@@ -2202,7 +2167,7 @@ class TestBackendIntegration:
         if not jnp:
             pytest.skip("JAX backend is required for this differentiability test.")
 
-        def get_total_distance(param: Any) -> Array:
+        def get_total_distance(param):
             """A scalar-in, scalar-out function for jax.grad."""
             # Dynamically create the lattice with the parameter being differentiated
             lat = lattice_class(**init_params, **{differentiable_arg_name: param})
@@ -2228,8 +2193,7 @@ class TestBackendIntegration:
                 float(grad_val), 0.0
             ), f"Gradient for {lattice_class.__name__} was zero."
 
-    @pytest.mark.usefixtures("jax_backend_fixture")
-    def test_customizelattice_differentiability(self) -> None:
+    def test_customizelattice_differentiability(self, jaxb):
         """
         Tests that the distance_matrix of a CustomizeLattice is differentiable
         with respect to its input coordinates.
@@ -2240,7 +2204,7 @@ class TestBackendIntegration:
 
         initial_coords = jnp.array([[0.0, 0.0], [1.0, 1.0], [0.5, 0.5]])
 
-        def get_total_distance_custom(coords: Array) -> Array:
+        def get_total_distance_custom(coords):
             """
             A helper function that takes coordinates, creates a CustomizeLattice,
             and returns a scalar value (the sum of its distance matrix).
@@ -2259,8 +2223,7 @@ class TestBackendIntegration:
         assert grad_tensor is not None
         assert not np.all(np.isclose(grad_tensor, 0.0))
 
-    @pytest.mark.usefixtures("jax_backend_fixture")
-    def test_tilattice_gradient_value_correctness(self) -> None:
+    def test_tilattice_gradient_value_correctness(self, jaxb):
         """
         Tests that the AD gradient for a TILattice parameter matches the
         analytically calculated, correct gradient value. This is a stronger
@@ -2270,7 +2233,7 @@ class TestBackendIntegration:
             pytest.skip("JAX backend is required for this gradient value test.")
 
         # 1. Define a simple objective function
-        def get_energy(a: float) -> Array:
+        def get_energy(a):
             """
             A simple energy function for a 2-site chain.
             Energy = (distance between site 0 and 1)^2 = a^2
@@ -2283,7 +2246,7 @@ class TestBackendIntegration:
             return tc.backend.sum(dist_matrix**2) / 2.0
 
         # 2. Define the analytical (manually calculated) gradient
-        def analytical_gradient(a: float) -> float:
+        def analytical_gradient(a):
             """
             The analytical derivative of the energy function E(a) = a^2.
             dE/da = 2a
@@ -2306,7 +2269,7 @@ class TestBackendIntegration:
         )
 
     @pytest.mark.parametrize("backend_name", ["numpy", "jax", "tensorflow", "pytorch"])
-    def test_dynamic_modification_across_backends(self, backend_name: str) -> None:
+    def test_dynamic_modification_across_backends(self, backend_name):
         """
         Tests that the dynamic modification methods (add_sites, remove_sites)
         of CustomizeLattice work correctly across all supported backends,
@@ -2351,7 +2314,7 @@ class TestBackendIntegration:
 
 
 @pytest.mark.parametrize("backend_name", ["numpy", "jax", "tensorflow", "pytorch"])
-def test_dtype_consistency_across_backends(backend_name: str) -> None:
+def test_dtype_consistency_across_backends(backend_name):
     """
     Tests that the dtype of user-provided coordinate data is preserved
     in internal calculations across all backends.
@@ -2390,7 +2353,7 @@ class TestPrivateHelpers:
     """
 
     @pytest.fixture
-    def simple_lattice_for_helpers(self) -> CustomizeLattice:
+    def simple_lattice_for_helpers(self):
         """
         Provides a very simple lattice instance, primarily to gain access to
         the private helper methods for testing. The geometry itself is trivial.
@@ -2503,15 +2466,15 @@ class TestPrivateHelpers:
             shells_zero == []
         ), "Should return an empty list for a distance array with only zeros."
 
-    def test_get_distance_matrix_with_mic(self):
+    def test_get_distance_matrix_with_mic_vectorized(self):
         """
-        Tests the internal _get_distance_matrix_with_mic method for TILattice
+        Tests the internal _get_distance_matrix_with_mic_vectorized method for TILattice
         to ensure it correctly applies the Minimum Image Convention.
         """
         # --- Test Case 1: Fully Periodic Boundary Conditions (PBC) ---
         lattice_pbc = SquareLattice(size=(3, 3), pbc=True, lattice_constant=1.0)
         # We need to use the numpy backend for direct comparison
-        dist_matrix_pbc = tc.backend.numpy(lattice_pbc._get_distance_matrix_with_mic())
+        dist_matrix_pbc = tc.backend.numpy(lattice_pbc._get_distance_matrix_with_mic_vectorized())
 
         # For a 3x3 PBC lattice, the distance between opposite edges should be 1.
         # Example: site (0,0) and site (2,0)
@@ -2546,7 +2509,7 @@ class TestPrivateHelpers:
             size=(3, 3), pbc=(True, False), lattice_constant=1.0
         )
         dist_matrix_mixed = tc.backend.numpy(
-            lattice_mixed._get_distance_matrix_with_mic()
+            lattice_mixed._get_distance_matrix_with_mic_vectorized()
         )
 
         # In the periodic x-direction, distance should be 1.

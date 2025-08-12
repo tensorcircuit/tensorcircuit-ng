@@ -633,7 +633,8 @@ class ExtendedBackend:
 
         :param args: coordinate vectors
         :type args: Any
-        :param kwargs: keyword arguments for meshgrid
+        :param kwargs: keyword arguments for meshgrid, typically includes 'indexing'
+            which can be 'ij' (matrix indexing) or 'xy' (Cartesian indexing)
         :type kwargs: Any
         :return: list of coordinate matrices
         :rtype: Any
@@ -657,21 +658,6 @@ class ExtendedBackend:
         """
         raise NotImplementedError(
             "Backend '{}' has not implemented `expand_dims`.".format(self.name)
-        )
-
-    def power(self: Any, a: Tensor, b: Union[Tensor, float]) -> Tensor:
-        """
-        First array elements raised to powers from second array, element-wise.
-
-        :param a: The bases
-        :type a: Tensor
-        :param b: The exponents
-        :type b: Union[Tensor, float]
-        :return: The bases in `a` raised to the powers in `b`.
-        :rtype: Tensor
-        """
-        raise NotImplementedError(
-            "Backend '{}' has not implemented `power`.".format(self.name)
         )
 
     def unique_with_counts(self: Any, a: Tensor, **kws: Any) -> Tuple[Tensor, Tensor]:
@@ -1502,21 +1488,6 @@ class ExtendedBackend:
         """
         raise NotImplementedError(
             "Backend '{}' has not implemented `where`.".format(self.name)
-        )
-
-    def equal(self: Any, x1: Tensor, x2: Tensor) -> Tensor:
-        """
-        Return the truth value of (x1 == x2) element-wise.
-
-        :param x1: Input tensor.
-        :type x1: Tensor
-        :param x2: Input tensor.
-        :type x2: Tensor
-        :return: Output tensor, element-wise truth value of (x1 == x2).
-        :rtype: Tensor (bool)
-        """
-        raise NotImplementedError(
-            "Backend '{}' has not implemented `equal`.".format(self.name)
         )
 
     def switch(

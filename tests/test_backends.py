@@ -1174,3 +1174,66 @@ def test_nested_vmap(backend):
     np.testing.assert_allclose(ya, tc.backend.transpose(yb, [1, 0, 2]), atol=1e-5)
     np.testing.assert_allclose(ya, yajit, atol=1e-5)
     np.testing.assert_allclose(yajit, tc.backend.transpose(ybjit, [1, 0, 2]), atol=1e-5)
+
+
+# Test new backend methods added for differentiable lattice support
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_sort(backend):
+    """Test sort method."""
+    a = tc.backend.convert_to_tensor([3, 1, 4, 1, 5])
+    result = tc.backend.sort(a)
+    expected = tc.backend.convert_to_tensor([1, 1, 3, 4, 5])
+    np.testing.assert_allclose(result, expected)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_all(backend):
+    """Test all method."""
+    # Test all True
+    a = tc.backend.convert_to_tensor([True, True, True])
+    result = tc.backend.all(a)
+    assert result == True
+    
+    # Test with False
+    b = tc.backend.convert_to_tensor([True, False, True])
+    result = tc.backend.all(b)
+    assert result == False
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_meshgrid(backend):
+    """Test meshgrid method."""
+    x = tc.backend.convert_to_tensor([1, 2])
+    y = tc.backend.convert_to_tensor([3, 4])
+    xx, yy = tc.backend.meshgrid(x, y, indexing='ij')
+    
+    expected_xx = tc.backend.convert_to_tensor([[1, 1], [2, 2]])
+    expected_yy = tc.backend.convert_to_tensor([[3, 4], [3, 4]])
+    
+    np.testing.assert_allclose(xx, expected_xx)
+    np.testing.assert_allclose(yy, expected_yy)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_expand_dims(backend):
+    """Test expand_dims method."""
+    a = tc.backend.convert_to_tensor([[1, 2], [3, 4]])
+    result = tc.backend.expand_dims(a, axis=0)
+    assert result.shape == (1, 2, 2)
+    
+    result = tc.backend.expand_dims(a, axis=1)
+    assert result.shape == (2, 1, 2)
+
+
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_where(backend):
+    """Test where method."""
+    condition = tc.backend.convert_to_tensor([True, False, True])
+    x = tc.backend.convert_to_tensor([1, 2, 3])
+    y = tc.backend.convert_to_tensor([4, 5, 6])
+    result = tc.backend.where(condition, x, y)
+    expected = tc.backend.convert_to_tensor([1, 5, 3])
+    np.testing.assert_allclose(result, expected)

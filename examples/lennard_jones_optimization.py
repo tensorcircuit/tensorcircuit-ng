@@ -1,49 +1,68 @@
+"""
+Lennard-Jones Potential Optimization Example
+
+This script demonstrates how to use TensorCircuit's differentiable lattice geometries
+to optimize crystal structure. It finds the equilibrium lattice constant that minimizes
+the total Lennard-Jones potential energy of a 2D square lattice.
+
+The optimization showcases the key Task 3 capability: making lattice parameters
+differentiable for variational material design.
+"""
 import optax
 import numpy as np
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
-import jax
-import tensorcircuit as tc
+
+# Try to enable JAX 64-bit precision if available (safe fallback)
+import jax  # noqa: E402
+try:  # pragma: no cover - optional optimization
+    from jax import config as jax_config  # type: ignore
+
+    jax_config.update("jax_enable_x64", True)
+except Exception:  # broad: environment may not have config attribute
+    pass
+import jax.numpy as jnp  # noqa: E402
+import tensorcircuit as tc  # noqa: E402
 
 
-jax.config.update("jax_enable_x64", True)
+tc.set_dtype("float64")  # Use tc for universal control
 K = tc.set_backend("jax")
 
 
-def calculate_potential(log_a, base_distance_matrix, epsilon=0.5, sigma=1.0):
+def calculate_potential(log_a, epsilon=0.5, sigma=1.0):
     """
     Calculate the total Lennard-Jones potential energy for a given logarithm of the lattice constant (log_a).
+    This version creates the lattice inside the function to demonstrate truly differentiable geometry.
     """
-    lattice_constant = jnp.exp(log_a)
-    d = base_distance_matrix * lattice_constant
-    d_safe = jnp.where(d > 1e-9, d, 1e-9)
+    lattice_constant = K.exp(log_a)
+    
+    # Create lattice with the differentiable parameter
+    size = (4, 4)  # Smaller size for demonstration
+    lattice = tc.templates.lattice.SquareLattice(size, lattice_constant=lattice_constant, pbc=True)
+    d = lattice.distance_matrix
+    
+    d_safe = K.where(d > 1e-9, d, K.convert_to_tensor(1e-9))
 
-    term12 = (sigma / d_safe) ** 12
-    term6 = (sigma / d_safe) ** 6
+    term12 = K.power(sigma / d_safe, 12)
+    term6 = K.power(sigma / d_safe, 6)
     potential_matrix = 4 * epsilon * (term12 - term6)
 
-    num_sites = d.shape[0]
-    potential_matrix = potential_matrix * (
-        1 - K.eye(num_sites, dtype=potential_matrix.dtype)
-    )
+    num_sites = lattice.num_sites
+    # Zero out self-interactions (diagonal elements)
+    eye_mask = K.eye(num_sites, dtype=potential_matrix.dtype)
+    potential_matrix = potential_matrix * (1 - eye_mask)
 
     potential_energy = K.sum(potential_matrix) / 2.0
 
     return potential_energy
 
 
-# Pre-calculate the base distance matrix (for lattice_constant=1.0)
-size = (10, 10)
-lat_base = tc.templates.lattice.SquareLattice(size, lattice_constant=1.0, pbc=True)
-base_distance_matrix = lat_base.distance_matrix
-
-# Create a lambda function to pass the base distance matrix to the potential function
-potential_fun_for_grad = lambda log_a: calculate_potential(log_a, base_distance_matrix)
+# Create a lambda function for optimization
+potential_fun_for_grad = lambda log_a: calculate_potential(log_a)
 value_and_grad_fun = K.jit(K.value_and_grad(potential_fun_for_grad))
 
 optimizer = optax.adam(learning_rate=0.01)
 
-log_a = K.convert_to_tensor(jnp.log(1.1))
+log_a = K.convert_to_tensor(K.log(K.convert_to_tensor(1.1)))
 
 opt_state = optimizer.init(log_a)
 
@@ -53,10 +72,11 @@ print("Starting optimization of lattice constant...")
 for i in range(200):
     energy, grad = value_and_grad_fun(log_a)
 
-    history["a"].append(jnp.exp(log_a))
+    history["a"].append(K.exp(log_a))
     history["energy"].append(energy)
 
-    if jnp.isnan(grad):
+    # Check for NaN gradients using TensorCircuit's backend-agnostic approach
+    if K.sum(tc.num_to_tensor(np.isnan(K.numpy(grad)))) > 0:
         print(f"Gradient became NaN at iteration {i+1}. Stopping optimization.")
         print(f"Current energy: {energy}, Current log_a: {log_a}")
         break
@@ -65,26 +85,26 @@ for i in range(200):
     log_a = optax.apply_updates(log_a, updates)
 
     if (i + 1) % 20 == 0:
-        current_a = jnp.exp(log_a)
+        current_a = K.exp(log_a)
         print(
             f"Iteration {i+1}/200: Total Energy = {energy:.4f}, Lattice Constant = {current_a:.4f}"
         )
 
-final_a = jnp.exp(log_a)
-final_energy = calculate_potential(K.convert_to_tensor(log_a), base_distance_matrix)
+final_a = K.exp(log_a)
+final_energy = calculate_potential(log_a)
 
-if not jnp.isnan(final_energy):
+if not np.isnan(K.numpy(final_energy)):
     print("\nOptimization finished!")
     print(f"Final optimized lattice constant: {final_a:.6f}")
     print(f"Corresponding minimum total energy: {final_energy:.6f}")
 
     # Vectorized calculation for the potential curve
     a_vals = np.linspace(0.8, 1.5, 200)
-    log_a_vals = np.log(a_vals)
+    log_a_vals = K.log(K.convert_to_tensor(a_vals))
 
     # Use vmap to create a vectorized version of the potential function
-    vmap_potential = jax.vmap(lambda la: calculate_potential(la, base_distance_matrix))
-    potential_curve = vmap_potential(K.convert_to_tensor(log_a_vals))
+    vmap_potential = K.vmap(lambda la: calculate_potential(la))
+    potential_curve = vmap_potential(log_a_vals)
 
     plt.figure(figsize=(10, 6))
     plt.plot(a_vals, potential_curve, label="Lennard-Jones Potential", color="blue")

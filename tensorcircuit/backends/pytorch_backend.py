@@ -238,14 +238,22 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def copy(self, a: Tensor) -> Tensor:
         return a.clone()
 
+    def convert_to_tensor(self, tensor: Tensor, dtype: Optional[str] = None) -> Tensor:
+        if self.is_tensor(tensor):
+            result = tensor
+        else:
+            result = torchlib.tensor(tensor)
+        if dtype is not None:
+            result = self.cast(result, dtype)
+        return result
+
     def expm(self, a: Tensor) -> Tensor:
         raise NotImplementedError("pytorch backend doesn't support expm")
         # in 2020, torch has no expm, hmmm. but that's ok,
         # it doesn't support complex numbers which is more severe issue.
         # see https://github.com/pytorch/pytorch/issues/9983
 
-    def power(self, a: Tensor, b: Union[Tensor, float]) -> Tensor:
-        return torchlib.pow(a, b)
+    # see https://github.com/pytorch/pytorch/issues/9983
 
     def sin(self, a: Tensor) -> Tensor:
         return torchlib.sin(a)
@@ -448,11 +456,6 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         if x is None and y is None:
             return torchlib.where(condition)
         return torchlib.where(condition, x, y)
-
-    def equal(self, x1: Tensor, x2: Any) -> Tensor:
-        if not self.is_tensor(x2):
-            x2 = torchlib.tensor(x2, device=x1.device, dtype=x1.dtype)
-        return torchlib.eq(x1, x2)
 
     def reverse(self, a: Tensor) -> Tensor:
         return torchlib.flip(a, dims=(-1,))

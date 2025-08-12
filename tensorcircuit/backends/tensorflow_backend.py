@@ -75,7 +75,12 @@ class keras_optimizer:
 def _tensordot_tf(
     self: Any, a: Tensor, b: Tensor, axes: Union[int, Sequence[Sequence[int]]]
 ) -> Tensor:
-    b = tf.cast(b, a.dtype)
+    # Use TensorFlow's dtype promotion rules by converting both to a common dtype
+    if a.dtype != b.dtype:
+        # Find the result dtype by performing a dummy operation
+        common_dtype = (tf.constant(0, dtype=a.dtype) + tf.constant(0, dtype=b.dtype)).dtype
+        a = tf.cast(a, common_dtype)
+        b = tf.cast(b, common_dtype)
     return tf.tensordot(a, b, axes)
 
 
@@ -442,11 +447,14 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def copy(self, a: Tensor) -> Tensor:
         return tf.identity(a)
 
+    def convert_to_tensor(self, tensor: Tensor, dtype: Optional[str] = None) -> Tensor:
+        result = tf.convert_to_tensor(tensor)
+        if dtype is not None:
+            result = self.cast(result, dtype)
+        return result
+
     def expm(self, a: Tensor) -> Tensor:
         return tf.linalg.expm(a)
-
-    def power(self, a: Tensor, b: Union[Tensor, float]) -> Tensor:
-        return tf.math.pow(a, b)
 
     def sin(self, a: Tensor) -> Tensor:
         return tf.math.sin(a)
@@ -541,9 +549,6 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
             # Return a tuple of tensors to be consistent with other backends
             return tuple(tf.unstack(tf.where(condition), axis=1))
         return tf.where(condition, x, y)
-
-    def equal(self, x1: Tensor, x2: Tensor) -> Tensor:
-        return tf.math.equal(x1, x2)
 
     def argmax(self, a: Tensor, axis: int = 0) -> Tensor:
         return tf.math.argmax(a, axis=axis)

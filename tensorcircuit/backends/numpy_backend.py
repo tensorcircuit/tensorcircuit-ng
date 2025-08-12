@@ -35,10 +35,12 @@ def _sum_numpy(
     # see https://github.com/google/TensorNetwork/issues/952
 
 
-def _convert_to_tensor_numpy(self: Any, a: Tensor, **kwargs: Any) -> Tensor:
+def _convert_to_tensor_numpy(self: Any, a: Tensor, dtype: Optional[str] = None) -> Tensor:
     if not isinstance(a, np.ndarray) and not np.isscalar(a):
         a = np.array(a)
     a = np.asarray(a)
+    if dtype is not None:
+        a = a.astype(getattr(np, dtype))
     return a
 
 
@@ -79,9 +81,6 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
 
     def expm(self, a: Tensor) -> Tensor:
         return expm(a)
-
-    def power(self, a: Tensor, b: Union[Tensor, float]) -> Tensor:
-        return np.power(a, b)
 
     def abs(self, a: Tensor) -> Tensor:
         return np.abs(a)
@@ -373,9 +372,6 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
             return np.where(condition)
         assert x is not None and y is not None
         return np.where(condition, x, y)
-
-    def equal(self, x: Tensor, y: Tensor) -> Tensor:
-        return np.equal(x, y)
 
     def cond(
         self,

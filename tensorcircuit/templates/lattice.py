@@ -21,6 +21,7 @@ from typing import (
 logger = logging.getLogger(__name__)
 import itertools
 import numpy as np
+from scipy.spatial import cKDTree
 from .. import backend
 
 
@@ -365,6 +366,7 @@ class AbstractLattice(abc.ABC):
         """
         try:
             import matplotlib.pyplot as plt
+            import numpy as np
         except ImportError:
             logger.error(
                 "Matplotlib is required for visualization. "
@@ -563,7 +565,7 @@ class AbstractLattice(abc.ABC):
         displacements = backend.expand_dims(all_coords, 1) - backend.expand_dims(
             all_coords, 0
         )
-        dist_matrix_sq = backend.sum(backend.power(displacements, 2), axis=-1)
+        dist_matrix_sq = backend.sum(displacements**2, axis=-1)
 
         # Flatten the matrix to a list of all squared distances to identify shells.
         all_distances_sq = backend.reshape(dist_matrix_sq, [-1])
@@ -726,67 +728,28 @@ class TILattice(AbstractLattice):
                 self._ident_to_idx[identifier] = current_index
                 current_index += 1
 
-    def _get_distance_matrix_with_mic(self) -> Coordinates:
-        """
-        Computes the full N x N distance matrix using backend operations,
-        correctly applying the Minimum Image Convention (MIC) for all
-        periodic dimensions in a memory-efficient manner.
-        """
-
-        size_arr = backend.convert_to_tensor(self.size)
-        size_arr = backend.cast(size_arr, self.lattice_vectors.dtype)
-
-        # Calculate the full system vectors that span the entire finite lattice.
-        system_vectors = self.lattice_vectors * backend.expand_dims(size_arr, axis=1)
-
-        pbc_dims = [d for d in range(self.dimensionality) if self.pbc[d]]
-
-        if not pbc_dims:
-            # If no PBC, the only 'translation' is the zero vector.
-            translations_arr = backend.zeros(
-                [1, self.dimensionality], dtype=self.lattice_vectors.dtype
-            )
-        else:
-            num_pbc_dims = len(pbc_dims)
-            pbc_system_vectors = backend.gather1d(
-                system_vectors, backend.convert_to_tensor(pbc_dims)
-            )
-
-            # Generate all 3^d possible image shifts (-1, 0, 1) for periodic dimensions.
-            shift_options = [backend.convert_to_tensor([-1.0, 0.0, 1.0])] * num_pbc_dims
-            shifts_grid = backend.meshgrid(*shift_options, indexing="ij")
-            all_shifts = backend.reshape(
-                backend.stack(shifts_grid, axis=-1), (-1, num_pbc_dims)
-            )
-
-            translations_arr = backend.tensordot(
-                all_shifts, pbc_system_vectors, axes=[[1], [0]]
-            )
-
-        dist_sq_rows = []
-        # Iterate through each site `i` to compute its distance to all other sites `j`.
-        # This is done row-by-row to manage memory for very large lattices.
-        assert self._coordinates is not None
-        for i in range(self.num_sites):
-            # For each site `i`, calculate displacements to all other sites `j`.
-            displacements_i = self._coordinates - self._coordinates[i]  # Shape: (N, D)
-            # Then, for each displacement `d_ij`, find the minimum distance among
-            # `d_ij` and all its periodic images.
-            image_displacements_i = backend.expand_dims(
-                displacements_i, 1
-            ) - backend.expand_dims(translations_arr, 0)
-            image_d_sq_i = backend.sum(image_displacements_i**2, axis=2)
-            min_dist_sq_i = backend.min(image_d_sq_i, axis=1)
-            dist_sq_rows.append(min_dist_sq_i)
-
-        dist_matrix_sq = backend.stack(dist_sq_rows, axis=0)
-        safe_dist_matrix_sq = backend.where(dist_matrix_sq > 0, dist_matrix_sq, 0.0)
-        return backend.sqrt(safe_dist_matrix_sq)
-
     def _get_distance_matrix_with_mic_vectorized(self) -> Coordinates:
         """
         Computes the full N x N distance matrix using a fully vectorized approach
-        to be compatible with JIT compilation (e.g., JAX).
+        that correctly applies the Minimum Image Convention (MIC) for periodic
+        boundary conditions.
+        
+        This method uses full vectorization for optimal performance and compatibility
+        with JIT compilation frameworks like JAX. The implementation processes all
+        site pairs simultaneously rather than iterating row-by-row, which provides:
+        
+        - Better performance through vectorized operations
+        - Full compatibility with automatic differentiation
+        - JIT compilation support (e.g., JAX, TensorFlow)
+        - Consistent tensor operations throughout
+        
+        The trade-off is higher memory usage compared to iterative approaches,
+        as it computes all pairwise distances simultaneously. For very large 
+        lattices (N > 10^4 sites), memory usage scales as O(N^2).
+        
+        :return: Distance matrix with shape (N, N) where entry (i,j) is the
+            minimum distance between sites i and j under periodic boundary conditions.
+        :rtype: Coordinates
         """
         size_arr = backend.cast(
             backend.convert_to_tensor(self.size), self.lattice_vectors.dtype
@@ -825,7 +788,7 @@ class TILattice(AbstractLattice):
         ) - backend.expand_dims(backend.expand_dims(translations_arr, 0), 0)
 
         # Sum of squares for distances
-        image_d_sq = backend.sum(backend.power(image_displacements, 2), axis=3)
+        image_d_sq = backend.sum(image_displacements**2, axis=3)
 
         # Find the minimum distance among all images (Minimum Image Convention)
         min_dist_sq = backend.min(image_d_sq, axis=2)
@@ -1382,29 +1345,146 @@ class CustomizeLattice(AbstractLattice):
 
     def _build_neighbors(self, max_k: int = 1, **kwargs: Any) -> None:
         """
-        Calculates neighbor relationships using a distance matrix.
+        Calculates neighbor relationships using either KDTree or distance matrix methods.
 
-        This method leverages the generic `_build_neighbors_by_distance_matrix`
-        to ensure differentiability, avoiding non-differentiable libraries
-        like SciPy's KDTree.
+        This method supports two modes:
+        1. KDTree mode (use_kdtree=True): Fast, O(N log N) performance for large lattices
+           but breaks differentiability due to scipy dependency
+        2. Distance matrix mode (use_kdtree=False): Slower O(N²) but fully differentiable
+           and backend-agnostic
+
+        :param max_k: Maximum number of neighbor shells to compute
+        :type max_k: int
+        :param kwargs: Additional arguments including:
+            - use_kdtree (bool): Whether to use KDTree optimization. Defaults to True.
+            - tol (float): Distance tolerance for neighbor identification. Defaults to 1e-6.
+            - force_differentiable (bool): If True, forces distance matrix method even when
+              KDTree is available. Defaults to False.
         """
         tol = kwargs.get("tol", 1e-6)
+        use_kdtree = kwargs.get("use_kdtree", True)
+        force_differentiable = kwargs.get("force_differentiable", False)
+        
         if self.num_sites < 2:
             return
 
-        # For CustomizeLattice, we must use the distance matrix method.
-        dist_matrix = self._compute_distance_matrix()
-        dist_matrix_sq = dist_matrix**2
-        self._distance_matrix = dist_matrix
-
-        all_distances_sq = backend.reshape(dist_matrix_sq, [-1])
-        dist_shells_sq = self._identify_distance_shells(all_distances_sq, max_k, tol)
-
-        self._neighbor_maps = self._build_neighbor_map_from_distances(
-            dist_matrix_sq, dist_shells_sq, tol
-        )
+        # Override KDTree if differentiability is explicitly required
+        if force_differentiable:
+            use_kdtree = False
+            logger.info("Using differentiable distance matrix method (forced)")
+        
+        # Choose algorithm based on user preference
+        if use_kdtree and not force_differentiable:
+            logger.info(f"Using KDTree method for {self.num_sites} sites up to k={max_k}")
+            self._build_neighbors_kdtree(max_k, tol)
+        else:
+            logger.info(f"Using differentiable distance matrix method for {self.num_sites} sites up to k={max_k}")
+            
+            # Use the existing distance matrix method
+            self._build_neighbors_by_distance_matrix(max_k, tol)
 
         logger.info(f"Neighbor building complete for CustomizeLattice up to k={max_k}.")
+
+    def _build_neighbors_kdtree(self, max_k: int, tol: float) -> None:
+        """
+        Build neighbors using KDTree for optimal performance.
+        
+        This method provides O(N log N) performance for neighbor finding but breaks
+        differentiability due to scipy dependency. Use this method when:
+        - Performance is critical
+        - Differentiability is not required
+        - Large lattices (N > 1000)
+        
+        Note: This method uses numpy arrays directly and may not be compatible
+        with all backend types (JAX, TensorFlow, etc.).
+        """        
+        # Convert coordinates to numpy for KDTree
+        coords_np = backend.numpy(self._coordinates)
+        
+        # Build KDTree
+        logger.info("Building KDTree...")
+        tree = cKDTree(coords_np)
+        
+        # For small lattices or cases with potential duplicate coordinates,
+        # fall back to distance matrix method for robustness
+        if self.num_sites < 1000:
+            logger.info("Small lattice detected, falling back to distance matrix method for robustness")
+            self._build_neighbors_by_distance_matrix(max_k, tol)
+            return
+        
+        # Find all distances for shell identification - use comprehensive sampling
+        logger.info("Identifying distance shells...")
+        distances_for_shells = []
+        
+        # For robust shell identification, query all pairwise distances for smaller lattices
+        # or use dense sampling for larger ones
+        if self.num_sites <= 100:
+            # For small lattices, compute all pairwise distances for accuracy
+            for i in range(self.num_sites):
+                query_k = min(self.num_sites - 1, max_k * 20)
+                if query_k > 0:
+                    dists, _ = tree.query(coords_np[i], k=query_k + 1)  # +1 to exclude self
+                    distances_for_shells.extend(dists[1:])  # Skip distance to self
+        else:
+            # For larger lattices, use adaptive sampling but ensure we capture all shells
+            sample_size = min(1000, self.num_sites // 2)  # More conservative sampling
+            for i in range(0, self.num_sites, max(1, self.num_sites // sample_size)):
+                query_k = min(max_k * 20 + 50, self.num_sites - 1)
+                if query_k > 0:
+                    dists, _ = tree.query(coords_np[i], k=query_k + 1)  # +1 to exclude self
+                    distances_for_shells.extend(dists[1:])  # Skip distance to self
+        
+        # Filter out zero distances (duplicate coordinates) before shell identification
+        ZERO_THRESHOLD = 1e-12
+        distances_for_shells = [d for d in distances_for_shells if d > ZERO_THRESHOLD]
+        
+        if not distances_for_shells:
+            logger.warning("No valid distances found for shell identification")
+            self._neighbor_maps = {}
+            return
+        
+        # Use the same shell identification logic as distance matrix method
+        distances_for_shells_sq = [d*d for d in distances_for_shells]
+        dist_shells_sq = self._identify_distance_shells(distances_for_shells_sq, max_k, tol)
+        dist_shells = [np.sqrt(d_sq) for d_sq in dist_shells_sq]
+        
+        logger.info(f"Found {len(dist_shells)} distance shells: {dist_shells[:5]}...")
+        
+        # Initialize neighbor maps
+        self._neighbor_maps = {k: {} for k in range(1, len(dist_shells) + 1)}
+        
+        # Build neighbor lists for each site
+        logger.info("Building neighbor lists...")
+        for i in range(self.num_sites):
+            # Query enough neighbors to capture all shells
+            query_k = min(max_k * 20 + 50, self.num_sites - 1)
+            if query_k > 0:
+                distances, indices = tree.query(coords_np[i], k=query_k + 1)  # +1 for self
+                
+                # Skip the first entry (distance to self)
+                distances = distances[1:]
+                indices = indices[1:]
+                
+                # Filter out zero distances (duplicate coordinates)
+                valid_pairs = [(d, idx) for d, idx in zip(distances, indices) if d > ZERO_THRESHOLD]
+                
+                # Assign neighbors to shells
+                for shell_idx, shell_dist in enumerate(dist_shells):
+                    k = shell_idx + 1
+                    shell_neighbors = []
+                    
+                    for dist, neighbor_idx in valid_pairs:
+                        if abs(dist - shell_dist) <= tol:
+                            shell_neighbors.append(int(neighbor_idx))
+                        elif dist > shell_dist + tol:
+                            break  # Distances are sorted, no more matches
+                    
+                    if shell_neighbors:
+                        self._neighbor_maps[k][i] = sorted(shell_neighbors)
+        
+        # Set distance matrix to None - will compute on demand
+        self._distance_matrix = None
+        logger.info("KDTree neighbor building completed")
 
     def _compute_distance_matrix(self) -> Coordinates:
         """
@@ -1424,10 +1504,10 @@ class CustomizeLattice(AbstractLattice):
             self._coordinates, 0
         )
 
-        dist_matrix_sq = backend.sum(backend.power(displacements, 2), axis=-1)
+        dist_matrix_sq = backend.sum(displacements**2, axis=-1)
 
         return backend.where(
-            backend.equal(dist_matrix_sq, 0),
+            dist_matrix_sq == 0,
             0,
             backend.sqrt(dist_matrix_sq),
         )
@@ -1593,29 +1673,24 @@ def get_compatible_layers(bonds: List[Tuple[int, int]]) -> List[List[Tuple[int, 
         tuple represents a bond. All bonds within a layer are non-overlapping.
     :rtype: List[List[Tuple[int, int]]]
     """
-    # Ensure all bonds are in a canonical form (i, j) with i < j and remove duplicates.
-    sorted_edges = sorted(list({(min(bond), max(bond)) for bond in bonds}))
+    uncolored_edges: Set[Tuple[int, int]] = {(min(bond), max(bond)) for bond in bonds}
 
     layers: List[List[Tuple[int, int]]] = []
-    unassigned_edges = set(sorted_edges)
 
-    # Greedily build layers until all edges have been assigned.
-    while unassigned_edges:
+    while uncolored_edges:
         current_layer: List[Tuple[int, int]] = []
         qubits_in_this_layer: Set[int] = set()
 
-        sorted_unassigned = sorted(list(unassigned_edges))
+        edges_to_process = sorted(list(uncolored_edges))
 
-        # Iterate through remaining edges and add an edge to the current layer
-        # if it doesn't conflict with (share a qubit with) edges already in the layer.
-        for edge in sorted_unassigned:
+        for edge in edges_to_process:
             i, j = edge
             if i not in qubits_in_this_layer and j not in qubits_in_this_layer:
                 current_layer.append(edge)
                 qubits_in_this_layer.add(i)
                 qubits_in_this_layer.add(j)
 
-        unassigned_edges -= set(current_layer)
-        layers.append(current_layer)
+        uncolored_edges -= set(current_layer)
+        layers.append(sorted(current_layer))
 
     return layers

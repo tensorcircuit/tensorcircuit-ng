@@ -50,12 +50,15 @@ class optax_optimizer:
         return params
 
 
-def _convert_to_tensor_jax(self: Any, tensor: Tensor) -> Tensor:
+def _convert_to_tensor_jax(self: Any, tensor: Tensor, dtype: Optional[str] = None) -> Tensor:
     if not isinstance(tensor, (np.ndarray, jnp.ndarray)) and not jnp.isscalar(tensor):
         raise TypeError(
             ("Expected a `jnp.array`, `np.array` or scalar. " f"Got {type(tensor)}")
         )
     result = jnp.asarray(tensor)
+    if dtype is not None:
+        # Use the backend's cast method to handle dtype conversion
+        result = self.cast(result, dtype)
     return result
 
 
@@ -243,10 +246,10 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def copy(self, tensor: Tensor) -> Tensor:
         return jnp.array(tensor, copy=True)
 
-    def convert_to_tensor(self, tensor: Tensor, **kwargs: Any) -> Tensor:
+    def convert_to_tensor(self, tensor: Tensor, dtype: Optional[str] = None) -> Tensor:
         result = jnp.asarray(tensor)
-        if "dtype" in kwargs and kwargs["dtype"] is not None:
-            result = self.cast(result, kwargs["dtype"])
+        if dtype is not None:
+            result = self.cast(result, dtype)
         return result
 
     def abs(self, a: Tensor) -> Tensor:
@@ -354,10 +357,6 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         return jsp.linalg.expm(a)
         # currently expm in jax doesn't support AD, it will raise an AssertError,
         # see https://github.com/google/jax/issues/2645
-
-    def power(self, a: Tensor, b: Union[Tensor, float]) -> Tensor:
-        return jnp.power(a, b)
-
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return jnp.stack(a, axis=axis)
 
@@ -420,9 +419,6 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
 
     def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
         return jnp.all(a, axis=axis)
-
-    def equal(self, x1: Tensor, x2: Tensor) -> Tensor:
-        return jnp.equal(x1, x2)
 
     def is_tensor(self, a: Any) -> bool:
         if not isinstance(a, jnp.ndarray):
