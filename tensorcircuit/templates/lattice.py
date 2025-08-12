@@ -1420,7 +1420,7 @@ class CustomizeLattice(AbstractLattice):
 
         # Find all distances for shell identification - use comprehensive sampling
         logger.info("Identifying distance shells...")
-        distances_for_shells = []
+        distances_for_shells: List[float] = []
 
         # For robust shell identification, query all pairwise distances for smaller lattices
         # or use dense sampling for larger ones
@@ -1432,7 +1432,10 @@ class CustomizeLattice(AbstractLattice):
                     dists, _ = tree.query(
                         coords_np[i], k=query_k + 1
                     )  # +1 to exclude self
-                    distances_for_shells.extend(dists[1:])  # Skip distance to self
+                    if isinstance(dists, np.ndarray):
+                        distances_for_shells.extend(dists[1:])  # Skip distance to self
+                    else:
+                        distances_for_shells.append(dists)  # Single distance
         else:
             # For larger lattices, use adaptive sampling but ensure we capture all shells
             sample_size = min(1000, self.num_sites // 2)  # More conservative sampling
@@ -1442,7 +1445,10 @@ class CustomizeLattice(AbstractLattice):
                     dists, _ = tree.query(
                         coords_np[i], k=query_k + 1
                     )  # +1 to exclude self
-                    distances_for_shells.extend(dists[1:])  # Skip distance to self
+                    if isinstance(dists, np.ndarray):
+                        distances_for_shells.extend(dists[1:])  # Skip distance to self
+                    else:
+                        distances_for_shells.append(dists)  # Single distance
 
         # Filter out zero distances (duplicate coordinates) before shell identification
         ZERO_THRESHOLD = 1e-12
@@ -1476,12 +1482,18 @@ class CustomizeLattice(AbstractLattice):
                 )  # +1 for self
 
                 # Skip the first entry (distance to self)
-                distances = distances[1:]
-                indices = indices[1:]
+                # Handle both single value and array cases
+                if isinstance(distances, np.ndarray) and len(distances) > 1:
+                    distances_slice = distances[1:]
+                    indices_slice = indices[1:] if isinstance(indices, np.ndarray) else np.array([], dtype=int)
+                else:
+                    # Single value or empty case - no neighbors to process
+                    distances_slice = np.array([])
+                    indices_slice = np.array([], dtype=int)
 
                 # Filter out zero distances (duplicate coordinates)
                 valid_pairs = [
-                    (d, idx) for d, idx in zip(distances, indices) if d > ZERO_THRESHOLD
+                    (d, idx) for d, idx in zip(distances_slice, indices_slice) if d > ZERO_THRESHOLD
                 ]
 
                 # Assign neighbors to shells
