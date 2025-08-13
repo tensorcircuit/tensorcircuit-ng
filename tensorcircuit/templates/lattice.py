@@ -20,6 +20,7 @@ from typing import (
 
 logger = logging.getLogger(__name__)
 import itertools
+import math
 import numpy as np
 from scipy.spatial import cKDTree
 from .. import backend
@@ -131,7 +132,8 @@ class AbstractLattice(abc.ABC):
         :rtype: Coordinates
         """
         self._validate_index(index)
-        assert self._coordinates is not None
+        if self._coordinates is None:
+            raise ValueError("Lattice coordinates have not been initialized.")
         coords = self._coordinates[index]
         return coords
 
@@ -184,7 +186,8 @@ class AbstractLattice(abc.ABC):
             - The site's coordinates as a NumPy array.
         :rtype: Tuple[SiteIndex, SiteIdentifier, Coordinates]
         """
-        assert self._coordinates is not None
+        if self._coordinates is None:
+            raise ValueError("Lattice coordinates have not been initialized.")
         if isinstance(index_or_identifier, int):  # SiteIndex is an int
             idx = index_or_identifier
             self._validate_index(idx)
@@ -204,8 +207,9 @@ class AbstractLattice(abc.ABC):
             index, identifier, and coordinates.
         :rtype: Iterator[Tuple[SiteIndex, SiteIdentifier, Coordinates]]
         """
+        if self._coordinates is None:
+            raise ValueError("Lattice coordinates have not been initialized.")
         for i in range(self.num_sites):
-            assert self._coordinates is not None
             yield i, self._identifiers[i], self._coordinates[i]
 
     def get_neighbors(self, index: SiteIndex, k: int = 1) -> List[SiteIndex]:
@@ -366,7 +370,6 @@ class AbstractLattice(abc.ABC):
         """
         try:
             import matplotlib.pyplot as plt
-            import numpy as np
         except ImportError:
             logger.error(
                 "Matplotlib is required for visualization. "
@@ -397,6 +400,10 @@ class AbstractLattice(abc.ABC):
                 fig, ax = plt.subplots(figsize=(8, 8))
         else:
             fig = ax.figure  # type: ignore
+
+        if self._coordinates is None:
+            logger.error("Cannot show lattice: coordinates have not been initialized.")
+            return
 
         coords = np.array(self._coordinates)
         # Prepare arguments for the scatter plot, allowing user overrides.
@@ -459,7 +466,6 @@ class AbstractLattice(abc.ABC):
                     if self.dimensionality > 2:
                         ax_3d = cast("Axes3D", ax)
                         for i, j in bonds:
-                            assert self._coordinates is not None
                             p1, p2 = self._coordinates[i], self._coordinates[j]
                             ax_3d.plot(
                                 [p1[0], p2[0]],
@@ -469,7 +475,6 @@ class AbstractLattice(abc.ABC):
                             )
                     else:
                         for i, j in bonds:
-                            assert self._coordinates is not None
                             p1, p2 = self._coordinates[i], self._coordinates[j]
                             if self.dimensionality == 1:  #  type: ignore
 
@@ -662,21 +667,30 @@ class TILattice(AbstractLattice):
         self.lattice_vectors = backend.convert_to_tensor(lattice_vectors)
         self.basis_coords = backend.convert_to_tensor(basis_coords)
 
-        assert self.lattice_vectors.shape == (
-            dimensionality,
-            dimensionality,
-        ), "Lattice vectors shape mismatch"
-        assert (
-            self.basis_coords.shape[1] == dimensionality
-        ), "Basis coordinates dimension mismatch"
-        assert len(size) == dimensionality, "Size tuple length mismatch"
+        if self.lattice_vectors.shape != (dimensionality, dimensionality):
+            raise ValueError(
+                f"Lattice vectors shape {self.lattice_vectors.shape} does not match "
+                f"expected ({dimensionality}, {dimensionality})"
+            )
+        if self.basis_coords.shape[1] != dimensionality:
+            raise ValueError(
+                f"Basis coordinates dimension {self.basis_coords.shape[1]} does not "
+                f"match lattice dimensionality {dimensionality}"
+            )
+        if len(size) != dimensionality:
+            raise ValueError(
+                f"Size tuple length {len(size)} does not match dimensionality {dimensionality}"
+            )
 
         self.num_basis = self.basis_coords.shape[0]
         self.size = size
         if isinstance(pbc, bool):
             self.pbc = tuple([pbc] * dimensionality)
         else:
-            assert len(pbc) == dimensionality, "PBC tuple length mismatch"
+            if len(pbc) != dimensionality:
+                raise ValueError(
+                    f"PBC tuple length {len(pbc)} does not match dimensionality {dimensionality}"
+                )
             self.pbc = tuple(pbc)
 
         self._build_lattice()
@@ -751,10 +765,25 @@ class TILattice(AbstractLattice):
             minimum distance between sites i and j under periodic boundary conditions.
         :rtype: Coordinates
         """
-        size_arr = backend.cast(
-            backend.convert_to_tensor(self.size), self.lattice_vectors.dtype
+        # Ensure dtype consistency across backends (especially torch) by explicitly
+        # casting size and lattice_vectors to the same floating dtype used internally.
+        # Strategy: prefer existing lattice_vectors dtype, fallback to float64 for precision,
+        # then float32 for compatibility. This avoids dtype mismatches in vectorized ops.
+        target_dt = None
+        try:
+            # prefer existing lattice_vectors dtype if possible
+            target_dt = backend.dtype(self.lattice_vectors)  # type: ignore
+        except Exception:  # pragma: no cover - defensive
+            target_dt = "float64"
+        if target_dt not in ("float32", "float64"):
+            # fallback for unusual dtypes
+            target_dt = "float64"
+
+        size_arr = backend.cast(backend.convert_to_tensor(self.size), target_dt)
+        lattice_vecs = backend.cast(
+            backend.convert_to_tensor(self.lattice_vectors), target_dt
         )
-        system_vectors = self.lattice_vectors * backend.expand_dims(size_arr, axis=1)
+        system_vectors = lattice_vecs * backend.expand_dims(size_arr, axis=1)
 
         pbc_mask = backend.convert_to_tensor(self.pbc)
 
@@ -913,12 +942,15 @@ class HoneycombLattice(TILattice):
         a = lattice_constant
 
         # Define the two primitive lattice vectors for the underlying triangular Bravais lattice.
-        lattice_vectors = [
-            [a * 1.5, a * backend.sqrt(backend.convert_to_tensor(3.0)) / 2],
-            [a * 1.5, -a * backend.sqrt(backend.convert_to_tensor(3.0)) / 2],
-        ]
+        rt3_over_2 = math.sqrt(3.0) / 2.0
+        lattice_vectors = backend.convert_to_tensor(
+            [
+                [a * 1.5, a * rt3_over_2],
+                [a * 1.5, -a * rt3_over_2],
+            ]
+        )
         # Define the two basis sites (A and B) within the unit cell.
-        basis_coords = [[0.0, 0.0], [a * 1.0, 0.0]]
+        basis_coords = backend.convert_to_tensor([[0.0, 0.0], [a * 1.0, 0.0]])
 
         super().__init__(
             dimensionality=dimensionality,
@@ -962,12 +994,14 @@ class TriangularLattice(TILattice):
         a = lattice_constant
 
         # Define the primitive lattice vectors for a triangular lattice.
-        lattice_vectors = [
-            [a * 1.0, 0.0],
-            [a * 0.5, a * backend.sqrt(backend.convert_to_tensor(3.0)) / 2],
-        ]
+        lattice_vectors = backend.convert_to_tensor(
+            [
+                [a * 1.0, 0.0],
+                [a * 0.5, a * backend.sqrt(backend.convert_to_tensor(3.0)) / 2.0],
+            ]
+        )
         # A triangular lattice is a Bravais lattice with a single-site basis.
-        basis_coords = [[0.0, 0.0]]
+        basis_coords = backend.convert_to_tensor([[0.0, 0.0]])
 
         super().__init__(
             dimensionality=dimensionality,
@@ -1002,9 +1036,9 @@ class ChainLattice(TILattice):
     ):
         dimensionality = 1
         # The lattice vector is just the lattice constant along one dimension.
-        lattice_vectors = [[lattice_constant]]
+        lattice_vectors = backend.convert_to_tensor([[lattice_constant]])
         # A simple chain is a Bravais lattice with a single-site basis.
-        basis_coords = [[0.0]]
+        basis_coords = backend.convert_to_tensor([[0.0]])
 
         super().__init__(
             dimensionality=dimensionality,
@@ -1043,9 +1077,9 @@ class DimerizedChainLattice(TILattice):
     ):
         dimensionality = 1
         # The unit cell is twice the bond length, as it contains two sites.
-        lattice_vectors = [[2 * lattice_constant]]
+        lattice_vectors = backend.convert_to_tensor([[2 * lattice_constant]])
         # Two basis sites (A and B) separated by the bond length.
-        basis_coords = [[0.0], [lattice_constant]]
+        basis_coords = backend.convert_to_tensor([[0.0], [lattice_constant]])
 
         super().__init__(
             dimensionality=dimensionality,
@@ -1085,9 +1119,9 @@ class RectangularLattice(TILattice):
         dimensionality = 2
         ax, ay = lattice_constants
         # Orthogonal lattice vectors with potentially different lengths.
-        lattice_vectors = [[ax, 0.0], [0.0, ay]]
+        lattice_vectors = backend.convert_to_tensor([[ax, 0.0], [0.0, ay]])
         # A rectangular lattice is a Bravais lattice with a single-site basis.
-        basis_coords = [[0.0, 0.0]]
+        basis_coords = backend.convert_to_tensor([[0.0, 0.0]])
 
         super().__init__(
             dimensionality=dimensionality,
@@ -1125,9 +1159,13 @@ class CheckerboardLattice(TILattice):
         dimensionality = 2
         a = lattice_constant
         # The unit cell is a square rotated by 45 degrees.
-        lattice_vectors = [[a * 1.0, a * 1.0], [a * 1.0, a * -1.0]]
+        lattice_vectors = backend.convert_to_tensor(
+            [[a * 1.0, a * 1.0], [a * 1.0, a * -1.0]]
+        )
         # Two basis sites (A and B) within the unit cell.
-        basis_coords = [[a * 0.0, a * 0.0], [a * 1.0, a * 0.0]]
+        basis_coords = backend.convert_to_tensor(
+            [[a * 0.0, a * 0.0], [a * 1.0, a * 0.0]]
+        )
 
         super().__init__(
             dimensionality=dimensionality,
@@ -1165,16 +1203,20 @@ class KagomeLattice(TILattice):
         dimensionality = 2
         a = lattice_constant
         # The Kagome lattice is based on a triangular Bravais lattice.
-        lattice_vectors = [
-            [a * 2.0, a * 0.0],
-            [a * 1.0, a * backend.sqrt(backend.convert_to_tensor(3.0))],
-        ]
+        lattice_vectors = backend.convert_to_tensor(
+            [
+                [a * 2.0, a * 0.0],
+                [a * 1.0, a * backend.sqrt(3.0)],
+            ]
+        )
         # It has a three-site basis, forming the corners of the triangles.
-        basis_coords = [
-            [a * 0.0, a * 0.0],
-            [a * 1.0, a * 0.0],
-            [a * 0.5, a * backend.sqrt(backend.convert_to_tensor(3.0)) / 2.0],
-        ]
+        basis_coords = backend.convert_to_tensor(
+            [
+                [a * 0.0, a * 0.0],
+                [a * 1.0, a * 0.0],
+                [a * 0.5, a * backend.sqrt(3.0) / 2.0],
+            ]
+        )
 
         super().__init__(
             dimensionality=dimensionality,
@@ -1216,13 +1258,17 @@ class LiebLattice(TILattice):
 
         unit_cell_side = 2 * bond_length
         # The Lieb lattice is based on a square Bravais lattice.
-        lattice_vectors = [[unit_cell_side, 0.0], [0.0, unit_cell_side]]
+        lattice_vectors = backend.convert_to_tensor(
+            [[unit_cell_side, 0.0], [0.0, unit_cell_side]]
+        )
         # It has a three-site basis: one corner and two edge-centers.
-        basis_coords = [
-            [0.0, 0.0],  # Corner site
-            [bond_length, 0.0],  # x-edge center
-            [0.0, bond_length],  # y-edge center
-        ]
+        basis_coords = backend.convert_to_tensor(
+            [
+                [0.0, 0.0],  # Corner site
+                [bond_length, 0.0],  # x-edge center
+                [0.0, bond_length],  # y-edge center
+            ]
+        )
 
         super().__init__(
             dimensionality=dimensionality,
@@ -1260,9 +1306,9 @@ class CubicLattice(TILattice):
         dimensionality = 3
         a = lattice_constant
         # Orthogonal lattice vectors of equal length in 3D.
-        lattice_vectors = [[a, 0, 0], [0, a, 0], [0, 0, a]]
+        lattice_vectors = backend.convert_to_tensor([[a, 0, 0], [0, a, 0], [0, 0, a]])
         # A simple cubic lattice is a Bravais lattice with a single-site basis.
-        basis_coords = [[0.0, 0.0, 0.0]]
+        basis_coords = backend.convert_to_tensor([[0.0, 0.0, 0.0]])
         super().__init__(
             dimensionality=dimensionality,
             lattice_vectors=lattice_vectors,
@@ -1358,23 +1404,15 @@ class CustomizeLattice(AbstractLattice):
         :param kwargs: Additional arguments including:
             - use_kdtree (bool): Whether to use KDTree optimization. Defaults to True.
             - tol (float): Distance tolerance for neighbor identification. Defaults to 1e-6.
-            - force_differentiable (bool): If True, forces distance matrix method even when
-              KDTree is available. Defaults to False.
         """
         tol = kwargs.get("tol", 1e-6)
         use_kdtree = kwargs.get("use_kdtree", True)
-        force_differentiable = kwargs.get("force_differentiable", False)
 
         if self.num_sites < 2:
             return
 
-        # Override KDTree if differentiability is explicitly required
-        if force_differentiable:
-            use_kdtree = False
-            logger.info("Using differentiable distance matrix method (forced)")
-
         # Choose algorithm based on user preference
-        if use_kdtree and not force_differentiable:
+        if use_kdtree:
             logger.info(
                 f"Using KDTree method for {self.num_sites} sites up to k={max_k}"
             )
@@ -1522,29 +1560,21 @@ class CustomizeLattice(AbstractLattice):
 
     def _compute_distance_matrix(self) -> Coordinates:
         """
-        Computes the full N x N distance matrix using backend operations.
-        This implementation is fully differentiable.
+        Computes the full N x N distance matrix by delegating to the inherited method.
+        This avoids code duplication with the base class implementation.
         """
         if self.num_sites == 0:
             return backend.zeros((0, 0))
         if self.num_sites < 2:
-            assert self._coordinates is not None
+            if self._coordinates is None:
+                raise ValueError("Lattice coordinates have not been initialized.")
             return backend.zeros(
                 (self.num_sites, self.num_sites), dtype=self._coordinates.dtype
             )
 
-        # Vectorized computation of displacements: (N, 1, D) - (1, N, D) -> (N, N, D)
-        displacements = backend.expand_dims(self._coordinates, 1) - backend.expand_dims(
-            self._coordinates, 0
-        )
-
-        dist_matrix_sq = backend.sum(displacements**2, axis=-1)
-
-        return backend.where(
-            dist_matrix_sq == 0,
-            0,
-            backend.sqrt(dist_matrix_sq),
-        )
+        # Use the inherited method from AbstractLattice which computes and caches the distance matrix
+        self._build_neighbors_by_distance_matrix(max_k=1, tol=1e-6)
+        return self._distance_matrix
 
     def _reset_computations(self) -> None:
         """Resets all cached data that depends on the lattice structure."""
@@ -1574,10 +1604,30 @@ class CustomizeLattice(AbstractLattice):
         # Unzip the list of tuples into separate lists of identifiers and coordinates
         _, identifiers, coordinates = zip(*all_sites_info)
 
+        # Normalize coordinates to plain nested Python float lists to avoid
+        # backend-specific tensor list issues (e.g., torch.tensor(list_of_tensors) ValueError).
+        # This ensures the resulting CustomizeLattice works consistently across all backends
+        # by converting any backend tensors to backend-agnostic Python lists.
+        normalized_coords = []
+        for c in coordinates:
+            try:
+                # If already a backend tensor, convert to numpy then to list
+                if hasattr(backend, "is_tensor") and backend.is_tensor(c):  # type: ignore
+                    normalized_coords.append(backend.numpy(c).tolist())  # type: ignore
+                else:
+                    # c may be a numpy array or list-like
+                    if hasattr(c, "tolist"):
+                        normalized_coords.append(c.tolist())  # type: ignore
+                    else:
+                        normalized_coords.append(list(c))  # fallback
+            except Exception:  # pragma: no cover - defensive
+                # Last resort: wrap scalar(s)
+                normalized_coords.append([float(x) for x in c])  # type: ignore
+
         return cls(
             dimensionality=lattice.dimensionality,
             identifiers=list(identifiers),
-            coordinates=list(coordinates),
+            coordinates=normalized_coords,
         )
 
     def add_sites(

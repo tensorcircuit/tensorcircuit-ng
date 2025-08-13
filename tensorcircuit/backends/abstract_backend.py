@@ -629,15 +629,27 @@ class ExtendedBackend:
 
     def meshgrid(self: Any, *args: Any, **kwargs: Any) -> Any:
         """
-        Return coordinate matrices from coordinate vectors.
+         Return coordinate matrices from coordinate vectors.
 
-        :param args: coordinate vectors
-        :type args: Any
+         :param args: coordinate vectors
+         :type args: Any
         :param kwargs: keyword arguments for meshgrid, typically includes 'indexing'
-            which can be 'ij' (matrix indexing) or 'xy' (Cartesian indexing)
-        :type kwargs: Any
-        :return: list of coordinate matrices
-        :rtype: Any
+           which can be 'ij' (matrix indexing) or 'xy' (Cartesian indexing).
+           - 'ij': matrix indexing, first dimension corresponds to rows (default)
+           - 'xy': Cartesian indexing, first dimension corresponds to columns
+           Example:
+              >>> x, y = backend.meshgrid([0, 1], [0, 2], indexing='xy')
+              Shapes:
+              - x.shape == (2, 2)  # rows correspond to y vector length
+              - y.shape == (2, 2)
+              Values:
+              x = [[0, 1],
+                  [0, 1]]
+              y = [[0, 0],
+                  [2, 2]]
+         :type kwargs: Any
+         :return: list of coordinate matrices
+         :rtype: Any
         """
         raise NotImplementedError(
             "Backend '{}' has not implemented `meshgrid`.".format(self.name)
@@ -795,6 +807,21 @@ class ExtendedBackend:
         """
         raise NotImplementedError(
             "Backend '{}' has not implemented `cast`.".format(self.name)
+        )
+
+    def convert_to_tensor(self: Any, a: Tensor, dtype: Optional[str] = None) -> Tensor:
+        """
+        Convert input to tensor.
+
+        :param a: input data to be converted
+        :type a: Tensor
+        :param dtype: target dtype, optional
+        :type dtype: Optional[str]
+        :return: converted tensor
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `convert_to_tensor`.".format(self.name)
         )
 
     def mod(self: Any, x: Tensor, y: Tensor) -> Tensor:

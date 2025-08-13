@@ -1176,9 +1176,6 @@ def test_nested_vmap(backend):
     np.testing.assert_allclose(yajit, tc.backend.transpose(ybjit, [1, 0, 2]), atol=1e-5)
 
 
-# Test new backend methods added for differentiable lattice support
-
-
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_sort(backend):
     """Test sort method."""

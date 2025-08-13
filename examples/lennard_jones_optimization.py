@@ -12,16 +12,7 @@ differentiable for variational material design.
 import optax
 import numpy as np
 import matplotlib.pyplot as plt
-
-# Try to enable JAX 64-bit precision if available (safe fallback)
-
-try:  # pragma: no cover - optional optimization
-    from jax import config as jax_config  # type: ignore
-
-    jax_config.update("jax_enable_x64", True)
-except Exception:  # broad: environment may not have config attribute
-    pass
-import tensorcircuit as tc  # noqa: E402
+import tensorcircuit as tc
 
 
 tc.set_dtype("float64")  # Use tc for universal control
@@ -58,9 +49,8 @@ def calculate_potential(log_a, epsilon=0.5, sigma=1.0):
     return potential_energy
 
 
-# Create a lambda function for optimization
-potential_fun_for_grad = lambda log_a: calculate_potential(log_a)
-value_and_grad_fun = K.jit(K.value_and_grad(potential_fun_for_grad))
+# Create value and grad function for optimization
+value_and_grad_fun = K.jit(K.value_and_grad(calculate_potential))
 
 optimizer = optax.adam(learning_rate=0.01)
 
@@ -77,11 +67,7 @@ for i in range(200):
     history["a"].append(K.exp(log_a))
     history["energy"].append(energy)
 
-    # Check for NaN gradients using TensorCircuit's backend-agnostic approach
-    if K.sum(tc.num_to_tensor(np.isnan(K.numpy(grad)))) > 0:
-        print(f"Gradient became NaN at iteration {i+1}. Stopping optimization.")
-        print(f"Current energy: {energy}, Current log_a: {log_a}")
-        break
+    # (Removed previously added blanket NaN guard per reviewer request to keep example minimal.)
 
     updates, opt_state = optimizer.update(grad, opt_state)
     log_a = optax.apply_updates(log_a, updates)

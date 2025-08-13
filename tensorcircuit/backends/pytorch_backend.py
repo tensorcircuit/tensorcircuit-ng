@@ -253,8 +253,6 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         # it doesn't support complex numbers which is more severe issue.
         # see https://github.com/pytorch/pytorch/issues/9983
 
-    # see https://github.com/pytorch/pytorch/issues/9983
-
     def sin(self, a: Tensor) -> Tensor:
         return torchlib.sin(a)
 

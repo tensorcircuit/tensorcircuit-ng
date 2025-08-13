@@ -77,10 +77,8 @@ def _tensordot_tf(
 ) -> Tensor:
     # Use TensorFlow's dtype promotion rules by converting both to a common dtype
     if a.dtype != b.dtype:
-        # Find the result dtype by performing a dummy operation
-        common_dtype = (
-            tf.constant(0, dtype=a.dtype) + tf.constant(0, dtype=b.dtype)
-        ).dtype
+        # Find the result dtype using TensorFlow's type promotion rules
+        common_dtype = tf.experimental.numpy.result_type(a.dtype, b.dtype)
         a = tf.cast(a, common_dtype)
         b = tf.cast(b, common_dtype)
     return tf.tensordot(a, b, axes)
