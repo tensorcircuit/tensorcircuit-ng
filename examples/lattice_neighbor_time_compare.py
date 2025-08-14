@@ -24,22 +24,22 @@ def run_once(
     """Run one size point and return (time_kdtree, time_matrix)."""
     rng = np.random.default_rng(seed)
     ids = list(range(n))
-    
+
     # Collect times for each repeat with different random coordinates
     kdtree_times: List[float] = []
     matrix_times: List[float] = []
-    
-    for i in range(repeats):
+
+    for _ in range(repeats):
         # Generate different coordinates for each repeat
         coords = rng.random((n, d), dtype=float)
         lat = CustomizeLattice(dimensionality=d, identifiers=ids, coordinates=coords)
-        
+
         # KDTree path - single measurement
         t0 = time.perf_counter()
         lat._build_neighbors(max_k=max_k, use_kdtree=True)
         kdtree_times.append(time.perf_counter() - t0)
-        
-        # Distance-matrix path - single measurement  
+
+        # Distance-matrix path - single measurement
         t0 = time.perf_counter()
         lat._build_neighbors(max_k=max_k, use_kdtree=False)
         matrix_times.append(time.perf_counter() - t0)
