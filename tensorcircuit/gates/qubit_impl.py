@@ -6,21 +6,17 @@ import sys
 import warnings
 from copy import deepcopy
 from functools import reduce, partial
-from typing import Any, Callable, Optional, Sequence, List, Union, Tuple
 from operator import mul
+from typing import Any, Callable, Optional, Sequence, List, Union, Tuple
 
 import numpy as np
-
-try:
-    from numpy import ComplexWarning
-except ImportError:  # np2.0 compatibility
-    from numpy.exceptions import ComplexWarning  # type: ignore
-
 import tensornetwork as tn
 from scipy.stats import unitary_group
 
-from .cons import backend, dtypestr, npdtype, runtime_backend
-from .utils import arg_alias
+from ..cons import backend, dtypestr, npdtype, runtime_backend
+from ..utils import arg_alias
+from . import ComplexWarning
+from . import Gate, num_to_tensor, array_to_tensor
 
 thismodule = sys.modules[__name__]
 
@@ -33,6 +29,12 @@ zero_state = np.array([1.0, 0.0], dtype=npdtype)
 one_state = np.array([0.0, 1.0], dtype=npdtype)
 plus_state = 1.0 / np.sqrt(2) * (zero_state + one_state)
 minus_state = 1.0 / np.sqrt(2) * (zero_state - one_state)
+
+# Common elements as np.ndarray objects
+_i00 = np.array([[1.0, 0.0], [0.0, 0.0]])
+_i01 = np.array([[0.0, 1.0], [0.0, 0.0]])
+_i10 = np.array([[0.0, 0.0], [1.0, 0.0]])
+_i11 = np.array([[0.0, 0.0], [0.0, 1.0]])
 
 # Common single qubit gates as np.ndarray objects
 _h_matrix = 1 / np.sqrt(2) * np.array([[1.0, 1.0], [1.0, -1.0]])
@@ -47,7 +49,6 @@ _wroot_matrix = (
     / np.sqrt(2)
     * np.array([[1, -1 / np.sqrt(2) * (1 + 1.0j)], [1 / np.sqrt(2) * (1 - 1.0j), 1]])
 )
-
 
 _ii_matrix = np.kron(_i_matrix, _i_matrix)
 _xx_matrix = np.kron(_x_matrix, _x_matrix)
@@ -67,7 +68,6 @@ _yx_matrix = np.kron(_y_matrix, _x_matrix)
 _yz_matrix = np.kron(_y_matrix, _z_matrix)
 _zx_matrix = np.kron(_z_matrix, _x_matrix)
 _zy_matrix = np.kron(_z_matrix, _y_matrix)
-
 
 _cnot_matrix = np.array(
     [
@@ -105,7 +105,6 @@ _swap_matrix = np.array(
     ]
 )
 
-
 _toffoli_matrix = np.array(
     [
         [1.0, 0, 0, 0, 0, 0, 0, 0],
@@ -141,121 +140,79 @@ def __rmul__(self: tn.Node, lvalue: Union[float, complex]) -> "Gate":
 tn.Node.__rmul__ = __rmul__
 
 
-class Gate(tn.Node):  # type: ignore
-    """
-    Wrapper of tn.Node, quantum gate
-    """
-
-    def __repr__(self) -> str:
-        """Formatted output of Gate
-
-        :Example:
-
-        >>> tc.gates.ry(0.5)
-        >>> # OR
-        >>> print(repr(tc.gates.ry(0.5)))
-        Gate(
-            name: '__unnamed_node__',
-            tensor:
-                <tf.Tensor: shape=(2, 2), dtype=complex64, numpy=
-                array([[ 0.9689124 +0.j, -0.24740396+0.j],
-                    [ 0.24740396+0.j,  0.9689124 +0.j]], dtype=complex64)>,
-            edges: [
-                Edge(Dangling Edge)[0],
-                Edge(Dangling Edge)[1]
-            ])
-        """
-        sp = " " * 4
-        edges = self.get_all_edges()
-        edges_text = [edge.__repr__().replace("\n", "").strip() for edge in edges]
-        edges_out = f"[" + f"\n{sp*2}" + f",\n{sp*2}".join(edges_text) + f"\n{sp}]"
-        tensor_out = f"\n{sp*2}" + self.tensor.__repr__().replace("\n", f"\n{sp*2}")
-        return (
-            f"{self.__class__.__name__}(\n"
-            f"{sp}name: {self.name!r},\n"
-            f"{sp}tensor:{tensor_out},\n"
-            f"{sp}edges: {edges_out})"
-        )
-
-    def copy(self, conjugate: bool = False) -> "Gate":
-        result = super().copy(conjugate=conjugate)
-        result.__class__ = Gate
-        return result  # type: ignore
-
-
-def num_to_tensor(*num: Union[float, Tensor], dtype: Optional[str] = None) -> Any:
-    r"""
-    Convert the inputs to Tensor with specified dtype.
-
-    :Example:
-
-    >>> from tensorcircuit.gates import num_to_tensor
-    >>> # OR
-    >>> from tensorcircuit.gates import array_to_tensor
-    >>>
-    >>> x, y, z = 0, 0.1, np.array([1])
-    >>>
-    >>> tc.set_backend('numpy')
-    numpy_backend
-    >>> num_to_tensor(x, y, z)
-    [array(0.+0.j, dtype=complex64), array(0.1+0.j, dtype=complex64), array([1.+0.j], dtype=complex64)]
-    >>>
-    >>> tc.set_backend('tensorflow')
-    tensorflow_backend
-    >>> num_to_tensor(x, y, z)
-    [<tf.Tensor: shape=(), dtype=complex64, numpy=0j>,
-     <tf.Tensor: shape=(), dtype=complex64, numpy=(0.1+0j)>,
-     <tf.Tensor: shape=(1,), dtype=complex64, numpy=array([1.+0.j], dtype=complex64)>]
-    >>>
-    >>> tc.set_backend('pytorch')
-    pytorch_backend
-    >>> num_to_tensor(x, y, z)
-    [tensor(0.+0.j), tensor(0.1000+0.j), tensor([1.+0.j])]
-    >>>
-    >>> tc.set_backend('jax')
-    jax_backend
-    >>> num_to_tensor(x, y, z)
-    [DeviceArray(0.+0.j, dtype=complex64),
-     DeviceArray(0.1+0.j, dtype=complex64),
-     DeviceArray([1.+0.j], dtype=complex64)]
-
-    :param num: inputs
-    :type num: Union[float, Tensor]
-    :param dtype: dtype of the output Tensors
-    :type dtype: str, optional
-    :return: List of Tensors
-    :rtype: List[Tensor]
-    """
-    # TODO(@YHPeter): fix __doc__ for same function with different names
-
-    l = []
-    if not dtype:
-        dtype = dtypestr
-    for n in num:
-        if not backend.is_tensor(n):
-            l.append(backend.cast(backend.convert_to_tensor(n), dtype=dtype))
-        else:
-            l.append(backend.cast(n, dtype=dtype))
-    if len(l) == 1:
-        return l[0]
-    return l
+# def num_to_tensor(*num: Union[float, Tensor], dtype: Optional[str] = None) -> Any:
+#     r"""
+#     Convert the inputs to Tensor with specified dtype.
+#
+#     :Example:
+#
+#     >>> from tensorcircuit.gates import num_to_tensor
+#     >>> # OR
+#     >>> from tensorcircuit.gates import array_to_tensor
+#     >>>
+#     >>> x, y, z = 0, 0.1, np.array([1])
+#     >>>
+#     >>> tc.set_backend('numpy')
+#     numpy_backend
+#     >>> num_to_tensor(x, y, z)
+#     [array(0.+0.j, dtype=complex64), array(0.1+0.j, dtype=complex64), array([1.+0.j], dtype=complex64)]
+#     >>>
+#     >>> tc.set_backend('tensorflow')
+#     tensorflow_backend
+#     >>> num_to_tensor(x, y, z)
+#     [<tf.Tensor: shape=(), dtype=complex64, numpy=0j>,
+#      <tf.Tensor: shape=(), dtype=complex64, numpy=(0.1+0j)>,
+#      <tf.Tensor: shape=(1,), dtype=complex64, numpy=array([1.+0.j], dtype=complex64)>]
+#     >>>
+#     >>> tc.set_backend('pytorch')
+#     pytorch_backend
+#     >>> num_to_tensor(x, y, z)
+#     [tensor(0.+0.j), tensor(0.1000+0.j), tensor([1.+0.j])]
+#     >>>
+#     >>> tc.set_backend('jax')
+#     jax_backend
+#     >>> num_to_tensor(x, y, z)
+#     [DeviceArray(0.+0.j, dtype=complex64),
+#      DeviceArray(0.1+0.j, dtype=complex64),
+#      DeviceArray([1.+0.j], dtype=complex64)]
+#
+#     :param num: inputs
+#     :type num: Union[float, Tensor]
+#     :param dtype: dtype of the output Tensors
+#     :type dtype: str, optional
+#     :return: List of Tensors
+#     :rtype: List[Tensor]
+#     """
+#     # TODO(@YHPeter): fix __doc__ for same function with different names
+#
+#     l = []
+#     if dtype is None:
+#         dtype = dtypestr
+#     for n in num:
+#         if not backend.is_tensor(n):
+#             l.append(backend.cast(backend.convert_to_tensor(n), dtype=dtype))
+#         else:
+#             l.append(backend.cast(n, dtype=dtype))
+#     if len(l) == 1:
+#         return l[0]
+#     return l
+#
+#
+# array_to_tensor = num_to_tensor
 
 
-array_to_tensor = num_to_tensor
-
-
-def gate_wrapper(m: Tensor, n: Optional[str] = None) -> Gate:
-    if not n:
-        n = "unknowngate"
-    m = m.astype(npdtype)
-    return Gate(deepcopy(m), name=n)
+# def gate_wrapper(m: Tensor, n: Optional[str] = None) -> Gate:
+#     if n is None:
+#         n = "unknowngate"
+#     m = m.astype(npdtype)
+#     return Gate(deepcopy(m), name=n)
 
 
 class GateF:
     def __init__(
         self, m: Tensor, n: Optional[str] = None, ctrl: Optional[List[int]] = None
     ):
-        if not n:
+        if n is None:
             n = "unknowngate"
         self.m = m
         self.n = n
@@ -310,7 +267,7 @@ class GateF:
 
             return Gate(cu, name="c" + self.n)
 
-        if not self.ctrl:
+        if self.ctrl is None:
             ctrl = [1]
         else:
             ctrl = [1] + self.ctrl
@@ -330,7 +287,7 @@ class GateF:
             # TODO(@refraction-ray): ctrl convention to be finally determined
             return Gate(ocu, name="o" + self.n)
 
-        if not self.ctrl:
+        if self.ctrl is None:
             ctrl = [0]
         else:
             ctrl = [0] + self.ctrl
@@ -349,7 +306,7 @@ class GateVF(GateF):
         n: Optional[str] = None,
         ctrl: Optional[List[int]] = None,
     ):
-        if not n:
+        if n is None:
             n = "unknowngate"
         self.f = f
         self.n = n
@@ -404,66 +361,66 @@ meta_gate()
 pauli_gates = [i(), x(), y(), z()]  # type: ignore
 
 
-def matrix_for_gate(gate: Gate, tol: float = 1e-6) -> Tensor:
-    r"""
-    Convert Gate to numpy array.
+# def matrix_for_gate(gate: Gate, tol: float = 1e-6) -> Tensor:
+#     r"""
+#     Convert Gate to numpy array.
+#
+#     :Example:
+#
+#     >>> gate = tc.gates.r_gate()
+#     >>> tc.gates.matrix_for_gate(gate)
+#         array([[1.+0.j, 0.+0.j],
+#             [0.+0.j, 1.+0.j]], dtype=complex64)
+#
+#     :param gate: input Gate
+#     :type gate: Gate
+#     :return: Corresponding Tensor
+#     :rtype: Tensor
+#     """
+#
+#     t = gate.tensor
+#     t = backend.reshapem(t)
+#     t = backend.numpy(t)
+#     t.real[abs(t.real) < tol] = 0.0
+#     t.imag[abs(t.imag) < tol] = 0.0
+#     return t
 
-    :Example:
 
-    >>> gate = tc.gates.r_gate()
-    >>> tc.gates.matrix_for_gate(gate)
-        array([[1.+0.j, 0.+0.j],
-            [0.+0.j, 1.+0.j]], dtype=complex64)
-
-    :param gate: input Gate
-    :type gate: Gate
-    :return: Corresponding Tensor
-    :rtype: Tensor
-    """
-
-    t = gate.tensor
-    t = backend.reshapem(t)
-    t = backend.numpy(t)
-    t.real[abs(t.real) < tol] = 0.0
-    t.imag[abs(t.imag) < tol] = 0.0
-    return t
-
-
-def bmatrix(a: Array) -> str:
-    r"""
-    Returns a :math:`\LaTeX` bmatrix.
-
-    :Example:
-
-    >>> gate = tc.gates.r_gate()
-    >>> array = tc.gates.matrix_for_gate(gate)
-    >>> array
-    array([[1.+0.j, 0.+0.j],
-        [0.+0.j, 1.+0.j]], dtype=complex64)
-    >>> print(tc.gates.bmatrix(array))
-    \begin{bmatrix}    1.+0.j & 0.+0.j\\    0.+0.j & 1.+0.j \end{bmatrix}
-
-    Formatted Display:
-
-    .. math::
-        \begin{bmatrix}    1.+0.j & 0.+0.j\\    0.+0.j & 1.+0.j \end{bmatrix}
-
-    :param a: 2D numpy array
-    :type a: np.array
-    :raises ValueError: ValueError("bmatrix can at most display two dimensions")
-    :return: :math:`\LaTeX`-formatted string for bmatrix of the array a
-    :rtype: str
-    """
-    #   Adopted from https://stackoverflow.com/questions/17129290/numpy-2d-and-1d-array-to-latex-bmatrix/17131750
-
-    if len(a.shape) > 2:
-        raise ValueError("bmatrix can at most display two dimensions")
-    lines = str(a).replace("[", "").replace("]", "").splitlines()
-    rv = [r"\begin{bmatrix}"]
-    rv += ["    " + " & ".join(l.split()) + r"\\" for l in lines]
-    rv[-1] = rv[-1][:-2]
-    rv += [r" \end{bmatrix}"]
-    return "".join(rv)
+# def bmatrix(a: Array) -> str:
+#     r"""
+#     Returns a :math:`\LaTeX` bmatrix.
+#
+#     :Example:
+#
+#     >>> gate = tc.gates.r_gate()
+#     >>> array = tc.gates.matrix_for_gate(gate)
+#     >>> array
+#     array([[1.+0.j, 0.+0.j],
+#         [0.+0.j, 1.+0.j]], dtype=complex64)
+#     >>> print(tc.gates.bmatrix(array))
+#     \begin{bmatrix}    1.+0.j & 0.+0.j\\    0.+0.j & 1.+0.j \end{bmatrix}
+#
+#     Formatted Display:
+#
+#     .. math::
+#         \begin{bmatrix}    1.+0.j & 0.+0.j\\    0.+0.j & 1.+0.j \end{bmatrix}
+#
+#     :param a: 2D numpy array
+#     :type a: np.array
+#     :raises ValueError: ValueError("bmatrix can at most display two dimensions")
+#     :return: :math:`\LaTeX`-formatted string for bmatrix of the array a
+#     :rtype: str
+#     """
+#     #   Adopted from https://stackoverflow.com/questions/17129290/numpy-2d-and-1d-array-to-latex-bmatrix/17131750
+#
+#     if len(a.shape) > 2:
+#         raise ValueError("bmatrix can at most display two dimensions")
+#     lines = str(a).replace("[", "").replace("]", "").splitlines()
+#     rv = [r"\begin{bmatrix}"]
+#     rv += ["    " + " & ".join(l.split()) + r"\\" for l in lines]
+#     rv[-1] = rv[-1][:-2]
+#     rv += [r" \end{bmatrix}"]
+#     return "".join(rv)
 
 
 def phase_gate(theta: float = 0) -> Gate:
@@ -483,7 +440,7 @@ def phase_gate(theta: float = 0) -> Gate:
     :rtype: Gate
     """
     theta = array_to_tensor(theta)
-    i00, i11 = array_to_tensor(np.array([[1, 0], [0, 0]]), np.array([[0, 0], [0, 1]]))
+    i00, i11 = array_to_tensor(_i00, _i11)
     unitary = i00 + backend.exp(1.0j * theta) * i11
     return Gate(unitary)
 
@@ -512,7 +469,7 @@ def get_u_parameter(m: Tensor) -> Tuple[float, float, float]:
     return theta, phi, lbd
 
 
-def u_gate(theta: float = 0, phi: float = 0, lbd: float = 0) -> Gate:
+def u_gate(theta: float = 0.0, phi: float = 0.0, lbd: float = 0.0) -> Gate:
     r"""
     IBMQ U gate following the converntion of OpenQASM3.0.
     See `OpenQASM doc <https://openqasm.com/language/gates.html#built-in-gates>`_
@@ -533,12 +490,7 @@ def u_gate(theta: float = 0, phi: float = 0, lbd: float = 0) -> Gate:
     :rtype: Gate
     """
     theta, phi, lbd = array_to_tensor(theta, phi, lbd)
-    i00, i01, i10, i11 = array_to_tensor(
-        np.array([[1, 0], [0, 0]]),
-        np.array([[0, 1], [0, 0]]),
-        np.array([[0, 0], [1, 0]]),
-        np.array([[0, 0], [0, 1]]),
-    )
+    i00, i01, i10, i11 = array_to_tensor(_i00, _i01, _i10, _i11)
     unitary = (
         backend.cos(theta / 2) * i00
         - backend.exp(1.0j * lbd) * backend.sin(theta / 2) * i01
@@ -548,7 +500,7 @@ def u_gate(theta: float = 0, phi: float = 0, lbd: float = 0) -> Gate:
     return Gate(unitary)
 
 
-def r_gate(theta: float = 0, alpha: float = 0, phi: float = 0) -> Gate:
+def r_gate(theta: float = 0.0, alpha: float = 0.0, phi: float = 0.0) -> Gate:
     r"""
     General single qubit rotation gate
 
@@ -582,7 +534,7 @@ def r_gate(theta: float = 0, alpha: float = 0, phi: float = 0) -> Gate:
 # r = r_gate
 
 
-def rx_gate(theta: float = 0) -> Gate:
+def rx_gate(theta: float = 0.0) -> Gate:
     r"""
     Rotation gate along :math:`x` axis.
 
@@ -603,7 +555,7 @@ def rx_gate(theta: float = 0) -> Gate:
 # rx = rx_gate
 
 
-def ry_gate(theta: float = 0) -> Gate:
+def ry_gate(theta: float = 0.0) -> Gate:
     r"""
     Rotation gate along :math:`y` axis.
 
@@ -624,7 +576,7 @@ def ry_gate(theta: float = 0) -> Gate:
 # ry = ry_gate
 
 
-def rz_gate(theta: float = 0) -> Gate:
+def rz_gate(theta: float = 0.0) -> Gate:
     r"""
     Rotation gate along :math:`z` axis.
 
@@ -645,7 +597,7 @@ def rz_gate(theta: float = 0) -> Gate:
 # rz = rz_gate
 
 
-def rgate_theoretical(theta: float = 0, alpha: float = 0, phi: float = 0) -> Gate:
+def rgate_theoretical(theta: float = 0.0, alpha: float = 0.0, phi: float = 0.0) -> Gate:
     r"""
     Rotation gate implemented by matrix exponential. The output is the same as `rgate`.
 
@@ -723,7 +675,7 @@ def iswap_gate(theta: float = 1.0) -> Gate:
 # iswap = iswap_gate
 
 
-def cr_gate(theta: float = 0, alpha: float = 0, phi: float = 0) -> Gate:
+def cr_gate(theta: float = 0.0, alpha: float = 0.0, phi: float = 0.0) -> Gate:
     r"""
     Controlled rotation gate. When the control qubit is 1, `rgate` is applied to the target qubit.
 
@@ -825,6 +777,8 @@ def exponential_gate(unitary: Tensor, theta: float, name: str = "none") -> Gate:
 
 
 exp_gate = exponential_gate
+
+
 # exp = exponential_gate
 
 
@@ -933,7 +887,7 @@ def multicontrol_gate(unitary: Tensor, ctrl: Union[int, Sequence[int]] = 1) -> O
         for i in range(1, len(nodes) - 1):
             nodes[i][3] ^ nodes[i + 1][0]
 
-    from .quantum import QuOperator
+    from ..quantum import QuOperator
 
     l = int((len(nodes[-1].edges) - 1) / 2)
     gate = QuOperator(

@@ -3,17 +3,16 @@ Some common noise quantum channels.
 """
 
 import sys
-from typing import Any, Sequence, Union, Optional, Dict
 from functools import partial
+from typing import Any, Sequence, Union, Optional, Dict
+
 import numpy as np
 
-
 from . import cons
+from . import gates
 from . import interfaces
 from .cons import backend, dtypestr
-from . import gates
 from .gates import array_to_tensor
-
 
 thismodule = sys.modules[__name__]
 
@@ -484,6 +483,8 @@ def _collect_channels() -> Sequence[str]:
 
 
 channels = _collect_channels()
+
+
 # channels = ["depolarizing", "amplitudedamping", "reset", "phasedamping"]
 
 
@@ -694,7 +695,7 @@ def choi_to_kraus(
     output_dim = _safe_sqrt(dim[1])
 
     # Get eigen-decomposition of Choi-matrix
-    e, v = backend.eigh(choi)  #  value of e is from minimal to maxmal
+    e, v = backend.eigh(choi)  # value of e is from minimal to maxmal
     e = backend.real(e)
     v = backend.transpose(v)
 
@@ -790,7 +791,7 @@ def super_to_kraus(superop: Matrix) -> Matrix:
     argnums=[0],
     gate_to_tensor=True,
 )
-def is_hermitian_matrix(mat: Matrix, rtol: float = 1e-8, atol: float = 1e-5):
+def is_hermitian_matrix(mat: Matrix, rtol: float = 1e-8, atol: float = 1e-5) -> bool:
     """
     Test if an array is a Hermitian matrix
 
@@ -922,7 +923,7 @@ def evol_superop(density_matrix: Matrix, superop: Matrix) -> Matrix:
 )
 def check_rep_transformation(
     kraus: Sequence[Gate], density_matrix: Matrix, verbose: bool = False
-):
+) -> None:
     """
     Check the convertation between those representations.
 

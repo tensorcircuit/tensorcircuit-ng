@@ -409,6 +409,12 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def mod(self, x: Tensor, y: Tensor) -> Tensor:
         return torchlib.fmod(x, y)
 
+    def floor(self, x: Tensor) -> Tensor:
+        return torchlib.floor(x)
+
+    def clip(self, x: Tensor, a_min: Tensor, a_max: Tensor) -> Tensor:
+        return torchlib.clamp(x, a_min, a_max)
+
     def right_shift(self, x: Tensor, y: Tensor) -> Tensor:
         return torchlib.bitwise_right_shift(x, y)
 

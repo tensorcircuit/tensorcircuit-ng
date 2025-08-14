@@ -8,18 +8,19 @@ from functools import reduce, partial
 from typing import Any, List, Optional, Sequence, Tuple, Dict, Union
 from copy import copy
 import logging
+import types
 
 import numpy as np
 import tensornetwork as tn
 
-from . import gates
+from .gates import Gate
 from .cons import backend, npdtype, contractor, rdtypestr, dtypestr
 from .quantum import QuOperator, QuVector, extract_tensors_from_qop
 from .mps_base import FiniteMPS
 from .abstractcircuit import AbstractCircuit
+from .basecircuit import _decode_basis_label
 from .utils import arg_alias
 
-Gate = gates.Gate
 Tensor = Any
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,7 @@ class MPSCircuit(AbstractCircuit):
     def __init__(
         self,
         nqubits: int,
+        dim: Optional[int] = None,
         center_position: Optional[int] = None,
         tensors: Optional[Sequence[Tensor]] = None,
         wavefunction: Optional[Union[QuVector, Tensor]] = None,
@@ -97,6 +99,8 @@ class MPSCircuit(AbstractCircuit):
 
         :param nqubits: The number of qubits in the circuit.
         :type nqubits: int
+        :param dim: The local Hilbert space dimension per site. Qudit is supported for 2 <= d <= 36.
+        :type dim: If None, the dimension of the circuit will be `2`, which is a qubit system.
         :param center_position: The center position of MPS, default to 0
         :type center_position: int, optional
         :param tensors: If not None, the initial state of the circuit is taken as ``tensors``
@@ -109,6 +113,7 @@ class MPSCircuit(AbstractCircuit):
         :param split: Split rules
         :type split: Any
         """
+        self._validate_dim(dim=dim)
         self.circuit_param = {
             "nqubits": nqubits,
             "center_position": center_position,
@@ -137,7 +142,9 @@ class MPSCircuit(AbstractCircuit):
                         wavefunction, split=self.split
                     )
             else:  # full wavefunction
-                tensors = self.wavefunction_to_tensors(wavefunction, split=self.split)
+                tensors = self.wavefunction_to_tensors(
+                    wavefunction, dim_phys=self._d, split=self.split
+                )
             assert len(tensors) == nqubits
             self._mps = FiniteMPS(tensors, canonicalize=False)
             self._mps.center_position = 0
@@ -151,8 +158,13 @@ class MPSCircuit(AbstractCircuit):
                 self._mps = FiniteMPS(tensors, canonicalize=True, center_position=0)
         else:
             tensors = [
-                np.array([1.0, 0.0], dtype=npdtype)[None, :, None]
-                for i in range(nqubits)
+                np.concatenate(
+                    [
+                        np.array([1.0], dtype=npdtype),
+                        np.zeros((self._d - 1,), dtype=npdtype),
+                    ]
+                )[None, :, None]
+                for _ in range(nqubits)
             ]
             self._mps = FiniteMPS(tensors, canonicalize=False)
             if center_position is not None:
@@ -289,18 +301,19 @@ class MPSCircuit(AbstractCircuit):
             consistent with the split option of the class.
         :type split: Optional[Dict[str, Any]], optional
         """
+        self._not_implemented_for_qudit()
         if split is None:
             split = self.split
         self.position(index_from)
         if index_from < index_to:
             for i in range(index_from, index_to):
                 self.apply_adjacent_double_gate(
-                    gates.swap(), i, i + 1, center_position=i + 1, split=split  # type: ignore
+                    self.gates.swap(), i, i + 1, center_position=i + 1, split=split  # type: ignore
                 )
         elif index_from > index_to:
             for i in range(index_from, index_to, -1):
                 self.apply_adjacent_double_gate(
-                    gates.swap(), i - 1, i, center_position=i - 1, split=split  # type: ignore
+                    self.gates.swap(), i - 1, i, center_position=i - 1, split=split  # type: ignore
                 )
         else:
             # index_from == index_to
@@ -370,42 +383,65 @@ class MPSCircuit(AbstractCircuit):
         #      b
 
         # index must be ordered
-        assert np.all(np.diff(index) > 0)
-        index_left = np.min(index)
+        if len(index) == 0:
+            raise ValueError("`index` must contain at least one site.")
+        if not all(index[i] < index[i + 1] for i in range(len(index) - 1)):
+            raise AssertionError("`index` must be strictly increasing.")
+
+        index_left = int(np.min(index))
         if isinstance(gate, tn.Node):
             gate = backend.copy(gate.tensor)
-        index = np.array(index) - index_left
+
+        gshape = tuple(backend.shape_tuple(gate))
         nindex = len(index)
-        # transform gate from (in1, in2, ..., out1, out2 ...) to
-        # (in1, out1, in2, out2, ...)
-        order = tuple(np.arange(2 * nindex).reshape((2, nindex)).T.flatten())
-        shape = (4,) * nindex
-        gate = backend.reshape(backend.transpose(gate, order), shape)
-        argsort = np.argsort(index)
-        # reorder the gate according to the site positions
-        gate = backend.transpose(gate, tuple(argsort))
-        index = index[argsort]  # type: ignore
-        # split the gate into tensors assuming they are adjacent
-        main_tensors = cls.wavefunction_to_tensors(gate, dim_phys=4, norm=False)
-        # each tensor is in shape of (i, a, b, j)
-        tensors = []
-        previous_i = None
-        for i, main_tensor in zip(index, main_tensors):
-            # insert identites in the middle
+
+        if len(gshape) != 2 * nindex:
+            raise AssertionError("The gate rank must be 2*n (in..., out...).")
+
+        in_dims = gshape[:nindex]
+        d = int(in_dims[0])
+        if any(int(x) != d for x in in_dims):
+            raise AssertionError("All input physical dimensions must be equal.")
+
+        dim_phys_mpo = d * d
+
+        order_interleave = tuple(
+            np.arange(2 * nindex).reshape(2, nindex).T.flatten().tolist()
+        )
+        gate = backend.transpose(gate, order_interleave)
+
+        index_arr = np.array(index, dtype=int) - index_left
+        pair_order = np.argsort(index_arr)
+
+        pair_axis_perm = np.ravel(
+            np.column_stack([2 * pair_order, 2 * pair_order + 1])
+        ).astype(int)
+        pair_axis_perm = tuple(pair_axis_perm.tolist())  # type: ignore
+        gate = backend.transpose(gate, pair_axis_perm)
+        index_arr = index_arr[pair_order]  # type: ignore
+
+        gate = backend.reshape(gate, (dim_phys_mpo,) * nindex)
+        main_tensors = cls.wavefunction_to_tensors(
+            gate, dim_phys=dim_phys_mpo, norm=False
+        )
+
+        tensors: list[Tensor] = []
+        previous_i: Optional[int] = None
+
+        for i, main_tensor in zip(index_arr, main_tensors):
             if previous_i is not None:
-                for _ in range(previous_i + 1, i):
-                    bond_dim = tensors[-1].shape[-1]
-                    I = (
-                        np.eye(bond_dim * 2)
-                        .reshape((bond_dim, 2, bond_dim, 2))
-                        .transpose((0, 1, 3, 2))
-                        .astype(dtypestr)
-                    )
-                    tensors.append(backend.convert_to_tensor(I))
-            nleft, _, nright = main_tensor.shape
-            tensor = backend.reshape(main_tensor, (nleft, 2, 2, nright))
+                for _gap_site in range(int(previous_i) + 1, int(i)):
+                    bond_dim = int(backend.shape_tuple(tensors[-1])[-1])
+                    eye2d = backend.eye(bond_dim * d, dtype=backend.dtype(tensors[-1]))
+                    I4 = backend.reshape(eye2d, (bond_dim, d, bond_dim, d))
+                    I4 = backend.transpose(I4, (0, 1, 3, 2))
+                    tensors.append(I4)
+
+            nleft, _, nright = backend.shape_tuple(main_tensor)
+            tensor = backend.reshape(main_tensor, (int(nleft), d, d, int(nright)))
             tensors.append(tensor)
-            previous_i = i
+            previous_i = int(i)
+
         return tensors, index_left
 
     @classmethod
@@ -448,15 +484,15 @@ class MPSCircuit(AbstractCircuit):
         """
         if split is None:
             split = {}
-        ni = tensor_left.shape[0]
-        nk = tensor_right.shape[-1]
+        ni, di = tensor_left.shape[0], tensor_right.shape[1]
+        nk, dk = tensor_right.shape[-1], tensor_right.shape[-2]
         T = backend.einsum("iaj,jbk->iabk", tensor_left, tensor_right)
-        T = backend.reshape(T, (ni * 2, nk * 2))
+        T = backend.reshape(T, (ni * di, nk * dk))
         new_tensor_left, new_tensor_right = split_tensor(
             T, center_left=center_left, split=split
         )
-        new_tensor_left = backend.reshape(new_tensor_left, (ni, 2, -1))
-        new_tensor_right = backend.reshape(new_tensor_right, (-1, 2, nk))
+        new_tensor_left = backend.reshape(new_tensor_left, (ni, di, -1))
+        new_tensor_right = backend.reshape(new_tensor_right, (-1, dk, nk))
         return new_tensor_left, new_tensor_right
 
     def reduce_dimension(
@@ -550,10 +586,11 @@ class MPSCircuit(AbstractCircuit):
         for i, idx in zip(i_list, idx_list):
             O = tensors[i]
             T = self._mps.tensors[idx]
-            ni, _, _, nj = O.shape
+            ni, d_in, _, nj = O.shape
             nk, _, nl = T.shape
             OT = backend.einsum("iabj,kbl->ikajl", O, T)
-            OT = backend.reshape(OT, (ni * nk, 2, nj * nl))
+            OT = backend.reshape(OT, (ni * nk, d_in, nj * nl))
+
             self._mps.tensors[idx] = OT
 
         # canonicalize
@@ -660,8 +697,7 @@ class MPSCircuit(AbstractCircuit):
         :type keep: int, optional
         """
         # normalization not guaranteed
-        assert keep in [0, 1]
-        gate = backend.zeros((2, 2), dtype=dtypestr)
+        gate = backend.zeros((self._d, self._d), dtype=dtypestr)
         gate = backend.scatter(
             gate,
             backend.convert_to_tensor([[keep, keep]]),
@@ -692,7 +728,7 @@ class MPSCircuit(AbstractCircuit):
     def wavefunction_to_tensors(
         cls,
         wavefunction: Tensor,
-        dim_phys: int = 2,
+        dim_phys: Optional[int] = None,
         norm: bool = True,
         split: Optional[Dict[str, Any]] = None,
     ) -> List[Tensor]:
@@ -710,6 +746,7 @@ class MPSCircuit(AbstractCircuit):
         :return: The tensors
         :rtype: List[Tensor]
         """
+        dim_phys = dim_phys if dim_phys is not None else 2
         if split is None:
             split = {}
         wavefunction = backend.reshape(wavefunction, (-1, 1))
@@ -768,10 +805,16 @@ class MPSCircuit(AbstractCircuit):
         for key in vars(self):
             if key == "_mps":
                 continue
-            if backend.is_tensor(info[key]):
-                copied_value = backend.copy(info[key])
+            val = info[key]
+            if backend.is_tensor(val):
+                copied_value = backend.copy(val)
+            elif isinstance(val, types.ModuleType):
+                copied_value = val
             else:
-                copied_value = copy(info[key])
+                try:
+                    copied_value = copy(val)
+                except TypeError:
+                    copied_value = val
             setattr(result, key, copied_value)
         return result
 
@@ -815,7 +858,8 @@ class MPSCircuit(AbstractCircuit):
 
     def amplitude(self, l: str) -> Tensor:
         assert len(l) == self._nqubits
-        tensors = [self._mps.tensors[i][:, int(s), :] for i, s in enumerate(l)]
+        idx_list = _decode_basis_label(l, self._d, self._nqubits)
+        tensors = [self._mps.tensors[i][:, idx, :] for i, idx in enumerate(idx_list)]
         return reduce(backend.matmul, tensors)[0, 0]
 
     def proj_with_mps(self, other: "MPSCircuit", conj: bool = True) -> Tensor:
@@ -873,6 +917,7 @@ class MPSCircuit(AbstractCircuit):
 
         mps = self.__class__(
             nqubits,
+            dim=self._d,
             tensors=tensors,
             center_position=center_position,
             split=self.split.copy(),
@@ -1000,8 +1045,6 @@ class MPSCircuit(AbstractCircuit):
         # set the center to the left side, then gradually move to the right and do measurement at sites
         """
         mps = self.copy()
-        up = backend.convert_to_tensor(np.array([1, 0]).astype(dtypestr))
-        down = backend.convert_to_tensor(np.array([0, 1]).astype(dtypestr))
 
         p = 1.0
         p = backend.convert_to_tensor(p)
@@ -1009,26 +1052,32 @@ class MPSCircuit(AbstractCircuit):
         sample = []
         for k, site in enumerate(index):
             mps.position(site)
-            # do measurement
             tensor = mps._mps.tensors[site]
             ps = backend.real(
                 backend.einsum("iaj,iaj->a", tensor, backend.conj(tensor))
             )
             ps /= backend.sum(ps)
-            pu = ps[0]
+
             if status is None:
                 r = backend.implicit_randu()[0]
             else:
                 r = status[k]
             r = backend.real(backend.cast(r, dtypestr))
-            eps = 0.31415926 * 1e-12
-            sign = backend.sign(r - pu + eps) / 2 + 0.5  # in case status is exactly 0.5
-            sign = backend.convert_to_tensor(sign)
-            sign = backend.cast(sign, dtype=rdtypestr)
-            sign_complex = backend.cast(sign, dtypestr)
-            sample.append(sign_complex)
-            p = p * (pu * (-1) ** sign + sign)
-            m = (1 - sign_complex) * up + sign_complex * down
+
+            cdf = backend.cumsum(ps)
+            choice = backend.sum(backend.cast(r >= cdf, "int32"))
+
+            choice_f = backend.cast(choice, dtypestr)
+            sample.append(choice_f)
+
+            m = backend.zeros((ps.shape[0],), dtype=dtypestr)
+            m = backend.scatter(
+                m,
+                backend.convert_to_tensor([[backend.cast(choice, "int32")]]),
+                backend.convert_to_tensor(np.array([1.0], dtype=dtypestr)),
+            )
+
+            p = p * backend.sum(ps * m)
             mps._mps.tensors[site] = backend.einsum("iaj,a->ij", tensor, m)[:, None, :]
         sample = backend.stack(sample)
         sample = backend.real(sample)

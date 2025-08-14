@@ -17,8 +17,8 @@ import opt_einsum
 import tensornetwork as tn
 from tensornetwork.backend_contextmanager import get_default_backend
 
-from .backends.numpy_backend import NumpyBackend
 from .backends import get_backend
+from .backends.numpy_backend import NumpyBackend
 from .simplify import _multi_remove
 
 logger = logging.getLogger(__name__)
@@ -63,6 +63,9 @@ rdtypestr = "float32"
 npdtype = np.complex64
 backend: NumpyBackend = get_backend("numpy")
 contractor = tn.contractors.auto
+_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
 # these above lines are just for mypy, it is not very good at evaluating runtime object
 
 
@@ -204,9 +207,9 @@ def set_dtype(dtype: Optional[str] = None, set_global: bool = True) -> Tuple[str
                 setattr(sys.modules[module], "rdtypestr", rdtype)
                 setattr(sys.modules[module], "npdtype", npdtype)
 
-        from .gates import meta_gate
+        from .gates import set_gates_for
 
-        meta_gate()
+        set_gates_for()
     return dtype, rdtype
 
 
@@ -542,7 +545,6 @@ def _get_path_cache_friendly(
 
 
 get_tn_info = partial(_get_path_cache_friendly, algorithm=_identity)
-
 
 # some contractor setup usages
 """

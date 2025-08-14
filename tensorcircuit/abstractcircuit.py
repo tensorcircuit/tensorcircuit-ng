@@ -1,15 +1,21 @@
 """
 Methods for abstract circuits independent of nodes, edges and contractions
+
+Note:
+  - Supports both qubit (d=2) and qudit (d>=2) systems.
+  - For string-encoded samples/counts when d<=36, digits use base-d characters 0–9A–Z (A=10, …, Z=35).
 """
 
 # pylint: disable=invalid-name
 
+import types
+import inspect
 import json
 import logging
 from copy import deepcopy
 from functools import reduce
 from operator import add
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union, NoReturn
 
 import numpy as np
 import tensornetwork as tn
@@ -25,49 +31,15 @@ logger = logging.getLogger(__name__)
 Gate = gates.Gate
 Tensor = Any
 
-sgates = (
-    ["i", "x", "y", "z", "h", "t", "s", "td", "sd", "wroot"]
-    + ["cnot", "cz", "swap", "cy", "ox", "oy", "oz"]
-    + ["toffoli", "fredkin"]
-)
-vgates = [
-    "r",
-    "cr",
-    "u",
-    "cu",
-    "rx",
-    "ry",
-    "rz",
-    "phase",
-    "rxx",
-    "ryy",
-    "rzz",
-    "cphase",
-    "crx",
-    "cry",
-    "crz",
-    "orx",
-    "ory",
-    "orz",
-    "iswap",
-    "any",
-    "exp",
-    "exp1",
-]
-mpogates = ["multicontrol", "mpo"]
-gate_aliases = [
-    ["cnot", "cx"],
-    ["fredkin", "cswap"],
-    ["toffoli", "ccnot"],
-    ["toffoli", "ccx"],
-    ["any", "unitary"],
-    ["sd", "sdg"],
-    ["td", "tdg"],
-]
+sgates = gates.sgates
+vgates = gates.vgates
+mpogates = gates.mpogates
+gate_aliases = gates.gate_aliases
 
 
 class AbstractCircuit:
     _nqubits: int
+    _d: int
     _qir: List[Dict[str, Any]]
     _extra_qir: List[Dict[str, Any]]
     inputs: Tensor
@@ -78,6 +50,31 @@ class AbstractCircuit:
     vgates = vgates
     mpogates = mpogates
     gate_aliases = gate_aliases
+
+    def _validate_dim(self, dim: Optional[int]) -> None:
+        self._d = 2 if dim is None else dim
+        # Require integer d>=2; current string-encoded IO supports d<=36 (0–9A–Z digits).
+        if not isinstance(self._d, int) or self._d < 2:
+            raise ValueError(f"Invalid dimension d={self._d}; must be an integer >= 2.")
+        if self._d > 36:
+            raise NotImplementedError(
+                "The Qudit interface is only supported for dimension < 36 now."
+            )
+
+    def _not_implemented_for_qudit(self) -> None:
+        if self._d != 2:
+            raise NotImplementedError(
+                f"The method ‘{inspect.stack()[1].function}’ is not supported for circuits with qudit systems (d != 2)."
+            )
+
+    def _get_gmod(self) -> types.ModuleType:
+        gmod = getattr(self, "_gmod", None)
+        if gmod is None:
+            from . import gates
+
+            gmod = gates.get_gate_module(int(getattr(self, "_d", 2)))
+            self._gmod = gmod
+        return self._gmod
 
     def apply_general_gate(
         self,
@@ -111,8 +108,16 @@ class AbstractCircuit:
             if "split" in vars:
                 split = vars["split"]
                 del vars["split"]
+            gmod = self._get_gmod()
+            try:
+                gatef_dyn = getattr(gmod, name)
+            except AttributeError:
+                raise NotImplementedError(
+                    f"Gate `{name}` is not supported for d={self._d}."
+                )
+
             gate_dict = {
-                "gatef": gatef,
+                "gatef": gatef_dyn,
                 "index": index,
                 "name": localname,
                 "split": split,
@@ -120,7 +125,7 @@ class AbstractCircuit:
                 "parameters": vars,
             }
             # self._qir.append(gate_dict)
-            gate = gatef(**vars)
+            gate = gatef_dyn(**vars)
             self.apply_general_gate(
                 gate,
                 *index,
@@ -175,8 +180,16 @@ class AbstractCircuit:
                 localname = defaultname
 
             # split = None
-            gate = gatef()
-            gate_dict = {"gatef": gatef}
+            gmod = self._get_gmod()
+            try:
+                gatef_dyn = getattr(gmod, defaultname)
+            except AttributeError:
+                raise NotImplementedError(
+                    f"Gate `{defaultname}` is not supported for d={self._d}."
+                )
+
+            gate = gatef_dyn()
+            gate_dict = {"gatef": gatef_dyn}
 
             self.apply_general_gate(
                 gate,
@@ -198,48 +211,75 @@ class AbstractCircuit:
 
         return apply_list
 
+    @staticmethod
+    def _named_stub(name: str) -> Callable[..., Gate]:
+        """Helper"""
+
+        def _stub(*args: Any, **kwargs: Any) -> NoReturn:
+            raise RuntimeError(f"stub for gate `{name}` should not be called")
+
+        _stub.__name__ = name
+        return _stub
+
     @classmethod
     def _meta_apply(cls) -> None:
         """
         The registration of gate methods on circuit class using reflection mechanism
         """
+        from . import gates
+
+        gmod = gates.get_gate_module(2)
+
         for g in sgates:
             setattr(
-                cls, g, cls.apply_general_gate_delayed(gatef=getattr(gates, g), name=g)
+                cls, g, cls.apply_general_gate_delayed(gatef=cls._named_stub(g), name=g)
             )
             setattr(
                 cls,
                 g.upper(),
-                cls.apply_general_gate_delayed(gatef=getattr(gates, g), name=g),
+                cls.apply_general_gate_delayed(gatef=cls._named_stub(g), name=g),
             )
-            matrix = gates.matrix_for_gate(getattr(gates, g)())
-            matrix = gates.bmatrix(matrix)
-            doc = """
-            Apply **%s** gate on the circuit.
-            See :py:meth:`tensorcircuit.gates.%s_gate`.
+            try:
+                matrix = gates.matrix_for_gate(getattr(gmod, g)())
+                matrix = gates.bmatrix(matrix)
+                doc = """
+                Apply **%s** gate on the circuit.
+                See :py:meth:`tensorcircuit.gates.%s_gate`.
+    
+                .. note::
+                   Gate availability and exact matrix depend on the circuit local dimension ``d``.
+                   The matrix below is an example for ``d=2`` (qubit case). For ``d>2`` (qudit),
+                   the gate has the same name but generally a different matrix.
+    
+                :param index: Subsystem (site) index that the gate applies on
+                    (qubit when ``d=2``, qudit when ``d>2``). The example matrix for ``d=2`` is
+    
+                    .. math::
+    
+                          %s
+    
+                :type index: int.
+                """ % (
+                    g.upper(),
+                    g,
+                    matrix,
+                )
+            except AttributeError:
+                doc = """
+                Apply **%s** gate on the circuit.
+                See :py:meth:`tensorcircuit.gates.%s_gate`.
+    
+                .. note::
+                   Gate availability and exact matrix depend on the circuit local dimension ``d``
+                   (qubit when ``d=2``, qudit when ``d>2``).
+    
+                :param index: Subsystem (site) index that the gate applies on.
+                :type index: int.
+                """ % (
+                    g.upper(),
+                    g,
+                )
 
-
-            :param index: Qubit number that the gate applies on.
-                The matrix for the gate is
-
-                .. math::
-
-                      %s
-
-            :type index: int.
-            """ % (
-                g.upper(),
-                g,
-                matrix,
-            )
-            # docs = """
-            # Apply **%s** gate on the circuit.
-
-            # :param index: Qubit number that the gate applies on.
-            # :type index: int.
-            # """ % (
-            #     g.upper()
-            # )
             getattr(cls, g).__doc__ = doc
             getattr(cls, g.upper()).__doc__ = doc
 
@@ -248,22 +288,25 @@ class AbstractCircuit:
                 cls,
                 g,
                 cls.apply_general_variable_gate_delayed(
-                    gatef=getattr(gates, g), name=g
+                    gatef=cls._named_stub(g), name=g
                 ),
             )
             setattr(
                 cls,
                 g.upper(),
                 cls.apply_general_variable_gate_delayed(
-                    gatef=getattr(gates, g), name=g
+                    gatef=cls._named_stub(g), name=g
                 ),
             )
             doc = """
             Apply **%s** gate with parameters on the circuit.
             See :py:meth:`tensorcircuit.gates.%s_gate`.
-
-
-            :param index: Qubit number that the gate applies on.
+    
+            .. note::
+               Gate availability and exact matrix/parameterization depend on the
+               circuit local dimension ``d`` (qubit when ``d=2``, qudit when ``d>2``).
+    
+            :param index: Subsystem (site) index that the gate applies on.
             :type index: int.
             :param vars: Parameters for the gate.
             :type vars: float.
@@ -279,21 +322,25 @@ class AbstractCircuit:
                 cls,
                 g,
                 cls.apply_general_variable_gate_delayed(
-                    gatef=getattr(gates, g), name=g, mpo=True
+                    gatef=cls._named_stub(g), name=g, mpo=True
                 ),
             )
             setattr(
                 cls,
                 g.upper(),
                 cls.apply_general_variable_gate_delayed(
-                    gatef=getattr(gates, g), name=g, mpo=True
+                    gatef=cls._named_stub(g), name=g, mpo=True
                 ),
             )
             doc = """
             Apply %s gate in MPO format on the circuit.
             See :py:meth:`tensorcircuit.gates.%s_gate`.
-
-            :param index: Qubit number that the gate applies on.
+    
+            .. note::
+               Gate availability and the MPO decomposition depend on the circuit local
+               dimension ``d`` (qubit when ``d=2``, qudit when ``d>2``).
+    
+            :param index: Subsystem index that the gate applies on.
             :type index: int.
             :param vars: Parameters for the gate.
             :type vars: float.
@@ -312,6 +359,7 @@ class AbstractCircuit:
     def to_qir(self) -> List[Dict[str, Any]]:
         """
         Return the quantum intermediate representation of the circuit.
+        (Gate availability and matrices depend on local dimension ``d``.)
 
         :Example:
 
@@ -427,6 +475,11 @@ class AbstractCircuit:
         :return: the inversed circuit
         :rtype: Circuit
         """
+        raise NotImplementedError(
+            "Due to the issue with the registered gate collection, "
+            "the inverse method is currently unavailable."
+        )
+        self._not_implemented_for_qudit()
         if circuit_params is None:
             circuit_params = {}
         if "nqubits" not in circuit_params:
@@ -521,11 +574,10 @@ class AbstractCircuit:
         circuit_params: Optional[Dict[str, Any]] = None,
     ) -> "AbstractCircuit":
         """
-        generate a new circuit with the qubit mapping given by ``logical_physical_mapping``
+        generate a new circuit with the site mapping given by ``logical_physical_mapping``
 
-        :param logical_physical_mapping: how to map logical qubits to the physical qubits on the new circuit
-        :type logical_physical_mapping: Dict[int, int]
-        :param n: number of qubit of the new circuit, can be different from the original one, defaults to None
+        :param logical_physical_mapping: how to map logical sites to the physical sites on the new circuit
+        :param n: number of sites of the new circuit, can be different from the original one, defaults to None
         :type n: Optional[int], optional
         :param circuit_params: _description_, defaults to None
         :type circuit_params: Optional[Dict[str, Any]], optional
@@ -564,10 +616,9 @@ class AbstractCircuit:
     def get_positional_logical_mapping(self) -> Dict[int, int]:
         """
         Get positional logical mapping dict based on measure instruction.
-        This function is useful when we only measure part of the qubits in the circuit,
-        to process the count result from partial measurement, we must be aware of the mapping,
-        i.e. for each position in the count bitstring, what is the corresponding qubits (logical)
-        defined on the circuit
+        This function is useful when only part of the sites are measured. To process the counts from partial
+        measurement, we must know the mapping — i.e. for each position in the base-d string
+        (d<=36 uses 0–9A–Z), what is the corresponding logical site defined on the circuit
 
         :return: ``positional_logical_mapping``
         :rtype: Dict[int, int]
@@ -756,6 +807,7 @@ class AbstractCircuit:
         :type enable_inputs: bool, defaults to False
         :return: A qiskit object of this circuit.
         """
+        self._not_implemented_for_qudit()
         from .translation import perm_matrix, qir2qiskit
 
         qir = self.to_qir()
@@ -783,6 +835,7 @@ class AbstractCircuit:
         :return: circuit representation in openqasm format
         :rtype: str
         """
+        self._not_implemented_for_qudit()
         qc = self.to_qiskit(enable_instruction=True)
         try:
             qasm_str = qc.qasm(**kws)  # type: ignore
@@ -799,6 +852,7 @@ class AbstractCircuit:
         :param file: the file path to save the circuit
         :type file: str
         """
+        self._not_implemented_for_qudit()
         with open(file, "w") as f:
             f.write(self.to_openqasm(**kws))
 
@@ -860,6 +914,7 @@ class AbstractCircuit:
         q_2: ┤ X ├─────
              └───┘
         """
+        self._not_implemented_for_qudit()
         return self.to_qiskit(enable_instruction=True).draw(**kws)
 
     @classmethod
@@ -942,6 +997,7 @@ class AbstractCircuit:
         :return: None if dumps to file otherwise the json str
         :rtype: Any
         """
+        self._not_implemented_for_qudit()
         from .translation import qir2json
 
         tcqasm = qir2json(self.to_qir(), simplified=simplified)
@@ -954,6 +1010,7 @@ class AbstractCircuit:
     def from_qsim_file(
         cls, file: str, circuit_params: Optional[Dict[str, Any]] = None
     ) -> "AbstractCircuit":
+        """.. note:: qsim import here assumes qubit gates (d=2)."""
         with open(file, "r") as f:
             lines = f.readlines()
         if circuit_params is None:
@@ -985,6 +1042,7 @@ class AbstractCircuit:
             for line in qsim_str[1:]
             if line
         ]
+        # Note: qsim parsing here is qubit-only (d=2); multi-level (qudit) gates are not handled.
         # https://github.com/quantumlib/qsim/blob/master/docs/input_format.md
         # https://github.com/jcmgray/quimb/blob/master/quimb/tensor/circuit.py#L241
         for gate in qsim_gates:
@@ -1082,7 +1140,7 @@ class AbstractCircuit:
         :type which: Tensor
         :param kraus: A list of gate in the form of ``tc.gate`` or Tensor
         :type kraus: Sequence[Gate]
-        :param index: the qubit lines the gate applied on
+        :param index: the site indices the gate is applied on
         :type index: int
         """
         kraus = [k.tensor if isinstance(k, tn.Node) else k for k in kraus]
@@ -1116,11 +1174,12 @@ class AbstractCircuit:
             matrix after this method is kept in mixed state without knowing the
             measuremet resuslts
 
+        .. note::
+            This helper is qubit-only (d=2). For qudit (d>2), use explicit projectors/Kraus operators.
 
-
-        :param index: the qubit for the z-basis measurement
+        :param index: the site index for the Z-basis measurement
         :type index: int
-        :return: 0 or 1 for z measurement on up and down freedom
+        :return: 0 or 1 for Z-basis measurement outcome
         :rtype: Tensor
         """
         return self.general_kraus(  # type: ignore
@@ -1170,7 +1229,7 @@ class AbstractCircuit:
 
         :param c: The other circuit to be appended
         :type c: BaseCircuit
-        :param indices: the qubit indices to which ``c`` is appended on.
+        :param indices: the site indices to which ``c`` is appended.
             Defaults to None, which means plain concatenation.
         :type indices: Optional[List[int]], optional
         :return: The composed circuit
@@ -1194,6 +1253,10 @@ class AbstractCircuit:
         qir = self.to_qir()
         c = type(self).from_qir(qir, self.circuit_param)
         return c
+
+    @property
+    def gates(self) -> types.ModuleType:
+        return self._get_gmod()
 
     def expectation(
         self,
@@ -1266,6 +1329,8 @@ class AbstractCircuit:
         :return: Expectation value
         :rtype: Tensor
         """
+        # This channel API is currently qubit-only (d=2). For d>2, a NotImplementedError will be raised.
+        self._not_implemented_for_qudit()
         obs = []
         if ps is not None:
             from .quantum import ps2xyz

@@ -203,6 +203,9 @@ def circuit_with_noise(
     :return: A newly constructed circuit with noise
     :rtype: AbstractCircuit
     """
+    if getattr(c, "_d", 2) != 2:
+        c._not_implemented_for_qudit()
+
     qir = c.to_qir()
     cnew: AbstractCircuit
     if isinstance(c, DMCircuit):
@@ -251,6 +254,8 @@ def sample_expectation_ps_noisfy(
     :return: sample expectation value with noise
     :rtype: Tensor
     """
+    if getattr(c, "_d", 2) != 2:
+        c._not_implemented_for_qudit()
 
     if noise_conf is None:
         noise_conf = NoiseConf()
@@ -323,6 +328,8 @@ def expectation_noisfy(
     :return: expectation value with noise
     :rtype: Tensor
     """
+    if getattr(c, "_d", 2) != 2:
+        c._not_implemented_for_qudit()
 
     if noise_conf is None:
         noise_conf = NoiseConf()

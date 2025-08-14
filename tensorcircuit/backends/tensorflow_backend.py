@@ -115,7 +115,7 @@ def _random_choice_tf(
     else:
         if not (isinstance(p, tf.Tensor) or isinstance(p, tf.Variable)):
             p = tf.constant(p)
-        dtype = p.dtype
+        dtype = p.dtype  # type: ignore
     shape1 = reduce(mul, shape)
     p_cuml = tf.cumsum(p)
     r = p_cuml[-1] * (1 - g.uniform([shape1], dtype=dtype))
@@ -544,6 +544,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return tf.stack(a, axis=axis)
 
+    def clip(self, a: Tensor, a_min: Tensor, a_max: Tensor) -> Tensor:
+        return tf.clip_by_value(a, a_min, a_max)
+
     def concat(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return tf.concat(a, axis=axis)
 
@@ -611,6 +614,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
 
     def mod(self, x: Tensor, y: Tensor) -> Tensor:
         return tf.math.mod(x, y)
+
+    def floor(self, x: Tensor) -> Tensor:
+        return tf.math.floor(x)
 
     def right_shift(self, x: Tensor, y: Tensor) -> Tensor:
         return tf.bitwise.right_shift(x, y)

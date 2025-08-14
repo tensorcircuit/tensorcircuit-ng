@@ -32,18 +32,27 @@ class StabilizerCircuit(AbstractCircuit):
     }
 
     def __init__(
-        self, nqubits: int, inputs: Tensor = None, tableau_inputs: Tensor = None
+        self,
+        nqubits: int,
+        dim: Optional[int] = None,
+        inputs: Tensor = None,
+        tableau_inputs: Tensor = None,
     ) -> None:
         """
         ``StabilizerCircuit`` class based on stim package
 
         :param nqubits: Number of qubits
         :type nqubits: int
+        :param dim: The local Hilbert space dimension per site. Qudit is supported for 2 <= d <= 36.
+        :type dim: If None, the dimension of the circuit will be `2`, which is a qubit system.
         :param inputs: initial state by stabilizers, defaults to None
         :type inputs: Tensor, optional
         :param tableau_inputs: initial state by **inverse** tableau, defaults to None
         :type tableau_inputs: Tensor, optional
         """
+        self._validate_dim(dim=dim)
+        self._not_implemented_for_qudit()
+
         self._nqubits = nqubits
         self._stim_circuit = stim.Circuit()
         self._qir: List[Dict[str, Any]] = []

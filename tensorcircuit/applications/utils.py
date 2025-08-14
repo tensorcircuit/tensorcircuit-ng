@@ -217,7 +217,7 @@ def train_qml_vag(
                 c.exp(  # type: ignore
                     i,
                     (i + 1) % 10,
-                    unitary=array_to_tensor(G._swap_matrix),
+                    unitary=array_to_tensor(G._swap_matrix),  # type: ignore
                     theta=cnnp[3 * epoch + 2, i],
                 )
             for i in range(1, nqubits, 2):
@@ -225,7 +225,7 @@ def train_qml_vag(
                 c.exp(  # type: ignore
                     i,
                     (i + 1) % 10,
-                    unitary=array_to_tensor(G._swap_matrix),
+                    unitary=array_to_tensor(G._swap_matrix),  # type: ignore
                     theta=cnnp[3 * epoch + 2, i],
                 )
         for i in range(nqubits):
@@ -287,7 +287,7 @@ def validate_qml_vag(
             c.exp(  # type: ignore
                 i,
                 (i + 1) % 10,
-                unitary=array_to_tensor(G._swap_matrix),
+                unitary=array_to_tensor(G._swap_matrix),  # type: ignore
                 theta=cnnp[3 * epoch + 2, i],
             )
         for i in range(1, nqubits, 2):
@@ -295,7 +295,7 @@ def validate_qml_vag(
             c.exp(  # type: ignore
                 i,
                 (i + 1) % 10,
-                unitary=array_to_tensor(G._swap_matrix),
+                unitary=array_to_tensor(G._swap_matrix),  # type: ignore
                 theta=cnnp[3 * epoch + 2, i],
             )
     for i in range(nqubits):

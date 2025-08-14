@@ -72,7 +72,7 @@ def any_measurements(
                     sum(
                         [
                             structuresc[i, k] * g.tensor
-                            for k, g in enumerate(G.pauli_gates)
+                            for k, g in enumerate(G.pauli_gates)  # type: ignore
                         ]
                     )
                 ),
@@ -137,7 +137,7 @@ def any_local_measurements(
                         sum(
                             [
                                 structuresc[i, k] * g.tensor
-                                for k, g in enumerate(G.pauli_gates)
+                                for k, g in enumerate(G.pauli_gates)  # type: ignore
                             ]
                         )
                     ),

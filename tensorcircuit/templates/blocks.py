@@ -89,14 +89,14 @@ def QAOA_block(
             c.exp1(
                 e1,
                 e2,
-                unitary=G._zz_matrix,
+                unitary=G._zz_matrix,  # type: ignore
                 theta=paramzz * g[e1][e2].get("weight", 1.0),
                 **kws,
             )
     else:
         i = 0
         for e1, e2 in g.edges:
-            c.exp1(e1, e2, unitary=G._zz_matrix, theta=paramzz[i], **kws)
+            c.exp1(e1, e2, unitary=G._zz_matrix, theta=paramzz[i], **kws)  # type: ignore
             i += 1
 
     if backend.sizen(paramx) == 1:
@@ -145,7 +145,7 @@ def example_block(
     for j in range(nlayers):
         for i in range(n - 1):
             c.exp1(
-                i, i + 1, unitary=G._zz_matrix, theta=param[2 * j, i], split=split_conf
+                i, i + 1, unitary=G._zz_matrix, theta=param[2 * j, i], split=split_conf  # type: ignore
             )
         for i in range(n):
             c.rx(i, theta=param[2 * j + 1, i])

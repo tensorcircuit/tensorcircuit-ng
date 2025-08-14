@@ -17,7 +17,7 @@ from .channels import kraus_to_super_gate
 from .circuit import Circuit
 from .cons import backend, contractor, dtypestr
 from .basecircuit import BaseCircuit
-from .quantum import QuOperator
+from .quantum import QuOperator, _infer_num_sites
 
 Gate = gates.Gate
 Tensor = Any
@@ -29,6 +29,7 @@ class DMCircuit(BaseCircuit):
     def __init__(
         self,
         nqubits: int,
+        dim: Optional[int] = None,
         empty: bool = False,
         inputs: Optional[Tensor] = None,
         mps_inputs: Optional[QuOperator] = None,
@@ -55,6 +56,7 @@ class DMCircuit(BaseCircuit):
             ``max_singular_values`` and ``max_truncation_err``.
         :type split: Optional[Dict[str, Any]]
         """
+        self._validate_dim(dim=dim)
         if not empty:
             if (
                 (inputs is None)
@@ -73,9 +75,9 @@ class DMCircuit(BaseCircuit):
                 inputs = backend.cast(inputs, dtype=dtypestr)
                 inputs = backend.reshape(inputs, [-1])
                 N = inputs.shape[0]
-                n = int(np.log(N) / np.log(2))
+                n = _infer_num_sites(N, self._d)
                 assert n == nqubits
-                inputs = backend.reshape(inputs, [2 for _ in range(n)])
+                inputs = backend.reshape(inputs, [self._d for _ in range(n)])
                 inputs_gate = Gate(inputs)
                 self._nodes = [inputs_gate]
                 self.coloring_nodes(self._nodes)
@@ -94,7 +96,9 @@ class DMCircuit(BaseCircuit):
             elif dminputs is not None:
                 dminputs = backend.convert_to_tensor(dminputs)
                 dminputs = backend.cast(dminputs, dtype=dtypestr)
-                dminputs = backend.reshape(dminputs, [2 for _ in range(2 * nqubits)])
+                dminputs = backend.reshape(
+                    dminputs, [self._d for _ in range(2 * nqubits)]
+                )
                 dminputs_gate = Gate(dminputs)
                 nodes = [dminputs_gate]
                 self._front = [dminputs_gate.get_edge(i) for i in range(2 * nqubits)]
@@ -217,7 +221,7 @@ class DMCircuit(BaseCircuit):
             dd = dmc.densitymatrix()
             circuits.append(dd)
         tensor = reduce(add, circuits)
-        tensor = backend.reshape(tensor, [2 for _ in range(2 * self._nqubits)])
+        tensor = backend.reshape(tensor, [self._d for _ in range(2 * self._nqubits)])
         self._nodes = [Gate(tensor)]
         dangling = [e for e in self._nodes[0]]
         self._front = dangling
@@ -255,7 +259,9 @@ class DMCircuit(BaseCircuit):
             t = contractor(nodes, output_edge_order=d_edges)
         else:
             t = nodes[0]
-        dm = backend.reshape(t.tensor, shape=[2**self._nqubits, 2**self._nqubits])
+        dm = backend.reshape(
+            t.tensor, shape=[self._d**self._nqubits, self._d**self._nqubits]
+        )
         if check:
             self.check_density_matrix(dm)
         return dm
@@ -274,7 +280,7 @@ class DMCircuit(BaseCircuit):
         dm = self.densitymatrix()
         e, v = backend.eigh(dm)
         np.testing.assert_allclose(
-            e[:-1], backend.zeros([2**self._nqubits - 1]), atol=1e-5
+            e[:-1], backend.zeros([self._d**self._nqubits - 1]), atol=1e-5
         )
         return v[:, -1]
 
@@ -375,7 +381,7 @@ class DMCircuit2(DMCircuit):
         #     index = [index[0] for _ in range(len(kraus))]
         super_op = kraus_to_super_gate(kraus)
         nlegs = 4 * len(index)
-        super_op = backend.reshape(super_op, [2 for _ in range(nlegs)])
+        super_op = backend.reshape(super_op, [self._d for _ in range(nlegs)])
         super_op = Gate(super_op)
         o2i = int(nlegs / 2)
         r2l = int(nlegs / 4)
