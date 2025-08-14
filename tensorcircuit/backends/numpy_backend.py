@@ -137,9 +137,6 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         return np.kron(a, b)
 
     def meshgrid(self, *args: Any, **kwargs: Any) -> Any:
-        """
-        Backend-agnostic meshgrid function.
-        """
         return np.meshgrid(*args, **kwargs)
 
     def dtype(self, a: Tensor) -> str:

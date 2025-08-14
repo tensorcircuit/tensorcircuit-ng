@@ -67,8 +67,6 @@ for i in range(200):
     history["a"].append(K.exp(log_a))
     history["energy"].append(energy)
 
-    # (Removed previously added blanket NaN guard per reviewer request to keep example minimal.)
-
     updates, opt_state = optimizer.update(grad, opt_state)
     log_a = optax.apply_updates(log_a, updates)
 
@@ -120,5 +118,3 @@ if not np.isnan(K.numpy(final_energy)):
     plt.legend()
     plt.grid(True)
     plt.show()
-else:
-    print("\nOptimization failed. Final energy is NaN.")

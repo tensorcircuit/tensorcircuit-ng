@@ -528,7 +528,10 @@ class TestCustomizeLattice:
             f"but found {computed_shells_after}."
         )
 
-    def test_precompute_neighbors_on_init_custom(self):
+    @pytest.mark.parametrize(
+        "backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")]
+    )
+    def test_precompute_neighbors_on_init_custom(self, backend):
         """
         Tests that the `precompute_neighbors` argument correctly populates
         the neighbor map upon initialization for CustomizeLattice.
@@ -1404,7 +1407,10 @@ class TestLongRangeNeighborFinding:
             edge_neighbors == expected_edge_indices
         ), "Failed for edge site with mixed BC."
 
-    def test_mixed_boundary_conditions_on_honeycomb(self):
+    @pytest.mark.parametrize(
+        "backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")]
+    )
+    def test_mixed_boundary_conditions_on_honeycomb(self, backend):
         """
         Tests neighbor finding on a HoneycombLattice with mixed PBC.
         This ensures the logic correctly handles composite lattices with
@@ -1531,7 +1537,6 @@ class TestCustomizeLatticeDynamic:
     )
     def test_from_lattice_conversion(self, backend):
         """Tests creating a CustomizeLattice from a TILattice."""
-        tc.set_backend(backend)
 
         # Arrange
         sq_lattice = SquareLattice(size=(2, 2), pbc=False)
@@ -1556,7 +1561,6 @@ class TestCustomizeLatticeDynamic:
     )
     def test_add_sites_successfully(self, backend, initial_lattice):
         """Tests adding new, valid sites to the lattice."""
-        tc.set_backend(backend)
 
         # Arrange
         lat = initial_lattice
@@ -1578,7 +1582,6 @@ class TestCustomizeLatticeDynamic:
     )
     def test_remove_sites_successfully(self, backend, initial_lattice):
         """Tests removing existing sites from the lattice."""
-        tc.set_backend(backend)
 
         # Arrange
         lat = initial_lattice
@@ -1600,7 +1603,6 @@ class TestCustomizeLatticeDynamic:
     )
     def test_add_duplicate_identifier_raises_error(self, backend, initial_lattice):
         """Tests that adding a site with an existing identifier fails."""
-        tc.set_backend(backend)
 
         with pytest.raises(ValueError, match="Duplicate identifiers found"):
             initial_lattice.add_sites(identifiers=["A"], coordinates=[[9.0, 9.0]])
@@ -1610,7 +1612,6 @@ class TestCustomizeLatticeDynamic:
     )
     def test_remove_nonexistent_identifier_raises_error(self, backend, initial_lattice):
         """Tests that removing a non-existent site fails."""
-        tc.set_backend(backend)
 
         with pytest.raises(ValueError, match="Non-existent identifiers provided"):
             initial_lattice.remove_sites(identifiers=["Z"])
@@ -1623,7 +1624,6 @@ class TestCustomizeLatticeDynamic:
         Tests that add_sites and remove_sites correctly invalidate the
         pre-computed neighbor map.
         """
-        tc.set_backend(backend)
 
         # Arrange: Pre-compute neighbors on the initial lattice
         initial_lattice._build_neighbors(max_k=1)
@@ -1653,7 +1653,6 @@ class TestCustomizeLatticeDynamic:
         Tests that add_sites and remove_sites correctly invalidate the
         cached distance matrix and that the recomputed matrix is correct.
         """
-        tc.set_backend(backend)
 
         # Arrange 1: Compute, cache, and perform a meaningful check on the original matrix.
         lat = initial_lattice
@@ -1696,7 +1695,6 @@ class TestCustomizeLatticeDynamic:
         Ensures that the list of neighbors returned by get_neighbors is always sorted.
         This provides a stricter check than set-based comparisons.
         """
-        tc.set_backend(backend)
 
         # Arrange
         lattice = simple_square_lattice
@@ -1719,7 +1717,6 @@ class TestCustomizeLatticeDynamic:
     )
     def test_from_lattice_from_empty_lattice(self, backend):
         """Tests creating a CustomizeLattice from an empty TILattice."""
-        tc.set_backend(backend)
 
         # Arrange: Create an empty TILattice instance.
         empty_sq = SquareLattice(size=(0, 0))
@@ -1737,7 +1734,6 @@ class TestCustomizeLatticeDynamic:
     )
     def test_add_sites_to_empty_lattice(self, backend):
         """Tests adding sites to a previously empty CustomizeLattice."""
-        tc.set_backend(backend)
 
         # Arrange: Create an empty CustomizeLattice.
         empty_lat = CustomizeLattice(dimensionality=2, identifiers=[], coordinates=[])
@@ -1763,7 +1759,6 @@ class TestCustomizeLatticeDynamic:
         Tests that calling add_sites and remove_sites with empty lists
         is a no-op and doesn't change the lattice state.
         """
-        tc.set_backend(backend)
 
         # Arrange
         lat = initial_lattice
@@ -1790,7 +1785,6 @@ class TestCustomizeLatticeDynamic:
     )
     def test_remove_all_sites(self, backend, initial_lattice):
         """Tests removing all sites from a lattice, resulting in an empty lattice."""
-        tc.set_backend(backend)
 
         # Arrange
         lat = initial_lattice
@@ -1879,7 +1873,6 @@ class TestDistanceMatrix:
         Tests that the distance matrix is correctly calculated for a TILattice
         with mixed boundary conditions (e.g., periodic in x, open in y).
         """
-        tc.set_backend(backend)
 
         # Arrange
         # pbc=(True, False) means periodic along x-axis, open along y-axis.
@@ -1911,7 +1904,8 @@ class TestDistanceMatrix:
         )
 
     # --- This list and the following test are now at the correct indentation level ---
-    # 使用工厂函数而不是预先实例化对象，避免跨 backend 复用已缓存 _distance_matrix（numpy 数组）
+    # Use factory functions instead of pre-instantiated objects
+    # to avoid sharing a cached _distance_matrix (NumPy array) across backends
     lattice_factories_for_invariant_test = [
         pytest.param(lambda: SquareLattice(size=(4, 4), pbc=True), id="Square_4x4_pbc"),
         pytest.param(
@@ -1945,8 +1939,7 @@ class TestDistanceMatrix:
         fundamental mathematical properties (invariants): symmetry, zero diagonal,
         and positive off-diagonal elements.
         """
-        tc.set_backend(backend)
-        # 重新实例化 lattice，确保没有跨 backend 的缓存副作用
+        # Re-instantiate the lattice to ensure no cache side effects across backends
         lattice = lattice_factory()
 
         # Arrange
@@ -1989,7 +1982,6 @@ class TestDistanceMatrix:
         """
         Tests that the distance_matrix property is cached after the first access.
         """
-        tc.set_backend(backend)
 
         # Arrange: Create a lattice instance.
         lattice = CustomizeLattice(
@@ -2096,6 +2088,54 @@ def test_layering_on_various_lattices(lattice_instance):
 
     assert len(layers) > 0, "Layers should not be empty for non-trivial lattices."
     _validate_layers(bonds, layers)
+
+
+# --- Regression tests for backend-scalar lattice constants (PR fix) ---
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_square_lattice_accepts_backend_scalar_lattice_constant(backend):
+    """
+    Ensure SquareLattice can be constructed when lattice_constant is a backend scalar tensor
+    (e.g., tf.constant, jnp.array, torch.tensor), without mixed-type errors.
+    """
+    tc.set_backend(backend)
+
+    lc = tc.backend.convert_to_tensor(0.5)
+    lat = SquareLattice(size=(2, 2), lattice_constant=lc, pbc=False)
+
+    # basic shape sanity
+    assert lat.num_sites == 4
+    assert tc.backend.shape_tuple(lat._coordinates)[1] == 2  # type: ignore[attr-defined]
+
+    # distance check along x and y
+    dm = lat.distance_matrix
+    o = lat.get_index((0, 0, 0))
+    x1 = lat.get_index((1, 0, 0))
+    y1 = lat.get_index((0, 1, 0))
+    np.testing.assert_allclose(tc.backend.numpy(dm[o, x1]), 0.5)
+    np.testing.assert_allclose(tc.backend.numpy(dm[o, y1]), 0.5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_rectangular_lattice_mixed_type_constants(backend):
+    """
+    RectangularLattice should accept a tuple where one constant is a backend scalar tensor
+    and the other is a Python float.
+    """
+    tc.set_backend(backend)
+
+    ax = tc.backend.convert_to_tensor(0.5)  # tensor scalar
+    ay = 2.0  # python float
+    lat = RectangularLattice(size=(2, 2), lattice_constants=(ax, ay), pbc=False)
+
+    assert lat.num_sites == 4
+    assert tc.backend.shape_tuple(lat._coordinates)[1] == 2  # type: ignore[attr-defined]
+
+    dm = lat.distance_matrix
+    o = lat.get_index((0, 0, 0))
+    x1 = lat.get_index((1, 0, 0))
+    y1 = lat.get_index((0, 1, 0))
+    np.testing.assert_allclose(tc.backend.numpy(dm[o, x1]), 0.5)
+    np.testing.assert_allclose(tc.backend.numpy(dm[o, y1]), 2.0)
 
 
 def test_layering_on_1d_chain_pbc():
@@ -2469,7 +2509,6 @@ class TestPrivateHelpers:
         Tests the basic functionality of _identify_distance_shells with a
         clear separation between distance shells.
         """
-        tc.set_backend(backend)
 
         # Arrange
         lattice = simple_lattice_for_helpers
@@ -2494,7 +2533,6 @@ class TestPrivateHelpers:
         Tests that _identify_distance_shells respects the max_k parameter,
         limiting the number of returned shells.
         """
-        tc.set_backend(backend)
 
         # Arrange
         lattice = simple_lattice_for_helpers
@@ -2520,7 +2558,6 @@ class TestPrivateHelpers:
         Tests that distances that are very close together are merged into a
         single shell when the tolerance `tol` is large enough.
         """
-        tc.set_backend(backend)
 
         # Arrange
         lattice = simple_lattice_for_helpers

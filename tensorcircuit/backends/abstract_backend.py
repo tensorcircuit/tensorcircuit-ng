@@ -631,8 +631,8 @@ class ExtendedBackend:
         """
          Return coordinate matrices from coordinate vectors.
 
-         :param args: coordinate vectors
-         :type args: Any
+        :param args: coordinate vectors
+        :type args: Any
         :param kwargs: keyword arguments for meshgrid, typically includes 'indexing'
            which can be 'ij' (matrix indexing) or 'xy' (Cartesian indexing).
            - 'ij': matrix indexing, first dimension corresponds to rows (default)
@@ -647,9 +647,9 @@ class ExtendedBackend:
                   [0, 1]]
               y = [[0, 0],
                   [2, 2]]
-         :type kwargs: Any
-         :return: list of coordinate matrices
-         :rtype: Any
+        :type kwargs: Any
+        :return: list of coordinate matrices
+        :rtype: Any
         """
         raise NotImplementedError(
             "Backend '{}' has not implemented `meshgrid`.".format(self.name)
