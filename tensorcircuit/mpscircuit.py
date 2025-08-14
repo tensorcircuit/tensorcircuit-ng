@@ -1077,7 +1077,7 @@ class MPSCircuit(AbstractCircuit):
                 backend.convert_to_tensor(np.array([1.0], dtype=dtypestr)),
             )
 
-            p = p * backend.sum(ps * m)
+            p = p * backend.sum(ps * backend.cast(m, dtype=rdtypestr))
             mps._mps.tensors[site] = backend.einsum("iaj,a->ij", tensor, m)[:, None, :]
         sample = backend.stack(sample)
         sample = backend.real(sample)
