@@ -18,40 +18,33 @@ logging.basicConfig(level=logging.WARNING)
 from tensorcircuit.templates.lattice import CustomizeLattice
 
 
-def _timeit(fn, repeats: int) -> float:
-    """Return average wall time (seconds) over repeats for calling fn()."""
-    times: List[float] = []
-    for _ in range(repeats):
-        t0 = time.perf_counter()
-        fn()
-        times.append(time.perf_counter() - t0)
-    return float(np.mean(times))
-
-
-def _gen_coords(n: int, d: int, seed: int) -> np.ndarray:
-    rng = np.random.default_rng(seed)
-    return rng.random((n, d), dtype=float)
-
-
 def run_once(
     n: int, d: int, max_k: int, repeats: int, seed: int
 ) -> Tuple[float, float]:
     """Run one size point and return (time_kdtree, time_matrix)."""
-    coords = _gen_coords(n, d, seed)
+    rng = np.random.default_rng(seed)
     ids = list(range(n))
-    lat = CustomizeLattice(dimensionality=d, identifiers=ids, coordinates=coords)
+    
+    # Collect times for each repeat with different random coordinates
+    kdtree_times: List[float] = []
+    matrix_times: List[float] = []
+    
+    for i in range(repeats):
+        # Generate different coordinates for each repeat
+        coords = rng.random((n, d), dtype=float)
+        lat = CustomizeLattice(dimensionality=d, identifiers=ids, coordinates=coords)
+        
+        # KDTree path - single measurement
+        t0 = time.perf_counter()
+        lat._build_neighbors(max_k=max_k, use_kdtree=True)
+        kdtree_times.append(time.perf_counter() - t0)
+        
+        # Distance-matrix path - single measurement  
+        t0 = time.perf_counter()
+        lat._build_neighbors(max_k=max_k, use_kdtree=False)
+        matrix_times.append(time.perf_counter() - t0)
 
-    # KDTree path
-    t_kdtree = _timeit(
-        lambda: lat._build_neighbors(max_k=max_k, use_kdtree=True), repeats
-    )
-
-    # Distance-matrix path (fully differentiable)
-    t_matrix = _timeit(
-        lambda: lat._build_neighbors(max_k=max_k, use_kdtree=False), repeats
-    )
-
-    return t_kdtree, t_matrix
+    return float(np.mean(kdtree_times)), float(np.mean(matrix_times))
 
 
 def parse_sizes(s: str) -> List[int]:
