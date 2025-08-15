@@ -2090,14 +2090,12 @@ def test_layering_on_various_lattices(lattice_instance):
     _validate_layers(bonds, layers)
 
 
-# --- Regression tests for backend-scalar lattice constants (PR fix) ---
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_square_lattice_accepts_backend_scalar_lattice_constant(backend):
     """
     Ensure SquareLattice can be constructed when lattice_constant is a backend scalar tensor
     (e.g., tf.constant, jnp.array, torch.tensor), without mixed-type errors.
     """
-    tc.set_backend(backend)
 
     lc = tc.backend.convert_to_tensor(0.5)
     lat = SquareLattice(size=(2, 2), lattice_constant=lc, pbc=False)
@@ -2121,7 +2119,6 @@ def test_rectangular_lattice_mixed_type_constants(backend):
     RectangularLattice should accept a tuple where one constant is a backend scalar tensor
     and the other is a Python float.
     """
-    tc.set_backend(backend)
 
     ax = tc.backend.convert_to_tensor(0.5)  # tensor scalar
     ay = 2.0  # python float

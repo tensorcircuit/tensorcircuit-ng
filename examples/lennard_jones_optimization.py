@@ -79,42 +79,41 @@ for i in range(200):
 final_a = K.exp(log_a)
 final_energy = calculate_potential(log_a)
 
-if not np.isnan(K.numpy(final_energy)):
-    print("\nOptimization finished!")
-    print(f"Final optimized lattice constant: {final_a:.6f}")
-    print(f"Corresponding minimum total energy: {final_energy:.6f}")
+print("\nOptimization finished!")
+print(f"Final optimized lattice constant: {final_a:.6f}")
+print(f"Corresponding minimum total energy: {final_energy:.6f}")
 
-    # Vectorized calculation for the potential curve
-    a_vals = np.linspace(0.8, 1.5, 200)
-    log_a_vals = K.log(K.convert_to_tensor(a_vals))
+# Vectorized calculation for the potential curve
+a_vals = np.linspace(0.8, 1.5, 200)
+log_a_vals = K.log(K.convert_to_tensor(a_vals))
 
-    # Use vmap to create a vectorized version of the potential function
-    vmap_potential = K.vmap(lambda la: calculate_potential(la))
-    potential_curve = vmap_potential(log_a_vals)
+# Use vmap to create a vectorized version of the potential function
+vmap_potential = K.vmap(lambda la: calculate_potential(la))
+potential_curve = vmap_potential(log_a_vals)
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(a_vals, potential_curve, label="Lennard-Jones Potential", color="blue")
-    plt.scatter(
-        history["a"],
-        history["energy"],
-        color="red",
-        s=20,
-        zorder=5,
-        label="Optimization Steps",
-    )
-    plt.scatter(
-        final_a,
-        final_energy,
-        color="green",
-        s=100,
-        zorder=6,
-        marker="*",
-        label="Final Optimized Point",
-    )
+plt.figure(figsize=(10, 6))
+plt.plot(a_vals, potential_curve, label="Lennard-Jones Potential", color="blue")
+plt.scatter(
+    history["a"],
+    history["energy"],
+    color="red",
+    s=20,
+    zorder=5,
+    label="Optimization Steps",
+)
+plt.scatter(
+    final_a,
+    final_energy,
+    color="green",
+    s=100,
+    zorder=6,
+    marker="*",
+    label="Final Optimized Point",
+)
 
-    plt.title("Lennard-Jones Potential Optimization")
-    plt.xlabel("Lattice Constant (a)")
-    plt.ylabel("Total Potential Energy")
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+plt.title("Lennard-Jones Potential Optimization")
+plt.xlabel("Lattice Constant (a)")
+plt.ylabel("Total Potential Energy")
+plt.legend()
+plt.grid(True)
+plt.show()

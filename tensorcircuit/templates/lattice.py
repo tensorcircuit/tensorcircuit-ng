@@ -767,14 +767,11 @@ class TILattice(AbstractLattice):
         """
         # Ensure dtype consistency across backends (especially torch) by explicitly
         # casting size and lattice_vectors to the same floating dtype used internally.
-        # Strategy: prefer existing lattice_vectors dtype, fallback to float32 for efficiency,
-        # then float64 for precision. This avoids dtype mismatches in vectorized ops.
-        target_dt = None
-        try:
-            # prefer existing lattice_vectors dtype if possible
-            target_dt = backend.dtype(self.lattice_vectors)  # type: ignore
-        except (AttributeError, TypeError):  # pragma: no cover - defensive
-            target_dt = "float32"
+        # Strategy: prefer existing lattice_vectors dtype; if it's an unusual dtype,
+        # fall back to float32 to avoid mixed-precision issues in vectorized ops.
+        # Note: `self.lattice_vectors` is always created via `backend.convert_to_tensor`
+        # in __init__, so `backend.dtype(...)` is reliable here and doesn't need try/except.
+        target_dt = str(backend.dtype(self.lattice_vectors))  # type: ignore
         if target_dt not in ("float32", "float64"):
             # fallback for unusual dtypes
             target_dt = "float32"
@@ -1626,21 +1623,20 @@ class CustomizeLattice(AbstractLattice):
         # Unzip the list of tuples into separate lists of identifiers and coordinates
         _, identifiers, _ = zip(*all_sites_info)
 
-        # Detach-and-copy coordinates in a backend-agnostic way.
-        # Rationale (answering reviewer question "why not keep backend-dependent form?"):
-        # - Passing a tuple/list of backend tensors (e.g., per-row slices) into
-        #   convert_to_tensor can fail on some backends (torch.tensor(list_of_tensors) ValueError),
-        #   whereas a plain nested Python list is accepted everywhere.
-        # - We want CustomizeLattice to be decoupled from the original lattice's computation
-        #   graph and device state (CPU/GPU), so we materialize numeric values here.
-        # - This is a one-shot conversion of the full coordinate array, simpler and faster
-        #   than iterating per row, while preserving the same numeric content.
-        coords_py = backend.numpy(lattice._coordinates).tolist()
+        # Detach-and-copy coordinates while remaining in tensor form to avoid
+        # host roundtrips and device/dtype changes; this keeps CustomizeLattice
+        # decoupled from the original graph but backend-friendly.
+        # Some backends (e.g., NumPy) don't implement stop_gradient; fall back.
+        try:
+            coords_detached = backend.stop_gradient(lattice._coordinates)
+        except NotImplementedError:
+            coords_detached = lattice._coordinates
+        coords_tensor = backend.copy(coords_detached)
 
         return cls(
             dimensionality=lattice.dimensionality,
             identifiers=list(identifiers),
-            coordinates=coords_py,
+            coordinates=coords_tensor,
         )
 
     def add_sites(
