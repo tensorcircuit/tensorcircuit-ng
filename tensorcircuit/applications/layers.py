@@ -13,7 +13,8 @@ import tensorflow as tf
 
 from ..circuit import Circuit
 from ..densitymatrix import DMCircuit
-from ..gates import num_to_tensor, array_to_tensor, _swap_matrix
+from .. import gates
+from ..gates import num_to_tensor, array_to_tensor
 from ..channels import depolarizingchannel
 from ..abstractcircuit import sgates
 
@@ -25,6 +26,7 @@ except ImportError as e:
     logger.warning(e)
     logger.warning("Therefore some functionality in %s may not work" % __name__)
 
+_swap_matrix = gates._swap_matrix  # type: ignore
 
 thismodule = sys.modules[__name__]
 
@@ -298,7 +300,7 @@ for gate in ["rx", "ry", "rz", "H", "I"]:
     generate_gate_layer(gate)
     generate_any_gate_layer(gate)
 
-for gates in itertools.product(*[["x", "y", "z"] for _ in range(2)]):
+for gates in itertools.product(*[["x", "y", "z"] for _ in range(2)]):  # type: ignore
     gates = gates[0] + gates[1]  # type: ignore
     generate_double_gate(gates)  # type: ignore
     generate_double_gate_layer(gates)  # type: ignore
@@ -308,7 +310,7 @@ for gates in itertools.product(*[["x", "y", "z"] for _ in range(2)]):
     generate_any_double_gate_layer_bitflip_mc(gates)  # type: ignore
 
 
-for gates in itertools.product(
+for gates in itertools.product(  # type: ignore
     *[["rx", "ry", "rz", "xx", "yy", "zz"] for _ in range(2)]
 ):
     generate_double_layer_block(gates)  # type: ignore
@@ -504,7 +506,7 @@ try:
         if gate != "H":
             generate_cirq_any_gate_layer(gate)
 
-    for gates in itertools.product(*[["x", "y", "z"] for _ in range(2)]):
+    for gates in itertools.product(*[["x", "y", "z"] for _ in range(2)]):  # type: ignore
         gates = gates[0] + gates[1]  # type: ignore
         generate_cirq_double_gate(gates)  # type: ignore
         generate_cirq_double_gate_layer(gates)  # type: ignore

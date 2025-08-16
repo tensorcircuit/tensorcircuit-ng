@@ -261,7 +261,7 @@ def apply_dd(
 
 
 def rc_candidates(gate: Gate) -> List[Any]:
-    pauli = [m.tensor for m in gates.pauli_gates]
+    pauli = [m.tensor for m in gates.pauli_gates]  # type: ignore
     if isinstance(gate, gates.Gate):
         gate = gate.tensor
     gatem = backend.reshapem(gate)

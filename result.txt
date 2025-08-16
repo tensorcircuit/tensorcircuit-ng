@@ -1,0 +1,1366 @@
+/opt/miniconda3/envs/testTC/lib/python3.12/site-packages/pytest_benchmark/logger.py:39: PytestBenchmarkWarning: Benchmarks are automatically disabled because xdist plugin is active.Benchmarks cannot be performed reliably in a parallelized environment.
+  warner(PytestBenchmarkWarning(text))
+============================= test session starts ==============================
+platform darwin -- Python 3.12.9, pytest-7.4.4, pluggy-1.6.0
+benchmark: 5.0.1 (defaults: timer=time.perf_counter disable_gc=False min_rounds=5 min_time=0.000005 max_time=1.0 calibration_precision=10 warmup=False warmup_iterations=100000)
+rootdir: /Users/weiguoma/PyProgram/tensorcircuit-ng
+configfile: pyproject.toml
+plugins: benchmark-5.0.1, xdist-3.8.0, cov-6.2.1, lazy-fixture-0.6.3
+created: 14/14 workers
+14 workers [772 items]
+
+...s.....ssss......s.........ss..s..s........s...s...............s..s.s. [  9%]
+s..s.......s.sss.....................F......F...........s.s.s.......s..s [ 18%]
+.................s..................sss..s......s...s..sssssssssssssssss [ 27%]
+sssssssssssssssss............................F.....sss.................. [ 37%]
+.........s.....s..sssss................................................. [ 46%]
+...................................................s.s.................. [ 55%]
+s...............................s.F...F.....F..........FFFFFF..F........ [ 65%]
+.........F...F.....................F................xs.................. [ 74%]
+..ssssssssssss....sss................sss...................F.F..s....... [ 83%]
+................................F....................................... [ 93%]
+...............................................s...s                     [100%]
+=================================== FAILURES ===================================
+__________________________ test_circuit_to_json[tfb] ___________________________
+[gw4] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None
+
+    @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+    def test_circuit_to_json(backend):
+        c = tc.Circuit(3)
+        c.h(0)
+        c.CNOT(1, 2)
+        c.rxx(0, 2, theta=0.3)
+        c.crx(0, 1, theta=-0.8)
+        c.r(1, theta=tc.backend.ones([]), alpha=0.2)
+        c.toffoli(0, 2, 1)
+        c.ccnot(0, 1, 2)
+        c.multicontrol(1, 2, 0, ctrl=[0, 1], unitary=tc.gates._x_matrix)
+>       s = c.to_json()
+
+tests/test_circuit.py:1497: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tensorcircuit/abstractcircuit.py:1047: in to_json
+    return json.dumps(tcqasm)
+/opt/miniconda3/envs/testTC/lib/python3.12/json/__init__.py:231: in dumps
+    return _default_encoder.encode(obj)
+/opt/miniconda3/envs/testTC/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+/opt/miniconda3/envs/testTC/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x1072b7d70>
+o = np.float32(1.5707964)
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type float32 is not JSON serializable
+
+/opt/miniconda3/envs/testTC/lib/python3.12/json/encoder.py:180: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  tensorcircuit.translation:translation.py:654 experimental feature subject to fast protocol and implementation change, try on your own risk
+__________________________ test_circuit_to_json[jaxb] __________________________
+[gw4] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None
+
+    @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+    def test_circuit_to_json(backend):
+        c = tc.Circuit(3)
+        c.h(0)
+        c.CNOT(1, 2)
+        c.rxx(0, 2, theta=0.3)
+        c.crx(0, 1, theta=-0.8)
+        c.r(1, theta=tc.backend.ones([]), alpha=0.2)
+        c.toffoli(0, 2, 1)
+        c.ccnot(0, 1, 2)
+        c.multicontrol(1, 2, 0, ctrl=[0, 1], unitary=tc.gates._x_matrix)
+>       s = c.to_json()
+
+tests/test_circuit.py:1497: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tensorcircuit/abstractcircuit.py:1047: in to_json
+    return json.dumps(tcqasm)
+/opt/miniconda3/envs/testTC/lib/python3.12/json/__init__.py:231: in dumps
+    return _default_encoder.encode(obj)
+/opt/miniconda3/envs/testTC/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+/opt/miniconda3/envs/testTC/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x1072b7d70>
+o = np.float32(1.5707964)
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type float32 is not JSON serializable
+
+/opt/miniconda3/envs/testTC/lib/python3.12/json/encoder.py:180: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  tensorcircuit.translation:translation.py:654 experimental feature subject to fast protocol and implementation change, try on your own risk
+__________________________ test_mult_qubit_kraus[tfb] __________________________
+[gw9] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None
+
+    @pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
+    def test_mult_qubit_kraus(backend):
+        xx = np.array(
+            [[0, 0, 0, 1], [0, 0, 1, 0], [0, 1, 0, 0], [1, 0, 0, 0]], dtype=np.complex64
+        ) / np.sqrt(2)
+        yz = np.array(
+            [[0, 0, -1.0j, 0], [0, 0, 0, 1.0j], [1.0j, 0, 0, 0], [0, -1.0j, 0, 0]],
+            dtype=np.complex64,
+        ) / np.sqrt(2)
+    
+        def forward(theta):
+            c = tc.DMCircuit_reference(3)
+            c.H(0)
+            c.rx(1, theta=theta)
+            c.apply_general_kraus(
+                [
+                    tc.gates.Gate(xx.reshape([2, 2, 2, 2])),
+                    tc.gates.Gate(yz.reshape([2, 2, 2, 2])),
+                ],
+                [(0, 1), (0, 1)],
+            )
+            c.H(1)
+            return tc.backend.real(tc.backend.sum(c.densitymatrix()))
+    
+        theta = tc.num_to_tensor(0.2)
+        vg = tc.backend.value_and_grad(forward)
+>       _, g1 = vg(theta)
+
+tests/test_dmcircuit.py:156: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tensorcircuit/backends/tensorflow_backend.py:851: in wrapper
+    y = f(*args, **kws)
+tests/test_dmcircuit.py:144: in forward
+    c.apply_general_kraus(
+tensorcircuit/densitymatrix.py:221: in apply_general_kraus
+    dd = dmc.densitymatrix()
+tensorcircuit/densitymatrix.py:257: in densitymatrix
+    nodes, d_edges = self._copy_dm_tensor(conj=False, reuse=reuse)
+tensorcircuit/basecircuit.py:282: in _copy_state_tensor
+    t = contractor(nodes, output_edge_order=d_edges)
+tensorcircuit/cons.py:755: in custom
+    return _base(nodes, alg, output_edge_order, ignore_edge_order)
+tensorcircuit/cons.py:681: in _base
+    new_node = tn.contract_between(nodes[a], nodes[b], allow_outer_product=True)
+/opt/miniconda3/envs/testTC/lib/python3.12/site-packages/tensornetwork/network_components.py:2232: in contract_between
+    new_tensor = backend.tensordot(node1.tensor, node2.tensor, [axes1, axes2])
+tensorcircuit/backends/tensorflow_backend.py:78: in _tensordot_tf
+    return tf.tensordot(a, b, axes)
+/opt/miniconda3/envs/testTC/lib/python3.12/site-packages/tensorflow/python/util/traceback_utils.py:153: in error_handler
+    raise e.with_traceback(filtered_tb) from None
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+e = _NotOkStatusException(), name = None
+
+    def raise_from_not_ok_status(e, name) -> NoReturn:
+      e.message += (" name: " + str(name if name is not None else ""))
+>     raise core._status_to_exception(e) from None  # pylint: disable=protected-access
+E     tensorflow.python.framework.errors_impl.InvalidArgumentError: cannot compute MatMul as input #1(zero-based) was expected to be a complex64 tensor but is a complex128 tensor [Op:MatMul] name:
+
+/opt/miniconda3/envs/testTC/lib/python3.12/site-packages/tensorflow/python/framework/ops.py:6006: InvalidArgumentError
+___________________________ test_circuits[tfb-highp] ___________________________
+[gw4] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None, dtype = None
+
+    @pytest.mark.parametrize(
+        "backend, dtype", [(lf("tfb"), lf("highp")), (lf("jaxb"), lf("highp"))]
+    )
+    def test_circuits(backend, dtype):
+        circuits = get_test_circuits()
+        do_test_canonical(circuits)
+        do_test_wavefunction(circuits)
+        do_test_truncation(circuits, 0.902663090851, 0.910305380327)
+        do_test_amplitude(circuits)
+>       do_test_expectation(circuits)
+
+tests/test_mpscircuit.py:304: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_mpscircuit.py:170: in do_test_expectation
+    exp_mps = mps_exact.expectation(*gates)
+tensorcircuit/mpscircuit.py:972: in expectation
+    mps = self.copy()
+tensorcircuit/mpscircuit.py:821: in copy
+    result = self.copy_without_tensor()
+tensorcircuit/mpscircuit.py:810: in copy_without_tensor
+    copied_value = copy(info[key])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+x = <module 'tensorcircuit.gates.qubit_impl' from '/Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/gates/qubit_impl.py'>
+
+    def copy(x):
+        """Shallow copy operation on arbitrary Python objects.
+    
+        See the module's __doc__ string for more info.
+        """
+    
+        cls = type(x)
+    
+        copier = _copy_dispatch.get(cls)
+        if copier:
+            return copier(x)
+    
+        if issubclass(cls, type):
+            # treat it as a regular class:
+            return _copy_immutable(x)
+    
+        copier = getattr(cls, "__copy__", None)
+        if copier is not None:
+            return copier(x)
+    
+        reductor = dispatch_table.get(cls)
+        if reductor is not None:
+            rv = reductor(x)
+        else:
+            reductor = getattr(x, "__reduce_ex__", None)
+            if reductor is not None:
+>               rv = reductor(4)
+E               TypeError: cannot pickle 'module' object
+
+/opt/miniconda3/envs/testTC/lib/python3.12/copy.py:87: TypeError
+----------------------------- Captured stdout call -----------------------------
+0.9026630908518938 0.9103053803271294
+______________________ test_simple_circuits_ad[tfb-highp] ______________________
+[gw2] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None, dtype = None
+
+    @pytest.mark.parametrize(
+        "backend, dtype", [(lf("tfb"), lf("highp")), (lf("jaxb"), lf("highp"))]
+    )
+    def test_simple_circuits_ad(backend, dtype):
+        def expec(params):
+            mps = tc.MPSCircuit(N, split=split)
+            mps.rx(0, theta=params[0])
+            mps.cx(0, 1)
+            mps.cx(1, 2)
+            mps.ry(2, theta=params[1])
+            mps.rzz(1, 3, theta=params[2])
+            x = [0, 2]
+            z = [1]
+            exp = mps.expectation_ps(x=x, z=z)
+            return tc.backend.real(exp)
+    
+        params = tc.backend.ones((3,), dtype=tc.dtypestr)
+        expec_vg = tc.backend.value_and_grad(expec)
+        expec_vg_jit = tc.backend.jit(expec_vg)
+>       exp = expec(params)
+
+tests/test_mpscircuit.py:362: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_mpscircuit.py:356: in expec
+    exp = mps.expectation_ps(x=x, z=z)
+tensorcircuit/abstractcircuit.py:1392: in expectation_ps
+    return self.expectation(
+tensorcircuit/mpscircuit.py:972: in expectation
+    mps = self.copy()
+tensorcircuit/mpscircuit.py:821: in copy
+    result = self.copy_without_tensor()
+tensorcircuit/mpscircuit.py:810: in copy_without_tensor
+    copied_value = copy(info[key])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+x = <module 'tensorcircuit.gates.qubit_impl' from '/Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/gates/qubit_impl.py'>
+
+    def copy(x):
+        """Shallow copy operation on arbitrary Python objects.
+    
+        See the module's __doc__ string for more info.
+        """
+    
+        cls = type(x)
+    
+        copier = _copy_dispatch.get(cls)
+        if copier:
+            return copier(x)
+    
+        if issubclass(cls, type):
+            # treat it as a regular class:
+            return _copy_immutable(x)
+    
+        copier = getattr(cls, "__copy__", None)
+        if copier is not None:
+            return copier(x)
+    
+        reductor = dispatch_table.get(cls)
+        if reductor is not None:
+            rv = reductor(x)
+        else:
+            reductor = getattr(x, "__reduce_ex__", None)
+            if reductor is not None:
+>               rv = reductor(4)
+E               TypeError: cannot pickle 'module' object
+
+/opt/miniconda3/envs/testTC/lib/python3.12/copy.py:87: TypeError
+_________________________ test_distrubuted_contractor __________________________
+[gw0] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+jaxb = None
+
+    def test_distrubuted_contractor(jaxb):
+        def nodes_fn(params):
+            c = tc.Circuit(4)
+            c.rx(range(4), theta=params["x"])
+            c.cnot([0, 1, 2], [1, 2, 3])
+            c.ry(range(4), theta=params["y"])
+            return c.expectation_before([tc.gates.z(), [-1]], reuse=False)
+    
+        params = {"x": np.ones([4]), "y": 0.3 * np.ones([4])}
+>       dc = experimental.DistributedContractor(
+            nodes_fn,
+            params,
+            {
+                "slicing_reconf_opts": {"target_size": 2**3},
+                "max_repeats": 8,
+                "minimize": "write",
+                "parallel": False,
+            },
+        )
+
+tests/test_miscs.py:264: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tensorcircuit.experimental.DistributedContractor object at 0x34f20e5d0>
+nodes_fn = <function test_distrubuted_contractor.<locals>.nodes_fn at 0x34f1a0720>
+params = {'x': array([1., 1., 1., 1.]), 'y': array([0.3, 0.3, 0.3, 0.3])}
+cotengra_options = {'max_repeats': 8, 'minimize': 'write', 'parallel': False, 'slicing_reconf_opts': {'target_size': 8}}
+devices = None
+
+    def __init__(
+        self,
+        nodes_fn: Callable[[Tensor], List[Gate]],
+        params: Tensor,
+        cotengra_options: Optional[Dict[str, Any]] = None,
+        devices: Optional[List[Any]] = None,
+    ) -> None:
+        global jaxlib
+        global ctg
+    
+        logger.info("Initializing DistributedContractor...")
+>       import cotengra as ctg
+E       ModuleNotFoundError: No module named 'cotengra'
+
+tensorcircuit/experimental.py:531: ModuleNotFoundError
+_________________________ test_benchmark_circuits[tfb] _________________________
+[gw0] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None
+
+    @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+    def test_benchmark_circuits(backend):
+        # QAOA
+        graph = [(2, 0), (0, 3), (1, 2)]
+        weight = [1] * len(graph)
+        params = np.array([[1, 1]])
+    
+        _ = benchmark_circuits.QAOA_circuit(graph, weight, params)
+    
+        # mirror circuit
+        # return circuit and ideal counts {"01000":1}
+>       _, _ = benchmark_circuits.mirror_circuit(
+            depth=5, two_qubit_gate_prob=1, connectivity_graph=nx.complete_graph(3), seed=20
+        )
+
+tests/test_qem.py:31: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+depth = 5, two_qubit_gate_prob = 1
+connectivity_graph = <networkx.classes.graph.Graph object at 0x34f8d3c20>
+seed = 20, two_qubit_gate_name = 'CNOT'
+
+    def mirror_circuit(
+        depth: int,
+        two_qubit_gate_prob: float,
+        connectivity_graph: nx.Graph,
+        seed: int,
+        two_qubit_gate_name: str = "CNOT",
+    ) -> Tuple[Any, Dict[str, float]]:
+        # Measuring the Capabilities of Quantum Computers https://arxiv.org/pdf/2008.11294.pdf
+>       cirq, bitstring_list = generate_mirror_circuit(
+            nlayers=depth,
+            two_qubit_gate_prob=two_qubit_gate_prob,
+            connectivity_graph=connectivity_graph,
+            two_qubit_gate_name=two_qubit_gate_name,
+            seed=seed,
+        )
+E       NameError: name 'generate_mirror_circuit' is not defined
+
+tensorcircuit/results/qem/benchmark_circuits.py:67: NameError
+________________________ test_benchmark_circuits[jaxb] _________________________
+[gw0] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None
+
+    @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+    def test_benchmark_circuits(backend):
+        # QAOA
+        graph = [(2, 0), (0, 3), (1, 2)]
+        weight = [1] * len(graph)
+        params = np.array([[1, 1]])
+    
+        _ = benchmark_circuits.QAOA_circuit(graph, weight, params)
+    
+        # mirror circuit
+        # return circuit and ideal counts {"01000":1}
+>       _, _ = benchmark_circuits.mirror_circuit(
+            depth=5, two_qubit_gate_prob=1, connectivity_graph=nx.complete_graph(3), seed=20
+        )
+
+tests/test_qem.py:31: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+depth = 5, two_qubit_gate_prob = 1
+connectivity_graph = <networkx.classes.graph.Graph object at 0x34f57a9f0>
+seed = 20, two_qubit_gate_name = 'CNOT'
+
+    def mirror_circuit(
+        depth: int,
+        two_qubit_gate_prob: float,
+        connectivity_graph: nx.Graph,
+        seed: int,
+        two_qubit_gate_name: str = "CNOT",
+    ) -> Tuple[Any, Dict[str, float]]:
+        # Measuring the Capabilities of Quantum Computers https://arxiv.org/pdf/2008.11294.pdf
+>       cirq, bitstring_list = generate_mirror_circuit(
+            nlayers=depth,
+            two_qubit_gate_prob=two_qubit_gate_prob,
+            connectivity_graph=connectivity_graph,
+            two_qubit_gate_name=two_qubit_gate_name,
+            seed=seed,
+        )
+E       NameError: name 'generate_mirror_circuit' is not defined
+
+tensorcircuit/results/qem/benchmark_circuits.py:67: NameError
+________________________________ test_zne[tfb] _________________________________
+[gw0] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None
+
+    @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+    def test_zne(backend):
+        c = tc.Circuit(2)
+        for _ in range(3):
+            c.rx(range(2), theta=0.4)
+    
+        error1 = tc.channels.generaldepolarizingchannel(0.01, 1)
+        noise_conf = NoiseConf()
+        noise_conf.add_noise("rx", error1)
+    
+        def execute(circuit):
+            value = circuit.expectation_ps(z=[0], noise_conf=noise_conf, nmc=10000)
+            return value
+    
+        random_state = np.random.RandomState(0)
+        noise_scaling_function = partial(
+>           zne_option.scaling.fold_gates_at_random,
+            # fidelities = {"single": 1.0},
+            random_state=random_state,
+        )
+E       AttributeError: 'NoneType' object has no attribute 'scaling'
+
+tests/test_qem.py:62: AttributeError
+________________________________ test_zne[jaxb] ________________________________
+[gw0] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None
+
+    @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+    def test_zne(backend):
+        c = tc.Circuit(2)
+        for _ in range(3):
+            c.rx(range(2), theta=0.4)
+    
+        error1 = tc.channels.generaldepolarizingchannel(0.01, 1)
+        noise_conf = NoiseConf()
+        noise_conf.add_noise("rx", error1)
+    
+        def execute(circuit):
+            value = circuit.expectation_ps(z=[0], noise_conf=noise_conf, nmc=10000)
+            return value
+    
+        random_state = np.random.RandomState(0)
+        noise_scaling_function = partial(
+>           zne_option.scaling.fold_gates_at_random,
+            # fidelities = {"single": 1.0},
+            random_state=random_state,
+        )
+E       AttributeError: 'NoneType' object has no attribute 'scaling'
+
+tests/test_qem.py:62: AttributeError
+_________________________________ test_dd[tfb] _________________________________
+[gw0] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None
+
+    @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+    def test_dd(backend):
+        c = tc.Circuit(2)
+        for _ in range(3):
+            c.rx(range(2), theta=0.4)
+    
+        def execute(circuit):
+            value = circuit.expectation_ps(z=[0])
+            return value
+    
+        def execute2(circuit):
+            key = tc.backend.get_random_state(42)
+            count = circuit.sample(
+                batch=1000, allow_state=True, format_="count_dict_bin", random_generator=key
+            )
+            return count
+    
+>       _ = apply_dd(
+            circuit=c,
+            executor=execute,
+            rule=["X", "X"],
+            rule_args={"spacing": -1},
+            full_output=True,
+            ignore_idle_qubit=True,
+            fulldd=False,
+        )
+
+tests/test_qem.py:102: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+circuit = <tensorcircuit.circuit.Circuit object at 0x34f07dd60>
+executor = <function test_dd.<locals>.execute at 0x34ef9f2e0>, rule = ['X', 'X']
+rule_args = {'spacing': -1}, num_trials = 1, full_output = True
+ignore_idle_qubit = True, fulldd = False, iscount = False
+
+    def apply_dd(
+        circuit: Any,
+        executor: Callable[[Any], Any],
+        rule: Union[Callable[[int], Any], List[str]],
+        rule_args: Optional[Dict[str, Any]] = None,
+        num_trials: int = 1,
+        full_output: bool = False,
+        ignore_idle_qubit: bool = True,
+        fulldd: bool = False,
+        iscount: bool = False,
+    ) -> Union[
+        float, Tuple[float, List[Any]], Dict[str, float], Tuple[Dict[str, float], List[Any]]
+    ]:
+        """
+        Apply dynamic decoupling (DD) and return the mitigated results.
+    
+    
+        :param circuit: The aim circuit.
+        :type circuit: Any
+        :param executor: A executor that executes a circuit and return results.
+        :type executor: Callable[[Any], Any]
+        :param rule: The rule to construct DD sequence, can use default rule "dd_option.rules.xx"
+        or custom rule "['X','X']"
+        :type rule: Union[Callable[[int], Any], List[str]]
+        :param rule_args:An optional dictionary of keyword arguments for ``rule``, defaults to {}.
+        :type rule_args: Dict[str, Any], optional
+        :param num_trials: The number of independent experiments to average over, defaults to 1
+        :type num_trials: int, optional
+        :param full_output: If ``False`` only the mitigated expectation value is
+            returned. If ``True`` a dictionary containing all DD data is
+            returned too, defaults to False
+        :type full_output: bool, optional
+        :param ig_idle_qubit: ignore the DD sequences that added to unused qubits, defaults to True
+        :type ig_idle_qubit: bool, optional
+        :param fulldd: dd sequence full fill the idle circuits, defaults to False
+        :type fulldd: bool, optional
+        :param iscount: whether the output is bit string, defaults to False
+        :type iscount: bool, optional
+        :return: mitigated expectation value or mitigated expectation value and DD circuit information
+        :rtype: Union[float, Tuple[float, Dict[str, Any]]]
+        """
+        if rule_args is None:
+            rule_args = {}
+    
+        def dd_rule(slack_length: int, spacing: int = -1) -> Any:
+            """
+            Set DD rule.
+    
+            :param slack_length: Length of idle window to fill. Automatically calculated for a circuit.
+            :type slack_length: int
+            :param spacing: How many identity spacing gates to apply between dynamical
+                  decoupling gates, defaults to -1
+            :type spacing: int, optional
+            """
+            dd_sequence = dd_option.rules.general_rule(
+                slack_length=slack_length,
+                spacing=spacing,
+                gates=gates,
+            )
+            return dd_sequence
+    
+        if isinstance(rule, list):
+>           import cirq
+E           ModuleNotFoundError: No module named 'cirq'
+
+tensorcircuit/results/qem/qem_methods.py:207: ModuleNotFoundError
+________________________________ test_dd[jaxb] _________________________________
+[gw0] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None
+
+    @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+    def test_dd(backend):
+        c = tc.Circuit(2)
+        for _ in range(3):
+            c.rx(range(2), theta=0.4)
+    
+        def execute(circuit):
+            value = circuit.expectation_ps(z=[0])
+            return value
+    
+        def execute2(circuit):
+            key = tc.backend.get_random_state(42)
+            count = circuit.sample(
+                batch=1000, allow_state=True, format_="count_dict_bin", random_generator=key
+            )
+            return count
+    
+>       _ = apply_dd(
+            circuit=c,
+            executor=execute,
+            rule=["X", "X"],
+            rule_args={"spacing": -1},
+            full_output=True,
+            ignore_idle_qubit=True,
+            fulldd=False,
+        )
+
+tests/test_qem.py:102: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+circuit = <tensorcircuit.circuit.Circuit object at 0x34ee025a0>
+executor = <function test_dd.<locals>.execute at 0x34f595440>, rule = ['X', 'X']
+rule_args = {'spacing': -1}, num_trials = 1, full_output = True
+ignore_idle_qubit = True, fulldd = False, iscount = False
+
+    def apply_dd(
+        circuit: Any,
+        executor: Callable[[Any], Any],
+        rule: Union[Callable[[int], Any], List[str]],
+        rule_args: Optional[Dict[str, Any]] = None,
+        num_trials: int = 1,
+        full_output: bool = False,
+        ignore_idle_qubit: bool = True,
+        fulldd: bool = False,
+        iscount: bool = False,
+    ) -> Union[
+        float, Tuple[float, List[Any]], Dict[str, float], Tuple[Dict[str, float], List[Any]]
+    ]:
+        """
+        Apply dynamic decoupling (DD) and return the mitigated results.
+    
+    
+        :param circuit: The aim circuit.
+        :type circuit: Any
+        :param executor: A executor that executes a circuit and return results.
+        :type executor: Callable[[Any], Any]
+        :param rule: The rule to construct DD sequence, can use default rule "dd_option.rules.xx"
+        or custom rule "['X','X']"
+        :type rule: Union[Callable[[int], Any], List[str]]
+        :param rule_args:An optional dictionary of keyword arguments for ``rule``, defaults to {}.
+        :type rule_args: Dict[str, Any], optional
+        :param num_trials: The number of independent experiments to average over, defaults to 1
+        :type num_trials: int, optional
+        :param full_output: If ``False`` only the mitigated expectation value is
+            returned. If ``True`` a dictionary containing all DD data is
+            returned too, defaults to False
+        :type full_output: bool, optional
+        :param ig_idle_qubit: ignore the DD sequences that added to unused qubits, defaults to True
+        :type ig_idle_qubit: bool, optional
+        :param fulldd: dd sequence full fill the idle circuits, defaults to False
+        :type fulldd: bool, optional
+        :param iscount: whether the output is bit string, defaults to False
+        :type iscount: bool, optional
+        :return: mitigated expectation value or mitigated expectation value and DD circuit information
+        :rtype: Union[float, Tuple[float, Dict[str, Any]]]
+        """
+        if rule_args is None:
+            rule_args = {}
+    
+        def dd_rule(slack_length: int, spacing: int = -1) -> Any:
+            """
+            Set DD rule.
+    
+            :param slack_length: Length of idle window to fill. Automatically calculated for a circuit.
+            :type slack_length: int
+            :param spacing: How many identity spacing gates to apply between dynamical
+                  decoupling gates, defaults to -1
+            :type spacing: int, optional
+            """
+            dd_sequence = dd_option.rules.general_rule(
+                slack_length=slack_length,
+                spacing=spacing,
+                gates=gates,
+            )
+            return dd_sequence
+    
+        if isinstance(rule, list):
+>           import cirq
+E           ModuleNotFoundError: No module named 'cirq'
+
+tensorcircuit/results/qem/qem_methods.py:207: ModuleNotFoundError
+_____________________ test_simple_circuits_ad[jaxb-highp] ______________________
+[gw2] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None, dtype = None
+
+    @pytest.mark.parametrize(
+        "backend, dtype", [(lf("tfb"), lf("highp")), (lf("jaxb"), lf("highp"))]
+    )
+    def test_simple_circuits_ad(backend, dtype):
+        def expec(params):
+            mps = tc.MPSCircuit(N, split=split)
+            mps.rx(0, theta=params[0])
+            mps.cx(0, 1)
+            mps.cx(1, 2)
+            mps.ry(2, theta=params[1])
+            mps.rzz(1, 3, theta=params[2])
+            x = [0, 2]
+            z = [1]
+            exp = mps.expectation_ps(x=x, z=z)
+            return tc.backend.real(exp)
+    
+        params = tc.backend.ones((3,), dtype=tc.dtypestr)
+        expec_vg = tc.backend.value_and_grad(expec)
+        expec_vg_jit = tc.backend.jit(expec_vg)
+>       exp = expec(params)
+
+tests/test_mpscircuit.py:362: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_mpscircuit.py:356: in expec
+    exp = mps.expectation_ps(x=x, z=z)
+tensorcircuit/abstractcircuit.py:1392: in expectation_ps
+    return self.expectation(
+tensorcircuit/mpscircuit.py:972: in expectation
+    mps = self.copy()
+tensorcircuit/mpscircuit.py:821: in copy
+    result = self.copy_without_tensor()
+tensorcircuit/mpscircuit.py:810: in copy_without_tensor
+    copied_value = copy(info[key])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+x = <module 'tensorcircuit.gates.qubit_impl' from '/Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/gates/qubit_impl.py'>
+
+    def copy(x):
+        """Shallow copy operation on arbitrary Python objects.
+    
+        See the module's __doc__ string for more info.
+        """
+    
+        cls = type(x)
+    
+        copier = _copy_dispatch.get(cls)
+        if copier:
+            return copier(x)
+    
+        if issubclass(cls, type):
+            # treat it as a regular class:
+            return _copy_immutable(x)
+    
+        copier = getattr(cls, "__copy__", None)
+        if copier is not None:
+            return copier(x)
+    
+        reductor = dispatch_table.get(cls)
+        if reductor is not None:
+            rv = reductor(x)
+        else:
+            reductor = getattr(x, "__reduce_ex__", None)
+            if reductor is not None:
+>               rv = reductor(4)
+E               TypeError: cannot pickle 'module' object
+
+/opt/miniconda3/envs/testTC/lib/python3.12/copy.py:87: TypeError
+_________________________ test_circuit_inverse_2[npb] __________________________
+[gw6] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None
+
+    @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+    def test_circuit_inverse_2(backend):
+        inputs = np.random.uniform(size=[8])
+        inputs /= np.linalg.norm(inputs)
+        c = tc.Circuit(3, inputs=inputs)
+        c.iswap(0, 1)
+        c.iswap(1, 0, theta=0.6)
+        c.rxx(1, 2, theta=-0.2)
+        c.cu(0, 1, lbd=2.0, theta=-0.7)
+        c.r(2, alpha=0.3)
+        c.sd(2)
+        c.cx(1, 2)
+        c.unitary(0, unitary=tc.gates._x_matrix)
+        c1 = c.inverse()
+        c.append(c1)
+        print(c.draw())
+>       np.testing.assert_allclose(c.state(), inputs, atol=1e-5)
+
+tests/test_circuit.py:1381: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<function assert_allclose.<locals>.compare at 0x3472151c0>, array([ 0.53586936-0.05293488j, -0.45244357+0.04615141j,
+...lex64), array([0.54845657, 0.47309895, 0.28714183, 0.32934674, 0.09612444,
+       0.01416939, 0.23025785, 0.47116208]))
+kwds = {'equal_nan': True, 'err_msg': '', 'header': 'Not equal to tolerance rtol=1e-07, atol=1e-05', 'strict': False, ...}
+
+    @wraps(func)
+    def inner(*args, **kwds):
+        with self._recreate_cm():
+>           return func(*args, **kwds)
+E           AssertionError: 
+E           Not equal to tolerance rtol=1e-07, atol=1e-05
+E           
+E           Mismatched elements: 8 / 8 (100%)
+E           Max absolute difference among violations: 0.92669246
+E           Max relative difference among violations: 7.00521395
+E            ACTUAL: array([ 0.535869-0.052935j, -0.452444+0.046151j,  0.336438-0.07604j ,
+E                  -0.34967 +0.088152j,  0.149454-0.075728j, -0.077933+0.037009j,
+E                   0.187209-0.002277j, -0.428239+0.01545j ], dtype=complex64)
+E            DESIRED: array([0.548457, 0.473099, 0.287142, 0.329347, 0.096124, 0.014169,
+E                  0.230258, 0.471162])
+
+/opt/miniconda3/envs/testTC/lib/python3.12/contextlib.py:81: AssertionError
+----------------------------- Captured stdout call -----------------------------
+     ┌───────────────┐┌───────────────────┐                               »
+q_0: ┤0              ├┤1                  ├──────────────────────■────────»
+     │  (XX+YY)(π,π) ││  (XX+YY)(1.885,π) │┌────────────┐┌───────┴───────┐»
+q_1: ┤1              ├┤0                  ├┤0           ├┤ U(-0.7,0,2,0) ├»
+     └───────────────┘└───────────────────┘│  Rxx(-0.2) │└─────┬───┬─────┘»
+q_2: ──────────────────────────────────────┤1           ├──────┤ r ├──────»
+                                           └────────────┘      └───┘      »
+«     ┌─────┐┌─────┐                                        »
+«q_0: ┤ any ├┤ any ├─────────────■──────────────────────────»
+«     └─────┘└─────┘     ┌───────┴───────┐     ┌───────────┐»
+«q_1: ──────────■─────■──┤ U(0.7,-2,0,0) ├─────┤0          ├»
+«     ┌─────┐ ┌─┴─┐ ┌─┴─┐└────┬─────┬────┘┌───┐│  Rxx(0.2) │»
+«q_2: ┤ Sdg ├─┤ X ├─┤ X ├─────┤ Sdg ├─────┤ r ├┤1          ├»
+«     └─────┘ └───┘ └───┘     └─────┘     └───┘└───────────┘»
+«     ┌────────────────────┐┌────────────────┐
+«q_0: ┤1                   ├┤0               ├
+«     │  (XX+YY)(-1.885,π) ││  (XX+YY)(-π,π) │
+«q_1: ┤0                   ├┤1               ├
+«     └────────────────────┘└────────────────┘
+«q_2: ────────────────────────────────────────
+«                                             
+_________________________ test_circuit_inverse_2[tfb] __________________________
+[gw6] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None
+
+    @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+    def test_circuit_inverse_2(backend):
+        inputs = np.random.uniform(size=[8])
+        inputs /= np.linalg.norm(inputs)
+        c = tc.Circuit(3, inputs=inputs)
+        c.iswap(0, 1)
+        c.iswap(1, 0, theta=0.6)
+        c.rxx(1, 2, theta=-0.2)
+        c.cu(0, 1, lbd=2.0, theta=-0.7)
+        c.r(2, alpha=0.3)
+        c.sd(2)
+        c.cx(1, 2)
+        c.unitary(0, unitary=tc.gates._x_matrix)
+        c1 = c.inverse()
+        c.append(c1)
+        print(c.draw())
+>       np.testing.assert_allclose(c.state(), inputs, atol=1e-5)
+
+tests/test_circuit.py:1381: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<function assert_allclose.<locals>.compare at 0x346d642c0>, array([ 0.2817256 -0.01330288j, -0.01777708+0.04259015j,
+...lex64), array([0.33836018, 0.06513215, 0.26498456, 0.082767  , 0.39440637,
+       0.42723191, 0.4829877 , 0.48253745]))
+kwds = {'equal_nan': True, 'err_msg': '', 'header': 'Not equal to tolerance rtol=1e-07, atol=1e-05', 'strict': False, ...}
+
+    @wraps(func)
+    def inner(*args, **kwds):
+        with self._recreate_cm():
+>           return func(*args, **kwds)
+E           AssertionError: 
+E           Not equal to tolerance rtol=1e-07, atol=1e-05
+E           
+E           Mismatched elements: 8 / 8 (100%)
+E           Max absolute difference among violations: 0.92668351
+E           Max relative difference among violations: 2.74141589
+E            ACTUAL: array([ 0.281726-0.013303j, -0.017777+0.04259j ,  0.316051-0.010468j,
+E                  -0.137518+0.054384j,  0.39415 -0.077557j, -0.458228+0.077629j,
+E                   0.463695-0.068668j, -0.441975+0.063392j], dtype=complex64)
+E            DESIRED: array([0.33836 , 0.065132, 0.264985, 0.082767, 0.394406, 0.427232,
+E                  0.482988, 0.482537])
+
+/opt/miniconda3/envs/testTC/lib/python3.12/contextlib.py:81: AssertionError
+----------------------------- Captured stdout call -----------------------------
+     ┌───────────────┐┌───────────────────┐                               »
+q_0: ┤0              ├┤1                  ├──────────────────────■────────»
+     │  (XX+YY)(π,π) ││  (XX+YY)(1.885,π) │┌────────────┐┌───────┴───────┐»
+q_1: ┤1              ├┤0                  ├┤0           ├┤ U(-0.7,0,2,0) ├»
+     └───────────────┘└───────────────────┘│  Rxx(-0.2) │└─────┬───┬─────┘»
+q_2: ──────────────────────────────────────┤1           ├──────┤ r ├──────»
+                                           └────────────┘      └───┘      »
+«     ┌─────┐┌─────┐                                        »
+«q_0: ┤ any ├┤ any ├─────────────■──────────────────────────»
+«     └─────┘└─────┘     ┌───────┴───────┐     ┌───────────┐»
+«q_1: ──────────■─────■──┤ U(0.7,-2,0,0) ├─────┤0          ├»
+«     ┌─────┐ ┌─┴─┐ ┌─┴─┐└────┬─────┬────┘┌───┐│  Rxx(0.2) │»
+«q_2: ┤ Sdg ├─┤ X ├─┤ X ├─────┤ Sdg ├─────┤ r ├┤1          ├»
+«     └─────┘ └───┘ └───┘     └─────┘     └───┘└───────────┘»
+«     ┌────────────────────┐┌────────────────┐
+«q_0: ┤1                   ├┤0               ├
+«     │  (XX+YY)(-1.885,π) ││  (XX+YY)(-π,π) │
+«q_1: ┤0                   ├┤1               ├
+«     └────────────────────┘└────────────────┘
+«q_2: ────────────────────────────────────────
+«                                             
+_________________________ test_circuit_inverse_2[jaxb] _________________________
+[gw6] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None
+
+    @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+    def test_circuit_inverse_2(backend):
+        inputs = np.random.uniform(size=[8])
+        inputs /= np.linalg.norm(inputs)
+        c = tc.Circuit(3, inputs=inputs)
+        c.iswap(0, 1)
+        c.iswap(1, 0, theta=0.6)
+        c.rxx(1, 2, theta=-0.2)
+        c.cu(0, 1, lbd=2.0, theta=-0.7)
+        c.r(2, alpha=0.3)
+        c.sd(2)
+        c.cx(1, 2)
+        c.unitary(0, unitary=tc.gates._x_matrix)
+        c1 = c.inverse()
+        c.append(c1)
+        print(c.draw())
+>       np.testing.assert_allclose(c.state(), inputs, atol=1e-5)
+
+tests/test_circuit.py:1381: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<function assert_allclose.<locals>.compare at 0x346d658a0>, array([-0.05571775-0.04894246j, -0.37061656+0.05728193j,
+...lex64), array([0.00174632, 0.42543002, 0.35639291, 0.30450696, 0.39677372,
+       0.49179465, 0.44586219, 0.03437152]))
+kwds = {'equal_nan': True, 'err_msg': '', 'header': 'Not equal to tolerance rtol=1e-07, atol=1e-05', 'strict': False, ...}
+
+    @wraps(func)
+    def inner(*args, **kwds):
+        with self._recreate_cm():
+>           return func(*args, **kwds)
+E           AssertionError: 
+E           Not equal to tolerance rtol=1e-07, atol=1e-05
+E           
+E           Mismatched elements: 8 / 8 (100%)
+E           Max absolute difference among violations: 0.97662276
+E           Max relative difference among violations: 43.22322355
+E            ACTUAL: array([-0.055718-0.048942j, -0.370617+0.057282j,  0.353303-0.068378j,
+E                  -0.350503+0.000281j,  0.438544-0.005524j, -0.482195+0.071662j,
+E                   0.401416-0.079045j,  0.007931+0.063772j], dtype=complex64)
+E            DESIRED: array([0.001746, 0.42543 , 0.356393, 0.304507, 0.396774, 0.491795,
+E                  0.445862, 0.034372])
+
+/opt/miniconda3/envs/testTC/lib/python3.12/contextlib.py:81: AssertionError
+----------------------------- Captured stdout call -----------------------------
+     ┌───────────────┐┌───────────────────┐                               »
+q_0: ┤0              ├┤1                  ├──────────────────────■────────»
+     │  (XX+YY)(π,π) ││  (XX+YY)(1.885,π) │┌────────────┐┌───────┴───────┐»
+q_1: ┤1              ├┤0                  ├┤0           ├┤ U(-0.7,0,2,0) ├»
+     └───────────────┘└───────────────────┘│  Rxx(-0.2) │└─────┬───┬─────┘»
+q_2: ──────────────────────────────────────┤1           ├──────┤ r ├──────»
+                                           └────────────┘      └───┘      »
+«     ┌─────┐┌─────┐                                        »
+«q_0: ┤ any ├┤ any ├─────────────■──────────────────────────»
+«     └─────┘└─────┘     ┌───────┴───────┐     ┌───────────┐»
+«q_1: ──────────■─────■──┤ U(0.7,-2,0,0) ├─────┤0          ├»
+«     ┌─────┐ ┌─┴─┐ ┌─┴─┐└────┬─────┬────┘┌───┐│  Rxx(0.2) │»
+«q_2: ┤ Sdg ├─┤ X ├─┤ X ├─────┤ Sdg ├─────┤ r ├┤1          ├»
+«     └─────┘ └───┘ └───┘     └─────┘     └───┘└───────────┘»
+«     ┌────────────────────┐┌────────────────┐
+«q_0: ┤1                   ├┤0               ├
+«     │  (XX+YY)(-1.885,π) ││  (XX+YY)(-π,π) │
+«q_1: ┤0                   ├┤1               ├
+«     └────────────────────┘└────────────────┘
+«q_2: ────────────────────────────────────────
+«                                             
+__________________________ test_circuits[jaxb-highp] ___________________________
+[gw4] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None, dtype = None
+
+    @pytest.mark.parametrize(
+        "backend, dtype", [(lf("tfb"), lf("highp")), (lf("jaxb"), lf("highp"))]
+    )
+    def test_circuits(backend, dtype):
+        circuits = get_test_circuits()
+        do_test_canonical(circuits)
+        do_test_wavefunction(circuits)
+        do_test_truncation(circuits, 0.902663090851, 0.910305380327)
+        do_test_amplitude(circuits)
+>       do_test_expectation(circuits)
+
+tests/test_mpscircuit.py:304: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_mpscircuit.py:170: in do_test_expectation
+    exp_mps = mps_exact.expectation(*gates)
+tensorcircuit/mpscircuit.py:972: in expectation
+    mps = self.copy()
+tensorcircuit/mpscircuit.py:821: in copy
+    result = self.copy_without_tensor()
+tensorcircuit/mpscircuit.py:810: in copy_without_tensor
+    copied_value = copy(info[key])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+x = <module 'tensorcircuit.gates.qubit_impl' from '/Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/gates/qubit_impl.py'>
+
+    def copy(x):
+        """Shallow copy operation on arbitrary Python objects.
+    
+        See the module's __doc__ string for more info.
+        """
+    
+        cls = type(x)
+    
+        copier = _copy_dispatch.get(cls)
+        if copier:
+            return copier(x)
+    
+        if issubclass(cls, type):
+            # treat it as a regular class:
+            return _copy_immutable(x)
+    
+        copier = getattr(cls, "__copy__", None)
+        if copier is not None:
+            return copier(x)
+    
+        reductor = dispatch_table.get(cls)
+        if reductor is not None:
+            rv = reductor(x)
+        else:
+            reductor = getattr(x, "__reduce_ex__", None)
+            if reductor is not None:
+>               rv = reductor(4)
+E               TypeError: cannot pickle 'module' object
+
+/opt/miniconda3/envs/testTC/lib/python3.12/copy.py:87: TypeError
+----------------------------- Captured stdout call -----------------------------
+0.9026630908518822 0.9103053803271302
+_________________________ test_circuits_jit[tfb-highp] _________________________
+[gw4] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None, dtype = None
+
+    @pytest.mark.parametrize("backend, dtype", [(lf("tfb"), lf("highp"))])
+    def test_circuits_jit(backend, dtype):
+        def expec(params):
+            mps = tc.MPSCircuit(N, split=split)
+            simulate(mps, check=False, params=params)
+            x = [0, 2]
+            y = [5, 3, 1]
+            z = [6, 4]
+            exp = mps.expectation_ps(x=x, y=y, z=z)
+            return tc.backend.real(exp)
+    
+        params = tc.backend.ones((3,), dtype=tc.dtypestr)
+        expec_vg = tc.backend.value_and_grad(expec)
+        expec_vg_jit = tc.backend.jit(expec_vg)
+>       exp = expec(params)
+
+tests/test_mpscircuit.py:327: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_mpscircuit.py:321: in expec
+    exp = mps.expectation_ps(x=x, y=y, z=z)
+tensorcircuit/abstractcircuit.py:1392: in expectation_ps
+    return self.expectation(
+tensorcircuit/mpscircuit.py:972: in expectation
+    mps = self.copy()
+tensorcircuit/mpscircuit.py:821: in copy
+    result = self.copy_without_tensor()
+tensorcircuit/mpscircuit.py:810: in copy_without_tensor
+    copied_value = copy(info[key])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+x = <module 'tensorcircuit.gates.qubit_impl' from '/Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/gates/qubit_impl.py'>
+
+    def copy(x):
+        """Shallow copy operation on arbitrary Python objects.
+    
+        See the module's __doc__ string for more info.
+        """
+    
+        cls = type(x)
+    
+        copier = _copy_dispatch.get(cls)
+        if copier:
+            return copier(x)
+    
+        if issubclass(cls, type):
+            # treat it as a regular class:
+            return _copy_immutable(x)
+    
+        copier = getattr(cls, "__copy__", None)
+        if copier is not None:
+            return copier(x)
+    
+        reductor = dispatch_table.get(cls)
+        if reductor is not None:
+            rv = reductor(x)
+        else:
+            reductor = getattr(x, "__reduce_ex__", None)
+            if reductor is not None:
+>               rv = reductor(4)
+E               TypeError: cannot pickle 'module' object
+
+/opt/miniconda3/envs/testTC/lib/python3.12/copy.py:87: TypeError
+__________________________ test_circuit_to_json[npb] ___________________________
+[gw7] darwin -- Python 3.12.9 /opt/miniconda3/envs/testTC/bin/python3.12
+
+backend = None
+
+    @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+    def test_circuit_to_json(backend):
+        c = tc.Circuit(3)
+        c.h(0)
+        c.CNOT(1, 2)
+        c.rxx(0, 2, theta=0.3)
+        c.crx(0, 1, theta=-0.8)
+        c.r(1, theta=tc.backend.ones([]), alpha=0.2)
+        c.toffoli(0, 2, 1)
+        c.ccnot(0, 1, 2)
+        c.multicontrol(1, 2, 0, ctrl=[0, 1], unitary=tc.gates._x_matrix)
+>       s = c.to_json()
+
+tests/test_circuit.py:1497: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tensorcircuit/abstractcircuit.py:1047: in to_json
+    return json.dumps(tcqasm)
+/opt/miniconda3/envs/testTC/lib/python3.12/json/__init__.py:231: in dumps
+    return _default_encoder.encode(obj)
+/opt/miniconda3/envs/testTC/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+/opt/miniconda3/envs/testTC/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x105928e60>
+o = np.float32(1.5707964)
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type float32 is not JSON serializable
+
+/opt/miniconda3/envs/testTC/lib/python3.12/json/encoder.py:180: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  tensorcircuit.translation:translation.py:654 experimental feature subject to fast protocol and implementation change, try on your own risk
+=============================== warnings summary ===============================
+tests/test_circuit.py::test_qir2qiskit[npb]
+tests/test_circuit.py::test_qir2qiskit[tfb]
+tests/test_circuit.py::test_qir2qiskit[jaxb]
+  /opt/miniconda3/envs/testTC/lib/python3.12/site-packages/qiskit/synthesis/unitary/qsd.py:212: RuntimeWarning: divide by zero encountered in matmul
+    um0um1 = um0 @ um1.T.conjugate()
+
+tests/test_circuit.py::test_qir2qiskit[npb]
+tests/test_circuit.py::test_qir2qiskit[tfb]
+tests/test_circuit.py::test_qir2qiskit[jaxb]
+  /opt/miniconda3/envs/testTC/lib/python3.12/site-packages/qiskit/synthesis/unitary/qsd.py:212: RuntimeWarning: overflow encountered in matmul
+    um0um1 = um0 @ um1.T.conjugate()
+
+tests/test_circuit.py::test_qir2qiskit[npb]
+tests/test_circuit.py::test_qir2qiskit[tfb]
+tests/test_circuit.py::test_qir2qiskit[jaxb]
+  /opt/miniconda3/envs/testTC/lib/python3.12/site-packages/qiskit/synthesis/unitary/qsd.py:212: RuntimeWarning: invalid value encountered in matmul
+    um0um1 = um0 @ um1.T.conjugate()
+
+tests/test_circuit.py::test_qir2qiskit[npb]
+tests/test_circuit.py::test_qir2qiskit[tfb]
+tests/test_circuit.py::test_qir2qiskit[jaxb]
+  /opt/miniconda3/envs/testTC/lib/python3.12/site-packages/qiskit/synthesis/unitary/qsd.py:220: RuntimeWarning: divide by zero encountered in matmul
+    wmat = dmat @ vmat.T.conjugate() @ um1
+
+tests/test_circuit.py::test_qir2qiskit[npb]
+tests/test_circuit.py::test_qir2qiskit[tfb]
+tests/test_circuit.py::test_qir2qiskit[jaxb]
+  /opt/miniconda3/envs/testTC/lib/python3.12/site-packages/qiskit/synthesis/unitary/qsd.py:220: RuntimeWarning: overflow encountered in matmul
+    wmat = dmat @ vmat.T.conjugate() @ um1
+
+tests/test_circuit.py::test_qir2qiskit[npb]
+tests/test_circuit.py::test_qir2qiskit[tfb]
+tests/test_circuit.py::test_qir2qiskit[jaxb]
+  /opt/miniconda3/envs/testTC/lib/python3.12/site-packages/qiskit/synthesis/unitary/qsd.py:220: RuntimeWarning: invalid value encountered in matmul
+    wmat = dmat @ vmat.T.conjugate() @ um1
+
+tests/test_circuit.py::test_qir2qiskit[npb]
+tests/test_circuit.py::test_qir2qiskit[tfb]
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tests/test_circuit.py:1102: RuntimeWarning: divide by zero encountered in matmul
+    np.testing.assert_allclose(p_mat @ tc_unitary @ p_mat, qis_unitary, atol=1e-5)
+
+tests/test_circuit.py::test_qir2qiskit[npb]
+tests/test_circuit.py::test_qir2qiskit[tfb]
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tests/test_circuit.py:1102: RuntimeWarning: overflow encountered in matmul
+    np.testing.assert_allclose(p_mat @ tc_unitary @ p_mat, qis_unitary, atol=1e-5)
+
+tests/test_circuit.py::test_qir2qiskit[npb]
+tests/test_circuit.py::test_qir2qiskit[tfb]
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tests/test_circuit.py:1102: RuntimeWarning: invalid value encountered in matmul
+    np.testing.assert_allclose(p_mat @ tc_unitary @ p_mat, qis_unitary, atol=1e-5)
+
+tests/test_circuit.py::test_qiskit2tc
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tests/test_circuit.py:1176: RuntimeWarning: divide by zero encountered in matmul
+    np.testing.assert_allclose(p_mat @ tc_unitary @ p_mat, qis_unitary, atol=1e-5)
+
+tests/test_circuit.py::test_qiskit2tc
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tests/test_circuit.py:1176: RuntimeWarning: overflow encountered in matmul
+    np.testing.assert_allclose(p_mat @ tc_unitary @ p_mat, qis_unitary, atol=1e-5)
+
+tests/test_circuit.py::test_qiskit2tc
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tests/test_circuit.py:1176: RuntimeWarning: invalid value encountered in matmul
+    np.testing.assert_allclose(p_mat @ tc_unitary @ p_mat, qis_unitary, atol=1e-5)
+
+tests/test_lattice.py::TestCustomizeLattice::test_show_method_actually_draws_2d_labels
+tests/test_lattice.py::TestLongRangeNeighborFinding::test_show_method_with_custom_bond_kwargs
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/templates/lattice.py:454: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+    plt.show()
+
+tests/test_dmcircuit.py::test_dm_sexpps_jittable_vamppable_tf
+tests/test_channels.py::test_readout[tfb]
+  <unknown>:12: SyntaxWarning: invalid escape sequence '\i'
+
+tests/test_timeevol.py::test_chebyshev_evol_basic[npb-True]
+tests/test_timeevol.py::test_chebyshev_evol_basic[npb-False]
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/timeevol.py:408: RuntimeWarning: divide by zero encountered in matmul
+    backend.transpose(u) @ backend.reshape(psi0, [-1, 1])
+
+tests/test_timeevol.py::test_chebyshev_evol_basic[npb-True]
+tests/test_timeevol.py::test_chebyshev_evol_basic[npb-False]
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/timeevol.py:408: RuntimeWarning: overflow encountered in matmul
+    backend.transpose(u) @ backend.reshape(psi0, [-1, 1])
+
+tests/test_timeevol.py::test_chebyshev_evol_basic[npb-True]
+tests/test_timeevol.py::test_chebyshev_evol_basic[npb-False]
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/timeevol.py:408: RuntimeWarning: invalid value encountered in matmul
+    backend.transpose(u) @ backend.reshape(psi0, [-1, 1])
+
+tests/test_timeevol.py::test_chebyshev_evol_basic[npb-True]
+tests/test_timeevol.py::test_chebyshev_evol_basic[npb-False]
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/timeevol.py:417: RuntimeWarning: divide by zero encountered in matmul
+    psi_exact = backend.conj(u) @ backend.reshape(ebetah_utpsi0, [-1, 1])
+
+tests/test_timeevol.py::test_chebyshev_evol_basic[npb-True]
+tests/test_timeevol.py::test_chebyshev_evol_basic[npb-False]
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/timeevol.py:417: RuntimeWarning: overflow encountered in matmul
+    psi_exact = backend.conj(u) @ backend.reshape(ebetah_utpsi0, [-1, 1])
+
+tests/test_timeevol.py::test_chebyshev_evol_basic[npb-True]
+tests/test_timeevol.py::test_chebyshev_evol_basic[npb-False]
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/timeevol.py:417: RuntimeWarning: invalid value encountered in matmul
+    psi_exact = backend.conj(u) @ backend.reshape(ebetah_utpsi0, [-1, 1])
+
+tests/test_timeevol.py: 30 warnings
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/timeevol.py:781: RuntimeWarning: divide by zero encountered in matmul
+    r = h @ q
+
+tests/test_timeevol.py: 30 warnings
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/timeevol.py:781: RuntimeWarning: overflow encountered in matmul
+    r = h @ q
+
+tests/test_timeevol.py: 30 warnings
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/timeevol.py:781: RuntimeWarning: invalid value encountered in matmul
+    r = h @ q
+
+tests/test_timeevol.py::test_chebyshev_evol_basic[npb-False]
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/timeevol.py:646: RuntimeWarning: divide by zero encountered in matmul
+    return ((hamiltonian @ psi) - b * psi) / a
+
+tests/test_timeevol.py::test_chebyshev_evol_basic[npb-False]
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/timeevol.py:646: RuntimeWarning: overflow encountered in matmul
+    return ((hamiltonian @ psi) - b * psi) / a
+
+tests/test_timeevol.py::test_chebyshev_evol_basic[npb-False]
+  /Users/weiguoma/PyProgram/tensorcircuit-ng/tensorcircuit/timeevol.py:646: RuntimeWarning: invalid value encountered in matmul
+    return ((hamiltonian @ psi) - b * psi) / a
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_circuit.py::test_circuit_to_json[tfb] - TypeError: Object o...
+FAILED tests/test_circuit.py::test_circuit_to_json[jaxb] - TypeError: Object ...
+FAILED tests/test_dmcircuit.py::test_mult_qubit_kraus[tfb] - tensorflow.pytho...
+FAILED tests/test_mpscircuit.py::test_circuits[tfb-highp] - TypeError: cannot...
+FAILED tests/test_mpscircuit.py::test_simple_circuits_ad[tfb-highp] - TypeErr...
+FAILED tests/test_miscs.py::test_distrubuted_contractor - ModuleNotFoundError...
+FAILED tests/test_qem.py::test_benchmark_circuits[tfb] - NameError: name 'gen...
+FAILED tests/test_qem.py::test_benchmark_circuits[jaxb] - NameError: name 'ge...
+FAILED tests/test_qem.py::test_zne[tfb] - AttributeError: 'NoneType' object h...
+FAILED tests/test_qem.py::test_zne[jaxb] - AttributeError: 'NoneType' object ...
+FAILED tests/test_qem.py::test_dd[tfb] - ModuleNotFoundError: No module named...
+FAILED tests/test_qem.py::test_dd[jaxb] - ModuleNotFoundError: No module name...
+FAILED tests/test_mpscircuit.py::test_simple_circuits_ad[jaxb-highp] - TypeEr...
+FAILED tests/test_circuit.py::test_circuit_inverse_2[npb] - AssertionError: 
+FAILED tests/test_circuit.py::test_circuit_inverse_2[tfb] - AssertionError: 
+FAILED tests/test_circuit.py::test_circuit_inverse_2[jaxb] - AssertionError: 
+FAILED tests/test_mpscircuit.py::test_circuits[jaxb-highp] - TypeError: canno...
+FAILED tests/test_mpscircuit.py::test_circuits_jit[tfb-highp] - TypeError: ca...
+FAILED tests/test_circuit.py::test_circuit_to_json[npb] - TypeError: Object o...
+==== 19 failed, 649 passed, 106 skipped, 1 xfailed, 136 warnings in 59.27s =====

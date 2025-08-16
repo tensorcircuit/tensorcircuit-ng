@@ -536,17 +536,23 @@ def qiskit2tc(
             else:
                 ctrl_state = ctrl_str2ctrl_state(gate_name[5:], len(idx) - 1)
                 tc_circuit.multicontrol(
-                    *idx, ctrl=ctrl_state, unitary=gates._x_matrix, name="x"
+                    *idx,
+                    ctrl=ctrl_state,
+                    unitary=gates._x_matrix,  # type: ignore
+                    name="x",
                 )
         elif gate_name[:3] == "mcx":
             if gate_name[3:] == "":
                 tc_circuit.multicontrol(
-                    *idx, ctrl=[1] * (len(idx) - 1), unitary=gates._x_matrix, name="x"
+                    *idx, ctrl=[1] * (len(idx) - 1), unitary=gates._x_matrix, name="x"  # type: ignore
                 )
             else:
                 ctrl_state = ctrl_str2ctrl_state(gate_name[5:], len(idx) - 1)
                 tc_circuit.multicontrol(
-                    *idx, ctrl=ctrl_state, unitary=gates._x_matrix, name="x"
+                    *idx,
+                    ctrl=ctrl_state,
+                    unitary=gates._x_matrix,  # type: ignore
+                    name="x",
                 )
         elif gate_name[0] == "c" and gate_name[:7] != "circuit" and gate_name != "cu":
             # qiskit cu bug, see https://github.com/tencent-quantum-lab/tensorcircuit/issues/199
@@ -657,7 +663,7 @@ def qir2json(
             nm = backend.reshapem(r["gate"].tensor)
         nmr, nmi = tensor_to_json(nm)
         if backend.shape_tuple(nm)[0] == backend.shape_tuple(nm)[1] == 2:
-            uparams = list(gates.get_u_parameter(backend.numpy(nm)))
+            uparams = list(gates.get_u_parameter(backend.numpy(nm)))  # type: ignore
         else:
             uparams = []
         params = r.get("parameters", {})
