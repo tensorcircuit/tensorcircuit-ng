@@ -5,8 +5,10 @@ This script demonstrates how to use TensorCircuit's differentiable lattice geome
 to optimize crystal structure. It finds the equilibrium lattice constant that minimizes
 the total Lennard-Jones potential energy of a 2D square lattice.
 
-The optimization showcases the key Task 3 capability: making lattice parameters
-differentiable for variational material design.
+This example showcases a key capability of the differentiable lattice system: 
+making geometric parameters (like lattice constants) fully differentiable and 
+optimizable using automatic differentiation. This enables variational material design
+where crystal structures can be optimized to minimize physical energy functions.
 """
 
 import optax
@@ -54,7 +56,7 @@ value_and_grad_fun = K.jit(K.value_and_grad(calculate_potential))
 
 optimizer = optax.adam(learning_rate=0.01)
 
-log_a = K.convert_to_tensor(K.log(K.convert_to_tensor(1.1)))
+log_a = K.convert_to_tensor(K.log(K.convert_to_tensor(2.0)))
 
 opt_state = optimizer.init(log_a)
 

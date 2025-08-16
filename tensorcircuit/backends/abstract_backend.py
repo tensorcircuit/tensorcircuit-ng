@@ -629,7 +629,7 @@ class ExtendedBackend:
 
     def meshgrid(self: Any, *args: Any, **kwargs: Any) -> Any:
         """
-         Return coordinate matrices from coordinate vectors.
+        Return coordinate matrices from coordinate vectors.
 
         :param args: coordinate vectors
         :type args: Any

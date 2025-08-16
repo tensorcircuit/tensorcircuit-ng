@@ -18,11 +18,11 @@ from typing import (
     Set,
 )
 
-logger = logging.getLogger(__name__)
 import itertools
 import math
 import numpy as np
 from scipy.spatial import KDTree
+
 from .. import backend
 
 
@@ -41,6 +41,8 @@ from .. import backend
 if TYPE_CHECKING:
     import matplotlib.axes
     from mpl_toolkits.mplot3d import Axes3D
+
+logger = logging.getLogger(__name__)
 
 Tensor = Any
 SiteIndex = int
@@ -835,7 +837,7 @@ class TILattice(AbstractLattice):
         :param max_k: The maximum order of neighbors to compute (e.g., k=1 for
             nearest neighbors, k=2 for next-nearest, etc.). Defaults to 2.
         :type max_k: int, optional
-        :param \**kwargs: Additional keyword arguments. May include:
+        :param kwargs: Additional keyword arguments. May include:
             - ``tol`` (float): The numerical tolerance used to determine if two
               distances are equal when identifying shells. Defaults to 1e-6.
         """
@@ -1486,7 +1488,7 @@ class CustomizeLattice(AbstractLattice):
 
         # For small lattices or cases with potential duplicate coordinates,
         # fall back to distance matrix method for robustness
-        if self.num_sites < 1000:
+        if self.num_sites < 200:
             logger.info(
                 "Small lattice detected, falling back to distance matrix method for robustness"
             )

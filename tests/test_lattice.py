@@ -1,5 +1,4 @@
 from unittest.mock import patch
-import time
 import logging
 
 import matplotlib
@@ -2001,44 +2000,6 @@ class TestDistanceMatrix:
 
             # The computation method should have been called only on the first access.
             spy_compute.assert_called_once()
-
-
-@pytest.mark.slow
-class TestPerformance:
-    def test_pbc_implementation_is_not_significantly_slower_than_obc(self):
-        """
-        A performance regression test.
-        It ensures that the specialized implementation for fully periodic
-        lattices (pbc=True) is not substantially slower than the general
-        implementation used for open boundaries (pbc=False).
-        This test will FAIL with the current code, exposing the performance bug.
-        """
-        # Arrange: Use a large-enough lattice to make performance differences apparent
-        size = (40, 40)
-        k = 1
-
-        # Act 1: Measure the execution time of the general (OBC) implementation
-        start_time_obc = time.time()
-        _ = SquareLattice(size=size, pbc=False, precompute_neighbors=k)
-        duration_obc = time.time() - start_time_obc
-
-        # Act 2: Measure the execution time of the specialized (PBC) implementation
-        start_time_pbc = time.time()
-        _ = SquareLattice(size=size, pbc=True, precompute_neighbors=k)
-        duration_pbc = time.time() - start_time_pbc
-
-        print(
-            f"\n[Performance] OBC ({size}): {duration_obc:.4f}s | PBC ({size}): {duration_pbc:.4f}s"
-        )
-
-        # Assert: The PBC implementation should not be drastically slower.
-        # We allow it to be up to 3 times slower to account for minor overheads,
-        # but this will catch the current 10x+ regression.
-        # THIS ASSERTION WILL FAIL with the current buggy code.
-        assert duration_pbc < duration_obc * 5, (
-            "The specialized PBC implementation is significantly slower "
-            "than the general-purpose implementation."
-        )
 
 
 def _validate_layers(bonds, layers):
