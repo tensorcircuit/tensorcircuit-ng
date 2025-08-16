@@ -388,6 +388,18 @@ For the simulation code and data for variational optimization of simutaneous exc
 
 Reference paper: https://arxiv.org/abs/2504.21459.
 
+### Quantum Machine Unlearning
+
+For the simulation code for the work "superior resilience to poisoning and amenability to unlearning in quantum machine learning", see the [project repo](https://github.com/yutuer21/quantum-machine-unlearning).
+
+Reference paper: https://arxiv.org/abs/2508.02422.
+
+### Low Weight Pauli Propagation Simulation
+
+For the simulation code and data for the work on low weight Pauli propagation in the context of variational quantum algorithms, see the [project repo](https://github.com/ZongliangLi/lwpp_init).
+
+Reference paper: https://arxiv.org/abs/2508.06358.
+
 ### More works
 
 <details>
@@ -433,19 +445,27 @@ Reference paper: https://arxiv.org/abs/2504.21459.
 
 - Variational post-selection for ground states and thermal states simulation: https://arxiv.org/abs/2402.07605 (published in QST).
 
-- Subsystem information capacity in random circuits and Hamiltonian dynamics: https://arxiv.org/abs/2405.05076. Code implementation: https://github.com/sxzgroup/subsystem_information_capacity.
+- Subsystem information capacity in random circuits and Hamiltonian dynamics: https://arxiv.org/abs/2405.05076 (published in Quantum). Code implementation: https://github.com/sxzgroup/subsystem_information_capacity.
 
 - Symmetry restoration and quantum Mpemba effect in symmetric random circuits: https://arxiv.org/abs/2403.08459 (published in PRL).
 
 - Quantum Mpemba effects in many-body localization systems: https://arxiv.org/abs/2408.07750.
 
-- Supersymmetry dynamics on Rydberg atom arrays: https://arxiv.org/abs/2410.21386.
+- Supersymmetry dynamics on Rydberg atom arrays: https://arxiv.org/abs/2410.21386 (published in PRB).
 
 - Dynamic parameterized quantum circuits: expressive and barren-plateau free: https://arxiv.org/abs/2411.05760.
 
-- Holographic deep thermalization: https://arxiv.org/abs/2411.03587.
+- Holographic deep thermalization: https://arxiv.org/abs/2411.03587 (published in Nature Communications).
 
 - Quantum deep generative prior with programmable quantum circuits: https://www.nature.com/articles/s42005-024-01765-9 (published in Communications Physics).
+
+- Symmetry Breaking Dynamics in Quantum Many-Body Systems: https://arxiv.org/abs/2501.13459.
+
+- Entanglement growth and information capacity in a quasiperiodic system with a single-particle mobility edge: https://arxiv.org/abs/2506.18076.
+
+- Hilbert subspace imprint: a new mechanism for non-thermalization: https://arxiv.org/abs/2506.11922.
+
+- A Neural-Guided Variational Quantum Algorithm for Efficient Sign Structure Learning in Hybrid Architectures: https://arxiv.org/abs/2507.07555.
 
 </details>
 
