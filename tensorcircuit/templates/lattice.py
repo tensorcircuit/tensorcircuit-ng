@@ -377,7 +377,7 @@ class AbstractLattice(abc.ABC):
         try:
             import matplotlib.pyplot as plt
         except ImportError:
-            logger.error(
+            logger.warning(
                 "Matplotlib is required for visualization. "
                 "Please install it using 'pip install matplotlib'."
             )
@@ -1479,12 +1479,6 @@ class CustomizeLattice(AbstractLattice):
         Note: This method uses numpy arrays directly and may not be compatible
         with all backend types (JAX, TensorFlow, etc.).
         """
-        # Convert coordinates to numpy for KDTree
-        coords_np = backend.numpy(self._coordinates)
-
-        # Build KDTree
-        logger.info("Building KDTree...")
-        tree = KDTree(coords_np)
 
         # For small lattices or cases with potential duplicate coordinates,
         # fall back to distance matrix method for robustness
@@ -1495,6 +1489,12 @@ class CustomizeLattice(AbstractLattice):
             self._build_neighbors_by_distance_matrix(max_k, tol)
             return
 
+        # Convert coordinates to numpy for KDTree
+        coords_np = backend.numpy(self._coordinates)
+
+        # Build KDTree
+        logger.info("Building KDTree...")
+        tree = KDTree(coords_np)
         # Find all distances for shell identification - use comprehensive sampling
         logger.info("Identifying distance shells...")
         distances_for_shells: List[float] = []
@@ -1549,7 +1549,6 @@ class CustomizeLattice(AbstractLattice):
         self._neighbor_maps = {k: {} for k in range(1, len(dist_shells) + 1)}
 
         # Build neighbor lists for each site
-        logger.info("Building neighbor lists...")
         for i in range(self.num_sites):
             # Query enough neighbors to capture all shells
             query_k = min(max_k * 20 + 50, self.num_sites - 1)
@@ -1595,7 +1594,6 @@ class CustomizeLattice(AbstractLattice):
 
         # Set distance matrix to None - will compute on demand
         self._distance_matrix = None
-        logger.info("KDTree neighbor building completed")
 
     def _reset_computations(self) -> None:
         """Resets all cached data that depends on the lattice structure."""

@@ -24,6 +24,8 @@
 
 - Add transformation method between tensornetwork, quimb, tenpy and QuOperator in tc-ng including `qop2tenpy`, `qop2quimb`, `qop2tn`, `tenpy2qop`, support both MPS and MPO formats.
 
+- Make the lattice module backend agnostic, now the lattice follows `tc.set_backend`.
+
 ### Fixed
 
 - Fixed `one_hot` in numpy backend.

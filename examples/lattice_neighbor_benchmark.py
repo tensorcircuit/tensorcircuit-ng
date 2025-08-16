@@ -68,7 +68,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         "--dims", type=int, default=2, help="Lattice dimensionality (default: 2)"
     )
     p.add_argument(
-        "--max-k", type=int, default=6, help="Max neighbor shells k (default: 6)"
+        "--max-k", type=int, default=10, help="Max neighbor shells k (default: 6)"
     )
     p.add_argument(
         "--repeats", type=int, default=5, help="Repeats per measurement (default: 5)"
