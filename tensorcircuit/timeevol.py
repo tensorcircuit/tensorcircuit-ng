@@ -434,6 +434,8 @@ def _solve_ode(f, s, times, args, solver_kws):
     ts = backend.convert_to_tensor(times)
     ts = backend.cast(ts, dtype=rdtypestr)
 
+    max_steps = solver_kws.get("max_steps", 10000)
+
     if (solver := solver_kws.get("solver", "Dopri5")) == "Dopri5":
         from jax.experimental.ode import odeint
         s1 = odeint(f, s, ts, rtol=rtol, atol=atol, *args)
@@ -459,6 +461,7 @@ def _solve_ode(f, s, times, args, solver_kws):
         saveat = diffrax.SaveAt(ts=times),
         args = args,
         stepsize_controller =  diffrax.PIDController(rtol=rtol, atol=atol),
+        max_steps=max_steps
         ).ys
     return s1
 
@@ -500,6 +503,7 @@ def ode_evol_local(
         The solver type can be specified: {'Dopri5' (default), 'Tsit5', 'Dopri8', 'Kvaerno5'}.
         rtol (default: 1e-12) and atol (default: 1e-12) are used to determine how accurately you would like the numerical approximation to your equation.
         dt0 (default: 0.01) specifies the initial step size.
+        max_steps (default: 10000)  The maximum number of steps to take before quitting the computation unconditionally.
     :type solver_kws: dict
     :return: Evolved quantum states at the specified time points. If callback is provided,
         returns the callback results; otherwise returns the state vectors.
@@ -568,6 +572,7 @@ def ode_evol_global(
         The solver type can be specified: {'Dopri5' (default), 'Tsit5', 'Dopri8', 'Kvaerno5'}.
         rtol (default: 1e-12) and atol (default: 1e-12) are used to determine how accurately you would like the numerical approximation to your equation.
         dt0 (default: 0.01) specifies the initial step size.
+        max_steps (default: 10000)  The maximum number of steps to take before quitting the computation unconditionally.
     :type solver_kws: dict
     :return: Evolved quantum states at the specified time points. If callback is provided,
         returns the callback results; otherwise returns the state vectors.
