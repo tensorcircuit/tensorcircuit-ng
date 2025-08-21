@@ -2,7 +2,7 @@
 Analog time evolution engines
 """
 
-from typing import Any, Tuple, Optional, Callable, List, Sequence
+from typing import Any, Tuple, Optional, Callable, List, Sequence, Dict
 from functools import partial
 
 import numpy as np
@@ -427,7 +427,13 @@ def hamiltonian_evol(
 ed_evol = hamiltonian_evol
 
 
-def _solve_ode(f, s, times, args, solver_kws):
+def _solve_ode(
+    f: Callable[..., Tensor],
+    s: Tensor,
+    times: Tensor,
+    args: Sequence[float | int | complex],
+    solver_kws: Dict[str, Any],
+) -> Tensor:
     rtol = solver_kws.get("rtol", 1e-12)
     atol = solver_kws.get("atol", 1e-12)
 
@@ -438,30 +444,37 @@ def _solve_ode(f, s, times, args, solver_kws):
 
     if (solver := solver_kws.get("solver", "Dopri5")) == "Dopri5":
         from jax.experimental.ode import odeint
+
         s1 = odeint(f, s, ts, rtol=rtol, atol=atol, *args)
-    
+
     else:
-        import diffrax, warnings
+        import diffrax
+        import warnings
+
         # Ignore complex warning
         warnings.simplefilter("ignore", category=UserWarning, append=True)
         dt0 = solver_kws.get("dt0", 0.01)
-        all_solvers = {"Tsit5": diffrax.Tsit5, "Dopri8": diffrax.Dopri8, "Kvaerno5": diffrax.Kvaerno5}
-        
+        all_solvers = {
+            "Tsit5": diffrax.Tsit5,
+            "Dopri8": diffrax.Dopri8,
+            "Kvaerno5": diffrax.Kvaerno5,
+        }
+
         # ODE
         term = diffrax.ODETerm(lambda t, y, args: f(y, t, *args))
 
         # solve ODE
         s1 = diffrax.diffeqsolve(
-        terms = term, 
-        solver = all_solvers[solver](), 
-        t0 = times[0],
-        t1 = times[-1],
-        dt0 = dt0,
-        y0 = s,
-        saveat = diffrax.SaveAt(ts=times),
-        args = args,
-        stepsize_controller =  diffrax.PIDController(rtol=rtol, atol=atol),
-        max_steps=max_steps
+            terms=term,
+            solver=all_solvers[solver](),
+            t0=times[0],
+            t1=times[-1],
+            dt0=dt0,
+            y0=s,
+            saveat=diffrax.SaveAt(ts=times),
+            args=args,
+            stepsize_controller=diffrax.PIDController(rtol=rtol, atol=atol),
+            max_steps=max_steps,
         ).ys
     return s1
 
@@ -472,16 +485,16 @@ def ode_evol_local(
     times: Tensor,
     index: Sequence[int],
     callback: Optional[Callable[..., Tensor]] = None,
-    args: tuple | list = tuple(),
-    solver_kws: dict = dict(),
+    args: Optional[Sequence[float | int | complex]] = None,
+    solver_kws: Optional[Dict[str, Any]] = None,
 ) -> Tensor:
     """
     ODE-based time evolution for a time-dependent Hamiltonian acting on a subsystem of qubits.
 
     This function solves the time-dependent Schrodinger equation using numerical ODE integration.
-    The Hamiltonian is applied only to a specific subset of qubits (indices) in the system. 
+    The Hamiltonian is applied only to a specific subset of qubits (indices) in the system.
 
-    If the solver is 'Dopri5' (default), calls `jax.experimental.ode.odeint`; 
+    If the solver is 'Dopri5' (default), calls `jax.experimental.ode.odeint`;
     otherwise calls `diffrax`.
 
     Note: This function currently only supports the JAX backend.
@@ -499,9 +512,10 @@ def ode_evol_local(
     :type callback: Optional[Callable[..., Tensor]]
     :param args: Additional arguments to pass to the Hamiltonian function.
     :type args: tuple | list
-    :param solver_kws: Additional keyword arguments to pass to the ODE solver. 
+    :param solver_kws: Additional keyword arguments to pass to the ODE solver.
         The solver type can be specified: {'Dopri5' (default), 'Tsit5', 'Dopri8', 'Kvaerno5'}.
-        rtol (default: 1e-12) and atol (default: 1e-12) are used to determine how accurately you would like the numerical approximation to your equation.
+        rtol (default: 1e-12) and atol (default: 1e-12) are used to determine how accurately you would
+        like the numerical approximation to your equation.
         dt0 (default: 0.01) specifies the initial step size.
         max_steps (default: 10000)  The maximum number of steps to take before quitting the computation unconditionally.
     :type solver_kws: dict
@@ -509,6 +523,10 @@ def ode_evol_local(
         returns the callback results; otherwise returns the state vectors.
     :rtype: Tensor
     """
+    if args is None:
+        args = tuple()
+    if solver_kws is None:
+        solver_kws = dict()
 
     n = int(np.log2(backend.shape_tuple(initial_state)[-1]) + 1e-7)
     l = len(index)
@@ -531,8 +549,8 @@ def ode_evol_local(
         return backend.reshape(y.tensor, [-1])
 
     s1 = _solve_ode(f, initial_state, times, args, solver_kws)
-        
-    if  callback is None:
+
+    if callback is None:
         return s1
     return backend.stack([callback(a_state) for a_state in s1])
 
@@ -542,8 +560,8 @@ def ode_evol_global(
     initial_state: Tensor,
     times: Tensor,
     callback: Optional[Callable[..., Tensor]] = None,
-    args: tuple | list = tuple(),
-    solver_kws: dict = dict(),
+    args: Optional[Sequence[int | float | complex]] = None,
+    solver_kws: Optional[Dict[str, Any]] = None,
 ) -> Tensor:
     """
     ODE-based time evolution for a time-dependent Hamiltonian acting on the entire system.
@@ -552,7 +570,7 @@ def ode_evol_global(
     The Hamiltonian is applied to the full system and should be provided in sparse matrix format
     for efficiency.
 
-    If the solver is 'Dopri5' (default), calls `jax.experimental.ode.odeint`; 
+    If the solver is 'Dopri5' (default), calls `jax.experimental.ode.odeint`;
     otherwise calls `diffrax`.
 
     Note: This function currently only supports the JAX backend.
@@ -568,9 +586,10 @@ def ode_evol_global(
     :type callback: Optional[Callable[..., Tensor]]
     :param args: Additional arguments to pass to the Hamiltonian function.
     :type args: tuple | list
-    :param solver_kws: Additional keyword arguments to pass to the ODE solver. 
+    :param solver_kws: Additional keyword arguments to pass to the ODE solver.
         The solver type can be specified: {'Dopri5' (default), 'Tsit5', 'Dopri8', 'Kvaerno5'}.
-        rtol (default: 1e-12) and atol (default: 1e-12) are used to determine how accurately you would like the numerical approximation to your equation.
+        rtol (default: 1e-12) and atol (default: 1e-12) are used to determine how accurately you would
+        like the numerical approximation to your equation.
         dt0 (default: 0.01) specifies the initial step size.
         max_steps (default: 10000)  The maximum number of steps to take before quitting the computation unconditionally.
     :type solver_kws: dict
@@ -578,11 +597,15 @@ def ode_evol_global(
         returns the callback results; otherwise returns the state vectors.
     :rtype: Tensor
     """
+    if args is None:
+        args = tuple()
+    if solver_kws is None:
+        solver_kws = dict()
 
     def f(y: Tensor, t: Tensor, *args: Any) -> Tensor:
         h = -1.0j * hamiltonian(t, *args)
         return backend.sparse_dense_matmul(h, y)
-    
+
     s1 = _solve_ode(f, initial_state, times, args, solver_kws)
 
     if callback is None:
@@ -760,8 +783,6 @@ def evol_global(
 #     if not callback:
 #         return s1
 #     return backend.stack([callback(s1[i]) for i in range(len(s1))])
-
-
 
 
 def chebyshev_evol(

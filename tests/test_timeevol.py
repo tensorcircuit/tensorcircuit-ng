@@ -66,8 +66,8 @@ def test_ode_evol_local(jaxb):
         times,
         [1],  # Apply to qubit 1
         None,
-        (1.0, 2.0) , # Omega=1.0, phi=2.0
-        dict(solver="Tsit5", atol = 1.4e-8, rtol=1.4e-8)
+        (1.0, 2.0),  # Omega=1.0, phi=2.0
+        dict(solver="Tsit5", atol=1.4e-8, rtol=1.4e-8),
     )
     states1 = tc.timeevol.ode_evol_local(
         local_hamiltonian,
@@ -76,7 +76,7 @@ def test_ode_evol_local(jaxb):
         [1],  # Apply to qubit 1
         None,
         (1.0, 2.0),  # Omega=1.0, phi=2.0
-        dict(solver="Dopri5", atol = 1.4e-8, rtol=1.4e-8)
+        dict(solver="Dopri5", atol=1.4e-8, rtol=1.4e-8),
     )
     states2 = tc.timeevol.ode_evol_local(
         local_hamiltonian,
@@ -85,15 +85,12 @@ def test_ode_evol_local(jaxb):
         [1],  # Apply to qubit 1
         None,
         (1.0, 2.0),  # Omega=1.0, phi=2.0
-        dict(solver="Dopri8", atol = 1.4e-8, rtol=1.4e-8)
+        dict(solver="Dopri8", atol=1.4e-8, rtol=1.4e-8),
     )
 
     assert tc.backend.shape_tuple(states0) == (30, 16)
     assert tc.backend.shape_tuple(states1) == (30, 16)
     assert tc.backend.shape_tuple(states2) == (30, 16)
-
-
-
 
 
 def test_ode_evol_global(jaxb):
@@ -138,7 +135,9 @@ def test_ode_evol_global(jaxb):
         return tc.backend.real(c.expectation_ps(z=[0]))
 
     # Perform global ODE evolution
-    states = tc.timeevol.ode_evol_global(hamiltonian_func, psi0, times, zobs, solver_kws=dict(atol=1.4e-8, rtol=1.4e-8))
+    states = tc.timeevol.ode_evol_global(
+        hamiltonian_func, psi0, times, zobs, solver_kws=dict(atol=1.4e-8, rtol=1.4e-8)
+    )
     assert tc.backend.shape_tuple(states) == (10,)
 
     zz_ham = tc.quantum.PauliStringSum2COO([[3, 3, 0, 0], [0, 3, 3, 0]], [1, 1])
@@ -167,7 +166,8 @@ def test_ode_evol_global(jaxb):
             tc.backend.convert_to_tensor([0, 1.0]),
             None,
             args=params,
-            solver_kws=dict(atol=1.4e-8, rtol=1.4e-8, solver="Kvaerno5"))
+            solver_kws=dict(atol=1.4e-8, rtol=1.4e-8, solver="Kvaerno5"),
+        )
         # Measure ZZ correlation at final time
         final_state = states[-1]
         return tc.backend.real(zz_correlation(final_state))
