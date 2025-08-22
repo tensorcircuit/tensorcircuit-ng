@@ -40,6 +40,13 @@ def test_circuit_ode_evol(jaxb):
 
 
 def test_ode_evol_local(jaxb):
+    try:
+        import diffrax
+    except ImportError:
+        pytest.skip("diffrax not installed, skipping test")
+
+    tc.set_dtype("complex128")
+
     def local_hamiltonian(t, Omega, phi):
         angle = phi * t
         coeff = Omega * tc.backend.cos(2.0 * t)  # Amplitude modulation
@@ -66,8 +73,10 @@ def test_ode_evol_local(jaxb):
         times,
         [1],  # Apply to qubit 1
         None,
-        (1.0, 2.0),  # Omega=1.0, phi=2.0
-        dict(solver="Tsit5", atol=1.4e-8, rtol=1.4e-8),
+        1.0,
+        2.0,  # Omega=1.0, phi=2.0
+        solver="Tsit5",
+        ode_backend="diffrax",
     )
     states1 = tc.timeevol.ode_evol_local(
         local_hamiltonian,
@@ -75,8 +84,10 @@ def test_ode_evol_local(jaxb):
         times,
         [1],  # Apply to qubit 1
         None,
-        (1.0, 2.0),  # Omega=1.0, phi=2.0
-        dict(solver="Dopri5", atol=1.4e-8, rtol=1.4e-8),
+        1.0,
+        2.0,  # Omega=1.0, phi=2.0
+        atol=1.0e-13,
+        rtol=1.0e-15,
     )
     states2 = tc.timeevol.ode_evol_local(
         local_hamiltonian,
@@ -84,16 +95,27 @@ def test_ode_evol_local(jaxb):
         times,
         [1],  # Apply to qubit 1
         None,
-        (1.0, 2.0),  # Omega=1.0, phi=2.0
-        dict(solver="Dopri8", atol=1.4e-8, rtol=1.4e-8),
+        1.0,
+        2.0,  # Omega=1.0, phi=2.0
+        solver="Dopri8",
+        atol=1.0e-13,
+        rtol=1.0e-13,
+        ode_backend="diffrax",
+        dt0=0.005,
     )
 
-    assert tc.backend.shape_tuple(states0) == (30, 16)
-    assert tc.backend.shape_tuple(states1) == (30, 16)
-    assert tc.backend.shape_tuple(states2) == (30, 16)
+    np.testing.assert_allclose(states2, states1, atol=1e-10, rtol=0.0)
+    np.testing.assert_allclose(states0, states1, atol=1e-10, rtol=0.0)
 
 
 def test_ode_evol_global(jaxb):
+    try:
+        import diffrax
+    except ImportError:
+        pytest.skip("diffrax not installed, skipping test")
+
+    tc.set_dtype("complex128")
+
     # Create a time-dependent transverse field Hamiltonian
     # H(t) = -∑ᵢ Jᵢ(t) ZᵢZᵢ₊₁ - ∑ᵢ hᵢ(t) Xᵢ
 
@@ -135,9 +157,7 @@ def test_ode_evol_global(jaxb):
         return tc.backend.real(c.expectation_ps(z=[0]))
 
     # Perform global ODE evolution
-    states = tc.timeevol.ode_evol_global(
-        hamiltonian_func, psi0, times, zobs, solver_kws=dict(atol=1.4e-8, rtol=1.4e-8)
-    )
+    states = tc.timeevol.ode_evol_global(hamiltonian_func, psi0, times, zobs)
     assert tc.backend.shape_tuple(states) == (10,)
 
     zz_ham = tc.quantum.PauliStringSum2COO([[3, 3, 0, 0], [0, 3, 3, 0]], [1, 1])
@@ -165,8 +185,11 @@ def test_ode_evol_global(jaxb):
             psi0,
             tc.backend.convert_to_tensor([0, 1.0]),
             None,
-            args=params,
-            solver_kws=dict(atol=1.4e-8, rtol=1.4e-8, solver="Kvaerno5"),
+            *params,
+            atol=1.0e-15,
+            rtol=1.0e-15,
+            solver="Kvaerno5",
+            ode_backend="diffrax",
         )
         # Measure ZZ correlation at final time
         final_state = states[-1]
