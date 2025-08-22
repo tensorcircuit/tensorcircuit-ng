@@ -39,13 +39,11 @@ def test_circuit_ode_evol(jaxb):
     np.testing.assert_allclose(c.expectation_ps(z=[1]), 1.0, atol=1e-5)
 
 
-def test_ode_evol_local(jaxb):
+def test_ode_evol_local(highp, jaxb):
     try:
-        import diffrax
+        import diffrax  # pylint: disable=unused-import
     except ImportError:
         pytest.skip("diffrax not installed, skipping test")
-
-    tc.set_dtype("complex128")
 
     def local_hamiltonian(t, Omega, phi):
         angle = phi * t
@@ -108,13 +106,11 @@ def test_ode_evol_local(jaxb):
     np.testing.assert_allclose(states0, states1, atol=1e-10, rtol=0.0)
 
 
-def test_ode_evol_global(jaxb):
+def test_ode_evol_global(highp, jaxb):
     try:
-        import diffrax
+        import diffrax  # pylint: disable=unused-import
     except ImportError:
         pytest.skip("diffrax not installed, skipping test")
-
-    tc.set_dtype("complex128")
 
     # Create a time-dependent transverse field Hamiltonian
     # H(t) = -∑ᵢ Jᵢ(t) ZᵢZᵢ₊₁ - ∑ᵢ hᵢ(t) Xᵢ

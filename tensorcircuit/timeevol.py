@@ -432,7 +432,7 @@ def _solve_ode(
     f: Callable[..., Tensor],
     s: Tensor,
     times: Tensor,
-    args: Tuple[float | int | complex, ...],
+    args: Any,
     solver_kws: Dict[str, Any],
 ) -> Tensor:
     rtol = solver_kws.get("rtol", 1e-12)
@@ -488,7 +488,7 @@ def ode_evol_local(
     times: Tensor,
     index: Sequence[int],
     callback: Optional[Callable[..., Tensor]] = None,
-    *args: int | float | complex,
+    *args: Any,
     **solver_kws: Any,
 ) -> Tensor:
     """
@@ -561,7 +561,7 @@ def ode_evol_global(
     initial_state: Tensor,
     times: Tensor,
     callback: Optional[Callable[..., Tensor]] = None,
-    *args: int | float | complex,
+    *args: Any,
     **solver_kws: Any,
 ) -> Tensor:
     """
