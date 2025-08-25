@@ -11,7 +11,7 @@ sys.path.insert(0, modulepath)
 import tensorcircuit as tc
 
 
-def test_circuit_ode_evol(jaxb):
+def test_circuit_ode_evol(highp, jaxb):
     def h_square(t, b):
         return (tc.backend.sign(t - 1.0) + 1) / 2 * b * tc.gates.x().tensor
 
@@ -33,7 +33,11 @@ def test_circuit_ode_evol(jaxb):
     c.cx(0, 1)
     c.h(2)
     c = tc.timeevol.evol_global(
-        c, h_square_sparse, 2.0, tc.backend.convert_to_tensor(0.2)
+        c,
+        h_square_sparse,
+        2.0,
+        tc.backend.convert_to_tensor(0.2),
+        ode_backend="diffrax",
     )
     c.rx(1, theta=np.pi - 0.4)
     np.testing.assert_allclose(c.expectation_ps(z=[1]), 1.0, atol=1e-5)

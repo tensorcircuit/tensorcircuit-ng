@@ -438,6 +438,7 @@ def _solve_ode(
     rtol = solver_kws.get("rtol", 1e-12)
     atol = solver_kws.get("atol", 1e-12)
     ode_backend = solver_kws.get("ode_backend", "jaxode")
+    max_steps = solver_kws.get("max_steps", 10000)
 
     ts = backend.convert_to_tensor(times)
     ts = backend.cast(ts, dtype=rdtypestr)
@@ -445,7 +446,7 @@ def _solve_ode(
     if ode_backend == "jaxode":
         from jax.experimental.ode import odeint
 
-        s1 = odeint(f, s, ts, rtol=rtol, atol=atol, *args)
+        s1 = odeint(f, s, ts, rtol=rtol, atol=atol, mxstep=max_steps, *args)
         return s1
 
     import diffrax
@@ -453,7 +454,6 @@ def _solve_ode(
     # Ignore complex warning
     warnings.simplefilter("ignore", category=UserWarning, append=True)
 
-    max_steps = solver_kws.get("max_steps", 10000)
     solver = solver_kws.get("solver", "Tsit5")
     dt0 = solver_kws.get("dt0", 0.01)
     all_solvers = {
