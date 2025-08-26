@@ -1,5 +1,7 @@
 """
-Quantum circuit: the state simulator
+Quantum circuit: the state simulator.
+Supports qubit (d=2) and qudit (3 <= d <= 36) systems.
+ For string-encoded samples/counts, digits use 0–9A–Z where A=10, …, Z=35.
 """
 
 # pylint: disable=invalid-name
@@ -13,7 +15,7 @@ import tensornetwork as tn
 
 from . import gates
 from . import channels
-from .cons import backend, contractor, dtypestr, npdtype
+from .cons import backend, contractor, dtypestr, npdtype, _ALPHABET
 from .quantum import QuOperator, identity
 from .simplify import _full_light_cone_cancel
 from .basecircuit import BaseCircuit
@@ -23,7 +25,7 @@ Tensor = Any
 
 
 class Circuit(BaseCircuit):
-    """
+    r"""
     ``Circuit`` class.
     Simple usage demo below.
 
@@ -42,17 +44,21 @@ class Circuit(BaseCircuit):
     def __init__(
         self,
         nqubits: int,
+        dim: Optional[int] = None,
         inputs: Optional[Tensor] = None,
         mps_inputs: Optional[QuOperator] = None,
         split: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
     ) -> None:
-        """
+        r"""
         Circuit object based on state simulator.
 
         :param nqubits: The number of qubits in the circuit.
         :type nqubits: int
+        :param dim: The local Hilbert space dimension per site. Qudit is supported for 2 <= d <= 36.
+        :type dim: If None, the dimension of the circuit will be `2`, which is a qubit system.
         :param inputs: If not None, the initial state of the circuit is taken as ``inputs``
-            instead of :math:`\\vert 0\\rangle^n` qubits, defaults to None.
+            instead of :math:`\vert 0 \rangle^n` qubits, defaults to None.
         :type inputs: Optional[Tensor], optional
         :param mps_inputs: QuVector for a MPS like initial wavefunction.
         :type mps_inputs: Optional[QuOperator]
@@ -60,6 +66,13 @@ class Circuit(BaseCircuit):
             ``max_singular_values`` and ``max_truncation_err``.
         :type split: Optional[Dict[str, Any]]
         """
+        self._d = 2 if dim is None else dim
+        if not kwargs.get("qudit", False) and self._d != 2:
+            raise ValueError(
+                f"Circuit only supports qubits (dim=2). "
+                f"You passed dim={self._d}. Please use `QuditCircuit` instead."
+            )
+
         self.inputs = inputs
         self.mps_inputs = mps_inputs
         self.split = split
@@ -67,21 +80,22 @@ class Circuit(BaseCircuit):
 
         self.circuit_param = {
             "nqubits": nqubits,
+            "dim": dim,
             "inputs": inputs,
             "mps_inputs": mps_inputs,
             "split": split,
         }
         if (inputs is None) and (mps_inputs is None):
-            nodes = self.all_zero_nodes(nqubits)
+            nodes = self.all_zero_nodes(nqubits, d=self._d)
             self._front = [n.get_edge(0) for n in nodes]
         elif inputs is not None:  # provide input function
             inputs = backend.convert_to_tensor(inputs)
             inputs = backend.cast(inputs, dtype=dtypestr)
             inputs = backend.reshape(inputs, [-1])
             N = inputs.shape[0]
-            n = int(np.log(N) / np.log(2))
+            n = int(np.log(N) / np.log(self._d))
             assert n == nqubits or n == 2 * nqubits
-            inputs = backend.reshape(inputs, [2 for _ in range(n)])
+            inputs = backend.reshape(inputs, [self._d for _ in range(n)])
             inputs = Gate(inputs)
             nodes = [inputs]
             self._front = [inputs.get_edge(i) for i in range(n)]
@@ -178,27 +192,14 @@ class Circuit(BaseCircuit):
 
         :param index: The index of qubit that the Z direction postselection applied on.
         :type index: int
-        :param keep: 0 for spin up, 1 for spin down, defaults to be 0.
+        :param keep: the post-selected digit in {0, ..., d-1}, defaults to be 0.
         :type keep: int, optional
         """
         # normalization not guaranteed
-        # assert keep in [0, 1]
-        if keep < 0.5:
-            gate = np.array(
-                [
-                    [1.0],
-                    [0.0],
-                ],
-                dtype=npdtype,
-            )
-        else:
-            gate = np.array(
-                [
-                    [0.0],
-                    [1.0],
-                ],
-                dtype=npdtype,
-            )
+        gate = np.array(
+            [[0.0] if _idx != keep else [1.0] for _idx in range(self._d)],
+            dtype=npdtype,
+        )
 
         mg1 = tn.Node(gate)
         mg2 = tn.Node(gate)
@@ -479,7 +480,7 @@ class Circuit(BaseCircuit):
         if get_gate_from_index is None:
             raise ValueError("no `get_gate_from_index` implementation is provided")
         g = get_gate_from_index(r, kraus)
-        g = backend.reshape(g, [2 for _ in range(sites * 2)])
+        g = backend.reshape(g, [self._d for _ in range(sites * 2)])
         self.any(*index, unitary=g, name=name)  # type: ignore
         return r
 
@@ -680,7 +681,7 @@ class Circuit(BaseCircuit):
             Apply %s quantum channel on the circuit.
             See :py:meth:`tensorcircuit.channels.%schannel`
 
-            :param index: Qubit number that the gate applies on.
+            :param index: Site index that the gate applies on.
             :type index: int.
             :param status: uniform external random number between 0 and 1
             :type status: Tensor
@@ -737,8 +738,8 @@ class Circuit(BaseCircuit):
         :return: ``QuOperator`` object for the circuit unitary (open indices for the input state)
         :rtype: QuOperator
         """
-        mps = identity([2 for _ in range(self._nqubits)])
-        c = Circuit(self._nqubits)
+        mps = identity([self._d for _ in range(self._nqubits)])
+        c = Circuit(self._nqubits, self._d)
         ns, es = self._copy()
         c._nodes = ns
         c._front = es
@@ -758,8 +759,8 @@ class Circuit(BaseCircuit):
         :return: The circuit unitary matrix
         :rtype: Tensor
         """
-        mps = identity([2 for _ in range(self._nqubits)])
-        c = Circuit(self._nqubits)
+        mps = identity([self._d for _ in range(self._nqubits)])
+        c = Circuit(self._nqubits, self._d)
         ns, es = self._copy()
         c._nodes = ns
         c._front = es
@@ -771,6 +772,9 @@ class Circuit(BaseCircuit):
     ) -> Tuple[str, float]:
         """
         Take measurement on the given quantum lines by ``index``.
+
+        Return format:
+        - For d <= 36, the sample is a base-d string using 0–9A–Z (A=10,…).
 
         :Example:
 
@@ -800,10 +804,9 @@ class Circuit(BaseCircuit):
                 if i != j:
                     e ^ edge2[i]
             for i in range(len(sample)):
-                if sample[i] == "0":
-                    m = np.array([1, 0], dtype=npdtype)
-                else:
-                    m = np.array([0, 1], dtype=npdtype)
+                m = np.array([0 for _ in range(self._d)], dtype=npdtype)
+                m[int(sample[i])] = 1
+
                 nodes1.append(tn.Node(m))
                 nodes1[-1].get_edge(0) ^ edge1[index[i]]
                 nodes2.append(tn.Node(m))
@@ -814,15 +817,13 @@ class Circuit(BaseCircuit):
                 / p
                 * contractor(nodes1, output_edge_order=[edge1[j], edge2[j]]).tensor
             )
-            pu = rho[0, 0]
-            r = backend.random_uniform([])
-            r = backend.real(backend.cast(r, dtypestr))
-            if r < backend.real(pu):
-                sample += "0"
-                p = p * pu
-            else:
-                sample += "1"
-                p = p * (1 - pu)
+            probs = backend.real(backend.diagonal(rho))
+            probs /= backend.sum(probs)
+            outcome = np.random.choice(self._d, p=probs)
+
+            sample += _ALPHABET[outcome]
+            p *= float(probs[outcome])
+
         if with_prob:
             return sample, p
         else:
@@ -842,6 +843,10 @@ class Circuit(BaseCircuit):
     ) -> Tensor:
         """
         Compute the expectation of corresponding operators.
+        For qudit (d > 2),
+        ensure that operator tensor shapes are consistent with d (each site contributes two axes of size d).
+
+        Noise shorthand (via noise_conf) is qubit-only; for d>2, use explicit operators.
 
         :Example:
 
@@ -883,8 +888,6 @@ class Circuit(BaseCircuit):
         :return: Tensor with one element
         :rtype: Tensor
         """
-        from .noisemodel import expectation_noisfy
-
         if noise_conf is None:
             # if not reuse:
             #     nodes1, edge1 = self._copy()
@@ -899,6 +902,8 @@ class Circuit(BaseCircuit):
                 nodes1 = _full_light_cone_cancel(nodes1)
             return contractor(nodes1).tensor
         else:
+            from .noisemodel import expectation_noisfy
+
             return expectation_noisfy(
                 self,
                 *ops,
@@ -916,12 +921,14 @@ Circuit._meta_apply_channels()
 def expectation(
     *ops: Tuple[tn.Node, List[int]],
     ket: Tensor,
+    d: Optional[int] = None,
     bra: Optional[Tensor] = None,
     conj: bool = True,
     normalization: bool = False,
 ) -> Tensor:
     """
     Compute :math:`\\langle bra\\vert ops \\vert ket\\rangle`.
+    For qudit systems (d>2), ops must be reshaped with per-site axes of length d.
 
     Example 1 (:math:`bra` is same as :math:`ket`)
 
@@ -966,6 +973,8 @@ def expectation(
     :type ket: Tensor
     :param bra: :math:`bra`, defaults to None, which is the same as ``ket``.
     :type bra: Optional[Tensor], optional
+    :param d: dimension of the circuit (defaults to 2)
+    :type d: int, optional
     :param conj: :math:`bra` changes to the adjoint matrix of :math:`bra`, defaults to True.
     :type conj: bool, optional
     :param normalization: Normalize the :math:`ket` and :math:`bra`, defaults to False.
@@ -974,6 +983,7 @@ def expectation(
     :return: The result of :math:`\\langle bra\\vert ops \\vert ket\\rangle`.
     :rtype: Tensor
     """
+    d = 2 if d is None else d
     if bra is None:
         bra = ket
     if isinstance(ket, QuOperator):
@@ -987,7 +997,7 @@ def expectation(
         for op, index in ops:
             if not isinstance(op, tn.Node):
                 # op is only a matrix
-                op = backend.reshape2(op)
+                op = backend.reshaped(op, d)
                 op = gates.Gate(op)
             if isinstance(index, int):
                 index = [index]
@@ -1011,8 +1021,8 @@ def expectation(
         if conj is True:
             bra = backend.conj(bra)
         ket = backend.reshape(ket, [-1])
-        ket = backend.reshape2(ket)
-        bra = backend.reshape2(bra)
+        ket = backend.reshaped(ket, d)
+        bra = backend.reshaped(bra, d)
         n = len(backend.shape_tuple(ket))
         ket = Gate(ket)
         bra = Gate(bra)
@@ -1024,7 +1034,7 @@ def expectation(
         for op, index in ops:
             if not isinstance(op, tn.Node):
                 # op is only a matrix
-                op = backend.reshape2(op)
+                op = backend.reshaped(op, d)
                 op = gates.Gate(op)
             if isinstance(index, int):
                 index = [index]
