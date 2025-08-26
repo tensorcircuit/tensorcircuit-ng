@@ -573,6 +573,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return tf.stack(a, axis=axis)
 
+    def clip(self, a: Tensor, a_min: Tensor, a_max: Tensor) -> Tensor:
+        return tf.clip_by_value(a, a_min, a_max)
+
     def concat(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return tf.concat(a, axis=axis)
 
@@ -640,6 +643,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
 
     def mod(self, x: Tensor, y: Tensor) -> Tensor:
         return tf.math.mod(x, y)
+
+    def floor(self, x: Tensor) -> Tensor:
+        return tf.math.floor(x)
 
     def right_shift(self, x: Tensor, y: Tensor) -> Tensor:
         return tf.bitwise.right_shift(x, y)
