@@ -12,6 +12,11 @@ import tensorcircuit as tc
 
 
 def test_circuit_ode_evol(highp, jaxb):
+    try:
+        import diffrax  # pylint: disable=unused-import
+    except ImportError:
+        pytest.skip("diffrax not installed, skipping test")
+
     def h_square(t, b):
         return (tc.backend.sign(t - 1.0) + 1) / 2 * b * tc.gates.x().tensor
 
