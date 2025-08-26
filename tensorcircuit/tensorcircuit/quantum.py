@@ -1,0 +1,3153 @@
+"""
+Quantum state and operator class backend by tensornetwork
+"""
+
+# pylint: disable=invalid-name
+
+import logging
+import math
+import os
+from functools import partial, reduce
+from operator import matmul, mul, or_
+from typing import (
+    Any,
+    Callable,
+    Collection,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
+
+import numpy as np
+import tensornetwork as tn
+from tensornetwork.network_components import AbstractNode, CopyNode, Edge, Node, connect
+from tensornetwork.network_operations import (
+    copy,
+    get_subgraph_dangling,
+    remove_node,
+)
+
+from .cons import backend, contractor, dtypestr, npdtype, rdtypestr
+from .gates import Gate, num_to_tensor
+from .utils import arg_alias
+
+Tensor = Any
+Graph = Any
+
+logger = logging.getLogger(__name__)
+
+# Note the first version of part of this file is adapted from source code of tensornetwork: (Apache2)
+# https://github.com/google/TensorNetwork/blob/master/tensornetwork/quantum/quantum.py
+# For the reason of adoption instead of direct import: see https://github.com/google/TensorNetwork/issues/950
+
+
+def get_all_nodes(edges: Iterable[Edge]) -> List[Node]:
+    """Return the set of nodes connected to edges."""
+    nodes = []
+    for edge in edges:
+        if edge.node1 is not None and edge.node1 not in nodes:
+            nodes.append(edge.node1)
+        if edge.node2 is not None and edge.node2 not in nodes:
+            nodes.append(edge.node2)
+    return nodes
+
+
+def _infer_num_sites(D: int, d: int) -> int:
+    """
+    Infer the number of sites (n) from a Hilbert space dimension D
+    and local dimension d, assuming D = d**n.
+
+    :param D: total Hilbert space dimension (int)
+    :param d: local dimension per site (int)
+    :return: n such that D == d**n
+    :raises ValueError: if D is not an exact power of d
+    """
+    if not (isinstance(D, int) and D > 0):
+        raise ValueError(f"D must be a positive integer, got {D}")
+    if not (isinstance(d, int) and d >= 2):
+        raise ValueError(f"d must be an integer >= 2, got {d}")
+
+    tmp, n = D, 0
+    while tmp % d == 0 and tmp > 1:
+        tmp //= d
+        n += 1
+    if tmp != 1:
+        raise ValueError(f"Dimension {D} is not a power of local dim {d}")
+    return n
+
+
+def _reachable(nodes: List[AbstractNode]) -> List[AbstractNode]:
+    if not nodes:
+        raise ValueError("Reachable requires at least 1 node.")
+    node_que = []
+    node_que.extend(nodes)
+    seen_nodes = []
+    i = 0
+    while i < len(node_que):
+        node = node_que[i]
+        if node not in seen_nodes:
+            seen_nodes.append(node)
+        for e in sorted(node.edges, key=id):  # Sort edges by id for deterministic order
+            for n in sorted([n for n in e.get_nodes() if n is not None], key=id):
+                if n not in seen_nodes and n not in node_que[i + 1 :]:
+                    node_que.append(n)
+        i += 1
+    return sorted(seen_nodes, key=lambda node: getattr(node, "_stable_id_", -1))
+
+
+def reachable(
+    inputs: Union[AbstractNode, Iterable[AbstractNode], Edge, Iterable[Edge]],
+) -> List[AbstractNode]:
+    """Computes all nodes reachable from `node` or `edge.node1` by connected edges.
+
+    Args:
+        inputs: A `AbstractNode`/`Edge` or collection of `AbstractNodes`/`Edges`
+
+    Returns:
+        A list of `AbstractNode` objects that can be reached from `node`
+        via connected edges.
+
+    Raises:
+        TypeError: If inputs contains other then `Edge` or `Node`.
+    """
+    if isinstance(inputs, AbstractNode):
+        inputs = [inputs]
+    if isinstance(inputs, Edge):
+        inputs = [inputs.node1]
+
+    processed_inputs = []
+    for inp in inputs:
+        if isinstance(inp, AbstractNode):
+            if inp not in processed_inputs:
+                processed_inputs.append(inp)
+        elif isinstance(inp, Edge):
+            if inp.node1 not in processed_inputs:
+                processed_inputs.append(inp.node1)
+        else:
+            raise TypeError(
+                f"input to `reachable` has to be an iterable of "
+                f"Nodes or Edges, got {type(inp)} instead."
+            )
+    return _reachable(processed_inputs)
+
+
+# general conventions left (first) out, right (then) in
+
+
+def quantum_constructor(
+    out_edges: Sequence[Edge],
+    in_edges: Sequence[Edge],
+    ref_nodes: Optional[Collection[AbstractNode]] = None,
+    ignore_edges: Optional[Collection[Edge]] = None,
+) -> "QuOperator":
+    """
+    Constructs an appropriately specialized QuOperator.
+    If there are no edges, creates a QuScalar. If the are only output (input)
+    edges, creates a QuVector (QuAdjointVector). Otherwise creates a QuOperator.
+
+    :Example:
+
+    .. code-block:: python
+
+        def show_attributes(op):
+            print(f"op.is_scalar() \t\t-> {op.is_scalar()}")
+            print(f"op.is_vector() \t\t-> {op.is_vector()}")
+            print(f"op.is_adjoint_vector() \t-> {op.is_adjoint_vector()}")
+            print(f"len(op.out_edges) \t-> {len(op.out_edges)}")
+            print(f"len(op.in_edges) \t-> {len(op.in_edges)}")
+
+    >>> psi_node = tn.Node(np.random.rand(2, 2))
+    >>>
+    >>> op = qu.quantum_constructor([psi_node[0]], [psi_node[1]])
+    >>> show_attributes(op)
+    op.is_scalar()          -> False
+    op.is_vector()          -> False
+    op.is_adjoint_vector()  -> False
+    len(op.out_edges)       -> 1
+    len(op.in_edges)        -> 1
+    >>> # psi_node[0] -> op.out_edges[0]
+    >>> # psi_node[1] -> op.in_edges[0]
+
+    >>> op = qu.quantum_constructor([psi_node[0], psi_node[1]], [])
+    >>> show_attributes(op)
+    op.is_scalar()          -> False
+    op.is_vector()          -> True
+    op.is_adjoint_vector()  -> False
+    len(op.out_edges)       -> 2
+    len(op.in_edges)        -> 0
+    >>> # psi_node[0] -> op.out_edges[0]
+    >>> # psi_node[1] -> op.out_edges[1]
+
+    >>> op = qu.quantum_constructor([], [psi_node[0], psi_node[1]])
+    >>> show_attributes(op)
+    op.is_scalar()          -> False
+    op.is_vector()          -> False
+    op.is_adjoint_vector()  -> True
+    len(op.out_edges)       -> 0
+    len(op.in_edges)        -> 2
+    >>> # psi_node[0] -> op.in_edges[0]
+    >>> # psi_node[1] -> op.in_edges[1]
+
+    :param out_edges: A list of output edges.
+    :type out_edges: Sequence[Edge]
+    :param in_edges: A list of input edges.
+    :type in_edges: Sequence[Edge]
+    :param ref_nodes: Reference nodes for the tensor network (needed if there is a.
+        scalar component).
+    :type ref_nodes: Optional[Collection[AbstractNode]], optional
+    :param ignore_edges: Edges to ignore when checking the dimensionality of the
+        tensor network.
+    :type ignore_edges: Optional[Collection[Edge]], optional
+    :return: The new created QuOperator object.
+    :rtype: QuOperator
+    """
+    if len(out_edges) == 0 and len(in_edges) == 0:
+        return QuScalar(ref_nodes, ignore_edges)  # type: ignore
+    if len(out_edges) == 0:
+        return QuAdjointVector(in_edges, ref_nodes, ignore_edges)
+    if len(in_edges) == 0:
+        return QuVector(out_edges, ref_nodes, ignore_edges)
+    return QuOperator(out_edges, in_edges, ref_nodes, ignore_edges)
+
+
+def identity(
+    space: Sequence[int],
+    dtype: Any = None,
+) -> "QuOperator":
+    """
+    Construct a 'QuOperator' representing the identity on a given space.
+    Internally, this is done by constructing 'CopyNode's for each edge, with
+    dimension according to 'space'.
+
+    :Example:
+
+    >>> E = qu.identity((2, 3, 4))
+    >>> float(E.trace().eval())
+    24.0
+
+    >>> tensor = np.random.rand(2, 2)
+    >>> psi = qu.QuVector.from_tensor(tensor)
+    >>> E = qu.identity((2, 2))
+    >>> psi.eval()
+    array([[0.03964233, 0.99298281],
+           [0.38564989, 0.00950596]])
+    >>> (E @ psi).eval()
+    array([[0.03964233, 0.99298281],
+           [0.38564989, 0.00950596]])
+    >>>
+    >>> (psi.adjoint() @ E @ psi).eval()
+    array(1.13640257)
+    >>> psi.norm().eval()
+    array(1.13640257)
+
+    :param space: A sequence of integers for the dimensions of the tensor product
+        factors of the space (the edges in the tensor network).
+    :type space: Sequence[int]
+    :param dtype: The data type by np.* (for conversion to dense). defaults None to tc dtype.
+    :type dtype: Any type
+    :return: The desired identity operator.
+    :rtype: QuOperator
+    """
+    if dtype is None:
+        dtype = npdtype
+    nodes = [CopyNode(2, d, dtype=dtype) for d in space]
+    out_edges = [n[0] for n in nodes]
+    in_edges = [n[1] for n in nodes]
+    return quantum_constructor(out_edges, in_edges)
+
+
+def check_spaces(edges_1: Sequence[Edge], edges_2: Sequence[Edge]) -> None:
+    """
+    Check the vector spaces represented by two lists of edges are compatible.
+    The number of edges must be the same and the dimensions of each pair of edges
+    must match. Otherwise, an exception is raised.
+
+    :param edges_1: List of edges representing a many-body Hilbert space.
+    :type edges_1: Sequence[Edge]
+    :param edges_2: List of edges representing a many-body Hilbert space.
+    :type edges_2: Sequence[Edge]
+
+    :raises ValueError: Hilbert-space mismatch: "Cannot connect {} subsystems with {} subsystems", or
+        "Input dimension {} != output dimension {}."
+    """
+    if len(edges_1) != len(edges_2):
+        raise ValueError(
+            "Hilbert-space mismatch: Cannot connect {} subsystems "
+            "with {} subsystems.".format(len(edges_1), len(edges_2))
+        )
+
+    for i, (e1, e2) in enumerate(zip(edges_1, edges_2)):
+        if e1.dimension != e2.dimension:
+            raise ValueError(
+                "Hilbert-space mismatch on subsystems {}: Input "
+                "dimension {} != output dimension {}.".format(
+                    i, e1.dimension, e2.dimension
+                )
+            )
+
+
+def eliminate_identities(nodes: Collection[AbstractNode]) -> Tuple[dict, dict]:  # type: ignore
+    """
+    Eliminates any connected CopyNodes that are identity matrices.
+    This will modify the network represented by `nodes`.
+    Only identities that are connected to other nodes are eliminated.
+
+    :param nodes: Collection of nodes to search.
+    :type nodes: Collection[AbstractNode]
+    :return: The Dictionary mapping remaining Nodes to any replacements, Dictionary specifying all dangling-edge
+        replacements.
+    :rtype: Dict[Union[CopyNode, AbstractNode], Union[Node, AbstractNode]], Dict[Edge, Edge]
+    """
+    nodes_dict = {}
+    dangling_edges_dict = {}
+    for n in nodes:
+        if (
+            isinstance(n, CopyNode)
+            and n.get_rank() == 2
+            and not (n[0].is_dangling() and n[1].is_dangling())
+        ):
+            old_edges = [n[0], n[1]]
+            _, new_edges = remove_node(n)
+            if 0 in new_edges and 1 in new_edges:
+                e = connect(new_edges[0], new_edges[1])
+            elif 0 in new_edges:  # 1 was dangling
+                dangling_edges_dict[old_edges[1]] = new_edges[0]
+            elif 1 in new_edges:  # 0 was dangling
+                dangling_edges_dict[old_edges[0]] = new_edges[1]
+            else:
+                # Trace of identity, so replace with a scalar node!
+                d = n.get_dimension(0)
+                # NOTE: Assume CopyNodes have numpy dtypes.
+                nodes_dict[n] = Node(np.array(d, dtype=n.dtype))
+        else:
+            for e in n.get_all_dangling():
+                dangling_edges_dict[e] = e
+            nodes_dict[n] = n
+
+    return nodes_dict, dangling_edges_dict
+
+
+class QuOperator:
+    """
+    Represents a linear operator via a tensor network.
+    To interpret a tensor network as a linear operator, some of the dangling
+    edges must be designated as `out_edges` (output edges) and the rest as
+    `in_edges` (input edges).
+    Considered as a matrix, the `out_edges` represent the row index and the
+    `in_edges` represent the column index.
+    The (right) action of the operator on another then consists of connecting
+    the `in_edges` of the first operator to the `out_edges` of the second.
+    Can be used to do simple linear algebra with tensor networks.
+    """
+
+    __array_priority__ = 100.0  # for correct __rmul__ with scalar ndarrays
+
+    def __init__(
+        self,
+        out_edges: Sequence[Edge],
+        in_edges: Sequence[Edge],
+        ref_nodes: Optional[Collection[AbstractNode]] = None,
+        ignore_edges: Optional[Collection[Edge]] = None,
+    ) -> None:
+        """
+        Creates a new `QuOperator` from a tensor network.
+        This encapsulates an existing tensor network, interpreting it as a linear
+        operator.
+        The network is checked for consistency: All dangling edges must either be
+        in `out_edges`, `in_edges`, or `ignore_edges`.
+
+        :param out_edges: The edges of the network to be used as the output edges.
+        :type out_edges: Sequence[Edge]
+        :param in_edges: The edges of the network to be used as the input edges.
+        :type in_edges: Sequence[Edge]
+        :param ref_nodes: Nodes used to refer to parts of the tensor network that are
+            not connected to any input or output edges (for example: a scalar
+            factor).
+        :type ref_nodes: Optional[Collection[AbstractNode]], optional
+        :param ignore_edges: Optional collection of dangling edges to ignore when
+            performing consistency checks.
+        :type ignore_edges: Optional[Collection[Edge]], optional
+        :raises ValueError: At least one reference node is required to specify a scalar. None provided!
+        """
+        # TODO: Decide whether the user must also supply all nodes involved.
+        #       This would enable extra error checking and is probably clearer
+        #       than `ref_nodes`.
+        if len(in_edges) == 0 and len(out_edges) == 0 and not ref_nodes:
+            raise ValueError(
+                "At least one reference node is required to specify a "
+                "scalar. None provided!"
+            )
+        self.out_edges = list(out_edges)
+        self.in_edges = list(in_edges)
+        self.ignore_edges = list(ignore_edges) if ignore_edges else list()
+        self.ref_nodes = list(ref_nodes) if ref_nodes else list()
+        self.check_network()
+
+    @classmethod
+    def from_tensor(
+        cls,
+        tensor: Tensor,
+        out_axes: Optional[Sequence[int]] = None,
+        in_axes: Optional[Sequence[int]] = None,
+    ) -> "QuOperator":
+        r"""
+        Construct a `QuOperator` directly from a single tensor.
+        This first wraps the tensor in a `Node`, then constructs the `QuOperator`
+        from that `Node`.
+
+        :Example:
+
+        .. code-block:: python
+
+            def show_attributes(op):
+                print(f"op.is_scalar() \t\t-> {op.is_scalar()}")
+                print(f"op.is_vector() \t\t-> {op.is_vector()}")
+                print(f"op.is_adjoint_vector() \t-> {op.is_adjoint_vector()}")
+                print(f"op.eval() \n{op.eval()}")
+
+        >>> psi_tensor = np.random.rand(2, 2)
+        >>> psi_tensor
+        array([[0.27260127, 0.91401091],
+               [0.06490953, 0.38653646]])
+        >>> op = qu.QuOperator.from_tensor(psi_tensor, out_axes=[0], in_axes=[1])
+        >>> show_attributes(op)
+        op.is_scalar()          -> False
+        op.is_vector()          -> False
+        op.is_adjoint_vector()  -> False
+        op.eval()
+        [[0.27260127 0.91401091]
+         [0.06490953 0.38653646]]
+
+        :param tensor: The tensor.
+        :type tensor: Tensor
+        :param out_axes: The axis indices of `tensor` to use as `out_edges`.
+        :type out_axes: Optional[Sequence[int]], optional
+        :param in_axes: The axis indices of `tensor` to use as `in_edges`.
+        :type in_axes: Optional[Sequence[int]], optional
+        :return: The new operator.
+        :rtype: QuOperator
+        """
+        nlegs = len(tensor.shape)
+        if (out_axes is None) and (in_axes is None):
+            out_axes = [i for i in range(int(nlegs / 2))]
+            in_axes = [i for i in range(int(nlegs / 2), nlegs)]
+        elif out_axes is None:
+            out_axes = [i for i in range(nlegs) if i not in in_axes]  # type: ignore
+        elif in_axes is None:
+            in_axes = [i for i in range(nlegs) if i not in out_axes]
+        n = Node(tensor)
+        out_edges = [n[i] for i in out_axes]
+        in_edges = [n[i] for i in in_axes]  # type: ignore
+        return cls(out_edges, in_edges)
+
+    @classmethod
+    def from_local_tensor(
+        cls,
+        tensor: Tensor,
+        space: Sequence[int],
+        loc: Sequence[int],
+        out_axes: Optional[Sequence[int]] = None,
+        in_axes: Optional[Sequence[int]] = None,
+    ) -> "QuOperator":
+        nlegs = len(tensor.shape)
+        if (out_axes is None) and (in_axes is None):
+            out_axes = [i for i in range(int(nlegs / 2))]
+            in_axes = [i for i in range(int(nlegs / 2), nlegs)]
+        elif out_axes is None:
+            out_axes = [i for i in range(nlegs) if i not in in_axes]  # type: ignore
+        elif in_axes is None:
+            in_axes = [i for i in range(nlegs) if i not in out_axes]
+        localn = Node(tensor)
+        out_edges = [localn[i] for i in out_axes]
+        in_edges = [localn[i] for i in in_axes]  # type: ignore
+        id_nodes = [
+            CopyNode(2, d, dtype=npdtype) for i, d in enumerate(space) if i not in loc
+        ]
+        for n in id_nodes:
+            out_edges.append(n[0])
+            in_edges.append(n[1])
+
+        return cls(out_edges, in_edges)
+
+    @property
+    def nodes(self) -> List[AbstractNode]:
+        """All tensor-network nodes involved in the operator."""
+        return reachable(get_all_nodes(self.out_edges + self.in_edges) + self.ref_nodes)  # type: ignore
+
+    @property
+    def in_space(self) -> List[int]:
+        return [e.dimension for e in self.in_edges]
+
+    @property
+    def out_space(self) -> List[int]:
+        return [e.dimension for e in self.out_edges]
+
+    def is_scalar(self) -> bool:
+        """
+        Returns a bool indicating if QuOperator is a scalar.
+        Examples can be found in the `QuOperator.from_tensor`.
+        """
+        return len(self.out_edges) == 0 and len(self.in_edges) == 0
+
+    def is_vector(self) -> bool:
+        """
+        Returns a bool indicating if QuOperator is a vector.
+        Examples can be found in the `QuOperator.from_tensor`.
+        """
+        return len(self.out_edges) > 0 and len(self.in_edges) == 0
+
+    def is_adjoint_vector(self) -> bool:
+        """
+        Returns a bool indicating if QuOperator is an adjoint vector.
+        Examples can be found in the `QuOperator.from_tensor`.
+        """
+        return len(self.out_edges) == 0 and len(self.in_edges) > 0
+
+    def check_network(self) -> None:
+        """
+        Check that the network has the expected dimensionality.
+        This checks that all input and output edges are dangling and that
+        there are no other dangling edges (except any specified in
+        `ignore_edges`). If not, an exception is raised.
+        """
+        for i, e in enumerate(self.out_edges):
+            if not e.is_dangling():
+                raise ValueError("Output edge {} is not dangling!".format(i))
+        for i, e in enumerate(self.in_edges):
+            if not e.is_dangling():
+                raise ValueError("Input edge {} is not dangling!".format(i))
+        for e in self.ignore_edges:
+            if not e.is_dangling():
+                raise ValueError(
+                    "ignore_edges contains non-dangling edge: {}".format(str(e))
+                )
+
+        known_edges = set(self.in_edges) | set(self.out_edges) | set(self.ignore_edges)
+        all_dangling_edges = get_subgraph_dangling(self.nodes)
+        if known_edges != all_dangling_edges:
+            raise ValueError(
+                "The network includes unexpected dangling edges (that "
+                "are not members of ignore_edges)."
+            )
+
+    def adjoint(self) -> "QuOperator":
+        """
+        The adjoint of the operator.
+        This creates a new `QuOperator` with complex-conjugate copies of all
+        tensors in the network and with the input and output edges switched.
+
+        :return: The adjoint of the operator.
+        :rtype: QuOperator
+        """
+        nodes_dict, edge_dict = copy(self.nodes, True)
+        out_edges = [edge_dict[e] for e in self.in_edges]
+        in_edges = [edge_dict[e] for e in self.out_edges]
+        ref_nodes = [nodes_dict[n] for n in self.ref_nodes]
+        ignore_edges = [edge_dict[e] for e in self.ignore_edges]
+        return quantum_constructor(out_edges, in_edges, ref_nodes, ignore_edges)
+
+    def copy(self) -> "QuOperator":
+        """
+        The deep copy of the operator.
+
+        :return: The new copy of the operator.
+        :rtype: QuOperator
+        """
+        nodes_dict, edge_dict = copy(self.nodes, False)
+        out_edges = [edge_dict[e] for e in self.out_edges]
+        in_edges = [edge_dict[e] for e in self.in_edges]
+        ref_nodes = [nodes_dict[n] for n in self.ref_nodes]
+        ignore_edges = [edge_dict[e] for e in self.ignore_edges]
+        return quantum_constructor(out_edges, in_edges, ref_nodes, ignore_edges)
+
+    def trace(self) -> "QuOperator":
+        """The trace of the operator."""
+        return self.partial_trace(range(len(self.in_edges)))
+
+    def norm(self) -> "QuOperator":
+        """
+        The norm of the operator.
+        This is the 2-norm (also known as the Frobenius or Hilbert-Schmidt
+        norm).
+        """
+        return (self.adjoint() @ self).trace()
+
+    def partial_trace(self, subsystems_to_trace_out: Collection[int]) -> "QuOperator":
+        """
+        The partial trace of the operator.
+        Subsystems to trace out are supplied as indices, so that dangling edges
+        are connected to each other as:
+        `out_edges[i] ^ in_edges[i] for i in subsystems_to_trace_out`
+        This does not modify the original network. The original ordering of the
+        remaining subsystems is maintained.
+
+        :param subsystems_to_trace_out: Indices of subsystems to trace out.
+        :type subsystems_to_trace_out: Collection[int]
+        :return: A new QuOperator or QuScalar representing the result.
+        :rtype: QuOperator
+        """
+        out_edges_trace = [self.out_edges[i] for i in subsystems_to_trace_out]
+        in_edges_trace = [self.in_edges[i] for i in subsystems_to_trace_out]
+
+        check_spaces(in_edges_trace, out_edges_trace)
+
+        nodes_dict, edge_dict = copy(self.nodes, False)
+        for e1, e2 in zip(out_edges_trace, in_edges_trace):
+            edge_dict[e1] = edge_dict[e1] ^ edge_dict[e2]
+
+        # get leftover edges in the original order
+        out_edges_trace = set(out_edges_trace)  # type: ignore
+        in_edges_trace = set(in_edges_trace)  # type: ignore
+        out_edges = [edge_dict[e] for e in self.out_edges if e not in out_edges_trace]
+        in_edges = [edge_dict[e] for e in self.in_edges if e not in in_edges_trace]
+        ref_nodes = [n for _, n in nodes_dict.items()]
+        ignore_edges = [edge_dict[e] for e in self.ignore_edges]
+
+        return quantum_constructor(out_edges, in_edges, ref_nodes, ignore_edges)
+
+    def __matmul__(self, other: Union["QuOperator", Tensor]) -> "QuOperator":
+        """
+        The action of this operator on another.
+        Given `QuOperator`s `A` and `B`, produces a new `QuOperator` for `A @ B`,
+        where `A @ B` means: "the action of A, as a linear operator, on B".
+        Under the hood, this produces copies of the tensor networks defining `A`
+        and `B` and then connects the copies by hooking up the `in_edges` of
+        `A.copy()` to the `out_edges` of `B.copy()`.
+        """
+        if not isinstance(other, QuOperator):
+            other = self.from_tensor(other)
+        check_spaces(self.in_edges, other.out_edges)
+
+        # Copy all nodes involved in the two operators.
+        # We must do this separately for self and other, in case self and other
+        # are defined via the same network components (e.g. if self === other).
+        nodes_dict1, edges_dict1 = copy(self.nodes, False)
+        nodes_dict2, edges_dict2 = copy(other.nodes, False)
+
+        # connect edges to create network for the result
+        for e1, e2 in zip(self.in_edges, other.out_edges):
+            _ = edges_dict1[e1] ^ edges_dict2[e2]
+
+        in_edges = [edges_dict2[e] for e in other.in_edges]
+        out_edges = [edges_dict1[e] for e in self.out_edges]
+        ref_nodes = [n for _, n in nodes_dict1.items()] + [
+            n for _, n in nodes_dict2.items()
+        ]
+        ignore_edges = [edges_dict1[e] for e in self.ignore_edges] + [
+            edges_dict2[e] for e in other.ignore_edges
+        ]
+
+        return quantum_constructor(out_edges, in_edges, ref_nodes, ignore_edges)
+
+    def __rmatmul__(self, other: Union["QuOperator", Tensor]) -> "QuOperator":
+        return self.__matmul__(other)
+
+    def __mul__(self, other: Union["QuOperator", AbstractNode, Tensor]) -> "QuOperator":
+        """
+        Scalar multiplication of operators.
+        Given two operators `A` and `B`, one of the which is a scalar (it has no
+        input or output edges), `A * B` produces a new operator representing the
+        scalar multiplication of `A` and `B`.
+        For convenience, one of `A` or `B` may be a number or scalar-valued tensor
+        or `Node` (it will automatically be wrapped in a `QuScalar`).
+        Note: This is a special case of `tensor_product()`.
+        """
+        if not isinstance(other, QuOperator):
+            if isinstance(other, AbstractNode):
+                node = other
+            else:
+                node = Node(other)
+            if node.shape:
+                raise ValueError(
+                    "Cannot perform elementwise multiplication by a "
+                    "non-scalar tensor."
+                )
+            other = QuScalar([node])
+
+        if self.is_scalar() or other.is_scalar():
+            return self.tensor_product(other)
+
+        raise ValueError(
+            "Elementwise multiplication is only supported if at "
+            "least one of the arguments is a scalar."
+        )
+
+    def __rmul__(
+        self, other: Union["QuOperator", AbstractNode, Tensor]
+    ) -> "QuOperator":
+        """
+        Scalar multiplication of operators.
+        See `.__mul__()`.
+        """
+        return self.__mul__(other)
+
+    def tensor_product(self, other: "QuOperator") -> "QuOperator":
+        """
+        Tensor product with another operator.
+        Given two operators `A` and `B`, produces a new operator `AB` representing
+        :math:`A ⊗ B`. The `out_edges` (`in_edges`) of `AB` is simply the
+        concatenation of the `out_edges` (`in_edges`) of `A.copy()` with that of
+        `B.copy()`:
+        `new_out_edges = [*out_edges_A_copy, *out_edges_B_copy]`
+        `new_in_edges = [*in_edges_A_copy, *in_edges_B_copy]`
+
+        :Example:
+
+        >>> psi = qu.QuVector.from_tensor(np.random.rand(2, 2))
+        >>> psi_psi = psi.tensor_product(psi)
+        >>> len(psi_psi.subsystem_edges)
+        4
+        >>> float(psi_psi.norm().eval())
+        2.9887872748523585
+        >>> psi.norm().eval() ** 2
+        2.9887872748523585
+
+        :param other: The other operator (`B`).
+        :type other: QuOperator
+        :return: The result (`AB`).
+        :rtype: QuOperator
+        """
+        nodes_dict1, edges_dict1 = copy(self.nodes, False)
+        nodes_dict2, edges_dict2 = copy(other.nodes, False)
+
+        in_edges = [edges_dict1[e] for e in self.in_edges] + [
+            edges_dict2[e] for e in other.in_edges
+        ]
+        out_edges = [edges_dict1[e] for e in self.out_edges] + [
+            edges_dict2[e] for e in other.out_edges
+        ]
+        ref_nodes = [n for _, n in nodes_dict1.items()] + [
+            n for _, n in nodes_dict2.items()
+        ]
+        ignore_edges = [edges_dict1[e] for e in self.ignore_edges] + [
+            edges_dict2[e] for e in other.ignore_edges
+        ]
+
+        return quantum_constructor(out_edges, in_edges, ref_nodes, ignore_edges)
+
+    def __or__(self, other: "QuOperator") -> "QuOperator":
+        """
+        Tensor product of operators.
+        Given two operators `A` and `B`, `A | B` produces a new operator representing the
+        tensor product of `A` and `B`.
+        """
+        return self.tensor_product(other)
+
+    def contract(
+        self,
+        final_edge_order: Optional[Sequence[Edge]] = None,
+    ) -> "QuOperator":
+        """
+        Contract the tensor network in place.
+        This modifies the tensor network representation of the operator (or vector,
+        or scalar), reducing it to a single tensor, without changing the value.
+
+        :param final_edge_order: Manually specify the axis ordering of the final tensor.
+        :type final_edge_order: Optional[Sequence[Edge]], optional
+        :return: The present object.
+        :rtype: QuOperator
+        """
+        nodes_dict, dangling_edges_dict = eliminate_identities(self.nodes)
+        self.in_edges = [dangling_edges_dict[e] for e in self.in_edges]
+        self.out_edges = [dangling_edges_dict[e] for e in self.out_edges]
+        self.ignore_edges = list(dangling_edges_dict[e] for e in self.ignore_edges)
+        self.ref_nodes = list(nodes_dict[n] for n in self.ref_nodes if n in nodes_dict)
+        self.check_network()
+        if final_edge_order:
+            final_edge_order = [dangling_edges_dict[e] for e in final_edge_order]
+            self.ref_nodes = list(
+                [contractor(self.nodes, output_edge_order=final_edge_order)]
+            )
+        else:
+            self.ref_nodes = list([contractor(self.nodes, ignore_edge_order=True)])
+        return self
+
+    def eval(
+        self,
+        final_edge_order: Optional[Sequence[Edge]] = None,
+    ) -> Tensor:
+        """
+        Contracts the tensor network in place and returns the final tensor.
+        Note that this modifies the tensor network representing the operator.
+        The default ordering for the axes of the final tensor is:
+        `*out_edges, *in_edges`.
+        If there are any "ignored" edges, their axes come first:
+        `*ignored_edges, *out_edges, *in_edges`.
+
+        :param final_edge_order: Manually specify the axis ordering of the final tensor.
+            The default ordering is determined by `out_edges` and `in_edges` (see above).
+        :type final_edge_order: Optional[Sequence[Edge]], optional
+        :raises ValueError: Node count '{}' > 1 after contraction!
+        :return: The final tensor representing the operator.
+        :rtype: Tensor
+        """
+        if not final_edge_order:
+            final_edge_order = list(self.ignore_edges) + self.out_edges + self.in_edges
+        self.contract(final_edge_order)
+        nodes = self.nodes
+        if len(nodes) != 1:
+            raise ValueError(
+                "Node count '{}' > 1 after contraction!".format(len(nodes))
+            )
+        return list(nodes)[0].tensor
+
+    def eval_matrix(self, final_edge_order: Optional[Sequence[Edge]] = None) -> Tensor:
+        r"""
+        Contracts the tensor network in place and returns the final tensor
+        in two dimentional matrix.
+        The default ordering for the axes of the final tensor is:
+        (:math:`\prod` dimension of out_edges, :math:`\prod` dimension of in_edges)
+
+        :param final_edge_order: Manually specify the axis ordering of the final tensor.
+            The default ordering is determined by `out_edges` and `in_edges` (see above).
+        :type final_edge_order: Optional[Sequence[Edge]], optional
+        :raises ValueError: Node count '{}' > 1 after contraction!
+        :return: The two-dimentional tensor representing the operator.
+        :rtype: Tensor
+        """
+        t = self.eval(final_edge_order)
+        shape1 = reduce(mul, [e.dimension for e in self.out_edges] + [1])
+        shape2 = reduce(mul, [e.dimension for e in self.in_edges] + [1])
+        return backend.reshape(t, [shape1, shape2])
+
+
+class QuVector(QuOperator):
+    """Represents a (column) vector via a tensor network."""
+
+    def __init__(
+        self,
+        subsystem_edges: Sequence[Edge],
+        ref_nodes: Optional[Collection[AbstractNode]] = None,
+        ignore_edges: Optional[Collection[Edge]] = None,
+    ) -> None:
+        """
+        Constructs a new `QuVector` from a tensor network.
+        This encapsulates an existing tensor network, interpreting it as a (column) vector.
+
+        :param subsystem_edges: The edges of the network to be used as the output edges.
+        :type subsystem_edges: Sequence[Edge]
+        :param ref_nodes: Nodes used to refer to parts of the tensor network that are
+            not connected to any input or output edges (for example: a scalar factor).
+        :type ref_nodes: Optional[Collection[AbstractNode]], optional
+        :param ignore_edges: Optional collection of edges to ignore when performing consistency checks.
+        :type ignore_edges: Optional[Collection[Edge]], optional
+        """
+        super().__init__(subsystem_edges, [], ref_nodes, ignore_edges)
+
+    @classmethod
+    def from_tensor(  # type: ignore
+        cls,
+        tensor: Tensor,
+        subsystem_axes: Optional[Sequence[int]] = None,
+    ) -> "QuVector":
+        r"""
+        Construct a `QuVector` directly from a single tensor.
+        This first wraps the tensor in a `Node`, then constructs the `QuVector`
+        from that `Node`.
+
+        :Example:
+
+        .. code-block:: python
+
+            def show_attributes(op):
+                print(f"op.is_scalar() \t\t-> {op.is_scalar()}")
+                print(f"op.is_vector() \t\t-> {op.is_vector()}")
+                print(f"op.is_adjoint_vector() \t-> {op.is_adjoint_vector()}")
+                print(f"op.eval() \n{op.eval()}")
+
+        >>> psi_tensor = np.random.rand(2, 2)
+        >>> psi_tensor
+        array([[0.27260127, 0.91401091],
+               [0.06490953, 0.38653646]])
+        >>> op = qu.QuVector.from_tensor(psi_tensor, [0, 1])
+        >>> show_attributes(op)
+        op.is_scalar()          -> False
+        op.is_vector()          -> True
+        op.is_adjoint_vector()  -> False
+        op.eval()
+        [[0.27260127 0.91401091]
+         [0.06490953 0.38653646]]
+
+        :param tensor: The tensor for constructing a "QuVector".
+        :type tensor: Tensor
+        :param subsystem_axes: Sequence of integer indices specifying the order in which
+            to interpret the axes as subsystems (output edges). If not specified,
+            the axes are taken in ascending order.
+        :type subsystem_axes: Optional[Sequence[int]], optional
+        :return: The new constructed QuVector from the given tensor.
+        :rtype: QuVector
+        """
+        n = Node(tensor)
+        if subsystem_axes is not None:
+            subsystem_edges = [n[i] for i in subsystem_axes]
+        else:
+            subsystem_edges = n.get_all_edges()
+        return cls(subsystem_edges)
+
+    @property
+    def subsystem_edges(self) -> List[Edge]:
+        return self.out_edges
+
+    @property
+    def space(self) -> List[int]:
+        return self.out_space
+
+    def projector(self) -> "QuOperator":
+        """
+        The projector of the operator.
+        The operator, as a linear operator, on the adjoint of the operator.
+
+        Set :math:`A` is the operator in matrix form, then the projector of operator is defined as: :math:`A A^\\dagger`
+
+        :return: The projector of the operator.
+        :rtype: QuOperator
+        """
+        return self @ self.adjoint()
+
+    def reduced_density(self, subsystems_to_trace_out: Collection[int]) -> "QuOperator":
+        """
+        The reduced density of the operator.
+
+        Set :math:`A` is the matrix of the operator, then the reduced density is defined as:
+
+        .. math::
+
+            \\mathrm{Tr}_{subsystems}(A A^\\dagger)
+
+        Firstly, take the projector of the operator, then trace out the subsystems
+        to trace out are supplied as indices, so that dangling edges are connected
+        to each other as:
+        `out_edges[i] ^ in_edges[i] for i in subsystems_to_trace_out`
+        This does not modify the original network. The original ordering of the
+        remaining subsystems is maintained.
+
+        :param subsystems_to_trace_out: Indices of subsystems to trace out.
+        :type subsystems_to_trace_out: Collection[int]
+        :return: The QuOperator of the reduced density of the operator with given subsystems.
+        :rtype: QuOperator
+        """
+        rho = self.projector()
+        return rho.partial_trace(subsystems_to_trace_out)
+
+
+class QuAdjointVector(QuOperator):
+    """Represents an adjoint (row) vector via a tensor network."""
+
+    def __init__(
+        self,
+        subsystem_edges: Sequence[Edge],
+        ref_nodes: Optional[Collection[AbstractNode]] = None,
+        ignore_edges: Optional[Collection[Edge]] = None,
+    ) -> None:
+        """
+        Constructs a new `QuAdjointVector` from a tensor network.
+        This encapsulates an existing tensor network, interpreting it as an adjoint
+        vector (row vector).
+
+        :param subsystem_edges: The edges of the network to be used as the input edges.
+        :type subsystem_edges: Sequence[Edge]
+        :param ref_nodes: Nodes used to refer to parts of the tensor network that are
+            not connected to any input or output edges (for example: a scalar factor).
+        :type ref_nodes: Optional[Collection[AbstractNode]], optional
+        :param ignore_edges: Optional collection of edges to ignore when performing consistency checks.
+        :type ignore_edges: Optional[Collection[Edge]], optional
+        """
+        super().__init__([], subsystem_edges, ref_nodes, ignore_edges)
+
+    @classmethod
+    def from_tensor(  # type: ignore
+        cls,
+        tensor: Tensor,
+        subsystem_axes: Optional[Sequence[int]] = None,
+    ) -> "QuAdjointVector":
+        r"""
+        Construct a `QuAdjointVector` directly from a single tensor.
+        This first wraps the tensor in a `Node`, then constructs the `QuAdjointVector` from that `Node`.
+
+        :Example:
+
+        .. code-block:: python
+
+            def show_attributes(op):
+                print(f"op.is_scalar() \t\t-> {op.is_scalar()}")
+                print(f"op.is_vector() \t\t-> {op.is_vector()}")
+                print(f"op.is_adjoint_vector() \t-> {op.is_adjoint_vector()}")
+                print(f"op.eval() \n{op.eval()}")
+
+        >>> psi_tensor = np.random.rand(2, 2)
+        >>> psi_tensor
+        array([[0.27260127, 0.91401091],
+               [0.06490953, 0.38653646]])
+        >>> op = qu.QuAdjointVector.from_tensor(psi_tensor, [0, 1])
+        >>> show_attributes(op)
+        op.is_scalar()          -> False
+        op.is_vector()          -> False
+        op.is_adjoint_vector()  -> True
+        op.eval()
+        [[0.27260127 0.91401091]
+         [0.06490953 0.38653646]]
+
+        :param tensor: The tensor for constructing an QuAdjointVector.
+        :type tensor: Tensor
+        :param subsystem_axes: Sequence of integer indices specifying the order in which
+            to interpret the axes as subsystems (input edges). If not specified,
+            the axes are taken in ascending order.
+        :type subsystem_axes: Optional[Sequence[int]], optional
+        :return: The new constructed QuAdjointVector give from the given tensor.
+        :rtype: QuAdjointVector
+        """
+        n = Node(tensor)
+        if subsystem_axes is not None:
+            subsystem_edges = [n[i] for i in subsystem_axes]
+        else:
+            subsystem_edges = n.get_all_edges()
+        return cls(subsystem_edges)
+
+    @property
+    def subsystem_edges(self) -> List[Edge]:
+        return self.in_edges
+
+    @property
+    def space(self) -> List[int]:
+        return self.in_space
+
+    def projector(self) -> "QuOperator":
+        """
+        The projector of the operator.
+        The operator, as a linear operator, on the adjoint of the operator.
+
+        Set :math:`A` is the operator in matrix form, then the projector of operator is defined as: :math:`A^\\dagger A`
+
+        :return: The projector of the operator.
+        :rtype: QuOperator
+        """
+        return self.adjoint() @ self
+
+    def reduced_density(self, subsystems_to_trace_out: Collection[int]) -> "QuOperator":
+        """
+        The reduced density of the operator.
+
+        Set :math:`A` is the matrix of the operator, then the reduced density is defined as:
+
+        .. math::
+
+            \\mathrm{Tr}_{subsystems}(A^\\dagger A)
+
+        Firstly, take the projector of the operator, then trace out the subsystems
+        to trace out are supplied as indices, so that dangling edges are connected
+        to each other as:
+        `out_edges[i] ^ in_edges[i] for i in subsystems_to_trace_out`
+        This does not modify the original network. The original ordering of the
+        remaining subsystems is maintained.
+
+        :param subsystems_to_trace_out: Indices of subsystems to trace out.
+        :type subsystems_to_trace_out: Collection[int]
+        :return: The QuOperator of the reduced density of the operator with given subsystems.
+        :rtype: QuOperator
+        """
+        rho = self.projector()
+        return rho.partial_trace(subsystems_to_trace_out)
+
+
+class QuScalar(QuOperator):
+    """Represents a scalar via a tensor network."""
+
+    def __init__(
+        self,
+        ref_nodes: Collection[AbstractNode],
+        ignore_edges: Optional[Collection[Edge]] = None,
+    ) -> None:
+        """
+        Constructs a new `QuScalar` from a tensor network.
+        This encapsulates an existing tensor network, interpreting it as a scalar.
+
+        :param ref_nodes: Nodes used to refer to the tensor network (need not be
+            exhaustive - one node from each disconnected subnetwork is sufficient).
+        :type ref_nodes: Collection[AbstractNode]
+        :param ignore_edges: Optional collection of edges to ignore when performing consistency checks.
+        :type ignore_edges: Optional[Collection[Edge]], optional
+        """
+        super().__init__([], [], ref_nodes, ignore_edges)
+
+    @classmethod
+    def from_tensor(cls, tensor: Tensor) -> "QuScalar":  # type: ignore
+        r"""
+        Construct a `QuScalar` directly from a single tensor.
+        This first wraps the tensor in a `Node`, then constructs the `QuScalar` from that `Node`.
+
+        :Example:
+
+        .. code-block:: python
+
+            def show_attributes(op):
+                print(f"op.is_scalar() \t\t-> {op.is_scalar()}")
+                print(f"op.is_vector() \t\t-> {op.is_vector()}")
+                print(f"op.is_adjoint_vector() \t-> {op.is_adjoint_vector()}")
+                print(f"op.eval() \n{op.eval()}")
+
+        >>> op = qu.QuScalar.from_tensor(1.0)
+        >>> show_attributes(op)
+        op.is_scalar()          -> True
+        op.is_vector()          -> False
+        op.is_adjoint_vector()  -> False
+        op.eval()
+        1.0
+
+        :param tensor: The tensor for constructing a new QuScalar.
+        :type tensor: Tensor
+        :return: The new constructed QuScalar from the given tensor.
+        :rtype: QuScalar
+        """
+        n = Node(tensor)
+        return cls(list([n]))
+
+
+def ps2xyz(ps: List[int]) -> Dict[str, List[int]]:
+    """
+    pauli string list to xyz dict
+
+    # ps2xyz([1, 2, 2, 0]) = {"x": [0], "y": [1, 2], "z": []}
+
+    :param ps: _description_
+    :type ps: List[int]
+    :return: _description_
+    :rtype: Dict[str, List[int]]
+    """
+    xyz: Dict[str, List[int]] = {"x": [], "y": [], "z": []}
+    for i, j in enumerate(ps):
+        if j == 1:
+            xyz["x"].append(i)
+        if j == 2:
+            xyz["y"].append(i)
+        if j == 3:
+            xyz["z"].append(i)
+    return xyz
+
+
+def xyz2ps(xyz: Dict[str, List[int]], n: Optional[int] = None) -> List[int]:
+    """
+    xyz dict to pauli string list
+
+    :param xyz: _description_
+    :type xyz: Dict[str, List[int]]
+    :param n: _description_, defaults to None
+    :type n: Optional[int], optional
+    :return: _description_
+    :rtype: List[int]
+    """
+    if n is None:
+        n = max(xyz.get("x", []) + xyz.get("y", []) + xyz.get("z", [])) + 1
+    ps = [0 for _ in range(n)]
+    for i in range(n):
+        if i in xyz.get("x", []):
+            ps[i] = 1
+        elif i in xyz.get("y", []):
+            ps[i] = 2
+        elif i in xyz.get("z", []):
+            ps[i] = 3
+    return ps
+
+
+def generate_local_hamiltonian(
+    *hlist: Sequence[Tensor], matrix_form: bool = True
+) -> Union[QuOperator, Tensor]:
+    """
+    Generate a local Hamiltonian operator based on the given sequence of Tensor.
+    Note: further jit is recommended.
+    For large Hilbert space, sparse Hamiltonian is recommended
+
+    :param hlist: A sequence of Tensor.
+    :type hlist: Sequence[Tensor]
+    :param matrix_form: Return Hamiltonian operator in form of matrix, defaults to True.
+    :type matrix_form: bool, optional
+    :return: The Hamiltonian operator in form of QuOperator or matrix.
+    :rtype: Union[QuOperator, Tensor]
+    """
+    hlist = [backend.cast(h, dtype=dtypestr) for h in hlist]  # type: ignore
+    hop_list = [QuOperator.from_tensor(h) for h in hlist]
+    hop = reduce(or_, hop_list)
+    if matrix_form:
+        tensor = hop.eval_matrix()
+        return tensor
+    return hop
+
+
+# TODO(@Charlespkuer): Add more conversion functions for other packages
+def extract_tensors_from_qop(qop: QuOperator) -> Tuple[List[Node], bool, int]:
+    """
+    Extract and sort tensors from QuOperator for conversion to other tensor network formats.
+
+    :param qop: Input QuOperator to extract tensors from
+    :type qop: QuOperator
+    :return: Tuple containing (sorted_nodes, is_mps, nwires) where:
+    - sorted_nodes: List of Node objects sorted in linear chain order
+    - is_mps: Boolean flag indicating if the structure is MPS (True) or MPO (False)
+    - nwires: Integer number of physical edges/qubits in the system
+    :rtype: Tuple[List[Node], bool, int]
+    """
+    is_mps = len(qop.in_edges) == 0
+    nwires = len(qop.out_edges)
+    if not is_mps and len(qop.in_edges) != nwires:
+        raise ValueError(
+            "MPO must have the same number of input and output edges. "
+            f"Got {len(qop.in_edges)} and {nwires}."
+        )
+
+    # Collect all nodes from edges
+    nodes_for_sorting = qop.nodes
+    if len(nodes_for_sorting) != nwires:
+        raise ValueError(f"Number of nodes  does not match number of wires.")
+
+    # Find endpoint nodes
+    endpoint_nodes = set()
+    physical_edges = set(qop.out_edges) if is_mps else set(qop.in_edges + qop.out_edges)
+    if is_mps:
+        rank_2_nodes = {node for node in nodes_for_sorting if len(node.edges) == 2}
+        if len(rank_2_nodes) == 2:
+            endpoint_nodes = rank_2_nodes
+
+    if not endpoint_nodes:
+        endpoint_nodes = {edge.node1 for edge in qop.ignore_edges if edge.node1}
+
+    if not endpoint_nodes and len(nodes_for_sorting) > 1:
+        virtual_bond_counts = {}
+        virtual_bond_dim_sums = {}
+
+        for node in nodes_for_sorting:
+            virtual_bonds = 0
+            virtual_dim_sum = 0
+
+            for edge in node.edges:
+                if edge not in physical_edges and not edge.is_dangling():
+                    virtual_bonds += 1
+                    virtual_dim_sum += edge.dimension
+
+            virtual_bond_counts[node] = virtual_bonds
+            virtual_bond_dim_sums[node] = virtual_dim_sum
+
+        min_dim_sum = min(virtual_bond_dim_sums.values())
+        min_dim_nodes = {
+            node
+            for node, dim_sum in virtual_bond_dim_sums.items()
+            if dim_sum == min_dim_sum
+        }
+
+        if len(min_dim_nodes) == 2:
+            endpoint_nodes = min_dim_nodes
+
+    if not endpoint_nodes:
+        if len(nodes_for_sorting) == 1:
+            raise ValueError("Cannot determine chain structure: only one node found.")
+        elif len(nodes_for_sorting) >= 2:
+            raise ValueError(f"Cannot identify endpoint nodes for your nodes.")
+
+    # Sort nodes along the chain
+    sorted_nodes: list[Node] = []
+    if endpoint_nodes and len(endpoint_nodes) >= 1:
+        current = next(iter(endpoint_nodes))
+        while current and len(sorted_nodes) < nwires:
+            sorted_nodes.append(current)
+            current = next(
+                (
+                    e.node2 if e.node1 is current else e.node1
+                    for e in current.edges
+                    if not e.is_dangling()
+                    and e not in physical_edges
+                    and (e.node2 if e.node1 is current else e.node1) not in sorted_nodes
+                ),
+                None,
+            )
+
+    if not sorted_nodes:
+        raise ValueError("No valid chain structure found in the QuOperator. ")
+    if len(sorted_nodes) > 0 and len(qop.ignore_edges) > 0:
+        if sorted_nodes[0] is not qop.ignore_edges[0].node1:
+            sorted_nodes = sorted_nodes[::-1]
+
+    return sorted_nodes, is_mps, nwires
+
+
+def tenpy2qop(tenpy_obj: Any) -> QuOperator:
+    """
+    Converts a TeNPy MPO or MPS to a TensorCircuit QuOperator.
+    This definitive version correctly handles axis ordering and boundary
+    conditions to be compatible with `eval_matrix`.
+
+    :param tenpy_obj: A MPO or MPS object from the TeNPy package.
+    :type tenpy_obj: Union[tenpy.networks.mpo.MPO, tenpy.networks.mps.MPS]
+    :return: The corresponding state or operator as a QuOperator.
+    :rtype: QuOperator
+    """
+    # MPO objects have _W attribute containing tensor list (documented in tenpy.networks.mpo.MPO)
+    # MPS objects have _B attribute containing tensor list (documented in tenpy.networks.mps.MPS)
+    # These are internal attributes that store the actual tensor data for each site
+    # Reference: https://tenpy.readthedocs.io/en/latest/reference/tenpy.networks.mpo.html
+    #           https://tenpy.readthedocs.io/en/latest/reference/tenpy.networks.mps.html
+    is_mpo = hasattr(tenpy_obj, "_W")
+    tenpy_tensors = tenpy_obj._W if is_mpo else tenpy_obj._B
+    nwires = len(tenpy_tensors)
+    if nwires == 0:
+        return quantum_constructor([], [], [])
+
+    nodes = []
+    if is_mpo:
+        original_tensors_obj = tenpy_tensors
+
+        for i, W_obj in enumerate(original_tensors_obj):
+            arr = W_obj.to_ndarray()
+            labels = W_obj.get_leg_labels()
+            wL_idx = labels.index("wL")
+            p_idx = labels.index("p")
+            p_star_idx = labels.index("p*")
+            wR_idx = labels.index("wR")
+
+            arr_reordered = arr.transpose((wL_idx, p_idx, p_star_idx, wR_idx))
+            if nwires == 1:
+                arr_reordered = arr_reordered[[0], :, :, :]
+                arr_reordered = arr_reordered[:, :, :, [-1]]
+            else:
+                if i == 0:
+                    arr_reordered = arr_reordered[[0], :, :, :]
+                elif i == nwires - 1:
+                    arr_reordered = arr_reordered[:, :, :, [-1]]
+
+            node = Node(
+                arr_reordered, name=f"mpo_{i}", axis_names=["wL", "p", "p*", "wR"]
+            )
+            nodes.append(node)
+
+        if nwires > 1:
+            for i in range(nwires - 1):
+                nodes[i][3] ^ nodes[i + 1][0]
+
+        out_edges = [n[2] for n in nodes]
+        in_edges = [n[1] for n in nodes]
+        ignore_edges = [nodes[0][0], nodes[-1][3]]
+    else:  # MPS
+        for i in range(nwires):
+            B_obj = tenpy_obj.get_B(i)
+            arr = B_obj.to_ndarray()
+            labels = B_obj.get_leg_labels()
+            vL_idx = labels.index("vL")
+            p_idx = labels.index("p")
+            vR_idx = labels.index("vR")
+            arr_reordered = arr.transpose((vL_idx, p_idx, vR_idx))
+            node = Node(arr_reordered, name=f"mps_{i}", axis_names=["vL", "p", "vR"])
+            nodes.append(node)
+
+        if nwires > 1:
+            for i in range(nwires - 1):
+                nodes[i][2] ^ nodes[i + 1][0]
+
+        out_edges = [n[1] for n in nodes]
+        in_edges = []
+        ignore_edges = [nodes[0][0], nodes[-1][2]]
+
+    qop = quantum_constructor(out_edges, in_edges, [], ignore_edges)
+
+    return qop
+
+
+def qop2tenpy(qop: QuOperator) -> Any:
+    """
+    Convert TensorCircuit QuOperator to MPO or MPS from TeNPy.
+
+    Requirements: QuOperator must represent valid MPS/MPO structure:
+    - Linear chain topology with open boundaries only
+    - MPS: no input edges, consistent virtual bonds, rank-3 or 4(with empty input edges) tensors
+    - MPO: equal input/output edges, rank-4 tensors
+    - Cyclic boundary conditions NOT supported
+
+    :param qop: The corresponding state/operator as a QuOperator.
+    :type qop: QuOperator
+    :return: MPO or MPS object from the TeNPy package.
+    :rtype: Union[tenpy.networks.mpo.MPO, tenpy.networks.mps.MPS]
+    """
+    try:
+        from tenpy.networks import MPO, MPS, Site
+        from tenpy.linalg import np_conserved as npc
+        from tenpy.linalg import LegCharge
+    except ImportError:
+        raise ImportError("Please install TeNPy package to use this function.")
+
+    sorted_nodes, is_mps, nwires = extract_tensors_from_qop(qop)
+
+    physical_dim = qop.out_edges[0].dimension if is_mps else qop.in_edges[0].dimension
+    sites = [Site(LegCharge.from_trivial(physical_dim), "q") for _ in range(nwires)]
+
+    # MPS Conversion
+    if is_mps:
+        tensors = []
+        for i, node in enumerate(sorted_nodes):
+            tensor = np.asarray(node.tensor)
+            if tensor.ndim == 3:
+                if i == 0:
+                    if tensor.shape[0] > 1:
+                        tensor = tensor[0:1, :, :]
+                elif i == len(sorted_nodes) - 1:
+                    if tensor.shape[2] > 1:
+                        tensor = tensor[:, :, 0:1]
+            tensors.append(
+                npc.Array.from_ndarray(
+                    tensor,
+                    legcharges=[LegCharge.from_trivial(s) for s in tensor.shape],
+                    labels=["vL", "p", "vR"],
+                )
+            )
+
+        SVs = (
+            [np.ones([1])]
+            + [np.ones(tensors[i].get_leg("vR").ind_len) for i in range(nwires - 1)]
+            + [np.ones([1])]
+        )
+        return MPS(sites, tensors, SVs, bc="finite")
+
+    # MPO Conversion
+    raw_tensors = [np.asarray(node.tensor) for node in sorted_nodes]
+
+    if nwires == 1:
+        chi = 1
+        IdL = IdR = 0
+        reconstructed_tensors = raw_tensors
+    else:
+        chi = max(
+            raw_tensors[0].shape[3] if raw_tensors[0].ndim > 3 else 1,
+            raw_tensors[-1].shape[0] if raw_tensors[-1].ndim > 3 else 1,
+        )
+        IdL = 0
+        IdR = chi - 1 if chi > 1 else 0
+
+        reconstructed_tensors = []
+        for i, tensor in enumerate(raw_tensors):
+            if i == 0 and tensor.shape[0] < chi:
+                new_shape = (chi,) + tensor.shape[1:]
+                padded_tensor = np.zeros(new_shape, dtype=tensor.dtype)
+                padded_tensor[IdL, ...] = tensor[0, ...]
+                reconstructed_tensors.append(padded_tensor)
+            elif i == nwires - 1 and len(tensor.shape) > 3 and tensor.shape[3] < chi:
+                new_shape = tensor.shape[:3] + (chi,)
+                padded_tensor = np.zeros(new_shape, dtype=tensor.dtype)
+                padded_tensor[..., IdR] = tensor[..., 0]
+                reconstructed_tensors.append(padded_tensor)
+            else:
+                reconstructed_tensors.append(tensor)
+
+    tenpy_Ws = []
+    for tensor in reconstructed_tensors:
+        labels = ["wL", "wR", "p", "p*"]
+        tensor = np.transpose(tensor, (0, 3, 1, 2))
+        tenpy_Ws.append(
+            npc.Array.from_ndarray(
+                tensor,
+                legcharges=[LegCharge.from_trivial(s) for s in tensor.shape],
+                labels=labels,
+            )
+        )
+
+    return MPO(sites, tenpy_Ws, bc="finite", IdL=IdL, IdR=IdR)
+
+
+def quimb2qop(qb_mpo: Any) -> QuOperator:
+    """
+    Convert MPO in Quimb package to QuOperator.
+
+    :param tn_mpo: MPO in the form of Quimb package
+    :type tn_mpo: ``quimb.tensor.tensor_gen.*``
+    :return: MPO in the form of QuOperator
+    :rtype: QuOperator
+    """
+    qb_mpo = qb_mpo.tensors
+    nwires = len(qb_mpo)
+    assert nwires >= 3, "number of tensors must be larger than 2"
+    mpo = []
+    edges = []
+    for i in range(nwires):
+        mpo.append(Node(qb_mpo[i].data))
+        for j, ind in enumerate(qb_mpo[i].inds):
+            edges.append((i, j, ind))
+
+    out_edges = []
+    in_edges = []
+
+    for i, e1 in enumerate(edges):
+        if e1[2].startswith("k"):
+            out_edges.append(mpo[e1[0]][e1[1]])
+        elif e1[2].startswith("b"):
+            in_edges.append(mpo[e1[0]][e1[1]])
+        else:
+            for j, e2 in enumerate(edges[i + 1 :]):
+                if e2[2] == e1[2]:
+                    connect(mpo[e1[0]][e1[1]], mpo[e2[0]][e2[1]])
+
+    qop = quantum_constructor(
+        out_edges,  # out_edges
+        in_edges,  # in_edges
+        [],
+        [],  # ignore_edges
+    )
+    return qop
+
+
+def qop2quimb(qop: QuOperator) -> Any:
+    """
+    Convert QuOperator to MPO or MPS in Quimb package.
+
+    Requirements: QuOperator must represent valid MPS/MPO structure:
+    - Linear chain topology with open boundaries only
+    - MPS: no input edges, consistent virtual bonds between adjacent tensors
+    - MPO: equal input/output edges, rank-4 tensors
+    - Edge connectivity: each internal node connected to exactly 2 neighbors
+    - Cyclic boundary conditions NOT supported
+
+    :param qop: MPO in the form of QuOperator
+    :type qop: QuOperator
+    :return: MPO in the form of Quimb package
+    :rtype: quimb.tensor.tensor_gen.MatrixProductOperator
+    """
+    try:
+        import quimb.tensor as qtn
+    except ImportError:
+        raise ImportError("Please install Quimb package to use this function.")
+
+    sorted_nodes, is_mps, _ = extract_tensors_from_qop(qop)
+
+    quimb_tensors = []
+    node_map = {node: i for i, node in enumerate(sorted_nodes)}
+
+    for i, node in enumerate(sorted_nodes):
+        tensor_data = node.tensor
+        inds: List[str] = []
+
+        for axis, edge in enumerate(node.edges):
+            if edge in qop.out_edges:
+                site_index = qop.out_edges.index(edge)
+                inds.append(f"k{site_index}")
+            elif edge in qop.in_edges and not is_mps:
+                site_index = qop.in_edges.index(edge)
+                inds.append(f"b{site_index}")
+            elif edge in qop.ignore_edges:
+                if i == 0:
+                    inds.append("_left_dangling")
+                elif i == len(sorted_nodes) - 1:
+                    inds.append("_right_dangling")
+                else:
+                    inds.append(f"_ignore_{i}_{axis}")
+            else:
+                neighbor = edge.node1 if edge.node2 is node else edge.node2
+                if neighbor in node_map:
+                    j = node_map[neighbor]
+                    left, right = min(i, j), max(i, j)
+                    inds.append(f"v{left}_{right}")
+                else:
+                    inds.append(f"_unconnected_{i}_{axis}")
+
+        quimb_tensors.append(qtn.Tensor(tensor_data, inds=inds, tags=f"I{i}"))
+
+    tn = qtn.TensorNetwork(quimb_tensors)
+
+    if is_mps:
+        return tn.as_network(qtn.MatrixProductState)
+    else:
+        return tn.as_network(qtn.MatrixProductOperator)
+
+
+def tn2qop(tn_obj: Any) -> QuOperator:
+    """
+    Convert MPO in TensorNetwork package to QuOperator.
+
+    :param tn_mpo: MPO in the form of TensorNetwork package
+    :type tn_mpo: ``tn.matrixproductstates.mpo.*``
+    :return: MPO in the form of QuOperator
+    :rtype: QuOperator
+    """
+    tn_tensors = tn_obj.tensors
+    nwires = len(tn_tensors)
+
+    if nwires == 0:
+        return quantum_constructor([], [], [])
+
+    is_mps = all(len(t.shape) <= 3 for t in tn_tensors)
+
+    nodes = []
+    for i in range(nwires):
+        nodes.append(Node(tn_tensors[i], name=f"tensor_{i}"))
+
+    if is_mps:
+        for i in range(nwires - 1):
+            connect(nodes[i][-1], nodes[i + 1][0])
+
+        out_edges = []
+        for i, node in enumerate(nodes):
+            if len(node.edges) == 2:
+                physical_edge = next(e for e in node.edges if e.is_dangling())
+                out_edges.append(physical_edge)
+            else:
+                out_edges.append(node[1])
+
+        in_edges = []
+
+        ignore_edges = []
+        left_dangling = next(
+            (e for e in nodes[0].edges if e.is_dangling() and e not in out_edges), None
+        )
+        right_dangling = next(
+            (e for e in nodes[-1].edges if e.is_dangling() and e not in out_edges), None
+        )
+
+        if left_dangling:
+            ignore_edges.append(left_dangling)
+        if right_dangling:
+            ignore_edges.append(right_dangling)
+
+    else:
+        for i in range(nwires - 1):
+            connect(nodes[i][1], nodes[i + 1][0])
+
+        out_edges = [nodes[i][-1] for i in range(nwires)]
+        in_edges = [nodes[i][-2] for i in range(nwires)]
+        ignore_edges = [nodes[0][0], nodes[-1][1]]
+
+    qop = quantum_constructor(
+        out_edges,
+        in_edges,
+        [],
+        ignore_edges,
+    )
+    return qop
+
+
+def qop2tn(qop: QuOperator) -> Any:
+    """
+    Convert QuOperator back to MPO or MPS in TensorNetwork package.
+
+    :param qop: MPO or MPS in the form of QuOperator, param in docstring
+    :return: MPO or MPS in the form of TensorNetwork
+    :rtype: Union[tn.matrixproductstates.MPO, tn.matrixproductstates.MPS]
+    """
+    sorted_nodes, is_mps, _ = extract_tensors_from_qop(qop)
+
+    tensors = [node.tensor for node in sorted_nodes]
+
+    if is_mps:
+        return tn.FiniteMPS(tensors, canonicalize=False)
+    else:
+        return tn.matrixproductstates.mpo.FiniteMPO(tensors)
+
+
+# TODO(@refraction-ray): Z2 analogy or more general analogies for the following u1 functions
+
+
+def u1_inds(n: int, m: int) -> Tensor:
+    """
+    Generate all the combination index of m down spins in n sites.
+
+    .. code-block:: python
+
+        print(u1_inds(5, 1))
+        # [1, 2, 4, 8, 16]
+
+
+    :param n: number of total sites
+    :type n: int
+    :param m: number of down spins (1 in 0, 1)
+    :type m: int
+    :return: index tensor
+    :rtype: Tensor
+    """
+    # m down spins
+    num_combinations = math.comb(n, m)
+    inds = np.zeros([num_combinations], dtype="int64")
+    if m == 0:
+        inds[0] = 0
+        return inds
+    combination = (1 << m) - 1
+
+    for i in range(num_combinations):
+        inds[i] = combination
+
+        # Find the next combination using Gosper's Hack
+        u = combination & -combination
+        v = u + combination
+        combination = v + (((v ^ combination) // u) >> 2)
+    return backend.convert_to_tensor(inds)
+
+
+def u1_mask(n: int, m: int) -> Tensor:
+    """
+    Return the 1d array of size 2**n filled with zero,
+    one only in elements corresponding to the m down spins
+
+    :param n: number of total sites
+    :type n: int
+    :param m: number of down spins (1 in 0, 1)
+    :type m: int
+    :return: _description_
+    :rtype: Tensor
+    """
+    inds = u1_inds(n, m)
+    m = backend.scatter(
+        backend.zeros([2**n]),
+        backend.reshape(inds, [-1, 1]),
+        backend.ones([math.comb(n, m)]),
+    )
+    return m
+
+
+def u1_project(s: Tensor, n: int, m: int) -> Tensor:
+    """
+    Project a state s to the subspace with m down spins in n sites
+
+    :param s: input state of size 2**n
+    :type s: Tensor
+    :param n: number of total sites
+    :type n: int
+    :param m: number of down spins (1 in 0, 1)
+    :type m: int
+    :return: projected state of size C_n^m
+    :rtype: Tensor
+    """
+    return backend.gather1d(s, u1_inds(n, m))
+
+
+def u1_enlarge(s: Tensor, n: int, m: int) -> Tensor:
+    """
+    Enlarge a state s in the subspace with m down spins in n sites to
+    the full Hilbert space wavefunction of size 2**n
+
+    :param s: input state of size C_n^m
+    :type s: Tensor
+    :param n: number of total sites
+    :type n: int
+    :param m: number of down spins (1 in 0, 1)
+    :type m: int
+    :return: enlarged state of size 2**n
+    :rtype: Tensor
+    """
+    inds = u1_inds(n, m)
+    return backend.scatter(backend.zeros([2**n]), backend.reshape(inds, [-1, 1]), s)
+
+
+def heisenberg_hamiltonian(
+    g: Graph,
+    hzz: float = 1.0,
+    hxx: float = 1.0,
+    hyy: float = 1.0,
+    hz: float = 0.0,
+    hx: float = 0.0,
+    hy: float = 0.0,
+    sparse: bool = True,
+    numpy: bool = False,
+) -> Tensor:
+    """
+    Generate Heisenberg Hamiltonian with possible external fields.
+    Currently requires tensorflow installed
+
+    :Example:
+
+    >>> g = tc.templates.graphs.Line1D(6)
+    >>> h = qu.heisenberg_hamiltonian(g, sparse=False)
+    >>> tc.backend.eigh(h)[0][:10]
+    array([-11.2111025,  -8.4721365,  -8.472136 ,  -8.472136 ,  -6.       ,
+            -5.123106 ,  -5.123106 ,  -5.1231055,  -5.1231055,  -5.1231055],
+        dtype=float32)
+
+    :param g: input circuit graph
+    :type g: Graph
+    :param hzz: zz coupling, default is 1.0
+    :type hzz: float
+    :param hxx: xx coupling, default is 1.0
+    :type hxx: float
+    :param hyy: yy coupling, default is 1.0
+    :type hyy: float
+    :param hz: External field on z direction, default is 0.0
+    :type hz: float
+    :param hx: External field on y direction, default is 0.0
+    :type hx: float
+    :param hy: External field on x direction, default is 0.0
+    :type hy: float
+    :param sparse: Whether to return sparse Hamiltonian operator, default is True.
+    :type sparse: bool, defalts True
+    :param numpy: whether return the matrix in numpy or tensorflow form
+    :type numpy: bool, defaults False,
+
+    :return: Hamiltonian measurements
+    :rtype: Tensor
+    """
+    n = len(g.nodes)
+    ls = []
+    weight = []
+    for e in g.edges:
+        if hzz != 0:
+            r = [0 for _ in range(n)]
+            r[e[0]] = 3
+            r[e[1]] = 3
+            ls.append(r)
+            weight.append(hzz)
+        if hxx != 0:
+            r = [0 for _ in range(n)]
+            r[e[0]] = 1
+            r[e[1]] = 1
+            ls.append(r)
+            weight.append(hxx)
+        if hyy != 0:
+            r = [0 for _ in range(n)]
+            r[e[0]] = 2
+            r[e[1]] = 2
+            ls.append(r)
+            weight.append(hyy)
+    for node in g.nodes:
+        if hz != 0:
+            r = [0 for _ in range(n)]
+            r[node] = 3
+            ls.append(r)
+            weight.append(hz)
+        if hx != 0:
+            r = [0 for _ in range(n)]
+            r[node] = 1
+            ls.append(r)
+            weight.append(hx)
+        if hy != 0:
+            r = [0 for _ in range(n)]
+            r[node] = 2
+            ls.append(r)
+            weight.append(hy)
+    ls = num_to_tensor(ls)
+    weight = num_to_tensor(weight)
+    if sparse:
+        r = PauliStringSum2COO_numpy(ls, weight)
+        if numpy:
+            return r
+        return backend.coo_sparse_matrix_from_numpy(r)
+    return PauliStringSum2Dense(ls, weight, numpy=numpy)
+
+
+def PauliStringSum2Dense(
+    ls: Sequence[Sequence[int]],
+    weight: Optional[Sequence[float]] = None,
+    numpy: bool = False,
+) -> Tensor:
+    """
+    Generate dense matrix from Pauli string sum.
+    Currently requires tensorflow installed.
+
+
+    :param ls: 2D Tensor, each row is for a Pauli string,
+        e.g. [1, 0, 0, 3, 2] is for :math:`X_0Z_3Y_4`
+    :type ls: Sequence[Sequence[int]]
+    :param weight: 1D Tensor, each element corresponds the weight for each Pauli string
+        defaults to None (all Pauli strings weight 1.0)
+    :type weight: Optional[Sequence[float]], optional
+    :param numpy: default False. If True, return numpy coo
+        else return backend compatible sparse tensor
+    :type numpy: bool
+    :return: the tensorflow dense matrix
+    :rtype: Tensor
+    """
+    sparsem = PauliStringSum2COO_numpy(ls, weight)
+    if numpy:
+        return sparsem.todense()
+    sparsem = backend.coo_sparse_matrix_from_numpy(sparsem)
+    densem = backend.to_dense(sparsem)
+    return backend.convert_to_tensor(densem)
+
+
+# already implemented as backend method
+#
+# def _tf2numpy_sparse(a: Tensor) -> Tensor:
+#     return get_backend("numpy").coo_sparse_matrix(
+#         indices=a.indices,
+#         values=a.values,
+#         shape=a.get_shape(),
+#     )
+
+# def _numpy2tf_sparse(a: Tensor) -> Tensor:
+#     return get_backend("tensorflow").coo_sparse_matrix(
+#         indices=np.array([a.row, a.col]).T,
+#         values=a.data,
+#         shape=a.shape,
+#     )
+
+
+def PauliStringSum2COO(
+    ls: Sequence[Sequence[int]],
+    weight: Optional[Sequence[float]] = None,
+    numpy: bool = False,
+) -> Tensor:
+    """
+    Generate sparse tensor from Pauli string sum.
+    Currently requires tensorflow installed
+
+    :param ls: 2D Tensor, each row is for a Pauli string,
+        e.g. [1, 0, 0, 3, 2] is for :math:`X_0Z_3Y_4`
+    :type ls: Sequence[Sequence[int]]
+    :param weight: 1D Tensor, each element corresponds the weight for each Pauli string
+        defaults to None (all Pauli strings weight 1.0)
+    :type weight: Optional[Sequence[float]], optional
+    :param numpy: default False. If True, return numpy coo
+        else return backend compatible sparse tensor
+    :type numpy: bool
+    :return: the scipy coo sparse matrix
+    :rtype: Tensor
+    """
+    # numpy version is 3* faster!
+
+    nterms = len(ls)
+    # n = len(ls[0])
+    # s = 0b1 << n
+    if weight is None:
+        weight = [1.0 for _ in range(nterms)]
+    weight = num_to_tensor(weight)
+    ls = num_to_tensor(ls)
+    # rsparse = get_backend("numpy").coo_sparse_matrix(
+    #     indices=np.array([[0, 0]], dtype=np.int64),
+    #     values=np.array([0.0], dtype=getattr(np, dtypestr)),
+    #     shape=(s, s),
+    # )
+    global PauliString2COO_jit
+    if backend.name not in PauliString2COO_jit:
+        PauliString2COO_jit[backend.name] = backend.jit(
+            PauliString2COO, jit_compile=True
+        )
+    rsparses = [
+        backend.numpy(PauliString2COO_jit[backend.name](ls[i], weight[i]))  # type: ignore
+        for i in range(nterms)
+    ]
+    rsparse = _dc_sum(rsparses)
+    # auto transformed into csr format!!
+
+    # for i in range(nterms):
+    #     rsparse += get_backend("tensorflow").numpy(PauliString2COO(ls[i], weight[i]))
+    rsparse = rsparse.tocoo()
+    if numpy:
+        return rsparse
+    return backend.coo_sparse_matrix_from_numpy(rsparse)
+
+
+def _dc_sum(l: List[Any]) -> Any:
+    """
+    For the sparse sum, the speed is determined by the non zero terms,
+    so the DC way to do the sum can indeed bring some speed advantage (several times)
+
+    :param l: _description_
+    :type l: List[Any]
+    :return: _description_
+    :rtype: Any
+    """
+    n = len(l)
+    if n > 2:
+        return _dc_sum(l[: n // 2]) + _dc_sum(l[n // 2 :])
+    else:
+        return sum(l)
+
+
+PauliStringSum2COO_numpy = partial(PauliStringSum2COO, numpy=True)
+
+
+def PauliStringSum2COO_tf(
+    ls: Sequence[Sequence[int]], weight: Optional[Sequence[float]] = None
+) -> Tensor:
+    """
+    Generate tensorflow sparse matrix from Pauli string sum
+    [deprecated]
+
+    :param ls: 2D Tensor, each row is for a Pauli string,
+        e.g. [1, 0, 0, 3, 2] is for :math:`X_0Z_3Y_4`
+    :type ls: Sequence[Sequence[int]]
+    :param weight: 1D Tensor, each element corresponds the weight for each Pauli string
+        defaults to None (all Pauli strings weight 1.0)
+    :type weight: Optional[Sequence[float]], optional
+    :return: the tensorflow coo sparse matrix
+    :rtype: Tensor
+    """
+    import tensorflow as tf
+
+    nterms = len(ls)
+    n = len(ls[0])
+    s = 0b1 << n
+    if weight is None:
+        weight = [1.0 for _ in range(nterms)]
+    if not (isinstance(weight, tf.Tensor) or isinstance(weight, tf.Variable)):
+        weight = tf.constant(weight, dtype=getattr(tf, dtypestr))
+    rsparse = tf.SparseTensor(
+        indices=tf.constant([[0, 0]], dtype=tf.int64),
+        values=tf.constant([0.0], dtype=weight.dtype),  # type: ignore
+        dense_shape=(s, s),
+    )
+    for i in range(nterms):
+        rsparse = tf.sparse.add(rsparse, PauliString2COO(ls[i], weight[i]))  # type: ignore
+        # very slow sparse.add?
+    return rsparse
+
+
+def PauliString2COO(l: Sequence[int], weight: Optional[float] = None) -> Tensor:
+    """
+    Generate sparse matrix from Pauli string sum
+
+    :param l: 1D Tensor representing for a Pauli string,
+        e.g. [1, 0, 0, 3, 2] is for :math:`X_0Z_3Y_4`
+    :type l: Sequence[int]
+    :param weight: the weight for the Pauli string
+        defaults to None (all Pauli strings weight 1.0)
+    :type weight: Optional[float], optional
+    :return: the tensorflow sparse matrix
+    :rtype: Tensor
+    """
+    n = len(l)
+    l = num_to_tensor(l, dtype="int64")
+    # l = backend.cast(l, dtype="int64")
+    one = num_to_tensor(0b1, dtype="int64")
+    idx_x = num_to_tensor(0b0, dtype="int64")
+    idx_y = num_to_tensor(0b0, dtype="int64")
+    idx_z = num_to_tensor(0b0, dtype="int64")
+    i = num_to_tensor(0, dtype="int64")
+    # for j in l:
+    for j in range(n):
+        oh = backend.onehot(l[j], 4)
+        s = backend.left_shift(one, n - i - 1)
+        oh = backend.cast(oh, dtype="int64")
+        idx_x += oh[1] * s
+        idx_y += oh[2] * s
+        idx_z += oh[3] * s
+
+        # if j == 1:  # xi
+        #     idx_x += backend.left_shift(one, n - i - 1)
+        # elif j == 2:  # yi
+        #     idx_y += backend.left_shift(one, n - i - 1)
+        # elif j == 3:  # zi
+        #     idx_z += backend.left_shift(one, n - i - 1)
+        i += 1
+
+    if weight is None:
+        weight = num_to_tensor(1.0, dtype="complex64")
+    return ps2coo_core(idx_x, idx_y, idx_z, weight, n)
+
+
+PauliString2COO_jit = {"numpy": PauliString2COO}
+
+
+def ps2coo_core(
+    idx_x: Tensor, idx_y: Tensor, idx_z: Tensor, weight: Tensor, nqubits: int
+) -> Tuple[Tensor, Tensor]:
+    s = 0b1 << nqubits
+    idx1 = num_to_tensor(backend.arange(s), dtype="int64")
+    idx2 = (idx1 ^ idx_x) ^ (idx_y)
+    indices = backend.transpose(backend.stack([idx1, idx2]))
+    tmp = idx1 & (idx_y | idx_z)
+    e = idx1 * 0
+    ny = 0
+    for i in range(nqubits):
+        # if tmp[i] is power of 2 (non zero), then e[i] = 1
+        e ^= backend.right_shift(tmp, i) & 0b1
+        # how many 1 contained in idx_y
+        ny += backend.right_shift(idx_y, i) & 0b1
+    ny = backend.mod(ny, 4)
+    values = (
+        num_to_tensor(1 - 2 * e)
+        * ((num_to_tensor(-1.0j) ** num_to_tensor(ny)))
+        * weight
+    )
+    return backend.coo_sparse_matrix(indices=indices, values=values, shape=(s, s))  # type: ignore
+
+
+# some quantum quatities below
+
+
+def op2tensor(
+    fn: Callable[..., Any], op_argnums: Union[int, Sequence[int]] = 0
+) -> Callable[..., Any]:
+    from .interfaces.tensortrans import args_to_tensor
+
+    return args_to_tensor(fn, op_argnums, qop_to_tensor=True, cast_dtype=False)
+
+
+# def op2tensor(
+#     fn: Callable[..., Any], op_argnums: Union[int, Sequence[int]] = 0
+# ) -> Callable[..., Any]:
+#     if isinstance(op_argnums, int):
+#         op_argnums = [op_argnums]
+
+#     @wraps(fn)
+#     def wrapper(*args: Any, **kwargs: Any) -> Any:
+#         nargs = list(args)
+#         for i in op_argnums:  # type: ignore
+#             if isinstance(args[i], QuOperator):
+#                 nargs[i] = args[i].copy().eval_matrix()
+#         out = fn(*nargs, **kwargs)
+#         return out
+
+#     return wrapper
+
+
+@op2tensor
+def entropy(rho: Union[Tensor, QuOperator], eps: Optional[float] = None) -> Tensor:
+    """
+    Compute the entropy from the given density matrix ``rho``.
+
+    :Example:
+
+    .. code-block:: python
+
+        @partial(tc.backend.jit, jit_compile=False, static_argnums=(1, 2))
+        def entanglement1(param, n, nlayers):
+            c = tc.Circuit(n)
+            c = tc.templates.blocks.example_block(c, param, nlayers)
+            w = c.wavefunction()
+            rm = qu.reduced_density_matrix(w, int(n / 2))
+            return qu.entropy(rm)
+
+        @partial(tc.backend.jit, jit_compile=False, static_argnums=(1, 2))
+        def entanglement2(param, n, nlayers):
+            c = tc.Circuit(n)
+            c = tc.templates.blocks.example_block(c, param, nlayers)
+            w = c.get_quvector()
+            rm = w.reduced_density([i for i in range(int(n / 2))])
+            return qu.entropy(rm)
+
+    >>> param = tc.backend.ones([6, 6])
+    >>> tc.backend.trace(param)
+    >>> entanglement1(param, 6, 3)
+    1.3132654
+    >>> entanglement2(param, 6, 3)
+    1.3132653
+
+    :param rho: The density matrix in form of Tensor or QuOperator.
+    :type rho: Union[Tensor, QuOperator]
+    :param eps: Epsilon, default is 1e-12.
+    :type eps: float
+    :return: Entropy on the given density matrix.
+    :rtype: Tensor
+    """
+    eps_env = os.environ.get("TC_QUANTUM_ENTROPY_EPS")
+    if eps is None and eps_env is None:
+        eps = 1e-12
+    elif eps is None and eps_env is not None:
+        eps = 10 ** (-int(eps_env))
+    rho += eps * backend.cast(backend.eye(rho.shape[-1]), rho.dtype)  # type: ignore
+    lbd = backend.real(backend.eigh(rho)[0])
+    lbd = backend.relu(lbd)
+    lbd /= backend.sum(lbd)
+    # we need the matrix anyway for AD.
+    entropy = -backend.sum(lbd * backend.log(lbd + eps))
+    return backend.real(entropy)
+
+
+def trace_product(*o: Union[Tensor, QuOperator]) -> Tensor:
+    """
+    Compute the trace of several inputs ``o`` as tensor or ``QuOperator``.
+
+    .. math ::
+
+        \\operatorname{Tr}(\\prod_i O_i)
+
+    :Example:
+
+    >>> o = np.ones([2, 2])
+    >>> h = np.eye(2)
+    >>> qu.trace_product(o, h)
+    2.0
+    >>> oq = qu.QuOperator.from_tensor(o)
+    >>> hq = qu.QuOperator.from_tensor(h)
+    >>> qu.trace_product(oq, hq)
+    array([[2.]])
+    >>> qu.trace_product(oq, h)
+    array([[2.]])
+    >>> qu.trace_product(o, hq)
+    array([[2.]])
+
+    :return: The trace of several inputs.
+    :rtype: Tensor
+    """
+    prod = reduce(matmul, o)
+    if isinstance(prod, QuOperator):
+        return prod.trace().eval_matrix()
+    return backend.trace(prod)
+
+
+@op2tensor
+def entanglement_entropy(state: Tensor, cut: Union[int, List[int]]) -> Tensor:
+    rho = reduced_density_matrix(state, cut)
+    return entropy(rho)
+
+
+def reduced_wavefunction(
+    state: Tensor,
+    cut: List[int],
+    measure: Optional[List[int]] = None,
+    d: Optional[int] = None,
+) -> Tensor:
+    """
+    Compute the reduced wavefunction from the quantum state ``state``.
+    The fixed measure result is guaranteed by users,
+    otherwise final normalization may required in the return
+
+    :param state: _description_
+    :type state: Tensor
+    :param cut: the list of position for qubit to be reduced
+    :type cut: List[int]
+    :param measure: the fixed results of given qubits in the same shape list as ``cut``
+    :type measure: List[int]
+    :return: _description_
+    :rtype: Tensor
+    :param d: dimension of qudit system
+    :type d: int
+    """
+    d = 2 if d is None else d
+    if measure is None:
+        measure = [0 for _ in cut]
+    s = backend.reshaped(state, d)
+    n = len(backend.shape_tuple(s))
+    s_node = Gate(s)
+    end_nodes = []
+    for c, m in zip(cut, measure):
+        oh = backend.cast(
+            backend.one_hot(backend.cast(backend.convert_to_tensor(m), "int32"), d),
+            dtypestr,
+        )
+        end_node = Gate(backend.convert_to_tensor(oh))
+        end_nodes.append(end_node)
+        s_node[c] ^ end_node[0]
+    new_node = contractor(
+        [s_node] + end_nodes,
+        output_edge_order=[s_node[i] for i in range(n) if i not in cut],
+    )
+    return backend.reshape(new_node.tensor, [-1])
+
+
+def reduced_density_matrix(
+    state: Union[Tensor, QuOperator],
+    cut: Union[int, List[int]],
+    p: Optional[Tensor] = None,
+    normalize: bool = True,
+    d: Optional[int] = None,
+) -> Union[Tensor, QuOperator]:
+    r"""
+    Compute the reduced density matrix from the quantum state ``state``.
+
+    :param state: The quantum state in form of Tensor or QuOperator.
+    :type state: Union[Tensor, QuOperator]
+    :param cut: the index list that is traced out, if cut is a int,
+        it indicates [0, cut] as the traced out region
+    :type cut: Union[int, List[int]]
+    :param p: probability decoration, default is None.
+    :type p: Optional[Tensor]
+    :return: The reduced density matrix.
+    :rtype: Union[Tensor, QuOperator]
+    :param normalize: if True, returns a trace 1 density matrix. Otherwise does not normalize.
+    :type normalize: bool
+    :param d: dimension of qudit system
+    :type d: int
+    """
+    d = 2 if d is None else d
+    if isinstance(cut, list) or isinstance(cut, tuple) or isinstance(cut, set):
+        traceout = list(cut)
+    else:
+        traceout = [i for i in range(cut)]
+    if isinstance(state, QuOperator):
+        if p is not None:
+            raise NotImplementedError(
+                "p arguments is not supported when state is a `QuOperator`"
+            )
+        return state.partial_trace(traceout)
+    if len(state.shape) == 2 and state.shape[0] == state.shape[1]:
+        # density operator
+        freedom = _infer_num_sites(state.shape[0], d)
+        # freedomexp = backend.sizen(state)
+        # # traceout = sorted(traceout)[::-1]
+        # freedom = int(np.log2(freedomexp) / 2)
+        # # traceout2 = [i + freedom for i in traceout]
+        left = traceout + [i for i in range(freedom) if i not in traceout]
+        right = [i + freedom for i in left]
+
+        rho = backend.reshape(state, [d] * (2 * freedom))
+        rho = backend.transpose(rho, perm=left + right)
+        rho = backend.reshape(
+            rho,
+            [
+                d ** len(traceout),
+                d ** (freedom - len(traceout)),
+                d ** len(traceout),
+                d ** (freedom - len(traceout)),
+            ],
+        )
+        if p is None:
+            # for i, (tr, tr2) in enumerate(zip(traceout, traceout2)):
+            #     rho = backend.trace(rho, axis1=tr, axis2=tr2 - i)
+            # correct but tf trace fail to support so much dimension with tf.einsum
+
+            rho = backend.trace(rho, axis1=0, axis2=2)
+        else:
+            p = backend.reshape(p, [-1])
+            rho = backend.einsum("a,aiaj->ij", p, rho)
+        rho = backend.reshape(
+            rho, [d ** (freedom - len(traceout)), d ** (freedom - len(traceout))]
+        )
+        if normalize:
+            rho /= backend.trace(rho)
+
+    else:
+        w = state / backend.norm(state)
+        size = int(backend.sizen(state))  # total number of elements
+        freedom = _infer_num_sites(size, d)
+        # freedomexp = backend.sizen(state)
+        # freedom = int(np.log(freedomexp) / np.log(2))
+        perm = [i for i in range(freedom) if i not in traceout]
+        perm = perm + traceout
+        w = backend.reshape(w, [d for _ in range(freedom)])
+        w = backend.transpose(w, perm=perm)
+        w = backend.reshape(w, [-1, d ** len(traceout)])
+        if p is None:
+            rho = w @ backend.adjoint(w)
+        else:
+            rho = w @ backend.diagflat(p) @ backend.adjoint(w)
+            if normalize:
+                rho /= backend.trace(rho)
+
+    return rho
+
+
+def free_energy(
+    rho: Union[Tensor, QuOperator],
+    h: Union[Tensor, QuOperator],
+    beta: float = 1,
+    eps: float = 1e-12,
+) -> Tensor:
+    """
+    Compute the free energy of the given density matrix.
+
+    :Example:
+
+    >>> rho = np.array([[1.0, 0], [0, 0]])
+    >>> h = np.array([[-1.0, 0], [0, 1]])
+    >>> qu.free_energy(rho, h, 0.5)
+    -0.9999999999979998
+    >>> hq = qu.QuOperator.from_tensor(h)
+    >>> qu.free_energy(rho, hq, 0.5)
+    array([[-1.]])
+
+    :param rho: The density matrix in form of Tensor or QuOperator.
+    :type rho: Union[Tensor, QuOperator]
+    :param h: Hamiltonian operator in form of Tensor or QuOperator.
+    :type h: Union[Tensor, QuOperator]
+    :param beta: Constant for the optimization, default is 1.
+    :type beta: float, optional
+    :param eps: Epsilon, default is 1e-12.
+    :type eps: float, optional
+
+    :return: The free energy of the given density matrix with the Hamiltonian operator.
+    :rtype: Tensor
+    """
+    energy = backend.real(trace_product(rho, h))
+    s = entropy(rho, eps)
+    return backend.real(energy - s / beta)
+
+
+def renyi_entropy(rho: Union[Tensor, QuOperator], k: int = 2) -> Tensor:
+    """
+    Compute the Rényi entropy of order :math:`k` by given density matrix.
+
+    :param rho: The density matrix in form of Tensor or QuOperator.
+    :type rho: Union[Tensor, QuOperator]
+    :param k: The order of Rényi entropy, default is 2.
+    :type k: int, optional
+    :return: The :math:`k` th order of Rényi entropy.
+    :rtype: Tensor
+    """
+    s = 1 / (1 - k) * backend.real(backend.log(trace_product(*[rho for _ in range(k)])))
+    return s
+
+
+def renyi_free_energy(
+    rho: Union[Tensor, QuOperator],
+    h: Union[Tensor, QuOperator],
+    beta: float = 1,
+    k: int = 2,
+) -> Tensor:
+    """
+    Compute the Rényi free energy of the corresponding density matrix and Hamiltonian.
+
+    :Example:
+
+    >>> rho = np.array([[1.0, 0], [0, 0]])
+    >>> h = np.array([[-1.0, 0], [0, 1]])
+    >>> qu.renyi_free_energy(rho, h, 0.5)
+    -1.0
+    >>> qu.free_energy(rho, h, 0.5)
+    -0.9999999999979998
+
+    :param rho: The density matrix in form of Tensor or QuOperator.
+    :type rho: Union[Tensor, QuOperator]
+    :param h: Hamiltonian operator in form of Tensor or QuOperator.
+    :type h: Union[Tensor, QuOperator]
+    :param beta: Constant for the optimization, default is 1.
+    :type beta: float, optional
+    :param k: The order of Rényi entropy, default is 2.
+    :type k: int, optional
+    :return: The :math:`k` th order of Rényi entropy.
+    :rtype: Tensor
+    """
+    energy = backend.real(trace_product(rho, h))
+    s = renyi_entropy(rho, k)
+    return backend.real(energy - s / beta)
+
+
+def taylorlnm(x: Tensor, k: int) -> Tensor:
+    """
+    Taylor expansion of :math:`ln(x+1)`.
+
+    :param x: The density matrix in form of Tensor.
+    :type x: Tensor
+    :param k: The :math:`k` th order, default is 2.
+    :type k: int, optional
+    :return: The :math:`k` th order of Taylor expansion of :math:`ln(x+1)`.
+    :rtype: Tensor
+    """
+    dtype = x.dtype
+    s = x.shape[-1]
+    y = 1 / k * (-1) ** (k + 1) * backend.eye(s, dtype=dtype)
+    for i in reversed(range(k)):
+        y = y @ x
+        if i > 0:
+            y += 1 / (i) * (-1) ** (i + 1) * backend.eye(s, dtype=dtype)
+    return y
+
+
+def truncated_free_energy(
+    rho: Tensor, h: Tensor, beta: float = 1, k: int = 2
+) -> Tensor:
+    """
+    Compute the truncated free energy from the given density matrix ``rho``.
+
+    :param rho: The density matrix in form of Tensor.
+    :type rho: Tensor
+    :param h: Hamiltonian operator in form of Tensor.
+    :type h: Tensor
+    :param beta: Constant for the optimization, default is 1.
+    :type beta: float, optional
+    :param k: The :math:`k` th order, defaults to 2
+    :type k: int, optional
+    :return: The :math:`k` th order of the truncated free energy.
+    :rtype: Tensor
+    """
+    dtype = rho.dtype
+    s = rho.shape[-1]
+    tyexpand = rho @ taylorlnm(rho - backend.eye(s, dtype=dtype), k - 1)
+    renyi = -backend.real(backend.trace(tyexpand))
+    energy = backend.real(trace_product(rho, h))
+    return energy - renyi / beta
+
+
+@op2tensor
+def partial_transpose(
+    rho: Tensor, transposed_sites: List[int], d: Optional[int] = None
+) -> Tensor:
+    """
+    _summary_
+
+    :param rho: density matrix
+    :type rho: Tensor
+    :param transposed_sites: sites int list to be transposed
+    :type transposed_sites: List[int]
+    :param d: dimension of qudit system
+    :type d: int
+    :return: _description_
+    :rtype: Tensor
+    """
+    d = 2 if d is None else d
+    rho = backend.reshaped(rho, d)
+    rho_node = Gate(rho)
+    n = len(rho.shape) // 2
+    left_edges = []
+    right_edges = []
+    for i in range(n):
+        if i not in transposed_sites:
+            left_edges.append(rho_node[i])
+            right_edges.append(rho_node[i + n])
+        else:
+            left_edges.append(rho_node[i + n])
+            right_edges.append(rho_node[i])
+    rhot_op = QuOperator(out_edges=left_edges, in_edges=right_edges)
+    rhot = rhot_op.eval_matrix()
+    return rhot
+
+
+@op2tensor
+def entanglement_negativity(
+    rho: Tensor, transposed_sites: List[int], d: Optional[int] = None
+) -> Tensor:
+    """
+    _summary_
+
+    :param rho: _description_
+    :type rho: Tensor
+    :param transposed_sites: _description_
+    :type transposed_sites: List[int]
+    :param d: dimension of qudit system
+    :type d: int
+    :return: _description_
+    :rtype: Tensor
+    """
+    rhot = partial_transpose(rho, transposed_sites)
+    es = backend.eigvalsh(rhot)
+    rhot_m = backend.sum(backend.abs(es))
+    return (rhot_m - 1.0) / 2.0
+
+
+@op2tensor
+def log_negativity(
+    rho: Tensor, transposed_sites: List[int], base: str = "e", d: Optional[int] = None
+) -> Tensor:
+    """
+    _summary_
+
+    :param rho: _description_
+    :type rho: Tensor
+    :param transposed_sites: _description_
+    :type transposed_sites: List[int]
+    :param base: whether use 2 based log or e based log, defaults to "e"
+    :type base: str, optional
+    :param d: dimension of qudit system
+    :type d: int
+    :return: _description_
+    :rtype: Tensor
+    """
+    d = 2 if d is None else d
+    rhot = partial_transpose(rho, transposed_sites, d)
+    es = backend.eigvalsh(rhot)
+    rhot_m = backend.sum(backend.abs(es))
+    een = backend.log(rhot_m)
+    if base in ["2", 2]:
+        return een / backend.cast(backend.log(2.0), rdtypestr)
+    return een
+
+
+@partial(op2tensor, op_argnums=(0, 1))
+def trace_distance(rho: Tensor, rho0: Tensor, eps: float = 1e-12) -> Tensor:
+    """
+    Compute the trace distance between two density matrix ``rho`` and ``rho2``.
+
+    :param rho: The density matrix in form of Tensor.
+    :type rho: Tensor
+    :param rho0: The density matrix in form of Tensor.
+    :type rho0: Tensor
+    :param eps: Epsilon, defaults to 1e-12
+    :type eps: float, optional
+    :return: The trace distance between two density matrix ``rho`` and ``rho2``.
+    :rtype: Tensor
+    """
+    d2 = rho - rho0
+    d2 = backend.adjoint(d2) @ d2
+    lbds = backend.real(backend.eigh(d2)[0])
+    lbds = backend.relu(lbds)
+    return 0.5 * backend.sum(backend.sqrt(lbds + eps))
+
+
+@partial(op2tensor, op_argnums=(0, 1))
+def fidelity(rho: Tensor, rho0: Tensor) -> Tensor:
+    """
+    Return fidelity scalar between two states rho and rho0.
+
+    .. math::
+
+        \\operatorname{Tr}(\\sqrt{\\sqrt{rho} rho_0 \\sqrt{rho}})
+
+    :param rho: The density matrix in form of Tensor.
+    :type rho: Tensor
+    :param rho0: The density matrix in form of Tensor.
+    :type rho0: Tensor
+    :return: The sqrtm of a Hermitian matrix ``a``.
+    :rtype: Tensor
+    """
+    rhosqrt = backend.sqrtmh(rho)
+    return backend.real(backend.trace(backend.sqrtmh(rhosqrt @ rho0 @ rhosqrt)) ** 2)
+
+
+@op2tensor
+def gibbs_state(h: Tensor, beta: float = 1) -> Tensor:
+    """
+    Compute the Gibbs state of the given Hamiltonian operator ``h``.
+
+    :param h: Hamiltonian operator in form of Tensor.
+    :type h: Tensor
+    :param beta: Constant for the optimization, default is 1.
+    :type beta: float, optional
+    :return: The Gibbs state of ``h`` with the given ``beta``.
+    :rtype: Tensor
+    """
+    rho = backend.expm(-beta * h)
+    rho /= backend.trace(rho)
+    return rho
+
+
+@op2tensor
+def double_state(h: Tensor, beta: float = 1) -> Tensor:
+    """
+    Compute the double state of the given Hamiltonian operator ``h``.
+
+    :param h: Hamiltonian operator in form of Tensor.
+    :type h: Tensor
+    :param beta: Constant for the optimization, default is 1.
+    :type beta: float, optional
+    :return: The double state of ``h`` with the given ``beta``.
+    :rtype: Tensor
+    """
+    rho = backend.expm(-beta / 2 * h)
+    state = backend.reshape(rho, [-1])
+    norm = backend.norm(state)
+    return state / norm
+
+
+@op2tensor
+def mutual_information(
+    s: Tensor, cut: Union[int, List[int]], d: Optional[int] = None
+) -> Tensor:
+    """
+    Mutual information between AB subsystem described by ``cut``.
+
+    :param s: The density matrix in form of Tensor.
+    :type s: Tensor
+    :param cut: The AB subsystem.
+    :type cut: Union[int, List[int]]
+    :param d: The diagonal matrix in form of Tensor.
+    :type d: Tensor
+    :return: The mutual information between AB subsystem described by ``cut``.
+    :rtype: Tensor
+    """
+    d = 2 if d is None else d
+    if isinstance(cut, list) or isinstance(cut, tuple) or isinstance(cut, set):
+        traceout = list(cut)
+    else:
+        traceout = [i for i in range(cut)]
+
+    if len(s.shape) == 2 and s.shape[0] == s.shape[1]:
+        # mixed state
+        n = _infer_num_sites(s.shape[0], d=d)
+        hab = entropy(s)
+
+        # subsystem a
+        rhoa = reduced_density_matrix(s, traceout, d=d)
+        ha = entropy(rhoa)
+
+        # need subsystem b as well
+        other = tuple(i for i in range(n) if i not in traceout)
+        rhob = reduced_density_matrix(s, other, d=d)  # type: ignore
+        hb = entropy(rhob)
+
+    # pure system
+    else:
+        hab = 0.0
+        rhoa = reduced_density_matrix(s, traceout, d=d)
+        ha = hb = entropy(rhoa)
+
+    return ha + hb - hab
+
+
+# measurement results and transformations and correlations below
+
+
+def count_s2d(srepr: Tuple[Tensor, Tensor], n: int, d: Optional[int] = None) -> Tensor:
+    """
+    measurement shots results, sparse tuple representation to dense representation
+    count_vector to count_tuple
+
+    :param srepr: [description]
+    :type srepr: Tuple[Tensor, Tensor]
+    :param n: number of qubits
+    :type n: int
+    :param d: [description], defaults to None
+    :type d: int, optional
+    :return: [description]
+    :rtype: Tensor
+    """
+    d = 2 if d is None else d
+    return backend.scatter(
+        backend.cast(backend.zeros([d**n]), srepr[1].dtype),
+        backend.reshape(srepr[0], [-1, 1]),
+        srepr[1],
+    )
+
+
+counts_v2t = count_s2d
+
+
+def count_d2s(drepr: Tensor, eps: float = 1e-7) -> Tuple[Tensor, Tensor]:
+    """
+    measurement shots results, dense representation to sparse tuple representation
+    non-jittable due to the non fixed return shape
+    count_tuple to count_vector
+
+    :Example:
+
+    >>> tc.quantum.counts_d2s(np.array([0.1, 0, -0.3, 0.2]))
+    (array([0, 2, 3]), array([ 0.1, -0.3,  0.2]))
+
+    :param drepr: [description]
+    :type drepr: Tensor
+    :param eps: cutoff to determine nonzero elements, defaults to 1e-7
+    :type eps: float, optional
+    :return: [description]
+    :rtype: Tuple[Tensor, Tensor]
+    """
+    # unjittable since the return shape is not fixed
+    # tf.boolean_mask is better but no jax counterpart
+    xl = []
+    cl = []
+    for i, j in enumerate(drepr):
+        if backend.abs(j) > eps:
+            xl.append(i)
+            cl.append(j)
+    xl = backend.convert_to_tensor(xl)
+    cl = backend.stack(cl)
+    return xl, cl
+
+
+count_t2v = count_d2s
+
+
+def sample_int2bin(sample: Tensor, n: int, d: Optional[int] = None) -> Tensor:
+    """
+    Convert linear-index samples to per-site digits (base-d).
+
+    :param sample: shape [trials], integers in [0, d**n)
+    :type sample: Tensor
+    :param n: number of sites
+    :type n: int
+    :param d: local dimension, defaults to 2
+    :type d: int, optional
+    :return: shape [trials, n], entries in [0, d-1]
+    :rtype: Tensor
+    """
+    d = 2 if d is None else d
+    if d == 2:
+        return backend.mod(
+            backend.right_shift(sample[..., None], backend.reverse(backend.arange(n))),
+            2,
+        )
+    else:
+        pos = backend.reverse(backend.arange(n))
+        base = backend.power(d, pos)
+        digits = backend.mod(
+            backend.floor(backend.divide(sample[..., None], base)),  # ⌊sample / d**pos⌋
+            d,
+        )
+        return backend.cast(digits, "int32")
+
+
+def sample_bin2int(sample: Tensor, n: int, d: Optional[int] = None) -> Tensor:
+    """
+    bin sample to int sample
+
+    :param sample: in shape [trials, n] of elements (0, 1)
+    :type sample: Tensor
+    :param n: number of qubits
+    :type n: int
+    :return: in shape [trials]
+    :rtype: Tensor
+    """
+    d = 2 if d is None else d
+    power = backend.convert_to_tensor([d**j for j in reversed(range(n))])
+    return backend.sum(sample * power, axis=-1)
+
+
+def sample2count(
+    sample: Tensor,
+    n: int,
+    jittable: bool = True,
+    d: Optional[int] = None,
+) -> Tuple[Tensor, Tensor]:
+    """
+    sample_int to count_tuple (indices, counts), size = d**n
+
+    :param sample: linear-index samples, shape [shots]
+    :param n: number of sites
+    :param jittable: whether to return fixed-size outputs (backend dependent)
+    :param d: local dimension per site, default 2 (qubit)
+    :return: (unique_indices, counts)
+    """
+    d = 2 if d is None else d
+    size = d**n
+    if not jittable:
+        results = backend.unique_with_counts(sample)  # non-jittable
+    else:  # jax specified / fixed-size
+        results = backend.unique_with_counts(sample, size=size, fill_value=-1)
+    return results
+
+
+def count_vector2dict(
+    count: Tensor, n: int, key: str = "bin", d: Optional[int] = None
+) -> Dict[Any, int]:
+    """
+    Convert count_vector to count_dict_bin or count_dict_int.
+    For d>10 cases, a base-d string (0-9A-Z) is used.
+
+    :param count: tensor in shape [d**n]
+    :type count: Tensor
+    :param n: number of sites
+    :type n: int
+    :param key: can be "int" or "bin", defaults to "bin"
+    :type key: str, optional
+    :param d: local dimension (default 2)
+    :type d: int, optional
+    :return: mapping from configuration to count
+    :rtype: Dict[Any, int]
+    """
+    from .interfaces import which_backend
+
+    d = 2 if d is None else d
+    b = which_backend(count)
+    size = d**n
+
+    out_int = {i: b.numpy(count[i]).item() for i in range(size)}
+
+    if key == "int":
+        return out_int
+    else:
+        out_str = {}
+        for k, v in out_int.items():
+            kn = np.base_repr(k, base=d).zfill(n)
+            out_str[kn] = v
+        return out_str
+
+
+def count_tuple2dict(
+    count: Tuple[Tensor, Tensor], n: int, key: str = "bin", d: Optional[int] = None
+) -> Dict[Any, int]:
+    """
+    count_tuple to count_dict_bin or count_dict_int
+
+    :param count: count_tuple format (indices, counts)
+    :type count: Tuple[Tensor, Tensor]
+    :param n: number of sites (qubits or qudits)
+    :type n: int
+    :param key: can be "int" or "bin", defaults to "bin"
+    :type key: str, optional
+    :param d: local dimension, defaults to 2
+    :type d: int, optional
+    :return: count_dict
+    :rtype: Dict[Any, int]
+    """
+    d = 2 if d is None else d
+
+    out_int = {
+        backend.numpy(i).item(): backend.numpy(j).item()
+        for i, j in zip(count[0], count[1])
+        if i >= 0
+    }
+
+    if key == "int":
+        return out_int
+    else:
+        out_str = {}
+        for k, v in out_int.items():
+            kn = np.base_repr(k, base=d).zfill(n)
+            out_str[kn] = v
+        return out_str
+
+
+@partial(arg_alias, alias_dict={"counts": ["shots"], "format": ["format_"]})
+def measurement_counts(
+    state: Tensor,
+    counts: Optional[int] = 8192,
+    format: str = "count_vector",
+    is_prob: bool = False,
+    random_generator: Optional[Any] = None,
+    status: Optional[Tensor] = None,
+    jittable: bool = False,
+    d: Optional[int] = None,
+) -> Any:
+    """
+    Simulate the measuring of each qubit of ``p`` in the computational basis,
+    thus producing output like that of ``qiskit``.
+
+    Six formats of measurement counts results:
+
+    "sample_int": # np.array([0, 0])
+
+    "sample_bin": # [np.array([1, 0]), np.array([1, 0])]
+
+    "count_vector": # np.array([2, 0, 0, 0])
+
+    "count_tuple": # (np.array([0]), np.array([2]))
+
+    "count_dict_bin": # {"00": 2, "01": 0, "10": 0, "11": 0}
+    / for cases d\in [10, 36], "10" -> "A", ..., "35" -> "Z"
+
+    "count_dict_int": # {0: 2, 1: 0, 2: 0, 3: 0}
+
+    :Example:
+
+    >>> n = 4
+    >>> w = tc.backend.ones([2**n])
+    >>> tc.quantum.measurement_results(w, counts=3, format="sample_bin", jittable=True)
+    array([[0, 0, 1, 0],
+        [0, 1, 1, 0],
+        [0, 1, 1, 1]])
+    >>> tc.quantum.measurement_results(w, counts=3, format="sample_int", jittable=True)
+    array([ 7, 15, 11])
+    >>> tc.quantum.measurement_results(w, counts=3, format="count_vector", jittable=True)
+    array([0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1])
+    >>> tc.quantum.measurement_results(w, counts=3, format="count_tuple")
+    (array([1, 2, 8]), array([1, 1, 1]))
+    >>> tc.quantum.measurement_results(w, counts=3, format="count_dict_bin")
+    {'0001': 1, '0011': 1, '1101': 1}
+    >>> tc.quantum.measurement_results(w, counts=3, format="count_dict_int")
+    {3: 1, 6: 2}
+
+    :param state: The quantum state, assumed to be normalized, as either a ket or density operator.
+    :type state: Tensor
+    :param counts: The number of counts to perform.
+    :type counts: int
+    :param format: defaults to be "direct", see supported format above
+    :type format: str
+    :param is_prob: if True, the `state` is directly regarded as a probability list,
+        defaults to be False
+    :type is_prob: bool
+    :param random_generator: random_generator, defaults to None
+    :type random_generator: Optional[Any]
+    :param status: external randomness given by tensor uniformly from [0, 1],
+        if set, can overwrite random_generator
+    :type status: Optional[Tensor]
+    :param jittable: if True, jax backend try using a jittable count, defaults to False
+    :type jittable: bool
+    :return: The counts for each bit string measured.
+    :rtype: Tuple[]
+    """
+    if is_prob:
+        pi = state / backend.sum(state)
+    else:
+        if len(state.shape) == 2:
+            state /= backend.trace(state)
+            pi = backend.abs(backend.diagonal(state))
+        else:
+            state /= backend.norm(state)
+            pi = backend.real(backend.conj(state) * state)
+        pi = backend.reshape(pi, [-1])
+
+    local_d = 2 if d is None else d
+    total_dim = int(backend.shape_tuple(pi)[0])
+    n = _infer_num_sites(total_dim, local_d)
+
+    if (counts is None) or counts <= 0:
+        if format == "count_vector":
+            return pi
+        elif format == "count_tuple":
+            return count_d2s(pi)
+        elif format == "count_dict_bin":
+            return count_vector2dict(pi, n, key="bin", d=local_d)
+        elif format == "count_dict_int":
+            return count_vector2dict(pi, n, key="int", d=local_d)
+        else:
+            raise ValueError(f"unsupported format {format} for analytical measurement")
+    else:
+        raw_counts = backend.probability_sample(
+            counts, pi, status=status, g=random_generator
+        )
+        # if random_generator is None:
+        # raw_counts = backend.implicit_randc(drange, shape=counts, p=pi)
+        # else:
+        # raw_counts = backend.stateful_randc(
+        # random_generator, a=drange, shape=counts, p=pi
+        # )
+        return sample2all(raw_counts, n, format=format, jittable=jittable, d=local_d)
+
+
+measurement_results = measurement_counts
+
+
+@partial(arg_alias, alias_dict={"format": ["format_"]})
+def sample2all(
+    sample: Tensor,
+    n: int,
+    format: str = "count_vector",
+    jittable: bool = False,
+    d: Optional[int] = None,
+) -> Any:
+    """
+    transform ``sample_int`` or ``sample_bin`` results to other forms specified by ``format``
+
+    :param sample: measurement shots results in ``sample_int`` (shape [shots]) or ``sample_bin`` (shape [shots, n])
+    :type sample: Tensor
+    :param n: number of sites
+    :type n: int
+    :param format: see :py:meth:`tensorcircuit.quantum.measurement_results`, defaults to "count_vector"
+    :type format: str, optional
+    :param jittable: only applicable to count transformation in jax backend, defaults to False
+    :type jittable: bool, optional
+    :param d: local dimension (2 for qubit; >2 for qudit), defaults to 2
+    :type d: Optional[int]
+    :return: measurement results specified as ``format``
+    :rtype: Any
+    """
+    d = 2 if d is None else int(d)
+
+    if len(backend.shape_tuple(sample)) == 1:
+        sample_int = sample
+        sample_bin = sample_int2bin(sample, n, d=d)
+    elif len(backend.shape_tuple(sample)) == 2:
+        sample_int = sample_bin2int(sample, n, d=d)
+        sample_bin = sample
+    else:
+        raise ValueError("unrecognized tensor shape for sample")
+
+    if format == "sample_int":
+        return sample_int
+    elif format == "sample_bin":
+        return sample_bin
+    else:
+        count_tuple = sample2count(sample_int, n, jittable=jittable, d=d)
+        if format == "count_tuple":
+            return count_tuple
+        elif format == "count_vector":
+            return count_s2d(count_tuple, n, d=d)
+        elif format == "count_dict_bin":
+            return count_tuple2dict(count_tuple, n, key="bin", d=d)
+        elif format == "count_dict_int":
+            return count_tuple2dict(count_tuple, n, key="int", d=d)
+        else:
+            raise ValueError(
+                f"unsupported format {format} for finite shots measurement"
+            )
+
+
+def spin_by_basis(
+    n: int, m: int, elements: Tuple[int, int] = (1, -1), d: Optional[int] = None
+) -> Tensor:
+    """
+    Generate all n-bitstrings as an array, each row is a bitstring basis.
+    Return m-th col.
+
+    :Example:
+
+    >>> qu.spin_by_basis(2, 1)
+    array([ 1, -1,  1, -1])
+
+    :param n: length of a bitstring
+    :type n: int
+    :param m: m<n,
+    :type m: int
+    :param elements: the binary elements to generate, default is (1, -1).
+    :type elements: Tuple[int, int], optional
+    :return: The value for the m-th position in bitstring when going through
+        all bitstring basis.
+    :rtype: Tensor
+    """
+    d = len(elements) if d is None else d
+
+    col = backend.convert_to_tensor(np.array(elements, dtype=np.int32).reshape(-1, 1))
+    s = backend.tile(backend.cast(col, "int32"), [d**m, int(d ** (n - m - 1))])
+    return backend.reshape(s, [-1])
+
+
+def correlation_from_samples(
+    index: Sequence[int],
+    results: Tensor,
+    n: int,
+    d: int = 2,
+    elements: Optional[Sequence[float]] = None,
+) -> Tensor:
+    r"""
+    Compute :math:`\prod_{i\in \text{index}} s_i` from measurement shots,
+    where each site value :math:`s_i` is mapped from the digit outcome.
+
+    Results can be "sample_int" ([shots]) or "sample_bin" ([shots, n]).
+
+    :param index: positions in the basis string
+    :param results: samples tensor
+    :param n: number of sites
+    :param d: local dimension (default 2)
+    :param elements: optional mapping of length d from outcome {0..d-1} to values s.
+                     If None and d==2, defaults to (1, -1) via the original formula.
+    :return: correlation estimate (mean over shots)
+    """
+    if len(backend.shape_tuple(results)) == 1:
+        results = sample_int2bin(results, n, d=d)
+
+    if d == 2 and elements is None:
+        svals = 1 - results * 2  # 0->+1, 1->-1
+        r = svals[:, index[0]]
+        for i in index[1:]:
+            r *= svals[:, i]
+        r = backend.cast(r, rdtypestr)
+        return backend.mean(r)
+
+    if elements is None:
+        raise ValueError(
+            f"correlation_from_samples requires `elements` mapping for d={d}; "
+            f"e.g., for qutrit you might pass elements=(1.0,0.0,-1.0)."
+        )
+    if len(elements) != d:
+        raise ValueError(f"`elements` length {len(elements)} != d={d}")
+
+    evec = backend.cast(backend.convert_to_tensor(np.asarray(elements)), rdtypestr)
+
+    col = backend.cast(results[:, index[0]], "int32")
+    r = backend.gather1d(evec, col)  # shape [shots]
+
+    for i in index[1:]:
+        col = backend.cast(results[:, i], "int32")
+        r *= backend.gather1d(evec, col)
+
+    r = backend.cast(r, rdtypestr)
+    return backend.mean(r)
+
+
+def correlation_from_counts(
+    index: Sequence[int],
+    results: Tensor,
+    d: Optional[int] = None,
+    elements: Optional[Sequence[float]] = None,
+) -> Tensor:
+    r"""
+    Compute :math:`\prod_{i\in \text{index}} s_i` where the probability for each
+    basis label is given by a count/probability vector ``results`` ("count_vector").
+
+    :param index: positions in the basis string
+    :param results: probability/count vector of shape d**n (will be normalized)
+    :param d: local dimension (default 2)
+    :param elements: optional mapping of length d from digit {0..d-1} to values s.
+                     If None and d==2, defaults to (1, -1). For d>2, must be provided.
+    :return: correlation expectation from counts
+    """
+    d = 2 if d is None else int(d)
+    if d != 2:
+        raise NotImplementedError(f"`d={d}` not implemented.")
+
+    results = backend.reshape(results, [-1])
+    results = backend.cast(results, rdtypestr)
+    results /= backend.sum(results)
+
+    n = _infer_num_sites(int(results.shape[0]), d=d)
+
+    if d == 2 and elements is None:
+        elems = (1, -1)
+    else:
+        if elements is None or len(elements) != d:
+            raise ValueError(
+                f"`elements` must be provided with length d={d} for qudit; got {elements}."
+            )
+        elems = tuple(elements)  # type: ignore
+
+    acc = results
+    for i in index:
+        acc = acc * backend.cast(
+            spin_by_basis(n, int(i), elements=elems, d=d), acc.dtype
+        )
+
+    return backend.sum(acc)
+
+
+# @op2tensor
+# def purify(rho):
+#     """
+#     Take state rho and purify it into a wavefunction of squared dimension.
+#     """
+#     d = rho.shape[0]
+#     evals, vs = backend.eigh(rho)
+#     evals = backend.relu(evals)
+#     psi = np.zeros(shape=(d ** 2, 1), dtype=complex)
+#     for i, lbd in enumerate(lbd):
+#         psi += lbd * kron(vs[:, [i]], basis_vec(i, d))
+#     return psi
