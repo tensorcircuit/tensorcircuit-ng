@@ -105,7 +105,7 @@ class QuditCircuit:
 
     def _apply_multi(
         self,
-        *indices: Sequence[int],
+        *indices: int,
         gates: Sequence[Tuple[str, Tuple[Any, ...]]],
         name: str,
     ) -> None:
