@@ -26,6 +26,8 @@
 
 - Make the lattice module backend agnostic, now the lattice follows `tc.set_backend`.
 
+- Add diffrax backend for ode solver in timeevol module.
+
 ### Fixed
 
 - Fixed `one_hot` in numpy backend.
