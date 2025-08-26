@@ -9,6 +9,7 @@ from functools import reduce, partial
 from operator import mul
 from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
+import math
 import numpy as np
 from ..utils import return_partial
 
@@ -404,6 +405,31 @@ class ExtendedBackend:
         nleg = int(np.log2(self.sizen(a)))
         a = self.reshape(a, [2 for _ in range(nleg)])
         return a
+
+    def reshaped(self: Any, a: Tensor, d: int) -> Tensor:
+        """
+        Reshape a tensor to the [d, d, ...] shape.
+
+        :param a: Input tensor
+        :type a: Tensor
+        :param d: edge length for each dimension
+        :type d: int
+        :return: the reshaped tensor
+        :rtype: Tensor
+        """
+        if not isinstance(d, int) or d <= 0:
+            raise ValueError("d must be a positive integer.")
+
+        size = self.sizen(a)
+        if size == 0:
+            return self.reshape(a, (0,))
+
+        nleg_float = math.log(size, d)
+        nleg = int(round(nleg_float))
+        if d**nleg != size:
+            raise ValueError(f"cannot reshape: size {size} is not a power of d={d}")
+
+        return self.reshape(a, (d,) * nleg)
 
     def reshapem(self: Any, a: Tensor) -> Tensor:
         """
@@ -837,6 +863,36 @@ class ExtendedBackend:
         """
         raise NotImplementedError(
             "Backend '{}' has not implemented `mod`.".format(self.name)
+        )
+
+    def floor(self: Any, x: Tensor) -> Tensor:
+        """
+        Compute
+
+        :param x: input values
+        :type x: Tensor
+        :return: results
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `floor`.".format(self.name)
+        )
+
+    def clip(self: Any, a: Tensor, a_min: Tensor, a_max: Tensor) -> Tensor:
+        """
+        Clip values of x into [a_min, a_max], preserving dtype & device.
+
+        :param a: input values
+        :type a: Tensor
+        :param a_min: minimum value
+        :type a_min: Tensor
+        :param a_max: maximum value
+        :type a_max: Tensor
+        :return: results
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `clip`.".format(self.name)
         )
 
     def reverse(self: Any, a: Tensor) -> Tensor:
