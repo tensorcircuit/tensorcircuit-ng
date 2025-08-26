@@ -76,10 +76,10 @@ class Circuit(BaseCircuit):
         :type split: Optional[Dict[str, Any]]
         """
         self._d = 2 if dim is None else dim
-        if kwargs.get("qudit", False) and dim != 2:
+        if not kwargs.get("qudit", False) and self._d != 2:
             raise ValueError(
                 f"Circuit only supports qubits (dim=2). "
-                f"You passed dim={dim}. Please use `QuditCircuit` instead."
+                f"You passed dim={self._d}. Please use `QuditCircuit` instead."
             )
 
         self.inputs = inputs

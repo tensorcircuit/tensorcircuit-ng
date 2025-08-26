@@ -2858,7 +2858,7 @@ def measurement_counts(
     jittable: bool = False,
     d: Optional[int] = None,
 ) -> Any:
-    """
+    r"""
     Simulate the measuring of each qubit of ``p`` in the computational basis,
     thus producing output like that of ``qiskit``.
 

@@ -44,7 +44,7 @@ class QuditCircuit:
             inputs=inputs,
             mps_inputs=mps_inputs,
             split=split,
-            _qudit=True,
+            qudit=True,
         )
         self._omega = np.exp(2j * np.pi / self._d)
         self.circuit_param = self._circ.circuit_param
