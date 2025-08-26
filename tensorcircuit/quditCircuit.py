@@ -91,12 +91,11 @@ class QuditCircuit:
         self,
         index: int,
         gate: str,
-        *,
         name: Optional[str] = None,
         extra: Tuple[Any, ...] = (),
     ) -> None:
         mat = self._cached_single(gate, self._d, self._omega, extra)
-        self._circ.unitary(index, mat, name=name or gate, dim=self._d)  # type: ignore
+        self._circ.unitary(index, unitary=mat, name=name or gate, dim=self._d)  # type: ignore
 
     def _tensor(self, gates: Sequence[Tuple[str, Tuple[Any, ...]]]) -> Tensor:
         mats = [
@@ -106,15 +105,14 @@ class QuditCircuit:
 
     def _apply_multi(
         self,
-        indices: Sequence[int],
+        *indices: Sequence[int],
         gates: Sequence[Tuple[str, Tuple[Any, ...]]],
-        *,
         name: str,
     ) -> None:
         if len(indices) != len(gates):
             raise ValueError("len(indices) must equal len(gates)")
         mat = self._tensor(gates)
-        self._circ.unitary(tuple(indices), mat, name=name, dim=self._d)  # type: ignore
+        self._circ.unitary(*indices, unitary=mat, name=name, dim=self._d)  # type: ignore
 
     def i(self, index: int) -> None:
         self._apply_single(index, "I")
@@ -134,39 +132,39 @@ class QuditCircuit:
         self._apply_single(index, "U8", extra=(gamma, z, eps), name="U8")
 
     def ii(self, *indices: int) -> None:
-        self._apply_multi(indices, [("I", ()), ("I", ())], name="II")
+        self._apply_multi(*indices, gates=[("I", ()), ("I", ())], name="II")
 
     def xx(self, *indices: int) -> None:
-        self._apply_multi(indices, [("X", ()), ("X", ())], name="XX")
+        self._apply_multi(*indices, gates=[("X", ()), ("X", ())], name="XX")
 
     def zz(self, *indices: int) -> None:
-        self._apply_multi(indices, [("Z", ()), ("Z", ())], name="ZZ")
+        self._apply_multi(*indices, gates=[("Z", ()), ("Z", ())], name="ZZ")
 
     def ix(self, *indices: int) -> None:
-        self._apply_multi(indices, [("I", ()), ("X", ())], name="IX")
+        self._apply_multi(*indices, gates=[("I", ()), ("X", ())], name="IX")
 
     def iz(self, *indices: int) -> None:
-        self._apply_multi(indices, [("I", ()), ("Z", ())], name="IZ")
+        self._apply_multi(*indices, gates=[("I", ()), ("Z", ())], name="IZ")
 
     def xi(self, *indices: int) -> None:
-        self._apply_multi(indices, [("X", ()), ("I", ())], name="XI")
+        self._apply_multi(*indices, gates=[("X", ()), ("I", ())], name="XI")
 
     def zi(self, *indices: int) -> None:
-        self._apply_multi(indices, [("Z", ()), ("I", ())], name="ZI")
+        self._apply_multi(*indices, gates=[("Z", ()), ("I", ())], name="ZI")
 
     def xz(self, *indices: int) -> None:
-        self._apply_multi(indices, [("X", ()), ("Z", ())], name="XZ")
+        self._apply_multi(*indices, gates=[("X", ()), ("Z", ())], name="XZ")
 
     def zx(self, *indices: int) -> None:
-        self._apply_multi(indices, [("Z", ()), ("X", ())], name="ZX")
+        self._apply_multi(*indices, gates=[("Z", ()), ("X", ())], name="ZX")
 
     def cphase(self, *indices: int, cv: Optional[int] = None) -> None:
         mat = _cphase_matrix_func(self._d, cv=cv)
-        self._circ.unitary(indices, mat, name="CPHASE", dim=self._d)  # type: ignore
+        self._circ.unitary(*indices, unitary=mat, name="CPHASE", dim=self._d)  # type: ignore
 
     def csum(self, *indices: int, cv: Optional[int] = None) -> None:
         mat = _csum_matrix_func(self._d, cv=cv)
-        self._circ.unitary(indices, mat, name="CSUM", dim=self._d)  # type: ignore
+        self._circ.unitary(*indices, unitary=mat, name="CSUM", dim=self._d)  # type: ignore
 
     def wavefunction(self, form: str = "default") -> tn.Node.tensor:
         return self._circ.wavefunction(form)

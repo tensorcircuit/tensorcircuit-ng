@@ -794,7 +794,7 @@ def any_gate(unitary: Tensor, name: str = "any", dim: Optional[int] = None) -> G
         unitary.tensor = backend.cast(unitary.tensor, dtypestr)
         return unitary
     unitary = backend.cast(unitary, dtypestr)
-    if dim is None:
+    if dim is None or dim == 2:
         unitary = backend.reshape2(unitary)
     else:
         unitary = backend.reshaped(unitary, dim)
