@@ -39,6 +39,7 @@ class QuditCircuit:
         # For d <= 36, string samples use base-d characters 0–9A–Z (A=10, ...).
 
     """
+
     is_dm = False
 
     def __init__(
