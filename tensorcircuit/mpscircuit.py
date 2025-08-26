@@ -13,6 +13,7 @@ import types
 import numpy as np
 import tensornetwork as tn
 
+from . import gates
 from .gates import Gate
 from .cons import backend, npdtype, contractor, rdtypestr, dtypestr
 from .quantum import QuOperator, QuVector, extract_tensors_from_qop
