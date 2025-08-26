@@ -121,7 +121,9 @@ def _split_two_qubit_gate(
     if fixed_choice == 2:  # swap one
         return n3, n4, True  # swap
     s2 = n3.tensor.shape[-1]
-    if (s1 >= 4) and (s2 >= 4):
+    if (s1 >= n[0].dimension * n[2].dimension) and (
+        s2 >= n[1].dimension * n[3].dimension
+    ):
         # jax jit unspport split_node with trun_err anyway
         # tf function doesn't work either, though I believe it may work on tf side
         # CANNOT DONE(@refraction-ray): tf.function version with trun_err set
