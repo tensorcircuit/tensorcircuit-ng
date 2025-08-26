@@ -35,10 +35,14 @@ def _sum_numpy(
     # see https://github.com/google/TensorNetwork/issues/952
 
 
-def _convert_to_tensor_numpy(self: Any, a: Tensor) -> Tensor:
+def _convert_to_tensor_numpy(
+    self: Any, a: Tensor, dtype: Optional[str] = None
+) -> Tensor:
     if not isinstance(a, np.ndarray) and not np.isscalar(a):
         a = np.array(a)
     a = np.asarray(a)
+    if dtype is not None:
+        a = a.astype(getattr(np, dtype))
     return a
 
 
@@ -132,6 +136,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     def kron(self, a: Tensor, b: Tensor) -> Tensor:
         return np.kron(a, b)
 
+    def meshgrid(self, *args: Any, **kwargs: Any) -> Any:
+        return np.meshgrid(*args, **kwargs)
+
     def dtype(self, a: Tensor) -> str:
         return a.dtype.__str__()  # type: ignore
 
@@ -150,6 +157,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         if isinstance(dtype, str):
             dtype = getattr(np, dtype)
         return np.array(1j, dtype=dtype)
+
+    def expand_dims(self, a: Tensor, axis: int) -> Tensor:
+        return np.expand_dims(a, axis)
 
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return np.stack(a, axis=axis)
@@ -173,6 +183,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     ) -> Tensor:
         return np.std(a, axis=axis, keepdims=keepdims)
 
+    def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
+        return np.all(a, axis=axis)
+
     def unique_with_counts(self, a: Tensor, **kws: Any) -> Tuple[Tensor, Tensor]:
         return np.unique(a, return_counts=True)  # type: ignore
 
@@ -187,6 +200,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
 
     def argmin(self, a: Tensor, axis: int = 0) -> Tensor:
         return np.argmin(a, axis=axis)
+
+    def sort(self, a: Tensor, axis: int = -1) -> Tensor:
+        return np.sort(a, axis=axis)
 
     def sigmoid(self, a: Tensor) -> Tensor:
         return expit(a)
@@ -350,6 +366,17 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
 
     def is_sparse(self, a: Tensor) -> bool:
         return issparse(a)  # type: ignore
+
+    def where(
+        self,
+        condition: Tensor,
+        x: Optional[Tensor] = None,
+        y: Optional[Tensor] = None,
+    ) -> Tensor:
+        if x is None and y is None:
+            return np.where(condition)
+        assert x is not None and y is not None
+        return np.where(condition, x, y)
 
     def cond(
         self,

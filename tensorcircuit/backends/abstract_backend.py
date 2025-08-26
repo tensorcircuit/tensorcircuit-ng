@@ -622,6 +622,82 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `argsort`.".format(self.name)
         )
 
+    def sort(self: Any, a: Tensor, axis: int = -1) -> Tensor:
+        """
+        Sort a tensor along the given axis.
+
+        :param a: [description]
+        :type a: Tensor
+        :param axis: [description], defaults to -1
+        :type axis: int, optional
+        :return: [description]
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `sort`.".format(self.name)
+        )
+
+    def all(self: Any, a: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
+        """
+        Test whether all array elements along a given axis evaluate to True.
+
+        :param a: Input tensor
+        :type a: Tensor
+        :param axis: Axis or axes along which a logical AND reduction is performed,
+            defaults to None
+        :type axis: Optional[Sequence[int]], optional
+        :return: A new boolean or tensor resulting from the AND reduction
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `all`.".format(self.name)
+        )
+
+    def meshgrid(self: Any, *args: Any, **kwargs: Any) -> Any:
+        """
+        Return coordinate matrices from coordinate vectors.
+
+        :param args: coordinate vectors
+        :type args: Any
+        :param kwargs: keyword arguments for meshgrid, typically includes 'indexing'
+           which can be 'ij' (matrix indexing) or 'xy' (Cartesian indexing).
+           - 'ij': matrix indexing, first dimension corresponds to rows (default)
+           - 'xy': Cartesian indexing, first dimension corresponds to columns
+           Example:
+              >>> x, y = backend.meshgrid([0, 1], [0, 2], indexing='xy')
+              Shapes:
+              - x.shape == (2, 2)  # rows correspond to y vector length
+              - y.shape == (2, 2)
+              Values:
+              x = [[0, 1],
+                  [0, 1]]
+              y = [[0, 0],
+                  [2, 2]]
+        :type kwargs: Any
+        :return: list of coordinate matrices
+        :rtype: Any
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `meshgrid`.".format(self.name)
+        )
+
+    def expand_dims(self: Any, a: Tensor, axis: int) -> Tensor:
+        """
+        Expand the shape of a tensor.
+        Insert a new axis that will appear at the `axis` position in the expanded
+        tensor shape.
+
+        :param a: Input tensor
+        :type a: Tensor
+        :param axis: Position in the expanded axes where the new axis is placed
+        :type axis: int
+        :return: Output tensor with the number of dimensions increased by one.
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `expand_dims`.".format(self.name)
+        )
+
     def unique_with_counts(self: Any, a: Tensor, **kws: Any) -> Tuple[Tensor, Tensor]:
         """
         Find the unique elements and their corresponding counts of the given tensor ``a``.
@@ -757,6 +833,21 @@ class ExtendedBackend:
         """
         raise NotImplementedError(
             "Backend '{}' has not implemented `cast`.".format(self.name)
+        )
+
+    def convert_to_tensor(self: Any, a: Tensor, dtype: Optional[str] = None) -> Tensor:
+        """
+        Convert input to tensor.
+
+        :param a: input data to be converted
+        :type a: Tensor
+        :param dtype: target dtype, optional
+        :type dtype: Optional[str]
+        :return: converted tensor
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `convert_to_tensor`.".format(self.name)
         )
 
     def mod(self: Any, x: Tensor, y: Tensor) -> Tensor:
@@ -1458,6 +1549,28 @@ class ExtendedBackend:
         # possibly the most weird thing introduced in the backend :(
         raise NotImplementedError(
             "Backend '{}' has not implemented `cond`.".format(self.name)
+        )
+
+    def where(
+        self: Any,
+        condition: Tensor,
+        x: Optional[Tensor] = None,
+        y: Optional[Tensor] = None,
+    ) -> Tensor:
+        """
+        Return a tensor of elements selected from either x or y, depending on condition.
+
+        :param condition: Where True, yield x, otherwise yield y.
+        :type condition: Tensor (bool)
+        :param x: Values from which to choose when condition is True.
+        :type x: Tensor
+        :param y: Values from which to choose when condition is False.
+        :type y: Tensor
+        :return: A tensor with elements from x where condition is True, and y otherwise.
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `where`.".format(self.name)
         )
 
     def switch(

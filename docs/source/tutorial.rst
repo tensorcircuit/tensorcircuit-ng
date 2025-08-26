@@ -26,6 +26,7 @@ Jupyter Tutorials
     tutorials/dqas.ipynb
     tutorials/barren_plateaus.ipynb
     tutorials/qubo_problem.ipynb
+    tutorials/lattice.ipynb
     tutorials/portfolio_optimization.ipynb
     tutorials/imag_time_evo.ipynb
     tutorials/classical_shadows.ipynb

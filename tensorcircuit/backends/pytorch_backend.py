@@ -238,6 +238,15 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def copy(self, a: Tensor) -> Tensor:
         return a.clone()
 
+    def convert_to_tensor(self, tensor: Tensor, dtype: Optional[str] = None) -> Tensor:
+        if self.is_tensor(tensor):
+            result = tensor
+        else:
+            result = torchlib.tensor(tensor)
+        if dtype is not None:
+            result = self.cast(result, dtype)
+        return result
+
     def expm(self, a: Tensor) -> Tensor:
         raise NotImplementedError("pytorch backend doesn't support expm")
         # in 2020, torch has no expm, hmmm. but that's ok,
@@ -369,6 +378,17 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def argmin(self, a: Tensor, axis: int = 0) -> Tensor:
         return torchlib.argmin(a, dim=axis)
 
+    def sort(self, a: Tensor, axis: int = -1) -> Tensor:
+        return torchlib.sort(a, dim=axis).values
+
+    def all(self, tensor: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
+        """
+        Corresponds to torch.all.
+        """
+        if axis is None:
+            return torchlib.all(tensor)
+        return torchlib.all(tensor, dim=axis)
+
     def unique_with_counts(self, a: Tensor, **kws: Any) -> Tuple[Tensor, Tensor]:
         return torchlib.unique(a, return_counts=True)  # type: ignore
 
@@ -430,6 +450,16 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         if not self.is_tensor(v):
             v = self.convert_to_tensor(v)
         return torchlib.searchsorted(a, v, side=side)
+
+    def where(
+        self,
+        condition: Tensor,
+        x: Optional[Tensor] = None,
+        y: Optional[Tensor] = None,
+    ) -> Tensor:
+        if x is None and y is None:
+            return torchlib.where(condition)
+        return torchlib.where(condition, x, y)
 
     def reverse(self, a: Tensor) -> Tensor:
         return torchlib.flip(a, dims=(-1,))
@@ -712,6 +742,12 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
 
         return wrapper
 
+    def expand_dims(self, a: Tensor, axis: int) -> Tensor:
+        return torchlib.unsqueeze(a, dim=axis)
+
     vvag = vectorized_value_and_grad
+
+    def meshgrid(self, *args: Any, **kws: Any) -> Tensor:
+        return torchlib.meshgrid(*args, **kws)
 
     optimizer = torch_optimizer

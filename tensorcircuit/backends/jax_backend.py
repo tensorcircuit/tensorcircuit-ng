@@ -50,12 +50,17 @@ class optax_optimizer:
         return params
 
 
-def _convert_to_tensor_jax(self: Any, tensor: Tensor) -> Tensor:
+def _convert_to_tensor_jax(
+    self: Any, tensor: Tensor, dtype: Optional[str] = None
+) -> Tensor:
     if not isinstance(tensor, (np.ndarray, jnp.ndarray)) and not jnp.isscalar(tensor):
         raise TypeError(
             ("Expected a `jnp.array`, `np.array` or scalar. " f"Got {type(tensor)}")
         )
     result = jnp.asarray(tensor)
+    if dtype is not None:
+        # Use the backend's cast method to handle dtype conversion
+        result = self.cast(result, dtype)
     return result
 
 
@@ -243,8 +248,10 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def copy(self, tensor: Tensor) -> Tensor:
         return jnp.array(tensor, copy=True)
 
-    def convert_to_tensor(self, tensor: Tensor) -> Tensor:
+    def convert_to_tensor(self, tensor: Tensor, dtype: Optional[str] = None) -> Tensor:
         result = jnp.asarray(tensor)
+        if dtype is not None:
+            result = self.cast(result, dtype)
         return result
 
     def abs(self, a: Tensor) -> Tensor:
@@ -396,6 +403,9 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def argsort(self, a: Tensor, axis: int = -1) -> Tensor:
         return jnp.argsort(a, axis=axis)
 
+    def sort(self, a: Tensor, axis: int = -1) -> Tensor:
+        return jnp.sort(a, axis=axis)
+
     def unique_with_counts(  # type: ignore
         self, a: Tensor, *, size: Optional[int] = None, fill_value: Optional[int] = None
     ) -> Tuple[Tensor, Tensor]:
@@ -415,6 +425,9 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
 
     def cumsum(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
         return jnp.cumsum(a, axis)
+
+    def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
+        return jnp.all(a, axis=axis)
 
     def is_tensor(self, a: Any) -> bool:
         if not isinstance(a, jnp.ndarray):
@@ -818,4 +831,23 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
 
     vvag = vectorized_value_and_grad
 
+    def meshgrid(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Backend-agnostic meshgrid function.
+        """
+        return jnp.meshgrid(*args, **kwargs)
+
     optimizer = optax_optimizer
+
+    def expand_dims(self, a: Tensor, axis: int) -> Tensor:
+        return jnp.expand_dims(a, axis)
+
+    def where(
+        self,
+        condition: Tensor,
+        x: Optional[Tensor] = None,
+        y: Optional[Tensor] = None,
+    ) -> Tensor:
+        if x is None and y is None:
+            return jnp.where(condition)
+        return jnp.where(condition, x, y)

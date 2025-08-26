@@ -56,10 +56,12 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
         cpx = cupyx
         self.name = "cupy"
 
-    def convert_to_tensor(self, a: Tensor) -> Tensor:
+    def convert_to_tensor(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
         if not isinstance(a, cp.ndarray) and not cp.isscalar(a):
             a = cp.array(a)
         a = cp.asarray(a)
+        if dtype is not None:
+            a = self.cast(a, dtype)
         return a
 
     def sum(

@@ -75,6 +75,12 @@ class keras_optimizer:
 def _tensordot_tf(
     self: Any, a: Tensor, b: Tensor, axes: Union[int, Sequence[Sequence[int]]]
 ) -> Tensor:
+    # Use TensorFlow's dtype promotion rules by converting both to a common dtype
+    if a.dtype != b.dtype:
+        # Find the result dtype using TensorFlow's type promotion rules
+        common_dtype = tf.experimental.numpy.result_type(a.dtype, b.dtype)
+        a = tf.cast(a, common_dtype)
+        b = tf.cast(b, common_dtype)
     return tf.tensordot(a, b, axes)
 
 
@@ -441,6 +447,12 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def copy(self, a: Tensor) -> Tensor:
         return tf.identity(a)
 
+    def convert_to_tensor(self, tensor: Tensor, dtype: Optional[str] = None) -> Tensor:
+        result = tf.convert_to_tensor(tensor)
+        if dtype is not None:
+            result = self.cast(result, dtype)
+        return result
+
     def expm(self, a: Tensor) -> Tensor:
         return tf.linalg.expm(a)
 
@@ -524,6 +536,20 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def max(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
         return tf.reduce_max(a, axis=axis)
 
+    def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
+        return tf.reduce_all(tf.cast(a, tf.bool), axis=axis)
+
+    def where(
+        self,
+        condition: Tensor,
+        x: Optional[Tensor] = None,
+        y: Optional[Tensor] = None,
+    ) -> Tensor:
+        if x is None and y is None:
+            # Return a tuple of tensors to be consistent with other backends
+            return tuple(tf.unstack(tf.where(condition), axis=1))
+        return tf.where(condition, x, y)
+
     def argmax(self, a: Tensor, axis: int = 0) -> Tensor:
         return tf.math.argmax(a, axis=axis)
 
@@ -532,6 +558,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
 
     def argsort(self, a: Tensor, axis: int = -1) -> Tensor:
         return tf.argsort(a, axis=axis)
+
+    def sort(self, a: Tensor, axis: int = -1) -> Tensor:
+        return tf.sort(a, axis=axis)
 
     def shape_tuple(self, a: Tensor) -> Tuple[int, ...]:
         return tuple(a.shape)
@@ -1067,4 +1096,13 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
 
     vvag = vectorized_value_and_grad
 
+    def meshgrid(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Backend-agnostic meshgrid function.
+        """
+        return tf.meshgrid(*args, **kwargs)
+
     optimizer = keras_optimizer
+
+    def expand_dims(self, a: Tensor, axis: int) -> Tensor:
+        return tf.expand_dims(a, axis)
