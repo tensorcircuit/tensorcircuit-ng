@@ -404,9 +404,7 @@ class MPSCircuit(AbstractCircuit):
         d = int(in_dims[0])
         dim_phys_mpo = d * d
 
-        order = tuple(
-            np.arange(2 * nindex).reshape(2, nindex).T.flatten().tolist()
-        )
+        order = tuple(np.arange(2 * nindex).reshape(2, nindex).T.flatten().tolist())
         gate = backend.transpose(gate, order)
 
         index_arr = np.array(index, dtype=int) - index_left
