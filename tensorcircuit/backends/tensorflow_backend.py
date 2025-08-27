@@ -577,17 +577,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         return tf.clip_by_value(a, a_min, a_max)
 
     def floor(self, x: Tensor) -> Tensor:
-        dtype_str = x.dtype.name if hasattr(x.dtype, "name") else str(x.dtype)
-        if x.dtype.is_floating:
-            return tf.math.floor(x)
-        elif x.dtype.is_integer:
+        if x.dtype.is_integer:
             return x
-        elif x.dtype.is_complex:
-            raise TypeError(
-                f"tf.math.floor does not support complex dtype ({dtype_str})"
-            )
-        else:
-            raise TypeError(f"Unsupported dtype for floor: {dtype_str}")
+        return tf.math.floor(x)
 
     def concat(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return tf.concat(a, axis=axis)

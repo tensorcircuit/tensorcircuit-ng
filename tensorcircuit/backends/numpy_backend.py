@@ -253,8 +253,8 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     def floor(self, x: Tensor) -> Tensor:
         return np.floor(x)
 
-    def clip(self, x: Tensor, a_min: Tensor, a_max: Tensor) -> Tensor:
-        return np.clip(x, a_min, a_max)
+    def clip(self, a: Tensor, a_min: Tensor, a_max: Tensor) -> Tensor:
+        return np.clip(a, a_min, a_max)
 
     def right_shift(self, x: Tensor, y: Tensor) -> Tensor:
         return np.right_shift(x, y)
