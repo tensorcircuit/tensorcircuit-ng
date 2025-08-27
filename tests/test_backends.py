@@ -436,6 +436,39 @@ def test_backend_methods_2(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_floor(backend):
+    """Test floor method (element-wise, dtype/device preservation, integers unchanged)."""
+    a = tc.backend.convert_to_tensor([-1.7, -0.0, 0.0, 0.2, 3.9])
+    r = tc.backend.floor(a)
+    expected = tc.backend.convert_to_tensor([-2.0, -0.0, 0.0, 0.0, 3.0])
+    np.testing.assert_allclose(r, expected, atol=1e-6)
+    assert tc.backend.dtype(r) == tc.backend.dtype(a)
+    assert tc.backend.device(r) == tc.backend.device(a)
+    ai = tc.backend.convert_to_tensor([0, 1, -2, 3])
+    ri = tc.backend.floor(ai)
+    np.testing.assert_allclose(ri, ai)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_clip(backend):
+    """Test clip method (scalar/tensor bounds, broadcasting, dtype/device)."""
+    a = tc.backend.convert_to_tensor([-2.0, -0.5, 0.0, 0.5, 10.0])
+    a_min = tc.backend.convert_to_tensor(-1.0)
+    a_max = tc.backend.convert_to_tensor(1.0)
+    r = tc.backend.clip(a, a_min, a_max)
+    expected = tc.backend.convert_to_tensor([-1.0, -0.5, 0.0, 0.5, 1.0])
+    np.testing.assert_allclose(r, expected, atol=1e-6)
+    assert tc.backend.dtype(r) == tc.backend.dtype(a)
+    assert tc.backend.device(r) == tc.backend.device(a)
+    a2 = tc.backend.convert_to_tensor([[-5.0, 0.0, 5.0], [1.0, 2.0, 3.0]])
+    a2_min = tc.backend.convert_to_tensor([[-1.0, 0.0, 0.0], [0.0, 1.0, 2.0]])
+    a2_max = tc.backend.convert_to_tensor([[0.0, 0.0, 4.0], [1.0, 2.0, 2.0]])
+    r2 = tc.backend.clip(a2, a2_min, a2_max)
+    expected2 = tc.backend.convert_to_tensor([[-1.0, 0.0, 4.0], [1.0, 2.0, 2.0]])
+    np.testing.assert_allclose(r2, expected2, atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_device_cpu_only(backend):
     a = tc.backend.ones([])
     dev_str = tc.backend.device(a)
