@@ -2,10 +2,11 @@
 dict related functionalities
 """
 
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence, List
 
 import numpy as np
 
+from ..cons import _ALPHABET
 
 Tensor = Any
 ct = Dict[str, int]
@@ -91,7 +92,13 @@ def marginal_count(count: ct, keep_list: Sequence[int]) -> ct:
 
 def count2vec(count: ct, normalization: bool = True) -> Tensor:
     """
-    Convert count dictionary to probability vector.
+    Convert a dictionary of counts (with string keys) to a probability/count vector.
+
+    Support:
+      - base-d string (d <= 36), characters taken from 0-9A-Z (case-insensitive)
+        For example:
+          qubit: '0101'
+          qudit: '012' or '09A' (A represents 10, which means [0, 9, 10])
 
     :param count: A dictionary mapping bit strings to counts
     :type count: ct
@@ -105,44 +112,90 @@ def count2vec(count: ct, normalization: bool = True) -> Tensor:
     >>> count2vec({"00": 2, "10": 3, "11": 5})
     array([0.2, 0. , 0.3, 0.5])
     """
-    nqubit = len(list(count.keys())[0])
-    probability = [0] * 2**nqubit
-    shots = sum([v for k, v in count.items()])
+    if not count:
+        return np.array([], dtype=float)
+
+    sample_key = next(iter(count)).upper()
+    n = len(sample_key)
+    d = 0
+    for k in count:
+        s = k.upper()
+        if len(s) != n:
+            raise ValueError(
+                f"The length of all keys should be the same ({n}), received '{k}'."
+            )
+        for ch in s:
+            if ch not in _ALPHABET:
+                raise ValueError(
+                    f"Key '{k}' contains illegal character '{ch}' (only 0-9A-Z are allowed)."
+                )
+            d = max(d, _ALPHABET.index(ch) + 1)
+    if d < 2:
+        raise ValueError(f"Inferred local dimension d={d} is illegal (must be >=2).")
+
+    def parse_key(_k: str) -> List[int]:
+        return [_ALPHABET.index(_ch) for _ch in _k.upper()]
+
+    size = d**n
+    prob = np.zeros(size, dtype=float)
+    shots = float(sum(count.values())) if normalization else 1.0
+    if shots == 0:
+        return prob
+
+    powers = [d**p for p in range(n)][::-1]
     for k, v in count.items():
-        if normalization is True:
-            v /= shots  # type: ignore
-        probability[int(k, 2)] = v
-    return np.array(probability)
+        digits = parse_key(k)
+        idx = sum(dig * p for dig, p in zip(digits, powers))
+        prob[idx] = (v / shots) if normalization else v
+
+    return prob
 
 
 def vec2count(vec: Tensor, prune: bool = False) -> ct:
     """
-    Convert probability vector to count dictionary.
+    Map a count/probability vector of length D to a dictionary with base-d string keys (0-9A-Z).
+    Only generate string keys when d ≤ 36; if d is inferred to be > 36, raise a NotImplementedError.
 
-    :param vec: Probability vector
-    :type vec: Tensor
-    :param prune: Whether to remove near-zero probabilities, defaults to False
-    :type prune: bool, optional
-    :return: Count dictionary
-    :rtype: ct
-
-    :Example:
-
-    >>> vec2count(np.array([0.2, 0.3, 0.1, 0.4]))
-    {'00': 0.2, '01': 0.3, '10': 0.1, '11': 0.4}
+    :param vec: A one-dimensional vector of length D = d**n
+    :param prune: Whether to prune near-zero elements (threshold 1e-8)
+    :return: {base-d string key: value}, key length n
     """
-    from ..quantum import count_vector2dict
+    from ..quantum import count_vector2dict, _infer_num_sites
 
     if isinstance(vec, list):
         vec = np.array(vec)
-    n = int(np.log(vec.shape[0]) / np.log(2) + 1e-9)
-    c = count_vector2dict(vec, n, key="bin")
-    if prune is True:
-        nc = c.copy()
-        for k, v in c.items():
-            if np.abs(v) < 1e-8:
-                del nc[k]
-        return nc
+    vec = np.asarray(vec)
+    if vec.ndim != 1:
+        raise ValueError("vec2count expects a one-dimensional vector.")
+
+    D = int(vec.shape[0])
+    if D <= 0:
+        return {}
+
+    def _is_power_of_two(x: int) -> bool:
+        return x > 0 and (x & (x - 1)) == 0
+
+    if _is_power_of_two(D):
+        n = int(np.log(D) / np.log(2) + 1e-9)
+        d: Optional[int] = 2
+    else:
+        d = n = None
+        upper = int(np.sqrt(D)) + 1
+        for d_try in range(2, max(upper, 3)):
+            try:
+                n_try = _infer_num_sites(D, d_try)
+            except ValueError:
+                continue
+            d, n = d_try, n_try
+            break
+        if d is None:
+            d, n = D, 1
+
+    c: ct = count_vector2dict(vec, n, key="bin", d=d)  # type: ignore
+
+    if prune:
+        c = {k: v for k, v in c.items() if np.abs(v) >= 1e-8}
+
     return c
 
 
