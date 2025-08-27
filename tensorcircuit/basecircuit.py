@@ -32,6 +32,30 @@ Gate = gates.Gate
 Tensor = Any
 
 
+def _decode_basis_label(label: str, d: int, n: int) -> List[int]:
+    if d > 36:
+        raise NotImplementedError(
+            f"String basis label supports d<=36 (0–9A–Z). Got d={d}. "
+            "Use an integer array/tensor of length n instead."
+        )
+    s = label.upper()
+    if len(s) != n:
+        raise ValueError(f"Basis label length mismatch: expect {n}, got {len(s)}")
+    digits = []
+    for ch in s:
+        if ch not in _ALPHABET:
+            raise ValueError(
+                f"Invalid character '{ch}' in basis label (allowed 0–9A–Z)."
+            )
+        v = _ALPHABET.index(ch)
+        if v >= d:
+            raise ValueError(
+                f"Digit '{ch}' (= {v}) out of range for base-d with d={d}."
+            )
+        digits.append(v)
+    return digits
+
+
 class BaseCircuit(AbstractCircuit):
     _nodes: List[tn.Node]
     _front: List[tn.Edge]
