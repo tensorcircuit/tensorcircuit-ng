@@ -1,5 +1,9 @@
 """
 Quantum circuit: common methods for all circuit classes as MixIn
+
+Note:
+  - Supports qubit (d = 2) and qudit (d >= 2) systems.
+  - For string-encoded samples/counts when d <= 36, digits use base-d characters 0–9A–Z (A = 10, …, Z = 35).
 """
 
 # pylint: disable=invalid-name
@@ -21,9 +25,10 @@ from .quantum import (
     sample_int2bin,
     sample_bin2int,
     sample2all,
+    _infer_num_sites,
 )
 from .abstractcircuit import AbstractCircuit
-from .cons import npdtype, backend, dtypestr, contractor, rdtypestr
+from .cons import npdtype, backend, dtypestr, contractor, rdtypestr, _ALPHABET
 from .simplify import _split_two_qubit_gate
 from .utils import arg_alias
 
@@ -314,7 +319,7 @@ class BaseCircuit(AbstractCircuit):
         for op, index in ops:
             if not isinstance(op, tn.Node):
                 # op is only a matrix
-                op = backend.reshape2(op)
+                op = backend.reshaped(op, d=self._d)
                 op = backend.cast(op, dtype=dtypestr)
                 op = gates.Gate(op)
             else:
@@ -380,12 +385,12 @@ class BaseCircuit(AbstractCircuit):
 
     def perfect_sampling(self, status: Optional[Tensor] = None) -> Tuple[str, float]:
         """
-        Sampling bistrings from the circuit output based on quantum amplitudes.
+        Sampling base-d strings (0–9A–Z when d <= 36) from the circuit output based on quantum amplitudes.
         Reference: arXiv:1201.3974.
 
         :param status: external randomness, with shape [nqubits], defaults to None
         :type status: Optional[Tensor]
-        :return: Sampled bit string and the corresponding theoretical probability.
+        :return: Sampled base-d string and the corresponding theoretical probability.
         :rtype: Tuple[str, float]
         """
         return self.measure_jit(*range(self._nqubits), with_prob=True, status=status)
@@ -394,10 +399,10 @@ class BaseCircuit(AbstractCircuit):
         self, *index: int, with_prob: bool = False, status: Optional[Tensor] = None
     ) -> Tuple[Tensor, Tensor]:
         """
-        Take measurement to the given quantum lines.
+        Take measurement on the given site indices (computational basis).
         This method is jittable is and about 100 times faster than unjit version!
 
-        :param index: Measure on which quantum line.
+        :param index: Measure on which site (wire) index.
         :type index: int
         :param with_prob: If true, theoretical probability is also returned.
         :type with_prob: bool, optional
@@ -408,9 +413,8 @@ class BaseCircuit(AbstractCircuit):
         """
         # finally jit compatible ! and much faster than unjit version ! (100x)
         sample: List[Tensor] = []
-        p = 1.0
-        p = backend.convert_to_tensor(p)
-        p = backend.cast(p, dtype=rdtypestr)
+        one_r = backend.cast(backend.convert_to_tensor(1.0), rdtypestr)
+        p = one_r
         for k, j in enumerate(index):
             if self.is_dm is False:
                 nodes1, edge1 = self._copy()
@@ -425,40 +429,88 @@ class BaseCircuit(AbstractCircuit):
                 if i != j:
                     e ^ edge2[i]
             for i in range(k):
-                m = (1 - sample[i]) * gates.array_to_tensor(np.array([1, 0])) + sample[
-                    i
-                ] * gates.array_to_tensor(np.array([0, 1]))
-                newnodes.append(Gate(m))
-                newnodes[-1].id = id(newnodes[-1])
-                newnodes[-1].is_dagger = False
-                newnodes[-1].flag = "measurement"
-                newnodes[-1].get_edge(0) ^ edge1[index[i]]
-                newnodes.append(Gate(m))
-                newnodes[-1].id = id(newnodes[-1])
-                newnodes[-1].is_dagger = True
-                newnodes[-1].flag = "measurement"
-                newnodes[-1].get_edge(0) ^ edge2[index[i]]
+                if self._d == 2:
+                    m = (1 - sample[i]) * gates.array_to_tensor(
+                        np.array([1, 0])
+                    ) + sample[i] * gates.array_to_tensor(np.array([0, 1]))
+                    g1 = Gate(m)
+                    g1.id = id(g1)
+                    g1.is_dagger = False
+                    g1.flag = "measurement"
+                    newnodes.append(g1)
+                    g1.get_edge(0) ^ edge1[index[i]]
+                    g2 = Gate(m)
+                    g2.id = id(g2)
+                    g2.is_dagger = True
+                    g2.flag = "measurement"
+                    newnodes.append(g2)
+                    g2.get_edge(0) ^ edge2[index[i]]
+                else:
+                    vec = backend.one_hot(backend.cast(sample[i], "int32"), self._d)
+                    v = backend.cast(vec, dtypestr)
+                    m = backend.tensordot(v, v, axes=0)
+                    g = Gate(m)
+                    g.id = id(g)
+                    g.is_dagger = False
+                    g.flag = "measurement"
+                    newnodes.append(g)
+                    g.get_edge(0) ^ edge1[index[i]]
+                    g.get_edge(1) ^ edge2[index[i]]
             rho = (
                 1
                 / backend.cast(p, dtypestr)
                 * contractor(newnodes, output_edge_order=[edge1[j], edge2[j]]).tensor
             )
-            pu = backend.real(rho[0, 0])
-            if status is None:
-                r = backend.implicit_randu()[0]
+            if self._d == 2:
+                pu = backend.real(rho[0, 0])
+                if status is None:
+                    r = backend.implicit_randu()[0]
+                else:
+                    r = status[k]
+                r = backend.real(backend.cast(r, dtypestr))
+                eps = 0.31415926 * 1e-12
+                sign = (
+                    backend.sign(r - pu + eps) / 2 + 0.5
+                )  # in case status is exactly 0.5
+                sign = backend.convert_to_tensor(sign)
+                sign = backend.cast(sign, dtype=rdtypestr)
+                sign_complex = backend.cast(sign, dtypestr)
+                sample.append(sign_complex)
+                p = p * (pu * (-1) ** sign + sign)
             else:
-                r = status[k]
-            r = backend.real(backend.cast(r, dtypestr))
-            eps = 0.31415926 * 1e-12
-            sign = backend.sign(r - pu + eps) / 2 + 0.5  # in case status is exactly 0.5
-            sign = backend.convert_to_tensor(sign)
-            sign = backend.cast(sign, dtype=rdtypestr)
-            sign_complex = backend.cast(sign, dtypestr)
-            sample.append(sign_complex)
-            p = p * (pu * (-1) ** sign + sign)
-
-        sample = backend.stack(sample)
-        sample = backend.real(sample)
+                zero_r = backend.cast(backend.convert_to_tensor(0.0), rdtypestr)
+                tiny_r = backend.cast(backend.convert_to_tensor(1e-12), rdtypestr)
+                pu = backend.real(backend.diagonal(rho))
+                pu = backend.clip(pu, zero_r, one_r)
+                d = backend.shape_tuple(pu)[-1]
+                pu = pu + tiny_r * (
+                    backend.ones((d,), dtype=rdtypestr)
+                    / backend.cast(backend.convert_to_tensor(float(d)), rdtypestr)
+                )
+                pu = pu / backend.sum(pu)
+                cdf = backend.cumsum(pu)
+                if status is None:
+                    r = backend.implicit_randu()[0]
+                    r = backend.real(backend.cast(r, rdtypestr))
+                    phi = backend.cast(
+                        backend.convert_to_tensor(0.6180339887498948), rdtypestr
+                    )
+                    r = r + phi * backend.cast(
+                        backend.convert_to_tensor(k + 1), rdtypestr
+                    )
+                    r = r - backend.floor(r)
+                    r = backend.clip(r, zero_r, one_r - tiny_r)
+                else:
+                    r = backend.real(backend.cast(status[k], rdtypestr))
+                k_out = backend.searchsorted(cdf, r, side="right")
+                k_out = backend.clip(
+                    k_out,
+                    backend.cast(backend.convert_to_tensor(0), "int32"),
+                    backend.cast(backend.convert_to_tensor(d - 1), "int32"),
+                )
+                sample.append(backend.cast(k_out, rdtypestr))
+                p = p * backend.cast(pu[k_out], rdtypestr)
+        sample = backend.real(backend.stack(sample))
         if with_prob:
             return sample, p
         else:
@@ -468,35 +520,56 @@ class BaseCircuit(AbstractCircuit):
 
     def amplitude_before(self, l: Union[str, Tensor]) -> List[Gate]:
         r"""
-        Returns the tensornetwor nodes for the amplitude of the circuit given the bitstring l.
-        For state simulator, it computes :math:`\langle l\vert \psi\rangle`,
-        for density matrix simulator, it computes :math:`Tr(\rho \vert l\rangle \langle 1\vert)`
+        Returns the tensornetwor nodes for the amplitude of the circuit given a computational-basis label ``l``.
+        For a state simulator, it computes :math:`\langle l \vert \psi\rangle`;
+        for a density-matrix simulator, it computes :math:`\mathrm{Tr}(\rho \vert l\rangle\langle l\vert)`.
         Note how these two are different up to a square operation.
 
-        :param l: The bitstring of 0 and 1s.
+        :Example:
+
+        >>> c = tc.Circuit(2)
+        >>> c.X(0)
+        >>> c.amplitude("10")  # d=2, per-qubit digits
+        array(1.+0.j, dtype=complex64)
+        >>> c.CNOT(0, 1)
+        >>> c.amplitude("11")
+        array(1.+0.j, dtype=complex64)
+
+        For qudits (d>2, d<=36):
+        >>> c = tc.Circuit(3, dim=12)
+        >>> c.amplitude("0A2")  # base-12 string, A stands for 10
+
+        :param l: Basis label.
+            - If a string: it must be a base-d string of length ``nqubits``, using 0–9A–Z (A=10,…,Z=35) when ``d<=36``.
+            - If a tensor/array/list: it should contain per-site integers in ``[0, d-1]`` with length ``nqubits``.
         :type l: Union[str, Tensor]
         :return: The tensornetwork nodes for the amplitude of the circuit.
         :rtype: List[Gate]
         """
+
+        def _basis_nod(_k: int) -> Tensor:
+            _vec = np.zeros((self._d,), dtype=npdtype)
+            _vec[_k] = 1.0
+            return _vec
+
         no, d_edges = self._copy()
         ms = []
         if self.is_dm:
             msconj = []
         if isinstance(l, str):
-            for s in l:
-                if s == "1":
-                    endn = np.array([0, 1], dtype=npdtype)
-                elif s == "0":
-                    endn = np.array([1, 0], dtype=npdtype)
-                ms.append(tn.Node(endn))
+            symbols = _decode_basis_label(l, d=self._d, n=self._nqubits)
+            for k in symbols:
+                n = _basis_nod(k)
+                ms.append(tn.Node(n))
                 if self.is_dm:
-                    msconj.append(tn.Node(endn))
-        else:  # l is Tensor
+                    msconj.append(tn.Node(n))
+        else:
             l = backend.cast(l, dtype=dtypestr)
             for i in range(self._nqubits):
-                endn = l[i] * gates.array_to_tensor(np.array([0, 1])) + (
-                    1 - l[i]
-                ) * gates.array_to_tensor(np.array([1, 0]))
+                endn = backend.cast(
+                    backend.one_hot(backend.cast(l[i], "int32"), self._d),
+                    dtype=dtypestr,
+                )
                 ms.append(tn.Node(endn))
                 if self.is_dm:
                     msconj.append(tn.Node(endn))
@@ -547,17 +620,18 @@ class BaseCircuit(AbstractCircuit):
 
     def probability(self) -> Tensor:
         """
-        get the 2^n length probability vector over computational basis
+        get the d^n length probability vector over computational basis
 
-        :return: probability vector
+        :return: probability vector of shape [d**n]
         :rtype: Tensor
         """
         s = self.state()  # type: ignore
         if self.is_dm is False:
-            p = backend.abs(s) ** 2
-
+            amp = backend.reshape(s, [-1])
+            p = backend.real(backend.abs(amp) ** 2)
         else:
-            p = backend.abs(backend.diagonal(s))
+            diag = backend.diagonal(s)
+            p = backend.real(backend.reshape(diag, [-1]))
         return p
 
     @partial(arg_alias, alias_dict={"format": ["format_"]})
@@ -571,7 +645,7 @@ class BaseCircuit(AbstractCircuit):
         status: Optional[Tensor] = None,
         jittable: bool = True,
     ) -> Any:
-        """
+        r"""
         batched sampling from state or circuit tensor network directly
 
         :param batch: number of samples, defaults to None
@@ -594,6 +668,7 @@ class BaseCircuit(AbstractCircuit):
                 "count_tuple": # (np.array([0]), np.array([2]))
 
                 "count_dict_bin": # {"00": 2, "01": 0, "10": 0, "11": 0}
+                    for cases d\in [11, 36], use 0–9A–Z digits (e.g., 'A' -> 10, …, 'Z' -> 35);
 
                 "count_dict_int": # {0: 2, 1: 0, 2: 0, 3: 0}
 
@@ -645,7 +720,7 @@ class BaseCircuit(AbstractCircuit):
                 return r
             r = backend.stack([ri[0] for ri in r])  # type: ignore
             r = backend.cast(r, "int32")
-            ch = sample_bin2int(r, self._nqubits)
+            ch = sample_bin2int(r, self._nqubits, d=self._d)
         else:  # allow_state
             if batch is None:
                 nbatch = 1
@@ -670,7 +745,7 @@ class BaseCircuit(AbstractCircuit):
             #     2,
             # )
             if format is None:  # for backward compatibility
-                confg = sample_int2bin(ch, self._nqubits)
+                confg = sample_int2bin(ch, self._nqubits, d=self._d)
                 prob = backend.gather1d(p, ch)
                 r = list(zip(confg, prob))  # type: ignore
                 if batch is None:
@@ -678,7 +753,9 @@ class BaseCircuit(AbstractCircuit):
                 return r
         if self._nqubits > 35:
             jittable = False
-        return sample2all(sample=ch, n=self._nqubits, format=format, jittable=jittable)
+        return sample2all(
+            sample=ch, n=self._nqubits, format=format, jittable=jittable, d=self._d
+        )
 
     def sample_expectation_ps(
         self,
@@ -878,9 +955,9 @@ class BaseCircuit(AbstractCircuit):
         """
         inputs = backend.reshape(inputs, [-1])
         N = inputs.shape[0]
-        n = int(np.log(N) / np.log(2))
+        n = _infer_num_sites(N, self._d)
         assert n == self._nqubits
-        inputs = backend.reshape(inputs, [2 for _ in range(n)])
+        inputs = backend.reshape(inputs, [self._d for _ in range(n)])
         if self.inputs is not None:
             self._nodes[0].tensor = inputs
             if self.is_dm:
@@ -911,9 +988,9 @@ class BaseCircuit(AbstractCircuit):
 
 
 
-        :param index: the qubit for the z-basis measurement
+        :param index: the site index for the Z-basis measurement
         :type index: int
-        :return: 0 or 1 for z measurement on up and down freedom
+        :return: 0 or 1 for Z-basis measurement outcome
         :rtype: Tensor
         """
         return self.general_kraus(  # type: ignore
@@ -992,8 +1069,8 @@ class BaseCircuit(AbstractCircuit):
 
     def projected_subsystem(self, traceout: Tensor, left: Tuple[int, ...]) -> Tensor:
         """
-        remaining wavefunction or density matrix on qubits in left, with other qubits
-        fixed in 0 or 1 indicated by traceout
+        remaining wavefunction or density matrix on sites in ``left``, with other sites
+        fixed to given digits (0..d-1) as indicated by ``traceout``
 
         :param traceout: can be jitted
         :type traceout: Tensor
@@ -1002,15 +1079,19 @@ class BaseCircuit(AbstractCircuit):
         :return: _description_
         :rtype: Tensor
         """
-        end0, end1 = gates.array_to_tensor(np.array([1.0, 0]), np.array([0, 1.0]))
+
+        def _basis_gate(k_tensor: Any) -> Gate:
+            vec = backend.one_hot(backend.cast(k_tensor, "int32"), self._d)
+            vec = backend.cast(vec, dtypestr)
+            return Gate(vec)
+
         traceout = backend.cast(traceout, dtypestr)
         nodes, front = self._copy()
         L = self._nqubits
         edges = []
         for i in range(len(traceout)):
             if i not in left:
-                b = traceout[i]
-                n = gates.Gate((1 - b) * end0 + b * end1)
+                n = _basis_gate(traceout[i])
                 nodes.append(n)
                 front[i] ^ n[0]
             else:
@@ -1019,8 +1100,7 @@ class BaseCircuit(AbstractCircuit):
         if self.is_dm:
             for i in range(len(traceout)):
                 if i not in left:
-                    b = traceout[i]
-                    n = gates.Gate((1 - b) * end0 + b * end1)
+                    n = _basis_gate(traceout[i])
                     nodes.append(n)
                     front[i + L] ^ n[0]
                 else:
