@@ -282,8 +282,10 @@ def test_ode_evol_jit_grad(highp, jaxb):
     v2, g2 = s2
     v3, g3 = s3
 
-    assert (np.linalg.norm(v1 - v2) < 1e-8) & (np.linalg.norm(v1 - v3) < 1e-8)
-    assert (np.linalg.norm(g1 - g2) < 1e-8) & (np.linalg.norm(g1 - g3) < 1e-8)
+    np.testing.assert_allclose(g1, g3, atol=1e-8, rtol=0)
+    np.testing.assert_allclose(g1, g2, atol=1e-8, rtol=0)
+    np.testing.assert_allclose(v1, v3, atol=1e-8, rtol=0)
+    np.testing.assert_allclose(v1, v2, atol=1e-8, rtol=0)
 
     ######################################################################
 
@@ -336,7 +338,9 @@ def test_ode_evol_jit_grad(highp, jaxb):
     s2 = do5_ode_solver_local(paras)
     v1, g1 = s1
     v2, g2 = s2
-    assert (np.linalg.norm(v1 - v2) < 1e-8) & (np.linalg.norm(g1 - g2) < 1e-8)
+
+    np.testing.assert_allclose(g1, g2, atol=1e-8, rtol=0)
+    np.testing.assert_allclose(v1, v2, atol=1e-8, rtol=0)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
