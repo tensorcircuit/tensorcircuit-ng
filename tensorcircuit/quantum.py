@@ -56,6 +56,30 @@ def get_all_nodes(edges: Iterable[Edge]) -> List[Node]:
     return nodes
 
 
+def _infer_num_sites(D: int, d: int) -> int:
+    """
+    Infer the number of sites (n) from a Hilbert space dimension D
+    and local dimension d, assuming D = d**n.
+
+    :param D: total Hilbert space dimension (int)
+    :param d: local dimension per site (int)
+    :return: n such that D == d**n
+    :raises ValueError: if D is not an exact power of d
+    """
+    if not (isinstance(D, int) and D > 0):
+        raise ValueError(f"D must be a positive integer, got {D}")
+    if not (isinstance(d, int) and d >= 2):
+        raise ValueError(f"d must be an integer >= 2, got {d}")
+
+    tmp, n = D, 0
+    while tmp % d == 0 and tmp > 1:
+        tmp //= d
+        n += 1
+    if tmp != 1:
+        raise ValueError(f"Dimension {D} is not a power of local dim {d}")
+    return n
+
+
 def _reachable(nodes: List[AbstractNode]) -> List[AbstractNode]:
     if not nodes:
         raise ValueError("Reachable requires at least 1 node.")
@@ -2150,7 +2174,10 @@ def entanglement_entropy(state: Tensor, cut: Union[int, List[int]]) -> Tensor:
 
 
 def reduced_wavefunction(
-    state: Tensor, cut: List[int], measure: Optional[List[int]] = None
+    state: Tensor,
+    cut: List[int],
+    measure: Optional[List[int]] = None,
+    d: Optional[int] = None,
 ) -> Tensor:
     """
     Compute the reduced wavefunction from the quantum state ``state``.
@@ -2165,20 +2192,22 @@ def reduced_wavefunction(
     :type measure: List[int]
     :return: _description_
     :rtype: Tensor
+    :param d: dimension of qudit system
+    :type d: int
     """
+    d = 2 if d is None else d
     if measure is None:
         measure = [0 for _ in cut]
-    s = backend.reshape2(state)
+    s = backend.reshaped(state, d)
     n = len(backend.shape_tuple(s))
     s_node = Gate(s)
     end_nodes = []
     for c, m in zip(cut, measure):
-        rt = backend.cast(backend.convert_to_tensor(1 - m), dtypestr) * backend.cast(
-            backend.convert_to_tensor(np.array([1.0, 0.0])), dtypestr
-        ) + backend.cast(backend.convert_to_tensor(m), dtypestr) * backend.cast(
-            backend.convert_to_tensor(np.array([0.0, 1.0])), dtypestr
+        oh = backend.cast(
+            backend.one_hot(backend.cast(backend.convert_to_tensor(m), "int32"), d),
+            dtypestr,
         )
-        end_node = Gate(rt)
+        end_node = Gate(backend.convert_to_tensor(oh))
         end_nodes.append(end_node)
         s_node[c] ^ end_node[0]
     new_node = contractor(
@@ -2193,8 +2222,9 @@ def reduced_density_matrix(
     cut: Union[int, List[int]],
     p: Optional[Tensor] = None,
     normalize: bool = True,
+    d: Optional[int] = None,
 ) -> Union[Tensor, QuOperator]:
-    """
+    r"""
     Compute the reduced density matrix from the quantum state ``state``.
 
     :param state: The quantum state in form of Tensor or QuOperator.
@@ -2206,8 +2236,12 @@ def reduced_density_matrix(
     :type p: Optional[Tensor]
     :return: The reduced density matrix.
     :rtype: Union[Tensor, QuOperator]
-    :normalize: if True, returns a trace 1 density matrix. Otherwise does not normalize.
+    :param normalize: if True, returns a trace 1 density matrix. Otherwise does not normalize.
+    :type normalize: bool
+    :param d: dimension of qudit system
+    :type d: int
     """
+    d = 2 if d is None else d
     if isinstance(cut, list) or isinstance(cut, tuple) or isinstance(cut, set):
         traceout = list(cut)
     else:
@@ -2220,21 +2254,19 @@ def reduced_density_matrix(
         return state.partial_trace(traceout)
     if len(state.shape) == 2 and state.shape[0] == state.shape[1]:
         # density operator
-        freedomexp = backend.sizen(state)
-        # traceout = sorted(traceout)[::-1]
-        freedom = int(np.log2(freedomexp) / 2)
-        # traceout2 = [i + freedom for i in traceout]
+        freedom = _infer_num_sites(state.shape[0], d)
         left = traceout + [i for i in range(freedom) if i not in traceout]
         right = [i + freedom for i in left]
-        rho = backend.reshape(state, [2 for _ in range(2 * freedom)])
+
+        rho = backend.reshape(state, [d] * (2 * freedom))
         rho = backend.transpose(rho, perm=left + right)
         rho = backend.reshape(
             rho,
             [
-                2 ** len(traceout),
-                2 ** (freedom - len(traceout)),
-                2 ** len(traceout),
-                2 ** (freedom - len(traceout)),
+                d ** len(traceout),
+                d ** (freedom - len(traceout)),
+                d ** len(traceout),
+                d ** (freedom - len(traceout)),
             ],
         )
         if p is None:
@@ -2247,20 +2279,20 @@ def reduced_density_matrix(
             p = backend.reshape(p, [-1])
             rho = backend.einsum("a,aiaj->ij", p, rho)
         rho = backend.reshape(
-            rho, [2 ** (freedom - len(traceout)), 2 ** (freedom - len(traceout))]
+            rho, [d ** (freedom - len(traceout)), d ** (freedom - len(traceout))]
         )
         if normalize:
             rho /= backend.trace(rho)
 
     else:
         w = state / backend.norm(state)
-        freedomexp = backend.sizen(state)
-        freedom = int(np.log(freedomexp) / np.log(2))
+        size = int(backend.sizen(state))
+        freedom = _infer_num_sites(size, d)
         perm = [i for i in range(freedom) if i not in traceout]
         perm = perm + traceout
-        w = backend.reshape(w, [2 for _ in range(freedom)])
+        w = backend.reshape(w, [d for _ in range(freedom)])
         w = backend.transpose(w, perm=perm)
-        w = backend.reshape(w, [-1, 2 ** len(traceout)])
+        w = backend.reshape(w, [-1, d ** len(traceout)])
         if p is None:
             rho = w @ backend.adjoint(w)
         else:
@@ -2403,7 +2435,9 @@ def truncated_free_energy(
 
 
 @op2tensor
-def partial_transpose(rho: Tensor, transposed_sites: List[int]) -> Tensor:
+def partial_transpose(
+    rho: Tensor, transposed_sites: List[int], d: Optional[int] = None
+) -> Tensor:
     """
     _summary_
 
@@ -2411,10 +2445,13 @@ def partial_transpose(rho: Tensor, transposed_sites: List[int]) -> Tensor:
     :type rho: Tensor
     :param transposed_sites: sites int list to be transposed
     :type transposed_sites: List[int]
+    :param d: dimension of qudit system
+    :type d: int
     :return: _description_
     :rtype: Tensor
     """
-    rho = backend.reshape2(rho)
+    d = 2 if d is None else d
+    rho = backend.reshaped(rho, d)
     rho_node = Gate(rho)
     n = len(rho.shape) // 2
     left_edges = []
@@ -2432,7 +2469,9 @@ def partial_transpose(rho: Tensor, transposed_sites: List[int]) -> Tensor:
 
 
 @op2tensor
-def entanglement_negativity(rho: Tensor, transposed_sites: List[int]) -> Tensor:
+def entanglement_negativity(
+    rho: Tensor, transposed_sites: List[int], d: Optional[int] = None
+) -> Tensor:
     """
     _summary_
 
@@ -2440,6 +2479,8 @@ def entanglement_negativity(rho: Tensor, transposed_sites: List[int]) -> Tensor:
     :type rho: Tensor
     :param transposed_sites: _description_
     :type transposed_sites: List[int]
+    :param d: dimension of qudit system
+    :type d: int
     :return: _description_
     :rtype: Tensor
     """
@@ -2450,7 +2491,9 @@ def entanglement_negativity(rho: Tensor, transposed_sites: List[int]) -> Tensor:
 
 
 @op2tensor
-def log_negativity(rho: Tensor, transposed_sites: List[int], base: str = "e") -> Tensor:
+def log_negativity(
+    rho: Tensor, transposed_sites: List[int], base: str = "e", d: Optional[int] = None
+) -> Tensor:
     """
     _summary_
 
@@ -2460,10 +2503,13 @@ def log_negativity(rho: Tensor, transposed_sites: List[int], base: str = "e") ->
     :type transposed_sites: List[int]
     :param base: whether use 2 based log or e based log, defaults to "e"
     :type base: str, optional
+    :param d: dimension of qudit system
+    :type d: int
     :return: _description_
     :rtype: Tensor
     """
-    rhot = partial_transpose(rho, transposed_sites)
+    d = 2 if d is None else d
+    rhot = partial_transpose(rho, transposed_sites, d)
     es = backend.eigvalsh(rhot)
     rhot_m = backend.sum(backend.abs(es))
     een = backend.log(rhot_m)
@@ -2549,7 +2595,9 @@ def double_state(h: Tensor, beta: float = 1) -> Tensor:
 
 
 @op2tensor
-def mutual_information(s: Tensor, cut: Union[int, List[int]]) -> Tensor:
+def mutual_information(
+    s: Tensor, cut: Union[int, List[int]], d: Optional[int] = None
+) -> Tensor:
     """
     Mutual information between AB subsystem described by ``cut``.
 
@@ -2557,9 +2605,12 @@ def mutual_information(s: Tensor, cut: Union[int, List[int]]) -> Tensor:
     :type s: Tensor
     :param cut: The AB subsystem.
     :type cut: Union[int, List[int]]
+    :param d: The diagonal matrix in form of Tensor.
+    :type d: Tensor
     :return: The mutual information between AB subsystem described by ``cut``.
     :rtype: Tensor
     """
+    d = 2 if d is None else d
     if isinstance(cut, list) or isinstance(cut, tuple) or isinstance(cut, set):
         traceout = list(cut)
     else:
@@ -2567,22 +2618,22 @@ def mutual_information(s: Tensor, cut: Union[int, List[int]]) -> Tensor:
 
     if len(s.shape) == 2 and s.shape[0] == s.shape[1]:
         # mixed state
-        n = int(np.log2(backend.sizen(s)) / 2)
+        n = _infer_num_sites(s.shape[0], d=d)
         hab = entropy(s)
 
         # subsystem a
-        rhoa = reduced_density_matrix(s, traceout)
+        rhoa = reduced_density_matrix(s, traceout, d=d)
         ha = entropy(rhoa)
 
         # need subsystem b as well
         other = tuple(i for i in range(n) if i not in traceout)
-        rhob = reduced_density_matrix(s, other)  # type: ignore
+        rhob = reduced_density_matrix(s, other, d=d)  # type: ignore
         hb = entropy(rhob)
 
     # pure system
     else:
         hab = 0.0
-        rhoa = reduced_density_matrix(s, traceout)
+        rhoa = reduced_density_matrix(s, traceout, d=d)
         ha = hb = entropy(rhoa)
 
     return ha + hb - hab
@@ -2591,7 +2642,7 @@ def mutual_information(s: Tensor, cut: Union[int, List[int]]) -> Tensor:
 # measurement results and transformations and correlations below
 
 
-def count_s2d(srepr: Tuple[Tensor, Tensor], n: int) -> Tensor:
+def count_s2d(srepr: Tuple[Tensor, Tensor], n: int, d: Optional[int] = None) -> Tensor:
     """
     measurement shots results, sparse tuple representation to dense representation
     count_vector to count_tuple
@@ -2600,11 +2651,14 @@ def count_s2d(srepr: Tuple[Tensor, Tensor], n: int) -> Tensor:
     :type srepr: Tuple[Tensor, Tensor]
     :param n: number of qubits
     :type n: int
+    :param d: [description], defaults to None
+    :type d: int, optional
     :return: [description]
     :rtype: Tensor
     """
+    d = 2 if d is None else d
     return backend.scatter(
-        backend.cast(backend.zeros([2**n]), srepr[1].dtype),
+        backend.cast(backend.zeros([d**n]), srepr[1].dtype),
         backend.reshape(srepr[0], [-1, 1]),
         srepr[1],
     )
@@ -2647,25 +2701,36 @@ def count_d2s(drepr: Tensor, eps: float = 1e-7) -> Tuple[Tensor, Tensor]:
 count_t2v = count_d2s
 
 
-def sample_int2bin(sample: Tensor, n: int) -> Tensor:
+def sample_int2bin(sample: Tensor, n: int, d: Optional[int] = None) -> Tensor:
     """
-    int sample to bin sample
+    Convert linear-index samples to per-site digits (base-d).
 
-    :param sample: in shape [trials] of int elements in the range [0, 2**n)
+    :param sample: shape [trials], integers in [0, d**n)
     :type sample: Tensor
-    :param n: number of qubits
+    :param n: number of sites
     :type n: int
-    :return: in shape [trials, n] of element (0, 1)
+    :param d: local dimension, defaults to 2
+    :type d: int, optional
+    :return: shape [trials, n], entries in [0, d-1]
     :rtype: Tensor
     """
-    confg = backend.mod(
-        backend.right_shift(sample[..., None], backend.reverse(backend.arange(n))),
-        2,
-    )
-    return confg
+    d = 2 if d is None else d
+    if d == 2:
+        return backend.mod(
+            backend.right_shift(sample[..., None], backend.reverse(backend.arange(n))),
+            2,
+        )
+    else:
+        pos = backend.reverse(backend.arange(n))
+        base = backend.power(d, pos)
+        digits = backend.mod(
+            backend.floor(backend.divide(sample[..., None], base)),  # ⌊sample / d**pos⌋
+            d,
+        )
+        return backend.cast(digits, "int32")
 
 
-def sample_bin2int(sample: Tensor, n: int) -> Tensor:
+def sample_bin2int(sample: Tensor, n: int, d: Optional[int] = None) -> Tensor:
     """
     bin sample to int sample
 
@@ -2676,88 +2741,98 @@ def sample_bin2int(sample: Tensor, n: int) -> Tensor:
     :return: in shape [trials]
     :rtype: Tensor
     """
-    power = backend.convert_to_tensor([2**j for j in reversed(range(n))])
+    d = 2 if d is None else d
+    power = backend.convert_to_tensor([d**j for j in reversed(range(n))])
     return backend.sum(sample * power, axis=-1)
 
 
 def sample2count(
-    sample: Tensor, n: int, jittable: bool = True
+    sample: Tensor,
+    n: int,
+    jittable: bool = True,
+    d: Optional[int] = None,
 ) -> Tuple[Tensor, Tensor]:
     """
-    sample_int to count_tuple
+    sample_int to count_tuple (indices, counts), size = d**n
 
-    :param sample: _description_
-    :type sample: Tensor
-    :param n: _description_
-    :type n: int
-    :param jittable: _description_, defaults to True
-    :type jittable: bool, optional
-    :return: _description_
-    :rtype: Tuple[Tensor, Tensor]
+    :param sample: linear-index samples, shape [shots]
+    :param n: number of sites
+    :param jittable: whether to return fixed-size outputs (backend dependent)
+    :param d: local dimension per site, default 2 (qubit)
+    :return: (unique_indices, counts)
     """
-    d = 2**n
+    d = 2 if d is None else d
+    size = d**n
     if not jittable:
         results = backend.unique_with_counts(sample)  # non-jittable
-    else:  # jax specified
-        results = backend.unique_with_counts(sample, size=d, fill_value=-1)
+    else:  # jax specified / fixed-size
+        results = backend.unique_with_counts(sample, size=size, fill_value=-1)
     return results
 
 
-def count_vector2dict(count: Tensor, n: int, key: str = "bin") -> Dict[Any, int]:
+def count_vector2dict(
+    count: Tensor, n: int, key: str = "bin", d: Optional[int] = None
+) -> Dict[Any, int]:
     """
-    convert_vector to count_dict_bin or count_dict_int
+    Convert count_vector to count_dict_bin or count_dict_int.
+    For d>10 cases, a base-d string (0-9A-Z) is used.
 
-    :param count: tensor in shape [2**n]
+    :param count: tensor in shape [d**n]
     :type count: Tensor
-    :param n: number of qubits
+    :param n: number of sites
     :type n: int
     :param key: can be "int" or "bin", defaults to "bin"
     :type key: str, optional
-    :return: _description_
-    :rtype: _type_
+    :param d: local dimension (default 2)
+    :type d: int, optional
+    :return: mapping from configuration to count
+    :rtype: Dict[Any, int]
     """
     from .interfaces import which_backend
-
+    d = 2 if d is None else d
     b = which_backend(count)
-    d = {i: b.numpy(count[i]).item() for i in range(2**n)}
+    out_int = {i: b.numpy(count[i]).item() for i in range(d**n)}
     if key == "int":
-        return d
+        return out_int
     else:
-        dn = {}
-        for k, v in d.items():
-            kn = str(bin(k))[2:].zfill(n)
-            dn[kn] = v
-        return dn
+        out_str = {}
+        for k, v in out_int.items():
+            kn = np.base_repr(k, base=d).zfill(n)
+            out_str[kn] = v
+        return out_str
 
 
 def count_tuple2dict(
-    count: Tuple[Tensor, Tensor], n: int, key: str = "bin"
+    count: Tuple[Tensor, Tensor], n: int, key: str = "bin", d: Optional[int] = None
 ) -> Dict[Any, int]:
     """
     count_tuple to count_dict_bin or count_dict_int
 
-    :param count: count_tuple format
+    :param count: count_tuple format (indices, counts)
     :type count: Tuple[Tensor, Tensor]
-    :param n: number of qubits
+    :param n: number of sites (qubits or qudits)
     :type n: int
     :param key: can be "int" or "bin", defaults to "bin"
     :type key: str, optional
+    :param d: local dimension, defaults to 2
+    :type d: int, optional
     :return: count_dict
-    :rtype: _type_
+    :rtype: Dict[Any, int]
     """
-    d = {
+    d = 2 if d is None else d
+    out_int = {
         backend.numpy(i).item(): backend.numpy(j).item()
         for i, j in zip(count[0], count[1])
         if i >= 0
     }
     if key == "int":
-        return d
+        return out_int
     else:
-        dn = {}
-        for k, v in d.items():
-            kn = str(bin(k))[2:].zfill(n)
-            dn[kn] = v
-        return dn
+        out_str = {}
+        for k, v in out_int.items():
+            kn = np.base_repr(k, base=d).zfill(n)
+            out_str[kn] = v
+        return out_str
 
 
 @partial(arg_alias, alias_dict={"counts": ["shots"], "format": ["format_"]})
@@ -2769,8 +2844,9 @@ def measurement_counts(
     random_generator: Optional[Any] = None,
     status: Optional[Tensor] = None,
     jittable: bool = False,
+    d: Optional[int] = None,
 ) -> Any:
-    """
+    r"""
     Simulate the measuring of each qubit of ``p`` in the computational basis,
     thus producing output like that of ``qiskit``.
 
@@ -2785,6 +2861,7 @@ def measurement_counts(
     "count_tuple": # (np.array([0]), np.array([2]))
 
     "count_dict_bin": # {"00": 2, "01": 0, "10": 0, "11": 0}
+    / for cases d\in [10, 36], "10" -> "A", ..., "35" -> "Z"
 
     "count_dict_int": # {0: 2, 1: 0, 2: 0, 3: 0}
 
@@ -2836,21 +2913,22 @@ def measurement_counts(
             state /= backend.norm(state)
             pi = backend.real(backend.conj(state) * state)
         pi = backend.reshape(pi, [-1])
-    d = int(backend.shape_tuple(pi)[0])
-    n = int(np.log(d) / np.log(2) + 1e-8)
+
+    local_d = 2 if d is None else d
+    total_dim = int(backend.shape_tuple(pi)[0])
+    n = _infer_num_sites(total_dim, local_d)
+
     if (counts is None) or counts <= 0:
         if format == "count_vector":
             return pi
         elif format == "count_tuple":
             return count_d2s(pi)
         elif format == "count_dict_bin":
-            return count_vector2dict(pi, n, key="bin")
+            return count_vector2dict(pi, n, key="bin", d=local_d)
         elif format == "count_dict_int":
-            return count_vector2dict(pi, n, key="int")
+            return count_vector2dict(pi, n, key="int", d=local_d)
         else:
-            raise ValueError(
-                "unsupported format %s for analytical measurement" % format
-            )
+            raise ValueError(f"unsupported format {format} for analytical measurement")
     else:
         raw_counts = backend.probability_sample(
             counts, pi, status=status, g=random_generator
@@ -2861,7 +2939,7 @@ def measurement_counts(
         # raw_counts = backend.stateful_randc(
         # random_generator, a=drange, shape=counts, p=pi
         # )
-        return sample2all(raw_counts, n, format=format, jittable=jittable)
+        return sample2all(raw_counts, n, format=format, jittable=jittable, d=local_d)
 
 
 measurement_results = measurement_counts
@@ -2869,52 +2947,62 @@ measurement_results = measurement_counts
 
 @partial(arg_alias, alias_dict={"format": ["format_"]})
 def sample2all(
-    sample: Tensor, n: int, format: str = "count_vector", jittable: bool = False
+    sample: Tensor,
+    n: int,
+    format: str = "count_vector",
+    jittable: bool = False,
+    d: Optional[int] = None,
 ) -> Any:
     """
-    transform ``sample_int`` or ``sample_bin`` form results to other forms specified by ``format``
+    transform ``sample_int`` or ``sample_bin`` results to other forms specified by ``format``
 
-    :param sample: measurement shots results in ``sample_int`` or ``sample_bin`` format
+    :param sample: measurement shots results in ``sample_int`` (shape [shots]) or ``sample_bin`` (shape [shots, n])
     :type sample: Tensor
-    :param n: number of qubits
+    :param n: number of sites
     :type n: int
-    :param format: see the doc in the doc in :py:meth:`tensorcircuit.quantum.measurement_results`,
-        defaults to "count_vector"
+    :param format: see :py:meth:`tensorcircuit.quantum.measurement_results`, defaults to "count_vector"
     :type format: str, optional
     :param jittable: only applicable to count transformation in jax backend, defaults to False
     :type jittable: bool, optional
+    :param d: local dimension (2 for qubit; >2 for qudit), defaults to 2
+    :type d: Optional[int]
     :return: measurement results specified as ``format``
     :rtype: Any
     """
+    d = 2 if d is None else int(d)
+
     if len(backend.shape_tuple(sample)) == 1:
         sample_int = sample
-        sample_bin = sample_int2bin(sample, n)
+        sample_bin = sample_int2bin(sample, n, d=d)
     elif len(backend.shape_tuple(sample)) == 2:
-        sample_int = sample_bin2int(sample, n)
+        sample_int = sample_bin2int(sample, n, d=d)
         sample_bin = sample
     else:
         raise ValueError("unrecognized tensor shape for sample")
+
     if format == "sample_int":
         return sample_int
     elif format == "sample_bin":
         return sample_bin
     else:
-        count_tuple = sample2count(sample_int, n, jittable)
+        count_tuple = sample2count(sample_int, n, jittable=jittable, d=d)
         if format == "count_tuple":
             return count_tuple
         elif format == "count_vector":
-            return count_s2d(count_tuple, n)
+            return count_s2d(count_tuple, n, d=d)
         elif format == "count_dict_bin":
-            return count_tuple2dict(count_tuple, n, key="bin")
+            return count_tuple2dict(count_tuple, n, key="bin", d=d)
         elif format == "count_dict_int":
-            return count_tuple2dict(count_tuple, n, key="int")
+            return count_tuple2dict(count_tuple, n, key="int", d=d)
         else:
             raise ValueError(
-                "unsupported format %s for finite shots measurement" % format
+                f"unsupported format {format} for finite shots measurement"
             )
 
 
-def spin_by_basis(n: int, m: int, elements: Tuple[int, int] = (1, -1)) -> Tensor:
+def spin_by_basis(
+    n: int, m: int, elements: Tuple[int, int] = (1, -1), d: Optional[int] = None
+) -> Tensor:
     """
     Generate all n-bitstrings as an array, each row is a bitstring basis.
     Return m-th col.
@@ -2934,67 +3022,109 @@ def spin_by_basis(n: int, m: int, elements: Tuple[int, int] = (1, -1)) -> Tensor
         all bitstring basis.
     :rtype: Tensor
     """
-    s = backend.tile(
-        backend.cast(
-            backend.convert_to_tensor(np.array([[elements[0]], [elements[1]]])), "int32"
-        ),
-        [2**m, int(2 ** (n - m - 1))],
-    )
+    d = len(elements) if d is None else d
+
+    col = backend.convert_to_tensor(np.array(elements, dtype=np.int32).reshape(-1, 1))
+    s = backend.tile(backend.cast(col, "int32"), [d**m, int(d ** (n - m - 1))])
     return backend.reshape(s, [-1])
 
 
-def correlation_from_samples(index: Sequence[int], results: Tensor, n: int) -> Tensor:
+def correlation_from_samples(
+    index: Sequence[int],
+    results: Tensor,
+    n: int,
+    d: int = 2,
+    elements: Optional[Sequence[float]] = None,
+) -> Tensor:
     r"""
-    Compute :math:`\prod_{i\in \\text{index}} s_i (s=\pm 1)`,
-    Results is in the format of "sample_int" or "sample_bin"
+    Compute :math:`\prod_{i\in \text{index}} s_i` from measurement shots,
+    where each site value :math:`s_i` is mapped from the digit outcome.
 
-    :param index: list of int, indicating the position in the bitstring
-    :type index: Sequence[int]
-    :param results: sample tensor
-    :type results: Tensor
-    :param n: number of qubits
-    :type n: int
-    :return: Correlation expectation from measurement shots
-    :rtype: Tensor
+    Results can be "sample_int" ([shots]) or "sample_bin" ([shots, n]).
+
+    :param index: positions in the basis string
+    :param results: samples tensor
+    :param n: number of sites
+    :param d: local dimension (default 2)
+    :param elements: optional mapping of length d from outcome {0..d-1} to values s.
+                     If None and d==2, defaults to (1, -1) via the original formula.
+    :return: correlation estimate (mean over shots)
     """
     if len(backend.shape_tuple(results)) == 1:
-        results = sample_int2bin(results, n)
-    results = 1 - results * 2
-    r = results[:, index[0]]
+        results = sample_int2bin(results, n, d=d)
+
+    if d == 2 and elements is None:
+        svals = 1 - results * 2  # 0->+1, 1->-1
+        r = svals[:, index[0]]
+        for i in index[1:]:
+            r *= svals[:, i]
+        r = backend.cast(r, rdtypestr)
+        return backend.mean(r)
+
+    if elements is None:
+        raise ValueError(
+            f"correlation_from_samples requires `elements` mapping for d={d}; "
+            f"e.g., for qutrit you might pass elements=(1.0,0.0,-1.0)."
+        )
+    if len(elements) != d:
+        raise ValueError(f"`elements` length {len(elements)} != d={d}")
+
+    evec = backend.cast(backend.convert_to_tensor(np.asarray(elements)), rdtypestr)
+
+    col = backend.cast(results[:, index[0]], "int32")
+    r = backend.gather1d(evec, col)  # shape [shots]
+
     for i in index[1:]:
-        r *= results[:, i]
+        col = backend.cast(results[:, i], "int32")
+        r *= backend.gather1d(evec, col)
+
     r = backend.cast(r, rdtypestr)
     return backend.mean(r)
 
 
-def correlation_from_counts(index: Sequence[int], results: Tensor) -> Tensor:
+def correlation_from_counts(
+    index: Sequence[int],
+    results: Tensor,
+    d: Optional[int] = None,
+    elements: Optional[Sequence[float]] = None,
+) -> Tensor:
     r"""
-    Compute :math:`\prod_{i\in \\text{index}} s_i`,
-    where the probability for each bitstring is given as a vector ``results``.
-    Results is in the format of "count_vector"
+    Compute :math:`\prod_{i\in \text{index}} s_i` where the probability for each
+    basis label is given by a count/probability vector ``results`` ("count_vector").
 
-    :Example:
-
-    >>> prob = tc.array_to_tensor(np.array([0.6, 0.4, 0, 0]))
-    >>> qu.correlation_from_counts([0, 1], prob)
-    (0.20000002+0j)
-    >>> qu.correlation_from_counts([1], prob)
-    (0.20000002+0j)
-
-    :param index: list of int, indicating the position in the bitstring
-    :type index: Sequence[int]
-    :param results: probability vector of shape 2^n
-    :type results: Tensor
-    :return: Correlation expectation from measurement shots.
-    :rtype: Tensor
+    :param index: positions in the basis string
+    :param results: probability/count vector of shape d**n (will be normalized)
+    :param d: local dimension (default 2)
+    :param elements: optional mapping of length d from digit {0..d-1} to values s.
+                     If None and d==2, defaults to (1, -1). For d>2, must be provided.
+    :return: correlation expectation from counts
     """
+    d = 2 if d is None else int(d)
+    if d != 2:
+        raise NotImplementedError(f"`d={d}` not implemented.")
+
     results = backend.reshape(results, [-1])
     results = backend.cast(results, rdtypestr)
     results /= backend.sum(results)
-    n = int(np.log(results.shape[0]) / np.log(2))
+
+    n = _infer_num_sites(int(results.shape[0]), d=d)
+
+    if d == 2 and elements is None:
+        elems = (1, -1)
+    else:
+        if elements is None or len(elements) != d:
+            raise ValueError(
+                f"`elements` must be provided with length d={d} for qudit; got {elements}."
+            )
+        elems = tuple(elements)  # type: ignore
+
+    acc = results
     for i in index:
-        results = results * backend.cast(spin_by_basis(n, i), results.dtype)
-    return backend.sum(results)
+        acc = acc * backend.cast(
+            spin_by_basis(n, int(i), elements=elems, d=d), acc.dtype
+        )
+
+    return backend.sum(acc)
 
 
 # @op2tensor
