@@ -9,6 +9,7 @@ from functools import reduce, partial
 from operator import mul
 from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
+import math
 import numpy as np
 from ..utils import return_partial
 
@@ -404,6 +405,31 @@ class ExtendedBackend:
         nleg = int(np.log2(self.sizen(a)))
         a = self.reshape(a, [2 for _ in range(nleg)])
         return a
+
+    def reshaped(self: Any, a: Tensor, d: int) -> Tensor:
+        """
+        Reshape a tensor to the [d, d, ...] shape.
+
+        :param a: Input tensor
+        :type a: Tensor
+        :param d: edge length for each dimension
+        :type d: int
+        :return: the reshaped tensor
+        :rtype: Tensor
+        """
+        if not isinstance(d, int) or d <= 0:
+            raise ValueError("d must be a positive integer.")
+
+        size = self.sizen(a)
+        if size == 0:
+            return self.reshape(a, (0,))
+
+        nleg_float = math.log(size, d)
+        nleg = int(round(nleg_float))
+        if d**nleg != size:
+            raise ValueError(f"cannot reshape: size {size} is not a power of d={d}")
+
+        return self.reshape(a, (d,) * nleg)
 
     def reshapem(self: Any, a: Tensor) -> Tensor:
         """
@@ -837,6 +863,54 @@ class ExtendedBackend:
         """
         raise NotImplementedError(
             "Backend '{}' has not implemented `mod`.".format(self.name)
+        )
+
+    def floor(self: Any, x: Tensor) -> Tensor:
+        """
+        Compute the element-wise floor of the input tensor.
+
+        This operation returns a new tensor with the largest integers
+        less than or equal to each element of the input tensor,
+        i.e. it rounds each value down towards negative infinity.
+
+        :param x: Input tensor containing numeric values.
+        :type x: Tensor
+        :return: A tensor with the same shape as `x`, where each element
+                 is the floored value of the corresponding element in `x`.
+        :rtype: Tensor
+
+        :raises NotImplementedError: If the backend does not provide an
+                                     implementation for `floor`.
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `floor`.".format(self.name)
+        )
+
+    def clip(self: Any, a: Tensor, a_min: Tensor, a_max: Tensor) -> Tensor:
+        """
+        Clip (limit) the values of a tensor element-wise to the range [a_min, a_max].
+
+        Each element in the input tensor `a` is compared against the corresponding
+        bounds `a_min` and `a_max`. If a value in `a` is less than `a_min`, it is set
+        to `a_min`; if greater than `a_max`, it is set to `a_max`. Otherwise, the
+        value is left unchanged. The result preserves the dtype and device of the input.
+
+        :param a: Input tensor containing values to be clipped.
+        :type a: Tensor
+        :param a_min: Lower bound (minimum value) for clipping. Can be a scalar tensor
+                      or broadcastable to the shape of `a`.
+        :type a_min: Tensor
+        :param a_max: Upper bound (maximum value) for clipping. Can be a scalar tensor
+                      or broadcastable to the shape of `a`.
+        :type a_max: Tensor
+        :return: A tensor with the same shape as `a`, where all values are clipped
+                 to lie within the interval [a_min, a_max].
+        :rtype: Tensor
+
+        :raises NotImplementedError: If the backend does not implement `clip`.
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `clip`.".format(self.name)
         )
 
     def reverse(self: Any, a: Tensor) -> Tensor:
