@@ -2789,6 +2789,7 @@ def count_vector2dict(
     :rtype: Dict[Any, int]
     """
     from .interfaces import which_backend
+
     d = 2 if d is None else d
     b = which_backend(count)
     out_int = {i: b.numpy(count[i]).item() for i in range(d**n)}
