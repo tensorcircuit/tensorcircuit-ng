@@ -349,11 +349,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def mod(self, x: Tensor, y: Tensor) -> Tensor:
         return jnp.mod(x, y)
 
-    def floor(self, x: Tensor) -> Tensor:
-        return jnp.floor(x)
+    def floor(self, a: Tensor) -> Tensor:
+        return jnp.floor(a)
 
-    def clip(self, x: Tensor, a_min: Tensor, a_max: Tensor) -> Tensor:
-        return jnp.clip(x, a_min, a_max)
+    def clip(self, a: Tensor, a_min: Tensor, a_max: Tensor) -> Tensor:
+        return jnp.clip(a, a_min, a_max)
 
     def right_shift(self, x: Tensor, y: Tensor) -> Tensor:
         return jnp.right_shift(x, y)

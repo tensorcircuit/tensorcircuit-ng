@@ -429,8 +429,8 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def mod(self, x: Tensor, y: Tensor) -> Tensor:
         return torchlib.fmod(x, y)
 
-    def floor(self, x: Tensor) -> Tensor:
-        return torchlib.floor(x)
+    def floor(self, a: Tensor) -> Tensor:
+        return torchlib.floor(a)
 
     def clip(self, a: Tensor, a_min: Tensor, a_max: Tensor) -> Tensor:
         return torchlib.clamp(a, a_min, a_max)

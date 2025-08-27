@@ -576,10 +576,10 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def clip(self, a: Tensor, a_min: Tensor, a_max: Tensor) -> Tensor:
         return tf.clip_by_value(a, a_min, a_max)
 
-    def floor(self, x: Tensor) -> Tensor:
-        if x.dtype.is_integer:
-            return x
-        return tf.math.floor(x)
+    def floor(self, a: Tensor) -> Tensor:
+        if a.dtype.is_integer:
+            return a
+        return tf.math.floor(a)
 
     def concat(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return tf.concat(a, axis=axis)

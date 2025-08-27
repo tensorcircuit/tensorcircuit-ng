@@ -250,8 +250,8 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     def mod(self, x: Tensor, y: Tensor) -> Tensor:
         return np.mod(x, y)
 
-    def floor(self, x: Tensor) -> Tensor:
-        return np.floor(x)
+    def floor(self, a: Tensor) -> Tensor:
+        return np.floor(a)
 
     def clip(self, a: Tensor, a_min: Tensor, a_max: Tensor) -> Tensor:
         return np.clip(a, a_min, a_max)
