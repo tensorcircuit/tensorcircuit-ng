@@ -66,6 +66,7 @@ class BaseCircuit(AbstractCircuit):
 
     @staticmethod
     def all_zero_nodes(n: int, d: int = 2, prefix: str = "qb-") -> List[tn.Node]:
+        prefix = "qd-" if d > 2 else prefix
         l = [0.0 for _ in range(d)]
         l[0] = 1.0
         nodes = [
