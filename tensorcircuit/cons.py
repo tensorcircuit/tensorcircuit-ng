@@ -63,6 +63,7 @@ rdtypestr = "float32"
 npdtype = np.complex64
 backend: NumpyBackend = get_backend("numpy")
 contractor = tn.contractors.auto
+_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # these above lines are just for mypy, it is not very good at evaluating runtime object
 
 

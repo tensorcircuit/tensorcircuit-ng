@@ -68,6 +68,7 @@ gate_aliases = [
 
 class AbstractCircuit:
     _nqubits: int
+    _d: int
     _qir: List[Dict[str, Any]]
     _extra_qir: List[Dict[str, Any]]
     inputs: Tensor
