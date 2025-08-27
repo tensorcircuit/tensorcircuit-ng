@@ -34,6 +34,12 @@ one_state = np.array([0.0, 1.0], dtype=npdtype)
 plus_state = 1.0 / np.sqrt(2) * (zero_state + one_state)
 minus_state = 1.0 / np.sqrt(2) * (zero_state - one_state)
 
+# Common elements as np.ndarray objects
+_i00 = np.array([[1.0, 0.0], [0.0, 0.0]])
+_i01 = np.array([[0.0, 1.0], [0.0, 0.0]])
+_i10 = np.array([[0.0, 0.0], [1.0, 0.0]])
+_i11 = np.array([[0.0, 0.0], [0.0, 1.0]])
+
 # Common single qubit gates as np.ndarray objects
 _h_matrix = 1 / np.sqrt(2) * np.array([[1.0, 1.0], [1.0, -1.0]])
 _i_matrix = np.array([[1.0, 0.0], [0.0, 1.0]])
@@ -229,7 +235,7 @@ def num_to_tensor(*num: Union[float, Tensor], dtype: Optional[str] = None) -> An
     # TODO(@YHPeter): fix __doc__ for same function with different names
 
     l = []
-    if not dtype:
+    if dtype is None:
         dtype = dtypestr
     for n in num:
         if not backend.is_tensor(n):
@@ -245,7 +251,7 @@ array_to_tensor = num_to_tensor
 
 
 def gate_wrapper(m: Tensor, n: Optional[str] = None) -> Gate:
-    if not n:
+    if n is None:
         n = "unknowngate"
     m = m.astype(npdtype)
     return Gate(deepcopy(m), name=n)
@@ -255,7 +261,7 @@ class GateF:
     def __init__(
         self, m: Tensor, n: Optional[str] = None, ctrl: Optional[List[int]] = None
     ):
-        if not n:
+        if n is None:
             n = "unknowngate"
         self.m = m
         self.n = n
@@ -310,7 +316,7 @@ class GateF:
 
             return Gate(cu, name="c" + self.n)
 
-        if not self.ctrl:
+        if self.ctrl is None:
             ctrl = [1]
         else:
             ctrl = [1] + self.ctrl
@@ -330,7 +336,7 @@ class GateF:
             # TODO(@refraction-ray): ctrl convention to be finally determined
             return Gate(ocu, name="o" + self.n)
 
-        if not self.ctrl:
+        if self.ctrl is None:
             ctrl = [0]
         else:
             ctrl = [0] + self.ctrl
@@ -349,7 +355,7 @@ class GateVF(GateF):
         n: Optional[str] = None,
         ctrl: Optional[List[int]] = None,
     ):
-        if not n:
+        if n is None:
             n = "unknowngate"
         self.f = f
         self.n = n
@@ -483,7 +489,7 @@ def phase_gate(theta: float = 0) -> Gate:
     :rtype: Gate
     """
     theta = array_to_tensor(theta)
-    i00, i11 = array_to_tensor(np.array([[1, 0], [0, 0]]), np.array([[0, 0], [0, 1]]))
+    i00, i11 = array_to_tensor(_i00, _i11)
     unitary = i00 + backend.exp(1.0j * theta) * i11
     return Gate(unitary)
 
@@ -512,7 +518,7 @@ def get_u_parameter(m: Tensor) -> Tuple[float, float, float]:
     return theta, phi, lbd
 
 
-def u_gate(theta: float = 0, phi: float = 0, lbd: float = 0) -> Gate:
+def u_gate(theta: float = 0.0, phi: float = 0.0, lbd: float = 0.0) -> Gate:
     r"""
     IBMQ U gate following the converntion of OpenQASM3.0.
     See `OpenQASM doc <https://openqasm.com/language/gates.html#built-in-gates>`_
@@ -533,12 +539,7 @@ def u_gate(theta: float = 0, phi: float = 0, lbd: float = 0) -> Gate:
     :rtype: Gate
     """
     theta, phi, lbd = array_to_tensor(theta, phi, lbd)
-    i00, i01, i10, i11 = array_to_tensor(
-        np.array([[1, 0], [0, 0]]),
-        np.array([[0, 1], [0, 0]]),
-        np.array([[0, 0], [1, 0]]),
-        np.array([[0, 0], [0, 1]]),
-    )
+    i00, i01, i10, i11 = array_to_tensor(_i00, _i01, _i10, _i11)
     unitary = (
         backend.cos(theta / 2) * i00
         - backend.exp(1.0j * lbd) * backend.sin(theta / 2) * i01
@@ -548,7 +549,7 @@ def u_gate(theta: float = 0, phi: float = 0, lbd: float = 0) -> Gate:
     return Gate(unitary)
 
 
-def r_gate(theta: float = 0, alpha: float = 0, phi: float = 0) -> Gate:
+def r_gate(theta: float = 0.0, alpha: float = 0.0, phi: float = 0.0) -> Gate:
     r"""
     General single qubit rotation gate
 
@@ -582,7 +583,7 @@ def r_gate(theta: float = 0, alpha: float = 0, phi: float = 0) -> Gate:
 # r = r_gate
 
 
-def rx_gate(theta: float = 0) -> Gate:
+def rx_gate(theta: float = 0.0) -> Gate:
     r"""
     Rotation gate along :math:`x` axis.
 
@@ -603,7 +604,7 @@ def rx_gate(theta: float = 0) -> Gate:
 # rx = rx_gate
 
 
-def ry_gate(theta: float = 0) -> Gate:
+def ry_gate(theta: float = 0.0) -> Gate:
     r"""
     Rotation gate along :math:`y` axis.
 
@@ -624,7 +625,7 @@ def ry_gate(theta: float = 0) -> Gate:
 # ry = ry_gate
 
 
-def rz_gate(theta: float = 0) -> Gate:
+def rz_gate(theta: float = 0.0) -> Gate:
     r"""
     Rotation gate along :math:`z` axis.
 
@@ -645,7 +646,7 @@ def rz_gate(theta: float = 0) -> Gate:
 # rz = rz_gate
 
 
-def rgate_theoretical(theta: float = 0, alpha: float = 0, phi: float = 0) -> Gate:
+def rgate_theoretical(theta: float = 0.0, alpha: float = 0.0, phi: float = 0.0) -> Gate:
     r"""
     Rotation gate implemented by matrix exponential. The output is the same as `rgate`.
 
@@ -723,7 +724,7 @@ def iswap_gate(theta: float = 1.0) -> Gate:
 # iswap = iswap_gate
 
 
-def cr_gate(theta: float = 0, alpha: float = 0, phi: float = 0) -> Gate:
+def cr_gate(theta: float = 0.0, alpha: float = 0.0, phi: float = 0.0) -> Gate:
     r"""
     Controlled rotation gate. When the control qubit is 1, `rgate` is applied to the target qubit.
 
@@ -775,7 +776,7 @@ def random_two_qubit_gate() -> Gate:
     return Gate(deepcopy(unitary), name="R2Q")
 
 
-def any_gate(unitary: Tensor, name: str = "any") -> Gate:
+def any_gate(unitary: Tensor, name: str = "any", dim: Optional[int] = None) -> Gate:
     """
     Note one should provide the gate with properly reshaped.
 
@@ -783,6 +784,8 @@ def any_gate(unitary: Tensor, name: str = "any") -> Gate:
     :type unitary: Tensor
     :param name: The name of the gate.
     :type name: str
+    :param dim: The dimension of the gate.
+    :type dim: int
     :return: the resulted gate
     :rtype: Gate
     """
@@ -791,7 +794,10 @@ def any_gate(unitary: Tensor, name: str = "any") -> Gate:
         unitary.tensor = backend.cast(unitary.tensor, dtypestr)
         return unitary
     unitary = backend.cast(unitary, dtypestr)
-    unitary = backend.reshape2(unitary)
+    if dim is None or dim == 2:
+        unitary = backend.reshape2(unitary)
+    else:
+        unitary = backend.reshaped(unitary, dim)
     # nleg = int(np.log2(backend.sizen(unitary)))
     # unitary = backend.reshape(unitary, [2 for _ in range(nleg)])
     return Gate(unitary, name=name)
