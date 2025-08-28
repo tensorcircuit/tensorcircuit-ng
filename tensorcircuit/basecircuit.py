@@ -482,10 +482,9 @@ class BaseCircuit(AbstractCircuit):
                 tiny_r = backend.cast(backend.convert_to_tensor(1e-12), rdtypestr)
                 pu = backend.real(backend.diagonal(rho))
                 pu = backend.clip(pu, zero_r, one_r)
-                d = backend.shape_tuple(pu)[-1]
                 pu = pu + tiny_r * (
-                    backend.ones((d,), dtype=rdtypestr)
-                    / backend.cast(backend.convert_to_tensor(float(d)), rdtypestr)
+                    backend.ones((self._d,), dtype=rdtypestr)
+                    / backend.cast(backend.convert_to_tensor(float(self._d)), rdtypestr)
                 )
                 pu = pu / backend.sum(pu)
                 cdf = backend.cumsum(pu)
@@ -502,11 +501,11 @@ class BaseCircuit(AbstractCircuit):
                     r = backend.clip(r, zero_r, one_r - tiny_r)
                 else:
                     r = backend.real(backend.cast(status[k], rdtypestr))
-                k_out = backend.searchsorted(cdf, r, side="right")
+                k_out = backend.sum(backend.cast(cdf <= r, "int32"))
                 k_out = backend.clip(
                     k_out,
                     backend.cast(backend.convert_to_tensor(0), "int32"),
-                    backend.cast(backend.convert_to_tensor(d - 1), "int32"),
+                    backend.cast(backend.convert_to_tensor(self._d - 1), "int32"),
                 )
                 sample.append(backend.cast(k_out, rdtypestr))
                 p = p * backend.cast(pu[k_out], rdtypestr)
