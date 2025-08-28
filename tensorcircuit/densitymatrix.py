@@ -58,7 +58,8 @@ class DMCircuit(BaseCircuit):
         :type split: Optional[Dict[str, Any]]
         """
         self._d = 2 if dim is None else dim
-        if not kwargs.get("qudit", False) and self._d != 2:
+        self._qudit: bool = kwargs.get("qudit", False)
+        if not self._qudit and self._d != 2:
             raise ValueError(
                 f"Circuit only supports qubits (dim=2). "
                 f"You passed dim={self._d}. Please use `QuditCircuit` instead."

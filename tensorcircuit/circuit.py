@@ -67,7 +67,8 @@ class Circuit(BaseCircuit):
         :type split: Optional[Dict[str, Any]]
         """
         self._d = 2 if dim is None else dim
-        if not kwargs.get("qudit", False) and self._d != 2:
+        self._qudit: bool = kwargs.get("qudit", False)
+        if not self._qudit and self._d != 2:
             raise ValueError(
                 f"Circuit only supports qubits (dim=2). "
                 f"You passed dim={self._d}. Please use `QuditCircuit` instead."
@@ -739,7 +740,7 @@ class Circuit(BaseCircuit):
         :rtype: QuOperator
         """
         mps = identity([self._d for _ in range(self._nqubits)])
-        c = Circuit(self._nqubits, self._d)
+        c = Circuit(self._nqubits, self._d, qudit=self._qudit)
         ns, es = self._copy()
         c._nodes = ns
         c._front = es
@@ -760,7 +761,7 @@ class Circuit(BaseCircuit):
         :rtype: Tensor
         """
         mps = identity([self._d for _ in range(self._nqubits)])
-        c = Circuit(self._nqubits, self._d)
+        c = Circuit(self._nqubits, self._d, qudit=self._qudit)
         ns, es = self._copy()
         c._nodes = ns
         c._front = es
