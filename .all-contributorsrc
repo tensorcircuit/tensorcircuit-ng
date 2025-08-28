@@ -373,6 +373,16 @@
         "code",
         "test"
       ]
+    },
+    {
+      "login": "WeiguoMa",
+      "name": "Weiguo_M",
+      "avatar_url": "https://avatars.githubusercontent.com/u/108172530?v=4",
+      "profile": "https://github.com/WeiguoMa",
+      "contributions": [
+        "code",
+        "test"
+      ]
     }
   ],
   "contributorsPerLine": 6,
