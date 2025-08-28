@@ -23,6 +23,7 @@ from .cons import (
     runtime_contractor,
 )  # prerun of set hooks
 from . import gates
+from . import quditgates
 from . import basecircuit
 from .gates import Gate
 from .circuit import Circuit, expectation
