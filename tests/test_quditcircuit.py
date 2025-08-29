@@ -46,7 +46,11 @@ def test_measure(backend):
     c.csum(0, 1)
     assert c.measure(1)[0] in [0, 1, 2]
 
-
+"""
+A bug was reported in the JAX backend: by default integers use int32 precision.
+ As a result, values like 3^29 (and even 3^19) exceed the representable range,
+  causing errors during the conversion step in sample/count.
+"""
 # @pytest.mark.parametrize("backend", [lf("jaxb")])
 # def test_large_scale_sample(backend):
 #     L = 30
