@@ -305,6 +305,57 @@ def _u8_matrix_func(
     eps: float = 0.0,
     omega: Optional[float] = None,
 ) -> Tensor:
+    r"""
+    U8 diagonal single-qudit gate for prime dimensions.
+
+    This gate is defined only when :math:`d` is prime. It is a diagonal
+    operator of size :math:`d \times d`:
+
+    .. py:math::
+
+        U_8(d; \gamma, z, \epsilon) =
+        \mathrm{diag}\!\left(\omega^{v_0}, \omega^{v_1}, \ldots, \omega^{v_{d-1}}\right),
+
+    where :math:`\omega = e^{2\pi i / d}` is a primitive :math:`d`-th root
+    of unity, and the exponents :math:`v_k` are computed from modular
+    polynomials depending on parameters :math:`\gamma, z, \epsilon`.
+
+    For :math:`d=3`, the exponents are fixed as
+
+    .. py:math::
+
+        (v_0, v_1, v_2) = (0, 1, 8).
+
+    For general prime :math:`d`, the exponents are determined by
+
+    .. py:math::
+
+        v_i \equiv \tfrac{1}{12} i \bigl(\gamma + i (6z + (2i-3)\gamma)\bigr) + \epsilon i
+        \pmod d, \quad i = 1, \ldots, d-1,
+
+    with :math:`v_0 = 0`. The sequence :math:`(v_0,\ldots,v_{d-1})` must
+    also satisfy
+
+    .. py:math::
+
+        \sum_{k=0}^{d-1} v_k \equiv 0 \pmod d.
+
+    Args:
+        d: Qudit dimension (must be prime).
+        gamma: Gate parameter (must be non-zero).
+        z: Gate parameter.
+        eps: Gate parameter.
+        omega: Optional primitive :math:`d`-th root of unity. Defaults to
+            :math:`\exp(2\pi i / d)`.
+
+    Returns:
+        Tensor: A :math:`(d, d)` diagonal numpy array of dtype ``npdtype``.
+
+    Raises:
+        ValueError: If ``d`` is not prime; if ``gamma = 0``; if 12 has no
+        modular inverse modulo ``d``; or if the computed :math:`v_k` do not
+        sum to 0 modulo :math:`d`.
+    """
     if not _is_prime(d):
         raise ValueError(
             f"Dimension d={d} is not prime, U8 gate requires a prime dimension."

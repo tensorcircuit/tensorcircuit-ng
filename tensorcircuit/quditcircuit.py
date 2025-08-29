@@ -76,7 +76,33 @@ def _cached_matrix(
     key: Optional[tuple] = (),
 ) -> Tensor:
     """
-    kind: "single" or "two"; key is a parameter tuple sorted by signature for caching
+    Build and cache a matrix using a registered builder function.
+
+    This function looks up a builder from either `SINGLE_BUILDERS` or
+    `TWO_BUILDERS` (depending on `kind`), and calls it with the given
+    arguments. Results are cached with `functools.lru_cache`, so repeated
+    calls with the same inputs return the cached tensor instead of
+    rebuilding it.
+
+    Args:
+        kind: Either `"single"` (use `SINGLE_BUILDERS`) or `"two"` (use `TWO_BUILDERS`).
+        name: The builder name to look up in the chosen dictionary.
+        d: The dimension of the matrix.
+        omega: Optional frequency or scaling parameter, passed to the builder.
+        key: Tuple of extra parameters, matched in order to the builder’s
+            expected signature.
+
+    Returns:
+        Tensor: The matrix built by the selected builder.
+
+    Notes:
+        - The cache key depends on all arguments (`kind`, `name`, `d`, `omega`, `key`).
+        - The `key` tuple must have the same order as the builder’s signature.
+        - The same inputs will always return the same cached tensor.
+
+    Raises:
+        KeyError: If the builder `name` is not found.
+        TypeError/ValueError: If `key` does not match the builder’s expected parameters.
     """
     builders = SINGLE_BUILDERS if kind == "single" else TWO_BUILDERS
     _, builder = builders[name]
@@ -146,6 +172,26 @@ class QuditCircuit:
         return self._nqubits
 
     def _apply_gate(self, *indices, name: str, **kwargs):
+        """
+        Apply a quantum gate (unitary) to one or two qudits in the circuit.
+
+        The gate matrix is looked up by name in either `SINGLE_BUILDERS` (for
+        single-qudit gates) or `TWO_BUILDERS` (for two-qudit gates). The matrix
+        is built (and cached) via `_cached_matrix`, then applied to the circuit
+        at the given indices.
+
+        Args:
+            *indices: The qudit indices the gate should act on.
+                - One index → single-qudit gate.
+                - Two indices → two-qudit gate.
+            name: The name of the gate (must exist in the chosen builder set).
+            **kwargs: Extra parameters for the gate. These are matched against
+                the gate’s signature from the builder definition.
+
+        Raises:
+            ValueError: If `name` is not found, or if the number of indices
+                does not match the gate type (single vs two).
+        """
         if len(indices) == 1 and name in SINGLE_BUILDERS:
             sig, _ = SINGLE_BUILDERS[name]
             key = tuple(kwargs.get(k) for k in sig if k != "none")
@@ -166,37 +212,102 @@ class QuditCircuit:
             raise ValueError(f"Unsupported gate/arity: {name} on {len(indices)} qudits")
 
     def any(self, *indices: int, unitary: Tensor, name: str = "any") -> None:
-        self._circ.unitary(*indices, unitary=unitary, name=name, dim=self._d)
+        self._circ.unitary(*indices, unitary=unitary, name=name, dim=self._d)  # type: ignore
 
     unitary = any
 
     def i(self, index: int) -> None:
+        """
+        Apply the identity (I) gate on the given qudit index.
+
+        Args:
+            index: Qudit index to apply the gate on.
+        """
         self._apply_gate(index, name="I")
 
     def x(self, index: int) -> None:
+        """
+        Apply the X gate on the given qudit index.
+
+        Args:
+            index: Qudit index to apply the gate on.
+        """
         self._apply_gate(index, name="X")
 
     def y(self, index: int) -> None:
+        """
+        Apply the Y gate on the given qudit index.
+
+        Args:
+            index: Qudit index to apply the gate on.
+        """
         self._apply_gate(index, name="Y")
 
     def z(self, index: int) -> None:
+        """
+        Apply the Z gate on the given qudit index.
+
+        Args:
+            index: Qudit index to apply the gate on.
+        """
         self._apply_gate(index, name="Z")
 
     def h(self, index: int) -> None:
+        """
+        Apply the Hadamard-like (H) gate on the given qudit index.
+
+        Args:
+            index: Qudit index to apply the gate on.
+        """
         self._apply_gate(index, name="H")
 
     def u8(
         self, index: int, gamma: float = 2.0, z: float = 1.0, eps: float = 0.0
     ) -> None:
+        """
+        Apply the U8 parameterized single-qudit gate.
+
+        Args:
+            index: Qudit index to apply the gate on.
+            gamma: Gate parameter gamma (default 2.0).
+            z: Gate parameter z (default 1.0).
+            eps: Gate parameter eps (default 0.0).
+        """
         self._apply_gate(index, name="U8", extra=(gamma, z, eps))
 
     def rx(self, index: int, theta: float, j: int = 0, k: int = 1):
+        """
+        Apply the single-qudit RX rotation on `index`.
+
+        Args:
+            index: Qudit index to apply the gate on.
+            theta: Rotation angle.
+            j: Source level of the rotation subspace (default 0).
+            k: Target level of the rotation subspace (default 1).
+        """
         self._apply_gate(index, name="RX", theta=theta, j=j, k=k)
 
     def ry(self, index: int, theta: float, j: int = 0, k: int = 1):
+        """
+        Apply the single-qudit RY rotation on `index`.
+
+        Args:
+            index: Qudit index to apply the gate on.
+            theta: Rotation angle.
+            j: Source level of the rotation subspace (default 0).
+            k: Target level of the rotation subspace (default 1).
+        """
         self._apply_gate(index, name="RY", theta=theta, j=j, k=k)
 
     def rz(self, index: int, theta: float, j: int = 0):
+        """
+        Apply the single-qudit RZ rotation on `index`.
+
+        Args:
+            index: Qudit index to apply the gate on.
+            theta: Rotation angle around Z.
+            j: Level where the phase rotation is applied (default 0).
+        """
         self._apply_gate(index, name="RZ", theta=theta, j=j)
 
     def rxx(
@@ -208,16 +319,50 @@ class QuditCircuit:
         j2: int = 0,
         k2: int = 1,
     ):
+        """
+        Apply a two-qudit RXX-type interaction on the given indices.
+
+        Args:
+            *indices: Two qudit indices.
+            theta: Interaction strength/angle.
+            j1: Source level of the first qudit subspace (default 0).
+            k1: Target level of the first qudit subspace (default 1).
+            j2: Source level of the second qudit subspace (default 0).
+            k2: Target level of the second qudit subspace (default 1).
+        """
         self._apply_gate(*indices, name="RXX", theta=theta, j1=j1, k1=k1, j2=j2, k2=k2)
 
     def rzz(self, *indices: int, theta: float):
+        """
+        Apply a two-qudit RZZ interaction on the given indices.
+
+        Args:
+            *indices: Two qudit indices.
+            theta: Interaction angle.
+        """
         self._apply_gate(*indices, name="RZZ", theta=theta)
 
     def cphase(self, *indices: int, cv: Optional[int] = None) -> None:
+        """
+        Apply a controlled phase (CPHASE) gate.
+
+        Args:
+            *indices: Two qudit indices (control, target).
+            cv: Optional control value. If None, default cv=1.
+        """
         self._apply_gate(*indices, name="CPHASE", cv=cv)
 
     def csum(self, *indices: int, cv: Optional[int] = None) -> None:
+        """
+        Apply a controlled-sum (CSUM) gate.
+
+        Args:
+            *indices: Two qudit indices (control, target).
+            cv: Optional control value. If None, default cv=1.
+        """
         self._apply_gate(*indices, name="CSUM", cv=cv)
+
+    cnot = csum
 
     # Functional
     def wavefunction(self, form: str = "default") -> tn.Node.tensor:
