@@ -491,14 +491,6 @@ class BaseCircuit(AbstractCircuit):
                 if status is None:
                     r = backend.implicit_randu()[0]
                     r = backend.real(backend.cast(r, rdtypestr))
-                    phi = backend.cast(
-                        backend.convert_to_tensor(0.6180339887498948), rdtypestr
-                    )
-                    r = r + phi * backend.cast(
-                        backend.convert_to_tensor(k + 1), rdtypestr
-                    )
-                    r = r - backend.floor(r)
-                    r = backend.clip(r, zero_r, one_r - tiny_r)
                 else:
                     r = backend.real(backend.cast(status[k], rdtypestr))
                 k_out = backend.sum(backend.cast(cdf <= r, "int32"))
