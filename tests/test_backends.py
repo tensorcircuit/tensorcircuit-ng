@@ -498,6 +498,75 @@ def test_dlpack(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_reshaped_basic(backend):
+    a1 = tc.backend.convert_to_tensor(np.arange(27))
+    r1 = tc.backend.reshaped(a1, 3)
+    assert r1.shape == (3, 3, 3)
+    np.testing.assert_allclose(tc.backend.numpy(r1), np.arange(27).reshape(3, 3, 3))
+    d, n = 4, 3
+    dim = d**n
+    mat = np.arange(dim * dim, dtype=np.float32).reshape(dim, dim)
+    a2 = tc.backend.convert_to_tensor(mat)
+    r2 = tc.backend.reshaped(a2, d)
+    assert r2.shape == (d,) * (2 * n)
+    np.testing.assert_allclose(tc.backend.numpy(r2), mat.reshape((d,) * (2 * n)))
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_reshaped_zero_size(backend):
+    """size == 0 returns a canonical empty vector shape (0,) regardless of input shape."""
+    a0 = tc.backend.convert_to_tensor(np.array([], dtype=np.float32))
+    r0 = tc.backend.reshaped(a0, 3)
+    assert r0.shape == (0,)
+    assert tc.backend.sizen(r0) == 0
+
+    a1 = tc.backend.convert_to_tensor(np.zeros((2, 0), dtype=np.float32))
+    r1 = tc.backend.reshaped(a1, 5)
+    assert r1.shape == (0,)
+    assert tc.backend.sizen(r1) == 0
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_reshaped_dtype_device_preserved(backend):
+    """Reshape should not change dtype or device."""
+    a = tc.backend.ones([16], dtype="float32")
+    dev = tc.backend.device(a)
+    r = tc.backend.reshaped(a, 2)
+    assert r.shape == (2, 2, 2, 2)
+    assert tc.backend.dtype(r) == tc.backend.dtype(a)
+    assert tc.backend.device(r) == dev
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_reshaped_scalar_size_one(backend):
+    """size == 1 stays scalar: nleg = 0 so shape () is kept."""
+    a = tc.backend.ones([])  # scalar tensor, total size = 1
+    r = tc.backend.reshaped(a, 2)
+    assert r.shape == ()
+    np.testing.assert_allclose(tc.backend.numpy(r), tc.backend.numpy(a))
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_reshaped_invalid_d_raises(backend):
+    """d must be a positive integer: non-int or <=0 should raise."""
+    a = tc.backend.ones([4], dtype="float32")
+    with pytest.raises(ValueError):
+        tc.backend.reshaped(a, 0)
+    with pytest.raises(ValueError):
+        tc.backend.reshaped(a, -2)
+    with pytest.raises(ValueError):
+        tc.backend.reshaped(a, 2.5)  # not an int
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_reshaped_non_power_raises(backend):
+    """When size is not a power of d, raise ValueError."""
+    a = tc.backend.convert_to_tensor(np.arange(10))
+    with pytest.raises(ValueError):
+        tc.backend.reshaped(a, 3)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_arg_cmp(backend):
     np.testing.assert_allclose(tc.backend.argmax(tc.backend.ones([3], "float64")), 0)
     np.testing.assert_allclose(
