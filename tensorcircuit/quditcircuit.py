@@ -7,7 +7,7 @@ import tensornetwork as tn
 from .utils import arg_alias
 from .basecircuit import BaseCircuit
 from .circuit import Circuit
-from .quantum import QuOperator
+from .quantum import QuOperator, QuVector
 from .quditgates import (
     _i_matrix_func,
     _x_matrix_func,
@@ -152,7 +152,7 @@ class QuditCircuit:
             mat = _cached_matrix(
                 kind="single", name=name, d=self._d, omega=self._omega, key=key
             )
-            self._circ.unitary(indices[0], unitary=mat, name=name, dim=self._d)  # type: ignore
+            self._circ.unitary(*indices, unitary=mat, name=name, dim=self._d)  # type: ignore
         elif len(indices) == 2 and name in TWO_BUILDERS:
             sig, _ = TWO_BUILDERS[name]
             key = tuple(kwargs.get(k) for k in sig if k != "none")
@@ -160,10 +160,15 @@ class QuditCircuit:
                 kind="two", name=name, d=self._d, omega=self._omega, key=key
             )
             self._circ.unitary(  # type: ignore
-                indices[0], indices[1], unitary=mat, name=name, dim=self._d
+                *indices, unitary=mat, name=name, dim=self._d
             )
         else:
             raise ValueError(f"Unsupported gate/arity: {name} on {len(indices)} qudits")
+
+    def any(self, *indices: int, unitary: Tensor, name: str = "any") -> None:
+        self._circ.unitary(*indices, unitary=unitary, name=name, dim=self._d)
+
+    unitary = any
 
     def i(self, index: int) -> None:
         self._apply_gate(index, name="I")
@@ -279,6 +284,10 @@ class QuditCircuit:
         status: Optional[Tensor] = None,
         jittable: bool = True,
     ) -> Any:
+        if format in ["sample_int", "count_tuple", "count_dict_int"]:
+            raise NotImplementedError(
+                "`int` representation is not friendly for d-dimensional systems."
+            )
         return self._circ.sample(
             batch=batch,
             allow_state=allow_state,
@@ -297,3 +306,18 @@ class QuditCircuit:
 
     def replace_inputs(self, inputs: Tensor) -> None:
         return self._circ.replace_inputs(inputs)
+
+    def mid_measurement(self, index: int, keep: int = 0) -> Tensor:
+        return self._circ.mid_measurement(index, keep=keep)
+
+    mid_measure = mid_measurement
+    post_select = mid_measurement
+    post_selection = mid_measurement
+
+    def get_quvector(self) -> QuVector:
+        return self._circ.quvector()
+
+    quvector = get_quvector
+
+    def replace_mps_inputs(self, mps_inputs: QuOperator) -> None:
+        return self._circ.replace_mps_inputs(mps_inputs)
