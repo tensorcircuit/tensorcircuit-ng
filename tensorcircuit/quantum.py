@@ -9,6 +9,7 @@ import math
 import os
 from functools import partial, reduce
 from operator import matmul, mul, or_
+from collections import Counter
 from typing import (
     Any,
     Callable,
@@ -2971,6 +2972,16 @@ def sample2all(
     :rtype: Any
     """
     d = 2 if d is None else int(d)
+    if n > 32:
+        assert (
+            len(backend.shape_tuple(sample)) == 2
+        ), "n>32 is only supported for ``sample_bin``"
+        if format == "sample_bin":
+            return sample
+        if format == "count_dict_bin":
+            binary_strings = ["".join(map(str, shot)) for shot in sample]
+            return dict(Counter(binary_strings))
+        raise ValueError(f"n={n} is too large for measurement representaion: {format}")
 
     if len(backend.shape_tuple(sample)) == 1:
         sample_int = sample

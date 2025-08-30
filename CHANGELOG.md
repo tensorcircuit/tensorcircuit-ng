@@ -40,6 +40,8 @@
 
 - Fix to use `status` for `circuit.sample` when `allow_state=True`.
 
+- Fix sample bug when number of qubit exceeding 32.
+
 ### Changed
 
 - The order of arguments of `tc.timeevol.ed_evol` are changed for consistent interface with other evolution methods.
