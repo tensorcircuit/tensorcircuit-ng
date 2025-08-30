@@ -19,7 +19,6 @@ from .quantum import (
     correlation_from_counts,
     measurement_counts,
     sample_int2bin,
-    sample_bin2int,
     sample2all,
 )
 from .abstractcircuit import AbstractCircuit
@@ -619,8 +618,8 @@ class BaseCircuit(AbstractCircuit):
             if format is None:
                 return r
             r = backend.stack([ri[0] for ri in r])  # type: ignore
-            r = backend.cast(r, "int32")
-            ch = sample_bin2int(r, self._nqubits)
+            ch = backend.cast(r, "int32")
+            # ch = sample_bin2int(r, self._nqubits)
         else:  # allow_state
             if batch is None:
                 nbatch = 1
