@@ -2725,7 +2725,7 @@ def sample_int2bin(sample: Tensor, n: int, d: Optional[int] = None) -> Tensor:
         pos = backend.reverse(backend.arange(n))
         base = backend.power(d, pos)
         digits = backend.mod(
-            backend.floor(backend.divide(sample[..., None], base)),  # ⌊sample / d**pos⌋
+            backend.floor_divide(sample[..., None], base),  # ⌊sample / d**pos⌋
             d,
         )
         return backend.cast(digits, "int32")
