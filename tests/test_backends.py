@@ -1357,12 +1357,15 @@ def test_floor_divide_various_cases(backend):
         try:
             if "torch" in name:
                 import torch
+
                 return torch.as_tensor(z)
             if "jax" in name:
                 import jax.numpy as jnp
+
                 return jnp.asarray(z)
             if "tf" in name or "tensorflow" in name:
                 import tensorflow as tf
+
                 return tf.convert_to_tensor(z)
         except Exception:
             pass
