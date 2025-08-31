@@ -1335,3 +1335,59 @@ def test_backend_where(backend):
     result = tc.backend.where(condition, x, y)
     expected = tc.backend.convert_to_tensor([1, 5, 3])
     np.testing.assert_allclose(result, expected)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_floor_divide_various_cases(backend):
+    r"""
+    Single test covering:
+      - basic positive integers
+      - negative dividends/divisors
+      - broadcasting
+      - floating inputs (matches floor semantics)
+    Ensures both operands are converted to the active backend's native tensor/array
+    to avoid type errors in Torch/JAX.
+    """
+
+    def to_backend(z):
+        if hasattr(tc.backend, "asarray"):
+            return tc.backend.asarray(z)
+
+        name = getattr(tc.backend, "name", "").lower()
+        try:
+            if "torch" in name:
+                import torch
+                return torch.as_tensor(z)
+            if "jax" in name:
+                import jax.numpy as jnp
+                return jnp.asarray(z)
+            if "tf" in name or "tensorflow" in name:
+                import tensorflow as tf
+                return tf.convert_to_tensor(z)
+        except Exception:
+            pass
+        return np.asarray(z)
+
+    out = tc.backend.floor_divide(to_backend([7, 8, 9]), to_backend(2))
+    np.testing.assert_array_equal(np.array(out), np.array([3, 4, 4]))
+
+    out = tc.backend.floor_divide(to_backend([-3, -4]), to_backend(2))
+    np.testing.assert_array_equal(np.array(out), np.array([-2, -2]))
+
+    out = tc.backend.floor_divide(to_backend([3, 4]), to_backend(-2))
+    np.testing.assert_array_equal(np.array(out), np.array([-2, -2]))
+
+    out = tc.backend.floor_divide(to_backend([-3, -4]), to_backend(-2))
+    np.testing.assert_array_equal(np.array(out), np.array([1, 2]))
+
+    x = to_backend([[10, 20], [30, 40]])
+    y = to_backend([3, 5])
+    expected = np.array([[10, 20], [30, 40]]) // np.array([3, 5])
+    out = tc.backend.floor_divide(x, y)
+    np.testing.assert_array_equal(np.array(out), expected)
+
+    xf = to_backend([7.9, 8.1, -3.5])
+    yf = to_backend([2.0, 2.0, 2.0])
+    expectedf = np.floor_divide(np.array([7.9, 8.1, -3.5]), np.array([2.0, 2.0, 2.0]))
+    out = tc.backend.floor_divide(xf, yf)
+    np.testing.assert_array_equal(np.array(out), expectedf)
