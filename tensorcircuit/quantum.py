@@ -2485,7 +2485,7 @@ def entanglement_negativity(
     :return: _description_
     :rtype: Tensor
     """
-    rhot = partial_transpose(rho, transposed_sites)
+    rhot = partial_transpose(rho, transposed_sites, d=d)
     es = backend.eigvalsh(rhot)
     rhot_m = backend.sum(backend.abs(es))
     return (rhot_m - 1.0) / 2.0
