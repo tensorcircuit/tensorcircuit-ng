@@ -352,6 +352,9 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def floor(self, a: Tensor) -> Tensor:
         return jnp.floor(a)
 
+    def floor_divide(self, x: Tensor, y: Tensor) -> Tensor:
+        return jnp.floor_divide(x, y)
+
     def clip(self, a: Tensor, a_min: Tensor, a_max: Tensor) -> Tensor:
         return jnp.clip(a, a_min, a_max)
 
