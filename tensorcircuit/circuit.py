@@ -820,7 +820,7 @@ class Circuit(BaseCircuit):
             )
             probs = backend.real(backend.diagonal(rho))
             probs /= backend.sum(probs)
-            outcome = np.random.choice(self._d, p=probs)
+            outcome = np.random.choice(self._d, p=backend.cast(probs, dtype="float64"))
 
             sample += _ALPHABET[outcome]
             p *= float(probs[outcome])
