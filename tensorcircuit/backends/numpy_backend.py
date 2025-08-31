@@ -250,6 +250,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     def mod(self, x: Tensor, y: Tensor) -> Tensor:
         return np.mod(x, y)
 
+    def floor_divide(self, x: Tensor, y: Tensor) -> Tensor:
+        return np.floor_divide(x, y)
+
     def floor(self, a: Tensor) -> Tensor:
         return np.floor(a)
 

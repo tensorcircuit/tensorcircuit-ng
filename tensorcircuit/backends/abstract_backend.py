@@ -865,7 +865,35 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `mod`.".format(self.name)
         )
 
-    def floor(self: Any, x: Tensor) -> Tensor:
+    def floor_divide(self: Any, x: Tensor, y: Tensor) -> Tensor:
+        r"""
+        Compute the element-wise floor division of two tensors.
+
+        This operation returns a new tensor containing the result of
+        dividing `x` by `y` and rounding each element down towards
+        negative infinity. The semantics are equivalent to the Python
+        `//` operator:
+
+            result[i] = floor(x[i] / y[i])
+
+        Broadcasting is supported according to the backend's rules.
+
+        :param x: Dividend tensor.
+        :type x: Tensor
+        :param y: Divisor tensor, must be broadcastable with `x`.
+        :type y: Tensor
+        :return: A tensor with the broadcasted shape of `x` and `y`,
+                 where each element is the floored result of the division.
+        :rtype: Tensor
+
+        :raises NotImplementedError: If the backend does not provide an
+                                     implementation for `floor_divide`.
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `floor_divide`.".format(self.name)
+        )
+
+    def floor(self: Any, a: Tensor) -> Tensor:
         """
         Compute the element-wise floor of the input tensor.
 
@@ -873,10 +901,10 @@ class ExtendedBackend:
         less than or equal to each element of the input tensor,
         i.e. it rounds each value down towards negative infinity.
 
-        :param x: Input tensor containing numeric values.
-        :type x: Tensor
-        :return: A tensor with the same shape as `x`, where each element
-                 is the floored value of the corresponding element in `x`.
+        :param a: Input tensor containing numeric values.
+        :type a: Tensor
+        :return: A tensor with the same shape as `a`, where each element
+                 is the floored value of the corresponding element in `a`.
         :rtype: Tensor
 
         :raises NotImplementedError: If the backend does not provide an

@@ -429,6 +429,9 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def mod(self, x: Tensor, y: Tensor) -> Tensor:
         return torchlib.fmod(x, y)
 
+    def floor_divide(self, x: Tensor, y: Tensor) -> Tensor:
+        return torchlib.floor_divide(x, y)
+
     def floor(self, a: Tensor) -> Tensor:
         return torchlib.floor(a)
 

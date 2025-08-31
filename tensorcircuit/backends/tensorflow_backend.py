@@ -581,6 +581,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
             return a
         return tf.math.floor(a)
 
+    def floor_divide(self, x: Tensor, y: Tensor) -> Tensor:
+        return tf.math.floordiv(x, y)
+
     def concat(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return tf.concat(a, axis=axis)
 
