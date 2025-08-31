@@ -49,6 +49,12 @@ def test_merge_count():
 
 def test_count2vec():
     assert counts.vec2count(counts.count2vec(d, normalization=False), prune=True) == d
+    assert (
+        counts.vec2count(
+            counts.count2vec(d, normalization=False, dim=36), prune=True, dim=36
+        )
+        == d
+    )
 
 
 def test_kl():
