@@ -433,29 +433,22 @@ class BaseCircuit(AbstractCircuit):
                     m = (1 - sample[i]) * gates.array_to_tensor(
                         np.array([1, 0])
                     ) + sample[i] * gates.array_to_tensor(np.array([0, 1]))
-                    g1 = Gate(m)
-                    g1.id = id(g1)
-                    g1.is_dagger = False
-                    g1.flag = "measurement"
-                    newnodes.append(g1)
-                    g1.get_edge(0) ^ edge1[index[i]]
-                    g2 = Gate(m)
-                    g2.id = id(g2)
-                    g2.is_dagger = True
-                    g2.flag = "measurement"
-                    newnodes.append(g2)
-                    g2.get_edge(0) ^ edge2[index[i]]
                 else:
                     vec = backend.one_hot(backend.cast(sample[i], "int32"), self._d)
-                    v = backend.cast(vec, dtypestr)
-                    m = backend.tensordot(v, v, axes=0)
-                    g = Gate(m)
-                    g.id = id(g)
-                    g.is_dagger = False
-                    g.flag = "measurement"
-                    newnodes.append(g)
-                    g.get_edge(0) ^ edge1[index[i]]
-                    g.get_edge(1) ^ edge2[index[i]]
+                    m = backend.cast(vec, dtypestr)
+                g1 = Gate(m)
+                g1.id = id(g1)
+                g1.is_dagger = False
+                g1.flag = "measurement"
+                newnodes.append(g1)
+                g1.get_edge(0) ^ edge1[index[i]]
+                g2 = Gate(m)
+                g2.id = id(g2)
+                g2.is_dagger = True
+                g2.flag = "measurement"
+                newnodes.append(g2)
+                g2.get_edge(0) ^ edge2[index[i]]
+
             rho = (
                 1
                 / backend.cast(p, dtypestr)
