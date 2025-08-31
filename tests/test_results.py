@@ -7,6 +7,7 @@ from tensorcircuit.results import counts
 from tensorcircuit.results.readout_mitigation import ReadoutMit
 
 d = {"000": 2, "101": 3, "100": 4}
+d_higher = {"A00": 2, "9BC": 3, "XYZ": 4}
 
 
 def test_marginal_count():
