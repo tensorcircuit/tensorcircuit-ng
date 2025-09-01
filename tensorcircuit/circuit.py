@@ -1,7 +1,7 @@
 """
 Quantum circuit: the state simulator.
 Supports qubit (dim=2) and qudit (3 <= dim <= 36) systems.
- For string-encoded samples/counts, digits use 0–9A–Z where A=10, …, Z=35.
+For string-encoded samples/counts, digits use 0–9A–Z where A=10, …, Z=35.
 """
 
 # pylint: disable=invalid-name
