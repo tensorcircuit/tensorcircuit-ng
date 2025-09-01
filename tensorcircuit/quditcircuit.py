@@ -73,7 +73,7 @@ def _cached_matrix(
     name: str,
     d: int,
     omega: Optional[float] = None,
-    key: Optional[tuple] = (),
+    key: Optional[tuple[Any, ...]] = (),
 ) -> Tensor:
     """
     Build and cache a matrix using a registered builder function.
@@ -175,7 +175,7 @@ class QuditCircuit:
     def nqubits(self) -> int:
         return self._nqubits
 
-    def _apply_gate(self, *indices, name: str, **kwargs):
+    def _apply_gate(self, *indices: int, name: str, **kwargs: Any) -> None:
         """
         Apply a quantum gate (unitary) to one or two qudits in the circuit.
 
@@ -279,7 +279,7 @@ class QuditCircuit:
         """
         self._apply_gate(index, name="U8", extra=(gamma, z, eps))
 
-    def rx(self, index: int, theta: float, j: int = 0, k: int = 1):
+    def rx(self, index: int, theta: float, j: int = 0, k: int = 1) -> None:
         """
         Apply the single-qudit RX rotation on `index`.
 
@@ -291,7 +291,7 @@ class QuditCircuit:
         """
         self._apply_gate(index, name="RX", theta=theta, j=j, k=k)
 
-    def ry(self, index: int, theta: float, j: int = 0, k: int = 1):
+    def ry(self, index: int, theta: float, j: int = 0, k: int = 1) -> None:
         """
         Apply the single-qudit RY rotation on `index`.
 
@@ -303,7 +303,7 @@ class QuditCircuit:
         """
         self._apply_gate(index, name="RY", theta=theta, j=j, k=k)
 
-    def rz(self, index: int, theta: float, j: int = 0):
+    def rz(self, index: int, theta: float, j: int = 0) -> None:
         """
         Apply the single-qudit RZ rotation on `index`.
 
@@ -322,7 +322,7 @@ class QuditCircuit:
         k1: int = 1,
         j2: int = 0,
         k2: int = 1,
-    ):
+    ) -> None:
         """
         Apply a two-qudit RXX-type interaction on the given indices.
 
@@ -336,7 +336,7 @@ class QuditCircuit:
         """
         self._apply_gate(*indices, name="RXX", theta=theta, j1=j1, k1=k1, j2=j2, k2=k2)
 
-    def rzz(self, *indices: int, theta: float):
+    def rzz(self, *indices: int, theta: float) -> None:
         """
         Apply a two-qudit RZZ interaction on the given indices.
 
