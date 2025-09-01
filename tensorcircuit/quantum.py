@@ -3016,9 +3016,7 @@ def sample2all(
             )
 
 
-def spin_by_basis(
-    n: int, m: int, elements: Tuple[int, int] = (1, -1), dim: Optional[int] = None
-) -> Tensor:
+def spin_by_basis(n: int, m: int, elements: Tuple[int, int] = (1, -1)) -> Tensor:
     """
     Generate all n-bitstrings as an array, each row is a bitstring basis.
     Return m-th col.
@@ -3038,109 +3036,67 @@ def spin_by_basis(
         all bitstring basis.
     :rtype: Tensor
     """
-    dim = len(elements) if dim is None else dim
-
-    col = backend.convert_to_tensor(np.array(elements, dtype=np.int32).reshape(-1, 1))
-    s = backend.tile(backend.cast(col, "int32"), [dim**m, int(dim ** (n - m - 1))])
+    s = backend.tile(
+        backend.cast(
+            backend.convert_to_tensor(np.array([[elements[0]], [elements[1]]])), "int32"
+        ),
+        [2**m, int(2 ** (n - m - 1))],
+    )
     return backend.reshape(s, [-1])
 
 
-def correlation_from_samples(
-    index: Sequence[int],
-    results: Tensor,
-    n: int,
-    dim: int = 2,
-    elements: Optional[Sequence[float]] = None,
-) -> Tensor:
+def correlation_from_samples(index: Sequence[int], results: Tensor, n: int) -> Tensor:
     r"""
-    Compute :math:`\prod_{i\in \text{index}} s_i` from measurement shots,
-    where each site value :math:`s_i` is mapped from the digit outcome.
+    Compute :math:`\prod_{i\in \\text{index}} s_i (s=\pm 1)`,
+    Results is in the format of "sample_int" or "sample_bin"
 
-    Results can be "sample_int" ([shots]) or "sample_bin" ([shots, n]).
-
-    :param index: positions in the basis string
-    :param results: samples tensor
-    :param n: number of sites
-    :param dim: local dimension (default 2)
-    :param elements: optional mapping of length d from outcome {0..d-1} to values s.
-                     If None and d==2, defaults to (1, -1) via the original formula.
-    :return: correlation estimate (mean over shots)
+    :param index: list of int, indicating the position in the bitstring
+    :type index: Sequence[int]
+    :param results: sample tensor
+    :type results: Tensor
+    :param n: number of qubits
+    :type n: int
+    :return: Correlation expectation from measurement shots
+    :rtype: Tensor
     """
     if len(backend.shape_tuple(results)) == 1:
-        results = sample_int2bin(results, n, dim=dim)
-
-    if dim == 2 and elements is None:
-        svals = 1 - results * 2  # 0->+1, 1->-1
-        r = svals[:, index[0]]
-        for i in index[1:]:
-            r *= svals[:, i]
-        r = backend.cast(r, rdtypestr)
-        return backend.mean(r)
-
-    if elements is None:
-        raise ValueError(
-            f"correlation_from_samples requires `elements` mapping for d={dim}; "
-            f"e.g., for qutrit you might pass elements=(1.0,0.0,-1.0)."
-        )
-    if len(elements) != dim:
-        raise ValueError(f"`elements` length {len(elements)} != d={dim}")
-
-    evec = backend.cast(backend.convert_to_tensor(np.asarray(elements)), rdtypestr)
-
-    col = backend.cast(results[:, index[0]], "int32")
-    r = backend.gather1d(evec, col)  # shape [shots]
-
+        results = sample_int2bin(results, n)
+    results = 1 - results * 2
+    r = results[:, index[0]]
     for i in index[1:]:
-        col = backend.cast(results[:, i], "int32")
-        r *= backend.gather1d(evec, col)
-
+        r *= results[:, i]
     r = backend.cast(r, rdtypestr)
     return backend.mean(r)
 
 
-def correlation_from_counts(
-    index: Sequence[int],
-    results: Tensor,
-    dim: Optional[int] = None,
-    elements: Optional[Sequence[float]] = None,
-) -> Tensor:
+def correlation_from_counts(index: Sequence[int], results: Tensor) -> Tensor:
     r"""
-    Compute :math:`\prod_{i\in \text{index}} s_i` where the probability for each
-    basis label is given by a count/probability vector ``results`` ("count_vector").
+    Compute :math:`\prod_{i\in \\text{index}} s_i`,
+    where the probability for each bitstring is given as a vector ``results``.
+    Results is in the format of "count_vector"
 
-    :param index: positions in the basis string
-    :param results: probability/count vector of shape d**n (will be normalized)
-    :param dim: local dimension (default 2)
-    :param dim: optional mapping of length d from digit {0..d-1} to values s.
-                     If None and d==2, defaults to (1, -1). For d>2, must be provided.
-    :return: correlation expectation from counts
+    :Example:
+
+    >>> prob = tc.array_to_tensor(np.array([0.6, 0.4, 0, 0]))
+    >>> qu.correlation_from_counts([0, 1], prob)
+    (0.20000002+0j)
+    >>> qu.correlation_from_counts([1], prob)
+    (0.20000002+0j)
+
+    :param index: list of int, indicating the position in the bitstring
+    :type index: Sequence[int]
+    :param results: probability vector of shape 2^n
+    :type results: Tensor
+    :return: Correlation expectation from measurement shots.
+    :rtype: Tensor
     """
-    dim = 2 if dim is None else int(dim)
-    if dim != 2:
-        raise NotImplementedError(f"`d={dim}` not implemented.")
-
     results = backend.reshape(results, [-1])
     results = backend.cast(results, rdtypestr)
     results /= backend.sum(results)
-
-    n = _infer_num_sites(int(results.shape[0]), dim=dim)
-
-    if dim == 2 and elements is None:
-        elems = (1, -1)
-    else:
-        if elements is None or len(elements) != dim:
-            raise ValueError(
-                f"`elements` must be provided with length d={dim} for qudit; got {elements}."
-            )
-        elems = tuple(elements)  # type: ignore
-
-    acc = results
+    n = int(np.log(results.shape[0]) / np.log(2))
     for i in index:
-        acc = acc * backend.cast(
-            spin_by_basis(n, int(i), elements=elems, dim=dim), acc.dtype
-        )
-
-    return backend.sum(acc)
+        results = results * backend.cast(spin_by_basis(n, i), results.dtype)
+    return backend.sum(results)
 
 
 # @op2tensor
