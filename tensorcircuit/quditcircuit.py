@@ -105,9 +105,13 @@ def _cached_matrix(
         TypeError/ValueError: If `key` does not match the builder’s expected parameters.
     """
     builders = SINGLE_BUILDERS if kind == "single" else TWO_BUILDERS
-    _, builder = builders[name]
-    sig = builders[name][0]
-    kwargs = {k: v for k, v in zip(sig, key)}
+    try:
+        sig, builder = builders[name]
+    except KeyError as e:
+        raise KeyError(f"Unknown builder '{name}' for kind '{kind}'") from e
+
+    extras: Tuple[Any, ...] = () if key is None else key  # normalized & typed
+    kwargs = {k: v for k, v in zip(sig, extras)}
     return builder(d, omega, **kwargs)
 
 
