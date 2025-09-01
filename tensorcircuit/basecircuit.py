@@ -472,12 +472,10 @@ class BaseCircuit(AbstractCircuit):
             else:
                 zero_r = backend.cast(backend.convert_to_tensor(0.0), rdtypestr)
                 tiny_r = backend.cast(backend.convert_to_tensor(1e-12), rdtypestr)
-                pu = backend.real(backend.diagonal(rho))
-                pu = backend.clip(pu, zero_r, one_r)
-                pu = pu + tiny_r * (
-                    backend.ones((self._d,), dtype=rdtypestr)
-                    / backend.cast(backend.convert_to_tensor(float(self._d)), rdtypestr)
-                )
+                pu = backend.clip(backend.real(backend.diagonal(rho)), zero_r, one_r)
+                phi = backend.cast(backend.convert_to_tensor((np.sqrt(5.0) - 1.0) / 2.0), rdtypestr)
+                frac = backend.mod(backend.cast(backend.arange(self._d), rdtypestr) * phi, one_r)
+                pu = pu + tiny_r * (frac + tiny_r)
                 pu = pu / backend.sum(pu)
                 cdf = backend.cumsum(pu)
                 if status is None:
