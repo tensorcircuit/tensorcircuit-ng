@@ -401,8 +401,8 @@ class MPSCircuit(AbstractCircuit):
 
         nindex = len(index)
         in_dims = tuple(backend.shape_tuple(gate))[:nindex]
-        d = int(in_dims[0])
-        dim_phys_mpo = d * d
+        dim = int(in_dims[0])
+        dim_phys_mpo = dim * dim
 
         order = tuple(np.arange(2 * nindex).reshape(2, nindex).T.flatten().tolist())
         gate = backend.transpose(gate, order)
@@ -429,13 +429,13 @@ class MPSCircuit(AbstractCircuit):
             if previous_i is not None:
                 for _gap_site in range(int(previous_i) + 1, int(i)):
                     bond_dim = int(backend.shape_tuple(tensors[-1])[-1])
-                    eye2d = backend.eye(bond_dim * d, dtype=backend.dtype(tensors[-1]))
-                    I4 = backend.reshape(eye2d, (bond_dim, d, bond_dim, d))
+                    eye2d = backend.eye(bond_dim * dim, dtype=backend.dtype(tensors[-1]))
+                    I4 = backend.reshape(eye2d, (bond_dim, dim, bond_dim, dim))
                     I4 = backend.transpose(I4, (0, 1, 3, 2))
                     tensors.append(I4)
 
             nleft, _, nright = backend.shape_tuple(main_tensor)
-            tensor = backend.reshape(main_tensor, (int(nleft), d, d, int(nright)))
+            tensor = backend.reshape(main_tensor, (int(nleft), dim, dim, int(nright)))
             tensors.append(tensor)
             previous_i = int(i)
 

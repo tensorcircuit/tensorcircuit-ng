@@ -1,6 +1,6 @@
 """
 Quantum circuit: the state simulator.
-Supports qubit (d=2) and qudit (3 <= d <= 36) systems.
+Supports qubit (dim=2) and qudit (3 <= dim <= 36) systems.
  For string-encoded samples/counts, digits use 0–9A–Z where A=10, …, Z=35.
 """
 
@@ -87,7 +87,7 @@ class Circuit(BaseCircuit):
             "split": split,
         }
         if (inputs is None) and (mps_inputs is None):
-            nodes = self.all_zero_nodes(nqubits, d=self._d)
+            nodes = self.all_zero_nodes(nqubits, dim=self._d)
             self._front = [n.get_edge(0) for n in nodes]
         elif inputs is not None:  # provide input function
             inputs = backend.convert_to_tensor(inputs)
@@ -922,7 +922,7 @@ Circuit._meta_apply_channels()
 def expectation(
     *ops: Tuple[tn.Node, List[int]],
     ket: Tensor,
-    d: Optional[int] = None,
+    dim: Optional[int] = None,
     bra: Optional[Tensor] = None,
     conj: bool = True,
     normalization: bool = False,
@@ -974,8 +974,8 @@ def expectation(
     :type ket: Tensor
     :param bra: :math:`bra`, defaults to None, which is the same as ``ket``.
     :type bra: Optional[Tensor], optional
-    :param d: dimension of the circuit (defaults to 2)
-    :type d: int, optional
+    :param dim: dimension of the circuit (defaults to 2)
+    :type dim: int, optional
     :param conj: :math:`bra` changes to the adjoint matrix of :math:`bra`, defaults to True.
     :type conj: bool, optional
     :param normalization: Normalize the :math:`ket` and :math:`bra`, defaults to False.
@@ -984,7 +984,7 @@ def expectation(
     :return: The result of :math:`\\langle bra\\vert ops \\vert ket\\rangle`.
     :rtype: Tensor
     """
-    d = 2 if d is None else d
+    dim = 2 if dim is None else dim
     if bra is None:
         bra = ket
     if isinstance(ket, QuOperator):
@@ -998,7 +998,7 @@ def expectation(
         for op, index in ops:
             if not isinstance(op, tn.Node):
                 # op is only a matrix
-                op = backend.reshaped(op, d)
+                op = backend.reshaped(op, dim)
                 op = gates.Gate(op)
             if isinstance(index, int):
                 index = [index]
@@ -1022,8 +1022,8 @@ def expectation(
         if conj is True:
             bra = backend.conj(bra)
         ket = backend.reshape(ket, [-1])
-        ket = backend.reshaped(ket, d)
-        bra = backend.reshaped(bra, d)
+        ket = backend.reshaped(ket, dim)
+        bra = backend.reshaped(bra, dim)
         n = len(backend.shape_tuple(ket))
         ket = Gate(ket)
         bra = Gate(bra)
@@ -1035,7 +1035,7 @@ def expectation(
         for op, index in ops:
             if not isinstance(op, tn.Node):
                 # op is only a matrix
-                op = backend.reshaped(op, d)
+                op = backend.reshaped(op, dim)
                 op = gates.Gate(op)
             if isinstance(index, int):
                 index = [index]

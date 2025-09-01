@@ -37,10 +37,10 @@ Gate = gates.Gate
 Tensor = Any
 
 
-def _decode_basis_label(label: str, d: int, n: int) -> List[int]:
-    if d > 36:
+def _decode_basis_label(label: str, dim: int, n: int) -> List[int]:
+    if dim > 36:
         raise NotImplementedError(
-            f"String basis label supports d<=36 (0–9A–Z). Got d={d}. "
+            f"String basis label supports d<=36 (0–9A–Z). Got dim={dim}. "
             "Use an integer array/tensor of length n instead."
         )
     s = label.upper()
@@ -53,9 +53,9 @@ def _decode_basis_label(label: str, d: int, n: int) -> List[int]:
                 f"Invalid character '{ch}' in basis label (allowed 0–9A–Z)."
             )
         v = _ALPHABET.index(ch)
-        if v >= d:
+        if v >= dim:
             raise ValueError(
-                f"Digit '{ch}' (= {v}) out of range for base-d with d={d}."
+                f"Digit '{ch}' (= {v}) out of range for base-d with dim={dim}."
             )
         digits.append(v)
     return digits
@@ -70,9 +70,9 @@ class BaseCircuit(AbstractCircuit):
     is_mps = False
 
     @staticmethod
-    def all_zero_nodes(n: int, d: int = 2, prefix: str = "qb-") -> List[tn.Node]:
-        prefix = "qd-" if d > 2 else prefix
-        l = [0.0 for _ in range(d)]
+    def all_zero_nodes(n: int, dim: int = 2, prefix: str = "qb-") -> List[tn.Node]:
+        prefix = "qd-" if dim > 2 else prefix
+        l = [0.0 for _ in range(dim)]
         l[0] = 1.0
         nodes = [
             tn.Node(
@@ -541,7 +541,7 @@ class BaseCircuit(AbstractCircuit):
         if self.is_dm:
             msconj = []
         if isinstance(l, str):
-            symbols = _decode_basis_label(l, d=self._d, n=self._nqubits)
+            symbols = _decode_basis_label(l, dim=self._d, n=self._nqubits)
             for k in symbols:
                 n = _basis_nod(k)
                 ms.append(tn.Node(n))
@@ -704,7 +704,7 @@ class BaseCircuit(AbstractCircuit):
                 return r
             r = backend.stack([ri[0] for ri in r])  # type: ignore
             r = backend.cast(r, "int32")
-            ch = sample_bin2int(r, self._nqubits, d=self._d)
+            ch = sample_bin2int(r, self._nqubits, dim=self._d)
         else:  # allow_state
             if batch is None:
                 nbatch = 1
@@ -729,7 +729,7 @@ class BaseCircuit(AbstractCircuit):
             #     2,
             # )
             if format is None:  # for backward compatibility
-                confg = sample_int2bin(ch, self._nqubits, d=self._d)
+                confg = sample_int2bin(ch, self._nqubits, dim=self._d)
                 prob = backend.gather1d(p, ch)
                 r = list(zip(confg, prob))  # type: ignore
                 if batch is None:
@@ -738,7 +738,7 @@ class BaseCircuit(AbstractCircuit):
         if self._nqubits > 35:
             jittable = False
         return sample2all(
-            sample=ch, n=self._nqubits, format=format, jittable=jittable, d=self._d
+            sample=ch, n=self._nqubits, format=format, jittable=jittable, dim=self._d
         )
 
     def sample_expectation_ps(

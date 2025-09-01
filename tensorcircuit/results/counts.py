@@ -151,7 +151,7 @@ def vec2count(vec: Tensor, prune: bool = False, dim: Optional[int] = 2) -> ct:
     if isinstance(vec, list):
         vec = np.array(vec)
     n = int(np.log(int(vec.shape[0])) / np.log(dim) + 1e-9)
-    c: ct = count_vector2dict(vec, n, key="bin", d=dim)  # type: ignore
+    c: ct = count_vector2dict(vec, n, key="bin", dim=dim)  # type: ignore
     if prune:
         c = {k: v for k, v in c.items() if np.abs(v) >= 1e-8}
 
