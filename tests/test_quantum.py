@@ -1034,3 +1034,122 @@ def test_u1_project(backend):
     s1 = tc.quantum.u1_project(s, 8, 3)
     assert s1.shape[-1] == 56
     np.testing.assert_allclose(tc.quantum.u1_enlarge(s1, 8, 3), s)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_sample_int2bin(backend):
+    for n, dim in [(3, 2), (3, 3), (4, 5), (4, 10), (5, 36)]:
+        trials = 10
+        max_val = dim**n
+        samples = np.random.randint(0, max_val, size=trials)
+
+        digits = np.asarray(tc.quantum.sample_int2bin(samples, n=n, dim=dim))
+        print(digits)
+
+        assert digits.shape == (trials, n)
+
+        assert digits.min() >= 0 and digits.max() < dim
+
+        weights = dim ** np.arange(n - 1, -1, -1)
+        recon = (digits * weights).sum(axis=1)
+        assert np.array_equal(recon, samples)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_count_s2d(backend):
+    cases = [
+        (3, None, [0, 3, 7], [5, 2, 1]),
+        (2, 3, [0, 1, 8], [1, 2, 3]),
+        (3, 5, [0, 57, 124], [4, 1, 6]),
+        (2, 10, [7, 42, 99], [2, 5, 1]),
+        (2, 36, [0, 35, 1295], [9, 8, 7]),
+    ]
+
+    for n, dim, idx, cnt in cases:
+        D = 2 if dim is None else dim
+        size = D**n
+
+        s_indices = np.asarray(idx, dtype=np.int64)
+        s_counts_i = np.asarray(cnt, dtype=np.int64)
+
+        dense_i = np.asarray(
+            tc.quantum.count_s2d((s_indices, s_counts_i), n=n, dim=dim)
+        )
+        print("int case:", n, dim, dense_i)
+
+        assert dense_i.shape == (size,)
+        expected_i = np.zeros(size, dtype=np.int64)
+        expected_i[s_indices] = s_counts_i
+        np.testing.assert_array_equal(dense_i, expected_i)
+
+        s_counts_f = np.asarray(cnt, dtype=np.float32)
+        dense_f = np.asarray(
+            tc.quantum.count_s2d((s_indices, s_counts_f), n=n, dim=dim)
+        )
+        print("float case:", n, dim, dense_f)
+
+        assert dense_f.shape == (size,)
+        assert dense_f.dtype == np.float32
+        expected_f = np.zeros(size, dtype=np.float32)
+        expected_f[s_indices] = s_counts_f
+        np.testing.assert_array_equal(dense_f, expected_f)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_sample_bin2int(backend):
+    for n, dim in [(3, 2), (3, 3), (4, 5), (4, 10), (5, 36)]:
+        trials = 10
+        digits = np.random.randint(0, dim, size=(trials, n))
+        ints = np.asarray(tc.quantum.sample_bin2int(digits, n=n, dim=dim))
+
+        assert ints.shape == (trials,)
+        weights = dim ** np.arange(n - 1, -1, -1)
+        expected = (digits * weights).sum(axis=1)
+        np.testing.assert_array_equal(ints, expected)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_count_vector2dict(backend):
+    for n, dim in [(3, 2), (3, 3), (4, 5), (3, 10), (3, 16), (2, 36)]:
+        size = dim**n
+        counts_np = np.random.randint(0, 7, size=size, dtype=np.int64)
+        counts = tc.backend.convert_to_tensor(counts_np)
+
+        out_int = tc.quantum.count_vector2dict(counts, n=n, key="int", dim=dim)
+        assert isinstance(out_int, dict)
+        assert len(out_int) == size
+        for i in range(size):
+            assert out_int[i] == int(counts_np[i])
+
+        out_bin = tc.quantum.count_vector2dict(counts, n=n, key="bin", dim=dim)
+        assert isinstance(out_bin, dict)
+        assert len(out_bin) == size
+        expected_keys = [np.base_repr(i, base=dim).zfill(n) for i in range(size)]
+        assert set(out_bin.keys()) == set(expected_keys)
+        for i, k in enumerate(expected_keys):
+            assert out_bin[k] == int(counts_np[i])
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_count_tuple2dict(backend):
+    for n, dim in [(3, 2), (3, 3), (2, 5), (3, 10), (2, 16), (2, 36)]:
+        size = dim**n
+        indices = np.random.choice(size, size=min(5, size), replace=False)
+        counts = np.random.randint(1, 10, size=len(indices))
+
+        idx_tensor = tc.backend.cast(tc.backend.convert_to_tensor(indices), "int64")
+        cnt_tensor = tc.backend.cast(tc.backend.convert_to_tensor(counts), "int64")
+        count_tuple = (idx_tensor, cnt_tensor)
+
+        out_int = tc.quantum.count_tuple2dict(count_tuple, n=n, key="int", dim=dim)
+        assert isinstance(out_int, dict)
+        assert set(out_int.keys()) == set(indices)
+        for i, c in zip(indices, counts):
+            assert out_int[int(i)] == int(c)
+
+        out_bin = tc.quantum.count_tuple2dict(count_tuple, n=n, key="bin", dim=dim)
+        assert isinstance(out_bin, dict)
+        expected_keys = [np.base_repr(int(i), base=dim).zfill(n) for i in indices]
+        assert set(out_bin.keys()) == set(expected_keys)
+        for k, c in zip(expected_keys, counts):
+            assert out_bin[k] == int(c)
