@@ -2,10 +2,8 @@
 
 import os
 import sys
-from functools import partial
 
 import numpy as np
-import opt_einsum as oem
 import pytest
 from pytest_lazyfixture import lazy_fixture as lf
 
@@ -127,92 +125,92 @@ def test_single_qubit():
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("cpb")])
 def test_expectation_between_two_states_qudit(backend):
-    d = 3
-    X3 = tc.quditgates._x_matrix_func(d)
-    Y3 = tc.quditgates._y_matrix_func(d)  # ZX/i
-    Z3 = tc.quditgates._z_matrix_func(d)
-    H3 = tc.quditgates._h_matrix_func(d)
+    dim = 3
+    X3 = tc.quditgates._x_matrix_func(dim)
+    Y3 = tc.quditgates._y_matrix_func(dim)  # ZX/i
+    Z3 = tc.quditgates._z_matrix_func(dim)
+    H3 = tc.quditgates._h_matrix_func(dim)
     X3_dag = np.conjugate(X3.T)
 
     e0 = np.array([1.0, 0.0, 0.0], dtype=np.complex64)
     e1 = np.array([0.0, 1.0, 0.0], dtype=np.complex64)
-    val = tc.expectation((tc.gates.Gate(Y3), [0]), ket=e0, bra=e1, d=d)
-    omega = np.exp(2j * np.pi / d)
+    val = tc.expectation((tc.gates.Gate(Y3), [0]), ket=e0, bra=e1, dim=dim)
+    omega = np.exp(2j * np.pi / dim)
     expected = omega / 1j
     np.testing.assert_allclose(tc.backend.numpy(val), expected, rtol=1e-6, atol=1e-6)
 
-    c = tc.QuditCircuit(3, d)
+    c = tc.QuditCircuit(3, dim)
     c.unitary(0, unitary=tc.gates.Gate(H3))
     c.ry(1, theta=0.8, j=0, k=1)
     state = c.wavefunction()
     x1z2 = [(tc.gates.Gate(X3), [0]), (tc.gates.Gate(Z3), [1])]
     e1 = c.expectation(*x1z2)
-    e2 = tc.expectation(*x1z2, ket=state, bra=state, normalization=True, d=d)
+    e2 = tc.expectation(*x1z2, ket=state, bra=state, normalization=True, dim=dim)
     np.testing.assert_allclose(tc.backend.numpy(e2), tc.backend.numpy(e1))
 
-    c = tc.QuditCircuit(3, d)
+    c = tc.QuditCircuit(3, dim)
     c.unitary(0, unitary=tc.gates.Gate(H3))
     c.ry(1, theta=0.8 + 0.7j, j=0, k=1)
     state = c.wavefunction()
     e1 = c.expectation(*x1z2) / (tc.backend.norm(state) ** 2)
-    e2 = tc.expectation(*x1z2, ket=state, normalization=True, d=d)
+    e2 = tc.expectation(*x1z2, ket=state, normalization=True, dim=dim)
     np.testing.assert_allclose(tc.backend.numpy(e2), tc.backend.numpy(e1))
 
-    c1 = tc.QuditCircuit(2, d)
+    c1 = tc.QuditCircuit(2, dim)
     c1.unitary(1, unitary=tc.gates.Gate(X3))
     s1 = c1.state()
 
-    c2 = tc.QuditCircuit(2, d)
+    c2 = tc.QuditCircuit(2, dim)
     c2.unitary(0, unitary=tc.gates.Gate(X3))
     s2 = c2.state()
 
-    c3 = tc.QuditCircuit(2, d)
+    c3 = tc.QuditCircuit(2, dim)
     c3.unitary(1, unitary=tc.gates.Gate(H3))
     s3 = c3.state()
 
     x1x2_fixed = [(tc.gates.Gate(X3), [0]), (tc.gates.Gate(X3_dag), [1])]
-    e = tc.expectation(*x1x2_fixed, ket=s1, bra=s2, d=d)
+    e = tc.expectation(*x1x2_fixed, ket=s1, bra=s2, dim=dim)
     np.testing.assert_allclose(tc.backend.numpy(e), 1.0)
 
-    e2 = tc.expectation(*x1x2_fixed, ket=s3, bra=s2, d=d)
+    e2 = tc.expectation(*x1x2_fixed, ket=s3, bra=s2, dim=dim)
     np.testing.assert_allclose(tc.backend.numpy(e2), 1.0 / np.sqrt(3))
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("cpb")])
 def test_any_inputs_state_qudit_true_gates(backend):
-    d = 3
-    Xd = tc.quditgates._x_matrix_func(d)
-    Zd = tc.quditgates._z_matrix_func(d)
-    omega = np.exp(2j * np.pi / d)
+    dim = 3
+    Xd = tc.quditgates._x_matrix_func(dim)
+    Zd = tc.quditgates._z_matrix_func(dim)
+    omega = np.exp(2j * np.pi / dim)
 
     def idx(j0, j1):
-        return d * j0 + j1
+        return dim * j0 + j1
 
-    vec = np.zeros(d * d, dtype=np.complex64)
+    vec = np.zeros(dim * dim, dtype=np.complex64)
     vec[idx(2, 0)] = 1.0
-    c = tc.QuditCircuit(2, d, inputs=tc.array_to_tensor(vec))
+    c = tc.QuditCircuit(2, dim, inputs=tc.array_to_tensor(vec))
     c.unitary(0, unitary=tc.gates.Gate(Xd))
     z0 = c.expectation((tc.gates.Gate(Zd), [0]))
     np.testing.assert_allclose(tc.backend.numpy(z0), 1.0 + 0j, rtol=1e-6, atol=1e-6)
 
-    vec = np.zeros(d * d, dtype=np.complex64)
+    vec = np.zeros(dim * dim, dtype=np.complex64)
     vec[idx(0, 0)] = 1.0
-    c = tc.QuditCircuit(2, d, inputs=tc.array_to_tensor(vec))
+    c = tc.QuditCircuit(2, dim, inputs=tc.array_to_tensor(vec))
     c.unitary(0, unitary=tc.gates.Gate(Xd))
     z0 = c.expectation((tc.gates.Gate(Zd), [0]))
     np.testing.assert_allclose(tc.backend.numpy(z0), omega, rtol=1e-6, atol=1e-6)
 
-    vec = np.zeros(d * d, dtype=np.complex64)
+    vec = np.zeros(dim * dim, dtype=np.complex64)
     vec[idx(1, 0)] = 1.0
-    c = tc.QuditCircuit(2, d, inputs=tc.array_to_tensor(vec))
+    c = tc.QuditCircuit(2, dim, inputs=tc.array_to_tensor(vec))
     c.unitary(0, unitary=tc.gates.Gate(Xd))
     z0 = c.expectation((tc.gates.Gate(Zd), [0]))
     np.testing.assert_allclose(tc.backend.numpy(z0), omega**2, rtol=1e-6, atol=1e-6)
 
-    vec = np.zeros(d * d, dtype=np.complex64)
+    vec = np.zeros(dim * dim, dtype=np.complex64)
     vec[idx(0, 0)] = 1 / np.sqrt(2)
     vec[idx(1, 0)] = 1 / np.sqrt(2)
-    c = tc.QuditCircuit(2, d, inputs=tc.array_to_tensor(vec))
+    c = tc.QuditCircuit(2, dim, inputs=tc.array_to_tensor(vec))
     c.unitary(0, unitary=tc.gates.Gate(Xd))
     z0 = c.expectation((tc.gates.Gate(Zd), [0]))
     np.testing.assert_allclose(tc.backend.numpy(z0), -0.5 + 0j, rtol=1e-6, atol=1e-6)
