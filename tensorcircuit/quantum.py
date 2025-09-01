@@ -2643,7 +2643,9 @@ def mutual_information(
 # measurement results and transformations and correlations below
 
 
-def count_s2d(srepr: Tuple[Tensor, Tensor], n: int, dim: Optional[int] = None) -> Tensor:
+def count_s2d(
+    srepr: Tuple[Tensor, Tensor], n: int, dim: Optional[int] = None
+) -> Tensor:
     """
     measurement shots results, sparse tuple representation to dense representation
     count_vector to count_tuple

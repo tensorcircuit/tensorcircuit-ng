@@ -429,7 +429,9 @@ class MPSCircuit(AbstractCircuit):
             if previous_i is not None:
                 for _gap_site in range(int(previous_i) + 1, int(i)):
                     bond_dim = int(backend.shape_tuple(tensors[-1])[-1])
-                    eye2d = backend.eye(bond_dim * dim, dtype=backend.dtype(tensors[-1]))
+                    eye2d = backend.eye(
+                        bond_dim * dim, dtype=backend.dtype(tensors[-1])
+                    )
                     I4 = backend.reshape(eye2d, (bond_dim, dim, bond_dim, dim))
                     I4 = backend.transpose(I4, (0, 1, 3, 2))
                     tensors.append(I4)
