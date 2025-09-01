@@ -90,7 +90,9 @@ def marginal_count(count: ct, keep_list: Sequence[int]) -> ct:
     return reverse_count(ncount)
 
 
-def count2vec(count: ct, normalization: bool = True, dim: Optional[int] = 2) -> Tensor:
+def count2vec(
+    count: ct, normalization: bool = True, dim: Optional[int] = None
+) -> Tensor:
     """
     Convert a dictionary of counts (with string keys) to a probability/count vector.
 
@@ -121,6 +123,8 @@ def count2vec(count: ct, normalization: bool = True, dim: Optional[int] = 2) -> 
     if not count:
         return np.array([], dtype=float)
 
+    dim = 2 if dim is None else dim
+
     n = len(next(iter(count)).upper())
     prob = np.zeros(dim**n, dtype=float)
     shots = float(sum(count.values())) if normalization else 1.0
@@ -136,7 +140,7 @@ def count2vec(count: ct, normalization: bool = True, dim: Optional[int] = 2) -> 
     return prob
 
 
-def vec2count(vec: Tensor, prune: bool = False, dim: Optional[int] = 2) -> ct:
+def vec2count(vec: Tensor, prune: bool = False, dim: Optional[int] = None) -> ct:
     """
     Map a count/probability vector of length D to a dictionary with base-d string keys (0-9A-Z).
     Only generate string keys when d ≤ 36; if d is inferred to be > 36, raise a NotImplementedError.
@@ -146,8 +150,9 @@ def vec2count(vec: Tensor, prune: bool = False, dim: Optional[int] = 2) -> ct:
     :param dim: Dimensionality of the vector, defaults to 2
     :return: {base-d string key: value}, key length n
     """
-    from ..quantum import count_vector2dict, _infer_num_sites
+    from ..quantum import count_vector2dict
 
+    dim = 2 if dim is None else dim
     if isinstance(vec, list):
         vec = np.array(vec)
     n = int(np.log(int(vec.shape[0])) / np.log(dim) + 1e-9)
