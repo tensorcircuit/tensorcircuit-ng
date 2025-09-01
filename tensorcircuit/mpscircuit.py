@@ -94,10 +94,10 @@ class MPSCircuit(AbstractCircuit):
         tensors: Optional[Sequence[Tensor]] = None,
         wavefunction: Optional[Union[QuVector, Tensor]] = None,
         split: Optional[Dict[str, Any]] = None,
-        **kwargs: Any,
     ) -> None:
         """
         MPSCircuit object based on state simulator.
+        Do not use this class with d!=2 directly
 
         :param nqubits: The number of qubits in the circuit.
         :type nqubits: int
@@ -115,13 +115,7 @@ class MPSCircuit(AbstractCircuit):
         :param split: Split rules
         :type split: Any
         """
-        self._qudit: bool = kwargs.get("qudit", False)
-        if not self._qudit and self._d != 2:
-            raise ValueError(
-                f"Circuit only supports qubits (dim=2). "
-                f"You passed dim={self._d}. Please use `QuditCircuit` instead."
-            )
-
+        self._d = 2 if dim is None else dim
         self.circuit_param = {
             "nqubits": nqubits,
             "center_position": center_position,

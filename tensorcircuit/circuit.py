@@ -48,10 +48,10 @@ class Circuit(BaseCircuit):
         inputs: Optional[Tensor] = None,
         mps_inputs: Optional[QuOperator] = None,
         split: Optional[Dict[str, Any]] = None,
-        **kwargs: Any,
     ) -> None:
         r"""
         Circuit object based on state simulator.
+        Do not use this class with d!=2 directly, use tc.QuditCircuit instead for qudit systems.
 
         :param nqubits: The number of qubits in the circuit.
         :type nqubits: int
@@ -67,13 +67,6 @@ class Circuit(BaseCircuit):
         :type split: Optional[Dict[str, Any]]
         """
         self._d = 2 if dim is None else dim
-        self._qudit: bool = kwargs.get("qudit", False)
-        if not self._qudit and self._d != 2:
-            raise ValueError(
-                f"Circuit only supports qubits (dim=2). "
-                f"You passed dim={self._d}. Please use `QuditCircuit` instead."
-            )
-
         self.inputs = inputs
         self.mps_inputs = mps_inputs
         self.split = split
@@ -740,7 +733,7 @@ class Circuit(BaseCircuit):
         :rtype: QuOperator
         """
         mps = identity([self._d for _ in range(self._nqubits)])
-        c = Circuit(self._nqubits, self._d, qudit=self._qudit)
+        c = Circuit(self._nqubits, self._d)
         ns, es = self._copy()
         c._nodes = ns
         c._front = es
@@ -761,7 +754,7 @@ class Circuit(BaseCircuit):
         :rtype: Tensor
         """
         mps = identity([self._d for _ in range(self._nqubits)])
-        c = Circuit(self._nqubits, self._d, qudit=self._qudit)
+        c = Circuit(self._nqubits, self._d)
         ns, es = self._copy()
         c._nodes = ns
         c._front = es

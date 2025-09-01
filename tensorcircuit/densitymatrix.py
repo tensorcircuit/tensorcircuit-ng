@@ -36,10 +36,10 @@ class DMCircuit(BaseCircuit):
         dminputs: Optional[Tensor] = None,
         mpo_dminputs: Optional[QuOperator] = None,
         split: Optional[Dict[str, Any]] = None,
-        **kwargs: Any,
     ) -> None:
         """
         The density matrix simulator based on tensornetwork engine.
+        Do not use this class with d!=2 directly
 
         :param nqubits: Number of qubits
         :type nqubits: int
@@ -58,13 +58,6 @@ class DMCircuit(BaseCircuit):
         :type split: Optional[Dict[str, Any]]
         """
         self._d = 2 if dim is None else dim
-        self._qudit: bool = kwargs.get("qudit", False)
-        if not self._qudit and self._d != 2:
-            raise ValueError(
-                f"Circuit only supports qubits (dim=2). "
-                f"You passed dim={self._d}. Please use `QuditCircuit` instead."
-            )
-
         if not empty:
             if (
                 (inputs is None)
