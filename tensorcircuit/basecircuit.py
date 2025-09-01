@@ -23,7 +23,6 @@ from .quantum import (
     correlation_from_counts,
     measurement_counts,
     sample_int2bin,
-    sample_bin2int,
     sample2all,
     _infer_num_sites,
 )
@@ -606,7 +605,7 @@ class BaseCircuit(AbstractCircuit):
         """
         get the d^n length probability vector over computational basis
 
-        :return: probability vector of shape [d**n]
+        :return: probability vector of shape [dim**n]
         :rtype: Tensor
         """
         s = self.state()  # type: ignore
@@ -703,8 +702,8 @@ class BaseCircuit(AbstractCircuit):
             if format is None:
                 return r
             r = backend.stack([ri[0] for ri in r])  # type: ignore
-            r = backend.cast(r, "int32")
-            ch = sample_bin2int(r, self._nqubits, dim=self._d)
+            ch = backend.cast(r, "int32")
+            # ch = sample_bin2int(r, self._nqubits, dim=self._d)
         else:  # allow_state
             if batch is None:
                 nbatch = 1

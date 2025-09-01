@@ -1350,23 +1350,7 @@ def test_floor_divide_various_cases(backend):
     """
 
     def to_backend(z):
-        if hasattr(tc.backend, "asarray"):
-            return tc.backend.asarray(z)
-
-        name = getattr(tc.backend, "name", "").lower()
-        try:
-            if "torch" in name:
-                import torch
-                return torch.as_tensor(z)
-            if "jax" in name:
-                import jax.numpy as jnp
-                return jnp.asarray(z)
-            if "tf" in name or "tensorflow" in name:
-                import tensorflow as tf
-                return tf.convert_to_tensor(z)
-        except Exception:
-            pass
-        return np.asarray(z)
+        return tc.backend.convert_to_tensor(z)
 
     out = tc.backend.floor_divide(to_backend([7, 8, 9]), to_backend(2))
     np.testing.assert_array_equal(np.array(out), np.array([3, 4, 4]))

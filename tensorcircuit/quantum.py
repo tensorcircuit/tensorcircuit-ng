@@ -2237,7 +2237,7 @@ def reduced_density_matrix(
     :type p: Optional[Tensor]
     :return: The reduced density matrix.
     :rtype: Union[Tensor, QuOperator]
-    :param normalize: if True, returns a trace 1 density matrix. Otherwise does not normalize.
+    :param normalize: if True, returns a trace 1 density matrix. Otherwise, does not normalize.
     :type normalize: bool
     :param dim: dimension of qudit system
     :type dim: int
@@ -3010,7 +3010,7 @@ def sample2all(
             return count_tuple2dict(count_tuple, n, key="int", dim=dim)
         else:
             raise ValueError(
-                f"unsupported format {format} for finite shots measurement"
+                "unsupported format %s for finite shots measurement" % format
             )
 
 
