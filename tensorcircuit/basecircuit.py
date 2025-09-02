@@ -475,7 +475,9 @@ class BaseCircuit(AbstractCircuit):
                 pu = pu / backend.sum(pu)
                 if status is None:
                     k_out = backend.implicit_randc(
-                        self._d, shape=1, p=backend.cast(pu, rdtypestr)
+                        a=backend.arange(self._d),
+                        shape=1,
+                        p=backend.cast(pu, rdtypestr),
                     )[0]
                     k_out = backend.cast(k_out, "int32")
                 else:
