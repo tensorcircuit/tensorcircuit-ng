@@ -2976,10 +2976,11 @@ def sample2all(
     :rtype: Any
     """
     dim = 2 if dim is None else int(dim)
-    if n > 32:
+    n_max_d = int(32 / np.log2(dim))
+    if n > n_max_d:
         assert (
             len(backend.shape_tuple(sample)) == 2
-        ), "n>32 is only supported for ``sample_bin``"
+        ), f"n>{n_max_d} is only supported for ``sample_bin``"
         if format == "sample_bin":
             return sample
         if format == "count_dict_bin":
