@@ -32,7 +32,7 @@ from tensornetwork.network_operations import (
     remove_node,
 )
 
-from .cons import backend, contractor, dtypestr, npdtype, rdtypestr
+from .cons import backend, contractor, dtypestr, npdtype, rdtypestr, _ALPHABET
 from .gates import Gate, num_to_tensor
 from .utils import arg_alias
 
@@ -55,6 +55,30 @@ def get_all_nodes(edges: Iterable[Edge]) -> List[Node]:
         if edge.node2 is not None and edge.node2 not in nodes:
             nodes.append(edge.node2)
     return nodes
+
+
+def _decode_basis_label(label: str, n: int, dim: int) -> List[int]:
+    if dim > 36:
+        raise NotImplementedError(
+            f"String basis label supports d<=36 (0–9A–Z). Got dim={dim}. "
+            "Use an integer array/tensor of length n instead."
+        )
+    s = label.upper()
+    if len(s) != n:
+        raise ValueError(f"Basis label length mismatch: expect {n}, got {len(s)}")
+    digits = []
+    for ch in s:
+        if ch not in _ALPHABET:
+            raise ValueError(
+                f"Invalid character '{ch}' in basis label (allowed 0–9A–Z)."
+            )
+        v = _ALPHABET.index(ch)
+        if v >= dim:
+            raise ValueError(
+                f"Digit '{ch}' (= {v}) out of range for base-d with dim={dim}."
+            )
+        digits.append(v)
+    return digits
 
 
 def _infer_num_sites(D: int, dim: int) -> int:

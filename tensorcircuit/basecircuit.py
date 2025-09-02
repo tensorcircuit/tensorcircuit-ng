@@ -25,39 +25,16 @@ from .quantum import (
     sample_int2bin,
     sample2all,
     _infer_num_sites,
+    _decode_basis_label,
 )
 from .abstractcircuit import AbstractCircuit
-from .cons import npdtype, backend, dtypestr, contractor, rdtypestr, _ALPHABET
+from .cons import npdtype, backend, dtypestr, contractor, rdtypestr
 from .simplify import _split_two_qubit_gate
 from .utils import arg_alias
 
 
 Gate = gates.Gate
 Tensor = Any
-
-
-def _decode_basis_label(label: str, n: int, dim: int) -> List[int]:
-    if dim > 36:
-        raise NotImplementedError(
-            f"String basis label supports d<=36 (0–9A–Z). Got dim={dim}. "
-            "Use an integer array/tensor of length n instead."
-        )
-    s = label.upper()
-    if len(s) != n:
-        raise ValueError(f"Basis label length mismatch: expect {n}, got {len(s)}")
-    digits = []
-    for ch in s:
-        if ch not in _ALPHABET:
-            raise ValueError(
-                f"Invalid character '{ch}' in basis label (allowed 0–9A–Z)."
-            )
-        v = _ALPHABET.index(ch)
-        if v >= dim:
-            raise ValueError(
-                f"Digit '{ch}' (= {v}) out of range for base-d with dim={dim}."
-            )
-        digits.append(v)
-    return digits
 
 
 class BaseCircuit(AbstractCircuit):

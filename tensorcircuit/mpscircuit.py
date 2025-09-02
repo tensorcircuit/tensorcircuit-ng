@@ -15,10 +15,9 @@ import tensornetwork as tn
 
 from . import gates
 from .cons import backend, npdtype, contractor, rdtypestr, dtypestr
-from .quantum import QuOperator, QuVector, extract_tensors_from_qop
+from .quantum import QuOperator, QuVector, extract_tensors_from_qop, _decode_basis_label
 from .mps_base import FiniteMPS
 from .abstractcircuit import AbstractCircuit
-from .basecircuit import _decode_basis_label
 from .utils import arg_alias
 
 Gate = gates.Gate
