@@ -89,11 +89,11 @@ class MPSCircuit(AbstractCircuit):
     def __init__(
         self,
         nqubits: int,
-        dim: Optional[int] = None,
         center_position: Optional[int] = None,
         tensors: Optional[Sequence[Tensor]] = None,
         wavefunction: Optional[Union[QuVector, Tensor]] = None,
         split: Optional[Dict[str, Any]] = None,
+        dim: Optional[int] = None,
     ) -> None:
         """
         MPSCircuit object based on state simulator.
@@ -851,7 +851,7 @@ class MPSCircuit(AbstractCircuit):
 
     def amplitude(self, l: str) -> Tensor:
         assert len(l) == self._nqubits
-        idx_list = _decode_basis_label(l, self._d, self._nqubits)
+        idx_list = _decode_basis_label(l, n=self._nqubits, dim=self._d)
         tensors = [self._mps.tensors[i][:, idx, :] for i, idx in enumerate(idx_list)]
         return reduce(backend.matmul, tensors)[0, 0]
 

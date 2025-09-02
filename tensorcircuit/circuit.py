@@ -44,10 +44,10 @@ class Circuit(BaseCircuit):
     def __init__(
         self,
         nqubits: int,
-        dim: Optional[int] = None,
         inputs: Optional[Tensor] = None,
         mps_inputs: Optional[QuOperator] = None,
         split: Optional[Dict[str, Any]] = None,
+        dim: Optional[int] = None,
     ) -> None:
         r"""
         Circuit object based on state simulator.
@@ -74,10 +74,10 @@ class Circuit(BaseCircuit):
 
         self.circuit_param = {
             "nqubits": nqubits,
-            "dim": dim,
             "inputs": inputs,
             "mps_inputs": mps_inputs,
             "split": split,
+            "dim": dim,
         }
         if (inputs is None) and (mps_inputs is None):
             nodes = self.all_zero_nodes(nqubits, dim=self._d)
@@ -915,10 +915,10 @@ Circuit._meta_apply_channels()
 def expectation(
     *ops: Tuple[tn.Node, List[int]],
     ket: Tensor,
-    dim: Optional[int] = None,
     bra: Optional[Tensor] = None,
     conj: bool = True,
     normalization: bool = False,
+    dim: Optional[int] = None,
 ) -> Tensor:
     """
     Compute :math:`\\langle bra\\vert ops \\vert ket\\rangle`.

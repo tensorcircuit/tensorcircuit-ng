@@ -29,13 +29,13 @@ class DMCircuit(BaseCircuit):
     def __init__(
         self,
         nqubits: int,
-        dim: Optional[int] = None,
         empty: bool = False,
         inputs: Optional[Tensor] = None,
         mps_inputs: Optional[QuOperator] = None,
         dminputs: Optional[Tensor] = None,
         mpo_dminputs: Optional[QuOperator] = None,
         split: Optional[Dict[str, Any]] = None,
+        dim: Optional[int] = None,
     ) -> None:
         """
         The density matrix simulator based on tensornetwork engine.

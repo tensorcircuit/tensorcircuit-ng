@@ -36,7 +36,7 @@ Gate = gates.Gate
 Tensor = Any
 
 
-def _decode_basis_label(label: str, dim: int, n: int) -> List[int]:
+def _decode_basis_label(label: str, n: int, dim: int) -> List[int]:
     if dim > 36:
         raise NotImplementedError(
             f"String basis label supports d<=36 (0–9A–Z). Got dim={dim}. "
@@ -69,7 +69,7 @@ class BaseCircuit(AbstractCircuit):
     is_mps = False
 
     @staticmethod
-    def all_zero_nodes(n: int, dim: int = 2, prefix: str = "qb-") -> List[tn.Node]:
+    def all_zero_nodes(n: int, prefix: str = "qb-", dim: int = 2) -> List[tn.Node]:
         prefix = "qd-" if dim > 2 else prefix
         l = [0.0 for _ in range(dim)]
         l[0] = 1.0
@@ -542,7 +542,7 @@ class BaseCircuit(AbstractCircuit):
         if self.is_dm:
             msconj = []
         if isinstance(l, str):
-            symbols = _decode_basis_label(l, dim=self._d, n=self._nqubits)
+            symbols = _decode_basis_label(l, n=self._nqubits, dim=self._d)
             for k in symbols:
                 n = _basis_nod(k)
                 ms.append(tn.Node(n))
