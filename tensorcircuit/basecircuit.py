@@ -471,28 +471,21 @@ class BaseCircuit(AbstractCircuit):
                 p = p * (pu * (-1) ** sign + sign)
             else:
                 zero_r = backend.cast(backend.convert_to_tensor(0.0), rdtypestr)
-                tiny_r = backend.cast(backend.convert_to_tensor(1e-12), rdtypestr)
                 pu = backend.clip(backend.real(backend.diagonal(rho)), zero_r, one_r)
-                phi = backend.cast(
-                    backend.convert_to_tensor((np.sqrt(5.0) - 1.0) / 2.0), rdtypestr
-                )
-                frac = backend.mod(
-                    backend.cast(backend.arange(self._d), rdtypestr) * phi, one_r
-                )
-                pu = pu + tiny_r * (frac + tiny_r)
                 pu = pu / backend.sum(pu)
-                cdf = backend.cumsum(pu)
                 if status is None:
-                    r = backend.implicit_randu()[0]
-                    r = backend.real(backend.cast(r, rdtypestr))
+                    a = backend.arange(self._d)
+                    k_out = backend.implicit_randc(a=a, shape=())[0]
+                    k_out = backend.cast(k_out, "int32")
                 else:
                     r = backend.real(backend.cast(status[k], rdtypestr))
-                k_out = backend.sum(backend.cast(cdf <= r, "int32"))
-                k_out = backend.clip(
-                    k_out,
-                    backend.cast(backend.convert_to_tensor(0), "int32"),
-                    backend.cast(backend.convert_to_tensor(self._d - 1), "int32"),
-                )
+                    cdf = backend.cumsum(pu)
+                    k_out = backend.sum(backend.cast(cdf < r, "int32"))
+                    k_out = backend.clip(
+                        k_out,
+                        backend.cast(backend.convert_to_tensor(0), "int32"),
+                        backend.cast(backend.convert_to_tensor(self._d - 1), "int32"),
+                    )
                 sample.append(backend.cast(k_out, rdtypestr))
                 p = p * backend.cast(pu[k_out], rdtypestr)
         sample = backend.real(backend.stack(sample))
