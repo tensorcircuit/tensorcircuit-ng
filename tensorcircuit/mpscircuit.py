@@ -386,7 +386,7 @@ class MPSCircuit(AbstractCircuit):
         if len(index) == 0:
             raise ValueError("`index` must contain at least one site.")
         if not all(index[i] < index[i + 1] for i in range(len(index) - 1)):
-            raise AssertionError("`index` must be strictly increasing.")
+            raise ValueError("`index` must be strictly increasing.")
 
         index_left = int(np.min(index))
         if isinstance(gate, tn.Node):

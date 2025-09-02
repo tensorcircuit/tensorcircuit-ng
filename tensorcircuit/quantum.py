@@ -2763,7 +2763,7 @@ def sample_bin2int(sample: Tensor, n: int, dim: Optional[int] = None) -> Tensor:
 
     :param sample: in shape [trials, n] of elements (0, 1)
     :type sample: Tensor
-    :param n: number of qubits
+    :param n: number of sites
     :type n: int
     :param dim: local dimension, defaults to 2
     :type dim: int, optional
@@ -2785,10 +2785,15 @@ def sample2count(
     sample_int to count_tuple (indices, counts), size = d**n
 
     :param sample: linear-index samples, shape [shots]
+    :type sample: Tensor
     :param n: number of sites
+    :type n: int
     :param jittable: whether to return fixed-size outputs (backend dependent)
+    :type jittable: bool
     :param dim: local dimension per site, default 2 (qubit)
+    :type dim: int, optional
     :return: (unique_indices, counts)
+    :rtype: Tuple[Tensor, Tensor]
     """
     dim = 2 if dim is None else dim
     size = dim**n

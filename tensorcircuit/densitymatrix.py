@@ -222,7 +222,7 @@ class DMCircuit(BaseCircuit):
             dd = dmc.densitymatrix()
             circuits.append(dd)
         tensor = reduce(add, circuits)
-        tensor = backend.reshape(tensor, [self._d for _ in range(2 * self._nqubits)])
+        tensor = backend.reshaped(tensor, d=self._d)
         self._nodes = [Gate(tensor)]
         dangling = [e for e in self._nodes[0]]
         self._front = dangling
@@ -260,9 +260,7 @@ class DMCircuit(BaseCircuit):
             t = contractor(nodes, output_edge_order=d_edges)
         else:
             t = nodes[0]
-        dm = backend.reshape(
-            t.tensor, shape=[self._d**self._nqubits, self._d**self._nqubits]
-        )
+        dm = backend.reshapem(t.tensor)
         if check:
             self.check_density_matrix(dm)
         return dm
