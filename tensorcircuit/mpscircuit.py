@@ -397,7 +397,8 @@ class MPSCircuit(AbstractCircuit):
         in_dims = tuple(backend.shape_tuple(gate))[:nindex]
         dim = int(in_dims[0])
         dim_phys_mpo = dim * dim
-
+        # transform gate from (in1, in2, ..., out1, out2 ...) to
+        # (in1, out1, in2, out2, ...)
         order = tuple(np.arange(2 * nindex).reshape(2, nindex).T.flatten().tolist())
         gate = backend.transpose(gate, order)
 
@@ -408,14 +409,16 @@ class MPSCircuit(AbstractCircuit):
             np.column_stack([2 * pair_order, 2 * pair_order + 1])
         ).astype(int)
         pair_axis_perm = tuple(pair_axis_perm.tolist())  # type: ignore
+        # reorder the gate according to the site positions
         gate = backend.transpose(gate, pair_axis_perm)
         index_arr = index_arr[pair_order]  # type: ignore
 
         gate = backend.reshape(gate, (dim_phys_mpo,) * nindex)
+        # split the gate into tensors assuming they are adjacent
         main_tensors = cls.wavefunction_to_tensors(
             gate, dim_phys=dim_phys_mpo, norm=False
         )
-
+        # each tensor is in shape of (i, a, b, j)
         tensors: list[Tensor] = []
         previous_i: Optional[int] = None
 
@@ -1042,36 +1045,30 @@ class MPSCircuit(AbstractCircuit):
         p = 1.0
         p = backend.convert_to_tensor(p)
         p = backend.cast(p, dtype=rdtypestr)
-        sample = []
+        sample: Tensor = []
         for k, site in enumerate(index):
             mps.position(site)
-            # do measurement
             tensor = mps._mps.tensors[site]
             ps = backend.real(
                 backend.einsum("iaj,iaj->a", tensor, backend.conj(tensor))
             )
             ps /= backend.sum(ps)
             if status is None:
-                r = backend.implicit_randu()[0]
+                outcome = backend.implicit_randc(
+                    self._d, shape=1, p=backend.cast(ps, rdtypestr)
+                )[0]
             else:
-                r = status[k]
-            r = backend.real(backend.cast(r, dtypestr))
+                r = backend.real(backend.cast(status[k], rdtypestr))
+                cdf = backend.cumsum(ps)
+                eps = 0.31415926 * 1e-12
+                ge_mask = backend.cast(r + eps >= cdf, rdtypestr)
+                outcome = backend.cast(backend.sum(ge_mask), "int32")
 
-            cdf = backend.cumsum(ps)
-            choice = backend.sum(backend.cast(r >= cdf, "int32"))
-
-            choice_f = backend.cast(choice, dtypestr)
-            sample.append(choice_f)
-
-            m = backend.zeros((ps.shape[0],), dtype=dtypestr)
-            m = backend.scatter(
-                m,
-                backend.convert_to_tensor([[backend.cast(choice, "int32")]]),
-                backend.convert_to_tensor(np.array([1.0], dtype=dtypestr)),
-            )
-
-            p = p * backend.sum(ps * backend.cast(m, dtype=rdtypestr))
+            p = p * ps[outcome]
+            basis = backend.convert_to_tensor(np.eye(self._d).astype(dtypestr))
+            m = basis[outcome]
             mps._mps.tensors[site] = backend.einsum("iaj,a->ij", tensor, m)[:, None, :]
+            sample.append(outcome)
         sample = backend.stack(sample)
         sample = backend.real(sample)
         if with_prob:

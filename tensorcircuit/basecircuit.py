@@ -474,13 +474,14 @@ class BaseCircuit(AbstractCircuit):
                 pu = backend.clip(backend.real(backend.diagonal(rho)), zero_r, one_r)
                 pu = pu / backend.sum(pu)
                 if status is None:
-                    a = backend.arange(self._d)
-                    k_out = backend.implicit_randc(a=a, shape=())[0]
+                    k_out = backend.implicit_randc(
+                        self._d, shape=1, p=backend.cast(pu, rdtypestr)
+                    )[0]
                     k_out = backend.cast(k_out, "int32")
                 else:
                     r = backend.real(backend.cast(status[k], rdtypestr))
                     cdf = backend.cumsum(pu)
-                    k_out = backend.sum(backend.cast(cdf < r, "int32"))
+                    k_out = backend.sum(backend.cast(r >= cdf, "int32"))
                     k_out = backend.clip(
                         k_out,
                         backend.cast(backend.convert_to_tensor(0), "int32"),
