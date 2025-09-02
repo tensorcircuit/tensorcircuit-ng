@@ -150,12 +150,12 @@ def vec2count(vec: Tensor, prune: bool = False, dim: Optional[int] = None) -> ct
     :param dim: Dimensionality of the vector, defaults to 2
     :return: {base-d string key: value}, key length n
     """
-    from ..quantum import count_vector2dict
+    from ..quantum import count_vector2dict, _infer_num_sites
 
     dim = 2 if dim is None else dim
     if isinstance(vec, list):
         vec = np.array(vec)
-    n = int(np.log(int(vec.shape[0])) / np.log(dim) + 1e-9)
+    n = _infer_num_sites(int(vec.shape[0]), dim)
     c: ct = count_vector2dict(vec, n, key="bin", dim=dim)  # type: ignore
     if prune:
         c = {k: v for k, v in c.items() if np.abs(v) >= 1e-8}
