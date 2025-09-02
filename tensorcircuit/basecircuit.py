@@ -26,6 +26,7 @@ from .quantum import (
     sample2all,
     _infer_num_sites,
     _decode_basis_label,
+    onehot_d_tensor,
 )
 from .abstractcircuit import AbstractCircuit
 from .cons import npdtype, backend, dtypestr, contractor, rdtypestr
@@ -410,8 +411,7 @@ class BaseCircuit(AbstractCircuit):
                         np.array([1, 0])
                     ) + sample[i] * gates.array_to_tensor(np.array([0, 1]))
                 else:
-                    vec = backend.one_hot(backend.cast(sample[i], "int32"), self._d)
-                    m = backend.cast(vec, dtypestr)
+                    m = onehot_d_tensor(sample[i], d=self._d)
                 g1 = Gate(m)
                 g1.id = id(g1)
                 g1.is_dagger = False
@@ -507,11 +507,6 @@ class BaseCircuit(AbstractCircuit):
         :rtype: List[Gate]
         """
 
-        def _basis_nod(_k: int) -> Tensor:
-            _vec = np.zeros((self._d,), dtype=npdtype)
-            _vec[_k] = 1.0
-            return _vec
-
         no, d_edges = self._copy()
         ms = []
         if self.is_dm:
@@ -519,17 +514,14 @@ class BaseCircuit(AbstractCircuit):
         if isinstance(l, str):
             symbols = _decode_basis_label(l, n=self._nqubits, dim=self._d)
             for k in symbols:
-                n = _basis_nod(k)
+                n = onehot_d_tensor(k, d=self._d)
                 ms.append(tn.Node(n))
                 if self.is_dm:
                     msconj.append(tn.Node(n))
         else:
             l = backend.cast(l, dtype=dtypestr)
             for i in range(self._nqubits):
-                endn = backend.cast(
-                    backend.one_hot(backend.cast(l[i], "int32"), self._d),
-                    dtype=dtypestr,
-                )
+                endn = onehot_d_tensor(l[i], d=self._d)
                 ms.append(tn.Node(endn))
                 if self.is_dm:
                     msconj.append(tn.Node(endn))
@@ -1040,18 +1032,13 @@ class BaseCircuit(AbstractCircuit):
         :rtype: Tensor
         """
 
-        def _basis_gate(k_tensor: Any) -> Gate:
-            vec = backend.one_hot(backend.cast(k_tensor, "int32"), self._d)
-            vec = backend.cast(vec, dtypestr)
-            return Gate(vec)
-
         traceout = backend.cast(traceout, dtypestr)
         nodes, front = self._copy()
         L = self._nqubits
         edges = []
         for i in range(len(traceout)):
             if i not in left:
-                n = _basis_gate(traceout[i])
+                n = Gate(onehot_d_tensor(traceout[i], d=self._d))
                 nodes.append(n)
                 front[i] ^ n[0]
             else:
@@ -1060,7 +1047,7 @@ class BaseCircuit(AbstractCircuit):
         if self.is_dm:
             for i in range(len(traceout)):
                 if i not in left:
-                    n = _basis_gate(traceout[i])
+                    n = Gate(onehot_d_tensor(traceout[i], d=self._d))
                     nodes.append(n)
                     front[i + L] ^ n[0]
                 else:

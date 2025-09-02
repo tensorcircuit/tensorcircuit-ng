@@ -57,7 +57,44 @@ def get_all_nodes(edges: Iterable[Edge]) -> List[Node]:
     return nodes
 
 
+def onehot_d_tensor(_k: Union[int, Tensor], d: int = 2) -> Tensor:
+    """
+    Construct a one-hot vector (or matrix) of local dimension ``d``.
+
+    :param _k: index or indices to set as 1. Can be an int or a backend Tensor.
+    :type _k: int or Tensor
+    :param d: local dimension (number of categories), defaults to 2
+    :type d: int, optional
+    :return: one-hot encoded vector (shape [d]) or matrix (shape [len(_k), d])
+    :rtype: Tensor
+    """
+    if isinstance(_k, int):
+        vec = backend.one_hot(_k, d)
+    else:
+        vec = backend.one_hot(backend.cast(_k, "int32"), d)
+    return backend.cast(vec, dtypestr)
+
+
 def _decode_basis_label(label: str, n: int, dim: int) -> List[int]:
+    """
+    Decode a string basis label into a list of integer digits.
+
+    The label is interpreted in base-``dim`` using characters ``0–9A–Z``.
+    Only dimensions up to 36 are supported.
+
+    :param label: basis label string, e.g. "010" or "A9F"
+    :type label: str
+    :param n: number of sites (expected length of the label)
+    :type n: int
+    :param dim: local dimension (2 <= dim <= 36)
+    :type dim: int
+    :return: list of integer digits of length ``n``, each in ``[0, dim-1]``
+    :rtype: List[int]
+
+    :raises NotImplementedError: if ``dim > 36``
+    :raises ValueError: if the label length mismatches ``n``,
+                        or contains invalid/out-of-range characters
+    """
     if dim > 36:
         raise NotImplementedError(
             f"String basis label supports d<=36 (0–9A–Z). Got dim={dim}. "
