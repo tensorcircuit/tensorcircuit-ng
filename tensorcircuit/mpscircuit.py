@@ -397,22 +397,12 @@ class MPSCircuit(AbstractCircuit):
         in_dims = tuple(backend.shape_tuple(gate))[:nindex]
         dim = int(in_dims[0])
         dim_phys_mpo = dim * dim
+        gate = backend.reshape(gate, (dim,) * nindex + (dim,) * nindex)
         # transform gate from (in1, in2, ..., out1, out2 ...) to
         # (in1, out1, in2, out2, ...)
         order = tuple(np.arange(2 * nindex).reshape(2, nindex).T.flatten().tolist())
         gate = backend.transpose(gate, order)
-
-        index_arr = np.array(index, dtype=int) - index_left
-        pair_order = np.argsort(index_arr)
-
-        pair_axis_perm = np.ravel(
-            np.column_stack([2 * pair_order, 2 * pair_order + 1])
-        ).astype(int)
-        pair_axis_perm = tuple(pair_axis_perm.tolist())  # type: ignore
         # reorder the gate according to the site positions
-        gate = backend.transpose(gate, pair_axis_perm)
-        index_arr = index_arr[pair_order]  # type: ignore
-
         gate = backend.reshape(gate, (dim_phys_mpo,) * nindex)
         # split the gate into tensors assuming they are adjacent
         main_tensors = cls.wavefunction_to_tensors(
@@ -421,6 +411,7 @@ class MPSCircuit(AbstractCircuit):
         # each tensor is in shape of (i, a, b, j)
         tensors: list[Tensor] = []
         previous_i: Optional[int] = None
+        index_arr = np.array(index, dtype=int) - index_left
 
         for i, main_tensor in zip(index_arr, main_tensors):
             if previous_i is not None:
