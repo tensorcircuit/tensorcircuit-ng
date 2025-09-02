@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Sequence, List
 
 import numpy as np
 
-from ..cons import _ALPHABET
+from ..quantum import _decode_basis_label
 
 Tensor = Any
 ct = Dict[str, int]
@@ -117,9 +117,6 @@ def count2vec(
     array([0.2, 0. , 0.3, 0.5])
     """
 
-    def parse_key(_k: str) -> List[int]:
-        return [_ALPHABET.index(_ch) for _ch in _k.upper()]
-
     if not count:
         return np.array([], dtype=float)
 
@@ -133,7 +130,7 @@ def count2vec(
 
     powers = [dim**p for p in range(n)][::-1]
     for k, v in count.items():
-        digits = parse_key(k)
+        digits = _decode_basis_label(k, n, dim)
         idx = sum(dig * p for dig, p in zip(digits, powers))
         prob[idx] = (v / shots) if normalization else v
 
