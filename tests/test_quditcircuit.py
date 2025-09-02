@@ -45,44 +45,30 @@ def test_measure(backend):
     assert c.measure(1)[0] in [0, 1, 2]
 
 
-"""
-A bug was reported in the JAX backend: by default integers use int32 precision.
- As a result, values like 3^29 (and even 3^19) exceed the representable range,
-  causing errors during the conversion step in sample/count.
-"""
-# @pytest.mark.parametrize("backend", [lf("jaxb")])
-# def test_large_scale_sample(backend):
-#     L = 30
-#     d = 3
-#     c = tc.QuditCircuit(L, d)
-#     c.h(0)
-#     for i in range(L - 1):
-#         c.csum(i, i + 1)
-#
-#     batch = 1024
-#     results = c.sample(
-#         allow_state=False, batch=batch, format="count_dict_bin", jittable=False
-#     )
-#     # print(results)
-#     #
-#     # samples = c.sample(allow_state=False, batch=20000, format="sample_bin", jittable=False)
-#     # first = np.array(samples)[:, 0].astype(int)
-#     # print(first)
-#     # print(np.unique(first, return_counts=True))
-#     #
-#     # results = c.sample(allow_state=False, batch=1024, format="count_dict_bin", jittable=False)
-#     # print(sorted(results.items(), key=lambda kv: kv[1], reverse=True)[:5])
-#
-#     k0, k1, k2 = "0" * L, "1" * L, "2" * L
-#     c0, c1, c2 = results.get(k0, 0), results.get(k1, 0), results.get(k2, 0)
-#     assert c0 + c1 + c2 == batch
-#
-#     probs = np.array([c0, c1, c2], dtype=float) / batch
-#     np.testing.assert_allclose(probs, np.ones(3) / 3, rtol=0.2, atol=0.0)
-#
-#     for a, b in [(c0, c1), (c1, c2), (c0, c2)]:
-#         ratio = (a + 1e-12) / (b + 1e-12)
-#         assert 0.8 <= ratio <= 1.25
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_large_scale_sample(backend):
+    L = 30
+    d = 3
+    c = tc.QuditCircuit(L, d)
+    c.h(0)
+    for i in range(L - 1):
+        c.csum(i, i + 1)
+
+    batch = 1024
+    results = c.sample(
+        allow_state=False, batch=batch, format="count_dict_bin", jittable=False
+    )
+
+    k0, k1, k2 = "0" * L, "1" * L, "2" * L
+    c0, c1, c2 = results.get(k0, 0), results.get(k1, 0), results.get(k2, 0)
+    assert c0 + c1 + c2 == batch
+
+    probs = np.array([c0, c1, c2], dtype=float) / batch
+    np.testing.assert_allclose(probs, np.ones(3) / 3, rtol=0.2, atol=0.0)
+
+    for a, b in [(c0, c1), (c1, c2), (c0, c2)]:
+        ratio = (a + 1e-12) / (b + 1e-12)
+        assert 0.8 <= ratio <= 1.25
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("cpb")])
