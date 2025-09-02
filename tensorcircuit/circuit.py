@@ -798,9 +798,7 @@ class Circuit(BaseCircuit):
                 if i != j:
                     e ^ edge2[i]
             for i in range(len(sample)):
-                m = np.array([0 for _ in range(self._d)], dtype=npdtype)
-                m[int(sample[i])] = 1
-
+                m = onehot_d_tensor(sample[i], d=self._d)
                 nodes1.append(tn.Node(m))
                 nodes1[-1].get_edge(0) ^ edge1[index[i]]
                 nodes2.append(tn.Node(m))
