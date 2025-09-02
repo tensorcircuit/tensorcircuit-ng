@@ -1048,11 +1048,12 @@ class MPSCircuit(AbstractCircuit):
                     self._d, shape=1, p=backend.cast(ps, rdtypestr)
                 )[0]
             else:
-                r = backend.real(backend.cast(status[k], rdtypestr))
-                cdf = backend.cumsum(ps)
-                eps = 0.31415926 * 1e-12
-                ge_mask = backend.cast(r + eps >= cdf, rdtypestr)
-                outcome = backend.cast(backend.sum(ge_mask), "int32")
+                one_r = backend.cast(backend.convert_to_tensor(1.0), rdtypestr)
+                st = backend.cast(status[k : k + 1], rdtypestr)
+                ind = backend.probability_sample(
+                    shots=1, p=backend.cast(ps, rdtypestr), status=one_r - st
+                )
+                outcome = backend.cast(ind[0], "int32")
 
             p = p * ps[outcome]
             basis = backend.convert_to_tensor(np.eye(self._d).astype(dtypestr))

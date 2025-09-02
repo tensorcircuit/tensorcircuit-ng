@@ -447,25 +447,27 @@ class BaseCircuit(AbstractCircuit):
                 sample.append(sign_complex)
                 p = p * (pu * (-1) ** sign + sign)
             else:
-                zero_r = backend.cast(backend.convert_to_tensor(0.0), rdtypestr)
-                pu = backend.clip(backend.real(backend.diagonal(rho)), zero_r, one_r)
+                pu = backend.clip(
+                    backend.real(backend.diagonal(rho)),
+                    backend.convert_to_tensor(0.0),
+                    backend.convert_to_tensor(1.0),
+                )
                 pu = pu / backend.sum(pu)
                 if status is None:
-                    k_out = backend.implicit_randc(
+                    ind = backend.implicit_randc(
                         a=backend.arange(self._d),
                         shape=1,
                         p=backend.cast(pu, rdtypestr),
-                    )[0]
-                    k_out = backend.cast(k_out, "int32")
-                else:
-                    r = backend.real(backend.cast(status[k], rdtypestr))
-                    cdf = backend.cumsum(pu)
-                    k_out = backend.sum(backend.cast(r >= cdf, "int32"))
-                    k_out = backend.clip(
-                        k_out,
-                        backend.cast(backend.convert_to_tensor(0), "int32"),
-                        backend.cast(backend.convert_to_tensor(self._d - 1), "int32"),
                     )
+                else:
+                    one_r = backend.cast(backend.convert_to_tensor(1.0), rdtypestr)
+                    st = backend.cast(status[k : k + 1], rdtypestr)
+                    ind = backend.probability_sample(
+                        shots=1,
+                        p=backend.cast(pu, rdtypestr),
+                        status=one_r - st,
+                    )
+                k_out = backend.cast(ind[0], "int32")
                 sample.append(backend.cast(k_out, rdtypestr))
                 p = p * backend.cast(pu[k_out], rdtypestr)
         sample = backend.real(backend.stack(sample))
