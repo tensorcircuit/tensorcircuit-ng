@@ -16,7 +16,7 @@ import tensornetwork as tn
 from . import gates
 from . import channels
 from .cons import backend, contractor, dtypestr, npdtype, _ALPHABET
-from .quantum import QuOperator, identity, _infer_num_sites
+from .quantum import QuOperator, identity, _infer_num_sites, onehot_d_tensor
 from .simplify import _full_light_cone_cancel
 from .basecircuit import BaseCircuit
 
