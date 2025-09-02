@@ -733,7 +733,7 @@ class Circuit(BaseCircuit):
         :rtype: QuOperator
         """
         mps = identity([self._d for _ in range(self._nqubits)])
-        c = Circuit(self._nqubits, self._d)
+        c = Circuit(self._nqubits, dim=self._d)
         ns, es = self._copy()
         c._nodes = ns
         c._front = es
@@ -754,7 +754,7 @@ class Circuit(BaseCircuit):
         :rtype: Tensor
         """
         mps = identity([self._d for _ in range(self._nqubits)])
-        c = Circuit(self._nqubits, self._d)
+        c = Circuit(self._nqubits, dim=self._d)
         ns, es = self._copy()
         c._nodes = ns
         c._front = es
