@@ -97,6 +97,7 @@ def _cached_matrix(
 
 
 def _is_prime(n: int) -> bool:
+    """ Check if `n` is a prime number. """
     if n < 2:
         return False
     if n in (2, 3, 5, 7):
@@ -112,6 +113,7 @@ def _is_prime(n: int) -> bool:
 
 
 def _i_matrix_func(d: int) -> Tensor:
+    """ identity matrix function. """
     matrix = np.zeros((d, d), dtype=npdtype)
     for i in range(d):
         matrix[i, i] = 1.0
@@ -181,10 +183,13 @@ def _s_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
 
 
 def _check_rotation(d: int, j: int, k: int) -> None:
+    """
+    Check rotation of qudit `j` in `d` qubits.
+    """
     if not (0 <= j < d) or not (0 <= k < d):
         raise ValueError(f"Indices j={j}, k={k} must satisfy 0 <= j,k < d (d={d}).")
     if j == k:
-        raise ValueError("RX rotation requires two distinct levels j != k.")
+        raise ValueError("R- rotation requires two distinct levels j != k.")
 
 
 def _rx_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:

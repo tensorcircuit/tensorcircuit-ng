@@ -1,5 +1,18 @@
+"""
+Quantum circuit: the state simulator.
+Supports qudit (3 <= dim <= 36) systems.
+For string-encoded samples/counts, digits use 0–9A–Z where A=10, …, Z=35.
+"""
+
 from functools import partial
 from typing import Any, Dict, List, Optional, Tuple, Sequence, Union
+
+try:
+    from typing import Literal  # py>=3.8
+except ImportError:
+    from typing_extensions import Literal  # py<3.8
+
+SAMPLE_FORMAT = Literal["sample_bin", "count_vector", "count_dict_bin"]
 
 import numpy as np
 import tensornetwork as tn
@@ -21,7 +34,7 @@ class QuditCircuit:
     Qudit quick example (d=3):
     .. code-block:: python
 
-        c = tc.Circuit(2, d=3)
+        c = tc.QuditCircuit(2, d=3)
         c.h(0)
         c.x(1)
         c.csum(0, 1)
@@ -67,10 +80,12 @@ class QuditCircuit:
 
     @property
     def dim(self) -> int:
+        """dimension of the qudit circuit"""
         return self._d
 
     @property
     def nqubits(self) -> int:
+        """qudit number of the circuit"""
         return self._nqubits
 
     def _apply_gate(self, *indices: int, name: str, **kwargs: Any) -> None:
@@ -114,6 +129,14 @@ class QuditCircuit:
             raise ValueError(f"Unsupported gate/arity: {name} on {len(indices)} qudits")
 
     def any(self, *indices: int, unitary: Tensor, name: str = "any") -> None:
+        """
+        Apply a quantum gate (unitary) to one or two qudits in the circuit.
+
+        Args:
+            *indices: The qudit indices the gate should act on.
+            unitary: The unitary to apply to the qudit.
+            name: The name of the gate.
+        """
         self._circ.unitary(*indices, unitary=unitary, name=name, dim=self._d)  # type: ignore
 
     unitary = any
@@ -273,6 +296,12 @@ class QuditCircuit:
     state = wavefunction
 
     def get_quoperator(self) -> QuOperator:
+        """
+        Get the ``QuOperator`` MPO like representation of the circuit unitary without contraction.
+
+        :return: ``QuOperator`` object for the circuit unitary (open indices for the input state)
+        :rtype: QuOperator
+        """
         return self._circ.quoperator()
 
     quoperator = get_quoperator
@@ -281,12 +310,18 @@ class QuditCircuit:
     get_state_as_quvector = BaseCircuit.quvector
 
     def matrix(self) -> Tensor:
+        """
+        Get the unitary matrix for the circuit irrespective with the circuit input state.
+
+        :return: The circuit unitary matrix
+        :rtype: Tensor
+        """
         return self._circ.matrix()
 
-    def measure_reference(
-        self, *index: int, with_prob: bool = False
-    ) -> Tuple[str, float]:
-        return self._circ.measure_reference(*index, with_prob=with_prob)
+    # def measure_reference(
+    #     self, *index: int, with_prob: bool = False
+    # ) -> Tuple[str, float]:
+    #     return self._circ.measure_reference(*index, with_prob=with_prob)
 
     def expectation(
         self,
@@ -310,14 +345,55 @@ class QuditCircuit:
     def measure_jit(
         self, *index: int, with_prob: bool = False, status: Optional[Tensor] = None
     ) -> Tuple[Tensor, Tensor]:
+        """
+        Take measurement on the given site indices (computational basis).
+        This method is jittable!
+
+        :param index: Measure on which site (wire) index.
+        :type index: int
+        :param with_prob: If true, theoretical probability is also returned.
+        :type with_prob: bool, optional
+        :param status: external randomness, with shape [index], defaults to None
+        :type status: Optional[Tensor]
+        :return: The sample output and probability (optional) of the quantum line.
+        :rtype: Tuple[Tensor, Tensor]
+        """
         return self._circ.measure_jit(*index, with_prob=with_prob, status=status)
 
     measure = measure_jit
 
     def amplitude(self, l: Union[str, Tensor]) -> Tensor:
+        r"""
+        Returns the amplitude of the circuit given the bitstring l.
+        For state simulator, it computes :math:`\langle l\vert \psi\rangle`,
+        for density matrix simulator, it computes :math:`Tr(\rho \vert l\rangle \langle 1\vert)`
+        Note how these two are different up to a square operation.
+
+        :Example:
+
+        >>> c = tc.QuditCircuit(2, dim=3)
+        >>> c.x(0)
+        >>> c.x(1)
+        >>> c.amplitude("20")
+        array(1.+0.j, dtype=complex64)
+        >>> c.csum(0, 1, cv=2)
+        >>> c.amplitude("21")
+        array(1.+0.j, dtype=complex64)
+
+        :param l: The bitstring of base-d characters.
+        :type l: Union[str, Tensor]
+        :return: The amplitude of the circuit.
+        :rtype: tn.Node.tensor
+        """
         return self._circ.amplitude(l)
 
     def probability(self) -> Tensor:
+        """
+        get the d^n length probability vector over computational basis
+
+        :return: probability vector of shape [dim**n]
+        :rtype: Tensor
+        """
         return self._circ.probability()
 
     @partial(arg_alias, alias_dict={"format": ["format_"]})
@@ -326,15 +402,45 @@ class QuditCircuit:
         batch: Optional[int] = None,
         allow_state: bool = False,
         readout_error: Optional[Sequence[Any]] = None,
-        format: Optional[str] = None,
+        format: Optional[SAMPLE_FORMAT] = None,
         random_generator: Optional[Any] = None,
         status: Optional[Tensor] = None,
         jittable: bool = True,
     ) -> Any:
-        """
-        A bug was reported in the JAX backend: by default integers use int32 precision.
-         As a result, values like 3^29 (and even 3^19) exceed the representable range,
-          causing errors during the conversion step in sample/count.
+        r"""
+        batched sampling from state or circuit tensor network directly
+
+        :param batch: number of samples, defaults to None
+        :type batch: Optional[int], optional
+        :param allow_state: if true, we sample from the final state
+            if memory allows, True is preferred, defaults to False
+        :type allow_state: bool, optional
+        :param readout_error: readout_error, defaults to None
+        :type readout_error: Optional[Sequence[Any]]. Tensor, List, Tuple
+        :param format: sample format, defaults to None as backward compatibility
+            check the doc in :py:meth:`tensorcircuit.quantum.measurement_results`
+            Six formats of measurement counts results:
+
+                "sample_bin": # [np.array([1, 0]), np.array([1, 0])]
+
+                "count_vector": # np.array([2, 0, 0, 0])
+
+                "count_dict_bin": # {"00": 2, "01": 0, "10": 0, "11": 0}
+                    for cases d\in [11, 36], use 0–9A–Z digits (e.g., 'A' -> 10, …, 'Z' -> 35);
+
+        :type format: Optional[str]
+        :param random_generator: random generator,  defaults to None
+        :type random_generator: Optional[Any], optional
+        :param status: external randomness given by tensor uniformly from [0, 1],
+            if set, can overwrite random_generator, shape [batch] for `allow_state=True`
+            and shape [batch, nqubits] for `allow_state=False` using perfect sampling implementation
+        :type status: Optional[Tensor]
+        :param jittable: when converting to count, whether keep the full size. if false, may be conflict
+            external jit, if true, may fail for large scale system with actual limited count results
+        :type jittable: bool, defaults true
+        :return: List (if batch) of tuple (binary configuration tensor and corresponding probability)
+            if the format is None, and consistent with format when given
+        :rtype: Any
         """
         if format in ["sample_int", "count_tuple", "count_dict_int"]:
             raise NotImplementedError(
@@ -351,15 +457,42 @@ class QuditCircuit:
         )
 
     def projected_subsystem(self, traceout: Tensor, left: Tuple[int, ...]) -> Tensor:
+        """
+        remaining wavefunction or density matrix on sites in ``left``, with other sites
+        fixed to given digits (0..d-1) as indicated by ``traceout``
+
+        :param traceout: can be jitted
+        :type traceout: Tensor
+        :param left: cannot be jitted
+        :type left: Tuple
+        :return: _description_
+        :rtype: Tensor
+        """
         return self._circ.projected_subsystem(
             traceout=traceout,
             left=left,
         )
 
     def replace_inputs(self, inputs: Tensor) -> None:
+        """
+        Replace the input state with the circuit structure unchanged.
+
+        :param inputs: Input wavefunction.
+        :type inputs: Tensor
+        """
         return self._circ.replace_inputs(inputs)
 
     def mid_measurement(self, index: int, keep: int = 0) -> Tensor:
+        """
+        Middle measurement in z-basis on the circuit, note the wavefunction output is not normalized
+        with ``mid_measurement`` involved, one should normalize the state manually if needed.
+        This is a post-selection method as keep is provided as a prior.
+
+        :param index: The index of qubit that the Z direction postselection applied on.
+        :type index: int
+        :param keep: the post-selected digit in {0, ..., d-1}, defaults to be 0.
+        :type keep: int, optional
+        """
         return self._circ.mid_measurement(index, keep=keep)
 
     mid_measure = mid_measurement
@@ -367,9 +500,37 @@ class QuditCircuit:
     post_selection = mid_measurement
 
     def get_quvector(self) -> QuVector:
+        """
+        Get the representation of the output state in the form of ``QuVector``
+        while maintaining the circuit uncomputed
+
+        :return: ``QuVector`` representation of the output state from the circuit
+        :rtype: QuVector
+        """
         return self._circ.quvector()
 
     quvector = get_quvector
 
     def replace_mps_inputs(self, mps_inputs: QuOperator) -> None:
+        """
+        Replace the input state in MPS representation while keep the circuit structure unchanged.
+
+        :Example:
+        >>> c = tc.QuditCircuit(2, dim=3)
+        >>> c.x(0)
+        >>>
+        >>> c2 = tc.QuditCircuit(2, dim=3, mps_inputs=c.quvector())
+        >>> c2.x(0)
+        >>> c2.wavefunction()
+        array([0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j, 0.+0.j], dtype=complex64)
+        >>>
+        >>> c3 = tc.QuditCircuit(2, dim=3)
+        >>> c3.x(0)
+        >>> c3.replace_mps_inputs(c.quvector())
+        >>> c3.wavefunction()
+        array([0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j, 0.+0.j], dtype=complex64)
+
+        :param mps_inputs: (Nodes, dangling Edges) for a MPS like initial wavefunction.
+        :type mps_inputs: Tuple[Sequence[Gate], Sequence[Edge]]
+        """
         return self._circ.replace_mps_inputs(mps_inputs)
