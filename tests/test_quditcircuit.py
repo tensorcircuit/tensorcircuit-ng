@@ -113,7 +113,7 @@ def test_single_qubit():
 def test_expectation_between_two_states_qudit(backend):
     dim = 3
     X3 = tc.quditgates._x_matrix_func(dim)
-    Y3 = tc.quditgates._y_matrix_func(dim)  # ZX/i
+    # Y3 = tc.quditgates._y_matrix_func(dim)  # ZX/i
     Z3 = tc.quditgates._z_matrix_func(dim)
     H3 = tc.quditgates._h_matrix_func(dim)
     X3_dag = np.conjugate(X3.T)
