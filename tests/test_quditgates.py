@@ -1,5 +1,12 @@
-import numpy as np
 import pytest
+import sys
+import os
+import numpy as np
+
+thisfile = os.path.abspath(__file__)
+modulepath = os.path.dirname(os.path.dirname(thisfile))
+
+sys.path.insert(0, modulepath)
 
 from tensorcircuit.quditgates import (
     _i_matrix_func,
@@ -20,89 +27,78 @@ from tensorcircuit.quditgates import (
     _cached_matrix,
     SINGLE_BUILDERS,
     TWO_BUILDERS,
-    npdtype,
 )
 
-if npdtype in (np.complex64, np.float32):
-    ATOL = 1e-6
-    RTOL = 1e-6
-else:
-    ATOL = 1e-12
-    RTOL = 1e-12
 
-
-def is_unitary(M, atol=None, rtol=None):
-    if atol is None or rtol is None:
-        atol = ATOL
-        rtol = RTOL
+def is_unitary(M):
     Mc = M.astype(np.complex128, copy=False)
     I = np.eye(M.shape[0], dtype=np.complex128)
-    return np.allclose(Mc.conj().T @ Mc, I, atol=atol, rtol=rtol) and np.allclose(
-        Mc @ Mc.conj().T, I, atol=atol, rtol=rtol
+    return np.allclose(Mc.conj().T @ Mc, I, atol=1e-5, rtol=1e-5) and np.allclose(
+        Mc @ Mc.conj().T, I, atol=1e-5, rtol=1e-5
     )
 
 
 @pytest.mark.parametrize("d", [2, 3, 4, 5])
-def test_I_X_Z_shapes_and_unitarity(d):
+def test_I_X_Z_shapes_and_unitarity(d, highp):
     I = _i_matrix_func(d)
     X = _x_matrix_func(d)
     Z = _z_matrix_func(d)
     assert I.shape == (d, d) and X.shape == (d, d) and Z.shape == (d, d)
     assert is_unitary(X)
     assert is_unitary(Z)
-    assert np.allclose(I, np.eye(d, dtype=npdtype), atol=ATOL)
+    np.testing.assert_allclose(I, np.eye(d), atol=1e-5)
 
 
 @pytest.mark.parametrize("d", [2, 3, 4])
-def test_X_is_right_cyclic_shift(d):
+def test_X_is_right_cyclic_shift(d, highp):
     X = _x_matrix_func(d)
     for j in range(d):
-        v = np.zeros(d, dtype=npdtype)
+        v = np.zeros(d)
         v[j] = 1
         out = X @ v
-        expected = np.zeros(d, dtype=npdtype)
+        expected = np.zeros(d)
         expected[(j + 1) % d] = 1
-        assert np.allclose(out, expected, atol=ATOL)
+        np.testing.assert_allclose(out, expected, atol=1e-5)
 
 
 @pytest.mark.parametrize("d", [2, 3, 5])
-def test_Z_diagonal_and_value(d):
+def test_Z_diagonal_and_value(d, highp):
     omega = np.exp(2j * np.pi / d)
     Z = _z_matrix_func(d, omega)
-    assert np.allclose(Z, np.diag([omega**j for j in range(d)]), atol=ATOL)
+    np.testing.assert_allclose(Z, np.diag([omega**j for j in range(d)]), atol=1e-5)
     assert is_unitary(Z)
 
 
 @pytest.mark.parametrize("d", [2, 3, 5])
-def test_Y_equals_ZX_over_i(d):
+def test_Y_equals_ZX_over_i(d, highp):
     Y = _y_matrix_func(d)
     ZX_over_i = (_z_matrix_func(d) @ _x_matrix_func(d)) / 1j
-    assert np.allclose(Y, ZX_over_i, atol=ATOL)
+    np.testing.assert_allclose(Y, ZX_over_i, atol=1e-5)
     assert is_unitary(Y)
 
 
 @pytest.mark.parametrize("d", [2, 3, 5])
-def test_H_is_fourier_like_and_unitary(d):
+def test_H_is_fourier_like_and_unitary(d, highp):
     H = _h_matrix_func(d)
     assert H.shape == (d, d)
     assert is_unitary(H)
     omega = np.exp(2j * np.pi / d)
     F = (1 / np.sqrt(d)) * np.array(
-        [[omega ** (j * k) for k in range(d)] for j in range(d)], dtype=npdtype
+        [[omega ** (j * k) for k in range(d)] for j in range(d)]
     ).T
-    assert np.allclose(
-        H.astype(np.complex128), F.astype(np.complex128), atol=ATOL, rtol=RTOL
+    np.testing.assert_allclose(
+        H.astype(np.complex128), F.astype(np.complex128), atol=1e-5, rtol=1e-5
     )
 
 
 @pytest.mark.parametrize("d", [2, 3, 5])
-def test_S_is_diagonal(d):
+def test_S_is_diagonal(d, highp):
     S = _s_matrix_func(d)
-    assert np.allclose(S, np.diag(np.diag(S)), atol=ATOL)
+    np.testing.assert_allclose(S, np.diag(np.diag(S)), atol=1e-5)
 
 
 @pytest.mark.parametrize("d", [3, 5])
-def test_RX_RY_only_affect_subspace(d):
+def test_RX_RY_only_affect_subspace(d, highp):
     theta = 0.7
     j, k = 0, 1
     RX = _rx_matrix_func(d, theta, j, k)
@@ -110,48 +106,48 @@ def test_RX_RY_only_affect_subspace(d):
     assert is_unitary(RX) and is_unitary(RY)
     for t in range(d):
         if t not in (j, k):
-            e = np.zeros(d, dtype=npdtype)
+            e = np.zeros(d)
             e[t] = 1
             outx = RX @ e
             outy = RY @ e
-            assert np.allclose(outx, e, atol=ATOL)
-            assert np.allclose(outy, e, atol=ATOL)
+            np.testing.assert_allclose(outx, e, atol=1e-5)
+            np.testing.assert_allclose(outy, e, atol=1e-5)
 
 
-def test_RZ_phase_on_single_level():
+def test_RZ_phase_on_single_level(highp):
     d, theta, j = 5, 1.234, 2
     RZ = _rz_matrix_func(d, theta, j)
     assert is_unitary(RZ)
-    diag = np.ones(d, dtype=npdtype)
+    diag = np.ones(d, dtype=np.complex64)
     diag[j] = np.exp(1j * theta)
-    assert np.allclose(RZ, np.diag(diag), atol=ATOL)
+    assert np.allclose(RZ, np.diag(diag), atol=1e-5)
 
 
 @pytest.mark.parametrize("d", [2, 3, 5])
-def test_SWAP_permutation(d):
+def test_SWAP_permutation(d, highp):
     SW = _swap_matrix_func(d)
     D = d * d
     assert SW.shape == (D, D)
     assert is_unitary(SW)
     for i in range(min(d, 3)):
         for j in range(min(d, 3)):
-            v = np.zeros(D, dtype=npdtype)
+            v = np.zeros(D)
             v[i * d + j] = 1
             out = SW @ v
-            exp = np.zeros(D, dtype=npdtype)
+            exp = np.zeros(D)
             exp[j * d + i] = 1
-            assert np.allclose(out, exp, atol=ATOL)
+            np.testing.assert_allclose(out, exp, atol=1e-5)
 
 
 @pytest.mark.parametrize("d", [2, 3, 5])
-def test_RZZ_diagonal(d):
+def test_RZZ_diagonal(d, highp):
     theta = 0.37
     RZZ = _rzz_matrix_func(d, theta)
     assert is_unitary(RZZ)
-    assert np.allclose(RZZ, np.diag(np.diag(RZZ)), atol=ATOL)  # 对角阵
+    np.testing.assert_allclose(RZZ, np.diag(np.diag(RZZ)), atol=1e-5)  # 对角阵
 
 
-def test_RXX_selected_block():
+def test_RXX_selected_block(highp):
     d = 4
     theta = 0.81
     j1, k1 = 0, 2
@@ -159,18 +155,18 @@ def test_RXX_selected_block():
     RXX = _rxx_matrix_func(d, theta, j1, k1, j2, k2)
     assert is_unitary(RXX)
     D = d * d
-    I = np.eye(D, dtype=npdtype)
+    I = np.eye(D)
     idx_a = j1 * d + j2
     idx_b = k1 * d + k2
     for t in range(D):
         for s in range(D):
             if {t, s} & {idx_a, idx_b}:
                 continue
-            assert np.isclose(RXX[t, s], I[t, s], atol=ATOL, rtol=RTOL)
+            np.testing.assert_allclose(RXX[t, s], I[t, s], atol=1e-5, rtol=1e-5)
 
 
 @pytest.mark.parametrize("d", [3, 5])
-def test_CPHASE_blocks(d):
+def test_CPHASE_blocks(d, highp):
     omega = np.exp(2j * np.pi / d)
     Z = _z_matrix_func(d, omega)
     M = _cphase_matrix_func(d, cv=None, omega=omega)
@@ -178,7 +174,7 @@ def test_CPHASE_blocks(d):
         rs = a * d
         block = M[rs : rs + d, rs : rs + d]
         Za = np.linalg.matrix_power(Z, a)
-        assert np.allclose(block, Za, atol=ATOL)
+        np.testing.assert_allclose(block, Za, atol=1e-5)
     assert is_unitary(M)
 
     cv = 1
@@ -187,20 +183,20 @@ def test_CPHASE_blocks(d):
         rs = a * d
         block = M2[rs : rs + d, rs : rs + d]
         if a == cv:
-            assert np.allclose(block, Z, atol=ATOL)
+            np.testing.assert_allclose(block, Z, atol=1e-5)
         else:
-            assert np.allclose(block, np.eye(d, dtype=npdtype), atol=ATOL)
+            np.testing.assert_allclose(block, np.eye(d), atol=1e-5)
 
 
 @pytest.mark.parametrize("d", [3, 5])
-def test_CSUM_blocks(d):
+def test_CSUM_blocks(d, highp):
     X = _x_matrix_func(d)
     M = _csum_matrix_func(d, cv=None)
     for a in range(d):
         rs = a * d
         block = M[rs : rs + d, rs : rs + d]
         Xa = np.linalg.matrix_power(X, a)
-        assert np.allclose(block, Xa, atol=ATOL)
+        np.testing.assert_allclose(block, Xa, atol=1e-5)
     assert is_unitary(M)
 
     cv = 2 % d
@@ -209,25 +205,25 @@ def test_CSUM_blocks(d):
         rs = a * d
         block = M2[rs : rs + d, rs : rs + d]
         if a == cv:
-            assert np.allclose(block, X, atol=ATOL)
+            np.testing.assert_allclose(block, X, atol=1e-5)
         else:
-            assert np.allclose(block, np.eye(d, dtype=npdtype), atol=ATOL)
+            np.testing.assert_allclose(block, np.eye(d), atol=1e-5)
 
 
-def test_CSUM_mapping_small_d():
+def test_CSUM_mapping_small_d(highp):
     d = 3
     M = _csum_matrix_func(d)
     for r in range(d):
         for s in range(d):
-            v = np.zeros(d * d, dtype=npdtype)
+            v = np.zeros(d * d)
             v[r * d + s] = 1
             out = M @ v
-            exp = np.zeros(d * d, dtype=npdtype)
+            exp = np.zeros(d * d)
             exp[r * d + ((r + s) % d)] = 1
-            assert np.allclose(out, exp, atol=ATOL)
+            np.testing.assert_allclose(out, exp, atol=1e-5)
 
 
-def test_rotation_index_errors():
+def test_rotation_index_errors(highp):
     d = 4
     with pytest.raises(ValueError):
         _rx_matrix_func(d, 0.1, j=-1, k=1)
@@ -237,7 +233,7 @@ def test_rotation_index_errors():
         _rx_matrix_func(d, 0.1, j=2, k=2)
 
 
-def test_U8_errors_and_values():
+def test_U8_errors_and_values(highp):
     with pytest.raises(ValueError):
         _u8_matrix_func(d=4)
     with pytest.raises(ValueError):
@@ -246,10 +242,10 @@ def test_U8_errors_and_values():
     U = _u8_matrix_func(d, gamma=2.0, z=1.0, eps=0.0)
     omega = np.exp(2j * np.pi / d)
     expected = np.diag([omega**0, omega**1, omega**8])
-    assert np.allclose(U, expected, atol=ATOL)
+    assert np.allclose(U, expected, atol=1e-5)
 
 
-def test_CPHASE_CSUM_cv_range():
+def test_CPHASE_CSUM_cv_range(highp):
     d = 5
     with pytest.raises(ValueError):
         _cphase_matrix_func(d, cv=-1)
@@ -261,7 +257,7 @@ def test_CPHASE_CSUM_cv_range():
         _csum_matrix_func(d, cv=d)
 
 
-def test_cached_matrix_identity_and_x():
+def test_cached_matrix_identity_and_x(highp):
     A1 = _cached_matrix("single", "I", d=3, omega=None, key=())
     A2 = _cached_matrix("single", "I", d=3, omega=None, key=())
     assert A1 is A2
@@ -272,7 +268,7 @@ def test_cached_matrix_identity_and_x():
     assert X1.shape == (3, 3) and X2.shape == (3, 3)
 
 
-def test_builders_smoke():
+def test_builders_smoke(highp):
     d = 3
     for name, (sig, _) in SINGLE_BUILDERS.items():
         defaults = {
