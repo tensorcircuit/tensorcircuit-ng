@@ -5,14 +5,7 @@ For string-encoded samples/counts, digits use 0–9A–Z where A=10, …, Z=35.
 """
 
 from functools import partial
-from typing import Any, Dict, List, Optional, Tuple, Sequence, Union
-
-try:
-    from typing import Literal  # py>=3.8
-except ImportError:
-    from typing_extensions import Literal  # py<3.8
-
-SAMPLE_FORMAT = Literal["sample_bin", "count_vector", "count_dict_bin"]
+from typing import Any, Dict, List, Optional, Tuple, Sequence, Union, Literal
 
 import numpy as np
 import tensornetwork as tn
@@ -25,6 +18,7 @@ from .quditgates import SINGLE_BUILDERS, TWO_BUILDERS, _cached_matrix
 
 
 Tensor = Any
+SAMPLE_FORMAT = Literal["sample_bin", "count_vector", "count_dict_bin"]
 
 
 class QuditCircuit:

@@ -97,7 +97,7 @@ def _cached_matrix(
 
 
 def _is_prime(n: int) -> bool:
-    """ Check if `n` is a prime number. """
+    """Check if `n` is a prime number."""
     if n < 2:
         return False
     if n in (2, 3, 5, 7):
@@ -113,7 +113,7 @@ def _is_prime(n: int) -> bool:
 
 
 def _i_matrix_func(d: int) -> Tensor:
-    """ identity matrix function. """
+    """identity matrix function."""
     matrix = np.zeros((d, d), dtype=npdtype)
     for i in range(d):
         matrix[i, i] = 1.0
