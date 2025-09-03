@@ -237,6 +237,7 @@ def test_rotation_index_errors():
     with pytest.raises(ValueError):
         _rx_matrix_func(d, 0.1, j=2, k=2)
 
+
 def test_U8_errors_and_values():
     with pytest.raises(ValueError):
         _u8_matrix_func(d=4)
