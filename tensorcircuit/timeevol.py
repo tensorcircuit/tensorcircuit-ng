@@ -435,10 +435,10 @@ def _solve_ode(
     args: Any,
     solver_kws: Dict[str, Any],
 ) -> Tensor:
-    rtol = solver_kws.get("rtol", 1e-12)
-    atol = solver_kws.get("atol", 1e-12)
+    rtol = solver_kws.get("rtol", 1e-8)
+    atol = solver_kws.get("atol", 1e-8)
     ode_backend = solver_kws.get("ode_backend", "jaxode")
-    max_steps = solver_kws.get("max_steps", 10000)
+    max_steps = solver_kws.get("max_steps", 4096)
 
     ts = backend.convert_to_tensor(times)
     ts = backend.cast(ts, dtype=rdtypestr)
@@ -513,15 +513,21 @@ def ode_evol_local(
     :type callback: Optional[Callable[..., Tensor]]
     :param args: Additional arguments to pass to the Hamiltonian function.
     :param solver_kws: Additional keyword arguments to pass to the ODE solver.
-        - ode_backend='jaxode'(default) uses ``jax.experimental.ode.odeint``; ode_backend='diffrax'
-        uses ``diffrax.diffeqsolve``.
-        - rtol (default: 1e-12) and atol (default: 1e-12) are used to determine how accurately you would
-        like the numerical approximation to your equation.
-        - The solver parameter accepts one of {'Tsit5' (default), 'Dopri5', 'Dopri8', 'Kvaerno5'}
-        and only works when ode_backend='diffrax'.
-        - dt0 (default: 0.01) specifies the initial step size and only works when ode_backend='diffrax'.
-        - max_steps (default: 10000)  The maximum number of steps to take before quitting the computation
-        unconditionally and only works when ode_backend='diffrax'.
+
+        - ``ode_backend='jaxode'`` (default) uses ``jax.experimental.ode.odeint``; ``ode_backend='diffrax'``
+          uses ``diffrax.diffeqsolve``.
+
+        - ``rtol`` (default: 1e-8) and ``atol`` (default: 1e-8) are used to determine how accurately you would
+          like the numerical approximation to your equation.
+
+        - The ``solver`` parameter accepts one of {'Tsit5' (default), 'Dopri5', 'Dopri8', 'Kvaerno5'}
+          and only works when ``ode_backend='diffrax'``.
+
+        - ``t0`` (default: 0.01) specifies the initial step size and only works when ``ode_backend='diffrax'``.
+
+        - ``max_steps`` (default: 4096)  The maximum number of steps to take before quitting the computation
+          unconditionally and only works when ``ode_backend='diffrax'``.
+    :type solver_kws: dict
 
     :return: Evolved quantum states at the specified time points. If callback is provided,
         returns the callback results; otherwise returns the state vectors.
@@ -585,17 +591,22 @@ def ode_evol_global(
     :param args: Additional arguments to pass to the Hamiltonian function.
     :type args: tuple | list
     :param solver_kws: Additional keyword arguments to pass to the ODE solver.
-        - ode_backend='jaxode'(default) uses ``jax.experimental.ode.odeint``; ode_backend='diffrax'
-        uses ``diffrax.diffeqsolve``.
-        - rtol (default: 1e-12) and atol (default: 1e-12) are used to determine how accurately you would
-        like the numerical approximation to your equation.
-        - The solver parameter accepts one of {'Tsit5' (default), 'Dopri5', 'Dopri8', 'Kvaerno5'}
-        and only works when ode_backend='diffrax'.
-        - dt0 (default: 0.01) specifies the initial step size and only works when ode_backend='diffrax'.
-        - max_steps (default: 10000)  The maximum number of steps to take before quitting the computation
-        unconditionally and only works when ode_backend='diffrax'.
 
+        - ``ode_backend='jaxode'`` (default) uses ``jax.experimental.ode.odeint``; ``ode_backend='diffrax'``
+          uses ``diffrax.diffeqsolve``.
+
+        - ``rtol`` (default: 1e-8) and ``atol`` (default: 1e-8) are used to determine how accurately you would
+          like the numerical approximation to your equation.
+
+        - The ``solver`` parameter accepts one of {'Tsit5' (default), 'Dopri5', 'Dopri8', 'Kvaerno5'}
+          and only works when ``ode_backend='diffrax'``.
+
+        - ``t0`` (default: 0.01) specifies the initial step size and only works when ``ode_backend='diffrax'``.
+
+        - ``max_steps`` (default: 4096)  The maximum number of steps to take before quitting the computation
+          unconditionally and only works when ``ode_backend='diffrax'``.
     :type solver_kws: dict
+
     :return: Evolved quantum states at the specified time points. If callback is provided,
         returns the callback results; otherwise returns the state vectors.
     :rtype: Tensor
