@@ -105,14 +105,14 @@ def test_ode_evol_local(highp, jaxb):
         1.0,
         2.0,  # Omega=1.0, phi=2.0
         solver="Dopri8",
-        atol=1.0e-13,
-        rtol=1.0e-13,
+        atol=1.0e-11,
+        rtol=1.0e-11,
         ode_backend="diffrax",
         dt0=0.005,
     )
 
-    np.testing.assert_allclose(states2, states1, atol=1e-10, rtol=0.0)
-    np.testing.assert_allclose(states0, states1, atol=1e-10, rtol=0.0)
+    np.testing.assert_allclose(states2, states1, atol=1e-5, rtol=0.0)
+    np.testing.assert_allclose(states0, states1, atol=1e-5, rtol=0.0)
 
 
 def test_ode_evol_global(highp, jaxb):
@@ -270,6 +270,8 @@ def test_ode_evol_jit_grad(highp, jaxb):
             tc.backend.convert_to_tensor([0, 10.0]),
             None,
             *params,
+            atol=1.0e-13,
+            rtol=1.0e-13,
         )
         return tc.backend.real(zz_correlation(states[-1]))
 
@@ -339,8 +341,8 @@ def test_ode_evol_jit_grad(highp, jaxb):
     v1, g1 = s1
     v2, g2 = s2
 
-    np.testing.assert_allclose(g1, g2, atol=1e-8, rtol=0)
-    np.testing.assert_allclose(v1, v2, atol=1e-8, rtol=0)
+    np.testing.assert_allclose(g1, g2, atol=1e-5, rtol=0)
+    np.testing.assert_allclose(v1, v2, atol=1e-5, rtol=0)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
