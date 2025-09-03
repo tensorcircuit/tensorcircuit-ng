@@ -86,22 +86,17 @@ class QuditCircuit:
         """
         Apply a quantum gate (unitary) to one or two qudits in the circuit.
 
-        The gate matrix is looked up by name in either `SINGLE_BUILDERS` (for
-        single-qudit gates) or `TWO_BUILDERS` (for two-qudit gates). The matrix
-        is built (and cached) via `_cached_matrix`, then applied to the circuit
-        at the given indices.
+        The gate matrix is looked up by name in either ``SINGLE_BUILDERS`` (for single-qudit gates) or ``TWO_BUILDERS`` (for two-qudit gates). The matrix is built (and cached) via ``_cached_matrix``, then applied to the circuit at the given indices.
 
-        Args:
-            *indices: The qudit indices the gate should act on.
-                - One index → single-qudit gate.
-                - Two indices → two-qudit gate.
-            name: The name of the gate (must exist in the chosen builder set).
-            **kwargs: Extra parameters for the gate. These are matched against
-                the gate’s signature from the builder definition.
-
-        Raises:
-            ValueError: If `name` is not found, or if the number of indices
-                does not match the gate type (single vs two).
+        :param indices: The qudit indices the gate should act on.
+            - One index → single-qudit gate.
+            - Two indices → two-qudit gate.
+        :type indices: int
+        :param name: The name of the gate (must exist in the chosen builder set).
+        :type name: str
+        :param kwargs: Extra parameters for the gate matched against the builder signature.
+        :type kwargs: Any
+        :raises ValueError: If ``name`` is not found, or if the number of indices does not match the gate type (single vs two).
         """
         if len(indices) == 1 and name in SINGLE_BUILDERS:
             sig, _ = SINGLE_BUILDERS[name]
@@ -126,10 +121,12 @@ class QuditCircuit:
         """
         Apply a quantum gate (unitary) to one or two qudits in the circuit.
 
-        Args:
-            *indices: The qudit indices the gate should act on.
-            unitary: The unitary to apply to the qudit.
-            name: The name of the gate.
+        :param indices: The qudit indices the gate should act on.
+        :type indices: int
+        :param unitary: The unitary matrix to apply to the qudit(s).
+        :type unitary: Tensor
+        :param name: The name to record for this gate.
+        :type name: str
         """
         self._circ.unitary(*indices, unitary=unitary, name=name, dim=self._d)  # type: ignore
 
@@ -139,8 +136,8 @@ class QuditCircuit:
         """
         Apply the identity (I) gate on the given qudit index.
 
-        Args:
-            index: Qudit index to apply the gate on.
+        :param index: Qudit index to apply the gate on.
+        :type index: int
         """
         self._apply_gate(index, name="I")
 
@@ -148,8 +145,8 @@ class QuditCircuit:
         """
         Apply the X gate on the given qudit index.
 
-        Args:
-            index: Qudit index to apply the gate on.
+        :param index: Qudit index to apply the gate on.
+        :type index: int
         """
         self._apply_gate(index, name="X")
 
@@ -157,8 +154,8 @@ class QuditCircuit:
         """
         Apply the Y gate on the given qudit index.
 
-        Args:
-            index: Qudit index to apply the gate on.
+        :param index: Qudit index to apply the gate on.
+        :type index: int
         """
         self._apply_gate(index, name="Y")
 
@@ -166,8 +163,8 @@ class QuditCircuit:
         """
         Apply the Z gate on the given qudit index.
 
-        Args:
-            index: Qudit index to apply the gate on.
+        :param index: Qudit index to apply the gate on.
+        :type index: int
         """
         self._apply_gate(index, name="Z")
 
@@ -175,8 +172,8 @@ class QuditCircuit:
         """
         Apply the Hadamard-like (H) gate on the given qudit index.
 
-        Args:
-            index: Qudit index to apply the gate on.
+        :param index: Qudit index to apply the gate on.
+        :type index: int
         """
         self._apply_gate(index, name="H")
 
@@ -186,46 +183,57 @@ class QuditCircuit:
         """
         Apply the U8 parameterized single-qudit gate.
 
-        Args:
-            index: Qudit index to apply the gate on.
-            gamma: Gate parameter gamma (default 2.0).
-            z: Gate parameter z (default 1.0).
-            eps: Gate parameter eps (default 0.0).
+        :param index: Qudit index to apply the gate on.
+        :type index: int
+        :param gamma: Gate parameter ``gamma``.
+        :type gamma: float
+        :param z: Gate parameter ``z``.
+        :type z: float
+        :param eps: Gate parameter ``eps``.
+        :type eps: float
         """
         self._apply_gate(index, name="U8", extra=(gamma, z, eps))
 
     def rx(self, index: int, theta: float, j: int = 0, k: int = 1) -> None:
         """
-        Apply the single-qudit RX rotation on `index`.
+        Apply the single-qudit RX rotation on ``index``.
 
-        Args:
-            index: Qudit index to apply the gate on.
-            theta: Rotation angle.
-            j: Source level of the rotation subspace (default 0).
-            k: Target level of the rotation subspace (default 1).
+        :param index: Qudit index to apply the gate on.
+        :type index: int
+        :param theta: Rotation angle.
+        :type theta: float
+        :param j: Source level of the rotation subspace.
+        :type j: int
+        :param k: Target level of the rotation subspace.
+        :type k: int
         """
         self._apply_gate(index, name="RX", theta=theta, j=j, k=k)
 
     def ry(self, index: int, theta: float, j: int = 0, k: int = 1) -> None:
         """
-        Apply the single-qudit RY rotation on `index`.
+        Apply the single-qudit RY rotation on ``index``.
 
-        Args:
-            index: Qudit index to apply the gate on.
-            theta: Rotation angle.
-            j: Source level of the rotation subspace (default 0).
-            k: Target level of the rotation subspace (default 1).
+        :param index: Qudit index to apply the gate on.
+        :type index: int
+        :param theta: Rotation angle.
+        :type theta: float
+        :param j: Source level of the rotation subspace.
+        :type j: int
+        :param k: Target level of the rotation subspace.
+        :type k: int
         """
         self._apply_gate(index, name="RY", theta=theta, j=j, k=k)
 
     def rz(self, index: int, theta: float, j: int = 0) -> None:
         """
-        Apply the single-qudit RZ rotation on `index`.
+        Apply the single-qudit RZ rotation on ``index``.
 
-        Args:
-            index: Qudit index to apply the gate on.
-            theta: Rotation angle around Z.
-            j: Level where the phase rotation is applied (default 0).
+        :param index: Qudit index to apply the gate on.
+        :type index: int
+        :param theta: Rotation angle around Z.
+        :type theta: float
+        :param j: Level where the phase rotation is applied.
+        :type j: int
         """
         self._apply_gate(index, name="RZ", theta=theta, j=j)
 
@@ -241,13 +249,18 @@ class QuditCircuit:
         """
         Apply a two-qudit RXX-type interaction on the given indices.
 
-        Args:
-            *indices: Two qudit indices.
-            theta: Interaction strength/angle.
-            j1: Source level of the first qudit subspace (default 0).
-            k1: Target level of the first qudit subspace (default 1).
-            j2: Source level of the second qudit subspace (default 0).
-            k2: Target level of the second qudit subspace (default 1).
+        :param indices: Two qudit indices.
+        :type indices: int
+        :param theta: Interaction strength/angle.
+        :type theta: float
+        :param j1: Source level of the first qudit subspace.
+        :type j1: int
+        :param k1: Target level of the first qudit subspace.
+        :type k1: int
+        :param j2: Source level of the second qudit subspace.
+        :type j2: int
+        :param k2: Target level of the second qudit subspace.
+        :type k2: int
         """
         self._apply_gate(*indices, name="RXX", theta=theta, j1=j1, k1=k1, j2=j2, k2=k2)
 
@@ -255,9 +268,10 @@ class QuditCircuit:
         """
         Apply a two-qudit RZZ interaction on the given indices.
 
-        Args:
-            *indices: Two qudit indices.
-            theta: Interaction angle.
+        :param indices: Two qudit indices.
+        :type indices: int
+        :param theta: Interaction angle.
+        :type theta: float
         """
         self._apply_gate(*indices, name="RZZ", theta=theta)
 
@@ -265,9 +279,10 @@ class QuditCircuit:
         """
         Apply a controlled phase (CPHASE) gate.
 
-        Args:
-            *indices: Two qudit indices (control, target).
-            cv: Optional control value. If None, default cv=1.
+        :param indices: Two qudit indices (control, target).
+        :type indices: int
+        :param cv: Optional control value. If ``None``, defaults to ``1``.
+        :type cv: Optional[int]
         """
         self._apply_gate(*indices, name="CPHASE", cv=cv)
 
@@ -275,9 +290,10 @@ class QuditCircuit:
         """
         Apply a controlled-sum (CSUM) gate.
 
-        Args:
-            *indices: Two qudit indices (control, target).
-            cv: Optional control value. If None, default cv=1.
+        :param indices: Two qudit indices (control, target).
+        :type indices: int
+        :param cv: Optional control value. If ``None``, defaults to ``1``.
+        :type cv: Optional[int]
         """
         self._apply_gate(*indices, name="CSUM", cv=cv)
 
@@ -383,9 +399,9 @@ class QuditCircuit:
 
     def probability(self) -> Tensor:
         """
-        get the d^n length probability vector over computational basis
+        Get the ``d^n`` length probability vector over the computational basis.
 
-        :return: probability vector of shape [dim**n]
+        :return: Probability vector of shape ``[dim**n]``.
         :rtype: Tensor
         """
         return self._circ.probability()

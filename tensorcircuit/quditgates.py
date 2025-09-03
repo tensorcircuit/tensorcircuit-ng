@@ -59,31 +59,25 @@ def _cached_matrix(
     """
     Build and cache a matrix using a registered builder function.
 
-    This function looks up a builder from either `SINGLE_BUILDERS` or
-    `TWO_BUILDERS` (depending on `kind`), and calls it with the given
-    arguments. Results are cached with `functools.lru_cache`, so repeated
-    calls with the same inputs return the cached tensor instead of
-    rebuilding it.
+    Looks up a builder in ``SINGLE_BUILDERS`` (for single–qudit gates) or
+    ``TWO_BUILDERS`` (for two–qudit gates) according to ``kind``, constructs the
+    matrix, and caches the result via ``functools.lru_cache``.
 
-    Args:
-        kind: Either `"single"` (use `SINGLE_BUILDERS`) or `"two"` (use `TWO_BUILDERS`).
-        name: The builder name to look up in the chosen dictionary.
-        d: The dimension of the matrix.
-        omega: Optional frequency or scaling parameter, passed to the builder.
-        key: Tuple of extra parameters, matched in order to the builder’s
-            expected signature.
-
-    Returns:
-        Tensor: The matrix built by the selected builder.
-
-    Notes:
-        - The cache key depends on all arguments (`kind`, `name`, `d`, `omega`, `key`).
-        - The `key` tuple must have the same order as the builder’s signature.
-        - The same inputs will always return the same cached tensor.
-
-    Raises:
-        KeyError: If the builder `name` is not found.
-        TypeError/ValueError: If `key` does not match the builder’s expected parameters.
+    :param kind: Either ``"single"`` (use ``SINGLE_BUILDERS``) or ``"two"`` (use ``TWO_BUILDERS``).
+    :type kind: str
+    :param name: Builder name to look up in the chosen dictionary.
+    :type name: str
+    :param d: Dimension of the (sub)system.
+    :type d: int
+    :param omega: Optional frequency/scaling parameter passed to the builder.
+    :type omega: Optional[float]
+    :param key: Tuple of extra parameters matched positionally to the builder's signature.
+    :type key: Optional[tuple[Any, ...]]
+    :return: Matrix built by the selected builder.
+    :rtype: Tensor
+    :raises KeyError: If the builder ``name`` is not found.
+    :raises TypeError: If ``key`` does not match the builder’s expected parameters.
+    :raises ValueError: If ``key`` does not match the builder’s expected parameters.
     """
     builders = SINGLE_BUILDERS if kind == "single" else TWO_BUILDERS
     try:
@@ -97,7 +91,14 @@ def _cached_matrix(
 
 
 def _is_prime(n: int) -> bool:
-    """Check if `n` is a prime number."""
+    """
+    Check whether a number is prime.
+
+    :param n: Integer to test.
+    :type n: int
+    :return: ``True`` if ``n`` is prime, else ``False``.
+    :rtype: bool
+    """
     if n < 2:
         return False
     if n in (2, 3, 5, 7):
@@ -113,7 +114,14 @@ def _is_prime(n: int) -> bool:
 
 
 def _i_matrix_func(d: int) -> Tensor:
-    """identity matrix function."""
+    """
+    Identity matrix of size ``d``.
+
+    :param d: Qudit dimension.
+    :type d: int
+    :return: ``(d, d)`` identity matrix.
+    :rtype: Tensor
+    """
     matrix = np.zeros((d, d), dtype=npdtype)
     for i in range(d):
         matrix[i, i] = 1.0
@@ -122,7 +130,14 @@ def _i_matrix_func(d: int) -> Tensor:
 
 def _x_matrix_func(d: int) -> Tensor:
     r"""
-    X_d\ket{j} = \ket{(j + 1) mod d}
+    Generalized Pauli-X on a ``d``-level system.
+
+    .. math:: X_d\lvert j \rangle = \lvert (j+1) \bmod d \rangle
+
+    :param d: Qudit dimension.
+    :type d: int
+    :return: ``(d, d)`` matrix for :math:`X_d`.
+    :rtype: Tensor
     """
     matrix = np.zeros((d, d), dtype=npdtype)
     for j in range(d):
@@ -132,7 +147,16 @@ def _x_matrix_func(d: int) -> Tensor:
 
 def _z_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     r"""
-    Z_d\ket{j} = \omega^{j}\ket{j}
+    Generalized Pauli-Z on a ``d``-level system.
+
+    .. math:: Z_d\lvert j \rangle = \omega^{j}\lvert j \rangle,\quad \omega=e^{2\pi i/d}
+
+    :param d: Qudit dimension.
+    :type d: int
+    :param omega: Optional primitive ``d``-th root of unity. Defaults to :math:`e^{2\pi i/d}`.
+    :type omega: Optional[float]
+    :return: ``(d, d)`` matrix for :math:`Z_d`.
+    :rtype: Tensor
     """
     omega = np.exp(2j * np.pi / d) if omega is None else omega
     matrix = np.zeros((d, d), dtype=npdtype)
@@ -143,23 +167,32 @@ def _z_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
 
 def _y_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     r"""
-    Generalized Pauli-Y (Y) Gate for qudits.
+    Generalized Pauli-Y (Y) gate for qudits.
 
-    The Y gate represents a combination of the X and Z gates, generalizing the Pauli-Y gate
-    from qubits to higher dimensions. It is defined as
+    Defined (up to a global phase) via :math:`Y \propto Z\,X`.
 
-    .. math::
-
-            Y = \frac{1}{i}\, Z \cdot X,
-
-    where the generalized Pauli-X and Pauli-Z gates are applied to the target qudits.
+    :param d: Qudit dimension.
+    :type d: int
+    :param omega: Optional primitive ``d``-th root of unity used by ``Z``.
+    :type omega: Optional[float]
+    :return: ``(d, d)`` matrix for :math:`Y`.
+    :rtype: Tensor
     """
     return np.matmul(_z_matrix_func(d, omega=omega), _x_matrix_func(d)) / 1j
 
 
 def _h_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     r"""
-    H_d\ket{j} = \frac{1}{\sqrt{d}}\sum_{k=0}^{d-1}\omega^{jk}\ket{k}
+    Discrete Fourier transform (Hadamard-like) on ``d`` levels.
+
+    .. math:: H_d\lvert j \rangle = \frac{1}{\sqrt{d}} \sum_{k=0}^{d-1} \omega^{jk}\lvert k \rangle
+
+    :param d: Qudit dimension.
+    :type d: int
+    :param omega: Optional primitive ``d``-th root of unity. Defaults to :math:`e^{2\pi i/d}`.
+    :type omega: Optional[float]
+    :return: ``(d, d)`` matrix for :math:`H_d`.
+    :rtype: Tensor
     """
     omega = np.exp(2j * np.pi / d) if omega is None else omega
     matrix = np.zeros((d, d), dtype=npdtype)
@@ -171,7 +204,16 @@ def _h_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
 
 def _s_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     r"""
-    S_d\ket{j} = \omega^{j(j + p_d) / 2}\ket{j}
+    Diagonal phase gate ``S_d`` on ``d`` levels.
+
+    .. math:: S_d\lvert j \rangle = \omega^{j(j+p_d)/2}\lvert j \rangle,\quad p_d = (d \bmod 2)
+
+    :param d: Qudit dimension.
+    :type d: int
+    :param omega: Optional primitive ``d``-th root of unity. Defaults to :math:`e^{2\pi i/d}`.
+    :type omega: Optional[float]
+    :return: ``(d, d)`` diagonal matrix for :math:`S_d`.
+    :rtype: Tensor
     """
     omega = np.exp(2j * np.pi / d) if omega is None else omega
     _pd = 0 if d % 2 == 0 else 1
@@ -184,7 +226,15 @@ def _s_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
 
 def _check_rotation(d: int, j: int, k: int) -> None:
     """
-    Check rotation of qudit `j` in `d` qubits.
+    Validate rotation subspace indices for a ``d``-level system.
+
+    :param d: Qudit dimension.
+    :type d: int
+    :param j: First level index.
+    :type j: int
+    :param k: Second level index.
+    :type k: int
+    :raises ValueError: If indices are out of range or if ``j == k``.
     """
     if not (0 <= j < d) or not (0 <= k < d):
         raise ValueError(f"Indices j={j}, k={k} must satisfy 0 <= j,k < d (d={d}).")
@@ -194,30 +244,20 @@ def _check_rotation(d: int, j: int, k: int) -> None:
 
 def _rx_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     r"""
-    Rotation-X (RX) Gate for qudits.
+    Rotation-X (``RX``) gate on a selected two-level subspace of a qudit.
 
-    The RX gate represents a rotation about the X-axis of the Bloch sphere in a qudit system.
-    For a qubit (2-level system), the matrix representation is given by
+    Acts like the qubit :math:`RX(\theta)` on levels ``j`` and ``k``, identity elsewhere.
 
-    .. math::
-
-            RX(\theta) =
-            \begin{pmatrix}
-            \cos(\theta/2) & -i\sin(\theta/2) \\
-            -i\sin(\theta/2) & \cos(\theta/2)
-            \end{pmatrix}
-
-    For higher-dimensional qudits, the RX gate affects only the specified two levels (indexed by
-    \(j\) and \(k\)), leaving all other levels unchanged.
-
-    Args:
-        d (int): Dimension of the qudit Hilbert space.
-        theta (float): Rotation angle θ.
-        j (int): First level index (default 0).
-        k (int): Second level index (default 1).
-
-    Returns:
-        Tensor: A (d x d) numpy array of dtype `npdtype` representing the RX gate.
+    :param d: Qudit dimension.
+    :type d: int
+    :param theta: Rotation angle :math:`\theta`.
+    :type theta: float
+    :param j: First level index.
+    :type j: int
+    :param k: Second level index.
+    :type k: int
+    :return: ``(d, d)`` matrix for :math:`RX(\theta)` on the ``j,k`` subspace.
+    :rtype: Tensor
     """
     _check_rotation(d, j, k)
     matrix = np.eye(d, dtype=npdtype)
@@ -231,27 +271,18 @@ def _rx_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
 
 def _ry_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     r"""
-    Rotation-Y (RY) Gate for qudits.
+    Rotation-Y (``RY``) gate on a selected two-level subspace of a qudit.
 
-    Acts as a standard qubit RY(θ) on the two-level subspace spanned by |j> and |k>,
-    and as identity on all other levels:
-
-    .. math::
-
-            RY(\theta) =
-            \begin{pmatrix}
-            \cos(\theta/2) & -\sin(\theta/2) \\
-            \sin(\theta/2) & \cos(\theta/2)
-            \end{pmatrix}
-
-    Args:
-        d (int): Dimension of the qudit Hilbert space.
-        theta (float): Rotation angle θ.
-        j (int): First level index (default 0).
-        k (int): Second level index (default 1).
-
-    Returns:
-        Tensor: A (d x d) numpy array of dtype `npdtype` representing the RY gate.
+    :param d: Qudit dimension.
+    :type d: int
+    :param theta: Rotation angle :math:`\theta`.
+    :type theta: float
+    :param j: First level index.
+    :type j: int
+    :param k: Second level index.
+    :type k: int
+    :return: ``(d, d)`` matrix for :math:`RY(\theta)` on the ``j,k`` subspace.
+    :rtype: Tensor
     """
     _check_rotation(d, j, k)
     matrix = np.eye(d, dtype=npdtype)
@@ -265,27 +296,19 @@ def _ry_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
 
 def _rz_matrix_func(d: int, theta: float, j: int = 0) -> Tensor:
     r"""
-    Rotation-Z (RZ) Gate for qudits.
+    Rotation-Z (``RZ``) gate for qudits.
 
-    .. math::
+    For qubits it reduces to the usual :math:`RZ(\theta)`. For general ``d``, it
+    applies a phase :math:`e^{i\theta}` to level ``j`` and leaves others unchanged.
 
-            RZ(\theta) =
-            \begin{pmatrix}
-            e^{-i\theta/2} & 0 \\
-            0 & e^{i\theta/2}
-            \end{pmatrix}
-
-    For qudits (d >= 2), apply a phase e^{iθ} only to level |j>, leaving others unchanged:
-        (RZ_d)_{mm} = e^{iθ} if m == j else 1
-
-    Args:
-        d (int): Dimension of the qudit Hilbert space.
-        theta (float): Rotation angle θ.
-        j (int): First level index (default 0).
-        k (int): Second level index (default 1).
-
-    Returns:
-        Tensor: A (d x d) numpy array of dtype `npdtype` representing the RZ gate.
+    :param d: Qudit dimension.
+    :type d: int
+    :param theta: Rotation angle :math:`\theta`.
+    :type theta: float
+    :param j: Level index receiving the phase.
+    :type j: int
+    :return: ``(d, d)`` diagonal matrix implementing :math:`RZ(\theta)` on level ``j``.
+    :rtype: Tensor
     """
     matrix = np.eye(d, dtype=npdtype)
     matrix[j, j] = np.exp(1j * theta)
@@ -293,16 +316,15 @@ def _rz_matrix_func(d: int, theta: float, j: int = 0) -> Tensor:
 
 
 def _swap_matrix_func(d: int) -> Tensor:
-    r"""
-    SWAP gate for two qudits of dimensions d.
+    """
+    SWAP gate for two qudits of dimension ``d``.
 
-    Exchanges the states |i⟩|j⟩ -> |j⟩|i⟩.
+    Exchanges basis states ``|i⟩|j⟩ → |j⟩|i⟩``.
 
-    Args:
-        d (int): Dimension of the qudit.
-
-    Returns:
-        Tensor: A numpy array representing the SWAP gate.
+    :param d: Qudit dimension (for each register).
+    :type d: int
+    :return: ``(d*d, d*d)`` matrix representing SWAP.
+    :rtype: Tensor
     """
     D = d * d
     matrix = np.zeros((D, D), dtype=npdtype)
@@ -316,22 +338,16 @@ def _swap_matrix_func(d: int) -> Tensor:
 
 def _rzz_matrix_func(d: int, theta: float) -> Tensor:
     r"""
-    Two-qudit RZZ(\theta) gate for qudits.
+    Two-qudit ``RZZ(\theta)`` interaction for qudits.
 
-    .. math::
+    .. math:: RZZ(\theta) = \exp\!\left(-i \tfrac{\theta}{2} (Z_H \otimes Z_H)\right)
 
-        Z_H = \mathrm{diag}(d-1,\, d-3,\, \ldots,\,-(d-1))
-    .. math::
-        RZZ(\theta) = \exp\!\left(-i \tfrac{\theta}{2} \, \bigl(Z_H \otimes Z_H\bigr)\right)
-
-    For :math:`d=2`, this reduces to the standard qubit RZZ gate.
-
-    Args:
-        d (int): Dimension of the qudits (assumed equal for both).
-        theta (float): Rotation angle.
-
-    Returns:
-        Tensor: A ``(d*d, d*d)`` numpy array representing the RZZ gate.
+    :param d: Dimension of each qudit (assumed equal).
+    :type d: int
+    :param theta: Rotation angle.
+    :type theta: float
+    :return: ``(d*d, d*d)`` matrix representing :math:`RZZ(\theta)`.
+    :rtype: Tensor
     """
     lam = np.array(
         [d - 1 - 2 * j for j in range(d)], dtype=float
@@ -350,27 +366,24 @@ def _rxx_matrix_func(
     d: int, theta: float, j1: int = 0, k1: int = 1, j2: int = 0, k2: int = 1
 ) -> Tensor:
     r"""
-    Two-qudit RXX(θ) on a selected two-state subspace.
+    Two-qudit ``RXX(\theta)`` on a selected two-state subspace.
 
-    Acts like a qubit RXX on the subspace spanned by |j1, j2> and |k1, k2>:
-    
-    .. math::
+    Acts like a qubit :math:`RXX` on the subspace spanned by ``|j1, j2⟩`` and ``|k1, k2⟩``.
 
-        RXX(\theta) =
-        \begin{pmatrix}
-        \cos\!\left(\tfrac{\theta}{2}\right) & -i \sin\!\left(\tfrac{\theta}{2}\right) \\
-        -i \sin\!\left(\tfrac{\theta}{2}\right) & \cos\!\left(\tfrac{\theta}{2}\right)
-        \end{pmatrix}
-    All other basis states are unchanged.
-
-    Args:
-        d (int): Dimension for both qudits (assumed equal).
-        theta (float): Rotation angle.
-        j1, k1 (int): Levels on qudit-1.
-        j2, k2 (int): Levels on qudit-2.
-
-    Returns:
-        Tensor: A ``(d*d, d*d)`` numpy array representing the RXX gate.
+    :param d: Dimension of each qudit (assumed equal).
+    :type d: int
+    :param theta: Rotation angle.
+    :type theta: float
+    :param j1: Level on qudit-1.
+    :type j1: int
+    :param k1: Level on qudit-1.
+    :type k1: int
+    :param j2: Level on qudit-2.
+    :type j2: int
+    :param k2: Level on qudit-2.
+    :type k2: int
+    :return: ``(d*d, d*d)`` matrix representing :math:`RXX(\theta)` on the selected subspace.
+    :rtype: Tensor
     """
     D = d * d
     M = np.eye(D, dtype=npdtype)
@@ -399,55 +412,25 @@ def _u8_matrix_func(
     omega: Optional[float] = None,
 ) -> Tensor:
     r"""
-    U8 diagonal single-qudit gate for prime dimensions.
+    ``U8`` diagonal single-qudit gate for prime dimensions.
 
-    This gate is defined only when :math:`d` is prime. It is a diagonal
-    operator of size :math:`d \times d`:
+    Defined for prime ``d`` with phases determined by modular polynomials depending
+    on parameters :math:`\gamma, z, \epsilon`.
 
-    .. py:math::
-
-        U_8(d; \gamma, z, \epsilon) =
-        \mathrm{diag}\!\left(\omega^{v_0}, \omega^{v_1}, \ldots, \omega^{v_{d-1}}\right),
-
-    where :math:`\omega = e^{2\pi i / d}` is a primitive :math:`d`-th root
-    of unity, and the exponents :math:`v_k` are computed from modular
-    polynomials depending on parameters :math:`\gamma, z, \epsilon`.
-
-    For :math:`d=3`, the exponents are fixed as
-
-    .. py:math::
-
-        (v_0, v_1, v_2) = (0, 1, 8).
-
-    For general prime :math:`d`, the exponents are determined by
-
-    .. py:math::
-
-        v_i \equiv \tfrac{1}{12} i \bigl(\gamma + i (6z + (2i-3)\gamma)\bigr) + \epsilon i
-        \pmod d, \quad i = 1, \ldots, d-1,
-
-    with :math:`v_0 = 0`. The sequence :math:`(v_0,\ldots,v_{d-1})` must
-    also satisfy
-
-    .. py:math::
-
-        \sum_{k=0}^{d-1} v_k \equiv 0 \pmod d.
-
-    Args:
-        d: Qudit dimension (must be prime).
-        gamma: Gate parameter (must be non-zero).
-        z: Gate parameter.
-        eps: Gate parameter.
-        omega: Optional primitive :math:`d`-th root of unity. Defaults to
-            :math:`\exp(2\pi i / d)`.
-
-    Returns:
-        Tensor: A :math:`(d, d)` diagonal numpy array of dtype ``npdtype``.
-
-    Raises:
-        ValueError: If ``d`` is not prime; if ``gamma = 0``; if 12 has no
-        modular inverse modulo ``d``; or if the computed :math:`v_k` do not
-        sum to 0 modulo :math:`d`.
+    :param d: Qudit dimension (must be prime).
+    :type d: int
+    :param gamma: Gate parameter (must be non-zero).
+    :type gamma: float
+    :param z: Gate parameter.
+    :type z: float
+    :param eps: Gate parameter.
+    :type eps: float
+    :param omega: Optional primitive :math:`d`-th root of unity. Defaults to :math:`e^{2\pi i/d}`.
+    :type omega: Optional[float]
+    :return: ``(d, d)`` diagonal matrix of dtype ``npdtype``.
+    :rtype: Tensor
+    :raises ValueError: If ``d`` is not prime; if ``gamma==0``;
+     if 12 has no modular inverse mod ``d``; or if the computed exponents do not sum to 0 mod ``d``.
     """
     if not _is_prime(d):
         raise ValueError(
@@ -489,10 +472,8 @@ def _cphase_matrix_func(
     d: int, cv: Optional[int] = None, omega: Optional[float] = None
 ) -> Tensor:
     r"""
-    Qudit Controlled-z gate
-    \ket{r}\ket{s} \rightarrow \omega^{rs}\ket{r}\ket{s} = \ket{r}Z^r\ket{s}
-
-    This gate is also called SUMZ gate, where Z represents Z_d gate.
+    Qudit controlled-phase (``CPHASE``) gate.
+    Implements ``|r⟩|s⟩ → ω^{rs}|r⟩|s⟩``; optionally condition on a specific control value ``cv``.
               ┌─                                          ─┐
               │ I_d      0        0         ...     0      │
               │ 0       Z_d       0         ...     0      │
@@ -500,6 +481,16 @@ def _cphase_matrix_func(
               │ .        .        .         .       .      │
               │ 0        0        0         ...  Z_d^{d-1} │
               └                                           ─┘
+
+    :param d: Qudit dimension (for each register).
+    :type d: int
+    :param cv: Optional control value in ``[0, d-1]``. If ``None``, builds the full SUMZ block-diagonal.
+    :type cv: Optional[int]
+    :param omega: Optional primitive ``d``-th root of unity for ``Z_d``.
+    :type omega: Optional[float]
+    :return: ``(d*d, d*d)`` matrix representing the controlled-phase.
+    :rtype: Tensor
+    :raises ValueError: If ``cv`` is provided and is outside ``[0, d-1]``.
     """
     omega = np.exp(2j * np.pi / d) if omega is None else omega
     size = d**2
@@ -528,10 +519,8 @@ def _cphase_matrix_func(
 
 def _csum_matrix_func(d: int, cv: Optional[int] = None) -> Tensor:
     r"""
-    Qudit Controlled-NOT gate
-    \ket{r}\ket{s} \rightarrow \ket{r}\ket{r+s} = \ket{r}X^r\ket{s} = \ket{r}\ket{(r+s) mod d}
-
-    This gate is also called SUMX gate, where X represents X_d gate.
+    Qudit controlled-sum (``CSUM`` / ``SUMX``) gate.
+    Implements ``|r⟩|s⟩ → |r⟩|r+s (\bmod d)⟩``; optionally condition on a specific control value ``cv``.
               ┌─                                          ─┐
               │ I_d      0        0         ...     0      │
               │ 0       X_d       0         ...     0      │
@@ -539,6 +528,14 @@ def _csum_matrix_func(d: int, cv: Optional[int] = None) -> Tensor:
               │ .        .        .         .       .      │
               │ 0        0        0         ...  X_d^{d-1} │
               └                                           ─┘
+
+    :param d: Qudit dimension (for each register).
+    :type d: int
+    :param cv: Optional control value in ``[0, d-1]``. If ``None``, builds the full SUMX block-diagonal.
+    :type cv: Optional[int]
+    :return: ``(d*d, d*d)`` matrix representing the controlled-sum.
+    :rtype: Tensor
+    :raises ValueError: If ``cv`` is provided and is outside ``[0, d-1]``.
     """
     size = d**2
     x_matrix = _x_matrix_func(d=d)
