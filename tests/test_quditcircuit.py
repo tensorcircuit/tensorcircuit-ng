@@ -105,7 +105,7 @@ def test_single_qubit():
             * 10
         )
         / np.sqrt(10),
-        atol=1e-4,
+        atol=1e-5,
     )
 
 
@@ -222,7 +222,7 @@ def test_unitary(backend):
         np.kron(tc.quditgates._x_matrix_func(3), tc.quditgates._z_matrix_func(3))
     )
     np.testing.assert_allclose(
-        tc.backend.numpy(c.wavefunction().reshape([9, 9])), answer, atol=1e-4
+        tc.backend.numpy(c.wavefunction().reshape([9, 9])), answer, atol=1e-5
     )
 
 
@@ -241,11 +241,11 @@ def test_circuit_add_demo():
     c2.x(0)  # |00> -> |20>
     answer = np.zeros(dim * dim, dtype=np.complex64)
     answer[dim * 2 + 0] = 1.0
-    np.testing.assert_allclose(c2.wavefunction(), answer, atol=1e-4)
+    np.testing.assert_allclose(c2.wavefunction(), answer, atol=1e-5)
     c3 = tc.QuditCircuit(2, dim=dim)
     c3.x(0)
     c3.replace_mps_inputs(c.quvector())
-    np.testing.assert_allclose(c3.wavefunction(), answer, atol=1e-4)
+    np.testing.assert_allclose(c3.wavefunction(), answer, atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
