@@ -122,10 +122,7 @@ def _i_matrix_func(d: int) -> Tensor:
     :return: ``(d, d)`` identity matrix.
     :rtype: Tensor
     """
-    matrix = np.zeros((d, d), dtype=npdtype)
-    for i in range(d):
-        matrix[i, i] = 1.0
-    return matrix
+    return np.eye(d, dtype=npdtype)
 
 
 def _x_matrix_func(d: int) -> Tensor:
