@@ -18,7 +18,7 @@ from .quditgates import SINGLE_BUILDERS, TWO_BUILDERS, _cached_matrix
 
 
 Tensor = Any
-SAMPLE_FORMAT = Literal["sample_bin", "count_vector", "count_dict_bin"]
+SAMPLE_FORMAT = Literal["sample_bin", "count_dict_bin"]
 
 
 class QuditCircuit:
@@ -452,7 +452,7 @@ class QuditCircuit:
             if the format is None, and consistent with format when given
         :rtype: Any
         """
-        if format in ["sample_int", "count_tuple", "count_dict_int"]:
+        if format in ["sample_int", "count_tuple", "count_dict_int", "count_vector"]:
             raise NotImplementedError(
                 "`int` representation is not friendly for d-dimensional systems."
             )
