@@ -192,8 +192,8 @@ def _h_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     matrix = np.zeros((d, d), dtype=npdtype)
     for j in range(d):
         for k in range(d):
-            matrix[j, k] = omega ** (j * k) / np.sqrt(d)
-    return matrix.T
+            matrix[k, j] = omega ** (j * k) / np.sqrt(d)
+    return matrix
 
 
 def _s_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
