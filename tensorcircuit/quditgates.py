@@ -407,8 +407,14 @@ def _u8_matrix_func(
     r"""
     ``U8`` diagonal single-qudit gate for prime dimensions.
 
-    Defined for prime ``d`` with phases determined by modular polynomials depending
-    on parameters :math:`\gamma, z, \epsilon`.
+    This gate represents a canonical nontrivial diagonal Clifford element
+    in prime-dimensional qudit systems. Together with generalized Pauli
+    operators, it generates the full single-qudit Clifford group. In the
+    qubit case (``d=2``), it reduces to the well-known π/8 gate. For higher
+    prime dimensions, the phases are defined through modular polynomials
+    depending on :math:`\gamma, z, \epsilon`. Its explicit inclusion ensures
+    coverage of the complete Clifford generating set across prime qudit
+    dimensions.
 
     :param d: Qudit dimension (must be prime).
     :type d: int
@@ -422,8 +428,8 @@ def _u8_matrix_func(
     :type omega: Optional[float]
     :return: ``(d, d)`` diagonal matrix of dtype ``npdtype``.
     :rtype: Tensor
-    :raises ValueError: If ``d`` is not prime; if ``gamma==0``;
-     if 12 has no modular inverse mod ``d``; or if the computed exponents do not sum to 0 mod ``d``.
+    :raises ValueError: If ``d`` is not prime; if ``gamma==0``; if 12 has no modular
+        inverse mod ``d``; or if the computed exponents do not sum to 0 mod ``d``.
     """
     if not _is_prime(d):
         raise ValueError(
