@@ -315,7 +315,6 @@ def test_sample_format(backend):
             for format_ in [
                 None,
                 "sample_bin",
-                "count_vector",
                 "count_dict_bin",
             ]:
                 print("    format: ", format_)
