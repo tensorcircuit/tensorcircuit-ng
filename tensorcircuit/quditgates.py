@@ -156,10 +156,7 @@ def _z_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     :rtype: Tensor
     """
     omega = np.exp(2j * np.pi / d) if omega is None else omega
-    matrix = np.zeros((d, d), dtype=npdtype)
-    for j in range(d):
-        matrix[j, j] = omega**j
-    return matrix
+    return np.diag([omega**j for j in range(d)]).astype(npdtype)
 
 
 def _y_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
