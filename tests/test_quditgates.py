@@ -12,7 +12,7 @@ from tensorcircuit.quditgates import (
     _i_matrix_func,
     _x_matrix_func,
     _z_matrix_func,
-    _y_matrix_func,
+    # _y_matrix_func,
     _h_matrix_func,
     _s_matrix_func,
     _rx_matrix_func,
@@ -69,12 +69,12 @@ def test_Z_diagonal_and_value(d, highp):
     assert is_unitary(Z)
 
 
-@pytest.mark.parametrize("d", [2, 3, 5])
-def test_Y_equals_ZX_over_i(d, highp):
-    Y = _y_matrix_func(d)
-    ZX_over_i = (_z_matrix_func(d) @ _x_matrix_func(d)) / 1j
-    np.testing.assert_allclose(Y, ZX_over_i, atol=1e-5)
-    assert is_unitary(Y)
+# @pytest.mark.parametrize("d", [2, 3, 5])
+# def test_Y_equals_ZX_over_i(d, highp):
+#     Y = _y_matrix_func(d)
+#     ZX_over_i = (_z_matrix_func(d) @ _x_matrix_func(d)) / 1j
+#     np.testing.assert_allclose(Y, ZX_over_i, atol=1e-5)
+#     assert is_unitary(Y)
 
 
 @pytest.mark.parametrize("d", [2, 3, 5])

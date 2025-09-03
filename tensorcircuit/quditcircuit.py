@@ -153,14 +153,14 @@ class QuditCircuit:
         """
         self._apply_gate(index, name="X")
 
-    def y(self, index: int) -> None:
-        """
-        Apply the Y gate on the given qudit index.
-
-        :param index: Qudit index to apply the gate on.
-        :type index: int
-        """
-        self._apply_gate(index, name="Y")
+    # def y(self, index: int) -> None:
+    #     """
+    #     Apply the Y gate on the given qudit index.
+    #
+    #     :param index: Qudit index to apply the gate on.
+    #     :type index: int
+    #     """
+    #     self._apply_gate(index, name="Y")
 
     def z(self, index: int) -> None:
         """

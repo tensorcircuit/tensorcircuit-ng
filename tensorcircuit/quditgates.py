@@ -11,7 +11,7 @@ Tensor = Any
 SINGLE_BUILDERS = {
     "I": (("none",), lambda d, omega, **kw: _i_matrix_func(d)),
     "X": (("none",), lambda d, omega, **kw: _x_matrix_func(d)),
-    "Y": (("none",), lambda d, omega, **kw: _y_matrix_func(d, omega)),
+    # "Y": (("none",), lambda d, omega, **kw: _y_matrix_func(d, omega)),
     "Z": (("none",), lambda d, omega, **kw: _z_matrix_func(d, omega)),
     "H": (("none",), lambda d, omega, **kw: _h_matrix_func(d, omega)),
     "RX": (
@@ -158,20 +158,20 @@ def _z_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     return np.diag([omega**j for j in range(d)]).astype(npdtype)
 
 
-def _y_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
-    r"""
-    Generalized Pauli-Y (Y) gate for qudits.
-
-    Defined (up to a global phase) via :math:`Y \propto Z\,X`.
-
-    :param d: Qudit dimension.
-    :type d: int
-    :param omega: Optional primitive ``d``-th root of unity used by ``Z``.
-    :type omega: Optional[float]
-    :return: ``(d, d)`` matrix for :math:`Y`.
-    :rtype: Tensor
-    """
-    return np.matmul(_z_matrix_func(d, omega=omega), _x_matrix_func(d)) / 1j
+# def _y_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
+#     r"""
+#     Generalized Pauli-Y (Y) gate for qudits.
+#
+#     Defined (up to a global phase) via :math:`Y \propto Z\,X`.
+#
+#     :param d: Qudit dimension.
+#     :type d: int
+#     :param omega: Optional primitive ``d``-th root of unity used by ``Z``.
+#     :type omega: Optional[float]
+#     :return: ``(d, d)`` matrix for :math:`Y`.
+#     :rtype: Tensor
+#     """
+#     return np.matmul(_z_matrix_func(d, omega=omega), _x_matrix_func(d)) / 1j
 
 
 def _h_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
