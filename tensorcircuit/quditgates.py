@@ -456,10 +456,7 @@ def _u8_matrix_func(
         )
 
     omega = np.exp(2j * np.pi / d) if omega is None else omega
-    matrix = np.zeros((d, d), dtype=npdtype)
-    for j in range(d):
-        matrix[j, j] = omega ** vks[j]
-    return matrix
+    return np.diag([omega ** vks[j] ** j for j in range(d)]).astype(npdtype)
 
 
 def _cphase_matrix_func(
