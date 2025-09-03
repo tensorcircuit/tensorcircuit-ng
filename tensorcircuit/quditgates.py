@@ -2,7 +2,6 @@ from functools import lru_cache
 from typing import Any, Optional, Tuple
 
 import numpy as np
-from sympy import mod_inverse, Mod
 
 from .cons import npdtype
 
@@ -438,7 +437,7 @@ def _u8_matrix_func(
         vks = [0, 1, 8]
     else:
         try:
-            inv_12 = mod_inverse(12, d)
+            inv_12 = pow(12, -1, d)
         except ValueError:
             raise ValueError(
                 f"Inverse of 12 mod {d} does not exist. Choose a prime d that does not divide 12."
@@ -446,13 +445,11 @@ def _u8_matrix_func(
 
         for i in range(1, d):
             a = inv_12 * i * (gamma + i * (6 * z + (2 * i - 3) * gamma)) + eps * i
-            vks[i] = Mod(a, d)
+            vks[i] = int(a) % d
 
-    # print(vks)
-    sum_vks = Mod(sum(vks), d)
-    if sum_vks != 0:
+    if sum(vks) % d != 0:
         raise ValueError(
-            f"Sum of v_k's is not 0 mod {d}. Got {sum_vks}. Check parameters."
+            f"Sum of v_k's is not 0 mod {d}. Got {sum(vks) % d}. Check parameters."
         )
 
     omega = np.exp(2j * np.pi / d) if omega is None else omega
