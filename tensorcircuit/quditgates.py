@@ -1,4 +1,5 @@
-from typing import Any, Optional
+from functools import lru_cache
+from typing import Any, Optional, Tuple
 
 import numpy as np
 from sympy import mod_inverse, Mod
@@ -6,6 +7,93 @@ from sympy import mod_inverse, Mod
 from .cons import npdtype
 
 Tensor = Any
+
+
+SINGLE_BUILDERS = {
+    "I": (("none",), lambda d, omega, **kw: _i_matrix_func(d)),
+    "X": (("none",), lambda d, omega, **kw: _x_matrix_func(d)),
+    "Y": (("none",), lambda d, omega, **kw: _y_matrix_func(d, omega)),
+    "Z": (("none",), lambda d, omega, **kw: _z_matrix_func(d, omega)),
+    "H": (("none",), lambda d, omega, **kw: _h_matrix_func(d, omega)),
+    "RX": (
+        ("theta", "j", "k"),
+        lambda d, omega, **kw: _rx_matrix_func(d, kw["theta"], kw["j"], kw["k"]),
+    ),
+    "RY": (
+        ("theta", "j", "k"),
+        lambda d, omega, **kw: _ry_matrix_func(d, kw["theta"], kw["j"], kw["k"]),
+    ),
+    "RZ": (
+        ("theta", "j"),
+        lambda d, omega, **kw: _rz_matrix_func(d, kw["theta"], kw["j"]),
+    ),
+    "U8": (
+        ("gamma", "z", "eps"),
+        lambda d, omega, **kw: _u8_matrix_func(
+            d, kw["gamma"], kw["z"], kw["eps"], omega
+        ),
+    ),
+}
+
+TWO_BUILDERS = {
+    "RXX": (
+        ("theta", "j1", "k1", "j2", "k2"),
+        lambda d, omega, **kw: _rxx_matrix_func(
+            d, kw["theta"], kw["j1"], kw["k1"], kw["j2"], kw["k2"]
+        ),
+    ),
+    "RZZ": (("theta",), lambda d, omega, **kw: _rzz_matrix_func(d, kw["theta"])),
+    "CPHASE": (("cv",), lambda d, omega, **kw: _cphase_matrix_func(d, kw["cv"], omega)),
+    "CSUM": (("cv",), lambda d, omega, **kw: _csum_matrix_func(d, kw["cv"])),
+}
+
+
+@lru_cache(maxsize=None)
+def _cached_matrix(
+    kind: str,
+    name: str,
+    d: int,
+    omega: Optional[float] = None,
+    key: Optional[tuple[Any, ...]] = (),
+) -> Tensor:
+    """
+    Build and cache a matrix using a registered builder function.
+
+    This function looks up a builder from either `SINGLE_BUILDERS` or
+    `TWO_BUILDERS` (depending on `kind`), and calls it with the given
+    arguments. Results are cached with `functools.lru_cache`, so repeated
+    calls with the same inputs return the cached tensor instead of
+    rebuilding it.
+
+    Args:
+        kind: Either `"single"` (use `SINGLE_BUILDERS`) or `"two"` (use `TWO_BUILDERS`).
+        name: The builder name to look up in the chosen dictionary.
+        d: The dimension of the matrix.
+        omega: Optional frequency or scaling parameter, passed to the builder.
+        key: Tuple of extra parameters, matched in order to the builder’s
+            expected signature.
+
+    Returns:
+        Tensor: The matrix built by the selected builder.
+
+    Notes:
+        - The cache key depends on all arguments (`kind`, `name`, `d`, `omega`, `key`).
+        - The `key` tuple must have the same order as the builder’s signature.
+        - The same inputs will always return the same cached tensor.
+
+    Raises:
+        KeyError: If the builder `name` is not found.
+        TypeError/ValueError: If `key` does not match the builder’s expected parameters.
+    """
+    builders = SINGLE_BUILDERS if kind == "single" else TWO_BUILDERS
+    try:
+        sig, builder = builders[name]
+    except KeyError as e:
+        raise KeyError(f"Unknown builder '{name}' for kind '{kind}'") from e
+
+    extras: Tuple[Any, ...] = () if key is None else key  # normalized & typed
+    kwargs = {k: v for k, v in zip(sig, extras)}
+    return builder(d, omega, **kwargs)
 
 
 def _is_prime(n: int) -> bool:
