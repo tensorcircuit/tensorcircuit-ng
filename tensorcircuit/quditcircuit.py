@@ -86,7 +86,9 @@ class QuditCircuit:
         """
         Apply a quantum gate (unitary) to one or two qudits in the circuit.
 
-        The gate matrix is looked up by name in either ``SINGLE_BUILDERS`` (for single-qudit gates) or ``TWO_BUILDERS`` (for two-qudit gates). The matrix is built (and cached) via ``_cached_matrix``, then applied to the circuit at the given indices.
+        The gate matrix is looked up by name in either ``SINGLE_BUILDERS`` (for single-qudit gates)
+        or ``TWO_BUILDERS`` (for two-qudit gates). The matrix is built (and cached) via ``_cached_matrix``,
+        then applied to the circuit at the given indices.
 
         :param indices: The qudit indices the gate should act on.
             - One index → single-qudit gate.
@@ -96,7 +98,8 @@ class QuditCircuit:
         :type name: str
         :param kwargs: Extra parameters for the gate matched against the builder signature.
         :type kwargs: Any
-        :raises ValueError: If ``name`` is not found, or if the number of indices does not match the gate type (single vs two).
+        :raises ValueError: If ``name`` is not found,
+        or if the number of indices does not match the gate type (single vs two).
         """
         if len(indices) == 1 and name in SINGLE_BUILDERS:
             sig, _ = SINGLE_BUILDERS[name]
