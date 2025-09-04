@@ -142,9 +142,21 @@ def test_SWAP_permutation(d, highp):
 @pytest.mark.parametrize("d", [2, 3, 5])
 def test_RZZ_diagonal(d, highp):
     theta = 0.37
-    RZZ = _rzz_matrix_func(d, theta)
+    RZZ = _rzz_matrix_func(d, theta, j1=0, k1=1, j2=0, k2=1)
     assert is_unitary(RZZ)
-    np.testing.assert_allclose(RZZ, np.diag(np.diag(RZZ)), atol=1e-5)  # 对角阵
+
+    D = d * d
+    I = np.eye(D, dtype=np.complex128)
+
+    idx_a = 0 * d + 0
+    idx_b = 1 * d + 1
+
+    for t in range(D):
+        if t not in (idx_a, idx_b):
+            np.testing.assert_allclose(RZZ[t], I[t], atol=1e-5)
+
+    np.testing.assert_allclose(RZZ[idx_a, idx_a], np.exp(-1j * theta / 2), atol=1e-5)
+    np.testing.assert_allclose(RZZ[idx_b, idx_b], np.exp(+1j * theta / 2), atol=1e-5)
 
 
 def test_RXX_selected_block(highp):

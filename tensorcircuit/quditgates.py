@@ -329,30 +329,51 @@ def _swap_matrix_func(d: int) -> Tensor:
     return matrix
 
 
-def _rzz_matrix_func(d: int, theta: float) -> Tensor:
+def _rzz_matrix_func(
+    d: int, theta: float, j1: int = 0, k1: int = 1, j2: int = 0, k2: int = 1
+) -> Tensor:
     r"""
-    Two-qudit ``RZZ(\theta)`` interaction for qudits.
+    Two-qudit ``RZZ(θ)`` on a selected two-state subspace.
 
-    .. math:: RZZ(\theta) = \exp\!\left(-i \tfrac{\theta}{2} (Z_H \otimes Z_H)\right)
+    Acts like a qubit :math:`RZZ(θ)=\exp(-i\,\tfrac{θ}{2}\,\sigma_z)` on the
+    two-dimensional subspace spanned by ``|j1, j2⟩`` and ``|k1, k2⟩``,
+    and as identity elsewhere. The resulting block is diagonal with phases
+    :math:`\mathrm{diag}(e^{-iθ/2},\, e^{+iθ/2})`.
 
     :param d: Dimension of each qudit (assumed equal).
     :type d: int
     :param theta: Rotation angle.
     :type theta: float
-    :return: ``(d*d, d*d)`` matrix representing :math:`RZZ(\theta)`.
+    :param j1: Level on qudit-1 for the first basis state.
+    :type j1: int
+    :param k1: Level on qudit-1 for the second basis state.
+    :type k1: int
+    :param j2: Level on qudit-2 for the first basis state.
+    :type j2: int
+    :param k2: Level on qudit-2 for the second basis state.
+    :type k2: int
+    :return: ``(d*d, d*d)`` matrix representing subspace :math:`RZZ(θ)`.
     :rtype: Tensor
+    :raises ValueError: If indices are out of range or select the same basis state.
     """
-    lam = np.array(
-        [d - 1 - 2 * j for j in range(d)], dtype=float
-    )  # [d-1, d-3, ..., -(d-1)]
+    if not (0 <= j1 < d and 0 <= k1 < d and 0 <= j2 < d and 0 <= k2 < d):
+        raise ValueError("Indices j1,k1,j2,k2 must be in [0, d-1].")
+    if j1 == k1 and j2 == k2:
+        raise ValueError("Selected basis states must be different: (j1,j2) ≠ (k1,k2).")
+
     D = d * d
-    diag = np.empty(D, dtype=npdtype)
-    idx = 0
-    for a in range(d):
-        for b in range(d):
-            diag[idx] = np.exp(-1j * (theta / 2.0) * lam[a] * lam[b])
-            idx += 1
-    return np.diag(diag)
+    M = np.eye(D, dtype=npdtype)
+
+    idx_a = j1 * d + j2
+    idx_b = k1 * d + k2
+
+    phase_minus = np.exp(-1j * theta / 2.0)
+    phase_plus  = np.exp(+1j * theta / 2.0)
+
+    M[idx_a, idx_a] = phase_minus
+    M[idx_b, idx_b] = phase_plus
+
+    return M
 
 
 def _rxx_matrix_func(
