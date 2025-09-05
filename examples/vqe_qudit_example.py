@@ -1,10 +1,5 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-vqe_qudit_example.py
-
-A clean, backend-explicit VQE example for qudits using tensorcircuit.
-You must set the backend explicitly via --backend {jax,tensorflow,torch}.
+r"""
+You must set the backend explicitly via --backend {jax, tensorflow}.
 AD-based optimization (gradient descent) is enabled for these backends.
 A fallback random-search optimizer is also provided.
 
@@ -17,11 +12,9 @@ What this script does:
   - Builds a 2-qudit (d>=3) ansatz with native RY/RZ single-qudit rotations on adjacent levels
     and an RXX entangler on (0,1) level pairs.
   - Minimizes the expectation of a simple 2-site Hermitian Hamiltonian:
-        H = N(0) + N(1) + J * [ X_sym(0)⊗X_sym(1) + Z_sym(0)⊗Z_sym(1) ]
-    where N = diag(0,1,...,d-1), X_sym = (X + X^†)/2, Z_sym = (Z + Z^†)/2.
+        H = N(0) + N(1) + J * [ X_sym(0)\otimes X_sym(1) + Z_sym(0)\otimes Z_sym(1) ]
+    where N = diag(0,1,...,d-1), X_sym = (X + X^\dagger)/2, Z_sym = (Z + Z^\dagger)/2.
 """
-
-import os
 
 import argparse
 import math
@@ -257,6 +250,7 @@ def main():
             obj_np, x0_shape=(nparams,), iters=args.iters, seed=args.seed
         )
     else:
+
         def obj_bk(theta_b):
             return energy_expectation_backend(theta_b, d, L, ham)
 
