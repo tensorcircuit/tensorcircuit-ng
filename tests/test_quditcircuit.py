@@ -351,9 +351,7 @@ def test_quditcircuit_set_dim_validation():
 def test_quditcircuit_single_and_two_qudit_paths_and_wrappers():
     c = tc.QuditCircuit(2, 3)
     c.x(0)
-    c.rzz(
-        0, 1, theta=np.float64(0.2), j1=0, k1=1, j2=0, k2=1
-    )
+    c.rzz(0, 1, theta=np.float64(0.2), j1=0, k1=1, j2=0, k2=1)
     c.cphase(0, 1, cv=1)
     qo = c.get_quoperator()
     assert qo is not None
