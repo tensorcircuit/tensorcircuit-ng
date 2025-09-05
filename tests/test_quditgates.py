@@ -24,8 +24,6 @@ from tensorcircuit.quditgates import (
     _cphase_matrix_func,
     _csum_matrix_func,
     _is_prime,
-    SINGLE_BUILDERS,
-    TWO_BUILDERS,
 )
 
 
