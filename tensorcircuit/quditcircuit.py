@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple, Sequence, Union, Literal
 import numpy as np
 import tensornetwork as tn
 
+from .gates import Gate
 from .utils import arg_alias
 from .basecircuit import BaseCircuit
 from .circuit import Circuit
