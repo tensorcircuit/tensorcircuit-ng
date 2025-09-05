@@ -339,3 +339,32 @@ def test_sample_representation():
         c.x(0)
         (result,) = c.sample(1, format="count_dict_bin").keys()
         assert result == _ALPHBET[i]
+
+
+def test_quditcircuit_set_dim_validation():
+    with pytest.raises(ValueError):
+        tc.QuditCircuit(1, 2)
+    with pytest.raises(ValueError):
+        tc.QuditCircuit(1, 2.5)  # type: ignore[arg-type]
+
+
+def test_quditcircuit_single_and_two_qudit_paths_and_wrappers():
+    c = tc.QuditCircuit(2, 3)
+    c.x(0)
+    c.rzz(
+        0, 1, theta=np.float64(0.2), j1=0, k1=1, j2=0, k2=1
+    )
+    c.cphase(0, 1, cv=1)
+    qo = c.get_quoperator()
+    assert qo is not None
+    _ = c.sample(allow_state=False, batch=1, format="count_dict_bin")
+    for bad in ["sample_int", "count_tuple", "count_dict_int", "count_vector"]:
+        with pytest.raises(NotImplementedError):
+            c.sample(allow_state=False, batch=1, format=bad)
+
+
+def test_quditcircuit_amplitude_before_wrapper():
+    c = tc.QuditCircuit(2, 3)
+    c.x(0)
+    nodes = c.amplitude_before("00")
+    assert isinstance(nodes, list)

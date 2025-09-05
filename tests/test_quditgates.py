@@ -12,7 +12,6 @@ from tensorcircuit.quditgates import (
     _i_matrix_func,
     _x_matrix_func,
     _z_matrix_func,
-    # _y_matrix_func,
     _h_matrix_func,
     _s_matrix_func,
     _rx_matrix_func,
@@ -25,6 +24,7 @@ from tensorcircuit.quditgates import (
     _cphase_matrix_func,
     _csum_matrix_func,
     _cached_matrix,
+    _is_prime,
     SINGLE_BUILDERS,
     TWO_BUILDERS,
 )
@@ -300,3 +300,47 @@ def test_builders_smoke(highp):
         key = tuple(defaults[s] for s in sig)
         M = _cached_matrix("two", name, d, None, key)
         assert M.shape == (d * d, d * d)
+
+
+def test_cached_matrix_np_scalar_and_non_scalar_omega():
+    d = 3
+    if "RX" in SINGLE_BUILDERS:
+        name = "RX"
+        sig, _ = SINGLE_BUILDERS[name]
+        defaults = {"theta": np.float64(0.314159265), "j": 0, "k": 1}
+        key = tuple(defaults.get(s, 0) for s in sig if s != "none")
+        M = _cached_matrix("single", name, d, None, key)
+        assert M.shape == (d, d)
+
+    name = "I" if "I" in SINGLE_BUILDERS else next(iter(SINGLE_BUILDERS.keys()))
+    sig, _ = SINGLE_BUILDERS[name]
+    key = tuple(0 for s in sig if s != "none")
+    M2 = _cached_matrix("single", name, d, np.array([0.5]), key)
+    assert M2.shape == (d, d)
+
+
+def test__is_prime_edge_and_composites():
+    assert _is_prime(2) is True
+    assert _is_prime(3) is True
+    assert _is_prime(4) is False
+    assert _is_prime(5) is True
+    assert _is_prime(25) is False
+    assert _is_prime(29) is True
+
+
+def test_two_qudit_builders_index_validation():
+    d = 3
+    theta = 0.1
+    with pytest.raises(ValueError):
+        _rzz_matrix_func(d, theta, j1=0, k1=1, j2=0, k2=3)
+    with pytest.raises(ValueError):
+        _rxx_matrix_func(d, theta, j1=0, k1=1, j2=3, k2=0)
+    with pytest.raises(ValueError):
+        _rzz_matrix_func(d, theta, j1=0, k1=0, j2=1, k2=1)
+    with pytest.raises(ValueError):
+        _rxx_matrix_func(d, theta, j1=2, k1=2, j2=0, k2=0)
+
+
+def test_u8_requires_prime_dimension():
+    with pytest.raises(ValueError):
+        _u8_matrix_func(d=9, gamma=1.0, z=0.0, eps=0.0)
