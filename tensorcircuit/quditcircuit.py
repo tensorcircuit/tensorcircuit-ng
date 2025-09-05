@@ -145,6 +145,8 @@ class QuditCircuit:
         """
         self._apply_gate(index, name="I")
 
+    I = i
+
     def x(self, index: int) -> None:
         """
         Apply the X gate on the given qudit index.
@@ -153,6 +155,8 @@ class QuditCircuit:
         :type index: int
         """
         self._apply_gate(index, name="X")
+
+    X = x
 
     # def y(self, index: int) -> None:
     #     """
@@ -172,6 +176,8 @@ class QuditCircuit:
         """
         self._apply_gate(index, name="Z")
 
+    Z = z
+
     def h(self, index: int) -> None:
         """
         Apply the Hadamard-like (H) gate on the given qudit index.
@@ -180,6 +186,8 @@ class QuditCircuit:
         :type index: int
         """
         self._apply_gate(index, name="H")
+
+    H = h
 
     def u8(
         self, index: int, gamma: float = 2.0, z: float = 1.0, eps: float = 0.0
@@ -198,6 +206,8 @@ class QuditCircuit:
         """
         self._apply_gate(index, name="U8", extra=(gamma, z, eps))
 
+    U8 = u8
+
     def rx(self, index: int, theta: float, j: int = 0, k: int = 1) -> None:
         """
         Apply the single-qudit RX rotation on ``index``.
@@ -212,6 +222,8 @@ class QuditCircuit:
         :type k: int
         """
         self._apply_gate(index, name="RX", theta=theta, j=j, k=k)
+
+    RX = rx
 
     def ry(self, index: int, theta: float, j: int = 0, k: int = 1) -> None:
         """
@@ -228,6 +240,8 @@ class QuditCircuit:
         """
         self._apply_gate(index, name="RY", theta=theta, j=j, k=k)
 
+    RY = ry
+
     def rz(self, index: int, theta: float, j: int = 0) -> None:
         """
         Apply the single-qudit RZ rotation on ``index``.
@@ -240,6 +254,8 @@ class QuditCircuit:
         :type j: int
         """
         self._apply_gate(index, name="RZ", theta=theta, j=j)
+
+    RZ = rz
 
     def rxx(
         self,
@@ -268,6 +284,8 @@ class QuditCircuit:
         """
         self._apply_gate(*indices, name="RXX", theta=theta, j1=j1, k1=k1, j2=j2, k2=k2)
 
+    RXX = rxx
+
     def rzz(
         self,
         *indices: int,
@@ -295,6 +313,8 @@ class QuditCircuit:
         """
         self._apply_gate(*indices, name="RZZ", theta=theta, j1=j1, k1=k1, j2=j2, k2=k2)
 
+    RZZ = rzz
+
     def cphase(self, *indices: int, cv: Optional[int] = None) -> None:
         """
         Apply a controlled phase (CPHASE) gate.
@@ -305,6 +325,8 @@ class QuditCircuit:
         :type cv: Optional[int]
         """
         self._apply_gate(*indices, name="CPHASE", cv=cv)
+
+    CPHASE = cphase
 
     def csum(self, *indices: int, cv: Optional[int] = None) -> None:
         """
@@ -317,7 +339,7 @@ class QuditCircuit:
         """
         self._apply_gate(*indices, name="CSUM", cv=cv)
 
-    cnot = csum
+    cnot, CSUM, CNOT = csum, csum, csum
 
     # Functional
     def wavefunction(self, form: str = "default") -> tn.Node.tensor:
