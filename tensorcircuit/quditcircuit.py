@@ -267,16 +267,32 @@ class QuditCircuit:
         """
         self._apply_gate(*indices, name="RXX", theta=theta, j1=j1, k1=k1, j2=j2, k2=k2)
 
-    def rzz(self, *indices: int, theta: float) -> None:
+    def rzz(
+        self,
+        *indices: int,
+        theta: float,
+        j1: int = 0,
+        k1: int = 1,
+        j2: int = 0,
+        k2: int = 1,
+    ) -> None:
         """
-        Apply a two-qudit RZZ interaction on the given indices.
+        Apply a two-qudit RZZ-type interaction on the given indices.
 
         :param indices: Two qudit indices.
         :type indices: int
-        :param theta: Interaction angle.
+        :param theta: Interaction strength/angle.
         :type theta: float
+        :param j1: Source level of the first qudit subspace.
+        :type j1: int
+        :param k1: Target level of the first qudit subspace.
+        :type k1: int
+        :param j2: Source level of the second qudit subspace.
+        :type j2: int
+        :param k2: Target level of the second qudit subspace.
+        :type k2: int
         """
-        self._apply_gate(*indices, name="RZZ", theta=theta)
+        self._apply_gate(*indices, name="RZZ", theta=theta, j1=j1, k1=k1, j2=j2, k2=k2)
 
     def cphase(self, *indices: int, cv: Optional[int] = None) -> None:
         """
