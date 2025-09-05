@@ -296,8 +296,9 @@ def _swap_matrix_func(d: int) -> Tensor:
     :rtype: Tensor
     """
     D = d * d
-    I = backend.eye(D, dtype=dtypestr)
-    return I.reshape(d, d, d, d).transpose(1, 0, 2, 3).reshape(D, D)
+    I = np.eye(D, dtype=dtypestr)
+    m = I.reshape(d, d, d, d).transpose(1, 0, 2, 3).reshape(D, D)
+    return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
 def _rzz_matrix_func(
