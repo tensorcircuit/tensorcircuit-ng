@@ -3,10 +3,9 @@ from typing import Any, Optional, Tuple
 
 import numpy as np
 
-from .cons import npdtype
+from .cons import backend, dtypestr
 
 Tensor = Any
-
 
 SINGLE_BUILDERS = {
     "I": (("none",), lambda d, omega, **kw: _i_matrix_func(d)),
@@ -121,7 +120,7 @@ def _i_matrix_func(d: int) -> Tensor:
     :return: ``(d, d)`` identity matrix.
     :rtype: Tensor
     """
-    return np.eye(d, dtype=npdtype)
+    return backend.eye(d, dtype=dtypestr)
 
 
 def _x_matrix_func(d: int) -> Tensor:
@@ -135,10 +134,10 @@ def _x_matrix_func(d: int) -> Tensor:
     :return: ``(d, d)`` matrix for :math:`X_d`.
     :rtype: Tensor
     """
-    matrix = np.zeros((d, d), dtype=npdtype)
+    matrix = backend.zeros((d, d), dtype=dtypestr)
     for j in range(d):
         matrix[(j + 1) % d, j] = 1.0
-    return matrix
+    return backend.cast(matrix, dtype=dtypestr)
 
 
 def _z_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
@@ -155,7 +154,8 @@ def _z_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     :rtype: Tensor
     """
     omega = np.exp(2j * np.pi / d) if omega is None else omega
-    return np.diag([omega**j for j in range(d)]).astype(npdtype)
+    m = backend.convert_to_tensor(np.diag([omega**j for j in range(d)]))
+    return backend.cast(m, dtype=dtypestr)
 
 
 # def _y_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
@@ -188,11 +188,12 @@ def _h_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     :rtype: Tensor
     """
     omega = np.exp(2j * np.pi / d) if omega is None else omega
-    matrix = np.zeros((d, d), dtype=npdtype)
+    matrix = backend.zeros((d, d), dtype=dtypestr)
+    inv_sqrt_d = 1.0 / np.sqrt(d)
     for j in range(d):
         for k in range(d):
-            matrix[k, j] = omega ** (j * k) / np.sqrt(d)
-    return matrix
+            matrix[k, j] = (omega ** (j * k)) * inv_sqrt_d
+    return backend.cast(matrix, dtype=dtypestr)
 
 
 def _s_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
@@ -210,11 +211,11 @@ def _s_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     """
     omega = np.exp(2j * np.pi / d) if omega is None else omega
     _pd = 0 if d % 2 == 0 else 1
-    matrix = np.zeros((d, d), dtype=complex)
+    matrix = backend.zeros((d, d), dtype=dtypestr)
     for j in range(d):
         phase_exp = (j * (j + _pd)) / 2
         matrix[j, j] = omega**phase_exp
-    return matrix
+    return backend.cast(matrix, dtype=dtypestr)
 
 
 def _check_rotation(d: int, j: int, k: int) -> None:
@@ -253,13 +254,14 @@ def _rx_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     :rtype: Tensor
     """
     _check_rotation(d, j, k)
-    matrix = np.eye(d, dtype=npdtype)
-    c, s = np.cos(theta / 2.0), np.sin(theta / 2.0)
+    matrix = backend.eye(d, dtype=dtypestr)
+    c = backend.cos(theta / 2.0)
+    s = backend.sin(theta / 2.0)
     matrix[j, j] = c
     matrix[k, k] = c
     matrix[j, k] = -1j * s
     matrix[k, j] = -1j * s
-    return matrix
+    return backend.cast(matrix, dtype=dtypestr)
 
 
 def _ry_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
@@ -278,13 +280,14 @@ def _ry_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     :rtype: Tensor
     """
     _check_rotation(d, j, k)
-    matrix = np.eye(d, dtype=npdtype)
-    c, s = np.cos(theta / 2.0), np.sin(theta / 2.0)
+    matrix = backend.eye(d, dtype=dtypestr)
+    c = backend.cos(theta / 2.0)
+    s = backend.sin(theta / 2.0)
     matrix[j, j] = c
     matrix[k, k] = c
     matrix[j, k] = -s
     matrix[k, j] = s
-    return matrix
+    return backend.cast(matrix, dtype=dtypestr)
 
 
 def _rz_matrix_func(d: int, theta: float, j: int = 0) -> Tensor:
@@ -303,9 +306,9 @@ def _rz_matrix_func(d: int, theta: float, j: int = 0) -> Tensor:
     :return: ``(d, d)`` diagonal matrix implementing :math:`RZ(\theta)` on level ``j``.
     :rtype: Tensor
     """
-    matrix = np.eye(d, dtype=npdtype)
-    matrix[j, j] = np.exp(1j * theta)
-    return matrix
+    matrix = backend.eye(d, dtype=dtypestr)
+    matrix[j, j] = backend.exp(1j * theta)
+    return backend.cast(matrix, dtype=dtypestr)
 
 
 def _swap_matrix_func(d: int) -> Tensor:
@@ -320,13 +323,13 @@ def _swap_matrix_func(d: int) -> Tensor:
     :rtype: Tensor
     """
     D = d * d
-    matrix = np.zeros((D, D), dtype=npdtype)
+    matrix = backend.zeros((D, D), dtype=dtypestr)
     for i in range(d):
         for j in range(d):
             idx_in = i * d + j
             idx_out = j * d + i
             matrix[idx_out, idx_in] = 1.0
-    return matrix
+    return backend.cast(matrix, dtype=dtypestr)
 
 
 def _rzz_matrix_func(
@@ -362,18 +365,18 @@ def _rzz_matrix_func(
         raise ValueError("Selected basis states must be different: (j1,j2) ≠ (k1,k2).")
 
     D = d * d
-    M = np.eye(D, dtype=npdtype)
+    M = backend.eye(D, dtype=dtypestr)
 
     idx_a = j1 * d + j2
     idx_b = k1 * d + k2
 
-    phase_minus = np.exp(-1j * theta / 2.0)
-    phase_plus  = np.exp(+1j * theta / 2.0)
+    phase_minus = backend.exp(-1j * theta / 2.0)
+    phase_plus = backend.exp(+1j * theta / 2.0)
 
     M[idx_a, idx_a] = phase_minus
     M[idx_b, idx_b] = phase_plus
 
-    return M
+    return backend.cast(M, dtype=dtypestr)
 
 
 def _rxx_matrix_func(
@@ -400,22 +403,20 @@ def _rxx_matrix_func(
     :rtype: Tensor
     """
     D = d * d
-    M = np.eye(D, dtype=npdtype)
+    M = backend.eye(D, dtype=dtypestr)
 
-    # flatten basis index: |a,b> ↦ a*d + b
     idx_a = j1 * d + j2
     idx_b = k1 * d + k2
 
-    c = np.cos(theta / 2.0)
-    s = np.sin(theta / 2.0)
+    c = backend.cos(theta / 2.0)
+    s = backend.sin(theta / 2.0)
 
-    # Overwrite the chosen 2x2 block
     M[idx_a, idx_a] = c
     M[idx_b, idx_b] = c
     M[idx_a, idx_b] = -1j * s
     M[idx_b, idx_a] = -1j * s
 
-    return M
+    return backend.cast(M, dtype=dtypestr)
 
 
 def _u8_matrix_func(
@@ -480,7 +481,8 @@ def _u8_matrix_func(
         )
 
     omega = np.exp(2j * np.pi / d) if omega is None else omega
-    return np.diag([omega ** vks[j] for j in range(d)]).astype(npdtype)
+    m = backend.convert_to_tensor(np.diag([omega ** vks[j] for j in range(d)]))
+    return backend.cast(m, dtype=dtypestr)
 
 
 def _cphase_matrix_func(
@@ -512,24 +514,24 @@ def _cphase_matrix_func(
     z_matrix = _z_matrix_func(d=d, omega=omega)
 
     if cv is None:
-        z_pows = [np.eye(d, dtype=npdtype)]
+        z_pows = [backend.eye(d, dtype=dtypestr)]
         for _ in range(1, d):
-            z_pows.append(z_pows[-1] @ z_matrix)
+            z_pows.append(backend.matmul(z_pows[-1], z_matrix))
 
-        matrix = np.zeros((size, size), dtype=npdtype)
+        matrix = backend.zeros((size, size), dtype=dtypestr)
         for a in range(d):
             rs = a * d
             matrix[rs : rs + d, rs : rs + d] = z_pows[a]
-        return matrix
+        return backend.cast(matrix, dtype=dtypestr)
 
     if not (0 <= cv < d):
         raise ValueError(f"cv must be in [0, {d - 1}], got {cv}")
 
-    matrix = np.eye(size, dtype=npdtype)
+    matrix = backend.eye(size, dtype=dtypestr)
     rs = cv * d
     matrix[rs : rs + d, rs : rs + d] = z_matrix
 
-    return matrix
+    return backend.cast(matrix, dtype=dtypestr)
 
 
 def _csum_matrix_func(d: int, cv: Optional[int] = None) -> Tensor:
@@ -556,20 +558,20 @@ def _csum_matrix_func(d: int, cv: Optional[int] = None) -> Tensor:
     x_matrix = _x_matrix_func(d=d)
 
     if cv is None:
-        x_pows = [np.eye(d, dtype=npdtype)]
+        x_pows = [backend.eye(d, dtype=dtypestr)]
         for _ in range(1, d):
-            x_pows.append(x_pows[-1] @ x_matrix)
+            x_pows.append(backend.matmul(x_pows[-1], x_matrix))
 
-        matrix = np.zeros((size, size), dtype=npdtype)
+        matrix = backend.zeros((size, size), dtype=dtypestr)
         for a in range(d):
             rs = a * d
             matrix[rs : rs + d, rs : rs + d] = x_pows[a]
-        return matrix
+        return backend.cast(matrix, dtype=dtypestr)
 
     if not (0 <= cv < d):
         raise ValueError(f"cv must be in [0, {d - 1}], got {cv}")
-    matrix = np.eye(size, dtype=npdtype)
+    matrix = backend.eye(size, dtype=dtypestr)
     rs = cv * d
     matrix[rs : rs + d, rs : rs + d] = x_matrix
 
-    return matrix
+    return backend.cast(matrix, dtype=dtypestr)
