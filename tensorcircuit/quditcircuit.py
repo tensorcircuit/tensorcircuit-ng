@@ -15,7 +15,7 @@ from .utils import arg_alias
 from .basecircuit import BaseCircuit
 from .circuit import Circuit
 from .quantum import QuOperator, QuVector
-from .quditgates import SINGLE_BUILDERS, TWO_BUILDERS, _cached_matrix
+from .quditgates import SINGLE_BUILDERS, TWO_BUILDERS
 
 
 Tensor = Any
@@ -88,7 +88,7 @@ class QuditCircuit:
         Apply a quantum gate (unitary) to one or two qudits in the circuit.
 
         The gate matrix is looked up by name in either ``SINGLE_BUILDERS`` (for single-qudit gates)
-        or ``TWO_BUILDERS`` (for two-qudit gates). The matrix is built (and cached) via ``_cached_matrix``,
+        or ``TWO_BUILDERS`` (for two-qudit gates). The matrix is built by the registered builder,
         then applied to the circuit at the given indices.
 
         :param indices: The qudit indices the gate should act on.
@@ -103,18 +103,16 @@ class QuditCircuit:
         or if the number of indices does not match the gate type (single vs two).
         """
         if len(indices) == 1 and name in SINGLE_BUILDERS:
-            sig, _ = SINGLE_BUILDERS[name]
-            key = tuple(kwargs.get(k) for k in sig if k != "none")
-            mat = _cached_matrix(
-                kind="single", name=name, d=self._d, omega=self._omega, key=key
-            )
+            sig, builder = SINGLE_BUILDERS[name]
+            extras = tuple(kwargs.get(k) for k in sig if k != "none")
+            builder_kwargs = {k: v for k, v in zip(sig, extras)}
+            mat = builder(self._d, self._omega, **builder_kwargs)
             self._circ.unitary(*indices, unitary=mat, name=name, dim=self._d)  # type: ignore
         elif len(indices) == 2 and name in TWO_BUILDERS:
-            sig, _ = TWO_BUILDERS[name]
-            key = tuple(kwargs.get(k) for k in sig if k != "none")
-            mat = _cached_matrix(
-                kind="two", name=name, d=self._d, omega=self._omega, key=key
-            )
+            sig, builder = TWO_BUILDERS[name]
+            extras = tuple(kwargs.get(k) for k in sig if k != "none")
+            builder_kwargs = {k: v for k, v in zip(sig, extras)}
+            mat = builder(self._d, self._omega, **builder_kwargs)
             self._circ.unitary(  # type: ignore
                 *indices, unitary=mat, name=name, dim=self._d
             )

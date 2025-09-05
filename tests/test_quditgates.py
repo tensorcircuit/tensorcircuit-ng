@@ -23,7 +23,6 @@ from tensorcircuit.quditgates import (
     _u8_matrix_func,
     _cphase_matrix_func,
     _csum_matrix_func,
-    _cached_matrix,
     _is_prime,
     SINGLE_BUILDERS,
     TWO_BUILDERS,
@@ -267,56 +266,6 @@ def test_CPHASE_CSUM_cv_range(highp):
         _csum_matrix_func(d, cv=-1)
     with pytest.raises(ValueError):
         _csum_matrix_func(d, cv=d)
-
-
-def test_cached_matrix_identity_and_x(highp):
-    A1 = _cached_matrix("single", "I", d=3, omega=None, key=())
-    A2 = _cached_matrix("single", "I", d=3, omega=None, key=())
-    assert A1 is A2
-
-    X1 = _cached_matrix("single", "RX", d=3, omega=None, key=(0.1, 0, 1))
-    X2 = _cached_matrix("single", "RX", d=3, omega=None, key=(0.2, 0, 1))
-    assert X1 is not X2
-    assert X1.shape == (3, 3) and X2.shape == (3, 3)
-
-
-def test_builders_smoke(highp):
-    d = 3
-    for name, (sig, _) in SINGLE_BUILDERS.items():
-        defaults = {
-            "theta": 0.1,
-            "gamma": 0.1,
-            "z": 0.1,
-            "eps": 0.1,
-            "j": 0,
-            "k": 1,  # ensure j != k when present
-        }
-        key = tuple(defaults.get(s, 0) for s in sig)
-        M = _cached_matrix("single", name, d, None, key)
-        assert M.shape == (d, d)
-
-    for name, (sig, _) in TWO_BUILDERS.items():
-        defaults = {"theta": 0.1, "j1": 0, "k1": 1, "j2": 0, "k2": 1, "cv": None}
-        key = tuple(defaults[s] for s in sig)
-        M = _cached_matrix("two", name, d, None, key)
-        assert M.shape == (d * d, d * d)
-
-
-def test_cached_matrix_np_scalar_and_non_scalar_omega():
-    d = 3
-    if "RX" in SINGLE_BUILDERS:
-        name = "RX"
-        sig, _ = SINGLE_BUILDERS[name]
-        defaults = {"theta": np.float64(0.314159265), "j": 0, "k": 1}
-        key = tuple(defaults.get(s, 0) for s in sig if s != "none")
-        M = _cached_matrix("single", name, d, None, key)
-        assert M.shape == (d, d)
-
-    name = "I" if "I" in SINGLE_BUILDERS else next(iter(SINGLE_BUILDERS.keys()))
-    sig, _ = SINGLE_BUILDERS[name]
-    key = tuple(0 for s in sig if s != "none")
-    M2 = _cached_matrix("single", name, d, np.array([0.5]), key)
-    assert M2.shape == (d, d)
 
 
 def test__is_prime_edge_and_composites():
