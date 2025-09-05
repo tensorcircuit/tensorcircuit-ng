@@ -276,22 +276,30 @@ def _s_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     return backend.diagflat(omega ** ((j * (j + pd)) / 2))
 
 
-def _check_rotation(d: int, j: int, k: int) -> None:
+def _check_rotation_indices(d: int, *indices: int, distinct_pairs: bool = False) -> None:
     """
-    Validate rotation subspace indices for a ``d``-level system.
+    Validate that indices are within [0, d-1] and optionally form distinct pairs.
 
     :param d: Qudit dimension.
     :type d: int
-    :param j: First level index.
-    :type j: int
-    :param k: Second level index.
-    :type k: int
-    :raises ValueError: If indices are out of range or if ``j == k``.
+    :param indices: Indices to validate.
+    :type indices: int
+    :param distinct_pairs: If True, enforce that (indices[0], indices[1])
+                           ≠ (indices[2], indices[3]) for 4 indices.
+    :type distinct_pairs: bool
+    :raises ValueError: If indices are invalid.
     """
-    if not (0 <= j < d) or not (0 <= k < d):
-        raise ValueError(f"Indices j={j}, k={k} must satisfy 0 <= j,k < d (d={d}).")
-    if j == k:
-        raise ValueError("R- rotation requires two distinct levels j != k.")
+    for idx in indices:
+        if not (0 <= idx < d):
+            raise ValueError(f"Index {idx} must satisfy 0 <= index < d (d={d}).")
+
+    if len(indices) == 2 and indices[0] == indices[1]:
+        raise ValueError("Rotation requires two distinct levels: j != k.")
+
+    if distinct_pairs and len(indices) == 4:
+        j1, k1, j2, k2 = indices
+        if j1 == k1 and j2 == k2:
+            raise ValueError("Selected basis states must be different: (j1, j2) ≠ (k1, k2).")
 
 
 def _two_level_projectors(
@@ -342,7 +350,7 @@ def _rx_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     :return: ``(d, d)`` matrix for :math:`RX(\theta)` on the ``j,k`` subspace.
     :rtype: Tensor
     """
-    _check_rotation(d, j, k)
+    _check_rotation_indices(d, j, k)
     I, Pjj, Pkk, Pjk, Pkj = _two_level_projectors(d, j, k)
     theta = num_to_tensor(theta)
     c = backend.cos(theta / 2.0)
@@ -365,7 +373,7 @@ def _ry_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     :return: ``(d, d)`` matrix for :math:`RY(\theta)` on the ``j,k`` subspace.
     :rtype: Tensor
     """
-    _check_rotation(d, j, k)
+    _check_rotation_indices(d, j, k)
     I, Pjj, Pkk, Pjk, Pkj = _two_level_projectors(d, j, k)
     theta = num_to_tensor(theta)
     c = backend.cos(theta / 2.0)
@@ -438,13 +446,7 @@ def _rzz_matrix_func(
     :rtype: Tensor
     :raises ValueError: If indices are out of range or select the same basis state.
     """
-    if not (0 <= j1 < d and 0 <= k1 < d and 0 <= j2 < d and 0 <= k2 < d):
-        raise ValueError("Indices j1, k1, j2, k2 must be in [0, d-1].")
-    if j1 == k1 and j2 == k2:
-        raise ValueError(
-            "Selected basis states must be different: (j1, j2) ≠ (k1, k2)."
-        )
-
+    _check_rotation_indices(d, j1, k1, j2, k2, distinct_pairs=True)
     idx_a = j1 * d + j2
     idx_b = k1 * d + k2
     theta = num_to_tensor(theta)
@@ -482,13 +484,7 @@ def _rxx_matrix_func(
     :return: ``(d*d, d*d)`` matrix representing :math:`RXX(\theta)` on the selected subspace.
     :rtype: Tensor
     """
-    if not (0 <= j1 < d and 0 <= k1 < d and 0 <= j2 < d and 0 <= k2 < d):
-        raise ValueError("Indices j1, k1, j2, k2 must be in [0, d-1].")
-    if j1 == k1 and j2 == k2:
-        raise ValueError(
-            "Selected basis states must be different: (j1, j2) ≠ (k1, k2)."
-        )
-
+    _check_rotation_indices(d, j1, k1, j2, k2, distinct_pairs=True)
     idx_a = j1 * d + j2
     idx_b = k1 * d + k2
     theta = num_to_tensor(theta)
