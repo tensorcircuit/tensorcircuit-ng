@@ -1,16 +1,16 @@
 from functools import lru_cache
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, List, cast
 
 import numpy as np
 
 from .cons import backend, dtypestr
+from .gates import num_to_tensor
 
 Tensor = Any
 
 SINGLE_BUILDERS = {
     "I": (("none",), lambda d, omega, **kw: _i_matrix_func(d)),
     "X": (("none",), lambda d, omega, **kw: _x_matrix_func(d)),
-    # "Y": (("none",), lambda d, omega, **kw: _y_matrix_func(d, omega)),
     "Z": (("none",), lambda d, omega, **kw: _z_matrix_func(d, omega)),
     "H": (("none",), lambda d, omega, **kw: _h_matrix_func(d, omega)),
     "RX": (
@@ -47,6 +47,42 @@ TWO_BUILDERS = {
 
 
 @lru_cache(maxsize=None)
+def _cached_matrix_cached(
+    kind: str,
+    name: str,
+    d: int,
+    omega: Optional[float] = None,
+    key: tuple[Any, ...] = (),
+) -> Tensor:
+    r"""
+    Cached builder for gate matrices.
+
+    This function is decorated with ``functools.lru_cache`` and should not be
+    called directly. It is invoked internally by :func:`_cached_matrix` once
+    the cache key (including backend identity, dtype, and optional parameters)
+    has been normalized.
+
+    :param kind: Builder category, either ``"single"`` or ``"two"``.
+    :type kind: str
+    :param name: Gate name in the chosen builder dictionary.
+    :type name: str
+    :param d: Dimension of the qudit system.
+    :type d: int
+    :param omega: Optional scalar parameter used by certain gates.
+    :type omega: Optional[float or complex]
+    :param key: Normalized cache key including builder parameters and metadata.
+    :type key: tuple
+    :return: Gate matrix constructed by the corresponding builder.
+    :rtype: Tensor
+    """
+    builders = SINGLE_BUILDERS if kind == "single" else TWO_BUILDERS
+    sig, builder = builders[name]
+    extras = () if key is None else key
+    extras_for_kwargs = extras[: len(sig)]
+    kwargs = {k: v for k, v in zip(sig, extras_for_kwargs)}
+    return builder(d, omega, **kwargs)
+
+
 def _cached_matrix(
     kind: str,
     name: str,
@@ -54,36 +90,72 @@ def _cached_matrix(
     omega: Optional[float] = None,
     key: Optional[tuple[Any, ...]] = (),
 ) -> Tensor:
-    """
-    Build and cache a matrix using a registered builder function.
+    r"""
+    Build (and optionally cache) a gate matrix with backend-/dtype-aware keys.
 
-    Looks up a builder in ``SINGLE_BUILDERS`` (for single–qudit gates) or
-    ``TWO_BUILDERS`` (for two–qudit gates) according to ``kind``, constructs the
-    matrix, and caches the result via ``functools.lru_cache``.
+    If ``key`` and ``omega`` can be normalized into hashable Python/NumPy scalars,
+    the result is cached using a key augmented with backend identity, dtype string,
+    and normalized ``omega``. Otherwise, caching is bypassed.
 
-    :param kind: Either ``"single"`` (use ``SINGLE_BUILDERS``) or ``"two"`` (use ``TWO_BUILDERS``).
+    :param kind: Builder category, either ``"single"`` or ``"two"``.
     :type kind: str
-    :param name: Builder name to look up in the chosen dictionary.
+    :param name: Gate name in the chosen builder dictionary.
     :type name: str
-    :param d: Dimension of the (sub)system.
+    :param d: Dimension of the qudit system.
     :type d: int
-    :param omega: Optional frequency/scaling parameter passed to the builder.
-    :type omega: Optional[float]
-    :param key: Tuple of extra parameters matched positionally to the builder's signature.
-    :type key: Optional[tuple[Any, ...]]
-    :return: Matrix built by the selected builder.
+    :param omega: Optional scalar parameter used by certain gates.
+    :type omega: Optional[float or complex]
+    :param key: Extra parameters matched positionally to the builder’s signature.
+    :type key: tuple
+    :return: Gate matrix constructed by the corresponding builder.
     :rtype: Tensor
-    :raises KeyError: If the builder ``name`` is not found.
-    :raises TypeError: If ``key`` does not match the builder’s expected parameters.
-    :raises ValueError: If ``key`` does not match the builder’s expected parameters.
     """
-    builders = SINGLE_BUILDERS if kind == "single" else TWO_BUILDERS
-    try:
-        sig, builder = builders[name]
-    except KeyError as e:
-        raise KeyError(f"Unknown builder '{name}' for kind '{kind}'") from e
+    # Normalize `key` to a hashable tuple of Python scalars; else disable caching.
+    norm_key: Optional[Tuple[Any, ...]]
+    if key is None:
+        norm_key = cast(Tuple[Any, ...], ())
+    else:
+        norm_list: List[Any] = []
+        for v in key:
+            if isinstance(v, (int, float, complex, str, bool, type(None))):
+                norm_list.append(v)
+            elif isinstance(v, np.generic):
+                norm_list.append(v.item())
+            else:
+                norm_key = None
+                break
+        else:
+            norm_key = tuple(norm_list)
 
-    extras: Tuple[Any, ...] = () if key is None else key  # normalized & typed
+    # Normalize omega to a scalar tag for the cache key; else disable caching.
+    omega_tag = None
+    if norm_key is not None:
+        if isinstance(omega, (int, float, complex, type(None))):
+            omega_tag = omega
+        elif isinstance(omega, np.generic):
+            omega_tag = omega.item()
+        else:
+            norm_key = None  # non-scalar omega → no caching
+
+    # Cached path
+    if norm_key is not None:
+        backend_id = getattr(backend, "name", None)
+        if backend_id is None:
+            backend_id = f"{backend.__class__.__module__}.{backend.__class__.__name__}"
+        augmented_key = norm_key + (
+            "__backend__",
+            backend_id,
+            "__dtype__",
+            dtypestr,
+            "__omega__",
+            omega_tag,
+        )
+        return _cached_matrix_cached(kind, name, d, omega, augmented_key)
+
+    # Non-cached fallback
+    builders = SINGLE_BUILDERS if kind == "single" else TWO_BUILDERS
+    sig, builder = builders[name]
+    extras = () if key is None else key
     kwargs = {k: v for k, v in zip(sig, extras)}
     return builder(d, omega, **kwargs)
 
@@ -134,10 +206,11 @@ def _x_matrix_func(d: int) -> Tensor:
     :return: ``(d, d)`` matrix for :math:`X_d`.
     :rtype: Tensor
     """
-    matrix = backend.zeros((d, d), dtype=dtypestr)
-    for j in range(d):
-        matrix[(j + 1) % d, j] = 1.0
-    return backend.cast(matrix, dtype=dtypestr)
+    I = backend.eye(d, dtype=dtypestr)
+    X = backend.zeros((d, d), dtype=dtypestr)
+    for t in range(d):
+        X += backend.outer_product(I[:, (t + 1) % d], I[:, t])
+    return X
 
 
 def _z_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
@@ -153,25 +226,11 @@ def _z_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     :return: ``(d, d)`` matrix for :math:`Z_d`.
     :rtype: Tensor
     """
-    omega = np.exp(2j * np.pi / d) if omega is None else omega
-    m = backend.convert_to_tensor(np.diag([omega**j for j in range(d)]))
-    return backend.cast(m, dtype=dtypestr)
-
-
-# def _y_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
-#     r"""
-#     Generalized Pauli-Y (Y) gate for qudits.
-#
-#     Defined (up to a global phase) via :math:`Y \propto Z\,X`.
-#
-#     :param d: Qudit dimension.
-#     :type d: int
-#     :param omega: Optional primitive ``d``-th root of unity used by ``Z``.
-#     :type omega: Optional[float]
-#     :return: ``(d, d)`` matrix for :math:`Y`.
-#     :rtype: Tensor
-#     """
-#     return np.matmul(_z_matrix_func(d, omega=omega), _x_matrix_func(d)) / 1j
+    omega = num_to_tensor(
+        np.exp(2j * np.pi / d) if omega is None else omega, dtype=dtypestr
+    )
+    j = backend.cast(backend.arange(d), dtype=dtypestr)
+    return backend.diagflat(backend.power(omega, j))
 
 
 def _h_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
@@ -187,13 +246,13 @@ def _h_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     :return: ``(d, d)`` matrix for :math:`H_d`.
     :rtype: Tensor
     """
-    omega = np.exp(2j * np.pi / d) if omega is None else omega
-    matrix = backend.zeros((d, d), dtype=dtypestr)
-    inv_sqrt_d = 1.0 / np.sqrt(d)
-    for j in range(d):
-        for k in range(d):
-            matrix[k, j] = (omega ** (j * k)) * inv_sqrt_d
-    return backend.cast(matrix, dtype=dtypestr)
+    omega = num_to_tensor(
+        np.exp(2j * np.pi / d) if omega is None else omega, dtype=dtypestr
+    )
+    j, k = backend.cast(backend.arange(d), dtype=dtypestr), backend.cast(
+        backend.arange(d), dtype=dtypestr
+    )
+    return omega ** backend.outer_product(k, j) / backend.sqrt(num_to_tensor(d))
 
 
 def _s_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
@@ -209,13 +268,12 @@ def _s_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     :return: ``(d, d)`` diagonal matrix for :math:`S_d`.
     :rtype: Tensor
     """
-    omega = np.exp(2j * np.pi / d) if omega is None else omega
-    _pd = 0 if d % 2 == 0 else 1
-    matrix = backend.zeros((d, d), dtype=dtypestr)
-    for j in range(d):
-        phase_exp = (j * (j + _pd)) / 2
-        matrix[j, j] = omega**phase_exp
-    return backend.cast(matrix, dtype=dtypestr)
+    omega = num_to_tensor(
+        np.exp(2j * np.pi / d) if omega is None else omega, dtype=dtypestr
+    )
+    j = backend.arange(d)
+    pd = 0 if d % 2 == 0 else 1
+    return backend.diagflat(omega ** ((j * (j + pd)) / 2))
 
 
 def _check_rotation(d: int, j: int, k: int) -> None:
@@ -236,6 +294,22 @@ def _check_rotation(d: int, j: int, k: int) -> None:
         raise ValueError("R- rotation requires two distinct levels j != k.")
 
 
+@lru_cache(maxsize=None)
+def _basis_single(d: int, j: int, k: Optional[int] = None) -> Tuple[Tensor, ...]:
+    I = backend.eye(d, dtype=dtypestr)
+    ej = I[:, j]
+    Pjj = backend.outer_product(ej, ej)
+
+    if k is None:
+        return I, Pjj
+
+    ek = I[:, k]
+    Pkk = backend.outer_product(ek, ek)
+    Pjk = backend.outer_product(ej, ek)
+    Pkj = backend.outer_product(ek, ej)
+    return I, Pjj, Pkk, Pjk, Pkj
+
+
 def _rx_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     r"""
     Rotation-X (``RX``) gate on a selected two-level subspace of a qudit.
@@ -254,14 +328,11 @@ def _rx_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     :rtype: Tensor
     """
     _check_rotation(d, j, k)
-    matrix = backend.eye(d, dtype=dtypestr)
+    I, Pjj, Pkk, Pjk, Pkj = _basis_single(d, j, k)
+    theta = num_to_tensor(theta)
     c = backend.cos(theta / 2.0)
     s = backend.sin(theta / 2.0)
-    matrix[j, j] = c
-    matrix[k, k] = c
-    matrix[j, k] = -1j * s
-    matrix[k, j] = -1j * s
-    return backend.cast(matrix, dtype=dtypestr)
+    return I + (c - 1.0) * (Pjj + Pkk) + (-1j * s) * (Pjk + Pkj)
 
 
 def _ry_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
@@ -280,14 +351,11 @@ def _ry_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     :rtype: Tensor
     """
     _check_rotation(d, j, k)
-    matrix = backend.eye(d, dtype=dtypestr)
+    I, Pjj, Pkk, Pjk, Pkj = _basis_single(d, j, k)
+    theta = num_to_tensor(theta)
     c = backend.cos(theta / 2.0)
     s = backend.sin(theta / 2.0)
-    matrix[j, j] = c
-    matrix[k, k] = c
-    matrix[j, k] = -s
-    matrix[k, j] = s
-    return backend.cast(matrix, dtype=dtypestr)
+    return I + (c - 1.0) * (Pjj + Pkk) - s * Pjk + s * Pkj
 
 
 def _rz_matrix_func(d: int, theta: float, j: int = 0) -> Tensor:
@@ -306,9 +374,10 @@ def _rz_matrix_func(d: int, theta: float, j: int = 0) -> Tensor:
     :return: ``(d, d)`` diagonal matrix implementing :math:`RZ(\theta)` on level ``j``.
     :rtype: Tensor
     """
-    matrix = backend.eye(d, dtype=dtypestr)
-    matrix[j, j] = backend.exp(1j * theta)
-    return backend.cast(matrix, dtype=dtypestr)
+    I, Pjj = _basis_single(d, j, k=None)
+    theta = num_to_tensor(theta)
+    phase = backend.exp(1j * theta)
+    return I + (phase - 1.0) * Pjj
 
 
 def _swap_matrix_func(d: int) -> Tensor:
@@ -323,25 +392,20 @@ def _swap_matrix_func(d: int) -> Tensor:
     :rtype: Tensor
     """
     D = d * d
-    matrix = backend.zeros((D, D), dtype=dtypestr)
-    for i in range(d):
-        for j in range(d):
-            idx_in = i * d + j
-            idx_out = j * d + i
-            matrix[idx_out, idx_in] = 1.0
-    return backend.cast(matrix, dtype=dtypestr)
+    I = backend.eye(D, dtype=dtypestr)
+    return I.reshape(d, d, d, d).transpose(1, 0, 2, 3).reshape(D, D)
 
 
 def _rzz_matrix_func(
     d: int, theta: float, j1: int = 0, k1: int = 1, j2: int = 0, k2: int = 1
 ) -> Tensor:
     r"""
-    Two-qudit ``RZZ(θ)`` on a selected two-state subspace.
+    Two-qudit ``RZZ(\theta)`` on a selected two-state subspace.
 
-    Acts like a qubit :math:`RZZ(θ)=\exp(-i\,\tfrac{θ}{2}\,\sigma_z)` on the
+    Acts like a qubit :math:`RZZ(\theta)=\exp(-i\,\tfrac{\theta}{2}\,\sigma_z)` on the
     two-dimensional subspace spanned by ``|j1, j2⟩`` and ``|k1, k2⟩``,
     and as identity elsewhere. The resulting block is diagonal with phases
-    :math:`\mathrm{diag}(e^{-iθ/2},\, e^{+iθ/2})`.
+    :math:`\mathrm{diag}(e^{-i\theta/2},\, e^{+i\theta/2})`.
 
     :param d: Dimension of each qudit (assumed equal).
     :type d: int
@@ -355,28 +419,29 @@ def _rzz_matrix_func(
     :type j2: int
     :param k2: Level on qudit-2 for the second basis state.
     :type k2: int
-    :return: ``(d*d, d*d)`` matrix representing subspace :math:`RZZ(θ)`.
+    :return: ``(d*d, d*d)`` matrix representing subspace :math:`RZZ(\theta)`.
     :rtype: Tensor
     :raises ValueError: If indices are out of range or select the same basis state.
     """
     if not (0 <= j1 < d and 0 <= k1 < d and 0 <= j2 < d and 0 <= k2 < d):
-        raise ValueError("Indices j1,k1,j2,k2 must be in [0, d-1].")
+        raise ValueError("Indices j1, k1, j2, k2 must be in [0, d-1].")
     if j1 == k1 and j2 == k2:
-        raise ValueError("Selected basis states must be different: (j1,j2) ≠ (k1,k2).")
-
-    D = d * d
-    M = backend.eye(D, dtype=dtypestr)
+        raise ValueError(
+            "Selected basis states must be different: (j1, j2) ≠ (k1, k2)."
+        )
 
     idx_a = j1 * d + j2
     idx_b = k1 * d + k2
-
+    theta = num_to_tensor(theta)
     phase_minus = backend.exp(-1j * theta / 2.0)
     phase_plus = backend.exp(+1j * theta / 2.0)
 
-    M[idx_a, idx_a] = phase_minus
-    M[idx_b, idx_b] = phase_plus
-
-    return backend.cast(M, dtype=dtypestr)
+    I = backend.eye(d * d, dtype=dtypestr)
+    ea = I[:, idx_a]
+    eb = I[:, idx_b]
+    Paa = backend.outer_product(ea, ea)
+    Pbb = backend.outer_product(eb, eb)
+    return I + (phase_minus - 1.0) * Paa + (phase_plus - 1.0) * Pbb
 
 
 def _rxx_matrix_func(
@@ -402,21 +467,27 @@ def _rxx_matrix_func(
     :return: ``(d*d, d*d)`` matrix representing :math:`RXX(\theta)` on the selected subspace.
     :rtype: Tensor
     """
-    D = d * d
-    M = backend.eye(D, dtype=dtypestr)
+    if not (0 <= j1 < d and 0 <= k1 < d and 0 <= j2 < d and 0 <= k2 < d):
+        raise ValueError("Indices j1, k1, j2, k2 must be in [0, d-1].")
+    if j1 == k1 and j2 == k2:
+        raise ValueError(
+            "Selected basis states must be different: (j1, j2) ≠ (k1, k2)."
+        )
 
     idx_a = j1 * d + j2
     idx_b = k1 * d + k2
-
+    theta = num_to_tensor(theta)
     c = backend.cos(theta / 2.0)
     s = backend.sin(theta / 2.0)
 
-    M[idx_a, idx_a] = c
-    M[idx_b, idx_b] = c
-    M[idx_a, idx_b] = -1j * s
-    M[idx_b, idx_a] = -1j * s
-
-    return backend.cast(M, dtype=dtypestr)
+    I = backend.eye(d * d, dtype=dtypestr)
+    ea = I[:, idx_a]
+    eb = I[:, idx_b]
+    Paa = backend.outer_product(ea, ea)
+    Pbb = backend.outer_product(eb, eb)
+    Pab = backend.outer_product(ea, eb)
+    Pba = backend.outer_product(eb, ea)
+    return I + (c - 1.0) * (Paa + Pbb) + (-1j * s) * (Pab + Pba)
 
 
 def _u8_matrix_func(
@@ -480,9 +551,11 @@ def _u8_matrix_func(
             f"Sum of v_k's is not 0 mod {d}. Got {sum(vks) % d}. Check parameters."
         )
 
-    omega = np.exp(2j * np.pi / d) if omega is None else omega
-    m = backend.convert_to_tensor(np.diag([omega ** vks[j] for j in range(d)]))
-    return backend.cast(m, dtype=dtypestr)
+    omega = num_to_tensor(
+        np.exp(2j * np.pi / d) if omega is None else omega, dtype=dtypestr
+    )
+    vks_arr = backend.cast(backend.convert_to_tensor(np.array(vks)), dtype=dtypestr)
+    return backend.diagflat(backend.power(omega, vks_arr))
 
 
 def _cphase_matrix_func(
@@ -509,29 +582,28 @@ def _cphase_matrix_func(
     :rtype: Tensor
     :raises ValueError: If ``cv`` is provided and is outside ``[0, d-1]``.
     """
-    omega = np.exp(2j * np.pi / d) if omega is None else omega
-    size = d**2
-    z_matrix = _z_matrix_func(d=d, omega=omega)
+    omega = num_to_tensor(
+        np.exp(2j * np.pi / d) if omega is None else omega, dtype=dtypestr
+    )
+    j = backend.arange(d)
+    I = backend.eye(d, dtype=dtypestr)
 
     if cv is None:
-        z_pows = [backend.eye(d, dtype=dtypestr)]
-        for _ in range(1, d):
-            z_pows.append(backend.matmul(z_pows[-1], z_matrix))
-
-        matrix = backend.zeros((size, size), dtype=dtypestr)
+        m = backend.zeros((d * d, d * d), dtype=dtypestr)
         for a in range(d):
-            rs = a * d
-            matrix[rs : rs + d, rs : rs + d] = z_pows[a]
-        return backend.cast(matrix, dtype=dtypestr)
+            Pa = backend.outer_product(I[:, a], I[:, a])
+            Z_a = backend.diagflat(omega ** (a * j))
+            m += backend.kron(Pa, Z_a)
+        return m
 
     if not (0 <= cv < d):
         raise ValueError(f"cv must be in [0, {d - 1}], got {cv}")
 
-    matrix = backend.eye(size, dtype=dtypestr)
-    rs = cv * d
-    matrix[rs : rs + d, rs : rs + d] = z_matrix
-
-    return backend.cast(matrix, dtype=dtypestr)
+    Z = backend.diagflat(omega**j)
+    m = backend.kron(I, I) + backend.kron(
+        backend.outer_product(I[:, cv], I[:, cv]), (Z - I)
+    )
+    return m
 
 
 def _csum_matrix_func(d: int, cv: Optional[int] = None) -> Tensor:
@@ -554,24 +626,25 @@ def _csum_matrix_func(d: int, cv: Optional[int] = None) -> Tensor:
     :rtype: Tensor
     :raises ValueError: If ``cv`` is provided and is outside ``[0, d-1]``.
     """
-    size = d**2
-    x_matrix = _x_matrix_func(d=d)
+    I = backend.eye(d, dtype=dtypestr)
 
     if cv is None:
-        x_pows = [backend.eye(d, dtype=dtypestr)]
-        for _ in range(1, d):
-            x_pows.append(backend.matmul(x_pows[-1], x_matrix))
-
-        matrix = backend.zeros((size, size), dtype=dtypestr)
+        m = backend.zeros((d * d, d * d), dtype=dtypestr)
         for a in range(d):
-            rs = a * d
-            matrix[rs : rs + d, rs : rs + d] = x_pows[a]
-        return backend.cast(matrix, dtype=dtypestr)
+            Pa = backend.outer_product(I[:, a], I[:, a])
+            Xa = backend.zeros((d, d), dtype=dtypestr)
+            for t in range(d):
+                Xa += backend.outer_product(I[:, (t + a) % d], I[:, t])
+            m += backend.kron(Pa, Xa)
+        return m
 
     if not (0 <= cv < d):
         raise ValueError(f"cv must be in [0, {d - 1}], got {cv}")
-    matrix = backend.eye(size, dtype=dtypestr)
-    rs = cv * d
-    matrix[rs : rs + d, rs : rs + d] = x_matrix
 
-    return backend.cast(matrix, dtype=dtypestr)
+    X = backend.zeros((d, d), dtype=dtypestr)
+    for t in range(d):
+        X += backend.outer_product(I[:, (t + 1) % d], I[:, t])
+
+    return backend.kron(I, I) + backend.kron(
+        backend.outer_product(I[:, cv], I[:, cv]), (X - I)
+    )
