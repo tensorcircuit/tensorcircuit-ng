@@ -45,7 +45,6 @@ TWO_BUILDERS = {
 }
 
 
-
 def _is_prime(n: int) -> bool:
     """
     Check whether a number is prime.
@@ -92,11 +91,8 @@ def _x_matrix_func(d: int) -> Tensor:
     :return: ``(d, d)`` matrix for :math:`X_d`.
     :rtype: Tensor
     """
-    I = backend.eye(d, dtype=dtypestr)
-    X = backend.zeros((d, d), dtype=dtypestr)
-    for t in range(d):
-        X += backend.outer_product(I[:, (t + 1) % d], I[:, t])
-    return X
+    m = np.roll(np.eye(d), shift=1, axis=0)
+    return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
 def _z_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
@@ -112,11 +108,9 @@ def _z_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     :return: ``(d, d)`` matrix for :math:`Z_d`.
     :rtype: Tensor
     """
-    omega = num_to_tensor(
-        np.exp(2j * np.pi / d) if omega is None else omega, dtype=dtypestr
-    )
-    j = backend.cast(backend.arange(d), dtype=dtypestr)
-    return backend.diagflat(backend.power(omega, j))
+    omega = np.exp(2j * np.pi / d) if omega is None else omega
+    m = np.diag(omega ** np.arange(d))
+    return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
 def _h_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
@@ -132,13 +126,10 @@ def _h_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     :return: ``(d, d)`` matrix for :math:`H_d`.
     :rtype: Tensor
     """
-    omega = num_to_tensor(
-        np.exp(2j * np.pi / d) if omega is None else omega, dtype=dtypestr
-    )
-    j, k = backend.cast(backend.arange(d), dtype=dtypestr), backend.cast(
-        backend.arange(d), dtype=dtypestr
-    )
-    return omega ** backend.outer_product(k, j) / backend.sqrt(num_to_tensor(d))
+    omega = np.exp(2j * np.pi / d) if omega is None else omega
+    j, k = np.arange(d), np.arange(d)
+    m = omega ** np.outer(j, k) / np.sqrt(d)
+    return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
 def _s_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
@@ -154,15 +145,17 @@ def _s_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     :return: ``(d, d)`` diagonal matrix for :math:`S_d`.
     :rtype: Tensor
     """
-    omega = num_to_tensor(
-        np.exp(2j * np.pi / d) if omega is None else omega, dtype=dtypestr
-    )
-    j = backend.arange(d)
+    omega = np.exp(2j * np.pi / d) if omega is None else omega
     pd = 0 if d % 2 == 0 else 1
-    return backend.diagflat(omega ** ((j * (j + pd)) / 2))
+
+    j = np.arange(d)
+    m = np.diag(omega ** ((j * (j + pd)) / 2))
+    return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
-def _check_rotation_indices(d: int, *indices: int, distinct_pairs: bool = False) -> None:
+def _check_rotation_indices(
+    d: int, *indices: int, distinct_pairs: bool = False
+) -> None:
     """
     Validate that indices are within [0, d-1] and optionally form distinct pairs.
 
@@ -185,7 +178,9 @@ def _check_rotation_indices(d: int, *indices: int, distinct_pairs: bool = False)
     if distinct_pairs and len(indices) == 4:
         j1, k1, j2, k2 = indices
         if j1 == k1 and j2 == k2:
-            raise ValueError("Selected basis states must be different: (j1, j2) ≠ (k1, k2).")
+            raise ValueError(
+                "Selected basis states must be different: (j1, j2) ≠ (k1, k2)."
+            )
 
 
 def _two_level_projectors(
@@ -448,11 +443,9 @@ def _u8_matrix_func(
             f"Sum of v_k's is not 0 mod {d}. Got {sum(vks) % d}. Check parameters."
         )
 
-    omega = num_to_tensor(
-        np.exp(2j * np.pi / d) if omega is None else omega, dtype=dtypestr
-    )
-    vks_arr = backend.cast(backend.convert_to_tensor(np.array(vks)), dtype=dtypestr)
-    return backend.diagflat(backend.power(omega, vks_arr))
+    omega = np.exp(2j * np.pi / d) if omega is None else omega
+    m = np.diag([omega ** vks[j] for j in range(d)])
+    return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
 def _cphase_matrix_func(
@@ -479,28 +472,20 @@ def _cphase_matrix_func(
     :rtype: Tensor
     :raises ValueError: If ``cv`` is provided and is outside ``[0, d-1]``.
     """
-    omega = num_to_tensor(
-        np.exp(2j * np.pi / d) if omega is None else omega, dtype=dtypestr
-    )
-    j = backend.arange(d)
-    I = backend.eye(d, dtype=dtypestr)
+    omega = np.exp(2j * np.pi / d) if omega is None else omega
+    r = np.arange(d).reshape(-1, 1)
+    s = np.arange(d).reshape(1, -1)
 
     if cv is None:
-        m = backend.zeros((d * d, d * d), dtype=dtypestr)
-        for a in range(d):
-            Pa = backend.outer_product(I[:, a], I[:, a])
-            Z_a = backend.diagflat(omega ** (a * j))
-            m += backend.kron(Pa, Z_a)
-        return m
+        phase = omega ** (r * s)
+    else:
+        if not (0 <= cv < d):
+            raise ValueError(f"cv must be in [0, {d - 1}], got {cv}")
+        phase = 1 + (r == cv) * (omega**s - 1)
 
-    if not (0 <= cv < d):
-        raise ValueError(f"cv must be in [0, {d - 1}], got {cv}")
-
-    Z = backend.diagflat(omega**j)
-    m = backend.kron(I, I) + backend.kron(
-        backend.outer_product(I[:, cv], I[:, cv]), (Z - I)
-    )
-    return m
+    diag = np.ravel(phase)
+    m = np.diag(diag)
+    return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
 def _csum_matrix_func(d: int, cv: Optional[int] = None) -> Tensor:
@@ -523,25 +508,21 @@ def _csum_matrix_func(d: int, cv: Optional[int] = None) -> Tensor:
     :rtype: Tensor
     :raises ValueError: If ``cv`` is provided and is outside ``[0, d-1]``.
     """
-    I = backend.eye(d, dtype=dtypestr)
+    I = np.eye(d)
 
     if cv is None:
-        m = backend.zeros((d * d, d * d), dtype=dtypestr)
-        for a in range(d):
-            Pa = backend.outer_product(I[:, a], I[:, a])
-            Xa = backend.zeros((d, d), dtype=dtypestr)
-            for t in range(d):
-                Xa += backend.outer_product(I[:, (t + a) % d], I[:, t])
-            m += backend.kron(Pa, Xa)
-        return m
+        blocks = [np.roll(I, shift=r, axis=0) for r in range(d)]
+        m = np.block(
+            [
+                [blocks[r] if r == c else np.zeros((d, d)) for c in range(d)]
+                for r in range(d)
+            ]
+        )
+        return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
     if not (0 <= cv < d):
         raise ValueError(f"cv must be in [0, {d - 1}], got {cv}")
 
-    X = backend.zeros((d, d), dtype=dtypestr)
-    for t in range(d):
-        X += backend.outer_product(I[:, (t + 1) % d], I[:, t])
-
-    return backend.kron(I, I) + backend.kron(
-        backend.outer_product(I[:, cv], I[:, cv]), (X - I)
-    )
+    X = np.roll(I, shift=1, axis=0)
+    m = np.kron(I, I) + np.kron(np.outer(I[:, cv], I[:, cv]), (X - I))
+    return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
