@@ -348,6 +348,84 @@ def test_quditcircuit_set_dim_validation():
         tc.QuditCircuit(1, 2.5)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_qudit_minimal_ad_qudit(backend):
+    """Minimal AD test on a single-qudit (d=3) circuit.
+    We differentiate the expectation ⟨Z⟩ w.r.t. a single RY parameter and
+    compare to a finite-difference estimate.
+    """
+
+    dim = 3
+
+    def energy(theta):
+        c = tc.QuditCircuit(1, dim)
+        # rotate on the (0,1) subspace so that the observable is sensitive to theta
+        c.ry(0, theta=theta, j=0, k=1)
+        # measure Z on site 0 (qudit Z for d=3)
+        E = c.expectation((tc.quditgates._z_matrix_func(dim), [0]))
+        return tc.backend.real(E)
+
+    # backend autodiff gradient
+    grad_energy = tc.backend.grad(energy)
+
+    theta0 = tc.num_to_tensor(0.37)
+    g = grad_energy(theta0)
+
+    # finite-difference check
+    eps = 1e-3
+    num = (energy(theta0 + eps) - energy(theta0 - eps)) / (2 * eps)
+
+    np.testing.assert_allclose(
+        tc.backend.numpy(g), tc.backend.numpy(num), rtol=1e-2, atol=1e-3
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_qudit_minimal_jit_qudit(backend):
+    """Minimal JIT test: jit-compiled energy matches eager energy."""
+
+    dim = 3
+
+    def energy(theta):
+        c = tc.QuditCircuit(1, dim)
+        c.ry(0, theta=theta, j=0, k=1)
+        E = c.expectation((tc.quditgates._z_matrix_func(dim), [0]))
+        return tc.backend.real(E)
+
+    jit_energy = tc.backend.jit(energy)
+
+    theta0 = tc.num_to_tensor(-0.91)
+    e_eager = energy(theta0)
+    e_jit = jit_energy(theta0)
+
+    np.testing.assert_allclose(
+        tc.backend.numpy(e_jit), tc.backend.numpy(e_eager), rtol=1e-6, atol=1e-6
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_qudit_minimal_vmap_qudit(backend):
+    """Minimal VMAP test: vectorized energies equal per-element eager results."""
+
+    dim = 3
+
+    def energy(theta):
+        c = tc.QuditCircuit(1, dim)
+        c.ry(0, theta=theta, j=0, k=1)
+        E = c.expectation((tc.quditgates._z_matrix_func(dim), [0]))
+        return tc.backend.real(E)
+
+    venergy = tc.backend.vmap(energy)
+
+    thetas = tc.array_to_tensor(np.linspace(-1.0, 1.0, 7))
+    vvals = venergy(thetas)
+    eager_vals = np.array([energy(t) for t in thetas])
+
+    np.testing.assert_allclose(
+        tc.backend.numpy(vvals), eager_vals, rtol=1e-6, atol=1e-6
+    )
+
+
 def test_quditcircuit_single_and_two_qudit_paths_and_wrappers():
     c = tc.QuditCircuit(2, 3)
     c.x(0)
