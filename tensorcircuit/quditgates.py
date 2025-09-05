@@ -95,7 +95,7 @@ def _x_matrix_func(d: int) -> Tensor:
     return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
-def _z_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
+def _z_matrix_func(d: int, omega: Optional[complex] = None) -> Tensor:
     r"""
     Generalized Pauli-Z on a ``d``-level system.
 
@@ -104,7 +104,7 @@ def _z_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     :param d: Qudit dimension.
     :type d: int
     :param omega: Optional primitive ``d``-th root of unity. Defaults to :math:`e^{2\pi i/d}`.
-    :type omega: Optional[float]
+    :type omega: Optional[complex]
     :return: ``(d, d)`` matrix for :math:`Z_d`.
     :rtype: Tensor
     """
@@ -113,7 +113,7 @@ def _z_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
-def _h_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
+def _h_matrix_func(d: int, omega: Optional[complex] = None) -> Tensor:
     r"""
     Discrete Fourier transform (Hadamard-like) on ``d`` levels.
 
@@ -122,7 +122,7 @@ def _h_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     :param d: Qudit dimension.
     :type d: int
     :param omega: Optional primitive ``d``-th root of unity. Defaults to :math:`e^{2\pi i/d}`.
-    :type omega: Optional[float]
+    :type omega: Optional[complex]
     :return: ``(d, d)`` matrix for :math:`H_d`.
     :rtype: Tensor
     """
@@ -132,7 +132,7 @@ def _h_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
-def _s_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
+def _s_matrix_func(d: int, omega: Optional[complex] = None) -> Tensor:
     r"""
     Diagonal phase gate ``S_d`` on ``d`` levels.
 
@@ -141,7 +141,7 @@ def _s_matrix_func(d: int, omega: Optional[float] = None) -> Tensor:
     :param d: Qudit dimension.
     :type d: int
     :param omega: Optional primitive ``d``-th root of unity. Defaults to :math:`e^{2\pi i/d}`.
-    :type omega: Optional[float]
+    :type omega: Optional[complex]
     :return: ``(d, d)`` diagonal matrix for :math:`S_d`.
     :rtype: Tensor
     """
@@ -385,59 +385,88 @@ def _rxx_matrix_func(
 
 def _u8_matrix_func(
     d: int,
-    gamma: float = 2.0,
-    z: float = 1.0,
-    eps: float = 0.0,
-    omega: Optional[float] = None,
+    gamma: int = 2,
+    z: int = 1,
+    eps: int = 0,
+    omega: Optional[complex] = None,
 ) -> Tensor:
     r"""
     ``U8`` diagonal single-qudit gate for prime dimensions.
 
-    This gate represents a canonical nontrivial diagonal Clifford element
-    in prime-dimensional qudit systems. Together with generalized Pauli
-    operators, it generates the full single-qudit Clifford group. In the
-    qubit case (``d=2``), it reduces to the well-known π/8 gate. For higher
-    prime dimensions, the phases are defined through modular polynomials
-    depending on :math:`\gamma, z, \epsilon`. Its explicit inclusion ensures
-    coverage of the complete Clifford generating set across prime qudit
-    dimensions.
+    See ref: Howard, Mark, and Jiri Vala.
+    "Qudit versions of the qubit π/8 gate." Physical Review A 86, no. 2 (2012): 022316.
+    https://doi.org/10.1103/PhysRevA.86.022316
+
+    This gate is the qudit analogue of the qubit :math:`\pi/8` gate, defined in
+    *Howard & Campbell, Phys. Rev. A 86, 022316 (2012)*. It is diagonal in the
+    computational basis with exponents determined by modular polynomials in the
+    parameters :math:`\gamma, z, \epsilon`. These gates, together with Pauli and
+    Clifford operations, generate the full single-qudit Clifford hierarchy.
+
+    - For :math:`d=2`, this reduces (up to global phase) to the standard qubit
+      :math:`\pi/8` gate.
+    - For :math:`d=3`, the exponents live in :math:`\mathbb{Z}_9` and the
+      primitive ninth root :math:`\zeta = e^{2\pi i/9}` is used.
+    - For prime :math:`d>3`, the construction uses the modular inverse of 12 in
+      :math:`\mathbb{Z}_d`.
 
     :param d: Qudit dimension (must be prime).
     :type d: int
-    :param gamma: Gate parameter (must be non-zero).
-    :type gamma: float
-    :param z: Gate parameter.
-    :type z: float
-    :param eps: Gate parameter.
-    :type eps: float
-    :param omega: Optional primitive :math:`d`-th root of unity. Defaults to :math:`e^{2\pi i/d}`.
-    :type omega: Optional[float]
+    :param gamma: Shear parameter :math:`\gamma' \in \mathbb{Z}_d`.
+        If ``gamma = 0``, the gate is a diagonal Clifford.
+        If ``gamma ≠ 0``, the gate is a genuine non-Clifford (analogue of :math:`\pi/8`).
+    :type gamma: int
+    :param z: Displacement parameter :math:`z' \in \mathbb{Z}_d`,
+        which sets the symplectic part of the associated Clifford.
+    :type z: int
+    :param eps: Phase offset parameter :math:`\epsilon' \in \mathbb{Z}_d`.
+        It only contributes a global phase factor :math:`\omega^{\epsilon'}`.
+    :type eps: int
+    :param omega: Optional primitive :math:`d`-th root of unity (complex).
+        Defaults to :math:`e^{2\pi i/d}` for d>3, and :math:`e^{2\pi i/9}` for d=3.
+    :type omega: Optional[complex]
     :return: ``(d, d)`` diagonal matrix of dtype ``npdtype``.
     :rtype: Tensor
-    :raises ValueError: If ``d`` is not prime; if ``gamma==0``; if 12 has no modular
-        inverse mod ``d``; or if the computed exponents do not sum to 0 mod ``d``.
+    :raises ValueError: If ``d`` is not prime; if 12 has no modular inverse
+        mod ``d`` (for ``d>3``); or if the computed exponents do not sum to
+        0 mod ``d`` (or 0 mod 3 for ``d=3``).
     """
     if not _is_prime(d):
         raise ValueError(
             f"Dimension d={d} is not prime, U8 gate requires a prime dimension."
         )
-    if gamma == 0.0:
-        raise ValueError("gamma must be non-zero")
 
-    vks = [0] * d
+    omega = np.exp(2j * np.pi / d) if omega is None else omega
+
+    gamma = int(gamma) % d
+    z = int(z) % d
+    eps = int(eps) % d
+
     if d == 3:
-        vks = [0, 1, 8]
-    else:
-        try:
-            inv_12 = pow(12, -1, d)
-        except ValueError:
+        vks = [0, (6 * z + 2 * gamma + 3 * eps) % 9, (6 * z + 1 * gamma + 6 * eps) % 9]
+        if sum(vks) % 3 != 0:
             raise ValueError(
-                f"Inverse of 12 mod {d} does not exist. Choose a prime d that does not divide 12."
+                f"Sum of v_k's is not 0 mod 3. Got {sum(vks) % 3}. Check parameters."
             )
 
-        for i in range(1, d):
-            a = inv_12 * i * (gamma + i * (6 * z + (2 * i - 3) * gamma)) + eps * i
-            vks[i] = int(a) % d
+        zeta = np.exp(2j * np.pi / 9)
+        m = np.diag([zeta**v for v in vks])
+        return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
+
+    try:
+        inv_12 = pow(12, -1, d)
+    except ValueError:
+        raise ValueError(
+            f"Inverse of 12 mod {d} does not exist. Choose a prime d that does not divide 12."
+        )
+
+    vks = [0] * d
+    for k in range(1, d):
+        term_inner = ((6 * z) % d + ((2 * k - 3) % d) * gamma) % d
+        term = (gamma + (k * term_inner) % d) % d
+        vk = ((inv_12 * (k % d)) % d) * term % d
+        vk = (vk + (eps * (k % d)) % d) % d
+        vks[k] = vk
 
     if sum(vks) % d != 0:
         raise ValueError(
@@ -445,12 +474,12 @@ def _u8_matrix_func(
         )
 
     omega = np.exp(2j * np.pi / d) if omega is None else omega
-    m = np.diag([omega ** vks[j] for j in range(d)])
+    m = np.diag([omega**v for v in vks])
     return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
 def _cphase_matrix_func(
-    d: int, cv: Optional[int] = None, omega: Optional[float] = None
+    d: int, cv: Optional[int] = None, omega: Optional[complex] = None
 ) -> Tensor:
     r"""
     Qudit controlled-phase (``CPHASE``) gate.
@@ -468,7 +497,7 @@ def _cphase_matrix_func(
     :param cv: Optional control value in ``[0, d-1]``. If ``None``, builds the full SUMZ block-diagonal.
     :type cv: Optional[int]
     :param omega: Optional primitive ``d``-th root of unity for ``Z_d``.
-    :type omega: Optional[float]
+    :type omega: Optional[complex]
     :return: ``(d*d, d*d)`` matrix representing the controlled-phase.
     :rtype: Tensor
     :raises ValueError: If ``cv`` is provided and is outside ``[0, d-1]``.
