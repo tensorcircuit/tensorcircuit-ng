@@ -1,12 +1,16 @@
 import sys
 import os
-import pytest
 import numpy as np
+
+import pytest
+from pytest_lazyfixture import lazy_fixture as lf
 
 thisfile = os.path.abspath(__file__)
 modulepath = os.path.dirname(os.path.dirname(thisfile))
 
 sys.path.insert(0, modulepath)
+
+import tensorcircuit as tc
 
 from tensorcircuit.quditgates import (
     _i_matrix_func,
@@ -28,6 +32,7 @@ from tensorcircuit.quditgates import (
 
 
 def is_unitary(M):
+    M = tc.backend.numpy(M)
     Mc = M.astype(np.complex128, copy=False)
     I = np.eye(M.shape[0], dtype=np.complex128)
     return np.allclose(Mc.conj().T @ Mc, I, atol=1e-5, rtol=1e-5) and np.allclose(
@@ -36,19 +41,22 @@ def is_unitary(M):
 
 
 @pytest.mark.parametrize("d", [2, 3, 4, 5])
-def test_I_X_Z_shapes_and_unitarity(d, highp):
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_I_X_Z_shapes_and_unitarity(d, backend, highp):
     I = _i_matrix_func(d)
     X = _x_matrix_func(d)
     Z = _z_matrix_func(d)
     assert I.shape == (d, d) and X.shape == (d, d) and Z.shape == (d, d)
     assert is_unitary(X)
     assert is_unitary(Z)
-    np.testing.assert_allclose(I, np.eye(d), atol=1e-5)
+    np.testing.assert_allclose(tc.backend.numpy(I), np.eye(d), atol=1e-5)
 
 
 @pytest.mark.parametrize("d", [2, 3, 4])
-def test_X_is_right_cyclic_shift(d, highp):
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_X_is_right_cyclic_shift(d, backend, highp):
     X = _x_matrix_func(d)
+    X = tc.backend.numpy(X)
     for j in range(d):
         v = np.zeros(d)
         v[j] = 1
@@ -59,10 +67,13 @@ def test_X_is_right_cyclic_shift(d, highp):
 
 
 @pytest.mark.parametrize("d", [2, 3, 5])
-def test_Z_diagonal_and_value(d, highp):
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_Z_diagonal_and_value(d, backend, highp):
     omega = np.exp(2j * np.pi / d)
     Z = _z_matrix_func(d, omega)
-    np.testing.assert_allclose(Z, np.diag([omega**j for j in range(d)]), atol=1e-5)
+    np.testing.assert_allclose(
+        tc.backend.numpy(Z), np.diag([omega**j for j in range(d)]), atol=1e-5
+    )
     assert is_unitary(Z)
 
 
@@ -75,7 +86,8 @@ def test_Z_diagonal_and_value(d, highp):
 
 
 @pytest.mark.parametrize("d", [2, 3, 5])
-def test_H_is_fourier_like_and_unitary(d, highp):
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_H_is_fourier_like_and_unitary(d, backend, highp):
     H = _h_matrix_func(d)
     assert H.shape == (d, d)
     assert is_unitary(H)
@@ -83,24 +95,25 @@ def test_H_is_fourier_like_and_unitary(d, highp):
     F = (1 / np.sqrt(d)) * np.array(
         [[omega ** (j * k) for k in range(d)] for j in range(d)]
     ).T
-    np.testing.assert_allclose(
-        H.astype(np.complex128), F.astype(np.complex128), atol=1e-5, rtol=1e-5
-    )
+    np.testing.assert_allclose(tc.backend.numpy(H), F, atol=1e-5, rtol=1e-5)
 
 
 @pytest.mark.parametrize("d", [2, 3, 5])
-def test_S_is_diagonal(d, highp):
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_S_is_diagonal(d, backend, highp):
     S = _s_matrix_func(d)
     np.testing.assert_allclose(S, np.diag(np.diag(S)), atol=1e-5)
 
 
 @pytest.mark.parametrize("d", [3, 5])
-def test_RX_RY_only_affect_subspace(d, highp):
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_RX_RY_only_affect_subspace(d, backend, highp):
     theta = 0.7
     j, k = 0, 1
     RX = _rx_matrix_func(d, theta, j, k)
     RY = _ry_matrix_func(d, theta, j, k)
     assert is_unitary(RX) and is_unitary(RY)
+    RX, RY = tc.backend.numpy(RX), tc.backend.numpy(RY)
     for t in range(d):
         if t not in (j, k):
             e = np.zeros(d)
@@ -111,7 +124,8 @@ def test_RX_RY_only_affect_subspace(d, highp):
             np.testing.assert_allclose(outy, e, atol=1e-5)
 
 
-def test_RZ_phase_on_single_level(highp):
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_RZ_phase_on_single_level(backend, highp):
     d, theta, j = 5, 1.234, 2
     RZ = _rz_matrix_func(d, theta, j)
     assert is_unitary(RZ)
@@ -121,11 +135,13 @@ def test_RZ_phase_on_single_level(highp):
 
 
 @pytest.mark.parametrize("d", [2, 3, 5])
-def test_SWAP_permutation(d, highp):
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_SWAP_permutation(d, backend, highp):
     SW = _swap_matrix_func(d)
     D = d * d
     assert SW.shape == (D, D)
     assert is_unitary(SW)
+    SW = tc.backend.numpy(SW)
     for i in range(min(d, 3)):
         for j in range(min(d, 3)):
             v = np.zeros(D)
@@ -137,7 +153,8 @@ def test_SWAP_permutation(d, highp):
 
 
 @pytest.mark.parametrize("d", [2, 3, 5])
-def test_RZZ_diagonal(d, highp):
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_RZZ_diagonal(d, backend, highp):
     theta = 0.37
     RZZ = _rzz_matrix_func(d, theta, j1=0, k1=1, j2=0, k2=1)
     assert is_unitary(RZZ)
@@ -156,7 +173,8 @@ def test_RZZ_diagonal(d, highp):
     np.testing.assert_allclose(RZZ[idx_b, idx_b], np.exp(+1j * theta / 2), atol=1e-5)
 
 
-def test_RXX_selected_block(highp):
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_RXX_selected_block(backend, highp):
     d = 4
     theta = 0.81
     j1, k1 = 0, 2
@@ -175,7 +193,8 @@ def test_RXX_selected_block(highp):
 
 
 @pytest.mark.parametrize("d", [3, 5])
-def test_CPHASE_blocks(d, highp):
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_CPHASE_blocks(d, backend, highp):
     omega = np.exp(2j * np.pi / d)
     Z = _z_matrix_func(d, omega)
     M = _cphase_matrix_func(d, cv=None, omega=omega)
@@ -198,7 +217,8 @@ def test_CPHASE_blocks(d, highp):
 
 
 @pytest.mark.parametrize("d", [3, 5])
-def test_CSUM_blocks(d, highp):
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_CSUM_blocks(d, backend, highp):
     X = _x_matrix_func(d)
     M = _csum_matrix_func(d, cv=None)
     for a in range(d):
@@ -219,9 +239,11 @@ def test_CSUM_blocks(d, highp):
             np.testing.assert_allclose(block, np.eye(d), atol=1e-5)
 
 
-def test_CSUM_mapping_small_d(highp):
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_CSUM_mapping_small_d(backend, highp):
     d = 3
     M = _csum_matrix_func(d)
+    M = tc.backend.numpy(M)
     for r in range(d):
         for s in range(d):
             v = np.zeros(d * d)
@@ -242,7 +264,8 @@ def test_rotation_index_errors(highp):
         _rx_matrix_func(d, 0.1, j=2, k=2)
 
 
-def test_U8_errors_and_values(highp):
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_U8_errors_and_values(backend, highp):
     with pytest.raises(ValueError):
         _u8_matrix_func(d=4)
     with pytest.raises(ValueError):
