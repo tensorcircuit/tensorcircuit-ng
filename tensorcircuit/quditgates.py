@@ -294,8 +294,23 @@ def _check_rotation(d: int, j: int, k: int) -> None:
         raise ValueError("R- rotation requires two distinct levels j != k.")
 
 
-@lru_cache(maxsize=None)
-def _basis_single(d: int, j: int, k: Optional[int] = None) -> Tuple[Tensor, ...]:
+def _two_level_projectors(
+    d: int, j: int, k: Optional[int] = None
+) -> Tuple[Tensor, ...]:
+    r"""
+    Construct projectors for single- or two-level subspaces in a ``d``-level qudit.
+
+    :param d: Qudit dimension.
+    :type d: int
+    :param j: First level index.
+    :type j: int
+    :param k: Optional second level index. If None, only projectors for ``j`` are returned.
+    :type k: Optional[int]
+    :return:
+        - If ``k is None``: ``(I, Pjj)``
+        - Else: ``(I, Pjj, Pkk, Pjk, Pkj)``
+    :rtype: Tuple[Tensor, ...]
+    """
     I = backend.eye(d, dtype=dtypestr)
     ej = I[:, j]
     Pjj = backend.outer_product(ej, ej)
@@ -328,7 +343,7 @@ def _rx_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     :rtype: Tensor
     """
     _check_rotation(d, j, k)
-    I, Pjj, Pkk, Pjk, Pkj = _basis_single(d, j, k)
+    I, Pjj, Pkk, Pjk, Pkj = _two_level_projectors(d, j, k)
     theta = num_to_tensor(theta)
     c = backend.cos(theta / 2.0)
     s = backend.sin(theta / 2.0)
@@ -351,7 +366,7 @@ def _ry_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     :rtype: Tensor
     """
     _check_rotation(d, j, k)
-    I, Pjj, Pkk, Pjk, Pkj = _basis_single(d, j, k)
+    I, Pjj, Pkk, Pjk, Pkj = _two_level_projectors(d, j, k)
     theta = num_to_tensor(theta)
     c = backend.cos(theta / 2.0)
     s = backend.sin(theta / 2.0)
@@ -374,7 +389,7 @@ def _rz_matrix_func(d: int, theta: float, j: int = 0) -> Tensor:
     :return: ``(d, d)`` diagonal matrix implementing :math:`RZ(\theta)` on level ``j``.
     :rtype: Tensor
     """
-    I, Pjj = _basis_single(d, j, k=None)
+    I, Pjj = _two_level_projectors(d, j, k=None)
     theta = num_to_tensor(theta)
     phase = backend.exp(1j * theta)
     return I + (phase - 1.0) * Pjj
