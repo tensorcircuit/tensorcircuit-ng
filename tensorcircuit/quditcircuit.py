@@ -563,3 +563,35 @@ class QuditCircuit:
         :type mps_inputs: Tuple[Sequence[Gate], Sequence[Edge]]
         """
         return self._circ.replace_mps_inputs(mps_inputs)
+
+    def expectation_before(
+        self,
+        *ops: Tuple[tn.Node, List[int]],
+        reuse: bool = True,
+        **kws: Any,
+    ) -> List[tn.Node]:
+        """
+        Get the tensor network in the form of a list of nodes
+        for the expectation calculation before the real contraction
+
+        :param reuse: _description_, defaults to True
+        :type reuse: bool, optional
+        :raises ValueError: _description_
+        :return: _description_
+        :rtype: List[tn.Node]
+        """
+        return self._circ.expectation_before(*ops, reuse=reuse, **kws)
+
+    def amplitude_before(self, l: Union[str, Tensor]) -> List[Gate]:
+        r"""
+        Returns the tensornetwor nodes for the amplitude of the circuit given the bitstring l.
+        For state simulator, it computes :math:`\langle l\vert \psi\rangle`,
+        for density matrix simulator, it computes :math:`Tr(\rho \vert l\rangle \langle 1\vert)`
+        Note how these two are different up to a square operation.
+
+        :param l: The bitstring of 0 and 1s.
+        :type l: Union[str, Tensor]
+        :return: The tensornetwork nodes for the amplitude of the circuit.
+        :rtype: List[Gate]
+        """
+        return self._circ.amplitude_before(l)
