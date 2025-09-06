@@ -19,8 +19,7 @@ What this script does:
 import argparse
 import math
 import sys
-from dataclasses import dataclass
-from typing import List, Sequence, Tuple
+from typing import Sequence, Tuple
 
 import numpy as np
 import tensorcircuit as tc
@@ -28,57 +27,19 @@ from tensorcircuit.quditcircuit import QuditCircuit
 
 
 # ---------- Hamiltonian helpers ----------
-
-
-def number_op(d: int) -> np.ndarray:
-    return np.diag(np.arange(d, dtype=np.float32)).astype(np.complex64)
-
-
-def x_unitary(d: int) -> np.ndarray:
-    X = np.zeros((d, d), dtype=np.complex64)
-    for j in range(d):
-        X[(j + 1) % d, j] = 1.0
-    return X
-
-
-def z_unitary(d: int) -> np.ndarray:
-    omega = np.exp(2j * np.pi / d)
-    diag = np.array([omega**j for j in range(d)], dtype=np.complex64)
-    return np.diag(diag)
-
-
 def symmetrize_hermitian(U: np.ndarray) -> np.ndarray:
     return 0.5 * (U + U.conj().T)
 
 
-def kron2(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    return np.kron(a, b).astype(np.complex64)
-
-
-@dataclass
-class Hamiltonian2Qudit:
-    H_local_0: np.ndarray
-    H_local_1: np.ndarray
-    H_couple: np.ndarray
-
-    def as_terms(self) -> List[Tuple[np.ndarray, Sequence[int]]]:
-        return [
-            (self.H_local_0, [0]),
-            (self.H_local_1, [1]),
-            (self.H_couple, [0, 1]),
-        ]
-
-
-def build_2site_hamiltonian(d: int, J: float) -> Hamiltonian2Qudit:
-    N = number_op(d)
-    Xsym = symmetrize_hermitian(x_unitary(d))
-    Zsym = symmetrize_hermitian(z_unitary(d))
+def build_2site_hamiltonian(
+    d: int, J: float
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
+    N = np.diag(np.arange(d))
+    Xsym = symmetrize_hermitian(tc.backend.numpy(tc.quditgates._x_matrix_func(d)))
+    Zsym = symmetrize_hermitian(tc.backend.numpy(tc.quditgates._z_matrix_func(d)))
     H0 = N.copy()
     H1 = N.copy()
-    HXX = kron2(Xsym, Xsym)
-    HZZ = kron2(Zsym, Zsym)
-    H01 = J * (HXX + HZZ)
-    return Hamiltonian2Qudit(H0, H1, H01)
+    return H0, H1, Xsym, Zsym, J
 
 
 # ---------- Ansatz ----------
@@ -127,7 +88,12 @@ def build_ansatz(nlayers: int, d: int, params: Sequence) -> QuditCircuit:
 # ---------- Energy ----------
 
 
-def energy_expectation_backend(params_b, d: int, nlayers: int, ham: Hamiltonian2Qudit):
+def energy_expectation_backend(
+    params_b,
+    d: int,
+    nlayers: int,
+    ham: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float],
+):
     """
     params_b: 1D backend tensor (jax/tf) of shape [nparams].
     Returns backend scalar.
@@ -137,18 +103,30 @@ def energy_expectation_backend(params_b, d: int, nlayers: int, ham: Hamiltonian2
     plist = [params_b[i] for i in range(params_b.shape[0])]
     c = build_ansatz(nlayers, d, plist)
     E = 0.0 + 0.0j
-    for op, sites in ham.as_terms():
-        E = E + c.expectation((tc.gates.Gate(op), list(sites)))
+    H0, H1, Xsym, Zsym, J = ham
+    # Local number operators
+    E = E + c.expectation((tc.gates.Gate(H0), [0]))
+    E = E + c.expectation((tc.gates.Gate(H1), [1]))
+    # Coupling terms as products on separate sites (avoids 9x9 reshaping issues)
+    E = E + J * c.expectation((tc.gates.Gate(Xsym), [0]), (tc.gates.Gate(Xsym), [1]))
+    E = E + J * c.expectation((tc.gates.Gate(Zsym), [0]), (tc.gates.Gate(Zsym), [1]))
     return bk.real(E)
 
 
 def energy_expectation_numpy(
-    params_np: np.ndarray, d: int, nlayers: int, ham: Hamiltonian2Qudit
+    params_np: np.ndarray,
+    d: int,
+    nlayers: int,
+    ham: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float],
 ) -> float:
     c = build_ansatz(nlayers, d, params_np.tolist())
     E = 0.0 + 0.0j
-    for op, sites in ham.as_terms():
-        E += c.expectation((tc.gates.Gate(op), list(sites)))
+    H0, H1, Xsym, Zsym, J = ham
+    E += c.expectation((tc.gates.Gate(H0), [0]))
+    E += c.expectation((tc.gates.Gate(H1), [1]))
+    # Coupling terms as products on separate sites (avoids 9x9 reshaping issues)
+    E += J * c.expectation((tc.gates.Gate(Xsym), [0]), (tc.gates.Gate(Xsym), [1]))
+    E += J * c.expectation((tc.gates.Gate(Zsym), [0]), (tc.gates.Gate(Zsym), [1]))
     return float(np.real(E))
 
 
@@ -159,7 +137,7 @@ def random_search(fun_numpy, x0_shape, iters=300, seed=42):
     rng = np.random.default_rng(seed)
     best_x, best_y = None, float("inf")
     for _ in range(iters):
-        x = rng.uniform(-math.pi, math.pi, size=x0_shape).astype(np.float32)
+        x = rng.uniform(-math.pi, math.pi, size=x0_shape)
         y = fun_numpy(x)
         if y < best_y:
             best_x, best_y = x, y
@@ -172,11 +150,11 @@ def gradient_descent_ad(energy_bk, x0_np: np.ndarray, steps=200, lr=0.1, jit=Fal
     Simple gradient descent in numpy space with backend-gradients.
     """
     bk = tc.backend
-    if jit and hasattr(bk, "jit"):
+    if jit:
         energy_bk = bk.jit(energy_bk)
     grad_f = bk.grad(energy_bk)
 
-    x_np = x0_np.astype(np.float32).copy()
+    x_np = x0_np.copy()
     best_x, best_y = x_np.copy(), float("inf")
 
     def to_np(x):
@@ -221,7 +199,7 @@ def main():
     ap.add_argument(
         "--jit",
         action="store_true",
-        help="enable backend JIT for energy/grad if available",
+        help="enable backend JIT (all backends implement .jit; numpy backend no-ops)",
     )
     args = ap.parse_args()
 
@@ -255,7 +233,7 @@ def main():
             return energy_expectation_backend(theta_b, d, L, ham)
 
         rng = np.random.default_rng(args.seed)
-        x0 = rng.uniform(-math.pi, math.pi, size=(nparams,)).astype(np.float32)
+        x0 = rng.uniform(-math.pi, math.pi, size=(nparams,))
         x, y = gradient_descent_ad(
             obj_bk, x0_np=x0, steps=args.steps, lr=args.lr, jit=args.jit
         )
