@@ -480,28 +480,12 @@ class BaseCircuit(AbstractCircuit):
 
     def amplitude_before(self, l: Union[str, Tensor]) -> List[Gate]:
         r"""
-        Returns the tensornetwor nodes for the amplitude of the circuit given a computational-basis label ``l``.
-        For a state simulator, it computes :math:`\langle l \vert \psi\rangle`;
-        for a density-matrix simulator, it computes :math:`\mathrm{Tr}(\rho \vert l\rangle\langle l\vert)`.
+        Returns the tensornetwor nodes for the amplitude of the circuit given the bitstring l.
+        For state simulator, it computes :math:`\langle l\vert \psi\rangle`,
+        for density matrix simulator, it computes :math:`Tr(\rho \vert l\rangle \langle 1\vert)`
         Note how these two are different up to a square operation.
 
-        :Example:
-
-        >>> c = tc.Circuit(2)
-        >>> c.X(0)
-        >>> c.amplitude("10")  # d=2, per-qubit digits
-        array(1.+0.j, dtype=complex64)
-        >>> c.CNOT(0, 1)
-        >>> c.amplitude("11")
-        array(1.+0.j, dtype=complex64)
-
-        For qudits (d>2, d<=36):
-        >>> c = tc.Circuit(3, dim=12)
-        >>> c.amplitude("0A2")  # base-12 string, A stands for 10
-
-        :param l: Basis label.
-            - If a string: it must be a base-d string of length ``nqubits``, using 0–9A–Z (A=10,…,Z=35) when ``d<=36``.
-            - If a tensor/array/list: it should contain per-site integers in ``[0, d-1]`` with length ``nqubits``.
+        :param l: The bitstring of 0 and 1s.
         :type l: Union[str, Tensor]
         :return: The tensornetwork nodes for the amplitude of the circuit.
         :rtype: List[Gate]
