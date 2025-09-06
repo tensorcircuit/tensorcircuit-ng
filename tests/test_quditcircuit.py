@@ -444,3 +444,4 @@ def test_quditcircuit_amplitude_before_wrapper():
     c.x(0)
     nodes = c.amplitude_before("00")
     assert isinstance(nodes, list)
+    assert len(nodes) == 5  # one gate (X on qudit 0) -> single node in the traced path
