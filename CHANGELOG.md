@@ -6,6 +6,8 @@
 
 - Add new module `tc.timeevol` for different types of time evolution solvers.
 
+- Add qudit circuit support with `tc.QuditCircuit` class.
+
 - Add `special_jv` for numpy and jax backends.
 
 - Add `jaxy_scan` for numpy and jax backends, contrasting to the tf style original backend scan method.
