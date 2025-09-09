@@ -5,8 +5,8 @@
 # Required
 version: 2
 
-formats:
-  - pdf
+# formats:
+#   - pdf
 
 # Set the version of Python and other tools you might need
 build:
