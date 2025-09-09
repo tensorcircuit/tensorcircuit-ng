@@ -1,4 +1,4 @@
-"""
+r"""
 VQE on QuditCircuits.
 
 This example shows how to run a simple VQE on a qudit system using
@@ -41,7 +41,7 @@ def vqe_forward(param, *, nqudits: int, d: int, nlayers: int, J: float, h: float
         - Entangle neighboring pairs with RXX on subspaces (0,1)
     """
     if d < 3:
-        raise ValueError("This example assblumes d >= 3 (qutrit or higher).")
+        raise ValueError("This example assumes d >= 3 (qutrit or higher).")
 
     S = tc.quditgates._x_matrix_func(d)
     Z = tc.quditgates._z_matrix_func(d)
@@ -99,7 +99,7 @@ def main():
     parser.add_argument(
         "--h", type=float, default=0.6, help="Field strength for Zc terms"
     )
-    parser.add_argument("--steps", type=int, default=200, help="Optimization steps")
+    parser.add_argument("--steps", type=int, default=300, help="Optimization steps")
     parser.add_argument("--lr", type=float, default=0.05, help="Learning rate")
     args = parser.parse_args()
 
