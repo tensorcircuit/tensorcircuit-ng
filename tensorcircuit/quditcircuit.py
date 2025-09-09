@@ -27,31 +27,30 @@ class QuditCircuit:
     ``QuditCircuit`` class.
 
     Qudit quick example (d=3):
-    .. code-block:: python
 
-        c = tc.QuditCircuit(2, d=3)
-        c.h(0)
-        c.x(1)
-        c.csum(0, 1)
-        c.sample(1024, format="count_dict_bin")
-        # For d <= 36, string samples use base-d characters 0–9A–Z (A=10, ...).
+    >>> c = tc.QuditCircuit(2, d=3)
+    >>> c.h(0)
+    >>> c.x(1)
+    >>> c.csum(0, 1)
+    >>> c.sample(1024, format="count_dict_bin")
+    >>> # For d <= 36, string samples use base-d characters 0–9A–Z (A=10, ...).
     """
 
     is_dm = False
 
     def __init__(
         self,
-        nqubits: int,
+        nqudits: int,
         dim: int,
         inputs: Optional[Tensor] = None,
         mps_inputs: Optional[QuOperator] = None,
         split: Optional[Dict[str, Any]] = None,
     ):
         self._set_dim(dim=dim)
-        self._nqubits = nqubits
+        self._nqudits = nqudits
 
         self._circ = Circuit(
-            nqubits=nqubits,
+            nqudits=nqudits,
             dim=dim,
             inputs=inputs,
             mps_inputs=mps_inputs,
@@ -64,7 +63,7 @@ class QuditCircuit:
         if not isinstance(dim, int) or dim <= 2:
             raise ValueError(
                 f"QuditCircuit is only for qudits (dim>=3). "
-                f"You passed dim={dim}. For qubits, please use `Circuit` instead."
+                f"You passed dim={dim}. For qudits, please use `Circuit` instead."
             )
         # Require integer d>=2; current string-encoded IO supports d<=36 (0–9A–Z digits).
         if dim > 36:
@@ -79,9 +78,9 @@ class QuditCircuit:
         return self._d
 
     @property
-    def nqubits(self) -> int:
+    def nqudits(self) -> int:
         """qudit number of the circuit"""
-        return self._nqubits
+        return self._nqudits
 
     def _apply_gate(self, *indices: int, name: str, **kwargs: Any) -> None:
         """
@@ -483,7 +482,7 @@ class QuditCircuit:
         :type random_generator: Optional[Any], optional
         :param status: external randomness given by tensor uniformly from [0, 1],
             if set, can overwrite random_generator, shape [batch] for `allow_state=True`
-            and shape [batch, nqubits] for `allow_state=False` using perfect sampling implementation
+            and shape [batch, nqudits] for `allow_state=False` using perfect sampling implementation
         :type status: Optional[Tensor]
         :param jittable: when converting to count, whether keep the full size. if false, may be conflict
             external jit, if true, may fail for large scale system with actual limited count results
@@ -538,7 +537,7 @@ class QuditCircuit:
         with ``mid_measurement`` involved, one should normalize the state manually if needed.
         This is a post-selection method as keep is provided as a prior.
 
-        :param index: The index of qubit that the Z direction postselection applied on.
+        :param index: The index of qudit that the Z direction postselection applied on.
         :type index: int
         :param keep: the post-selected digit in {0, ..., d-1}, defaults to be 0.
         :type keep: int, optional
