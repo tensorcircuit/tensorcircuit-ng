@@ -23,8 +23,10 @@ from .cons import (
     runtime_contractor,
 )  # prerun of set hooks
 from . import gates
+from . import quditgates
 from . import basecircuit
 from .gates import Gate
+from .quditcircuit import QuditCircuit
 from .circuit import Circuit, expectation
 from .mpscircuit import MPSCircuit
 from .densitymatrix import DMCircuit as DMCircuit_reference
