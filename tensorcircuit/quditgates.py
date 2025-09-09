@@ -1,3 +1,7 @@
+"""
+Single-qudit and two-qudit gates and their corresponding matrix.
+"""
+
 from typing import Any, Optional, Tuple
 
 import numpy as np
@@ -8,25 +12,25 @@ from .gates import num_to_tensor
 Tensor = Any
 
 SINGLE_BUILDERS = {
-    "I": (("none",), lambda d, omega, **kw: _i_matrix_func(d)),
-    "X": (("none",), lambda d, omega, **kw: _x_matrix_func(d)),
-    "Z": (("none",), lambda d, omega, **kw: _z_matrix_func(d, omega)),
-    "H": (("none",), lambda d, omega, **kw: _h_matrix_func(d, omega)),
+    "I": (("none",), lambda d, omega, **kw: i_matrix_func(d)),
+    "X": (("none",), lambda d, omega, **kw: x_matrix_func(d)),
+    "Z": (("none",), lambda d, omega, **kw: z_matrix_func(d, omega)),
+    "H": (("none",), lambda d, omega, **kw: h_matrix_func(d, omega)),
     "RX": (
         ("theta", "j", "k"),
-        lambda d, omega, **kw: _rx_matrix_func(d, kw["theta"], kw["j"], kw["k"]),
+        lambda d, omega, **kw: rx_matrix_func(d, kw["theta"], kw["j"], kw["k"]),
     ),
     "RY": (
         ("theta", "j", "k"),
-        lambda d, omega, **kw: _ry_matrix_func(d, kw["theta"], kw["j"], kw["k"]),
+        lambda d, omega, **kw: ry_matrix_func(d, kw["theta"], kw["j"], kw["k"]),
     ),
     "RZ": (
         ("theta", "j"),
-        lambda d, omega, **kw: _rz_matrix_func(d, kw["theta"], kw["j"]),
+        lambda d, omega, **kw: rz_matrix_func(d, kw["theta"], kw["j"]),
     ),
     "U8": (
         ("gamma", "z", "eps"),
-        lambda d, omega, **kw: _u8_matrix_func(
+        lambda d, omega, **kw: u8_matrix_func(
             d, kw["gamma"], kw["z"], kw["eps"], omega
         ),
     ),
@@ -35,13 +39,13 @@ SINGLE_BUILDERS = {
 TWO_BUILDERS = {
     "RXX": (
         ("theta", "j1", "k1", "j2", "k2"),
-        lambda d, omega, **kw: _rxx_matrix_func(
+        lambda d, omega, **kw: rxx_matrix_func(
             d, kw["theta"], kw["j1"], kw["k1"], kw["j2"], kw["k2"]
         ),
     ),
-    "RZZ": (("theta",), lambda d, omega, **kw: _rzz_matrix_func(d, kw["theta"])),
-    "CPHASE": (("cv",), lambda d, omega, **kw: _cphase_matrix_func(d, kw["cv"], omega)),
-    "CSUM": (("cv",), lambda d, omega, **kw: _csum_matrix_func(d, kw["cv"])),
+    "RZZ": (("theta",), lambda d, omega, **kw: rzz_matrix_func(d, kw["theta"])),
+    "CPHASE": (("cv",), lambda d, omega, **kw: cphase_matrix_func(d, kw["cv"], omega)),
+    "CSUM": (("cv",), lambda d, omega, **kw: csum_matrix_func(d, kw["cv"])),
 }
 
 
@@ -68,7 +72,7 @@ def _is_prime(n: int) -> bool:
     return True
 
 
-def _i_matrix_func(d: int) -> Tensor:
+def i_matrix_func(d: int) -> Tensor:
     """
     Identity matrix of size ``d``.
 
@@ -80,7 +84,7 @@ def _i_matrix_func(d: int) -> Tensor:
     return backend.eye(d, dtype=dtypestr)
 
 
-def _x_matrix_func(d: int) -> Tensor:
+def x_matrix_func(d: int) -> Tensor:
     r"""
     Generalized Pauli-X on a ``d``-level system.
 
@@ -95,7 +99,7 @@ def _x_matrix_func(d: int) -> Tensor:
     return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
-def _z_matrix_func(d: int, omega: Optional[complex] = None) -> Tensor:
+def z_matrix_func(d: int, omega: Optional[complex] = None) -> Tensor:
     r"""
     Generalized Pauli-Z on a ``d``-level system.
 
@@ -113,7 +117,7 @@ def _z_matrix_func(d: int, omega: Optional[complex] = None) -> Tensor:
     return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
-def _h_matrix_func(d: int, omega: Optional[complex] = None) -> Tensor:
+def h_matrix_func(d: int, omega: Optional[complex] = None) -> Tensor:
     r"""
     Discrete Fourier transform (Hadamard-like) on ``d`` levels.
 
@@ -132,7 +136,7 @@ def _h_matrix_func(d: int, omega: Optional[complex] = None) -> Tensor:
     return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
-def _s_matrix_func(d: int, omega: Optional[complex] = None) -> Tensor:
+def s_matrix_func(d: int, omega: Optional[complex] = None) -> Tensor:
     r"""
     Diagonal phase gate ``S_d`` on ``d`` levels.
 
@@ -214,7 +218,7 @@ def _two_level_projectors(
     return I, Pjj, Pkk, Pjk, Pkj
 
 
-def _rx_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
+def rx_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     r"""
     Rotation-X (``RX``) gate on a selected two-level subspace of a qudit.
 
@@ -239,7 +243,7 @@ def _rx_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     return I + (c - 1.0) * (Pjj + Pkk) + (-1j * s) * (Pjk + Pkj)
 
 
-def _ry_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
+def ry_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     r"""
     Rotation-Y (``RY``) gate on a selected two-level subspace of a qudit.
 
@@ -262,7 +266,7 @@ def _ry_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     return I + (c - 1.0) * (Pjj + Pkk) - s * Pjk + s * Pkj
 
 
-def _rz_matrix_func(d: int, theta: float, j: int = 0) -> Tensor:
+def rz_matrix_func(d: int, theta: float, j: int = 0) -> Tensor:
     r"""
     Rotation-Z (``RZ``) gate for qudits.
 
@@ -284,7 +288,7 @@ def _rz_matrix_func(d: int, theta: float, j: int = 0) -> Tensor:
     return I + (phase - 1.0) * Pjj
 
 
-def _swap_matrix_func(d: int) -> Tensor:
+def swap_matrix_func(d: int) -> Tensor:
     """
     SWAP gate for two qudits of dimension ``d``.
 
@@ -301,7 +305,7 @@ def _swap_matrix_func(d: int) -> Tensor:
     return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
-def _rzz_matrix_func(
+def rzz_matrix_func(
     d: int, theta: float, j1: int = 0, k1: int = 1, j2: int = 0, k2: int = 1
 ) -> Tensor:
     r"""
@@ -343,7 +347,7 @@ def _rzz_matrix_func(
     return I + (phase_minus - 1.0) * Paa + (phase_plus - 1.0) * Pbb
 
 
-def _rxx_matrix_func(
+def rxx_matrix_func(
     d: int, theta: float, j1: int = 0, k1: int = 1, j2: int = 0, k2: int = 1
 ) -> Tensor:
     r"""
@@ -383,7 +387,7 @@ def _rxx_matrix_func(
     return I + (c - 1.0) * (Paa + Pbb) + (-1j * s) * (Pab + Pba)
 
 
-def _u8_matrix_func(
+def u8_matrix_func(
     d: int,
     gamma: int = 2,
     z: int = 1,
@@ -478,19 +482,31 @@ def _u8_matrix_func(
     return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
-def _cphase_matrix_func(
+def cphase_matrix_func(
     d: int, cv: Optional[int] = None, omega: Optional[complex] = None
 ) -> Tensor:
     r"""
     Qudit controlled-phase (``CPHASE``) gate.
-    Implements ``|r⟩|s⟩ → ω^{rs}|r⟩|s⟩``; optionally condition on a specific control value ``cv``.
-              ┌─                                          ─┐
-              │ I_d      0        0         ...     0      │
-              │ 0       Z_d       0         ...     0      │
-     SUMZ_d = │ 0        0       Z_d^2      ...     0      │
-              │ .        .        .         .       .      │
-              │ 0        0        0         ...  Z_d^{d-1} │
-              └                                           ─┘
+
+    Logical definition:
+
+    .. math::
+
+        \lvert r \rangle \lvert s \rangle \;\longmapsto\;
+        \omega^{rs} \lvert r \rangle \lvert s \rangle
+
+    Matrix form:
+
+    .. math::
+
+        \mathrm{SUMZ}_d =
+        \begin{bmatrix}
+            I_d & 0   & 0   & \cdots & 0 \\
+            0   & Z_d & 0   & \cdots & 0 \\
+            0   & 0   & Z_d^2 & \cdots & 0 \\
+            \vdots & \vdots & \vdots & \ddots & \vdots \\
+            0   & 0   & 0   & \cdots & Z_d^{d-1}
+        \end{bmatrix}
 
     :param d: Qudit dimension (for each register).
     :type d: int
@@ -518,17 +534,29 @@ def _cphase_matrix_func(
     return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 
 
-def _csum_matrix_func(d: int, cv: Optional[int] = None) -> Tensor:
+def csum_matrix_func(d: int, cv: Optional[int] = None) -> Tensor:
     r"""
     Qudit controlled-sum (``CSUM`` / ``SUMX``) gate.
-    Implements ``|r⟩|s⟩ → |r⟩|r+s (\bmod d)⟩``; optionally condition on a specific control value ``cv``.
-              ┌─                                          ─┐
-              │ I_d      0        0         ...     0      │
-              │ 0       X_d       0         ...     0      │
-     SUMX_d = │ 0        0       X_d^2      ...     0      │
-              │ .        .        .         .       .      │
-              │ 0        0        0         ...  X_d^{d-1} │
-              └                                           ─┘
+
+    Logical definition:
+
+    .. math::
+
+        \lvert r \rangle \lvert s \rangle \;\longmapsto\;
+        \lvert r \rangle \lvert r+s \pmod d \rangle
+
+    Matrix form:
+
+    .. math::
+
+        \mathrm{SUMX}_d =
+        \begin{bmatrix}
+            I_d & 0   & 0   & \cdots & 0 \\
+            0   & X_d & 0   & \cdots & 0 \\
+            0   & 0   & X_d^2 & \cdots & 0 \\
+            \vdots & \vdots & \vdots & \ddots & \vdots \\
+            0   & 0   & 0   & \cdots & X_d^{d-1}
+        \end{bmatrix}
 
     :param d: Qudit dimension (for each register).
     :type d: int

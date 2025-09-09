@@ -13,20 +13,20 @@ sys.path.insert(0, modulepath)
 import tensorcircuit as tc
 
 from tensorcircuit.quditgates import (
-    _i_matrix_func,
-    _x_matrix_func,
-    _z_matrix_func,
-    _h_matrix_func,
-    _s_matrix_func,
-    _rx_matrix_func,
-    _ry_matrix_func,
-    _rz_matrix_func,
-    _swap_matrix_func,
-    _rzz_matrix_func,
-    _rxx_matrix_func,
-    _u8_matrix_func,
-    _cphase_matrix_func,
-    _csum_matrix_func,
+    i_matrix_func,
+    x_matrix_func,
+    z_matrix_func,
+    h_matrix_func,
+    s_matrix_func,
+    rx_matrix_func,
+    ry_matrix_func,
+    rz_matrix_func,
+    swap_matrix_func,
+    rzz_matrix_func,
+    rxx_matrix_func,
+    u8_matrix_func,
+    cphase_matrix_func,
+    csum_matrix_func,
     _is_prime,
 )
 
@@ -43,9 +43,9 @@ def is_unitary(M):
 @pytest.mark.parametrize("d", [2, 3, 4, 5])
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_I_X_Z_shapes_and_unitarity(d, backend, highp):
-    I = _i_matrix_func(d)
-    X = _x_matrix_func(d)
-    Z = _z_matrix_func(d)
+    I = i_matrix_func(d)
+    X = x_matrix_func(d)
+    Z = z_matrix_func(d)
     assert I.shape == (d, d) and X.shape == (d, d) and Z.shape == (d, d)
     assert is_unitary(X)
     assert is_unitary(Z)
@@ -55,7 +55,7 @@ def test_I_X_Z_shapes_and_unitarity(d, backend, highp):
 @pytest.mark.parametrize("d", [2, 3, 4])
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_X_is_right_cyclic_shift(d, backend, highp):
-    X = _x_matrix_func(d)
+    X = x_matrix_func(d)
     X = tc.backend.numpy(X)
     for j in range(d):
         v = np.zeros(d)
@@ -70,7 +70,7 @@ def test_X_is_right_cyclic_shift(d, backend, highp):
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_Z_diagonal_and_value(d, backend, highp):
     omega = np.exp(2j * np.pi / d)
-    Z = _z_matrix_func(d, omega)
+    Z = z_matrix_func(d, omega)
     np.testing.assert_allclose(
         tc.backend.numpy(Z), np.diag([omega**j for j in range(d)]), atol=1e-5
     )
@@ -88,7 +88,7 @@ def test_Z_diagonal_and_value(d, backend, highp):
 @pytest.mark.parametrize("d", [2, 3, 5])
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_H_is_fourier_like_and_unitary(d, backend, highp):
-    H = _h_matrix_func(d)
+    H = h_matrix_func(d)
     assert H.shape == (d, d)
     assert is_unitary(H)
     omega = np.exp(2j * np.pi / d)
@@ -101,7 +101,7 @@ def test_H_is_fourier_like_and_unitary(d, backend, highp):
 @pytest.mark.parametrize("d", [2, 3, 5])
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_S_is_diagonal(d, backend, highp):
-    S = _s_matrix_func(d)
+    S = s_matrix_func(d)
     np.testing.assert_allclose(S, np.diag(np.diag(S)), atol=1e-5)
 
 
@@ -110,8 +110,8 @@ def test_S_is_diagonal(d, backend, highp):
 def test_RX_RY_only_affect_subspace(d, backend, highp):
     theta = 0.7
     j, k = 0, 1
-    RX = _rx_matrix_func(d, theta, j, k)
-    RY = _ry_matrix_func(d, theta, j, k)
+    RX = rx_matrix_func(d, theta, j, k)
+    RY = ry_matrix_func(d, theta, j, k)
     assert is_unitary(RX) and is_unitary(RY)
     RX, RY = tc.backend.numpy(RX), tc.backend.numpy(RY)
     for t in range(d):
@@ -127,7 +127,7 @@ def test_RX_RY_only_affect_subspace(d, backend, highp):
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_RZ_phase_on_single_level(backend, highp):
     d, theta, j = 5, 1.234, 2
-    RZ = _rz_matrix_func(d, theta, j)
+    RZ = rz_matrix_func(d, theta, j)
     assert is_unitary(RZ)
     diag = np.ones(d, dtype=np.complex64)
     diag[j] = np.exp(1j * theta)
@@ -137,7 +137,7 @@ def test_RZ_phase_on_single_level(backend, highp):
 @pytest.mark.parametrize("d", [2, 3, 5])
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_SWAP_permutation(d, backend, highp):
-    SW = _swap_matrix_func(d)
+    SW = swap_matrix_func(d)
     D = d * d
     assert SW.shape == (D, D)
     assert is_unitary(SW)
@@ -156,7 +156,7 @@ def test_SWAP_permutation(d, backend, highp):
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_RZZ_diagonal(d, backend, highp):
     theta = 0.37
-    RZZ = _rzz_matrix_func(d, theta, j1=0, k1=1, j2=0, k2=1)
+    RZZ = rzz_matrix_func(d, theta, j1=0, k1=1, j2=0, k2=1)
     assert is_unitary(RZZ)
 
     D = d * d
@@ -179,7 +179,7 @@ def test_RXX_selected_block(backend, highp):
     theta = 0.81
     j1, k1 = 0, 2
     j2, k2 = 1, 3
-    RXX = _rxx_matrix_func(d, theta, j1, k1, j2, k2)
+    RXX = rxx_matrix_func(d, theta, j1, k1, j2, k2)
     assert is_unitary(RXX)
     D = d * d
     I = np.eye(D)
@@ -196,8 +196,8 @@ def test_RXX_selected_block(backend, highp):
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_CPHASE_blocks(d, backend, highp):
     omega = np.exp(2j * np.pi / d)
-    Z = _z_matrix_func(d, omega)
-    M = _cphase_matrix_func(d, cv=None, omega=omega)
+    Z = z_matrix_func(d, omega)
+    M = cphase_matrix_func(d, cv=None, omega=omega)
     for a in range(d):
         rs = a * d
         block = M[rs : rs + d, rs : rs + d]
@@ -206,7 +206,7 @@ def test_CPHASE_blocks(d, backend, highp):
     assert is_unitary(M)
 
     cv = 1
-    M2 = _cphase_matrix_func(d, cv=cv, omega=omega)
+    M2 = cphase_matrix_func(d, cv=cv, omega=omega)
     for a in range(d):
         rs = a * d
         block = M2[rs : rs + d, rs : rs + d]
@@ -219,8 +219,8 @@ def test_CPHASE_blocks(d, backend, highp):
 @pytest.mark.parametrize("d", [3, 5])
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_CSUM_blocks(d, backend, highp):
-    X = _x_matrix_func(d)
-    M = _csum_matrix_func(d, cv=None)
+    X = x_matrix_func(d)
+    M = csum_matrix_func(d, cv=None)
     for a in range(d):
         rs = a * d
         block = M[rs : rs + d, rs : rs + d]
@@ -229,7 +229,7 @@ def test_CSUM_blocks(d, backend, highp):
     assert is_unitary(M)
 
     cv = 2 % d
-    M2 = _csum_matrix_func(d, cv=cv)
+    M2 = csum_matrix_func(d, cv=cv)
     for a in range(d):
         rs = a * d
         block = M2[rs : rs + d, rs : rs + d]
@@ -242,7 +242,7 @@ def test_CSUM_blocks(d, backend, highp):
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_CSUM_mapping_small_d(backend, highp):
     d = 3
-    M = _csum_matrix_func(d)
+    M = csum_matrix_func(d)
     M = tc.backend.numpy(M)
     for r in range(d):
         for s in range(d):
@@ -257,23 +257,23 @@ def test_CSUM_mapping_small_d(backend, highp):
 def test_rotation_index_errors(highp):
     d = 4
     with pytest.raises(ValueError):
-        _rx_matrix_func(d, 0.1, j=-1, k=1)
+        rx_matrix_func(d, 0.1, j=-1, k=1)
     with pytest.raises(ValueError):
-        _ry_matrix_func(d, 0.1, j=0, k=4)
+        ry_matrix_func(d, 0.1, j=0, k=4)
     with pytest.raises(ValueError):
-        _rx_matrix_func(d, 0.1, j=2, k=2)
+        rx_matrix_func(d, 0.1, j=2, k=2)
 
 
 def test_CPHASE_CSUM_cv_range(highp):
     d = 5
     with pytest.raises(ValueError):
-        _cphase_matrix_func(d, cv=-1)
+        cphase_matrix_func(d, cv=-1)
     with pytest.raises(ValueError):
-        _cphase_matrix_func(d, cv=d)
+        cphase_matrix_func(d, cv=d)
     with pytest.raises(ValueError):
-        _csum_matrix_func(d, cv=-1)
+        csum_matrix_func(d, cv=-1)
     with pytest.raises(ValueError):
-        _csum_matrix_func(d, cv=d)
+        csum_matrix_func(d, cv=d)
 
 
 def test__is_prime_edge_and_composites():
@@ -289,32 +289,32 @@ def test_two_qudit_builders_index_validation():
     d = 3
     theta = 0.1
     with pytest.raises(ValueError):
-        _rzz_matrix_func(d, theta, j1=0, k1=1, j2=0, k2=3)
+        rzz_matrix_func(d, theta, j1=0, k1=1, j2=0, k2=3)
     with pytest.raises(ValueError):
-        _rxx_matrix_func(d, theta, j1=0, k1=1, j2=3, k2=0)
+        rxx_matrix_func(d, theta, j1=0, k1=1, j2=3, k2=0)
     with pytest.raises(ValueError):
-        _rzz_matrix_func(d, theta, j1=0, k1=0, j2=1, k2=1)
+        rzz_matrix_func(d, theta, j1=0, k1=0, j2=1, k2=1)
     with pytest.raises(ValueError):
-        _rxx_matrix_func(d, theta, j1=2, k1=2, j2=0, k2=0)
+        rxx_matrix_func(d, theta, j1=2, k1=2, j2=0, k2=0)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_u8_prime_dimension_and_qubit_case(backend):
     with pytest.raises(ValueError):
-        _u8_matrix_func(d=4)
+        u8_matrix_func(d=4)
     with pytest.raises(ValueError):
-        _u8_matrix_func(d=9, gamma=1, z=0, eps=0)
+        u8_matrix_func(d=9, gamma=1, z=0, eps=0)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_u8_qutrit_correct_phases_and_gamma_zero_allowed(backend):
     d = 3
-    U3 = _u8_matrix_func(d=d, gamma=2, z=1, eps=0)
+    U3 = u8_matrix_func(d=d, gamma=2, z=1, eps=0)
     zeta = np.exp(2j * np.pi / 9)
     expected3 = np.diag([zeta**0, zeta**1, zeta**8])
     assert np.allclose(tc.backend.numpy(U3), expected3, atol=1e-12)
 
-    U3_g0 = _u8_matrix_func(d=d, gamma=0, z=1, eps=2)
+    U3_g0 = u8_matrix_func(d=d, gamma=0, z=1, eps=2)
     U3_g0 = tc.backend.numpy(U3_g0)
     assert U3_g0.shape == (3, 3)
     assert np.allclose(U3_g0, np.diag(np.diag(U3_g0)), atol=1e-12)
@@ -339,7 +339,7 @@ def test_u8_p_greater_than_3_matches_closed_form(backend):
     omega = np.exp(2j * np.pi / d)
     expected5 = np.diag([omega**v for v in vks])
 
-    U5 = _u8_matrix_func(d=d, gamma=gamma, z=z, eps=eps)
+    U5 = u8_matrix_func(d=d, gamma=gamma, z=z, eps=eps)
     assert np.allclose(tc.backend.numpy(U5), expected5, atol=1e-12)
     assert sum(vks) % d == 0
 
@@ -347,8 +347,8 @@ def test_u8_p_greater_than_3_matches_closed_form(backend):
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_u8_parameter_normalization_and_custom_omega(backend):
     d = 5
-    U_modded = _u8_matrix_func(d=d, gamma=2, z=1, eps=3)
-    U_unnormalized = _u8_matrix_func(
+    U_modded = u8_matrix_func(d=d, gamma=2, z=1, eps=3)
+    U_unnormalized = u8_matrix_func(
         d=d, gamma=7, z=-4, eps=13
     )  # 7\equiv 2, -4\equiv 1, 13\equiv 3 (mod 5)
     assert np.allclose(U_modded, U_unnormalized, atol=1e-12)
@@ -366,6 +366,6 @@ def test_u8_parameter_normalization_and_custom_omega(backend):
         vks[k] = vk
 
     omega_custom = np.exp(2j * np.pi / d) * np.exp(0j)
-    U7_custom = _u8_matrix_func(d=d, gamma=gamma, z=z, eps=eps, omega=omega_custom)
+    U7_custom = u8_matrix_func(d=d, gamma=gamma, z=z, eps=eps, omega=omega_custom)
     expected7_custom = np.diag([omega_custom**v for v in vks])
     assert np.allclose(tc.backend.numpy(U7_custom), expected7_custom, atol=1e-12)

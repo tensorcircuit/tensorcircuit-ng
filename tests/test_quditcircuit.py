@@ -76,7 +76,7 @@ def test_expectation(backend):
     c = tc.QuditCircuit(2, 3)
     c.h(0)
     np.testing.assert_allclose(
-        tc.backend.numpy(c.expectation((tc.quditgates._z_matrix_func(3), [0]))),
+        tc.backend.numpy(c.expectation((tc.quditgates.z_matrix_func(3), [0]))),
         0,
         atol=1e-7,
     )
@@ -88,7 +88,7 @@ def test_complex128(highp, tfb):
     c.rx(0, theta=1j)
     c.wavefunction()
     np.testing.assert_allclose(
-        c.expectation((tc.quditgates._z_matrix_func(3), [1])), 0, atol=1e-15
+        c.expectation((tc.quditgates.z_matrix_func(3), [1])), 0, atol=1e-15
     )
 
 
@@ -112,10 +112,10 @@ def test_single_qubit():
 @pytest.mark.parametrize("backend", [lf("npb"), lf("cpb")])
 def test_expectation_between_two_states_qudit(backend):
     dim = 3
-    X3 = tc.quditgates._x_matrix_func(dim)
+    X3 = tc.quditgates.x_matrix_func(dim)
     # Y3 = tc.quditgates._y_matrix_func(dim)  # ZX/i
-    Z3 = tc.quditgates._z_matrix_func(dim)
-    H3 = tc.quditgates._h_matrix_func(dim)
+    Z3 = tc.quditgates.z_matrix_func(dim)
+    H3 = tc.quditgates.h_matrix_func(dim)
     X3_dag = np.conjugate(X3.T)
 
     # e0 = np.array([1.0, 0.0, 0.0], dtype=np.complex64)
@@ -165,8 +165,8 @@ def test_expectation_between_two_states_qudit(backend):
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("cpb")])
 def test_any_inputs_state_qudit_true_gates(backend):
     dim = 3
-    Xd = tc.quditgates._x_matrix_func(dim)
-    Zd = tc.quditgates._z_matrix_func(dim)
+    Xd = tc.quditgates.x_matrix_func(dim)
+    Zd = tc.quditgates.z_matrix_func(dim)
     omega = np.exp(2j * np.pi / dim)
 
     def idx(j0, j1):
@@ -219,7 +219,7 @@ def test_unitary(backend):
     c.x(0)
     c.z(1)
     answer = tc.backend.numpy(
-        np.kron(tc.quditgates._x_matrix_func(3), tc.quditgates._z_matrix_func(3))
+        np.kron(tc.quditgates.x_matrix_func(3), tc.quditgates.z_matrix_func(3))
     )
     np.testing.assert_allclose(
         tc.backend.numpy(c.wavefunction().reshape([9, 9])), answer, atol=1e-5
@@ -362,7 +362,7 @@ def test_qudit_minimal_ad_qudit(backend):
         # rotate on the (0,1) subspace so that the observable is sensitive to theta
         c.ry(0, theta=theta, j=0, k=1)
         # measure Z on site 0 (qudit Z for d=3)
-        E = c.expectation((tc.quditgates._z_matrix_func(dim), [0]))
+        E = c.expectation((tc.quditgates.z_matrix_func(dim), [0]))
         return tc.backend.real(E)
 
     # backend autodiff gradient
@@ -389,7 +389,7 @@ def test_qudit_minimal_jit_qudit(backend):
     def energy(theta):
         c = tc.QuditCircuit(1, dim)
         c.ry(0, theta=theta, j=0, k=1)
-        E = c.expectation((tc.quditgates._z_matrix_func(dim), [0]))
+        E = c.expectation((tc.quditgates.z_matrix_func(dim), [0]))
         return tc.backend.real(E)
 
     jit_energy = tc.backend.jit(energy)
@@ -412,7 +412,7 @@ def test_qudit_minimal_vmap_qudit(backend):
     def energy(theta):
         c = tc.QuditCircuit(1, dim)
         c.ry(0, theta=theta, j=0, k=1)
-        E = c.expectation((tc.quditgates._z_matrix_func(dim), [0]))
+        E = c.expectation((tc.quditgates.z_matrix_func(dim), [0]))
         return tc.backend.real(E)
 
     venergy = tc.backend.vmap(energy)

@@ -43,8 +43,8 @@ def vqe_forward(param, *, nqudits: int, d: int, nlayers: int, J: float, h: float
     if d < 3:
         raise ValueError("This example assumes d >= 3 (qutrit or higher).")
 
-    S = tc.quditgates._x_matrix_func(d)
-    Z = tc.quditgates._z_matrix_func(d)
+    S = tc.quditgates.x_matrix_func(d)
+    Z = tc.quditgates.z_matrix_func(d)
     Sdag = tc.backend.adjoint(S)
     Zdag = tc.backend.adjoint(Z)
 
