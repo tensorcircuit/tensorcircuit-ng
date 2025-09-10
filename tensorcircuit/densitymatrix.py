@@ -179,9 +179,9 @@ class DMCircuit(BaseCircuit):
 
     @staticmethod
     def check_kraus(kraus: Sequence[Gate]) -> bool:
-        """
+        r"""
         Check if Kraus operators satisfy the completeness relation:
-        sum_i K_i^† K_i = I
+        :math:`\sum_i K_i^\dagger K_i = I`
 
         :param kraus: Sequence of Kraus operators
         :type kraus: Sequence[Gate]

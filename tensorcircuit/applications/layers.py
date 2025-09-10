@@ -35,7 +35,7 @@ Symbol = Any  # sympy.Symbol
 
 def _resolve(symbol: Union[Symbol, Tensor], i: int = 0) -> Tensor:
     """
-    Make sure the layer is compatible with both multi-param and single param requirements。
+    Make sure the layer is compatible with both multi-param and single param requirements
 
     What could be the input: list/tuple of sympy.symbol, tf.tensor with 1D or 0D shape
     """

@@ -19,11 +19,11 @@ def heisenberg_hamiltonian(
     j_coupling: Union[float, List[float], Tuple[float, ...]] = 1.0,
     interaction_scope: str = "neighbors",
 ) -> Any:
-    """
+    r"""
     Generates the sparse matrix of the Heisenberg Hamiltonian for a given lattice.
 
     The Heisenberg Hamiltonian is defined as:
-    H = J * Σ_{i,j} (X_i X_j + Y_i Y_j + Z_i Z_j)
+    :math:`H = J\sum_{i,j} (X_i X_j + Y_i Y_j + Z_i Z_j)`
     where the sum is over a specified set of interacting pairs {i,j}.
 
     :param lattice: An instance of a class derived from AbstractLattice,
@@ -86,13 +86,21 @@ def heisenberg_hamiltonian(
 def rydberg_hamiltonian(
     lattice: AbstractLattice, omega: float, delta: float, c6: float
 ) -> Any:
-    """
+    r"""
     Generates the sparse matrix of the Rydberg atom array Hamiltonian.
 
     The Hamiltonian is defined as:
-    H = Σ_i (Ω/2)X_i - Σ_i δ(1 - Z_i)/2 + Σ_{i<j} V_ij (1-Z_i)/2 (1-Z_j)/2
-      = Σ_i (Ω/2)X_i + Σ_i (δ/2)Z_i + Σ_{i<j} (V_ij/4)(Z_iZ_j - Z_i - Z_j)
-    where V_ij = C6 / |r_i - r_j|^6.
+    .. math::
+
+    H = \sum_i \frac{\Omega}{2} X_i
+        - \sum_i \frac{\delta}{2} \bigl(1 - Z_i \bigr)
+        + \sum_{i<j} \frac{V_{ij}}{4} \bigl(1 - Z_i \bigr)\bigl(1 - Z_j \bigr)
+
+      = \sum_i \frac{\Omega}{2} X_i
+        + \sum_i \frac{\delta}{2} Z_i
+        + \sum_{i<j} \frac{V_{ij}}{4}\,\bigl(Z_i Z_j - Z_i - Z_j \bigr)
+
+    where :math:`V_{ij} = C6 / |r_i - r_j|^6`.
 
     Note: Constant energy offset terms (proportional to the identity operator)
     are ignored in this implementation.

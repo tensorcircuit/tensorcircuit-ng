@@ -1436,7 +1436,7 @@ class CustomizeLattice(AbstractLattice):
         This method supports two modes:
         1. KDTree mode (use_kdtree=True): Fast, O(N log N) performance for large lattices
            but breaks differentiability due to scipy dependency
-        2. Distance matrix mode (use_kdtree=False): Slower O(N²) but fully differentiable
+        2. Distance matrix mode (use_kdtree=False): Slower O(N^2) but fully differentiable
            and backend-agnostic
 
         :param max_k: Maximum number of neighbor shells to compute

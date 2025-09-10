@@ -79,7 +79,7 @@ def _decode_basis_label(label: str, n: int, dim: int) -> List[int]:
     """
     Decode a string basis label into a list of integer digits.
 
-    The label is interpreted in base-``dim`` using characters ``0–9A–Z``.
+    The label is interpreted in base-``dim`` using characters ``0-9A-Z``.
     Only dimensions up to 36 are supported.
 
     :param label: basis label string, e.g. "010" or "A9F"
@@ -97,7 +97,7 @@ def _decode_basis_label(label: str, n: int, dim: int) -> List[int]:
     """
     if dim > 36:
         raise NotImplementedError(
-            f"String basis label supports d<=36 (0–9A–Z). Got dim={dim}. "
+            f"String basis label supports d<=36 (0-9A-Z). Got dim={dim}. "
             "Use an integer array/tensor of length n instead."
         )
     s = label.upper()
@@ -107,7 +107,7 @@ def _decode_basis_label(label: str, n: int, dim: int) -> List[int]:
     for ch in s:
         if ch not in _ALPHABET:
             raise ValueError(
-                f"Invalid character '{ch}' in basis label (allowed 0–9A–Z)."
+                f"Invalid character '{ch}' in basis label (allowed 0-9A-Z)."
             )
         v = _ALPHABET.index(ch)
         if v >= dim:
@@ -751,7 +751,7 @@ class QuOperator:
         """
         Tensor product with another operator.
         Given two operators `A` and `B`, produces a new operator `AB` representing
-        :math:`A ⊗ B`. The `out_edges` (`in_edges`) of `AB` is simply the
+        :math:`A \otimes B`. The `out_edges` (`in_edges`) of `AB` is simply the
         concatenation of the `out_edges` (`in_edges`) of `A.copy()` with that of
         `B.copy()`:
         `new_out_edges = [*out_edges_A_copy, *out_edges_B_copy]`
@@ -2403,13 +2403,13 @@ def free_energy(
 
 def renyi_entropy(rho: Union[Tensor, QuOperator], k: int = 2) -> Tensor:
     """
-    Compute the Rényi entropy of order :math:`k` by given density matrix.
+    Compute the Renyi entropy of order :math:`k` by given density matrix.
 
     :param rho: The density matrix in form of Tensor or QuOperator.
     :type rho: Union[Tensor, QuOperator]
-    :param k: The order of Rényi entropy, default is 2.
+    :param k: The order of Renyi entropy, default is 2.
     :type k: int, optional
-    :return: The :math:`k` th order of Rényi entropy.
+    :return: The :math:`k` th order of Renyi entropy.
     :rtype: Tensor
     """
     s = 1 / (1 - k) * backend.real(backend.log(trace_product(*[rho for _ in range(k)])))
@@ -2423,7 +2423,7 @@ def renyi_free_energy(
     k: int = 2,
 ) -> Tensor:
     """
-    Compute the Rényi free energy of the corresponding density matrix and Hamiltonian.
+    Compute the Renyi free energy of the corresponding density matrix and Hamiltonian.
 
     :Example:
 
@@ -2440,9 +2440,9 @@ def renyi_free_energy(
     :type h: Union[Tensor, QuOperator]
     :param beta: Constant for the optimization, default is 1.
     :type beta: float, optional
-    :param k: The order of Rényi entropy, default is 2.
+    :param k: The order of Renyi entropy, default is 2.
     :type k: int, optional
-    :return: The :math:`k` th order of Rényi entropy.
+    :return: The :math:`k` th order of Renyi entropy.
     :rtype: Tensor
     """
     energy = backend.real(trace_product(rho, h))

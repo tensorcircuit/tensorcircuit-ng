@@ -334,7 +334,7 @@ def entropy_shadow(
 
 def renyi_entropy_2(snapshots: Tensor, sub: Optional[Sequence[int]] = None) -> Tensor:
     r"""To calculate the second order Renyi entropy of a subsystem from snapshot, please refer to
-    Brydges, T. et al. Science 364, 260–263 (2019). This function is not jitable.
+    Brydges, T. et al. Science 364, 260-263 (2019). This function is not jitable.
 
     :param snapshots: shape = (ns, repeat, nq)
     :type: Tensor

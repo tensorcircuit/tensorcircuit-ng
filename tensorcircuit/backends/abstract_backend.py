@@ -1039,8 +1039,8 @@ class ExtendedBackend:
         :type a: Tensor
         :param v: value to inserted
         :type v: Tensor
-        :param side:  If ‘left’, the index of the first suitable location found is given.
-            If ‘right’, return the last such index.
+        :param side:  If `left`, the index of the first suitable location found is given.
+            If `right`, return the last such index.
             If there is no suitable index, return either 0 or N (where N is the length of a),
             defaults to "left"
         :type side: str, optional

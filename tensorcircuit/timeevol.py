@@ -387,7 +387,7 @@ def hamiltonian_evol(
     ...     [0.0, 2.0, -1.0, 0.0],
     ...     [0.0, 0.0, 0.0, 1.0]
     ... ])
-    >>> # Initial state |00⟩
+    >>> # Initial state |00>
     >>> psi0 = tc.array_to_tensor([1.0, 0.0, 0.0, 0.0])
     >>> # Evolution times
     >>> times = tc.array_to_tensor([0.0, 0.5, 1.0])
@@ -843,7 +843,7 @@ def estimate_spectral_bounds(
     :type n_iter: int
     :param psi0: Optional initial state.
     :type psi0: Optional[Any]
-    :return: (E_max, E_min)。
+    :return: (E_max, E_min)
     """
     shape = h.shape
     D = shape[-1]

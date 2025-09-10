@@ -140,7 +140,7 @@ def count2vec(
 def vec2count(vec: Tensor, prune: bool = False, dim: Optional[int] = None) -> ct:
     """
     Map a count/probability vector of length D to a dictionary with base-d string keys (0-9A-Z).
-    Only generate string keys when d ≤ 36; if d is inferred to be > 36, raise a NotImplementedError.
+    Only generate string keys when d <= 36; if d is inferred to be > 36, raise a NotImplementedError.
 
     :param vec: A one-dimensional vector of length D = d**n
     :param prune: Whether to prune near-zero elements (threshold 1e-8)
