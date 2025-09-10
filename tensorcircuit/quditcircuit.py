@@ -92,7 +92,7 @@ class QuditCircuit:
         if not isinstance(dim, int) or dim <= 2:
             raise ValueError(
                 f"QuditCircuit is only for qudits (dim>=3). "
-                f"You passed dim={dim}. For qudits, please use `Circuit` instead."
+                f"You passed dim={dim}. For qubits, please use `Circuit` instead."
             )
         # Require integer d>=2; current string-encoded IO supports d<=36 (0-9A-Z digits).
         if dim > 36:
