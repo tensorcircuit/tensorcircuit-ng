@@ -50,7 +50,7 @@ class QuditCircuit:
         self._nqudits = nqudits
 
         self._circ = Circuit(
-            nqudits=nqudits,
+            nqubits=nqudits,
             dim=dim,
             inputs=inputs,
             mps_inputs=mps_inputs,
