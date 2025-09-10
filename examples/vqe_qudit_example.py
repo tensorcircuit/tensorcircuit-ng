@@ -16,7 +16,8 @@ where, for local dimension `d`,
 The code defaults to a 2-qutrit (d=3) problem but can be changed via CLI flags.
 """
 
-# import os, sys
+# import os
+# import sys
 #
 # base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 # if base_dir not in sys.path:
