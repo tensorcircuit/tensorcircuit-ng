@@ -36,7 +36,7 @@ def vqe_forward(param, *, nqudits: int, d: int, nlayers: int, J: float, h: float
     Ansatz:
       [ for L in 1...nlayers ]
         - On each site q:
-            :math:`RX(q; \theta_L q^(01)) RY(q; \theta_L q^(12)) RZ(q; \phi_L q^(0))`
+            :math:`RX(q; \theta_L q^{(01)}) RY(q; \theta_L q^{(12)}) RZ(q; \phi_L q^{(0)})`
           (subspace indices shown as superscripts)
         - Entangle neighboring pairs with RXX on subspaces (0,1)
     """
@@ -76,8 +76,8 @@ def vqe_forward(param, *, nqudits: int, d: int, nlayers: int, J: float, h: float
     return tc.backend.real(energy)
 
 
-def build_param_shape(nqudits: int, d: int, nlayers: int):
-    # Per layer per qudit: RX^(01), RY^(12) (or dummy), RZ^(0) = 3 params
+def build_param_shape(nqudits: int, nlayers: int):
+    # Per layer per qudit: RX^{(01)}, RY^{(12)} (or dummy), RZ^{(0)} = 3 params
     # Per layer entanglers: len(pairs) parameters
     pairs = nqudits - 1
     per_layer = 3 * nqudits + pairs
