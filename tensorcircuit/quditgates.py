@@ -1,5 +1,14 @@
-"""
-Single-qudit and two-qudit gates and their corresponding matrix.
+r"""
+Single-qudit and two-qudit gates and their matrix representations.
+
+This module implements gates for **qudits** (d-level systems), providing d-dimensional
+analogues of familiar qubit gates as well as qudit-specific primitives.
+
+**Registry**
+Single-qudit builders: ``I``, ``X``, ``Z``, ``H``, ``RX``, ``RY``, ``RZ``, ``U8``.
+Two-qudit builders: ``RXX``, ``RZZ``, ``CPHASE``, ``CSUM``.
+
+These names are used by higher-level APIs (e.g. :class:`tensorcircuit.quditcircuit.QuditCircuit`).
 """
 
 from typing import Any, Optional, Tuple
@@ -161,16 +170,19 @@ def _check_rotation_indices(
     d: int, *indices: int, distinct_pairs: bool = False
 ) -> None:
     """
-    Validate that indices are within [0, d-1] and optionally form distinct pairs.
+    Validate subspace indices for rotations and interactions.
+
+    Ensures every index lies in ``[0, d-1]`` and (optionally) that two selected
+    basis pairs are distinct.
 
     :param d: Qudit dimension.
     :type d: int
-    :param indices: Indices to validate.
+    :param indices: Indices to validate (e.g., ``j, k`` or ``j1, k1, j2, k2``).
     :type indices: int
-    :param distinct_pairs: If True, enforce that (indices[0], indices[1])
-                           ≠ (indices[2], indices[3]) for 4 indices.
+    :param distinct_pairs: If ``True`` and four indices are provided, enforce that
+                           ``(j1, k1)`` and ``(j2, k2)`` do not denote the same basis state.
     :type distinct_pairs: bool
-    :raises ValueError: If indices are invalid.
+    :raises ValueError: If any index is out of range or if the distinctness constraint fails.
     """
     for idx in indices:
         if not (0 <= idx < d):
@@ -220,9 +232,15 @@ def _two_level_projectors(
 
 def rx_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     r"""
-    Rotation-X (``RX``) gate on a selected two-level subspace of a qudit.
+    Rotation-X (``RX``) on a selected two-level subspace of a qudit.
 
-    Acts like the qubit :math:`RX(\theta)` on levels ``j`` and ``k``, identity elsewhere.
+    Acts like the qubit :math:`RX(\theta)` on levels :math:`j` and :math:`k`, identity elsewhere. On the
+    :math:`\{\lvert j\rangle,\lvert k\rangle\}` subspace the matrix equals
+
+    .. math::
+       RX(\theta) = \cos\tfrac{\theta}{2}\,(\lvert j\rangle\!\langle j\rvert+\lvert k\rangle\!\langle k\rvert)
+       - i\,\sin\tfrac{\theta}{2}\,(\lvert j\rangle\!\langle k\rvert + \lvert k\rangle\!\langle j\rvert)
+       + I.
 
     :param d: Qudit dimension.
     :type d: int
@@ -232,7 +250,7 @@ def rx_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     :type j: int
     :param k: Second level index.
     :type k: int
-    :return: ``(d, d)`` matrix for :math:`RX(\theta)` on the ``j,k`` subspace.
+    :return: ``(d, d)`` matrix for :math:`RX(\theta)` on the :math:`j,k` subspace.
     :rtype: Tensor
     """
     _check_rotation_indices(d, j, k)
@@ -245,7 +263,15 @@ def rx_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
 
 def ry_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     r"""
-    Rotation-Y (``RY``) gate on a selected two-level subspace of a qudit.
+    Rotation-Y (``RY``) on a selected two-level subspace of a qudit.
+
+    Acts like the qubit :math:`RY(\theta)` on levels :math:`j` and :math:`k`, identity elsewhere. On the
+    :math:`\{\lvert j\rangle,\lvert k\rangle\}` subspace the matrix equals
+
+    .. math::
+       RY(\theta) = \cos\tfrac{\theta}{2}\,(\lvert j\rangle\!\langle j\rvert+\lvert k\rangle\!\langle k\rvert)
+       + \sin\tfrac{\theta}{2}\,(\lvert k\rangle\!\langle j\rvert - \lvert j\rangle\!\langle k\rvert)
+       + I.
 
     :param d: Qudit dimension.
     :type d: int
@@ -255,7 +281,7 @@ def ry_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
     :type j: int
     :param k: Second level index.
     :type k: int
-    :return: ``(d, d)`` matrix for :math:`RY(\theta)` on the ``j,k`` subspace.
+    :return: ``(d, d)`` matrix for :math:`RY(\theta)` on the :math:`j,k` subspace.
     :rtype: Tensor
     """
     _check_rotation_indices(d, j, k)
@@ -268,10 +294,15 @@ def ry_matrix_func(d: int, theta: float, j: int = 0, k: int = 1) -> Tensor:
 
 def rz_matrix_func(d: int, theta: float, j: int = 0) -> Tensor:
     r"""
-    Rotation-Z (``RZ``) gate for qudits.
+    Rotation-Z (``RZ``) on a selected level of a qudit.
 
-    For qubits it reduces to the usual :math:`RZ(\theta)`. For general ``d``, it
-    applies a phase :math:`e^{i\theta}` to level ``j`` and leaves others unchanged.
+    Acts like the qubit :math:`RZ(\theta)` but applies a phase only to level :math:`j`. On the computational
+    basis it equals
+
+    .. math::
+       RZ(\theta) = I + (e^{i\theta}-1)\,\lvert j\rangle\!\langle j\rvert,
+
+    i.e. :math:`\lvert j\rangle \mapsto e^{i\theta}\,\lvert j\rangle` and all other levels unchanged.
 
     :param d: Qudit dimension.
     :type d: int
@@ -279,7 +310,7 @@ def rz_matrix_func(d: int, theta: float, j: int = 0) -> Tensor:
     :type theta: float
     :param j: Level index receiving the phase.
     :type j: int
-    :return: ``(d, d)`` diagonal matrix implementing :math:`RZ(\theta)` on level ``j``.
+    :return: ``(d, d)`` diagonal matrix implementing :math:`RZ(\theta)` on level :math:`j`.
     :rtype: Tensor
     """
     I, Pjj = _two_level_projectors(d, j, k=None)
@@ -289,14 +320,14 @@ def rz_matrix_func(d: int, theta: float, j: int = 0) -> Tensor:
 
 
 def swap_matrix_func(d: int) -> Tensor:
-    """
-    SWAP gate for two qudits of dimension ``d``.
+    r"""
+    SWAP gate for two qudits of equal dimension :math:`d`.
 
-    Exchanges basis states ``|i⟩|j⟩ → |j⟩|i⟩``.
+    Exchanges basis states :math:`\lvert i\rangle\lvert j\rangle \to \lvert j\rangle\lvert i\rangle`.
 
     :param d: Qudit dimension (for each register).
     :type d: int
-    :return: ``(d*d, d*d)`` matrix representing SWAP.
+    :return: ``(d^2, d^2)`` permutation matrix implementing SWAP.
     :rtype: Tensor
     """
     D = d * d
