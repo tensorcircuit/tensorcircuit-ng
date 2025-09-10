@@ -5,6 +5,7 @@
 .. toctree::
 
     tutorials/circuit_basics_cn.ipynb
+    tutorials/circuit_qudit_basics_cn.ipynb
     tutorials/qaoa_cn.ipynb
     tutorials/tfim_vqe_cn.ipynb
     tutorials/mnist_qml_cn.ipynb

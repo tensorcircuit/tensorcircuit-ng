@@ -5,6 +5,7 @@ Jupyter Tutorials
 .. toctree::
 
     tutorials/circuit_basics.ipynb
+    tutorials/circuit_qudit_basics.ipynb
     tutorials/qaoa.ipynb
     tutorials/qaoa_bo.ipynb
     tutorials/qaoa_nae3sat.ipynb
