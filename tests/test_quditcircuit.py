@@ -445,3 +445,106 @@ def test_quditcircuit_amplitude_before_wrapper():
     nodes = c.amplitude_before("00")
     assert isinstance(nodes, list)
     assert len(nodes) == 5  # one gate (X on qudit 0) -> single node in the traced path
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("cpb")])
+def test_qudit_entanglement_measures_maximally_entangled(backend):
+    r"""
+    Prepare the two-qudit maximally entangled state
+    :math:`\lvert \Phi_d \rangle = \frac{1}{\sqrt{d}} \sum_{j=0}^{d-1} \lvert j \rangle \otimes \lvert j \rangle`
+    for :math:`d>2` using a generalized Hadamard :math:`H` on qudit-0 followed by
+    :math:`\mathrm{CSUM}(0\!\to\!1)`. For this state,
+    :math:`\rho_A = \operatorname{Tr}_B(\lvert \Phi_d \rangle\langle \Phi_d \rvert) = \mathbb{I}_d/d`.
+    We check:
+    - eigenvalues of :math:`\rho_A` are all :math:`1/d`;
+    - purity :math:`\operatorname{Tr}(\rho_A^2) = 1/d`;
+    - linear entropy :math:`S_L = 1 - \operatorname{Tr}(\rho_A^2) = 1 - 1/d`.
+    """
+    d = 3  # any d>2 is fine; use qutrit here
+    c = tc.QuditCircuit(2, d)
+    c.h(0)
+    c.csum(0, 1)
+
+    # |\psi> as a d*d amplitude matrix: \psi[j_A, j_B]
+    psi = tc.backend.numpy(c.state()).reshape(d, d)
+    rho_A = psi @ psi.conj().T  # partial trace over B
+
+    evals = np.linalg.eigvalsh(rho_A)
+    np.testing.assert_allclose(evals, np.ones(d) / d, rtol=1e-6, atol=1e-7)
+
+    purity = np.real_if_close(np.trace(rho_A @ rho_A))
+    np.testing.assert_allclose(purity, 1.0 / d, rtol=1e-6, atol=1e-7)
+
+    linear_entropy = 1.0 - purity
+    np.testing.assert_allclose(linear_entropy, 1.0 - 1.0 / d, rtol=1e-6, atol=1e-7)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("cpb")])
+def test_qudit_mutual_information_product_vs_entangled(backend):
+    r"""
+    Compare quantum mutual information :math:`I(A\!:\!B) = S(\rho_A)+S(\rho_B)-S(\rho_{AB})`
+    (with von Neumann entropy :math:`S(\rho)=-\operatorname{Tr}[\rho \ln \rho]`, natural log)
+    for two two-qudit states (local dimension :math:`d>2`):
+
+    1) **Product state** prepared *with gates* by applying single-qudit rotations
+       :math:`\mathrm{RY}(\theta)` in the two-level subspace :math:`(j,k)=(0,1)` on **each** qudit.
+       This yields a separable pure state, hence :math:`I(A\!:\!B)=0`.
+
+    2) **Maximally entangled state** :math:`\lvert \Phi_d \rangle` prepared by :math:`H` on qudit-0
+       then :math:`\mathrm{CSUM}(0\!\to\!1)`. For this pure bipartite state,
+       :math:`\rho_A=\rho_B=\mathbb{I}_d/d`, so :math:`S(\rho_A)=S(\rho_B)=\ln d`,
+       :math:`S(\rho_{AB})=0`, and :math:`I(A\!:\!B)=2\ln d`.
+    """
+    d = 3
+
+    # --- Case 1: explicit product state via local rotations (uses native ry) ---
+    c1 = tc.QuditCircuit(2, d)
+    # rotate each qudit in subspace (0,1) by different angles to ensure it's not trivial
+    c1.ry(0, theta=0.37, j=0, k=1)
+    c1.ry(1, theta=-0.59, j=0, k=1)
+    psi1 = tc.backend.numpy(c1.state()).reshape(d, d)
+
+    # --- Case 2: maximally entangled |\phi_d> via H + CSUM ---
+    c2 = tc.QuditCircuit(2, d)
+    c2.h(0)
+    c2.csum(0, 1)
+    psi2 = tc.backend.numpy(c2.state()).reshape(d, d)
+
+    def reduced_density(psi, trace_out="B"):
+        # \rho_A = \psi \psi^\dagger ; \rho_B = \psi^T \psi^*
+        return psi @ psi.conj().T if trace_out == "B" else psi.T @ psi.conj()
+
+    def von_neumann_entropy(rho):
+        # Hermitize for stability, drop ~0 eigenvalues before log.
+        rh = (rho + rho.conj().T) / 2
+        vals = np.linalg.eigvalsh(rh)
+        vals = np.clip(np.real_if_close(vals), 0.0, 1.0)
+        nz = vals > 1e-12
+        return float(-np.sum(vals[nz] * np.log(vals[nz])))
+
+    # product state mutual information
+    rhoA1, rhoB1 = reduced_density(psi1, "B"), reduced_density(psi1, "A")
+    rhoAB1 = np.outer(psi1.reshape(-1), psi1.conj().reshape(-1)).reshape(d * d, d * d)
+    I_AB_1 = (
+        von_neumann_entropy(rhoA1)
+        + von_neumann_entropy(rhoB1)
+        - von_neumann_entropy(rhoAB1)
+    )
+    np.testing.assert_allclose(I_AB_1, 0.0, atol=1e-7)
+
+    # maximally entangled mutual information
+    rhoA2, rhoB2 = reduced_density(psi2, "B"), reduced_density(psi2, "A")
+    rhoAB2 = np.outer(psi2.reshape(-1), psi2.conj().reshape(-1)).reshape(d * d, d * d)
+    I_AB_2 = (
+        von_neumann_entropy(rhoA2)
+        + von_neumann_entropy(rhoB2)
+        - von_neumann_entropy(rhoAB2)
+    )
+    np.testing.assert_allclose(von_neumann_entropy(rhoAB2), 0.0, atol=1e-7)
+    np.testing.assert_allclose(
+        von_neumann_entropy(rhoA2), np.log(d), rtol=1e-6, atol=1e-7
+    )
+    np.testing.assert_allclose(
+        von_neumann_entropy(rhoB2), np.log(d), rtol=1e-6, atol=1e-7
+    )
+    np.testing.assert_allclose(I_AB_2, 2.0 * np.log(d), rtol=1e-6, atol=1e-7)
