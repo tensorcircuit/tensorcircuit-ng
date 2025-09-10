@@ -874,7 +874,7 @@ class Circuit(BaseCircuit):
         :param nmc: repetition time for Monte Carlo sampling for noisfy calculation, defaults to 1000
         :type nmc: int, optional
         :param status: external randomness given by tensor uniformly from [0, 1], defaults to None,
-            used for noisfy circuit sampling
+            used for noisy circuit sampling
         :type status: Optional[Tensor], optional
         :raises ValueError: "Cannot measure two operators in one index"
         :return: Tensor with one element
