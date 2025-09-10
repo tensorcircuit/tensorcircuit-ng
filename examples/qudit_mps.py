@@ -119,23 +119,7 @@ def main():
     mps = build_qutrit_circuit_mps(n=n, d=d, theta=theta)
     qc = build_qutrit_circuit_dense(n=n, d=d, theta=theta)
 
-    # Obtain statevectors (shape [-1])
-    psi_mps = tc.backend.numpy(mps.wavefunction(form="default"))
-    psi_dense = tc.backend.numpy(qc.wavefunction(form="default"))
-
-    # Normalize both just in case of tiny numerical drift
-    def _norm(v):
-        return v / np.linalg.norm(v)
-
-    psi_mps = _norm(psi_mps)
-    psi_dense = _norm(psi_dense)
-
-    # \ell_\infty comparison: :math:`\max_i |(\psi_{\mathrm{MPS}} - \psi_{\mathrm{dense}})_i|`
-    inf_err = np.max(np.abs(psi_mps - psi_dense))
-    print(r"Max $|\Delta|$ between MPS and dense:", inf_err)
-
-    tol = 1e-10
-    assert inf_err < tol, f"States differ too much: {inf_err} >= {tol}"
+    np.testing.assert_allclose(mps.wavefunction(), qc.wavefunction())
     print("OK: MPSCircuit matches QuditCircuit for d=3 with unitary-applied gates.")
 
 
