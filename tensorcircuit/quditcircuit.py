@@ -3,7 +3,7 @@ Quantum circuit: state simulator for **qudits** (d-level systems).
 
 This module provides a high-level `QuditCircuit` API that mirrors `tensorcircuit.circuit.Circuit`
 but targets qudits with dimension `3 <= d <= 36`.
-For string-encoded samples/counts, digits use `0–9A–Z` where `A=10, …, Z=35`.
+For string-encoded samples/counts, digits use `0-9A-Z` where `A=10, ..., Z=35`.
 
 .. note::
    For qubits (`d=2`) please use :class:`tensorcircuit.circuit.Circuit`.
@@ -42,8 +42,8 @@ class QuditCircuit:
     >>> c.sample(1024, format="count_dict_bin")
 
     .. note::
-       For `3 <= d <= 36`, string samples and count keys use base-`d` characters `0–9A–Z`
-       (`A=10, …, Z=35`).
+       For `3 <= d <= 36`, string samples and count keys use base-`d` characters `0-9A-Z`
+       (`A=10, ..., Z=35`).
 
     :param nqudits: Number of qudits (wires) in the circuit.
     :type nqudits: int
@@ -94,7 +94,7 @@ class QuditCircuit:
                 f"QuditCircuit is only for qudits (dim>=3). "
                 f"You passed dim={dim}. For qudits, please use `Circuit` instead."
             )
-        # Require integer d>=2; current string-encoded IO supports d<=36 (0–9A–Z digits).
+        # Require integer d>=2; current string-encoded IO supports d<=36 (0-9A-Z digits).
         if dim > 36:
             raise NotImplementedError(
                 "The Qudit interface is only supported for dimension < 36 now."
@@ -486,7 +486,7 @@ class QuditCircuit:
         >>> c.amplitude("21")
         array(1.+0.j, dtype=complex64)
 
-        :param l: Bitstring in base-`d` using `0–9A–Z`.
+        :param l: Bitstring in base-`d` using `0-9A-Z`.
         :type l: Union[str, Tensor]
         :return: Complex amplitude.
         :rtype: Tensor
@@ -528,7 +528,7 @@ class QuditCircuit:
                 "count_vector": # np.array([2, 0, 0, 0])
 
                 "count_dict_bin": # {"00": 2, "01": 0, "10": 0, "11": 0}
-                    for cases d\in [11, 36], use 0–9A–Z digits (e.g., 'A' -> 10, …, 'Z' -> 35);
+                    for cases :math:`d\in [11, 36]`, use 0-9A-Z digits (e.g., 'A' -> 10, ..., 'Z' -> 35);
 
         :type format: Optional[str]
         :param random_generator: random generator,  defaults to None
@@ -593,7 +593,7 @@ class QuditCircuit:
 
         :param index: Qudit index where post-selection is applied.
         :type index: int
-        :param keep: Post-selected digit in `{0, …, d-1}`.
+        :param keep: Post-selected digit in `{0, ..., d-1}`.
         :type keep: int
         :return: Unnormalized post-selected state.
         :rtype: Tensor
@@ -662,7 +662,7 @@ class QuditCircuit:
         For density-matrix simulators,
         it would correspond to :math:`\operatorname{Tr}(\rho \vert l \rangle \langle l \vert)`.
 
-        :param l: Base-`d` string using `0–9A–Z` or an equivalent tensor index.
+        :param l: Base-`d` string using `0-9A-Z` or an equivalent tensor index.
         :type l: Union[str, Tensor]
         :return: The tensornetwork nodes for the amplitude of the circuit.
         :rtype: List[Gate]

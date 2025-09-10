@@ -1,7 +1,7 @@
 """
 Quantum circuit: the state simulator.
 Supports qubit (dim=2) and qudit (3 <= dim <= 36) systems.
-For string-encoded samples/counts, digits use 0–9A–Z where A=10, …, Z=35.
+For string-encoded samples/counts, digits use 0-9A-Z where A=10, ..., Z=35.
 """
 
 # pylint: disable=invalid-name
@@ -768,7 +768,7 @@ class Circuit(BaseCircuit):
         Take measurement on the given quantum lines by ``index``.
 
         Return format:
-        - For d <= 36, the sample is a base-d string using 0–9A–Z (A=10,…).
+        - For d <= 36, the sample is a base-d string using 0-9A-Z (A=10,...).
 
         :Example:
 

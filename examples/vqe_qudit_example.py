@@ -4,7 +4,7 @@ VQE on QuditCircuits.
 This example shows how to run a simple VQE on a qudit system using
 `tensorcircuit.QuditCircuit`. We build a compact ansatz using single-qudit
 rotations in selected two-level subspaces and RXX-type entanglers, then
-optimize the energy of a Hermitian "clock–shift" Hamiltonian:
+optimize the energy of a Hermitian "clock-shift" Hamiltonian:
 
     H(d) = - J * (X_c \otimes X_c)  -  h * (Z_c \otimes I + I \otimes Z_c)
 
@@ -31,12 +31,12 @@ tc.set_dtype("complex128")
 
 
 def vqe_forward(param, *, nqudits: int, d: int, nlayers: int, J: float, h: float):
-    """Build a QuditCircuit ansatz and compute ⟨H⟩.
+    r"""Build a QuditCircuit ansatz and compute :math:`\langle H\rangle`.
 
     Ansatz:
       [ for L in 1...nlayers ]
         - On each site q:
-            RX(q; θ_Lq^(01)) ∘ RY(q; θ_Lq^(12)) ∘ RZ(q; φ_Lq^(0))
+            :math:`RX(q; \theta_L q^(01)) RY(q; \theta_L q^(12)) RZ(q; \phi_L q^(0))`
           (subspace indices shown as superscripts)
         - Entangle neighboring pairs with RXX on subspaces (0,1)
     """
@@ -86,7 +86,7 @@ def build_param_shape(nqudits: int, d: int, nlayers: int):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="VQE on QuditCircuit (clock–shift model)"
+        description="VQE on QuditCircuit (clock-shift model)"
     )
     parser.add_argument(
         "--d", type=int, default=3, help="Local dimension per site (>=3)"

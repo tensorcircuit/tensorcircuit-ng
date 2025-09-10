@@ -195,7 +195,7 @@ def _check_rotation_indices(
         j1, k1, j2, k2 = indices
         if j1 == k1 and j2 == k2:
             raise ValueError(
-                "Selected basis states must be different: (j1, j2) ≠ (k1, k2)."
+                "Selected basis states must be different: (j1, j2) != (k1, k2)."
             )
 
 
@@ -343,7 +343,7 @@ def rzz_matrix_func(
     Two-qudit ``RZZ(\theta)`` on a selected two-state subspace.
 
     Acts like a qubit :math:`RZZ(\theta)=\exp(-i\,\tfrac{\theta}{2}\,\sigma_z)` on the
-    two-dimensional subspace spanned by ``|j1, j2⟩`` and ``|k1, k2⟩``,
+    two-dimensional subspace spanned by :math:`\lvert j1, j2\rangle` and :math:`\lvert k1, k2\rangle`,
     and as identity elsewhere. The resulting block is diagonal with phases
     :math:`\mathrm{diag}(e^{-i\theta/2},\, e^{+i\theta/2})`.
 
@@ -384,7 +384,8 @@ def rxx_matrix_func(
     r"""
     Two-qudit ``RXX(\theta)`` on a selected two-state subspace.
 
-    Acts like a qubit :math:`RXX` on the subspace spanned by ``|j1, j2⟩`` and ``|k1, k2⟩``.
+    Acts like a qubit :math:`RXX` on the subspace spanned by
+    :math:`\lvert j1, j2\rangle` and :math:`\lvert k1, k2\rangle`.
 
     :param d: Dimension of each qudit (assumed equal).
     :type d: int
@@ -429,7 +430,7 @@ def u8_matrix_func(
     ``U8`` diagonal single-qudit gate for prime dimensions.
 
     See ref: Howard, Mark, and Jiri Vala.
-    "Qudit versions of the qubit π/8 gate." Physical Review A 86, no. 2 (2012): 022316.
+    "Qudit versions of the qubit \pi/8 gate." Physical Review A 86, no. 2 (2012): 022316.
     https://doi.org/10.1103/PhysRevA.86.022316
 
     This gate is the qudit analogue of the qubit :math:`\pi/8` gate, defined in
@@ -448,8 +449,8 @@ def u8_matrix_func(
     :param d: Qudit dimension (must be prime).
     :type d: int
     :param gamma: Shear parameter :math:`\gamma' \in \mathbb{Z}_d`.
-        If ``gamma = 0``, the gate is a diagonal Clifford.
-        If ``gamma ≠ 0``, the gate is a genuine non-Clifford (analogue of :math:`\pi/8`).
+        If :math:`gamma = 0`, the gate is a diagonal Clifford.
+        If :math:`gamma \neq 0`, the gate is a genuine non-Clifford (analogue of :math:`\pi/8`).
     :type gamma: int
     :param z: Displacement parameter :math:`z' \in \mathbb{Z}_d`,
         which sets the symplectic part of the associated Clifford.

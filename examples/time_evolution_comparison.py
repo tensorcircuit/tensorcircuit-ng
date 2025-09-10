@@ -27,7 +27,11 @@ def create_heisenberg_hamiltonian(n, sparse=True):
 
 
 def create_initial_state(n):
-    """Create initial Neel state |↑↓↑↓↑↓↑↓> for n sites."""
+    r"""
+    Create initial Neel state
+    :math:`\vert \uparrow\downarrow\uparrow\downarrow\uparrow\downarrow\uparrow\downarrow\rangle`
+    for n sites.
+    """
     c = tc.Circuit(n)
     # Apply X gates to odd sites to create Neel state
     c.x([i for i in range(1, n, 2)])

@@ -350,8 +350,8 @@ def test_quditcircuit_set_dim_validation():
 
 @pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
 def test_qudit_minimal_ad_qudit(backend):
-    """Minimal AD test on a single-qudit (d=3) circuit.
-    We differentiate the expectation ⟨Z⟩ w.r.t. a single RY parameter and
+    r"""Minimal AD test on a single-qudit (d=3) circuit.
+    We differentiate the expectation :math:`\langle Z\rangle` w.r.t. a single RY parameter and
     compare to a finite-difference estimate.
     """
 

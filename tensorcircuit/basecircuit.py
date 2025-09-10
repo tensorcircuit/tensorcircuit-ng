@@ -3,7 +3,7 @@ Quantum circuit: common methods for all circuit classes as MixIn
 
 Note:
   - Supports qubit (d = 2) and qudit (d >= 2) systems.
-  - For string-encoded samples/counts when d <= 36, digits use base-d characters 0–9A–Z (A = 10, …, Z = 35).
+  - For string-encoded samples/counts when d <= 36, digits use base-d characters 0-9A-Z (A = 10, ..., Z = 35).
 """
 
 # pylint: disable=invalid-name
@@ -362,7 +362,7 @@ class BaseCircuit(AbstractCircuit):
 
     def perfect_sampling(self, status: Optional[Tensor] = None) -> Tuple[str, float]:
         """
-        Sampling base-d strings (0–9A–Z when d <= 36) from the circuit output based on quantum amplitudes.
+        Sampling base-d strings (0-9A-Z when d <= 36) from the circuit output based on quantum amplitudes.
         Reference: arXiv:1201.3974.
 
         :param status: external randomness, with shape [nqubits], defaults to None
@@ -604,7 +604,7 @@ class BaseCircuit(AbstractCircuit):
                 "count_tuple": # (np.array([0]), np.array([2]))
 
                 "count_dict_bin": # {"00": 2, "01": 0, "10": 0, "11": 0}
-                    for cases d\in [11, 36], use 0–9A–Z digits (e.g., 'A' -> 10, …, 'Z' -> 35);
+                    for cases d\in [11, 36], use 0-9A-Z digits (e.g., 'A' -> 10, ..., 'Z' -> 35);
 
                 "count_dict_int": # {0: 2, 1: 0, 2: 0, 3: 0}
 
