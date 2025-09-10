@@ -119,7 +119,7 @@ class QuditCircuit:
         or :data:`TWO_BUILDERS` (two-qudit). The registered builder is called with `(d, omega, **kwargs)`
         to produce the unitary, which is then applied at the given indices.
 
-        :param indices: Qudit indices the gate acts on. One index → single-qudit gate; two indices → two-qudit gate.
+        :param indices: Qudit indices the gate acts on. One index -> single-qudit gate; two indices -> two-qudit gate.
         :type indices: int
         :param name: Gate name registered in the corresponding builder set.
         :type name: str
