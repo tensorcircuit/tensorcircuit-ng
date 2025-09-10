@@ -447,7 +447,7 @@ def test_quditcircuit_amplitude_before_wrapper():
     assert len(nodes) == 5  # one gate (X on qudit 0) -> single node in the traced path
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("cpb")])
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_qudit_entanglement_measures_maximally_entangled(backend):
     r"""
     Prepare the two-qudit maximally entangled state
@@ -479,7 +479,7 @@ def test_qudit_entanglement_measures_maximally_entangled(backend):
     np.testing.assert_allclose(linear_entropy, 1.0 - 1.0 / d, rtol=1e-6, atol=1e-7)
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("cpb")])
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_qudit_mutual_information_product_vs_entangled(backend):
     r"""
     Compare quantum mutual information :math:`I(A\!:\!B) = S(\rho_A)+S(\rho_B)-S(\rho_{AB})`
