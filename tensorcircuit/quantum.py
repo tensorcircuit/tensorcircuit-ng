@@ -748,7 +748,7 @@ class QuOperator:
         return self.__mul__(other)
 
     def tensor_product(self, other: "QuOperator") -> "QuOperator":
-        """
+        r"""
         Tensor product with another operator.
         Given two operators `A` and `B`, produces a new operator `AB` representing
         :math:`A \otimes B`. The `out_edges` (`in_edges`) of `AB` is simply the
