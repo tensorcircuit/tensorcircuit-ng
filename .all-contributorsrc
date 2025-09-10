@@ -382,7 +382,8 @@
       "contributions": [
         "code",
         "test",
-        "example"
+        "example",
+        "tutorial"
       ]
     }
   ],
