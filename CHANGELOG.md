@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.4.0
+
 ### Added
 
 - Add new module `tc.timeevol` for different types of time evolution solvers.
