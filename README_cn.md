@@ -33,7 +33,7 @@ TensorCircuit-NG 是目前积极维护的唯一官方版本，是 TensorCircuit 
 
 请从 [完整文档](https://tensorcircuit-ng.readthedocs.io/) 中的 [快速上手](/docs/source/quickstart.rst) 开始。
 
-有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 90+ [示例脚本](/examples) 和 30+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
+有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 90+ [示例脚本](/examples) 和 40+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
 
 TensorCircuit-NG 也支持 AI 原生编程资源：[Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng) 和 [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
 

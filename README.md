@@ -27,7 +27,7 @@
 
 TensorCircuit-NG is the next-generation open-source high-performance quantum software framework, built upon tensornetwork engines, supporting for automatic differentiation, just-in-time compiling, hardware acceleration, vectorized parallelism and distributed training, providing unified infrastructures and interfaces for quantum programming. It can compose quantum circuits, neural networks and tensor networks seamlessly with high simulation efficiency and flexibility.
 
-TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for large-scale simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal, noisy, Clifford, approximate, analog and fermionic cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions.
+TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for large-scale simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal, noisy, Clifford, qudit, approximate, analog, and fermionic cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions.
 
 TensorCircuit-NG is the actively maintained official version and a [fully compatible](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng) successor to TensorCircuit with more new features (stabilizer circuit, multi-card distributed simulation, etc.) and bug fixes (support latest `numpy>2` and `qiskit>1`).
 
@@ -35,7 +35,7 @@ TensorCircuit-NG is the actively maintained official version and a [fully compat
 
 Please begin with [Quick Start](/docs/source/quickstart.rst) in the [full documentation](https://tensorcircuit-ng.readthedocs.io/).
 
-For more information on software usage, sota algorithm implementation and engineer paradigm demonstration, please refer to 90+ [example scripts](/examples) and 30+ [tutorial notebooks](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials). API docstrings and test cases in [tests](/tests) are also informative. One can also refer to AI-native docs for tensorcircuit-ng: [Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng) and [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
+For more information on software usage, sota algorithm implementation and engineer paradigm demonstration, please refer to 90+ [example scripts](/examples) and 40+ [tutorial notebooks](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials). API docstrings and test cases in [tests](/tests) are also informative. One can also refer to AI-native docs for tensorcircuit-ng: [Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng) and [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
 
 For beginners, please refer to [quantum computing lectures with TC-NG](https://github.com/sxzgroup/qc_lecture) to learn both quantum computing basics and representative usage of TensorCircuit-NG.
 
@@ -190,7 +190,7 @@ We also have [Docker support](/docker).
 
   - Support **Fermion Gaussian state** simulation with expectation, entanglement, measurement, ground state, real and imaginary time evolution.
 
-  - Support **qudits simulation**.
+  - Support **qudits simulation** for tensor network and MPS approximation modes.
 
   - Support **parallel** quantum circuit evaluation across **multiple GPUs**.
 
@@ -211,6 +211,8 @@ We also have [Docker support](/docker).
   - Gradients can be obtained with both **automatic differenation** and parameter shift (vmap accelerated) modes.
 
   - **Machine learning interface/layer/model** abstraction in both TensorFlow, PyTorch and Jax for both numerical simulation and real QPU experiments.
+
+  - Support time evolution simulation with **exact, ODE, Krylov, Trotter, Chebyshev solvers**.
 
   - Circuit sampling supports both final state sampling and perfect sampling from tensor networks.
 
@@ -246,7 +248,7 @@ If this project helps in your research, please cite our software whitepaper to a
 
 which is also a good introduction to the software.
 
-Research works citing TensorCircuit can be highlighted in [Research and Applications section](https://github.com/tensorcircuit/tensorcircuit-ng#research-and-applications).
+Research works citing TensorCircuit-NG can be highlighted in [Research and Applications section](https://github.com/tensorcircuit/tensorcircuit-ng#research-and-applications).
 
 ### Guidelines
 
@@ -328,7 +330,7 @@ TensorCircuit-NG is open source, released under the Apache License, Version 2.0.
 
 ## Research and Applications
 
-TensorCircuit-NG is a powerful framework for driving research and applications in quantum computing. Below are examples of published academic works and open-source projects that utilize TensorCircuit-NG.
+TensorCircuit-NG is a powerful framework for driving research and applications in quantum computing. Below are examples of published academic works (100+ in total) and open-source projects that utilize TensorCircuit-NG.
 
 ### DQAS
 

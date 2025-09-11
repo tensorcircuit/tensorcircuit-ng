@@ -250,7 +250,7 @@ And from GitHub page choose draft a release from tag.
 
     python -m build
     export VERSION=0.x.y
-    twine upload dist/tensorcircuit-${VERSION}-py3-none-any.whl dist/tensorcircuit-${VERSION}.tar.gz
+    twine upload dist/tensorcircuit_ng-${VERSION}-py3-none-any.whl dist/tensorcircuit_ng-${VERSION}.tar.gz
 
 For upload authetication via token, please refer `this tutorial <https://kynan.github.io/blog/2020/05/23/how-to-upload-your-package-to-the-python-package-index-pypi-test-server>`__ .
 Latest version of twine direct accepts token.
