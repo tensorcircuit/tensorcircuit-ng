@@ -1,5 +1,6 @@
 """
 Analog-Digital Hybrid Circuit class wrapper
+only support jax backend
 """
 
 from typing import Any, List, Optional, Callable, Dict, Tuple, Union, Sequence
@@ -21,7 +22,9 @@ Tensor = Any
 
 @dataclass
 class AnalogBlock:
-    """A data structure to hold information about an analog evolution block."""
+    """
+    A data structure to hold information about an analog evolution block.
+    """
 
     hamiltonian_func: Callable[[Tensor], Tensor]
     time: float
@@ -45,7 +48,18 @@ class AnalogCircuit:
         """
         Initializes the hybrid circuit.
 
-        :param num_qubits: The number of qubits in the circuit.
+        :param nqubits: The number of qubits in the circuit.
+        :type nqubits: int
+        :param dim: The local Hilbert space dimension per site. Qudit is supported for 2 <= d <= 36.
+        :type dim: If None, the dimension of the circuit will be `2`, which is a qubit system.
+        :param inputs: If not None, the initial state of the circuit is taken as ``inputs``
+            instead of :math:`\vert 0 \rangle^n` qubits, defaults to None.
+        :type inputs: Optional[Tensor], optional
+        :param mps_inputs: QuVector for a MPS like initial wavefunction.
+        :type mps_inputs: Optional[QuOperator]
+        :param split: dict if two qubit gate is ready for split, including parameters for at least one of
+            ``max_singular_values`` and ``max_truncation_err``.
+        :type split: Optional[Dict[str, Any]]
         """
         self.num_qubits, self._nqubits = nqubits, nqubits
         self.dim = 2**self.num_qubits
@@ -57,7 +71,7 @@ class AnalogCircuit:
 
         # List of digital circuits, starting with one empty circuit.
         self.digital_circuits: List[Circuit] = [
-            Circuit(self.num_qubits, self.inputs, mps_inputs, split, dim)
+            Circuit(self.num_qubits, inputs, mps_inputs, split, dim)
         ]
 
         # List of analog blocks, each containing the Hamiltonian function, time, and solver options.
@@ -66,18 +80,25 @@ class AnalogCircuit:
         self._solver_options: Dict[str, Any] = {}
 
     def set_solver_options(self, **kws: Any) -> None:
+        """
+        set solver options globally for this circuit object
+        """
         self._solver_options = kws
 
     @property
     def effective_circuit(self) -> Circuit:
-        """Returns the effective circuit after all blocks have been added."""
+        """
+        Returns the effective circuit after all blocks have been added.
+        """
         if self._effective_circuit is None:
             self.state()
         return self._effective_circuit  # type: ignore
 
     @property
     def current_digital_circuit(self) -> Circuit:
-        """Returns the last (currently active) digital circuit."""
+        """
+        Returns the last (currently active) digital circuit.
+        """
         return self.digital_circuits[-1]
 
     def add_analog_block(
@@ -94,11 +115,14 @@ class AnalogCircuit:
 
         :param hamiltonian_func: A function H(t) that takes a time `t` (from 0 to `time`)
                                  and returns the Hamiltonian matrix at that instant.
+        :type hamiltonian_func: Callable[[float], np.ndarray]
         :param time: The total evolution time 'T'.
+        :type time: float
         :param index: The indices of the qubits to apply the analog evolution to. Defaults None for
             global application.
-        :param solver_options: Keyword arguments passed directly to `scipy.integrate.solve_ivp`.
-                               (e.g., method='RK45', rtol=1e-6, atol=1e-8)
+        :type index: Optional[List[int]]
+        :param solver_options: Keyword arguments passed directly to `tc.timeevol.ode_evolve`
+        :type solver_options: Dict[str, Any]
         """
         # Create and store the analog block information
         time = backend.convert_to_tensor(time, dtype=rdtypestr)
@@ -152,14 +176,12 @@ class AnalogCircuit:
         :return: The final state vector after the full evolution
         :rtype: Tensor
         """
-        psi = self.inputs
-
         # Propagate the state through the alternating circuit blocks
         for i, analog_block in enumerate(self.analog_blocks):
             # 1. Apply Digital Block i
             digital_c = self.digital_circuits[i]
             if i > 0:
-                digital_c.replace_inputs(psi)
+                digital_c.replace_inputs(psi)  # type: ignore
             psi = digital_c.wavefunction()
 
             if analog_block.index is None:
@@ -181,8 +203,11 @@ class AnalogCircuit:
             # TODO(@refraction-ray): support more time evol methods
 
         # 3. Apply the final digital circuit
-        self.digital_circuits[-1].replace_inputs(psi)
-        psi = self.digital_circuits[-1].wavefunction()
+        if self.analog_blocks:
+            self.digital_circuits[-1].replace_inputs(psi)
+            psi = self.digital_circuits[-1].wavefunction()
+        else:
+            psi = self.digital_circuits[-1].wavefunction()
         self._effective_circuit = Circuit(self.num_qubits, inputs=psi)
 
         return psi
@@ -382,7 +407,7 @@ class AnalogCircuit:
             if i < len(self.analog_blocks):
                 block = self.analog_blocks[i]
                 s += f"--- Analog Block {i} (T={block.time}) ---\n"
-                s += f"  H(t) function: '{block.hamiltonian_func.__name__}'\n"
+                s += f" H(t) function: '{block.hamiltonian_func.__name__}'\n"
 
         s += "=" * 40
         return s

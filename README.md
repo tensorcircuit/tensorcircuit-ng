@@ -27,9 +27,9 @@
 
 TensorCircuit-NG is the next-generation open-source high-performance quantum software framework, built upon tensornetwork engines, supporting for automatic differentiation, just-in-time compiling, hardware acceleration, vectorized parallelism and distributed training, providing unified infrastructures and interfaces for quantum programming. It can compose quantum circuits, neural networks and tensor networks seamlessly with high simulation efficiency and flexibility.
 
-TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for large-scale simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal, noisy, Clifford, qudit, approximate, analog, and fermionic cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions.
+TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for large-scale simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal (`Circuit`), noisy (`DMCircuit`), Clifford (`StabilizerCircuit`), qudit (`QuditCircuit`), approximate (`MPSCircuit`), analog (`AnalogCircuit`), and fermionic (`FGSCircuit`) cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions.
 
-TensorCircuit-NG is the actively maintained official version and a [fully compatible](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng) successor to TensorCircuit with more new features (stabilizer circuit, multi-card distributed simulation, etc.) and bug fixes (support latest `numpy>2` and `qiskit>1`).
+TensorCircuit-NG is the only actively maintained official version and a [fully compatible](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng) successor to TensorCircuit with more new features (stabilizer circuit, qudit circuit, analog circuit, multi-GPU distributed simulation, etc.) and bug fixes (support latest `numpy>2` and `qiskit>1`).
 
 ## Getting Started
 
