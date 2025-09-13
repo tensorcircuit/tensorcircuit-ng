@@ -65,6 +65,8 @@ gate_aliases = [
     ["td", "tdg"],
 ]
 
+defined_gates = sgates + vgates + mpogates + [alias[1] for alias in gate_aliases]
+
 
 class AbstractCircuit:
     _nqubits: int

@@ -3,6 +3,7 @@ tensorcircuit
 .. toctree::
     ./api/about.rst
     ./api/abstractcircuit.rst
+    ./api/analogcircuit.rst
     ./api/applications.rst
     ./api/backends.rst
     ./api/basecircuit.rst

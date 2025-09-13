@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Add `tc.AnalogCircuit` for digital-analog hybrid simulation.
+
 ## v1.4.0
 
 ### Added

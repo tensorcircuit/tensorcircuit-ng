@@ -541,6 +541,8 @@ def ode_evol_local(
         y = backend.reshape2(y)
         y = Gate(y)
         h = -1.0j * hamiltonian(t, *args)
+        if backend.is_sparse(h):
+            h = backend.to_dense(h)
         h = backend.reshape2(h)
         h = Gate(h)
         edges = []
