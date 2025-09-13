@@ -146,6 +146,7 @@ def test_analog_circuit_ad_jit(jaxb):
 
         ac.add_analog_block(hamiltonian, [1.0, 2.3])
         # jaxodeint somehow incompatible with h0 outside hamiltonian function
+        # https://github.com/jax-ml/jax/issues/31792
         ac.cx(1, 0)
         return tc.backend.real(ac.expectation_ps(z=[1]))
 
