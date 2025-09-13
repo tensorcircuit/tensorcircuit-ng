@@ -9,6 +9,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union
 from operator import mul
 from functools import reduce, partial
 
+from scipy.sparse import coo_matrix
 import tensornetwork
 from tensornetwork.backends.pytorch import pytorch_backend
 from .abstract_backend import ExtendedBackend
@@ -302,6 +303,9 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         return torchlib.kron(a, b)
 
     def numpy(self, a: Tensor) -> Tensor:
+        if self.is_sparse(a):
+            a = a.coalesce()
+            return coo_matrix((a.values().numpy(), a.indices().numpy()), shape=a.shape)
         a = a.cpu()
         if a.is_conj():
             return a.resolve_conj().numpy()
@@ -380,6 +384,9 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
 
     def sort(self, a: Tensor, axis: int = -1) -> Tensor:
         return torchlib.sort(a, dim=axis).values
+
+    def argsort(self, a: Tensor, axis: int = -1) -> Tensor:
+        return torchlib.argsort(a, dim=axis)
 
     def all(self, tensor: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
         """
@@ -466,6 +473,39 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
 
     def reverse(self, a: Tensor) -> Tensor:
         return torchlib.flip(a, dims=(-1,))
+
+    def coo_sparse_matrix(
+        self, indices: Tensor, values: Tensor, shape: Tensor
+    ) -> Tensor:
+        # Convert COO format to PyTorch sparse tensor
+        indices = self.convert_to_tensor(indices)
+        return torchlib.sparse_coo_tensor(self.transpose(indices), values, shape)
+
+    def sparse_dense_matmul(
+        self,
+        sp_a: Tensor,
+        b: Tensor,
+    ) -> Tensor:
+        # Matrix multiplication between sparse and dense tensor
+        return torchlib.sparse.mm(sp_a, b)
+
+    def sparse_csr_from_coo(self, coo: Tensor, strict: bool = False) -> Tensor:
+        try:
+            # Convert COO to CSR format if supported
+            return coo.to_sparse_csr()
+        except AttributeError as e:
+            if not strict:
+                return coo
+            else:
+                raise e
+
+    def to_dense(self, sp_a: Tensor) -> Tensor:
+        # Convert sparse tensor to dense
+        return sp_a.to_dense()
+
+    def is_sparse(self, a: Tensor) -> bool:
+        # Check if tensor is sparse
+        return a.is_sparse or a.is_sparse_csr  # type: ignore
 
     def tree_map(self, f: Callable[..., Any], *pytrees: Any) -> Any:
         # torch native tree_map not support multiple pytree args

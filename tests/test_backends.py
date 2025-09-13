@@ -61,7 +61,7 @@ def test_grad_torch(torchb):
     np.testing.assert_allclose(f(a), np.ones([2]), atol=1e-5)
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_sparse_csr_from_coo(backend):
     # Create a sparse matrix in COO format
     values = tc.backend.convert_to_tensor(np.array([1.0, 2.0, 3.0]))
@@ -583,7 +583,7 @@ def test_arg_cmp(backend):
     )
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_argsort(backend):
     # Test basic argsort functionality
     a = tc.array_to_tensor(np.array([3, 1, 2]), dtype="float32")
@@ -987,7 +987,7 @@ def test_qr(backend, highp):
         np.testing.assert_allclose(n_grad, a_grad, atol=1e-3)
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_sparse_methods(backend):
     values = tc.backend.convert_to_tensor(np.array([1.0, 2.0]))
     values = tc.backend.cast(values, "complex64")

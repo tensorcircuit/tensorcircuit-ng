@@ -6,6 +6,8 @@
 
 - Add `tc.AnalogCircuit` for digital-analog hybrid simulation.
 
+- Add sparse matrix related methods for pytorch backend.
+
 ## v1.4.0
 
 ### Added
