@@ -21,7 +21,9 @@ chain = tc.templates.lattice.ChainLattice([nqubits], lattice_constant=10, pbc=Fa
 
 # Instantiate the AnalogCircuit
 ac = tc.AnalogCircuit(nqubits)
-
+ac.set_solver_options(
+    ode_backend="diffrax", max_steps=20000
+)  # more efficient and stable than the default one by jax
 # 1. Create the sparsely excited state
 ac.x([i for i in range(nqubits) if i % 4 == 0])
 
@@ -49,5 +51,7 @@ ac.add_analog_block(rydberg_hamiltonian_func, time=evolution_time)
 #         ac.rx(i, theta=-np.pi/4)
 
 # 5. Sample from the final state in the computational basis
+state = ac.state()
+np.testing.assert_allclose(tc.backend.norm(state), 1, atol=1e-3)
 sample = ac.sample(batch=1024, allow_state=True, format="count_dict_bin")
 print("\nSampled bitstrings:\n", sample)

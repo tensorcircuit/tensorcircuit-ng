@@ -175,6 +175,27 @@ def _eigh_jax(self: Any, tensor: Tensor) -> Tensor:
     return adaware_eigh(tensor)
 
 
+def bcsr_scalar_mul(self: Tensor, other: Tensor) -> Tensor:
+    """
+    Implements scalar multiplication for BCSR matrices (self * scalar).
+    """
+    import jax.numpy as jnp
+    from jax.experimental.sparse import BCSR
+
+    if jnp.isscalar(other):
+        # The core logic: only the data array is affected by scalar multiplication.
+        # The sparsity pattern (indices, indptr) remains the same.
+        new_data = self.data * other
+
+        # Return a new BCSR instance with the scaled data.
+        return BCSR((new_data, self.indices, self.indptr), shape=self.shape)
+
+    # For any other type of multiplication (e.g., element-wise with another matrix),
+    # return NotImplemented. This allows Python to try other operations,
+    # like other.__rmul__(self).
+    return NotImplemented
+
+
 tensornetwork.backends.jax.jax_backend.JaxBackend.convert_to_tensor = (
     _convert_to_tensor_jax
 )
@@ -223,6 +244,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         jsp = libjax.scipy
 
         self.name = "jax"
+
+        # --- Monkey-patch the BCSR class ---
+
+        sparse.BCSR.__mul__ = bcsr_scalar_mul  # type: ignore
+        sparse.BCSR.__rmul__ = bcsr_scalar_mul  # type: ignore
 
     # it is already child of numpy backend, and self.np = self.jax.np
     def eye(

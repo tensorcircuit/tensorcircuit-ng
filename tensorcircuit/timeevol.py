@@ -616,7 +616,7 @@ def ode_evol_global(
 
     def f(y: Tensor, t: Tensor, *args: Any) -> Tensor:
         h = -1.0j * hamiltonian(t, *args)
-        return backend.sparse_dense_matmul(h, y)
+        return h @ y
 
     s1 = _solve_ode(f, initial_state, times, args, solver_kws)
 
