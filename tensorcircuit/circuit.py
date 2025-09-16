@@ -391,6 +391,7 @@ class Circuit(BaseCircuit):
         prob: Optional[Sequence[float]] = None,
         status: Optional[float] = None,
         name: Optional[str] = None,
+        return_gate: bool = False,
     ) -> Tensor:
         """
         Apply unitary gates in ``kraus`` randomly based on corresponding ``prob``.
@@ -422,6 +423,7 @@ class Circuit(BaseCircuit):
             status=status,
             get_gate_from_index=index2gate,
             name=name,
+            return_gate=return_gate,
         )
 
     def _unitary_kraus_template(
@@ -434,6 +436,7 @@ class Circuit(BaseCircuit):
             Callable[[Tensor, Sequence[Tensor]], Tensor]
         ] = None,
         name: Optional[str] = None,
+        return_gate: bool = False,
     ) -> Tensor:  # DRY
         sites = len(index)
         kraus = [k.tensor if isinstance(k, tn.Node) else k for k in kraus]
@@ -475,6 +478,8 @@ class Circuit(BaseCircuit):
             raise ValueError("no `get_gate_from_index` implementation is provided")
         g = get_gate_from_index(r, kraus)
         g = backend.reshape(g, [self._d for _ in range(sites * 2)])
+        if return_gate:
+            return r, g
         self.any(*index, unitary=g, name=name)  # type: ignore
         return r
 
@@ -553,6 +558,7 @@ class Circuit(BaseCircuit):
         status: Optional[float] = None,
         with_prob: bool = False,
         name: Optional[str] = None,
+        return_gate: bool = False,
     ) -> Tensor:
         # the graph building time is frustratingly slow, several minutes
         # though running time is in terms of ms
@@ -600,9 +606,14 @@ class Circuit(BaseCircuit):
             for w, k in zip(prob, kraus_tensor)
         ]
         pick = self.unitary_kraus(
-            new_kraus, *index, prob=prob, status=status, name=name
+            new_kraus,
+            *index,
+            prob=prob,
+            status=status,
+            name=name,
+            return_gate=return_gate,
         )
-        if with_prob is False:
+        if not with_prob:
             return pick
         else:
             return pick, prob
@@ -614,6 +625,7 @@ class Circuit(BaseCircuit):
         status: Optional[float] = None,
         with_prob: bool = False,
         name: Optional[str] = None,
+        return_gate: bool = False,
     ) -> Tensor:
         """
         Monte Carlo trajectory simulation of general Kraus channel whose Kraus operators cannot be
@@ -633,7 +645,12 @@ class Circuit(BaseCircuit):
         :type status: Optional[float], optional
         """
         return self._general_kraus_2(
-            kraus, *index, status=status, with_prob=with_prob, name=name
+            kraus,
+            *index,
+            status=status,
+            with_prob=with_prob,
+            name=name,
+            return_gate=return_gate,
         )
 
     apply_general_kraus = general_kraus

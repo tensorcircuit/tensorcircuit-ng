@@ -668,3 +668,78 @@ class QuditCircuit:
         :rtype: List[Gate]
         """
         return self._circ.amplitude_before(l)
+
+    def general_kraus(
+        self,
+        kraus: Sequence[Gate],
+        *index: int,
+        status: Optional[float] = None,
+        with_prob: bool = False,
+        name: Optional[str] = None,
+    ) -> Tensor:
+        """
+        Monte Carlo trajectory simulation of general Kraus channel whose Kraus operators cannot be
+        amplified to unitary operators. For unitary operators composed Kraus channel, :py:meth:`unitary_kraus`
+        is much faster.
+
+        This function is jittable in theory. But only jax+GPU combination is recommended for jit
+        since the graph building time is too long for other backend options; though the running
+        time of the function is very fast for every case.
+
+        :param kraus: A list of ``tn.Node`` for Kraus operators.
+        :type kraus: Sequence[Gate]
+        :param index: The qubits index that Kraus channel is applied on.
+        :type index: int
+        :param status: Random tensor uniformly between 0 or 1, defaults to be None,
+            when the random number will be generated automatically
+        :type status: Optional[float], optional
+        """
+        res = self._circ.general_kraus(
+            kraus=kraus,
+            *index,
+            status=status,
+            with_prob=with_prob,
+            name=name,
+            return_gate=True,
+        )
+
+        if with_prob:
+            (pick, gate), prob = res
+            self.any(*index, unitary=gate, name=name)
+            return pick, prob
+        else:
+            pick, gate = res
+            self.any(*index, unitary=gate, name=name)
+            return pick
+
+    def unitary_kraus(
+        self,
+        kraus: Sequence[Gate],
+        *index: int,
+        prob: Optional[Sequence[float]] = None,
+        status: Optional[float] = None,
+        name: Optional[str] = None,
+    ) -> Tensor:
+        """
+        Apply unitary gates in ``kraus`` randomly based on corresponding ``prob``.
+        If ``prob`` is ``None``, this is reduced to kraus channel language.
+
+        :param kraus: List of ``tc.gates.Gate`` or just Tensors
+        :type kraus: Sequence[Gate]
+        :param prob: prob list with the same size as ``kraus``, defaults to None
+        :type prob: Optional[Sequence[float]], optional
+        :param status: random seed between 0 to 1, defaults to None
+        :type status: Optional[float], optional
+        :return: shape [] int dtype tensor indicates which kraus gate is actually applied
+        :rtype: Tensor
+        """
+        r, g = self._circ.unitary_kraus(
+            kraus=kraus,
+            *index,
+            prob=prob,
+            status=status,
+            name=name,
+            return_gate=True,
+        )
+        self.any(*index, unitary=g, name=name)
+        return r
