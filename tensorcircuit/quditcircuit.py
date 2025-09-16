@@ -144,7 +144,7 @@ class QuditCircuit:
         else:
             raise ValueError(f"Unsupported gate/arity: {name} on {len(indices)} qudits")
 
-    def any(self, *indices: int, unitary: Tensor, name: str = "any") -> None:
+    def any(self, *indices: int, unitary: Tensor, name: Optional[str] = None) -> None:
         """
         Apply an arbitrary unitary on one or two qudits.
 
@@ -155,6 +155,7 @@ class QuditCircuit:
         :param name: Optional label stored in the circuit history.
         :type name: str
         """
+        name = "any" if name is None else name
         self._circ.unitary(*indices, unitary=unitary, name=name, dim=self._d)  # type: ignore
 
     unitary = any
