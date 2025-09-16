@@ -695,7 +695,7 @@ class QuditCircuit:
         :type status: Optional[float], optional
         """
         res = self._circ.general_kraus(
-            kraus=kraus,
+            kraus,
             *index,
             status=status,
             with_prob=with_prob,
@@ -734,7 +734,7 @@ class QuditCircuit:
         :rtype: Tensor
         """
         r, g = self._circ.unitary_kraus(
-            kraus=kraus,
+            kraus,
             *index,
             prob=prob,
             status=status,
