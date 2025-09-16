@@ -537,22 +537,63 @@ def test_unitary_kraus_qutrit_single(backend):
     c = tc.QuditCircuit(1, dim=d)
     idx = c.unitary_kraus([I, X], 0, prob=[0.0, 1.0])
     assert idx == 1
-
-    a0 = c.amplitude("0")
-    a1 = c.amplitude("1")
-    a2 = c.amplitude("2")
-    np.testing.assert_allclose(a1, 1.0 + 0j, atol=1e-6)
-    np.testing.assert_allclose(a0, 0.0 + 0j, atol=1e-6)
-    np.testing.assert_allclose(a2, 0.0 + 0j, atol=1e-6)
+    np.testing.assert_allclose(c.amplitude("0"), 0.0 + 0j, atol=1e-6)
+    np.testing.assert_allclose(c.amplitude("1"), 1.0 + 0j, atol=1e-6)
+    np.testing.assert_allclose(c.amplitude("2"), 0.0 + 0j, atol=1e-6)
 
     # Case B: choose I branch deterministically
     c2 = tc.QuditCircuit(1, dim=d)
     idx2 = c2.unitary_kraus([I, X], 0, prob=[1.0, 0.0])
     assert idx2 == 0
+    np.testing.assert_allclose(c2.amplitude("0"), 1.0 + 0j, atol=1e-6)
+    np.testing.assert_allclose(c2.amplitude("1"), 0.0 + 0j, atol=1e-6)
+    np.testing.assert_allclose(c2.amplitude("2"), 0.0 + 0j, atol=1e-6)
 
-    b0 = c2.amplitude("0")
-    b1 = c2.amplitude("1")
-    b2 = c2.amplitude("2")
-    np.testing.assert_allclose(b0, 1.0 + 0j, atol=1e-6)
-    np.testing.assert_allclose(b1, 0.0 + 0j, atol=1e-6)
-    np.testing.assert_allclose(b2, 0.0 + 0j, atol=1e-6)
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_general_kraus_qutrit_single(backend):
+    r"""
+    Qutrit (d=3) tests for general_kraus on a single site (Part B only).
+
+    True general Kraus with normalization and `with_prob=True`:
+      K0 = sqrt(p) * I, K1 = sqrt(1-p) * X
+      (K0^\dagger K0 + K1^\dagger K1 = I)
+      `status` controls which branch is sampled.
+    """
+    d = 3
+
+    # Identity and qutrit shift X (|k> -> |k+1 mod 3)
+    I = tc.quditgates.i_matrix_func(d)
+    X = tc.quditgates.x_matrix_func(d)
+
+    p = 0.7
+    K0 = np.sqrt(p) * I
+    K1 = np.sqrt(1.0 - p) * X
+
+    # ---- completeness check in numpy space (works for all backends) ----
+    np.testing.assert_allclose(
+        tc.backend.transpose(tc.backend.conj(K0)) @ K0
+        + tc.backend.transpose(tc.backend.conj(K1)) @ K1,
+        I,
+        atol=1e-6,
+    )
+
+    # ---- Case B1: status small -> pick K0 with prob ~ p; state remains |0\rangle ----
+    c3 = tc.QuditCircuit(1, dim=d)
+    idx3, prob3 = c3.general_kraus([K0, K1], 0, status=0.2, with_prob=True)
+    assert idx3 == 0
+    np.testing.assert_allclose(np.array(prob3), np.array([p, 1 - p]), atol=1e-6)
+    np.testing.assert_allclose(np.array(prob3)[idx3], p, atol=1e-6)
+    np.testing.assert_allclose(c3.amplitude("0"), 1.0 + 0j, atol=1e-6)
+    np.testing.assert_allclose(c3.amplitude("1"), 0.0 + 0j, atol=1e-6)
+    np.testing.assert_allclose(c3.amplitude("2"), 0.0 + 0j, atol=1e-6)
+
+    # ---- Case B2: status large -> pick K1 with prob ~ (1-p); state becomes |1\rangle ----
+    c4 = tc.QuditCircuit(1, dim=d)
+    idx4, prob4 = c4.general_kraus([K0, K1], 0, status=0.95, with_prob=True)
+    assert idx4 == 1
+    np.testing.assert_allclose(np.array(prob4), np.array([p, 1 - p]), atol=1e-6)
+    np.testing.assert_allclose(np.array(prob4)[idx4], 1.0 - p, atol=1e-6)
+    np.testing.assert_allclose(c4.amplitude("0"), 0.0 + 0j, atol=1e-6)
+    np.testing.assert_allclose(c4.amplitude("1"), 1.0 + 0j, atol=1e-6)
+    np.testing.assert_allclose(c4.amplitude("2"), 0.0 + 0j, atol=1e-6)
