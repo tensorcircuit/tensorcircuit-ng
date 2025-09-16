@@ -695,23 +695,13 @@ class QuditCircuit:
             when the random number will be generated automatically
         :type status: Optional[float], optional
         """
-        res = self._circ.general_kraus(
+        return self._circ.general_kraus(
             kraus,
             *index,
             status=status,
             with_prob=with_prob,
             name=name,
-            return_gate=True,
         )
-
-        if with_prob:
-            (pick, gate), prob = res
-            self.any(*index, unitary=gate, name=name)
-            return pick, prob
-        else:
-            pick, gate = res
-            self.any(*index, unitary=gate, name=name)
-            return pick
 
     def unitary_kraus(
         self,
@@ -734,13 +724,10 @@ class QuditCircuit:
         :return: shape [] int dtype tensor indicates which kraus gate is actually applied
         :rtype: Tensor
         """
-        r, g = self._circ.unitary_kraus(
+        return self._circ.unitary_kraus(
             kraus,
             *index,
             prob=prob,
             status=status,
             name=name,
-            return_gate=True,
         )
-        self.any(*index, unitary=g, name=name)
-        return r
