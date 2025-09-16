@@ -518,3 +518,43 @@ def test_qudit_mutual_information_product_vs_entangled(backend):
     rho_A = qu.reduced_density_matrix(c2.state(), cut=[1], dim=d)
     SA = qu.entropy(rho_A)
     np.testing.assert_allclose(SA, np.log(d), rtol=1e-6, atol=1e-7)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_unitary_kraus_qutrit_single(backend):
+    r"""
+    Qutrit (d=3) deterministic unitary-kraus selection on a single site.
+    Case A: prob=[0,1] -> pick X (shift), |0> -> |1>.
+    Case B: prob=[1,0] -> pick I, state remains |0>.
+    """
+    d = 3
+
+    # Identity and qutrit shift X (|k> -> |k+1 mod 3)
+    I = tc.quditgates.i_matrix_func(d)
+    X = tc.quditgates.x_matrix_func(d)
+
+    # Case A: choose X branch deterministically
+    c = tc.QuditCircuit(1, dim=d)
+    idx = c.unitary_kraus([I, X], 0, prob=[0.0, 1.0])
+    # idx_val = int(tc.backend.numpy(idx)) if hasattr(tc.backend, "numpy") else int(idx)
+    assert idx == 1
+
+    a0 = c.amplitude("0")
+    a1 = c.amplitude("1")
+    a2 = c.amplitude("2")
+    np.testing.assert_allclose(tc.backend.numpy(a1), 1.0 + 0j, atol=1e-6)
+    np.testing.assert_allclose(tc.backend.numpy(a0), 0.0 + 0j, atol=1e-6)
+    np.testing.assert_allclose(tc.backend.numpy(a2), 0.0 + 0j, atol=1e-6)
+
+    # Case B: choose I branch deterministically
+    c2 = tc.QuditCircuit(1, dim=d)
+    idx2 = c2.unitary_kraus([I, X], 0, prob=[1.0, 0.0])
+    # idx2_val = int(tc.backend.numpy(idx2)) if hasattr(tc.backend, "numpy") else int(idx2)
+    assert idx2 == 0
+
+    b0 = c2.amplitude("0")
+    b1 = c2.amplitude("1")
+    b2 = c2.amplitude("2")
+    np.testing.assert_allclose(b0, 1.0 + 0j, atol=1e-6)
+    np.testing.assert_allclose(b1, 0.0 + 0j, atol=1e-6)
+    np.testing.assert_allclose(b2, 0.0 + 0j, atol=1e-6)
