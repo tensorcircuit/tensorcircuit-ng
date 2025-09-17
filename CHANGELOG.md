@@ -8,6 +8,8 @@
 
 - Add sparse matrix related methods for pytorch backend.
 
+- Add exp and expm for torch backend.
+
 ## v1.4.0
 
 ### Added

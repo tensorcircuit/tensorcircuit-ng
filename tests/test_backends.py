@@ -306,6 +306,14 @@ def test_backend_methods_2(backend):
     np.testing.assert_allclose(tc.backend.mean(tc.backend.ones([10])), 1.0, atol=1e-5)
     # acos acosh asin asinh atan atan2 atanh cosh (cos) tan tanh sinh (sin)
     np.testing.assert_allclose(
+        tc.backend.exp(tc.backend.ones([2, 3])), np.exp(np.ones([2, 3])), atol=1e-5
+    )
+    np.testing.assert_allclose(
+        tc.backend.expm(tc.backend.ones([3, 3])),
+        scipy.linalg.expm(np.ones([3, 3])),
+        atol=1e-5,
+    )
+    np.testing.assert_allclose(
         tc.backend.acos(tc.backend.ones([2], dtype="float32")),
         np.arccos(tc.backend.ones([2])),
         atol=1e-5,

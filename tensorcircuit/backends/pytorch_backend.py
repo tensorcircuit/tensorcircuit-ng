@@ -229,6 +229,9 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         r = torchlib.ones(shape)
         return self.cast(r, dtype)
 
+    def exp(self, tensor: Tensor) -> Tensor:
+        return torchlib.exp(tensor)
+
     def zeros(self, shape: Tuple[int, ...], dtype: Optional[str] = None) -> Tensor:
         if dtype is None:
             dtype = dtypestr
@@ -248,7 +251,8 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         return result
 
     def expm(self, a: Tensor) -> Tensor:
-        raise NotImplementedError("pytorch backend doesn't support expm")
+        return torchlib.linalg.matrix_exp(a)
+        # raise NotImplementedError("pytorch backend doesn't support expm")
         # in 2020, torch has no expm, hmmm. but that's ok,
         # it doesn't support complex numbers which is more severe issue.
         # see https://github.com/pytorch/pytorch/issues/9983
