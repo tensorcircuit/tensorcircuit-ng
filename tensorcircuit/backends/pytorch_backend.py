@@ -412,6 +412,7 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         return torchlib.nn.Softmax(a, dim=axis)
 
     def onehot(self, a: Tensor, num: int) -> Tensor:
+        a = a.long()
         return torchlib.nn.functional.one_hot(a, num)
 
     def cumsum(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
