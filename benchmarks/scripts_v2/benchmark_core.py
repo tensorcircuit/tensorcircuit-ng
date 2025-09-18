@@ -36,7 +36,6 @@ def generate_2d_circuit(c, lx, ly, params, nqubits, nlayers):
 
 def generate_noisy_circuit(c, status, type="depolarizing"):
     noise_conf = noisemodel.NoiseConf()
-    # print(type)
     if type == "depolarizing":
         error1 = channels.depolarizingchannel(0.1, 0.1, 0.1)  # px, py, pz probabilities
     elif type == "amplitudedamping":
@@ -78,6 +77,7 @@ def benchmark_mega_function(
     use_grad=False,  # True, False
     use_vmap=False,  # True, False
     contractor=None,  # contractor setting like "cotengra-16-128"
+    jit_compile=True,  # True, False
 ):
     """
     Mega benchmark function that can control all parameters via arguments.
@@ -88,12 +88,13 @@ def benchmark_mega_function(
         lx: Lattice size x (for 2D)
         ly: Lattice size y (for 2D)
         circuit_type: Type of circuit ("circuit", "dmcircuit", "mpscircuit")
+        bond_dim: Bond dimension for MPS circuits
         layout_type: Circuit layout ("1d", "2d")
         operation: Operation to perform ("state", "sample", "exps")
         noisy: Whether to add noise (only for "circuit" and "dmcircuit")
+        noisy_type: Type of noise channel ("depolarizing", "amplitudedamping")
         use_grad: Whether to compute gradient (AD)
         use_vmap: Whether to use vectorized operations
-        batch_size: Batch size for vmap operations
         contractor: Contractor setting like "cotengra-16-128"
 
     Returns:
@@ -136,17 +137,17 @@ def benchmark_mega_function(
     # Handle gradient computation
     if use_grad and not use_vmap:
         grad_func = tc.backend.grad(circuit_func)
-        return tc.backend.jit(grad_func, jit_compile=True)
+        return tc.backend.jit(grad_func, jit_compile=jit_compile)
 
     # Handle vmap computation
     if use_vmap and not use_grad:
-        return tc.backend.jit(tc.backend.vmap(circuit_func), jit_compile=True)
+        return tc.backend.jit(tc.backend.vmap(circuit_func), jit_compile=jit_compile)
 
     # Handle both grad and vmap
     if use_grad and use_vmap:
         vvag_func = tc.backend.vvag(circuit_func)
-        return tc.backend.jit(vvag_func, jit_compile=True)
+        return tc.backend.jit(vvag_func, jit_compile=jit_compile)
 
     # Regular operation (no grad, no vmap)
     # Always JIT the returned function
-    return tc.backend.jit(circuit_func, jit_compile=True)
+    return tc.backend.jit(circuit_func, jit_compile=jit_compile)

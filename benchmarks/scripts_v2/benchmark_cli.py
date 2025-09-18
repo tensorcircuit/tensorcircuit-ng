@@ -3,10 +3,10 @@ import os
 import json
 import argparse
 import time
-import numpy as np
-import cpuinfo
 import sys
 import datetime
+import numpy as np
+import cpuinfo
 import tensorcircuit as tc
 
 from benchmark_core import benchmark_mega_function
@@ -131,6 +131,22 @@ def arg():
         help="Contractor setting (e.g., cotengra-16-128)",
         default=[None],
     )
+    parser.add_argument(
+        "-bond_dim",
+        dest="bond_dim",
+        type=int,
+        nargs=1,
+        help="Bond dimension for MPS circuits",
+        default=[16],
+    )
+    parser.add_argument(
+        "-jit_compile",
+        dest="jit_compile",
+        type=int,
+        nargs=1,
+        help="Whether to use JIT compilation (0 or 1)",
+        default=[1],
+    )
     args = parser.parse_args()
     return [
         args.n[0],
@@ -152,6 +168,8 @@ def arg():
         args.backend[0],
         args.dtype[0],
         args.contractor[0],
+        args.bond_dim[0],
+        args.jit_compile[0],
     ]
 
 
@@ -204,6 +222,8 @@ def benchmark_cli(
     backend,
     dtype,
     contractor,
+    bond_dim,
+    jit_compile,
     path,
 ):
     meta = {}
@@ -244,6 +264,8 @@ def benchmark_cli(
         "backend": backend,
         "dtype": dtype,
         "contractor": contractor,
+        "bond_dim": bond_dim,
+        "jit_compile": jit_compile,
     }
     meta["UUID"] = uuid
     meta["Benchmark Time"] = (
@@ -258,6 +280,7 @@ def benchmark_cli(
         lx=lx,
         ly=ly,
         circuit_type=circuit_type,
+        bond_dim=bond_dim,
         layout_type=layout_type,
         operation=operation,
         noisy=bool(noisy),
@@ -265,6 +288,7 @@ def benchmark_cli(
         use_grad=bool(use_grad),
         use_vmap=bool(use_vmap),
         contractor=contractor,
+        jit_compile=bool(jit_compile),
     )
 
     # Create parameters for testing
@@ -313,6 +337,8 @@ if __name__ == "__main__":
         backend,
         dtype,
         contractor,
+        bond_dim,
+        jit_compile,
     ) = arg()
 
     results = benchmark_cli(
@@ -335,6 +361,8 @@ if __name__ == "__main__":
         backend,
         dtype,
         contractor,
+        bond_dim,
+        jit_compile,
         path,
     )
     save(results, _uuid, path)
