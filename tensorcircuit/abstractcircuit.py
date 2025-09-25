@@ -53,6 +53,7 @@ vgates = [
     "any",
     "exp",
     "exp1",
+    "su4",
 ]
 mpogates = ["multicontrol", "mpo"]
 gate_aliases = [

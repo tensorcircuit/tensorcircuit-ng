@@ -870,6 +870,43 @@ def exponential_gate_unity(
     return Gate(mat, name="exp1-" + name)
 
 
+def su4_gate(theta: Tensor, name: str = "su(4)") -> Gate:
+    r"""
+    Two-qubit general SU(4) gate.
+
+    :param theta: the angle tensor (15 components) of the gate.
+    :type theta: Tensor
+    :param name: the name of the gate.
+    :type name: str
+    :return: a gate object.
+    :rtype: Gate
+    """
+    theta = num_to_tensor(theta)
+    pauli_ops = array_to_tensor(
+        _ix_matrix,
+        _iy_matrix,
+        _iz_matrix,
+        _xi_matrix,
+        _xx_matrix,
+        _xy_matrix,
+        _xz_matrix,
+        _yi_matrix,
+        _yx_matrix,
+        _yy_matrix,
+        _yz_matrix,
+        _zi_matrix,
+        _zx_matrix,
+        _zy_matrix,
+        _zz_matrix,
+    )
+    generator = backend.sum(
+        backend.stack([theta[i] * pauli_ops[i] for i in range(15)]), axis=0
+    )
+    mat = backend.expm(-1j * generator)
+    mat = backend.reshape2(mat)
+    return Gate(mat, name=name)
+
+
 exp1_gate = exponential_gate_unity
 # exp1 = exponential_gate_unity
 rzz_gate = partial(exp1_gate, unitary=_zz_matrix, half=True)
@@ -974,6 +1011,7 @@ def meta_vgate() -> None:
         "rzz",
         "rxx",
         "ryy",
+        "su4",
     ]:
         for funcname in [f, f + "gate"]:
             setattr(thismodule, funcname, GateVF(getattr(thismodule, f + "_gate"), f))

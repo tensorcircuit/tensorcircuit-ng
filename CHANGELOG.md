@@ -10,6 +10,8 @@
 
 - Add exp and expm for torch backend.
 
+- Add `su4` as a generic parameterized two-qubit gates.
+
 ## v1.4.0
 
 ### Added

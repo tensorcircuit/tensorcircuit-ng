@@ -260,6 +260,18 @@ def test_expectation(backend):
     )
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_su4gate(backend, highp):
+    def f(param):
+        c = tc.Circuit(8)
+        for d in range(6):
+            for i in range(8):
+                c.su4(i, (i + 1) % 8, theta=param[d, i])
+        return tc.backend.norm(c.state())
+
+    np.testing.assert_allclose(f(tc.backend.ones([6, 8, 15])), 1, atol=1e-7)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("cpb")])
 def test_exp1(backend):
     @partial(tc.backend.jit, jit_compile=True)
