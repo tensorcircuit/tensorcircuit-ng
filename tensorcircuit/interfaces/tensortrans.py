@@ -132,13 +132,17 @@ def general_args_to_backend(
         target_backend = backend
     elif isinstance(target_backend, str):
         target_backend = get_backend(target_backend)
+    try:
+        t = backend.tree_map(target_backend.from_dlpack, caps)
+    except TypeError:
+        t = backend.tree_map(target_backend.from_dlpack, args)
+
     if dtype is None:
-        return backend.tree_map(target_backend.from_dlpack, caps)
+        return t
     if isinstance(dtype, str):
         leaves, treedef = backend.tree_flatten(args)
         dtype = [dtype for _ in range(len(leaves))]
         dtype = backend.tree_unflatten(treedef, dtype)
-    t = backend.tree_map(target_backend.from_dlpack, caps)
     t = backend.tree_map(target_backend.cast, t, dtype)
     return t
 

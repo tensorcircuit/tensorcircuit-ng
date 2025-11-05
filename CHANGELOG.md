@@ -12,6 +12,12 @@
 
 - Add `su4` as a generic parameterized two-qubit gates.
 
+### Fixed
+
+- Fix the breaking logic change in jax from dlpack API, dlcapsule -> tensor.
+
+- Better torch interface for dlpack translation.
+
 ## v1.4.0
 
 ### Added

@@ -69,12 +69,14 @@ def torch_interface(
         @staticmethod
         def forward(ctx: Any, *x: Any) -> Any:  # type: ignore
             # ctx.xdtype = [xi.dtype for xi in x]
-            ctx.xdtype = backend.tree_map(lambda s: s.dtype, x)
+            ctx.save_for_backward(*x)
+            x_detached = backend.tree_map(lambda s: s.detach(), x)
+            ctx.xdtype = backend.tree_map(lambda s: s.dtype, x_detached)
             # (x, )
             if len(ctx.xdtype) == 1:
                 ctx.xdtype = ctx.xdtype[0]
-            ctx.device = (backend.tree_flatten(x)[0][0]).device
-            x = general_args_to_backend(x, enable_dlpack=enable_dlpack)
+            ctx.device = (backend.tree_flatten(x_detached)[0][0]).device
+            x = general_args_to_backend(x_detached, enable_dlpack=enable_dlpack)
             y = fun(*x)
             ctx.ydtype = backend.tree_map(lambda s: s.dtype, y)
             if len(x) == 1:
@@ -88,6 +90,9 @@ def torch_interface(
 
         @staticmethod
         def backward(ctx: Any, *grad_y: Any) -> Any:
+            x = ctx.saved_tensors
+            x_detached = backend.tree_map(lambda s: s.detach(), x)
+            x_backend = general_args_to_backend(x_detached, enable_dlpack=enable_dlpack)
             if len(grad_y) == 1:
                 grad_y = grad_y[0]
             grad_y = backend.tree_map(lambda s: s.contiguous(), grad_y)
@@ -96,7 +101,12 @@ def torch_interface(
             )
             # grad_y = general_args_to_numpy(grad_y)
             # grad_y = numpy_args_to_backend(grad_y, dtype=ctx.ydtype)  # backend.dtype
-            _, g = vjp_fun(ctx.x, grad_y)
+            if len(x_backend) == 1:
+                x_backend_for_vjp = x_backend[0]
+            else:
+                x_backend_for_vjp = x_backend
+
+            _, g = vjp_fun(x_backend_for_vjp, grad_y)
             # a redundency due to current vjp API
 
             r = general_args_to_backend(
