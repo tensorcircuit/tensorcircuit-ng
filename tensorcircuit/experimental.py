@@ -489,6 +489,62 @@ jax_func_load = jax_jitted_function_load
 PADDING_VALUE = -1
 jaxlib: Any
 ctg: Any
+Mesh: Any
+NamedSharding: Any
+P: Any
+
+
+def broadcast_py_object(obj: Any) -> Any:
+    """
+    Broadcast a picklable Python object from process 0 to all other processes
+    within jax ditribution system.
+
+    This function uses a two-step broadcast: first the size, then the data.
+    This is necessary because `broadcast_one_to_all` requires the same
+    shaped array on all hosts.
+
+    :param obj: The Python object to broadcast. It must be picklable.
+             This object should exist on process 0 and can be None on others.
+
+    :return: The broadcasted object, now present on all processes.
+    """
+    import jax as jaxlib
+    import pickle
+    from jax.experimental import multihost_utils
+
+    # Serialize to bytes on process 0, empty bytes on others
+    if jaxlib.process_index() == 0:
+        if obj is None:
+            raise ValueError("Object to broadcast from process 0 cannot be None.")
+        data = pickle.dumps(obj)
+    else:
+        data = b""
+
+    # Step 1: Broadcast the length of the serialized data.
+    # We send a single-element int32 array.
+    length = np.array([len(data)], dtype=np.int32)
+    length = multihost_utils.broadcast_one_to_all(length)
+    length = int(length[0])  # type: ignore
+
+    # Step 2: Broadcast the actual data.
+    # Convert byte string to a uint8 array for broadcasting.
+    send_arr = np.frombuffer(data, dtype=np.uint8)
+
+    # Pad the array on the source process if necessary, although it's unlikely
+    # to be smaller than `length`. More importantly, other processes create an
+    # empty buffer which must be padded to the correct receiving size.
+    if send_arr.size < length:
+        send_arr = np.pad(send_arr, (0, length - send_arr.size), mode="constant")  # type: ignore
+
+    # Broadcast the uint8 array. Process 0 sends, others receive into `send_arr`.
+    received_arr = multihost_utils.broadcast_one_to_all(send_arr)
+
+    # Step 3: Reconstruct the object from the received bytes.
+    # Convert the NumPy array back to bytes, truncate any padding, and unpickle.
+    received_data = received_arr[:length].tobytes()
+    if jaxlib.process_index() == 0:
+        logger.info(f"Broadcasted object {obj}")
+    return pickle.loads(received_data)
 
 
 class DistributedContractor:
@@ -513,8 +569,10 @@ class DistributedContractor:
     :type params: Tensor
     :param cotengra_options: Configuration options passed to the cotengra optimizer. Defaults to None
     :type cotengra_options: Optional[Dict[str, Any]], optional
-    :param devices: List of devices to use. If None, uses all available local devices
+    :param devices: List of devices to use. If None, uses all available devices
     :type devices: Optional[List[Any]], optional
+    :param mesh: Mesh object to use for distributed computation. If None, uses all available devices
+    :type mesh: Optional[Any], optional
     """
 
     def __init__(
@@ -522,23 +580,28 @@ class DistributedContractor:
         nodes_fn: Callable[[Tensor], List[Gate]],
         params: Tensor,
         cotengra_options: Optional[Dict[str, Any]] = None,
-        devices: Optional[List[Any]] = None,
+        devices: Optional[List[Any]] = None,  # backward compatibility
+        mesh: Optional[Any] = None,
     ) -> None:
         global jaxlib
         global ctg
+        global Mesh
+        global NamedSharding
+        global P
 
         logger.info("Initializing DistributedContractor...")
         import cotengra as ctg
         import jax as jaxlib
+        from jax.sharding import Mesh, NamedSharding, PartitionSpec as P
 
         self.nodes_fn = nodes_fn
-        if devices is None:
-            self.num_devices = jaxlib.local_device_count()
-            self.devices = jaxlib.local_devices()
-            # TODO(@refraction-ray): multi host support
+        if mesh is not None:
+            self.mesh = mesh
+        elif devices is not None:
+            self.mesh = Mesh(devices, axis_names=("devices",))
         else:
-            self.devices = devices
-            self.num_devices = len(devices)
+            self.mesh = Mesh(jaxlib.devices(), axis_names=("devices",))
+        self.num_devices = len(self.mesh.devices)
 
         if self.num_devices <= 1:
             logger.info("DistributedContractor is running on a single device.")
@@ -555,20 +618,39 @@ class DistributedContractor:
         ] = {}
 
         logger.info("Running cotengra pathfinder... (This may take a while)")
-        nodes = self.nodes_fn(self._params_template)
-        tn_info, _ = get_tn_info(nodes)
-        default_cotengra_options = {
-            "slicing_reconf_opts": {"target_size": 2**28},
-            "max_repeats": 128,
-            "progbar": True,
-            "minimize": "write",
-            "parallel": "auto",
-        }
-        if cotengra_options:
-            default_cotengra_options = cotengra_options
+        tree_object = None
+        if jaxlib.process_index() == 0:
+            logger.info("Process 0: Running cotengra pathfinder...")
 
-        opt = ctg.ReusableHyperOptimizer(**default_cotengra_options)
-        self.tree = opt.search(*tn_info)
+            local_cotengra_options = (cotengra_options or {}).copy()
+            local_cotengra_options["progbar"] = True
+
+            nodes = self.nodes_fn(self._params_template)
+            tn_info, _ = get_tn_info(nodes)
+            default_cotengra_options = {
+                "slicing_reconf_opts": {"target_size": 2**28},
+                "max_repeats": 128,
+                "minimize": "write",
+                "parallel": "auto",
+            }
+            default_cotengra_options.update(local_cotengra_options)
+
+            opt = ctg.ReusableHyperOptimizer(**default_cotengra_options)
+            tree_object = opt.search(*tn_info)
+
+        # Step 2: Use the robust helper function to broadcast the tree object.
+        # Process 0 sends its computed `tree_object`.
+        # Other processes send `None`, but receive the object from process 0.
+        logger.info(
+            f"Process {jaxlib.process_index()}: Synchronizing contraction path..."
+        )
+        if jaxlib.process_count() > 1:
+            self.tree = broadcast_py_object(tree_object)
+        else:
+            self.tree = tree_object
+        logger.info(
+            f"Process {jaxlib.process_index()}: Contraction path successfully synchronized."
+        )
         actual_num_slices = self.tree.nslices
 
         print("\n--- Contraction Path Info ---")
@@ -587,9 +669,19 @@ class DistributedContractor:
         slice_indices = np.arange(actual_num_slices)
         padded_slice_indices = np.full(padded_size, PADDING_VALUE, dtype=np.int32)
         padded_slice_indices[:actual_num_slices] = slice_indices
-        self.batched_slice_indices = backend.convert_to_tensor(
-            padded_slice_indices.reshape(self.num_devices, slices_per_device)
+
+        # Reshape for distribution and define the sharding rule
+        batched_indices = padded_slice_indices.reshape(
+            self.num_devices, slices_per_device
         )
+        # Sharding rule: split the first axis (the one for devices) across the 'devices' mesh axis
+        self.sharding = NamedSharding(self.mesh, P("devices", None))
+        # Place the tensor on devices according to the rule
+        self.batched_slice_indices = jaxlib.device_put(batched_indices, self.sharding)
+
+        # self.batched_slice_indices = backend.convert_to_tensor(
+        #     padded_slice_indices.reshape(self.num_devices, slices_per_device)
+        # )
         print(
             f"Distributing across {self.num_devices} devices. Each device will sequentially process "
             f"up to {slices_per_device} slices."
@@ -716,6 +808,7 @@ class DistributedContractor:
         fn_getter: Callable[..., Any],
         op: Optional[Callable[[Tensor], Tensor]],
         output_dtype: Optional[str],
+        is_grad_fn: bool,
     ) -> Callable[[Any, Tensor, Tensor], Tensor]:
         """
         Gets a compiled pmap-ed function from cache or compiles and caches it.
@@ -728,15 +821,64 @@ class DistributedContractor:
         cache_key = (op, output_dtype)
         if cache_key not in cache:
             device_fn = fn_getter(op=op, output_dtype=output_dtype)
-            compiled_fn = jaxlib.pmap(
-                device_fn,
-                in_axes=(
-                    None,
-                    None,
-                    0,
-                ),  # tree: broadcast, params: broadcast, indices: map
-                static_broadcasted_argnums=(0,),  # arg 0 (tree) is a static argument
-                devices=self.devices,
+
+            def global_aggregated_fn(
+                tree: Any, params: Any, batched_slice_indices: Tensor
+            ) -> Any:
+                # Use jax.vmap to apply the per-device function across the sharded data.
+                # vmap maps `device_fn` over the first axis (0) of `batched_slice_indices`.
+                # `tree` and `params` are broadcasted (in_axes=None) to each call.
+                vmapped_device_fn = jaxlib.vmap(
+                    device_fn, in_axes=(None, None, 0), out_axes=0
+                )
+                device_results = vmapped_device_fn(tree, params, batched_slice_indices)
+
+                # Now, `device_results` is a sharded PyTree (one result per device).
+                # We aggregate them using jnp.sum, which JAX automatically compiles
+                # into a cross-device AllReduce operation.
+
+                if is_grad_fn:
+                    # `device_results` is a (value, grad) tuple of sharded arrays
+                    device_values, device_grads = device_results
+
+                    # Replace psum with jnp.sum
+                    global_value = jaxlib.numpy.sum(device_values, axis=0)
+                    global_grad = jaxlib.tree_util.tree_map(
+                        lambda g: jaxlib.numpy.sum(g, axis=0), device_grads
+                    )
+                    return global_value, global_grad
+                else:
+                    # `device_results` is just the sharded values
+                    return jaxlib.numpy.sum(device_results, axis=0)
+
+            #  Compile the global function with jax.jit and specify shardings.
+            # `params` are replicated (available everywhere).
+            params_sharding = jaxlib.tree_util.tree_map(
+                lambda x: NamedSharding(self.mesh, P(*((None,) * x.ndim))),
+                self._params_template,
+            )
+
+            in_shardings = (params_sharding, self.sharding)
+
+            if is_grad_fn:
+                # Returns (value, grad), so out_sharding must be a 2-tuple.
+                # `value` is a replicated scalar -> P()
+                sharding_for_value = NamedSharding(self.mesh, P())
+                # `grad` is a replicated PyTree with the same structure as params.
+                sharding_for_grad = params_sharding
+                out_shardings = (sharding_for_value, sharding_for_grad)
+            else:
+                # Returns a single scalar value -> P()
+                out_shardings = NamedSharding(self.mesh, P())
+
+            compiled_fn = jaxlib.jit(
+                global_aggregated_fn,
+                # `tree` is a static argument, its value is compiled into the function.
+                static_argnums=(0,),
+                # Specify how inputs are sharded.
+                in_shardings=in_shardings,
+                # Specify how the output should be sharded.
+                out_shardings=out_shardings,
             )
             cache[cache_key] = compiled_fn  # type: ignore
         return cache[cache_key]  # type: ignore
@@ -744,7 +886,7 @@ class DistributedContractor:
     def value_and_grad(
         self,
         params: Tensor,
-        aggregate: bool = True,
+        # aggregate: bool = True,
         op: Optional[Callable[[Tensor], Tensor]] = None,
         output_dtype: Optional[str] = None,
     ) -> Tuple[Tensor, Tensor]:
@@ -753,8 +895,6 @@ class DistributedContractor:
 
         :param params: Parameters for the `nodes_fn` input
         :type params: Tensor
-        :param aggregate: Whether to aggregate (sum) the results across devices, defaults to True
-        :type aggregate: bool, optional
         :param op: Optional post-processing function for the output, defaults to None (corresponding to `backend.real`)
             op is a cache key, so dont directly pass lambda function for op
         :type op: Optional[Callable[[Tensor], Tensor]], optional
@@ -766,24 +906,18 @@ class DistributedContractor:
             fn_getter=self._get_device_sum_vg_fn,
             op=op,
             output_dtype=output_dtype,
+            is_grad_fn=True,
         )
 
-        device_values, device_grads = compiled_vg_fn(
+        total_value, total_grad = compiled_vg_fn(
             self.tree, params, self.batched_slice_indices
         )
-
-        if aggregate:
-            total_value = backend.sum(device_values)
-            total_grad = jaxlib.tree_util.tree_map(
-                lambda x: backend.sum(x, axis=0), device_grads
-            )
-            return total_value, total_grad
-        return device_values, device_grads
+        return total_value, total_grad
 
     def value(
         self,
         params: Tensor,
-        aggregate: bool = True,
+        # aggregate: bool = True,
         op: Optional[Callable[[Tensor], Tensor]] = None,
         output_dtype: Optional[str] = None,
     ) -> Tensor:
@@ -792,8 +926,6 @@ class DistributedContractor:
 
         :param params: Parameters for the `nodes_fn` input
         :type params: Tensor
-        :param aggregate: Whether to aggregate (sum) the results across devices, defaults to True
-        :type aggregate: bool, optional
         :param op: Optional post-processing function for the output, defaults to None (corresponding to identity)
             op is a cache key, so dont directly pass lambda function for op
         :type op: Optional[Callable[[Tensor], Tensor]], optional
@@ -805,22 +937,17 @@ class DistributedContractor:
             fn_getter=self._get_device_sum_v_fn,
             op=op,
             output_dtype=output_dtype,
+            is_grad_fn=False,
         )
 
-        device_values = compiled_v_fn(self.tree, params, self.batched_slice_indices)
-
-        if aggregate:
-            return backend.sum(device_values)
-        return device_values
+        total_value = compiled_v_fn(self.tree, params, self.batched_slice_indices)
+        return total_value
 
     def grad(
         self,
         params: Tensor,
-        aggregate: bool = True,
         op: Optional[Callable[[Tensor], Tensor]] = None,
         output_dtype: Optional[str] = None,
     ) -> Tensor:
-        _, grad = self.value_and_grad(
-            params, aggregate=aggregate, op=op, output_dtype=output_dtype
-        )
+        _, grad = self.value_and_grad(params, op=op, output_dtype=output_dtype)
         return grad

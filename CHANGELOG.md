@@ -12,6 +12,8 @@
 
 - Add `su4` as a generic parameterized two-qubit gates.
 
+- Add multi controller jax support for distrubuted contraction.
+
 ### Fixed
 
 - Fix the breaking logic change in jax from dlpack API, dlcapsule -> tensor.
