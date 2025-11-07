@@ -7,36 +7,59 @@ among different ansätze: FLDC, GLDC, and FDC.
 
 """
 
+from itertools import product
+from typing import Dict, Tuple, Optional
+
 import numpy as np
 import tensorflow as tf
 import scipy.sparse as sp
 from scipy.sparse.linalg import eigs
-from itertools import product
-from typing import Dict, Tuple, Optional
 import matplotlib.pyplot as plt
 
 import tensorcircuit as tc
-from tensorcircuit.quantum import PauliStringSum2COO_tf
+from tensorcircuit.quantum import PauliStringSum2COO
 
 
 def build_toric_hamiltonian(
     Lx: int, Ly: int, h: float, hx: float = 0.0, hz: float = 0.0
 ) -> Dict[str, float]:
-    """
+    r"""
     Build the generalized 2D toric code Hamiltonian with open boundary conditions.
 
-    The Hamiltonian is: H = -(1-h)∑A_v - (1-h)∑B_p - h∑(hx*X_i + hz*Z_i)
+    The Hamiltonian is: H = - (1 - h) \sum A_v - (1 - h) \sum B_p - h \sum (hx * X_i + hz * Z_i)
     where A_v are vertex operators (X products) and B_p are plaquette operators (Z products).
 
-    Args:
-        Lx: Number of plaquettes in x-direction
-        Ly: Number of plaquettes in y-direction
-        h: Magnetic field parameter controlling topological phase (0 to 1)
-        hx: X-direction field strength (default: 0.0)
-        hz: Z-direction field strength (default: 0.0)
+    Plaquette Operators at Boundaries:
 
-    Returns:
-        Dictionary mapping Pauli strings to coefficients {pauli_string: weight}
+    In the toric code with open boundary conditions, each plaquette operator B_p acts on the
+    four edges surrounding a single plaquette. For interior plaquettes, all four edges exist.
+    However, at the boundaries, the treatment remains consistent:
+
+    - Each plaquette (i,j) is defined for i in [0, Lx-1] and j in [0, Ly-1]
+    - The four edges (top, bottom, left, right) are always well-defined within the lattice
+    - Boundary plaquettes still have four edges, but some of these edges may be at the physical boundary
+    - No special weighting is applied to boundary plaquettes (unlike vertex operators, which are weighted as 0.5 or 0.75)
+
+    The qubit indices for each edge are calculated as:
+    - Horizontal edges: indexed sequentially along rows
+    - Vertical edges: indexed after all horizontal edges
+    - Top edge: i * Ly + j
+    - Bottom edge: (i + 1) * Ly + j
+    - Left edge: num_horizontal + i * (Ly + 1) + j
+    - Right edge: left + 1
+
+    :param Lx: Number of plaquettes in x-direction
+    :type Lx: int
+    :param Ly: Number of plaquettes in y-direction
+    :type Ly: int
+    :param h: Magnetic field parameter controlling topological phase (0 to 1)
+    :type h: float
+    :param hx: X-direction field strength (default: 0.0)
+    :type hx: float
+    :param hz: Z-direction field strength (default: 0.0)
+    :type hz: float
+    :return: Hamiltonian as a dictionary mapping Pauli strings to coefficients
+    :rtype: Dict[str, float]
     """
     H = {}
 
@@ -120,12 +143,16 @@ def get_plaquette_qubits(i: int, j: int, Lx: int, Ly: int) -> Dict[str, int]:
     """
     Get qubit indices for the four edges of plaquette (i,j).
 
-    Args:
-        i, j: Plaquette coordinates
-        Lx, Ly: Lattice dimensions
-
-    Returns:
-        Dictionary with keys 'top', 'bottom', 'left', 'right' mapping to qubit indices
+    :param i: Plaquette x-coordinate
+    :type i: int
+    :param j: Plaquette y-coordinate
+    :type j: int
+    :param Lx: Lattice width
+    :type Lx: int
+    :param Ly: Lattice height
+    :type Ly: int
+    :return: Dictionary with keys 'top', 'bottom', 'left', 'right' mapping to qubit indices
+    :rtype: Dict[str, int]
     """
     num_horizontal = (Lx + 1) * Ly
 
@@ -143,10 +170,14 @@ def building_block(circuit: tc.Circuit, params: tf.Variable, q1: int, q2: int) -
 
     Gate sequence: RZ-RY-RZ-RZ-RXX-RYY-RZZ-RZ-RY-RZ-RZ
 
-    Args:
-        circuit: Quantum circuit
-        params: 11 parameters for the gate sequence
-        q1, q2: Qubit indices
+    :param circuit: Quantum circuit
+    :type circuit: tc.Circuit
+    :param params: 11 parameters for the gate sequence
+    :type params: tf.Variable
+    :param q1: Qubit index 1
+    :type q1: int
+    :param q2: Qubit index 2
+    :type q2: int
     """
     circuit.RZ(q1, theta=params[0])
     circuit.RY(q2, theta=params[1])
@@ -161,22 +192,45 @@ def building_block(circuit: tc.Circuit, params: tf.Variable, q1: int, q2: int) -
     circuit.RZ(q2, theta=params[10])
 
 
+def building_block_su4(
+    circuit: tc.Circuit, params: tf.Variable, q1: int, q2: int
+) -> None:
+    """
+    Apply a parameterized two-qubit SU(4) gate.
+
+    :param circuit: Quantum circuit
+    :type circuit: tc.Circuit
+    :param params: 15 parameters for the SU(4) gate
+    :type params: tf.Variable
+    :param q1: Qubit index 1
+    :type q1: int
+    :param q2: Qubit index 2
+    :type q2: int
+    """
+    circuit.SU4(q1, q2, theta=params)
+    # su4_gate = tc.gates.su4_gate(params)
+    # circuit.any(su4_gate, q1, q2)
+
+
 def fldc_claw_ansatz(
     params: tf.Variable, Lx: int, Ly: int, layers: int = 1
 ) -> tc.Circuit:
     """
-    Fixed Layer Depth Claw (FLDC) ansatz for the toric code.
+    Finite local depth circuit (FLDC) ansatz for the toric code.
 
     Applies gate sequences to (left,bottom), (top,bottom), (right,bottom) pairs
     for each plaquette in sequence.
 
-    Args:
-        params: Variational parameters
-        Lx, Ly: Lattice dimensions
-        layers: Number of ansatz layers
-
-    Returns:
-        Quantum circuit
+    :param params: Variational parameters
+    :type params: tf.Variable
+    :param Lx: Lattice width
+    :type Lx: int
+    :param Ly: Lattice height
+    :type Ly: int
+    :param layers: Number of ansatz layers
+    :type layers: int
+    :return: Quantum circuit
+    :rtype: tc.Circuit
     """
     num_qubits = (Lx + 1) * Ly + Lx * (Ly + 1)
     circuit = tc.Circuit(num_qubits)
@@ -192,10 +246,10 @@ def fldc_claw_ansatz(
                     (qubits["top"], qubits["bottom"]),
                     (qubits["right"], qubits["bottom"]),
                 ]:
-                    building_block(
-                        circuit, params[param_idx : param_idx + 11], pair[0], pair[1]
+                    building_block_su4(
+                        circuit, params[param_idx : param_idx + 15], pair[0], pair[1]
                     )
-                    param_idx += 11
+                    param_idx += 15
 
     return circuit
 
@@ -204,18 +258,21 @@ def gldc_claw_ansatz(
     params: tf.Variable, Lx: int, Ly: int, layers: int = 1
 ) -> tc.Circuit:
     """
-    Grouped Layer Depth Claw (GLDC) ansatz for the toric code.
+    Global linear depth circuit (GLDC) ansatz for the toric code.
 
     Groups gates by pair type: all (left,bottom), then all (top,bottom),
     then all (right,bottom).
 
-    Args:
-        params: Variational parameters
-        Lx, Ly: Lattice dimensions
-        layers: Number of ansatz layers, if not 1 (not FDC), set to num_qubits
-
-    Returns:
-        Quantum circuit
+    :param params: Variational parameters
+    :type params: tf.Variable
+    :param Lx: Lattice width
+    :type Lx: int
+    :param Ly: Lattice height
+    :type Ly: int
+    :param layers: Number of ansatz layers, if not 1 (not FDC), set to num_qubits (which means full GLDC)
+    :type layers: int
+    :return: Quantum circuit
+    :rtype: tc.Circuit
     """
     num_qubits = (Lx + 1) * Ly + Lx * (Ly + 1)
 
@@ -230,57 +287,55 @@ def gldc_claw_ansatz(
         for i in range(Lx):
             for j in range(Ly):
                 qubits = get_plaquette_qubits(i, j, Lx, Ly)
-                building_block(
+                building_block_su4(
                     circuit,
-                    params[param_idx : param_idx + 11],
+                    params[param_idx : param_idx + 15],
                     qubits["left"],
                     qubits["bottom"],
                 )
-                param_idx += 11
+                param_idx += 15
 
         # Top-bottom pairs
         for i in range(Lx):
             for j in range(Ly):
                 qubits = get_plaquette_qubits(i, j, Lx, Ly)
-                building_block(
+                building_block_su4(
                     circuit,
-                    params[param_idx : param_idx + 11],
+                    params[param_idx : param_idx + 15],
                     qubits["top"],
                     qubits["bottom"],
                 )
-                param_idx += 11
+                param_idx += 15
 
         # Right-bottom pairs
         for i in range(Lx):
             for j in range(Ly):
                 qubits = get_plaquette_qubits(i, j, Lx, Ly)
-                building_block(
+                building_block_su4(
                     circuit,
-                    params[param_idx : param_idx + 11],
+                    params[param_idx : param_idx + 15],
                     qubits["right"],
                     qubits["bottom"],
                 )
-                param_idx += 11
+                param_idx += 15
 
     return circuit
 
 
 def fdc_claw_ansatz(params: tf.Variable, Lx: int, Ly: int) -> tc.Circuit:
-    """Fixed Depth Claw (FDC) ansatz - single layer GLDC."""
+    """Finite depth circuit (FDC) ansatz - single layer GLDC."""
     return gldc_claw_ansatz(params, Lx, Ly, layers=1)
 
 
-def build_sparse_hamiltonian(
-    hamiltonian_dict: Dict[str, float],
-) -> PauliStringSum2COO_tf:
+def build_sparse_hamiltonian(hamiltonian_dict: Dict[str, float]) -> PauliStringSum2COO:
     """
     Convert Hamiltonian dictionary to sparse matrix representation.
 
-    Args:
-        hamiltonian_dict: Hamiltonian as {pauli_string: coefficient}
+    :param hamiltonian_dict: Hamiltonian as {pauli_string: coefficient}
+    :type hamiltonian_dict: Dict[str, float]
 
-    Returns:
-        Sparse Hamiltonian in COO format
+    :return: Sparse Hamiltonian in COO format
+    :rtype: PauliStringSum2COO
     """
     pauli_strings = list(hamiltonian_dict.keys())
     coefficients = list(hamiltonian_dict.values())
@@ -288,40 +343,18 @@ def build_sparse_hamiltonian(
     pauli_map = {"I": 0, "X": 1, "Y": 2, "Z": 3}
     pauli_sequences = [[pauli_map[p] for p in ps] for ps in pauli_strings]
 
-    return PauliStringSum2COO_tf(pauli_sequences, weight=coefficients)
+    return PauliStringSum2COO(pauli_sequences, weight=coefficients)
 
 
-def energy_expectation(state: tf.Tensor, hamiltonian_dict: Dict[str, float]) -> float:
-    """
-    Calculate energy expectation value <ψ|H|ψ>.
-
-    Args:
-        state: Quantum state vector
-        hamiltonian_dict: Hamiltonian dictionary
-
-    Returns:
-        Energy expectation value
-    """
-    sparse_hamiltonian = build_sparse_hamiltonian(hamiltonian_dict)
-
-    H_psi = tc.backend.sparse_dense_matmul(
-        sparse_hamiltonian, tc.backend.reshape(state, [-1, 1])
-    )
-    expectation = tc.backend.sum(tc.backend.conj(state) * H_psi[:, 0])
-
-    return tc.backend.real(expectation)
+def energy_calc(c: tc.Circuit, H: PauliStringSum2COO) -> float:
+    """Calculate energy expectation value for a given circuit and Hamiltonian."""
+    return tc.templates.measurements.operator_expectation(c, H)
 
 
-def toric_energy(
-    c: tc.Circuit, h: float, hx: float, hz: float, Lx: int, Ly: int
-) -> float:
-    """Calculate toric code energy for a given circuit state."""
-    H = build_toric_hamiltonian(Lx=Lx, Ly=Ly, h=h, hx=hx, hz=hz)
-    return tc.backend.real(energy_expectation(c.state(), H))
-
-
-def vqe_toric_fldc(
+def vqe_func(
     params: tf.Variable,
+    ansatz_type: str,
+    H: PauliStringSum2COO,
     Lx: int,
     Ly: int,
     h: float,
@@ -329,41 +362,22 @@ def vqe_toric_fldc(
     hz: float,
     num_layers: int = 1,
 ) -> float:
-    """VQE loss function for FLDC ansatz."""
-    c = fldc_claw_ansatz(params, Lx, Ly, layers=num_layers)
-    return toric_energy(c, h, hx, hz, Lx, Ly)
-
-
-def vqe_toric_gldc(
-    params: tf.Variable,
-    Lx: int,
-    Ly: int,
-    h: float,
-    hx: float,
-    hz: float,
-    num_layers: int = 3,
-) -> float:
-    """VQE loss function for GLDC ansatz."""
-    c = gldc_claw_ansatz(params, Lx, Ly, layers=num_layers)
-    return toric_energy(c, h, hx, hz, Lx, Ly)
-
-
-def vqe_toric_fdc(
-    params: tf.Variable,
-    Lx: int,
-    Ly: int,
-    h: float,
-    hx: float,
-    hz: float,
-    num_layers: int = 1,
-) -> float:
-    """VQE loss function for FDC ansatz. num_layers is unused."""
-    c = fdc_claw_ansatz(params, Lx, Ly)
-    return toric_energy(c, h, hx, hz, Lx, Ly)
+    """VQE loss function for FLDC/GLDC/FDC ansatz."""
+    if ansatz_type == "fldc":
+        c = fldc_claw_ansatz(params, Lx, Ly, layers=num_layers)
+    elif ansatz_type == "gldc":
+        c = gldc_claw_ansatz(params, Lx, Ly, layers=num_layers)
+    elif ansatz_type == "fdc":
+        c = fdc_claw_ansatz(params, Lx, Ly)
+    else:
+        raise ValueError(f"Unknown ansatz type: {ansatz_type}")
+    return energy_calc(c, H)
 
 
 def train_vqe(
     vqe_vag,
+    ansatz_type: str,
+    H: PauliStringSum2COO,
     Lx: int,
     Ly: int,
     maxiter: int,
@@ -378,18 +392,19 @@ def train_vqe(
     """
     Train VQE model.
 
-    Args:
-        vqe_vag: JIT-compiled value_and_grad function
-        Lx, Ly: Lattice dimensions
-        maxiter: Maximum iterations
-        h, hx, hz: Hamiltonian parameters
-        num_params: Number of variational parameters
-        num_layers: Number of ansatz layers (for FLDC, set to 1 for FDC and set to num_qubits for GLDC)
-        seed: Random seed
-        lr: Learning rate
-
-    Returns:
-        Array of energy values during training
+    :param vqe_vag: JIT-compiled value_and_grad function
+    :param Lx: Lattice width
+    :param Ly: Lattice height
+    :param maxiter: Maximum iterations
+    :param h: Hamiltonian parameter
+    :param hx: Hamiltonian parameter
+    :param hz: Hamiltonian parameter
+    :param num_params: Number of variational parameters
+    :param num_layers: Number of ansatz layers (for FLDC, set to 1 for FDC and set to num_qubits for GLDC)
+    :param seed: Random seed
+    :param lr: Learning rate
+    :return: Array of energy values during training
+    :rtype: np.ndarray
     """
     energies = []
     params = tf.Variable(
@@ -405,7 +420,9 @@ def train_vqe(
     optimizer = tf.keras.optimizers.Adam(lr)
 
     for i in range(maxiter):
-        energy, grad = vqe_vag(params, Lx, Ly, h, hx, hz, num_layers=num_layers)
+        energy, grad = vqe_vag(
+            params, ansatz_type, H, Lx, Ly, h, hx, hz, num_layers=num_layers
+        )
         optimizer.apply_gradients([(grad, params)])
         energies.append(energy)
 
@@ -417,6 +434,7 @@ def train_vqe(
 
 def run_vqe_trials(
     ansatz_type: str,
+    H: PauliStringSum2COO,
     Lx: int,
     Ly: int,
     maxiter: int,
@@ -430,35 +448,35 @@ def run_vqe_trials(
     """
     Run multiple VQE trials and return averaged results.
 
-    Args:
-        ansatz_type: 'fldc', 'gldc', or 'fdc'
-        Lx, Ly: Lattice dimensions
-        maxiter: Maximum iterations per trial
-        h, hx, hz: Hamiltonian parameters
-        fldc_num_layers: Number of FLDC ansatz layers
-        trials: Number of random trials
-        avg_percent: Fraction of best trials to average
-
-    Returns:
-        (best_energy_avg, avg_energy_trajectory)
+    :param ansatz_type: 'fldc', 'gldc', or 'fdc'
+    :param Lx: Lattice width
+    :param Ly: Lattice height
+    :param maxiter: Maximum iterations per trial
+    :param h: Hamiltonian parameter
+    :param hx: Hamiltonian parameter
+    :param hz: Hamiltonian parameter
+    :param fldc_num_layers: Number of FLDC ansatz layers
+    :param trials: Number of random trials
+    :param avg_percent: Fraction of best trials to average
+    :return: (best_energy_avg, avg_energy_trajectory)
+    :rtype: Tuple[float, np.ndarray]
     """
-    # Setup based on ansatz type
 
+    # Setup based on ansatz type
     num_qubits = (Lx + 1) * Ly + Lx * (Ly + 1)
 
     if ansatz_type == "fldc":
-        vqe_func = vqe_toric_fldc
-        num_params = Lx * Ly * 11 * 3 * fldc_num_layers
+        num_params = Lx * Ly * 15 * 3 * fldc_num_layers
     elif ansatz_type == "gldc":
-        vqe_func = vqe_toric_gldc
-        num_params = Lx * Ly * 11 * 3 * num_qubits
+        num_params = Lx * Ly * 15 * 3 * num_qubits
     elif ansatz_type == "fdc":
-        vqe_func = vqe_toric_fdc
-        num_params = Lx * Ly * 11 * 3
+        num_params = Lx * Ly * 15 * 3
     else:
         raise ValueError(f"Unknown ansatz type: {ansatz_type}")
 
-    vqe_vag = tc.backend.jit(tc.backend.value_and_grad(vqe_func), static_argnums=(1, 2))
+    vqe_vag = tc.backend.jit(
+        tc.backend.value_and_grad(vqe_func), static_argnums=(1, 2, 3, 4)
+    )
 
     final_energies = []
     avg_energies = np.zeros(maxiter)
@@ -466,7 +484,18 @@ def run_vqe_trials(
     for trial in range(trials):
         print(f"\nTrial {trial+1}/{trials}")
         energies = train_vqe(
-            vqe_vag, Lx, Ly, maxiter, h, hx, hz, num_params, fldc_num_layers, seed=trial
+            vqe_vag,
+            ansatz_type=ansatz_type,
+            H=H,
+            Lx=Lx,
+            Ly=Ly,
+            maxiter=maxiter,
+            h=h,
+            hx=hx,
+            hz=hz,
+            num_params=num_params,
+            num_layers=fldc_num_layers,
+            seed=trial,
         )
         final_energies.append(energies[-1])
         avg_energies += energies / trials
@@ -480,22 +509,15 @@ def run_vqe_trials(
     return best_energy, avg_energies
 
 
-def compute_exact_ground_energy(
-    Lx: int, Ly: int, h: float, hx: float, hz: float
-) -> float:
+def compute_exact_ground_energy(sparse_H: PauliStringSum2COO) -> float:
     """
     Compute exact ground state energy using sparse diagonalization.
 
-    Args:
-        Lx, Ly: Lattice dimensions
-        h, hx, hz: Hamiltonian parameters
-
-    Returns:
-        Ground state energy
+    :param sparse_H: Sparse Hamiltonian in COO format
+    :type sparse_H: PauliStringSum2COO
+    :return: Exact ground state energy
+    :rtype: float
     """
-    H = build_toric_hamiltonian(Lx=Lx, Ly=Ly, h=h, hx=hx, hz=hz)
-    sparse_H = build_sparse_hamiltonian(H)
-
     indices = sparse_H.indices.numpy()
     values = sparse_H.values.numpy()
     shape = sparse_H.dense_shape.numpy()
@@ -539,8 +561,11 @@ def main():
         print(f"Training for h={h:.1f}")
         print(f"{'='*60}")
 
+        H = build_toric_hamiltonian(Lx=Lx, Ly=Ly, h=h, hx=h, hz=h)
+        sparse_H = build_sparse_hamiltonian(H)
+
         # Exact diagonalization
-        ground_energy = compute_exact_ground_energy(Lx, Ly, h, h, h)
+        ground_energy = compute_exact_ground_energy(sparse_H)
         print(f"Exact ground energy: {ground_energy:.6f}")
         results["ed"].append(ground_energy)
 
@@ -549,6 +574,7 @@ def main():
             print(f"\n--- {ansatz.upper()} Ansatz ---")
             best_energy, avg_traj = run_vqe_trials(
                 ansatz,
+                sparse_H,
                 Lx,
                 Ly,
                 maxiter,
@@ -570,34 +596,68 @@ def main():
         if not key.endswith("_traj"):
             results[key] = np.array(results[key])
 
-    # Plot error convergence
-    plt.figure(figsize=(10, 6))
+    h_array = np.array(h_values)
+
+    # Define a color map for consistency
+    # Using Matplotlib default color cycle (C0: blue, C1: orange, C2: green, C3: red)
+    color_map = {"Exact": "C0", "FDC": "C1", "FLDC": "C2", "GLDC": "C3"}
+
+    fig, ax_main = plt.subplots(figsize=(10, 6))
+
+    # Plot main graph: Energy per qubit vs h
+    ax_main.plot(
+        h_array,
+        results["ed"] / num_qubits,
+        "o-",
+        label="Exact",
+        linewidth=2,
+        color=color_map["Exact"],
+    )
+    ax_main.plot(
+        h_array, results["fdc"] / num_qubits, "s-", label="FDC", color=color_map["FDC"]
+    )
+    ax_main.plot(
+        h_array,
+        results["fldc"] / num_qubits,
+        "^-",
+        label="FLDC",
+        color=color_map["FLDC"],
+    )
+    ax_main.plot(
+        h_array,
+        results["gldc"] / num_qubits,
+        "d-",
+        label="GLDC",
+        color=color_map["GLDC"],
+    )
+
+    ax_main.set_xlabel("Magnetic field h")
+    ax_main.set_ylabel("Energy per qubit (E/N)")
+    ax_main.set_title("Ground State Energy vs Magnetic Field")
+    ax_main.legend()
+    ax_main.grid(False)
+
+    # Plot inset graph: Error convergence for h=0.1
+    # To control the position of the inset, you can adjust these values to change the position and size of the inset
+    inset_pos = [0.72, 0.63, 0.25, 0.25]  # [left x, bottom y, width, height]
+    ax_inset = fig.add_axes(inset_pos)
+
     for ansatz in ["fdc", "fldc", "gldc"]:
         if f"{ansatz}_traj" in results:
-            plt.plot(results[f"{ansatz}_traj"], label=ansatz.upper())
-    plt.xlabel("Iteration")
-    plt.ylabel("Error per qubit")
-    plt.title(f"Training Error for h={h_values[0]}")
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig("training_error.png", dpi=300)
-    plt.show()
+            ansatz_upper = ansatz.upper()
+            ax_inset.plot(
+                results[f"{ansatz}_traj"],
+                label=ansatz_upper,
+                color=color_map[ansatz_upper],
+            )
 
-    # Plot energy landscape
-    plt.figure(figsize=(10, 6))
-    h_array = np.array(h_values)
-    plt.plot(h_array, results["ed"] / num_qubits, "o-", label="Exact", linewidth=2)
-    plt.plot(h_array, results["fdc"] / num_qubits, "s-", label="FDC")
-    plt.plot(h_array, results["fldc"] / num_qubits, "^-", label="FLDC")
-    plt.plot(h_array, results["gldc"] / num_qubits, "d-", label="GLDC")
-    plt.xlabel("Magnetic field h")
-    plt.ylabel("Energy per qubit (E/N)")
-    plt.title("Ground State Energy vs Magnetic Field")
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig("energy_landscape.png", dpi=300)
+    ax_inset.set_xlabel("Iteration", fontsize=10)  # 使用稍小的字体
+    ax_inset.set_ylabel("Error per qubit", fontsize=10)
+    ax_inset.set_title(f"Training Error (h={h_values[0]})", fontsize=11)
+    ax_inset.grid(False)
+    ax_inset.tick_params(axis="both", which="major", labelsize=8)
+
+    # plt.savefig('combined_energy_plot.png', dpi=300)
     plt.show()
 
     print("\n" + "=" * 60)
