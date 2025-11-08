@@ -1,4 +1,5 @@
 data
+tree.pkl
 *.bk
 git_stat_v2.sh
 *.token

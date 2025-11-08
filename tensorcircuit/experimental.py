@@ -7,6 +7,10 @@ Experimental features
 from functools import partial
 import logging
 from typing import Any, Callable, Dict, Optional, Tuple, List, Sequence, Union
+import pickle
+import uuid
+import time
+import os
 
 import numpy as np
 
@@ -494,7 +498,49 @@ NamedSharding: Any
 P: Any
 
 
-def broadcast_py_object(obj: Any) -> Any:
+def broadcast_py_object(obj: Any, shared_dir: Optional[str] = None) -> Any:
+    """
+    Broadcast a picklable Python object from process 0 to all other processes,
+    with fallback mechanism from gRPC to file system based approach.
+
+    This function first attempts to use gRPC-based broadcast. If that fails due to
+    pickling issues, it falls back to a file system based approach that is more robust.
+
+    :param obj: The Python object to broadcast. It must be picklable.
+                This object should exist on process 0 and can be None on others.
+    :type obj: Any
+    :param shared_dir: Directory path for shared file system broadcast fallback.
+                       If None, uses current directory. Only used in fallback mode.
+    :type shared_dir: Optional[str], optional
+    :return: The broadcasted object, now present on all processes.
+    :rtype: Any
+    """
+    import jax
+    from jax.experimental import multihost_utils
+
+    try:
+        result = broadcast_py_object_jax(obj)
+        return result
+
+    except pickle.UnpicklingError as e:
+        # This block is executed if any process fails during the gRPC attempt.
+
+        multihost_utils.sync_global_devices("grpc_broadcast_failed_fallback_sync")
+
+        if jax.process_index() == 0:
+            border = "=" * 80
+            logger.warning(
+                "\n%s\nJAX gRPC broadcast failed with error: %s\n"
+                "--> Falling back to robust Shared File System broadcast method.\n%s",
+                border,
+                e,
+                border,
+            )
+
+        return broadcast_py_object_fs(obj, shared_dir)
+
+
+def broadcast_py_object_jax(obj: Any) -> Any:
     """
     Broadcast a picklable Python object from process 0 to all other processes
     within jax ditribution system.
@@ -517,6 +563,10 @@ def broadcast_py_object(obj: Any) -> Any:
         if obj is None:
             raise ValueError("Object to broadcast from process 0 cannot be None.")
         data = pickle.dumps(obj)
+        logger.info(
+            f"--- Size of object to be broadcast: {len(data) / 1024**2:.3f} MB ---"
+        )
+
     else:
         data = b""
 
@@ -524,27 +574,148 @@ def broadcast_py_object(obj: Any) -> Any:
     # We send a single-element int32 array.
     length = np.array([len(data)], dtype=np.int32)
     length = multihost_utils.broadcast_one_to_all(length)
+
     length = int(length[0])  # type: ignore
 
     # Step 2: Broadcast the actual data.
     # Convert byte string to a uint8 array for broadcasting.
-    send_arr = np.frombuffer(data, dtype=np.uint8)
+    send_arr_uint8 = np.frombuffer(data, dtype=np.uint8)
+    padded_length = (length + 3) // 4 * 4
+    if send_arr_uint8.size < padded_length:
+        send_arr_uint8 = np.pad(  #  type: ignore
+            send_arr_uint8, (0, padded_length - send_arr_uint8.size), mode="constant"
+        )
+    send_arr_int32 = send_arr_uint8.astype(np.int32)
+    # send_arr_int32 = jaxlib.numpy.array(send_arr_int32, dtype=np.int32)
+    send_arr_int32 = jaxlib.device_put(send_arr_int32)
 
-    # Pad the array on the source process if necessary, although it's unlikely
-    # to be smaller than `length`. More importantly, other processes create an
-    # empty buffer which must be padded to the correct receiving size.
-    if send_arr.size < length:
-        send_arr = np.pad(send_arr, (0, length - send_arr.size), mode="constant")  # type: ignore
+    jaxlib.experimental.multihost_utils.sync_global_devices("bulk_before")
 
-    # Broadcast the uint8 array. Process 0 sends, others receive into `send_arr`.
-    received_arr = multihost_utils.broadcast_one_to_all(send_arr)
+    received_arr = multihost_utils.broadcast_one_to_all(send_arr_int32)
+
+    received_arr = np.array(received_arr)
+    received_arr_uint8 = received_arr.astype(np.uint8)
 
     # Step 3: Reconstruct the object from the received bytes.
     # Convert the NumPy array back to bytes, truncate any padding, and unpickle.
-    received_data = received_arr[:length].tobytes()
-    if jaxlib.process_index() == 0:
-        logger.info(f"Broadcasted object {obj}")
+    received_data = received_arr_uint8[:length].tobytes()
+    # if jaxlib.process_index() == 0:
+    #     logger.info(f"Broadcasted object {obj}")
     return pickle.loads(received_data)
+
+
+def broadcast_py_object_fs(
+    obj: Any, shared_dir: Optional[str] = None, timeout_seconds: int = 300
+) -> Any:
+    """
+    Broadcast a picklable Python object from process 0 to all other processes
+    using a shared file system approach.
+
+    This is a fallback method when gRPC-based broadcast fails. It uses UUID-based
+    file communication to share objects between processes through a shared file system.
+
+    :param obj: The Python object to broadcast. Must be picklable.
+                Should exist on process 0, can be None on others.
+    :type obj: Any
+    :param shared_dir: Directory path for shared file system communication.
+                       If None, uses current directory.
+    :type shared_dir: Optional[str], optional
+    :param timeout_seconds: Maximum time to wait for file operations before timing out.
+                            Defaults to 300 seconds.
+    :type timeout_seconds: int, optional
+    :return: The broadcasted object, now present on all processes.
+    :rtype: Any
+    """
+    # to_avoid very subtle bugs for broadcast tree_data on A800 clusters
+    import jax
+    from jax.experimental import multihost_utils
+
+    if shared_dir is None:
+        shared_dir = "."
+    if jax.process_index() == 0:
+        os.makedirs(shared_dir, exist_ok=True)
+
+    id_comm_path = os.path.join(shared_dir, f".broadcast_temp_12318")
+    transfer_id = ""
+
+    if jax.process_index() == 0:
+        transfer_id = str(uuid.uuid4())
+        # print(f"[Process 0] Generated unique transfer ID: {transfer_id}", flush=True)
+        with open(id_comm_path, "w") as f:
+            f.write(transfer_id)
+
+    multihost_utils.sync_global_devices("fs_broadcast_id_written")
+
+    if jax.process_index() != 0:
+        start_time = time.time()
+        while not os.path.exists(id_comm_path):
+            time.sleep(0.1)
+            if time.time() - start_time > timeout_seconds:
+                raise TimeoutError(
+                    f"Process {jax.process_index()} timed out waiting for ID file: {id_comm_path}"
+                )
+        with open(id_comm_path, "r") as f:
+            transfer_id = f.read()
+
+    multihost_utils.sync_global_devices("fs_broadcast_id_read")
+    if jax.process_index() == 0:
+        try:
+            os.remove(id_comm_path)
+        except OSError:
+            pass  # 如果文件已被其他进程快速清理，忽略错误
+
+    # 定义本次传输使用的数据文件和标志文件路径
+    data_path = os.path.join(shared_dir, f"{transfer_id}.data")
+    done_path = os.path.join(shared_dir, f"{transfer_id}.done")
+
+    result_obj = None
+
+    if jax.process_index() == 0:
+        if obj is None:
+            raise ValueError("None cannot be broadcasted.")
+
+        # print(f"[Process 0] Pickling object...", flush=True)
+        pickled_data = pickle.dumps(obj)
+        logger.info(
+            f"[Process 0] Writing {len(pickled_data) / 1024**2:.3f} MB to {data_path}"
+        )
+        with open(data_path, "wb") as f:
+            f.write(pickled_data)
+
+        with open(done_path, "w") as f:
+            pass
+        logger.info(f"[Process 0] Write complete.")
+        result_obj = obj
+    else:
+        # print(f"[Process {jax.process_index()}] Waiting for done file: {done_path}", flush=True)
+        start_time = time.time()
+        while not os.path.exists(done_path):
+            time.sleep(0.1)
+            if time.time() - start_time > timeout_seconds:
+                raise TimeoutError(
+                    f"Process {jax.process_index()} timed out waiting for done file: {done_path}"
+                )
+
+        # print(f"[Process {jax.process_index()}] Done file found. Reading data from {data_path}", flush=True)
+        with open(data_path, "rb") as f:
+            pickled_data = f.read()
+
+        result_obj = pickle.loads(pickled_data)
+        logger.info(f"[Process {jax.process_index()}] Object successfully loaded.")
+
+    multihost_utils.sync_global_devices("fs_broadcast_read_complete")
+
+    if jax.process_index() == 0:
+        try:
+            os.remove(data_path)
+            os.remove(done_path)
+            # print(f"[Process 0] Cleaned up temporary files for transfer {transfer_id}.", flush=True)
+        except OSError as e:
+            logger.info(
+                f"[Process 0]: Failed to clean up temporary files: {e}",
+            )
+
+    return result_obj
 
 
 class DistributedContractor:
@@ -582,6 +753,7 @@ class DistributedContractor:
         cotengra_options: Optional[Dict[str, Any]] = None,
         devices: Optional[List[Any]] = None,  # backward compatibility
         mesh: Optional[Any] = None,
+        tree_data: Optional[Dict[str, Any]] = None,
     ) -> None:
         global jaxlib
         global ctg
@@ -591,6 +763,7 @@ class DistributedContractor:
 
         logger.info("Initializing DistributedContractor...")
         import cotengra as ctg
+        from cotengra import ContractionTree
         import jax as jaxlib
         from jax.sharding import Mesh, NamedSharding, PartitionSpec as P
 
@@ -618,36 +791,43 @@ class DistributedContractor:
         ] = {}
 
         logger.info("Running cotengra pathfinder... (This may take a while)")
-        tree_object = None
-        if jaxlib.process_index() == 0:
-            logger.info("Process 0: Running cotengra pathfinder...")
+        if tree_data is None:
+            if params is None:
+                raise ValueError("Please provide specific circuit parameters array.")
+            if jaxlib.process_index() == 0:
+                logger.info("Process 0: Running cotengra pathfinder...")
+                tree_data = self._get_tree_data(
+                    self.nodes_fn, self._params_template, cotengra_options  # type: ignore
+                )
 
-            local_cotengra_options = (cotengra_options or {}).copy()
-            local_cotengra_options["progbar"] = True
+            # Step 2: Use the robust helper function to broadcast the tree object.
+            # Process 0 sends its computed `tree_object`.
+            # Other processes send `None`, but receive the object from process 0.
 
-            nodes = self.nodes_fn(self._params_template)
-            tn_info, _ = get_tn_info(nodes)
-            default_cotengra_options = {
-                "slicing_reconf_opts": {"target_size": 2**28},
-                "max_repeats": 128,
-                "minimize": "write",
-                "parallel": "auto",
-            }
-            default_cotengra_options.update(local_cotengra_options)
-
-            opt = ctg.ReusableHyperOptimizer(**default_cotengra_options)
-            tree_object = opt.search(*tn_info)
-
-        # Step 2: Use the robust helper function to broadcast the tree object.
-        # Process 0 sends its computed `tree_object`.
-        # Other processes send `None`, but receive the object from process 0.
-        logger.info(
-            f"Process {jaxlib.process_index()}: Synchronizing contraction path..."
-        )
-        if jaxlib.process_count() > 1:
-            self.tree = broadcast_py_object(tree_object)
+            if jaxlib.process_count() > 1:
+                # self.tree = broadcast_py_object(tree_object)
+                jaxlib.experimental.multihost_utils.sync_global_devices("tree_before")
+                logger.info(
+                    f"Process {jaxlib.process_index()}: Synchronizing contraction path..."
+                )
+                tree_data = broadcast_py_object(tree_data)
+                jaxlib.experimental.multihost_utils.sync_global_devices("tree_after")
         else:
-            self.tree = tree_object
+            logger.info("Using pre-computed contraction path.")
+        if tree_data is None:
+            raise ValueError("Contraction path data is missing.")
+
+        self.tree = ContractionTree.from_path(
+            inputs=tree_data["inputs"],
+            output=tree_data["output"],
+            size_dict=tree_data["size_dict"],
+            path=tree_data["path"],
+        )
+
+        # Restore slicing information
+        for ind, _ in tree_data["sliced_inds"].items():
+            self.tree.remove_ind_(ind)
+
         logger.info(
             f"Process {jaxlib.process_index()}: Contraction path successfully synchronized."
         )
@@ -691,6 +871,76 @@ class DistributedContractor:
         self._compiled_v_fn = None
 
         logger.info("Initialization complete.")
+
+    @staticmethod
+    def _get_tree_data(
+        nodes_fn: Callable[[Tensor], List[Gate]],
+        params: Tensor,
+        cotengra_options: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        global ctg
+
+        import cotengra as ctg
+
+        local_cotengra_options = (cotengra_options or {}).copy()
+
+        nodes = nodes_fn(params)
+        tn_info, _ = get_tn_info(nodes)
+        default_cotengra_options = {
+            "slicing_reconf_opts": {"target_size": 2**28},
+            "max_repeats": 128,
+            "minimize": "write",
+            "parallel": "auto",
+            "progbar": True,
+        }
+        default_cotengra_options.update(local_cotengra_options)
+
+        opt = ctg.ReusableHyperOptimizer(**default_cotengra_options)
+        tree_object = opt.search(*tn_info)
+        tree_data = {
+            "inputs": tree_object.inputs,
+            "output": tree_object.output,
+            "size_dict": tree_object.size_dict,
+            "path": tree_object.get_path(),
+            "sliced_inds": tree_object.sliced_inds,
+        }
+        return tree_data
+
+    @staticmethod
+    def find_path(
+        nodes_fn: Callable[[Tensor], Tensor],
+        params: Tensor,
+        cotengra_options: Optional[Dict[str, Any]] = None,
+        filepath: Optional[str] = None,
+    ) -> None:
+        tree_data = DistributedContractor._get_tree_data(
+            nodes_fn, params, cotengra_options
+        )
+        if filepath is not None:
+            with open(filepath, "wb") as f:
+                pickle.dump(tree_data, f)
+            logger.info(f"Contraction path data successfully saved to '{filepath}'.")
+
+    @classmethod
+    def from_path(
+        cls,
+        filepath: str,
+        nodes_fn: Callable[[Tensor], List[Gate]],
+        devices: Optional[List[Any]] = None,  # backward compatibility
+        mesh: Optional[Any] = None,
+    ) -> "DistributedContractor":
+        with open(filepath, "rb") as f:
+            tree_data = pickle.load(f)
+
+        # Each process loads the file independently. No broadcast is needed.
+        # We pass the loaded `tree_data` directly to __init__ to trigger the second workflow.
+        return cls(
+            nodes_fn=nodes_fn,
+            params=None,
+            mesh=mesh,
+            devices=devices,
+            tree_data=tree_data,
+        )
 
     def _get_single_slice_contraction_fn(
         self, op: Optional[Callable[[Tensor], Tensor]] = None
