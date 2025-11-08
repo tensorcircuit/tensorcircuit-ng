@@ -5,6 +5,8 @@ This module implements VQE optimization for finding ground states of the
 generalized 2D toric code Hamiltonian with open boundary conditions and provides comparison
 among different ansätze: FLDC, GLDC, and FDC.
 
+Reference:
+- [arXiv:2311.01393](https://arxiv.org/pdf/2311.01393)
 """
 
 from itertools import product
@@ -29,24 +31,40 @@ def build_toric_hamiltonian(
     The Hamiltonian is: H = - (1 - h) \sum A_v - (1 - h) \sum B_p - h \sum (hx * X_i + hz * Z_i)
     where A_v are vertex operators (X products) and B_p are plaquette operators (Z products).
 
-    Plaquette Operators at Boundaries:
+    **Operator Definitions with Open Boundaries:**
 
-    In the toric code with open boundary conditions, each plaquette operator B_p acts on the
-    four edges surrounding a single plaquette. For interior plaquettes, all four edges exist.
-    However, at the boundaries, the treatment remains consistent:
+    In this model, qubits reside on the edges of the lattice.
 
-    - Each plaquette (i,j) is defined for i in [0, Lx-1] and j in [0, Ly-1]
-    - The four edges (top, bottom, left, right) are always well-defined within the lattice
-    - Boundary plaquettes still have four edges, but some of these edges may be at the physical boundary
-    - No special weighting is applied to boundary plaquettes (unlike vertex operators, which are weighted as 0.5 or 0.75)
+    Vertex Operators (A_v):
+
+    * Vertex operators are defined on each **vertex** (i,j), where
+        `i` in [0, Lx] and `j` in [0, Ly]. There are `(Lx + 1) * (Ly + 1)` vertices.
+    * **Boundary Terms:** Vertices on the physical boundary connect to fewer edges:
+        * **Bulk vertices** (interior) connect to 4 edges. (Weight 1.0)
+        * **Edge vertices** (non-corner) connect to 3 edges. (Weight 0.75)
+        * **Corner vertices** connect to 2 edges. (Weight 0.5)
+    * The code correctly identifies these and applies the corresponding 2, 3, or 4-body
+        'X' operators with the specified weights.
+
+    Plaquette Operators (B_p):
+
+    * Plaquette operators are defined on each **plaquette** (or face) (i,j), where
+        `i` in [0, Lx-1] and `j` in [0, Ly-1]. There are `Lx * Ly` plaquettes.
+    * **No Boundary Terms:** In this lattice definition, *every* plaquette,
+        including those at the physical boundary, is surrounded by exactly four edges
+        (top, bottom, left, right).
+    * Therefore, all `B_p` operators are 4-body 'Z' terms, and no special
+        boundary weighting is applied.
+
+    **Qubit Indexing:**
 
     The qubit indices for each edge are calculated as:
-    - Horizontal edges: indexed sequentially along rows
-    - Vertical edges: indexed after all horizontal edges
-    - Top edge: i * Ly + j
-    - Bottom edge: (i + 1) * Ly + j
-    - Left edge: num_horizontal + i * (Ly + 1) + j
-    - Right edge: left + 1
+    - Horizontal edges: indexed sequentially along rows (0 to num_horizontal - 1)
+    - Vertical edges: indexed after all horizontal edges (num_horizontal to num_qubits - 1)
+    - Top edge of plaquette (i,j): i * Ly + j
+    - Bottom edge of plaquette (i,j): (i + 1) * Ly + j
+    - Left edge of plaquette (i,j): num_horizontal + i * (Ly + 1) + j
+    - Right edge of plaquette (i,j): left + 1
 
     :param Lx: Number of plaquettes in x-direction
     :type Lx: int
@@ -164,34 +182,6 @@ def get_plaquette_qubits(i: int, j: int, Lx: int, Ly: int) -> Dict[str, int]:
     }
 
 
-def building_block(circuit: tc.Circuit, params: tf.Variable, q1: int, q2: int) -> None:
-    """
-    Apply a parameterized two-qubit gate sequence.
-
-    Gate sequence: RZ-RY-RZ-RZ-RXX-RYY-RZZ-RZ-RY-RZ-RZ
-
-    :param circuit: Quantum circuit
-    :type circuit: tc.Circuit
-    :param params: 11 parameters for the gate sequence
-    :type params: tf.Variable
-    :param q1: Qubit index 1
-    :type q1: int
-    :param q2: Qubit index 2
-    :type q2: int
-    """
-    circuit.RZ(q1, theta=params[0])
-    circuit.RY(q2, theta=params[1])
-    circuit.RZ(q1, theta=params[2])
-    circuit.RZ(q2, theta=params[3])
-    circuit.RXX(q1, q2, theta=params[4])
-    circuit.RYY(q1, q2, theta=params[5])
-    circuit.RZZ(q1, q2, theta=params[6])
-    circuit.RZ(q1, theta=params[7])
-    circuit.RY(q2, theta=params[8])
-    circuit.RZ(q1, theta=params[9])
-    circuit.RZ(q2, theta=params[10])
-
-
 def building_block_su4(
     circuit: tc.Circuit, params: tf.Variable, q1: int, q2: int
 ) -> None:
@@ -208,8 +198,6 @@ def building_block_su4(
     :type q2: int
     """
     circuit.SU4(q1, q2, theta=params)
-    # su4_gate = tc.gates.su4_gate(params)
-    # circuit.any(su4_gate, q1, q2)
 
 
 def fldc_claw_ansatz(
