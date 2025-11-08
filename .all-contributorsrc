@@ -385,6 +385,15 @@
         "example",
         "tutorial"
       ]
+    },
+    {
+      "login": "QuiXamii",
+      "name": "Qixiang WANG",
+      "avatar_url": "https://avatars.githubusercontent.com/u/136054857?v=4",
+      "profile": "https://github.com/QuiXamii",
+      "contributions": [
+        "example"
+      ]
     }
   ],
   "contributorsPerLine": 6,
