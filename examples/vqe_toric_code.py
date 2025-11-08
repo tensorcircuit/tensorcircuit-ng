@@ -10,7 +10,7 @@ Reference:
 """
 
 from itertools import product
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -531,7 +531,8 @@ def main():
     fldc_num_layers = 3
     maxiter = 1000
     # For each ansatz, there are 100 independent VQE trials
-    # And the data are averaged over the best half of the 100 training trajectories starting from different initializations.
+    # And the data are averaged over the best half of the 100 training trajectories
+    # starting from different initializations.
     # It's time consuming to run GLDC ansatz with 100 trials; consider reducing trials for testing.
     # And GLDC ansatz requires NUM_QUBITS layers FDC structure, which may lead to very long training time.
     trials = 100
