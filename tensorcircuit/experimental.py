@@ -833,16 +833,7 @@ class DistributedContractor:
         )
         actual_num_slices = self.tree.nslices
 
-        print("\n--- Contraction Path Info ---")
-        stats = self.tree.contract_stats()
-        print(f"Path found with {actual_num_slices} slices.")
-        print(
-            f"Arithmetic Intensity (higher is better): {self.tree.arithmetic_intensity():.2f}"
-        )
-        print("flops (TFlops):", stats["flops"] / 2**40 / self.num_devices)
-        print("write (GB):", stats["write"] / 2**27 / actual_num_slices)
-        print("size (GB):", stats["size"] / 2**27)
-        print("-----------------------------\n")
+        self._report_tree_info()
 
         slices_per_device = int(np.ceil(actual_num_slices / self.num_devices))
         padded_size = slices_per_device * self.num_devices
@@ -871,6 +862,19 @@ class DistributedContractor:
         self._compiled_v_fn = None
 
         logger.info("Initialization complete.")
+
+    def _report_tree_info(self) -> None:
+        print("\n--- Contraction Path Info ---")
+        actual_num_slices = self.tree.nslices
+        stats = self.tree.contract_stats()
+        print(f"Path found with {actual_num_slices} slices.")
+        print(
+            f"Arithmetic Intensity (higher is better): {self.tree.arithmetic_intensity():.2f}"
+        )
+        print("flops (TFlops):", stats["flops"] / 2**40 / self.num_devices)
+        print("write (GB):", stats["write"] / 2**27 / actual_num_slices)
+        print("size (GB):", stats["size"] / 2**27)
+        print("-----------------------------\n")
 
     @staticmethod
     def _get_tree_data(
