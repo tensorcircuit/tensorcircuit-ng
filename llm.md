@@ -142,6 +142,6 @@ pip install -r requirements/requirements-types.txt
 
 ### Branch Strategy
 
-- main/master branch for stable releases
+- master branch for stable releases
 - beta branch for nightly builds (as seen in nightly_release.yml)
 - pull requests for feature development

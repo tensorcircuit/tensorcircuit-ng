@@ -98,15 +98,16 @@ def run_vqe_main(coordinator_address: str, num_processes: int, process_id: int):
     # The contractor will use this concrete array to run its (now internal)
     # "find path on 0 and broadcast" logic.},
 
-    DC = DistributedContractor.from_path(
-        filepath="tree.pkl",
-        nodes_fn=nodes_fn,
-        mesh=global_mesh,
-    )
-
     # Shard the parameters onto devices for the actual GPU/TPU computation.
     params_sharding = NamedSharding(global_mesh, P(*([None] * len(params_shape))))
     params = jax.device_put(params_cpu, params_sharding)
+
+    DC = DistributedContractor.from_path(
+        filepath="tree.pkl",
+        nodes_fn=nodes_fn,
+        params=params,
+        mesh=global_mesh,
+    )
 
     # Initialize the optimizer and its state.
     optimizer = optax.adam(2e-2)

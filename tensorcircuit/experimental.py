@@ -780,6 +780,10 @@ class DistributedContractor:
             logger.info("DistributedContractor is running on a single device.")
 
         self._params_template = params
+        self.params_sharding = jaxlib.tree_util.tree_map(
+            lambda x: NamedSharding(self.mesh, P(*((None,) * x.ndim))),
+            self._params_template,
+        )
         self._backend = "jax"
         self._compiled_v_fns: Dict[
             Tuple[Callable[[Tensor], Tensor], str],
@@ -932,6 +936,7 @@ class DistributedContractor:
         nodes_fn: Callable[[Tensor], List[Gate]],
         devices: Optional[List[Any]] = None,  # backward compatibility
         mesh: Optional[Any] = None,
+        params: Any = None,
     ) -> "DistributedContractor":
         with open(filepath, "rb") as f:
             tree_data = pickle.load(f)
@@ -940,7 +945,7 @@ class DistributedContractor:
         # We pass the loaded `tree_data` directly to __init__ to trigger the second workflow.
         return cls(
             nodes_fn=nodes_fn,
-            params=None,
+            params=params,
             mesh=mesh,
             devices=devices,
             tree_data=tree_data,
@@ -1107,19 +1112,15 @@ class DistributedContractor:
 
             #  Compile the global function with jax.jit and specify shardings.
             # `params` are replicated (available everywhere).
-            params_sharding = jaxlib.tree_util.tree_map(
-                lambda x: NamedSharding(self.mesh, P(*((None,) * x.ndim))),
-                self._params_template,
-            )
 
-            in_shardings = (params_sharding, self.sharding)
+            in_shardings = (self.params_sharding, self.sharding)
 
             if is_grad_fn:
                 # Returns (value, grad), so out_sharding must be a 2-tuple.
                 # `value` is a replicated scalar -> P()
                 sharding_for_value = NamedSharding(self.mesh, P())
                 # `grad` is a replicated PyTree with the same structure as params.
-                sharding_for_grad = params_sharding
+                sharding_for_grad = self.params_sharding
                 out_shardings = (sharding_for_value, sharding_for_grad)
             else:
                 # Returns a single scalar value -> P()

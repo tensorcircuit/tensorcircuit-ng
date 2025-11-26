@@ -83,16 +83,16 @@ def run_vqe_main():
     # Broadcast the CPU array. Now all processes have a concrete `params_cpu`.
     # This is CRITICAL to prevent the NoneType error upon contractor initialization.
     params_cpu = broadcast_py_object(params_cpu)
+    # Shard the parameters onto devices for the actual GPU/TPU computation.
+    params_sharding = NamedSharding(global_mesh, P(*([None] * len(params_shape))))
+    params = jax.device_put(params_cpu, params_sharding)
 
     DC = DistributedContractor.from_path(
         filepath="tree.pkl",
         nodes_fn=nodes_fn,
         mesh=global_mesh,
+        params=params,
     )
-
-    # Shard the parameters onto devices for the actual GPU/TPU computation.
-    params_sharding = NamedSharding(global_mesh, P(*([None] * len(params_shape))))
-    params = jax.device_put(params_cpu, params_sharding)
 
     # Initialize the optimizer and its state.
     optimizer = optax.adam(2e-2)
