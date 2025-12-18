@@ -381,6 +381,12 @@ For the setup and simulation code of neural network encoded variational quantum 
 
 Reference paper: https://arxiv.org/abs/2308.01068 (published in PRApplied).
 
+### FLDC
+
+Absence of barren plateaus in finite local-depth circuits with long-range entanglement, see the [demo](/examples/vqe_toric_code.py).
+
+Reference paper: https://arxiv.org/abs/2311.01393 (published in PRL).
+
 ### Effective temperature in ansatzes
 
 For the simulation implementation of quantum states based on neural networks, tensor networs and quantum circuits using TensorCircuit-NG, see the [project repo](https://github.com/sxzgroup/et).
@@ -404,6 +410,12 @@ Reference paper: https://arxiv.org/abs/2508.02422.
 For the simulation code and data for the work on low weight Pauli propagation in the context of variational quantum algorithms, see the [project repo](https://github.com/ZongliangLi/lwpp_init).
 
 Reference paper: https://arxiv.org/abs/2508.06358.
+
+### Quantum Continual Learning
+
+For the code implementation on the work of demonstrating plasticity in quantum continual learning, see the [project repo](https://github.com/sxzgroup/quantum-plasticity).
+
+Reference paper: https://arxiv.org/abs/2511.17228.
 
 ### More works
 
@@ -444,8 +456,6 @@ Reference paper: https://arxiv.org/abs/2508.06358.
 
 - Universal imaginary-time critical dynamics on a quantum computer: https://arxiv.org/abs/2308.05408 (published in PRB).
 
-- Absence of barren plateaus in finite local-depth circuits with long-range entanglement: https://arxiv.org/abs/2311.01393 (published in PRL).
-
 - Non-Markovianity benefits quantum dynamics simulation: https://arxiv.org/abs/2311.17622.
 
 - Variational post-selection for ground states and thermal states simulation: https://arxiv.org/abs/2402.07605 (published in QST).
@@ -471,6 +481,12 @@ Reference paper: https://arxiv.org/abs/2508.06358.
 - Hilbert subspace imprint: a new mechanism for non-thermalization: https://arxiv.org/abs/2506.11922.
 
 - A Neural-Guided Variational Quantum Algorithm for Efficient Sign Structure Learning in Hybrid Architectures: https://arxiv.org/abs/2507.07555.
+
+- Quantum Pontus-Mpemba Effects in Real and Imaginary-time Dynamics: https://arxiv.org/abs/2509.01960.
+
+- Quantum Mpemba effect in long-ranged U(1)-symmetric random circuits: https://arxiv.org/abs/2512.06775.
+
+- A Qudit-native Framework for Discrete Time Crystals: https://arxiv.org/abs/2512.04577.
 
 </details>
 
