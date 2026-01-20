@@ -33,7 +33,6 @@ from .cons import npdtype, backend, dtypestr, contractor, rdtypestr
 from .simplify import _split_two_qubit_gate
 from .utils import arg_alias
 
-
 Gate = gates.Gate
 Tensor = Any
 

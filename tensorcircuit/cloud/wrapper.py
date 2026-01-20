@@ -19,7 +19,6 @@ from ..compiler.simple_compiler import simple_compile
 from .apis import submit_task, get_device
 from .abstraction import Device
 
-
 logger = logging.getLogger(__name__)
 Tensor = Any
 
@@ -88,10 +87,8 @@ def sample_expectation_ps(
     """
     Deprecated, please use :py:meth:`tensorcircuit.cloud.wrapper.batch_expectation_ps`.
     """
-    logger.warning(
-        "This method is deprecated and not maintained, \
-        please use `tensorcircuit.cloud.wrapper.batch_expectation_ps` instead"
-    )
+    logger.warning("This method is deprecated and not maintained, \
+        please use `tensorcircuit.cloud.wrapper.batch_expectation_ps` instead")
     c1 = Circuit.from_qir(c.to_qir())
     if x is None:
         x = []

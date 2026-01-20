@@ -11,7 +11,6 @@ import numpy as np
 import tensorflow as tf
 import tensorcircuit as tc
 
-
 dtype = np.complex128
 tfdtype = tf.complex128
 

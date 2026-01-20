@@ -17,7 +17,6 @@ from jax.sharding import Mesh, NamedSharding, PartitionSpec as P
 import tensorcircuit as tc
 from tensorcircuit.experimental import DistributedContractor, broadcast_py_object
 
-
 # --- Static Configuration ---
 NUM_DEVICES_TOTAL = 4
 os.environ["XLA_FLAGS"] = f"--xla_force_host_platform_device_count={NUM_DEVICES_TOTAL}"

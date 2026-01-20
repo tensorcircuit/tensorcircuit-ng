@@ -23,7 +23,6 @@ from .circuit import Circuit
 from .quantum import QuOperator, QuVector
 from .quditgates import SINGLE_BUILDERS, TWO_BUILDERS
 
-
 Tensor = Any
 SAMPLE_FORMAT = Literal["sample_bin", "count_dict_bin"]
 

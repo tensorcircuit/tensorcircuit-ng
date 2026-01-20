@@ -17,7 +17,6 @@ from jax.sharding import Mesh, NamedSharding, PartitionSpec as P
 import tensorcircuit as tc
 from tensorcircuit.experimental import DistributedContractor, broadcast_py_object
 
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

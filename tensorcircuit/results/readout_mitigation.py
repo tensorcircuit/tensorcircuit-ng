@@ -31,7 +31,6 @@ from .counts import count2vec, vec2count, ct, marginal_count, expectation, sort_
 from ..circuit import Circuit
 from ..utils import is_sequence
 
-
 Tensor = Any
 
 

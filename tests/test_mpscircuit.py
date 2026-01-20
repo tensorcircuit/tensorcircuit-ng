@@ -16,7 +16,6 @@ modulepath = os.path.dirname(os.path.dirname(thisfile))
 sys.path.insert(0, modulepath)
 import tensorcircuit as tc
 
-
 N = 8
 D = 6
 split = tc.cons.split_rules(max_singular_values=D)

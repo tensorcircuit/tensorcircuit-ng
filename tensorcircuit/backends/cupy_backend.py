@@ -85,7 +85,7 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
         return cp.linalg.norm(tensor)
 
     def shape_tuple(self, tensor: Tensor) -> Tuple[int]:
-        return tensor.shape  # type:ignore
+        return tensor.shape  # type: ignore
 
     def tensordot(
         self, a: Tensor, b: Tensor, axes: Union[int, Sequence[Sequence[int]]]

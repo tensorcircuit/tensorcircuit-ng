@@ -24,7 +24,6 @@ import numpy as np
 import scipy as sp
 import tensorflow as tf
 
-
 Array = Any  # np.array
 Opt = Any  # tf.keras.optimizer
 Model = Any  # tf.keras.Model

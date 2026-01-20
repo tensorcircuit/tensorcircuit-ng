@@ -18,7 +18,6 @@ from scipy import sparse
 
 import tensorcircuit as tc
 
-
 n = 4
 multiplicity = 1
 geometry = [("H", (0, 0, 0.95 * i)) for i in range(n)]

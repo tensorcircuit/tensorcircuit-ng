@@ -5,7 +5,6 @@ import pytest
 from pytest_lazyfixture import lazy_fixture as lf
 from scipy.optimize import minimize
 
-
 thisfile = os.path.abspath(__file__)
 modulepath = os.path.dirname(os.path.dirname(thisfile))
 

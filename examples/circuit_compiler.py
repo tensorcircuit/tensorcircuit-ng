@@ -4,7 +4,6 @@ compilation utilities in tensorcircuit
 
 import tensorcircuit as tc
 
-
 c = tc.Circuit(3)
 c.rx(0, theta=0.2)
 c.rz(0, theta=-0.3)

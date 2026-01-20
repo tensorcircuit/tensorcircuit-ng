@@ -234,14 +234,14 @@ def apply_dd(
 
     if iscount is True:
         sumcount = dict(
-            functools.reduce(operator.add, map(collections.Counter, exp))  # type:ignore
-        )  # type:ignore
+            functools.reduce(operator.add, map(collections.Counter, exp))  # type: ignore
+        )  # type: ignore
         result = {k: sumcount[k] / num_trials for k in sumcount.keys()}
     else:
-        result = np.mean(exp)  # type:ignore
+        result = np.mean(exp)  # type: ignore
 
     if full_output is True:
-        result = [result, c3]  # type:ignore
+        result = [result, c3]  # type: ignore
 
     # def executortc(c):
     #     c = Circuit.from_qiskit(c, c.num_qubits)
@@ -257,7 +257,7 @@ def apply_dd(
     #     full_output=full_output,
     # )
 
-    return result  # type:ignore
+    return result  # type: ignore
 
 
 def rc_candidates(gate: Gate) -> List[Any]:
@@ -371,13 +371,13 @@ def apply_rc(
 
     if iscount is True:
         sumcount = dict(
-            functools.reduce(operator.add, map(collections.Counter, exp))  # type:ignore
-        )  # type:ignore
+            functools.reduce(operator.add, map(collections.Counter, exp))  # type: ignore
+        )  # type: ignore
         result = {k: sumcount[k] / num_to_average for k in sumcount.keys()}
     else:
-        result = np.mean(exp)  # type:ignore
+        result = np.mean(exp)  # type: ignore
 
-    return result, circuit_list  # type:ignore
+    return result, circuit_list  # type: ignore
 
 
 # TODO(yuqinchen) add executor with batch ability

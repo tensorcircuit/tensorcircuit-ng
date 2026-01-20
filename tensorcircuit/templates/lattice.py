@@ -2,6 +2,7 @@
 """
 The lattice module for defining and manipulating lattice geometries.
 """
+
 import logging
 import abc
 from typing import (
@@ -24,7 +25,6 @@ import numpy as np
 from scipy.spatial import KDTree
 
 from .. import backend
-
 
 # This block resolves a name resolution issue for the static type checker (mypy).
 # GOAL:
@@ -478,7 +478,7 @@ class AbstractLattice(abc.ABC):
                     else:
                         for i, j in bonds:
                             p1, p2 = self._coordinates[i], self._coordinates[j]
-                            if self.dimensionality == 1:  #  type: ignore
+                            if self.dimensionality == 1:  # type: ignore
 
                                 ax.plot([p1[0], p2[0]], [0, 0], **plot_bond_kwargs)  # type: ignore
                             else:

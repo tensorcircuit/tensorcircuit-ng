@@ -2,7 +2,6 @@ import uuid
 import os
 import utils
 
-
 if __name__ == "__main__":
     _uuid = str(uuid.uuid4())
     nwires, nlayer, nitrs, timeLimit, isgpu, minus, path, nbatch = utils.arg(qml=True)

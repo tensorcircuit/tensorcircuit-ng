@@ -317,7 +317,7 @@ def qaoa_block_vag(
     with tf.GradientTape() as t:
         t.watch(pnnp.values)  # type: ignore
         loss = exp_forward(pnnp, preset, gdata, f)
-    gr = t.gradient(loss, pnnp.values)  # type:ignore
+    gr = t.gradient(loss, pnnp.values)  # type: ignore
     if gr is None:
         # if all gates in preset are not trainable, then gr returns None instead of 0s
         gr = tf.zeros_like(pnnp)
@@ -325,7 +325,7 @@ def qaoa_block_vag(
         gr = cons.backend.real(gr)
         gr = tf.where(tf.math.is_nan(gr), 0.0, gr)
         # if all gates in preset are not trainable, then gr returns None instead of 0s
-        gr = pnnp.with_values(gr)  # type:ignore
+        gr = pnnp.with_values(gr)  # type: ignore
 
     gr = cons.backend.real(gr)
 

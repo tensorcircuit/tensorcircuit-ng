@@ -16,7 +16,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import tensorcircuit as tc
 
-
 tc.set_dtype("float64")  # Use tc for universal control
 K = tc.set_backend("jax")
 

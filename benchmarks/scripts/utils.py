@@ -9,7 +9,6 @@ from pathlib import Path
 import optax
 import tensorcircuit as tc
 
-
 qml_data = {}
 
 

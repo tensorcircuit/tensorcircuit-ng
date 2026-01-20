@@ -9,7 +9,6 @@ from ..cons import backend
 from ..utils import is_sequence
 from .tensortrans import general_args_to_backend
 
-
 Tensor = Any
 
 # TODO(@refraction-ray): new paradigm compatible with torch functional transformation

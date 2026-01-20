@@ -22,7 +22,6 @@ from ..circuit import Circuit
 from ..quantum import generate_local_hamiltonian
 from .. import gates as G
 
-
 Tensor = Any
 Array = Any
 Model = Any

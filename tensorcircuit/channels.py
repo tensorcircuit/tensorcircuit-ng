@@ -14,7 +14,6 @@ from .cons import backend, dtypestr
 from . import gates
 from .gates import array_to_tensor
 
-
 thismodule = sys.modules[__name__]
 
 Gate = gates.Gate

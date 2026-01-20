@@ -1234,7 +1234,7 @@ class FGSTestSimulator:
         self, alpha: Tensor, n: int, subsystems_to_trace_out: List[int]
     ) -> Tensor:
         rho = quantum.reduced_density_matrix(self.state, subsystems_to_trace_out)
-        l = rho.shape[-1]  # type:ignore
+        l = rho.shape[-1]  # type: ignore
         r = np.eye(l)
         L = int(np.log(l) / np.log(2) + 0.001)
         qa = np.diagonal(

@@ -18,7 +18,6 @@ from .cons import backend, dtypestr, rdtypestr, get_tn_info
 from .gates import Gate
 from .timeevol import hamiltonian_evol, evol_global, evol_local
 
-
 # for backward compatibility
 
 Tensor = Any
@@ -582,7 +581,7 @@ def broadcast_py_object_jax(obj: Any) -> Any:
     send_arr_uint8 = np.frombuffer(data, dtype=np.uint8)
     padded_length = (length + 3) // 4 * 4
     if send_arr_uint8.size < padded_length:
-        send_arr_uint8 = np.pad(  #  type: ignore
+        send_arr_uint8 = np.pad(  # type: ignore
             send_arr_uint8, (0, padded_length - send_arr_uint8.size), mode="constant"
         )
     send_arr_int32 = send_arr_uint8.astype(np.int32)

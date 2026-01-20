@@ -12,7 +12,6 @@ import tensornetwork as tn
 import tensorcircuit as tc
 from tensorcircuit.experimental import DistributedContractor
 
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

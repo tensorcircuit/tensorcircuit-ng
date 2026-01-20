@@ -62,7 +62,7 @@ class NoiseConf:
         """
         if gate_name == "readout":
             assert qubit is None
-            self.readout_error = kraus  # type:ignore
+            self.readout_error = kraus  # type: ignore
             return
 
         gate_name = AbstractCircuit.standardize_gate(gate_name)
@@ -85,7 +85,7 @@ class NoiseConf:
                 description = (gate_name, idx)
 
                 # https://stackoverflow.com/questions/1107210/python-create-function-in-a-loop-capturing-the-loop-variable
-                def condition(  # type:ignore
+                def condition(  # type: ignore
                     d: Dict[str, Any], _idx: Sequence[Any]
                 ) -> bool:
                     # avoid bad black style because the long is too long
@@ -176,13 +176,13 @@ def apply_qir_with_noise(
                         c.unitary_kraus(
                             krauslist,
                             *d["index"],
-                            status=status[quantum_index],  #  type: ignore
+                            status=status[quantum_index],  # type: ignore
                         )
                     else:
                         c.general_kraus(
                             krauslist,
                             *d["index"],
-                            status=status[quantum_index],  #  type: ignore
+                            status=status[quantum_index],  # type: ignore
                         )
                     quantum_index += 1
 
@@ -269,7 +269,7 @@ def sample_expectation_ps_noisfy(
         else:
 
             def mcsim(statusc: Optional[Tensor], status: Optional[Tensor]) -> Tensor:
-                cnoise = circuit_with_noise(c, noise_conf, statusc)  #  type: ignore
+                cnoise = circuit_with_noise(c, noise_conf, statusc)  # type: ignore
                 return cnoise.sample_expectation_ps(
                     x=x,
                     y=y,
@@ -340,7 +340,7 @@ def expectation_noisfy(
         else:
 
             def mcsim(status: Optional[Tensor]) -> Tensor:
-                cnoise = circuit_with_noise(c, noise_conf, status)  #  type: ignore
+                cnoise = circuit_with_noise(c, noise_conf, status)  # type: ignore
                 return cnoise.expectation(*ops, **kws)
 
             mcsim_vmap = backend.vmap(mcsim, vectorized_argnums=0)
