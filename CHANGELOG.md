@@ -20,6 +20,8 @@
 
 - Better torch interface for dlpack translation.
 
+- fix `jax_interface` for scalar output shape
+
 ## v1.4.0
 
 ### Added

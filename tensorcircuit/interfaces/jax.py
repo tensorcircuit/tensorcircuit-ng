@@ -33,8 +33,10 @@ def jax_wrapper(
 
         # Use provided shape and dtype if available, otherwise run test
         if output_shape is not None and output_dtype is not None:
-            if isinstance(output_shape, Sequence) and not isinstance(
-                output_shape[0], int
+            if (
+                isinstance(output_shape, Sequence)
+                and len(output_shape) > 0
+                and not isinstance(output_shape[0], int)
             ):
                 # Multiple outputs case
                 out_shape = tuple(
