@@ -1,26 +1,33 @@
 # TensorCircuit-NG Repository Guide for AI Agents
 
-## Repository Overview
+## Core Philosophy
 
-TensorCircuit is a high-performance unified quantum computing framework designed for the NISQ (Noisy Intermediate-Scale Quantum) era. It provides a comprehensive set of tools for quantum circuit simulation with support for multiple backends including Numpy, TensorFlow, JAX, and PyTorch.
+TensorCircuit is a **Tensor Network-first**, **Multi-Backend** quantum computing framework. When contributing to this codebase, you must adhere to the following architectural principles:
 
-## Documentation and AI Native Services
+### Unified Backend Interface
+- **Rule**: Never use backend-specific libraries (numpy, tensorflow, jax) directly in core logic.
+- **Pattern**: Use the `tc.backend` abstraction for all tensor operations.
+- **Example**: Use `tc.backend.sin(x)` instead of `np.sin(x)` or `tf.math.sin(x)`. This ensures code runs seamlessly on TensorFlow, JAX, PyTorch, and NumPy.
 
-### Official Documentation
+### Differentiable Programming (AD)
+- **Rule**: All core components must be differentiable.
+- **Pattern**: Avoid operations that break the computation graph (e.g., converting to numpy inside a differentiable function, using in-place assignments on tensors).
+- **Goal**: End-to-end differentiability allows variational algorithms and gradient-based optimization to work out of the box.
 
-- Main Documentation: https://tensorcircuit-ng.readthedocs.io/
-- Quick Start Guide: https://tensorcircuit-ng.readthedocs.io/en/latest/quickstart.html
-- Tutorials: https://tensorcircuit-ng.readthedocs.io/en/latest/tutorial.html
-- API Reference: Available in docstrings throughout the codebase
+### JIT-First Optimization
+- **Rule**: Write code that is JIT-compilable (Just-In-Time).
+- **Pattern**: Avoid Python control flow (if/else) that depends on tensor values. Use `tc.backend.cond` or `tc.backend.switch` if necessary, or structure code to be statically analyzable.
+- **Benefit**: This enables massive speedups on JAX and TensorFlow backends.
 
-### AI-Native Documentation Services
 
-- Devin Deepwiki: https://deepwiki.com/tensorcircuit/tensorcircuit-ng
-- Context7 MCP: https://context7.com/tensorcircuit/tensorcircuit-ng
+## Repository Structure
 
-### Educational Resources
-
-- Quantum Computing Lectures with TC-NG: https://github.com/sxzgroup/qc_lecture
+- `tensorcircuit/`: Core package source code.
+  - `backends/`: Backend implementations (avoid modifying unless necessary).
+  - `templates/`: High-level modules (ansatzes, Hamiltonians, graphs).
+- `examples/`: Usage demos and benchmarks. Use these as reference implementations.
+- `tests/`: Comprehensive test suite. Check these for expected behavior.
+- `docs/`: Sphinx documentation source.
 
 ## Configuration and Dependencies
 
@@ -63,42 +70,39 @@ TensorCircuit is a high-performance unified quantum computing framework designed
 
 3. `.pylintrc` - Code style enforcement with specific rules enabled
 
-## Common Bash Commands
-
-### Development Checks
-
-```bash
-# Run all checks (black, mypy, pylint, pytest, sphinx)
-bash check_all.sh
-
-# Equivalent to the following individual checks:
-black . --check                    # Code formatting check
-mypy tensorcircuit                 # Type checking
-pylint tensorcircuit tests examples/*.py  # Code linting
-pytest -n auto --cov=tensorcircuit -vv -W ignore::DeprecationWarning  # Run tests
-
-# Run all tests with coverage report
-pytest --cov=tensorcircuit --cov-report=xml -svv --benchmark-skip
-
-# Run specific test file
-pytest tests/test_circuit.py
-
-# Install dependencies
-pip install --upgrade pip
-pip install -r requirements/requirements.txt
-pip install -r requirements/requirements-dev.txt
-pip install -r requirements/requirements-extra.txt
-pip install -r requirements/requirements-types.txt
-```
 
 ## AI Agent Best Practices
 
-### Efficient Code Navigation
+### Code Navigation
+- **Search First**: The codebase is extensive. Search for class definitions (e.g., `class Hamiltonian`) rather than guessing file paths.
+- **Check Tests**: `tests/test_*.py` files are the ultimate source of truth for how APIs are intended to be used.
 
-- Use the search function to find specific classes and functions rather than browsing files
-- Look for example usage in the /examples/ directory when learning new features
-- Check tests in /tests/ directory for detailed usage examples
-- Refer to docstrings for API documentation
+### Coding Standards
+- **Linting**: We enforce strict **Pylint** and **Black** formatting.
+  - Run `bash check_all.sh` before submitting changes.
+  - Target Pylint score: 10.0/10.
+- **Type Hinting**: Use type hints liberally to aid static analysis.
+- **Documentation**: Write clear docstrings (reStructuredText format) for all public APIs.
+
+### Common Workflows
+
+#### 1. Running Tests
+```bash
+# Run all tests (auto-parallelized)
+pytest -n auto
+
+# Run specific test file (useful during debugging)
+pytest tests/test_hamiltonians.py
+```
+
+#### 2. Checking Code Quality
+```bash
+# Check formatting
+black . --check
+
+# Run linter on specific file
+pylint tensorcircuit/quantum.py
+```
 
 ### Common Patterns in the Codebase
 
@@ -108,13 +112,11 @@ pip install -r requirements/requirements-types.txt
 - Vectorized operations using tc.backend.vmap patterns
 - Context managers for temporary configuration changes
 
-### Working with Quantum Concepts
+### Branch Strategy
 
-- Familiarity with quantum computing basics (qubits, gates, measurements)
-- Understanding of tensor network concepts for advanced features
-- Knowledge of different quantum computing paradigms (digital, analog, noisy, etc.)
-
-## Additional Information
+- master branch for stable releases
+- beta branch for nightly builds (as seen in nightly_release.yml)
+- pull requests for feature development
 
 ### Test Structure
 
@@ -130,18 +132,18 @@ pip install -r requirements/requirements-types.txt
 
 ### Package Distribution
 
-- Distributed as tensorcircuit-ng package
+- Distributed as tensorcircuit-ng package in PyPI
 - Supports extra dependencies for specific backends (tensorflow, jax, torch, qiskit, cloud)
 
-### Core Design Principles
+## Further Reading
 
-- Unified interface across multiple backends
-- High performance through tensor network optimizations
-- Extensible architecture for quantum computing research
-- Compatibility with major quantum computing frameworks
+- **Specific Protocols**: See `experience.md` for detailed protocols on development, profiling, and performance tuning.
 
-### Branch Strategy
+- **Official Docs**: https://tensorcircuit-ng.readthedocs.io/
 
-- master branch for stable releases
-- beta branch for nightly builds (as seen in nightly_release.yml)
-- pull requests for feature development
+### AI-Native Documentation Services
+
+- Devin Deepwiki: https://deepwiki.com/tensorcircuit/tensorcircuit-ng
+- Context7 MCP: https://context7.com/tensorcircuit/tensorcircuit-ng
+
+

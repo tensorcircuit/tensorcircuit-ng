@@ -47,6 +47,11 @@ time0 = time.perf_counter()
 h12 = tc.quantum.heisenberg_hamiltonian(
     g, hzz=1, hxx=0, hyy=0, hz=0, hx=-1, hy=0, sparse=True
 )
+# JAX is asynchronous; block to measure execution time
+if hasattr(h12, "data") and hasattr(h12.data, "block_until_ready"):
+    h12.data.block_until_ready()
+elif hasattr(h12, "block_until_ready"):
+    h12.block_until_ready()
 time1 = time.perf_counter()
 
 print("tc (jax) time: ", time1 - time0)
@@ -55,6 +60,10 @@ time0 = time.perf_counter()
 h12 = tc.quantum.heisenberg_hamiltonian(
     g, hzz=1, hxx=0, hyy=0, hz=0, hx=-1, hy=0, sparse=True
 )
+if hasattr(h12, "data") and hasattr(h12.data, "block_until_ready"):
+    h12.data.block_until_ready()
+elif hasattr(h12, "block_until_ready"):
+    h12.block_until_ready()
 time1 = time.perf_counter()
 
 print("tc (jax) time (after jit): ", time1 - time0)
