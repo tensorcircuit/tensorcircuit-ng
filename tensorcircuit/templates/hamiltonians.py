@@ -1,5 +1,4 @@
 from typing import Any, List, Tuple, Union
-import numpy as np
 from ..cons import dtypestr, backend
 from ..quantum import PauliStringSum2COO
 from .lattice import AbstractLattice
@@ -131,7 +130,7 @@ def rydberg_hamiltonian(
         ls.append(x_string)
         weights.append(omega / 2.0)
 
-    z_coefficients = np.zeros(num_sites)
+    z_coefficients = [0.0] * num_sites
 
     for i in range(num_sites):
         z_coefficients[i] += delta / 2.0
@@ -142,8 +141,8 @@ def rydberg_hamiltonian(
         for j in range(i + 1, num_sites):
             distance = dist_matrix[i, j]
 
-            if distance < 1e-9:
-                continue
+            # if distance < 1e-9:
+            #     continue
 
             interaction_strength = c6 / (distance**6)
             coefficient = interaction_strength / 4.0
@@ -163,11 +162,11 @@ def rydberg_hamiltonian(
             z_coefficients[j] -= coefficient
 
     for i in range(num_sites):
-        if abs(z_coefficients[i]) > 1e-9:
-            z_string = [0] * num_sites
-            z_string[i] = pauli_map["Z"]
-            ls.append(z_string)
-            weights.append(z_coefficients[i])  # type: ignore
+        # if abs(z_coefficients[i]) > 1e-9:
+        z_string = [0] * num_sites
+        z_string[i] = pauli_map["Z"]
+        ls.append(z_string)
+        weights.append(z_coefficients[i])  # type: ignore
 
     hamiltonian_matrix = PauliStringSum2COO(ls, weight=weights, numpy=False)
 

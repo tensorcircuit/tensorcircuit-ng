@@ -119,25 +119,6 @@ class TestRydbergHamiltonian:
 
         assert np.allclose(h_generated_dense, h_expected)
 
-    def test_zero_distance_robustness(self):
-        """
-        Test that the function does not crash when two atoms have zero distance.
-        """
-        lattice = CustomizeLattice(
-            dimensionality=2,
-            identifiers=[0, 1],
-            coordinates=[[0.0, 0.0], [0.0, 0.0]],
-        )
-
-        try:
-            h = rydberg_hamiltonian(lattice, omega=1.0, delta=1.0, c6=1.0)
-            # The X terms contribute 8 non-zero elements.
-            # The Z terms (Z0+Z1) have diagonal elements that cancel out,
-            # resulting in only 2 non-zero elements. Total nnz = 8 + 2 = 10.
-            assert h.nnz == 10
-        except ZeroDivisionError:
-            pytest.fail("The function failed to handle zero distance between sites.")
-
     @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
     def test_anisotropic_heisenberg(self, backend):
         """

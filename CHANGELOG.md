@@ -20,7 +20,9 @@
 
 - Better torch interface for dlpack translation.
 
-- fix `jax_interface` for scalar output shape
+- Fix `jax_interface` for scalar output shape.
+
+- End-to-end differentiable PauliStringSum2COO on jax backend.
 
 ## v1.4.0
 

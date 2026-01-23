@@ -1534,22 +1534,45 @@ def quimb2qop(qb_mpo: Any) -> QuOperator:
 
     out_edges = []
     in_edges = []
+    ignore_edges = []
 
-    for i, e1 in enumerate(edges):
-        if e1[2].startswith("k"):
-            out_edges.append(mpo[e1[0]][e1[1]])
-        elif e1[2].startswith("b"):
-            in_edges.append(mpo[e1[0]][e1[1]])
+    # Map edge names to list of (node_index, axis_index)
+    edge_map: dict[str, list[tuple[int, int]]] = {}
+    for i, e in enumerate(edges):
+        name = e[2]
+        if name.startswith("k"):
+            out_edges.append(mpo[e[0]][e[1]])
+        elif name.startswith("b"):
+            in_edges.append(mpo[e[0]][e[1]])
         else:
-            for j, e2 in enumerate(edges[i + 1 :]):
-                if e2[2] == e1[2]:
-                    connect(mpo[e1[0]][e1[1]], mpo[e2[0]][e2[1]])
+            if name not in edge_map:
+                edge_map[name] = []
+            edge_map[name].append((e[0], e[1]))
+
+    # Process internal/ignore edges
+    for name, connectivity in edge_map.items():
+        if len(connectivity) == 2:
+            n1_idx, a1_idx = connectivity[0]
+            n2_idx, a2_idx = connectivity[1]
+            connect(mpo[n1_idx][a1_idx], mpo[n2_idx][a2_idx])
+        elif len(connectivity) == 1:
+            n_idx, a_idx = connectivity[0]
+            ignore_edges.append(mpo[n_idx][a_idx])
+        else:
+            # For hyperedges or other cases, treating as ignore/dangling or
+            # currently not supported for direct connection without CopyNode
+            # But for MPS/MPO, usually 1 or 2.
+            # If > 2, treating as ignore might be safer than crashing,
+            # but strictly might be invalid.
+            # We add to ignore_edges to avoid "unexpected dangling" error for now.
+            for n_idx, a_idx in connectivity:
+                ignore_edges.append(mpo[n_idx][a_idx])
 
     qop = quantum_constructor(
         out_edges,  # out_edges
         in_edges,  # in_edges
         [],
-        [],  # ignore_edges
+        ignore_edges,  # ignore_edges
     )
     return qop
 
@@ -1880,10 +1903,7 @@ def heisenberg_hamiltonian(
     ls = num_to_tensor(ls)
     weight = num_to_tensor(weight)
     if sparse:
-        r = PauliStringSum2COO_numpy(ls, weight)
-        if numpy:
-            return r
-        return backend.coo_sparse_matrix_from_numpy(r)
+        return PauliStringSum2COO(ls, weight, numpy=numpy)
     return PauliStringSum2Dense(ls, weight, numpy=numpy)
 
 
@@ -1970,16 +1990,36 @@ def PauliStringSum2COO(
     #     shape=(s, s),
     # )
     global PauliString2COO_jit
-    if backend.name not in PauliString2COO_jit:
-        PauliString2COO_jit[backend.name] = backend.jit(
-            PauliString2COO, jit_compile=True
+    if backend.name == "jax" and not numpy:
+        if backend.name not in PauliString2COO_jit:
+            PauliString2COO_jit[backend.name] = backend.jit(
+                PauliString2COO, jit_compile=True
+            )
+        # Use vmap to generate batched BCOO and then sum reduction
+        # This keeps everything in JAX/tracers and avoids backend.numpy()
+        batch_f = backend.vmap(
+            PauliString2COO_jit[backend.name], vectorized_argnums=(0, 1)
         )
-    rsparses = [
-        backend.numpy(PauliString2COO_jit[backend.name](ls[i], weight[i]))  # type: ignore
-        for i in range(nterms)
-    ]
-    rsparse = _dc_sum(rsparses)
+        rsparses = batch_f(ls, weight)
+        rsparse = rsparses.sum(axis=0)  # Sum over the batch dimension (terms)
+
+    else:
+        if backend.name not in PauliString2COO_jit:
+            PauliString2COO_jit[backend.name] = backend.jit(
+                PauliString2COO, jit_compile=True
+            )
+        rsparses = [
+            backend.numpy(PauliString2COO_jit[backend.name](ls[i], weight[i]))  # type: ignore
+            for i in range(nterms)
+        ]
+        rsparse = _dc_sum(rsparses)
     # auto transformed into csr format!!
+    if (backend.is_tensor(rsparse) or backend.is_sparse(rsparse)) and not hasattr(
+        rsparse, "tocoo"
+    ):
+        if numpy:
+            return backend.numpy(rsparse)
+        return rsparse
 
     # for i in range(nterms):
     #     rsparse += get_backend("tensorflow").numpy(PauliString2COO(ls[i], weight[i]))

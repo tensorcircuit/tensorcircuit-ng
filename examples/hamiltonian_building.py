@@ -104,9 +104,9 @@ print("quimb time: ", time1 - time0)
 
 
 def assert_equal(h1, h2):
-    np.testing.assert_allclose(h1.row, h2.row, atol=1e-5)
-    np.testing.assert_allclose(h1.col, h2.col, atol=1e-5)
-    np.testing.assert_allclose(h1.data, h2.data, atol=1e-5)
+    diff = abs(h1 - h2)
+    max_diff = diff.max()
+    np.testing.assert_allclose(max_diff, 0, atol=1e-5)
 
 
 # numpy
