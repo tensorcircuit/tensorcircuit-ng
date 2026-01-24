@@ -916,6 +916,47 @@ class AbstractCircuit:
             binding_params=binding_params,
         )
 
+    @classmethod
+    def from_cirq(
+        cls,
+        qc: Any,
+        n: Optional[int] = None,
+        inputs: Optional[List[float]] = None,
+        circuit_params: Optional[Dict[str, Any]] = None,
+    ) -> "AbstractCircuit":
+        """
+        Import Cirq Circuit object as a ``tc.Circuit`` object.
+
+        :Example:
+
+        >>> import cirq
+        >>> c = cirq.Circuit()
+        >>> q = cirq.LineQubit.range(3)
+        >>> c.append(cirq.H(q[0]))
+        >>> c.append(cirq.CNOT(q[0], q[1]))
+        >>> tc_c = tc.Circuit.from_cirq(c)
+
+        :param qc: Cirq Circuit object
+        :type qc: cirq.Circuit
+        :param n: The number of qubits for the circuit
+        :type n: int
+        :param inputs: possible input wavefunction for ``tc.Circuit``, defaults to None
+        :type inputs: Optional[List[float]], optional
+        :param circuit_params: kwargs given in Circuit.__init__ construction function, default to None.
+        :type circuit_params: Optional[Dict[str, Any]]
+        :return: The same circuit but as tensorcircuit object
+        :rtype: Circuit
+        """
+        from .translation import cirq2tc
+
+        return cirq2tc(  # type: ignore
+            qc,
+            n,
+            inputs,
+            circuit_constructor=cls,
+            circuit_params=circuit_params,
+        )
+
     def vis_tex(self, **kws: Any) -> str:
         """
         Generate latex string based on quantikz latex package

@@ -169,7 +169,7 @@ class AnalogCircuit:
                 f"object has no attribute '{name}'."
             )
 
-    def state(self) -> Tensor:
+    def state(self, form: str = "default") -> Tensor:
         """
         Executes the full digital-analog sequence.
 
@@ -209,8 +209,13 @@ class AnalogCircuit:
         else:
             psi = self.digital_circuits[-1].wavefunction()
         self._effective_circuit = Circuit(self.num_qubits, inputs=psi)
-
-        return psi
+        if form == "default":
+            shape = [-1]
+        elif form == "ket":
+            shape = [-1, 1]
+        elif form == "bra":  # no conj here
+            shape = [1, -1]
+        return backend.reshape(psi, shape=shape)
 
     wavefunction = state
 

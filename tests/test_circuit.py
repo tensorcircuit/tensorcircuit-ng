@@ -1732,3 +1732,83 @@ def test_projected_subsystem(backend):
     )
     assert tc.backend.shape_tuple(s) == (4, 4)
     np.testing.assert_allclose(s[3, 3], 0.8108051, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_cirq_translation(backend):
+    try:
+        import cirq
+    except ImportError:
+        pytest.skip("cirq is not installed")
+
+    n = 3
+    q = cirq.LineQubit.range(n)
+    c = cirq.Circuit()
+    c.append(cirq.H(q[0]))
+    c.append(cirq.H(q[1]))
+    c.append(cirq.CNOT(q[0], q[1]))
+    c.append(cirq.rx(0.5)(q[0]))
+    c.append(cirq.ry(0.2)(q[1]))
+    c.append(cirq.rz(0.5)(q[2]))
+    c.append(cirq.CNOT(q[1], q[2]))
+    c.append(cirq.CZ(q[1], q[0]))
+
+    c_tc = tc.Circuit.from_cirq(c)
+
+    # Validation via unitary
+    u_cirq = cirq.unitary(c)
+    u_tc = c_tc.matrix()
+
+    np.testing.assert_allclose(u_cirq, tc.backend.numpy(u_tc), atol=1e-5)
+
+
+def assert_allclose_up_to_global_phase(a, b, atol=1e-5):
+    a = np.array(a)
+    b = np.array(b)
+    flat_a = a.flatten()
+    flat_b = b.flatten()
+    idx = np.argmax(np.abs(flat_a))
+    if np.abs(flat_a[idx]) < 1e-10:
+        np.testing.assert_allclose(a, b, atol=atol)
+        return
+
+    phase_diff = flat_a[idx] / flat_b[idx]
+    b = b * phase_diff
+    np.testing.assert_allclose(a, b, atol=atol)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_cirq_gates_translation(backend):
+    try:
+        import cirq
+    except ImportError:
+        pytest.skip("cirq is not installed")
+
+    n = 3
+    q = cirq.LineQubit.range(n)
+
+    # Test FSim and ISWAP
+    c2 = cirq.Circuit()
+    c2.append(cirq.ISWAP(q[0], q[1]))
+    c2.append(cirq.FSimGate(0.1, 0.2)(q[1], q[2]))
+
+    c2_tc = tc.Circuit.from_cirq(c2)
+    u_cirq2 = cirq.unitary(c2)
+    u_tc2 = c2_tc.matrix()
+    assert_allclose_up_to_global_phase(u_cirq2, tc.backend.numpy(u_tc2), atol=1e-5)
+
+    # Test PhasedXPow
+    c3 = cirq.Circuit()
+    c3.append(cirq.PhasedXPowGate(phase_exponent=0.1, exponent=0.2)(q[0]))
+    c3_tc = tc.Circuit.from_cirq(c3)
+    u_cirq3 = cirq.unitary(c3)
+    u_tc3 = c3_tc.matrix()
+    assert_allclose_up_to_global_phase(u_cirq3, tc.backend.numpy(u_tc3), atol=1e-5)
+
+    # Test random parameter ISWAP
+    c4 = cirq.Circuit()
+    c4.append(cirq.ISwapPowGate(exponent=0.3)(q[0], q[1]))
+    c4_tc = tc.Circuit.from_cirq(c4)
+    u_cirq4 = cirq.unitary(c4)
+    u_tc4 = c4_tc.matrix()
+    assert_allclose_up_to_global_phase(u_cirq4, tc.backend.numpy(u_tc4), atol=1e-5)

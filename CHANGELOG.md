@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add `from_cirq` method for `Circuit` and `DMCircuit` to support translation from Cirq.
+
 - Add `tc.AnalogCircuit` for digital-analog hybrid simulation.
 
 - Add sparse matrix related methods for pytorch backend.

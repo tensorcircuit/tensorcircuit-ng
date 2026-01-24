@@ -792,3 +792,124 @@ def qiskit_from_qasm_str_ordered_measure(qasm_str: str) -> Any:
     for qid, cid in measure_sequence:
         qc.measure(qid, cid)
     return qc
+
+
+def cirq2tc(
+    qc: Any,
+    n: Optional[int] = None,
+    inputs: Optional[List[float]] = None,
+    is_dm: bool = False,
+    circuit_constructor: Any = None,
+    circuit_params: Optional[Dict[str, Any]] = None,
+) -> Any:
+    """
+    Generate a tensorcircuit circuit from the cirq circuit.
+
+    :param qc: A quantum circuit in cirq
+    :type qc: cirq.Circuit
+    :param n: # of qubits, defaults to None
+    :type n: Optional[int], optional
+    :param inputs: Input state of the circuit, defaults to None
+    :type inputs: Optional[List[float]], optional
+    :param is_dm: whether to use DMCircuit, defaults to False
+    :type is_dm: bool, optional
+    :param circuit_constructor: _description_, defaults to None
+    :type circuit_constructor: Any, optional
+    :param circuit_params: _description_, defaults to None
+    :type circuit_params: Optional[Dict[str, Any]], optional
+    :return: _description_
+    :rtype: Any
+    """
+
+    if circuit_constructor is not None:
+        Circ = circuit_constructor
+    elif is_dm:
+        Circ = DMCircuit2
+    else:
+        Circ = Circuit
+
+    if n is None:
+        n = len(sorted(qc.all_qubits()))
+
+    if circuit_params is None:
+        circuit_params = {}
+    if "nqubits" not in circuit_params:
+        circuit_params["nqubits"] = n
+
+    if inputs is not None:
+        circuit_params["inputs"] = inputs
+
+    tc_circuit: Any = Circ(**circuit_params)
+
+    qubits = sorted(qc.all_qubits())
+    qubit_map = {q: i for i, q in enumerate(qubits)}
+
+    for op in qc.all_operations():
+        if isinstance(op.gate, cirq.MeasurementGate):
+            for q in op.qubits:
+                tc_circuit.measure_instruction(qubit_map[q])
+            continue
+
+        index = [qubit_map[q] for q in op.qubits]
+        gate = op.gate
+        # gate_name = str(gate)
+
+        if isinstance(gate, cirq.IdentityGate):
+            continue
+
+        # Standard Gates (and PowGates with exp=1)
+        if isinstance(gate, cirq.HPowGate) and np.isclose(gate.exponent, 1):
+            tc_circuit.h(*index)
+        elif isinstance(gate, cirq.XPowGate) and np.isclose(gate.exponent, 1):
+            tc_circuit.x(*index)
+        elif isinstance(gate, cirq.YPowGate) and np.isclose(gate.exponent, 1):
+            tc_circuit.y(*index)
+        elif isinstance(gate, cirq.ZPowGate) and np.isclose(gate.exponent, 1):
+            tc_circuit.z(*index)
+        elif isinstance(gate, cirq.SwapPowGate) and np.isclose(gate.exponent, 1):
+            tc_circuit.swap(*index)
+        elif isinstance(gate, cirq.ISwapPowGate) and np.isclose(gate.exponent, 1):
+            tc_circuit.iswap(*index)
+        elif isinstance(gate, cirq.CNotPowGate) and np.isclose(gate.exponent, 1):
+            tc_circuit.cnot(*index)
+        elif isinstance(gate, cirq.CZPowGate) and np.isclose(gate.exponent, 1):
+            tc_circuit.cz(*index)
+
+        # Variable Gates (X, Y, Z, ISWAP family)
+        elif isinstance(gate, cirq.XPowGate):
+            tc_circuit.rx(*index, theta=gate.exponent * np.pi)
+        elif isinstance(gate, cirq.YPowGate):
+            tc_circuit.ry(*index, theta=gate.exponent * np.pi)
+        elif isinstance(gate, cirq.ZPowGate):
+            if np.isclose(gate.exponent, 0.5):
+                tc_circuit.s(*index)
+            elif np.isclose(gate.exponent, 0.25):
+                tc_circuit.t(*index)
+            else:
+                tc_circuit.rz(*index, theta=gate.exponent * np.pi)
+        elif isinstance(gate, cirq.ISwapPowGate):
+            tc_circuit.iswap(*index, theta=gate.exponent)
+
+        elif isinstance(gate, cirq.FSimGate):
+            tc_circuit.iswap(*index, theta=-gate.theta * 2 / np.pi)
+            tc_circuit.cphase(*index, theta=-gate.phi)
+        elif isinstance(gate, cirq.PhasedXPowGate):
+            # Rz(phase_exponent * pi) Rx(exponent * pi) Rz(-phase_exponent * pi)
+            tc_circuit.rz(*index, theta=-gate.phase_exponent * np.pi)
+            tc_circuit.rx(*index, theta=gate.exponent * np.pi)
+            tc_circuit.rz(*index, theta=gate.phase_exponent * np.pi)
+        elif isinstance(gate, cirq.MatrixGate):
+            # Arbitrary unitary
+            m = cirq.unitary(gate)
+            tc_circuit.any(*index, unitary=m)
+        else:
+            # try to get unitary
+            try:
+                m = cirq.unitary(gate)
+                tc_circuit.any(*index, unitary=m)
+            except (TypeError, ValueError):
+                logger.warning(
+                    f"Cirq gate {gate} not supported in translation, skipping"
+                )
+
+    return tc_circuit
