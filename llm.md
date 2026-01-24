@@ -137,7 +137,7 @@ pylint tensorcircuit/quantum.py
 
 ## Further Reading
 
-- **Specific Protocols**: See `experience.md` for detailed protocols on development, profiling, and performance tuning.
+- **Specific Protocols**: See `llm_experience.md` for detailed protocols on development, profiling, and performance tuning.
 
 - **Official Docs**: https://tensorcircuit-ng.readthedocs.io/
 

@@ -12,6 +12,23 @@ This document records specific technical protocols, lessons learned, and advance
     *   For operations over large batches (e.g., summing $2^{22}$ Pauli strings), `vmap` materializes all intermediate results in memory.
     *   **Protocol**: Use `jax.lax.scan` or sequential loops for reductions over large inputs to keep peak memory usage constant ($O(1)$) rather than linear ($O(N)$).
 
+3.  **Vmap Broadcasting with Optimizers (Optax/Custom)**:
+    *   **Pitfall**: `tc.backend.vmap(func)` implicitly sets `vectorized_argnums=0`. If `func` takes multiple arguments that are *all* batched (e.g. `update_step(params, opt_state)`), you MUST specify `vectorized_argnums=(0, 1)`.
+    *   **Symptom**: Dimension mismatch errors (e.g. `broadcast_shapes got incompatible shapes`) where one argument is treated as a scalar/unbatched while the other is batched.
+    *   **Protocol**: Explicitly define `vectorized_argnums` when vmapping functions with optimizer states or multiple batched inputs.
+
+## Qudit Simulation & Advanced Models
+
+1.  **Ansatz Expressibility**:
+    *   For $d > 2$ (Qudits), simple "Hardware Efficient" ansätze (single layer of rotations) are often insufficient to reach ground states of complex Hamiltonians (e.g. Potts model).
+    *   **Protocol**: Ensure high expressibility by parameterizing *all* $d$ diagonal phases (`rz` on levels $0 \dots d-1$) and *all* off-diagonal mixing angles (`ry` on pairs $(j, k)$).
+    *   **Dimension Agnostic Code**: Write code using variables `d` and loops `range(d)` instead of hardcoding `d=3`. This allows the same script to simulate qutrits, ququarts, etc. seamlessly.
+
+2.  **Sparse Matrix Hamiltonian**:
+    *   For larger Hilbert spaces ($d^N \gg 10^3$), dense matrix construction explodes in memory.
+    *   **Protocol**: Construct Hamiltonians using `scipy.sparse` (COO format), but first prefer to use `PauliStringSum2COO` if available.
+    *   **Integration**: Convert to JAX Sparse via `tc.backend.coo_sparse_matrix(indices, values, shape)` and use `tc.backend.sparse_dense_matmul(H_sparse, ket)` for expectation values. This provides massive speedups and enables simulation of larger $N$ or $d$.
+
 ## Testing and Robustness
 
 1.  **Sparse Matrix Compatibility**:
