@@ -72,3 +72,9 @@ This document records specific technical protocols, lessons learned, and advance
 
 4.  **Multi-Qubit Thermal Noise**:
     *   The `thermalrelaxationchannel` returns single-qubit Kraus operators. To apply thermal noise to multi-qubit gates (like CNOT), you generally cannot simply pass the single-qubit channel to `add_noise("cnot", ...)` because of dimension mismatch.
+
+## Backend API Wrapper Quirks
+
+1.  **JAX Vmap in TensorCircuit Wrapper**:
+    *   When using `tc.backend.vmap` (alias `K.vmap`) with the JAX backend, do **not** use JAX-native arguments like `in_axes`. The TC wrapper unifies behavior and exposes `vectorized_argnums` (like TensorFlow) instead.
+    *   **Protocol**: Always use `vectorized_argnums=(0, 1, ...)` to specify batched arguments, regardless of the backend (JAX/TF/Torch). Passing `in_axes` will raise a `TypeError` because the wrapper function definition doesn't accept it.

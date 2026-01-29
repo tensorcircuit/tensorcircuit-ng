@@ -34,3 +34,5 @@ docs/source/locale/zh/LC_MESSAGES/whitepapertoc_cn.po
 docs/source/locale/zh/LC_MESSAGES/textbooktoc.po
 test.qasm
 venv/
+examples/ng_whitepaper/*.pdf
+examples/ng_whitepaper/trials/
