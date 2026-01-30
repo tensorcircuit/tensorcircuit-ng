@@ -315,6 +315,9 @@ TensorCircuit-NG is open source, released under the Apache License, Version 2.0.
       <td align="center" valign="top" width="16.66%"><a href="https://github.com/QuiXamii"><img src="https://avatars.githubusercontent.com/u/136054857?v=4?s=100" width="100px;" alt="Qixiang WANG"/><br /><sub><b>Qixiang WANG</b></sub></a><br /><a href="#example-QuiXamii" title="Examples">💡</a></td>
       <td align="center" valign="top" width="16.66%"><a href="https://github.com/iop-hui252"><img src="https://avatars.githubusercontent.com/u/257909307?v=4?s=100" width="100px;" alt="iop-hui252"/><br /><sub><b>iop-hui252</b></sub></a><br /><a href="#example-iop-hui252" title="Examples">💡</a></td>
     </tr>
+    <tr>
+      <td align="center" valign="top" width="16.66%"><a href="https://github.com/Yoshiyuki-F"><img src="https://avatars.githubusercontent.com/u/45096493?v=4?s=100" width="100px;" alt="Yoshiyuki-F"/><br /><sub><b>Yoshiyuki-F</b></sub></a><br /><a href="https://github.com/tensorcircuit/tensorcircuit-ng/commits?author=Yoshiyuki-F" title="Code">💻</a></td>
+    </tr>
   </tbody>
 </table>
 
