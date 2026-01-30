@@ -13,25 +13,27 @@ Entanglement Entropy (TEE) and Mutual Information (MEE).
 """
 
 from typing import Tuple, List, Any
-import numpy as np
-import tensorcircuit as tc
 from functools import partial
+import numpy as np
+import numpy.typing as npt
+import tensorcircuit as tc
 
 # Setup
 K = tc.set_backend("jax")
 tc.set_dtype("complex128")
 
-# Operators
-Z, X = np.array([[1, 0], [0, -1]]), np.array([[0, 1], [1, 0]])
-I8 = np.eye(8)
-ZXZ = np.kron(np.kron(Z, X), Z)
+# Operators with type annotations - explicitly set dtype
+Z: npt.NDArray[np.complex128] = np.array([[1, 0], [0, -1]], dtype=np.complex128)
+X: npt.NDArray[np.complex128] = np.array([[0, 1], [1, 0]], dtype=np.complex128)
+I8: npt.NDArray[np.complex128] = np.eye(8, dtype=np.complex128)
+ZXZ: npt.NDArray[np.complex128] = np.kron(np.kron(Z, X), Z)
 
 
 @partial(K.jit, static_argnums=(3, 4))
 def mipt_circuit(
-    sx: np.ndarray,
-    szz: np.ndarray,
-    szxz: np.ndarray,
+    sx: npt.NDArray[np.float64],
+    szz: npt.NDArray[np.float64],
+    szxz: npt.NDArray[np.float64],
     n: int,
     d: int,
     cx_params: float,
@@ -63,27 +65,43 @@ def mipt_circuit(
     # Initialize |+++...⟩ state
     c = tc.Circuit(n)
     for j in range(n):
-        c.rx(j, theta=-np.pi / 2)
+        c.h(j)  # type: ignore
     state = c.state()
 
     # A. Weak X Measurement Operators (Single Qubit)
     M1_x = 0.5 * cx_params * K.convert_to_tensor(
-        np.array([[1, 1], [1, 1]])
-    ) + 0.5 * sx_params * K.convert_to_tensor(np.array([[1, -1], [-1, 1]]))
+        np.array([[1, 1], [1, 1]], dtype=np.complex128)
+    ) + 0.5 * sx_params * K.convert_to_tensor(
+        np.array([[1, -1], [-1, 1]], dtype=np.complex128)
+    )
     M2_x = 0.5 * sx_params * K.convert_to_tensor(
-        np.array([[1, 1], [1, 1]])
-    ) + 0.5 * cx_params * K.convert_to_tensor(np.array([[1, -1], [-1, 1]]))
+        np.array([[1, 1], [1, 1]], dtype=np.complex128)
+    ) + 0.5 * cx_params * K.convert_to_tensor(
+        np.array([[1, -1], [-1, 1]], dtype=np.complex128)
+    )
 
     # B. Weak ZZ Measurement Operators (Two Qubits)
     M1_zz = czz_params * K.convert_to_tensor(
-        np.array([[1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1]])
+        np.array(
+            [[1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1]],
+            dtype=np.complex128,
+        )
     ) + szz_params * K.convert_to_tensor(
-        np.array([[0, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 0]])
+        np.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 0]],
+            dtype=np.complex128,
+        )
     )
     M2_zz = szz_params * K.convert_to_tensor(
-        np.array([[1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1]])
+        np.array(
+            [[1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1]],
+            dtype=np.complex128,
+        )
     ) + czz_params * K.convert_to_tensor(
-        np.array([[0, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 0]])
+        np.array(
+            [[0, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 0]],
+            dtype=np.complex128,
+        )
     )
     M1_zz = M1_zz.reshape([2, 2, 2, 2])
     M2_zz = M2_zz.reshape([2, 2, 2, 2])
@@ -108,7 +126,9 @@ def mipt_circuit(
         # ZZ measurements (alternating bonds)
         for i in range(t % 2, n - 1, 2):
             zz_h.append(
-                c.general_kraus([M1_zz, M2_zz], i, i + 1, status=szz[t, i], with_prob=False)
+                c.general_kraus(
+                    [M1_zz, M2_zz], i, i + 1, status=szz[t, i], with_prob=False
+                )
             )
         state = c.state() / K.norm(c.state())
         c = tc.Circuit(n, inputs=state)
@@ -117,7 +137,12 @@ def mipt_circuit(
         for i in range(t % 3, n - 2, 3):
             zxz_h.append(
                 c.general_kraus(
-                    [M1_zxz, M2_zxz], i, i + 1, i + 2, status=szxz[t, i], with_prob=False
+                    [M1_zxz, M2_zxz],
+                    i,
+                    i + 1,
+                    i + 2,
+                    status=szxz[t, i],
+                    with_prob=False,
                 )
             )
         state = c.state() / K.norm(c.state())
@@ -125,7 +150,9 @@ def mipt_circuit(
 
         # X measurements (all qubits)
         for i in range(n):
-            x_h.append(c.general_kraus([M1_x, M2_x], i, status=sx[t, i], with_prob=False))
+            x_h.append(
+                c.general_kraus([M1_x, M2_x], i, status=sx[t, i], with_prob=False)
+            )
         state = c.state() / K.norm(c.state())
 
     return K.stack(x_h), K.stack(zz_h), K.stack(zxz_h), state
@@ -206,19 +233,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-   
-    
-    
-
-
-
-
-
-
-
-
-    
-
-
-
-    
