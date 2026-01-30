@@ -389,9 +389,9 @@ def meta_gate() -> None:
             n = name[1:-7]
             m = getattr(thismodule, name)
             if m.shape[0] == 4:
-                m = np.reshape(m, newshape=(2, 2, 2, 2))
+                m = np.reshape(m, (2, 2, 2, 2))
             if m.shape[0] == 8:
-                m = np.reshape(m, newshape=(2, 2, 2, 2, 2, 2))
+                m = np.reshape(m, (2, 2, 2, 2, 2, 2))
             # m = m.astype(npdtype)
             # not enough for new mechanism: register method on class instead of instance
             # temp = partial(gate_wrapper, m, n)
@@ -772,7 +772,7 @@ def random_two_qubit_gate() -> Gate:
     unitary = unitary_group.rvs(dim=4).astype(
         npdtype
     )  # the default is np.complex128 without astype
-    unitary = np.reshape(unitary, newshape=(2, 2, 2, 2))
+    unitary = np.reshape(unitary, (2, 2, 2, 2))
     return Gate(deepcopy(unitary), name="R2Q")
 
 
