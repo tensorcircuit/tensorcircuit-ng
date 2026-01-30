@@ -155,7 +155,8 @@ def mipt_circuit(
             x_h.append(
                 c.general_kraus([M1_x, M2_x], i, status=sx[t, i], with_prob=False)
             )
-        state = c.state() / K.norm(c.state())
+        state = c.state()
+        state = state / K.norm(state)
 
     return K.stack(x_h), K.stack(zz_h), K.stack(zxz_h), state
 
