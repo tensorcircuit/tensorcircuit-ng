@@ -130,7 +130,8 @@ def mipt_circuit(
                     [M1_zz, M2_zz], i, i + 1, status=szz[t, i], with_prob=False
                 )
             )
-        state = c.state() / K.norm(c.state())
+        state = c.state()
+        state = state / K.norm(state)
         c = tc.Circuit(n, inputs=state)
 
         # ZXZ measurements (3-qubit blocks)
@@ -145,7 +146,8 @@ def mipt_circuit(
                     with_prob=False,
                 )
             )
-        state = c.state() / K.norm(c.state())
+        state = c.state()
+        state = state / K.norm(state)
         c = tc.Circuit(n, inputs=state)
 
         # X measurements (all qubits)
