@@ -16,6 +16,8 @@
 
 - Add multi controller jax support for distrubuted contraction.
 
+- Add `pauli_propagation` function for efficient approximate simulation of Pauli operators in Heisenberg picture.
+
 ### Fixed
 
 - Fix the breaking logic change in jax from dlpack API, dlcapsule -> tensor.

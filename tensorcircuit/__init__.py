@@ -55,6 +55,8 @@ from . import compiler
 from . import cloud
 from . import fgs
 from .fgs import FGSSimulator
+from . import pauliprop
+from .pauliprop import pauli_propagation
 from . import timeevol
 
 FGSCircuit = FGSSimulator

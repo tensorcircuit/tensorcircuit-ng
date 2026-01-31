@@ -78,3 +78,63 @@ This document records specific technical protocols, lessons learned, and advance
 1.  **JAX Vmap in TensorCircuit Wrapper**:
     *   When using `tc.backend.vmap` (alias `K.vmap`) with the JAX backend, do **not** use JAX-native arguments like `in_axes`. The TC wrapper unifies behavior and exposes `vectorized_argnums` (like TensorFlow) instead.
     *   **Protocol**: Always use `vectorized_argnums=(0, 1, ...)` to specify batched arguments, regardless of the backend (JAX/TF/Torch). Passing `in_axes` will raise a `TypeError` because the wrapper function definition doesn't accept it.
+
+## Backend Quirks
+
+1.  **Missing Backend APIs**:
+    *   The `tc.backend` (JAX) interface may lack some convenient NumPy/TensorFlow methods widely used in other backends.
+    *   **Missing**: `K.zeros_like`, `K.ones_like`, `K.any`, `K.minimum`, `K.gather`, `K.outer`.
+    *   **Workarounds**:
+        *   `zeros_like(x)` -> `K.zeros(x.shape, dtype=x.dtype)`
+        *   `probs > 0` (any) -> `K.sum(probs) > 0`
+        *   `minimum(a,b)` -> `K.where(a < b, a, b)`
+        *   `gather(x, idx)` -> `x[idx]`
+        *   `outer(a, b)` -> `a[:, None] * b[None, :]` (Broadcasting)
+
+2.  **JIT Buffer Management**:
+    *   Updating a fixed-size buffer with a dynamic number of new terms in JAX JIT is challenging due to static shape requirements.
+    *   **Pitfall**: `jax.lax.dynamic_update_slice` requires static slice shapes and can behave unexpectedly if logic implies dynamic sizes.
+    *   **Protocol**: Use **masked updates** (`K.where`). Create a mask for valid insertion indices and map source indices to destination indices using modular arithmetic or standard indexing, masked by the valid region. This maintains static graph shapes.
+
+## Pauli Propagation & Operator Evolution (Heisenberg Picture)
+
+1.  **Heisenberg Picture Reverse Order**:
+    *   Pauli Propagation evolves the *observable* rather than the state. 
+    *   **Protocol**: Circuit operations must be applied in **reversed** chronological order (from the measurement gate back to the initial layer). This corresponds to applying the adjoint gate to the operator: $O \to U^\dagger O U$.
+
+2.  **JAX Tracer Accumulation**:
+    *   When initializing an operator state from a Hamiltonian where weights are JAX Tracers (e.g., in VQE optimization), direct indexing and assignment (`state[idx] = w`) will fail with `TracerArrayConversionError`.
+    *   **Protocol**: Use the `at[].add()` or `at[].set()` functional update syntax for compatibility with JIT and AD.
+        ```python
+        state = state.at[target_idx, flat_idx].add(w)
+        ```
+
+3.  **Real-Valued Expectations for Gradients**:
+    *   JAX gradients of loss functions often require the output to be a real-valued scalar. Even if the physics dictates a real expectation value, numerical complex types (even with zero imaginary part) can trigger `TypeError`.
+    *   **Protocol**: Always explicitly take the real part using `K.real()` or `.real` before returning the expectation value from a loss function or engine method.
+
+
+## Module Integration Protocols
+
+1.  **Exporting and Aliasing**:
+    *   Export new modules in `tensorcircuit/__init__.py`. 
+    *   Provide both the module export (e.g. `from . import pauliprop`) and the primary helper function (e.g. `from .pauliprop import pauli_propagation`). 
+    *   Use concise aliases for frequently used functions (e.g., `PauliProp = pauli_propagation`).
+
+2.  **Backwards Compatibility in Helpers**:
+    *   High-level wrapper functions should support multiple input formats (e.g., both raw arrays and convenient list-of-tuples for observables) to be user-friendly while maintaining internal efficiency.
+
+3.  **Standardized Testing Patterns**:
+    *   **Backend Isolation**: Avoid global `tc.set_backend()` in test files. Use the standard fixtures (`npb`, `tfb`, `jaxb`) from `conftest.py` as function arguments.
+    *   **Test Levels**:
+        *   **Unit**: Test initialization, state mapping, and single-gate kernels.
+        *   **Correctness**: Compare results against `tc.Circuit.expectation` or `expectation_ps` for small $N$.
+        *   **AD/Gradients**: Verify that `jax.grad` (or backend equivalent) works on the module's primary interfaces.
+        *   **Scanning**: Verify that loop-optimization interfaces (e.g. `compute_expectation_scan`) match manual application results.
+
+4.  **Documentation & Linting**:
+    *   Achieve **10/10 pylint score** and pass `mypy` before finalizing a module. 
+    *   Follow Google-style docstrings with reStructuredText markers. This is critical for automated documentation generation.
+
+5.  **User Verification (Walkthroughs)**:
+    *   Always provide a production-ready example in `examples/` (e.g., `pauli_propagation_vqe.py`) that showcases a real-world use case (optimization, dynamics, etc.) and demonstrates performance features like JAX JIT and Scanning.
