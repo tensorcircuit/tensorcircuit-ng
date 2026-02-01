@@ -404,8 +404,6 @@ def plain_contractor(
     return final_node
 
 
-# TODO(@refraction-ray): try to make plain contractor follow the pattern of custom?
-
 # TODO(@refraction-ray): consistent logger system for different contractors.
 
 

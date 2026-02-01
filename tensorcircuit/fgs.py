@@ -242,7 +242,7 @@ class FGSSimulator:
         """
         # otoc in FGS language, see: https://arxiv.org/pdf/1908.03292.pdf
         # https://journals.aps.org/prb/pdf/10.1103/PhysRevB.99.054205
-        # otoc for non=hermitian system is more subtle due to the undefined normalization
+        # otoc for non-hermitian system is more subtle due to the undefined normalization
         # of operator and not considered here, see: https://arxiv.org/pdf/2305.12054.pdf
         if self.cmatrix is not None and now_i is True and now_j is True:
             return self.cmatrix
