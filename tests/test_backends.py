@@ -433,6 +433,17 @@ def test_backend_methods_2(backend):
     np.testing.assert_allclose(
         tc.backend.det(tc.backend.convert_to_tensor(np.eye(3) * 2)), 8, atol=1e-5
     )
+    np.testing.assert_allclose(
+        tc.backend.zeros_like(tc.backend.ones([2, 2])), np.zeros([2, 2]), atol=1e-5
+    )
+    np.testing.assert_allclose(
+        tc.backend.ones_like(tc.backend.zeros([2, 2])), np.ones([2, 2]), atol=1e-5
+    )
+    # Test with explicit dtype
+    z = tc.backend.zeros_like(tc.backend.ones([2, 2]), dtype="float32")
+    assert tc.backend.dtype(z) == "float32"
+    o = tc.backend.ones_like(tc.backend.zeros([2, 2]), dtype="complex64")
+    assert tc.backend.dtype(o) == "complex64"
 
 
 # @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])

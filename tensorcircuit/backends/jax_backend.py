@@ -271,6 +271,18 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         r = jnp.zeros(shape)
         return self.cast(r, dtype)
 
+    def zeros_like(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
+        if dtype is None:
+            dtype = self.dtype(a)
+        r = jnp.zeros_like(a)
+        return self.cast(r, dtype)
+
+    def ones_like(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
+        if dtype is None:
+            dtype = self.dtype(a)
+        r = jnp.ones_like(a)
+        return self.cast(r, dtype)
+
     def copy(self, tensor: Tensor) -> Tensor:
         return jnp.array(tensor, copy=True)
 

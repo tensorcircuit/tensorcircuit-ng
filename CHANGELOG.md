@@ -18,6 +18,8 @@
 
 - Add `pauli_propagation` function for efficient approximate simulation of Pauli operators in Heisenberg picture.
 
+-  Add `zeros_like` and `ones_like` method for backends.
+
 ### Fixed
 
 - Fix the breaking logic change in jax from dlpack API, dlcapsule -> tensor.

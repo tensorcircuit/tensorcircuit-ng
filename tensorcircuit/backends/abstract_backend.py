@@ -352,6 +352,36 @@ class ExtendedBackend:
         """
         return self.conj(self.transpose(a))
 
+    def zeros_like(self: Any, a: Tensor, dtype: Optional[str] = None) -> Tensor:
+        """
+        Return a tensor of zeros with the same shape as a.
+
+        :param a: Input tensor
+        :type a: Tensor
+        :param dtype: Optional dtype of the output tensor
+        :type dtype: str, optional
+        :return: A tensor of zeros with the same shape as a
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `zeros_like`.".format(self.name)
+        )
+
+    def ones_like(self: Any, a: Tensor, dtype: Optional[str] = None) -> Tensor:
+        """
+        Return a tensor of ones with the same shape as a.
+
+        :param a: Input tensor
+        :type a: Tensor
+        :param dtype: Optional dtype of the output tensor
+        :type dtype: str, optional
+        :return: A tensor of ones with the same shape as a
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `ones_like`.".format(self.name)
+        )
+
     def det(self: Any, a: Tensor) -> Tensor:
         """
         Return the determinant scalar of a tensor ``a``

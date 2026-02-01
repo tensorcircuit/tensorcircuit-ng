@@ -238,6 +238,18 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         r = torchlib.zeros(shape)
         return self.cast(r, dtype)
 
+    def zeros_like(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
+        if dtype is None:
+            dtype = self.dtype(a)
+        r = torchlib.zeros_like(a)
+        return self.cast(r, dtype)
+
+    def ones_like(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
+        if dtype is None:
+            dtype = self.dtype(a)
+        r = torchlib.ones_like(a)
+        return self.cast(r, dtype)
+
     def copy(self, a: Tensor) -> Tensor:
         return a.clone()
 

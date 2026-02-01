@@ -444,6 +444,18 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         r = tf.zeros(shape=shape)
         return self.cast(r, dtype)
 
+    def zeros_like(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
+        if dtype is None:
+            dtype = self.dtype(a)
+        r = tf.zeros_like(a)
+        return self.cast(r, dtype)
+
+    def ones_like(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
+        if dtype is None:
+            dtype = self.dtype(a)
+        r = tf.ones_like(a)
+        return self.cast(r, dtype)
+
     def copy(self, a: Tensor) -> Tensor:
         return tf.identity(a)
 
