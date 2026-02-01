@@ -351,9 +351,28 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
             shape = (shape,)
         return g.choice(a, size=shape, replace=True, p=p)
 
-    def scatter(self, operand: Tensor, indices: Tensor, updates: Tensor) -> Tensor:
+    def scatter(
+        self, operand: Tensor, indices: Tensor, updates: Tensor, mode: str = "update"
+    ) -> Tensor:
         operand_new = cp.copy(operand)
-        operand_new[tuple([indices[:, i] for i in range(indices.shape[1])])] = updates
+        indices = cp.asarray(indices)
+        updates = cp.asarray(updates)
+        index_depth = indices.shape[-1]
+        indices_reshaped = indices.reshape(-1, index_depth)
+        updates_reshaped = updates.reshape((-1,) + operand.shape[index_depth:])
+
+        # Create a tuple of arrays for each dimension being indexed
+        idx_tuple = tuple(indices_reshaped[:, i] for i in range(index_depth))
+
+        if mode == "update":
+            operand_new[idx_tuple] = updates_reshaped
+        elif mode == "add":
+            cpx.scatter_add(operand_new, idx_tuple, updates_reshaped)
+        elif mode == "sub":
+            cpx.scatter_add(operand_new, idx_tuple, -updates_reshaped)
+        else:
+            raise ValueError(f"Unsupported scatter mode: {mode}")
+
         return operand_new
 
     def coo_sparse_matrix(

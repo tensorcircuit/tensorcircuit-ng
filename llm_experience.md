@@ -81,15 +81,12 @@ This document records specific technical protocols, lessons learned, and advance
 
 ## Backend Quirks
 
-1.  **Missing Backend APIs**:
-    *   The `tc.backend` (JAX) interface may lack some convenient NumPy/TensorFlow methods widely used in other backends.
-    *   **Missing**: `K.zeros_like`, `K.ones_like`, `K.any`, `K.minimum`, `K.gather`, `K.outer`.
-    *   **Workarounds**:
-        *   `zeros_like(x)` -> `K.zeros(x.shape, dtype=x.dtype)`
-        *   `probs > 0` (any) -> `K.sum(probs) > 0`
-        *   `minimum(a,b)` -> `K.where(a < b, a, b)`
-        *   `gather(x, idx)` -> `x[idx]`
-        *   `outer(a, b)` -> `a[:, None] * b[None, :]` (Broadcasting)
+1.  **Common Backend APIs**:
+    *   The `tc.backend` interface provides unified methods like `K.zeros_like`, `K.ones_like`, and `K.scatter`.
+    *   **Protocols for Missing Methods**:
+        *   `K.any` -> `K.sum(probs) > 0`
+        *   `K.minimum(a,b)` -> `K.where(a < b, a, b)`
+        *   `K.outer(a, b)` -> `a[:, None] * b[None, :]` (Broadcasting)
 
 2.  **JIT Buffer Management**:
     *   Updating a fixed-size buffer with a dynamic number of new terms in JAX JIT is challenging due to static shape requirements.
@@ -138,3 +135,4 @@ This document records specific technical protocols, lessons learned, and advance
 
 5.  **User Verification (Walkthroughs)**:
     *   Always provide a production-ready example in `examples/` (e.g., `pauli_propagation_vqe.py`) that showcases a real-world use case (optimization, dynamics, etc.) and demonstrates performance features like JAX JIT and Scanning.
+

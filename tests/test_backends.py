@@ -1394,3 +1394,70 @@ def test_floor_divide_various_cases(backend):
     expectedf = np.floor_divide(np.array([7.9, 8.1, -3.5]), np.array([2.0, 2.0, 2.0]))
     out = tc.backend.floor_divide(xf, yf)
     np.testing.assert_array_equal(np.array(out), expectedf)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_scatter(backend):
+    # 1. Backward compatibility: 2D indices, scalar updates
+    operand = tc.backend.zeros([3, 3], dtype="float32")
+    indices = tc.backend.convert_to_tensor([[0, 0], [1, 1], [2, 2]], dtype="int32")
+    updates = tc.backend.convert_to_tensor([1.0, 2.0, 3.0], dtype="float32")
+    res = tc.backend.scatter(operand, indices, updates)
+    np.testing.assert_allclose(tc.backend.numpy(res), np.diag([1, 2, 3]))
+
+    # 2. N-D indexing: batch dimensions in indices
+    operand = tc.backend.zeros([4, 4], dtype="float32")
+    indices = tc.backend.convert_to_tensor(
+        [[[0, 0], [1, 1]], [[2, 2], [3, 3]]], dtype="int32"
+    )
+    updates = tc.backend.convert_to_tensor([[1.0, 2.0], [3.0, 4.0]], dtype="float32")
+    res = tc.backend.scatter(operand, indices, updates)
+    np.testing.assert_allclose(tc.backend.numpy(res), np.diag([1, 2, 3, 4]))
+
+    # 3. Sub-tensor updates: index_depth < rank
+    operand = tc.backend.zeros([3, 2, 2], dtype="float32")
+    indices = tc.backend.convert_to_tensor([[0], [2]], dtype="int32")
+    updates = tc.backend.convert_to_tensor(
+        [[[1, 1], [1, 1]], [[2, 2], [2, 2]]], dtype="float32"
+    )
+    res = tc.backend.scatter(operand, indices, updates)
+    expected = np.zeros([3, 2, 2], dtype=np.float32)
+    expected[0] = 1.0
+    expected[2] = 2.0
+    np.testing.assert_allclose(tc.backend.numpy(res), expected)
+
+    # 4. Mode "add"
+    operand = tc.backend.ones([3, 3], dtype="float32")
+    indices = tc.backend.convert_to_tensor([[0, 0], [1, 1]], dtype="int32")
+    updates = tc.backend.convert_to_tensor([2.0, 3.0], dtype="float32")
+    res = tc.backend.scatter(operand, indices, updates, mode="add")
+    expected = np.ones([3, 3], dtype=np.float32)
+    expected[0, 0] += 2.0
+    expected[1, 1] += 3.0
+    np.testing.assert_allclose(tc.backend.numpy(res), expected)
+
+    # 5. Mode "sub"
+    operand = tc.backend.ones([3, 3], dtype="float32")
+    indices = tc.backend.convert_to_tensor([[0, 0], [2, 2]], dtype="int32")
+    updates = tc.backend.convert_to_tensor([0.5, 1.5], dtype="float32")
+    res = tc.backend.scatter(operand, indices, updates, mode="sub")
+    expected = np.ones([3, 3], dtype=np.float32)
+    expected[0, 0] -= 0.5
+    expected[2, 2] -= 1.5
+    np.testing.assert_allclose(tc.backend.numpy(res), expected)
+
+    # 6. Duplicated indices in "add" mode
+    operand = tc.backend.zeros([3], dtype="float32")
+    indices = tc.backend.convert_to_tensor([[0], [0], [1]], dtype="int32")
+    updates = tc.backend.convert_to_tensor([1.0, 2.0, 4.0], dtype="float32")
+    res = tc.backend.scatter(operand, indices, updates, mode="add")
+    np.testing.assert_allclose(tc.backend.numpy(res), np.array([3.0, 4.0, 0.0]))
+
+    # 7. Complex numbers
+    operand = tc.backend.zeros([2, 2], dtype="complex64")
+    indices = tc.backend.convert_to_tensor([[0, 1]], dtype="int32")
+    updates = tc.backend.convert_to_tensor([1.0 + 2.0j], dtype="complex64")
+    res = tc.backend.scatter(operand, indices, updates, mode="add")
+    expected = np.zeros([2, 2], dtype=np.complex64)
+    expected[0, 1] = 1.0 + 2.0j
+    np.testing.assert_allclose(tc.backend.numpy(res), expected)

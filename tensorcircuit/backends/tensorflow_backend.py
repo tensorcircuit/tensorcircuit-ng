@@ -757,8 +757,17 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def gather1d(self, operand: Tensor, indices: Tensor) -> Tensor:
         return tf.gather(operand, indices)
 
-    def scatter(self, operand: Tensor, indices: Tensor, updates: Tensor) -> Tensor:
-        return tf.tensor_scatter_nd_update(operand, indices, updates)
+    def scatter(
+        self, operand: Tensor, indices: Tensor, updates: Tensor, mode: str = "update"
+    ) -> Tensor:
+        if mode == "update":
+            return tf.tensor_scatter_nd_update(operand, indices, updates)
+        elif mode == "add":
+            return tf.tensor_scatter_nd_add(operand, indices, updates)
+        elif mode == "sub":
+            return tf.tensor_scatter_nd_sub(operand, indices, updates)
+        else:
+            raise ValueError(f"Unsupported scatter mode: {mode}")
 
     def coo_sparse_matrix(
         self, indices: Tensor, values: Tensor, shape: Tensor

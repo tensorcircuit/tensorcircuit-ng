@@ -30,6 +30,8 @@
 
 - End-to-end differentiable PauliStringSum2COO on jax backend.
 
+- Generalize `scatter` method for backends.
+
 ## v1.4.0
 
 ### Added

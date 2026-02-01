@@ -485,7 +485,23 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     ) -> Tensor:
         if x is None and y is None:
             return torchlib.where(condition)
+        assert x is not None and y is not None
         return torchlib.where(condition, x, y)
+
+    def scatter(
+        self, operand: Tensor, indices: Tensor, updates: Tensor, mode: str = "update"
+    ) -> Tensor:
+        operand_new = operand.clone()
+        index_depth = indices.shape[-1]
+        idx_tuple = tuple(indices[..., i] for i in range(index_depth))
+        if mode == "update":
+            return operand_new.index_put(idx_tuple, updates, accumulate=False)
+        elif mode == "add":
+            return operand_new.index_put(idx_tuple, updates, accumulate=True)
+        elif mode == "sub":
+            return operand_new.index_put(idx_tuple, -updates, accumulate=True)
+        else:
+            raise ValueError(f"Unsupported scatter mode: {mode}")
 
     def reverse(self, a: Tensor) -> Tensor:
         return torchlib.flip(a, dims=(-1,))

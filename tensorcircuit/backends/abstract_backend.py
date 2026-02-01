@@ -1430,22 +1430,33 @@ class ExtendedBackend:
         """
         return operand[indices]
 
-    def scatter(self: Any, operand: Tensor, indices: Tensor, updates: Tensor) -> Tensor:
+    def scatter(
+        self: Any,
+        operand: Tensor,
+        indices: Tensor,
+        updates: Tensor,
+        mode: str = "update",
+    ) -> Tensor:
         """
-        Roughly equivalent to operand[indices] = updates, indices only support shape with rank 2 for now.
+        Equivalent to ``operand[indices] = updates`` with mode="update".
+        Also supports mode="add" and mode="sub".
+        Roughly equivalent to ``tf.tensor_scatter_nd_update``.
 
-        :param operand: [description]
+        :param operand: The tensor to be updated.
         :type operand: Tensor
-        :param indices: [description]
+        :param indices: The indices to update.
+            Expected shape: (batch_dims..., index_depth), where index_depth <= rank(operand).
         :type indices: Tensor
-        :param updates: [description]
+        :param updates: The updates to apply.
+            Expected shape: (batch_dims...,) + operand.shape[index_depth:].
         :type updates: Tensor
-        :return: [description]
+        :param mode: The update mode, "update", "add" or "sub", defaults to "update".
+        :type mode: str, optional
+        :return: The updated tensor.
         :rtype: Tensor
         """
         # only tested on scalar update for now, as the general XLA scatter syntax is too complicated
         # https://www.tensorflow.org/xla/operation_semantics?hl=en#scatter
-        # TODO(@refraction-ray): implement more general and consistent scatter syntax for different backends.
         raise NotImplementedError(
             "Backend '{}' has not implemented `scatter`.".format(self.name)
         )

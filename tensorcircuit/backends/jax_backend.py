@@ -688,17 +688,19 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     ) -> Tensor:
         return libjax.lax.scan(f, init, xs)
 
-    def scatter(self, operand: Tensor, indices: Tensor, updates: Tensor) -> Tensor:
-        # updates = jnp.reshape(updates, indices.shape)
-        # return operand.at[indices].set(updates)
-        rank = len(operand.shape)
-        dnums = libjax.lax.ScatterDimensionNumbers(
-            update_window_dims=(),
-            inserted_window_dims=tuple([i for i in range(rank)]),
-            scatter_dims_to_operand_dims=tuple([i for i in range(rank)]),
-        )
-        r = libjax.lax.scatter(operand, indices, updates, dnums)
-        return r
+    def scatter(
+        self, operand: Tensor, indices: Tensor, updates: Tensor, mode: str = "update"
+    ) -> Tensor:
+        index_depth = indices.shape[-1]
+        idx_tuple = tuple(indices[..., i] for i in range(index_depth))
+        if mode == "update":
+            return operand.at[idx_tuple].set(updates)
+        elif mode == "add":
+            return operand.at[idx_tuple].add(updates)
+        elif mode == "sub":
+            return operand.at[idx_tuple].add(-updates)
+        else:
+            raise ValueError(f"Unsupported scatter mode: {mode}")
 
     def coo_sparse_matrix(
         self, indices: Tensor, values: Tensor, shape: Tensor
