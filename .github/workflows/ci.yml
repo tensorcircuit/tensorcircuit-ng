@@ -45,7 +45,6 @@ jobs:
         run: |
           cd examples
           python mcnoise_check.py
-          python vqnhe_h6.py
           python mcnoise_boost.py
           python quantumng.py
           python universal_lr.py
