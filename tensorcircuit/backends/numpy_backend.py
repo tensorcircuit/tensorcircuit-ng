@@ -11,7 +11,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union
 import numpy as np
 
 try:
-    from numpy import ComplexWarning
+    from numpy import ComplexWarning  # type: ignore
 except ImportError:  # np2.0 compatibility
     from numpy.exceptions import ComplexWarning  # type: ignore
 
@@ -196,7 +196,7 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         return np.std(a, axis=axis, keepdims=keepdims)
 
     def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
-        return np.all(a, axis=axis)
+        return np.all(a, axis=axis)  # type: ignore
 
     def unique_with_counts(self, a: Tensor, **kws: Any) -> Tuple[Tensor, Tensor]:
         return np.unique(a, return_counts=True)  # type: ignore
@@ -256,8 +256,8 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
 
     def arange(self, start: int, stop: Optional[int] = None, step: int = 1) -> Tensor:
         if stop is None:
-            return np.arange(start=0, stop=start, step=step)
-        return np.arange(start=start, stop=stop, step=step)
+            return np.arange(0, start, step)
+        return np.arange(start, stop, step)
 
     def mod(self, x: Tensor, y: Tensor) -> Tensor:
         return np.mod(x, y)

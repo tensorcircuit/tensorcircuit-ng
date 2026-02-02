@@ -72,25 +72,34 @@ class keras_optimizer:
         return params
 
 
+def _promote_tf(a: Tensor, b: Tensor) -> Tuple[Tensor, Tensor]:
+    if hasattr(a, "dtype") and hasattr(b, "dtype") and a.dtype != b.dtype:
+        common_dtype = tf.experimental.numpy.result_type(a.dtype, b.dtype)
+        a = tf.cast(a, common_dtype)
+        b = tf.cast(b, common_dtype)
+    return a, b
+
+
 def _tensordot_tf(
     self: Any, a: Tensor, b: Tensor, axes: Union[int, Sequence[Sequence[int]]]
 ) -> Tensor:
     # Use TensorFlow's dtype promotion rules by converting both to a common dtype
-    if a.dtype != b.dtype:
-        # Find the result dtype using TensorFlow's type promotion rules
-        common_dtype = tf.experimental.numpy.result_type(a.dtype, b.dtype)
-        a = tf.cast(a, common_dtype)
-        b = tf.cast(b, common_dtype)
+    a, b = _promote_tf(a, b)
     return tf.tensordot(a, b, axes)
 
 
 def _outer_product_tf(self: Any, tensor1: Tensor, tensor2: Tensor) -> Tensor:
+    # Use TensorFlow's dtype promotion rules by converting both to a common dtype
+    tensor1, tensor2 = _promote_tf(tensor1, tensor2)
     return tf.tensordot(tensor1, tensor2, 0)
 
 
 def _matmul_tf(self: Any, tensor1: Tensor, tensor2: Tensor) -> Tensor:
     if (len(tensor1.shape) <= 1) or (len(tensor2.shape) <= 1):
         raise ValueError("inputs to `matmul` have to be a tensors of order > 1,")
+
+    # Use TensorFlow's dtype promotion rules by converting both to a common dtype
+    tensor1, tensor2 = _promote_tf(tensor1, tensor2)
 
     return tf.matmul(tensor1, tensor2)
 
@@ -518,6 +527,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
 
     def kron(self, a: Tensor, b: Tensor) -> Tensor:
         # array more than 2d consistency is not guranteed for different backends
+        a, b = _promote_tf(a, b)
         return tf.reshape(
             tf.reshape(a, [a.shape[0], 1, a.shape[1], 1])
             * tf.reshape(b, [1, b.shape[0], 1, b.shape[1]]),
@@ -560,6 +570,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         if x is None and y is None:
             # Return a tuple of tensors to be consistent with other backends
             return tuple(tf.unstack(tf.where(condition), axis=1))
+        x, y = _promote_tf(x, y)  # type: ignore
         return tf.where(condition, x, y)
 
     def argmax(self, a: Tensor, axis: int = 0) -> Tensor:

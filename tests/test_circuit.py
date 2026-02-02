@@ -304,7 +304,7 @@ def test_complex128(highp, tfb):
     c.H(1)
     c.rx(0, theta=tc.gates.num_to_tensor(1j))
     c.wavefunction()
-    np.testing.assert_allclose(c.expectation((tc.gates.z(), [1])), 0)
+    np.testing.assert_allclose(c.expectation((tc.gates.z(), [1])), 0, atol=1e-8)
 
 
 # def test_qcode():

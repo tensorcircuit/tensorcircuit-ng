@@ -657,7 +657,7 @@ def qir2json(
             nm = backend.reshapem(r["gate"].tensor)
         nmr, nmi = tensor_to_json(nm)
         if backend.shape_tuple(nm)[0] == backend.shape_tuple(nm)[1] == 2:
-            uparams = list(gates.get_u_parameter(backend.numpy(nm)))
+            uparams = [float(p) for p in gates.get_u_parameter(backend.numpy(nm))]
         else:
             uparams = []
         params = r.get("parameters", {})

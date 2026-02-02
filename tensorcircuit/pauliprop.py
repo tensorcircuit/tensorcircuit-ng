@@ -13,39 +13,19 @@ Key Features:
       propagate outside their k-local support.
     - Provides an interface for variational algorithms (e.g., VQE/QAOA).
 
-Usage Example:
-    >>> import tensorcircuit as tc
-    >>> from tensorcircuit.pauliprop import PauliPropagationEngine
-    >>> N = 4
-    >>> k = 2
-    >>> pp = PauliPropagationEngine(N, k)
-    >>> # H = 1.0 * Z0 Z1 + 0.5 * X1 X2
-    >>> structures = np.array([[3, 3, 0, 0], [0, 1, 1, 0]])
-    >>> weights = np.array([1.0, 0.5])
-    >>> state = pp.get_initial_state(structures, weights)
-    >>> # Apply CNOT(0, 1)
-    >>> state = pp.apply_gate(state, "cnot", (0, 1))
-    >>> print(pp.expectation(state))  # Expected value of H
+Note: This implementation is optimized for JAX and NumPy backends.
+TensorFlow backend is not supported for this module.
 """
 
 from itertools import combinations
-from typing import Any, Callable, Optional, Sequence, Tuple
+from typing import Any, Callable, Optional, Sequence
 import numpy as np
 
-try:
-    import jax
-    import jax.numpy as jnp
-except ImportError:  # pragma: no cover
-    jax = None  # type: ignore
-    jnp = None  # type: ignore
-
-import tensorcircuit as tc
-
-K = tc.backend
+from . import gates
+from .cons import backend
+from .circuit import Circuit
 
 Tensor = Any
-
-# TODO(@refraction-ray): backend agnostic implementation
 
 
 class PauliPropagationEngine:
@@ -67,27 +47,29 @@ class PauliPropagationEngine:
         :param k: Maximum locality of the Pauli strings to track.
         :type k: int
         """
-        if jax is None:
-            raise ImportError(
-                "JAX is required for PauliPropagationEngine. "
-                "Please install jax and jaxlib."
-            )
         self.N = N
         self.k = k
         self.subsets = list(combinations(range(N), k))
         self.num_subsets = len(self.subsets)
 
-        self.subset_arr = jnp.array(self.subsets, dtype=jnp.int32)
+        self.subset_arr = backend.convert_to_tensor(
+            np.array(self.subsets, dtype=np.int32)
+        )
 
         # Basis matrices for PTM construction
-        self.pauli_mats = jnp.array(
-            [
-                [[1, 0], [0, 1]],  # I
-                [[0, 1], [1, 0]],  # X
-                [[0, -1j], [1j, 0]],  # Y
-                [[1, 0], [0, -1]],  # Z
-            ],
-            dtype=jnp.complex64,
+        self.pauli_mats = backend.cast(
+            backend.convert_to_tensor(
+                np.array(
+                    [
+                        [[1, 0], [0, 1]],  # I
+                        [[0, 1], [1, 0]],  # X
+                        [[0, -1j], [1j, 0]],  # Y
+                        [[1, 0], [0, -1]],  # Z
+                    ],
+                    dtype=np.complex64,
+                )
+            ),
+            "complex64",
         )
         # Indices corresponding to Pauli strings with only I and Z
         valid_indices = []
@@ -104,45 +86,62 @@ class PauliPropagationEngine:
             if is_valid:
                 valid_indices.append(i)
 
-        self.valid_indices = jnp.array(valid_indices, dtype=jnp.int32)
+        self.valid_indices = backend.convert_to_tensor(
+            np.array(valid_indices, dtype=np.int32)
+        )
 
     def get_ptm_1q(self, u: Any) -> Any:
         """
         Compute 4x4 Pauli Transfer Matrix for a 1-qubit unitary U.
         R_ij = 0.5 * Tr(sigma_i U^dag sigma_j U)
         """
-        u_dag = jnp.conjugate(u.T)
+        u = backend.convert_to_tensor(u)
+        u_dag = backend.conj(backend.transpose(u))
 
         # shape: (4, 2, 2)
         sigmas = self.pauli_mats
 
         # U^dag sigma_j U
         # (4, 2, 2)
-        rot_sigmas = jnp.einsum("ab,jbc,cd->jad", u_dag, sigmas, u)
+        tmp = backend.matmul(u_dag, sigmas)
+        rot_sigmas = backend.matmul(tmp, u)
 
-        # Tr(sigma_i * rot_sigmas)
+        # Tr(sigma_i * rot_sigmas_j)
         # (4, 4)
-        m = 0.5 * jnp.einsum("iab,jba->ij", sigmas, rot_sigmas)
-        return m.real  # PTM should be real for CPTP maps on Hermitian basis
+        res = backend.matmul(
+            backend.reshape(sigmas, [4, 4]),
+            backend.transpose(backend.reshape(rot_sigmas, [4, 4])),
+        )
+        m = 0.5 * res
+        return backend.real(m)  # PTM should be real for CPTP maps on Hermitian basis
 
     def get_ptm_2q(self, u: Any) -> Any:
         """
         Compute 16x16 Pauli Transfer Matrix for a 2-qubit unitary U.
         """
-        u_dag = jnp.conjugate(u.T)
+        u = backend.convert_to_tensor(u)
+        u_dag = backend.conj(backend.transpose(u))
 
         # Tensor product of Paulis: (16, 4, 4)
         s1 = self.pauli_mats  # (4, 2, 2)
-        # Kronecker product for basis
-        # I_i x I_j -> index 4*i + j
-        # shape (16, 4, 4)
-        sigmas_2q = jnp.kron(s1[:, None, :, :], s1[None, :, :, :]).reshape(16, 4, 4)
 
-        rot_sigmas = jnp.einsum("ab,jbc,cd->jad", u_dag, sigmas_2q, u)
+        # Vectorized broadcasting for JAX/NumPy
+        sigmas_2q = backend.reshape(
+            backend.reshape(s1, [4, 1, 2, 1, 2, 1])
+            * backend.reshape(s1, [1, 4, 1, 2, 1, 2]),
+            [16, 4, 4],
+        )
+
+        tmp = backend.matmul(u_dag, sigmas_2q)
+        rot_sigmas = backend.matmul(tmp, u)
 
         # Normalization factor for 2Q is 1/4
-        m = 0.25 * jnp.einsum("iab,jba->ij", sigmas_2q, rot_sigmas)
-        return m.real
+        res = backend.matmul(
+            backend.reshape(sigmas_2q, [16, 16]),
+            backend.transpose(backend.reshape(rot_sigmas, [16, 16])),
+        )
+        m = 0.25 * res
+        return backend.real(m)
 
     def get_initial_state(self, structures: Any, weights: Any) -> Any:
         """
@@ -153,14 +152,13 @@ class PauliPropagationEngine:
         :param weights: (M,) float/complex array.
         :type weights: np.ndarray
         :return: Initial state tensor.
-        :rtype: jnp.ndarray
+        :rtype: Tensor
         """
         # Ensure numpy for processing structures (must be static)
         structures = np.array(structures)
 
-        # If weights is a tracer/JAX array, we use JAX-native accumulation
-        # to avoid TracerArrayConversionError.
-        state = jnp.zeros((self.num_subsets, 4**self.k), dtype=jnp.complex64)
+        indices = []
+        updates = []
 
         for i in range(len(weights)):
             term = structures[i]
@@ -188,19 +186,31 @@ class PauliPropagationEngine:
                     code = term[global_q]
                     flat_idx += code * (4 ** (self.k - 1 - local_pos))
 
-                state = state.at[target_idx, flat_idx].add(w)
+                indices.append([target_idx, flat_idx])
+                updates.append(w)
+
+        state = backend.zeros((self.num_subsets, 4**self.k), dtype="complex64")
+        if len(indices) > 0:
+            indices_tensor = backend.convert_to_tensor(
+                np.array(indices, dtype=np.int32)
+            )
+            updates_tensor = backend.stack(updates)  # Use stack to handle tracers
+            updates_tensor = backend.cast(updates_tensor, "complex64")
+            state = backend.scatter(state, indices_tensor, updates_tensor, mode="add")
 
         return state
 
     def expectation(self, state: Any) -> Any:
         # Sum coefficients at valid indices (pure Z/I terms)
-        total = jnp.sum(state[:, self.valid_indices])
-        return jnp.real(total).real
+        # workaround for missing backend.gather with axis support
+        valid_terms = backend.gather1d(backend.transpose(state), self.valid_indices)
+        total = backend.sum(valid_terms)
+        return backend.real(total)
 
     def _apply_1q_kernel(self, state_subset: Any, ptm: Any, local_idx: Any) -> Any:
         """
         Apply 1Q PTM to a specific local axis of the state tensor (flattened).
-        Dispatches to static versions using switch.
+        Dispatches to static versions using backend.switch.
         """
         branches = []
         for i in range(self.k):
@@ -210,30 +220,28 @@ class PauliPropagationEngine:
 
             branches.append(branch_fn)
 
-        return jax.lax.switch(local_idx, branches)
+        return backend.switch(local_idx, branches)
 
     def _apply_1q_kernel_static(
         self, state_subset: Any, ptm: Any, static_idx: Any
     ) -> Any:
         shape = (4,) * self.k
-        tensor = state_subset.reshape(shape)
-        # tensordot axis 1 of PTM with static_idx of tensor
-        new_tensor = jnp.tensordot(ptm, tensor, axes=([1], [static_idx]))
+        tensor = backend.reshape(state_subset, shape)
+        new_tensor = backend.tensordot(ptm, tensor, axes=([1], [static_idx]))
 
         # Permutation to restore order
-        # tensordot puts new axis at 0
         perm = (
             list(range(1, static_idx + 1)) + [0] + list(range(static_idx + 1, self.k))
         )
-        new_tensor = jnp.transpose(new_tensor, perm)
-        return new_tensor.reshape(4**self.k)
+        new_tensor = backend.transpose(new_tensor, perm)
+        return backend.reshape(new_tensor, [4**self.k])
 
     def _apply_2q_kernel(
         self, state_subset: Any, ptm: Any, idx1: Any, idx2: Any
     ) -> Any:
         """
         Apply 2Q PTM to local axes idx1, idx2.
-        Dispatches via switch on flattened index (idx1 * k + idx2).
+        Dispatches via backend.switch on flattened index (idx1 * k + idx2).
         """
         flat_idx = idx1 * self.k + idx2
 
@@ -244,16 +252,14 @@ class PauliPropagationEngine:
             c = i % self.k
 
             if r == c:
-                # Diagonal case: invalid for contraction (same axis twice).
-                # Unreachable for valid distinct-wire gates.
-                # Return dummy Identity.
+
                 def branch_fn(
                     s: Any = state_subset,
                     p: Any = ptm,
                     r_static: Any = r,
                     c_static: Any = c,
                 ) -> Any:
-                    return s.reshape(4**self.k)
+                    return backend.reshape(s, [4**self.k])
 
             else:
 
@@ -267,23 +273,21 @@ class PauliPropagationEngine:
 
             branches.append(branch_fn)
 
-        return jax.lax.switch(flat_idx, branches)
+        return backend.switch(flat_idx, branches)
 
     def _apply_2q_kernel_static(
         self, state_subset: Any, ptm: Any, idx1: Any, idx2: Any
     ) -> Any:
         shape = (4,) * self.k
-        tensor = state_subset.reshape(shape)
-
-        ptm_reshaped = ptm.reshape(4, 4, 4, 4)
+        tensor = backend.reshape(state_subset, shape)
+        ptm_reshaped = backend.reshape(ptm, [4, 4, 4, 4])
 
         # Contract
-        new_tensor = jnp.tensordot(ptm_reshaped, tensor, axes=([2, 3], [idx1, idx2]))
+        new_tensor = backend.tensordot(
+            ptm_reshaped, tensor, axes=([2, 3], [idx1, idx2])
+        )
 
         # Permutation
-        # new_tensor axes: (out1, out2, rest...)
-        # We want mappings: 0->idx1, 1->idx2.
-
         target_perm = [0] * self.k
         target_perm[idx1] = 0
         target_perm[idx2] = 1
@@ -294,8 +298,8 @@ class PauliPropagationEngine:
                 target_perm[i] = current_rest_ptr
                 current_rest_ptr += 1
 
-        new_tensor = jnp.transpose(new_tensor, target_perm)
-        return new_tensor.reshape(4**self.k)
+        new_tensor = backend.transpose(new_tensor, target_perm)
+        return backend.reshape(new_tensor, [4**self.k])
 
     def _project_2q_boundary(
         self, state_subset: Any, ptm: Any, local_idx: Any, is_q1_in: Any
@@ -305,17 +309,14 @@ class PauliPropagationEngine:
         PTM is 16x16 (q1, q2).
         If is_q1_in=True: q1 is in subset (at local_idx), q2 is out.
         We take submatrix M s.t. q2 input=I, q2 output=I.
-        Indices: q1*4 + q2. I is 0.
-        So we want Input indices where q2=0: 0, 4, 8, 12.
-        Output indices where q2=0: 0, 4, 8, 12.
-        This forms a 4x4 matrix.
         """
         # Reshape PTM to (4(out1), 4(out2), 4(in1), 4(in2))
-        ptm_4 = ptm.reshape(4, 4, 4, 4)
+        ptm_4 = backend.reshape(ptm, [4, 4, 4, 4])
 
-        reduced_ptm = jax.lax.cond(
-            is_q1_in, lambda _: ptm_4[:, 0, :, 0], lambda _: ptm_4[0, :, 0, :], None
-        )
+        if is_q1_in:
+            reduced_ptm = ptm_4[:, 0, :, 0]
+        else:
+            reduced_ptm = ptm_4[0, :, 0, :]
 
         return self._apply_1q_kernel(state_subset, reduced_ptm, local_idx)
 
@@ -323,9 +324,8 @@ class PauliPropagationEngine:
         self, state: Any, gate_name: str, wires: Any, params: Any = None
     ) -> Any:
         # 1. Get PTM
-        # Use tc.gates to get matrix directly, supporting JAX types
         gate_name = gate_name.lower()
-        gate_func = getattr(tc.gates, gate_name)
+        gate_func = getattr(gates, gate_name)
 
         if params is not None:
             if isinstance(params, dict):
@@ -339,73 +339,56 @@ class PauliPropagationEngine:
         else:
             u = gate_func().tensor
 
-        # Ensure matrix shape
+        # Ensure matrix shape and convert to backend tensor
+        u = backend.convert_to_tensor(u)
         dim = 2 ** len(wires)
-        u = u.reshape(dim, dim)
+        u = backend.reshape(u, [dim, dim])
 
         if len(wires) == 1:
             ptm = self.get_ptm_1q(u)
             q = wires[0]
 
-            # Find subsets containing q
-            # Use masking for vectorization
-            # self.subset_arr shape (num_subsets, k)
+            has_q = backend.sum(backend.cast(self.subset_arr == q, "int32"), axis=1) > 0
+            local_indices = backend.argmax(
+                backend.cast(self.subset_arr == q, "int32"), axis=1
+            )
 
-            # Mask: (num_subsets,) boolean
-            has_q = jnp.any(self.subset_arr == q, axis=1)
-
-            # Local index: (num_subsets,) int. -1 if not present.
-            # argmax returns first True index, which is what we want if q is present.
-            local_indices = jnp.argmax(self.subset_arr == q, axis=1)
-
-            # Define batched update function
             def update_fn_1q(s: Any, idx: Any, present: Any) -> Any:
-                # if present, apply, else identity
                 res = self._apply_1q_kernel(s, ptm, idx)
-                return jnp.where(present, res, s)
+                return backend.where(present, res, s)
 
-            state = jax.vmap(update_fn_1q)(state, local_indices, has_q)  # type: ignore
+            state = backend.vmap(update_fn_1q, vectorized_argnums=(0, 1, 2))(
+                state, local_indices, has_q
+            )
 
         elif len(wires) == 2:
             ptm = self.get_ptm_2q(u)
             q1, q2 = wires
 
-            # Identify subsets
-            # Mask1: contains q1. Mask2: contains q2.
-            mask1 = jnp.any(self.subset_arr == q1, axis=1)
-            mask2 = jnp.any(self.subset_arr == q2, axis=1)
+            mask1 = (
+                backend.sum(backend.cast(self.subset_arr == q1, "int32"), axis=1) > 0
+            )
+            mask2 = (
+                backend.sum(backend.cast(self.subset_arr == q2, "int32"), axis=1) > 0
+            )
 
-            idx1 = jnp.argmax(self.subset_arr == q1, axis=1)
-            idx2 = jnp.argmax(self.subset_arr == q2, axis=1)
-
-            # Case 1: Both in (mask1 & mask2) -> Full 2Q update
-            # Case 2: Only q1 in (mask1 & !mask2) -> Boundary update q1
-            # Case 3: Only q2 in (!mask1 & mask2) -> Boundary update q2
+            idx1 = backend.argmax(backend.cast(self.subset_arr == q1, "int32"), axis=1)
+            idx2 = backend.argmax(backend.cast(self.subset_arr == q2, "int32"), axis=1)
 
             def update_fn_2q(s: Any, m1: Any, m2: Any, i1: Any, i2: Any) -> Any:
-                # Branchless logic using where
-
-                # Case Both
                 s_both = self._apply_2q_kernel(s, ptm, i1, i2)
-
-                # Case q1 only
                 s_q1 = self._project_2q_boundary(s, ptm, i1, True)
-
-                # Case q2 only
                 s_q2 = self._project_2q_boundary(s, ptm, i2, False)
-
-                # Select
-                # If m1 and m2: s_both
-                # Elif m1: s_q1
-                # Elif m2: s_q2
-                # Else: s
-
-                res = jnp.where(
-                    m1 & m2, s_both, jnp.where(m1, s_q1, jnp.where(m2, s_q2, s))
+                res = backend.where(
+                    m1 & m2,
+                    s_both,
+                    backend.where(m1, s_q1, backend.where(m2, s_q2, s)),
                 )
                 return res
 
-            state = jax.vmap(update_fn_2q)(state, mask1, mask2, idx1, idx2)  # type: ignore
+            state = backend.vmap(update_fn_2q, vectorized_argnums=(0, 1, 2, 3, 4))(
+                state, mask1, mask2, idx1, idx2
+            )
 
         return state
 
@@ -427,17 +410,17 @@ class PauliPropagationEngine:
         :param layer_fn: Function that constructs one layer of the circuit.
         :type layer_fn: Callable[..., None]
         :param params_batch: Tensor of shape (layers, params_per_layer).
-        :type params_batch: jnp.ndarray
+        :type params_batch: Tensor
         :param extra_inputs: Optional extra inputs to scan over or broadcast.
         :type extra_inputs: Optional[Sequence[Any]]
         :return: Scalar expectation value.
-        :rtype: jnp.ndarray
+        :rtype: Tensor
         """
         # Initialize
         state = self.get_initial_state(ham_structures, ham_weights)
 
         # Define scan body
-        def scan_body(state: Any, scan_inputs: Any) -> Tuple[Any, None]:
+        def scan_body(state: Any, scan_inputs: Any) -> Any:
             if extra_inputs is None:
                 p_l = scan_inputs
                 args = ()
@@ -445,52 +428,38 @@ class PauliPropagationEngine:
                 p_l = scan_inputs[0]
                 args = scan_inputs[1:]
 
-            # 1. Trace the circuit for this layer to get operations
-            # We assume structure is static, so we can trace once or every time (JIT compliant)
-            # Circuit creation in JAX is fine as long as we extract metadata
-            c_layer = tc.Circuit(self.N)
+            # Heisenberg Picture requires REVERSED order of gates
+            c_layer = Circuit(self.N)
             layer_fn(c_layer, p_l, *args)
-
             ops = c_layer.to_qir()
 
-            # 2. Key Step: Heisenberg Picture requires REVERSED order of gates
-            # The last gate in the circuit is the first to act on the Observable.
-
-            # ops is list of dicts.
-            # We iterate reversed.
-
-            def body_apply(s: Any, op: Any) -> Any:
-                # Unpack op
+            for op in reversed(ops):
                 gate_name = op["name"]
                 wires = op["index"]
                 p_dict = op.get("parameters", {})
-                param_val = None
-                if p_dict:
-                    # Heuristic: pass the dict or the first value?
-                    # apply_gate handles dict.
-                    param_val = p_dict
+                param_val = p_dict if p_dict else None
+                state = self.apply_gate(state, gate_name, wires, param_val)
 
-                return self.apply_gate(s, gate_name, wires, param_val)
-
-            # Loop over ops in this layer
-            for op in reversed(ops):
-                state = body_apply(state, op)
-
-            return state, None
+            return state
 
         # Prepare inputs for scan
         scan_inputs = (
             params_batch if extra_inputs is None else (params_batch, *extra_inputs)
         )
 
-        # Scan REVERSED over layers (Layer L, L-1... 1)
-        final_state, _ = jax.lax.scan(scan_body, state, scan_inputs, reverse=True)
+        # Simple reverse for JAX/NumPy (works for any rank tensor reverse on axis 0)
+        if isinstance(scan_inputs, (tuple, list)):
+            scan_inputs_rev = tuple([backend.reverse(x) for x in scan_inputs])
+        else:
+            scan_inputs_rev = backend.reverse(scan_inputs)
+
+        final_state = backend.scan(scan_body, scan_inputs_rev, state)
 
         return self.expectation(final_state)
 
 
 def pauli_propagation(
-    c: tc.Circuit,
+    c: Circuit,
     observable: Any,
     weights: Optional[Any] = None,
     k: int = 3,
@@ -499,7 +468,7 @@ def pauli_propagation(
     Computes the expectation value using Pauli Propagation.
 
     :param c: The Circuit object to simulate.
-    :type c: tc.Circuit
+    :type c: Circuit
     :param observable: The observable to measure. Can be a list of (coeff, Pauli_string)
                        or the Hamiltonian structures (M, N) array.
     :type observable: Union[List[Tuple[float, str]], Any]
@@ -515,14 +484,12 @@ def pauli_propagation(
 
     # Parse observables
     if weights is not None:
-        # User passed (c, structures, weights, ...)
         state = pp.get_initial_state(observable, weights)
     elif (
         isinstance(observable, list)
         and len(observable) > 0
         and isinstance(observable[0], tuple)
     ):
-        # User passed (c, list_of_tuples, ...)
         map_char = {"I": 0, "X": 1, "Y": 2, "Z": 3}
         num_terms = len(observable)
         structures = np.zeros((num_terms, N), dtype=int)
@@ -534,7 +501,6 @@ def pauli_propagation(
                     structures[i, j] = map_char[char]
         state = pp.get_initial_state(structures, weights_arr)
     elif isinstance(observable, tuple) and len(observable) == 2:
-        # User passed (c, (structures, weights), ...)
         state = pp.get_initial_state(observable[0], observable[1])
     else:
         raise ValueError(
@@ -543,15 +509,12 @@ def pauli_propagation(
         )
 
     # Circuit Loop
-    # We iterate reversed
     ops = c.to_qir()
     for op in reversed(ops):
         gate_name = op["name"]
         wires = op["index"]
         params_dict = op.get("parameters", {})
-        # Pass params_dict directly if present, else None
         param_val = params_dict if params_dict else None
-
         state = pp.apply_gate(state, gate_name, wires, param_val)
 
     return pp.expectation(state)

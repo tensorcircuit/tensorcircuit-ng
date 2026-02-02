@@ -12,7 +12,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union
 import numpy as np
 
 try:
-    from numpy import ComplexWarning
+    from numpy import ComplexWarning  # type: ignore
 except ImportError:  # np2.0 compatibility
     from numpy.exceptions import ComplexWarning  # type: ignore
 
@@ -518,6 +518,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
             # Typically, you can pass a JAX array directly to the `from_dlpack` function of
             # another framework without using `to_dlpack`.
             return a.__dlpack__()
+            # TODO(@refraction-ray) jax 0.9 has new break changes
 
     def set_random_state(
         self, seed: Optional[Union[int, PRNGKeyArray]] = None, get_only: bool = False

@@ -11,7 +11,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union
 import numpy as np
 
 try:
-    from numpy import ComplexWarning
+    from numpy import ComplexWarning  # type: ignore
 except ImportError:  # np2.0 compatibility
     from numpy.exceptions import ComplexWarning  # type: ignore
 
