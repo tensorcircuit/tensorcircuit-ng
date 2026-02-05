@@ -400,6 +400,32 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def sort(self, a: Tensor, axis: int = -1) -> Tensor:
         return torchlib.sort(a, dim=axis).values
 
+    def top_k(self, a: Tensor, k: int) -> Tuple[Tensor, Tensor]:
+        r = torchlib.topk(a, k)
+        return r.values, r.indices
+
+    def lexsort(self, keys: Any, axis: int = -1) -> Any:
+        # PyTorch stable sort for lexsort
+        if not keys:
+            return None
+        idx = torchlib.arange(keys[0].size(0), device=keys[0].device)
+        for k in reversed(keys):
+            idx = idx[torchlib.argsort(k[idx], stable=True)]
+        return idx
+
+    def repeat(self, a: Any, repeats: Any, axis: Optional[int] = None) -> Any:
+        return torchlib.repeat_interleave(a, repeats, dim=axis)
+
+    def popc(self, a: Any) -> Any:
+        if hasattr(torchlib, "bitwise_count"):  # PyTorch 1.10+
+            return torchlib.bitwise_count(a)
+        # Fallback
+        c = a.to(torchlib.int64)
+        c = c - ((c >> 1) & 0x5555555555555555)
+        c = (c & 0x3333333333333333) + ((c >> 2) & 0x3333333333333333)
+        weight_w = (((c + (c >> 4)) & 0x0F0F0F0F0F0F0F0F) * 0x0101010101010101) >> 56
+        return weight_w.to(torchlib.int32)
+
     def argsort(self, a: Tensor, axis: int = -1) -> Tensor:
         return torchlib.argsort(a, dim=axis)
 

@@ -667,6 +667,36 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `sort`.".format(self.name)
         )
 
+    def top_k(self: Any, a: Tensor, k: int) -> Tuple[Tensor, Tensor]:
+        """
+        Find values and indices of the k largest elements of the last dimension.
+
+        :param a: Input tensor
+        :type a: Tensor
+        :param k: Number of top elements to find
+        :type k: int
+        :return: (top_values, top_indices)
+        :rtype: Tuple[Tensor, Tensor]
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `top_k`.".format(self.name)
+        )
+
+    def lexsort(self: Any, keys: Any, axis: int = -1) -> Any:
+        """
+        Perform an indirect sort using a sequence of keys.
+
+        :param keys: Sequence of tensors of the same shape
+        :type keys: Sequence[Tensor]
+        :param axis: Axis to sort along, defaults to -1
+        :type axis: int, optional
+        :return: Indices that would sort the keys
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `lexsort`.".format(self.name)
+        )
+
     def all(self: Any, a: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
         """
         Test whether all array elements along a given axis evaluate to True.
@@ -1587,6 +1617,36 @@ class ExtendedBackend:
         """
         raise NotImplementedError(
             "Backend '{}' has not implemented `device_move`.".format(self.name)
+        )
+
+    def repeat(self: Any, a: Any, repeats: Any, axis: Optional[int] = None) -> Any:
+        """
+        Repeat elements of an array.
+
+        :param a: Input tensor
+        :type a: Tensor
+        :param repeats: The number of repetitions for each element.
+        :type repeats: Tensor or int
+        :param axis: The axis along which to repeat values.
+        :type axis: Optional[int]
+        :return: Output tensor which has the same shape as a, except along the given axis.
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `repeat`.".format(self.name)
+        )
+
+    def popc(self: Any, a: Any) -> Any:
+        """
+        Return the number of 1-bits in the binary representation of input ``a``.
+
+        :param a: Input tensor, integer type
+        :type a: Tensor
+        :return: Element-wise popcount of ``a``
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `popc`.".format(self.name)
         )
 
     def _dev2str(self: Any, dev: Any) -> str:

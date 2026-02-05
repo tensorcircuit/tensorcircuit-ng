@@ -42,7 +42,10 @@ def _convert_to_tensor_numpy(
         a = np.array(a)
     a = np.asarray(a)
     if dtype is not None:
-        a = a.astype(getattr(np, dtype))
+        if isinstance(dtype, str) and dtype == "bool":
+            a = a.astype(bool)
+        else:
+            a = a.astype(getattr(np, dtype))
     return a
 
 
@@ -167,7 +170,10 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         if not dtype:
             dtype = npdtype  # type: ignore
         if isinstance(dtype, str):
-            dtype = getattr(np, dtype)
+            if dtype == "bool":
+                dtype = bool
+            else:
+                dtype = getattr(np, dtype)
         return np.array(1j, dtype=dtype)
 
     def expand_dims(self, a: Tensor, axis: int) -> Tensor:
@@ -216,6 +222,30 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     def sort(self, a: Tensor, axis: int = -1) -> Tensor:
         return np.sort(a, axis=axis)
 
+    def top_k(self, a: Tensor, k: int) -> Tuple[Tensor, Tensor]:
+        # Use np.argpartition for O(n) top-k
+        a = np.asarray(a)
+        if a.ndim == 1:
+            idx = np.argpartition(a, -k)[-k:]
+            # partition doesn't guarantee order, so sort them
+            idx = idx[np.argsort(a[idx])[::-1]]
+            return a[idx], idx
+        else:
+            # Handle multi-dimensional if needed, but 1D is enough for us now
+            raise NotImplementedError("Numpy top_k only implemented for 1D")
+
+    def lexsort(self, keys: Any, axis: int = -1) -> Any:
+        return np.lexsort(keys, axis=axis)
+
+    def repeat(self, a: Any, repeats: Any, axis: Optional[int] = None) -> Any:
+        return np.repeat(a, repeats, axis=axis)
+
+    def popc(self, a: Any) -> Any:
+        if hasattr(np, "bitcount"):  # NumPy 1.25+
+            return np.bitcount(a)
+        # Fallback for older numpy
+        return np.vectorize(lambda x: bin(x).count("1"))(a)
+
     def sigmoid(self, a: Tensor) -> Tensor:
         return expit(a)
 
@@ -251,6 +281,8 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", ComplexWarning)
             if isinstance(dtype, str):
+                if dtype == "bool":
+                    return a.astype(bool)
                 return a.astype(getattr(np, dtype))
             return a.astype(dtype)
 

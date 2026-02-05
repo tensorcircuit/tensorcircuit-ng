@@ -387,6 +387,12 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def mod(self, x: Tensor, y: Tensor) -> Tensor:
         return jnp.mod(x, y)
 
+    def repeat(self, a: Any, repeats: Any, axis: Optional[int] = None) -> Any:
+        return jnp.repeat(a, repeats, axis=axis)
+
+    def popc(self, a: Any) -> Any:
+        return libjax.lax.population_count(a)
+
     def floor(self, a: Tensor) -> Tensor:
         return jnp.floor(a)
 
@@ -446,6 +452,13 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
 
     def sort(self, a: Tensor, axis: int = -1) -> Tensor:
         return jnp.sort(a, axis=axis)
+
+    def top_k(self, a: Tensor, k: int) -> Tuple[Tensor, Tensor]:
+        val, idx = libjax.lax.top_k(a, k)
+        return val, idx
+
+    def lexsort(self, keys: Any, axis: int = -1) -> Any:
+        return jnp.lexsort(keys, axis=axis)
 
     def unique_with_counts(  # type: ignore
         self, a: Tensor, *, size: Optional[int] = None, fill_value: Optional[int] = None
