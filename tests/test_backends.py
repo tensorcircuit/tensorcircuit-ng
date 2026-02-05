@@ -1461,3 +1461,34 @@ def test_scatter(backend):
     expected = np.zeros([2, 2], dtype=np.complex64)
     expected[0, 1] = 1.0 + 2.0j
     np.testing.assert_allclose(tc.backend.numpy(res), expected)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_methods_3(backend):
+    # repeat
+    a = tc.backend.convert_to_tensor([1, 2, 3])
+    res = tc.backend.repeat(a, 2)
+    np.testing.assert_allclose(tc.backend.numpy(res), [1, 1, 2, 2, 3, 3])
+
+    # popc
+    a = tc.backend.convert_to_tensor([1, 3, 7, 15], dtype="int32")
+    res = tc.backend.popc(a)
+    np.testing.assert_allclose(tc.backend.numpy(res), [1, 2, 3, 4])
+
+    # top_k
+    a = tc.backend.convert_to_tensor([1.0, 5.0, 2.0, 4.0, 3.0])
+    val, idx = tc.backend.top_k(a, 3)
+    np.testing.assert_allclose(tc.backend.numpy(val), [5.0, 4.0, 3.0])
+    np.testing.assert_allclose(tc.backend.numpy(idx), [1, 3, 4])
+
+    # lexsort
+    keys = (
+        tc.backend.convert_to_tensor([1, 2, 1, 2]),
+        tc.backend.convert_to_tensor([2, 2, 1, 1]),
+    )
+    res = tc.backend.lexsort(keys)
+    # lexsort sorts by the last key first, then the second to last...
+    # pairs (first key is last arg in np.lexsort): (2,1), (2,2), (1,1), (1,2)
+    # sorted order of pairs: (1,1), (1,2), (2,1), (2,2)
+    # indices: 2, 3, 0, 1
+    np.testing.assert_allclose(tc.backend.numpy(res), [2, 3, 0, 1])

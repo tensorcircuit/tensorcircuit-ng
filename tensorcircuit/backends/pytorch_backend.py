@@ -409,7 +409,7 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         if not keys:
             return None
         idx = torchlib.arange(keys[0].size(0), device=keys[0].device)
-        for k in reversed(keys):
+        for k in keys:
             idx = idx[torchlib.argsort(k[idx], stable=True)]
         return idx
 

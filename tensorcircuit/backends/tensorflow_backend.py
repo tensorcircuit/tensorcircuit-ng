@@ -594,7 +594,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         if not keys:
             return None
         idx = tf.range(tf.shape(keys[0])[0])
-        for k in reversed(keys):
+        for k in keys:
             idx = tf.gather(idx, tf.argsort(tf.gather(k, idx), stable=True))
         return idx
 
@@ -604,14 +604,17 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def popc(self, a: Any) -> Any:
         # TF bit manipulation popcount fallback
         c = tf.cast(a, tf.uint64)
-        c = c - ((c >> 1) & tf.cast(0x5555555555555555, tf.uint64))
-        c = (c & tf.cast(0x3333333333333333, tf.uint64)) + (
-            (c >> 2) & tf.cast(0x3333333333333333, tf.uint64)
+        m1 = tf.cast(0x5555555555555555, tf.uint64)
+        m2 = tf.cast(0x3333333333333333, tf.uint64)
+        m4 = tf.cast(0x0F0F0F0F0F0F0F0F, tf.uint64)
+        h01 = tf.cast(0x0101010101010101, tf.uint64)
+
+        c = c - tf.bitwise.bitwise_and(tf.bitwise.right_shift(c, 1), m1)
+        c = tf.bitwise.bitwise_and(c, m2) + tf.bitwise.bitwise_and(
+            tf.bitwise.right_shift(c, 2), m2
         )
-        weight_w = (
-            ((c + (c >> 4)) & tf.cast(0x0F0F0F0F0F0F0F0F, tf.uint64))
-            * tf.cast(0x0101010101010101, tf.uint64)
-        ) >> 56
+        c = tf.bitwise.bitwise_and(c + tf.bitwise.right_shift(c, 4), m4)
+        weight_w = tf.bitwise.right_shift(c * h01, 56)
         return tf.cast(weight_w, tf.int32)
 
     def shape_tuple(self, a: Tensor) -> Tuple[int, ...]:
