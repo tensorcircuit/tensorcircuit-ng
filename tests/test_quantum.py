@@ -1109,6 +1109,52 @@ def test_sample_bin2int(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_PauliStringSum2MVP(backend):
+    # Test 1: Compare with PauliStringSum2Dense for random Hamiltonian
+    n = 4
+    structures = [
+        [1, 0, 0, 0],  # X0
+        [0, 0, 3, 0],  # Z2
+        [3, 3, 0, 0],  # Z0 Z1
+        [1, 2, 0, 0],  # X0 Y1
+        [0, 2, 2, 3],  # Y1 Y2 Z3
+    ]
+    weights = [0.5, -0.3, 1.2, 0.7, -0.9]
+
+    mvp = qu.PauliStringSum2MVP(structures, weights)
+    H_dense = qu.PauliStringSum2Dense(structures, weights)
+
+    psi = np.random.randn(2**n) + 1j * np.random.randn(2**n)
+    psi = tc.backend.convert_to_tensor(psi)
+
+    result_mvp = mvp(psi)
+    result_dense = tc.backend.tensordot(H_dense, psi, axes=1)
+
+    np.testing.assert_allclose(result_mvp, result_dense, atol=1e-5)
+
+    # Test 2: Non-flat input (shape [2]*n)
+    psi_nd = tc.backend.reshape(psi, (2,) * n)
+    result_mvp_nd = mvp(psi_nd)
+    np.testing.assert_allclose(
+        tc.backend.reshape(result_mvp_nd, (-1,)), result_dense, atol=1e-5
+    )
+
+    # Test 3: Empty structures
+    mvp_empty = qu.PauliStringSum2MVP([], [])
+    result_empty = mvp_empty(psi)
+    np.testing.assert_allclose(result_empty, tc.backend.zeros_like(psi), atol=1e-5)
+
+    # Test 4: Identity-only term
+    structures_id = [[0, 0, 0]]
+    weights_id = [2.0]
+    mvp_id = qu.PauliStringSum2MVP(structures_id, weights_id)
+    psi3 = np.array([1.0, 0, 0, 0, 0, 0, 0, 1.0]) + 0j
+    psi3 = tc.backend.convert_to_tensor(psi3)
+    result_id = mvp_id(psi3)
+    np.testing.assert_allclose(result_id, 2.0 * psi3, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_count_vector2dict(backend):
     for n, dim in [(3, 2), (3, 3), (4, 5), (3, 10), (3, 16), (2, 36)]:
         size = dim**n

@@ -1910,6 +1910,136 @@ def heisenberg_hamiltonian(
 # @TODO(@refraction-ray): Matrix-Free MVM (Matrix-Vector Multiplication)
 
 
+def PauliStringSum2MVP(
+    structures: Sequence[Sequence[int]],
+    weights: Sequence[float],
+) -> Callable[[Tensor], Tensor]:
+    """
+    Generate a matrix-vector product function for a given Pauli string sum.
+    The returned function `mvp(psi)` computes sum(w_i * P_i * psi).
+    This implementation efficiently handles the operation by using backend-agnostic
+    slicing (for X/Y flips) and broadcasting (for Z/Y phases), avoiding explicit
+    matrix construction.
+
+    :param structures: List of Pauli strings, e.g. [[1, 0, 3], [0, 2, 0]] for X0 Z2 and Y1.
+        (0: I, 1: X, 2: Y, 3: Z)
+    :type structures: Sequence[Sequence[int]]
+    :param weights: List of weights for each Pauli string.
+    :type weights: Sequence[float]
+    :return: MVP function taking wavefunction (shape [2**n] or [2]*n) and returning the same shape.
+    :rtype: Callable[[Tensor], Tensor]
+    """
+    # Infer n from the first structure
+    if not structures:
+
+        def mvp_identity(psi: Tensor) -> Tensor:
+            return backend.zeros_like(psi)
+
+        return mvp_identity
+
+    n = len(structures[0])
+
+    # Cache TensorFlow module if needed for axis flipping workaround
+    tf_module = None
+    if backend.name == "tensorflow":
+        import tensorflow as tf
+
+        tf_module = tf
+
+    # Pre-process terms into separate lists for type safety
+    term_flip_slices: List[Optional[Tuple[slice, ...]]] = []
+    term_flip_axes: List[Tuple[int, ...]] = []
+    term_mask_indices: List[Tuple[int, ...]] = []
+    term_weights: List[complex] = []
+
+    for s, w in zip(structures, weights):
+        s_arr = np.array(s)
+        x_indices = np.where(s_arr == 1)[0].tolist()
+        y_indices = np.where(s_arr == 2)[0].tolist()
+        z_indices = np.where(s_arr == 3)[0].tolist()
+
+        # Z mask comes from Z terms AND Y terms (Y = i * X * Z)
+        mask_indices = tuple(sorted(z_indices + y_indices))
+        # Flip axes come from X terms AND Y terms
+        # Sorted order required for TF reshape workaround
+        flip_axes = tuple(sorted(x_indices + y_indices))
+        # Global phase: each Y contributes 1j
+        phase_c = w * (1j) ** len(y_indices)
+
+        # Pre-compute slice object for flipping
+        if flip_axes:
+            sl: List[slice] = [slice(None)] * n
+            for k in flip_axes:
+                sl[k] = slice(None, None, -1)
+            flip_slice: Optional[Tuple[slice, ...]] = tuple(sl)
+        else:
+            flip_slice = None
+
+        term_flip_slices.append(flip_slice)
+        term_flip_axes.append(flip_axes)
+        term_mask_indices.append(mask_indices)
+        term_weights.append(phase_c)
+
+    z_base_np = np.array([1.0, -1.0])
+    z_base_cache: Dict[Any, Tensor] = {}
+
+    def mvp(psi: Tensor) -> Tensor:
+        psi_shape = backend.shape_tuple(psi)
+        is_flat = len(psi_shape) == 1
+
+        if is_flat:
+            psi_tensor = backend.reshape(psi, (2,) * n)
+        else:
+            psi_tensor = psi
+
+        dtype = backend.dtype(psi_tensor)
+
+        if dtype not in z_base_cache:
+            z_base = backend.convert_to_tensor(z_base_np)
+            z_base = backend.cast(z_base, dtype)
+            z_base_cache[dtype] = z_base
+        else:
+            z_base = z_base_cache[dtype]
+
+        total_res = backend.zeros_like(psi_tensor)
+
+        for i in range(len(term_weights)):
+            term_psi = psi_tensor
+
+            # 1. Apply Z masks via broadcasting
+            for k in term_mask_indices[i]:
+                shape = [1] * n
+                shape[k] = 2
+                z_k = backend.reshape(z_base, shape)
+                term_psi = term_psi * z_k
+
+            # 2. Apply flips via slicing
+            flip_slice = term_flip_slices[i]
+            if flip_slice is not None:
+                if tf_module is not None:
+                    # TF workaround: reshape to rank 3, flip, reshape back
+                    curr_psi = term_psi
+                    for axis in term_flip_axes[i]:
+                        pre_shape = 2**axis
+                        post_shape = 2 ** (n - 1 - axis)
+                        curr_psi = tf_module.reshape(
+                            curr_psi, (pre_shape, 2, post_shape)
+                        )
+                        curr_psi = tf_module.reverse(curr_psi, axis=[1])
+                    term_psi = tf_module.reshape(curr_psi, (2,) * n)
+                else:
+                    term_psi = term_psi[flip_slice]
+
+            # 3. Apply weight
+            total_res = total_res + (term_psi * term_weights[i])
+
+        if is_flat:
+            return backend.reshape(total_res, (-1,))
+        return total_res
+
+    return mvp
+
+
 def PauliStringSum2Dense(
     ls: Sequence[Sequence[int]],
     weight: Optional[Sequence[float]] = None,
