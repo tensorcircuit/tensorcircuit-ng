@@ -93,6 +93,11 @@ This document records specific technical protocols, lessons learned, and advance
     *   **Pitfall**: `jax.lax.dynamic_update_slice` requires static slice shapes and can behave unexpectedly if logic implies dynamic sizes.
     *   **Protocol**: Use **masked updates** (`K.where`). Create a mask for valid insertion indices and map source indices to destination indices using modular arithmetic or standard indexing, masked by the valid region. This maintains static graph shapes.
 
+3.  **Lexsort Priority Consistency**:
+    *   **Protocol**: In TensorCircuit, `lexsort(keys)` consistently treats the **last** key in the sequence as the **primary** sort key, following the NumPy convention.
+    *   **Pitfall**: Different backend libraries might have different default priorities (e.g. TensorFlow's `argsort` doesn't natively support lexsort, and custom implementations must be careful). Always verify and test against NumPy's behavior.
+
+
 ## Pauli Propagation & Operator Evolution (Heisenberg Picture)
 
 1.  **Heisenberg Picture Reverse Order**:

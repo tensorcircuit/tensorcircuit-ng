@@ -30,6 +30,12 @@ class PauliPropagationEngine:
     A Pauli Propagation Engine that tracks observables in the global k-local space.
 
     The state is represented as a flat vector of size $|P_k| = \sum_{i=0}^k \binom{N}{i} 3^i$.
+
+    .. note::
+        The engine internally uses single precision (``complex64``) for state coefficients.
+        Since Pauli propagation is an approximate algorithm, the systematic errors
+        introduced by truncation are typically much larger than the numerical errors
+        from single-precision floating point.
     """
 
     def __init__(self, N: int, k: int) -> None:
@@ -183,7 +189,23 @@ class PauliPropagationEngine:
 
     def get_initial_state(self, structures: Any, weights: Any) -> Any:
         """
-        Initialize the state vector from Hamiltonian terms.
+        Initialize the state vector in the k-local Hilbert space from Hamiltonian terms.
+
+        :param structures: Hamiltonian structure array of shape [n_terms, n_qubits].
+            Each entry is 0:I, 1:X, 2:Y, 3:Z.
+        :type structures: Any
+        :param weights: Coefficients for each Hamiltonian term.
+        :type weights: Any
+        :return: Initial state vector of size dim+1 (including sink).
+        :rtype: Any
+
+        .. code-block:: python
+
+            # Initialize Z0 + Z1 for a 2-qubit system
+            engine = PauliPropagationEngine(N=2, k=2)
+            structures = [[3, 0], [0, 3]]
+            weights = [1.0, 1.0]
+            state = engine.get_initial_state(structures, weights)
         """
         structures = np.array(structures)
         indices = []
@@ -214,7 +236,13 @@ class PauliPropagationEngine:
 
     def expectation(self, state: Any) -> Any:
         """
-        Sum coefficients of purely Z observables in the final state on |0...0>.
+        Compute the expectation value $\langle 0| O(t) |0 \rangle$.
+        Sum coefficients of purely Z observables in the final state.
+
+        :param state: Propagated observable state vector.
+        :type state: Any
+        :return: Real-valued expectation value.
+        :rtype: Any
         """
         z_coeffs = backend.gather1d(state, self.z_indices)
         return backend.real(backend.sum(z_coeffs))
@@ -222,6 +250,21 @@ class PauliPropagationEngine:
     def apply_gate(
         self, state: Any, gate_name: str, wires: Any, params: Any = None
     ) -> Any:
+        """
+        Propagate the observable through a quantum gate in the Heisenberg picture.
+        Applies $O \to U^\dagger O U$.
+
+        :param state: Current observable state vector.
+        :type state: Any
+        :param gate_name: Name of the gate (e.g., 'rx', 'cnot').
+        :type gate_name: str
+        :param wires: List of qubit indices the gate acts on.
+        :type wires: Any
+        :param params: Optional gate parameters.
+        :type params: Any
+        :return: Updated observable state vector.
+        :rtype: Any
+        """
         gate_name = gate_name.lower()
         gate_func = getattr(gates, gate_name)
 
@@ -335,6 +378,22 @@ class PauliPropagationEngine:
         params_batch: Any,
         extra_inputs: Optional[Sequence[Any]] = None,
     ) -> Any:
+        """
+        Compute expectation value with JAX scan optimization for layers.
+
+        :param ham_structures: Hamiltonian structure array.
+        :type ham_structures: Any
+        :param ham_weights: Hamiltonian weights.
+        :type ham_weights: Any
+        :param layer_fn: A function `f(circuit, params, *extra_inputs)` that defines a circuit layer.
+        :type layer_fn: Callable
+        :param params_batch: Batched parameters for the layers.
+        :type params_batch: Any
+        :param extra_inputs: Optional static inputs for the layer function.
+        :type extra_inputs: Optional[Sequence[Any]]
+        :return: Final expectation value.
+        :rtype: Any
+        """
         state = self.get_initial_state(ham_structures, ham_weights)
 
         def scan_body(state: Any, scan_inputs: Any) -> Any:
@@ -395,6 +454,35 @@ def pauli_propagation(
     weights: Optional[Any] = None,
     k: int = 3,
 ) -> Any:
+    """
+    High-level API for Heisenberg-picture Pauli propagation.
+
+    :param c: The quantum circuit to propagate through.
+    :type c: Circuit
+    :param observable: The initial observable. Can be:
+        1. A list of (coeff, pauli_string) pairs, e.g., ``[(1.0, "ZZ"), (-0.5, "XI")]``.
+        2. A structure array if ``weights`` is also provided.
+    :type observable: Any
+    :param weights: Optional weights if ``observable`` is a structure array.
+    :type weights: Optional[Any]
+    :param k: Maximum locality to track. Defaults to 3.
+    :type k: int
+    :return: Real-valued expectation value $\langle 0 | U^\dagger O U | 0 \rangle$.
+    :rtype: Any
+
+    .. code-block:: python
+
+        import tensorcircuit as tc
+        from tensorcircuit.pauliprop import pauli_propagation
+
+        c = tc.Circuit(2)
+        c.h(0)
+        c.cnot(0, 1)
+
+        # Compute expectation of Z0 + Z1
+        obs = [(1.0, "ZI"), (1.0, "IZ")]
+        energy = pauli_propagation(c, obs, k=2)
+    """
     N = c._nqubits
     pp = PauliPropagationEngine(N, k)
 
@@ -436,6 +524,20 @@ class SparsePauliPropagationEngine:
     A Truly Sparse Pauli Propagation Engine that tracks Pauli strings
     using bitpacked integers. No combinatorial basis is precomputed,
     making it suitable for hundreds of qubits.
+
+    .. note::
+        The engine internally uses single precision (``complex64``) for coefficients,
+        but utilizes ``int64`` bit-packing for encoding Pauli strings.
+        It is highly recommended to call ``tc.set_dtype("complex128")`` when
+        using this engine. While the coefficients remain single-precision, this setting
+        ensures the backend (especially JAX) enables native 64-bit support, which is
+        essential for the ``int64`` encoding and bitwise operations used in the
+        large-scale simulation.
+
+    .. note::
+        The numerical precision error of ``complex64`` is significantly smaller than the
+        systematic approximation error from buffer truncation, making double-precision
+        coefficients practically unnecessary for this engine.
     """
 
     def __init__(self, N: int, k: int, buffer_size: int = 2000) -> None:
@@ -456,7 +558,27 @@ class SparsePauliPropagationEngine:
             )
         )
 
-    def prepare_initial_state(self, structures: Any, weights: Any) -> Any:
+    def get_initial_state(self, structures: Any, weights: Any) -> Any:
+        """
+        Initialize the sparse state (codes, coefficients).
+
+        :param structures: Hamiltonian structures [n_terms, n_qubits].
+        :type structures: Any
+        :param weights: Hamiltonian coefficients.
+        :type weights: Any
+        :return: A tuple of (codes, weights) representing the sparse state.
+        :rtype: Any
+
+        .. code-block:: python
+
+            # Initialize Z0 + Z1 for a 100-qubit system
+            engine = SparsePauliPropagationEngine(N=100, k=2, buffer_size=1000)
+            structures = np.zeros((2, 100), dtype=int)
+            structures[0, 0] = 3 # Z
+            structures[1, 1] = 3 # Z
+            weights = [1.0, 1.0]
+            state = engine.get_initial_state(structures, weights)
+        """
         K = backend
         structures = K.convert_to_tensor(structures, dtype="int32")
         weights = K.convert_to_tensor(weights, dtype="complex64")
@@ -483,10 +605,16 @@ class SparsePauliPropagationEngine:
 
         return (codes, weights)
 
-    def get_initial_state(self, structures: Any, weights: Any) -> Any:
-        return self.prepare_initial_state(structures, weights)
-
     def expectation(self, state: Any) -> Any:
+        """
+        Compute the expectation value $\langle 0| O(t) |0 \rangle$.
+        Sum coefficients of purely Z observables in the final state.
+
+        :param state: Propagated sparse observable state (codes, weights).
+        :type state: Any
+        :return: Real-valued expectation value.
+        :rtype: Any
+        """
         codes, coeffs = state
         K = backend
         is_z = K.ones(K.shape_tuple(codes)[0], dtype="bool")
@@ -550,6 +678,21 @@ class SparsePauliPropagationEngine:
     def apply_gate(
         self, state: Any, gate_name: str, wires: Any, params: Any = None
     ) -> Any:
+        """
+        Propagate the observable through a quantum gate in the Heisenberg picture.
+        Applies $O \to U^\dagger O U$.
+
+        :param state: Current sparse observable state (codes, weights).
+        :type state: Any
+        :param gate_name: Name of the gate.
+        :type gate_name: str
+        :param wires: List of qubit indices the gate acts on.
+        :type wires: Any
+        :param params: Optional gate parameters.
+        :type params: Any
+        :return: Updated sparse observable state (codes, weights).
+        :rtype: Any
+        """
         indices, coeffs = state
         K = backend
         ptm = self._get_ptm(gate_name, wires, params)
@@ -683,6 +826,20 @@ class SparsePauliPropagationEngine:
         layer: Callable[[Any, Any], None],
         params: Any,
     ) -> Any:
+        """
+        Compute expectation value with JAX scan optimization for layers.
+
+        :param structures: Initial Hamiltonian structures.
+        :type structures: Any
+        :param weights: Initial Hamiltonian weights.
+        :type weights: Any
+        :param layer: A function `f(circuit, params)` that defines a circuit layer.
+        :type layer: Callable
+        :param params: Batched parameters for the layers.
+        :type params: Any
+        :return: Final expectation value.
+        :rtype: Any
+        """
         K = backend
         state = self.get_initial_state(structures, weights)
 
