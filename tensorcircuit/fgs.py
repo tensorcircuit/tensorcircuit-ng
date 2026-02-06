@@ -2,7 +2,7 @@
 Fermion Gaussian state simulator
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -273,26 +273,27 @@ class FGSSimulator:
         """
         Calculates the reduced correlation matrix by tracing out specified subsystems.
 
+        This optimized implementation first slices the alpha matrix, then computes
+        the correlation matrix, reducing complexity from O(L³) to O(L·L_A²) where
+        L_A is the size of the kept subsystem.
+
         :param subsystems_to_trace_out: A list of site indices to be traced out.
         :type subsystems_to_trace_out: List[int]
         :return: The reduced correlation matrix.
         :rtype: Tensor
         """
-        m = self.get_cmatrix()
         if subsystems_to_trace_out is None:
             subsystems_to_trace_out = []
         keep = [i for i in range(self.L) if i not in subsystems_to_trace_out]
         keep += [i + self.L for i in range(self.L) if i not in subsystems_to_trace_out]
-        if len(keep) == 0:  # protect from empty keep
+        if len(keep) == 0:
             raise ValueError("the full system is traced out, no subsystems to keep")
         keep = backend.convert_to_tensor(keep)
 
-        def slice_(a: Tensor) -> Tensor:
-            return backend.gather1d(a, keep)
-
-        slice_ = backend.vmap(slice_)
-        m = backend.gather1d(slice_(m), keep)
-        return m
+        # Optimized: slice alpha first, then compute correlation matrix
+        # This reduces complexity from O(L³) to O(L·L_A²)
+        alpha_sub = backend.gather1d(self.alpha, keep)  # shape: (2*L_A, L)
+        return alpha_sub @ backend.adjoint(alpha_sub)
 
     def renyi_entropy(self, n: int, subsystems_to_trace_out: List[int]) -> Tensor:
         """
@@ -532,11 +533,14 @@ class FGSSimulator:
         m += backend.adjoint(m)
         return m
 
-    def evol_hp(self, i: int, j: int, chi: Tensor = 0) -> None:
+    def evol_hp(self, i: int, j: int, chi: Union[Tensor, float] = 0) -> None:
         r"""
         Evolves the state with a hopping Hamiltonian.
 
         The evolution is governed by the Hamiltonian :math:`\chi c_i^\dagger c_j + h.c.`.
+
+        This optimized implementation uses analytical 2x2 local unitaries
+        reducing complexity from O(L³) to O(L).
 
         :param i: The index of the first site.
         :type i: int
@@ -545,7 +549,43 @@ class FGSSimulator:
         :param chi: The hopping strength. Defaults to 0.
         :type chi: Tensor, optional
         """
-        self.evol_hamiltonian(self.hopping(chi, i, j, self.L))
+        chi = backend.convert_to_tensor(chi)
+        chi = backend.cast(chi, dtypestr)
+        chi_abs = backend.abs(chi)
+        eps = backend.convert_to_tensor(1e-30)
+        eps = backend.cast(eps, rdtypestr)
+        chi_abs_safe = chi_abs + eps
+
+        cos_term = backend.cos(chi_abs / 2)
+        sin_term = backend.sin(chi_abs / 2)
+        # Cast to complex for TensorFlow compatibility
+        cos_term = backend.cast(cos_term, dtypestr)
+        sin_term = backend.cast(sin_term, dtypestr)
+        phase = chi / backend.cast(chi_abs_safe, dtypestr)
+
+        # Extract rows i, j, j+L, i+L from alpha
+        row_i = self.alpha[i, :]
+        row_j = self.alpha[j, :]
+        row_jL = self.alpha[j + self.L, :]
+        row_iL = self.alpha[i + self.L, :]
+
+        # For (i,j) block: U = [[cos, -i*phase*sin], [-i*conj(phase)*sin, cos]]
+        new_row_i = cos_term * row_i + (-1.0j * phase * sin_term) * row_j
+        new_row_j = (-1.0j * backend.conj(phase) * sin_term) * row_i + cos_term * row_j
+
+        # For (j+L, i+L) block: U = [[cos, i*phase*sin], [i*conj(phase)*sin, cos]]
+        # (opposite sign due to -chi/2 in the Hamiltonian for particle-hole)
+        new_row_jL = cos_term * row_jL + (1.0j * phase * sin_term) * row_iL
+        new_row_iL = (
+            1.0j * backend.conj(phase) * sin_term
+        ) * row_jL + cos_term * row_iL
+
+        # Use scatter to update rows directly
+        indices = backend.convert_to_tensor([[i], [j], [i + self.L], [j + self.L]])
+        updates = backend.stack([new_row_i, new_row_j, new_row_iL, new_row_jL])
+        self.alpha = backend.scatter(self.alpha, indices, updates)
+        self.cmatrix = None
+        self.otcmatrix = {}
 
     @staticmethod
     def chemical_potential(chi: Tensor, i: int, L: int) -> Tensor:
@@ -594,11 +634,14 @@ class FGSSimulator:
         m += backend.adjoint(m)
         return m
 
-    def evol_sp(self, i: int, j: int, chi: Tensor = 0) -> None:
+    def evol_sp(self, i: int, j: int, chi: Union[Tensor, float] = 0) -> None:
         r"""
         Evolves the state with a superconducting pairing Hamiltonian.
 
         The evolution is governed by the Hamiltonian :math:`\chi c_i^\dagger c_j^\dagger + h.c.`.
+
+        This optimized implementation uses analytical 4x4 local unitaries
+        reducing complexity from O(L³) to O(L).
 
         :param i: The index of the first site.
         :type i: int
@@ -607,33 +650,122 @@ class FGSSimulator:
         :param chi: The pairing strength. Defaults to 0.
         :type chi: Tensor, optional
         """
-        self.evol_hamiltonian(self.sc_pairing(chi, i, j, self.L))
+        chi = backend.convert_to_tensor(chi)
+        chi = backend.cast(chi, dtypestr)
+        chi_abs = backend.abs(chi)
+        eps = backend.convert_to_tensor(1e-30)
+        eps = backend.cast(eps, rdtypestr)
+        chi_abs_safe = chi_abs + eps
 
-    def evol_cp(self, i: int, chi: Tensor = 0) -> None:
+        cos_term = backend.cos(chi_abs / 2)
+        sin_term = backend.sin(chi_abs / 2)
+        # Cast to complex for TensorFlow compatibility
+        cos_term = backend.cast(cos_term, dtypestr)
+        sin_term = backend.cast(sin_term, dtypestr)
+        phase = chi / backend.cast(chi_abs_safe, dtypestr)
+
+        # Extract rows i, j, i+L, j+L from alpha
+        row_i = self.alpha[i, :]
+        row_j = self.alpha[j, :]
+        row_iL = self.alpha[i + self.L, :]
+        row_jL = self.alpha[j + self.L, :]
+
+        # The pairing Hamiltonian couples (i, j+L) and (j, i+L)
+        # H = chi/2 * (|i><j+L| - |j><i+L|) + h.c.
+        # U = exp(-i H) in the 4x4 basis [i, j, i+L, j+L]
+        # U[i,i] = cos, U[i,j+L] = -i*phase*sin
+        # U[j,j] = cos, U[j,i+L] = i*phase*sin
+        # U[i+L,i+L] = cos, U[i+L,j] = i*conj(phase)*sin
+        # U[j+L,j+L] = cos, U[j+L,i] = -i*conj(phase)*sin
+
+        new_row_i = cos_term * row_i + (-1.0j * phase * sin_term) * row_jL
+        new_row_j = cos_term * row_j + (1.0j * phase * sin_term) * row_iL
+        new_row_iL = (1.0j * backend.conj(phase) * sin_term) * row_j + cos_term * row_iL
+        new_row_jL = (
+            -1.0j * backend.conj(phase) * sin_term
+        ) * row_i + cos_term * row_jL
+
+        # Use scatter to update rows directly
+        indices = backend.convert_to_tensor([[i], [j], [i + self.L], [j + self.L]])
+        updates = backend.stack([new_row_i, new_row_j, new_row_iL, new_row_jL])
+        self.alpha = backend.scatter(self.alpha, indices, updates)
+        self.cmatrix = None
+        self.otcmatrix = {}
+
+    def evol_cp(self, i: int, chi: Union[Tensor, float] = 0) -> None:
         r"""
         Evolves the state with a chemical potential Hamiltonian.
 
         The evolution is governed by the Hamiltonian :math:`\chi c_i^\dagger c_i`.
 
+        This optimized implementation uses analytical phase factors
+        reducing complexity from O(L³) to O(L).
+
         :param i: The index of the site.
         :type i: int
         :param chi: The chemical potential strength. Defaults to 0.
         :type chi: Tensor, optional
         """
-        self.evol_hamiltonian(self.chemical_potential(chi, i, self.L))
+        chi = backend.convert_to_tensor(chi)
+        chi = backend.cast(chi, dtypestr)
 
-    def evol_icp(self, i: int, chi: Tensor = 0) -> None:
+        # For chemical potential: H = chi/2 * (|i><i| - |i+L><i+L|)
+        # U = exp(-i H) gives phase factors:
+        # row i: e^{-i*chi/2}
+        # row i+L: e^{i*chi/2}
+        phase_i = backend.exp(-0.5j * chi)
+        phase_iL = backend.exp(0.5j * chi)
+
+        row_i = self.alpha[i, :]
+        row_iL = self.alpha[i + self.L, :]
+
+        new_row_i = phase_i * row_i
+        new_row_iL = phase_iL * row_iL
+
+        # Use scatter to update rows directly
+        indices = backend.convert_to_tensor([[i], [i + self.L]])
+        updates = backend.stack([new_row_i, new_row_iL])
+        self.alpha = backend.scatter(self.alpha, indices, updates)
+        self.cmatrix = None
+        self.otcmatrix = {}
+
+    def evol_icp(self, i: int, chi: Union[Tensor, float] = 0) -> None:
         r"""
         Evolves the state with a chemical potential Hamiltonian using imaginary time evolution.
 
         The evolution is governed by :math:`e^{-H/2}` where :math:`H = \chi c_i^\dagger c_i`.
 
+        This optimized implementation uses analytical scaling factors
+        reducing complexity from O(L³) to O(L).
+
         :param i: The index of the site.
         :type i: int
         :param chi: The chemical potential strength. Defaults to 0.
         :type chi: Tensor, optional
         """
-        self.evol_ihamiltonian(self.chemical_potential(chi, i, self.L))
+        chi = backend.convert_to_tensor(chi)
+        chi = backend.cast(chi, dtypestr)
+
+        # For imaginary time evolution: U = exp(H) where H = chi/2 * (|i><i| - |i+L><i+L|)
+        # This gives scaling factors:
+        # row i: e^{chi/2}
+        # row i+L: e^{-chi/2}
+        scale_i = backend.exp(chi / 2)
+        scale_iL = backend.exp(-chi / 2)
+
+        row_i = self.alpha[i, :]
+        row_iL = self.alpha[i + self.L, :]
+
+        new_row_i = scale_i * row_i
+        new_row_iL = scale_iL * row_iL
+
+        # Use scatter to update rows directly
+        indices = backend.convert_to_tensor([[i], [i + self.L]])
+        updates = backend.stack([new_row_i, new_row_iL])
+        self.alpha = backend.scatter(self.alpha, indices, updates)
+        self.orthogonal()
+        self.cmatrix = None
+        self.otcmatrix = {}
 
     def get_bogoliubov_uv(self) -> Tuple[Tensor, Tensor]:
         r"""
@@ -732,6 +864,9 @@ class FGSSimulator:
         """
         Post-selects the state based on the occupation of a specific site.
 
+        This optimized implementation uses vectorized broadcasting operations
+        instead of Python loops, improving JIT compilation performance.
+
         :param i: The index of the site to post-select on.
         :type i: int
         :param keep: The desired occupation number (0 or 1). Defaults to 1.
@@ -758,37 +893,33 @@ class FGSSimulator:
         mask12d = backend.tile(mask1[None, :], [alpha.shape[0], 1])
         mask02d = backend.tile(mask0[None, :], [alpha.shape[0], 1])
         alpha1 = mask02d * alpha1 + mask12d * alpha
-        r = []
-        for j in range(2 * self.L):
-            indicator = (
-                backend.sign(backend.cast((i - j), rdtypestr) ** 2 - 0.5) + 1
-            ) / 2
-            # i=j indicator = 0, i!=j indicator = 1
-            indicator = backend.cast(indicator, dtypestr)
-            r.append(
-                backend.ones([self.L]) * indicator
-                + backend.ones([self.L]) * mask1 * (1 - indicator)
-            )
-            # if j != i:
-            #     r.append(backend.ones([L]))
-            # else:
-            #     r.append(backend.ones([L]) * mask1)
-        mask2 = backend.stack(r)
+
+        # Vectorized construction of mask2
+        # indicator[j] = 1 if j != i, 0 if j == i
+        # Using broadcasting instead of loop
+        indices = backend.cast(backend.arange(0, 2 * self.L), "int32")
+        diff = backend.cast(i - indices, rdtypestr)
+        indicator = (backend.sign(diff**2 - 0.5) + 1) / 2
+        indicator = backend.cast(indicator, dtypestr)
+        # mask2[j, :] = ones if j != i, else mask1
+        # = ones * indicator[j] + mask1 * (1 - indicator[j])
+        ones_row = backend.ones([self.L])
+        ones_row = backend.cast(ones_row, dtypestr)
+        # Shape: (2L, L)
+        mask2 = (
+            indicator[:, None] * ones_row[None, :]
+            + (1 - indicator)[:, None] * mask1[None, :]
+        )
         alpha1 = alpha1 * mask2
-        r = []
-        for j in range(2 * self.L):
-            indicator = (
-                backend.sign(
-                    (backend.cast((i + L) % (2 * L) - j, rdtypestr)) ** 2 - 0.5
-                )
-                + 1
-            ) / 2
-            r.append(1 - indicator)
-        newcol = backend.stack(r)
-        # newcol = np.zeros([2 * self.L])
-        # newcol[(i + L) % (2 * L)] = 1
-        # newcol = backend.convert_to_tensor(newcol)
+
+        # Vectorized construction of newcol
+        # newcol[j] = 1 if j == (i + L) % (2L), else 0
+        i_plus_L = (i + L) % (2 * L)
+        diff2 = backend.cast(i_plus_L - indices, rdtypestr)
+        indicator2 = (backend.sign(diff2**2 - 0.5) + 1) / 2
+        newcol = 1 - indicator2
         newcol = backend.cast(newcol, dtypestr)
+
         alpha1 = alpha1 * mask02d + backend.tile(newcol[:, None], [1, self.L]) * mask12d
         q, _ = backend.qr(alpha1)
         self.alpha = q

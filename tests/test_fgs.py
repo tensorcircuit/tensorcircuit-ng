@@ -179,6 +179,39 @@ def test_post_select_cmatrix_refresh(backend, highp):
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+def test_post_select_jit(backend, highp):
+    """Test that post_select works correctly within JIT compilation."""
+
+    @tc.backend.jit
+    def jitted_post_select(keep):
+        c = F(3, filled=[0, 2])
+        c.evol_hp(0, 1, 0.2)
+        c.evol_cp(0, 0.5)
+        c.post_select(0, 1)
+        c.evol_hp(1, 2, 0.3j)
+        c.evol_cp(1, -0.8)
+        c.evol_sp(0, 2, 0.3)
+        c.post_select(1, keep)
+        return c.get_cmatrix()
+
+    def baseline_post_select(keep):
+        c = FT(3, filled=[0, 2])
+        c.evol_hp(0, 1, 0.2)
+        c.evol_cp(0, 0.5)
+        c.post_select(0, 1)
+        c.evol_hp(1, 2, 0.3j)
+        c.evol_cp(1, -0.8)
+        c.evol_sp(0, 2, 0.3)
+        c.post_select(1, keep)
+        return c.get_cmatrix()
+
+    for keep in [0, 1]:
+        m = jitted_post_select(tc.backend.convert_to_tensor(keep))
+        m1 = baseline_post_select(keep)
+        np.testing.assert_allclose(m, m1, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
 def test_jittable_measure(backend):
     @tc.backend.jit
     def get_cmatrix(status):
