@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.5.0
+
 ### Added
 
 - Add `from_cirq` method for `Circuit` and `DMCircuit` to support translation from Cirq.
