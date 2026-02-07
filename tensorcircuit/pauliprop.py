@@ -156,6 +156,18 @@ class PauliPropagationEngine:
         self.z_indices_np = np.array(z_indices, dtype=np.int32)
         self.z_indices = backend.convert_to_tensor(self.z_indices_np, dtype="int32")
 
+    def string_to_code(self, s: Tuple[Tuple[int, ...], Tuple[int, ...]]) -> int:
+        """
+        Convert a Pauli string representation ((qidx, ...), (opcode, ...))
+        to its index in the basis.
+
+        :param s: Pauli string as ((qidx, ...), (opcode, ...)).
+        :type s: Tuple[Tuple[int, ...], Tuple[int, ...]]
+        :return: Index in the basis.
+        :rtype: int
+        """
+        return self.string_to_idx.get(s, self.dim)
+
     def get_ptm_1q(self, u: Any) -> Any:
         u = backend.convert_to_tensor(u)
         u_dag = backend.conj(backend.transpose(u))
@@ -604,6 +616,30 @@ class SparsePauliPropagationEngine:
             weights = weights[: self.buffer_size]
 
         return (codes, weights)
+
+    def string_to_code(self, s: Tuple[Tuple[int, ...], Tuple[int, ...]]) -> Any:
+        """
+        Convert a Pauli string representation ((qidx, ...), (opcode, ...))
+        to its bit-packed int64 representation.
+
+        :param s: Pauli string as ((qidx, ...), (opcode, ...)).
+        :type s: Tuple[Tuple[int, ...], Tuple[int, ...]]
+        :return: Bit-packed int64 tensor.
+        :rtype: Any
+        """
+        K = backend
+        qubits, opcodes = s
+        codes = []
+        for w in range(self.W):
+            word = 0
+            for i in range(32):
+                q = w * 32 + i
+                if q in qubits:
+                    idx = qubits.index(q)
+                    op = opcodes[idx]
+                    word = word | (int(op) << (2 * i))
+            codes.append(word)
+        return K.convert_to_tensor(np.array(codes, dtype=np.int64), dtype="int64")
 
     def expectation(self, state: Any) -> Any:
         """

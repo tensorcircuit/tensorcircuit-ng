@@ -16,6 +16,25 @@ def test_initialization(request, backend):
 
 
 @pytest.mark.parametrize("backend", ["npb", "jaxb"])
+def test_string_to_code(request, backend):
+    request.getfixturevalue(backend)
+    N, k = 4, 2
+    pp = PauliPropagationEngine(N, k)
+    from tensorcircuit.pauliprop import SparsePauliPropagationEngine
+
+    spp = SparsePauliPropagationEngine(N, k)
+
+    s = ((0, 1), (3, 3))  # Z0 Z1
+    idx = pp.string_to_code(s)
+    assert pp.basis[idx] == s
+
+    code = spp.string_to_code(s)
+    # Z is 3. Bit pattern for Z at q=0 and q=1:
+    # word 0: (3 << 0) | (3 << 2) = 3 | 12 = 15
+    assert tc.backend.numpy(code)[0] == 15
+
+
+@pytest.mark.parametrize("backend", ["npb", "jaxb"])
 def test_initial_state(request, backend):
     request.getfixturevalue(backend)
     K = tc.backend
@@ -281,3 +300,109 @@ def test_sparse_engine_scan_match(request, backend, highp):
     )
 
     assert np.allclose(K.numpy(val_scan_sparse), K.numpy(val_scan_dense), atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", ["npb", "jaxb"])
+def test_truncation_analytical(request, backend, highp):
+    """
+    Directly verify that for insufficient k, the approximation is exactly the same
+    as the analytical derived Pauli string and then truncated.
+    """
+    request.getfixturevalue(backend)
+    K = tc.backend
+    N, k = 3, 1
+    theta = 0.6
+
+    # Initial state: Z1
+    # Apply RXX(0, 1)
+    # Heisenberg: exp(i theta/2 X0 X1) Z1 exp(-i theta/2 X0 X1)
+    # = cos(theta) Z1 + sin(theta) Y1 X0
+    # Truncated to k=1: cos(theta) Z1
+
+    # 1. Dense Engine
+    pp = PauliPropagationEngine(N, k)
+    state = pp.get_initial_state(np.array([[0, 3, 0]]), np.array([1.0]))
+    state = pp.apply_gate(state, "rxx", [0, 1], {"theta": theta})
+
+    idx_z1 = pp.string_to_code(((1,), (3,)))
+    val = K.numpy(state)[idx_z1]
+    assert np.allclose(val, np.cos(theta), atol=1e-5)
+
+    # All other k=1 terms should be 0
+    # The total weight should be |cos(theta)|^2 ? No, the state vector stores coefficients.
+    # Sum of absolute values of k=1 terms should be |cos(theta)|
+    # Exclude SINK index
+    assert np.allclose(
+        np.sum(np.abs(K.numpy(state[:-1]))), np.abs(np.cos(theta)), atol=1e-5
+    )
+
+    # 2. Sparse Engine
+    from tensorcircuit.pauliprop import SparsePauliPropagationEngine
+
+    spp = SparsePauliPropagationEngine(N, k, buffer_size=100)
+    s_state = spp.get_initial_state(np.array([[0, 3, 0]]), np.array([1.0]))
+    s_state = spp.apply_gate(s_state, "rxx", [0, 1], {"theta": theta})
+
+    # Expectation on |0> state sums only Z strings
+    # Z1 is the only Z string here
+    assert np.allclose(K.numpy(spp.expectation(s_state)), np.cos(theta), atol=1e-5)
+
+    # Verify that only the Z1 term remains with correct coefficient
+    # (Sparse engine might have multiple entries or empty ones, but aggregate_and_truncate cleans it)
+    s_codes, s_coeffs = s_state
+    assert K.numpy(s_codes[0]) == spp.string_to_code(((1,), (3,)))
+    assert np.allclose(
+        K.numpy(K.sum(K.abs(s_coeffs))), np.abs(np.cos(theta)), atol=1e-5
+    )
+
+
+@pytest.mark.parametrize("backend", ["npb", "jaxb"])
+def test_truncation_and_buffer_sparse(request, backend, highp):
+    """
+    Verify Sparse engine truncation for both k (locality) and buffer_size (number of strings).
+    """
+    request.getfixturevalue(backend)
+    K = tc.backend
+    N, k = 4, 2
+    buffer_size = 2
+
+    from tensorcircuit.pauliprop import SparsePauliPropagationEngine
+
+    spp = SparsePauliPropagationEngine(N, k, buffer_size=buffer_size)
+
+    # Initial: Z0
+    # Apply RX(0, theta1) -> cos(theta1) Z0 + sin(theta1) Y0
+    # Apply RXX(0, 1, theta2) ->
+    # cos(theta1) [cos(theta2) Z0 + sin(theta2) Y0 X1]  (loc 1, loc 2)
+    # + sin(theta1) [cos(theta2) Y0 - sin(theta2) Z0 X1] (loc 1, loc 2)
+    # All are loc <= 2, so k=2 doesn't truncate yet.
+    # Total terms: 4.
+    # But buffer_size = 2. It should keep the 2 terms with largest coefficients.
+
+    theta1 = 0.4
+    theta2 = 0.8
+    s_state = spp.get_initial_state(np.array([[3, 0, 0, 0]]), np.array([1.0]))
+    s_state = spp.apply_gate(s_state, "rx", [0], {"theta": theta1})
+    s_state = spp.apply_gate(s_state, "rxx", [0, 1], {"theta": theta2})
+
+    # Expected coefficients before buffer truncation:
+    # c1 = cos(theta1)cos(theta2)  (Z0)
+    # c2 = cos(theta1)sin(theta2)  (Y0 X1)
+    # c3 = sin(theta1)cos(theta2)  (Y0)
+    # c4 = -sin(theta1)sin(theta2) (Z0 X1)
+
+    c = np.array(
+        [
+            np.cos(theta1) * np.cos(theta2),
+            np.cos(theta1) * np.sin(theta2),
+            np.sin(theta1) * np.cos(theta2),
+            -np.sin(theta1) * np.sin(theta2),
+        ]
+    )
+    c_abs = np.abs(c)
+    top2_idx = np.argsort(c_abs)[-2:]
+    expected_sum_abs = np.sum(c_abs[top2_idx])
+
+    s_codes, s_coeffs = s_state
+    print(s_codes)
+    assert np.allclose(K.numpy(K.sum(K.abs(s_coeffs))), expected_sum_abs, atol=1e-5)

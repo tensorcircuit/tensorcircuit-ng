@@ -20,6 +20,9 @@
 
 - Add `zeros_like`, `ones_like`, `repeat`, `popc`, `top_k`, `lexsort` method for backends.
 
+- Add new way for expectation: `PauliStringSum2MVP`.
+
+
 ### Fixed
 
 - Fix the breaking logic change in jax from dlpack API, dlcapsule -> tensor.
@@ -31,6 +34,7 @@
 - End-to-end differentiable PauliStringSum2COO on jax backend.
 
 - Generalize `scatter` method for backends.
+
 
 ## v1.4.0
 

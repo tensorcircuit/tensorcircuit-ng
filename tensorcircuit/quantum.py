@@ -1907,9 +1907,6 @@ def heisenberg_hamiltonian(
     return PauliStringSum2Dense(ls, weight, numpy=numpy)
 
 
-# @TODO(@refraction-ray): Matrix-Free MVM (Matrix-Vector Multiplication)
-
-
 def PauliStringSum2MVP(
     structures: Sequence[Sequence[int]],
     weights: Sequence[float],
