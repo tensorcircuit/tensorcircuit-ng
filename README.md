@@ -44,7 +44,7 @@ For beginners, please refer to [quantum computing lectures with TC-NG](https://g
 To write TC-NG scripts and applications efficiently with AI coding agents (e.g., Claude Code, Cursor, Antigravity), we strongly recommend **working directly within the local tensorcircuit-ng repository** rather than an empty folder.
 
 1.  **Rich Context:** The 100+ scripts in `examples/` and extensive test cases in `tests/` provide essential references that significantly reduce AI hallucinations.
-2.  **Built-in Rules:** We provide a dedicated **[`llm.md`](/llm.md)** file. It serves as the "handbook" (i.e. `CLAUDE.md`) for AI agents, defining coding standards and best practices to ensure the generated code is idiomatic.
+2.  **Built-in Rules:** We provide a dedicated **[`AGENTS.md`](/AGENTS.md)** file. It serves as the "handbook" (i.e. `CLAUDE.md`) for AI agents, defining coding standards and best practices to ensure the generated code is idiomatic.
 
 **Recommended Workflow:**
 
@@ -52,7 +52,9 @@ To write TC-NG scripts and applications efficiently with AI coding agents (e.g.,
 2.  Switch to a local playground branch: `git checkout -b my-playground` in case messing up with the original repository.
 3.  Open the repository folder in your AI IDE. And you are ready to start writing TC-NG scripts.
 
-Now, enjoy implementing quantum algorithms entirely through natural language.
+Now, enjoy implementing quantum algorithms entirely through natural language!
+
+### Quick Demos
 
 The following are some minimal demos.
 
@@ -198,9 +200,7 @@ We also have [Docker support](/docker).
   - Support **Fermion Gaussian state** simulation with expectation, entanglement, measurement, ground state, real and imaginary time evolution.
   - Support **qudits simulation** for tensor network and MPS approximation modes.
   - Support **parallel** quantum circuit evaluation across **multiple GPUs**.
-
   - Highly customizable **noise model** with gate error and scalable readout error.
-
   - Support for **non-unitary** gate and post-selection simulation.
 
   - Support **real quantum devices access** from different providers.
