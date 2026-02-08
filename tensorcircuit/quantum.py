@@ -32,7 +32,15 @@ from tensornetwork.network_operations import (
     remove_node,
 )
 
-from .cons import backend, contractor, dtypestr, npdtype, rdtypestr, _ALPHABET
+from .cons import (
+    backend,
+    contractor,
+    dtypestr,
+    idtypestr,
+    npdtype,
+    rdtypestr,
+    _ALPHABET,
+)
 from .gates import Gate, num_to_tensor
 from .utils import arg_alias
 
@@ -2229,18 +2237,18 @@ def PauliString2COO(l: Sequence[int], weight: Optional[float] = None) -> Tensor:
     :rtype: Tensor
     """
     n = len(l)
-    l = num_to_tensor(l, dtype="int64")
+    l = num_to_tensor(l, dtype=idtypestr)
     # l = backend.cast(l, dtype="int64")
-    one = num_to_tensor(0b1, dtype="int64")
-    idx_x = num_to_tensor(0b0, dtype="int64")
-    idx_y = num_to_tensor(0b0, dtype="int64")
-    idx_z = num_to_tensor(0b0, dtype="int64")
-    i = num_to_tensor(0, dtype="int64")
+    one = num_to_tensor(0b1, dtype=idtypestr)
+    idx_x = num_to_tensor(0b0, dtype=idtypestr)
+    idx_y = num_to_tensor(0b0, dtype=idtypestr)
+    idx_z = num_to_tensor(0b0, dtype=idtypestr)
+    i = num_to_tensor(0, dtype=idtypestr)
     # for j in l:
     for j in range(n):
         oh = backend.onehot(l[j], 4)
         s = backend.left_shift(one, n - i - 1)
-        oh = backend.cast(oh, dtype="int64")
+        oh = backend.cast(oh, dtype=idtypestr)
         idx_x += oh[1] * s
         idx_y += oh[2] * s
         idx_z += oh[3] * s
@@ -2254,7 +2262,7 @@ def PauliString2COO(l: Sequence[int], weight: Optional[float] = None) -> Tensor:
         i += 1
 
     if weight is None:
-        weight = num_to_tensor(1.0, dtype="complex64")
+        weight = num_to_tensor(1.0, dtype=dtypestr)
     return ps2coo_core(idx_x, idx_y, idx_z, weight, n)
 
 
@@ -2265,7 +2273,7 @@ def ps2coo_core(
     idx_x: Tensor, idx_y: Tensor, idx_z: Tensor, weight: Tensor, nqubits: int
 ) -> Tuple[Tensor, Tensor]:
     s = 0b1 << nqubits
-    idx1 = num_to_tensor(backend.arange(s), dtype="int64")
+    idx1 = num_to_tensor(backend.arange(s), dtype=idtypestr)
     idx2 = (idx1 ^ idx_x) ^ (idx_y)
     indices = backend.transpose(backend.stack([idx1, idx2]))
     tmp = idx1 & (idx_y | idx_z)

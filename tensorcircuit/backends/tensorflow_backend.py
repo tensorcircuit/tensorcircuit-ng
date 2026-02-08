@@ -815,7 +815,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def coo_sparse_matrix(
         self, indices: Tensor, values: Tensor, shape: Tensor
     ) -> Tensor:
-        return tf.SparseTensor(indices=indices, values=values, dense_shape=shape)
+        return tf.SparseTensor(
+            indices=tf.cast(indices, tf.int64), values=values, dense_shape=shape
+        )
 
     def sparse_dense_matmul(
         self,

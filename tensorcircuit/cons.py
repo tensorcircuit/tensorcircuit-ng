@@ -60,6 +60,7 @@ package_name = "tensorcircuit"
 thismodule = sys.modules[__name__]
 dtypestr = "complex64"
 rdtypestr = "float32"
+idtypestr = "int32"
 npdtype = np.complex64
 backend: NumpyBackend = get_backend("numpy")
 contractor = tn.contractors.auto
@@ -186,6 +187,11 @@ def set_dtype(dtype: Optional[str] = None, set_global: bool = True) -> Tuple[str
     else:
         raise ValueError(f"Unsupported data type: {dtype}")
 
+    if dtype == "complex128":
+        idtype = "int64"
+    else:
+        idtype = "int32"
+
     try:
         from jax import config
     except ImportError:
@@ -203,6 +209,7 @@ def set_dtype(dtype: Optional[str] = None, set_global: bool = True) -> Tuple[str
             if module.startswith(package_name):
                 setattr(sys.modules[module], "dtypestr", dtype)
                 setattr(sys.modules[module], "rdtypestr", rdtype)
+                setattr(sys.modules[module], "idtypestr", idtype)
                 setattr(sys.modules[module], "npdtype", npdtype)
 
         from .gates import meta_gate
