@@ -44,13 +44,13 @@ For beginners, please refer to [quantum computing lectures with TC-NG](https://g
 To write TC-NG scripts and applications efficiently with AI coding agents (e.g., Claude Code, Cursor, Antigravity), we strongly recommend **working directly within the local tensorcircuit-ng repository** rather than an empty folder.
 
 1.  **Rich Context:** The 100+ scripts in `examples/` and extensive test cases in `tests/` provide essential references that significantly reduce AI hallucinations.
-2.  **Built-in Rules:** We provide a dedicated **[`AGENTS.md`](/AGENTS.md)** file. It serves as the "handbook" (i.e. `CLAUDE.md`) for AI agents, defining coding standards and best practices to ensure the generated code is idiomatic.
+2.  **Built-in Rules:** We provide a dedicated [AGENTS.md](/AGENTS.md) file. It serves as the "handbook" (i.e. `CLAUDE.md`) for AI agents, defining coding standards and best practices to ensure the generated code is idiomatic.
 
 **Recommended Workflow:**
 
 1.  Clone the repository: `git clone https://github.com/tensorcircuit/tensorcircuit-ng.git`
 2.  Switch to a local playground branch: `git checkout -b my-playground` in case messing up with the original repository.
-3.  Open the repository folder in your AI IDE. And you are ready to start writing TC-NG scripts.
+3.  Open the repository folder in your AI IDE. And you are ready to start writing TC-NG-based scripts.
 
 Now, enjoy implementing quantum algorithms entirely through natural language!
 
@@ -192,15 +192,25 @@ We also have [Docker support](/docker).
 
   <details>
   <summary> Tons of amazing features and built in tools for research (click for details) </summary>
+
   - Support **super large circuit simulation** using tensor network engine.
+
   - Support **noisy simulation** with both Monte Carlo and density matrix (tensor network powered) modes.
-  - Support **stabilizer circuit simulation** with stim backend
+
+  - Support **stabilizer circuit simulation** with stim backend.
+
   - Support **approximate simulation** with MPS-TEBD modes.
+
   - Support **analog/digital hybrid simulation** (time dependent Hamiltonian evolution, **pulse** level simulation) with neural ode modes.
+
   - Support **Fermion Gaussian state** simulation with expectation, entanglement, measurement, ground state, real and imaginary time evolution.
+
   - Support **qudits simulation** for tensor network and MPS approximation modes.
-  - Support **parallel** quantum circuit evaluation across **multiple GPUs**.
+
+  - Support **parallel** quantum circuit evaluation across **multiple GPUs** and **multiple hosts**.
+
   - Highly customizable **noise model** with gate error and scalable readout error.
+
   - Support for **non-unitary** gate and post-selection simulation.
 
   - Support **real quantum devices access** from different providers.
@@ -218,6 +228,8 @@ We also have [Docker support](/docker).
   - **Machine learning interface/layer/model** abstraction in both TensorFlow, PyTorch and Jax for both numerical simulation and real QPU experiments.
 
   - Support time evolution simulation with **exact, ODE, Krylov, Trotter, Chebyshev solvers**.
+
+  - Support Heisenberg picture-based Pauli propagation approximation simulation for circuits.
 
   - Circuit sampling supports both final state sampling and perfect sampling from tensor networks.
 
