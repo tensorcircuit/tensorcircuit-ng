@@ -33,9 +33,11 @@ TensorCircuit-NG 是目前积极维护的唯一官方版本，是 TensorCircuit 
 
 请从 [完整文档](https://tensorcircuit-ng.readthedocs.io/) 中的 [快速上手](/docs/source/quickstart.rst) 开始。
 
-有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 100+ [示例脚本](/examples) 和 40+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
+有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 130+ [示例脚本](/examples) 和 40+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
 
 TensorCircuit-NG 也支持 AI 原生编程资源：[Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng) 和 [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
+
+若使用 AI 编程助手（如 Claude Code, Cursor, Antigravity）编写 TC-NG 应用，我们强烈建议直接在克隆的本地代码库中进行开发以提供更好的上下文，而非在新的空文件夹中操作。
 
 初学者也可以参考[量子计算教程](https://github.com/sxzgroup/qc_lecture)学习量子计算基础和 TensorCircuit-NG 的典型用法.
 
@@ -112,13 +114,11 @@ pip install tensorcircuit-nightly
 - 高性能原生，分布式多卡多节点支持
 
 - 效率
-
   - 时间：与 TFQ, Pennylane, 或 Qiskit 相比，加速 10 到 10^6+ 倍
 
   - 空间：600+ qubits 1D VQE 工作流（收敛能量误差：< 1%）
 
 - 优雅
-
   - 灵活性：自定义张量收缩、多种 ML 后端/接口选择、多种数值精度、多种量子硬件
 
   - API 设计：人类可理解的量子，更少的代码，更多的可能

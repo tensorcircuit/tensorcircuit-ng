@@ -35,9 +35,24 @@ TensorCircuit-NG is the only actively maintained official version and a [fully c
 
 Please begin with [Quick Start](/docs/source/quickstart.rst) in the [full documentation](https://tensorcircuit-ng.readthedocs.io/).
 
-For more information on software usage, sota algorithm implementation and engineer paradigm demonstration, please refer to 100+ [example scripts](/examples) and 40+ [tutorial notebooks](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials). API docstrings and test cases in [tests](/tests) are also informative. One can also refer to AI-native docs for tensorcircuit-ng: [Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng) and [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
+For more information on software usage, sota algorithm implementation and engineer paradigm demonstration, please refer to 130+ [example scripts](/examples) and 40+ [tutorial notebooks](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials). API docstrings and test cases in [tests](/tests) are also informative. One can also refer to AI-native docs for tensorcircuit-ng: [Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng) and [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
 
 For beginners, please refer to [quantum computing lectures with TC-NG](https://github.com/sxzgroup/qc_lecture) to learn both quantum computing basics and representative usage of TensorCircuit-NG.
+
+### AI-Assisted Development (Recommended)
+
+To write TC-NG scripts and applications efficiently with AI coding agents (e.g., Claude Code, Cursor, Antigravity), we strongly recommend **working directly within the local tensorcircuit-ng repository** rather than an empty folder.
+
+1.  **Rich Context:** The 100+ scripts in `examples/` and extensive test cases in `tests/` provide essential references that significantly reduce AI hallucinations.
+2.  **Built-in Rules:** We provide a dedicated **[`llm.md`](/llm.md)** file. It serves as the "handbook" (i.e. `CLAUDE.md`) for AI agents, defining coding standards and best practices to ensure the generated code is idiomatic.
+
+**Recommended Workflow:**
+
+1.  Clone the repository: `git clone https://github.com/tensorcircuit/tensorcircuit-ng.git`
+2.  Switch to a local playground branch: `git checkout -b my-playground` in case messing up with the original repository.
+3.  Open the repository folder in your AI IDE. And you are ready to start writing TC-NG scripts.
+
+Now, enjoy implementing quantum algorithms entirely through natural language.
 
 The following are some minimal demos.
 
@@ -162,13 +177,11 @@ We also have [Docker support](/docker).
 - HPC native, distributed simulation enabled, multiple devices/hosts support
 
 - Efficiency
-
   - Time: 10 to 10^6+ times acceleration compared to TensorFlow Quantum, Pennylane or Qiskit
 
   - Space: 600+ qubits 1D VQE workflow (converged energy inaccuracy: < 1%)
 
 - Elegance
-
   - Flexibility: customized contraction, multiple ML backend/interface choices, multiple dtype precisions, multiple QPU providers
 
   - API design: quantum for humans, less code, more power
@@ -177,21 +190,13 @@ We also have [Docker support](/docker).
 
   <details>
   <summary> Tons of amazing features and built in tools for research (click for details) </summary>
-
   - Support **super large circuit simulation** using tensor network engine.
-
   - Support **noisy simulation** with both Monte Carlo and density matrix (tensor network powered) modes.
-
   - Support **stabilizer circuit simulation** with stim backend
-
   - Support **approximate simulation** with MPS-TEBD modes.
-
   - Support **analog/digital hybrid simulation** (time dependent Hamiltonian evolution, **pulse** level simulation) with neural ode modes.
-
   - Support **Fermion Gaussian state** simulation with expectation, entanglement, measurement, ground state, real and imaginary time evolution.
-
   - Support **qudits simulation** for tensor network and MPS approximation modes.
-
   - Support **parallel** quantum circuit evaluation across **multiple GPUs**.
 
   - Highly customizable **noise model** with gate error and scalable readout error.
