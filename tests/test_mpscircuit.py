@@ -372,3 +372,30 @@ def test_simple_circuits_ad(backend, dtype):
         tc.backend.numpy(exp_grad_dir_jit),
         atol=1e-6,
     )
+
+
+def test_mps_base_extra(jaxb):
+    from tensorcircuit.mps_base import FiniteMPS
+
+    # create a simple MPS
+    n = 4
+    nodes = [
+        tc.backend.ones([1, 2, 2]),
+        tc.backend.ones([2, 2, 2]),
+        tc.backend.ones([2, 2, 2]),
+        tc.backend.ones([2, 2, 1]),
+    ]
+    mps = FiniteMPS(nodes, center_position=0)
+    mps1 = mps.copy()
+    mps2 = mps.conj()
+
+    # measure_local_operator
+    ops = [tc.backend.ones([2, 2])]
+    mps.measure_local_operator(ops, [1])
+
+    # measure_two_body_correlator
+    mps.measure_two_body_correlator(ops[0], ops[0], 0, [1, 2])
+
+    # apply_two_site_gate
+    gate = tc.backend.ones([2, 2, 2, 2])
+    mps.apply_two_site_gate(gate, 1, 2)

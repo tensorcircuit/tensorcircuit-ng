@@ -158,3 +158,21 @@ def test_ent(backend):
 #
 #     assert np.isclose(expc, pl_expc)
 #     assert np.isclose(ent, pl_ent)
+
+
+def test_shadow_extra(jaxb):
+
+    ps = [1, 2, 3]  # X, Y, Z
+    N, k = shadow_bound(ps, 0.1)
+    assert N > 0
+    assert k > 0
+
+    # test shadow_snapshots with measurement_only and sub
+    c = tc.Circuit(3)
+    c.h(range(3))
+    psi = c.state()
+    ns = 2
+    pauli_strings = tc.backend.convert_to_tensor(np.random.randint(1, 4, size=(ns, 3)))
+
+    snapshots = shadow_snapshots(psi, pauli_strings, measurement_only=True, sub=[0, 1])
+    assert snapshots.shape == (ns, 1, 2)

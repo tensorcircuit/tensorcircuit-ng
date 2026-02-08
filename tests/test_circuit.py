@@ -1189,6 +1189,8 @@ def test_qiskit2tc():
     qisc_from_tc = c.to_qiskit(enable_instruction=True)
     qis_unitary2 = qi.Operator(qisc_from_tc)
     qis_unitary2 = np.reshape(qis_unitary2, [2**n, 2**n])
+    # Note: the following assertion may fail intermittently due to non-deterministic behavior
+    # in Qiskit's UnitaryGate.control() method as of Qiskit 0.46.3
     np.testing.assert_allclose(qis_unitary2, qis_unitary, atol=1e-5)
 
 
@@ -1812,3 +1814,25 @@ def test_cirq_gates_translation(backend):
     u_cirq4 = cirq.unitary(c4)
     u_tc4 = c4_tc.matrix()
     assert_allclose_up_to_global_phase(u_cirq4, tc.backend.numpy(u_tc4), atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
+def test_circuit_extra_coverage(backend):
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cx(0, 1)
+
+    # inverse
+    c1 = c.inverse()
+    assert len(c1.to_qir()) == 2
+
+    # replace_mps_inputs
+    c2 = tc.Circuit(2)
+    c2.replace_mps_inputs(c.quvector())
+
+    # depolarizing2
+    c.depolarizing2(0, px=0.1, py=0.1, pz=0.1)
+
+    # unitary_kraus2
+    kraus = [tc.gates.x(), tc.gates.y()]
+    c.unitary_kraus2(kraus, 0, prob=[0.5, 0.5])

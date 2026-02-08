@@ -302,3 +302,162 @@ def test_function_nodes_capture(backend):
         return c.expectation_ps(z=[-3], reuse=False)
 
     assert len(exp(0.3)) == 9
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
+def test_parameter_shift_grad(backend):
+    def f(params):
+        c = tc.Circuit(2)
+        c.rx(0, theta=params[0])
+        c.ry(1, theta=params[1])
+        c.cnot(0, 1)
+        return tc.backend.real(c.expectation_ps(z=[0, 1]))
+
+    params = tc.array_to_tensor(np.array([0.1, 0.2]))
+
+    # Standard AD gradient
+    g_ad = tc.backend.grad(f)(params)
+
+    # Parameter shift gradient
+    g_ps = experimental.parameter_shift_grad(f)(params)
+
+    np.testing.assert_allclose(g_ad, g_ps, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_parameter_shift_grad_v2(backend):
+    # v2 is mainly for jax and supports randomness
+    def f(params):
+        c = tc.Circuit(2)
+        c.rx(0, theta=params[0])
+        c.ry(1, theta=params[1])
+        return tc.backend.real(c.expectation_ps(z=[0]))
+
+    params = tc.array_to_tensor(np.array([0.5, 0.5]))
+    g_ps = experimental.parameter_shift_grad_v2(f)(params)
+    g_ad = tc.backend.grad(f)(params)
+    np.testing.assert_allclose(g_ps, g_ad, atol=1e-5)
+
+
+def test_broadcast_py_object_single_process(jaxb):
+    # In a single process environment, broadcast should just return the object
+    # though it uses jax.experimental.multihost_utils.broadcast_one_to_all
+    obj = {"a": 1, "b": [1, 2, 3]}
+    res = experimental.broadcast_py_object(obj)
+    assert res == obj
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_jax_jitted_function_save_load_v2(backend, tmp_path):
+    K = tc.backend
+
+    @K.jit
+    def f(x):
+        return x**2 + 1.0
+
+    x = K.ones([2])
+    path = os.path.join(tmp_path, "f.bin")
+    experimental.jax_jitted_function_save(path, f, x)
+
+    f_load = experimental.jax_jitted_function_load(path)
+    np.testing.assert_allclose(f_load(x), f(x), atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
+def test_qng_options(backend):
+    def f(params):
+        c = tc.Circuit(1)
+        c.rx(0, theta=params[0])
+        return c.state()
+
+    params = tc.backend.ones([1])
+    # test different options in qng to hit more lines
+    qng_fn = experimental.qng(f, mode="fwd")
+    qng_fn(params)
+
+    qng_fn2 = experimental.qng(f, mode="rev")
+    qng_fn2(params)
+
+    qng_fn3 = experimental.qng(f, kernel="dynamics", postprocess=None)
+    qng_fn3(params)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
+def test_qng2_options(backend):
+    def f(params):
+        c = tc.Circuit(1)
+        c.rx(0, theta=params[0])
+        return c.state()
+
+    params = tc.backend.ones([1])
+    qng_fn = experimental.qng2(f, mode="fwd")
+    qng_fn(params)
+
+    qng_fn2 = experimental.qng2(f, mode="rev")
+    qng_fn2(params)
+
+    qng_fn3 = experimental.qng2(f, kernel="dynamics", postprocess=None)
+    qng_fn3(params)
+
+
+def test_vis_extra():
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cx(0, 1)
+    tex = tc.vis.qir2tex(c.to_qir(), 2)
+    assert "\\qw" in tex
+
+    assert tc.vis.gate_name_trans("ccnot") == (2, "not")
+    assert tc.vis.gate_name_trans("h") == (0, "h")
+
+
+def test_cons_extra(jaxb):
+    # set_function_backend
+    @tc.cons.set_function_backend("jax")
+    def f():
+        return tc.backend.name
+
+    # set_function_dtype
+    @tc.cons.set_function_dtype("complex128")
+    def g():
+        return tc.dtypestr
+
+
+def test_ascii_art():
+    # hit some lines in asciiart.py
+
+    try:
+        tc.set_ascii("wrong")
+    except AttributeError:
+        pass
+
+    # lucky() is only available after set_ascii
+    assert not hasattr(tc, "lucky")
+
+
+def test_utils_extra():
+    from tensorcircuit import utils
+
+    # return_partial
+    f = lambda x: [x, x**2, x**3]
+    f1 = utils.return_partial(f, return_argnums=1)
+    assert f1(2) == 4
+    f2 = utils.return_partial(f, return_argnums=[0, 2])
+    assert f2(2) == (2, 8)
+
+    # append
+    f3 = utils.append(lambda x: x**2, lambda x: x + 1)
+    assert f3(2) == 5
+
+    # is_m1mac
+    utils.is_m1mac()
+
+    # is_sequence, is_number
+    assert utils.is_sequence([1])
+    assert utils.is_number(1.0)
+
+    # benchmark
+    def h(x):
+        return x + 1
+
+    utils.benchmark(h, 1.0, tries=2)

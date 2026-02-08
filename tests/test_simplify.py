@@ -44,3 +44,25 @@ def test_rank_simplify():
 
     nodes = simplify._full_rank_simplify([f, g, h])
     assert len(nodes) == 2
+
+
+def test_simplify_extra():
+    from tensorcircuit import simplify
+    import tensorcircuit as tc
+
+    a = tn.Node(np.ones([2, 2]), name="a")
+    b = tn.Node(np.ones([2, 2]), name="b")
+    a[1] ^ b[0]
+    nodes = simplify._full_rank_simplify([a, b])
+    assert len(nodes) == 1
+
+    # _full_light_cone_cancel
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cx(0, 1)
+    c.h(0)
+    # usually used in expectation where the psi and its conj can cancel
+    # but we can just call it on any nodes list
+    qir = c.to_qir()
+    nodes = [g["gate"] for g in qir]
+    simplify._full_light_cone_cancel(nodes)
