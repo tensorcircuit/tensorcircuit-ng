@@ -11,32 +11,78 @@ TensorCircuit Next Generation
 Introduction
 ---------------
 
-`TensorCircuit-NG <https://github.com/tensorcircuit/tensorcircuit-ng>`_ is an open-source high-performance quantum software framework in Python.
+`TensorCircuit-NG <https://github.com/tensorcircuit/tensorcircuit-ng>`_ is an industrial-grade, open-source high-performance quantum software framework in Python.
 
-* It is built for humans. 👽
+It is designed for researchers and engineers who demand **Speed, Flexibility, and Elegance**.
 
-* It is designed for speed, flexibility and elegance. 🚀
+.. grid:: 1 1 2 3
+   :gutter: 3
 
-* It is empowered by advanced tensor network simulator engines. 🔋
+   .. grid-item-card:: 🧬 Built for Humans
+      :shadow: md
 
-* It is ready for quantum hardware access with CPU/GPU/QPU (local/cloud) hybrid solutions. 🖥
+      Intuitive API that feels like natural quantum physics. Focus on your research, not the boilerplate.
 
-* It is implemented with industry-standard machine learning frameworks: TensorFlow, JAX, and PyTorch. 🤖
+   .. grid-item-card:: 🚀 Extreme Performance
+      :shadow: md
 
-* It is flexible and powerful to build and simulate tensor networks, neural networks and quantum circuits together. 🧠
+      Achieve **10-100x GPU speedup** over traditional simulators. Powered by JIT compilation and optimized tensor engines.
 
-* It is compatible with machine learning engineering paradigms: automatic differentiation, just-in-time compilation, vectorized parallelism and GPU acceleration. 🛠
+   .. grid-item-card:: 🤖 Deep ML Fusion
+      :shadow: md
 
-With the help of TensorCircuit-NG, now get ready to efficiently and elegantly solve interesting and challenging quantum computing and quantum many-body problems: from academic research prototype to industry application deployment.
+      Native integration with **JAX, TensorFlow, and PyTorch**. Seamlessly combine AD with quantum kernels for hybrid QML.
+
+   .. grid-item-card:: ⛓️ Advanced Engines
+      :shadow: md
+
+      State-of-the-art support for **Noisy, Analog, Approximate and Stabilizer** simulations. Utilize ``cotengra`` for complex tensor networks.
+
+   .. grid-item-card:: ☁️ Hardware Agnostic
+      :shadow: md
+
+      Run your code anywhere: from local CPUs to distributed GPUs/TPUs and real **QPU providers** via a unified interface.
+
+   .. grid-item-card:: 🛠 Industrial Strength
+      :shadow: md
+
+      Committed to stability and performance. **Long-term support** and proven by extensive research and industrial applications.
+
 
 .. important::
-   Please cite the `whitepaper <https://quantum-journal.org/papers/q-2023-02-02-912/>`_ when using TensorCircuit or TensorCircuit-NG in your research. The bibtex information is provided by ``tc.cite()``.
+   Please cite our published `whitepaper <https://quantum-journal.org/papers/q-2023-02-02-912/>`_ when using TensorCircuit or TensorCircuit-NG in your research. The bibtex information is provided by ``tc.cite()``.
 
 .. note::
    The TensorCircuit package is outdated. 
    We recommend upgrading to TensorCircuit-NG for the latest features and improvements. 
    You can upgrade by running the following command:
    ``pip uninstall tensorcircuit && pip install tensorcircuit-ng``
+
+
+Get Started in Seconds
+----------------------
+
+Install with one line:
+
+.. code-block:: bash
+
+    pip install tensorcircuit-ng
+
+Simulate your first circuit:
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cnot(0, 1)
+
+    print(c.state()) # Ideal Bell state: [0.707, 0, 0, 0.707]
+    print(c.expectation_ps(z=[0, 1])) # ZZ expectation: 1.0
+
+
+
 
 
 Useful Links
@@ -117,66 +163,66 @@ If you have any further questions or collaboration ideas, please use the issue t
 Unified Quantum Programming
 ------------------------------
 
-TensorCircuit-NG is unifying infrastructures and interfaces for quantum computing.
+TensorCircuit-NG is building the future of unified quantum computing infrastructures.
 
 .. grid:: 1 2 4 4
    :margin: 0
    :padding: 0
-   :gutter: 2
+   :gutter: 3
 
-   .. grid-item-card:: Unified Backends
+   .. grid-item-card:: 🛠 Unified Backends
       :columns: 12 6 3 3
       :shadow: md
 
-      Jax/TensorFlow/PyTorch/Numpy/Cupy
+      JAX, TensorFlow, PyTorch, Numpy, Cupy
 
-   .. grid-item-card:: Unified Devices
+   .. grid-item-card:: 💻 Unified Devices
       :columns: 12 6 3 3
       :shadow: md
 
-      CPU/GPU/TPU
+      CPU, GPU, and TPU support
 
-   .. grid-item-card:: Unified Providers
+   .. grid-item-card:: 🏛 Unified Providers
       :columns: 12 6 3 3
       :shadow: md
 
-      QPUs from different vendors
+      QPUs from major vendors
 
-   .. grid-item-card:: Unified Resources
+   .. grid-item-card:: 🌐 Unified Resources
       :columns: 12 6 3 3
       :shadow: md
 
-      local/cloud/HPC
+      Local, Cloud, and HPC environments
 
 
 .. grid:: 1 2 4 4
    :margin: 0
    :padding: 0
-   :gutter: 2
+   :gutter: 3
 
-   .. grid-item-card:: Unified Interfaces
+   .. grid-item-card:: 🎛 Unified Interfaces
       :columns: 12 6 3 3
       :shadow: md
 
-      numerical sim/hardware exp
+      Numerical sim and hardware experiments
 
-   .. grid-item-card:: Unified Engines
+   .. grid-item-card:: ⚙️ Unified Engines
       :columns: 12 6 3 3
       :shadow: md
 
-      ideal/noisy/approx/analog/stabilizer
+      Ideal, Noisy, Analog, and Stabilizer
 
-   .. grid-item-card:: Unified Representations
+   .. grid-item-card:: 📝 Unified Representations
       :columns: 12 6 3 3
       :shadow: md
 
-      from/to_IR/qiskit/openqasm/json
+      Qiskit, OpenQASM, Cirq, and IR
 
-   .. grid-item-card:: Unified Objects
+   .. grid-item-card:: 🧊 Unified Objects
       :columns: 12 6 3 3
       :shadow: md
 
-      neural-net/tensor-net/quantum-circuit
+      Neural Nets, Tensor Nets, and Circuits
 
 
 
@@ -227,3 +273,12 @@ Indices and Tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+
+Join the Community
+==================
+
+We are always looking for contributors and collaborators!
+
+*   Check out our `GitHub Discussions <https://github.com/tensorcircuit/tensorcircuit-ng/discussions>`_ for questions and show-and-tell.
+*   Report bugs or request features via `GitHub Issues <https://github.com/tensorcircuit/tensorcircuit-ng/issues>`_.
+*   Star the repository to stay updated! ⭐

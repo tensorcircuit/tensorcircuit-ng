@@ -15,7 +15,7 @@ TensorCircuit-NG is intended as a drop-in replacement for TensorCircuit, namely,
 How can I run TensorCircuit-NG on GPU?
 -----------------------------------------
 
-This is done directly through the ML backend. GPU support is determined by whether ML libraries are can run on GPU, we don't handle this within tensorcircuit-ng.
+This is done directly through the ML backend. GPU support is determined by whether ML libraries can run on GPU, we don't handle this within tensorcircuit-ng.
 It is the users' responsibility to configure a GPU-compatible environment for these ML packages. Please refer to the installation documentation for these ML packages and directly use the official dockerfiles provided by TensorCircuit-NG.
 
 - TensorFlow: ``pip install "tensorflow[and-cuda]"``
@@ -29,10 +29,11 @@ When should I use GPU?
 ----------------------------------------------------
 
 In general, for a circuit with qubit count larger than 16 or for circuit simulation with large batch dimension more than 16, GPU simulation will be faster than CPU simulation.
+Typically, GPU can provide 10-100 times acceleration compared to a CPU node.
 That is to say, for very small circuits and the very small batch dimensions of vectorization, GPU may show worse performance than CPU.
 But one have to carry out detailed benchmarks on the hardware choice, since the performance is determined by the hardware and task details.
 
-For tensor network tasks of more regular shape, such as MPS-MPO contraction, GPU can be much more favored and efficient than CPU.
+For tensor network tasks of more regular shape, such as MPS-MPO contraction, GPU can be much more favored and efficient than CPU (usually 50-100 times acceleration).
 
 
 How can I use multiple GPUs?
@@ -47,7 +48,8 @@ We also introduce a new interface for the multi-GPU tensornetwork contraction, s
 When should I jit the function?
 ----------------------------------------------------
 
-For a function with "tensor in and tensor out", wrapping it with jit will greatly accelerate the evaluation. Since the first time of evaluation takes longer time (staging time), jit is only good for functions which have to be evaluated frequently.
+For a jittable function, it should be designed as "tensor in and tensor out" to ensure full compatibility and maximum performance across different backends.
+Wrapping it with jit will greatly accelerate the evaluation. Since the first time of evaluation takes longer time (staging time), jit is only good for functions which have to be evaluated frequently.
 
 
 .. Warning::
@@ -65,12 +67,31 @@ For a function with "tensor in and tensor out", wrapping it with jit will greatl
         3. subtle interplay between random number generation and jit (see :ref:`advance:Randoms, Jit, Backend Agnostic, and Their Interplay` for the correct solution), respectively.
 
 
+For very deep quantum circuits (e.g., hundreds of layers), the JIT compilation (staging) time can become significant. To mitigate this, one can use the ``scan`` mechanism supported by ML backends to iterate through circuit layers.
+
+Specifically, use ``tc.backend.scan`` to wrap the repeating layers. This keeps the computation graph size independent of the circuit depth, leading to much faster JIT compilation and lower memory usage during staging. For a concrete implementation, please refer to `examples/hea_scan_jit_acc.py <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/hea_scan_jit_acc.py>`_.
+
+
+General tips of good performance for circuit simulation?
+---------------------------------------------------------------------
+
+To achieve the best performance with TensorCircuit-NG, consider the following checklist:
+
+*   **GPU Acceleration**: Use GPU for 20+ qubits or large batch dimensions. Expect 10-100x speedup for one GPU card over one CPU node.
+*   **Vectorization**: Always use ``K.vmap``  for simulating multiple circuits or batches of parameters or inputs; it is much more efficient than manual loops.
+*   **JIT Compilation**: Wrap your performance-critical functions with ``tc.backend.jit``. Ensure the function follows the "tensor in, tensor out" pattern to avoid unnecessary recompilation.
+*   **Backend Choice**: **JAX** is generally recommended for its superior JIT and vectorization performance, as well as automatic type promotion and easy-to-use distributed runtime. 
+*   **Scan for Depth**: Use ``K.scan`` for deep circuits with repeating structures to avoid exorbitant JIT staging time and memory consumption.
+*   **Advanced Contractor**: For circuits with large qubits and depth counts, use the ``cotengra`` contractor (via ``tc.set_contractor("cotengra")``) to find more efficient contraction paths and reduce peak memory usage.
+*   **Sparse/MPO Operators**: For expectation evaluation of large systems or complex observables, utilize sparse matrix or MPO representations to avoid constructing the full dense Hamiltonian or measuring each Pauli string separately.
+
+
 Which ML framework backend should I use?
 --------------------------------------------
 
 Since the Numpy backend has no support for AD, if you want to evaluate the circuit gradient, you must set the backend as one of the ML frameworks beyond Numpy.
 
-Since PyTorch has very limited support for vectorization and jit while our package strongly depends on these features, it is not recommended to use. Though one can always wrap a quantum function on another backend using a PyTorch interface, say :py:meth:`tensorcircuit.interfaces.torch_interface`.
+While PyTorch is widely used, its native simulation performance is often limited due to the lack of mature vectorization and JIT support for quantum kernels. If you prefer the PyTorch ecosystem, we recommend using the **JAX backend for fast simulation** and wrapping the results with function level :py:meth:`tensorcircuit.interfaces.torch_interface` or object level :py:class:`tensorcircuit.torchnn.TorchLayer`.
 
 In terms of the choice between TensorFlow and Jax backend, the better one may depend on the use cases and one may want to benchmark both to pick the better one. There is no one-for-all recommendation and this is why we maintain the backend agnostic form of our software.
 
@@ -78,29 +99,30 @@ Some general rules of thumb:
 
 * On both CPU and GPU, the running time of a jitted function is faster for jax backend.
 
-* But on GPU, jit staging time is usually much longer for jax backend.
-
 * For hybrid machine learning tasks, TensorFlow has a better ML ecosystem and reusable classical ML models.
 
-* Jax has some built-in advanced features that are lacking in TensorFlow, such as checkpoint in AD and pmap for distributed computing.
+* Jax has some built-in advanced features that are lacking in TensorFlow, such as checkpoint in AD and pmap/jit for distributed computing.
 
 * Jax is much insensitive to dtype where type promotion is handled automatically which means easier debugging.
 
-* TensorFlow can cache the jitted function on the disk via SavedModel, which further amortizes the staging time.
+* Both TensorFlow and Jax can cache the jitted function on the disk, which further amortizes the staging time.
 
 
 What is the counterpart of ``QuantumLayer`` for PyTorch and Jax backend?
 ----------------------------------------------------------------------------
 
-Since PyTorch doesn't have mature vmap and jit support and Jax doesn't have native classical ML layers, we highly recommend TensorFlow as the backend for quantum-classical hybrid machine learning tasks, where ``QuantumLayer`` plays an important role.
-For PyTorch, we can in principle wrap the corresponding quantum function into a PyTorch module, we currently have the built-in support for this wrapper as ``tc.TorchLayer``.
-In terms of the Jax backend, we highly suggested keeping the functional programming paradigm for such machine learning tasks.
-Besides, it is worth noting that, jit and vmap are automatically taken care of in ``QuantumLayer``.
+While TensorFlow's ``QuantumLayer`` is a powerful tool for hybrid tasks, TensorCircuit-NG offers robust solutions for other frameworks as well.
+
+For **PyTorch** users, we provide :py:class:`tensorcircuit.torchnn.TorchLayer`. We highly recommend using the **JAX backend** to power the underlying simulation, as this combination provides the best of both worlds: the familiar PyTorch ecosystem for classical layers and JAX's high-performance simulation for quantum kernels. This is handled seamlessly via the :py:meth:`tensorcircuit.interfaces.torch_interface`.
+
+For the **JAX** ecosystem, quantum circuits can be naturally integrated into functional ML libraries like **Flax**. For a concrete implementation of a hybrid model, see our example: `examples/flax_mnist_hybrid.py <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/flax_mnist_hybrid.py>`_.
+
+JIT and vmap are automatically managed in these high-level wrappers (``QuantumLayer``, ``TorchLayer``, etc.), ensuring efficient execution of your hybrid workflows.
 
 When do I need to customize the contractor and how?
 ------------------------------------------------------
 
-As a rule of thumb, for the circuit with qubit counts larger than 16 and circuit depth larger than 8, customized contraction may outperform the default built-in greedy contraction strategy.
+As a rule of thumb, for the circuit with qubit counts larger than 14 and circuit depth larger than 6, customized contraction may significantly outperform the default built-in greedy contraction strategy.
 
 To set up or not set up the customized contractor is about a trade-off between the time on contraction pathfinding and the time on the real contraction via matmul.
 
@@ -108,7 +130,7 @@ The customized contractor costs much more time than the default contractor in te
 
 If the circuit simulation time is the bottleneck of the whole workflow, one can always try customized contractors to see whether there is some performance improvement.
 
-We recommend to using `cotengra library <https://cotengra.readthedocs.io/en/latest/index.html>`_ to set up the contractor, since there are lots of interesting hyperparameters to tune, we can achieve a better trade-off between the time on contraction path search and the time on the real tensor network contraction.
+We recommend using the `cotengra library <https://cotengra.readthedocs.io/en/latest/index.html>`_ to set up the contractor. It provides more stable and faster simulation for large-scale tensor network contractions. Since there are lots of interesting hyperparameters to tune, we can achieve a better trade-off between the time on contraction path search and the time on the real tensor network contraction.
 
 It is also worth noting that for jitted function which we usually use, the contraction path search is only called at the first run of the function, which further amortizes the time and favors the use of a highly customized contractor.
 
@@ -123,6 +145,16 @@ So one can try one of the following options:
 * ``c.expectation_ps(x=[0], y=[2], z=[1, 4])`` 
 
 * ``tc.templates.measurements.parameterized_measurements(c, np.array([1, 3, 2, 0, 3, 0]), onehot=True)``
+
+How to efficiently evaluate expectations for large systems?
+-----------------------------------------------------------
+
+For large-scale quantum systems or complex observables, the standard ``expectation`` API may be slow or memory-intensive. We first need to switch off the `reuse=False` option in ``expectation`` API to avoid directly compute the wavefunction.
+TensorCircuit-NG provides several specialized alternatives:
+
+*   **Sparse Expectation**: Use :py:meth:`tensorcircuit.templates.measurements.sparse_expectation` when the Hamiltonian is given in a sparse matrix form.
+*   **MPO Expectation**: Use :py:meth:`tensorcircuit.templates.measurements.mpo_expectation` for systems where the operator is represented as a Matrix Product Operator (MPO).
+*   **MVP (Matrix-Vector Product)**: For even larger systems where the Hamiltonian cannot be explicitly stored, use Matrix-Vector Product functions like :py:meth:`tensorcircuit.quantum.PauliStringSum2MVP` to evaluate expectations without constructing the full matrix.
 
 Can I apply quantum operation based on previous classical measurement results?
 ----------------------------------------------------------------------------------------------------
@@ -181,11 +213,9 @@ Please refer to the following demos:
 How to understand difference between ``tc.array_to_tensor`` and ``tc.backend.convert_to_tensor``?
 ------------------------------------------------------------------------------------------------------
 
-``tc.array_to_tensor`` convert array to tensor as well as automatically cast the type to the default dtype of TensorCircuit-NG,
-i.e. ``tc.dtypestr`` and it also support to specify dtype as ``tc.array_to_tensor( , dtype="complex128")``.
-Instead, ``tc.backend.convert_to_tensor`` keeps the dtype of the input array, and to cast it as complex dtype, we have to
-explicitly call ``tc.backend.cast`` after conversion. Besides, ``tc.array_to_tensor`` also accepts multiple inputs as
-``a_tensor, b_tensor = tc.array_to_tensor(a_array, b_array)``.
+``tc.array_to_tensor`` converts one or multiple arrays to tensors and automatically casts them to the default dtype of TensorCircuit-NG (i.e., ``tc.dtypestr``). It also supports specifying a specific dtype and can handle multiple inputs: ``a_tensor, b_tensor = tc.array_to_tensor(a_array, b_array)``.
+
+In contrast, ``tc.backend.convert_to_tensor`` is a lower-level API that converts a single array into a tensor for the active backend. By default, it preserves the input's dtype, but it now also supports an optional ``dtype`` argument to specify the desired type during conversion.
 
 
 How to arrange the circuit gate placement in the visualization from ``c.tex()``?
@@ -278,3 +308,9 @@ Try the following:
 
     renyi_ee = tc.quantum.renyi_entropy(rho, k=2)
     # get the k-th order renyi entropy
+
+
+What is the long-term support (LTS) commitment for TensorCircuit-NG?
+---------------------------------------------------------------------
+
+TensorCircuit-NG is committed to long-term maintenance and stability. We ensure compatibility with the latest versions of major ML frameworks (Numpy, TensorFlow, JAX, PyTorch) and provide timely updates to stay aligned with the evolving Python scientific computing ecosystem. Our priority is to provide a reliable, performant, and future-proof platform for both research and production-grade quantum simulation tasks.
