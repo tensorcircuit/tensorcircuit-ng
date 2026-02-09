@@ -390,6 +390,24 @@ def test_backend_methods_2(backend):
         np.array([2, 1]),
     )
     np.testing.assert_allclose(
+        tc.backend.bitwise_and(
+            tc.backend.convert_to_tensor(np.array([12, 7])),
+            tc.backend.convert_to_tensor(np.array([10, 5])),
+        ),
+        np.array(
+            [8, 5]
+        ),  # 12 & 10 = 1100 & 1010 = 1000 = 8, 7 & 5 = 0111 & 0101 = 0101 = 5
+    )
+    np.testing.assert_allclose(
+        tc.backend.bitwise_xor(
+            tc.backend.convert_to_tensor(np.array([12, 7])),
+            tc.backend.convert_to_tensor(np.array([10, 5])),
+        ),
+        np.array(
+            [6, 2]
+        ),  # 12 ^ 10 = 1100 ^ 1010 = 0110 = 6, 7 ^ 5 = 0111 ^ 0101 = 0010 = 2
+    )
+    np.testing.assert_allclose(
         tc.backend.mod(
             tc.backend.convert_to_tensor(np.array([4, 3])),
             tc.backend.convert_to_tensor(np.array([2, 2])),

@@ -309,6 +309,12 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     def left_shift(self, x: Tensor, y: Tensor) -> Tensor:
         return np.left_shift(x, y)
 
+    def bitwise_and(self, x: Tensor, y: Tensor) -> Tensor:
+        return np.bitwise_and(x, y)
+
+    def bitwise_xor(self, x: Tensor, y: Tensor) -> Tensor:
+        return np.bitwise_xor(x, y)
+
     def solve(self, A: Tensor, b: Tensor, assume_a: str = "gen") -> Tensor:  # type: ignore
         # gen, sym, her, pos
         # https://stackoverflow.com/questions/44672029/difference-between-numpy-linalg-solve-and-numpy-linalg-lu-solve/44710451

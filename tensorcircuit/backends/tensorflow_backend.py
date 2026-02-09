@@ -713,6 +713,12 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def left_shift(self, x: Tensor, y: Tensor) -> Tensor:
         return tf.bitwise.left_shift(x, y)
 
+    def bitwise_and(self, x: Tensor, y: Tensor) -> Tensor:
+        return tf.bitwise.bitwise_and(x, y)
+
+    def bitwise_xor(self, x: Tensor, y: Tensor) -> Tensor:
+        return tf.bitwise.bitwise_xor(x, y)
+
     def solve(self, A: Tensor, b: Tensor, **kws: Any) -> Tensor:
         if b.shape[-1] == A.shape[-1]:
             b = b[..., tf.newaxis]

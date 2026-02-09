@@ -1042,6 +1042,36 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `left_shift`.".format(self.name)
         )
 
+    def bitwise_and(self: Any, x: Tensor, y: Tensor) -> Tensor:
+        """
+        Compute the element-wise bitwise AND of two integer tensors.
+
+        :param x: first input tensor
+        :type x: Tensor
+        :param y: second input tensor
+        :type y: Tensor
+        :return: element-wise bitwise AND of ``x`` and ``y``
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `bitwise_and`.".format(self.name)
+        )
+
+    def bitwise_xor(self: Any, x: Tensor, y: Tensor) -> Tensor:
+        """
+        Compute the element-wise bitwise XOR of two integer tensors.
+
+        :param x: first input tensor
+        :type x: Tensor
+        :param y: second input tensor
+        :type y: Tensor
+        :return: element-wise bitwise XOR of ``x`` and ``y``
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `bitwise_xor`.".format(self.name)
+        )
+
     def arange(
         self: Any, start: int, stop: Optional[int] = None, step: int = 1
     ) -> Tensor:

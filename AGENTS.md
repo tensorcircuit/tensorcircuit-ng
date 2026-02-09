@@ -137,6 +137,66 @@ pylint tensorcircuit/quantum.py
 - Example scripts in /examples/ directory also serve as integration tests
 - CI runs example demos to ensure functionality
 
+### Pytest Fixtures
+
+All fixtures are defined in `tests/conftest.py`. Use these instead of manually calling `tc.set_backend()` or `tc.set_dtype()`.
+
+**Backend Fixtures** (use with `@pytest.mark.parametrize` and `lazy_fixture`):
+| Fixture | Backend | Notes |
+|---------|---------|-------|
+| `npb` | NumPy | Default, always available |
+| `tfb` | TensorFlow | Requires tensorflow |
+| `jaxb` | JAX | Requires jax/jaxlib |
+| `torchb` | PyTorch | Requires torch |
+| `cpb` | CuPy | Requires cupy (GPU) |
+
+**Configuration Fixtures** (use as additional function parameter):
+| Fixture | Effect |
+|---------|--------|
+| `highp` | Sets `complex128` dtype, resets to `complex64` after test |
+
+**Usage Patterns**:
+```python
+from pytest_lazyfixture import lazy_fixture as lf
+
+# Standard multi-backend test
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_feature(backend):
+    # Test runs on numpy, tensorflow, and jax backends
+    c = tc.Circuit(2)
+    c.h(0)
+    assert tc.backend.numpy(c.expectation_z(0)) is not None
+
+# Test with high precision (complex128)
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_high_precision(backend, highp):
+    # dtype is complex128 here
+    pass
+
+# AD/JIT tests (exclude numpy which doesn't support these)
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+def test_gradients(backend):
+    @tc.backend.jit
+    def loss(theta):
+        c = tc.Circuit(1)
+        c.rx(0, theta=theta)
+        return tc.backend.real(c.expectation_z(0))
+
+    vg = tc.backend.value_and_grad(loss)
+    val, grad = vg(tc.backend.convert_to_tensor(0.5))
+    assert grad is not None
+
+# vmap tests (JAX only)
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_vmap(backend):
+    pass
+```
+
+**Important Rules**:
+- Never call `tc.set_backend()` or `tc.set_dtype()` directly in tests
+- Always use fixtures for proper setup/teardown
+- Fixtures automatically reset state after each test
+
 ### Documentation
 
 - Documentation built with Sphinx

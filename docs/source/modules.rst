@@ -33,5 +33,6 @@ tensorcircuit
     ./api/timeevol.rst
     ./api/torchnn.rst
     ./api/translation.rst
+    ./api/u1circuit.rst
     ./api/utils.rst
     ./api/vis.rst

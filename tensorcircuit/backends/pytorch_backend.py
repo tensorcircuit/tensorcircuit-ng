@@ -493,6 +493,12 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def left_shift(self, x: Tensor, y: Tensor) -> Tensor:
         return torchlib.bitwise_left_shift(x, y)
 
+    def bitwise_and(self, x: Tensor, y: Tensor) -> Tensor:
+        return torchlib.bitwise_and(x, y)
+
+    def bitwise_xor(self, x: Tensor, y: Tensor) -> Tensor:
+        return torchlib.bitwise_xor(x, y)
+
     def solve(self, A: Tensor, b: Tensor, **kws: Any) -> Tensor:
         return torchlib.linalg.solve(A, b)
 

@@ -408,6 +408,12 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def left_shift(self, x: Tensor, y: Tensor) -> Tensor:
         return jnp.left_shift(x, y)
 
+    def bitwise_and(self, x: Tensor, y: Tensor) -> Tensor:
+        return jnp.bitwise_and(x, y)
+
+    def bitwise_xor(self, x: Tensor, y: Tensor) -> Tensor:
+        return jnp.bitwise_xor(x, y)
+
     def expm(self, a: Tensor) -> Tensor:
         return jsp.linalg.expm(a)
         # currently expm in jax doesn't support AD, it will raise an AssertError,

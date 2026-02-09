@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- Add `bitwise_and`, `bitwise_xor` methods for backends.
+
+- Add `tc.U1Circuit` for U(1) charge conservation circuits.
+
 ## v1.5.0
 
 ### Added
