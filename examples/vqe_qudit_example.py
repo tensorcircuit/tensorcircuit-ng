@@ -77,7 +77,7 @@ def vqe_forward(param, *, nqudits: int, d: int, nlayers: int, J: float, h: float
     return tc.backend.real(energy)
 
 
-def build_param_shape(nqudits: int, nlayers: int):
+def build_param_shape(nqudits: int, d: int, nlayers: int):
     # Per layer per qudit: RX^{(01)}, RY^{(12)} (or dummy), RZ^{(0)} = 3 params
     # Per layer entanglers: len(pairs) parameters
     pairs = nqudits - 1
