@@ -77,7 +77,7 @@ def vqe_forward(param, *, nqudits: int, d: int, nlayers: int, J: float, h: float
     return tc.backend.real(energy)
 
 
-def build_param_shape(nqudits: int, d: int, nlayers: int):
+def build_param_shape(nqudits: int, nlayers: int):
     # Per layer per qudit: RX^{(01)}, RY^{(12)} (or dummy), RZ^{(0)} = 3 params
     # Per layer entanglers: len(pairs) parameters
     pairs = nqudits - 1
@@ -106,7 +106,7 @@ def main():
 
     assert args.d >= 3, "d must be >= 3"
 
-    shape = build_param_shape(args.nqudits, args.d, args.nlayers)
+    shape = build_param_shape(args.nqudits, args.nlayers)
     param = tc.backend.random_uniform(shape, boundaries=(-0.1, 0.1), seed=42)
 
     try:
