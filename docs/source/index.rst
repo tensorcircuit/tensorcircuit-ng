@@ -26,22 +26,22 @@ It is designed for researchers and engineers who demand **Speed, Flexibility, an
    .. grid-item-card:: 🚀 Extreme Performance
       :shadow: md
 
-      Achieve **10-100x GPU speedup** over traditional simulators. Powered by JIT compilation and optimized tensor engines.
+      Achieve **10-100x GPU speedup**. Powered by JIT compilation and optimized tensor engines.
 
    .. grid-item-card:: 🤖 Deep ML Fusion
       :shadow: md
 
-      Native integration with **JAX, TensorFlow, and PyTorch**. Seamlessly combine AD with quantum kernels for hybrid QML.
+      Native integration with **JAX, TensorFlow, and PyTorch**. Seamlessly combine AD with quantum kernels.
 
    .. grid-item-card:: ⛓️ Advanced Engines
       :shadow: md
 
-      State-of-the-art support for **Noisy, Analog, Approximate and Stabilizer** simulations. Utilize ``cotengra`` for complex tensor networks.
+      State-of-the-art support for **Noisy, Analog, Approximate and Stabilizer** simulations.
 
    .. grid-item-card:: ☁️ Hardware Agnostic
       :shadow: md
 
-      Run your code anywhere: from local CPUs to distributed GPUs/TPUs and real **QPU providers** via a unified interface.
+      Run your code anywhere: from local CPUs to distributed GPUs/TPUs and **QPU providers** via a unified interface.
 
    .. grid-item-card:: 🛠 Industrial Strength
       :shadow: md
