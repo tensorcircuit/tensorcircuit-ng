@@ -27,14 +27,19 @@ Jxy = 1.0  # XX + YY coupling
 Jz = 1.0  # ZZ coupling (Jz=Jxy is isotropic Heisenberg)
 
 
-def heisenberg_energy_circuit(params):
-    """VQE energy using regular Circuit."""
-    c = tc.Circuit(n)
-    # Initial state: half-filled product state |010101...>
-    for i in range(0, n, 4):
-        c.x(i)
+def heisenberg_energy(params, u1=False):
+    """VQE energy calculation supporting both regular Circuit and U1Circuit."""
+    if u1:
+        # Initial state: half-filled |01000100...>
+        filled = list(range(0, n, 4))
+        c = U1Circuit(n, k=k, filled=filled)
+    else:
+        c = tc.Circuit(n)
+        # Initial state: half-filled product state |01000100...>
+        for i in range(0, n, 4):
+            c.x(i)
 
-    # Ansatz: layers of RZZ + fSim-like gates (U1 conserving)
+    # Ansatz: layers of RZZ + RZ + iSWAP (U1-conserving gates)
     for layer in range(nlayers):
         # RZZ gates
         for i in range(n - 1):
@@ -53,34 +58,6 @@ def heisenberg_energy_circuit(params):
         energy += Jxy * c.expectation_ps(x=[i, i + 1])
         energy += Jxy * c.expectation_ps(y=[i, i + 1])
         # ZZ term
-        energy += Jz * c.expectation_ps(z=[i, i + 1])
-
-    return tc.backend.real(energy)
-
-
-def heisenberg_energy_u1circuit(params):
-    """VQE energy using U1Circuit (particle-number conserving)."""
-    # Initial state: half-filled |010101...>
-    filled = list(range(0, n, 4))
-    c = U1Circuit(n, k=k, filled=filled)
-
-    # Same ansatz structure but using U1-conserving gates
-    for layer in range(nlayers):
-        # RZZ gates
-        for i in range(n - 1):
-            c.rzz(i, i + 1, theta=params[layer, i, 0])
-        # RZ gates
-        for i in range(n):
-            c.rz(i, theta=params[layer, i, 1])
-        # iswap entangling
-        for i in range(layer % 2, n - 1, 2):
-            c.iswap(i, i + 1, theta=params[layer, i, 2])
-
-    # Compute Heisenberg energy
-    energy = 0.0
-    for i in range(n - 1):
-        energy += Jxy * c.expectation_ps(x=[i, i + 1])
-        energy += Jxy * c.expectation_ps(y=[i, i + 1])
         energy += Jz * c.expectation_ps(z=[i, i + 1])
 
     return tc.backend.real(energy)
@@ -158,10 +135,10 @@ if __name__ == "__main__":
     nruns = 10
 
     e1, g1, t1_first, t1_avg = benchmark(
-        "Regular Circuit", heisenberg_energy_circuit, params, nruns
+        "Regular Circuit", lambda p: heisenberg_energy(p, u1=False), params, nruns
     )
     e2, g2, t2_first, t2_avg = benchmark(
-        "U1Circuit", heisenberg_energy_u1circuit, params, nruns
+        "U1Circuit", lambda p: heisenberg_energy(p, u1=True), params, nruns
     )
 
     # Verify correctness
@@ -196,10 +173,16 @@ if __name__ == "__main__":
     params_opt = np.random.normal(0, 0.1, size=[nlayers, n, 3]).astype(np.float32)
 
     e_circuit, t_circuit = run_optimization(
-        "Circuit", heisenberg_energy_circuit, params_opt.copy(), nsteps=100
+        "Circuit",
+        lambda p: heisenberg_energy(p, u1=False),
+        params_opt.copy(),
+        nsteps=100,
     )
     e_u1, t_u1 = run_optimization(
-        "U1Circuit", heisenberg_energy_u1circuit, params_opt.copy(), nsteps=100
+        "U1Circuit",
+        lambda p: heisenberg_energy(p, u1=True),
+        params_opt.copy(),
+        nsteps=100,
     )
 
     print("\n" + "=" * 60)
