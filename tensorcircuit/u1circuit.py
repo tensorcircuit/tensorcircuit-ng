@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 from .abstractcircuit import AbstractCircuit
-from .cons import backend, dtypestr, rdtypestr
+from .cons import backend, dtypestr, rdtypestr, idtypestr
 from .quantum import sample2all
 from .utils import arg_alias
 
@@ -18,6 +18,12 @@ Tensor = Any
 
 
 class U1Circuit(AbstractCircuit):
+    """
+    Circuit class for U(1) conserving circuits (particle number conservation).
+    Note: Currently only supports nqubits < 64 due to the use of 64-bit integer
+    bitmasks for basis state representation.
+    """
+
     def __init__(
         self,
         nqubits: int,
@@ -26,6 +32,10 @@ class U1Circuit(AbstractCircuit):
         inputs: Optional[Any] = None,
     ) -> None:
         self._nqubits = nqubits
+        if nqubits >= 64:
+            raise ValueError(
+                f"U1Circuit only supports nqubits < 64, but got {nqubits}. "
+            )
 
         # Infer k from filled if not provided
         if k is None and filled is None:
@@ -53,7 +63,7 @@ class U1Circuit(AbstractCircuit):
 
         # Convert basis to backend tensor for faster lookup
         self._basis_tensor = backend.cast(
-            backend.convert_to_tensor(self._basis), dtype="int32"
+            backend.convert_to_tensor(self._basis), dtype=idtypestr
         )
 
         if inputs is not None:
@@ -70,7 +80,7 @@ class U1Circuit(AbstractCircuit):
             # Find the index in our basis - JIT FRIENDLY
             # Use searchsorted and one_hot to stay within the graph
             fs_tensor = backend.cast(
-                backend.convert_to_tensor([filled_state]), dtype="int32"
+                backend.convert_to_tensor([filled_state]), dtype=idtypestr
             )
             initial_idx = backend.searchsorted(self._basis_tensor, fs_tensor)[0]
             # Clip index for safety - searchsorted should always find exact match
@@ -419,7 +429,7 @@ class U1Circuit(AbstractCircuit):
         # Scatter the U(1) state into the full space at basis positions
         # indices should be shape [n, 1] for 1D scatter
         indices = backend.reshape(
-            backend.cast(self._basis_tensor, "int32"), [self._dim, 1]
+            backend.cast(self._basis_tensor, idtypestr), [self._dim, 1]
         )
         dense_state = backend.scatter(dense_state, indices, self._state)
         return dense_state
@@ -517,7 +527,7 @@ class U1Circuit(AbstractCircuit):
 
         # Use sample2all for format conversion
         # full_indices are already integers representing the full basis states
-        ch = backend.cast(full_indices, "int32")
+        ch = backend.cast(full_indices, idtypestr)
         return sample2all(
             ch,
             n=self._nqubits,
