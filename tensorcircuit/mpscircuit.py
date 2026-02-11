@@ -121,6 +121,7 @@ class MPSCircuit(AbstractCircuit):
             "split": split,
             "tensors": tensors,
             "wavefunction": wavefunction,
+            "dim": dim,
         }
         if split is None:
             split = {}

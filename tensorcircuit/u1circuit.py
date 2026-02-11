@@ -49,6 +49,13 @@ class U1Circuit(AbstractCircuit):
         self._extra_qir: List[Dict[str, Any]] = []
         self.is_mps = False
 
+        self.circuit_param = {
+            "nqubits": nqubits,
+            "k": k,
+            "filled": filled,
+            "inputs": inputs,
+        }
+
         # Mapping helpers
         # TC uses qubit 0 as the leftmost (highest) bit
         # So qubit i corresponds to bit position (n-1-i) in the state integer
@@ -192,32 +199,6 @@ class U1Circuit(AbstractCircuit):
             cos_t * self._state + isin_t * swapped_state
         )
 
-    def _apply_fsim(self, i: int, j: int, theta: Any, phi: Any) -> None:
-        """Apply fSim(theta, phi): fermionic simulation gate."""
-        bpi, bpj = self._bit_position(i), self._bit_position(j)
-        mask_i = 1 << bpi
-        mask_j = 1 << bpj
-        bi = backend.right_shift(backend.bitwise_and(self._basis_tensor, mask_i), bpi)
-        bj = backend.right_shift(backend.bitwise_and(self._basis_tensor, mask_j), bpj)
-        diff = backend.bitwise_xor(bi, bj)
-        mask_swap = (1 << bpi) | (1 << bpj)
-        new_basis = backend.bitwise_xor(self._basis_tensor, diff * mask_swap)
-        indices = backend.searchsorted(self._basis_tensor, new_basis)
-
-        theta_c = backend.cast(backend.convert_to_tensor(theta), dtypestr)
-        phi_c = backend.cast(backend.convert_to_tensor(phi), dtypestr)
-        both_on = backend.cast(backend.bitwise_and(bi, bj), dtypestr)
-        phi_factor = 1.0 + (backend.exp(-1j * phi_c) - 1.0) * both_on
-
-        cos_theta = backend.cos(theta_c)
-        isin_theta = 1j * backend.sin(theta_c)
-        diff_f = backend.cast(diff, dtypestr)
-        swapped_state = backend.gather1d(self._state, indices)
-
-        self._state = (1.0 - diff_f) * self._state * phi_factor + diff_f * (
-            cos_theta * self._state - isin_theta * swapped_state
-        )
-
     # -------------------------------------------------------------------------
     # Public gate methods (delegate to internal implementations)
     # -------------------------------------------------------------------------
@@ -227,6 +208,9 @@ class U1Circuit(AbstractCircuit):
         gate: Any,
         *index: int,
         name: Optional[str] = None,
+        split: Optional[Dict[str, Any]] = None,
+        mpo: bool = False,
+        ir_dict: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -234,9 +218,14 @@ class U1Circuit(AbstractCircuit):
 
         :param gate: Gate tensor (ignored, dispatch is by name)
         :param index: Qubit indices
-        :param name: Gate name (rz, rzz, cz, cphase, swap, iswap, fsim)
-        :param kwargs: May contain ir_dict with parameters from _meta_apply
+        :param name: Gate name (rz, rzz, cz, cphase, swap, iswap)
+        :param split: Split configuration (ignored in U1Circuit)
+        :param mpo: MPO flag (ignored in U1Circuit)
+        :param ir_dict: QIR dictionary for recording
+        :param kwargs: Extra parameters
         """
+        if name is None:
+            name = ""
         non_u1 = {"x", "y", "h", "t", "s", "td", "sd", "rx", "ry"}
         if name and name.lower() in non_u1:
             raise ValueError(
@@ -246,7 +235,28 @@ class U1Circuit(AbstractCircuit):
         gate_name = name.lower() if name else None
 
         # Extract parameters: _meta_apply puts them in ir_dict['parameters']
-        params = kwargs.get("ir_dict", {}).get("parameters", kwargs)
+        # Also check kwargs for direct calls
+        params = {}
+        if ir_dict is not None and "parameters" in ir_dict:
+            params.update(ir_dict["parameters"])
+        params.update(kwargs)
+
+        # Record gate in QIR
+        gate_dict = {
+            "gate": gate,
+            "index": index,
+            "name": name,
+            "split": split,
+            "mpo": mpo,
+        }
+        if params:
+            gate_dict["parameters"] = params
+
+        if ir_dict is not None:
+            ir_dict.update(gate_dict)
+        else:
+            ir_dict = gate_dict
+        self._qir.append(ir_dict)
 
         if gate_name == "rz":
             self._apply_rz(index[0], params.get("theta", 0))
@@ -260,23 +270,16 @@ class U1Circuit(AbstractCircuit):
             self._apply_swap(index[0], index[1])
         elif gate_name == "iswap":
             self._apply_iswap(index[0], index[1], params.get("theta", 1.0))
-        elif gate_name == "fsim":
-            self._apply_fsim(
-                index[0], index[1], params.get("theta", 0), params.get("phi", 0)
-            )
+        elif gate_name == "cphase":
+            self._apply_cphase(index[0], index[1], params.get("theta", 0))
         else:
             raise ValueError(
                 f"Gate {name} not implemented in U1Circuit. "
-                "Supported: rz, rzz, cz, cphase, swap, iswap, fsim."
+                "Supported: rz, rzz, cz, cphase, swap, iswap."
             )
 
     # Note: Most gate methods (rz, rzz, cz, swap, iswap, cphase, etc.) are
     # auto-generated by _meta_apply() which calls apply_general_gate.
-    # fsim is not in the standard gate list, so we define it explicitly.
-
-    def fsim(self, i: int, j: int, theta: Any = 0, phi: Any = 0, **kwargs: Any) -> None:
-        """Apply fSim gate on qubits i and j."""
-        self._apply_fsim(i, j, theta, phi)
 
     # -------------------------------------------------------------------------
     # State and expectation methods
@@ -585,5 +588,3 @@ class U1Circuit(AbstractCircuit):
 
 # Register gates via _meta_apply
 U1Circuit._meta_apply()
-
-# TODO(@refraction-ray): qir support

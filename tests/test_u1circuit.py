@@ -26,23 +26,13 @@ def test_u1circuit_correctness(backend):
     sim.rz(0, theta=np.pi)  # |1010> -> -|1010> (global phase doesn't change Z)
     assert np.allclose(tc.backend.numpy(sim.expectation_z(0)), -1.0)
 
-    # Test fSim
-    # Apply fsim on (2, 3): q2=1, q3=0.
-    # fsim([1, 0]) -> cos(theta)|10> - i sin(theta)|01>
-    sim.fsim(2, 3, theta=np.pi / 4, phi=0)
-    # New state: cos(pi/4)|1010> - i sin(pi/4)|1001>
-    # <Z2> = cos^2(pi/4) * (-1) + sin^2(pi/4) * (1) = 0
-    # <Z3> = cos^2(pi/4) * (1) + sin^2(pi/4) * (-1) = 0
-    assert np.allclose(tc.backend.numpy(sim.expectation_z(2)), 0.0, atol=1e-5)
-    assert np.allclose(tc.backend.numpy(sim.expectation_z(3)), 0.0, atol=1e-5)
-
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
 def test_u1circuit_ad_gradients(backend):
     def loss(theta):
         sim = U1Circuit(2, 1, filled=[0])  # |10>
-        sim.fsim(0, 1, theta, 0)
-        # |10> -> cos(theta)|10> - i sin(theta)|01>
+        sim.iswap(0, 1, theta=theta)
+        # |10> -> cos(theta)|10> + i sin(theta)|01>
         # <Z0> = cos^2(theta)*(-1) + sin^2(theta)*(1) = -cos(2*theta)
         return tc.backend.real(sim.expectation_z(0))
 
@@ -50,10 +40,17 @@ def test_u1circuit_ad_gradients(backend):
     theta_v = tc.backend.convert_to_tensor(0.5, dtype="float32")
     val, grad = vg(theta_v)
 
-    # Expected Val: -cos(1.0) approx -0.5403
-    # Expected Grad: d/dth (-cos(2th)) = 2 sin(2th) -> 2 * sin(1.0) approx 1.6829
-    assert np.allclose(tc.backend.numpy(val), -np.cos(1.0), atol=1e-4)
-    assert np.allclose(tc.backend.numpy(grad), 2 * np.sin(1.0), atol=1e-4)
+    # Expected Val: -cos(theta_v * pi) approx -0.58778 (for theta=0.5, pi*theta=pi/2, so -cos(pi/2)=0)
+    # Wait, if theta=0.5, th*pi = pi/2, -cos(pi/2) = 0.
+    # d/dth (-cos(th*pi)) = pi * sin(th*pi). For th=0.5, pi * sin(pi/2) = pi.
+    assert np.allclose(
+        tc.backend.numpy(val), -np.cos(tc.backend.numpy(theta_v) * np.pi), atol=1e-4
+    )
+    assert np.allclose(
+        tc.backend.numpy(grad),
+        np.pi * np.sin(tc.backend.numpy(theta_v) * np.pi),
+        atol=1e-4,
+    )
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
@@ -61,7 +58,7 @@ def test_u1circuit_jit(backend):
     @tc.backend.jit
     def run(theta):
         sim = U1Circuit(4, 2, filled=[0, 1])
-        sim.fsim(1, 2, theta, theta)
+        sim.iswap(1, 2, theta=theta)
         return tc.backend.real(sim.expectation_z(1))
 
     res = run(tc.backend.convert_to_tensor(0.2, dtype="float32"))
@@ -72,13 +69,12 @@ def test_u1circuit_jit(backend):
 def test_u1circuit_vmap(backend):
     def run(theta):
         sim = U1Circuit(2, 1, filled=[0])
-        sim.fsim(0, 1, theta, 0)
+        sim.iswap(0, 1, theta=theta)
         return tc.backend.real(sim.expectation_z(0))
 
     vrun = tc.backend.vmap(run)
-    thetas = tc.backend.convert_to_tensor([0.0, np.pi / 4, np.pi / 2], dtype="float32")
+    thetas = tc.backend.convert_to_tensor([0.0, 0.5, 1.0], dtype="float32")
     results = vrun(thetas)
-    # -cos(0)=-1, -cos(pi/2)=0, -cos(pi)=1
     assert np.allclose(tc.backend.numpy(results), [-1.0, 0.0, 1.0], atol=1e-5)
 
 
@@ -103,7 +99,7 @@ def test_u1circuit_expectation_ps(backend):
     assert np.allclose(tc.backend.numpy(res), -1.0, atol=1e-5)
 
     # test X0Y1 - Y0X1 (non-zero for entangling states)
-    sim.fsim(0, 1, np.pi / 4, 0)
+    sim.iswap(0, 1, theta=np.pi / 4)
     # |10> -> 1/sqrt(2) (|10> - i|01>)
     # <X0Y1> = <1/sqrt(2)(|10> - i|01|) | X0Y1 | 1/sqrt(2)(|10> - i|01|)>
     # X0Y1 |10> = |0>(-i)|0> = -i|00> NO, Y1 |0> = i|1>
@@ -131,11 +127,15 @@ def test_u1circuit_vs_circuit_comparison(backend):
     u1c.rz(0, theta=0.5)
     c.rz(0, theta=0.5)
     u1c.cz(0, 1)
+    u1c.iswap(0, 2, theta=1.9)
     u1c.cz(2, 3)
     u1c.rzz(2, 0, theta=0.3)
+    u1c.cphase(1, 2, theta=0.8)
     c.cz(0, 1)
+    c.iswap(0, 2, theta=1.9)
     c.cz(2, 3)
     c.rzz(2, 0, theta=0.3)
+    c.cphase(1, 2, theta=0.8)
 
     # Compare Z expectations
     for i in range(n):
@@ -339,7 +339,7 @@ def test_u1circuit_measure(backend):
 
     # Test 2: After superposition, outcomes vary
     u1c2 = U1Circuit(n, k, filled=[0, 1])
-    u1c2.fsim(0, 2, theta=np.pi / 4, phi=0)  # Create superposition
+    u1c2.iswap(0, 2, theta=np.pi / 4)  # Create superposition
 
     # Run multiple measurements and check U(1) conservation
     for _ in range(10):
@@ -357,11 +357,11 @@ def test_u1circuit_dtype_agnostic(backend, highp):
 
     # With highp fixture, dtype is complex128
     u1c = U1Circuit(n, k, filled=[0, 1])
-    u1c.fsim(0, 1, theta=0.5, phi=0.3)
+    u1c.iswap(0, 1, theta=0.5)
     exp = tc.backend.numpy(u1c.expectation_z(0))
 
-    # Verify result is reasonable
-    assert np.abs(exp) <= 1.0
+    # Verify result is precise
+    np.testing.assert_allclose(exp, -1.0, atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -533,70 +533,6 @@ def test_u1circuit_all_gate_types(backend):
         assert np.allclose(
             u1_dense, c_state, atol=1e-5
         ), f"State mismatch for {gate_name}({indices}, {kwargs}) with filled={filled}"
-
-
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
-def test_u1circuit_fsim_comprehensive(backend):
-    """Test fSim gate for U1Circuit (internal consistency and expected behavior)."""
-    n = 4
-    k = 2
-
-    # Test 1: fsim(0, 0) should be identity on the swap part
-    u1c = U1Circuit(n, k, filled=[0, 2])
-    u1c.fsim(0, 1, theta=0.0, phi=0.0)
-    # State should be unchanged
-    dense = tc.backend.numpy(u1c.to_dense())
-    expected_idx = (1 << (n - 1 - 0)) | (
-        1 << (n - 1 - 2)
-    )  # filled=[0,2] -> |1010> = 10
-    assert np.allclose(np.abs(dense[expected_idx]), 1.0)
-
-    # Test 2: fsim(pi/2, 0) should fully swap |10> to -i|01>
-    u1c2 = U1Circuit(2, 1, filled=[0])  # |10>
-    u1c2.fsim(0, 1, theta=np.pi / 2, phi=0)
-    # cos(pi/2)|10> - i*sin(pi/2)|01> = -i|01>
-    dense2 = tc.backend.numpy(u1c2.to_dense())
-    assert np.allclose(np.abs(dense2[1]), 1.0)  # |01> = 1
-    assert np.allclose(np.angle(dense2[1]), -np.pi / 2, atol=1e-5)  # phase -i
-
-    # Test 3: Test Z expectations for various theta/phi
-    test_params = [
-        (0.0, 0.0),
-        (np.pi / 4, 0.0),
-        (np.pi / 2, 0.0),
-        (0.0, np.pi / 4),
-        (np.pi / 4, np.pi / 4),
-        (0.5, 0.3),
-    ]
-
-    for theta, phi in test_params:
-        u1c = U1Circuit(n, k, filled=[0, 2])  # |1010>
-        u1c.fsim(0, 1, theta=theta, phi=phi)
-
-        # Check normalization
-        dense = tc.backend.numpy(u1c.to_dense())
-        assert np.allclose(np.sum(np.abs(dense) ** 2), 1.0)
-
-        # Check particle number conservation
-        for i in range(2**n):
-            if bin(i).count("1") != k:
-                assert np.allclose(np.abs(dense[i]), 0.0)
-
-        # Verify Z expectation is in valid range
-        for i in range(n):
-            exp_z = tc.backend.numpy(u1c.expectation_z(i))
-            assert (
-                -1.0 <= exp_z <= 1.0
-            ), f"Z[{i}] out of range at theta={theta}, phi={phi}"
-
-    # Test 4: Known analytic result for fsim on |10> state
-    # fsim|10> = cos(theta)|10> - i*sin(theta)|01>
-    # <Z0> = cos^2(theta)*(-1) + sin^2(theta)*(+1) = -cos(2*theta)
-    for theta in [0.0, 0.25, 0.5, 0.75, 1.0]:
-        u1c = U1Circuit(2, 1, filled=[0])  # |10>
-        u1c.fsim(0, 1, theta=theta, phi=0)
-        exp_z0 = tc.backend.numpy(u1c.expectation_z(0))
-        assert np.allclose(exp_z0, -np.cos(2 * theta), atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])

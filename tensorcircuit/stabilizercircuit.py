@@ -48,9 +48,17 @@ class StabilizerCircuit(AbstractCircuit):
         self._stim_circuit = stim.Circuit()
         self._qir: List[Dict[str, Any]] = []
         self.is_dm = False
-        self.inputs = None
+        self.inputs = inputs
+        self.tableau_inputs = tableau_inputs
         self._extra_qir: List[Dict[str, Any]] = []
         self.current_sim = stim.TableauSimulator()
+
+        self.circuit_param = {
+            "nqubits": nqubits,
+            "inputs": inputs,
+            "tableau_inputs": tableau_inputs,
+        }
+
         if inputs:
             self.current_sim.set_state_from_stabilizers(inputs)
         if tableau_inputs:
