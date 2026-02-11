@@ -63,15 +63,22 @@ class AnalogCircuit:
         """
         self.num_qubits, self._nqubits = nqubits, nqubits
         self.dim = 2**self.num_qubits
-        self.inputs = inputs
         if inputs is None:
             self.inputs = np.zeros([self.dim])
             self.inputs[0] = 1.0
             self.inputs = backend.convert_to_tensor(self.inputs)
+        else:
+            self.inputs = inputs
 
         # List of digital circuits, starting with one empty circuit.
         self.digital_circuits: List[Circuit] = [
-            Circuit(self.num_qubits, inputs, mps_inputs, split, dim)
+            Circuit(
+                self.num_qubits,
+                inputs=self.inputs,
+                mps_inputs=mps_inputs,
+                split=split,
+                dim=dim,
+            )
         ]
 
         # List of analog blocks, each containing the Hamiltonian function, time, and solver options.
@@ -147,6 +154,84 @@ class AnalogCircuit:
         self.digital_circuits.append(Circuit(self.num_qubits, inputs=self.inputs))
         self._effective_circuit = None
         return self  # Allow for chaining
+
+    def append(self, c: Any, indices: Optional[List[int]] = None) -> "AnalogCircuit":
+        """
+        Append a circuit or another AnalogCircuit to the current hybrid circuit.
+        If an AnalogCircuit is appended, its block structure is merged into the current one.
+
+        :param c: The circuit to append.
+        :type c: Union[Circuit, AnalogCircuit]
+        :param indices: Optional qubit indices to map the appended circuit to.
+        :type indices: Optional[Sequence[int]]
+        :return: The updated AnalogCircuit.
+        :rtype: AnalogCircuit
+        """
+        if isinstance(c, AnalogCircuit):
+            # 1. Concatenate the first digital circuit of c to our current digital circuit
+            self.current_digital_circuit.append(c.digital_circuits[0], indices=indices)
+            # 2. Append all subsequent analog blocks and their corresponding digital circuits
+            for i in range(len(c.analog_blocks)):
+                self.analog_blocks.append(c.analog_blocks[i])
+                self.digital_circuits.append(c.digital_circuits[i + 1])
+        elif isinstance(c, Circuit):
+            self.current_digital_circuit.append(c, indices=indices)
+        else:
+            raise TypeError(
+                f"AnalogCircuit.append expects a Circuit or AnalogCircuit, got {type(c).__name__}"
+            )
+        self._effective_circuit = None
+        return self
+
+    def _build_digital_circuit_from_qir(
+        self, qir: List[Dict[str, Any]], nqubits: int
+    ) -> Circuit:
+        """Helper to build a digital Circuit from QIR with inputs set for replace_inputs compatibility."""
+        return Circuit.from_qir(  # type: ignore[return-value]
+            qir,
+            circuit_params={"nqubits": nqubits, "inputs": self.inputs},
+        )
+
+    def inverse(self) -> "AnalogCircuit":
+        """
+        Inverse the hybrid circuit, including digital gate sequences and analog evolutions.
+        Analog blocks are inverted by negating the Hamiltonian (H -> -H), which gives
+        the physical inverse e^{+iHT} of the evolution e^{-iHT}.
+
+        :return: The inversed AnalogCircuit.
+        :rtype: AnalogCircuit
+        """
+        new_circ = AnalogCircuit(self._nqubits)
+        # Reverse the blocks:
+        # Original: D0 -> B0 -> D1 -> B1 -> ... -> DN
+        # Inverse: DN^-1 -> B_{N-1}^-1 -> DN-1^-1 -> ... -> D0^-1
+
+        # 1. Start with the inverse of the last digital circuit
+        last_inv = self.digital_circuits[-1].inverse()
+        new_circ.digital_circuits = [
+            self._build_digital_circuit_from_qir(last_inv.to_qir(), self._nqubits)
+        ]
+
+        # 2. Iterate backwards through analog blocks and preceding digital circuits
+        for i in range(len(self.analog_blocks) - 1, -1, -1):
+            block = self.analog_blocks[i]
+            # Negate the Hamiltonian for the inverse evolution:
+            # e^{-iHT} is inverted by e^{+iHT} = e^{-i(-H)T}
+            neg_ham = lambda t, _orig=block.hamiltonian_func: -_orig(t)
+            inv_block = AnalogBlock(
+                hamiltonian_func=neg_ham,
+                time=block.time,
+                index=block.index,
+                solver_options=block.solver_options,
+            )
+            new_circ.analog_blocks.append(inv_block)
+            inv_c = self.digital_circuits[i].inverse()
+            new_circ.digital_circuits.append(
+                self._build_digital_circuit_from_qir(inv_c.to_qir(), self._nqubits)
+            )
+
+        new_circ._effective_circuit = None
+        return new_circ
 
     def __getattr__(self, name: str) -> Any:
         """

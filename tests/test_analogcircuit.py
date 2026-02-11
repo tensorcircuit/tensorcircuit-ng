@@ -160,3 +160,105 @@ def test_analog_circuit_ad_jit(jaxb):
 
     np.testing.assert_allclose(gf(param), gf(param), atol=1e-6)
     np.testing.assert_allclose(gf(param)[0], num_grad, atol=1e-3)
+
+
+def test_analog_circuit_consistency(jaxb):
+    def hfunc(t):
+        return tc.backend.convert_to_tensor(
+            np.array([[1, 0], [0, -1]], dtype=np.complex64)
+        )
+
+    ac = tc.AnalogCircuit(2)
+    ac.h(0)
+    ac.add_analog_block(hfunc, 1.0, [0])
+    ac.x(1)
+
+    # Test append
+    ac2 = tc.AnalogCircuit(2)
+    ac2.h(0)
+    ac2.add_analog_block(hfunc, 0.5, [0])
+    ac.append(ac2)
+
+    # Sequence: D0 -> B0 -> D1 -> B1 -> D2
+    assert len(ac.analog_blocks) == 2
+    assert len(ac.digital_circuits) == 3
+
+    # Test inverse
+    inv_ac = ac.inverse()
+    assert len(inv_ac.analog_blocks) == 2
+    assert len(inv_ac.digital_circuits) == 3
+    # Verify time is preserved (not negated) — inverse negates Hamiltonian instead
+    np.testing.assert_allclose(
+        tc.backend.numpy(inv_ac.analog_blocks[0].time), [0, 0.5], atol=1e-5
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(inv_ac.analog_blocks[1].time), [0, 1.0], atol=1e-5
+    )
+    # Verify Hamiltonian is negated
+    t0 = tc.backend.convert_to_tensor(0.0)
+    orig_h = tc.backend.numpy(hfunc(t0))
+    inv_h = tc.backend.numpy(inv_ac.analog_blocks[0].hamiltonian_func(t0))
+    np.testing.assert_allclose(inv_h, -orig_h, atol=1e-7)
+
+    # Test identity (simple): 1 analog block
+    ac3 = tc.AnalogCircuit(2)
+    ac3.h(0)
+    ac3.add_analog_block(hfunc, 0.5, [0])
+    ac3.append(ac3.inverse())
+    np.testing.assert_allclose(tc.backend.numpy(ac3.amplitude("00")), 1.0, atol=1e-5)
+
+    # Test identity (deep): 3 qubits, 2 analog blocks, rich digital layers
+    def hfunc_xx(t):
+        # XX coupling Hamiltonian on 2 qubits
+        return tc.backend.convert_to_tensor(
+            np.array(
+                [[0, 0, 0, 1], [0, 0, 1, 0], [0, 1, 0, 0], [1, 0, 0, 0]],
+                dtype=np.complex64,
+            )
+        )
+
+    ac4 = tc.AnalogCircuit(3)
+    ac4.h(0)
+    ac4.cnot(0, 1)
+    ac4.rx(2, theta=tc.array_to_tensor(0.7))
+    ac4.add_analog_block(hfunc, 0.3, [1])
+    ac4.h(2)
+    ac4.cnot(1, 2)
+    ac4.add_analog_block(hfunc_xx, 0.4, [0, 1])
+    ac4.rx(0, theta=tc.array_to_tensor(1.2))
+    ac4.h(1)
+
+    ac4_combined = tc.AnalogCircuit(3)
+    ac4_combined.h(0)
+    ac4_combined.cnot(0, 1)
+    ac4_combined.rx(2, theta=tc.array_to_tensor(0.7))
+    ac4_combined.add_analog_block(hfunc, 0.3, [1])
+    ac4_combined.h(2)
+    ac4_combined.cnot(1, 2)
+    ac4_combined.add_analog_block(hfunc_xx, 0.4, [0, 1])
+    ac4_combined.rx(0, theta=tc.array_to_tensor(1.2))
+    ac4_combined.h(1)
+    ac4_combined.append(ac4.inverse())
+
+    assert len(ac4_combined.analog_blocks) == 4
+    assert len(ac4_combined.digital_circuits) == 5
+    np.testing.assert_allclose(
+        tc.backend.numpy(ac4_combined.amplitude("000")), 1.0, atol=1e-4
+    )
+
+    # Test identity (global Hamiltonian): 2 qubits, global evolution
+    def hfunc_global(t):
+        return tc.backend.convert_to_tensor(
+            np.array(
+                [[1, 0, 0, 0], [0, -1, 0.5, 0], [0, 0.5, -1, 0], [0, 0, 0, 1]],
+                dtype=np.complex64,
+            )
+        )
+
+    ac5 = tc.AnalogCircuit(2)
+    ac5.h(0)
+    ac5.h(1)
+    ac5.add_analog_block(hfunc_global, 0.6)
+    ac5.rx(0, theta=tc.array_to_tensor(0.5))
+    ac5.append(ac5.inverse())
+    np.testing.assert_allclose(tc.backend.numpy(ac5.amplitude("00")), 1.0, atol=1e-4)

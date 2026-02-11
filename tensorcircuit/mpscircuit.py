@@ -15,7 +15,13 @@ import tensornetwork as tn
 
 from . import gates
 from .cons import backend, npdtype, contractor, rdtypestr, dtypestr
-from .quantum import QuOperator, QuVector, extract_tensors_from_qop, _decode_basis_label
+from .quantum import (
+    QuOperator,
+    QuVector,
+    extract_tensors_from_qop,
+    _decode_basis_label,
+    sample2all,
+)
 from .mps_base import FiniteMPS
 from .abstractcircuit import AbstractCircuit
 from .utils import arg_alias
@@ -1067,6 +1073,52 @@ class MPSCircuit(AbstractCircuit):
             return sample, p
         else:
             return sample, -1.0
+
+    def sample(
+        self,
+        batch: Optional[int] = None,
+        allow_state: bool = False,
+        readout_error: Optional[Sequence[Any]] = None,
+        format: Optional[str] = None,
+        random_generator: Optional[Any] = None,
+        status: Optional[Tensor] = None,
+        jittable: bool = True,
+    ) -> Any:
+        if allow_state:
+            raise ValueError("MPSCircuit.sample does not support allow_state=True")
+
+        if random_generator is None:
+            random_generator = backend.get_random_state()
+
+        if batch is None:
+            if status is None:
+                status = backend.stateful_randu(random_generator, shape=[self._nqubits])
+            r = self.measure(*range(self._nqubits), status=status)[0]
+            if format is None:  # batch=None, format=None, backward compatibility
+                return r
+            ch = backend.cast(backend.reshape(r, [1, -1]), "int32")
+        else:
+            if status is None:
+                status = backend.stateful_randu(
+                    random_generator, shape=[batch, self._nqubits]
+                )
+
+            def measure_all(st: Tensor) -> Tensor:
+                return self.measure(*range(self._nqubits), status=st)[0]
+
+            r = []
+            for i in range(batch):
+                r.append(measure_all(status[i]))
+            r = backend.stack(r)
+            if format is None:
+                return r
+            ch = backend.cast(r, "int32")
+
+        if self._nqubits > 35:
+            jittable = False
+        return sample2all(
+            sample=ch, n=self._nqubits, format=format, jittable=jittable, dim=self._d
+        )
 
 
 MPSCircuit._meta_apply()

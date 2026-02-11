@@ -433,8 +433,26 @@ class AbstractCircuit:
         """
         if circuit_params is None:
             circuit_params = {}
+        if hasattr(self, "circuit_param"):
+            for k, v in self.circuit_param.items():
+                if (
+                    k
+                    not in [
+                        "inputs",
+                        "tableau_inputs",
+                        "tensors",
+                        "wavefunction",
+                        "mps_inputs",
+                        "dminputs",
+                    ]
+                    and k not in circuit_params
+                ):
+                    circuit_params[k] = v
         if "nqubits" not in circuit_params:
-            circuit_params["nqubits"] = self._nqubits
+            if hasattr(self, "_nqubits"):
+                circuit_params["nqubits"] = self._nqubits
+            elif hasattr(self, "num_qubits"):
+                circuit_params["nqubits"] = self.num_qubits
 
         c = type(self)(**circuit_params)
         for d in reversed(self._qir):

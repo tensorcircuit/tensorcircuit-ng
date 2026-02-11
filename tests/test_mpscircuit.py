@@ -291,6 +291,20 @@ def test_MPO_conversion(highp, tfb):
     np.testing.assert_allclose(tensor4, tensor4_ref, atol=1e-12)
 
 
+def do_test_sample(test_circuits: type_test_circuits):
+    (
+        c,
+        w_c,
+        mps,
+        w_mps,
+        mps_exact,
+        w_mps_exact,
+    ) = test_circuits
+    s = mps_exact.sample(batch=10, format="sample_bin")
+    assert len(s) == 10
+    assert len(s[0]) == N
+
+
 @pytest.mark.parametrize(
     "backend, dtype", [(lf("tfb"), lf("highp")), (lf("jaxb"), lf("highp"))]
 )
@@ -306,6 +320,7 @@ def test_circuits(backend, dtype):
     do_test_proj(circuits, external)
     do_test_tensor_input(circuits)
     do_test_measure(circuits)
+    do_test_sample(circuits)
 
 
 # TODO(@refraction-ray): fails  (lf("jaxb"), lf("highp"))

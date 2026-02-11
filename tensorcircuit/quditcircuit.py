@@ -730,3 +730,23 @@ class QuditCircuit:
             status=status,
             name=name,
         )
+
+    def append(self, c: Any, indices: Optional[List[int]] = None) -> "QuditCircuit":
+        if isinstance(c, QuditCircuit):
+            c = c._circ
+        self._circ.append(c, indices=indices)
+        return self
+
+    def inverse(self) -> "QuditCircuit":
+        new_circ = QuditCircuit(self._nqudits, self._d)
+        inv = self._circ.inverse()
+        assert isinstance(inv, Circuit)
+        new_circ._circ = inv
+        return new_circ
+
+    def expectation_ps(self, **kwargs: Any) -> Any:
+        raise ValueError(
+            "Pauli string expectation values (expectation_ps) are not well-defined "
+            f"for qudits with dimension d={self._d}. "
+            "Please use `expectation()` with explicit qudit operators instead."
+        )

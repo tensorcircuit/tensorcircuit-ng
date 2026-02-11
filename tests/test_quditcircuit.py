@@ -597,3 +597,31 @@ def test_general_kraus_qutrit_single(backend):
     np.testing.assert_allclose(c4.amplitude("0"), 0.0 + 0j, atol=1e-6)
     np.testing.assert_allclose(c4.amplitude("1"), 1.0 + 0j, atol=1e-6)
     np.testing.assert_allclose(c4.amplitude("2"), 0.0 + 0j, atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_qudit_consistency(backend):
+    c = tc.QuditCircuit(2, 3)
+    c.h(0)
+    c.x(1)
+
+    # Test append
+    c2 = tc.QuditCircuit(2, 3)
+    c2.h(0)
+    c.append(c2)
+
+    # Test inverse
+    inv_c = c.inverse()
+    assert isinstance(inv_c, tc.QuditCircuit)
+    assert inv_c.dim == 3
+
+    # Test expectation_ps ValueError
+    with pytest.raises(ValueError, match="not well-defined for qudits"):
+        c.expectation_ps(z=[0])
+
+    # Test identity: c.append(c.inverse()) -> all zero state
+    c3 = tc.QuditCircuit(2, 3)
+    c3.h(0)
+    c3.x(1)
+    c3.append(c3.inverse())
+    np.testing.assert_allclose(tc.backend.numpy(c3.amplitude("00")), 1.0, atol=1e-5)

@@ -595,3 +595,19 @@ def test_gradient_with_exact_circuit(backend):
     grad1 = tc.backend.grad(loss)(tc.backend.ones([6]))
     grad2 = tc.backend.grad(loss2)(tc.backend.ones([6]))
     assert np.allclose(grad1, grad2, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_u1circuit_inverse(backend):
+    # n=4, k=2, filled=[0, 1] -> |1100>
+    sim = U1Circuit(4, 2, filled=[0, 1])
+    sim.iswap(0, 1, theta=0.8)
+    # verify k is propagated and state is NOT (starts from zero/filled state)
+    inv_sim = sim.inverse()
+    assert inv_sim.circuit_param.get("k") == 2
+    assert "filled" in inv_sim.circuit_param
+    # verify functional inversion
+    sim.append(inv_sim)
+    # After U and U^dagger, state should be back to |1100>
+    assert np.allclose(tc.backend.numpy(sim.expectation_z(0)), -1.0, atol=1e-5)
+    assert np.allclose(tc.backend.numpy(sim.expectation_z(2)), 1.0, atol=1e-5)
