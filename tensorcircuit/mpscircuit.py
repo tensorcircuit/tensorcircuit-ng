@@ -1045,6 +1045,7 @@ class MPSCircuit(AbstractCircuit):
         sample: Tensor = []
         for k, site in enumerate(index):
             mps.position(site)
+            # TODO(@refraction-ray): potential performance issue, position might be saved
             tensor = mps._mps.tensors[site]
             ps = backend.real(
                 backend.einsum("iaj,iaj->a", tensor, backend.conj(tensor))

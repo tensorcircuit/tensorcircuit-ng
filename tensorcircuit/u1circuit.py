@@ -270,8 +270,6 @@ class U1Circuit(AbstractCircuit):
             self._apply_swap(index[0], index[1])
         elif gate_name == "iswap":
             self._apply_iswap(index[0], index[1], params.get("theta", 1.0))
-        elif gate_name == "cphase":
-            self._apply_cphase(index[0], index[1], params.get("theta", 0))
         else:
             raise ValueError(
                 f"Gate {name} not implemented in U1Circuit. "

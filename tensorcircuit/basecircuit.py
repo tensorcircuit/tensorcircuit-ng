@@ -621,7 +621,9 @@ class BaseCircuit(AbstractCircuit):
             if the format is None, and consistent with format when given
         :rtype: Any
         """
-        # allow_state = False is compatibility issue
+        # TODO(@refraction-ray): to be check:
+        # 1. efficiency in different use case
+        # 2. randomness interaction with jit when no explicit status
         if not allow_state:
             if random_generator is None:
                 random_generator = backend.get_random_state()

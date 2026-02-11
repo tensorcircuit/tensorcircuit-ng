@@ -454,6 +454,8 @@ class AbstractCircuit:
             elif hasattr(self, "num_qubits"):
                 circuit_params["nqubits"] = self.num_qubits
 
+        # TODO(@refraction-ray): make the init args consistent across diff classes
+
         c = type(self)(**circuit_params)
         for d in reversed(self._qir):
             if "parameters" not in d:
