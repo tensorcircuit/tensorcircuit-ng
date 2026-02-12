@@ -27,7 +27,7 @@ TensorCircuit-NG 建立在现代机器学习框架 Jax, TensorFlow, PyTorch 之�
 
 TensorCircuit-NG 现在支持真实量子硬件连接和实验，并提供优雅的 CPU/GPU/QPU 硬件混合部署训练方案。
 
-TensorCircuit-NG 是目前积极维护的唯一官方版本，是 TensorCircuit 的[完全兼容](https://github.com/orgs/tensorcircuit/discussions/19)的升级版本，它包含了更多新功能（例如稳定子线路、多卡分布式模拟等）和错误修复（例如支持最新的 numpy>2 和 qiskit>1）。
+TensorCircuit-NG 是 TensorCircuit 在技术与架构上的演进版本，由原核心开发团队领导并持续维护。本仓库填补了旧有镜像在维护上的空白（如对 numpy > 2.0 和 qiskit > 1.0 的支持）并实现了大幅的功能增强。作为[完全兼容](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng)的无缝替代方案，TensorCircuit-NG 提供了下一代量子计算模拟能力，包括稳定子（stabilizer）、量子多能级（qudit）、模拟（analog）及对称性（symmetric）线路模拟，以及支持多节点、多 GPU 的分布式大规模模拟。
 
 ## 入门
 
@@ -208,3 +208,6 @@ VQEX 在 MBL 相位识别上的应用见 [教程](/docs/source/tutorials/vqex_mb
 <p align="center">
     <img width=90% src="docs/source/statics/user_logo.png">
 </p>
+
+
+*关于版权和免责信息，请参阅 [NOTICE](NOTICE) 文件。*

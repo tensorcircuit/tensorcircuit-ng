@@ -53,7 +53,7 @@ It is designed for researchers and engineers who demand **Speed, Flexibility, an
    Please cite our published `whitepaper <https://quantum-journal.org/papers/q-2023-02-02-912/>`_ when using TensorCircuit or TensorCircuit-NG in your research. The bibtex information is provided by ``tc.cite()``.
 
 .. note::
-   The TensorCircuit package is outdated. 
+   TensorCircuit-NG is the active continuation of TensorCircuit project.
    We recommend upgrading to TensorCircuit-NG for the latest features and improvements. 
    You can upgrade by running the following command:
    ``pip uninstall tensorcircuit && pip install tensorcircuit-ng``

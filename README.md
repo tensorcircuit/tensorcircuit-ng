@@ -29,7 +29,8 @@ TensorCircuit-NG is the next-generation open-source high-performance quantum sof
 
 TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for large-scale simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal (`Circuit`), noisy (`DMCircuit`), Clifford (`StabilizerCircuit`), qudit (`QuditCircuit`), approximate (`MPSCircuit`), analog (`AnalogCircuit`), and fermionic (`FGSCircuit`) cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions.
 
-TensorCircuit-NG is the only actively maintained official version and a [fully compatible](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng) successor to TensorCircuit with more new features (stabilizer circuit, qudit circuit, analog circuit, multi-GPU distributed simulation, etc.) and bug fixes (support latest `numpy>2` and `qiskit>1`).
+TensorCircuit-NG is the technical and authoritative successor to TensorCircuit, led and maintained by the original TensorCircuit development team. Since the core developers moved the project’s heartbeat here, this distribution has served as the primary home for the framework's evolution, addressing critical maintenance gaps (numpy > 2.0, qiskit > 1.0) and feature enhancements. As a fully compatible [drop-in replacement](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng), TensorCircuit-NG delivers next-gen capabilities—including stabilizer/qudit/analog/symmetric circuit simulation and multi-node multi-GPU distributed simulation.
+
 
 ## Getting Started
 
@@ -520,3 +521,5 @@ Our users, developers, and partners:
 <p align="center">
     <img width=90% src="docs/source/statics/user_logo.png">
 </p>
+
+*For detailed copyright, disclaimers, and origin information, please refer to the [NOTICE](NOTICE) file.*

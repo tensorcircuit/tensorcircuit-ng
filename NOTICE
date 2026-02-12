@@ -1,0 +1,18 @@
+TensorCircuit-NG
+Copyright 2024-2026 The TensorCircuit-NG Authors (https://github.com/tensorcircuit/tensorcircuit-ng)
+
+=== Origins and Credits ===
+This project is an advanced evolution of the "TensorCircuit" software, originally created and developed by the founding authors who now maintain this distribution. 
+
+=== Trademark & Nominative Use Disclaimer ===
+The name "TensorCircuit" is used herein solely in a nominative sense to accurately describe the technological origin, historical context, and compatibility of this 
+software. 
+
+TensorCircuit-NG is an independent community-led project. It is not affiliated with, 
+sponsored by, endorsed by, or representative of the previous institutional host 
+organizations or any of their subsidiaries. Any other trademarks referenced are the property of their respective owners and are used here for identification purposes only.
+
+=== Attribution Requirements ===
+Any redistribution or derivative work of this software must retain the NOTICE file intact. If the derivative work provides a user interface (such as a "Credits" or "About" page), a clear attribution to the "Development Team of TensorCircuit-NG" and a link to the official repository (https://github.com/tensorcircuit/tensorcircuit-ng) must be included.
+
+All modified files must carry prominent notices stating that the files have been changed to prevent confusion with the original authoritative distribution.
