@@ -15,7 +15,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 authors = [
-  { name = "TensorCircuit Authors", email = "znfesnpbh@gmail.com" },
+  { name = "TensorCircuit-NG Authors", email = "znfesnpbh@gmail.com" },
 ]
 
 dynamic = ["version"]
