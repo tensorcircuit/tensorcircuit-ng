@@ -132,7 +132,7 @@ Or since we can transform ``tc.Circuit`` into QuantumCircuit easily, we have a s
 
 **Circuit Intermediate Representation:**
 
-TensorCircuit provides its own circuit IR as a python list of dicts. This IR can be further utilized to run compiling, generate serialization qasm, or render circuit figures.
+TensorCircuit-NG provides its own circuit IR as a python list of dicts. This IR can be further utilized to run compiling, generate serialization qasm, or render circuit figures.
 
 The IR is given as a list, each element is a dict containing information on one gate that is applied to the circuit. Note gate attr in the dict is a python function that returns the gate's node.
 
@@ -180,7 +180,7 @@ The most common case and the most typical programming paradigm for TensorCircuit
 Also for a non-quantum example (linear regression) demonstrating the backend agnostic feature, variables with pytree support, AD/jit/vmap usage, and variational optimization loops. Please refer to the example script: `linear regression example <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/universal_lr.py>`_.
 This example might be more friendly to the machine learning community since it is purely classical while also showcasing the main features and paradigms of tensorcircuit-ng.
 
-If the user has no intention to maintain the application code in a backend agnostic fashion, the API for ML frameworks can be more handily used and interleaved with the TensorCircuit API.
+If the user has no intention to maintain the application code in a backend agnostic fashion, the API for ML frameworks can be more handily used and interleaved with the TensorCircuit-NG API.
 
 .. code-block:: python
 
@@ -352,168 +352,34 @@ The backend can be set as ``K=tc.set_backend("jax")`` and ``K`` is the backend w
     DeviceArray([0.7400521], dtype=float32)
 
 The supported APIs in the backend come from two sources, one part is implemented in `TensorNetwork package <https://github.com/google/TensorNetwork/blob/master/tensornetwork/backends/abstract_backend.py>`__
-and the other part is implemented in `TensorCircuit package <modules.html#module-tensorcircuit.backends>`__. To see all the backend agnostic APIs, try:
+and the other part is implemented in `TensorCircuit-NG package <modules.html#module-tensorcircuit.backends>`__. To see all the backend agnostic APIs, try:
 
 .. code-block:: python
 
     >>> [s for s in dir(tc.backend) if not s.startswith("_")]
-    ['abs',
-    'acos',
-    'acosh',
-    'addition',
-    'adjoint',
-    'arange',
-    'argmax',
-    'argmin',
-    'asin',
-    'asinh',
-    'atan',
-    'atan2',
-    'atanh',
-    'broadcast_left_multiplication',
-    'broadcast_right_multiplication',
-    'cast',
-    'cholesky',
-    'concat',
-    'cond',
-    'conj',
-    'convert_to_tensor',
-    'coo_sparse_matrix',
-    'coo_sparse_matrix_from_numpy',
-    'copy',
-    'cos',
-    'cosh',
-    'cumsum',
-    'deserialize_tensor',
-    'device',
-    'device_move',
-    'diagflat',
-    'diagonal',
-    'divide',
-    'dtype',
-    'eigh',
-    'eigs',
-    'eigsh',
-    'eigsh_lanczos',
-    'eigvalsh',
-    'einsum',
-    'eps',
-    'exp',
-    'expm',
-    'eye',
-    'from_dlpack',
-    'g',
-    'gather1d',
-    'get_random_state',
-    'gmres',
-    'grad',
-    'hessian',
-    'i',
-    'imag',
-    'implicit_randc',
-    'implicit_randn',
-    'implicit_randu',
-    'index_update',
-    'inv',
-    'is_sparse',
-    'is_tensor',
-    'item',
-    'jacbwd',
-    'jacfwd',
-    'jacrev',
-    'jit',
-    'jvp',
-    'kron',
-    'left_shift',
-    'log',
-    'matmul',
-    'max',
-    'mean',
-    'min',
-    'minor',
-    'mod',
-    'multiply',
-    'name',
-    'norm',
-    'numpy',
-    'one_hot',
-    'onehot',
-    'ones',
-    'optimizer',
-    'outer_product',
-    'pivot',
-    'power',
-    'probability_sample',
-    'qr',
-    'randn',
-    'random_split',
-    'random_uniform',
-    'real',
-    'relu',
-    'reshape',
-    'reshape2',
-    'reshapem',
-    'reverse',
-    'right_shift',
-    'rq',
-    'scatter',
-    'searchsorted',
-    'serialize_tensor',
-    'set_random_state',
-    'shape_concat',
-    'shape_prod',
-    'shape_tensor',
-    'shape_tuple',
-    'sigmoid',
-    'sign',
-    'sin',
-    'sinh',
-    'size',
-    'sizen',
-    'slice',
-    'softmax',
-    'solve',
-    'sparse_dense_matmul',
-    'sparse_shape',
-    'sqrt',
-    'sqrtmh',
-    'stack',
-    'stateful_randc',
-    'stateful_randn',
-    'stateful_randu',
-    'std',
-    'stop_gradient',
-    'subtraction',
-    'sum',
-    'svd',
-    'switch',
-    'tan',
-    'tanh',
-    'tensordot',
-    'tile',
-    'to_dense',
-    'to_dlpack',
-    'trace',
-    'transpose',
-    'tree_flatten',
-    'tree_map',
-    'tree_unflatten',
-    'unique_with_counts',
-    'value_and_grad',
-    'vectorized_value_and_grad',
-    'vjp',
-    'vmap',
-    'vvag',
-    'zeros']
+    # show all methods for tc.backend
 
+Working with Data Types (Dtype)
+---------------------------------
 
-Switch the Dtype
---------------------
+TensorCircuit-NG supports numerical simulation with both **32-bit** (default) and **64-bit** precision. 
+You can switch the global precision using ``tc.set_dtype``.
 
-TensorCircuit-NG supports simulation using 32/64 bit precession. The default dtype is 32-bit as "complex64".
-Change this by ``tc.set_dtype("complex128")``.
+.. code-block:: python
 
-``tc.dtypestr`` always returns the current dtype string: either "complex64" or "complex128". Accordingly, ``tc.rdtypestr`` always returns the current real dtype string: either "float32" or "float64".
+    import tensorcircuit as tc
+    
+    # Switch to 64-bit precision (complex128, float64, int64)
+    tc.set_dtype("complex128")
+    
+    # Return to 32-bit precision (complex64, float32, int32)
+    tc.set_dtype("complex64")
+
+The following properties provide strings for the currently active data types:
+
+* ``tc.dtypestr``: The complex data type (e.g., ``"complex64"`` or ``"complex128"``).
+* ``tc.rdtypestr``: The corresponding real data type (e.g., ``"float32"`` or ``"float64"``).
+* ``tc.idtypestr``: The corresponding integer data type (e.g., ``"int32"`` or ``"int64"``).
 
 
 Setup the Contractor

@@ -167,8 +167,6 @@ Try nightly build for the newest features:
 pip install tensorcircuit-nightly
 ```
 
-We also have [Docker support](/docker).
-
 ## Advantages
 
 - Tensor network simulation engine based

@@ -101,8 +101,6 @@ pip uninstall tensorcircuit-ng
 pip install tensorcircuit-nightly
 ```
 
-我们也有 [Docker 支持](/docker)。
-
 ## 优势
 
 - 基于张量网络模拟引擎
