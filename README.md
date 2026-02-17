@@ -13,6 +13,14 @@
   <a href="https://tensorcircuit-ng.readthedocs.io/">
     <img src="https://img.shields.io/badge/docs-link-green.svg?logo=read-the-docs"/>
   </a>
+  <!-- arXiv 2205.10091 -->
+  <a href="https://arxiv.org/abs/2205.10091">
+    <img src="https://img.shields.io/badge/arXiv-2205.10091-teal.svg"/>
+  </a>
+  <!-- arXiv 2602.14167 -->
+  <a href="https://arxiv.org/abs/2602.14167">
+    <img src="https://img.shields.io/badge/arXiv-2602.14167-teal.svg"/>
+  </a>
   <!-- PyPI -->
   <a href="https://pypi.org/project/tensorcircuit-ng/">
     <img src="https://img.shields.io/pypi/v/tensorcircuit-ng.svg?logo=pypi"/>
@@ -29,7 +37,7 @@ TensorCircuit-NG is the next-generation open-source high-performance quantum sof
 
 TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for large-scale simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal (`Circuit`), noisy (`DMCircuit`), Clifford (`StabilizerCircuit`), qudit (`QuditCircuit`), approximate (`MPSCircuit`), analog (`AnalogCircuit`), and fermionic (`FGSCircuit`) cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions.
 
-TensorCircuit-NG is the technical and authoritative successor to TensorCircuit, led and maintained by the original TensorCircuit development team. This distribution has served as the primary home for the framework's evolution, addressing critical maintenance gaps (numpy > 2.0, qiskit > 1.0) and feature enhancements. As a fully compatible [drop-in replacement](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng), TensorCircuit-NG delivers next-gen capabilities—including stabilizer/qudit/analog/symmetric circuit simulation and multi-node multi-GPU distributed simulation.
+TensorCircuit-NG is the technical successor to TensorCircuit, led and maintained by the original TensorCircuit development team. This distribution has served as the primary home for the framework's evolution, addressing critical maintenance gaps (numpy > 2.0, qiskit > 1.0) and feature enhancements. As a fully compatible [drop-in replacement](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng), TensorCircuit-NG delivers next-gen capabilities—including stabilizer/qudit/analog/symmetric circuit simulation and multi-node multi-GPU distributed simulation.
 
 
 ## Getting Started
@@ -258,11 +266,13 @@ This project is created and maintained by [Shi-Xin Zhang](https://github.com/ref
 
 ### Citation
 
-If this project helps in your research, please cite our software whitepaper to acknowledge the work put into the development of TensorCircuit-NG.
+If this project helps in your research, please cite the two versions of software whitepapers to acknowledge the work put into the development of TensorCircuit-NG.
 
-[TensorCircuit: a Quantum Software Framework for the NISQ Era](https://quantum-journal.org/papers/q-2023-02-02-912/) (published in Quantum)
+- [TensorCircuit: a Quantum Software Framework for the NISQ Era](https://quantum-journal.org/papers/q-2023-02-02-912/) (published in Quantum).
 
-which is also a good introduction to the software.
+- [TensorCircuit-NG: A Universal, Composable, and Scalable Platform for Quantum Computing and Quantum Simulation](https://arxiv.org/abs/2602.14167).
+
+These two works also serve as a good introduction to the software.
 
 Research works citing TensorCircuit-NG can be highlighted in [Research and Applications section](https://github.com/tensorcircuit/tensorcircuit-ng#research-and-applications).
 
@@ -351,7 +361,7 @@ TensorCircuit-NG is open source, released under the Apache License, Version 2.0.
 
 ## Research and Applications
 
-TensorCircuit-NG is a powerful framework for driving research and applications in quantum computing. Below are examples of published academic works (100+ in total) and open-source projects that utilize TensorCircuit-NG.
+TensorCircuit-NG is a powerful framework for driving research and applications in quantum computing. Below are examples of published academic works (150+ in total) and open-source projects that utilize TensorCircuit and TensorCircuit-NG.
 
 ### DQAS
 

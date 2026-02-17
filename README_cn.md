@@ -9,6 +9,14 @@
   <a href="https://tensorcircuit-ng.readthedocs.io/">
     <img src="https://img.shields.io/badge/docs-link-green.svg?logo=read-the-docs"/>
   </a>
+  <!-- arXiv 2205.10091 -->
+  <a href="https://arxiv.org/abs/2205.10091">
+    <img src="https://img.shields.io/badge/arXiv-2205.10091-teal.svg"/>
+  </a>
+  <!-- arXiv 2602.14167 -->
+  <a href="https://arxiv.org/abs/2602.14167">
+    <img src="https://img.shields.io/badge/arXiv-2602.14167-teal.svg"/>
+  </a>
   <!-- PyPI -->
   <a href="https://pypi.org/project/tensorcircuit-ng/">
     <img src="https://img.shields.io/pypi/v/tensorcircuit-ng.svg?logo=pypi"/>
@@ -129,9 +137,11 @@ pip install tensorcircuit-nightly
 
 ### 引用
 
-如果该软件对您的研究有帮助, 请引用我们发表在 Quantum 期刊的白皮书文章来支持我们的研发付出。
+如果该软件对您的研究有帮助, 请引用我们发表的两版白皮书文章来支持我们的研发付出和学术贡献。
 
-[TensorCircuit: a Quantum Software Framework for the NISQ Era](https://quantum-journal.org/papers/q-2023-02-02-912/).
+* [TensorCircuit: a Quantum Software Framework for the NISQ Era](https://quantum-journal.org/papers/q-2023-02-02-912/) (Quantum 期刊).
+
+* [TensorCircuit-NG: A Universal, Composable, and Scalable Platform for Quantum Computing and Quantum Simulation](https://arxiv.org/abs/2602.14167).
 
 ### 说明
 
