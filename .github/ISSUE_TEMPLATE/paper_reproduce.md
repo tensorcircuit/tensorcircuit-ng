@@ -1,7 +1,7 @@
 ---
 name: Paper Reproduction Request
 about: Suggest a paper to reproduce using TensorCircuit-NG
-title: "[Reproduce] <Paper Title>"
+title: "Reproduce <Paper Title>"
 labels: "good first issue"
 assignees: ""
 ---
@@ -12,7 +12,7 @@ assignees: ""
 
 * **Link:**
 
-**Tags:** 
+* **Tags:** 
 
 ## 2. Reproduction Goal
 
@@ -68,12 +68,12 @@ pylint examples/reproduce_papers/your_script.py
 
 ## 5. Checklist
 
-[ ] I have checked that this paper hasn't been reproduced in the repo yet.
+- [ ] I have checked that this paper hasn't been reproduced in the repo yet.
 
-[ ] The script is self-contained and runnable.
+- [ ] The script is self-contained and runnable.
 
-[ ] The docstring includes the correct arXiv/DOI link.
+- [ ] The docstring includes the correct arXiv/DOI link.
 
-[ ] black formatting applied.
+- [ ] black formatting applied.
 
-[ ] pylint check passed.
+- [ ] pylint check passed.
