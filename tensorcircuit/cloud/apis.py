@@ -234,7 +234,9 @@ def set_token(
     if cached:
         file_token = {k: b64encode_s(v) for k, v in saved_token.items()}
         if file_token:
-            with open(authpath, "w") as f:
+            fd = os.open(authpath, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                os.chmod(authpath, 0o600)
                 json.dump(file_token, f)
 
     return saved_token
