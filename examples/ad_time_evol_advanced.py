@@ -37,8 +37,11 @@ def get_hamiltonian_terms(n):
     hz = tc.quantum.heisenberg_hamiltonian(
         g, hxx=0, hyy=0, hzz=0, hx=0, hy=0, hz=1.0, sparse=True
     )
+    hx = tc.quantum.heisenberg_hamiltonian(
+        g, hxx=0, hyy=0, hzz=0, hx=1.0, hy=0, hz=0, sparse=True
+    )
 
-    return hxx, hyy, hzz, hz
+    return hxx, hyy, hzz, hz, hx
 
 
 def measure_magnetization(state):
@@ -62,24 +65,6 @@ def benchmark_evolution(
     print(f"Benchmarking Time Evolution (n={n})")
     print("-" * 60)
 
-    # Initial state: product state |+>|+>...|+>
-    # To ensure non-zero dynamics, let's use a Neel-like state but tilted?
-    # |0101...> is Neel. H has XX+YY+ZZ.
-    # Let's use random circuit initialization to get a generic state, or just |+>
-    # |+> is usually fine for Heisenberg.
-    # Let's stick to |+> but ensure we measure something that changes. Z mag should change if H is not commuting with Z.
-    # H = J(XX+YY+ZZ) + hZ. Commutes with total Z if XX+YY does?
-    # XX+YY = 0.5(S+S- + S-S+). It conserves total Z.
-    # If initial state is |+>|+>..., it is equal superposition of all basis states? No.
-    # |+> = (|0>+|1>)/sqrt(2).
-    # Product of |+> has components in different Z sectors.
-    # So Z mag should evolve? Wait, <Z> = Sum <Zi>.
-    # If H conserves total Z, then <Z_total> is constant!
-    # Aaaah. |+> has <Z>=0.
-    # If [H, Z_total] = 0, then <Z_total> is constant 0.
-    # We should use an observable that DOES evolve, or a Hamiltonian that does NOT conserve Z.
-    # Add hx field to break Z conservation.
-
     print("Initial state: |+> product state")
     c = tc.Circuit(n)
     for i in range(n):
@@ -88,12 +73,7 @@ def benchmark_evolution(
 
     # Pre-calculate Hamiltonian terms
     # We will use H = J(XX+YY+ZZ) + hZ + hX (to break conservation)
-    g = tc.templates.graphs.Line1D(n, pbc=False)
-    hxx_term = tc.quantum.heisenberg_hamiltonian(g, hxx=1.0, sparse=True)
-    hyy_term = tc.quantum.heisenberg_hamiltonian(g, hyy=1.0, sparse=True)
-    hzz_term = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, sparse=True)
-    hz_term = tc.quantum.heisenberg_hamiltonian(g, hz=1.0, sparse=True)
-    hx_term = tc.quantum.heisenberg_hamiltonian(g, hx=1.0, sparse=True)  # New term
+    hxx_term, hyy_term, hzz_term, hz_term, hx_term = get_hamiltonian_terms(n)
 
     # Parameters to differentiate
     j_coupling = 1.0
