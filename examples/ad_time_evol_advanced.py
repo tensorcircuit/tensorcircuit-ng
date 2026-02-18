@@ -69,13 +69,20 @@ def benchmark_evolution(n=6, t=1.0, steps=10, methods=["ed", "krylov", "chebyshe
         h = j_c * (hxx_term + hyy_term + hzz_term) + h_f * hz_term
         return h
 
-    # Pre-calculate spectral bounds using initial parameters
+    # Pre-calculate spectral bounds using initial parameters (outside JIT)
     h_init = construct_h(j_coupling, h_field)
     e_max, e_min = tc.timeevol.estimate_spectral_bounds(h_init)
 
     # Estimate k and M using float bounds
-    k_cheb = tc.timeevol.estimate_k(t, (float(e_max)+2.0, float(e_min)-2.0))
-    M_cheb = tc.timeevol.estimate_M(t, (float(e_max)+2.0, float(e_min)-2.0), k_cheb)
+    # Add buffer to ensure stability if params change slightly during optimization (if we were optimizing)
+    # For benchmarking gradients at fixed point, these bounds are fine.
+    # If parameters change significantly, bounds should be re-estimated, but that requires non-JIT call.
+    # In practice, for AD, we might use loose bounds or recompute periodically.
+    e_max_val = float(e_max) + 5.0
+    e_min_val = float(e_min) - 5.0
+
+    k_cheb = tc.timeevol.estimate_k(t, (e_max_val, e_min_val))
+    M_cheb = tc.timeevol.estimate_M(t, (e_max_val, e_min_val), k_cheb)
     print(f"Chebyshev params: k={k_cheb}, M={M_cheb}")
 
     # 1. Exact Diagonalization (Real Time)
@@ -101,23 +108,16 @@ def benchmark_evolution(n=6, t=1.0, steps=10, methods=["ed", "krylov", "chebyshe
         psi_t = tc.timeevol.krylov_evol(h, psi0, [t], subspace_dimension=k_dim, scan_impl=True)[-1]
         return measure_magnetization(psi_t)
 
-    # 3. Chebyshev with JIT-able bounds
+    # 3. Chebyshev with precomputed bounds
     @jax.jit
     @jax.value_and_grad
     def loss_chebyshev(params):
         j_c, h_f = params
         h = construct_h(j_c, h_f)
 
-        # Calculate spectral bounds INSIDE JIT (tracers)
-        # using new scan_impl=True
-        e_max_tr, e_min_tr = tc.timeevol.estimate_spectral_bounds(h, n_iter=30, scan_impl=True, psi0=None)
-
-        # Add buffer (still tracers)
-        e_max_tr = e_max_tr + 2.0
-        e_min_tr = e_min_tr - 2.0
-
+        # Use precomputed bounds (captured as constants)
         psi_t = tc.timeevol.chebyshev_evol(
-            h, psi0, t, spectral_bounds=(e_max_tr, e_min_tr), k=k_cheb, M=M_cheb
+            h, psi0, t, spectral_bounds=(e_max_val, e_min_val), k=k_cheb, M=M_cheb
         )
         # Normalize
         psi_t = psi_t / jnp.linalg.norm(psi_t)
