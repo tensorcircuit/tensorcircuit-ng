@@ -42,158 +42,182 @@ def measure_magnetization(state):
         mag += c.expectation_ps(z=[i])
     return jnp.real(mag) / n
 
-def benchmark_evolution(n=6, t=1.0, steps=10, methods=["ed", "krylov", "chebyshev"]):
+def benchmark_evolution(n=10, t_list=[1.0, 5.0, 20.0], methods=["ed", "krylov", "chebyshev"]):
     """
     Benchmarks time evolution methods.
     """
-    print(f"Benchmarking Time Evolution (n={n}, t={t})")
+    print(f"Benchmarking Time Evolution (n={n})")
     print("-" * 60)
 
     # Initial state: product state |+>|+>...|+>
+    # To ensure non-zero dynamics, let's use a Neel-like state but tilted?
+    # |0101...> is Neel. H has XX+YY+ZZ.
+    # Let's use random circuit initialization to get a generic state, or just |+>
+    # |+> is usually fine for Heisenberg.
+    # Let's stick to |+> but ensure we measure something that changes. Z mag should change if H is not commuting with Z.
+    # H = J(XX+YY+ZZ) + hZ. Commutes with total Z if XX+YY does?
+    # XX+YY = 0.5(S+S- + S-S+). It conserves total Z.
+    # If initial state is |+>|+>..., it is equal superposition of all basis states? No.
+    # |+> = (|0>+|1>)/sqrt(2).
+    # Product of |+> has components in different Z sectors.
+    # So Z mag should evolve? Wait, <Z> = Sum <Zi>.
+    # If H conserves total Z, then <Z_total> is constant!
+    # Aaaah. |+> has <Z>=0.
+    # If [H, Z_total] = 0, then <Z_total> is constant 0.
+    # We should use an observable that DOES evolve, or a Hamiltonian that does NOT conserve Z.
+    # Add hx field to break Z conservation.
+
+    print("Initial state: |+> product state")
     c = tc.Circuit(n)
     for i in range(n):
         c.h(i)
     psi0 = c.state()
 
     # Pre-calculate Hamiltonian terms
-    hxx_term, hyy_term, hzz_term, hz_term = get_hamiltonian_terms(n)
+    # We will use H = J(XX+YY+ZZ) + hZ + hX (to break conservation)
+    g = tc.templates.graphs.Line1D(n, pbc=False)
+    hxx_term = tc.quantum.heisenberg_hamiltonian(g, hxx=1.0, sparse=True)
+    hyy_term = tc.quantum.heisenberg_hamiltonian(g, hyy=1.0, sparse=True)
+    hzz_term = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, sparse=True)
+    hz_term = tc.quantum.heisenberg_hamiltonian(g, hz=1.0, sparse=True)
+    hx_term = tc.quantum.heisenberg_hamiltonian(g, hx=1.0, sparse=True) # New term
 
     # Parameters to differentiate
     j_coupling = 1.0
-    h_field = 0.5
+    h_field_z = 0.5
+    h_field_x = 0.3 # Non-zero to break symmetry
 
     # Function to construct H from params
-    def construct_h(j_c, h_f):
-        # We assume j_c couples XX, YY, ZZ equally
-        # BCOO matrices addition
-        h = j_c * (hxx_term + hyy_term + hzz_term) + h_f * hz_term
+    def construct_h(j_c, h_z, h_x):
+        h = j_c * (hxx_term + hyy_term + hzz_term) + h_z * hz_term + h_x * hx_term
         return h
 
     # Pre-calculate spectral bounds using initial parameters (outside JIT)
-    h_init = construct_h(j_coupling, h_field)
+    h_init = construct_h(j_coupling, h_field_z, h_field_x)
     e_max, e_min = tc.timeevol.estimate_spectral_bounds(h_init)
 
-    # Estimate k and M using float bounds
-    # Add buffer to ensure stability if params change slightly during optimization (if we were optimizing)
-    # For benchmarking gradients at fixed point, these bounds are fine.
-    # If parameters change significantly, bounds should be re-estimated, but that requires non-JIT call.
-    # In practice, for AD, we might use loose bounds or recompute periodically.
+    # Buffer for bounds
     e_max_val = float(e_max) + 5.0
     e_min_val = float(e_min) - 5.0
+    print(f"Spectral bounds: [{e_min_val}, {e_max_val}]")
 
-    k_cheb = tc.timeevol.estimate_k(t, (e_max_val, e_min_val))
-    M_cheb = tc.timeevol.estimate_M(t, (e_max_val, e_min_val), k_cheb)
-    print(f"Chebyshev params: k={k_cheb}, M={M_cheb}")
-
-    # 1. Exact Diagonalization (Real Time)
+    # Define Loss Functions
     @jax.jit
     @jax.value_and_grad
-    def loss_ed(params):
-        j_c, h_f = params
-        h = construct_h(j_c, h_f)
+    def loss_ed(params, t):
+        j_c, h_z, h_x = params
+        h = construct_h(j_c, h_z, h_x)
         h_dense = tc.backend.to_dense(h)
-        # ed_evol defaults to imaginary time. Pass 1j*t for real time.
         psi_t = tc.timeevol.ed_evol(h_dense, psi0, [1j * t])[-1]
         return measure_magnetization(psi_t)
 
-    # 2. Krylov (Scan implementation)
-    k_dim = min(2**n, 30)
+    k_dim = min(2**n, 50) # Increased Krylov dimension
 
     @jax.jit
     @jax.value_and_grad
-    def loss_krylov(params):
-        j_c, h_f = params
-        h = construct_h(j_c, h_f)
-        # krylov_evol with scan_impl=True
+    def loss_krylov(params, t):
+        j_c, h_z, h_x = params
+        h = construct_h(j_c, h_z, h_x)
         psi_t = tc.timeevol.krylov_evol(h, psi0, [t], subspace_dimension=k_dim, scan_impl=True)[-1]
         return measure_magnetization(psi_t)
 
-    # 3. Chebyshev with precomputed bounds
-    @jax.jit
-    @jax.value_and_grad
-    def loss_chebyshev(params):
-        j_c, h_f = params
-        h = construct_h(j_c, h_f)
+    # Chebyshev needs static k and M, so we need a factory or partial
+    def make_chebyshev_loss(k, M):
+        @jax.jit
+        @jax.value_and_grad
+        def loss_chebyshev(params, t): # t is passed but assumed static-like for k/M validness
+            j_c, h_z, h_x = params
+            h = construct_h(j_c, h_z, h_x)
+            psi_t = tc.timeevol.chebyshev_evol(
+                h, psi0, t, spectral_bounds=(e_max_val, e_min_val), k=k, M=M
+            )
+            psi_t = psi_t / jnp.linalg.norm(psi_t)
+            return measure_magnetization(psi_t)
+        return loss_chebyshev
 
-        # Use precomputed bounds (captured as constants)
-        psi_t = tc.timeevol.chebyshev_evol(
-            h, psi0, t, spectral_bounds=(e_max_val, e_min_val), k=k_cheb, M=M_cheb
-        )
-        # Normalize
-        psi_t = psi_t / jnp.linalg.norm(psi_t)
-        return measure_magnetization(psi_t)
+    params = jnp.array([j_coupling, h_field_z, h_field_x])
 
-    params = jnp.array([j_coupling, h_field])
+    for t in t_list:
+        print(f"\nTime t={t}")
+        print("=" * 20)
 
-    results = {}
+        # Estimate Chebyshev params for this t
+        k_cheb = tc.timeevol.estimate_k(t, (e_max_val, e_min_val))
+        M_cheb = tc.timeevol.estimate_M(t, (e_max_val, e_min_val), k_cheb)
+        print(f"Chebyshev params: k={k_cheb}, M={M_cheb}")
 
-    # Run benchmarks
-    for method in methods:
-        print(f"\nTesting {method}...")
-        try:
-            if method == "ed":
-                loss_fn = loss_ed
-            elif method == "krylov":
-                loss_fn = loss_krylov
-            elif method == "chebyshev":
-                loss_fn = loss_chebyshev
-            else:
-                continue
+        loss_chebyshev = make_chebyshev_loss(k_cheb, M_cheb)
 
-            # Warmup
-            start = time.time()
-            val, grad = loss_fn(params)
-            val.block_until_ready()
-            end = time.time()
-            print(f"  Warmup time: {end - start:.4f}s")
-            print(f"  Value: {val:.6f}")
-            print(f"  Grad: {grad}")
+        results = {}
 
-            # Run multiple times
-            times = []
-            for _ in range(10):
-                start = time.time()
-                val, grad = loss_fn(params)
+        for method in methods:
+            print(f"  Testing {method}...")
+            try:
+                if method == "ed":
+                    loss_fn = loss_ed
+                elif method == "krylov":
+                    loss_fn = loss_krylov
+                elif method == "chebyshev":
+                    loss_fn = loss_chebyshev
+                else:
+                    continue
+
+                # JIT Compilation (Staging) Time
+                start_compile = time.time()
+                # Trigger compilation
+                val, grad = loss_fn(params, t)
                 val.block_until_ready()
-                end = time.time()
-                times.append(end - start)
+                end_compile = time.time()
+                compile_time = end_compile - start_compile
 
-            avg_time = np.mean(times)
-            std_time = np.std(times)
-            print(f"  Avg time: {avg_time:.4f}s (+/- {std_time:.4f})")
+                # Execution Time
+                times = []
+                for _ in range(10):
+                    start = time.time()
+                    val, grad = loss_fn(params, t)
+                    val.block_until_ready()
+                    end = time.time()
+                    times.append(end - start)
 
-            results[method] = {"val": val, "grad": grad, "time": avg_time}
+                avg_time = np.mean(times)
+                std_time = np.std(times)
 
-        except Exception as e:
-            print(f"  FAILED: {e}")
-            import traceback
-            traceback.print_exc()
+                print(f"    Compile time: {compile_time:.4f}s")
+                print(f"    Run time:     {avg_time:.4f}s (+/- {std_time:.4f})")
+                print(f"    Value:        {val:.6f}")
+                print(f"    Grad norm:    {jnp.linalg.norm(grad):.6f}")
 
-    # Compare
-    if "ed" in results:
-        base_val = results["ed"]["val"]
-        base_grad = results["ed"]["grad"]
+                results[method] = {"val": val, "grad": grad}
 
-        for method in results:
-            if method == "ed": continue
+            except Exception as e:
+                print(f"    FAILED: {e}")
+                import traceback
+                traceback.print_exc()
 
-            val = results[method]["val"]
-            grad = results[method]["grad"]
+        # Comparisons
+        if "ed" in results:
+            base_val = results["ed"]["val"]
+            base_grad = results["ed"]["grad"]
 
-            val_diff = abs(val - base_val)
-            grad_diff = jnp.linalg.norm(grad - base_grad)
+            for method in results:
+                if method == "ed": continue
 
-            print(f"\nComparison {method} vs ED:")
-            print(f"  Value Diff: {val_diff:.2e}")
-            print(f"  Grad Diff: {grad_diff:.2e}")
+                val = results[method]["val"]
+                grad = results[method]["grad"]
+
+                val_diff = abs(val - base_val)
+                grad_diff = jnp.linalg.norm(grad - base_grad)
+
+                print(f"  Comparison {method} vs ED:")
+                print(f"    Value Diff: {val_diff:.2e}")
+                print(f"    Grad Diff:  {grad_diff:.2e}")
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n", type=int, default=8, help="Number of qubits")
-    parser.add_argument("--t", type=float, default=1.0, help="Total time")
+    parser.add_argument("--n", type=int, default=10, help="Number of qubits")
     args = parser.parse_args()
 
-    benchmark_evolution(n=args.n, t=args.t)
+    benchmark_evolution(n=args.n)
 
 if __name__ == "__main__":
     main()
