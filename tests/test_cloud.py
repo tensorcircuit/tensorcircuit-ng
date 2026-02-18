@@ -1,11 +1,11 @@
 import sys
 import os
 import time
-import pytest
-import numpy as np
 import stat
 import json
 from unittest.mock import patch
+import pytest
+import numpy as np
 
 thisfile = os.path.abspath(__file__)
 modulepath = os.path.dirname(os.path.dirname(thisfile))
@@ -16,6 +16,7 @@ from tensorcircuit.cloud import apis, wrapper
 from tensorcircuit.results import counts
 
 skip_cloud = pytest.mark.skipif("TC_CLOUD_TEST" not in os.environ, reason="no token")
+
 
 @skip_cloud
 class TestCloud:
@@ -141,7 +142,9 @@ class TestCloud:
         c = tc.Circuit(2)
         c.h(0)
         c.x(1)
-        np.testing.assert_allclose(wrapper.batch_expectation_ps(c, pss), [1, -1], atol=1e-5)
+        np.testing.assert_allclose(
+            wrapper.batch_expectation_ps(c, pss), [1, -1], atol=1e-5
+        )
         np.testing.assert_allclose(
             wrapper.batch_expectation_ps(c, pss, ws=[1, -0.5]), 1.5, atol=1e-5
         )
@@ -151,7 +154,9 @@ class TestCloud:
             atol=1e-1,
         )
         np.testing.assert_allclose(
-            wrapper.batch_expectation_ps(c, pss, device="local::default", with_rem=False),
+            wrapper.batch_expectation_ps(
+                c, pss, device="local::default", with_rem=False
+            ),
             [1, -1],
             atol=1e-1,
         )
@@ -213,7 +218,10 @@ class TestCloudAuth:
         try:
             # Mock os.path.expanduser to return tmp_path
             # We patch where it is used in tensorcircuit.cloud.apis
-            with patch("tensorcircuit.cloud.apis.os.path.expanduser", return_value=str(tmp_path)):
+            with patch(
+                "tensorcircuit.cloud.apis.os.path.expanduser",
+                return_value=str(tmp_path),
+            ):
                 authpath = tmp_path / ".tc.auth.json"
 
                 # Ensure clean state for saved_token global variable if necessary
@@ -231,8 +239,17 @@ class TestCloudAuth:
                 if os.name == "posix":
                     st = os.stat(authpath)
                     # Check that group and others have no permissions (should be 0)
-                    assert (st.st_mode & (stat.S_IRGRP | stat.S_IWGRP | stat.S_IXGRP |
-                                          stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH)) == 0
+                    assert (
+                        st.st_mode
+                        & (
+                            stat.S_IRGRP
+                            | stat.S_IWGRP
+                            | stat.S_IXGRP
+                            | stat.S_IROTH
+                            | stat.S_IWOTH
+                            | stat.S_IXOTH
+                        )
+                    ) == 0
 
                 # Scenario 2: File update (existing file with insecure permissions)
                 if os.name == "posix":
@@ -240,7 +257,7 @@ class TestCloudAuth:
                     os.chmod(authpath, 0o666)
                     st_before = os.stat(authpath)
                     # Verify it is indeed insecure (readable by others)
-                    assert (st_before.st_mode & stat.S_IROTH)
+                    assert st_before.st_mode & stat.S_IROTH
 
                 # Update token (add another token or update existing)
                 # This triggers the write logic again
@@ -249,8 +266,17 @@ class TestCloudAuth:
                 # Verify permissions again (should be fixed to 0600)
                 if os.name == "posix":
                     st_after = os.stat(authpath)
-                    assert (st_after.st_mode & (stat.S_IRGRP | stat.S_IWGRP | stat.S_IXGRP |
-                                               stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH)) == 0
+                    assert (
+                        st_after.st_mode
+                        & (
+                            stat.S_IRGRP
+                            | stat.S_IWGRP
+                            | stat.S_IXGRP
+                            | stat.S_IROTH
+                            | stat.S_IWOTH
+                            | stat.S_IXOTH
+                        )
+                    ) == 0
 
                 # Verify content updated and readable
                 with open(authpath, "r") as f:
