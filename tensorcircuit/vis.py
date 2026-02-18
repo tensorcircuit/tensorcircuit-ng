@@ -310,6 +310,15 @@ def render_pdf(
         filepath = os.getcwd()
     if not latex:
         latex = "pdflatex"
+    else:
+        # Security fix: validate latex command
+        basename = os.path.basename(latex)
+        if basename not in ["pdflatex", "xelatex", "lualatex", "latex"]:
+            raise ValueError(
+                f"Invalid latex command: {latex}. "
+                "Only pdflatex, xelatex, lualatex, and latex are allowed."
+            )
+
     if not filename:
         filename = str(uuid4())
     if filename.endswith(".pdf"):
