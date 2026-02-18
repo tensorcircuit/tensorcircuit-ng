@@ -67,3 +67,13 @@ Chebyshev params: k=1262, M=1770
     Value:        0.545247
     Grad norm:    17.178024
   Testing chebyshev...
+    Compile time: 35.1749s
+    Run time:     32.1185s (+/- 1.4105)
+    Value:        0.545247
+    Grad norm:    17.178024
+  Comparison krylov vs ED:
+    Value Diff: 7.12e-14
+    Grad Diff:  1.05e-12
+  Comparison chebyshev vs ED:
+    Value Diff: 1.63e-14
+    Grad Diff:  2.34e-11

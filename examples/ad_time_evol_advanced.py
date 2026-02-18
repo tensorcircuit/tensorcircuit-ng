@@ -16,6 +16,7 @@ import jax.numpy as jnp
 tc.set_backend("jax")
 tc.set_dtype("complex128")
 
+
 def get_hamiltonian_terms(n):
     """
     Creates base Hamiltonian terms for a 1D Heisenberg chain.
@@ -24,12 +25,21 @@ def get_hamiltonian_terms(n):
 
     # We construct terms separately so that we can linearly combine them with JAX tracers
     # sparse=True returns BCOO matrix in JAX
-    hxx = tc.quantum.heisenberg_hamiltonian(g, hxx=1.0, hyy=0, hzz=0, hx=0, hy=0, hz=0, sparse=True)
-    hyy = tc.quantum.heisenberg_hamiltonian(g, hxx=0, hyy=1.0, hzz=0, hx=0, hy=0, hz=0, sparse=True)
-    hzz = tc.quantum.heisenberg_hamiltonian(g, hxx=0, hyy=0, hzz=1.0, hx=0, hy=0, hz=0, sparse=True)
-    hz = tc.quantum.heisenberg_hamiltonian(g, hxx=0, hyy=0, hzz=0, hx=0, hy=0, hz=1.0, sparse=True)
+    hxx = tc.quantum.heisenberg_hamiltonian(
+        g, hxx=1.0, hyy=0, hzz=0, hx=0, hy=0, hz=0, sparse=True
+    )
+    hyy = tc.quantum.heisenberg_hamiltonian(
+        g, hxx=0, hyy=1.0, hzz=0, hx=0, hy=0, hz=0, sparse=True
+    )
+    hzz = tc.quantum.heisenberg_hamiltonian(
+        g, hxx=0, hyy=0, hzz=1.0, hx=0, hy=0, hz=0, sparse=True
+    )
+    hz = tc.quantum.heisenberg_hamiltonian(
+        g, hxx=0, hyy=0, hzz=0, hx=0, hy=0, hz=1.0, sparse=True
+    )
 
     return hxx, hyy, hzz, hz
+
 
 def measure_magnetization(state):
     """
@@ -42,7 +52,10 @@ def measure_magnetization(state):
         mag += c.expectation_ps(z=[i])
     return jnp.real(mag) / n
 
-def benchmark_evolution(n=10, t_list=[1.0, 5.0, 20.0], methods=["ed", "krylov", "chebyshev"]):
+
+def benchmark_evolution(
+    n=10, t_list=[1.0, 5.0, 20.0], methods=["ed", "krylov", "chebyshev"]
+):
     """
     Benchmarks time evolution methods.
     """
@@ -80,12 +93,12 @@ def benchmark_evolution(n=10, t_list=[1.0, 5.0, 20.0], methods=["ed", "krylov", 
     hyy_term = tc.quantum.heisenberg_hamiltonian(g, hyy=1.0, sparse=True)
     hzz_term = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, sparse=True)
     hz_term = tc.quantum.heisenberg_hamiltonian(g, hz=1.0, sparse=True)
-    hx_term = tc.quantum.heisenberg_hamiltonian(g, hx=1.0, sparse=True) # New term
+    hx_term = tc.quantum.heisenberg_hamiltonian(g, hx=1.0, sparse=True)  # New term
 
     # Parameters to differentiate
     j_coupling = 1.0
     h_field_z = 0.5
-    h_field_x = 0.3 # Non-zero to break symmetry
+    h_field_x = 0.3  # Non-zero to break symmetry
 
     # Function to construct H from params
     def construct_h(j_c, h_z, h_x):
@@ -111,21 +124,25 @@ def benchmark_evolution(n=10, t_list=[1.0, 5.0, 20.0], methods=["ed", "krylov", 
         psi_t = tc.timeevol.ed_evol(h_dense, psi0, [1j * t])[-1]
         return measure_magnetization(psi_t)
 
-    k_dim = min(2**n, 50) # Increased Krylov dimension
+    k_dim = min(2**n, 50)  # Increased Krylov dimension
 
     @jax.jit
     @jax.value_and_grad
     def loss_krylov(params, t):
         j_c, h_z, h_x = params
         h = construct_h(j_c, h_z, h_x)
-        psi_t = tc.timeevol.krylov_evol(h, psi0, [t], subspace_dimension=k_dim, scan_impl=True)[-1]
+        psi_t = tc.timeevol.krylov_evol(
+            h, psi0, [t], subspace_dimension=k_dim, scan_impl=True
+        )[-1]
         return measure_magnetization(psi_t)
 
     # Chebyshev needs static k and M, so we need a factory or partial
     def make_chebyshev_loss(k, M):
         @jax.jit
         @jax.value_and_grad
-        def loss_chebyshev(params, t): # t is passed but assumed static-like for k/M validness
+        def loss_chebyshev(
+            params, t
+        ):  # t is passed but assumed static-like for k/M validness
             j_c, h_z, h_x = params
             h = construct_h(j_c, h_z, h_x)
             psi_t = tc.timeevol.chebyshev_evol(
@@ -133,6 +150,7 @@ def benchmark_evolution(n=10, t_list=[1.0, 5.0, 20.0], methods=["ed", "krylov", 
             )
             psi_t = psi_t / jnp.linalg.norm(psi_t)
             return measure_magnetization(psi_t)
+
         return loss_chebyshev
 
     params = jnp.array([j_coupling, h_field_z, h_field_x])
@@ -192,6 +210,7 @@ def benchmark_evolution(n=10, t_list=[1.0, 5.0, 20.0], methods=["ed", "krylov", 
             except Exception as e:
                 print(f"    FAILED: {e}")
                 import traceback
+
                 traceback.print_exc()
 
         # Comparisons
@@ -200,7 +219,8 @@ def benchmark_evolution(n=10, t_list=[1.0, 5.0, 20.0], methods=["ed", "krylov", 
             base_grad = results["ed"]["grad"]
 
             for method in results:
-                if method == "ed": continue
+                if method == "ed":
+                    continue
 
                 val = results[method]["val"]
                 grad = results[method]["grad"]
@@ -212,12 +232,14 @@ def benchmark_evolution(n=10, t_list=[1.0, 5.0, 20.0], methods=["ed", "krylov", 
                 print(f"    Value Diff: {val_diff:.2e}")
                 print(f"    Grad Diff:  {grad_diff:.2e}")
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=10, help="Number of qubits")
     args = parser.parse_args()
 
     benchmark_evolution(n=args.n)
+
 
 if __name__ == "__main__":
     main()
