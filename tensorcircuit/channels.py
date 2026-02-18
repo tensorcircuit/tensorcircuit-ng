@@ -207,8 +207,33 @@ def generaldepolarizingchannel(
     assert len(tup) == len(probs)
 
     Gkarus = []
-    for pro, paugate in zip(probs, tup):
-        Gkarus.append(Gate(_sqrt(pro) * paugate))
+
+    # Vectorized implementation
+    # 1. Convert probs to tensor and sqrt
+    probs_tensor = backend.convert_to_tensor(probs)
+    probs_tensor = backend.cast(probs_tensor, cons.rdtypestr)
+    sqrt_probs = backend.sqrt(probs_tensor)
+    sqrt_probs = backend.cast(sqrt_probs, dtype=cons.dtypestr)
+
+    # 2. Stack tup to tensor
+    if isinstance(tup[0], np.ndarray):
+        tup_tensor = backend.convert_to_tensor(np.stack(tup))
+    else:
+        tup_tensor = backend.stack(tup)
+
+    tup_tensor = backend.cast(tup_tensor, dtype=cons.dtypestr)
+
+    # 3. Reshape sqrt_probs for broadcasting
+    tup_shape = backend.shape_tuple(tup_tensor)
+    new_shape = [-1] + [1] * (len(tup_shape) - 1)
+    sqrt_probs = backend.reshape(sqrt_probs, new_shape)
+
+    # 4. Multiply
+    final_tensor = sqrt_probs * tup_tensor
+
+    # 5. Create Gates
+    for i in range(len(probs)):
+        Gkarus.append(Gate(final_tensor[i]))
 
     return KrausList(Gkarus, name="depolarizing", is_unitary=True)
 
