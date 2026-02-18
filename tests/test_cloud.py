@@ -257,13 +257,4 @@ class TestCloudAuth:
                     data = json.load(f)
                     assert data is not None
         finally:
-            # Restore original saved_token
-            # We must update the global variable in apis module
-            # We can't assign to it directly from here easily if it's not imported as mutable
-            # But apis.saved_token IS mutable (it's a dict).
-            # However, apis.set_token(clear=True) might reassign the variable inside apis.py:
-            # "saved_token = {}" inside set_token might create a new dict, but global saved_token refers to it.
-            # Wait, `from . import saved_token` would import a reference, but `import tensorcircuit.cloud.apis as apis` -> `apis.saved_token` accesses the module attribute.
-            # If set_token does `global saved_token; saved_token = {}`, it rebinds the name in module scope.
-            # So we can just reassign it back.
             apis.saved_token = original_saved_token
