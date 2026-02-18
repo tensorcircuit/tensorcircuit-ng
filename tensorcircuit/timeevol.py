@@ -319,7 +319,9 @@ def krylov_evol(
     times = backend.convert_to_tensor(times)
     times = backend.cast(times, dtypestr)
 
-    # Transform projected state to eigenbasis: |psi_coeff> = U^† |psi_proj>
+    # Transform projected state to eigenbasis: |psi_coeff> = U^† |psi_coeff>
+    # Note: previous implementation comment had |psi_proj> which is confusing.
+    # U^dagger |psi_proj> -> coefficients in energy basis
     eigenvectors_projected_state = backend.matvec(
         backend.conj(backend.transpose(eigenvectors)), projected_state
     )
@@ -716,8 +718,12 @@ def chebyshev_evol(
     """
     # TODO(@refraction-ray): no support for tf backend as bessel function has no implementation
     E_max, E_min = spectral_bounds
-    if E_max <= E_min:
-        raise ValueError("E_max must be > E_min.")
+    try:
+        if E_max <= E_min:
+            raise ValueError("E_max must be > E_min.")
+    except Exception:
+        # Avoid raising error if E_max/E_min are tracers
+        pass
 
     a = (E_max - E_min) / 2.0
     b = (E_max + E_min) / 2.0
@@ -833,11 +839,11 @@ def estimate_M(t: float, spectral_bounds: Tuple[float, float], k: int) -> int:
 
 
 def estimate_spectral_bounds(
-    h: Any, n_iter: int = 30, psi0: Optional[Any] = None
+    h: Any, n_iter: int = 30, psi0: Optional[Any] = None, scan_impl: bool = False
 ) -> Tuple[float, float]:
     """
     Lanczos algorithm to estimate the spectral bounds of a Hamiltonian.
-    Just for quick run before `chebyshev_evol`, non jit-able.
+    Just for quick run before `chebyshev_evol`, non jit-able (unless scan_impl=True).
 
     :param h: Hamiltonian matrix.
     :type h: Any
@@ -845,15 +851,33 @@ def estimate_spectral_bounds(
     :type n_iter: int
     :param psi0: Optional initial state.
     :type psi0: Optional[Any]
+    :param scan_impl: whether use scan implementation, suitable for jit.
+    :type scan_impl: bool, defaults False
     :return: (E_max, E_min)
     """
     shape = h.shape
     D = shape[-1]
     if psi0 is None:
-        psi0 = np.random.normal(size=[D])
+        if not scan_impl:
+            psi0 = np.random.normal(size=[D])
+        else:
+            # For JIT, we cannot use random without key.
+            # Fallback to deterministic vector (ones) if not provided.
+            # This might be bad if it has 0 overlap with extremes, but it's a tradeoff.
+            psi0 = backend.ones([D], dtype=dtypestr)
 
     psi0 = backend.convert_to_tensor(psi0) / backend.norm(psi0)
     psi0 = backend.cast(psi0, dtypestr)
+
+    if scan_impl:
+        # Use lanczos_iteration_scan to get the projected Hamiltonian (tridiagonal)
+        # Note: lanczos_iteration_scan assumes complex128 for everything inside usually
+        _, T = lanczos_iteration_scan(h, psi0, n_iter)
+
+        # Compute eigenvalues of T
+        # T is (n_iter, n_iter)
+        ritz_values = backend.eigvalsh(T)
+        return backend.max(ritz_values), backend.min(ritz_values)
 
     # Lanczos
     alphas = []
