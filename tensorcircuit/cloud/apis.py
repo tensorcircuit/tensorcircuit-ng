@@ -199,7 +199,6 @@ def set_token(
     global saved_token
     homedir = os.path.expanduser("~")
     authpath = os.path.join(homedir, ".tc.auth.json")
-    # provider, device = _preprocess(provider, device)
     if clear is True:
         saved_token = {}
     if token is None:
@@ -208,7 +207,6 @@ def set_token(
                 with open(authpath, "r") as f:
                     file_token = json.load(f)
                     file_token = {k: b64decode_s(v) for k, v in file_token.items()}
-                    # file_token = backend.tree_map(b64decode_s, file_token)
             except json.JSONDecodeError:
                 logger.warning("token file loading failure, set empty token instead")
                 # TODO(@refraction-ray): better conflict solve with multiprocessing
@@ -234,7 +232,6 @@ def set_token(
         saved_token.update(added_token)
 
     if cached:
-        # file_token = backend.tree_map(b64encode_s, saved_token)
         file_token = {k: b64encode_s(v) for k, v in saved_token.items()}
         if file_token:
             with open(authpath, "w") as f:
@@ -323,13 +320,6 @@ def list_properties(
     :return: Propeties dict
     :rtype: Dict[str, Any]
     """
-    # if provider is not None and device is None:
-    #     provider, device = None, provider
-    # if device is None:
-    #     device = default_device
-    # device = Device.from_name(device, provider)
-    # if provider is None:
-    #     provider = device.provider
     provider, device = _preprocess(provider, device)
 
     if token is None:
@@ -434,17 +424,6 @@ def submit_task(
     :return: The task object
     :rtype: List[Task]
     """
-    # if device is None:
-    #     device = get_device()
-    # if isinstance(device, str):
-    #     if len(device.split(sep)) > 1:
-    #         device = Device(device, provider)
-    #     else:
-    #         if provider is None:
-    #             provider = get_provider()
-    #         device = Device(device, provider)
-    # if provider is None:
-    #     provider = device.provider
     provider, device = _preprocess(provider, device)
 
     if token is None:
