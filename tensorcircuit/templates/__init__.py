@@ -7,5 +7,6 @@ from . import measurements
 from . import conversions
 from . import lattice
 from . import hamiltonians
+from . import layers
 
 costfunctions = measurements
