@@ -91,6 +91,7 @@ TensorCircuit is a **Tensor Network-first**, **Multi-Backend** quantum computing
 Follow these rules for all code changes in this repository:
 
 - Minimize comments; be concise; code should be self-explanatory and self-documenting.
+- Do not include chain-of-thought or debugging steps in comments.
 - Comments should be useful, for example, comments that remind the reader about some global context that is non-obvious and can't be inferred locally.
 - Match existing code style and architectural patterns of the codebase.
 - If uncertain, choose the simpler, more concise implementation.
