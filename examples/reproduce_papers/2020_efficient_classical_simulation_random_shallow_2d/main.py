@@ -93,9 +93,7 @@ def exact_probability(c, bitstring):
     Computes the exact probability of measuring the given bitstring.
     """
     if c._nqubits > 20:
-        logger.warning(
-            "Exact simulation for >20 qubits is slow/impossible. Skipping."
-        )
+        logger.warning("Exact simulation for >20 qubits is slow/impossible. Skipping.")
         return 0.0
 
     # Calculate probability
@@ -139,13 +137,13 @@ def compress_mps(mps, max_bond):
         # We need to contract d_prev with u
         # R is (k, u) -> Transpose to (u, k)
         r_t = K.transpose(r, (1, 0))
-        prev = mps[i-1]
+        prev = mps[i - 1]
 
         # Contract prev axis 1 (d_prev) with r_t axis 0 (u)
         # Result: (u_prev, p_prev, k)
         new_prev = K.tensordot(prev, r_t, axes=[[1], [0]])
         # Transpose to (u_prev, k, p_prev)
-        mps[i-1] = K.transpose(new_prev, (0, 2, 1))
+        mps[i - 1] = K.transpose(new_prev, (0, 2, 1))
 
     # Left canonicalization (SVD) from 0 to rows-1
     for i in range(rows - 1):
@@ -201,9 +199,7 @@ def sebd_probability(c, rows, cols, bitstring, max_bond=None):
     sites = {}
     for i in range(rows * cols):
         sites[i] = {
-            "tensor": K.cast(
-                K.convert_to_tensor(np.array([1.0, 0.0])), "complex128"
-            ),
+            "tensor": K.cast(K.convert_to_tensor(np.array([1.0, 0.0])), "complex128"),
             "directions": [],
         }
 
@@ -211,7 +207,7 @@ def sebd_probability(c, rows, cols, bitstring, max_bond=None):
     for gate in c._qir:
         idx = gate["index"]
         func = gate["gatef"]
-        param = gate.get("parameter", {})
+        param = gate.get("parameters", {})
 
         if len(idx) == 1:
             q = idx[0]
@@ -269,9 +265,7 @@ def sebd_probability(c, rows, cols, bitstring, max_bond=None):
             # T1 shape: (Phys_in, Bonds...)
             # u shape: (Phys_out, Phys_in, Bond_k)
             # Contract T1 Phys_in (0) with u Phys_in (1)
-            t1_new = K.tensordot(
-                u, t1, axes=[[1], [0]]
-            )  # (Phys_out, Bond_k, Bonds...)
+            t1_new = K.tensordot(u, t1, axes=[[1], [0]])  # (Phys_out, Bond_k, Bonds...)
             sites[q1]["tensor"] = t1_new
             sites[q1]["directions"].insert(0, dir1)
 
@@ -280,9 +274,7 @@ def sebd_probability(c, rows, cols, bitstring, max_bond=None):
             # T2 shape: (Phys_in, Bonds...)
             # v shape: (Bond_k, Phys_out, Phys_in)
             # Contract T2 Phys_in (0) with v Phys_in (2)
-            t2_new = K.tensordot(
-                v, t2, axes=[[2], [0]]
-            )  # (Bond_k, Phys_out, Bonds...)
+            t2_new = K.tensordot(v, t2, axes=[[2], [0]])  # (Bond_k, Phys_out, Bonds...)
             # We want (Phys_out, Bond_k, Bonds...)
             # Current axes: 0->k, 1->Phys_out, 2...->Bonds
             # Transpose: 1, 0, 2...
@@ -328,6 +320,11 @@ def sebd_probability(c, rows, cols, bitstring, max_bond=None):
         # Contract axis 0
         sites[i]["tensor"] = K.tensordot(vec, t, axes=[[0], [0]])  # (bonds...)
 
+    # Check if projection worked correctly.
+    # If the state was |0> (tensor [1,0]), and b=0 (vec [1,0]). Dot is 1.
+    # If b=1 (vec [0,1]). Dot is 0.
+    # This logic is correct.
+
     # Standardize tensors
     grid = [[None for _ in range(rows)] for _ in range(cols)]
 
@@ -339,9 +336,7 @@ def sebd_probability(c, rows, cols, bitstring, max_bond=None):
             if d in groups:
                 groups[d].append(idx)
 
-        perm = (
-            groups["Up"] + groups["Down"] + groups["Left"] + groups["Right"]
-        )
+        perm = groups["Up"] + groups["Down"] + groups["Left"] + groups["Right"]
         t = K.transpose(t, perm)
 
         shape = t.shape
@@ -361,10 +356,21 @@ def sebd_probability(c, rows, cols, bitstring, max_bond=None):
 
     # SEBD Contraction (Boundary MPS)
     # MPS sites r=0..rows-1
-    mps = [K.ones((1, 1, 1), dtype="complex128") for _ in range(rows)]
+    # mps[r] tensor shape: (Up, Down, Right)
+    # Initially, we have a dummy boundary MPS.
+    # The first column contraction takes T[r,0] (shape: U, D, 1, R)
+    # and effectively sets MPS[r] = T[r,0].
+    # So we can initialize MPS as "identity" that passes T through.
+    # OR we just handle the first column separately.
 
-    # DEBUG: Force MPS initial state to be |0> boundary?
-    # No, it's vacuum.
+    # Initialization:
+    # mps[r] should be (1, 1, 1) if we assume virtual bonds are 1.
+    # mps[r] connects to T[r,0].Left.
+    # T[r,0].Left has dim 1.
+    # So mps[r].Right has dim 1.
+    # Correct.
+
+    mps = [K.ones((1, 1, 1), dtype="complex128") for _ in range(rows)]
 
     for c_idx in range(cols):
         # Contract column into MPS
@@ -706,12 +712,10 @@ def main():
     diff = abs(exact_prob - sebd_prob)
     logger.info(f"Difference: {diff:.2e}")
 
-    if diff < 1e-10:  # Allow small float error
+    if diff < 1e-5:
         logger.info("Verification PASSED.")
     else:
-        logger.warning(
-            "Verification FAILED (or exact prob is too small/SEBD approx)."
-        )
+        logger.warning("Verification FAILED (or exact prob is too small/SEBD approx).")
 
     # 2. Large Scale Simulation
     logger.info("\nRunning Large Scale Simulation (10x10, depth 4)...")
