@@ -9,6 +9,7 @@ The task is to classify points inside/outside a circle.
 """
 
 import time
+from functools import partial
 import numpy as np
 import matplotlib.pyplot as plt
 import optax
@@ -100,22 +101,30 @@ def main():
         init_params = np.random.normal(0, 1, size=param_shape)
         params = K.convert_to_tensor(init_params)
 
-        # We use Adam with a JIT-compiled update step for modern, GPU-compatible optimization.
-        # While L-BFGS is mentioned, Adam is often more robust for stochastic/batch settings in DL frameworks
-        # and easier to implement correctly with optax's standard API.
-        solver = optax.adam(learning_rate=0.05)
+        # Use optax.lbfgs as requested
+        solver = optax.lbfgs(learning_rate=1.0)
         opt_state = solver.init(params)
 
+        # Jitted update step for L-BFGS
         @jax.jit
         def update_step(params, opt_state, x, y):
             loss_val, grads = jax.value_and_grad(loss)(params, x, y, n_layers)
-            updates, opt_state = solver.update(grads, opt_state, params)
+            updates, opt_state = solver.update(
+                grads,
+                opt_state,
+                params,
+                value=loss_val,
+                grad=grads,
+                value_fn=partial(loss, x=x, y=y, n_layers=n_layers),
+            )
             params = optax.apply_updates(params, updates)
             return params, opt_state, loss_val
 
         start_time = time.time()
         loss_history = []
-        for _ in range(200):  # 200 iterations
+        # L-BFGS often converges faster in fewer steps, but needs more computation per step (line search)
+        # We'll use fewer iterations compared to Adam (e.g., 50 or 100)
+        for _ in range(50):
             params, opt_state, loss_val = update_step(params, opt_state, X_tc, Y_tc)
             loss_history.append(loss_val)
 
@@ -175,10 +184,9 @@ def main():
             plt.legend()
 
     plt.tight_layout()
-    plt.savefig("examples/reproduce_papers/2019_Data_re_uploading/outputs/result.png")
-    print(
-        "Results saved to examples/reproduce_papers/2019_Data_re_uploading/outputs/result.png"
-    )
+    output_path = "examples/reproduce_papers/2019_Data_re_uploading/outputs/result.png"
+    plt.savefig(output_path)
+    print(f"Results saved to {output_path}")
 
 
 if __name__ == "__main__":
