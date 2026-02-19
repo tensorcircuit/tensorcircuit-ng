@@ -25,6 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Use numpy backend for broad compatibility and simplicity in manual tensor ops
+# TODO(@refraction-ray): Support JAX backend with JIT compilation for better performance
 K = tc.set_backend("numpy")
 
 
