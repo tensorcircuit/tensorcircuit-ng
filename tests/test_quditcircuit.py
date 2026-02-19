@@ -347,6 +347,8 @@ def test_quditcircuit_set_dim_validation():
         tc.QuditCircuit(1, 2)
     with pytest.raises(ValueError):
         tc.QuditCircuit(1, 2.5)  # type: ignore[arg-type]
+    with pytest.raises(NotImplementedError):
+        tc.QuditCircuit(1, 37)
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
