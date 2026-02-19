@@ -8,6 +8,13 @@ This script reproduces Figure 2(a) from the paper.
 It simulates a Sycamore-like random quantum circuit using both exact state vector simulation
 and an MPS-based simulator (DMRG-like algorithm) with varying bond dimensions.
 The script plots the infidelity (1 - Fidelity) as a function of the bond dimension.
+
+Implementation Note:
+This script implements a "layerwise DMRG" logic. Instead of truncating the MPS
+after every 2-qubit gate (TEBD approach), we apply a full layer of gates to the
+MPS (allowing the bond dimension to grow) and then perform a compression sweep
+to truncate the MPS back to the target bond dimension. This variational-like
+compression is closer to the DMRG-style algorithm described in the paper.
 """
 
 import time
@@ -24,91 +31,141 @@ logger = logging.getLogger(__name__)
 K = tc.set_backend("numpy")
 
 
-def generate_sycamore_like_circuit(rows, cols, depth, seed=42):
+def generate_sycamore_like_circuit_structure(rows, cols, depth, seed=42):
     """
     Generates a random quantum circuit with a structure similar to Sycamore circuits.
-    Since real Sycamore gates are specific, we use a simplified model:
-    - 2D Grid connectivity
-    - Layers of random single-qubit gates
-    - Layers of two-qubit gates (CZ or similar) in a specific pattern
+    Returns the exact circuit (for validation) and a list of layers, where each layer
+    is a list of gate dictionaries.
     """
     np.random.seed(seed)
     n_qubits = rows * cols
     c = tc.Circuit(n_qubits)
+    layers = []
 
     def q(r, col):
         return r * cols + col
 
     for d in range(depth):
+        layer_gates = []
+
         # Single qubit gates
         for i in range(n_qubits):
-            # Random single qubit gate (e.g., Rx, Ry, Rz)
-            # Simplification: Use a general random unitary or specific rotations
-            # Sycamore uses sqrt(X), sqrt(Y), sqrt(W)
-            # We'll use random rotations for generic RQC behavior
             theta = np.random.uniform(0, 2 * np.pi)
             phi = np.random.uniform(0, 2 * np.pi)
             lam = np.random.uniform(0, 2 * np.pi)
+
             c.rz(i, theta=phi)
+            layer_gates.append(
+                {"gatef": tc.gates.rz, "index": (i,), "parameters": {"theta": phi}}
+            )
+
             c.ry(i, theta=theta)
+            layer_gates.append(
+                {"gatef": tc.gates.ry, "index": (i,), "parameters": {"theta": theta}}
+            )
+
             c.rz(i, theta=lam)
+            layer_gates.append(
+                {"gatef": tc.gates.rz, "index": (i,), "parameters": {"theta": lam}}
+            )
+
+        layers.append(layer_gates)
+        layer_gates = []
 
         # Two-qubit gates
-        # Sycamore uses a specific pattern (ABCD...)
-        # We will use a simple alternating pattern
-        # Layer A: horizontal even
-        # Layer B: horizontal odd
-        # Layer C: vertical even
-        # Layer D: vertical odd
-        # We cycle through these patterns based on depth
-
         layer_type = d % 4
 
         if layer_type == 0:  # Horizontal (col, col+1) for even cols
             for r in range(rows):
                 for col in range(0, cols - 1, 2):
                     c.cz(q(r, col), q(r, col + 1))
+                    layer_gates.append(
+                        {
+                            "gatef": tc.gates.cz,
+                            "index": (q(r, col), q(r, col + 1)),
+                            "parameters": {},
+                        }
+                    )
         elif layer_type == 1:  # Horizontal (col, col+1) for odd cols
             for r in range(rows):
                 for col in range(1, cols - 1, 2):
                     c.cz(q(r, col), q(r, col + 1))
+                    layer_gates.append(
+                        {
+                            "gatef": tc.gates.cz,
+                            "index": (q(r, col), q(r, col + 1)),
+                            "parameters": {},
+                        }
+                    )
         elif layer_type == 2:  # Vertical (row, row+1) for even rows
             for col in range(cols):
                 for r in range(0, rows - 1, 2):
                     c.cz(q(r, col), q(r + 1, col))
+                    layer_gates.append(
+                        {
+                            "gatef": tc.gates.cz,
+                            "index": (q(r, col), q(r + 1, col)),
+                            "parameters": {},
+                        }
+                    )
         elif layer_type == 3:  # Vertical (row, row+1) for odd rows
             for col in range(cols):
                 for r in range(1, rows - 1, 2):
                     c.cz(q(r, col), q(r + 1, col))
+                    layer_gates.append(
+                        {
+                            "gatef": tc.gates.cz,
+                            "index": (q(r, col), q(r + 1, col)),
+                            "parameters": {},
+                        }
+                    )
 
-    return c
+        if layer_gates:
+            layers.append(layer_gates)
+
+    return c, layers
 
 
-def run_mps_simulation(c, bond_dim):
+def run_mps_simulation_layerwise(n_qubits, layers, bond_dim):
     """
-    Runs the simulation using MPSCircuit with a maximum bond dimension.
+    Runs the simulation using MPSCircuit with layerwise DMRG-like compression.
     """
-    # Create MPSCircuit from the circuit operations
-    # We need to re-apply the gates to an MPSCircuit
-    # Or we can just build the MPSCircuit directly in the generation function.
-    # But to ensure exactly the same circuit, we can iterate over the qir of the tc.Circuit
-    n = c._nqubits
-    mps = tc.MPSCircuit(n)
+    mps = tc.MPSCircuit(n_qubits)
 
-    # Set truncation rules
-    # We use `max_singular_values` to control the bond dimension (chi)
-    mps.set_split_rules({"max_singular_values": bond_dim})
+    # We want to manually control truncation
+    # First, we set no truncation for gate application
+    mps.set_split_rules({})  # Infinite bond dimension during application
 
-    for gate in c._qir:
-        index = gate["index"]
-        params = gate.get("parameters", {})
+    for layer in layers:
+        # 1. Apply all gates in the layer
+        # This will increase the bond dimension significantly
+        for gate in layer:
+            index = gate["index"]
+            params = gate.get("parameters", {})
+            g_obj = gate["gatef"](**params)
+            mps.apply(g_obj, *index)
 
-        # Construct the gate on MPS
-        # tc.Circuit stores 'gatef' which returns a Gate object when called with params
-        g_obj = gate["gatef"](**params)
+        # 2. Perform compression sweep (DMRG-style logic)
+        # We sweep from left to right (and/or right to left) and truncate
+        # the bonds to the target dimension `bond_dim`.
 
-        # Apply to MPS
-        mps.apply(g_obj, *index)
+        # We use standard SVD-based compression (sweeping) which is optimal for minimizing 2-norm error
+        # This is effectively what DMRG does when optimizing overlap for a fixed bond dimension.
+
+        # Sweep Left -> Right
+        # First ensure we are at the beginning
+        mps.position(0)
+        for i in range(n_qubits - 1):
+            mps.reduce_dimension(
+                i, center_left=False, split={"max_singular_values": bond_dim}
+            )
+
+        # Sweep Right -> Left (to ensure canonicalization and further optimization)
+        # We are at n_qubits - 1 now.
+        for i in range(n_qubits - 2, -1, -1):
+            mps.reduce_dimension(
+                i, center_left=True, split={"max_singular_values": bond_dim}
+            )
 
     return mps
 
@@ -118,16 +175,8 @@ def calculate_fidelity(exact_c, mps_c):
     Calculates the fidelity between the exact state and the MPS state.
     F = |<psi_exact | psi_mps>|^2
     """
-    # Get exact state vector
     psi_exact = exact_c.state()
-
-    # Get MPS state vector (converted to full tensor)
-    # Note: For large N, this will OOM. We should keep N small (e.g. <= 20).
     psi_mps = mps_c.wavefunction()
-
-    # Compute overlap
-    # exact state is (2^N,) or (1, 2^N)
-    # mps state is (1, 2^N) usually
 
     psi_exact = K.reshape(psi_exact, (-1,))
     psi_mps = K.reshape(psi_mps, (-1,))
@@ -143,12 +192,12 @@ def main():
     COLS = 4  # 12 qubits
     DEPTH = 8
     # Bond dimensions to sweep
-    # For 12 qubits, full bond dimension is 2^6=64.
-    # So we should see perfect fidelity at 64, and error below it.
     BOND_DIMS = [2, 4, 8, 16, 32, 64]
 
     logger.info(f"Generating random circuit: {ROWS}x{COLS} grid, Depth {DEPTH}")
-    circuit = generate_sycamore_like_circuit(ROWS, COLS, DEPTH, seed=42)
+    circuit, layers = generate_sycamore_like_circuit_structure(
+        ROWS, COLS, DEPTH, seed=42
+    )
 
     # 1. Exact Simulation
     logger.info("Running Exact Simulation...")
@@ -160,10 +209,10 @@ def main():
     infidelities = []
 
     # 2. MPS Simulation with varying bond dimension
-    logger.info("Running MPS Simulations...")
+    logger.info("Running MPS Simulations (Layerwise DMRG)...")
     for chi in BOND_DIMS:
         start_time = time.time()
-        mps = run_mps_simulation(circuit, chi)
+        mps = run_mps_simulation_layerwise(circuit._nqubits, layers, chi)
 
         # Calculate Fidelity
         fid = calculate_fidelity(circuit, mps)
