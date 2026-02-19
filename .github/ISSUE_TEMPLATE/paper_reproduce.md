@@ -24,12 +24,47 @@ Which specific figure or table from the paper needs to be reproduced?
 
 * **Allow to reduce the problem size compared to the paper:** Yes
 
-## 3. Implementation Requirements
+## 3. Directory Structure Plan
+
+To keep the repository organized, please strictly follow this folder structure:
+
+* **Proposed Folder Name:** `examples/reproduce_papers/<YYYY>_<Keywords>/`
+    * *Naming Convention:* `Year_Keywords` (snake_case)
+    * *Example:* `examples/reproduce_papers/2023_quantum_transformer/`
+
+## 4. Metadata Definition (`meta.yaml`)
+
+Please provide the content for the `meta.yaml` file that will be placed in the folder. 
+
+**Contributors/AI:** Copy and fill this block directly into the `meta.yaml` file.
+
+```yaml
+title: ""
+arxiv_id: ""
+url: ""
+year: 
+authors: 
+  - ""
+  - ""
+tags:
+  - ""
+  - ""
+hardware_requirements:
+  gpu: False
+  min_memory: ""
+description: ""
+outputs:
+  - target: "Figure 3(a)"
+    path: result.png
+    script: "main.py"
+  - target: "Figure 3(b)"
+    path: comparison.csv
+    script: "main.py"
+```
+
+## 5. Implementation Requirements
 
 > **For AI Assistants / Contributors:** Please strictly follow the rules below.
-
-* **File Location:** Create a new file in: `examples/reproduce_papers/<paper_related_name>.py`
-    *Example:* `examples/reproduce_papers/data_reuploading.py`
 
 * **Docstring Standard:**
     * The file **MUST** start with a docstring containing the paper title and the link.
@@ -45,6 +80,9 @@ Which specific figure or table from the paper needs to be reproduced?
         """
         ```
 
+* **Outputs:**
+  The reproduced data and figures should be in outputs/ subfolder.
+
 * **Code Quality & Linter:**
     * [ ] **Formatter:** The code must be formatted using `black`.
     * [ ] **Linter:** The code must pass `pylint` checks (clean code, handle errors).
@@ -54,7 +92,7 @@ Which specific figure or table from the paper needs to be reproduced?
     * Use `tensorcircuit` as the main framework.
     * Use `matplotlib` for plotting if necessary.
 
-## 4. Verification
+## 6. Verification
 
 To be considered complete, please provide:
 1.  A screenshot of the generated plot or the terminal output matching the paper's result.
@@ -62,11 +100,11 @@ To be considered complete, please provide:
 
 ```bash
 # Example verification commands
-black examples/reproduce_papers/your_script.py
-pylint examples/reproduce_papers/your_script.py
+black examples/reproduce_papers/*.py
+pylint examples/reproduce_papers/*.py
 ```
 
-## 5. Checklist
+## 7. Checklist
 
 - [ ] I have checked that this paper hasn't been reproduced in the repo yet.
 
