@@ -1,0 +1,21 @@
+title: "Data re-uploading for a universal quantum classifier"
+arxiv_id: "1907.02085"
+url: "https://arxiv.org/abs/1907.02085"
+year: 2019
+authors:
+  - "Adrián Pérez-Salinas"
+  - "Alba Cervera-Lierta"
+  - "Elies Gil-Fuster"
+  - "José I. Latorre"
+tags:
+  - "QML"
+  - "Classification"
+  - "Data Re-uploading"
+hardware_requirements:
+  gpu: False
+  min_memory: "1GB"
+description: "Reproduces the single-qubit classifier experiment (Figure 6) using the data re-uploading technique."
+outputs:
+  - target: "Figure 6"
+    path: "outputs/result.png"
+    script: "main.py"

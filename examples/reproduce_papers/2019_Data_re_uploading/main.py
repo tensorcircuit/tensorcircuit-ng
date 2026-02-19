@@ -175,8 +175,10 @@ def main():
             plt.legend()
 
     plt.tight_layout()
-    plt.savefig("examples/reproduce_papers/data_reuploading_results.png")
-    print("Results saved to examples/reproduce_papers/data_reuploading_results.png")
+    plt.savefig("examples/reproduce_papers/2019_Data_re_uploading/outputs/result.png")
+    print(
+        "Results saved to examples/reproduce_papers/2019_Data_re_uploading/outputs/result.png"
+    )
 
 
 if __name__ == "__main__":
