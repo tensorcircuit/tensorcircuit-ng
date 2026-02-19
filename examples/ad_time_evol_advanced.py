@@ -8,9 +8,9 @@ AD+JIT with krylov_evol and chebyshev_evol, comparing against exact diagonalizat
 import time
 import argparse
 import numpy as np
-import tensorcircuit as tc
 import jax
 import jax.numpy as jnp
+import tensorcircuit as tc
 
 # Set backend to JAX
 tc.set_backend("jax")
@@ -56,12 +56,14 @@ def measure_magnetization(state):
     return jnp.real(mag) / n
 
 
-def benchmark_evolution(
-    n=10, t_list=[1.0, 5.0, 20.0], methods=["ed", "krylov", "chebyshev"]
-):
+def benchmark_evolution(n=10, t_list=None, methods=None):
     """
     Benchmarks time evolution methods.
     """
+    if t_list is None:
+        t_list = [1.0, 5.0, 20.0]
+    if methods is None:
+        methods = ["ed", "krylov", "chebyshev"]
     print(f"Benchmarking Time Evolution (n={n})")
     print("-" * 60)
 
