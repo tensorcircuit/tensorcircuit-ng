@@ -122,9 +122,7 @@ def main():
 
         start_time = time.time()
         loss_history = []
-        # L-BFGS often converges faster in fewer steps, but needs more computation per step (line search)
-        # We'll use fewer iterations compared to Adam (e.g., 50 or 100)
-        for _ in range(50):
+        for _ in range(100):
             params, opt_state, loss_val = update_step(params, opt_state, X_tc, Y_tc)
             loss_history.append(loss_val)
 
