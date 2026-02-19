@@ -206,9 +206,11 @@ def generaldepolarizingchannel(
 
     assert len(tup) == len(probs)
 
-    Gkarus = []
-    for pro, paugate in zip(probs, tup):
-        Gkarus.append(Gate(_sqrt(pro) * paugate))
+    tup = backend.cast(backend.stack(tup), dtype=cons.dtypestr)
+    sqrt_probs = backend.reshape(
+        _sqrt(probs), [-1] + [1] * (len(backend.shape_tuple(tup)) - 1)
+    )
+    Gkarus = [Gate(g) for g in sqrt_probs * tup]
 
     return KrausList(Gkarus, name="depolarizing", is_unitary=True)
 
