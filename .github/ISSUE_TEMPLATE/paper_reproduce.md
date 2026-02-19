@@ -28,8 +28,8 @@ Which specific figure or table from the paper needs to be reproduced?
 
 To keep the repository organized, please strictly follow this folder structure:
 
-* **Proposed Folder Name:** `examples/reproduce_papers/<YYYY>_<Keywords>/`
-    * *Naming Convention:* `Year_Keywords` (snake_case)
+* **Proposed Folder Name:** `examples/reproduce_papers/<YYYY>_<keywords>/`
+    * *Naming Convention:* `year_keywords`  
     * *Example:* `examples/reproduce_papers/2023_quantum_transformer/`
 
 ## 4. Metadata Definition (`meta.yaml`)
