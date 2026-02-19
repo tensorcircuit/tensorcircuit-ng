@@ -83,6 +83,18 @@ outputs:
 * **Outputs:**
   The reproduced data and figures should be in outputs/ subfolder.
 
+* **Subfolder structure:**
+
+  ```
+  examples/reproduce_papers/<YYYY>_<Keywords>/
+  ├── meta.yaml
+  ├── main.py
+  ├── ...       # models, data, etc.
+  └── outputs/
+      ├── result.png    # used for gallery
+      └── ...           # other outputs if necessary
+  ```
+
 * **Code Quality & Linter:**
     * [ ] **Formatter:** The code must be formatted using `black`.
     * [ ] **Linter:** The code must pass `pylint` checks (clean code, handle errors).
@@ -100,8 +112,8 @@ To be considered complete, please provide:
 
 ```bash
 # Example verification commands
-black examples/reproduce_papers/*.py
-pylint examples/reproduce_papers/*.py
+black examples/reproduce_papers/<paper_subfolder>/*.py
+pylint examples/reproduce_papers/<paper_subfolder>/*.py
 ```
 
 ## 7. Checklist
