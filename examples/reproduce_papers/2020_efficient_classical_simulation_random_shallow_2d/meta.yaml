@@ -1,0 +1,25 @@
+title: "Efficient classical simulation of random shallow 2D quantum circuits"
+arxiv_id: "2001.00021"
+url: "https://arxiv.org/abs/2001.00021"
+year: 2020
+authors:
+  - "John Napp"
+  - "Rolando L. La Placa"
+  - "Alexander M. Dalzell"
+  - "Fernando G. S. L. Brandão"
+  - "Aram W. Harrow"
+tags:
+  - "classical simulation"
+  - "random circuits"
+  - "tensor networks"
+hardware_requirements:
+  gpu: False
+  min_memory: "8GB"
+description: "This script implements the Spatial Evolution Block Decimation (SEBD) algorithm described in the paper for efficient classical simulation of random shallow 2D quantum circuits."
+outputs:
+  - target: "Benchmark results (probability)"
+    path: "outputs/results.log"
+    script: "main.py"
+  - target: "Accuracy comparison plot"
+    path: "outputs/accuracy.png"
+    script: "main.py"
