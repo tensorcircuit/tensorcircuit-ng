@@ -11,7 +11,8 @@ The task is to classify points inside/outside a circle.
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.optimize import minimize
+import optax
+import jax
 import tensorcircuit as tc
 
 # Set backend to JAX for better performance
@@ -54,6 +55,16 @@ def clf_circuit(params, x, n_layers):
     return c
 
 
+def predict_point(params, xi, n_layers):
+    c = clf_circuit(params, xi, n_layers)
+    # Probability of state |1>
+    # TC z expectation is <Z> = P(0) - P(1) = 1 - 2P(1)
+    # So P(1) = (1 - <Z>) / 2
+    z_exp = c.expectation_ps(z=[0])
+    p1 = (1.0 - z_exp) / 2.0
+    return p1
+
+
 def loss(params, x, y, n_layers):
     """
     Calculate the weighted fidelity loss.
@@ -61,19 +72,7 @@ def loss(params, x, y, n_layers):
     x: (n_samples, 2)
     y: (n_samples,)
     """
-
-    # We use vmap to compute expectation values for all samples in parallel
-    def predict_point(xi):
-        c = clf_circuit(params, xi, n_layers)
-        # Probability of state |1>
-        # TC z expectation is <Z> = P(0) - P(1) = 1 - 2P(1)
-        # So P(1) = (1 - <Z>) / 2
-        z_exp = c.expectation_ps(z=[0])
-        p1 = (1.0 - z_exp) / 2.0
-        return p1
-
-    probs_1 = K.vmap(predict_point)(x)
-
+    probs_1 = K.vmap(predict_point, vectorized_argnums=1)(params, x, n_layers)
     loss_val = K.mean((y - probs_1) ** 2)
     return K.real(loss_val)
 
@@ -81,6 +80,10 @@ def loss(params, x, y, n_layers):
 def main():
     n_samples = 200
     X, Y = generate_circle_data(n_samples)
+
+    # Convert data to backend tensors once
+    X_tc = K.convert_to_tensor(X)
+    Y_tc = K.convert_to_tensor(Y)
 
     # Different number of layers to test
     layers_list = [1, 2, 4]
@@ -95,30 +98,34 @@ def main():
         # Initialize randomly
         param_shape = (n_layers, 4)
         init_params = np.random.normal(0, 1, size=param_shape)
+        params = K.convert_to_tensor(init_params)
 
-        # Scipy interface
-        # We need to wrap loss to fix x, y, n_layers
-        def loss_wrapper(p, x_in, y_in):
-            return loss(p, x_in, y_in, n_layers)
+        # We use Adam with a JIT-compiled update step for modern, GPU-compatible optimization.
+        # While L-BFGS is mentioned, Adam is often more robust for stochastic/batch settings in DL frameworks
+        # and easier to implement correctly with optax's standard API.
+        solver = optax.adam(learning_rate=0.05)
+        opt_state = solver.init(params)
 
-        # Create the scipy compatible function
-        loss_scipy = tc.interfaces.scipy_optimize_interface(
-            loss_wrapper, shape=param_shape, gradient=True, jit=True
-        )
+        @jax.jit
+        def update_step(params, opt_state, x, y):
+            loss_val, grads = jax.value_and_grad(loss)(params, x, y, n_layers)
+            updates, opt_state = solver.update(grads, opt_state, params)
+            params = optax.apply_updates(params, updates)
+            return params, opt_state, loss_val
 
         start_time = time.time()
-        res = minimize(
-            loss_scipy,
-            init_params.flatten(),
-            args=(X, Y),
-            method="L-BFGS-B",
-            jac=True,
-            options={"maxiter": 2000},
-        )
-        end_time = time.time()
-        print(f"Optimization finished in {end_time - start_time:.2f}s. Loss: {res.fun}")
+        loss_history = []
+        for _ in range(200):  # 200 iterations
+            params, opt_state, loss_val = update_step(params, opt_state, X_tc, Y_tc)
+            loss_history.append(loss_val)
 
-        opt_params = res.x.reshape(param_shape)
+        end_time = time.time()
+        final_loss = loss_history[-1]
+        print(
+            f"Optimization finished in {end_time - start_time:.2f}s. Loss: {final_loss}"
+        )
+
+        opt_params = params
 
         # Visualization
         plt.subplot(1, 3, idx + 1)
@@ -133,18 +140,13 @@ def main():
         # Predict on grid
         @K.jit
         def predict_batch(p, x_in):
-            def predict_point(xi):
-                c = clf_circuit(p, xi, n_layers)
-                z_exp = c.expectation_ps(z=[0])
-                return (1.0 - z_exp) / 2.0
+            # reusing predict_point
+            return K.vmap(predict_point, vectorized_argnums=1)(p, x_in, n_layers)
 
-            return K.vmap(predict_point)(x_in)
-
-        # Convert grid_points and opt_params to backend
-        opt_params_tc = K.convert_to_tensor(opt_params)
+        # Convert grid_points to backend
         grid_points_tc = K.convert_to_tensor(grid_points)
 
-        probs_grid = predict_batch(opt_params_tc, grid_points_tc)
+        probs_grid = predict_batch(opt_params, grid_points_tc)
         probs_grid_np = K.numpy(probs_grid).reshape(grid_size, grid_size).real
 
         # Plot contour
@@ -168,7 +170,7 @@ def main():
             label="Class 1",
         )
 
-        plt.title(f"Layers: {n_layers}\nLoss: {res.fun:.4f}")
+        plt.title(f"Layers: {n_layers}\nLoss: {final_loss:.4f}")
         if idx == 0:
             plt.legend()
 
