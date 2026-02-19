@@ -32,6 +32,7 @@ jobs:
       - name: pylint checker
         run: |
           pylint tensorcircuit tests
+          pylint --recursive=y examples/
       - name: test scripts
         run: |
           pytest --cov=tensorcircuit --cov-report=xml -svv --benchmark-skip
