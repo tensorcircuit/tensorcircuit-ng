@@ -356,6 +356,13 @@ def sebd_probability(c, rows, cols, bitstring, max_bond=None):
 
 
 def main():
+    # Clear log file
+    with open(
+        "examples/reproduce_papers/2020_efficient_classical_simulation_random_shallow_2d/outputs/results.log",
+        "w",
+    ) as f:
+        f.write("Verification Results:\n")
+
     # 1. Verification on Small Grids
     logger.info("Running verification on small grids...")
 
@@ -381,9 +388,14 @@ def main():
             end = time.time()
 
             diff = abs(exact_prob - sebd_prob)
-            logger.info(
-                f"Bitstring: {target_bits[:5]}... Exact: {exact_prob:.6e}, SEBD: {sebd_prob:.6e}, Diff: {diff:.2e}"
-            )
+            msg = f"Bitstring: {target_bits[:5]}... Exact: {exact_prob:.6e}, SEBD: {sebd_prob:.6e}, Diff: {diff:.2e}"
+            logger.info(msg)
+
+            with open(
+                "examples/reproduce_papers/2020_efficient_classical_simulation_random_shallow_2d/outputs/results.log",
+                "a",
+            ) as f:
+                f.write(f"Grid {rows}x{cols} depth {depth}: {msg}\n")
 
             # Relaxed threshold for larger grids/floating point error
             if diff > 1e-8:
@@ -409,7 +421,7 @@ def main():
     # Save results
     with open(
         "examples/reproduce_papers/2020_efficient_classical_simulation_random_shallow_2d/outputs/results.log",
-        "w",
+        "a",
     ) as f:
         f.write(f"Large Scale 10x10:\nProb: {prob}\nTime: {end - start:.4f}s\n")
 

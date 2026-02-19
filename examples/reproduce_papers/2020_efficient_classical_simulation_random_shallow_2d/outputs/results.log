@@ -1,3 +1,10 @@
+Verification Results:
+Grid 2x2 depth 2: Bitstring: 1101... Exact: 3.177146e-03, SEBD: 3.177145e-03, Diff: 9.72e-10
+Grid 2x2 depth 2: Bitstring: 0101... Exact: 3.501271e-03, SEBD: 3.501269e-03, Diff: 2.11e-09
+Grid 4x4 depth 4: Bitstring: 01000... Exact: 7.651079e-06, SEBD: 7.651004e-06, Diff: 7.45e-11
+Grid 4x4 depth 4: Bitstring: 11001... Exact: 1.286861e-05, SEBD: 1.286850e-05, Diff: 1.10e-10
+Grid 4x5 depth 4: Bitstring: 11010... Exact: 1.020886e-06, SEBD: 1.020875e-06, Diff: 1.02e-11
+Grid 4x5 depth 4: Bitstring: 00010... Exact: 5.336154e-07, SEBD: 5.336101e-07, Diff: 5.29e-12
 Large Scale 10x10:
 Prob: 4.330939486047805e-36
-Time: 66.6539s
+Time: 66.3942s
