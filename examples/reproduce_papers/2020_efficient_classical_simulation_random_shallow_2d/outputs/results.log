@@ -7,4 +7,4 @@ Grid 4x5 depth 4: Bitstring: 11010... Exact: 1.020886e-06, SEBD: 1.020875e-06, D
 Grid 4x5 depth 4: Bitstring: 00010... Exact: 5.336154e-07, SEBD: 5.336101e-07, Diff: 5.29e-12
 Large Scale 10x10:
 Prob: 4.330939486047805e-36
-Time: 66.3942s
+Time: 75.8105s

@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 # TODO(@refraction-ray): Support JAX backend with JIT compilation for better performance
 K = tc.set_backend("numpy")
 
+LOG_FILE_PATH = "examples/reproduce_papers/2020_efficient_classical_simulation_random_shallow_2d/outputs/results.log"
+
 
 def generate_random_2d_circuit(rows, cols, depth, seed=42):
     """
@@ -183,9 +185,11 @@ def compress_mps(mps, max_bond):
     return mps
 
 
-def sebd_probability(c, rows, cols, bitstring, max_bond=None):
+def build_peps_tensors(c, rows, cols, bitstring):
     """
-    Computes the probability of `bitstring` using SEBD.
+    Constructs the PEPS tensors for the given circuit and bitstring projection.
+    Returns:
+        grid: 2D list of standardized tensors representing the PEPS.
     """
     # Map qubit index to (r, c)
     q_to_rc = {}
@@ -252,18 +256,12 @@ def sebd_probability(c, rows, cols, bitstring, max_bond=None):
 
             # Update T1
             t1 = sites[q1]["tensor"]
-            # T1 shape: (Phys_in, Bonds...)
-            # u shape: (Phys_out, Phys_in, Bond_k)
-            # Contract T1 Phys_in (0) with u Phys_in (1)
             t1_new = K.tensordot(u, t1, axes=[[1], [0]])  # (Phys_out, Bond_k, Bonds...)
             sites[q1]["tensor"] = t1_new
             sites[q1]["directions"].insert(0, dir1)
 
             # Update T2
             t2 = sites[q2]["tensor"]
-            # T2 shape: (Phys_in, Bonds...)
-            # v shape: (Bond_k, Phys_out, Phys_in)
-            # Contract T2 Phys_in (0) with v Phys_in (2)
             t2_new = K.tensordot(v, t2, axes=[[2], [0]])  # (Bond_k, Phys_out, Bonds...)
             # We want (Phys_out, Bond_k, Bonds...)
             # Current axes: 0->k, 1->Phys_out, 2...->Bonds
@@ -314,6 +312,13 @@ def sebd_probability(c, rows, cols, bitstring, max_bond=None):
         for r in range(rows):
             grid[c_idx][r] = standardize_tensor(sites[r * cols + c_idx])
 
+    return grid
+
+
+def contract_peps(grid, rows, cols, max_bond=None):
+    """
+    Contracts the PEPS grid using Boundary MPS.
+    """
     # SEBD Contraction (Boundary MPS)
     mps = [K.ones((1, 1, 1), dtype="complex128") for _ in range(rows)]
 
@@ -355,12 +360,53 @@ def sebd_probability(c, rows, cols, bitstring, max_bond=None):
     return np.abs(K.numpy(prob_amp)) ** 2
 
 
+def sebd_probability(c, rows, cols, bitstring, max_bond=None):
+    """
+    Computes the probability of `bitstring` using SEBD.
+    """
+    grid = build_peps_tensors(c, rows, cols, bitstring)
+    prob = contract_peps(grid, rows, cols, max_bond)
+    return prob
+
+
+def test_sebd_simple():
+    """
+    Test SEBD on a simple entangled circuit (Bell pair).
+    """
+    logger.info("Running simple SEBD test (Bell pair)...")
+    # 2 qubits. 2x1 grid? Or 1x2?
+    # Grid: rows=2, cols=1.
+    # Qubits: (0,0) and (1,0).
+
+    # Circuit
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cnot(0, 1)
+
+    # Target |00> -> 0.5. |11> -> 0.5.
+
+    rows, cols = 2, 1
+
+    p00 = sebd_probability(c, rows, cols, "00")
+    p11 = sebd_probability(c, rows, cols, "11")
+    p01 = sebd_probability(c, rows, cols, "01")
+
+    logger.info(f"P(00) = {p00}")
+    logger.info(f"P(11) = {p11}")
+    logger.info(f"P(01) = {p01}")
+
+    if abs(p00 - 0.5) < 1e-5 and abs(p11 - 0.5) < 1e-5:
+        logger.info("Simple test PASSED.")
+    else:
+        logger.warning("Simple test FAILED.")
+
+
 def main():
+    # 0. Simple Test
+    test_sebd_simple()
+
     # Clear log file
-    with open(
-        "examples/reproduce_papers/2020_efficient_classical_simulation_random_shallow_2d/outputs/results.log",
-        "w",
-    ) as f:
+    with open(LOG_FILE_PATH, "w") as f:
         f.write("Verification Results:\n")
 
     # 1. Verification on Small Grids
@@ -391,10 +437,7 @@ def main():
             msg = f"Bitstring: {target_bits[:5]}... Exact: {exact_prob:.6e}, SEBD: {sebd_prob:.6e}, Diff: {diff:.2e}"
             logger.info(msg)
 
-            with open(
-                "examples/reproduce_papers/2020_efficient_classical_simulation_random_shallow_2d/outputs/results.log",
-                "a",
-            ) as f:
+            with open(LOG_FILE_PATH, "a") as f:
                 f.write(f"Grid {rows}x{cols} depth {depth}: {msg}\n")
 
             # Relaxed threshold for larger grids/floating point error
@@ -419,10 +462,7 @@ def main():
     logger.info(f"Time taken: {end - start:.4f}s")
 
     # Save results
-    with open(
-        "examples/reproduce_papers/2020_efficient_classical_simulation_random_shallow_2d/outputs/results.log",
-        "a",
-    ) as f:
+    with open(LOG_FILE_PATH, "a") as f:
         f.write(f"Large Scale 10x10:\nProb: {prob}\nTime: {end - start:.4f}s\n")
 
     # Simple plot of accuracy vs bond dimension for small case (4x4)
