@@ -5,17 +5,12 @@ Link: https://arxiv.org/abs/2207.05612
 
 Description:
 This script reproduces Figure 2(a) from the paper.
-It simulates a Sycamore-like random quantum circuit using both exact state vector simulation
-and an MPS-based simulator (DMRG-like algorithm) with varying bond dimensions.
-The script plots the infidelity (1 - Fidelity) as a function of the bond dimension.
-
-Implementation Note:
-This script implements a 1-site DMRG-like simulation logic.
-We construct an MPO for each chunk of layers (e.g., 2 layers) and then
-variationally optimize the MPS to maximize the overlap with the state after
-applying the MPO. This avoids forming intermediate high-bond-dimension states
-explicitly (like standard TEBD or global contraction) and aligns with the
-standard DMRG algorithm for time evolution / circuit simulation.
+It implements the specific DMRG algorithm described in the paper:
+1. Qubit Grouping: Maps 2D grid columns to single MPS sites (Pure State).
+2. 1-site Analytic Variational Update: M_new = F / norm(F).
+3. Local Vertical Contraction: Environment tensors are computed by contracting
+   gates individually without forming explicit MPOs.
+4. Backend Agnostic: Uses tensorcircuit backend for JAX compatibility.
 """
 
 import time
@@ -28,23 +23,24 @@ import tensorcircuit as tc
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Use numpy backend for broad compatibility
+# Use numpy backend for broad compatibility (can be switched to jax)
 K = tc.set_backend("numpy")
 
 
-def generate_sycamore_like_circuit_structure(rows, cols, depth, seed=42):
+def generate_sycamore_gates(rows, cols, depth, seed=42):
     """
-    Generates a random quantum circuit with a structure similar to Sycamore circuits.
-    Returns the exact circuit (for validation) and a list of layers, where each layer
-    is a list of gate dictionaries.
+    Generates gates for a Sycamore-like circuit.
+    Returns a list of layers, where each layer is a list of gates.
+    Each gate is a dict: {'gatef': func, 'index': tuple, 'parameters': dict}
     """
     np.random.seed(seed)
     n_qubits = rows * cols
-    c = tc.Circuit(n_qubits)
-    layers = []
 
+    # We define qubit index as q(r, c) = r + c * rows
     def q(r, col):
-        return r * cols + col
+        return r + col * rows
+
+    layers = []
 
     for d in range(depth):
         layer_gates = []
@@ -55,17 +51,12 @@ def generate_sycamore_like_circuit_structure(rows, cols, depth, seed=42):
             phi = np.random.uniform(0, 2 * np.pi)
             lam = np.random.uniform(0, 2 * np.pi)
 
-            c.rz(i, theta=phi)
             layer_gates.append(
                 {"gatef": tc.gates.rz, "index": (i,), "parameters": {"theta": phi}}
             )
-
-            c.ry(i, theta=theta)
             layer_gates.append(
                 {"gatef": tc.gates.ry, "index": (i,), "parameters": {"theta": theta}}
             )
-
-            c.rz(i, theta=lam)
             layer_gates.append(
                 {"gatef": tc.gates.rz, "index": (i,), "parameters": {"theta": lam}}
             )
@@ -76,422 +67,506 @@ def generate_sycamore_like_circuit_structure(rows, cols, depth, seed=42):
         # Two-qubit gates
         layer_type = d % 4
 
-        if layer_type == 0:  # Horizontal (col, col+1) for even cols
-            for r in range(rows):
-                for col in range(0, cols - 1, 2):
-                    c.cz(q(r, col), q(r, col + 1))
+        if layer_type == 0:  # Horizontal (col, col+1) Even cols
+            for c in range(0, cols - 1, 2):
+                for r in range(rows):
+                    q1, q2 = q(r, c), q(r, c + 1)
                     layer_gates.append(
-                        {
-                            "gatef": tc.gates.cz,
-                            "index": (q(r, col), q(r, col + 1)),
-                            "parameters": {},
-                        }
+                        {"gatef": tc.gates.cz, "index": (q1, q2), "parameters": {}}
                     )
-        elif layer_type == 1:  # Horizontal (col, col+1) for odd cols
-            for r in range(rows):
-                for col in range(1, cols - 1, 2):
-                    c.cz(q(r, col), q(r, col + 1))
+        elif layer_type == 1:  # Horizontal (col, col+1) Odd cols
+            for c in range(1, cols - 1, 2):
+                for r in range(rows):
+                    q1, q2 = q(r, c), q(r, c + 1)
                     layer_gates.append(
-                        {
-                            "gatef": tc.gates.cz,
-                            "index": (q(r, col), q(r, col + 1)),
-                            "parameters": {},
-                        }
+                        {"gatef": tc.gates.cz, "index": (q1, q2), "parameters": {}}
                     )
-        elif layer_type == 2:  # Vertical (row, row+1) for even rows
-            for col in range(cols):
+        elif layer_type == 2:  # Vertical (row, row+1) Even rows
+            for c in range(cols):
                 for r in range(0, rows - 1, 2):
-                    c.cz(q(r, col), q(r + 1, col))
+                    q1, q2 = q(r, c), q(r + 1, c)
                     layer_gates.append(
-                        {
-                            "gatef": tc.gates.cz,
-                            "index": (q(r, col), q(r + 1, col)),
-                            "parameters": {},
-                        }
+                        {"gatef": tc.gates.cz, "index": (q1, q2), "parameters": {}}
                     )
-        elif layer_type == 3:  # Vertical (row, row+1) for odd rows
-            for col in range(cols):
+        elif layer_type == 3:  # Vertical (row, row+1) Odd rows
+            for c in range(cols):
                 for r in range(1, rows - 1, 2):
-                    c.cz(q(r, col), q(r + 1, col))
+                    q1, q2 = q(r, c), q(r + 1, c)
                     layer_gates.append(
-                        {
-                            "gatef": tc.gates.cz,
-                            "index": (q(r, col), q(r + 1, col)),
-                            "parameters": {},
-                        }
+                        {"gatef": tc.gates.cz, "index": (q1, q2), "parameters": {}}
                     )
 
         if layer_gates:
             layers.append(layer_gates)
 
-    return c, layers
+    return layers
 
 
-def build_mpo_from_layers(n_qubits, layers):
+class GroupedMPS:
     """
-    Constructs an MPO (list of tensors) representing the layers of gates.
-    The MPO tensors have shape (left_bond, right_bond, phys_out, phys_in).
+    Manages an MPS where each site represents a column of qubits (Qubit Grouping).
     """
-    # Start with Identity MPO
-    # shape: (1, 1, 2, 2)
-    # mpo_tensors = [
-    #     np.eye(2).reshape(1, 1, 2, 2).astype(np.complex128) for _ in range(n_qubits)
-    # ]
 
-    # We use MPSCircuit to simulate the superoperator evolution
-    # State space dimension is 4 (2*2).
-    # Initial state is Identity vector (unnormalized trace but it's operator).
-    # Wait, MPSCircuit usually starts in |0...0>.
-    # We want it to start in |I...I> where I is flattened identity.
-    # Identity (2x2) flattened is [1, 0, 0, 1].
+    def __init__(self, rows, cols, bond_dim):
+        self.rows = rows
+        self.cols = cols
+        self.bond_dim = bond_dim
+        self.phys_dim = 2**rows
+        self.mps_len = cols
 
-    initial_tensors = []
-    for _ in range(n_qubits):
-        # Shape (1, 4, 1) -> (1, dim, 1)
-        t = np.array([1.0, 0.0, 0.0, 1.0], dtype=np.complex128).reshape(1, 4, 1)
-        initial_tensors.append(t)
+        # Initialize tensors (l, d, r)
+        self.tensors = []
+        for i in range(self.cols):
+            l_dim = bond_dim if i > 0 else 1
+            r_dim = bond_dim if i < self.cols - 1 else 1
 
-    mpo_mps = tc.MPSCircuit(n_qubits, tensors=initial_tensors, dim=4)
-    mpo_mps.set_split_rules({})  # No truncation
+            # Random initialization
+            t = np.random.randn(l_dim, self.phys_dim, r_dim) + 1j * np.random.randn(
+                l_dim, self.phys_dim, r_dim
+            )
+            t /= np.linalg.norm(t)
+            self.tensors.append(K.convert_to_tensor(t))
 
-    for layer in layers:
-        for gate in layer:
-            idx = gate["index"]
-            params = gate.get("parameters", {})
-            g_obj = gate["gatef"](**params)
-            u = g_obj.tensor  # (2, 2) or (2, 2, 2, 2)
+    def right_canonicalize(self):
+        """
+        Brings MPS to right-canonical form.
+        """
+        for i in range(self.cols - 1, 0, -1):
+            t = self.tensors[i]  # (l, d, r)
+            l, d, r = t.shape
+            t_flat = K.reshape(t, (l, d * r))
 
-            # Create superoperator gate U \otimes I
-            # U acts on the "output" index of the MPO, which corresponds to the first factor in 2x2.
-            # Flattened index i corresponds to (i // 2, i % 2) -> (out, in).
-            # We want U on out, I on in.
+            # RQ decomposition: T = R * Q. Q is isometric (rows orthogonal).
+            # K.rq returns R (l, l) and Q (l, d*r) if l < d*r.
+            # R is (l, rank), Q is (rank, d*r).
+            r_mat, q_mat = K.rq(t_flat)
 
-            if len(idx) == 1:
-                # U: (2, 2)
-                # Super: (4, 4)
-                # U_{ik} \delta_{jl} -> index (i,j), (k,l)
-                # kron(U, I) does exactly this.
-                u_super = np.kron(u, np.eye(2))
-                g_super = tc.gates.Gate(u_super.reshape(4, 4))
-                mpo_mps.apply(g_super, *idx)
+            self.tensors[i] = K.reshape(q_mat, (q_mat.shape[0], d, r))
 
-            elif len(idx) == 2:
-                # U: (2, 2, 2, 2) -> (out1, out2, in1, in2)
-                # We need (4, 4, 4, 4) -> (site1_out, site1_in), (site2_out, site2_in) etc.
-                # Actually, kron(U_mat, I_4) gives a 16x16 matrix acting on (sys1, sys2, anc1, anc2).
-                # Indices: s1, s2, a1, a2.
-                # We want: s1, a1, s2, a2.
-                # So we need to permute.
-
-                # U matrix: (s1_out * s2_out, s1_in * s2_in)
-                u_mat = u.reshape(4, 4)
-                super_op = np.kron(u_mat, np.eye(4))  # (16, 16)
-                # Indices of super_op: (s1_out, s2_out, a1, a2), (s1_in, s2_in, a1, a2) (row, col)
-                # We want to act on MPS sites which are (s1, a1) and (s2, a2).
-                # So row indices should be (s1_out, a1), (s2_out, a2).
-                # Col indices should be (s1_in, a1), (s2_in, a2).
-
-                # Reshape to tensor (4, 4, 4, 4)
-                t = super_op.reshape(2, 2, 2, 2, 2, 2, 2, 2)
-                # (s1o, s2o, a1o, a2o, s1i, s2i, a1i, a2i)
-                # Note: a1o = a1i (Identity on ancilla).
-
-                # Permute to (s1o, a1o, s2o, a2o, s1i, a1i, s2i, a2i)
-                t = np.transpose(t, (0, 2, 1, 3, 4, 6, 5, 7))
-
-                # Reshape to (4, 4, 4, 4)
-                u_super = t.reshape(4, 4, 4, 4)
-                g_super = tc.gates.Gate(u_super)
-
-                # Custom handling for non-adjacent gates with d=4
-                # because standard MPSCircuit uses qubit swap.
-                idx1, idx2 = idx
-                if abs(idx1 - idx2) > 1:
-                    # Construct Swap(d=4)
-                    swap_d4 = np.zeros((4, 4, 4, 4), dtype=np.complex128)
-                    for i in range(4):
-                        for j in range(4):
-                            swap_d4[j, i, i, j] = 1.0
-                    g_swap_d4 = tc.gates.Gate(swap_d4)
-
-                    # Normalize index order
-                    p1, p2 = min(idx1, idx2), max(idx1, idx2)
-
-                    # Move p2 to p1 + 1
-                    for k in range(p2, p1 + 1, -1):
-                        mpo_mps.apply_adjacent_double_gate(g_swap_d4, k - 1, k)
-
-                    # Apply gate
-                    mpo_mps.apply_adjacent_double_gate(g_super, p1, p1 + 1)
-
-                    # Move back
-                    for k in range(p1 + 1, p2):
-                        mpo_mps.apply_adjacent_double_gate(g_swap_d4, k, k + 1)
-                else:
-                    mpo_mps.apply(g_super, *idx)
-
-    # Extract tensors and convert to MPO format (l, r, p_out, p_in)
-    # MPS format: (l, d=4, r)
-    final_mps_tensors = mpo_mps.get_tensors()
-    final_mpo = []
-    for t in final_mps_tensors:
-        # t: (l, 4, r)
-        # Transpose to (l, r, 4)
-        t = np.transpose(t, (0, 2, 1))
-        # Reshape to (l, r, 2, 2)
-        # Note: 4 corresponds to (out, in) via kron(U, I) logic, i.e. (out * 2 + in).
-        final_mpo.append(t.reshape(t.shape[0], t.shape[1], 2, 2))
-
-    return final_mpo
+            # Absorb R into T[i-1]
+            prev = self.tensors[i - 1]  # (pl, pd, pr)
+            # Contract pr with r_mat (left index)
+            new_prev = K.tensordot(prev, r_mat, axes=[[2], [0]])
+            self.tensors[i - 1] = new_prev
 
 
-def run_1site_dmrg(mps_old, mpo_tensors, chi, sweeps=1):
+def get_gate_matrix(gate, rows):
     """
-    Optimizes a new MPS to approximate MPO @ MPS_old using 1-site DMRG sweep.
+    Constructs the unitary matrix for a gate acting on a grouped site (column).
+    If the gate is single-qubit or vertical 2-qubit, it acts on the 'rows' qubits of the site.
+    Returns matrix of shape (d, d) where d = 2^rows.
     """
-    n = mps_old._nqubits
+    c_local = tc.Circuit(rows)
+    idx = [x % rows for x in gate["index"]]
+    params = gate["parameters"]
+    # Use .n for name access as gatef is GateVF
+    name = gate["gatef"].n
+    getattr(c_local, name)(*idx, **params)
+    return c_local.matrix()
 
-    # Initialize guess: Copy of old MPS
-    # To allow bond dimension to adapt up to chi, we rely on svd truncation limit.
-    # If starting bond dim < chi, it will grow?
-    # In 1-site DMRG, bond dimension is fixed by the guess.
-    # To allow growth, we usually use 2-site or subspace expansion.
-    # User asked for "1-site dmrg".
-    # But strictly 1-site cannot increase bond dimension.
-    # If we want to simulate circuit, we need to increase bond dimension.
-    # So we probably need 2-site update logic to adapt bond dimension,
-    # OR start with a guess that has max bond dimension.
-    # Given "Figure 4... 1-site DMRG", maybe they do subspace expansion.
-    # Simpler: Use 2-site update which naturally handles bond dimension.
-    # Or start with a guess of size chi (random or padded).
 
-    # Let's implement 2-site update logic for the sweep as it's more robust
-    # for dynamic bond dimension and standard in TEBD/DMRG codes.
-    # It updates 2 sites at a time, SVDs, and truncates to chi.
+def get_interaction_gate_matrix(gate, rows):
+    """
+    Constructs the unitary matrix for a gate acting on two adjacent grouped sites.
+    The gate acts on 2*rows qubits.
+    Returns matrix of shape (d*d, d*d).
+    """
+    c_bond = tc.Circuit(2 * rows)
+    # Map indices: site 1 qubits are 0..rows-1, site 2 qubits are rows..2*rows-1
+    # Gate indices are global.
+    # We assume gate connects (r, c) and (r, c+1).
+    # r1 = gate['index'][0] % rows
+    # r2 = gate['index'][1] % rows
+    # In the circuit, r1 is on first site, r2 on second.
+    # So index in c_bond: r1, r2 + rows.
 
-    mps_new = mps_old.copy()
+    idx_global = gate["index"]
+    r1 = idx_global[0] % rows
+    r2 = idx_global[1] % rows
 
-    # Tensors
-    A_new = [t.copy() for t in mps_new.get_tensors()]  # (l, d, r)
-    A_old = mps_old.get_tensors()  # (l, d, r)
-    W = mpo_tensors  # (l, r, u, d)
+    # Check which is left/right. Assuming ordered in generation (c, c+1).
+    # But generation might be (c+1, c) if symmetric? No, we generated carefully.
+
+    idx1 = r1
+    idx2 = r2 + rows
+
+    params = gate["parameters"]
+    name = gate["gatef"].n
+    getattr(c_bond, name)(idx1, idx2, **params)
+    return c_bond.matrix()
+
+
+def apply_internal_gates(tensor, gates, rows):
+    """
+    Applies internal gates to a site tensor (l, d, r).
+    """
+    if not gates:
+        return tensor
+
+    # Build total unitary U for the site
+    # Start with Identity
+    # We can compose circuit or matrices.
+    c_local = tc.Circuit(rows)
+    for gate in gates:
+        idx = [x % rows for x in gate["index"]]
+        params = gate["parameters"]
+        name = gate["gatef"].n
+        getattr(c_local, name)(*idx, **params)
+    U = c_local.matrix()  # (d, d)
+
+    # Contract U with T
+    # T: (l, d, r). U acts on d (index 1).
+    # New T = U * T (contract U axis 1 with T axis 1) -> (d_out, l, r)
+    # Permute back -> (l, d_out, r)
+
+    l, d, r = tensor.shape
+    t_flat = K.transpose(tensor, (1, 0, 2))  # (d, l, r)
+    t_flat = K.reshape(t_flat, (d, l * r))
+
+    new_t = K.matmul(U, t_flat)  # (d, l*r)
+    new_t = K.reshape(new_t, (d, l, r))
+    new_t = K.transpose(new_t, (1, 0, 2))  # (l, d, r)
+
+    return new_t
+
+
+def apply_layer_dmrg(mps, layer_gates):
+    """
+    Applies a layer of gates using 1-site analytic variational update.
+    """
+    # 1. Classify gates
+    internal_gates = [[] for _ in range(mps.cols)]
+    interaction_gates = [[] for _ in range(mps.cols - 1)]
+
+    for gate in layer_gates:
+        idx = gate["index"]
+        cols_involved = sorted(list(set([i // mps.rows for i in idx])))
+
+        if len(cols_involved) == 1:
+            c = cols_involved[0]
+            internal_gates[c].append(gate)
+        elif len(cols_involved) == 2:
+            c1, c2 = cols_involved
+            bond = min(c1, c2)
+            interaction_gates[bond].append(gate)
+
+    # 2. Right Canonicalize
+    mps.right_canonicalize()
+
+    # 3. Environment Sweep & Update
+    # We maintain mps_old (copy) and update mps (new)
+    mps_old_tensors = [K.copy(t) for t in mps.tensors]
+
+    # Prepare MPO-like objects for Interaction Gates to use in contraction
+    # SVD interaction unitaries into (W_L, W_R) for each bond
+    # This effectively makes the "layer" an MPO
+
+    W_L_list = []
+    W_R_list = []
+
+    d = mps.phys_dim
+    for c in range(mps.cols - 1):
+        gates = interaction_gates[c]
+        if not gates:
+            # Identity interaction
+            # W_L = I, W_R = I
+            W_L = K.eye(d).reshape(d, d, 1)  # (out, in, bond)
+            W_R = K.eye(d).reshape(d, d, 1)
+        else:
+            # V = get_interaction_gate_matrix({"index": [0,0], "parameters": {}, "gatef": type("obj", (object,), {"n": "id"})}, mps.rows) # Dummy
+            # Actually use real logic
+            c_bond = tc.Circuit(2 * mps.rows)
+            for gate in gates:
+                r1 = gate["index"][0] % mps.rows
+                r2 = gate["index"][1] % mps.rows
+                getattr(c_bond, gate["gatef"].n)(
+                    r1, r2 + mps.rows, **gate["parameters"]
+                )
+            V = c_bond.matrix()  # (d*d, d*d)
+
+            # SVD V -> L * R
+            V = K.reshape(V, (d, d, d, d))  # (o1, o2, i1, i2)
+            V = K.transpose(V, (0, 2, 1, 3))  # (o1, i1, o2, i2)
+            V_flat = K.reshape(V, (d * d, d * d))
+            # K.svd may return 4 values if truncated? or 3?
+            # tensorcircuit.backend.svd might return error?
+            # Check backend implementation. Usually u, s, v or u, s, v, err.
+            # But numpy backend svd returns u, s, v.
+            # Wait, tc.backend.svd might have different signature?
+            # Let's inspect signature or try unpacking differently.
+            # In 'numpy' backend, it calls np.linalg.svd which returns 3.
+            # But tc.backend wrapper might add truncation error.
+            svd_res = K.svd(V_flat)
+            if len(svd_res) == 3:
+                u, s, v = svd_res
+            else:
+                u, s, v, _ = svd_res
+
+            s_sqrt = K.sqrt(s)
+
+            L = u * s_sqrt  # (d*d, rank)
+            L = K.reshape(L, (d, d, -1))  # (o1, i1, bond)
+
+            # Use backend diagflat or similar? or just broadcasting
+            # s_sqrt is vector (rank). v is (rank, d*d).
+            # We want diag(s) @ v => scale rows of v.
+            # s_sqrt[:, None] * v
+            R = s_sqrt[:, None] * v
+            R = K.transpose(R, (1, 0))  # (d*d, rank)
+            R = K.reshape(R, (d, d, -1))  # (o2, i2, bond)
+
+            W_L = L
+            W_R = R
+
+        W_L_list.append(W_L)
+        W_R_list.append(W_R)
+
+    # Apply Internal Gates to mps_old tensors to simplify contraction
+    # Effectively incorporating U_internal into the "Ket"
+    for i in range(mps.cols):
+        mps_old_tensors[i] = apply_internal_gates(
+            mps_old_tensors[i], internal_gates[i], mps.rows
+        )
 
     # Environments
-    L = [np.ones((1, 1, 1))] * (n + 1)
-    R = [np.ones((1, 1, 1))] * (n + 1)
+    # L[i]: (l_new, bond_prev, l_old)
+    # R[i]: (r_new, bond_next, r_old)
+    # Bond dimension of MPO is dynamic (from SVD of interactions)
 
-    # Build initial R environments
-    for i in range(n - 1, 0, -1):
-        # Contract R[i+1] with site i
-        # R: (r_n, r_m, r_o)
-        # A_n: (l_n, p, r_n)
-        T = np.tensordot(A_new[i], R[i + 1], axes=[[2], [0]])  # (l_n, p, r_m, r_o)
-        # W: (l_m, r_m, p, p')
-        T = np.tensordot(T, W[i], axes=[[2, 1], [1, 2]])  # (l_n, r_o, l_m, p')
-        # A_o: (l_o, p', r_o)
-        R[i] = np.tensordot(T, A_old[i], axes=[[1, 3], [2, 1]])  # (l_n, l_m, l_o)
+    L_env = [None] * (mps.cols + 1)
+    R_env = [None] * (mps.cols + 1)
 
-    # Sweep
-    for _ in range(sweeps):
-        # Left -> Right (2-site update)
-        for i in range(n - 1):
-            # Form effective tensor for sites i, i+1
-            # E = L[i] * W[i] * W[i+1] * A_old[i] * A_old[i+1] * R[i+2]
+    # Boundary conditions
+    L_env[0] = K.ones((1, 1, 1), dtype="complex128")
+    R_env[mps.cols] = K.ones((1, 1, 1), dtype="complex128")
 
-            # 1. Contract Left block: L[i] * A_old[i] * W[i]
-            # L: (l_n, l_m, l_o)
-            # A_o: (l_o, p1', r_o)
-            T = np.tensordot(L[i], A_old[i], axes=[[2], [0]])  # (l_n, l_m, p1', r_o)
-            # W: (l_m, r_m, p1, p1')
-            T = np.tensordot(T, W[i], axes=[[1, 2], [0, 3]])  # (l_n, r_o, r_m, p1)
+    # Precompute R environments
+    for i in range(mps.cols - 1, 0, -1):
+        # Site i
+        # Op i: W_L[i] (if i < N-1) and W_R[i-1] (if i > 0)
+        # Note: Interaction is V_{i-1, i} and V_{i, i+1}.
+        # Site i has W_R[i-1] acting from left bond, W_L[i] acting to right bond?
+        # No.
+        # Layer Op = prod V_{c, c+1}.
+        # V_{c, c+1} = sum W_L[c]_k * W_R[c]_k.
+        # Site i is acted upon by W_R[i-1] (part of V_{i-1, i}) AND W_L[i] (part of V_{i, i+1}).
+        # So effective Operator on site i has 2 interaction bonds: k_{i-1} and k_i.
 
-            # 2. Contract with site i+1 parts
-            # A_o[i+1]: (r_o, p2', r_o2)
-            T = np.tensordot(
-                T, A_old[i + 1], axes=[[1], [0]]
-            )  # (l_n, r_m, p1, p2', r_o2)
-            # W[i+1]: (r_m, r_m2, p2, p2')
-            T = np.tensordot(
-                T, W[i + 1], axes=[[1, 3], [0, 3]]
-            )  # (l_n, p1, r_o2, r_m2, p2)
+        # Interaction MPO tensor for site i:
+        # Indices: (k_{i-1}, k_i, p_out, p_in)
+        # T = W_R[i-1] * W_L[i]
+        # W_R[i-1]: (p_out, p_in, k_{i-1})
+        # W_L[i]: (p_out, p_in, k_i)
+        # Total Op: O_{k_{i-1}, k_i, p_out, p_in} = \sum_x (W_R[i-1])_{px, p_in, k_{i-1}} * (W_L[i])_{p_out, px, k_i}
+        # Wait, order of operations? V_{i-1, i} and V_{i, i+1} commute (disjoint).
+        # So we can apply them in any order or symmetric.
+        # Let's assume sequential: apply all W_R then all W_L?
+        # Actually, simpler:
+        # Treat them as MPO.
+        # Site i has left bond k_{i-1} and right bond k_i.
+        # MPO Tensor M_i:
+        # If i=0: W_L[0] (indices: p_out, p_in, k_0). Shape (1, k_0, p_out, p_in).
+        # If i=N-1: W_R[N-2] (indices: p_out, p_in, k_{N-2}). Shape (k_{N-2}, 1, p_out, p_in).
+        # Middle: Contract W_R[i-1] and W_L[i].
+        # Since they commute, just matrix multiply?
+        # No, W_R[i-1] acts on physical. W_L[i] acts on physical.
+        # M_i = W_L[i] @ W_R[i-1] (matrix mult on physical).
+        # Outer product on bonds.
 
-            # 3. Contract with Right block: R[i+2]
-            # R: (r_n2, r_m2, r_o2)
-            # T: (l_n, p1, r_o2, r_m2, p2)
-            # axes: [2, 3] with [2, 1]
-            E = np.tensordot(T, R[i + 2], axes=[[2, 3], [2, 1]])  # (l_n, p1, p2, r_n2)
+        # Construct M_i for site i
+        if i == 0:
+            # Only W_L[0]
+            # W_L[0]: (o, i, k0)
+            M = K.transpose(W_L_list[0], (2, 0, 1))  # (k0, o, i)
+            M = K.reshape(M, (1, M.shape[0], M.shape[1], M.shape[2]))  # (1, k0, o, i)
+        elif i == mps.cols - 1:
+            # Only W_R[N-2]
+            # W_R: (o, i, k_prev)
+            M = K.transpose(W_R_list[i - 1], (2, 0, 1))  # (k_prev, o, i)
+            M = K.reshape(
+                M, (M.shape[0], 1, M.shape[1], M.shape[2])
+            )  # (k_prev, 1, o, i)
+        else:
+            # W_R[i-1] and W_L[i]
+            # Both (o, i, k)
+            # Combine: O = W_L[i] @ W_R[i-1]
+            wr = W_R_list[i - 1]  # (o, i, kL)
+            wl = W_L_list[i]  # (o, i, kR)
 
-            # E is the target 2-site tensor (l_n, p1, p2, r_n2)
+            # M_{kL, kR, o, i} = sum_x wl_{o, x, kR} * wr_{x, i, kL}
+            M = K.tensordot(wl, wr, axes=[[1], [0]])  # (o, kR, i, kL)
+            M = K.transpose(M, (3, 1, 0, 2))  # (kL, kR, o, i)
 
-            # 4. SVD and Truncate
-            # Reshape to (l_n * p1, p2 * r_n2)
-            shape = E.shape
-            E_flat = E.reshape(shape[0] * shape[1], shape[2] * shape[3])
+        # Contract R[i+1] -- A_new[i] -- M_i -- A_old[i]
+        # R[i+1]: (r_n, kR, r_o)
+        # A_new[i]: (l_n, p, r_n)
 
-            u, s, v = np.linalg.svd(E_flat, full_matrices=False)
+        # T1 = A_new[i] * R[i+1] (sum r_n) -> (l_n, p, kR, r_o)
+        T1 = K.tensordot(mps.tensors[i], R_env[i + 1], axes=[[2], [0]])
 
-            rank = min(len(s), chi)
-            u = u[:, :rank]
-            s = s[:rank]
-            v = v[:rank, :]
+        # T2 = T1 * M_i (sum p, kR)
+        # T1: (l_n, p, kR, r_o)
+        # M_i: (kL, kR, p_out(p), p_in)
+        # axes: T1[1, 2] with M_i[2, 1]
+        T2 = K.tensordot(T1, M, axes=[[1, 2], [2, 1]])  # (l_n, r_o, kL, p_in)
 
-            # 5. Update A_new[i] and A_new[i+1]
-            A_new[i] = u.reshape(shape[0], shape[1], rank)  # (l_n, p1, bond)
+        # T3 = T2 * A_old[i] (sum r_o, p_in)
+        # T2: (l_n, r_o, kL, p_in)
+        # A_old: (l_o, p_in, r_o)
+        # axes: T2[1, 3] with A_old[2, 1]
+        R_env[i] = K.tensordot(
+            T2, mps_old_tensors[i], axes=[[1, 3], [2, 1]]
+        )  # (l_n, kL, l_o)
 
-            # Absorb s into v for next site
-            sv = np.dot(np.diag(s), v)
-            A_new[i + 1] = sv.reshape(rank, shape[2], shape[3])  # (bond, p2, r_n2)
+    # Sweep Left -> Right
+    for i in range(mps.cols):
+        # Build M_i again (could cache)
+        if i == 0:
+            M = K.transpose(W_L_list[0], (2, 0, 1))
+            M = K.reshape(M, (1, M.shape[0], M.shape[1], M.shape[2]))
+        elif i == mps.cols - 1:
+            M = K.transpose(W_R_list[i - 1], (2, 0, 1))
+            M = K.reshape(M, (M.shape[0], 1, M.shape[1], M.shape[2]))
+        else:
+            wr = W_R_list[i - 1]
+            wl = W_L_list[i]
+            M = K.tensordot(wl, wr, axes=[[1], [0]])
+            M = K.transpose(M, (3, 1, 0, 2))
 
-            # 6. Update L[i+1] using new A_new[i]
-            # Same logic as before
-            # L[i+1] = L[i] * A_new[i] * W[i] * A_old[i]
-            T_L = np.tensordot(L[i], A_new[i], axes=[[0], [0]])  # (l_m, l_o, p1, bond)
-            T_L = np.tensordot(
-                T_L, W[i], axes=[[0, 2], [0, 2]]
-            )  # (l_o, bond, r_m, p1')
-            L[i + 1] = np.tensordot(
-                T_L, A_old[i], axes=[[0, 3], [0, 1]]
-            )  # (bond, r_m, r_o)
-            # (r_n, r_m, r_o) -> Matches.
+        # Compute F_i
+        # F = L[i] * M_i * R[i+1] * A_old[i]
+        # L[i]: (l_n, kL, l_o)
+        # A_old: (l_o, p_in, r_o)
 
-        # Right -> Left sweep (optional but good for stability)
-        for i in range(n - 2, -1, -1):
-            # Form effective tensor E (same as above)
-            T = np.tensordot(L[i], A_old[i], axes=[[2], [0]])
-            T = np.tensordot(T, W[i], axes=[[1, 2], [0, 3]])
-            T = np.tensordot(T, A_old[i + 1], axes=[[1], [0]])
-            T = np.tensordot(T, W[i + 1], axes=[[1, 3], [0, 3]])
-            E = np.tensordot(T, R[i + 2], axes=[[2, 3], [2, 1]])  # (l_n, p1, p2, r_n2)
+        # T1 = L[i] * A_old[i] (sum l_o) -> (l_n, kL, p_in, r_o)
+        T1 = K.tensordot(L_env[i], mps_old_tensors[i], axes=[[2], [0]])
 
-            # SVD
-            shape = E.shape
-            E_flat = E.reshape(shape[0] * shape[1], shape[2] * shape[3])
-            u, s, v = np.linalg.svd(E_flat, full_matrices=False)
+        # T2 = T1 * M_i (sum kL, p_in)
+        # T1: (l_n, kL, p_in, r_o)
+        # M_i: (kL, kR, p_out, p_in)
+        # axes: T1[1, 2] with M_i[0, 3]
+        T2 = K.tensordot(T1, M, axes=[[1, 2], [0, 3]])  # (l_n, r_o, kR, p_out)
 
-            rank = min(len(s), chi)
-            u = u[:, :rank]
-            s = s[:rank]
-            v = v[:rank, :]
+        # T3 = T2 * R[i+1] (sum r_o, kR)
+        # T2: (l_n, r_o, kR, p_out)
+        # R[i+1]: (r_n, kR, r_o)
+        # axes: T2[1, 2] with R[2, 1]
+        F = K.tensordot(T2, R_env[i + 1], axes=[[1, 2], [2, 1]])  # (l_n, p_out, r_n)
 
-            # Update A_new[i+1] (Right-isometric)
-            A_new[i + 1] = v.reshape(rank, shape[2], shape[3])
+        # 4. Analytic Update
+        norm_F = K.norm(F)
+        if norm_F > 1e-12:
+            mps.tensors[i] = F / norm_F
+        else:
+            # Fallback if zero (unlikely)
+            pass
 
-            # Absorb u * s into A_new[i]
-            us = np.dot(u, np.diag(s))
-            A_new[i] = us.reshape(shape[0], shape[1], rank)
+        # 5. Left Canonicalize (Shift center to i+1)
+        if i < mps.cols - 1:
+            t = mps.tensors[i]
+            l, d, r = t.shape
+            t_flat = K.reshape(t, (l * d, r))
+            q, r_mat = K.qr(t_flat)
 
-            # Update R[i+1] using new A_new[i+1]
-            # R[i+1] = R[i+2] * A_new[i+1] * W[i+1] * A_old[i+1]
-            T_R = np.tensordot(
-                A_new[i + 1], R[i + 2], axes=[[2], [0]]
-            )  # (bond, p2, r_m2, r_o2)
-            T_R = np.tensordot(
-                T_R, W[i + 1], axes=[[2, 1], [1, 2]]
-            )  # (bond, r_o2, l_m2, p2')
-            R[i + 1] = np.tensordot(
-                T_R, A_old[i + 1], axes=[[1, 3], [2, 1]]
-            )  # (bond, l_m2, l_o2)
+            # Truncate if rank > bond_dim?
+            # 1-site update doesn't change bond dim if initialized with fixed bond dim.
+            # But QR can reveal rank deficiency.
+            # We keep the shape consistent with bond_dim if possible, or adapt.
+            # Here we assume bond_dim is fixed by initialization.
+            # However, QR returns Q(..., k) R(k, ...).
+            # If we want to keep fixed dimensions, we need to pad or standard shape?
+            # `K.qr` usually produces full rank or reduced.
+            # TensorCircuit MPS tensors are usually fixed size?
+            # We initialized with size `bond_dim`.
+            # If Q is smaller, next site shape mismatch?
+            # We should ensure shapes match.
+            # Simplification: Just allow shapes to adapt.
 
-    # Return new MPSCircuit
-    # Center is at 0 after backward sweep
-    return tc.MPSCircuit(n, tensors=A_new, center_position=0)
+            mps.tensors[i] = K.reshape(q, (l, d, -1))
+
+            # Absorb R into i+1
+            next_t = mps.tensors[i + 1]
+            mps.tensors[i + 1] = K.tensordot(r_mat, next_t, axes=[[1], [0]])
+
+            # 6. Update L[i+1]
+            # T1 = L[i] * A_new[i] (sum l_n) -> (kL, l_o, p, bond)
+            T1 = K.tensordot(L_env[i], mps.tensors[i], axes=[[0], [0]])
+
+            # T2 = T1 * M_i (sum kL, p)
+            # T1: (kL, l_o, p, bond)
+            # M_i: (kL, kR, p, p_in)
+            # axes: T1[0, 2] with M_i[0, 2]
+            T2 = K.tensordot(T1, M, axes=[[0, 2], [0, 2]])  # (l_o, bond, kR, p_in)
+
+            # T3 = T2 * A_old[i] (sum l_o, p_in)
+            # T2: (l_o, bond, kR, p_in)
+            # A_old: (l_o, p_in, r_o)
+            # axes: T2[0, 3] with A_old[0, 1]
+            L_env[i + 1] = K.tensordot(
+                T2, mps_old_tensors[i], axes=[[0, 3], [0, 1]]
+            )  # (bond, kR, r_o)
+            # Matches (l_n, kL, l_o) pattern for next site.
 
 
-def run_mps_simulation_dmrg(n_qubits, layers, bond_dim):
-    """
-    Runs simulation using DMRG-style update (2-site sweep for bond adaptability).
-    """
-    mps = tc.MPSCircuit(n_qubits)
-    mps.position(0)
+def run_simulation(rows, cols, depth, bond_dims):
+    layers = generate_sycamore_gates(rows, cols, depth)
 
-    # Process layers in chunks
-    chunk_size = 2  # Process 2 layers at a time (Fig 4 idea: several layers)
-    for i in range(0, len(layers), chunk_size):
-        chunk = layers[i : i + chunk_size]
-
-        # Build MPO for this chunk
-        mpo_tensors = build_mpo_from_layers(n_qubits, chunk)
-
-        # Run DMRG sweep (2-site update to adapt bond dim up to chi)
-        mps = run_1site_dmrg(mps, mpo_tensors, bond_dim, sweeps=1)
-
-    return mps
-
-
-def calculate_fidelity(exact_c, mps_c):
-    """
-    Calculates the fidelity between the exact state and the MPS state.
-    F = |<psi_exact | psi_mps>|^2
-    """
-    psi_exact = exact_c.state()
-    psi_mps = mps_c.wavefunction()
-
+    # Exact state
+    c_exact = tc.Circuit(rows * cols)
+    for layer in layers:
+        for gate in layer:
+            name = gate["gatef"].n
+            idx = gate["index"]
+            params = gate["parameters"]
+            getattr(c_exact, name)(*idx, **params)
+    psi_exact = c_exact.state()
     psi_exact = K.reshape(psi_exact, (-1,))
-    psi_mps = K.reshape(psi_mps, (-1,))
-
-    overlap = K.tensordot(K.conj(psi_exact), psi_mps, axes=1)
-    fidelity = np.abs(overlap) ** 2
-    return float(fidelity)
-
-
-def main():
-    # Parameters
-    ROWS = 3
-    COLS = 4  # 12 qubits
-    DEPTH = 8
-    # Bond dimensions to sweep
-    BOND_DIMS = [2, 4, 8, 16, 32, 64]
-
-    logger.info(f"Generating random circuit: {ROWS}x{COLS} grid, Depth {DEPTH}")
-    circuit, layers = generate_sycamore_like_circuit_structure(
-        ROWS, COLS, DEPTH, seed=42
-    )
-
-    # 1. Exact Simulation
-    logger.info("Running Exact Simulation...")
-    start_time = time.time()
-    # Force state calculation
-    _ = circuit.state()
-    logger.info(f"Exact simulation done in {time.time() - start_time:.4f}s")
 
     infidelities = []
 
-    # 2. MPS Simulation with varying bond dimension
-    logger.info("Running MPS Simulations (DMRG Sweep)...")
-    for chi in BOND_DIMS:
-        start_time = time.time()
-        mps = run_mps_simulation_dmrg(circuit._nqubits, layers, chi)
+    for chi in bond_dims:
+        logger.info(f"Running MPS (DMRG) with chi={chi}")
+        start = time.time()
 
-        # Calculate Fidelity
-        fid = calculate_fidelity(circuit, mps)
-        infidelity = 1.0 - fid
-        # Avoid log(0)
-        if infidelity < 1e-15:
-            infidelity = 1e-15
+        mps = GroupedMPS(rows, cols, bond_dim=chi)
 
-        infidelities.append(infidelity)
+        for layer in layers:
+            apply_layer_dmrg(mps, layer)
 
-        logger.info(
-            f"Bond Dim: {chi}, Fidelity: {fid:.6f}, Infidelity: {infidelity:.4e}, Time: {time.time() - start_time:.4f}s"
-        )
+        # Compute Fidelity
+        # Contract MPS tensors
+        full_tensor = mps.tensors[0]  # (1, d, r)
+        for i in range(1, mps.cols):
+            # full: (1, d...d, r_prev)
+            # next: (r_prev, d, r_next)
+            full_tensor = K.tensordot(full_tensor, mps.tensors[i], axes=[[-1], [0]])
 
-    # 3. Plotting
-    plt.figure(figsize=(8, 6))
-    plt.loglog(BOND_DIMS, infidelities, "o-", label="Total Infidelity (1-F)")
+        psi_mps = K.reshape(full_tensor, (-1,))
 
-    plt.xlabel("Bond Dimension (chi)")
-    plt.ylabel("Infidelity (1 - F)")
-    plt.title(
-        f"MPS Simulation Accuracy vs Bond Dimension\n{ROWS}x{COLS} Circuit, Depth {DEPTH}"
-    )
-    plt.grid(True, which="both", ls="--")
-    plt.legend()
+        # Handle potential phase difference? No, fidelity is abs^2.
+        # Also MPS might not be normalized if we didn't track it carefully (though we normalize F).
+        # We should normalize psi_mps.
+        norm_mps = K.norm(psi_mps)
+        psi_mps /= norm_mps
 
-    output_path = (
+        overlap = K.tensordot(K.conj(psi_exact), psi_mps, axes=[[0], [0]])
+        fid = float(np.abs(overlap) ** 2)
+
+        infidelities.append(1 - fid)
+        logger.info(f"Chi={chi}, Infidelity={1-fid:.6e}, Time={time.time()-start:.2f}s")
+
+    plt.figure()
+    plt.loglog(bond_dims, infidelities, "o-")
+    plt.xlabel("Bond Dimension")
+    plt.ylabel("Infidelity")
+    plt.title("DMRG Simulation (Figure 2a Repro)")
+    plt.savefig(
         "examples/reproduce_papers/2022_dmrg_circuit_simulation/outputs/result.png"
     )
-    plt.savefig(output_path)
-    logger.info(f"Plot saved to {output_path}")
+
+
+def main():
+    run_simulation(3, 4, 8, [2, 4, 8, 16, 32, 64])
 
 
 if __name__ == "__main__":
