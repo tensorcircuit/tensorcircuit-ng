@@ -41,6 +41,9 @@ def test_dep(backend):
     cs = tc.channels.generaldepolarizingchannel(0.02, 2)
     tc.channels.kraus_identity_check(cs)
 
+    cs3 = tc.channels.generaldepolarizingchannel(0.01, 3)
+    tc.channels.kraus_identity_check(cs3)
+
     cs2 = tc.channels.isotropicdepolarizingchannel(0.02 * 15, 2)
     for c1, c2 in zip(cs, cs2):
         np.testing.assert_allclose(c1.tensor, c2.tensor)

@@ -194,19 +194,31 @@ def generaldepolarizingchannel(
     if not np.all(np.array(probs) >= 0):
         raise ValueError(f"Invalid probability input {p}")
 
-    paulis = [gates.i().tensor, gates.x().tensor, gates.y().tensor, gates.z().tensor]  # type: ignore
-    tup = paulis
+    # paulis = [gates.i().tensor, gates.x().tensor, gates.y().tensor, gates.z().tensor]  # type: ignore
+    # vectorized implementation
+    base = np.stack(
+        [
+            gates._i_matrix,
+            gates._x_matrix,
+            gates._y_matrix,
+            gates._z_matrix,
+        ]
+    )
+    current = base
     for _ in range(num_qubits - 1):
-        old_tup = tup
-        tup = []
-        for pauli in paulis:
-            for term in old_tup:
-                mat = np.kron(pauli, term).reshape([2, 2] * num_qubits)
-                tup.append(mat)
+        n_prev = current.shape[1]
+        b = base[:, None, :, None, :, None]
+        c = current[None, :, None, :, None, :]
+        res = b * c
+        current = res.reshape(-1, 2 * n_prev, 2 * n_prev)
+
+    final_shape = [-1] + [2] * (2 * num_qubits)
+    tup = current.reshape(final_shape)
 
     assert len(tup) == len(probs)
 
-    tup = backend.cast(backend.stack(tup), dtype=cons.dtypestr)
+    tup = backend.convert_to_tensor(tup)
+    tup = backend.cast(tup, dtype=cons.dtypestr)
     sqrt_probs = backend.reshape(
         _sqrt(probs), [-1] + [1] * (len(backend.shape_tuple(tup)) - 1)
     )
