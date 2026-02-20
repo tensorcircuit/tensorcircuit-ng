@@ -419,10 +419,10 @@ class EnvManager:
                 if i > 0:
                     if (i - 1) in self.R: del self.R[i - 1]
 
-            L_final = self.update_L(self.get_L(self.cols - 1), self.cols - 1)
-            f = jnp.abs(jnp.reshape(L_final, (-1,))[0])**2
-            fidelities.append(f)
-            logger.info(f"Sweep {sweep}: Fidelity = {f}")
+        # Use the squared norm of the final environment tensor (at site 0) as fidelity
+        f = float(norm ** 2)
+        fidelities.append(f)
+        logger.info(f"Sweep {sweep}: Fidelity = {f}")
 
         return fidelities
 
@@ -506,6 +506,20 @@ def main():
             new_t += noise
             new_t = new_t / jnp.linalg.norm(new_t)
             mps_new.append(new_t)
+
+        # Transform mps_new to right-canonical form before starting DMRG
+        for i in range(cols - 1, 0, -1):
+            t = mps_new[i]
+            b_L = t.shape[0]
+            t_mat = jnp.reshape(t, (b_L, -1))
+            # LQ decomposition via QR of transpose
+            Q_prime, R_prime = jnp.linalg.qr(t_mat.T)
+            L_mat = R_prime.T
+            Q_mat = Q_prime.T
+            mps_new[i] = jnp.reshape(Q_mat, (-1, t.shape[1], t.shape[2]))
+            mps_new[i-1] = jnp.tensordot(mps_new[i-1], L_mat, axes=[[2], [0]])
+
+        mps_new[0] = mps_new[0] / jnp.linalg.norm(mps_new[0])
 
         em = EnvManager(mps_current, mps_new, block, gm, rows, cols)
         fids = em.run_dmrg(sweeps=2)
