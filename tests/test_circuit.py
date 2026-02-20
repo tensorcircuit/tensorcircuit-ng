@@ -1837,6 +1837,7 @@ def test_circuit_extra_coverage(backend):
     kraus = [tc.gates.x(), tc.gates.y()]
     c.unitary_kraus2(kraus, 0, prob=[0.5, 0.5])
 
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_expectation_error_handling(backend):
     c = tc.Circuit(2)
