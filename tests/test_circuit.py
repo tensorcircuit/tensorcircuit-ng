@@ -1836,3 +1836,15 @@ def test_circuit_extra_coverage(backend):
     # unitary_kraus2
     kraus = [tc.gates.x(), tc.gates.y()]
     c.unitary_kraus2(kraus, 0, prob=[0.5, 0.5])
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_expectation_error_handling(backend):
+    c = tc.Circuit(2)
+    c.H(0)
+    with pytest.raises(ValueError, match="Cannot measure two operators in one index"):
+        c.expectation((tc.gates.z(), [0]), (tc.gates.x(), [0]))
+
+    with pytest.raises(ValueError, match="Cannot measure two operators in one index"):
+        tc.expectation(
+            (tc.gates.z(), [0]), (tc.gates.x(), [0]), ket=c.state(), normalization=True
+        )
