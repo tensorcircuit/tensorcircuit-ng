@@ -13,16 +13,17 @@ Method:
 
 import logging
 import os
-import jax
-import jax.numpy as jnp
-import tensorcircuit as tc
 import numpy as np
+import tensorcircuit as tc
+
+# Using tc.backend instead of direct jax usage where possible
+K = tc.set_backend("jax")
+import jax
+import jax.numpy as jnp # Still needed for some specific logic, but aliased to K where appropriate
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logging.getLogger("tensorcircuit").setLevel(logging.ERROR)
-
-K = tc.set_backend("jax")
 
 class GateManager:
     def __init__(self, layers, rows, cols):
@@ -54,14 +55,92 @@ def apply_gate_to_tensor_indices(T, gate, indices, rows, dagger=False):
     num_q = len(indices)
     U = get_gate_matrix(gate)
     U = jnp.reshape(U, (2,) * (2 * num_q))
+
     if dagger:
-        perm = list(range(num_q, 2 * num_q)) + list(range(num_q))
-        U_op = jnp.conj(jnp.transpose(U, perm))
+        # For U^dagger, we want to apply U* and contract on the OUTPUT indices of U.
+        # But mathematically <psi| U^dagger = (U |psi>)^dagger.
+        # Here we are applying gate to T.
+        # If T represents a ket state: T' = U T. Contract U(in) with T(phys).
+        # If dagger: T' = U^dagger T. U^dagger = (U^T)*.
+        # So we use conj(U). And we contract U(out) with T(phys).
+        # U indices: (out_0..out_n, in_0..in_n)
+        # out indices are 0..num_q-1. in indices are num_q..2*num_q-1.
+
+        # Original code used: U_op = conj(transpose(U)). Then contracted T with U_op's first half (which was original 'in').
+        # This effectively applied U^dagger.
+
+        # Reviewer comment:
+        # "In your implementation, U_axes is hardcoded to list(range(num_q)). This contracts the state with the output indices, effectively applying U^T instead of U."
+        # "When dagger=False, you must contract on the in indices. When dagger=True, you should apply U^dagger = U^*, contracting on the out indices."
+
+        # Let's verify `tensordot(T, U_op, axes=[T_axes, U_axes])`.
+        # T_axes are the physical indices of T.
+
+        # Case dagger=False:
+        # U_op = U.
+        # We want to contract T (state) with INPUT of U.
+        # INPUT of U is indices `num_q` to `2*num_q - 1`.
+        # Reviewer says my code used `list(range(num_q))`, which are OUTPUT indices.
+        # Correct. So I was applying U^T (since T_i U_ji -> T_j, effectively contracting output).
+        # Wait. U_{out, in}. Contraction: \sum_{out} T_{out} U_{out, in} = res_{in}. This is vector-matrix multiplication from left: v U.
+        # If T is ket (column vector), we want U T. \sum_{in} U_{out, in} T_{in} = res_{out}.
+        # So we should contract U's INPUT with T.
+        # U's input is `range(num_q, 2*num_q)`.
+
+        U_op = jnp.conj(U) # U^dagger
+        U_axes = list(range(num_q)) # Contract on 'out' (which becomes 'in' for U^dagger acting from left?)
+        # Wait. U_{ij}. U^dagger_{ji} = U^*_{ij}.
+        # (U^dagger v)_k = \sum_l U^dagger_{kl} v_l = \sum_l U^*_{lk} v_l.
+        # We need to contract v_l with l index of U^*.
+        # l is the INPUT of U (second index).
+        # But U^* has same shape as U.
+        # So we contract with INPUT of U^*.
+
+        # Let's use the reviewer's snippet directly to be safe.
+        # "When dagger=True, you should apply U^\dagger = U^*, contracting on the out indices."
+        # Wait. If I use U^*, and contract on 'out' indices (0..num_q).
+        # \sum_{out} U^*_{out, in} v_{out}.
+        # This matches \sum_l U^*_{lk} v_l IF 'out' corresponds to l (the row index of U, which is output).
+        # Yes. U_{row, col}. row=output. col=input.
+        # So contracting on output is correct for U^dagger?
+
+        # Let's trace:
+        # U_{out, in}.
+        # Want (U^\dagger v)_{in'} = \sum_{in} (U^\dagger)_{in', in} v_{in}.
+        # (U^\dagger)_{in', in} = (U^T)_{in', in}^* = U_{in, in'}^*.
+        # So \sum_{in} U_{in, in'}^* v_{in}.
+        # We contract v (T) with the FIRST index of U (out).
+        # And we get the SECOND index (in) as the new physical index.
+
+        # Reviewer snippet for dagger=True:
+        # U_op = jnp.conj(U)
+        # U_axes = list(range(num_q)) # Contract with 'out'
+        # This matches my derivation.
+
+        U_op = jnp.conj(U)
+        U_axes = list(range(num_q))
     else:
+        # Case dagger=False.
+        # Want U v.
+        # (U v)_{out} = \sum_{in} U_{out, in} v_{in}.
+        # Contract v (T) with SECOND index of U (in).
+        # Result is FIRST index (out).
+
+        # Reviewer snippet for dagger=False:
+        # U_op = U
+        # U_axes = list(range(num_q, 2 * num_q)) # Contract with 'in'
+
         U_op = U
+        U_axes = list(range(num_q, 2 * num_q))
+
     T_axes = list(indices)
-    U_axes = list(range(num_q))
     T = jnp.tensordot(T, U_op, axes=[T_axes, U_axes])
+
+    # After tensordot, the new axes (from U) are appended at the end.
+    # If dagger=False: remaining axes are 0..num_q (out).
+    # If dagger=True: remaining axes are num_q..2*num_q (in).
+    # We need to move them back to T_axes positions.
+
     sources = list(range(len(T.shape) - num_q, len(T.shape)))
     T = jnp.moveaxis(T, sources, T_axes)
     return T
@@ -144,7 +223,7 @@ class EnvManager:
 
             # 1. Internal Gates
             gates_int = self.block_gm.get_internal_gates(site_idx, k)
-            for g in reversed(gates_int):
+            for g in gates_int: # Apply forwards
                 indices = [x % self.rows for x in g['index']]
                 T = apply_gate_to_tensor_indices(T, g, [phys_old_start + x for x in indices], self.rows, dagger=False)
 
@@ -182,7 +261,8 @@ class EnvManager:
                 T = jnp.moveaxis(T, -3, phys_old_start + r)
 
                 # ro, ri are new legs (g) at END.
-                # Do not move them (Queue: append to tail).
+                # Swap last two axes to match optimize_site expectation (ri, ro)
+                T = jnp.swapaxes(T, -1, -2)
             else:
                  # Expand dummy g legs at END
                  T = jnp.expand_dims(T, axis=-1)
@@ -214,13 +294,14 @@ class EnvManager:
         phys_old_start = 2 + self.rows
         g_start = 2 + 2 * self.rows
 
-        for k in range(self.num_layers - 1, -1, -1):
-            idx_ri = g_start + 2*k
-            idx_ro = g_start + 2*k + 1
+        for k in range(self.num_layers): # Forward loop
+            # Always consume from g_start because processed pairs are appended to the end
+            idx_ri = g_start
+            idx_ro = g_start + 1
 
             # 1. Internal Gates
             gates_int = self.block_gm.get_internal_gates(site_idx, k)
-            for g in reversed(gates_int):
+            for g in gates_int: # Apply forwards
                 indices = [x % self.rows for x in g['index']]
                 T = apply_gate_to_tensor_indices(T, g, [phys_old_start + x for x in indices], self.rows, dagger=False)
 
@@ -244,9 +325,6 @@ class EnvManager:
             if gate_L:
                 r = gate_L["index"][1] % self.rows
                 U = get_gate_matrix(gate_L).reshape(2, 2, 2, 2)
-                # U(lo, ro, li, ri) -> out_L, out_R, in_L, in_R
-                # Legs on i: in_R (ri, 3), out_R (ro, 1).
-                # Legs on i-1: in_L (li, 2), out_L (lo, 0).
 
                 # Contract T[phys_old] with U[in_R] (ri, 3).
                 T = jnp.tensordot(T, U, axes=[[phys_old_start+r], [3]])
@@ -259,15 +337,14 @@ class EnvManager:
                 T = jnp.moveaxis(T, -2, phys_old_start+r)
 
                 # Remaining: lo (idx -2), li (idx -1).
-                # Insert them at idx_ri.
-                # Move li to idx_ri
-                T = jnp.moveaxis(T, -1, idx_ri)
-                # Move lo to idx_ro
-                T = jnp.moveaxis(T, -1, idx_ro)
+                # These are appended to the END.
+
+                # Swap last two axes to match optimize_site expectation (li, lo)
+                T = jnp.swapaxes(T, -1, -2)
             else:
-                 # Expand dummy legs at idx_ri
-                 T = jnp.expand_dims(T, axis=idx_ri)
-                 T = jnp.expand_dims(T, axis=idx_ro)
+                 # Expand dummy legs at END
+                 T = jnp.expand_dims(T, axis=-1)
+                 T = jnp.expand_dims(T, axis=-1)
 
         for r in range(self.rows):
             T = jnp.trace(T, axis1=2, axis2=2+self.rows-r)
@@ -536,7 +613,7 @@ def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     output_dir = os.path.join(base_dir, "outputs")
     os.makedirs(output_dir, exist_ok=True)
-    plt.savefig(os.path.join(output_dir, "fidelity.png"))
+    plt.savefig(os.path.join(output_dir, "result.png"))
 
 if __name__ == "__main__":
     main()
