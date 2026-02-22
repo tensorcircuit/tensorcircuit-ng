@@ -22,6 +22,12 @@ torchlib: Any
 
 logger = logging.getLogger(__name__)
 
+
+# TODO(@refraction-ray): lack stateful random methods implementation for now
+# TODO(@refraction-ray): lack scatter impl for now
+# To be added once pytorch backend is ready
+
+
 class torch_jit_func:
     """
     Delay the tracing of torch jit to the first run time:
@@ -337,7 +343,9 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         else:
             p = self.convert_to_tensor(p)
             num_samples = reduce(mul, shape)
-            indices = torchlib.multinomial(p, num_samples, replacement=True, generator=g)
+            indices = torchlib.multinomial(
+                p, num_samples, replacement=True, generator=g
+            )
             indices = torchlib.reshape(indices, shape)
 
         return possible_values[indices]
