@@ -128,8 +128,8 @@ def sweep_right(mps_new, mps_prev, grid_row, L_env_init, R_envs):
     D_down = grid_row.shape[2]
 
     def scan_step(carry, inputs):
-        L_env_curr, _ = carry
-        R_env_curr, prev_node, grid_node, original_next_mps_node = inputs
+        L_env_curr = carry
+        R_env_curr, prev_node, grid_node = inputs
 
         E = optimize_site(L_env_curr, R_env_curr, prev_node, grid_node)
         E_mat = E.reshape(chi_max * D_down, chi_max)
@@ -137,18 +137,12 @@ def sweep_right(mps_new, mps_prev, grid_row, L_env_init, R_envs):
         Q, R_mat = jnp.linalg.qr(E_mat)
         Q_node = Q.reshape(chi_max, D_down, chi_max)
 
-        updated_next_node = jnp.tensordot(
-            R_mat, original_next_mps_node, axes=[[1], [0]]
-        )
         L_env_next = update_L(L_env_curr, Q_node, prev_node, grid_node)
 
-        return (L_env_next, updated_next_node), (Q_node, R_mat)
+        return L_env_next, (Q_node, R_mat)
 
-    dummy_next = jnp.zeros_like(mps_new[0])
-    mps_new_shifted = jnp.concatenate([mps_new[1:], dummy_next[None, ...]], axis=0)
-
-    inputs = (R_envs, mps_prev, grid_row, mps_new_shifted)
-    init_carry = (L_env_init, mps_new[0])
+    inputs = (R_envs, mps_prev, grid_row)
+    init_carry = L_env_init
 
     _, (Q_nodes_stack, R_mat_stack) = jax.lax.scan(scan_step, init_carry, inputs)
 
@@ -168,8 +162,8 @@ def sweep_left(mps_new, mps_prev, grid_row, L_envs, R_env_init):
     D_down = grid_row.shape[2]
 
     def scan_step(carry, inputs):
-        R_env_curr, _ = carry
-        L_env_curr, prev_node, grid_node, original_prev_mps_node = inputs
+        R_env_curr = carry
+        L_env_curr, prev_node, grid_node = inputs
 
         E = optimize_site(L_env_curr, R_env_curr, prev_node, grid_node)
 
@@ -179,18 +173,12 @@ def sweep_left(mps_new, mps_prev, grid_row, L_envs, R_env_init):
         L_mat = R_mat.T
         Q_node = (Q.T).reshape(chi_max, D_down, chi_max)
 
-        updated_prev_node = jnp.tensordot(
-            original_prev_mps_node, L_mat, axes=[[2], [0]]
-        )
         R_env_next = update_R(R_env_curr, Q_node, prev_node, grid_node)
 
-        return (R_env_next, updated_prev_node), (Q_node, L_mat)
+        return R_env_next, (Q_node, L_mat)
 
-    dummy_prev = jnp.zeros_like(mps_new[0])
-    mps_new_shifted = jnp.concatenate([dummy_prev[None, ...], mps_new[:-1]], axis=0)
-
-    inputs = (L_envs, mps_prev, grid_row, mps_new_shifted)
-    init_carry = (R_env_init, mps_new[-1])
+    inputs = (L_envs, mps_prev, grid_row)
+    init_carry = R_env_init
 
     _, (Q_nodes_stack, L_mat_stack) = jax.lax.scan(
         scan_step, init_carry, inputs, reverse=True
