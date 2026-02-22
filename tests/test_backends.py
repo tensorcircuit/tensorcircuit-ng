@@ -181,7 +181,7 @@ def test_backend_jv_grad(jaxb, highp):
     print(tc.backend.jit(tc.backend.value_and_grad(f))(0.2))
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_scatter(backend):
     np.testing.assert_allclose(
         tc.backend.scatter(
@@ -661,7 +661,7 @@ def test_tree_map(backend):
     np.testing.assert_allclose(ans["a"], 2 * np.ones([2]))
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_randoms(backend):
     @partial(tc.backend.jit, static_argnums=0)
     def random_matrixn(key):
@@ -690,7 +690,7 @@ def test_backend_randoms(backend):
     key = 42
     r31, r32 = random_matrixu(key)
     np.testing.assert_allclose(r31.shape, [2, 2])
-    assert np.any(r32 > 0)
+    assert np.any(tc.backend.numpy(r32) > 0)
     assert not np.allclose(r31, r32, atol=1e-4)
 
     def random_matrixc(key):
@@ -701,7 +701,7 @@ def test_backend_randoms(backend):
 
     r41, r42 = random_matrixc(key)
     np.testing.assert_allclose(r41.shape, [2, 2])
-    assert np.any((r42 > 0) & (r42 < 4))
+    assert np.any(tc.backend.numpy(r42 > 0) & tc.backend.numpy(r42 < 4))
 
 
 def vqe_energy(inputs, param, n, nlayers):
@@ -1056,7 +1056,7 @@ def test_sparse_methods(backend):
     )
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_randoms_v2(backend):
     g = tc.backend.get_random_state(42)
     for t in tc.backend.stateful_randc(g, 3, [3]):
@@ -1070,7 +1070,7 @@ def test_backend_randoms_v2(backend):
     assert tuple(r[0]) != tuple(r[1])
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_randoms_v3(backend):
     tc.backend.set_random_state(42)
     for _ in range(2):

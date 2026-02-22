@@ -22,6 +22,7 @@ torchlib: Any
 
 logger = logging.getLogger(__name__)
 
+
 # TODO(@refraction-ray): lack stateful random methods implementation for now
 # TODO(@refraction-ray): lack scatter impl for now
 # To be added once pytorch backend is ready
@@ -261,6 +262,93 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         if dtype is not None:
             result = self.cast(result, dtype)
         return result
+
+    def set_random_state(
+        self, seed: Optional[int] = None, get_only: bool = False
+    ) -> Any:
+        if isinstance(seed, torchlib.Generator):
+            g = seed
+        else:
+            g = torchlib.Generator()
+            if seed is not None:
+                g.manual_seed(seed)
+        if get_only is False:
+            self.g = g
+        return g
+
+    def stateful_randn(
+        self,
+        g: Any,
+        shape: Union[int, Sequence[int]] = 1,
+        mean: float = 0,
+        stddev: float = 1,
+        dtype: str = "32",
+    ) -> Tensor:
+        if isinstance(dtype, str):
+            dtype = dtype[-2:]
+        if isinstance(shape, int):
+            shape = (shape,)
+        if dtype == "32":
+            dtyper = torchlib.float32
+        elif dtype == "64":
+            dtyper = torchlib.float64
+        elif not isinstance(dtype, str):
+            dtyper = dtype
+        else:
+            raise ValueError("unspported `dtype` %s" % dtype)
+        r = torchlib.randn(size=shape, generator=g, dtype=dtyper) * stddev + mean
+        return r
+
+    def stateful_randu(
+        self,
+        g: Any,
+        shape: Union[int, Sequence[int]] = 1,
+        low: float = 0,
+        high: float = 1,
+        dtype: str = "32",
+    ) -> Tensor:
+        if isinstance(dtype, str):
+            dtype = dtype[-2:]
+        if isinstance(shape, int):
+            shape = (shape,)
+        if dtype == "32":
+            dtyper = torchlib.float32
+        elif dtype == "64":
+            dtyper = torchlib.float64
+        elif not isinstance(dtype, str):
+            dtyper = dtype
+        else:
+            raise ValueError("unspported `dtype` %s" % dtype)
+        r = torchlib.rand(size=shape, generator=g, dtype=dtyper) * (high - low) + low
+        return r
+
+    def stateful_randc(
+        self,
+        g: Any,
+        a: Union[int, Sequence[int], Tensor],
+        shape: Union[int, Sequence[int]],
+        p: Optional[Union[Sequence[float], Tensor]] = None,
+    ) -> Tensor:
+        if isinstance(shape, int):
+            shape = (shape,)
+        if isinstance(a, int):
+            possible_values = torchlib.arange(a)
+            n = a
+        else:
+            possible_values = self.convert_to_tensor(a)
+            n = possible_values.shape[0]
+
+        if p is None:
+            indices = torchlib.randint(0, n, size=shape, generator=g)
+        else:
+            p = self.convert_to_tensor(p)
+            num_samples = reduce(mul, shape)
+            indices = torchlib.multinomial(
+                p, num_samples, replacement=True, generator=g
+            )
+            indices = torchlib.reshape(indices, shape)
+
+        return possible_values[indices]
 
     def expm(self, a: Tensor) -> Tensor:
         return torchlib.linalg.matrix_exp(a)
