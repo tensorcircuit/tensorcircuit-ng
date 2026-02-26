@@ -517,7 +517,7 @@ def _identity(*args: Any, **kws: Any) -> Any:
     return args
 
 
-def _get_path_cache_friendly(
+def _get_path_info(
     nodes: List[tn.Node], algorithm: Any
 ) -> Tuple[List[Tuple[int, int]], List[tn.Node], Dict[Any, str]]:
     # Refactored to return output_symbols as well
@@ -622,20 +622,12 @@ def _get_path_cache_friendly(
 
     size_dict = {}
     for root, symbol in mapping_dict.items():
-        size_dict[symbol] = root.dimension  # type: ignore  # type: ignore
+        size_dict[symbol] = root.dimension  # type: ignore
 
     logger.debug("input_sets: %s" % input_sets)
     logger.debug("output_set: %s" % output_set)
     logger.debug("size_dict: %s" % size_dict)
     logger.debug("path finder algorithm: %s" % algorithm)
-
-    # We need a way to map original edges to symbols for rebind_dangling_edges.
-    # uf[edge] -> root -> symbol (in mapping_dict)
-    # So we return uf and mapping_dict? Or just a helper dict.
-    # Let's return a dict {edge: symbol} for all edges?
-    # Or better, just return the `uf` and `mapping_dict`.
-    # But `uf` is not picklable or standard?
-    # Let's construct a simple dict: {id(edge): symbol}
 
     edge_to_symbol = {}
     for edge in all_edges:
@@ -647,6 +639,14 @@ def _get_path_cache_friendly(
         regular_nodes,
         edge_to_symbol,  # Use this instead of output_set/mapping_dict for output reordering
     )
+
+
+def _get_path_cache_friendly(
+    nodes: List[tn.Node], algorithm: Any
+) -> Tuple[List[Tuple[int, int]], List[tn.Node]]:
+    # Legacy wrapper for backward compatibility of get_tn_info
+    path, regular_nodes, _ = _get_path_info(nodes, algorithm)
+    return path, regular_nodes
 
 
 get_tn_info = partial(_get_path_cache_friendly, algorithm=_identity)
@@ -760,7 +760,7 @@ def _base(
     # nodes = list(nodes_set)
 
     # 1. FRONTEND: Resolve topology
-    path, regular_nodes, edge_to_symbol = _get_path_cache_friendly(nodes, algorithm)
+    path, regular_nodes, edge_to_symbol = _get_path_info(nodes, algorithm)
 
     # Detect if we should use the new primitive-based engine
     # If the number of regular nodes returned differs from input nodes (meaning CopyNodes were filtered out),
@@ -826,15 +826,11 @@ def _base(
     # ==========================================
     # be = regular_nodes[0].backend
     be = backend
-
     # Determine output symbols
     output_symbols = set()
-    if output_edge_order:
-        for edge in output_edge_order:
-            # We must use edge_to_symbol
-            # If edge was not in edge_to_symbol (e.g. not connected?), this would key error.
-            # But edge_to_symbol covers all edges in nodes_new.
-            # Since output_edge_order edges are dangling edges of the graph, they are in all_edges.
+    dangling_edges = tn.get_subgraph_dangling(nodes)
+    for edge in dangling_edges:
+        if id(edge) in edge_to_symbol:
             output_symbols.add(edge_to_symbol[id(edge)])
 
     # Extract bare tensors and their initial symbols into a working pool
