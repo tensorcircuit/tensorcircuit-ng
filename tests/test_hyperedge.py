@@ -107,3 +107,40 @@ def test_tensorcircuit_circuit_hyperedge_support(contractor_setup):
     # Bell state |00> + |11>
     expected = np.array([1, 0, 0, 1]) / np.sqrt(2)
     assert np.allclose(np.abs(state), np.abs(expected))
+
+
+@pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
+def test_hyperedge_output_reordering(contractor_setup):
+    # Test ensuring that output edge ordering works with hyperedge contraction logic
+    # A(i, j) -> connected to two separate CopyNodes?
+    # Let's simple case: A(i) -> CN1 -> Output1(i)
+    #                    B(j) -> CN2 -> Output2(j)
+    # Output edges order [Output2, Output1] -> result should be transpose(A x B)
+
+    dim = 2
+    a = tn.Node(np.array([1.0, 2.0]), name="A")
+    b = tn.Node(np.array([3.0, 4.0]), name="B")
+
+    cn1 = tn.CopyNode(2, dim, name="CN1")
+    cn2 = tn.CopyNode(2, dim, name="CN2")
+
+    a[0] ^ cn1[0]
+    b[0] ^ cn2[0]
+
+    # Dangling: cn1[1], cn2[1]
+
+    nodes = [a, b, cn1, cn2]
+
+    # Default order is usually arbitrary or determined by graph traversal
+    # We specify explicit order
+    output_edge_order = [cn2[1], cn1[1]]
+
+    res = tc.contractor(nodes, output_edge_order=output_edge_order)
+
+    # Result should be B outer A = [3, 4] outer [1, 2] = [[3, 6], [4, 8]]
+    # (j, i) where j is from B, i is from A
+
+    expected = np.outer(np.array([3.0, 4.0]), np.array([1.0, 2.0]))
+
+    assert np.allclose(res.tensor, expected)
+    assert res.tensor.shape == (2, 2)

@@ -519,7 +519,7 @@ def _identity(*args: Any, **kws: Any) -> Any:
 
 def _get_path_cache_friendly(
     nodes: List[tn.Node], algorithm: Any
-) -> Tuple[List[Tuple[int, int]], List[tn.Node], List[str]]:
+) -> Tuple[List[Tuple[int, int]], List[tn.Node], Dict[Any, str]]:
     # Refactored to return output_symbols as well
     nodes = list(nodes)
 
@@ -559,8 +559,8 @@ def _get_path_cache_friendly(
         return (
             algorithm(input_sets, output_set, size_dict),
             nodes_new,
-            output_set,
-        )  # Added output_set
+            mapping_dict,  # Return mapping dict to reconstruct output order
+        )
 
     # Hyperedge logic with UnionFind
     uf = UnionFind()
@@ -622,17 +622,31 @@ def _get_path_cache_friendly(
 
     size_dict = {}
     for root, symbol in mapping_dict.items():
-        size_dict[symbol] = root.dimension  # type: ignore  # type: ignore  # type: ignore
+        size_dict[symbol] = root.dimension  # type: ignore  # type: ignore
 
     logger.debug("input_sets: %s" % input_sets)
     logger.debug("output_set: %s" % output_set)
     logger.debug("size_dict: %s" % size_dict)
     logger.debug("path finder algorithm: %s" % algorithm)
+
+    # We need a way to map original edges to symbols for rebind_dangling_edges.
+    # uf[edge] -> root -> symbol (in mapping_dict)
+    # So we return uf and mapping_dict? Or just a helper dict.
+    # Let's return a dict {edge: symbol} for all edges?
+    # Or better, just return the `uf` and `mapping_dict`.
+    # But `uf` is not picklable or standard?
+    # Let's construct a simple dict: {id(edge): symbol}
+
+    edge_to_symbol = {}
+    for edge in all_edges:
+        if edge in uf:  # Should be all
+            edge_to_symbol[id(edge)] = mapping_dict[uf[edge]]
+
     return (
         algorithm(input_sets, output_set, size_dict),
         regular_nodes,
-        output_set,
-    )  # Added output_set
+        edge_to_symbol,  # Use this instead of output_set/mapping_dict for output reordering
+    )
 
 
 get_tn_info = partial(_get_path_cache_friendly, algorithm=_identity)
@@ -687,7 +701,24 @@ def _base(
 ) -> tn.Node:
     """
     The base method for all `opt_einsum` contractors.
-    ...
+
+    :param nodes: A collection of connected nodes.
+    :type nodes: List[tn.Node]
+    :pram algorithm: `opt_einsum` contraction method to use.
+    :type algorithm: Any
+    :param output_edge_order: An optional list of edges. Edges of the
+        final node in `nodes_set` are reordered into `output_edge_order`;
+        if final node has more than one edge, `output_edge_order` must be provided.
+    :type output_edge_order: Optional[Sequence[tn.Edge]], optional
+    :param ignore_edge_order: An option to ignore the output edge order.
+    :type ignore_edge_order: bool
+    :param total_size: The total size of the tensor network.
+    :type total_size: Optional[int], optional
+    :raises ValueError:"The final node after contraction has more than
+        one remaining edge. In this case `output_edge_order` has to be provided," or
+        "Output edges are not equal to the remaining non-contracted edges of the final node."
+    :return: The final node after full contraction.
+    :rtype: tn.Node
     """
     # rewrite tensornetwork default to add logging infras
     nodes_set = set(nodes)
@@ -729,7 +760,7 @@ def _base(
     # nodes = list(nodes_set)
 
     # 1. FRONTEND: Resolve topology
-    path, regular_nodes, output_symbols = _get_path_cache_friendly(nodes, algorithm)
+    path, regular_nodes, edge_to_symbol = _get_path_cache_friendly(nodes, algorithm)
 
     # Detect if we should use the new primitive-based engine
     # If the number of regular nodes returned differs from input nodes (meaning CopyNodes were filtered out),
@@ -795,6 +826,16 @@ def _base(
     # ==========================================
     # be = regular_nodes[0].backend
     be = backend
+
+    # Determine output symbols
+    output_symbols = set()
+    if output_edge_order:
+        for edge in output_edge_order:
+            # We must use edge_to_symbol
+            # If edge was not in edge_to_symbol (e.g. not connected?), this would key error.
+            # But edge_to_symbol covers all edges in nodes_new.
+            # Since output_edge_order edges are dangling edges of the graph, they are in all_edges.
+            output_symbols.add(edge_to_symbol[id(edge)])
 
     # Extract bare tensors and their initial symbols into a working pool
     # Pool elements are just tuples: (raw_tensor, ["a", "b", ...])
@@ -876,7 +917,7 @@ def _base(
         total_size += reduce(mul, be.shape_tuple(new_tensor) + (1,))  # type: ignore
 
     # RE-ENTRY: Wrap the final bare tensor back into the Graph world
-    final_raw_tensor, _ = tensor_pool[0]
+    final_raw_tensor, final_symbols = tensor_pool[0]
 
     # We need to ensure the final tensor's axes match the output_edge_order
     # output_edge_order is a list of Edges.
@@ -915,7 +956,16 @@ def _base(
         # To match robustly:
         # We need the `uf` and `mapping_dict` from `_get_path_cache_friendly`.
         # Refactoring `_get_path_cache_friendly` to return a `get_symbol_for_edge` callable or dict?
-        pass  # Handling below
+
+        target_symbols = []
+        for edge in output_edge_order:
+            target_symbols.append(edge_to_symbol[id(edge)])
+
+        # We need to find permutation such that final_symbols[p] matches target_symbols
+        # final_symbols should be a permutation of target_symbols (same set)
+
+        perm = [final_symbols.index(s) for s in target_symbols]
+        final_node.tensor = be.transpose(final_node.tensor, perm)
 
     # For now, let's assume the user wants the result.
     # TensorNetwork's `reorder_edges` expects the node to have those specific edge objects attached.
