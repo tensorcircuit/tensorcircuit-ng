@@ -149,16 +149,24 @@ def arg_alias(
     :rtype: Callable[..., Any]
     """
 
+    flat_aliases = []
+    normalized_alias_dict = {}
+    for k, vs in alias_dict.items():
+        if isinstance(vs, str):
+            vs_list = [vs]
+        else:
+            vs_list = vs  # type: ignore
+        normalized_alias_dict[k] = vs_list
+        for v in vs_list:
+            flat_aliases.append((k, v))
+
     @wraps(f)
     def wrapper(*args: Any, **kws: Any) -> Any:
-        for k, vs in alias_dict.items():
-            if isinstance(vs, str):
-                vs = []
-            for v in vs:
-                if v in kws:
-                    # in case it is None by design!
-                    kws[k] = kws[v]
-                    del kws[v]
+        for k, v in flat_aliases:
+            if v in kws:
+                # in case it is None by design!
+                kws[k] = kws[v]
+                del kws[v]
         return f(*args, **kws)
 
     if fix_doc:
@@ -176,7 +184,7 @@ def arg_alias(
 
                 if line.strip().startswith(":param "):
                     param = re.findall(r":param\s([^\s]+):", line)[0]
-                    if param in alias_dict:
+                    if param in normalized_alias_dict:
                         j = 1
                         while True:
                             ndoc.append(doc[i + j])
@@ -184,7 +192,7 @@ def arg_alias(
                                 break
                             j += 1
                         skip = True
-                        for v in alias_dict[param]:
+                        for v in normalized_alias_dict[param]:
                             ndoc.append(
                                 re.sub(
                                     r"(.*:param\s)([^\s]+)(:.*)",
