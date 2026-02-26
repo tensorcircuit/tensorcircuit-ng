@@ -502,6 +502,114 @@ def get_symbol(i: int) -> str:
     return chr(i)
 
 
+def _extract_topology(
+    nodes: List[tn.Node],
+) -> Tuple[List[Any], List[str], str, Dict[str, int], Dict[int, str]]:
+    """
+    Convert a physical tensor network graph (with possible CopyNodes) into
+    algebraic components for einsum/cotengra.
+    """
+    # split nodes into regular nodes and CopyNodes
+    regular_nodes = [n for n in nodes if not isinstance(n, tn.CopyNode)]
+    copy_nodes = [n for n in nodes if isinstance(n, tn.CopyNode)]
+
+    uf = UnionFind()
+    all_edges = tn.get_all_edges(nodes)
+    for edge in all_edges:
+        uf[edge]  # init
+
+    for cn in copy_nodes:
+        edges = cn.edges
+        if edges:
+            root_edge = edges[0]
+            for i in range(1, len(edges)):
+                uf.union(root_edge, edges[i])
+
+    mapping_dict = {}
+    symbol_counter = 0
+
+    input_sets = []
+    raw_tensors = []
+    for node in regular_nodes:
+        node_symbols = []
+        for edge in node.edges:
+            root = uf[edge]
+            if root not in mapping_dict:
+                mapping_dict[root] = get_symbol(symbol_counter)
+                symbol_counter += 1
+            node_symbols.append(mapping_dict[root])
+        input_sets.append("".join(node_symbols))
+        raw_tensors.append(node.tensor)
+
+    dangling_edges = sorted_edges(tn.get_subgraph_dangling(nodes))
+    output_set = []
+    for edge in dangling_edges:
+        root = uf[edge]
+        if root not in mapping_dict:
+            mapping_dict[root] = get_symbol(symbol_counter)
+            symbol_counter += 1
+        output_set.append(mapping_dict[root])
+
+    size_dict = {symbol: root.dimension for root, symbol in mapping_dict.items()}
+    edge_to_symbol = {id(edge): mapping_dict[uf[edge]] for edge in all_edges}
+
+    return (
+        raw_tensors,
+        input_sets,
+        "".join(output_set),
+        size_dict,
+        edge_to_symbol,
+    )
+
+
+def _algebraic_base_contraction(
+    nodes: List[tn.Node],
+    algorithm: Any,
+    output_edge_order: Optional[Sequence[tn.Edge]] = None,
+    ignore_edge_order: bool = False,
+) -> tn.Node:
+    """
+    Execute contraction using cotengra and autoray for bare tensors.
+    """
+    import cotengra as ctg
+
+    raw_tensors, input_sets, output_set, size_dict, edge_to_symbol = _extract_topology(
+        nodes
+    )
+    # Use the backend of the first node
+    be = nodes[0].backend
+
+    if len(raw_tensors) == 1:
+        # Avoid cotengra bug for empty contraction paths
+        final_raw_tensor = be.einsum(input_sets[0] + "->" + output_set, *raw_tensors)
+    else:
+        path = algorithm(input_sets, output_set, size_dict)
+        logger.info("the contraction path is given as %s" % str(path))
+
+        tree = ctg.ContractionTree.from_path(
+            input_sets, output_set, size_dict, path=path
+        )
+
+        # Use autoray to keep AD and JIT support across backends
+        # Note: cotengra's make_contractor handles the orchestration
+        contractor = ctg.core.make_contractor(tree, implementation="autoray")
+        final_raw_tensor = contractor(*raw_tensors)
+
+    final_node = tn.Node(final_raw_tensor, backend=be)
+
+    if not ignore_edge_order:
+        if output_edge_order is None:
+            output_edge_order = sorted_edges(tn.get_subgraph_dangling(nodes))
+
+        target_symbols = [edge_to_symbol[id(edge)] for edge in output_edge_order]
+        # final_node.tensor currently has axes in output_set order
+        final_symbols = list(output_set)
+        perm = [final_symbols.index(s) for s in target_symbols]
+        final_node.tensor = be.transpose(final_node.tensor, perm)
+
+    return final_node
+
+
 def _get_path(
     nodes: List[tn.Node], algorithm: Any
 ) -> Tuple[List[Tuple[int, int]], List[tn.Node]]:
@@ -517,136 +625,35 @@ def _identity(*args: Any, **kws: Any) -> Any:
     return args
 
 
-def _get_path_info(
+def _get_path_cache_friendly(
     nodes: List[tn.Node], algorithm: Any
-) -> Tuple[List[Tuple[int, int]], List[tn.Node], Dict[Any, str]]:
-    # Refactored to return output_symbols as well
+) -> Tuple[List[Tuple[int, int]], List[tn.Node]]:
     nodes = list(nodes)
 
     nodes_new = sorted(nodes, key=lambda node: getattr(node, "_stable_id_", -1))
+    # if isinstance(algorithm, list):
+    #     return algorithm, [nodes_new]
 
-    # split nodes into regular nodes and CopyNodes
-    regular_nodes = [n for n in nodes_new if not isinstance(n, tn.CopyNode)]
-    copy_nodes = [n for n in nodes_new if isinstance(n, tn.CopyNode)]
-
-    if not copy_nodes:
-        # Fallback to original logic if no CopyNodes are present
-        all_edges = tn.get_all_edges(nodes_new)
-        all_edges_sorted = sorted_edges(all_edges)
-        mapping_dict = {}
-        i = 0
-        for edge in all_edges_sorted:
-            if id(edge) not in mapping_dict:
-                mapping_dict[id(edge)] = get_symbol(i)
-                i += 1
-
-        input_sets = [
-            list([mapping_dict[id(e)] for e in node.edges]) for node in nodes_new
-        ]
-        output_set = list(
-            [
-                mapping_dict[id(e)]
-                for e in sorted_edges(tn.get_subgraph_dangling(nodes_new))
-            ]
-        )
-        size_dict = {
-            mapping_dict[id(edge)]: edge.dimension for edge in all_edges_sorted
-        }
-        logger.debug("input_sets: %s" % input_sets)
-        logger.debug("output_set: %s" % output_set)
-        logger.debug("size_dict: %s" % size_dict)
-        logger.debug("path finder algorithm: %s" % algorithm)
-        return (
-            algorithm(input_sets, output_set, size_dict),
-            nodes_new,
-            mapping_dict,  # Return mapping dict to reconstruct output order
-        )
-
-    # Hyperedge logic with UnionFind
-    uf = UnionFind()
     all_edges = tn.get_all_edges(nodes_new)
-
-    for edge in all_edges:
-        uf[edge]  # init
-
-    for cn in copy_nodes:
-        edges = cn.edges
-        if edges:
-            root_edge = edges[0]
-            for i in range(1, len(edges)):
-                uf.union(root_edge, edges[i])
-
+    all_edges_sorted = sorted_edges(all_edges)
     mapping_dict = {}
-    symbol_counter = 0
+    i = 0
+    for edge in all_edges_sorted:
+        if id(edge) not in mapping_dict:
+            mapping_dict[id(edge)] = get_symbol(i)
+            i += 1
 
-    for node in regular_nodes:
-        sorted_node_edges = sorted(
-            node.edges, key=lambda e: e.axis1 if e.node1 is node else e.axis2
-        )
-        for edge in sorted_node_edges:
-            root = uf[edge]
-            if root not in mapping_dict:
-                mapping_dict[root] = get_symbol(symbol_counter)
-                symbol_counter += 1
-
-    input_sets = []
-    for node in regular_nodes:
-        node_symbols = []
-        # Store symbols on the node for later retrieval in _base
-        # We need to ensure the order matches node.edges?
-        # The contraction logic needs to know which dimension corresponds to which symbol.
-        # tn.Node stores edges in order.
-        # But here we sorted edges for consistent symbol generation?
-        # Wait, sorted_node_edges logic above was just to assign symbols deterministically.
-        # Now we need to assign them to the node's actual edge order.
-        for edge in node.edges:  # Use original edge order!
-            root = uf[edge]
-            if root not in mapping_dict:
-                # Should have been assigned if all connected components were visited
-                # But dangling edges might be separate roots?
-                mapping_dict[root] = get_symbol(symbol_counter)
-                symbol_counter += 1
-            node_symbols.append(mapping_dict[root])
-        # Save symbols to the node for the execution phase
-        setattr(node, "_symbols", node_symbols)
-        input_sets.append(node_symbols)
-
-    dangling_edges = sorted_edges(tn.get_subgraph_dangling(nodes_new))
-    output_set = []
-    for edge in dangling_edges:
-        root = uf[edge]
-        if root not in mapping_dict:
-            mapping_dict[root] = get_symbol(symbol_counter)
-            symbol_counter += 1
-        output_set.append(mapping_dict[root])
-
-    size_dict = {}
-    for root, symbol in mapping_dict.items():
-        size_dict[symbol] = root.dimension  # type: ignore
-
+    input_sets = [list([mapping_dict[id(e)] for e in node.edges]) for node in nodes_new]
+    output_set = list(
+        [mapping_dict[id(e)] for e in sorted_edges(tn.get_subgraph_dangling(nodes_new))]
+    )
+    size_dict = {mapping_dict[id(edge)]: edge.dimension for edge in all_edges_sorted}
     logger.debug("input_sets: %s" % input_sets)
     logger.debug("output_set: %s" % output_set)
     logger.debug("size_dict: %s" % size_dict)
     logger.debug("path finder algorithm: %s" % algorithm)
-
-    edge_to_symbol = {}
-    for edge in all_edges:
-        if edge in uf:  # Should be all
-            edge_to_symbol[id(edge)] = mapping_dict[uf[edge]]
-
-    return (
-        algorithm(input_sets, output_set, size_dict),
-        regular_nodes,
-        edge_to_symbol,  # Use this instead of output_set/mapping_dict for output reordering
-    )
-
-
-def _get_path_cache_friendly(
-    nodes: List[tn.Node], algorithm: Any
-) -> Tuple[List[Tuple[int, int]], List[tn.Node]]:
-    # Legacy wrapper for backward compatibility of get_tn_info
-    path, regular_nodes, _ = _get_path_info(nodes, algorithm)
-    return path, regular_nodes
+    return algorithm(input_sets, output_set, size_dict), nodes_new
+    # directly get input_sets, output_set and size_dict by using identity function as algorithm
 
 
 get_tn_info = partial(_get_path_cache_friendly, algorithm=_identity)
@@ -697,7 +704,7 @@ def _base(
     ignore_edge_order: bool = False,
     total_size: Optional[int] = None,
     debug_level: int = 0,
-    use_primitives: Optional[bool] = None,  # Default to None for auto-detect
+    use_primitives: Optional[bool] = None,
 ) -> tn.Node:
     """
     The base method for all `opt_einsum` contractors.
@@ -759,233 +766,60 @@ def _base(
 
     # nodes = list(nodes_set)
 
-    # 1. FRONTEND: Resolve topology
-    path, regular_nodes, edge_to_symbol = _get_path_info(nodes, algorithm)
+    # 1. Resolve topology and check for hyperedges
+    has_hyperedges = any(isinstance(n, tn.CopyNode) for n in nodes)
 
-    # Detect if we should use the new primitive-based engine
-    # If the number of regular nodes returned differs from input nodes (meaning CopyNodes were filtered out),
-    # we MUST use the new engine to support hyperedges properly.
-    if use_primitives is None:
-        has_hyperedges = len(regular_nodes) != len(nodes)
-        if has_hyperedges:
-            use_primitives = True
-        else:
-            # Maintain legacy behavior for standard graphs unless forced?
-            # Actually, for safety, let's default to False if no hyperedges are detected,
-            # ensuring 100% backward compatibility for existing code.
-            use_primitives = False
+    if use_primitives is True or (use_primitives is None and has_hyperedges):
+        # ==========================================
+        # NEW ALGEBRAIC EXECUTION PATH (Opt-in)
+        # ==========================================
+        return _algebraic_base_contraction(
+            nodes, algorithm, output_edge_order, ignore_edge_order
+        )
 
+    # ==========================================
+    # ORIGINAL EXECUTION PATH (100% Backward Compatible)
+    # ==========================================
+    # Then apply `opt_einsum`'s algorithm
+    # if isinstance(algorithm, list):
+    #     path = algorithm
+    # else:
+    path, nodes = _get_path_cache_friendly(nodes, algorithm)
     if debug_level == 2:  # do nothing
         if output_edge_order:
             shape = [e.dimension for e in output_edge_order]
         else:
             shape = []
         return tn.Node(backend.zeros(shape))
-
     logger.info("the contraction path is given as %s" % str(path))
     if total_size is None:
-        total_size = sum([_sizen(t) for t in regular_nodes])
-
-    if not use_primitives:
-        # ==========================================
-        # LEGACY EXECUTION PATH (Safe Fallback)
-        # ==========================================
-        nodes = regular_nodes  # In legacy, this matches 'nodes' (no CopyNodes filtered)
-        for ab in path:
-            if len(ab) < 2:
-                logger.warning("single element tuple in contraction path!")
-                continue
-            a, b = ab
-
-            if debug_level == 1:
-                from .simplify import pseudo_contract_between
-
-                new_node = pseudo_contract_between(nodes[a], nodes[b])
-            else:
-                new_node = tn.contract_between(
-                    nodes[a], nodes[b], allow_outer_product=True
-                )
-            nodes.append(new_node)
-            # nodes[a] = backend.zeros([1])
-            # nodes[b] = backend.zeros([1])
-            nodes = _multi_remove(nodes, [a, b])
-
-            logger.debug(_sizen(new_node, is_log=True))
-            total_size += _sizen(new_node)
-        logger.info("----- WRITE: %s --------\n" % np.log2(total_size))
-
-        # if the final node has more than one edge,
-        # output_edge_order has to be specified
-        final_node = nodes[0]  # nodes were connected, we checked this
-        if not ignore_edge_order:
-            final_node.reorder_edges(output_edge_order)
-        return final_node
-
-    # ==========================================
-    # NEW EXECUTION PATH (Hyperedge & JIT friendly)
-    # ==========================================
-    # be = regular_nodes[0].backend
-    be = backend
-    # Determine output symbols
-    output_symbols = set()
-    dangling_edges = tn.get_subgraph_dangling(nodes)
-    for edge in dangling_edges:
-        if id(edge) in edge_to_symbol:
-            output_symbols.add(edge_to_symbol[id(edge)])
-
-    # Extract bare tensors and their initial symbols into a working pool
-    # Pool elements are just tuples: (raw_tensor, ["a", "b", ...])
-    # _symbols was attached in _get_path_cache_friendly
-    tensor_pool = [(node.tensor, getattr(node, "_symbols")) for node in regular_nodes]
-
+        total_size = sum([_sizen(t) for t in nodes])
     for ab in path:
         if len(ab) < 2:
+            logger.warning("single element tuple in contraction path!")
             continue
         a, b = ab
-        tensor_a, sym_a = tensor_pool[a]
-        tensor_b, sym_b = tensor_pool[b]
 
-        # Calculate remaining symbols needed by the rest of the pool
-        # This determines which symbols are summed over (trace) vs kept (hyperedge/output)
-        remaining_pool = [t for i, t in enumerate(tensor_pool) if i not in (a, b)]
-        symbols_left = set()
-        for _, sym in remaining_pool:
-            symbols_left.update(sym)
+        if debug_level == 1:
+            from .simplify import pseudo_contract_between
 
-        # Categorize shared axes
-        # Sym_a and Sym_b are lists of strings
-        set_a = set(sym_a)
-        set_b = set(sym_b)
-        shared_syms = set_a.intersection(set_b)
+            new_node = pseudo_contract_between(nodes[a], nodes[b])
+        else:
+            new_node = tn.contract_between(nodes[a], nodes[b], allow_outer_product=True)
+        nodes.append(new_node)
+        # nodes[a] = backend.zeros([1])
+        # nodes[b] = backend.zeros([1])
+        nodes = _multi_remove(nodes, [a, b])
 
-        # A symbol is "trace" (contracted) if it is NOT in the remaining pool AND NOT in the output set
-        trace_syms = [
-            s for s in shared_syms if s not in symbols_left and s not in output_symbols
-        ]
+        logger.debug(_sizen(new_node, is_log=True))
+        total_size += _sizen(new_node)
+    logger.info("----- WRITE: %s --------\n" % np.log2(total_size))
 
-        # A symbol is "hyper" (broadcast/kept) if it IS in the remaining pool OR IS in the output set
-        # (meaning it is connected to a CopyNode that branches elsewhere or is an output)
-        # hyper_syms = [s for s in shared_syms if s in symbols_left or s in output_symbols]
-
-        # Compute output symbols
-        # Sym_out = (Sym_a + Sym_b) - Trace_syms (but preserving order/uniqueness logic?)
-        # Opt_einsum / backend.einsum handles this via the equation string.
-        # We just need to construct the equation "abc,abd->abcd" etc.
-
-        # Construct output symbols list
-        # Start with A's symbols, exclude trace
-        # Append B's symbols, exclude trace AND already present (from A)
-        # Wait, if it's a hyperedge, it's shared but NOT traced. So it appears in both A and B.
-        # In the output, it should appear once.
-
-        sym_out = []
-        seen = set()
-
-        # We want to preserve a deterministic order, usually A then B
-        for s in sym_a:
-            if s not in trace_syms:
-                if s not in seen:
-                    sym_out.append(s)
-                    seen.add(s)
-        for s in sym_b:
-            if s not in trace_syms:
-                if s not in seen:
-                    sym_out.append(s)
-                    seen.add(s)
-
-        # Construct einsum equation
-        # Input: "".join(sym_a) + "," + "".join(sym_b)
-        # Output: "->" + "".join(sym_out)
-        eq = f"{''.join(sym_a)},{''.join(sym_b)}->{''.join(sym_out)}"
-
-        # Dispatch to explicit primitive (einsum is the most general primitive here)
-        # It handles both standard contraction (summing over trace_syms)
-        # and hyperedge "contraction" (element-wise mult over shared hyper_syms)
-        # efficiently without materializing the CopyNode.
-
-        new_tensor = be.einsum(eq, tensor_a, tensor_b)
-
-        # Add the BARE result back to the pool
-        tensor_pool.append((new_tensor, sym_out))
-        tensor_pool = _multi_remove(tensor_pool, [a, b])
-
-        # Logging (optional, might need adaptation for bare tensors)
-        total_size += reduce(mul, be.shape_tuple(new_tensor) + (1,))  # type: ignore
-
-    # RE-ENTRY: Wrap the final bare tensor back into the Graph world
-    final_raw_tensor, final_symbols = tensor_pool[0]
-
-    # We need to ensure the final tensor's axes match the output_edge_order
-    # output_edge_order is a list of Edges.
-    # We need to map these Edges to the symbols in final_symbols.
-
-    final_node = tn.Node(final_raw_tensor, backend=be)
-
-    # But wait, the final_node created above has new, fresh edges.
-    # We need to connect them or reorder them to match output_edge_order.
-    # The `output_edge_order` contains the dangling edges from the ORIGINAL graph.
-    # We have `mapping_dict` (symbol -> original edge info?)
-    # No, we don't have mapping_dict here easily unless we return it from _get_path...
-
-    # Let's reconstruct the mapping from the original dangling edges.
-    # In `_get_path_cache_friendly`, we used `get_symbol` deterministically based on UnionFind.
-    # If we re-run that logic or pass the map, we can know which symbol corresponds to which original edge.
-
-    # However, `output_symbols` returned from `_get_path_cache_friendly` is a list of symbols
-    # corresponding to `sorted_edges(tn.get_subgraph_dangling(nodes))` of the ORIGINAL graph.
-
-    # So `output_symbols`[i] corresponds to the i-th edge in `sorted_edges(...)`.
-
-    # `final_symbols` is the actual axis order of `final_raw_tensor`.
-
-    # We need to permute `final_raw_tensor` so that its axes match `output_edge_order`.
-
-    if output_edge_order is not None and not ignore_edge_order:
-        # 1. Map original edges to symbols
-        # We need to know the symbol for each edge in output_edge_order.
-        # This requires the UF logic again? Or we can assume `output_symbols`
-        # was generated from `sorted_edges(dangling)`.
-
-        # Recalculate dangling edges sorted to match `output_symbols` generation order
-        # But `output_edge_order` might be different from that sorted order.
-
-        # To match robustly:
-        # We need the `uf` and `mapping_dict` from `_get_path_cache_friendly`.
-        # Refactoring `_get_path_cache_friendly` to return a `get_symbol_for_edge` callable or dict?
-
-        target_symbols = []
-        for edge in output_edge_order:
-            target_symbols.append(edge_to_symbol[id(edge)])
-
-        # We need to find permutation such that final_symbols[p] matches target_symbols
-        # final_symbols should be a permutation of target_symbols (same set)
-
-        perm = [final_symbols.index(s) for s in target_symbols]
-        final_node.tensor = be.transpose(final_node.tensor, perm)
-
-    # For now, let's assume the user wants the result.
-    # TensorNetwork's `reorder_edges` expects the node to have those specific edge objects attached.
-    # But `final_node` is new. It has new edges.
-    # We essentially just need to return the tensor in the right shape/transpose.
-
-    # But the function signature returns a `tn.Node`.
-    # And typically users expect `node[i]` to correspond to `output_edge_order[i]`.
-
-    # Since we can't easily re-attach the *original* edge objects (they belong to old nodes),
-    # we just need to ensure the *logical* mapping is correct.
-
-    # BUT, if `output_edge_order` was passed, we must align the final tensor axes to it.
-
-    # Implementation strategy:
-    # 1. We need the map {original_edge: symbol}.
-    # 2. `output_edge_order` is a list of `original_edge`.
-    # 3. We find the symbol for each edge in `output_edge_order`.
-    # 4. We find the current index of that symbol in `final_symbols`.
-    # 5. We construct the permutation.
-
-    # To do this, we need `uf` and `mapping_dict` access.
-    # I will modify `_get_path_cache_friendly` to return a lookup function/dict.
-
+    # if the final node has more than one edge,
+    # output_edge_order has to be specified
+    final_node = nodes[0]  # nodes were connected, we checked this
+    if not ignore_edge_order:
+        final_node.reorder_edges(output_edge_order)
     return final_node
 
 
@@ -1040,12 +874,21 @@ def custom(
     memory_limit: Optional[int] = None,
     output_edge_order: Optional[List[Any]] = None,
     ignore_edge_order: bool = False,
+    debug_level: int = 0,
+    use_primitives: Optional[bool] = None,
     **kws: Any,
 ) -> Any:
     if len(nodes) < 5:
         alg = opt_einsum.paths.optimal
         # not good at minimize WRITE actually...
-        return _base(nodes, alg, output_edge_order, ignore_edge_order)
+        return _base(
+            nodes,
+            alg,
+            output_edge_order,
+            ignore_edge_order,
+            debug_level=debug_level,
+            use_primitives=use_primitives,
+        )
 
     total_size = None
     if kws.get("preprocessing", None):
@@ -1063,6 +906,7 @@ def custom(
         ignore_edge_order,
         total_size,
         debug_level=debug_level,
+        use_primitives=use_primitives,
     )
 
 
@@ -1073,13 +917,20 @@ def custom_stateful(
     opt_conf: Optional[Dict[str, Any]] = None,
     output_edge_order: Optional[List[Any]] = None,
     ignore_edge_order: bool = False,
+    use_primitives: Optional[bool] = None,
     **kws: Any,
 ) -> Any:
     if len(nodes) < 5:
         alg = opt_einsum.paths.optimal
         # dynamic_programming has a potential bug for outer product
         # not good at minimize WRITE actually...
-        return _base(nodes, alg, output_edge_order, ignore_edge_order)
+        return _base(
+            nodes,
+            alg,
+            output_edge_order,
+            ignore_edge_order,
+            use_primitives=use_primitives,
+        )
 
     total_size = None
     if kws.get("preprocessing", None):
@@ -1099,6 +950,7 @@ def custom_stateful(
         ignore_edge_order,
         total_size,
         debug_level=debug_level,
+        use_primitives=use_primitives,
     )
 
 
@@ -1218,6 +1070,7 @@ def set_contractor(
             opt_conf=opt_conf,
             contraction_info=contraction_info,
             debug_level=debug_level,
+            use_primitives=use_primitives,
             **kws,
         )
 
