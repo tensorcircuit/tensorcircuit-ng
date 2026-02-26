@@ -622,7 +622,7 @@ def _get_path_cache_friendly(
 
     size_dict = {}
     for root, symbol in mapping_dict.items():
-        size_dict[symbol] = root.dimension  # type: ignore
+        size_dict[symbol] = root.dimension  # type: ignore  # type: ignore  # type: ignore
 
     logger.debug("input_sets: %s" % input_sets)
     logger.debug("output_set: %s" % output_set)
