@@ -16,6 +16,7 @@ import numpy as np
 import opt_einsum
 import tensornetwork as tn
 from tensornetwork.backend_contextmanager import get_default_backend
+from networkx.utils import UnionFind
 
 from .backends.numpy_backend import NumpyBackend
 from .backends import get_backend
@@ -522,29 +523,66 @@ def _get_path_cache_friendly(
     nodes = list(nodes)
 
     nodes_new = sorted(nodes, key=lambda node: getattr(node, "_stable_id_", -1))
-    # if isinstance(algorithm, list):
-    #     return algorithm, [nodes_new]
 
+    # split nodes into regular nodes and CopyNodes
+    regular_nodes = [n for n in nodes_new if not isinstance(n, tn.CopyNode)]
+    copy_nodes = [n for n in nodes_new if isinstance(n, tn.CopyNode)]
+
+    uf = UnionFind()
     all_edges = tn.get_all_edges(nodes_new)
-    all_edges_sorted = sorted_edges(all_edges)
-    mapping_dict = {}
-    i = 0
-    for edge in all_edges_sorted:
-        if id(edge) not in mapping_dict:
-            mapping_dict[id(edge)] = get_symbol(i)
-            i += 1
 
-    input_sets = [list([mapping_dict[id(e)] for e in node.edges]) for node in nodes_new]
-    output_set = list(
-        [mapping_dict[id(e)] for e in sorted_edges(tn.get_subgraph_dangling(nodes_new))]
-    )
-    size_dict = {mapping_dict[id(edge)]: edge.dimension for edge in all_edges_sorted}
+    for edge in all_edges:
+        uf[edge]  # init
+
+    for cn in copy_nodes:
+        edges = cn.edges
+        if edges:
+            root_edge = edges[0]
+            for i in range(1, len(edges)):
+                uf.union(root_edge, edges[i])
+
+    mapping_dict = {}
+    symbol_counter = 0
+
+    for node in regular_nodes:
+        sorted_node_edges = sorted(
+            node.edges, key=lambda e: e.axis1 if e.node1 is node else e.axis2
+        )
+        for edge in sorted_node_edges:
+            root = uf[edge]
+            if root not in mapping_dict:
+                mapping_dict[root] = get_symbol(symbol_counter)
+                symbol_counter += 1
+
+    input_sets = []
+    for node in regular_nodes:
+        node_symbols = []
+        sorted_node_edges = sorted(
+            node.edges, key=lambda e: e.axis1 if e.node1 is node else e.axis2
+        )
+        for edge in sorted_node_edges:
+            root = uf[edge]
+            node_symbols.append(mapping_dict[root])
+        input_sets.append(node_symbols)
+
+    dangling_edges = sorted_edges(tn.get_subgraph_dangling(nodes_new))
+    output_set = []
+    for edge in dangling_edges:
+        root = uf[edge]
+        if root not in mapping_dict:
+            mapping_dict[root] = get_symbol(symbol_counter)
+            symbol_counter += 1
+        output_set.append(mapping_dict[root])
+
+    size_dict = {}
+    for root, symbol in mapping_dict.items():
+        size_dict[symbol] = root.dimension
+
     logger.debug("input_sets: %s" % input_sets)
     logger.debug("output_set: %s" % output_set)
     logger.debug("size_dict: %s" % size_dict)
     logger.debug("path finder algorithm: %s" % algorithm)
-    return algorithm(input_sets, output_set, size_dict), nodes_new
-    # directly get input_sets, output_set and size_dict by using identity function as algorithm
+    return algorithm(input_sets, output_set, size_dict), regular_nodes
 
 
 get_tn_info = partial(_get_path_cache_friendly, algorithm=_identity)
@@ -676,12 +714,38 @@ def _base(
             continue
         a, b = ab
 
+        node_a = nodes[a]
+        node_b = nodes[b]
+
+        node_a_neighbors = set()
+        for e in node_a.edges:
+            n = e.node1 if e.node1 is not node_a else e.node2
+            if n is not None:
+                node_a_neighbors.add(n)
+
+        node_b_neighbors = set()
+        for e in node_b.edges:
+            n = e.node1 if e.node1 is not node_b else e.node2
+            if n is not None:
+                node_b_neighbors.add(n)
+
+        shared_cns = set()
+        for n in node_a_neighbors:
+            if isinstance(n, tn.CopyNode) and n in node_b_neighbors:
+                shared_cns.add(n)
+
+        curr_node_a = node_a
+        for cn in shared_cns:
+            curr_node_a = tn.contract_between(curr_node_a, cn)
+
         if debug_level == 1:
             from .simplify import pseudo_contract_between
 
             new_node = pseudo_contract_between(nodes[a], nodes[b])
         else:
-            new_node = tn.contract_between(nodes[a], nodes[b], allow_outer_product=True)
+            new_node = tn.contract_between(
+                curr_node_a, node_b, allow_outer_product=True
+            )
         nodes.append(new_node)
         # nodes[a] = backend.zeros([1])
         # nodes[b] = backend.zeros([1])
@@ -694,6 +758,17 @@ def _base(
     # if the final node has more than one edge,
     # output_edge_order has to be specified
     final_node = nodes[0]  # nodes were connected, we checked this
+
+    while True:
+        cns = []
+        for e in final_node.edges:
+            n = e.node1 if e.node1 is not final_node else e.node2
+            if n is not None and isinstance(n, tn.CopyNode):
+                cns.append(n)
+        if not cns:
+            break
+        final_node = tn.contract_between(final_node, cns[0])
+
     if not ignore_edge_order:
         final_node.reorder_edges(output_edge_order)
     return final_node
