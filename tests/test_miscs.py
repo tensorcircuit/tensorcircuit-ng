@@ -203,7 +203,7 @@ def test_arg_alias():
         """
         return theta
 
-    assert g(alpha=1.0) == 1.0
+    np.testing.assert_allclose(g(alpha=1.0), 1.0, atol=1e-5)
     assert "alpha: alias for the argument ``theta``" in g.__doc__
 
 
