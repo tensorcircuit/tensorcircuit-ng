@@ -7,6 +7,7 @@ import numpy as np
 import tensornetwork as tn
 import tensorcircuit as tc
 
+
 def hyperedge_demo():
     print("Demonstrating hyperedge contraction with cotengra...")
 
@@ -31,7 +32,7 @@ def hyperedge_demo():
 
     res = tc.contractor(nodes)
     print("Single Hyperedge Result:", res.tensor)
-    expected = 1*1*1 + 2*2*2
+    expected = 1 * 1 * 1 + 2 * 2 * 2
     print(f"Expected: {expected}")
     assert np.allclose(res.tensor, expected)
 
@@ -42,7 +43,9 @@ def hyperedge_demo():
     dim = 2
 
     # Create 20 random tensors connected to a single CopyNode
-    input_tensors = [tn.Node(np.random.rand(dim), name=f"T{i}") for i in range(num_legs)]
+    input_tensors = [
+        tn.Node(np.random.rand(dim), name=f"T{i}") for i in range(num_legs)
+    ]
     cn_large = tn.CopyNode(num_legs, dim, name="CN_Large")
 
     for i, t in enumerate(input_tensors):
@@ -69,6 +72,7 @@ def hyperedge_demo():
     print(f"Computed: {res_large.tensor}")
     print(f"Expected: {expected_sum}")
     assert np.allclose(res_large.tensor, expected_sum)
+
 
 if __name__ == "__main__":
     hyperedge_demo()

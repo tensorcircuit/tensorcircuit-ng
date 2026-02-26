@@ -3,6 +3,7 @@ import tensornetwork as tn
 import tensorcircuit as tc
 import pytest
 
+
 @pytest.fixture
 def contractor_setup(request):
     """
@@ -20,6 +21,7 @@ def contractor_setup(request):
     yield contractor_name
     # Reset to default
     tc.set_contractor("greedy")
+
 
 @pytest.mark.parametrize("contractor_setup", ["cotengra", "greedy"], indirect=True)
 def test_single_hyperedge(contractor_setup):
@@ -48,6 +50,7 @@ def test_single_hyperedge(contractor_setup):
     res = tc.contractor(nodes)
     assert np.allclose(res.tensor, 9.0)
 
+
 @pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
 def test_chained_hyperedge(contractor_setup):
     # A(i), B(i), C(i), D(i)
@@ -63,7 +66,7 @@ def test_chained_hyperedge(contractor_setup):
 
     a[0] ^ cn1[0]
     b[0] ^ cn1[1]
-    cn1[2] ^ cn2[0] # Link
+    cn1[2] ^ cn2[0]  # Link
     c[0] ^ cn2[1]
     d[0] ^ cn2[2]
 
@@ -71,6 +74,7 @@ def test_chained_hyperedge(contractor_setup):
     res = tc.contractor(nodes)
     # sum i A_i B_i C_i D_i = 1+16 = 17
     assert np.allclose(res.tensor, 17.0)
+
 
 @pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
 def test_dangling_hyperedge(contractor_setup):
@@ -85,10 +89,11 @@ def test_dangling_hyperedge(contractor_setup):
     # cn[2] is dangling
 
     nodes = [a, b, cn]
-    res = tc.contractor(nodes) # Should return a tensor of shape (2,)
+    res = tc.contractor(nodes)  # Should return a tensor of shape (2,)
 
     # Expected: C_i = A_i * B_i => [1, 4]
     assert np.allclose(res.tensor, np.array([1.0, 4.0]))
+
 
 @pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
 def test_tensorcircuit_circuit_hyperedge_support(contractor_setup):
