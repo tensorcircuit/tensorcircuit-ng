@@ -192,6 +192,20 @@ def test_arg_alias():
     print(f.__doc__)
     assert len(f.__doc__.strip().split("\n")) == 12
 
+    @partial(tc.utils.arg_alias, alias_dict={"theta": "alpha"})
+    def g(theta: float) -> float:
+        """
+        g doc
+
+        :param theta: theta angle
+        :type theta: float
+        :return: theta
+        """
+        return theta
+
+    np.testing.assert_allclose(g(alpha=1.0), 1.0, atol=1e-5)
+    assert "alpha: alias for the argument ``theta``" in g.__doc__
+
 
 def test_finite_difference_tf(tfb):
     def f(param1, param2):
