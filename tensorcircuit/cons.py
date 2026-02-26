@@ -622,7 +622,7 @@ def _get_path_cache_friendly(
 
     size_dict = {}
     for root, symbol in mapping_dict.items():
-        size_dict[symbol] = root.dimension  # type: ignore  # type: ignore  # type: ignore
+        size_dict[symbol] = root.dimension  # type: ignore
 
     logger.debug("input_sets: %s" % input_sets)
     logger.debug("output_set: %s" % output_set)
@@ -676,24 +676,6 @@ tc.set_contractor("custom", optimizer=opt_reconf)
 """
 
 
-def _explicit_batched_multiply(
-    be: Any, tensor_a: Any, tensor_b: Any, trace_syms: List[str], hyper_syms: List[str]
-) -> Any:
-    # TODO: Implement actual broadcasting and multiplication logic
-    # This is a placeholder for the logic described in the review.
-    # For now, we can use einsum as a "primitive" that handles this,
-    # or implement it via reshape/broadcast/multiply/sum.
-    # Given the complexity, einsum is the most robust "primitive" available
-    # that avoids creating the dense CopyNode.
-    # The key is we are feeding it the BARE tensors with SHARED symbols for hyperedges.
-    # Einsum handles the "hyperedge" naturally if the same index appears in both inputs
-    # and the output (or just both inputs without summing).
-    # But wait, standard einsum sums over repeated indices unless specified in output.
-    # Cotengra path gives us pairs.
-    # We need to construct the einsum string for A, B -> C
-    pass
-
-
 def _base(
     nodes: List[tn.Node],
     algorithm: Any,
@@ -701,7 +683,7 @@ def _base(
     ignore_edge_order: bool = False,
     total_size: Optional[int] = None,
     debug_level: int = 0,
-    use_primitives: bool = True,  # Default to True for now, will auto-detect
+    use_primitives: Optional[bool] = None,  # Default to None for auto-detect
 ) -> tn.Node:
     """
     The base method for all `opt_einsum` contractors.
@@ -752,14 +734,15 @@ def _base(
     # Detect if we should use the new primitive-based engine
     # If the number of regular nodes returned differs from input nodes (meaning CopyNodes were filtered out),
     # we MUST use the new engine to support hyperedges properly.
-    has_hyperedges = len(regular_nodes) != len(nodes)
-    if has_hyperedges:
-        use_primitives = True
-    else:
-        # Maintain legacy behavior for standard graphs unless forced?
-        # Actually, for safety, let's default to False if no hyperedges are detected,
-        # ensuring 100% backward compatibility for existing code.
-        use_primitives = False
+    if use_primitives is None:
+        has_hyperedges = len(regular_nodes) != len(nodes)
+        if has_hyperedges:
+            use_primitives = True
+        else:
+            # Maintain legacy behavior for standard graphs unless forced?
+            # Actually, for safety, let's default to False if no hyperedges are detected,
+            # ensuring 100% backward compatibility for existing code.
+            use_primitives = False
 
     if debug_level == 2:  # do nothing
         if output_edge_order:
@@ -810,7 +793,8 @@ def _base(
     # ==========================================
     # NEW EXECUTION PATH (Hyperedge & JIT friendly)
     # ==========================================
-    be = regular_nodes[0].backend
+    # be = regular_nodes[0].backend
+    be = backend
 
     # Extract bare tensors and their initial symbols into a working pool
     # Pool elements are just tuples: (raw_tensor, ["a", "b", ...])
@@ -1120,6 +1104,7 @@ def set_contractor(
     set_global: bool = True,
     contraction_info: bool = False,
     debug_level: int = 0,
+    use_primitives: Optional[bool] = None,
     **kws: Any,
 ) -> Callable[..., Any]:
     """
@@ -1207,6 +1192,7 @@ def set_contractor(
             optimizer=optimizer,
             memory_limit=memory_limit,
             debug_level=debug_level,
+            use_primitives=use_primitives,
             **kws,
         )
     if set_global:
