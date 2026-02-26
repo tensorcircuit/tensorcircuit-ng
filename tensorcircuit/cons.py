@@ -528,6 +528,36 @@ def _get_path_cache_friendly(
     regular_nodes = [n for n in nodes_new if not isinstance(n, tn.CopyNode)]
     copy_nodes = [n for n in nodes_new if isinstance(n, tn.CopyNode)]
 
+    if not copy_nodes:
+        # Fallback to original logic if no CopyNodes are present
+        all_edges = tn.get_all_edges(nodes_new)
+        all_edges_sorted = sorted_edges(all_edges)
+        mapping_dict = {}
+        i = 0
+        for edge in all_edges_sorted:
+            if id(edge) not in mapping_dict:
+                mapping_dict[id(edge)] = get_symbol(i)
+                i += 1
+
+        input_sets = [
+            list([mapping_dict[id(e)] for e in node.edges]) for node in nodes_new
+        ]
+        output_set = list(
+            [
+                mapping_dict[id(e)]
+                for e in sorted_edges(tn.get_subgraph_dangling(nodes_new))
+            ]
+        )
+        size_dict = {
+            mapping_dict[id(edge)]: edge.dimension for edge in all_edges_sorted
+        }
+        logger.debug("input_sets: %s" % input_sets)
+        logger.debug("output_set: %s" % output_set)
+        logger.debug("size_dict: %s" % size_dict)
+        logger.debug("path finder algorithm: %s" % algorithm)
+        return algorithm(input_sets, output_set, size_dict), nodes_new
+
+    # Hyperedge logic with UnionFind
     uf = UnionFind()
     all_edges = tn.get_all_edges(nodes_new)
 
@@ -576,7 +606,7 @@ def _get_path_cache_friendly(
 
     size_dict = {}
     for root, symbol in mapping_dict.items():
-        size_dict[symbol] = root.dimension
+        size_dict[symbol] = root.dimension  # type: ignore
 
     logger.debug("input_sets: %s" % input_sets)
     logger.debug("output_set: %s" % output_set)
