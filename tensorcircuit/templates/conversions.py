@@ -75,6 +75,7 @@ def QUBO_to_Ising(Q: Tensor) -> Tuple[Tensor, List[float], float]:
             term.tolist()
         )  # Add a Pauli term corresponding to a single qubit
 
+    quadratic_weights = []
     for i in range(n - 1):
         for j in range(i + 1, n):
             term = np.zeros(n)
@@ -87,8 +88,10 @@ def QUBO_to_Ising(Q: Tensor) -> Tuple[Tensor, List[float], float]:
             weight = (
                 Q[i][j] / 2
             )  # Calculate the weight for the two-qubit interaction term
-            weights = np.concatenate(
-                (weights, weight), axis=None
-            )  # Add the weight to the weights list
+            quadratic_weights.append(weight)
+
+    weights = np.concatenate(
+        (weights, quadratic_weights), axis=None
+    )  # Add the weight to the weights list
 
     return pauli_terms, weights, offset
