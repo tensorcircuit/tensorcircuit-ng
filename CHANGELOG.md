@@ -8,6 +8,8 @@
 
 - Add `tc.U1Circuit` for U(1) charge conservation circuits.
 
+- Add hyper edge support for contractor infrastructure
+
 ## v1.5.0
 
 ### Added
