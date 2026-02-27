@@ -4,7 +4,7 @@ Link: https://arxiv.org/abs/2602.19722
 
 Description:
 This script reproduces the core idea of differentiable noise estimation using tensor networks.
-It simulates a rotated surface code (d=3) with bit-flip errors.
+It simulates a rotated surface code (scalable distance d) with bit-flip errors.
 The goal is to estimate the error probability 'p' given a set of observed syndromes.
 We construct the tensor network for the likelihood P(syndrome | p) using CopyNodes to handle hyperedges,
 and use JAX for automatic differentiation to maximize the likelihood (minimize NLL).
@@ -36,31 +36,101 @@ tc.set_contractor("cotengra")
 # 1. Surface Code Parameters and Helper Functions
 # -----------------------------------------------------------------------------
 
-# Rotated Surface Code d=3
-# Data Qubits: 9
-# Stabilizers (Z-type, detecting X errors):
-# s0: Z(0) Z(1) Z(3) Z(4)
-# s1: Z(1) Z(2) Z(4) Z(5)
-# s2: Z(3) Z(4) Z(6) Z(7)
-# s3: Z(4) Z(5) Z(7) Z(8)
 
-DATA_QUBITS = 9
-STABILIZERS = [
-    [0, 1, 3, 4],  # s0
-    [1, 2, 4, 5],  # s1
-    [3, 4, 6, 7],  # s2
-    [4, 5, 7, 8],  # s3
-]
-
-
-def get_syndrome(error_configuration):
+def generate_surface_code(d):
     """
-    Compute syndrome for a given error configuration (binary array of length 9).
-    1 means error, 0 means no error.
-    Syndrome bit i is parity of errors on qubits in stabilizer i.
+    Generate the standard rotated surface code topology of distance d (d must be odd).
+    Returns: data_qubits_count, z_checks, x_checks
+
+    data_qubits_count: integer, total number of data qubits.
+    z_checks: list of lists, each sublist contains indices of qubits involved in a Z-stabilizer.
+    x_checks: list of lists, each sublist contains indices of qubits involved in an X-stabilizer.
     """
+    assert d % 2 != 0, "Distance d must be odd (e.g., 3, 5, 7)"
+    data_qubits_count = d * d
+    z_checks = []
+    x_checks = []
+
+    # r and c represent the top-left logical coordinate of a plaquette
+    # Coordinate system:
+    # Qubits are at (r, c) where r, c in [0, d-1]
+    # Qubit index = r * d + c
+
+    # Plaquettes are centered at (r+0.5, c+0.5) roughly.
+    # We iterate possible check positions.
+    for r in range(-1, d):
+        for c in range(-1, d):
+            # 1. Collect valid data qubits covered by this plaquette
+            # A plaquette at (r,c) covers qubits at (r,c), (r,c+1), (r+1,c), (r+1,c+1)
+            qubits = []
+            for dr, dc in [(0, 0), (0, 1), (1, 0), (1, 1)]:
+                qr, qc = r + dr, c + dc
+                if 0 <= qr < d and 0 <= qc < d:
+                    qubits.append(qr * d + qc)
+
+            # Ignore invalid corners (weight <= 1 is not a stabilizer in bulk/boundary logic usually,
+            # but for rotated surface code, weight-2 boundaries are crucial.
+            # Standard rotated surface code has no weight-1 stabilizers.
+            if len(qubits) <= 1:
+                continue
+
+            # 2. Checkerboard coloring: Even sum is Z-check, Odd sum is X-check
+            is_z_check = (r + c) % 2 == 0
+
+            if is_z_check:
+                # Z-check detects X errors.
+                # In standard rotated surface code, Z checks are top/bottom boundaries?
+                # Let's visualize d=3.
+                # (0,0) is Z? r=0,c=0 -> sum=0 even -> Z.
+                # Qubits: (0,0), (0,1), (1,0), (1,1). Weight 4. Center.
+                #
+                # Boundary conditions:
+                # Z-checks generally have Rough Left/Right boundaries? No, Z-logical is Top-Bottom.
+                # X-logical is Left-Right.
+                #
+                # The provided code snippet:
+                # if is_z_check:
+                #     if c != -1 and c != d - 1:
+                #         z_checks.append(qubits)
+                #
+                # If d=3:
+                # r=-1, c=0 (sum -1 odd -> X)
+                # r=-1, c=1 (sum 0 even -> Z). c=1 != -1 and != 2. Valid. Qubits: (0,1), (0,2). Top boundary.
+                #
+                # This logic seems consistent with standard Rotated Surface Code definitions.
+                if c != -1 and c != d - 1:
+                    z_checks.append(qubits)
+            else:
+                # X-check detects Z errors.
+                if r != -1 and r != d - 1:
+                    x_checks.append(qubits)
+
+    return data_qubits_count, z_checks, x_checks
+
+
+# Initialize Topology
+DISTANCE = 3  # Configurable: 3, 5, 7...
+DATA_QUBITS_COUNT, Z_CHECKS, X_CHECKS = generate_surface_code(DISTANCE)
+
+print(f"Generated Surface Code (d={DISTANCE}):")
+print(f"Data Qubits: {DATA_QUBITS_COUNT}")
+print(f"Z-Checks (detect X errors): {len(Z_CHECKS)}")
+print(f"X-Checks (detect Z errors): {len(X_CHECKS)}")
+
+# For demonstration, we simulate X errors detected by Z checks.
+ACTIVE_CHECKS = Z_CHECKS
+NUM_QUBITS = DATA_QUBITS_COUNT
+
+
+def get_syndrome(error_configuration, checks=None):
+    """
+    Compute syndrome for a given error configuration.
+    """
+    if checks is None:
+        checks = ACTIVE_CHECKS
+
     syndrome = []
-    for stab in STABILIZERS:
+    for stab in checks:
         parity = 0
         for q in stab:
             parity += error_configuration[q]
@@ -73,12 +143,15 @@ def get_syndrome(error_configuration):
 # -----------------------------------------------------------------------------
 
 
-def surface_code_likelihood(p, observed_syndrome):
+def surface_code_likelihood(p, observed_syndrome, checks=None, num_qubits=None):
     """
     Compute the likelihood P(syndrome | p) using a tensor network with WHT.
-    p: Error probability (scalar).
-    observed_syndrome: array of shape (4,), values 0 or 1.
     """
+    if checks is None:
+        checks = ACTIVE_CHECKS
+    if num_qubits is None:
+        num_qubits = NUM_QUBITS
+
     nodes = []
 
     # 1. Error Probability Tensors (Source for Qubits)
@@ -86,22 +159,13 @@ def surface_code_likelihood(p, observed_syndrome):
     prob_vec = jnp.stack([1 - p, p])
 
     # 2. Hadamard Matrix for edges
-    # H = [[1, 1], [1, -1]] / sqrt(2)? No, we are doing classical parity check.
-    # The identity is: sum_{x_i} delta(sum x_i = m) prod P(x_i)
-    # = sum_{x_i} 1/2 sum_{u=0,1} (-1)^{u (sum x_i - m)} prod P(x_i)
-    # = 1/2 sum_u (-1)^{-um} prod_i (sum_{x_i} (-1)^{u x_i} P(x_i))
-    # Note the factor 1/2. Since we want Likelihood, normalization matters less for optimization,
-    # but let's stick to the structure. The standard implementation puts H on the edges.
-    # H_unnormalized = [[1, 1], [1, -1]]
-    # This transforms the basis.
-
     hadamard = jnp.array([[1.0, 1.0], [1.0, -1.0]], dtype=jnp.complex128)
 
     # 3. Qubit Nodes (CopyNodes)
-    # Degree = (number of stabilizers acting on this qubit) + 1 (for error source)
     qubit_nodes = []
-    for q in range(DATA_QUBITS):
-        involved_stabs = [i for i, stab in enumerate(STABILIZERS) if q in stab]
+    for q in range(num_qubits):
+        # Find which stabilizers involve this qubit
+        involved_stabs = [i for i, stab in enumerate(checks) if q in stab]
         degree = len(involved_stabs) + 1  # +1 for the error source
 
         # Create CopyNode for variable x_q
@@ -114,9 +178,8 @@ def surface_code_likelihood(p, observed_syndrome):
         en[0] ^ cn[0]  # Leg 0
 
     # 4. Stabilizer Nodes (Dual CopyNodes in Fourier Basis)
-    # Degree = (number of qubits in this stabilizer) + 1 (for syndrome factor)
     stabilizer_nodes = []
-    for i, stab in enumerate(STABILIZERS):
+    for i, stab in enumerate(checks):
         degree = len(stab) + 1  # +1 for syndrome factor
 
         # Create CopyNode for dual variable u_i
@@ -124,11 +187,6 @@ def surface_code_likelihood(p, observed_syndrome):
         stabilizer_nodes.append(sn)
 
         # Syndrome Factor: [1, (-1)**m]
-        # This injects the syndrome constraint.
-        # If m=0: [1, 1] (sum over u: 1 + ...)
-        # If m=1: [1, -1] (sum over u: 1 - ...)
-        # Wait, the formula is (-1)^{-um}. Since u,m in {0,1}, -um = um mod 2.
-        # So factor is (-1)^{m} if u=1.
         m = observed_syndrome[i]
         factor = jnp.stack([1.0, (-1.0) ** m]).astype(jnp.complex128)
         syn_node = tn.Node(factor, name=f"Syn{i}")
@@ -138,11 +196,10 @@ def surface_code_likelihood(p, observed_syndrome):
         syn_node[0] ^ sn[0]
 
     # 5. Connect Qubits and Stabilizers with Hadamard Edges
-    # We need to track used legs on both sides.
-    qubit_leg_counters = [1] * DATA_QUBITS
-    stab_leg_counters = [1] * len(STABILIZERS)
+    qubit_leg_counters = [1] * num_qubits
+    stab_leg_counters = [1] * len(checks)
 
-    for i, stab in enumerate(STABILIZERS):
+    for i, stab in enumerate(checks):
         sn = stabilizer_nodes[i]
         for q_idx in stab:
             cn = qubit_nodes[q_idx]
@@ -152,8 +209,6 @@ def surface_code_likelihood(p, observed_syndrome):
             nodes.append(h_node)
 
             # Connect: Stabilizer -> Hadamard -> Qubit
-            # sn leg -> H[0]
-            # H[1] -> cn leg
             sn[stab_leg_counters[i]] ^ h_node[0]
             h_node[1] ^ cn[qubit_leg_counters[q_idx]]
 
@@ -166,20 +221,28 @@ def surface_code_likelihood(p, observed_syndrome):
     # Contract
     result_node = tc.contractor(all_nodes)
 
-    # The result is unnormalized likelihood (due to 1/2 factors etc).
-    # But since we maximize likelihood, constant factors don't change the argmax p.
-    # To get exact probability, we would need to divide by 2^(num_stabilizers).
-    return jnp.abs(result_node.tensor)  # Return magnitude (should be real positive)
+    return jnp.abs(result_node.tensor)
 
 
 # JIT and Grad
-def loss_fn(p_logit, observed_syndrome):
-    p = jax.nn.sigmoid(p_logit)
-    likelihood = surface_code_likelihood(p, observed_syndrome)
-    # Add a small epsilon to avoid log(0)
-    return -jnp.log(likelihood + 1e-10)
+# We pass static arguments (checks, num_qubits) via closure or partial if needed,
+# but since they are global constants in this script structure or static, JIT can handle them if they are not traced.
+# However, 'checks' is a list of lists, which JAX jit might not like as an argument.
+# We'll rely on the fact that loss_fn calls surface_code_likelihood which uses the global ACTIVE_CHECKS by default.
+# For a cleaner implementation, we should make loss_fn close over checks.
 
 
+def make_loss_fn(checks, num_qubits):
+    def loss_fn_inner(p_logit, observed_syndrome):
+        p = jax.nn.sigmoid(p_logit)
+        likelihood = surface_code_likelihood(p, observed_syndrome, checks, num_qubits)
+        return -jnp.log(likelihood + 1e-10)
+
+    return loss_fn_inner
+
+
+# Initialize JIT-compiled functions for the active configuration
+loss_fn = make_loss_fn(ACTIVE_CHECKS, NUM_QUBITS)
 loss_and_grad = jax.jit(jax.value_and_grad(loss_fn))
 
 
@@ -201,12 +264,12 @@ def main():
 
     key = jax.random.PRNGKey(42)
     key, subkey = jax.random.split(key)
-    random_probs = jax.random.uniform(subkey, (n_samples, DATA_QUBITS))
+    random_probs = jax.random.uniform(subkey, (n_samples, NUM_QUBITS))
     errors = (random_probs < p_true).astype(jnp.int32)
 
     syndromes = []
     for i in range(n_samples):
-        syn = get_syndrome(errors[i])
+        syn = get_syndrome(errors[i], ACTIVE_CHECKS)
         syndromes.append(syn)
     syndromes = jnp.array(syndromes)
 
@@ -223,16 +286,19 @@ def main():
 
     print("\nStarting Optimization (Maximum Likelihood)...")
     pbar = tqdm(range(100))
+
+    # Pre-JIT the batch step
+    @jax.jit
+    def step_batch(current_params, batch_syndromes):
+        def single_sample_loss(s):
+            return loss_fn(current_params, s)
+
+        losses = jax.vmap(single_sample_loss)(batch_syndromes)
+        return jnp.mean(losses)
+
+    step_batch_grad = jax.value_and_grad(step_batch)
+
     for _ in pbar:
-        # Batch Optimization
-        def step_batch(current_params, batch_syndromes):
-            def single_sample_loss(s):
-                return loss_fn(current_params, s)
-
-            losses = jax.vmap(single_sample_loss)(batch_syndromes)
-            return jnp.mean(losses)
-
-        step_batch_grad = jax.value_and_grad(step_batch)
         loss_val, grads = step_batch_grad(params, syndromes)
 
         updates, opt_state = optimizer.update(grads, opt_state)
@@ -249,6 +315,15 @@ def main():
 
     # Save Output Plot
     os.makedirs("outputs", exist_ok=True)
+
+    # Ensure directory exists for the full path if needed,
+    # but 'outputs' relative to current dir is fine as script is run from repo root usually.
+    # The meta.yaml uses specific path, but here we just need to save to where we are running.
+    # Assuming running from repo root.
+    output_dir = "examples/reproduce_papers/2026_diff_qec_surface/outputs"
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, "convergence.png")
+
     plt.figure(figsize=(10, 5))
     plt.subplot(1, 2, 1)
     plt.plot(loss_history, label="NLL Loss")
@@ -263,8 +338,8 @@ def main():
     plt.ylabel("p")
     plt.legend()
 
-    plt.savefig("outputs/convergence.png")
-    print("Convergence plot saved to 'outputs/convergence.png'")
+    plt.savefig(output_path)
+    print(f"Convergence plot saved to '{output_path}'")
 
 
 def inverse_sigmoid(y):

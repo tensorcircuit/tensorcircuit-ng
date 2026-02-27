@@ -18,5 +18,5 @@ hardware_requirements:
 description: "Reproducing the differentiable maximum likelihood noise estimation for surface code using Tensor Network contraction with CopyNodes."
 outputs:
   - target: "No specific figure"
-    path: "outputs/convergence.png"
+    path: "examples/reproduce_papers/2026_diff_qec_surface/outputs/convergence.png"
     script: "main.py"
