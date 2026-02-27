@@ -87,27 +87,38 @@ y_test_new = y_test_old
 
 # 2. Quantum Circuit (VQC)
 def vqc_circuit(params, inputs):
-    c = tc.Circuit(n_qubits, inputs=inputs)
-    # Hardware-efficient VQC layers with brick-wall entanglement
-    for i in range(n_layers):
-        # Single-qubit rotation gates
+    # params shape: (n_layers, n_qubits, 2)
+    # Group layers in pairs to handle alternating entanglement with scan
+    params_scan = jnp.reshape(params, (n_layers // 2, 2, n_qubits, 2))
+
+    def double_layer(state, ps):
+        # ps shape: (2, n_qubits, 2)
+        c = tc.Circuit(n_qubits, inputs=state)
+        # Layer 1 (Even)
         for j in range(n_qubits):
-            c.rx(j, theta=params[i, j, 0])
-            c.rz(j, theta=params[i, j, 1])
+            c.rx(j, theta=ps[0, j, 0])
+            c.rz(j, theta=ps[0, j, 1])
+        for j in range(0, n_qubits - 1, 2):
+            c.cnot(j, j + 1)
+        # Layer 2 (Odd)
+        for j in range(n_qubits):
+            c.rx(j, theta=ps[1, j, 0])
+            c.rz(j, theta=ps[1, j, 1])
+        for j in range(1, n_qubits - 1, 2):
+            c.cnot(j, j + 1)
+        c.cnot(n_qubits - 1, 0)
+        return c.state()
 
-        # Brick-wall entanglement structure (alternating CNOTs)
-        if i % 2 == 0:
-            # Even layer: CNOT(0,1), CNOT(2,3), CNOT(4,5), CNOT(6,7)
-            for j in range(0, n_qubits - 1, 2):
-                c.cnot(j, j + 1)
-        else:
-            # Odd layer: CNOT(1,2), CNOT(3,4), CNOT(5,6), CNOT(7,0)
-            for j in range(1, n_qubits - 1, 2):
-                c.cnot(j, j + 1)
-            c.cnot(n_qubits - 1, 0)
+    # Initial state preparation
+    c0 = tc.Circuit(n_qubits, inputs=inputs)
+    s0 = c0.state()
 
-    # Measure first qubit expectation value in Z basis
-    res = c.expectation((tc.gates.z(), [0]))
+    # Scan over layers to reduce JIT staging overhead
+    sf = tc.backend.scan(double_layer, params_scan, s0)
+
+    # Final measurement
+    cf = tc.Circuit(n_qubits, inputs=sf)
+    res = cf.expectation((tc.gates.z(), [0]))
     # Mapping outcome from [-1, 1] to probability [0, 1]
     return (tc.backend.real(res) + 1.0) / 2.0
 
