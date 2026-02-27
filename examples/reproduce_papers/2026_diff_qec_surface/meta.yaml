@@ -17,6 +17,6 @@ hardware_requirements:
   min_memory: "8GB"
 description: "Reproducing the differentiable maximum likelihood noise estimation for surface code using Tensor Network contraction with CopyNodes."
 outputs:
-  - target: "Figure 3(a)"
+  - target: "No specific figure"
     path: "outputs/convergence.png"
     script: "main.py"
