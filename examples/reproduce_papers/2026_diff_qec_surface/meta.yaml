@@ -1,0 +1,22 @@
+title: "Differentiable Maximum Likelihood Noise Estimation for Quantum Error Correction"
+arxiv_id: "2602.19722"
+url: "https://arxiv.org/abs/2602.19722"
+year: 2026
+authors:
+  - "Hanyan Cao"
+  - "Dongyang Feng"
+  - "Cheng Ye"
+  - "Feng Pan"
+tags:
+  - "tensor network"
+  - "quantum error correction"
+  - "differentiable programming"
+  - "surface code"
+hardware_requirements:
+  gpu: False
+  min_memory: "8GB"
+description: "Reproducing the differentiable maximum likelihood noise estimation for surface code using Tensor Network contraction with CopyNodes."
+outputs:
+  - target: "Figure 3(a)"
+    path: "outputs/convergence.png"
+    script: "main.py"
