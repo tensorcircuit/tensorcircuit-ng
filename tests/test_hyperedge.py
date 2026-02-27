@@ -9,16 +9,38 @@ def contractor_setup(request):
     """
     Fixture to set up the contractor and clean up afterwards.
     Default to cotengra, but can be parametrized.
+    Support passing (method, kwargs) as param.
     """
-    contractor_name = getattr(request, "param", "cotengra")
-    if contractor_name == "cotengra":
+    param = getattr(request, "param", "cotengra")
+    if isinstance(param, str):
+        method = param
+        kwargs = {}
+    else:
+        method, kwargs = param
+
+    opt = None
+    if method == "cotengra":
         try:
-            import cotengra as _
+            import cotengra
+
+            opt = cotengra.ReusableHyperOptimizer(
+                methods=["greedy", "kahypar"],
+                parallel=True,
+                minimize="combo",
+                max_time=30,
+                max_repeats=64,
+                progbar=True,
+            )
+            tc.set_contractor("custom", optimizer=opt, **kwargs)
         except ImportError:
             pytest.skip("cotengra not installed")
+    else:
+        tc.set_contractor(method, **kwargs)
 
-    tc.set_contractor(contractor_name)
-    yield contractor_name
+    yield method
+
+    if opt is not None and hasattr(opt, "close"):
+        opt.close()
     # Reset to default
     tc.set_contractor("greedy")
 
@@ -194,12 +216,12 @@ def test_large_star_hyperedge(contractor_setup, backend_setup):
     np.testing.assert_allclose(tc.backend.numpy(res.tensor), expected, atol=1e-4)
 
 
-def test_hyperedge_jit(jaxb):
+@pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
+def test_hyperedge_jit(jaxb, contractor_setup):
     import jax
 
     @jax.jit
     def f(v1, v2):
-        tc.set_contractor("cotengra")
         a = tn.Node(v1)
         b = tn.Node(v2)
         cn = tn.CopyNode(3, 2)
@@ -215,11 +237,11 @@ def test_hyperedge_jit(jaxb):
     np.testing.assert_allclose(res, 3.0, atol=1e-5)
 
 
-def test_hyperedge_ad(jaxb):
+@pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
+def test_hyperedge_ad(jaxb, contractor_setup):
     import jax
 
     def f(v1, v2):
-        tc.set_contractor("cotengra")
         a = tn.Node(v1)
         b = tn.Node(v2)
         cn = tn.CopyNode(3, 2)
@@ -237,7 +259,8 @@ def test_hyperedge_ad(jaxb):
     np.testing.assert_allclose(gv1, jax.numpy.array([3.0, 0.0]), atol=1e-5)
 
 
-def test_cotengra_path_reuse(caplog):
+@pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
+def test_cotengra_path_reuse(caplog, contractor_setup):
     import logging
 
     if tc.backend.name != "numpy":
@@ -247,9 +270,6 @@ def test_cotengra_path_reuse(caplog):
         import cotengra
     except ImportError:
         pytest.skip("cotengra not installed")
-
-    # Set contractor once - this creates a LOCAL ReusableHyperOptimizer
-    tc.set_contractor("cotengra")
 
     def run_contraction():
         # Use a star topology with 7 nodes (6 outer + 1 central CopyNode)
@@ -283,7 +303,10 @@ def test_cotengra_path_reuse(caplog):
     assert final_searches == initial_searches
 
 
-def test_hyperedge_partial_contraction():
+@pytest.mark.parametrize(
+    "contractor_setup", [("cotengra", {"use_primitives": True})], indirect=True
+)
+def test_hyperedge_partial_contraction(contractor_setup):
     # Test contracting a subset of nodes in a larger network
     a = tn.Node(np.array([1.0, 2.0]))  # [i]
     b = tn.Node(np.eye(2) * np.array([3, 4]))  # [i, j]
@@ -294,7 +317,6 @@ def test_hyperedge_partial_contraction():
     e_bc = b[1] ^ c[0]
     e_cd = c[1] ^ d[0]
 
-    tc.set_contractor("cotengra", use_primitives=True)
     # 1. Contract [A, B]
     res_ab = tc.contractor([a, b])
     # res_ab should be rank 1, edges[0] should be e_bc
