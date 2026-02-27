@@ -88,16 +88,10 @@ def generate_surface_code(d):
                 # Z-checks generally have Rough Left/Right boundaries? No, Z-logical is Top-Bottom.
                 # X-logical is Left-Right.
                 #
-                # The provided code snippet:
-                # if is_z_check:
-                #     if c != -1 and c != d - 1:
-                #         z_checks.append(qubits)
-                #
                 # If d=3:
                 # r=-1, c=0 (sum -1 odd -> X)
                 # r=-1, c=1 (sum 0 even -> Z). c=1 != -1 and != 2. Valid. Qubits: (0,1), (0,2). Top boundary.
                 #
-                # This logic seems consistent with standard Rotated Surface Code definitions.
                 if c != -1 and c != d - 1:
                     z_checks.append(qubits)
             else:
@@ -106,20 +100,6 @@ def generate_surface_code(d):
                     x_checks.append(qubits)
 
     return data_qubits_count, z_checks, x_checks
-
-
-# Initialize Topology
-DISTANCE = 3  # Configurable: 3, 5, 7...
-DATA_QUBITS_COUNT, Z_CHECKS, X_CHECKS = generate_surface_code(DISTANCE)
-
-print(f"Generated Surface Code (d={DISTANCE}):")
-print(f"Data Qubits: {DATA_QUBITS_COUNT}")
-print(f"Z-Checks (detect X errors): {len(Z_CHECKS)}")
-print(f"X-Checks (detect Z errors): {len(X_CHECKS)}")
-
-# For demonstration, we simulate X errors detected by Z checks.
-ACTIVE_CHECKS = Z_CHECKS
-NUM_QUBITS = DATA_QUBITS_COUNT
 
 
 def get_syndrome(error_configuration, checks=None):
@@ -224,14 +204,6 @@ def surface_code_likelihood(p, observed_syndrome, checks=None, num_qubits=None):
     return jnp.abs(result_node.tensor)
 
 
-# JIT and Grad
-# We pass static arguments (checks, num_qubits) via closure or partial if needed,
-# but since they are global constants in this script structure or static, JIT can handle them if they are not traced.
-# However, 'checks' is a list of lists, which JAX jit might not like as an argument.
-# We'll rely on the fact that loss_fn calls surface_code_likelihood which uses the global ACTIVE_CHECKS by default.
-# For a cleaner implementation, we should make loss_fn close over checks.
-
-
 def make_loss_fn(checks, num_qubits):
     def loss_fn_inner(p_logit, observed_syndrome):
         p = jax.nn.sigmoid(p_logit)
@@ -239,11 +211,6 @@ def make_loss_fn(checks, num_qubits):
         return -jnp.log(likelihood + 1e-10)
 
     return loss_fn_inner
-
-
-# Initialize JIT-compiled functions for the active configuration
-loss_fn = make_loss_fn(ACTIVE_CHECKS, NUM_QUBITS)
-loss_and_grad = jax.jit(jax.value_and_grad(loss_fn))
 
 
 # -----------------------------------------------------------------------------
@@ -259,7 +226,7 @@ def main():
     print(f"True Error Probability: {p_true}")
 
     # Generate Synthetic Data
-    n_samples = 20
+    n_samples = 3000
     print(f"Generating {n_samples} synthetic syndrome samples...")
 
     key = jax.random.PRNGKey(42)
@@ -277,7 +244,7 @@ def main():
     p_init = 0.1
     logit_init = inverse_sigmoid(p_init)
 
-    optimizer = optax.adam(learning_rate=0.1)
+    optimizer = optax.adam(learning_rate=0.02)
     opt_state = optimizer.init(logit_init)
     params = logit_init
 
@@ -347,4 +314,19 @@ def inverse_sigmoid(y):
 
 
 if __name__ == "__main__":
+    # Initialize Topology
+    DISTANCE = 5  # Configurable: 3, 5, 7...
+    DATA_QUBITS_COUNT, Z_CHECKS, X_CHECKS = generate_surface_code(DISTANCE)
+
+    print(f"Generated Surface Code (d={DISTANCE}):")
+    print(f"Data Qubits: {DATA_QUBITS_COUNT}")
+    print(f"Z-Checks (detect X errors): {len(Z_CHECKS)}")
+    print(f"X-Checks (detect Z errors): {len(X_CHECKS)}")
+
+    # For demonstration, we simulate X errors detected by Z checks.
+    ACTIVE_CHECKS = Z_CHECKS
+    NUM_QUBITS = DATA_QUBITS_COUNT
+    # Initialize JIT-compiled functions for the active configuration
+    loss_fn = make_loss_fn(ACTIVE_CHECKS, NUM_QUBITS)
+    loss_and_grad = jax.jit(jax.value_and_grad(loss_fn))
     main()
