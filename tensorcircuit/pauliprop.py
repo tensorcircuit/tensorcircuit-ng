@@ -26,7 +26,7 @@ Tensor = Any
 
 
 class PauliPropagationEngine:
-    """
+    r"""
     A Pauli Propagation Engine that tracks observables in the global k-local space.
 
     The state is represented as a flat vector of size $|P_k| = \sum_{i=0}^k \binom{N}{i} 3^i$.
@@ -247,7 +247,7 @@ class PauliPropagationEngine:
         return state
 
     def expectation(self, state: Any) -> Any:
-        """
+        r"""
         Compute the expectation value $\langle 0| O(t) |0 \rangle$.
         Sum coefficients of purely Z observables in the final state.
 
@@ -262,7 +262,7 @@ class PauliPropagationEngine:
     def apply_gate(
         self, state: Any, gate_name: str, wires: Any, params: Any = None
     ) -> Any:
-        """
+        r"""
         Propagate the observable through a quantum gate in the Heisenberg picture.
         Applies $O \to U^\dagger O U$.
 
@@ -466,7 +466,7 @@ def pauli_propagation(
     weights: Optional[Any] = None,
     k: int = 3,
 ) -> Any:
-    """
+    r"""
     High-level API for Heisenberg-picture Pauli propagation.
 
     :param c: The quantum circuit to propagate through.
@@ -642,7 +642,7 @@ class SparsePauliPropagationEngine:
         return K.convert_to_tensor(np.array(codes, dtype=np.int64), dtype="int64")
 
     def expectation(self, state: Any) -> Any:
-        """
+        r"""
         Compute the expectation value $\langle 0| O(t) |0 \rangle$.
         Sum coefficients of purely Z observables in the final state.
 
@@ -714,7 +714,7 @@ class SparsePauliPropagationEngine:
     def apply_gate(
         self, state: Any, gate_name: str, wires: Any, params: Any = None
     ) -> Any:
-        """
+        r"""
         Propagate the observable through a quantum gate in the Heisenberg picture.
         Applies $O \to U^\dagger O U$.
 
