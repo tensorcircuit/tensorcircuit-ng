@@ -1,0 +1,20 @@
+title: "Quantum Continual Learning Overcoming Catastrophic Forgetting"
+arxiv_id: "2108.02786"
+url: "https://arxiv.org/abs/2108.02786"
+year: 2021
+authors: 
+  - "Wenjie Jiang"
+  - "Zhide Lu"
+  - "Dong-Ling Deng"
+tags:
+  - "Quantum Machine Learning"
+  - "Continual Learning"
+  - "Catastrophic Forgetting"
+hardware_requirements:
+  gpu: False
+  min_memory: "4GB"
+description: "This reproduction demonstrates catastrophic forgetting in a quantum classifier by training sequentially on MNIST (0, 9) and permuted MNIST (0, 9). We use an 8-qubit variational quantum circuit with amplitude encoding and 10 layers of hardware-efficient gates."
+outputs:
+  - target: "Figure 2(b)"
+    path: outputs/result.png
+    script: "main.py"
