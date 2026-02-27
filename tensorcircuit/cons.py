@@ -504,12 +504,13 @@ def get_symbol(i: int) -> str:
 
 def _extract_topology(
     nodes: List[tn.Node],
-) -> Tuple[List[Any], List[str], str, Dict[str, int], Dict[int, str]]:
+) -> Tuple[List[Any], List[str], str, Dict[str, int]]:
     """
     Convert a physical tensor network graph (with possible CopyNodes) into
     algebraic components for einsum/cotengra.
     """
     # split nodes into regular nodes and CopyNodes
+    nodes = sorted(nodes, key=lambda node: getattr(node, "_stable_id_", -1))
     regular_nodes = [n for n in nodes if not isinstance(n, tn.CopyNode)]
     copy_nodes = [n for n in nodes if isinstance(n, tn.CopyNode)]
 
@@ -551,14 +552,11 @@ def _extract_topology(
         output_set.append(mapping_dict[root])
 
     size_dict = {symbol: root.dimension for root, symbol in mapping_dict.items()}
-    edge_to_symbol = {id(edge): mapping_dict[uf[edge]] for edge in all_edges}
-
     return (
         raw_tensors,
         input_sets,
         "".join(output_set),
         size_dict,
-        edge_to_symbol,
     )
 
 
@@ -573,9 +571,7 @@ def _algebraic_base_contraction(
     """
     import cotengra as ctg
 
-    raw_tensors, input_sets, output_set, size_dict, edge_to_symbol = _extract_topology(
-        nodes
-    )
+    raw_tensors, input_sets, output_set, size_dict = _extract_topology(nodes)
     # Use the backend of the first node
     be = nodes[0].backend
 
@@ -597,15 +593,23 @@ def _algebraic_base_contraction(
 
     final_node = tn.Node(final_raw_tensor, backend=be)
 
+    # Resolve dangling edges in the same order as in _extract_topology
+    dangling_edges = sorted_edges(tn.get_subgraph_dangling(nodes))
+
+    # Update the edges to point to the new final_node
+    for i, edge in enumerate(dangling_edges):
+        if edge.node1 in nodes:
+            edge.node1 = final_node
+            edge.axis1 = i
+        else:
+            edge.node2 = final_node
+            edge.axis2 = i
+    final_node.edges = list(dangling_edges)
+
     if not ignore_edge_order:
         if output_edge_order is None:
-            output_edge_order = sorted_edges(tn.get_subgraph_dangling(nodes))
-
-        target_symbols = [edge_to_symbol[id(edge)] for edge in output_edge_order]
-        # final_node.tensor currently has axes in output_set order
-        final_symbols = list(output_set)
-        perm = [final_symbols.index(s) for s in target_symbols]
-        final_node.tensor = be.transpose(final_node.tensor, perm)
+            output_edge_order = dangling_edges
+        final_node.reorder_edges(list(output_edge_order))
 
     return final_node
 
@@ -749,6 +753,21 @@ def _base(
                 "non-contracted edges of the final node."
             )
 
+    # 1. Resolve topology and check for hyperedges
+    has_hyperedges = any(isinstance(n, tn.CopyNode) for n in nodes)
+
+    if use_primitives is True or (use_primitives is None and has_hyperedges):
+        # ==========================================
+        # NEW ALGEBRAIC EXECUTION PATH (Opt-in)
+        # ==========================================
+        return _algebraic_base_contraction(
+            nodes, algorithm, output_edge_order, ignore_edge_order
+        )
+
+    # ==========================================
+    # ORIGINAL EXECUTION PATH (100% Backward Compatible)
+    # ==========================================
+
     for edge in edges:
         if not edge.is_disabled:  # if its disabled we already contracted it
             if edge.is_trace():
@@ -766,20 +785,6 @@ def _base(
 
     # nodes = list(nodes_set)
 
-    # 1. Resolve topology and check for hyperedges
-    has_hyperedges = any(isinstance(n, tn.CopyNode) for n in nodes)
-
-    if use_primitives is True or (use_primitives is None and has_hyperedges):
-        # ==========================================
-        # NEW ALGEBRAIC EXECUTION PATH (Opt-in)
-        # ==========================================
-        return _algebraic_base_contraction(
-            nodes, algorithm, output_edge_order, ignore_edge_order
-        )
-
-    # ==========================================
-    # ORIGINAL EXECUTION PATH (100% Backward Compatible)
-    # ==========================================
     # Then apply `opt_einsum`'s algorithm
     # if isinstance(algorithm, list):
     #     path = algorithm

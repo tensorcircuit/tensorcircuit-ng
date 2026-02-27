@@ -281,3 +281,33 @@ def test_cotengra_path_reuse(caplog):
 
     final_searches = len(opt.deltas) if hasattr(opt, "deltas") else 0
     assert final_searches == initial_searches
+
+
+def test_hyperedge_partial_contraction():
+    # Test contracting a subset of nodes in a larger network
+    a = tn.Node(np.array([1.0, 2.0]))  # [i]
+    b = tn.Node(np.eye(2) * np.array([3, 4]))  # [i, j]
+    c = tn.Node(np.eye(2) * np.array([5, 6]))  # [j, k]
+    d = tn.Node(np.array([7.0, 8.0]))  # [k]
+
+    a[0] ^ b[0]
+    e_bc = b[1] ^ c[0]
+    e_cd = c[1] ^ d[0]
+
+    tc.set_contractor("cotengra", use_primitives=True)
+    # 1. Contract [A, B]
+    res_ab = tc.contractor([a, b])
+    # res_ab should be rank 1, edges[0] should be e_bc
+    assert len(res_ab.edges) == 1
+    assert res_ab.edges[0] == e_bc
+    assert e_bc.node1 == res_ab or e_bc.node2 == res_ab
+
+    # 2. Contract [res_ab, c]
+    res_abc = tc.contractor([res_ab, c])
+    assert len(res_abc.edges) == 1
+    assert res_abc.edges[0] == e_cd
+
+    # 3. Final
+    res = tc.contractor([res_abc, d])
+    # Expected: sum_i,j,k A_i B_ij C_jk D_k = 1*3*5*7 + 2*4*6*8 = 105 + 384 = 489
+    np.testing.assert_allclose(res.tensor, 489.0)

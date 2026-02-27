@@ -12,9 +12,11 @@ import tensorcircuit as tc
 tc.set_backend("jax")
 
 
-def run_vqe_benchmark(n, nlayers, use_primitives):
+def run_vqe_benchmark(n, nlayers, use_primitives, preprocessing):
     # Set the contractor configuration
-    tc.set_contractor("cotengra", use_primitives=use_primitives)
+    tc.set_contractor(
+        "cotengra", use_primitives=use_primitives, preprocessing=preprocessing
+    )
 
     def energy_fn(params):
         c = tc.Circuit(n)
@@ -73,23 +75,25 @@ def main():
     print(f"--- VQE Benchmark: {n} Qubits, {nlayers} Layers ---")
     print(f"Backend: {tc.backend.name}")
 
-    # Test use_primitives=False (Legacy Path)
-    print("\n[Case 1] use_primitives=False (Legacy Path)")
-    s1, e1 = run_vqe_benchmark(n, nlayers, use_primitives=False)
-    print(f"  Staging Time:   {s1:.4f}s")
-    print(f"  Execution Time: {e1:.6f}s")
+    results = []
+    for use_primitives in [False, True]:
+        for preprocessing in [False, True]:
+            print(
+                f"\nTesting: use_primitives={use_primitives}, preprocessing={preprocessing}"
+            )
+            s, e = run_vqe_benchmark(n, nlayers, use_primitives, preprocessing)
+            print(f"  Staging Time:   {s:.4f}s")
+            print(f"  Execution Time: {e:.6f}s")
+            results.append((use_primitives, preprocessing, s, e))
 
-    # Test use_primitives=True (Algebraic Path)
-    print("\n[Case 2] use_primitives=True (Algebraic Path)")
-    s2, e2 = run_vqe_benchmark(n, nlayers, use_primitives=True)
-    print(f"  Staging Time:   {s2:.4f}s")
-    print(f"  Execution Time: {e2:.6f}s")
-
-    print("\n--- Summary ---")
-    staging_gain = (s1 - s2) / s1 * 100 if s1 > 0 else 0
-    exec_gain = (e1 - e2) / e1 * 100 if e1 > 0 else 0
-    print(f"Staging Speedup:   {staging_gain:.2f}%")
-    print(f"Execution Speedup: {exec_gain:.2f}%")
+    print("\n" + "=" * 62)
+    print(
+        f"{'Primitives':<12} | {'Preprocess':<12} | {'Staging (s)':<12} | {'Exec (s)':<12}"
+    )
+    print("-" * 62)
+    for up, pre, s, e in results:
+        print(f"{str(up):<12} | {str(pre):<12} | {s:<12.4f} | {e:<12.6f}")
+    print("=" * 62)
 
 
 if __name__ == "__main__":
