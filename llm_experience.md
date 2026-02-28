@@ -10,12 +10,17 @@ This document records specific technical protocols, lessons learned, and advance
 
 2.  **Memory Management (OOM Prevention)**:
     *   For operations over large batches (e.g., summing $2^{22}$ Pauli strings), `vmap` materializes all intermediate results in memory.
-    *   **Protocol**: Use `jax.lax.scan` or sequential loops for reductions over large inputs to keep peak memory usage constant ($O(1)$) rather than linear ($O(N)$).
+    *   **Protocol**: Use `jax.lax.scan` or sequential loops for reductions over large inputs to keep peak memory usage constant ($O(1)$) rather than linear ($O(N)$). When using `scan`, ensure the qubits' state can actually reside in memory.
+    *   **Large Qubit Safeguard**: For large qubit counts, ensure switches like `reuse=False` or `allow_state=False` in methods like `expectation`, `expectation_ps`, or `sample` are turned off. This prevents the formation of the full dense state, avoiding catastrophic OOM.
 
 3.  **Vmap Broadcasting with Optimizers (Optax/Custom)**:
     *   **Pitfall**: `tc.backend.vmap(func)` implicitly sets `vectorized_argnums=0`. If `func` takes multiple arguments that are *all* batched (e.g. `update_step(params, opt_state)`), you MUST specify `vectorized_argnums=(0, 1)`.
     *   **Symptom**: Dimension mismatch errors (e.g. `broadcast_shapes got incompatible shapes`) where one argument is treated as a scalar/unbatched while the other is batched.
     *   **Protocol**: Explicitly define `vectorized_argnums` when vmapping functions with optimizer states or multiple batched inputs.
+
+4.  **JIT Granularity and Placement**:
+    *   **Protocol**: Place JIT at the most outside part of the computation loop possible (e.g., wrapping the entire optimization step including the loop itself via `jax.lax.scan`).
+    *   **Trade-off**: Avoid JIT-ing small functions inside a Python loop; the dispatch and staging overhead can exceed the execution gain.
 
 ## Qudit Simulation & Advanced Models
 
@@ -26,8 +31,8 @@ This document records specific technical protocols, lessons learned, and advance
 
 2.  **Sparse Matrix Hamiltonian**:
     *   For larger Hilbert spaces ($d^N \gg 10^3$), dense matrix construction explodes in memory.
-    *   **Protocol**: Construct Hamiltonians using `scipy.sparse` (COO format), but first prefer to use `PauliStringSum2COO` if available.
-    *   **Integration**: Convert to JAX Sparse via `tc.backend.coo_sparse_matrix(indices, values, shape)` and use `tc.backend.sparse_dense_matmul(H_sparse, ket)` for expectation values. This provides massive speedups and enables simulation of larger $N$ or $d$.
+    *   **Protocol**: Construct Hamiltonians using `scipy.sparse` (COO format), but **strictly prefer** `tc.quantum.PauliStringSum2COO` for Pauli sums as it is significantly faster than manual `kron` construction.
+    *   **Integration**: Convert to JAX Sparse via `tc.backend.coo_sparse_matrix(indices, values, shape)` and use `tc.templates.measurements.sparse_expectation` or `tc.templates.measurements.mpo_expectation` for large system evaluations. This provides massive speedups and enables simulation of larger $N$ or $d$.
 
 ## Testing and Robustness
 
@@ -97,6 +102,9 @@ This document records specific technical protocols, lessons learned, and advance
     *   **Protocol**: In TensorCircuit, `lexsort(keys)` consistently treats the **last** key in the sequence as the **primary** sort key, following the NumPy convention.
     *   **Pitfall**: Different backend libraries might have different default priorities (e.g. TensorFlow's `argsort` doesn't natively support lexsort, and custom implementations must be careful). Always verify and test against NumPy's behavior.
 
+4.  **Migrating from PyTorch/TF to JAX**:
+    *   **Protocol**: Always prefer the JAX backend for high-performance quantum kernels. 
+    *   **Hybrid Workflow**: If the project requires PyTorch (e.g., for specific NN layers or legacy optimizers), use the `jax` backend for the quantum part and bridge it using `tc.interfaces.torch_interface`. This maintains an end-to-end differentiable graph while leveraging JAX's JIT and vectorization for the quantum bottle-necks.
 
 ## Pauli Propagation & Operator Evolution (Heisenberg Picture)
 
@@ -180,3 +188,15 @@ This document records specific technical protocols, lessons learned, and advance
          2.  Update each `edge.node1/2` and `edge.axis1/2` to point to the new `final_node`.
          3.  Assign the list of edges to `final_node.edges`.
          4.  Finally, call `final_node.reorder_edges(output_edge_order)` to ensure the tensor's axes match the expected edge sequence.
+
+4.  **Cotengra Performance Tuning**:
+    *   **Protocol**: For large-scale tensor network contractions, use `tc.set_contractor("cotengra")`.
+    *   **Advanced Tuning**: For complex circuits, manually set a `ctg.ReusableHyperOptimizer` with specific `max_time` and `max_repeats` to find better paths. Use `preprocessing=True` to cache the path.
+
+## Agentic Skills & Specialized Workflows
+
+To maintain high development standards, use the following specialized skills:
+
+1.  **arxiv-reproduce**: Autonomously reproduces ArXiv papers. Focuses on adaptive scaling, standardized meta.yaml generation, and strictly validated code quality.
+2.  **performance-optimize**: Scientific bottleneck diagnosis and refactoring. Enforces the "Hypothesis -> Benchmark -> Refactor" workflow using JAX primitives.
+3.  **tc-rosetta**: End-to-end intent-based translation from Qiskit/PennyLane to TC-NG. Prioritizes functional rewrites over syntax mapping to achieve maximum speedup.
