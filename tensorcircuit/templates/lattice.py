@@ -291,7 +291,7 @@ class AbstractLattice(abc.ABC):
         if self.num_sites < 2:
             return []
         # Use itertools.combinations to efficiently generate all unique pairs (i, j) with i < j.
-        return sorted(list(itertools.combinations(range(self.num_sites), 2)))
+        return sorted(itertools.combinations(range(self.num_sites), 2))
 
     @abc.abstractmethod
     def _build_lattice(self, *args: Any, **kwargs: Any) -> None:
