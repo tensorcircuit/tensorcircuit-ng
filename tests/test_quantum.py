@@ -25,6 +25,18 @@ decimal = 5
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_invalid_quoperator_init(backend):
+    with pytest.raises(
+        ValueError, match="At least one reference node is required to specify a scalar"
+    ):
+        qu.QuOperator([], [])
+    with pytest.raises(
+        ValueError, match="At least one reference node is required to specify a scalar"
+    ):
+        qu.QuScalar([])
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_constructor(backend):
     psi_tensor = np.random.rand(2, 2)
     psi_node = tn.Node(psi_tensor)
