@@ -49,6 +49,7 @@ TensorCircuit-NG 也支持 AI 原生编程资源：[Devin Deepwiki](https://deep
 * [`arxiv-reproduce`](/.agents/skills/arxiv-reproduce/README.md): 自动复现 ArXiv 论文，自适应规模并保证标准化的结构与代码质量。
 * [`performance-optimize`](/.agents/skills/performance-optimize/README.md): 旨在科学地发现性能瓶颈，并自动实施 JAX 原生的代码重构（如 `scan` 和 `vmap`）。
 * [`tc-rosetta`](/.agents/skills/tc-rosetta/README.md): 端到端的数学意图识别代码翻译（如从 Qiskit 或 PennyLane 翻译成高性能的 TC-NG 代码）。
+* [`tutorial-crafter`](/.agents/skills/tutorial-crafter/README.md): 将原始的 TC-NG 脚本转化为详尽、叙事驱动的教育型 Markdown 教程。
 
 初学者也可以参考[量子计算教程](https://github.com/sxzgroup/qc_lecture)学习量子计算基础和 TensorCircuit-NG 的典型用法.
 

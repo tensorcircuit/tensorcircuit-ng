@@ -200,3 +200,4 @@ To maintain high development standards, use the following specialized skills:
 1.  **arxiv-reproduce**: Autonomously reproduces ArXiv papers. Focuses on adaptive scaling, standardized meta.yaml generation, and strictly validated code quality.
 2.  **performance-optimize**: Scientific bottleneck diagnosis and refactoring. Enforces the "Hypothesis -> Benchmark -> Refactor" workflow using JAX primitives.
 3.  **tc-rosetta**: End-to-end intent-based translation from Qiskit/PennyLane to TC-NG. Prioritizes functional rewrites over syntax mapping to achieve maximum speedup.
+4.  **tutorial-crafter**: Transforms raw TC-NG scripts into comprehensive, narrative-driven Markdown educational tutorials, highlighting HPC programming practices.

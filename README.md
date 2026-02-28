@@ -58,6 +58,7 @@ To write TC-NG scripts and applications efficiently with AI coding agents (e.g.,
     *   [`arxiv-reproduce`](/.agents/skills/arxiv-reproduce/README.md): Autonomously reproduces arXiv papers with standardized output and code quality validation.
     *   [`performance-optimize`](/.agents/skills/performance-optimize/README.md): Scientific execution and memory optimization workflow (JAX scanning, vectorized parallelism, etc.).
     *   [`tc-rosetta`](/.agents/skills/tc-rosetta/README.md): End-to-end framework translation (from Qiskit, PennyLane, etc.) with intrinsic mathematical intent rewriting.
+    *   [`tutorial-crafter`](/.agents/skills/tutorial-crafter/README.md): Transforms raw TC-NG scripts into comprehensive, narrative-driven Markdown or/and HTML educational tutorials.
 
 **Recommended Workflow:**
 
