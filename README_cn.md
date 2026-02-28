@@ -29,7 +29,9 @@
 
 <p align="center"> <a href="README.md">English</a> |  简体中文 </p>
 
-TensorCircuit-NG 是下一代量子软件框架，完美支持自动微分、即时编译、硬件加速、向量并行化和分布式训练，是量超智融合的首选平台。
+TensorCircuit-NG 是下一代开源高性能量子软件框架，也是全球首个专为智能体驱动研究和自动化科学发现而设计的量子软件平台。
+
+TensorCircuit-NG 基于张量网络引擎构建，完美支持自动微分、即时编译、硬件加速、向量并行化和分布式训练，为量子编程提供统一的基础设施和接口。它可以无缝编织量子线路、神经网络和张量网络，具备极高的模拟效率和灵活性。
 
 TensorCircuit-NG 建立在现代机器学习框架 Jax, TensorFlow, PyTorch 之上，支持机器学习后端无关的统一界面。 其特别适用于理想情况、含噪声情况、稳定子情况、可控近似情况、连续动力学情况及费米子情况下，大规模量子经典混合范式和变分量子算法的高效模拟。其可以高效地编织和模拟量子线路、张量网络和神经网络组成的混合计算图。
 
@@ -43,13 +45,27 @@ TensorCircuit-NG 是 TensorCircuit 在技术与架构上的演进版本，由原
 
 有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 130+ [示例脚本](/examples) 和 40+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
 
-TensorCircuit-NG 也支持 AI 原生编程资源：[Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng) 和 [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
+### AI 辅助开发 (推荐)
 
-若使用 AI 编程助手（如 Claude Code, Cursor, Antigravity）编写 TC-NG 应用，我们强烈建议直接在克隆的本地代码库中进行开发以提供更好的上下文，而非在新的空文件夹中操作。这不仅提供了极多有用的文档和范例，还能让 AI 助手使用内置在 `.agents/skills/` 目录中的智能体技能 (Agentic Skills)：
-* [`arxiv-reproduce`](/.agents/skills/arxiv-reproduce/README.md): 自动复现 ArXiv 论文，自适应规模并保证标准化的结构与代码质量。
-* [`performance-optimize`](/.agents/skills/performance-optimize/README.md): 旨在科学地发现性能瓶颈，并自动实施 JAX 原生的代码重构（如 `scan` 和 `vmap`）。
-* [`tc-rosetta`](/.agents/skills/tc-rosetta/README.md): 端到端的数学意图识别代码翻译（如从 Qiskit 或 PennyLane 翻译成高性能的 TC-NG 代码）。
-* [`tutorial-crafter`](/.agents/skills/tutorial-crafter/README.md): 将原始的 TC-NG 脚本转化为详尽、叙事驱动的教育型 Markdown 教程。
+若使用 AI 编程助手（如 Claude Code, Cursor, Antigravity）编写 TC-NG 应用，我们强烈建议**直接在克隆的本地代码库中进行开发**，以便为 AI 提供更丰富的上下文。
+
+1.  **丰富上下文：** `examples/` 中的 100 多个脚本和 `tests/` 中的大量测试用例提供了至关重要的参考，能显著减少 AI 幻觉。
+2.  **内置规则：** 我们提供了专门的 [AGENTS.md](/AGENTS.md) 文件。它是 AI 助手的“开发手册”（类似 `CLAUDE.md`），定义了编码标准和最佳实践，确保生成的代码符合 TC-NG 调用范式。
+3.  **专用智能体技能 (Agentic Skills)：** `.agents/skills/` 目录包含了一系列工作流，引导 AI 助手完成复杂的跨步骤任务：
+    *   [`arxiv-reproduce`](/.agents/skills/arxiv-reproduce/README.md): 自动复现 arXiv 论文，支持标准化输出和代码质量验证。
+    *   [`performance-optimize`](/.agents/skills/performance-optimize/README.md): 科学的性能调优与内存优化工作流（JAX 循环编译、向量化并行等）。
+    *   [`tc-rosetta`](/.agents/skills/tc-rosetta/README.md): 端到端框架翻译（如从 Qiskit, PennyLane 翻译），具备内在数学意图重构能力。
+    *   [`tutorial-crafter`](/.agents/skills/tutorial-crafter/README.md): 将原始 TC-NG 脚本转化为详尽、叙事驱动的 Markdown 或 HTML 教程。
+
+**建议工作流：**
+
+1.  克隆仓库：`git clone https://github.com/tensorcircuit/tensorcircuit-ng.git`
+2.  切换到本地实验分支：`git checkout -b my-playground`，以防弄乱原始仓库。
+3.  在 AI IDE 中打开仓库文件夹，即可开始编写基于 TC-NG 的脚本。
+
+现在，快来体验完全通过自然语言实现量子算法吧！通过将极致性能与全自动的意图驱动的 AI 工作流（`.agents/skills/`）无缝集成，TC-NG 赋能研究人员从繁琐的手动编码跨越到数秒内自动完成论文复现、性能极致优化以及跨框架代码翻译的新范式。
+
+您可以参考相关的 AI 原生文档：[Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng) 和 [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
 
 初学者也可以参考[量子计算教程](https://github.com/sxzgroup/qc_lecture)学习量子计算基础和 TensorCircuit-NG 的典型用法.
 

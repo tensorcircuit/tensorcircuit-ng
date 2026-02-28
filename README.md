@@ -33,7 +33,9 @@
 
 <p align="center"> English | <a href="README_cn.md"> 简体中文 </a></p>
 
-TensorCircuit-NG is the next-generation open-source high-performance quantum software framework, built upon tensornetwork engines, supporting for automatic differentiation, just-in-time compiling, hardware acceleration, vectorized parallelism and distributed training, providing unified infrastructures and interfaces for quantum programming. It can compose quantum circuits, neural networks and tensor networks seamlessly with high simulation efficiency and flexibility.
+TensorCircuit-NG is the next-generation open-source high-performance quantum software framework, and the world's first AI-native quantum programming platform purpose-built for agentic research and automated scientific discovery.
+
+TensorCircuit-NG is built upon tensornetwork engines, supporting for automatic differentiation, just-in-time compiling, hardware acceleration, vectorized parallelism and distributed training, providing unified infrastructures and interfaces for quantum programming. It can compose quantum circuits, neural networks and tensor networks seamlessly with high simulation efficiency and flexibility.
 
 TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for large-scale simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal (`Circuit`), noisy (`DMCircuit`), Clifford (`StabilizerCircuit`), qudit (`QuditCircuit`), approximate (`MPSCircuit`), analog (`AnalogCircuit`), and fermionic (`FGSCircuit`) cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions.
 
@@ -66,7 +68,7 @@ To write TC-NG scripts and applications efficiently with AI coding agents (e.g.,
 2.  Switch to a local playground branch: `git checkout -b my-playground` in case messing up with the original repository.
 3.  Open the repository folder in your AI IDE. And you are ready to start writing TC-NG-based scripts.
 
-Now, enjoy implementing quantum algorithms entirely through natural language!
+Now, enjoy implementing quantum algorithms entirely through natural language! By seamlessly integrating the extreme performance with an autonomous, intent-driven AI workflow (via embedded `.agents/skills/`), TC-NG empowers researchers to transition from manual coding to automated paper reproduction, intelligent performance squeezing, and cross-framework translation in seconds.
 
 ### Quick Demos
 
