@@ -56,6 +56,7 @@ TensorCircuit-NG 是 TensorCircuit 在技术与架构上的演进版本，由原
     *   [`performance-optimize`](/.agents/skills/performance-optimize/README.md): 科学的性能调优与内存优化工作流（JAX 循环编译、向量化并行等）。
     *   [`tc-rosetta`](/.agents/skills/tc-rosetta/README.md): 端到端框架翻译（如从 Qiskit, PennyLane 翻译），具备内在数学意图重构能力。
     *   [`tutorial-crafter`](/.agents/skills/tutorial-crafter/README.md): 将原始 TC-NG 脚本转化为详尽、叙事驱动的 Markdown 或 HTML 教程。
+    *   [`demo-generator`](/.agents/skills/demo-generator/README.md): 将 TC-NG 脚本转化为交互式、精美且高性能的 Streamlit GUI 应用程序。
 
 **建议工作流：**
 

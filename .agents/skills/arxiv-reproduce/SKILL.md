@@ -61,21 +61,24 @@ When tasked with reproducing an arXiv paper using TensorCircuit-NG, you act as a
 - **Run the Script**: Execute `main.py`.
 - **Self-Correction**: If the code encounters OOM errors, compilation issues, or algorithmic bugs, autonomously analyze the terminal output, modify the script (e.g., adjust the tensor network contraction path or learning rate), and retry until the result is successfully generated.
 
-### 5. Post-Execution Code Review & Refactoring
+### 5. Research Integrity & Transparency
+- **No Cheating**: You MUST NOT "cheat" on key steps by using fake data, hardcoding expected results, or implementing meaningless workarounds just to get a plot to look right. The physics must be genuine.
+- **No Laziness**: Do not skip foundational derivations or critical algorithmic steps in the original paper. Every line of code should have a physical or mathematical basis referenced from the paper.
+- **Explicit Simplifications**: If you take any numerical shortcuts or simplify the implementation (e.g., reducing lattice size, skipping noise channels per section 1.1), you MUST explicitly state exactly **which part** was simplified, **how** it was simplified, and **why** the core physics is still preserved. This should be documented in both the `meta.yaml` and the final report to the user.
+
+### 6. Post-Execution Code Review & Refactoring
 Once the script runs successfully and generates the target output, you MUST pause and deeply review your own code:
 
-Logic Correctness: Cross-check your implementation logic against the original paper. Are the Hamiltonian terms, Ansatz structures, and measurement bases, algorithm workflows physically accurate?
+- **Logic Correctness**: Cross-check your implementation logic against the original paper. Are the Hamiltonian terms, Ansatz structures, measurement bases, and algorithm workflows physically accurate?
+- **Scientific Honesty**: Re-verify that the generated results (e.g., phase transition curves, fidelity plateaus) are emerging from the physics logic and not from ad-hoc data manipulation.
+- **Performance Bottlenecks**: Analyze the script for HPC anti-patterns. Are you optimally utilizing JAX transformations (jit, vmap, grad)? Refactor to maximize TC-NG's performance.
+- **Clean Up**: Rigorously remove any dead code, unused variables, redundant imports, and leftover debugging print statements.
 
-Performance Bottlenecks: Analyze the script for HPC anti-patterns. Are you optimally utilizing JAX transformations (jit, vmap, grad)? Are there redundant tensor contractions, unnecessary for-loops, or inefficient data transfers between CPU/GPU? Refactor to maximize TC-NG's performance.
-
-Clean Up: Rigorously identify and remove any dead code, unused variables, redundant imports, unnecessary comments, and leftover debugging print statements.
-
-### 6. Verification & Code Quality Enforcement
-
+### 7. Verification & Code Quality Enforcement
 Before completing the task, you MUST execute the following terminal commands and ensure they pass:
 
 1. **Formatting**: Run `black examples/reproduce_papers/<paper_subfolder>/*.py`
-2. **Linting**: Run `pylint examples/reproduce_papers/<paper_subfolder>/*.py` (Fix any critical linting errors to ensure clean code; ignore minor type-hinting warnings if not applicable).
+2. **Linting**: Run `pylint examples/reproduce_papers/<paper_subfolder>/*.py`
 3. **Output Check**: Verify that `outputs/result.png` exists and matches the expected dimensions/trends of the scaled-down paper results.
 
-Conclude your task by summarizing the execution results, confirming that the checklist (formatting, linting, docstrings, self-contained runnable script) has been fully met, and providing the path to the reproduced figure.
+Conclude your task by summarizing the execution results, confirming that the checklist has been fully met, and providing the path to the reproduced figure. Explicitly list any implementation simplifications made for computational feasibility.

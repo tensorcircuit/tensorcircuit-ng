@@ -9,6 +9,7 @@ The `arxiv-reproduce` skill is designed to autonomously reproduce quantum comput
 - **High-Performance Implementation**: Synthesizes JAX-accelerated Python code (`main.py`) following TC-NG best practices (JIT, vmap, grad).
 - **Autonomous Debugging**: Capable of self-correcting and retrying execution upon encountering resource limits (OOM) or algorithmic errors.
 - **Code Quality Enforcement**: Automatically runs `black` for formatting and `pylint` for linting before final delivery.
+- **Scientific Integrity**: Strictly prohibits "cheating" via fake data or hardcoded results; requires explicit transparency and documentation for any implementation simplifications or problem scaling.
 
 ## When to Use
 Use this skill when you need to:
