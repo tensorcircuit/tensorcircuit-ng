@@ -13,12 +13,28 @@ When tasked with reviewing, profiling, or optimizing a TensorCircuit-NG (TC-NG) 
 ### 2. The TC-NG Performance Checklist (Hypothesis Generation)
 Consider the following optimizations, but treat them as hypotheses to be tested:
 - **Vectorization**: Replace manual `for` loops with `tc.backend.vmap` (or `jax.vmap`).
-- **JIT Compilation**: Wrap performance-critical functions with `tc.backend.jit` (Ensure tensor-in, tensor-out). *Trade-off: JIT staging takes time; it is a net negative if the function is only executed once.*
+- **JIT Compilation**: Wrap performance-critical functions with `tc.backend.jit` (Ensure tensor-in, tensor-out). Better ensure JIT is placed in the most outside part possible (e.g., the entire optimization step). *Trade-off: JIT staging takes time; it is a net negative if the function is only executed once.*
 - **Staging Awareness**: Single-qubit gates can have longer JIT staging times than two-qubit gates. Avoid unnecessarily unrolling them.
-- **Scan for Depth**: Use `tc.backend.scan` (or `jax.lax.scan`) for deep circuits with repeating structures instead of Python loops.
+- **Scan for Depth**: Use `tc.backend.scan` (or `jax.lax.scan`) for deep circuits with repeating structures instead of Python loops. When using scan, ensure the state is allowed in memory for the given number of qubits.
+- **Avoid Full State Instantiation**: For large qubit counts, ensure switches like `reuse=False` or `allow_state=False` in methods like `expectation`, `expectation_ps`, or `sample` are turned off to not form the full state.
 - **Memory vs. Compute (Checkpointing)**: Nest `jax.checkpoint` within `scan` loops for deep circuit gradients. *Trade-off: This strictly trades increased forward-pass computation time for drastically reduced memory usage. Only apply if memory is the actual bottleneck.*
-- **Advanced Contractor**: Use `tc.set_contractor("cotengra")`. *Trade-off: Path-finding takes upfront time. It may be counterproductive for small or shallow circuits.*
-- **Sparse/MPO Observables**: Use Sparse Matrix or MPO representations for large system expectations instead of dense matrices or individual Pauli strings.
+- **Advanced Contractor**: Use `tc.set_contractor("cotengra")`. The cotengra contractor can be further tuned with its API for sufficiently large circuits. *Trade-off: Path-finding takes upfront time. It may be counterproductive for small or shallow circuits.* To manually set an optimizer with tunable hyperparameters, use a snippet like:
+  ```python
+  import cotengra as ctg
+  import tensorcircuit as tc
+
+  opt = ctg.ReusableHyperOptimizer(
+      methods=["greedy", "kahypar"],
+      parallel="ray",
+      minimize="flops",
+      max_time=120,
+      max_repeats=1024,
+      progbar=True,
+  )
+  tc.set_contractor("custom", optimizer=opt, preprocessing=True)
+  ```
+- **Sparse/MPO Observables**: Use Sparse Matrix or MPO representations for large system expectations instead of dense matrices or individual Pauli strings. Use specific APIs like `tc.templates.measurements.sparse_expectation` and `tc.templates.measurements.mpo_expectation`. For sparse Hamiltonians consisting of Pauli string sums, generate the matrix via `tc.quantum.PauliStringSum2COO`, which is significantly faster than manually using `kron` to construct the Hamiltonian.
+- **Backend Selection (PyTorch to JAX)**: Highly recommend moving from the PyTorch backend to JAX for significant performance gains (JIT, Vectorization). If the codebase is tightly integrated with the PyTorch ecosystem (e.g., using Torch optimizers or complex NN layers), use the JAX backend for the quantum kernel and bridge it using `tc.interfaces.torch_interface`. This keeps the quantum part fast on JAX while remaining end-to-end differentiable within the PyTorch computational graph.
 
 ### 3. Empirical Benchmarking & Trade-off Analysis
 You MUST NOT assume an optimization is inherently better. 
