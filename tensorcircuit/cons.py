@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 ## monkey patch
 _NODE_CREATION_COUNTER = 0
 _original_node_init = tn.Node.__init__
+_original_copynode_init = tn.CopyNode.__init__
 
 
 @wraps(_original_node_init)
@@ -38,7 +39,17 @@ def _patched_node_init(self: Any, *args: Any, **kwargs: Any) -> None:
     _NODE_CREATION_COUNTER += 1
 
 
+@wraps(_original_copynode_init)
+def _patched_copynode_init(self: Any, *args: Any, **kwargs: Any) -> None:
+    """Patched CopyNode.__init__ to add a stable creation ID."""
+    global _NODE_CREATION_COUNTER
+    _original_copynode_init(self, *args, **kwargs)
+    self._stable_id_ = _NODE_CREATION_COUNTER
+    _NODE_CREATION_COUNTER += 1
+
+
 tn.Node.__init__ = _patched_node_init
+tn.CopyNode.__init__ = _patched_copynode_init
 
 
 def _get_edge_stable_key(edge: tn.Edge) -> Tuple[int, int, int, int]:
