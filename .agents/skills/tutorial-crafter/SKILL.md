@@ -70,7 +70,7 @@ When generating HTML, you MUST use the following premium style and structure to 
 ```
 
 ### 4. File Saving & Confirmation
-- Save `.md` as `tutorial_<script_name>.md`.
-- Save `.html` as `tutorial_<script_name>.html`.
+- Save `.md` as `[original_name]_tutorial.md` in the same directory as the original script.
+- Save `.html` as `[original_name]_tutorial.html` in the same directory as the original script.
 - Use the official remote URL for the logo in the <img> tag: https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/docs/source/statics/logong.png?raw=true
 - Summarize the completion.

@@ -34,12 +34,13 @@ Your goal is **NOT** to do a naive 1:1 syntax or line-by-line translation. You m
 ### 4. Advanced Optimization (Skill Chaining)
 - **Performance Squeeze**: Mentally apply or invoke the `performance-optimize` skill. Check if the TC-NG code can further benefit from `jax.lax.scan` for deep layers or `cotengra` for tensor network contractions, applying them only if they improve the benchmark.
 
-### 5. Output Generation (The Benchmark Report)
-Conclude your translation task by outputting a comprehensive migration report:
-- **The Intent Summary**: Briefly state the mathematical objective of the original code.
-- **The Execution Time Report**: A clear, quantifiable comparison:
-  - Original Framework Time: [Time in seconds/minutes]
-  - TC-NG Execution Time: [Time in seconds/minutes]
-  - Speedup Factor: [e.g., 45x faster]
-- **The Architectural Paradigm Shift**: Explain exactly why it is faster. (e.g., "Discarded the line-by-line Qiskit parameter binding loop and rewrote the end-to-end VQE process using `tc.backend.value_and_grad` and `vmap`, achieving native JAX GPU acceleration.")
-- **The Idiomatic TC-NG Code**: Present the fully refactored, runnable, and highly optimized script.
+### 5. Output & Delivery
+- **Save the Script**: Save the translated script as `[original_name]_tc.py` in the same directory as the original script.
+- **The Benchmark Report**: Conclude your translation task by outputting a comprehensive migration report:
+  - **The Intent Summary**: Briefly state the mathematical objective of the original code.
+  - **The Execution Time Report**: A clear, quantifiable comparison:
+    - Original Framework Time: [Time in seconds/minutes]
+    - TC-NG Execution Time: [Time in seconds/minutes]
+    - Speedup Factor: [e.g., 45x faster]
+  - **The Architectural Paradigm Shift**: Explain exactly why it is faster. (e.g., "Discarded the line-by-line Qiskit parameter binding loop and rewrote the end-to-end VQE process using `tc.backend.value_and_grad` and `vmap`, achieving native JAX GPU acceleration.")
+  - **The Idiomatic TC-NG Code**: Present the fully refactored, runnable, and highly optimized script.

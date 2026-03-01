@@ -7,12 +7,12 @@ allowed-tools: Bash, Read, Write
 When tasked with creating a Streamlit demo from a TensorCircuit-NG (TC-NG) script, you act as a Creative Full-Stack Quantum Scientist. Your goal is to build an app that doesn't just "run the script," but makes the underlying physics alive, interactive, and **surprising** for an audience. Use your imagination to create a 'wow' effect.
 
 ### 0. App Metadata & Docstring
-The generated `app_<script_name>.py` MUST begin with a standardized docstring:
+The generated `[original_name]_app.py` MUST begin with a standardized docstring:
 ```python
 """
 Streamlit Interactive Demo: [App Title]
 Origin: Based on [path/to/original_script.py]
-Usage: streamlit run app_[script_name].py
+Usage: streamlit run [original_name]_app.py
 Description: [Brief 1-sentence description of the interactivity and goal]
 """
 ```
@@ -24,7 +24,7 @@ Description: [Brief 1-sentence description of the interactivity and goal]
 - **Plan the Story**: How should the user interact with it? (e.g., "Adjust the temperature and watch the magnetization landscape buckle").
 
 ### 2. Standardized App Structure
-The generated `app.py` should follow this professional blueprint:
+The generated `[original_name]_app.py` should follow this professional blueprint:
 
 #### A. Global Styling & Branding
 - Use `st.set_page_config` with a wide layout and a custom title.
@@ -53,6 +53,6 @@ The generated `app.py` should follow this professional blueprint:
 - **Error Handling**: Wrap the simulation in try-except blocks to catch potential OOM or out-of-bounds parameters, and display friendly warnings in the UI using `st.error`.
 
 ### 4. Output & Delivery
-- Save the script as `app_<script_name>.py`.
-- Provide the exact terminal command to run the app: `streamlit run app_<script_name>.py`.
+- Save the script as `[original_name]_app.py` in the same directory as the original script.
+- Provide the exact terminal command to run the app: `streamlit run [original_name]_app.py`.
 - Summarize the interactive features you've added and why they make the demo impressive.

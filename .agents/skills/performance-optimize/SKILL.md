@@ -46,8 +46,9 @@ You MUST NOT assume an optimization is inherently better.
 - **Apply Validated Changes**: Modify the target script with the optimizations that passed the trade-off analysis. Leave clear comments (e.g., `# Using scan + checkpoint here to prevent OOM during grad, accepting ~20% time overhead`).
 - **Dry Run**: Execute the final refactored script to ensure mathematically identical results to the original.
 
-### 5. Output Generation
-Conclude your task by providing a summary report containing:
-1. **Bottlenecks Identified**: What was the original issue?
-2. **Empirical Results & Trade-offs**: Which optimizations were tested, what were the benchmarked results (time/memory), and *why* specific techniques (like checkpointing) were kept or discarded based on the trade-off.
-3. **Refactored Code Path**: The location of the optimized script.
+### 5. Output & Delivery
+- **Save the Script**: Save the optimized script as `[original_name]_optimized.py` in the same directory as the original script.
+- **Summary Report**: Conclude your task by providing a summary report containing:
+  1. **Bottlenecks Identified**: What was the original issue?
+  2. **Empirical Results & Trade-offs**: Which optimizations were tested, what were the benchmarked results (time/memory), and *why* specific techniques (like checkpointing) were kept or discarded based on the trade-off.
+  3. **The Optimized Code**: Present the fully refactored, runnable, and highly optimized script.

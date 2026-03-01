@@ -43,7 +43,7 @@ TensorCircuit-NG 是 TensorCircuit 在技术与架构上的演进版本，由原
 
 请从 [完整文档](https://tensorcircuit-ng.readthedocs.io/) 中的 [快速上手](/docs/source/quickstart.rst) 开始。
 
-有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 130+ [示例脚本](/examples) 和 40+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
+有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 140+ [示例脚本](/examples) 和 40+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
 
 ### AI 辅助开发 (推荐)
 
