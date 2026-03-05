@@ -9,7 +9,16 @@ import logging
 from copy import deepcopy
 from functools import reduce
 from operator import add
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 import numpy as np
 import tensornetwork as tn
@@ -65,8 +74,11 @@ gate_aliases = [
     ["sd", "sdg"],
     ["td", "tdg"],
 ]
+diaggates = ["diagonal", "rzm", "cmz"]
 
-defined_gates = sgates + vgates + mpogates + [alias[1] for alias in gate_aliases]
+defined_gates = (
+    sgates + vgates + mpogates + diaggates + [alias[1] for alias in gate_aliases]
+)
 
 
 class AbstractCircuit:
@@ -81,6 +93,7 @@ class AbstractCircuit:
     sgates = sgates
     vgates = vgates
     mpogates = mpogates
+    diaggates = diaggates
     gate_aliases = gate_aliases
 
     def apply_general_gate(
@@ -90,6 +103,7 @@ class AbstractCircuit:
         name: Optional[str] = None,
         split: Optional[Dict[str, Any]] = None,
         mpo: bool = False,
+        diagonal: bool = False,
         ir_dict: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
@@ -99,14 +113,16 @@ class AbstractCircuit:
 
     @staticmethod
     def apply_general_variable_gate_delayed(
-        gatef: Callable[..., Gate],
+        gatef: Callable[..., Any],
         name: Optional[str] = None,
         mpo: bool = False,
+        diagonal: bool = False,
     ) -> Callable[..., None]:
         if name is None:
             name = getattr(gatef, "n")
 
         def apply(self: "AbstractCircuit", *index: int, **vars: Any) -> None:
+
             split = None
             localname = name
             if "name" in vars:
@@ -115,23 +131,31 @@ class AbstractCircuit:
             if "split" in vars:
                 split = vars["split"]
                 del vars["split"]
-            gate_dict = {
-                "gatef": gatef,
-                "index": index,
-                "name": localname,
-                "split": split,
-                "mpo": mpo,
-                "parameters": vars,
-            }
-            # self._qir.append(gate_dict)
+
+            if name in diaggates or localname in diaggates:
+                if "dim" not in vars:
+                    vars["dim"] = self._d
+                if name in ["rzm", "cmz"] and "n" not in vars:
+                    vars["n"] = len(index)
+
             gate = gatef(**vars)
+
             self.apply_general_gate(
                 gate,
                 *index,
                 name=localname,
                 split=split,
                 mpo=mpo,
-                ir_dict=gate_dict,
+                diagonal=diagonal,
+                ir_dict={
+                    "gatef": gatef,
+                    "index": index,
+                    "name": localname,
+                    "split": split,
+                    "mpo": mpo,
+                    "diagonal": diagonal,
+                    "parameters": vars,
+                },
             )
 
         def apply_list(self: "AbstractCircuit", *index: int, **vars: Any) -> None:
@@ -308,6 +332,36 @@ class AbstractCircuit:
             getattr(cls, g).__doc__ = doc
             getattr(cls, g.upper()).__doc__ = doc
 
+        for g in diaggates:
+            setattr(
+                cls,
+                g,
+                cls.apply_general_variable_gate_delayed(
+                    gatef=getattr(gates, g + "_gate"), name=g, diagonal=True
+                ),
+            )
+            setattr(
+                cls,
+                g.upper(),
+                cls.apply_general_variable_gate_delayed(
+                    gatef=getattr(gates, g + "_gate"), name=g, diagonal=True
+                ),
+            )
+            doc = """
+            Apply %s gate on the circuit using hyperedge support for digonal gates.
+            See :py:meth:`tensorcircuit.gates.%s_gate`.
+
+            :param index: Qubit number that the gate applies on.
+            :type index: int.
+            :param vars: Parameters for the gate.
+            :type vars: float.
+            """ % (
+                g,
+                g,
+            )
+            getattr(cls, g).__doc__ = doc
+            getattr(cls, g.upper()).__doc__ = doc
+
         for gate_alias in gate_aliases:
             present_gate = gate_alias[0]
             for alias_gate in gate_alias[1:]:
@@ -409,8 +463,11 @@ class AbstractCircuit:
                 )
             else:
                 c.apply_general_variable_gate_delayed(
-                    d["gatef"], d["name"], mpo=d["mpo"]
-                )(c, *d["index"], **d["parameters"], split=d["split"])
+                    d["gatef"],
+                    d["name"],
+                    mpo=d.get("mpo", False),
+                    diagonal=d.get("diagonal", False),
+                )(c, *d["index"], **d["parameters"], split=d.get("split"))
         return c
 
     def inverse(
@@ -459,7 +516,8 @@ class AbstractCircuit:
         c = type(self)(**circuit_params)
         for d in reversed(self._qir):
             if "parameters" not in d:
-                if d["gatef"].n in self.sgates and d["gatef"].n not in [
+                gate_n = getattr(d["gatef"], "n", None)
+                if gate_n in self.sgates and gate_n not in [
                     "wroot",
                     "sd",
                     "td",
@@ -467,23 +525,40 @@ class AbstractCircuit:
                     self.apply_general_gate_delayed(
                         d["gatef"], d["name"], mpo=d["mpo"]
                     )(c, *d["index"], split=d["split"])
-                elif d["gatef"].n in ["sd", "td"]:
+                elif gate_n in ["sd", "td"]:
                     self.apply_general_gate_delayed(
-                        getattr(gates, d["gatef"].n[:-1]), d["name"], mpo=d["mpo"]
+                        getattr(gates, gate_n[:-1]), d["name"], mpo=d["mpo"]
                     )(c, *d["index"], split=d["split"])
                 else:
                     self.apply_general_gate_delayed(
                         d["gatef"].adjoint(), d["name"], mpo=d["mpo"]
                     )(c, *d["index"], split=d["split"])
             else:
-                if d["gatef"].n in ["r", "cr"]:
+                gate_name = getattr(
+                    d["gatef"],
+                    "n",
+                    getattr(d["gatef"], "__name__", str(d.get("gatef", ""))),
+                )
+                if isinstance(gate_name, str) and gate_name.endswith("_gate"):
+                    gate_name = gate_name[:-5]
+
+                if gate_name in ["diagonal", "rzm", "cmz", "mpo"]:
+                    params = {k: v for k, v in d.get("parameters", {}).items()}
+                    if gate_name == "diagonal":
+                        params["diag"] = backend.conj(params["diag"])
+                    elif gate_name == "rzm":
+                        params["theta"] = -params["theta"]
+                    elif gate_name == "mpo":
+                        params["mpo"] = params["mpo"].adjoint()
+                    getattr(c, gate_name)(*d["index"], **params)
+                elif gate_name in ["r", "cr"]:
                     params = {k: v for k, v in d["parameters"].items()}
                     if "theta" in params:
                         params["theta"] = -params.get("theta", 0.0)
                     self.apply_general_variable_gate_delayed(
                         d["gatef"], d["name"], mpo=d["mpo"]
                     )(c, *d["index"], **params, split=d["split"])
-                elif d["gatef"].n in ["u", "cu"]:
+                elif gate_name in ["u", "cu"]:
                     params = {k: v for k, v in d["parameters"].items()}
                     # deepcopy fail with tf+jit
                     params["lbd"] = -d["parameters"].get("phi", 0) + np.pi
@@ -491,22 +566,19 @@ class AbstractCircuit:
                     self.apply_general_variable_gate_delayed(
                         d["gatef"], d["name"], mpo=d["mpo"]
                     )(c, *d["index"], **params, split=d["split"])
-                elif d["gatef"].n in self.vgates and d["gatef"].n not in [
+                elif gate_name in self.vgates and gate_name not in [
                     "any",
                     "exp",
                     "exp1",
                 ]:
                     params = {k: v for k, v in d["parameters"].items()}
                     df = 0.0
-                    if d["gatef"].n == "iswap":
+                    if gate_name == "iswap":
                         df = 1.0
                     params["theta"] = -params.get("theta", df)
                     self.apply_general_variable_gate_delayed(
                         d["gatef"], d["name"], mpo=d["mpo"]
                     )(c, *d["index"], **params, split=d["split"])
-
-                # TODO(@refraction-ray): multi control gate?
-
                 else:
                     self.apply_general_variable_gate_delayed(
                         d["gatef"].adjoint(), d["name"], mpo=d["mpo"]

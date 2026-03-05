@@ -210,6 +210,7 @@ class U1Circuit(AbstractCircuit):
         name: Optional[str] = None,
         split: Optional[Dict[str, Any]] = None,
         mpo: bool = False,
+        diagonal: bool = False,
         ir_dict: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
@@ -221,6 +222,7 @@ class U1Circuit(AbstractCircuit):
         :param name: Gate name (rz, rzz, cz, cphase, swap, iswap)
         :param split: Split configuration (ignored in U1Circuit)
         :param mpo: MPO flag (ignored in U1Circuit)
+        :param diagonal: Diagonal flag (ignored in U1Circuit)
         :param ir_dict: QIR dictionary for recording
         :param kwargs: Extra parameters
         """

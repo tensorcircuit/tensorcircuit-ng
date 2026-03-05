@@ -886,6 +886,21 @@ def test_apply_multicontrol_gate():
     c.multicontrol(0, 1, 2, 3, ctrl=[1, 0], unitary=tc.gates.swap())
     np.testing.assert_allclose(c.expectation([tc.gates.z(), [3]]), -1, atol=1e-5)
 
+    c = tc.Circuit(3)
+    c.X(0)
+    c.X(2)
+    c.multicontrol(0, 2, 1, ctrl=[1, 1], unitary=tc.gates.y())
+    qir = c.to_qir()
+    c2 = tc.Circuit.from_qir(qir)
+    np.testing.assert_allclose(c.state(), c2.state(), atol=1e-5)
+    c_inv = c2.inverse()
+    c3 = tc.Circuit(3)
+    c3.append_from_qir(qir)
+    c3.append_from_qir(c_inv.to_qir())
+    expected = np.zeros(8)
+    expected[0] = 1.0  # |000>
+    np.testing.assert_allclose(np.abs(c3.state()), expected, atol=1e-5)
+
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_circuit_quoperator(backend):

@@ -10,6 +10,8 @@
 
 - Add hyper edge support for contractor infrastructure
 
+- Add diagonal gate hyperedge support: `c.diagonal`, `c.rzm`, `c.cmz`.
+
 ## v1.5.0
 
 ### Added

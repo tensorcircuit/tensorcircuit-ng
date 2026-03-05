@@ -639,6 +639,7 @@ class MPSCircuit(AbstractCircuit):
         name: Optional[str] = None,
         split: Optional[Dict[str, Any]] = None,
         mpo: bool = False,
+        diagonal: bool = False,
         ir_dict: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
@@ -668,6 +669,7 @@ class MPSCircuit(AbstractCircuit):
         self._qir.append(ir_dict)
         assert len(index) == len(set(index))
         assert mpo is False, "MPO not implemented for MPS"
+        assert diagonal is False, "diagonal hyperedge not implemented for MPS"
         assert isinstance(gate, tn.Node)
         noe = len(index)
         if noe == 1:

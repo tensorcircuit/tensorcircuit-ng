@@ -365,8 +365,10 @@ class GateVF(GateF):
         return self.f(*args, **kws)
 
     def adjoint(self) -> "GateVF":
-        def f(*args: Any, **kws: Any) -> Gate:
+        def f(*args: Any, **kws: Any) -> Any:
             m = self.__call__(*args, **kws)
+            if not hasattr(m, "tensor"):
+                return m.adjoint()
             shape0 = backend.shape_tuple(m.tensor)
             m0 = backend.reshapem(m.tensor)
             ma = backend.adjoint(m0)
@@ -991,6 +993,139 @@ def multicontrol_gate(unitary: Tensor, ctrl: Union[int, Sequence[int]] = 1) -> O
     return gate
 
 
+def diagonal_gate(diag: Tensor, dim: int = 2, name: str = "diagonal") -> Gate:
+    """
+    Apply a diagonal gate as a coefficient node (hyperedge).
+
+    :param diag: The diagonal elements of the gate.
+    :type diag: Tensor
+    :param dim: The dimension of the local Hilbert space, defaults to 2.
+    :type dim: int, optional
+    :param name: Name of the gate, defaults to "diagonal".
+    :type name: str, optional
+    :return: A Gate containing the diagonal coefficient tensor.
+    :rtype: Gate
+    """
+    diag = backend.cast(diag, dtype=dtypestr)
+    noe = int(np.round(np.log(reduce(mul, backend.shape_tuple(diag))) / np.log(dim)))
+    shape = [dim for _ in range(noe)]
+    diag_reshaped = backend.reshape(diag, shape)
+    return Gate(diag_reshaped, name=name)
+
+
+def rzm_gate(theta: float, n: int, dim: int = 2, name: str = "rzm") -> Operator:
+    """
+    Multi-qubit Z rotation gate `R_zz...z(theta)`.
+    Decomposed as an MPS of diagonal coefficients connected via CopyNode hyperedges (`chi=2`).
+    Only for memory effciency and large qubit counts, the gain is negative for small qubit count.
+
+    :param theta: Rotation angle.
+    :type theta: float
+    :param n: The number of qubits the gate applies to.
+    :type n: int
+    :param dim: The dimension of the local Hilbert space, defaults to 2.
+    :type dim: int, optional
+    :param name: Name of the gate, defaults to "rzm".
+    :type name: str, optional
+    :return: A QuVector containing the MPS nodes.
+    :rtype: "QuVector"
+    """
+    from .quantum import QuVector
+
+    if n < 2:
+        raise ValueError("Gate requires at least 2 qubits.")
+    if dim != 2:
+        # TODO: support general dimensions
+        raise ValueError("rzm gate only supports dim=2 at the moment.")
+
+    theta_t = backend.cast(backend.convert_to_tensor(theta), dtype=dtypestr)
+
+    i_tensor = backend.cast(backend.convert_to_tensor(1j), dtypestr)
+    c = backend.cast(backend.cos(theta_t / 2.0), dtypestr)
+    s = backend.cast(backend.sin(theta_t / 2.0), dtypestr)
+
+    m1 = backend.reshape(
+        backend.stack([c, -i_tensor * s, c, i_tensor * s]),
+        (dim, 2),
+    )
+
+    mk_np = np.zeros((2, dim, 2), dtype=np.complex128)
+    mk_np[0, 0, 0] = 1.0
+    mk_np[0, 1, 0] = 1.0
+    mk_np[1, 0, 1] = 1.0
+    mk_np[1, 1, 1] = -1.0
+    mk = backend.cast(backend.convert_to_tensor(mk_np), dtype=dtypestr)
+
+    mn_np = np.zeros((2, dim), dtype=np.complex128)
+    mn_np[0, 0] = 1.0
+    mn_np[0, 1] = 1.0
+    mn_np[1, 0] = 1.0
+    mn_np[1, 1] = -1.0
+    mn = backend.cast(backend.convert_to_tensor(mn_np), dtype=dtypestr)
+
+    tensors = [m1] + [mk for _ in range(n - 2)] + [mn]
+    nodes = [tn.Node(t, name=f"{name}_{i}") for i, t in enumerate(tensors)]
+    for i in range(n - 1):
+        right_edge = nodes[0][1] if i == 0 else nodes[i][2]
+        left_edge = nodes[i + 1][0]
+        right_edge ^ left_edge
+
+    out_edges = [nodes[0][0]] + [nodes[i][1] for i in range(1, n - 1)] + [nodes[-1][1]]
+    return QuVector(out_edges)
+
+
+def cmz_gate(n: int, dim: int = 2, name: str = "cmz") -> Operator:
+    """
+    Multi-qubit CCC...Z gate.
+    Decomposed as an MPS of diagonal coefficients connected via CopyNode hyperedges (`chi=2`).
+    Only for memory effciency and large qubit counts, the gain is negative for small qubit count.
+
+    :param n: The number of qubits the gate applies to.
+    :type n: int
+    :param dim: The dimension of the local Hilbert space, defaults to 2.
+    :type dim: int, optional
+    :param name: Name of the gate, defaults to "cmz".
+    :type name: str, optional
+    :return: A QuVector containing the MPS nodes.
+    :rtype: "QuVector"
+    """
+    from .quantum import QuVector
+
+    if n < 2:
+        raise ValueError("Gate requires at least 2 qubits.")
+    if dim != 2:
+        # TODO: support general dimensions
+        raise ValueError("cmz gate only supports dim=2 at the moment.")
+
+    m1_np = np.zeros((dim, 2), dtype=np.complex128)
+    m1_np[0, 0] = 1.0
+    m1_np[1, 0] = 1.0
+    m1_np[1, 1] = -2.0
+    m1 = backend.cast(backend.convert_to_tensor(m1_np), dtype=dtypestr)
+
+    mk_np = np.zeros((2, dim, 2), dtype=np.complex128)
+    mk_np[0, 0, 0] = 1.0
+    mk_np[0, 1, 0] = 1.0
+    mk_np[1, 1, 1] = 1.0
+    mk = backend.cast(backend.convert_to_tensor(mk_np), dtype=dtypestr)
+
+    mn_np = np.zeros((2, dim), dtype=np.complex128)
+    mn_np[0, 0] = 1.0
+    mn_np[0, 1] = 1.0
+    mn_np[1, 1] = 1.0
+    mn = backend.cast(backend.convert_to_tensor(mn_np), dtype=dtypestr)
+
+    tensors = [m1] + [mk for _ in range(n - 2)] + [mn]
+    nodes = [tn.Node(t, name=f"{name}_{i}") for i, t in enumerate(tensors)]
+    for i in range(n - 1):
+        right_edge = nodes[0][1] if i == 0 else nodes[i][2]
+        left_edge = nodes[i + 1][0]
+        right_edge ^ left_edge
+
+    out_edges = [nodes[0][0]] + [nodes[i][1] for i in range(1, n - 1)] + [nodes[-1][1]]
+    return QuVector(out_edges)
+
+
 def mpo_gate(mpo: Operator, name: str = "mpo") -> Operator:
     return mpo
 
@@ -1024,7 +1159,13 @@ def meta_vgate() -> None:
     for f in ["sd", "td"]:
         for funcname in [f, f + "gate"]:
             setattr(thismodule, funcname, getattr(thismodule, f[:-1]).adjoint())
-    for f in ["multicontrol", "mpo"]:  # mpo type gate
+    for f in [
+        "multicontrol",
+        "mpo",
+        "diagonal",
+        "rzm",
+        "cmz",
+    ]:  # mpo/hyperedge type gate
         for funcname in [f, f + "gate"]:
             setattr(thismodule, funcname, GateVF(getattr(thismodule, f + "_gate"), f))
 

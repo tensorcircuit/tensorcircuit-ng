@@ -1,4 +1,5 @@
 import pytest
+from pytest_lazyfixture import lazy_fixture as lf
 import numpy as np
 import tensornetwork as tn
 import tensorcircuit as tc
@@ -333,3 +334,214 @@ def test_hyperedge_partial_contraction(contractor_setup):
     res = tc.contractor([res_abc, d])
     # Expected: sum_i,j,k A_i B_ij C_jk D_k = 1*3*5*7 + 2*4*6*8 = 105 + 384 = 489
     np.testing.assert_allclose(res.tensor, 489.0)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb")])
+@pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
+def test_circuit_diagonal_gate(contractor_setup, backend):
+    n = 3
+    c1 = tc.Circuit(n)
+    c2 = tc.Circuit(n)
+
+    for i in range(n):
+        c1.h(i)
+        c2.h(i)
+
+    diag = tc.backend.convert_to_tensor(np.array([1, -1, 1j, -1j, 1, 1, -1, -1]))
+
+    # Apply using dense diagonal representation
+    diag_matrix = tc.backend.diagflat(diag)
+    c1.any(*range(n), unitary=diag_matrix)
+
+    # Apply using hyperedge CopyNode representation
+    c2.diagonal(*range(n), diag=diag)
+
+    for i in range(n):
+        c1.rx(i, theta=0.2)
+        c2.rx(i, theta=0.2)
+
+    np.testing.assert_allclose(c1.state(), c2.state(), atol=1e-5)
+
+    # Test expectation values
+    exp1 = c1.expectation([tc.gates.z(), [0]], [tc.gates.y(), [1]])
+    exp2 = c2.expectation([tc.gates.z(), [0]], [tc.gates.y(), [1]])
+    np.testing.assert_allclose(exp1, exp2, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb")])
+@pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
+def test_circuit_diagonal_qir(contractor_setup, backend):
+    n = 2
+    c = tc.Circuit(n)
+    c.h(0)
+    diag = tc.backend.convert_to_tensor(np.array([1.0, 1j, -1j, -1.0]))
+    c.diagonal(0, 1, diag=diag)
+    c.x(1)
+
+    qir = c.to_qir()
+    c2 = tc.Circuit.from_qir(qir)
+    np.testing.assert_allclose(c.state(), c2.state(), atol=1e-5)
+
+    c_inv = c.inverse()
+    c_all = tc.Circuit(n)
+    c_all.append_from_qir(c.to_qir())
+    c_all.append_from_qir(c_inv.to_qir())
+
+    # state should be |00>
+    expected = np.zeros(4)
+    expected[0] = 1.0
+    np.testing.assert_allclose(np.abs(c_all.state()), expected, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb")])
+@pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
+def test_circuit_rzm_gate(contractor_setup, backend):
+    n = 4
+    theta = 1.2
+
+    # 1. BaseCircuit implementation via exact TensorNetwork MPS (rzm)
+    c_mps = tc.Circuit(n)
+    for i in range(n):
+        c_mps.h(i)
+    c_mps.rzm(*range(n), theta=theta)
+    for i in range(n):
+        c_mps.rx(i, theta=0.3)
+
+    s_mps = c_mps.state()
+
+    # 2. Dense Matrix baseline comparison
+    c_dense = tc.Circuit(n)
+    for i in range(n):
+        c_dense.h(i)
+
+    # Construct dense R_{ZZ...Z} matrix
+    diag = np.ones(2**n, dtype=np.complex128) * np.cos(theta / 2)
+    z_str = np.array([(-1) ** bin(i).count("1") for i in range(2**n)])
+    diag -= 1j * np.sin(theta / 2) * z_str
+
+    diag_tensor = tc.backend.convert_to_tensor(diag)
+    diag_matrix = tc.backend.diagflat(diag_tensor)
+    c_dense.any(*range(n), unitary=diag_matrix)
+
+    for i in range(n):
+        c_dense.rx(i, theta=0.3)
+
+    s_dense = c_dense.state()
+
+    np.testing.assert_allclose(s_mps, s_dense, atol=1e-5)
+
+    exp_mps = c_mps.expectation([tc.gates.z(), [0]], [tc.gates.x(), [1]])
+    exp_dense = c_dense.expectation([tc.gates.z(), [0]], [tc.gates.x(), [1]])
+    np.testing.assert_allclose(exp_mps, exp_dense, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb")])
+@pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
+def test_circuit_cmz_gate(contractor_setup, backend):
+    n = 5
+
+    # 1. BaseCircuit implementation via exact TensorNetwork MPS (cmz)
+    c_mps = tc.Circuit(n)
+    for i in range(n):
+        c_mps.h(i)
+    c_mps.cmz(*range(n))
+    for i in range(n):
+        c_mps.rx(i, theta=0.5)
+
+    s_mps = c_mps.state()
+
+    # 2. Dense Matrix baseline comparison (C...CZ)
+    c_dense = tc.Circuit(n)
+    for i in range(n):
+        c_dense.h(i)
+
+    diag = np.ones(2**n, dtype=np.complex128)
+    diag[-1] = -1.0  # Only the last element |11...1> gets a -1 phase
+
+    diag_tensor = tc.backend.convert_to_tensor(diag)
+    diag_matrix = tc.backend.diagflat(diag_tensor)
+    c_dense.any(*range(n), unitary=diag_matrix)
+
+    for i in range(n):
+        c_dense.rx(i, theta=0.5)
+
+    s_dense = c_dense.state()
+
+    np.testing.assert_allclose(s_mps, s_dense, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
+@pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
+def test_circuit_ad_rzm(contractor_setup, backend):
+
+    def test_grad_mps(theta):
+        c = tc.Circuit(3)
+        for i in range(3):
+            c.h(i)
+        c.rzm(0, 1, 2, theta=theta)
+        return tc.backend.real(c.expectation([tc.gates.z(), [0]]))
+
+    def test_grad_dense(theta):
+        c = tc.Circuit(3)
+        for i in range(3):
+            c.h(i)
+        theta_t = tc.backend.cast(theta, tc.dtypestr)
+        c_val = tc.backend.cos(theta_t / 2)
+        s_val = tc.backend.sin(theta_t / 2)
+        z_str = tc.backend.cast(
+            tc.backend.convert_to_tensor([1, -1, -1, 1, -1, 1, 1, -1]), tc.dtypestr
+        )
+        diag = (
+            tc.backend.cast(c_val, tc.dtypestr)
+            * tc.backend.ones([8], dtype=tc.dtypestr)
+            - 1j * tc.backend.cast(s_val, tc.dtypestr) * z_str
+        )
+        diag_tensor = tc.backend.convert_to_tensor(diag)
+        diag_matrix = tc.backend.diagflat(diag_tensor)
+        c.any(0, 1, 2, unitary=diag_matrix)
+        return tc.backend.real(c.expectation([tc.gates.z(), [0]]))
+
+    grad_mps = tc.backend.grad(test_grad_mps)
+    grad_dense = tc.backend.grad(test_grad_dense)
+    g1 = grad_mps(tc.backend.convert_to_tensor(1.2))
+    g2 = grad_dense(tc.backend.convert_to_tensor(1.2))
+
+    np.testing.assert_allclose(g1, g2, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb")])
+@pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
+def test_dmcircuit_rzm_cmz(contractor_setup, backend):
+    n = 3
+    c_dm = tc.DMCircuit(n)
+    c_pure = tc.Circuit(n)
+
+    for i in range(n):
+        c_dm.h(i)
+        c_pure.h(i)
+
+    c_dm.rzm(*range(n), theta=1.5)
+    c_pure.rzm(*range(n), theta=1.5)
+
+    c_dm.cmz(*range(n))
+    c_pure.cmz(*range(n))
+
+    np.testing.assert_allclose(
+        c_dm.densitymatrix(),
+        c_pure.state()[:, None] @ np.conj(c_pure.state()[None, :]),
+        atol=1e-5,
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb")])
+@pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
+def test_qir_fallback(contractor_setup, backend):
+    n = 3
+    c = tc.Circuit(n)
+    c.h(0)
+    c.rzm(0, 1, 2, theta=1.0)
+    c.cmz(0, 1)
+
+    qir = c.to_qir()
+    c2 = tc.Circuit.from_qir(qir, circuit_params={"nqubits": n})
+    np.testing.assert_allclose(c.state(), c2.state(), atol=1e-5)

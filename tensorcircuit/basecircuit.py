@@ -127,6 +127,7 @@ class BaseCircuit(AbstractCircuit):
         name: Optional[str] = None,
         split: Optional[Dict[str, Any]] = None,
         mpo: bool = False,
+        diagonal: bool = False,
         ir_dict: Optional[Dict[str, Any]] = None,
     ) -> None:
         if name is None:
@@ -137,6 +138,7 @@ class BaseCircuit(AbstractCircuit):
             "name": name,
             "split": split,
             "mpo": mpo,
+            "diagonal": diagonal,
         }
         if ir_dict is not None:
             ir_dict.update(gate_dict)
@@ -144,7 +146,7 @@ class BaseCircuit(AbstractCircuit):
             ir_dict = gate_dict
         self._qir.append(ir_dict)
         assert len(index) == len(set(index))
-        index = tuple([i if i >= 0 else self._nqubits + i for i in index])
+        index = tuple(i if i >= 0 else self._nqubits + i for i in index)
         noe = len(index)
         nq = self._nqubits
         applied = False
@@ -154,7 +156,7 @@ class BaseCircuit(AbstractCircuit):
         elif self.split is not None:
             split_conf = self.split
 
-        if not mpo:
+        if not (mpo or diagonal):
             assert isinstance(gate, tn.Node)
             if (split_conf is not None) and noe == 2:
                 results = _split_two_qubit_gate(gate, **split_conf)
@@ -220,7 +222,7 @@ class BaseCircuit(AbstractCircuit):
                         lgate.get_edge(i + noe) ^ self._front[ind + nq]
                         self._front[ind + nq] = lgate.get_edge(i)
 
-        else:  # gate in MPO format
+        elif mpo:  # gate in MPO format
             assert isinstance(gate, QuOperator)
             gatec = gate.copy()
             for n in gatec.nodes:
@@ -244,6 +246,61 @@ class BaseCircuit(AbstractCircuit):
                 if self.is_dm:
                     gateconj.out_edges[i] ^ self._front[ind + nq]
                     self._front[ind + nq] = gateconj.in_edges[i]
+
+        elif diagonal:
+            if isinstance(gate, tn.Node):
+                mps_nodes = [gate]
+            else:
+                mps_nodes = gate.nodes
+            for n in mps_nodes:
+                n.flag = "gate"
+                n.is_dagger = False
+                n.id = id(gate)
+                n.name = name
+            self._nodes += mps_nodes
+
+            if self.is_dm:
+                if isinstance(gate, tn.Node):
+                    gateconj_tensor = backend.conj(gate.tensor)
+                    gateconj_node = tn.Node(gateconj_tensor, name=name)
+                    gateconj_nodes = [gateconj_node]
+                else:
+                    gateconj = gate.adjoint()
+                    gateconj_nodes = gateconj.nodes
+                for n0, n in zip(mps_nodes, gateconj_nodes):
+                    n.flag = "gate"
+                    n.is_dagger = True
+                    n.id = id(n0)
+                    n.name = name
+                self._nodes += gateconj_nodes
+
+            for i, ind in enumerate(index):
+                if isinstance(gate, tn.Node):
+                    phys_edge = gate[i]
+                else:
+                    phys_edge = gate.out_edges[i]
+
+                cn = tn.CopyNode(3, self._d, name=f"{name}_copy_{i}")
+                self.coloring_nodes([cn], flag="gate")
+                self._nodes.append(cn)
+
+                cn[0] ^ self._front[ind]
+                cn[1] ^ phys_edge
+                self._front[ind] = cn[2]
+
+                if self.is_dm:
+                    if isinstance(gate, tn.Node):
+                        phys_edge_conj = gateconj_nodes[0][i]
+                    else:
+                        phys_edge_conj = gateconj.in_edges[i]
+
+                    cn_conj = tn.CopyNode(3, self._d, name=f"{name}_copy_{i}_conj")
+                    self.coloring_nodes([cn_conj], flag="gate", is_dagger=True)
+                    self._nodes.append(cn_conj)
+
+                    cn_conj[0] ^ self._front[ind + nq]
+                    cn_conj[1] ^ phys_edge_conj
+                    self._front[ind + nq] = cn_conj[2]
 
         self.state_tensor = None  # refresh the state cache
 
@@ -302,7 +359,7 @@ class BaseCircuit(AbstractCircuit):
                 op.tensor = backend.cast(op.tensor, dtype=dtypestr)
             if isinstance(index, int):
                 index = [index]
-            index = tuple([i if i >= 0 else self._nqubits + i for i in index])  # type: ignore
+            index = tuple(i if i >= 0 else self._nqubits + i for i in index)  # type: ignore
             noe = len(index)
 
             for j, e in enumerate(index):
