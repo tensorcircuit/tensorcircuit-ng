@@ -1503,29 +1503,34 @@ class CustomizeLattice(AbstractLattice):
         # or use dense sampling for larger ones
         if self.num_sites <= 100:
             # For small lattices, compute all pairwise distances for accuracy
-            for i in range(self.num_sites):
-                query_k = min(self.num_sites - 1, max_k * 20)
-                if query_k > 0:
-                    dists, _ = tree.query(
-                        coords_np[i], k=query_k + 1
-                    )  # +1 to exclude self
-                    if isinstance(dists, np.ndarray):
-                        distances_for_shells.extend(dists[1:])  # Skip distance to self
+            query_k = min(self.num_sites - 1, max_k * 20)
+            if query_k > 0:
+                dists, _ = tree.query(coords_np, k=query_k + 1)  # +1 to exclude self
+                if isinstance(dists, np.ndarray):
+                    if dists.ndim == 1:
+                        distances_for_shells.append(dists[1])
                     else:
-                        distances_for_shells.append(dists)  # Single distance
+                        distances_for_shells.extend(dists[:, 1:].flatten())
+                else:
+                    distances_for_shells.append(dists)  # Single distance
         else:
             # For larger lattices, use adaptive sampling but ensure we capture all shells
             sample_size = min(1000, self.num_sites // 2)  # More conservative sampling
-            for i in range(0, self.num_sites, max(1, self.num_sites // sample_size)):
-                query_k = min(max_k * 20 + 50, self.num_sites - 1)
-                if query_k > 0:
-                    dists, _ = tree.query(
-                        coords_np[i], k=query_k + 1
-                    )  # +1 to exclude self
-                    if isinstance(dists, np.ndarray):
-                        distances_for_shells.extend(dists[1:])  # Skip distance to self
+            query_indices = list(
+                range(0, self.num_sites, max(1, self.num_sites // sample_size))
+            )
+            query_k = min(max_k * 20 + 50, self.num_sites - 1)
+            if query_k > 0:
+                dists, _ = tree.query(
+                    coords_np[query_indices], k=query_k + 1
+                )  # +1 to exclude self
+                if isinstance(dists, np.ndarray):
+                    if dists.ndim == 1:
+                        distances_for_shells.append(dists[1])
                     else:
-                        distances_for_shells.append(dists)  # Single distance
+                        distances_for_shells.extend(dists[:, 1:].flatten())
+                else:
+                    distances_for_shells.append(dists)  # Single distance
 
         # Filter out zero distances (duplicate coordinates) before shell identification
         ZERO_THRESHOLD = 1e-12
@@ -1549,21 +1554,22 @@ class CustomizeLattice(AbstractLattice):
         self._neighbor_maps = {k: {} for k in range(1, len(dist_shells) + 1)}
 
         # Build neighbor lists for each site
-        for i in range(self.num_sites):
-            # Query enough neighbors to capture all shells
-            query_k = min(max_k * 20 + 50, self.num_sites - 1)
-            if query_k > 0:
-                distances, indices = tree.query(
-                    coords_np[i], k=query_k + 1
-                )  # +1 for self
+        query_k = min(max_k * 20 + 50, self.num_sites - 1)
+        if query_k > 0:
+            distances, indices = tree.query(coords_np, k=query_k + 1)  # +1 for self
 
-                # Skip the first entry (distance to self)
-                # Handle both single value and array cases
-                if isinstance(distances, np.ndarray) and len(distances) > 1:
-                    distances_slice = distances[1:]
+            for i in range(self.num_sites):
+                # Handle both single value and array cases (per row)
+                if isinstance(distances, np.ndarray) and distances.ndim == 2:
+                    distances_slice = distances[i, 1:]
+                    indices_slice = indices[i, 1:]
+                elif isinstance(distances, np.ndarray) and distances.ndim == 1:
+                    distances_slice = (
+                        np.array([distances[1]]) if len(distances) > 1 else np.array([])
+                    )
                     indices_slice = (
-                        indices[1:]
-                        if isinstance(indices, np.ndarray)
+                        np.array([indices[1]])
+                        if len(indices) > 1
                         else np.array([], dtype=int)
                     )
                 else:
