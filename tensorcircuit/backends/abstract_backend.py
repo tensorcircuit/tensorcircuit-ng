@@ -1252,9 +1252,9 @@ class ExtendedBackend:
         """
         Get the backend specific random state object.
 
-        :param seed: [description], defaults to be None
+        :param seed: The random seed for the generator, defaults to None
         :type seed: Optional[int], optional
-        :return:the backend specific random state object
+        :return: the backend specific random state object
         :rtype: Any
         """
         return self.set_random_state(seed, True)
@@ -1266,9 +1266,9 @@ class ExtendedBackend:
         make sure you know what the function actually does.
         This function is mainly a utility to write backend agnostic code instead of doing magic things.
 
-        :param key: [description]
+        :param key: The random state/key to be split
         :type key: Any
-        :return: [description]
+        :return: A pair of random states/keys
         :rtype: Tuple[Any, Any]
         """
         return key, key
@@ -1281,20 +1281,20 @@ class ExtendedBackend:
         shape: Union[int, Sequence[int]] = 1,
         mean: float = 0,
         stddev: float = 1,
-        dtype: str = "32",
+        dtype: Optional[str] = None,
     ) -> Tensor:
         """
         Call the random normal function with the random state management behind the scene.
 
-        :param shape: [description], defaults to 1
+        :param shape: The shape of the output tensor, defaults to 1
         :type shape: Union[int, Sequence[int]], optional
-        :param mean: [description], defaults to 0
+        :param mean: The mean of the normal distribution, defaults to 0
         :type mean: float, optional
-        :param stddev: [description], defaults to 1
+        :param stddev: The standard deviation of the normal distribution, defaults to 1
         :type stddev: float, optional
-        :param dtype: [description], defaults to "32"
-        :type dtype: str, optional
-        :return: [description]
+        :param dtype: The real data type of the output tensor, defaults to None (global rdtypestr)
+        :type dtype: Optional[str], optional
+        :return: Samples from the normal distribution
         :rtype: Tensor
         """
         g = getattr(self, "g", None)
@@ -1310,24 +1310,24 @@ class ExtendedBackend:
         shape: Union[int, Sequence[int]] = 1,
         mean: float = 0,
         stddev: float = 1,
-        dtype: str = "32",
+        dtype: Optional[str] = None,
     ) -> Tensor:
         """
-        [summary]
+        Sample from a normal distribution with the given random state.
 
-        :param self: [description]
+        :param self: The backend object
         :type self: Any
         :param g: stateful register for each package
         :type g: Any
         :param shape: shape of output sampling tensor
         :type shape: Union[int, Sequence[int]]
-        :param mean: [description], defaults to 0
+        :param mean: The mean of the normal distribution, defaults to 0
         :type mean: float, optional
-        :param stddev: [description], defaults to 1
+        :param stddev: The standard deviation of the normal distribution, defaults to 1
         :type stddev: float, optional
-        :param dtype: only real data type is supported, "32" or "64", defaults to "32"
-        :type dtype: str, optional
-        :return: [description]
+        :param dtype: only real data type is supported, "32" or "64", defaults to None (global rdtypestr)
+        :type dtype: Optional[str], optional
+        :return: Samples from the normal distribution
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -1339,20 +1339,20 @@ class ExtendedBackend:
         shape: Union[int, Sequence[int]] = 1,
         low: float = 0,
         high: float = 1,
-        dtype: str = "32",
+        dtype: Optional[str] = None,
     ) -> Tensor:
         """
-        Call the random normal function with the random state management behind the scene.
+        Call the uniform random function with the random state management behind the scene.
 
-        :param shape: [description], defaults to 1
+        :param shape: The shape of the output tensor, defaults to 1
         :type shape: Union[int, Sequence[int]], optional
-        :param mean: [description], defaults to 0
-        :type mean: float, optional
-        :param stddev: [description], defaults to 1
-        :type stddev: float, optional
-        :param dtype: [description], defaults to "32"
-        :type dtype: str, optional
-        :return: [description]
+        :param low: The lower bound of the uniform distribution, defaults to 0
+        :type low: float, optional
+        :param high: The upper bound of the uniform distribution, defaults to 1
+        :type high: float, optional
+        :param dtype: The real data type of the output tensor, defaults to None (global rdtypestr)
+        :type dtype: Optional[str], optional
+        :return: Samples from the uniform distribution
         :rtype: Tensor
         """
         g = getattr(self, "g", None)
@@ -1368,7 +1368,7 @@ class ExtendedBackend:
         shape: Union[int, Sequence[int]] = 1,
         low: float = 0,
         high: float = 1,
-        dtype: str = "32",
+        dtype: Optional[str] = None,
     ) -> Tensor:
         """
         Uniform random sampler from ``low`` to ``high``.
@@ -1377,13 +1377,13 @@ class ExtendedBackend:
         :type g: Any
         :param shape: shape of output sampling tensor, defaults to 1
         :type shape: Union[int, Sequence[int]], optional
-        :param low: [description], defaults to 0
+        :param low: The lower bound of the uniform distribution, defaults to 0
         :type low: float, optional
-        :param high: [description], defaults to 1
+        :param high: The upper bound of the uniform distribution, defaults to 1
         :type high: float, optional
-        :param dtype: only real data type is supported, "32" or "64", defaults to "32"
-        :type dtype: str, optional
-        :return: [description]
+        :param dtype: only real data type is supported, "32" or "64", defaults to None (global rdtypestr)
+        :type dtype: Optional[str], optional
+        :return: Samples from the uniform distribution
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -1397,17 +1397,15 @@ class ExtendedBackend:
         p: Optional[Union[Sequence[float], Tensor]] = None,
     ) -> Tensor:
         """
-        [summary]
+        Categorical random sampler with internally managed random state.
 
-        :param g: [description]
-        :type g: Any
         :param a: The possible options
         :type a: Union[int, Sequence[int], Tensor]
         :param shape: Sampling output shape
         :type shape: Union[int, Sequence[int]]
         :param p: probability for each option in a, defaults to None, as equal probability distribution
         :type p: Optional[Union[Sequence[float], Tensor]], optional
-        :return: [description]
+        :return: Samples from the categorical distribution
         :rtype: Tensor
         """
         g = getattr(self, "g", None)
@@ -1425,9 +1423,9 @@ class ExtendedBackend:
         p: Optional[Union[Sequence[float], Tensor]] = None,
     ) -> Tensor:
         """
-        [summary]
+        Categorical random sampler with given random state.
 
-        :param g: [description]
+        :param g: stateful register for each package
         :type g: Any
         :param a: The possible options
         :type a: Union[int, Sequence[int], Tensor]
@@ -1435,7 +1433,7 @@ class ExtendedBackend:
         :type shape: Union[int, Sequence[int]]
         :param p: probability for each option in a, defaults to None, as equal probability distribution
         :type p: Optional[Union[Sequence[float], Tensor]], optional
-        :return: [description]
+        :return: Samples from the categorical distribution
         :rtype: Tensor
         """
         raise NotImplementedError(

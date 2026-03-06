@@ -25,6 +25,7 @@ from .abstract_backend import ExtendedBackend
 logger = logging.getLogger(__name__)
 
 dtypestr: str
+rdtypestr: str
 Tensor = Any
 
 
@@ -343,8 +344,10 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         shape: Union[int, Sequence[int]] = 1,
         mean: float = 0,
         stddev: float = 1,
-        dtype: str = "32",
+        dtype: Optional[str] = None,
     ) -> Tensor:
+        if dtype is None:
+            dtype = rdtypestr
         if isinstance(dtype, str):
             dtype = dtype[-2:]
         if isinstance(shape, int):
@@ -366,8 +369,10 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         shape: Union[int, Sequence[int]] = 1,
         low: float = 0,
         high: float = 1,
-        dtype: str = "32",
+        dtype: Optional[str] = None,
     ) -> Tensor:
+        if dtype is None:
+            dtype = rdtypestr
         if isinstance(dtype, str):
             dtype = dtype[-2:]
         if isinstance(shape, int):

@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 dtypestr: str
+rdtypestr: str
 Tensor = Any
 PRNGKeyArray = Any  # libjax.random.PRNGKeyArray
 pytree = Any
@@ -560,7 +561,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         shape: Union[int, Sequence[int]] = 1,
         mean: float = 0,
         stddev: float = 1,
-        dtype: str = "32",
+        dtype: Optional[str] = None,
     ) -> Tensor:
         g = getattr(self, "g", None)
         if g is None:  # or getattr(g, "_trace", None) is not None:
@@ -584,7 +585,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         shape: Union[int, Sequence[int]] = 1,
         low: float = 0,
         high: float = 1,
-        dtype: str = "32",
+        dtype: Optional[str] = None,
     ) -> Tensor:
         g = getattr(self, "g", None)
         if g is None:
@@ -627,8 +628,10 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         shape: Union[int, Sequence[int]] = 1,
         mean: float = 0,
         stddev: float = 1,
-        dtype: str = "32",
+        dtype: Optional[str] = None,
     ) -> Tensor:
+        if dtype is None:
+            dtype = rdtypestr
         if isinstance(dtype, str):
             dtype = dtype[-2:]
         if isinstance(shape, int):
@@ -648,8 +651,10 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         shape: Union[int, Sequence[int]] = 1,
         low: float = 0,
         high: float = 1,
-        dtype: str = "32",
+        dtype: Optional[str] = None,
     ) -> Tensor:
+        if dtype is None:
+            dtype = rdtypestr
         if isinstance(dtype, str):
             dtype = dtype[-2:]
         if isinstance(shape, int):

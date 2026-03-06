@@ -1510,3 +1510,34 @@ def test_backend_methods_3(backend):
     # sorted order of pairs: (1,1), (1,2), (2,1), (2,2)
     # indices: 2, 3, 0, 1
     np.testing.assert_allclose(tc.backend.numpy(res), [2, 3, 0, 1])
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_random_dtype_highp(backend, highp):
+    # default dtype=None behavior
+    g = tc.backend.get_random_state(42)
+    r1 = tc.backend.stateful_randn(g)
+    assert tc.backend.dtype(r1) == "float64"  # complex128 corresponds to float64 real
+
+    r2 = tc.backend.stateful_randu(g)
+    assert tc.backend.dtype(r2) == "float64"
+
+    r3 = tc.backend.implicit_randn()
+    assert tc.backend.dtype(r3) == "float64"
+
+    r4 = tc.backend.implicit_randu()
+    assert tc.backend.dtype(r4) == "float64"
+
+    # explicitly specified behaviour
+    r5 = tc.backend.stateful_randn(g, dtype="32")
+    assert tc.backend.dtype(r5) == "float32"
+
+    r6 = tc.backend.implicit_randn(dtype="float32")
+    assert tc.backend.dtype(r6) == "float32"
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_random_dtype_lowp(backend):
+    g = tc.backend.get_random_state(42)
+    r7 = tc.backend.stateful_randn(g)
+    assert tc.backend.dtype(r7) == "float32"

@@ -106,6 +106,10 @@ This document records specific technical protocols, lessons learned, and advance
     *   **Protocol**: Always prefer the JAX backend for high-performance quantum kernels. 
     *   **Hybrid Workflow**: If the project requires PyTorch (e.g., for specific NN layers or legacy optimizers), use the `jax` backend for the quantum part and bridge it using `tc.interfaces.torch_interface`. This maintains an end-to-end differentiable graph while leveraging JAX's JIT and vectorization for the quantum bottle-necks.
 
+5.  **Numpy Operations on Backend Tensors**:
+    *   Avoid using native `numpy` functions on backend tensors (like `np.diag(tensor)`). This breaks JAX tracing, as the tensor might be an abstract Tracer during `jit`.
+    *   **Protocol**: Always use the equivalent backend method such as `tc.backend.diagflat(tensor)` instead of `np.diag`.
+
 ## Pauli Propagation & Operator Evolution (Heisenberg Picture)
 
 1.  **Heisenberg Picture Reverse Order**:
@@ -169,7 +173,6 @@ This document records specific technical protocols, lessons learned, and advance
     *   `to_qir()` / `from_qir()` is the canonical serialization path. All circuit classes should produce compatible QIR entries with consistent `gatef` and `parameters` fields.
     *   **Protocol**: When adding a new gate to a circuit class, ensure `apply_general_gate` records a proper QIR entry with `gatef` pointing to the gate factory and `parameters` containing all reconstruction-necessary kwargs.
     *   **Cross-class conversion**: `ClassA.from_qir(ClassB.to_qir())` works if both classes support the gates in the QIR. Use `circuit_params` dict to pass class-specific init args (e.g., `{"nqubits": n, "k": k}` for `U1Circuit`).
-
 ## Contraction Infrastructure & Hyperedges
  
  1.  **Algebraic Contraction Path for Hyperedges**:

@@ -15,6 +15,7 @@ from tensornetwork.backends.pytorch import pytorch_backend
 from .abstract_backend import ExtendedBackend
 
 dtypestr: str
+rdtypestr: str
 Tensor = Any
 pytree = Any
 
@@ -282,8 +283,10 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         shape: Union[int, Sequence[int]] = 1,
         mean: float = 0,
         stddev: float = 1,
-        dtype: str = "32",
+        dtype: Optional[str] = None,
     ) -> Tensor:
+        if dtype is None:
+            dtype = rdtypestr
         if isinstance(dtype, str):
             dtype = dtype[-2:]
         if isinstance(shape, int):
@@ -305,8 +308,10 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         shape: Union[int, Sequence[int]] = 1,
         low: float = 0,
         high: float = 1,
-        dtype: str = "32",
+        dtype: Optional[str] = None,
     ) -> Tensor:
+        if dtype is None:
+            dtype = rdtypestr
         if isinstance(dtype, str):
             dtype = dtype[-2:]
         if isinstance(shape, int):
