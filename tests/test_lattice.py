@@ -2648,8 +2648,8 @@ class TestPrivateHelpers:
 
         # Helper to generate random coordinates
         def generate_lattice(num_sites):
-            np.random.seed(42)
-            coords = np.random.rand(num_sites, 2).tolist()
+            rng = np.random.default_rng(42)
+            coords = rng.random((num_sites, 2)).tolist()
             return CustomizeLattice(
                 dimensionality=2, identifiers=list(range(num_sites)), coordinates=coords
             )
