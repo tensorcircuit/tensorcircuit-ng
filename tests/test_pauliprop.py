@@ -1,7 +1,11 @@
 import numpy as np
 import pytest
 import tensorcircuit as tc
-from tensorcircuit.pauliprop import PauliPropagationEngine, pauli_propagation
+from tensorcircuit.pauliprop import (
+    PauliPropagationEngine,
+    SparsePauliPropagationEngine,
+    pauli_propagation,
+)
 
 
 @pytest.mark.parametrize("backend", ["npb", "jaxb"])
@@ -20,8 +24,6 @@ def test_string_to_code(request, backend):
     request.getfixturevalue(backend)
     N, k = 4, 2
     pp = PauliPropagationEngine(N, k)
-    from tensorcircuit.pauliprop import SparsePauliPropagationEngine
-
     spp = SparsePauliPropagationEngine(N, k)
 
     s = ((0, 1), (3, 3))  # Z0 Z1
@@ -233,8 +235,6 @@ def test_sparse_engine_match_comprehensive(request, backend, highp):
     K = tc.backend
     N, k = 4, 3
     buffer_size = 500
-    from tensorcircuit.pauliprop import SparsePauliPropagationEngine
-
     dense_pp = PauliPropagationEngine(N, k)
     sparse_pp = SparsePauliPropagationEngine(N, k, buffer_size=buffer_size)
 
@@ -276,8 +276,6 @@ def test_sparse_engine_scan_match(request, backend, highp):
     K = tc.backend
     N, k = 4, 2
     buffer_size = 200
-    from tensorcircuit.pauliprop import SparsePauliPropagationEngine
-
     sparse_pp = SparsePauliPropagationEngine(N, k, buffer_size=buffer_size)
     dense_pp = PauliPropagationEngine(N, k)
 
@@ -337,8 +335,6 @@ def test_truncation_analytical(request, backend, highp):
     )
 
     # 2. Sparse Engine
-    from tensorcircuit.pauliprop import SparsePauliPropagationEngine
-
     spp = SparsePauliPropagationEngine(N, k, buffer_size=100)
     s_state = spp.get_initial_state(np.array([[0, 3, 0]]), np.array([1.0]))
     s_state = spp.apply_gate(s_state, "rxx", [0, 1], {"theta": theta})
@@ -365,8 +361,6 @@ def test_truncation_and_buffer_sparse(request, backend, highp):
     K = tc.backend
     N, k = 4, 2
     buffer_size = 2
-
-    from tensorcircuit.pauliprop import SparsePauliPropagationEngine
 
     spp = SparsePauliPropagationEngine(N, k, buffer_size=buffer_size)
 
@@ -406,3 +400,71 @@ def test_truncation_and_buffer_sparse(request, backend, highp):
     s_codes, s_coeffs = s_state
     print(s_codes)
     assert np.allclose(K.numpy(K.sum(K.abs(s_coeffs))), expected_sum_abs, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", ["npb", "jaxb"])
+def test_ptm_identity_1q(request, backend):
+    request.getfixturevalue(backend)
+    K = tc.backend
+    N = 1
+    k = 1
+    engine = PauliPropagationEngine(N, k)
+
+    # 1Q identity PTM
+    u = np.eye(2, dtype=np.complex64)
+    ptm = engine.get_ptm_1q(u)
+
+    # Assert it's an identity matrix (PTM of I is I)
+    np.testing.assert_allclose(K.numpy(ptm), np.eye(4), atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", ["npb", "jaxb"])
+def test_ptm_identity_2q(request, backend):
+    request.getfixturevalue(backend)
+    K = tc.backend
+    N = 2
+    k = 2
+    engine = PauliPropagationEngine(N, k)
+
+    # 2Q identity PTM
+    u = np.eye(4, dtype=np.complex64)
+    ptm = engine.get_ptm_2q(u)
+
+    # Assert it's an identity matrix
+    np.testing.assert_allclose(K.numpy(ptm), np.eye(16), atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", ["npb", "jaxb"])
+def test_sparse_ptm_identity(request, backend):
+    request.getfixturevalue(backend)
+    K = tc.backend
+    N = 2
+    k = 2
+    engine = SparsePauliPropagationEngine(N, k)
+
+    # 1Q identity PTM
+    ptm_1q = engine._get_ptm("i", [0], None)
+    np.testing.assert_allclose(K.numpy(ptm_1q), np.eye(4), atol=1e-6)
+
+    # 2Q identity PTM
+    u = np.eye(4, dtype=np.complex64)
+    ptm_2q = engine._get_ptm("any", [0, 1], u)
+    np.testing.assert_allclose(K.numpy(ptm_2q), np.eye(16), atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", ["npb", "jaxb"])
+def test_pauli_y_evolution(request, backend):
+    request.getfixturevalue(backend)
+    K = tc.backend
+
+    # Let's test a circuit where Y expectation is non-zero
+    c2 = tc.Circuit(1)
+    c2.rx(0, theta=np.pi / 2)
+
+    energy2 = tc.pauliprop.pauli_propagation(c2, [(1.0, "Y")], k=1)
+
+    # Let's check with standard tc simulation
+    c_standard = tc.Circuit(1)
+    c_standard.rx(0, theta=np.pi / 2)
+    expected = c_standard.expectation([tc.gates.y(), [0]])
+    np.testing.assert_allclose(K.numpy(energy2), np.real(K.numpy(expected)), atol=1e-6)

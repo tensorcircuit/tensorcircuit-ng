@@ -175,7 +175,7 @@ class PauliPropagationEngine:
         tmp = backend.matmul(u_dag, sigmas)
         rot_sigmas = backend.matmul(tmp, u)
         res = backend.matmul(
-            backend.reshape(sigmas, [4, 4]),
+            backend.conj(backend.reshape(sigmas, [4, 4])),
             backend.transpose(backend.reshape(rot_sigmas, [4, 4])),
         )
         m = 0.5 * res
@@ -193,7 +193,7 @@ class PauliPropagationEngine:
         tmp = backend.matmul(u_dag, sigmas_2q)
         rot_sigmas = backend.matmul(tmp, u)
         res = backend.matmul(
-            backend.reshape(sigmas_2q, [16, 16]),
+            backend.conj(backend.reshape(sigmas_2q, [16, 16])),
             backend.transpose(backend.reshape(rot_sigmas, [16, 16])),
         )
         m = 0.25 * res
@@ -823,8 +823,6 @@ class SparsePauliPropagationEngine:
         return state
 
     def _get_ptm(self, gate_name: str, wires: Sequence[int], params: Any) -> Any:
-        from . import gates
-
         K = backend
         gate_func = getattr(gates, gate_name.lower())
         if params is None:
@@ -842,7 +840,9 @@ class SparsePauliPropagationEngine:
         s1 = self.pauli_mats
         if len(wires) == 1:
             rot = K.matmul(K.matmul(u_dag, s1), u)
-            res = K.matmul(K.reshape(s1, [4, 4]), K.transpose(K.reshape(rot, [4, 4])))
+            res = K.matmul(
+                K.conj(K.reshape(s1, [4, 4])), K.transpose(K.reshape(rot, [4, 4]))
+            )
             return K.real(0.5 * res)
         else:
             s2 = K.reshape(
@@ -851,7 +851,7 @@ class SparsePauliPropagationEngine:
             )
             rot = K.matmul(K.matmul(u_dag, s2), u)
             res = K.matmul(
-                K.reshape(s2, [16, 16]), K.transpose(K.reshape(rot, [16, 16]))
+                K.conj(K.reshape(s2, [16, 16])), K.transpose(K.reshape(rot, [16, 16]))
             )
             return K.real(0.25 * res)
 
