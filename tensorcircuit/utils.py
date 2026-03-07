@@ -18,14 +18,26 @@ def gpu_memory_share(flag: bool = True) -> None:
     :type flag: bool
     :return: None
     """
-    # TODO(@refraction-ray): the default torch behavior should be True
-    # preallocate behavior for torch to be investigated
+    # torch default behavior is already sharing-friendly (allow growth)
     if flag is True:
         os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
         os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+        if "PYTORCH_CUDA_ALLOC_CONF" not in os.environ:
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+        elif "expandable_segments:True" not in os.environ["PYTORCH_CUDA_ALLOC_CONF"]:
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] += ",expandable_segments:True"
     else:
         os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "false"
         os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
+        if "PYTORCH_CUDA_ALLOC_CONF" in os.environ:
+            conf = os.environ["PYTORCH_CUDA_ALLOC_CONF"]
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = ",".join(
+                [
+                    p.strip()
+                    for p in conf.split(",")
+                    if p.strip() != "expandable_segments:True"
+                ]
+            )
 
 
 def return_partial(
