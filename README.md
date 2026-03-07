@@ -58,12 +58,15 @@ To write TC-NG scripts and applications efficiently with AI coding agents (e.g.,
 2.  **Built-in Rules:** We provide a dedicated [AGENTS.md](/AGENTS.md) file. It serves as the "handbook" (i.e. `CLAUDE.md`) for AI agents, defining coding standards and best practices to ensure the generated code is idiomatic.
 3.  **Specialized Agentic Skills:** The `.agents/skills/` directory contains workflows to guide AI assistants on complex, multi-step tasks.
 <details>
+<summary> List of built-in agentic skills (click for details) </summary>
+
     *   [`arxiv-reproduce`](/.agents/skills/arxiv-reproduce/README.md): Autonomously reproduces arXiv papers with standardized output and code quality validation.
     *   [`performance-optimize`](/.agents/skills/performance-optimize/README.md): Scientific execution and memory optimization workflow (JAX scanning, vectorized parallelism, etc.).
     *   [`tc-rosetta`](/.agents/skills/tc-rosetta/README.md): End-to-end framework translation (from Qiskit, PennyLane, etc.) with intrinsic mathematical intent rewriting.
     *   [`tutorial-crafter`](/.agents/skills/tutorial-crafter/README.md): Transforms raw TC-NG scripts into comprehensive, narrative-driven Markdown or/and HTML educational tutorials.
     *   [`demo-generator`](/.agents/skills/demo-generator/README.md): Transforms TC-NG scripts into interactive, sleek, and high-performance Streamlit GUI applications.
     *   [`code-reviewer`](/.agents/skills/code-reviewer/README.md): Autonomously reviews and refactors TC-NG code for mathematical correctness, JAX-native performance, and engineering rigor.
+
 </details>
 
 
