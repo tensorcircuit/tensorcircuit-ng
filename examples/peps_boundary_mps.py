@@ -134,7 +134,8 @@ def sweep_right(mps_new, mps_prev, grid_row, L_env_init, R_envs):
         E = optimize_site(L_env_curr, R_env_curr, prev_node, grid_node)
         E_mat = E.reshape(chi_max * D_down, chi_max)
 
-        Q, R_mat = jnp.linalg.qr(E_mat)
+        # Use tc.backend.qr as plain jnp.linalg.qr fails AD for complex matrices (NaN gradients)
+        Q, R_mat = tc.backend.qr(E_mat)
         Q_node = Q.reshape(chi_max, D_down, chi_max)
 
         L_env_next = update_L(L_env_curr, Q_node, prev_node, grid_node)
@@ -167,9 +168,9 @@ def sweep_left(mps_new, mps_prev, grid_row, L_envs, R_env_init):
 
         E = optimize_site(L_env_curr, R_env_curr, prev_node, grid_node)
 
-        # LQ decomposition via QR on transpose
+        # LQ decomposition via QR on transpose (stabilized tc.backend)
         E_mat = E.reshape(chi_max, D_down * chi_max)
-        Q, R_mat = jnp.linalg.qr(E_mat.T)
+        Q, R_mat = tc.backend.qr(E_mat.T)
         L_mat = R_mat.T
         Q_node = (Q.T).reshape(chi_max, D_down, chi_max)
 
@@ -208,7 +209,7 @@ def right_orthogonalize(mps):
         L_mat_prev = carry
         node_updated = jnp.tensordot(node, L_mat_prev, axes=[[2], [0]])
         mat = node_updated.reshape(chi, D * chi)
-        Q, R = jnp.linalg.qr(mat.T)
+        Q, R = tc.backend.qr(mat.T)
         L_mat = R.T
         Q_mat = Q.T
         Q_node = Q_mat.reshape(chi, D, chi)
@@ -231,18 +232,21 @@ def apply_grid_row_dmrg(mps_prev, grid_row, chi_max, key, num_sweeps=2):
     Variational MPO-MPS application: mps_new ≈ mps_prev * grid_row using sweeps.
     """
     # 1. Initialize mps_new guess state with global noise
-    noise_real = jax.random.normal(key, mps_prev.shape, dtype=mps_prev.dtype)
-    noise_imag = jax.random.normal(
-        jax.random.split(key)[0], mps_prev.shape, dtype=mps_prev.dtype
-    )
+    # Fix: Correct key splitting and real/imag noise generation
+    key, subkey1, subkey2 = jax.random.split(key, 3)
+    noise_real = jax.random.normal(subkey1, mps_prev.shape, dtype=mps_prev.real.dtype)
+    noise_imag = jax.random.normal(subkey2, mps_prev.shape, dtype=mps_prev.real.dtype)
     noise = (noise_real + 1j * noise_imag) * 1e-3
 
     mps_new = mps_prev + noise
     mps_new = right_orthogonalize(mps_new)
 
-    # Initialize left and right environment boundaries for OBC (value 1 at bond 0)
-    L_env_init = jnp.zeros((chi_max, grid_row.shape[2], chi_max), dtype=mps_new.dtype)
-    R_env_init = jnp.zeros((chi_max, grid_row.shape[3], chi_max), dtype=mps_new.dtype)
+    # 2. Initialize left and right environment boundaries for OBC (value 1 at bond 0)
+    # Fix: Correct dimension logic for horizontal bonds (D_l, D_r)
+    D_l = grid_row.shape[3]
+    D_r = grid_row.shape[4]
+    L_env_init = jnp.zeros((chi_max, D_l, chi_max), dtype=mps_new.dtype)
+    R_env_init = jnp.zeros((chi_max, D_r, chi_max), dtype=mps_new.dtype)
     L_env_init = L_env_init.at[0, 0, 0].set(1.0)
     R_env_init = R_env_init.at[0, 0, 0].set(1.0)
 
@@ -255,20 +259,23 @@ def apply_grid_row_dmrg(mps_prev, grid_row, chi_max, key, num_sweeps=2):
 
     # After sweep_left, the MPS is canonicalized to the first node.
     # We extract the complex 'weight' (scale + phase) using the maximum-amplitude element.
-    # This 'Phase Anchoring' ensures military-grade stability against nodal points.
     left_node = mps_new[0]
-    pivot = left_node.flatten()[jnp.argmax(jnp.abs(left_node))]
+
+    # Fix: Use stop_gradient for argmax to ensure AD compatibility
+    flat_idx = jax.lax.stop_gradient(jnp.argmax(jnp.abs(left_node)))
+    pivot = left_node.flatten()[flat_idx]
     row_norm = jnp.linalg.norm(left_node)
 
-    # Track the complex phase of the pivot to avoid sign/phase masking
-    phase = pivot / (jnp.abs(pivot) + 1e-300)
-    row_complex_weight = phase * row_norm
-    row_log_weight = jnp.log(row_complex_weight + 0j)
+    # Fix: Decouple magnitude and phase for better stability across layers
+    # Use jnp.finfo for device-safe epsilon
+    eps = jnp.finfo(jnp.abs(pivot).dtype).eps
+    phase = pivot / (jnp.abs(pivot) + eps)
+    row_log_mag = jnp.log(row_norm + eps)
 
     # Normalize the MPS for the next layer (making it phase-canonical)
-    mps_new = mps_new.at[0].set(left_node / (row_complex_weight + 1e-300))
+    mps_new = mps_new.at[0].set(left_node / ((phase * row_norm) + eps))
 
-    return mps_new, row_log_weight
+    return mps_new, row_log_mag, phase
 
 
 # =====================================================================
@@ -285,25 +292,31 @@ def contract_peps_dmrg(mps_init, pe_grid, chi_max, key, num_sweeps=2):
     """
 
     def scan_step(carry, grid_row):
-        mps_curr, log_norm_acc, curr_key = carry
+        mps_curr, total_log_mag, total_phase, curr_key = carry
 
         # Split key for current step and future steps
         step_key, next_key = jax.random.split(curr_key)
 
-        mps_new, row_log_weight = apply_grid_row_dmrg(
+        mps_new, row_log_mag, row_phase = apply_grid_row_dmrg(
             mps_curr, grid_row, chi_max, step_key, num_sweeps
         )
 
-        # Accumulate complex log-weight to prevent overflow and preserve phase
-        new_log_weight_acc = log_norm_acc + row_log_weight
+        # Accumulate magnitudes and phases separately for numerical robustness
+        new_log_mag = total_log_mag + row_log_mag
+        new_phase = total_phase * row_phase
 
-        return (mps_new, new_log_weight_acc, next_key), None
+        return (mps_new, new_log_mag, new_phase, next_key), None
 
-    init_carry = (mps_init, jnp.array(0.0, dtype=mps_init.dtype), key)
-    (mps_final_stacked, total_log_norm, _), _ = jax.lax.scan(
+    init_carry = (
+        mps_init,
+        jnp.array(0.0, dtype=mps_init.real.dtype),
+        jnp.array(1.0 + 0j, dtype=mps_init.dtype),
+        key,
+    )
+    (mps_final_stacked, final_log_mag, final_phase, _), _ = jax.lax.scan(
         scan_step, init_carry, pe_grid
     )
-    return mps_final_stacked, total_log_norm
+    return mps_final_stacked, final_log_mag, final_phase
 
 
 @partial(jax.jit, static_argnames=["chi_max", "num_sweeps"])
@@ -324,7 +337,7 @@ def peps_partition_function(pe_grid, chi_max, key, num_sweeps=2):
     mps_init_stacked = jnp.stack([init_node] * L_x)
 
     # Perform end-to-end variational contraction
-    mps_final_stacked, total_log_norm = contract_peps_dmrg(
+    mps_final_stacked, final_log_mag, final_phase = contract_peps_dmrg(
         mps_init_stacked, pe_grid, chi_max, key, num_sweeps
     )
 
@@ -338,8 +351,8 @@ def peps_partition_function(pe_grid, chi_max, key, num_sweeps=2):
     v_init = jnp.zeros(chi_max, dtype=cdtype).at[0].set(1.0)
     v_final, _ = jax.lax.scan(final_scan, v_init, mat_stack)
 
-    # Resulting Z = residual_scalar * exp(total_log_norm)
-    return v_final[0] * jnp.exp(total_log_norm)
+    # Resulting Z = (residual_scalar * final_phase) * exp(final_log_mag)
+    return v_final[0] * final_phase * jnp.exp(final_log_mag)
 
 
 @partial(jax.jit, static_argnames=["chi_max", "num_sweeps"])
@@ -360,7 +373,7 @@ def peps_partition_function_log(pe_grid, chi_max, key, num_sweeps=2):
     mps_init_stacked = jnp.stack([init_node] * L_x)
 
     # Perform end-to-end variational contraction
-    mps_final_stacked, total_log_norm = contract_peps_dmrg(
+    mps_final_stacked, final_log_mag, final_phase = contract_peps_dmrg(
         mps_init_stacked, pe_grid, chi_max, key, num_sweeps
     )
 
@@ -375,7 +388,9 @@ def peps_partition_function_log(pe_grid, chi_max, key, num_sweeps=2):
     v_final, _ = jax.lax.scan(final_scan, v_init, mat_stack)
 
     # Final log-sum ln(Z). Correctly handles complex phase/sign without abs().
-    return total_log_norm + jnp.log(v_final[0] + 0j)
+    boundary_contraction = v_final[0] * final_phase
+    eps = jnp.finfo(jnp.abs(boundary_contraction).dtype).eps
+    return final_log_mag + jnp.log(boundary_contraction + eps)
 
 
 # =====================================================================
@@ -392,8 +407,8 @@ def test_peps_contraction():
 
     L_x = 4
     L_y = 4
-    D = 4  # Physical bond dimension
-    chi_max = 256  # Max MPS bond dimension
+    D = 3  # Physical bond dimension
+    chi_max = 128  # Max MPS bond dimension
 
     # Build random grid tensors
     exact_grid_arrays = []
@@ -418,34 +433,68 @@ def test_peps_contraction():
 
         exact_grid_arrays.append(exact_row)
 
-    # Perform EXACT contraction using TensorNetwork Node
-    tc_nodes = [
-        [tn.Node(exact_grid_arrays[y][x], name=f"({x},{y})") for x in range(L_x)]
-        for y in range(L_y)
-    ]
-    for y in range(L_y):
-        for x in range(L_x):
-            if x < L_x - 1:
-                tc_nodes[y][x][3] ^ tc_nodes[y][x + 1][2]
-            if y < L_y - 1:
-                tc_nodes[y][x][1] ^ tc_nodes[y + 1][x][0]
+    # --- Shared Loss Functions for DRYness ---
+    def exact_loss(grid_reshaped):
+        # Exact contraction using TensorNetwork with JAX backend
+        nodes = [
+            [tn.Node(grid_reshaped[y, x], backend="jax") for x in range(L_x)]
+            for y in range(L_y)
+        ]
+        for y in range(L_y):
+            for x in range(L_x):
+                if x < L_x - 1:
+                    nodes[y][x][3] ^ nodes[y][x + 1][2]
+                if y < L_y - 1:
+                    nodes[y][x][1] ^ nodes[y + 1][x][0]
+        flat_nodes = [node for row in nodes for node in row]
+        # Identify all dangling edges (boundaries)
+        dangling = tn.get_all_dangling(flat_nodes)
+        # Contract everything, specifying the order for any remaining edges to ensure scalars
+        res_node = contractor(flat_nodes, output_edge_order=dangling)
+        res = res_node.tensor
+        # If there are residual boundary dimensions > 1
+        # (due to the way TN handles scalars), flatten and take the first element
+        return res.reshape(-1)[0]
 
-    flat_nodes = [node for row in tc_nodes for node in row]
-    dangling = tn.get_all_dangling(flat_nodes)
-    exact_res = contractor(flat_nodes, output_edge_order=dangling).tensor.item()
-    print(f"Exact Network Contraction Result: {exact_res}")
+    def dmrg_loss(grid_reshaped):
+        z = peps_partition_function(
+            grid_reshaped, chi_max=chi_max, key=key, num_sweeps=4
+        )
+        return z
 
     print("Transferring grid to GPU Device (Single H2D transfer)...")
     dmrg_grid_tensor = jax.device_put(dmrg_grid_np)
-
-    # Perform DMRG-PEPS contraction
     key = jax.random.PRNGKey(42)
-    dmrg_res = peps_partition_function(
-        dmrg_grid_tensor, chi_max=chi_max, key=key, num_sweeps=4
-    )
 
+    # 1. Forward Comparison
+    exact_res = exact_loss(dmrg_grid_tensor)
+    dmrg_res = dmrg_loss(dmrg_grid_tensor)
+
+    print(f"Exact Network Contraction Result: {exact_res}")
     print(f"Boundary MPS DMRG Contraction Result: {dmrg_res}")
-    print(f"Difference: {abs(exact_res - dmrg_res):.2e}")
+    print(f"Forward Difference: {abs(exact_res - dmrg_res):.2e}")
+
+    # 2. Gradient Comparison
+    print("\nStarting Gradient Verification (AD vs Exact)...")
+
+    # Define scalarized real-part-only loss for jax.grad
+    def exact_real_loss(grid_flat):
+        return jnp.real(exact_loss(grid_flat.reshape((L_y, L_x, D, D, D, D))))
+
+    def dmrg_real_loss(grid_flat):
+        return jnp.real(dmrg_loss(grid_flat.reshape((L_y, L_x, D, D, D, D))))
+
+    grid_flat = dmrg_grid_tensor.flatten()
+    grad_exact = jax.grad(exact_real_loss)(grid_flat)
+    grad_dmrg = jax.grad(dmrg_real_loss)(grid_flat)
+
+    grad_diff = jnp.linalg.norm(grad_exact - grad_dmrg) / jnp.linalg.norm(grad_exact)
+    print(f"Exact Gradient Norm: {jnp.linalg.norm(grad_exact):.4e}")
+    print(f"DMRG Gradient Norm:  {jnp.linalg.norm(grad_dmrg):.4e}")
+    print(f"Relative Gradient Difference: {grad_diff:.2e}")
+
+    assert grad_diff < 1e-3, "DMRG gradients do not match exact gradients!"
+    print("Gradient Verification Passed!")
 
 
 # =====================================================================
@@ -559,7 +608,7 @@ def test_ising_peps_contraction():
 
 
 if __name__ == "__main__":
-    print("=== Running Random PEPS Contraction Benchmark ===")
+    print("=== Running PEPS Contraction & Gradient Benchmark ===")
     test_peps_contraction()
     print("\n=== Running Ising PEPS Phase Transition Benchmark ===")
     test_ising_peps_contraction()
