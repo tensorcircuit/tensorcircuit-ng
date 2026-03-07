@@ -12,6 +12,12 @@
 
 - Add diagonal gate hyperedge support: `c.diagonal`, `c.rzm`, `c.cmz`.
 
+- Add `reduced_density_matrix` method for `MPSCircuit`.
+
+### Fixed
+
+- Fix pauli propagation sign error for Y operator
+
 ## v1.5.0
 
 ### Added

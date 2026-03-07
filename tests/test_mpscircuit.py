@@ -305,6 +305,71 @@ def do_test_sample(test_circuits: type_test_circuits):
     assert len(s[0]) == N
 
 
+def do_test_rdm(test_circuits: type_test_circuits):
+    (
+        c,
+        w_c,
+        mps,
+        w_mps,
+        mps_exact,
+        w_mps_exact,
+    ) = test_circuits
+
+    # Contiguous: keep [1, 2, 3]
+    rho_mps = mps_exact.reduced_density_matrix([1, 2, 3])
+    rho_c = tc.quantum.reduced_density_matrix(w_c, [0, 4, 5, 6, 7])
+    np.testing.assert_allclose(
+        tc.backend.numpy(rho_mps), tc.backend.numpy(rho_c), atol=1e-12
+    )
+
+    # Non-contiguous: keep [1, 3, 5]
+    rho_mps_nc = mps_exact.reduced_density_matrix([1, 3, 5])
+    rho_c_nc = tc.quantum.reduced_density_matrix(w_c, [0, 2, 4, 6, 7])
+    np.testing.assert_allclose(
+        tc.backend.numpy(rho_mps_nc), tc.backend.numpy(rho_c_nc), atol=1e-12
+    )
+
+    # Order control: [3, 1] should differ from [1, 3]
+    rho_13 = mps_exact.reduced_density_matrix([1, 3])
+    rho_31 = mps_exact.reduced_density_matrix([3, 1])
+    rho_13_np = tc.backend.numpy(rho_13)
+    rho_31_np = tc.backend.numpy(rho_31)
+    # rho_31 should be the transpose-permutation of rho_13
+    rho_13_4d = rho_13_np.reshape(2, 2, 2, 2)
+    rho_31_4d = rho_31_np.reshape(2, 2, 2, 2)
+    np.testing.assert_allclose(rho_31_4d, rho_13_4d.transpose(1, 0, 3, 2), atol=1e-12)
+
+
+def do_test_mpo_explicit():
+    # Test apply_MPO explicitly with both directions
+    mps = tc.MPSCircuit(4)
+    u1 = reproducible_unitary(
+        1, tc.backend.cast(tc.backend.convert_to_tensor(0.5), tc.dtypestr)
+    )
+    u_mpo = [u1[None, :, :, None]] * 4
+
+    # Right-moving sweep
+    mps.position(0)
+    mps.apply_MPO(u_mpo, 0, center_left=True)
+    np.testing.assert_allclose(np.abs(mps._mps.check_canonical()), 0, atol=1e-12)
+
+    # Left-moving sweep
+    mps.position(3)
+    mps.apply_MPO(u_mpo, 0, center_left=False)
+    np.testing.assert_allclose(np.abs(mps._mps.check_canonical()), 0, atol=1e-12)
+
+    # Correctness check
+    c = tc.Circuit(4)
+    for i in range(4):
+        c.apply(tc.gates.any(u1), i)
+        c.apply(tc.gates.any(u1), i)
+    np.testing.assert_allclose(
+        tc.backend.numpy(mps.wavefunction()),
+        tc.backend.numpy(c.wavefunction()),
+        atol=1e-12,
+    )
+
+
 @pytest.mark.parametrize(
     "backend, dtype", [(lf("tfb"), lf("highp")), (lf("jaxb"), lf("highp"))]
 )
@@ -321,9 +386,35 @@ def test_circuits(backend, dtype):
     do_test_tensor_input(circuits)
     do_test_measure(circuits)
     do_test_sample(circuits)
+    do_test_rdm(circuits)
+    do_test_mpo_explicit()
+
+
+@pytest.mark.parametrize(
+    "backend, dtype", [(lf("tfb"), lf("highp")), (lf("jaxb"), lf("highp"))]
+)
+def test_mps_jit_rdm_mpo(backend, dtype):
+    u1 = reproducible_unitary(
+        1, tc.backend.cast(tc.backend.convert_to_tensor(0.5), tc.dtypestr)
+    )
+    u_mpo = [u1[None, :, :, None]] * 4
+
+    def rdm_expec(mpo_tensors):
+        mps = tc.MPSCircuit(4)
+        # test apply_MPO under jit
+        mps.apply_MPO(mpo_tensors, 0, center_left=True)
+        # test reduced_density_matrix under jit
+        rho = mps.reduced_density_matrix([1, 2])
+        return tc.backend.real(tc.backend.trace(rho))
+
+    rdm_expec_jit = tc.backend.jit(rdm_expec)
+    res = rdm_expec_jit(u_mpo)
+    np.testing.assert_allclose(res, 1.0, atol=1e-12)
 
 
 # TODO(@refraction-ray): fails  (lf("jaxb"), lf("highp"))
+
+
 @pytest.mark.parametrize("backend, dtype", [(lf("tfb"), lf("highp"))])
 def test_circuits_jit(backend, dtype):
     def expec(params):

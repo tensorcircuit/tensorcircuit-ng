@@ -21,6 +21,10 @@ This document records specific technical protocols, lessons learned, and advance
 4.  **JIT Granularity and Placement**:
     *   **Protocol**: Place JIT at the most outside part of the computation loop possible (e.g., wrapping the entire optimization step including the loop itself via `jax.lax.scan`).
     *   **Trade-off**: Avoid JIT-ing small functions inside a Python loop; the dispatch and staging overhead can exceed the execution gain.
+    
+5.  **Batched Execution (Vmap) and JIT Re-triggering**:
+    *   **Lesson**: JAX JIT caches specialized functions based on input shapes. If you warm up a JIT-ed vmap function with a small batch (e.g., `batch=2`) but run it with a large batch (e.g., `batch=100`), JAX will re-trigger compilation during the "execution" phase, leading to heavily distorted benchmarks.
+    *   **Protocol**: Always warm up the JIT compiler with the **exact** same batch dimension shape as the production/benchmark run.
 
 ## Qudit Simulation & Advanced Models
 

@@ -148,18 +148,12 @@ class FiniteMPS(tn.FiniteMPS):  # type: ignore
             # Note: fix the center position bug here
             if center_position == site2:
                 left_tensor = U
-                right_tensor = ncon.ncon(
-                    [self.backend.diagflat(S), V],
-                    [[-1, 1], [1, -2, -3]],
-                    backend=self.backend,
-                )
+                S_shape = [-1] + [1] * (len(self.backend.shape_tuple(V)) - 1)
+                right_tensor = self.backend.reshape(S, S_shape) * V
                 set_center_position(site2)
             else:
-                left_tensor = ncon.ncon(
-                    [U, self.backend.diagflat(S)],
-                    [[-1, -2, 1], [1, -3]],
-                    backend=self.backend,
-                )
+                S_shape = [1] * (len(self.backend.shape_tuple(U)) - 1) + [-1]
+                left_tensor = U * self.backend.reshape(S, S_shape)
                 right_tensor = V
                 set_center_position(site1)
 

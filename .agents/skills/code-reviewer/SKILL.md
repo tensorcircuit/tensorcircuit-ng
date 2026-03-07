@@ -33,7 +33,7 @@ When tasked with reviewing or auditing a TensorCircuit-NG (TC-NG) codebase, you 
 
 ### 5. Code Quality & Static Analysis
 - **Defensive Coding**: Avoid "over-defense". **Never** use general catch-all blocks like `except Exception:`. Catch only specific, expected errors.
-- **Cruft Removal (Minimal Changes)**: Eliminate duplication and explicitly unreachable dead branches, but *do not* rewrite perfectly functional abstractions or serialization schemas correctly handling edge-cases (like the assumption that `gatef` could be a string in IR when it's already resolved in high-level calls).
+- **Cruft Removal (Minimal Changes)**: Eliminate duplication and explicitly unreachable dead branches, but *do not* rewrite perfectly functional abstractions or serialization schemas correctly handling edge-cases. Ensure the proposed changes are minimal for the intented targets.
 - **Import Manners**:
     - **Core Dependency**: Top-level imports in the `tensorcircuit` package are reserved for core dependencies.
     - **Lazy Imports**: Any non-core or heavy dependency (e.g., `qiskit`, `pennylane`, `cupy`) must be imported **within the function or method scope** where it is used to keep the library lightweight.

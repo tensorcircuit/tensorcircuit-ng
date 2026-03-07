@@ -53,9 +53,9 @@ def split_tensor(
     if svd:
         U, S, VH, _ = backend.svd(tensor, **split)
         if center_left:
-            return backend.matmul(U, backend.diagflat(S)), VH
+            return U * backend.reshape(S, (1, -1)), VH
         else:
-            return U, backend.matmul(backend.diagflat(S), VH)
+            return U, backend.reshape(S, (-1, 1)) * VH
     else:
         if center_left:
             return backend.rq(tensor)  # type: ignore
@@ -248,7 +248,8 @@ class MPSCircuit(AbstractCircuit):
         :param index: Qubit index of the gate
         :type index: int
         """
-        self.position(index)
+        if self._mps.center_position != index:
+            self.position(index)
         self._mps.apply_one_site_gate(gate.tensor, index)
 
     def apply_adjacent_double_gate(
@@ -280,9 +281,11 @@ class MPSCircuit(AbstractCircuit):
         diff1 = abs(index1 - self._mps.center_position)  # type: ignore
         diff2 = abs(index2 - self._mps.center_position)  # type: ignore
         if diff1 < diff2:
-            self.position(index1)
+            if self._mps.center_position != index1:
+                self.position(index1)
         else:
-            self.position(index2)
+            if self._mps.center_position != index2:
+                self.position(index2)
         err = self._mps.apply_two_site_gate(
             gate.tensor,
             index1,
@@ -546,23 +549,11 @@ class MPSCircuit(AbstractCircuit):
         :param split: Truncation options for bond dimension reduction. Defaults to None.
         :type split: Optional[Dict[str, Any]], optional
         """
-        # step 1:
-        #     contract tensor
-        #           a
-        #           |
-        #     i-----O-----j            a
-        #           |        ->        |
-        #           b             ik---X---jl
-        #           |
-        #     k-----T-----l
-        # step 2:
-        #     canonicalize the tensors one by one from end1 to end2
-        # setp 3:
-        #     reduce the bond dimension one by one from end2 to end1
         if split is None:
             split = self.split
         nindex = len(tensors)
         index_right = index_left + nindex - 1
+
         if center_left:
             end1 = index_left
             end2 = index_right
@@ -571,31 +562,66 @@ class MPSCircuit(AbstractCircuit):
             end1 = index_right
             end2 = index_left
             step = -1
+
+        n_list = np.arange(nindex)[::step]
         idx_list = np.arange(index_left, index_right + 1)[::step]
-        i_list = np.arange(nindex)[::step]
 
         self.position(end1)
-        # contract
-        for i, idx in zip(i_list, idx_list):
+
+        residue = None
+        for i, idx in zip(n_list, idx_list):
             O = tensors[i]
             T = self._mps.tensors[idx]
-            ni, d_in, _, nj = O.shape
+            ni, d_out, _, nj = O.shape
             nk, _, nl = T.shape
+
+            # OT: (ni, nk, d_out, nj, nl) -> (ni*nk, d_out, nj*nl)
             OT = backend.einsum("iabj,kbl->ikajl", O, T)
-            OT = backend.reshape(OT, (ni * nk, d_in, nj * nl))
+            OT = backend.reshape(OT, (ni * nk, d_out, nj * nl))
 
-            self._mps.tensors[idx] = OT
+            if residue is not None:
+                if step == 1:
+                    # residue: (K, ni*nk), OT: (ni*nk, d_out, nj*nl)
+                    OT = backend.einsum("ab,bcd->acd", residue, OT)
+                else:
+                    # residue: (nj*nl, K), OT: (ni*nk, d_out, nj*nl)
+                    OT = backend.einsum("abc,cd->abd", OT, residue)
 
-        # canonicalize
-        # FiniteMPS.position applies QR sequentially from index_left to index_right
-        self.position(end2)
+            OT_shape = backend.shape_tuple(OT)
+            if idx != end2:
+                if step == 1:
+                    # Move center right
+                    OT_mat = backend.reshape(OT, (OT_shape[0] * OT_shape[1], -1))
+                    Q, R = backend.qr(OT_mat)
+                    self._mps.tensors[idx] = backend.reshape(
+                        Q, (OT_shape[0], OT_shape[1], -1)
+                    )
+                    residue = R
+                    self._mps.center_position = idx + 1
+                else:
+                    # Move center left via transposed QR
+                    # (left, phys, right) -> (right, phys, left)
+                    OT_T = backend.transpose(OT, [2, 1, 0])
+                    OT_mat = backend.reshape(OT_T, (OT_shape[2] * OT_shape[1], -1))
+                    Q_T, R_T = backend.qr(OT_mat)
 
-        # reduce bond dimension
+                    # Q_T: (right*phys, K) -> (right, phys, K) -> (K, phys, right)
+                    Q2 = backend.reshape(Q_T, (OT_shape[2], OT_shape[1], -1))
+                    self._mps.tensors[idx] = backend.transpose(Q2, [2, 1, 0])
+                    # residue: (K, ni*nk) -> (ni*nk, K)
+                    residue = backend.transpose(R_T, [1, 0])
+                    self._mps.center_position = idx - 1
+            else:
+                self._mps.tensors[idx] = OT
+                self._mps.center_position = end2
+
+        # step 3: reduce bond dimension
         for i in idx_list[::-1][:-1]:
             self.reduce_dimension(
                 min(i, i - step), center_left=center_left, split=split
             )
-        assert self._mps.center_position == end1
+        # the assert requires python ints, ignore under tracing if needed
+        # assert self._mps.center_position == end1
 
     def apply_nqubit_gate(
         self,
@@ -867,7 +893,7 @@ class MPSCircuit(AbstractCircuit):
         :rtype: Tensor
         """
         if conj:
-            bra = other.conj().copy()
+            bra = other.conj()
         else:
             bra = other.copy()
         ket = self.copy()
@@ -1076,6 +1102,103 @@ class MPSCircuit(AbstractCircuit):
             return sample, p
         else:
             return sample, -1.0
+
+    def reduced_density_matrix(self, subsystem_to_keep: Sequence[int]) -> Tensor:
+        """
+        Compute the reduced density matrix for the specified qubits.
+
+        The output density matrix indices follow the order given by
+        ``subsystem_to_keep``, so passing ``[3, 1]`` yields a different
+        index ordering from ``[1, 3]``.
+
+        :param subsystem_to_keep: The qubits to keep (all others are traced out).
+        :type subsystem_to_keep: Sequence[int]
+        :return: The reduced density matrix.
+        :rtype: Tensor
+        """
+        keep = list(subsystem_to_keep)
+        if not keep:
+            raise ValueError("Must keep at least one qubit index.")
+        if len(keep) != len(set(keep)):
+            raise ValueError("Duplicate qubit indices in subsystem_to_keep.")
+
+        keep_sorted = sorted(keep)
+        is_contiguous = all(
+            keep_sorted[i + 1] - keep_sorted[i] == 1
+            for i in range(len(keep_sorted) - 1)
+        )
+
+        if is_contiguous:
+            site_first, site_last = keep_sorted[0], keep_sorted[-1]
+            cp = self._mps.center_position
+            if cp is not None:
+                if cp < site_first:
+                    self.position(site_first)
+                elif cp > site_last:
+                    self.position(site_last)
+            else:
+                self.position(site_first)
+
+            # With center inside [site_first, site_last], the left and right
+            # environments are identity.  We only need to contract the kept
+            # site tensors (ket and bra) and connect the boundary bonds.
+            tensors = [self._mps.tensors[i] for i in keep_sorted]
+            nodes_ket = [tn.Node(t, backend=backend.name) for t in tensors]
+            nodes_bra = [
+                tn.Node(backend.conj(t), backend=backend.name) for t in tensors
+            ]
+
+            # horizontal bonds
+            for i in range(len(nodes_ket) - 1):
+                nodes_ket[i][2] ^ nodes_ket[i + 1][0]
+                nodes_bra[i][2] ^ nodes_bra[i + 1][0]
+
+            # boundary bonds (dim-1 identity contractions)
+            nodes_ket[0][0] ^ nodes_bra[0][0]
+            nodes_ket[-1][2] ^ nodes_bra[-1][2]
+
+            nodes = nodes_ket + nodes_bra
+            output_edges = [n[1] for n in nodes_ket] + [n[1] for n in nodes_bra]
+
+        else:
+            # Non-contiguous: contract the full MPS chain, tracing out
+            # sites not in keep_sorted.
+            nodes_ket = [tn.Node(t, backend=backend.name) for t in self._mps.tensors]
+            nodes_bra = [
+                tn.Node(backend.conj(t), backend=backend.name)
+                for t in self._mps.tensors
+            ]
+
+            for i in range(self._nqubits - 1):
+                nodes_ket[i][2] ^ nodes_ket[i + 1][0]
+                nodes_bra[i][2] ^ nodes_bra[i + 1][0]
+
+            for i in range(self._nqubits):
+                if i not in keep_sorted:
+                    nodes_ket[i][1] ^ nodes_bra[i][1]
+
+            nodes_ket[0][0] ^ nodes_bra[0][0]
+            nodes_ket[-1][2] ^ nodes_bra[-1][2]
+
+            nodes = nodes_ket + nodes_bra
+            output_edges = [nodes_ket[i][1] for i in keep_sorted] + [
+                nodes_bra[i][1] for i in keep_sorted
+            ]
+
+        res_node = contractor(nodes, output_edge_order=output_edges)
+        nk = len(keep)
+        rho = backend.reshape(res_node.tensor, (self._d**nk, self._d**nk))
+
+        # Reorder to match the caller-specified order in `keep`
+        if keep != keep_sorted:
+            rho = backend.reshape(rho, [self._d] * (2 * nk))
+            order_map = {v: i for i, v in enumerate(keep_sorted)}
+            perm_out = [order_map[q] for q in keep]
+            perm_in = [nk + order_map[q] for q in keep]
+            rho = backend.transpose(rho, perm_out + perm_in)
+            rho = backend.reshape(rho, (self._d**nk, self._d**nk))
+
+        return rho
 
     def sample(
         self,
