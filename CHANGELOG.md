@@ -16,7 +16,9 @@
 
 ### Fixed
 
-- Fix pauli propagation sign error for Y operator
+- Fix pauli propagation sign error for Y operator.
+
+- Fix jax backend QR gradient bug.
 
 ## v1.5.0
 

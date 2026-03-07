@@ -114,6 +114,25 @@ This document records specific technical protocols, lessons learned, and advance
     *   Avoid using native `numpy` functions on backend tensors (like `np.diag(tensor)`). This breaks JAX tracing, as the tensor might be an abstract Tracer during `jit`.
     *   **Protocol**: Always use the equivalent backend method such as `tc.backend.diagflat(tensor)` instead of `np.diag`.
 
+## Automatic Differentiation (AD) & Complex Numbers
+
+1.  **JAX Complex AD (Wirtinger Calculus)**:
+    *   **Protocol**: JAX's `custom_vjp` for complex-to-complex functions expects the backward pass to return the Wirtinger derivative ($\partial L / \partial z^*$). In contrast, TensorFlow's `custom_gradient` returns the mathematical gradient ($\nabla_z L = (\partial L / \partial z^*)^*$).
+    *   **Implementation Guide**: To port a complex gradient from TF to JAX:
+        1. Conjugate incoming tangents: `dq, dr = dq.conj(), dr.conj()`.
+        2. Perform the gradient calculation logic (same as TF).
+        3. Conjugate the final result: `return (result.conj(),)`.
+    *   **Pitfall**: Forgetting the final `.conj()` on the result, especially in recursive branches (like Wide-Matrix QR), will lead to gradients that mismatch numerical results by a complex conjugate or incorrect sign.
+
+2.  **Wide Matrix QR/SVD AD Instability**:
+    *   **Observation**: JAX native AD does not support non-square (wide/tall) matrix QR decomposition. TensorCircuit provides custom implementations (`adaware_qr`).
+
+3.  **Isolation Strategy for Gradient Debugging**:
+    *   **Protocol**: When AD gradients mismatch numerical gradients in a complex system like `MPSCircuit`:
+        1. Isolate the **Library API** (e.g. `apply_nqubit_gate`) in a minimal script.
+        2. Create a **Pure Backend Chain** (e.g., a chain of 3 `backend.qr` calls) that mimics the internal logic.
+        3. Compare both against TensorFlow. If the Pure Backend Chain fails in JAX but the Library API works in TF, the issue is likely in the `jax_ops.py` VJP implementation of the specific primitive.
+
 ## Pauli Propagation & Operator Evolution (Heisenberg Picture)
 
 1.  **Heisenberg Picture Reverse Order**:

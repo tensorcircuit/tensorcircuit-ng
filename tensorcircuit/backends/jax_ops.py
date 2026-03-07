@@ -129,13 +129,13 @@ def jaxqr_bwd(res: Sequence[Array], tangents: Sequence[Array]) -> Tuple[Array]:
             correction = eyem - jnp.real(eyem)
             ret = ret + _TriangularSolve(q.dot(correction.T.conj()), r)
 
-        return ret.conj()
+        return ret
 
     num_rows, num_cols = q.shape[-2], r.shape[-1]
 
     if num_rows >= num_cols:
         result = _QrGradSquareAndDeepMatrices(q, r, dq, dr)
-        return (result,)
+        return (result.conj(),)
 
     y = a[..., :, num_rows:]
     u = r[..., :, :num_rows]
@@ -144,7 +144,7 @@ def jaxqr_bwd(res: Sequence[Array], tangents: Sequence[Array]) -> Tuple[Array]:
     dy = q.dot(dv)
     dx = _QrGradSquareAndDeepMatrices(q, u, dq + y.dot(dv.T.conj()), du)
     result = jnp.concatenate([dx, dy], axis=-1)
-    return (result,)
+    return (result.conj(),)
 
 
 adaware_qr.defvjp(jaxqr_fwd, jaxqr_bwd)  # type: ignore

@@ -1024,6 +1024,44 @@ def test_qr(backend, highp):
         np.testing.assert_allclose(n_grad, a_grad, atol=1e-3)
 
 
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
+def test_qr_wide_ad(backend, highp):
+    def qr_loss(p):
+        # Create a non-square WIDE matrix (mimicking gate_to_MPO split)
+        p_c = tc.backend.cast(p, "complex128")
+        data = np.arange(64).reshape((4, 16)).astype(np.complex128)
+        data = data + 1j * data[::-1, :]
+        A = tc.backend.convert_to_tensor(data) * p_c
+
+        Q1, R1 = tc.backend.qr(A)
+        Q2, R2 = tc.backend.qr(R1)
+
+        return tc.backend.real(
+            tc.backend.sum(Q1) + tc.backend.sum(Q2) + tc.backend.sum(R2)
+        )
+
+    if tc.backend.name == "tensorflow":
+        p = tf.Variable(1.0, dtype=tf.float64)
+    else:
+        p = tc.backend.convert_to_tensor(1.0, dtype="float64")
+
+    vg = tc.backend.value_and_grad(qr_loss)
+    _, grad_ad = vg(p)
+
+    eps = 1e-7
+
+    def loss_val(p_val):
+        if tc.backend.name == "tensorflow":
+            return float(qr_loss(tf.constant(p_val, dtype=tf.float64)))
+        return float(qr_loss(tc.backend.convert_to_tensor(p_val, dtype="float64")))
+
+    val_p = loss_val(1.0 + eps)
+    val_m = loss_val(1.0 - eps)
+    grad_num = (val_p - val_m) / (2 * eps)
+
+    np.testing.assert_allclose(float(grad_ad), grad_num, atol=1e-5)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_sparse_methods(backend):
     values = tc.backend.convert_to_tensor(np.array([1.0, 2.0]))

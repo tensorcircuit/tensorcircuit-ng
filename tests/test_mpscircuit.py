@@ -412,10 +412,9 @@ def test_mps_jit_rdm_mpo(backend, dtype):
     np.testing.assert_allclose(res, 1.0, atol=1e-12)
 
 
-# TODO(@refraction-ray): fails  (lf("jaxb"), lf("highp"))
-
-
-@pytest.mark.parametrize("backend, dtype", [(lf("tfb"), lf("highp"))])
+@pytest.mark.parametrize(
+    "backend, dtype", [(lf("tfb"), lf("highp")), (lf("jaxb"), lf("highp"))]
+)
 def test_circuits_jit(backend, dtype):
     def expec(params):
         mps = tc.MPSCircuit(N, split=split)

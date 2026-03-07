@@ -639,7 +639,6 @@ class MPSCircuit(AbstractCircuit):
         :param split: Truncation options for the MPO application. Defaults to None.
         :type split: Optional[Dict[str, Any]], optional
         """
-        # TODO(@SUSYUSTC): jax autograd is wrong on this function
         ordered = np.all(np.diff(index) > 0)
         if not ordered:
             order = np.argsort(index)
