@@ -37,6 +37,9 @@ To debug the installation issue or report bugs, please check the environment inf
     ``pip uninstall tensorcircuit-ng``, then
     ``pip install tensorcircuit-nightly``
 
+.. Tip::
+    **AI-Native Development:** We highly recommend developing with AI coding agents (e.g., Cursor, Claude Code, Gemini CLI) directly within the cloned repository to leverage the rich context from examples and tests. See :doc:`agentic` for details.
+
 
 Circuit Object
 ------------------

@@ -12,7 +12,6 @@ Introduction
 ---------------
 
 `TensorCircuit-NG <https://github.com/tensorcircuit/tensorcircuit-ng>`_ is an industrial-grade, open-source high-performance quantum software framework in Python.
-
 It is designed for researchers and engineers who demand **Speed, Flexibility, and Elegance**.
 
 .. grid:: 1 1 2 3
@@ -236,6 +235,7 @@ The following documentation sections briefly introduce TensorCircuit-NG to the u
    :maxdepth: 2
 
    quickstart.rst
+   agentic.rst
    advance.rst
    faq.rst
    sharpbits.rst
