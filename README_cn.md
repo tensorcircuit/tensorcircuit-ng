@@ -51,13 +51,16 @@ TensorCircuit-NG 是 TensorCircuit 在技术与架构上的演进版本，由原
 
 1.  **丰富上下文：** `examples/` 中的 100 多个脚本和 `tests/` 中的大量测试用例提供了至关重要的参考，能显著减少 AI 幻觉。
 2.  **内置规则：** 我们提供了专门的 [AGENTS.md](/AGENTS.md) 文件。它是 AI 助手的“开发手册”（类似 `CLAUDE.md`），定义了编码标准和最佳实践，确保生成的代码符合 TC-NG 调用范式。
-3.  **专用智能体技能 (Agentic Skills)：** `.agents/skills/` 目录包含了一系列工作流，引导 AI 助手完成复杂的跨步骤任务：
+3.  **专用智能体技能 (Agentic Skills)：** `.agents/skills/` 目录包含了一系列工作流，引导 AI 助手完成复杂的跨步骤任务.
+<details>
     *   [`arxiv-reproduce`](/.agents/skills/arxiv-reproduce/README.md): 自动复现 arXiv 论文，支持标准化输出和代码质量验证。
     *   [`performance-optimize`](/.agents/skills/performance-optimize/README.md): 科学的性能调优与内存优化工作流（JAX 循环编译、向量化并行等）。
     *   [`tc-rosetta`](/.agents/skills/tc-rosetta/README.md): 端到端框架翻译（如从 Qiskit, PennyLane 翻译），具备内在数学意图重构能力。
     *   [`tutorial-crafter`](/.agents/skills/tutorial-crafter/README.md): 将原始 TC-NG 脚本转化为详尽、叙事驱动的 Markdown 或 HTML 教程。
     *   [`demo-generator`](/.agents/skills/demo-generator/README.md): 将 TC-NG 脚本转化为交互式、精美且高性能的 Streamlit GUI 应用程序。
     *   [`code-reviewer`](/.agents/skills/code-reviewer/README.md): 自动审查并重构 TC-NG 代码，确保数学正确性、JAX 原生性能（JIT, vmap）以及工程严谨性。
+</details>
+
 
 **建议工作流：**
 

@@ -20,7 +20,10 @@ except ImportError as e:
 from ..circuit import Circuit
 from .. import gates as G
 from ..gates import array_to_tensor, num_to_tensor
-from .physics.baseline import TFIM1Denergy, Heisenberg1Denergy
+from .physics.baseline import (  # pylint: disable=unused-import
+    TFIM1Denergy,
+    Heisenberg1Denergy,
+)
 
 Array = Any
 Tensor = Any
@@ -388,5 +391,3 @@ def repr2array(inputs: str) -> Array:
         o = [float(c.strip()) for c in l.split(" ") if c.strip()]
         outputs.append(o)
     return np.array(outputs)
-
-
