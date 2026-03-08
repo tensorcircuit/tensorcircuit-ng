@@ -1,0 +1,20 @@
+title: "Quantum Convolutional Neural Networks"
+arxiv_id: "1810.03787"
+url: "https://arxiv.org/abs/1810.03787"
+year: 2018
+authors:
+  - "Iris Cong"
+  - "Soonwon Choi"
+  - "Mikhail D. Lukin"
+tags:
+  - "QCNN"
+  - "Quantum Machine Learning"
+  - "Symmetry-Protected Topological Phases"
+hardware_requirements:
+  gpu: False
+  min_memory: "16GB"
+description: "Reproduces the analytical QCNN phase recognition (Figure 2c) using exact ground states obtained from quimb DMRG simulation fed into TensorCircuit QCNN."
+outputs:
+  - target: "Figure 2(c)"
+    path: outputs/result.png
+    script: "main.py"
