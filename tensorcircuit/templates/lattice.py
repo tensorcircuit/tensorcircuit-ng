@@ -1480,8 +1480,6 @@ class CustomizeLattice(AbstractLattice):
         with all backend types (JAX, TensorFlow, etc.).
         """
 
-        # For small lattices or cases with potential duplicate coordinates,
-        # fall back to distance matrix method for robustness
         if self.num_sites < 200:
             logger.info(
                 "Small lattice detected, falling back to distance matrix method for robustness"
@@ -1499,38 +1497,19 @@ class CustomizeLattice(AbstractLattice):
         logger.info("Identifying distance shells...")
         distances_for_shells: List[float] = []
 
-        # For robust shell identification, query all pairwise distances for smaller lattices
-        # or use dense sampling for larger ones
-        if self.num_sites <= 100:
-            # For small lattices, compute all pairwise distances for accuracy
-            query_k = min(self.num_sites - 1, max_k * 20)
-            if query_k > 0:
-                dists, _ = tree.query(coords_np, k=query_k + 1)  # +1 to exclude self
-                if isinstance(dists, np.ndarray):
-                    if dists.ndim == 1:
-                        distances_for_shells.append(dists[1])
-                    else:
-                        distances_for_shells.extend(dists[:, 1:].flatten())
+        # For robust shell identification, compute pairwise distances for all sites.
+        # Batched KDTree queries are efficient enough that sampling is rarely necessary
+        # for typical lattice sizes.
+        query_k = min(self.num_sites - 1, max_k * 20 + 50)
+        if query_k > 0:
+            dists, _ = tree.query(coords_np, k=query_k + 1)  # +1 to exclude self
+            if isinstance(dists, np.ndarray):
+                if dists.ndim == 1:
+                    distances_for_shells.append(dists[1])
                 else:
-                    distances_for_shells.append(dists)  # Single distance
-        else:
-            # For larger lattices, use adaptive sampling but ensure we capture all shells
-            sample_size = min(1000, self.num_sites // 2)  # More conservative sampling
-            query_indices = list(
-                range(0, self.num_sites, max(1, self.num_sites // sample_size))
-            )
-            query_k = min(max_k * 20 + 50, self.num_sites - 1)
-            if query_k > 0:
-                dists, _ = tree.query(
-                    coords_np[query_indices], k=query_k + 1
-                )  # +1 to exclude self
-                if isinstance(dists, np.ndarray):
-                    if dists.ndim == 1:
-                        distances_for_shells.append(dists[1])
-                    else:
-                        distances_for_shells.extend(dists[:, 1:].flatten())
-                else:
-                    distances_for_shells.append(dists)  # Single distance
+                    distances_for_shells.extend(dists[:, 1:].flatten())
+            else:
+                distances_for_shells.append(dists)  # Single distance
 
         # Filter out zero distances (duplicate coordinates) before shell identification
         ZERO_THRESHOLD = 1e-12

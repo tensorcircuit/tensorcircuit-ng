@@ -2644,7 +2644,6 @@ class TestPrivateHelpers:
         Tests the _build_neighbors method of CustomizeLattice using KDTree (use_kdtree=True)
         by comparing it to the standard distance matrix method for both small and large lattices.
         """
-        import numpy as np
 
         # Helper to generate random coordinates
         def generate_lattice(num_sites):
@@ -2655,19 +2654,19 @@ class TestPrivateHelpers:
             )
 
         # Test small lattice branch (num_sites <= 100)
-        lat_small_kdtree = generate_lattice(50)
+        lat_small_kdtree = generate_lattice(150)
         lat_small_kdtree._build_neighbors(max_k=2, use_kdtree=True)
 
-        lat_small_dist = generate_lattice(50)
+        lat_small_dist = generate_lattice(150)
         lat_small_dist._build_neighbors(max_k=2, use_kdtree=False)
 
         assert lat_small_kdtree._neighbor_maps == lat_small_dist._neighbor_maps
 
         # Test large lattice branch (num_sites > 100)
-        lat_large_kdtree = generate_lattice(150)
+        lat_large_kdtree = generate_lattice(250)
         lat_large_kdtree._build_neighbors(max_k=2, use_kdtree=True)
 
-        lat_large_dist = generate_lattice(150)
+        lat_large_dist = generate_lattice(250)
         lat_large_dist._build_neighbors(max_k=2, use_kdtree=False)
 
         assert lat_large_kdtree._neighbor_maps == lat_large_dist._neighbor_maps
