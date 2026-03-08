@@ -21,6 +21,7 @@ TensorCircuit-NG includes built-in agentic skills that can be activated by compa
 *   **tutorial-crafter**: Transforms raw scripts into comprehensive, narrative-driven educational tutorials.
 *   **demo-generator**: Transforms scripts into interactive, high-performance Streamlit GUI applications.
 *   **code-reviewer**: Autonomously reviews and refactors code for mathematical correctness and performance.
+*   **meta-explorer**: High-intensity autonomous research agent for circuit architecture and optimization strategy discovery (VQE, QML, QAOA, etc.).
 
 Recommended Workflow
 --------------------
