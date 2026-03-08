@@ -206,8 +206,8 @@ if __name__ == "__main__":
         methods=["greedy"],
         parallel=False,
         minimize="combo",
-        max_time=0.5,
-        max_repeats=8,
+        max_time=1.0,
+        max_repeats=16,
         progbar=False,
     )
     tc.set_contractor("custom", optimizer=opt, preprocessing=True)
