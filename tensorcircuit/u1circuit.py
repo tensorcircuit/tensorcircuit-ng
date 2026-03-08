@@ -37,11 +37,30 @@ class U1Circuit(AbstractCircuit):
                 f"U1Circuit only supports nqubits < 64, but got {nqubits}. "
             )
 
-        # Infer k from filled if not provided
         if k is None and filled is None:
             raise ValueError("Either 'k' or 'filled' must be provided")
-        if k is None:
-            k = len(filled)  # type: ignore
+
+        if filled is not None:
+            if isinstance(filled, (list, tuple, range, set)):
+                filled = list(filled)
+                if k is not None and len(filled) != k:
+                    raise ValueError(
+                        f"Provided 'k' ({k}) does not match length of 'filled' ({len(filled)})"
+                    )
+                if len(set(filled)) != len(filled):
+                    raise ValueError(f"Duplicate indices found in 'filled': {filled}")
+                for i in filled:
+                    if i < 0 or i >= nqubits:
+                        raise ValueError(
+                            f"Index {i} in 'filled' is out of range for {nqubits} qubits"
+                        )
+                if k is None:
+                    k = len(filled)
+            else:
+                if k is None:
+                    k = int(backend.shape_tuple(filled)[0])
+        else:
+            filled = list(range(k))  # type: ignore
 
         self._k = k
         self._d = 2
@@ -59,6 +78,7 @@ class U1Circuit(AbstractCircuit):
         # Mapping helpers
         # TC uses qubit 0 as the leftmost (highest) bit
         # So qubit i corresponds to bit position (n-1-i) in the state integer
+        assert k is not None
         self._dim = comb(nqubits, k)
         self._basis: List[int] = []
         for filled_combo in combinations(range(nqubits), k):
@@ -76,13 +96,12 @@ class U1Circuit(AbstractCircuit):
         if inputs is not None:
             self._state = backend.cast(inputs, dtypestr)
         else:
-            if filled is None:
-                # Default: fill lowest-indexed qubits (highest bits in state integer)
-                filled_state = ((1 << k) - 1) << (nqubits - k)
-            else:
-                filled_state = 0
-                for i in filled:
-                    filled_state |= 1 << (nqubits - 1 - i)  # Reversed bit ordering
+            filled_tensor = backend.cast(backend.convert_to_tensor(filled), idtypestr)
+            bit_positions = nqubits - 1 - filled_tensor
+            bits = backend.left_shift(
+                backend.cast(backend.convert_to_tensor(1), idtypestr), bit_positions
+            )
+            filled_state = backend.sum(bits)
 
             # Find the index in our basis - JIT FRIENDLY
             # Use searchsorted and one_hot to stay within the graph
@@ -199,6 +218,34 @@ class U1Circuit(AbstractCircuit):
             cos_t * self._state + isin_t * swapped_state
         )
 
+    def _apply_diagonal(self, index: Sequence[int], diagonal: Any) -> None:
+        """Apply diagonal gate on qubits specified by index."""
+        # Convert index to bit positions
+        bps = [self._bit_position(i) for i in index]
+
+        # Extract bits for each target qubit
+        # Basis shape: [dim]
+        # For each qubit, bit_val: [dim]
+        # We need to construct the index into the diagonal vector
+        # Qubit index[0] corresponds to the most significant bit in the diagonal vector
+        config_val = backend.cast(backend.zeros_like(self._basis_tensor), idtypestr)
+        m = len(index)
+        for i, bp in enumerate(bps):
+            bit = backend.right_shift(
+                backend.bitwise_and(self._basis_tensor, (1 << bp)), bp
+            )
+            config_val = backend.bitwise_xor(
+                config_val, backend.left_shift(bit, m - 1 - i)
+            )
+
+        # config_val is now a tensor of indices [dim], each in [0, 2^m - 1]
+        if hasattr(diagonal, "tensor"):
+            diagonal = diagonal.tensor
+        diag_tensor = backend.cast(backend.convert_to_tensor(diagonal), dtypestr)
+        diag_tensor = backend.reshape(diag_tensor, [-1])
+        phases = backend.gather1d(diag_tensor, config_val)
+        self._state = self._state * phases
+
     # -------------------------------------------------------------------------
     # Public gate methods (delegate to internal implementations)
     # -------------------------------------------------------------------------
@@ -236,8 +283,7 @@ class U1Circuit(AbstractCircuit):
 
         gate_name = name.lower() if name else None
 
-        # Extract parameters: _meta_apply puts them in ir_dict['parameters']
-        # Also check kwargs for direct calls
+        # Extract parameters
         params = {}
         if ir_dict is not None and "parameters" in ir_dict:
             params.update(ir_dict["parameters"])
@@ -250,6 +296,7 @@ class U1Circuit(AbstractCircuit):
             "name": name,
             "split": split,
             "mpo": mpo,
+            "diagonal": diagonal,
         }
         if params:
             gate_dict["parameters"] = params
@@ -272,10 +319,12 @@ class U1Circuit(AbstractCircuit):
             self._apply_swap(index[0], index[1])
         elif gate_name == "iswap":
             self._apply_iswap(index[0], index[1], params.get("theta", 1.0))
+        elif gate_name == "diagonal":
+            self._apply_diagonal(index, gate)
         else:
             raise ValueError(
                 f"Gate {name} not implemented in U1Circuit. "
-                "Supported: rz, rzz, cz, cphase, swap, iswap."
+                "Supported: rz, rzz, cz, cphase, swap, iswap, diagonal."
             )
 
     # Note: Most gate methods (rz, rzz, cz, swap, iswap, cphase, etc.) are
@@ -306,19 +355,14 @@ class U1Circuit(AbstractCircuit):
         """
         Compute expectation value of operators.
 
-        Currently only supports single Z operator. For Pauli strings, use expectation_ps.
+        Currently only supports single Z operator via expectation_z.
+        For general operators, please use expectation_ps.
 
-        :param ops: Operator specification as (gate_tensor, [qubit_indices])
+        :param ops: Operator specification
         :return: Expectation value
         """
-        if len(ops) == 1 and isinstance(ops[0], tuple) and len(ops[0]) == 2:
-            op, idx = ops[0]
-            op_np = backend.numpy(op)
-            if np.allclose(op_np, [[1, 0], [0, -1]]):
-                return self.expectation_z(idx[0])
-
         raise NotImplementedError(
-            "General expectation not yet implemented for U1Circuit. Use expectation_ps."
+            "General expectation not yet implemented for U1Circuit. Please use expectation_ps instead."
         )
 
     def expectation_ps(  # type: ignore
@@ -345,6 +389,19 @@ class U1Circuit(AbstractCircuit):
             x = d.get("x", [])
             y = d.get("y", [])
             z = d.get("z", [])
+
+        if x is not None:
+            for i in x:
+                if i < 0 or i >= self._nqubits:
+                    raise ValueError(f"Index {i} in 'x' is out of range")
+        if y is not None:
+            for i in y:
+                if i < 0 or i >= self._nqubits:
+                    raise ValueError(f"Index {i} in 'y' is out of range")
+        if z is not None:
+            for i in z:
+                if i < 0 or i >= self._nqubits:
+                    raise ValueError(f"Index {i} in 'z' is out of range")
 
         x = x or []
         y = y or []
@@ -572,6 +629,8 @@ class U1Circuit(AbstractCircuit):
         # Extract bits at the specified indices (using TC ordering)
         outcomes = []
         for i in index:
+            if i < 0 or i >= self._nqubits:
+                raise ValueError(f"Index {i} is out of range for measurement")
             bp = self._bit_position(i)
             bit = backend.bitwise_and(backend.right_shift(full_state, bp), 1)
             outcomes.append(backend.cast(bit, rdtypestr))

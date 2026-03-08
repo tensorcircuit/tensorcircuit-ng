@@ -88,6 +88,118 @@ def test_u1circuit_errors(backend):
     with pytest.raises(ValueError, match=r"not U\(1\) conserving"):
         sim.rx(0, theta=0.1)
 
+    # Test filled validation
+    with pytest.raises(ValueError, match="match length of 'filled'"):
+        U1Circuit(4, k=1, filled=[0, 1])
+    with pytest.raises(ValueError, match="Duplicate indices"):
+        U1Circuit(4, filled=[0, 0])
+    with pytest.raises(ValueError, match="out of range"):
+        U1Circuit(4, filled=[2, 4])
+
+    # Test expectation error
+    with pytest.raises(NotImplementedError, match="Please use expectation_ps"):
+        sim.expectation([tc.gates.z(), [0]])
+
+    # Test initialization with only k
+    sim3 = U1Circuit(4, k=2)
+    assert sim3.circuit_param["filled"] == [0, 1]
+    assert np.allclose(tc.backend.numpy(sim3.expectation_ps(z=[0, 1])), 1.0)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_u1circuit_diagonal_gate(backend):
+    # Test case 1: 2 qubits
+    n, k = 2, 1
+    filled = [0]
+    diag = tc.backend.convert_to_tensor([1.0, 2.0, 3.0, 4.0])
+
+    u1c = U1Circuit(n, k, filled=filled)
+    u1c.diagonal(0, 1, diag=diag)
+
+    c = tc.Circuit(n)
+    c.x(0)
+    c.diagonal(0, 1, diag=diag)
+
+    assert np.allclose(
+        tc.backend.numpy(u1c.to_dense()),
+        tc.backend.numpy(tc.backend.reshape(c.state(), [-1])),
+        atol=1e-5,
+    )
+
+    # Test case 2: 3 qubits
+    n, k = 4, 2
+    filled = [0, 2]
+    diag3 = tc.backend.convert_to_tensor(np.exp(1j * np.random.rand(8)))
+
+    u1c3 = U1Circuit(n, k, filled=filled)
+    u1c3.diagonal(0, 1, 2, diag=diag3)
+
+    c3 = tc.Circuit(n)
+    c3.x(0)
+    c3.x(2)
+    c3.diagonal(0, 1, 2, diag=diag3)
+
+    assert np.allclose(
+        tc.backend.numpy(u1c3.to_dense()),
+        tc.backend.numpy(tc.backend.reshape(c3.state(), [-1])),
+        atol=1e-5,
+    )
+
+    # Test case 3: 4 qubits
+    n, k = 5, 2
+    filled = [1, 3]
+    diag4 = tc.backend.convert_to_tensor(np.exp(1j * np.random.rand(16)))
+
+    u1c4 = U1Circuit(n, k, filled=filled)
+    u1c4.diagonal(0, 1, 2, 4, diag=diag4)
+
+    c4 = tc.Circuit(n)
+    c4.x(1)
+    c4.x(3)
+    c4.diagonal(0, 1, 2, 4, diag=diag4)
+
+    assert np.allclose(
+        tc.backend.numpy(u1c4.to_dense()),
+        tc.backend.numpy(tc.backend.reshape(c4.state(), [-1])),
+        atol=1e-5,
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_u1circuit_expectation_odd_y(backend):
+    # Odd number of Y in Pauli string
+    n, k = 4, 2
+    filled = [0, 1]
+
+    u1c = U1Circuit(n, k, filled=filled)
+    c = tc.Circuit(n)
+    c.x(0)
+    c.x(1)
+
+    # Create some entanglement
+    u1c.iswap(0, 2, theta=0.5)
+    c.iswap(0, 2, theta=0.5)
+    u1c.iswap(1, 3, theta=0.7)
+    c.iswap(1, 3, theta=0.7)
+
+    ps = {"y": [0, 2], "z": [1]}
+    assert np.allclose(
+        tc.backend.numpy(u1c.expectation_ps(**ps)),
+        tc.backend.numpy(c.expectation_ps(**ps)),
+        atol=1e-5,
+    )
+
+    ps_odd = {"y": [0], "x": [1]}
+    assert np.abs(tc.backend.numpy(u1c.expectation_ps(**ps_odd))) < 1e-6
+    assert np.abs(tc.backend.numpy(c.expectation_ps(**ps_odd))) < 1e-6
+
+    ps_complex = {"y": [0, 1, 2], "x": [3]}
+    assert np.allclose(
+        tc.backend.numpy(u1c.expectation_ps(**ps_complex)),
+        tc.backend.numpy(c.expectation_ps(**ps_complex)),
+        atol=1e-5,
+    )
+
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_u1circuit_expectation_ps(backend):
@@ -526,13 +638,44 @@ def test_u1circuit_all_gate_types(backend):
         # Apply gate to both circuits
         getattr(u1c, gate_name)(*indices, **kwargs)
         getattr(c, gate_name)(*indices, **kwargs)
-
         # Compare states
         u1_dense = tc.backend.numpy(u1c.to_dense())
         c_state = tc.backend.numpy(tc.backend.reshape(c.state(), [-1]))
         assert np.allclose(
             u1_dense, c_state, atol=1e-5
         ), f"State mismatch for {gate_name}({indices}, {kwargs}) with filled={filled}"
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
+def test_u1circuit_filled_jit(backend):
+    # This test verifies that different 'filled' tensors do not trigger re-compilation
+    compilation_count = 0
+
+    def get_expectation(filled):
+        nonlocal compilation_count
+        compilation_count += 1
+        # Create U1Circuit inside JIT
+        c = U1Circuit(4, 2, filled=filled)
+        return c.expectation_ps(z=[0])
+
+    f_jit = tc.backend.jit(get_expectation)
+
+    # First call: compiles
+    res1 = f_jit(tc.backend.convert_to_tensor([0, 1], dtype="int32"))
+    assert compilation_count == 1
+    assert np.allclose(tc.backend.numpy(res1), -1.0)
+
+    # Second call: should use cached JIT-ted function
+    res2 = f_jit(tc.backend.convert_to_tensor([1, 2], dtype="int32"))
+    assert compilation_count == 1
+    # |0110> -> Z0=1, Z1=-1, Z2=-1, Z3=1
+    assert np.allclose(tc.backend.numpy(res2), 1.0)
+
+    # Third call: another variation
+    res3 = f_jit(tc.backend.convert_to_tensor([0, 2], dtype="int32"))
+    assert compilation_count == 1
+    # |1010> -> Z0=-1, Z1=1, Z2=-1, Z3=1
+    assert np.allclose(tc.backend.numpy(res3), -1.0)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
