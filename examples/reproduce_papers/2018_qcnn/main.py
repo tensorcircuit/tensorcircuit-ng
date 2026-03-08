@@ -121,21 +121,27 @@ def exact_qcnn_circuit(n_qubits, depth, inputs):
     current_qubits = list(range(n_qubits))
 
     for _ in range(depth):
+        # 1. Translationally invariant convolution layer
+        for i in range(len(current_qubits) - 1):
+            c.cz(current_qubits[i], current_qubits[i + 1])
+
+        # 2. Pooling layer (Toffoli and conditional phase flips)
         next_qubits = []
         for i in range(0, len(current_qubits) - 2, 3):
             q1 = current_qubits[i]
             q2 = current_qubits[i + 1]
             q3 = current_qubits[i + 2]
 
-            c.cz(q1, q2)
-            c.cz(q2, q3)
+            # CZs are already applied above, so we skip them here
 
+            # Toffoli with controls in X basis
             c.H(q1)
             c.H(q3)
             c.toffoli(q1, q3, q2)
             c.H(q1)
             c.H(q3)
 
+            # Phase flips when adjacent measurement is X=-1
             c.H(q1)
             c.cz(q1, q2)
             c.H(q1)
@@ -171,21 +177,21 @@ def calculate_sop(circ, N):
 
 
 def calculate_qcnn(circ, rem_qubits):
+    # Fully connected layer applies CZ gates
     for i in range(len(rem_qubits) - 1):
         circ.cz(rem_qubits[i], rem_qubits[i + 1])
 
     if len(rem_qubits) >= 3:
         mid_idx = len(rem_qubits) // 2
-        q1 = rem_qubits[mid_idx - 1]
         q2 = rem_qubits[mid_idx]
-        q3 = rem_qubits[mid_idx + 1]
+
+        # Followed by an X projection
         val = circ.expectation(
-            [tc.gates.z(), [q1]],
             [tc.gates.x(), [q2]],
-            [tc.gates.z(), [q3]],
             reuse=False,
         )
         return abs(float(val.real))
+
     if len(rem_qubits) >= 1:
         mid_idx = len(rem_qubits) // 2
         val = circ.expectation_ps(x=[rem_qubits[mid_idx]], reuse=False)
