@@ -2635,3 +2635,38 @@ class TestPrivateHelpers:
             2.0,
             err_msg="Distance check failed for open y-direction in mixed BC case.",
         )
+
+    @pytest.mark.parametrize(
+        "backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")]
+    )
+    def test_kdtree_neighbors(self, backend):
+        """
+        Tests the _build_neighbors method of CustomizeLattice using KDTree (use_kdtree=True)
+        by comparing it to the standard distance matrix method for both small and large lattices.
+        """
+
+        # Helper to generate random coordinates
+        def generate_lattice(num_sites):
+            rng = np.random.default_rng(42)
+            coords = rng.random((num_sites, 2)).tolist()
+            return CustomizeLattice(
+                dimensionality=2, identifiers=list(range(num_sites)), coordinates=coords
+            )
+
+        # Test small lattice branch (num_sites <= 100)
+        lat_small_kdtree = generate_lattice(150)
+        lat_small_kdtree._build_neighbors(max_k=2, use_kdtree=True)
+
+        lat_small_dist = generate_lattice(150)
+        lat_small_dist._build_neighbors(max_k=2, use_kdtree=False)
+
+        assert lat_small_kdtree._neighbor_maps == lat_small_dist._neighbor_maps
+
+        # Test large lattice branch (num_sites > 100)
+        lat_large_kdtree = generate_lattice(250)
+        lat_large_kdtree._build_neighbors(max_k=2, use_kdtree=True)
+
+        lat_large_dist = generate_lattice(250)
+        lat_large_dist._build_neighbors(max_k=2, use_kdtree=False)
+
+        assert lat_large_kdtree._neighbor_maps == lat_large_dist._neighbor_maps
