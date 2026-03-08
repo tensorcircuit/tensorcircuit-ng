@@ -1,0 +1,23 @@
+{
+  "config": {
+    "id": "cddc19c5",
+    "topology": "line",
+    "entangle_gate": "rxx",
+    "depth": 4,
+    "rx_layers": true,
+    "ry_layers": true,
+    "rz_layers": false,
+    "init_strategy": "symmetry_breaking",
+    "learning_rate": 0.05,
+    "seed": 9972,
+    "max_steps": 25
+  },
+  "results": {
+    "status": "success",
+    "best_energy": -16.816030596605163,
+    "energy_error": 0.1839694033948689,
+    "num_params": 164,
+    "time": 11.90745735168457,
+    "steps_taken": 25
+  }
+}

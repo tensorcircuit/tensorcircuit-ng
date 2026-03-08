@@ -1,0 +1,23 @@
+{
+  "config": {
+    "id": "b3f44a5c",
+    "topology": "lattice",
+    "entangle_gate": "rzz",
+    "depth": 2,
+    "rx_layers": true,
+    "ry_layers": false,
+    "rz_layers": false,
+    "init_strategy": "normal_small",
+    "learning_rate": 0.1,
+    "seed": 1255,
+    "max_steps": 25
+  },
+  "results": {
+    "status": "success",
+    "best_energy": -16.994319994492464,
+    "energy_error": 0.0056800055075676426,
+    "num_params": 70,
+    "time": 8.59532356262207,
+    "steps_taken": 25
+  }
+}

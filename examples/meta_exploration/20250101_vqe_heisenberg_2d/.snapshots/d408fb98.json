@@ -1,0 +1,23 @@
+{
+  "config": {
+    "id": "d408fb98",
+    "topology": "line",
+    "entangle_gate": "rzz",
+    "depth": 4,
+    "rx_layers": true,
+    "ry_layers": true,
+    "rz_layers": false,
+    "init_strategy": "zero",
+    "learning_rate": 0.05,
+    "seed": 7228,
+    "max_steps": 25
+  },
+  "results": {
+    "status": "success",
+    "best_energy": -17.0,
+    "energy_error": 3.197442310920451e-14,
+    "num_params": 164,
+    "time": 10.844810724258423,
+    "steps_taken": 1
+  }
+}

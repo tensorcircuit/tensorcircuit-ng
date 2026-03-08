@@ -1,0 +1,23 @@
+{
+  "config": {
+    "id": "cebb0570",
+    "topology": "all_to_all",
+    "entangle_gate": "rxx",
+    "depth": 1,
+    "rx_layers": false,
+    "ry_layers": false,
+    "rz_layers": true,
+    "init_strategy": "normal_large",
+    "learning_rate": 0.05,
+    "seed": 8834,
+    "max_steps": 25
+  },
+  "results": {
+    "status": "success",
+    "best_energy": -8.276764045641803,
+    "energy_error": 8.723235954358211,
+    "num_params": 90,
+    "time": 6.957996845245361,
+    "steps_taken": 25
+  }
+}

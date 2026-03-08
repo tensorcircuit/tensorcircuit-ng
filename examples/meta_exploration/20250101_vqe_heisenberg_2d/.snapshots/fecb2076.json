@@ -1,0 +1,23 @@
+{
+  "config": {
+    "id": "fecb2076",
+    "topology": "all_to_all",
+    "entangle_gate": "cz",
+    "depth": 1,
+    "rx_layers": true,
+    "ry_layers": true,
+    "rz_layers": false,
+    "init_strategy": "symmetry_breaking",
+    "learning_rate": 0.05,
+    "seed": 8471,
+    "max_steps": 25
+  },
+  "results": {
+    "status": "success",
+    "best_energy": -16.98959018391444,
+    "energy_error": 0.010409816085690693,
+    "num_params": 48,
+    "time": 3.8147804737091064,
+    "steps_taken": 25
+  }
+}
