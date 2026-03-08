@@ -12,7 +12,7 @@ tags:
   - "Symmetry-Protected Topological Phases"
 hardware_requirements:
   gpu: False
-  min_memory: "4GB"
+  min_memory: "16GB"
 description: "Reproduces the analytical QCNN phase recognition (Figure 2c) using exact ground states obtained from quimb DMRG simulation fed into TensorCircuit QCNN."
 outputs:
   - target: "Figure 2(c)"
