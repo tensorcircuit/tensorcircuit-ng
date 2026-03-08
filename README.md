@@ -252,7 +252,9 @@ pip install tensorcircuit-nightly
 
   - Support time evolution simulation with **exact, ODE, Krylov, Trotter, Chebyshev solvers**.
 
-  - Support Heisenberg picture-based Pauli propagation approximation simulation for circuits.
+  - Support **symmetry-enforced circuit simulation** with `U1Circuit` for charge conservation.
+
+  - Support Heisenberg picture-based **Pauli propagation** approximation simulation for circuits.
 
   - Circuit sampling supports both final state sampling and perfect sampling from tensor networks.
 
@@ -271,6 +273,12 @@ pip install tensorcircuit-nightly
   - SOTA quantum algorithm and model implementations.
 
   - Support hybrid workflows and pipelines with CPU/GPU/QPU hardware from local/cloud/hpc resources using tf/torch/jax/cupy/numpy frameworks all at the same time.
+
+  - Support **autonomous paper reproduction**.
+
+  - Support **autonomous research discovery** for circuit architectures and optimization strategies.
+
+  - Fully **AI-native ecosystem** with built-in agentic skills and standardized development rules for AI assistants.
 
   </details>
 
