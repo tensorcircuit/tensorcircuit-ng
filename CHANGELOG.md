@@ -14,6 +14,8 @@
 
 - Add `reduced_density_matrix` method for `MPSCircuit`.
 
+- Add `diagonal` gate for `U1Circuit`.
+
 ### Fixed
 
 - Fix pauli propagation sign error for Y operator.

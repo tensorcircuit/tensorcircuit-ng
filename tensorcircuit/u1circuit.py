@@ -105,8 +105,8 @@ class U1Circuit(AbstractCircuit):
 
             # Find the index in our basis - JIT FRIENDLY
             # Use searchsorted and one_hot to stay within the graph
-            fs_tensor = backend.cast(
-                backend.convert_to_tensor([filled_state]), dtype=idtypestr
+            fs_tensor = backend.reshape(
+                backend.cast(filled_state, dtype=idtypestr), [1]
             )
             initial_idx = backend.searchsorted(self._basis_tensor, fs_tensor)[0]
             # Clip index for safety - searchsorted should always find exact match
@@ -127,12 +127,27 @@ class U1Circuit(AbstractCircuit):
         """Convert qubit index to bit position (TC uses reversed ordering)."""
         return self._nqubits - 1 - i
 
-    def _apply_rz(self, i: int, theta: Any) -> None:
-        """Apply RZ(theta) on qubit i: |0> -> |0>, |1> -> e^{-i*theta/2}|1>."""
+    def _get_bit(self, i: int) -> Tensor:
+        """Extract bit value (0 or 1) at position corresponding to qubit i."""
         bp = self._bit_position(i)
-        bit_val = backend.right_shift(
+        return backend.right_shift(
             backend.bitwise_and(self._basis_tensor, (1 << bp)), bp
         )
+
+    def _get_swapped_info(self, i: int, j: int) -> Tuple[Tensor, Tensor]:
+        """Get XOR difference and target indices for swapping qubits i and j."""
+        bpi, bpj = self._bit_position(i), self._bit_position(j)
+        bi = self._get_bit(i)
+        bj = self._get_bit(j)
+        diff = backend.bitwise_xor(bi, bj)
+        mask_swap = (1 << bpi) | (1 << bpj)
+        new_basis = backend.bitwise_xor(self._basis_tensor, diff * mask_swap)
+        indices = backend.searchsorted(self._basis_tensor, new_basis)
+        return diff, indices
+
+    def _apply_rz(self, i: int, theta: Any) -> None:
+        """Apply RZ(theta) on qubit i: |0> -> |0>, |1> -> e^{-i*theta/2}|1>."""
+        bit_val = self._get_bit(i)
         phases = backend.cast(
             -0.5
             * theta
@@ -145,21 +160,15 @@ class U1Circuit(AbstractCircuit):
 
     def _apply_rzz(self, i: int, j: int, theta: Any) -> None:
         """Apply RZZ(theta) on qubits i,j: exp(-i*theta/2 * Z_i Z_j)."""
-        bpi, bpj = self._bit_position(i), self._bit_position(j)
-        zi = backend.right_shift(
-            backend.bitwise_and(self._basis_tensor, (1 << bpi)), bpi
-        )
-        zj = backend.right_shift(
-            backend.bitwise_and(self._basis_tensor, (1 << bpj)), bpj
-        )
+        zi = self._get_bit(i)
+        zj = self._get_bit(j)
         zz = 1 - 2 * backend.cast(backend.bitwise_xor(zi, zj), dtype=dtypestr)
         phases = backend.cast(-0.5 * theta * zz, dtype=dtypestr)
         self._state = self._state * backend.exp(1j * phases)
 
     def _apply_cz(self, i: int, j: int) -> None:
         """Apply CZ gate: |11> -> -|11>, others unchanged."""
-        bpi, bpj = self._bit_position(i), self._bit_position(j)
-        mask = (1 << bpi) | (1 << bpj)
+        mask = (1 << self._bit_position(i)) | (1 << self._bit_position(j))
         both_on = backend.cast(
             backend.bitwise_and(self._basis_tensor, mask) == mask, dtype=dtypestr
         )
@@ -167,47 +176,23 @@ class U1Circuit(AbstractCircuit):
 
     def _apply_cphase(self, i: int, j: int, theta: Any) -> None:
         """Apply controlled-phase: |11> -> e^{i*theta}|11>, others unchanged."""
-        bpi, bpj = self._bit_position(i), self._bit_position(j)
-        mask = (1 << bpi) | (1 << bpj)
+        mask = (1 << self._bit_position(i)) | (1 << self._bit_position(j))
         both_on = backend.cast(
             backend.bitwise_and(self._basis_tensor, mask) == mask, dtype=dtypestr
         )
-        self._state = self._state * (
-            1.0
-            + (
-                backend.exp(
-                    1j * backend.cast(backend.convert_to_tensor(theta), dtypestr)
-                )
-                - 1.0
-            )
-            * both_on
+        phase_val = backend.exp(
+            1j * backend.cast(backend.convert_to_tensor(theta), dtypestr)
         )
+        self._state = self._state * (1.0 + (phase_val - 1.0) * both_on)
 
     def _apply_swap(self, i: int, j: int) -> None:
         """Apply SWAP gate: exchange qubits i and j."""
-        bpi, bpj = self._bit_position(i), self._bit_position(j)
-        mask_i = 1 << bpi
-        mask_j = 1 << bpj
-        bi = backend.right_shift(backend.bitwise_and(self._basis_tensor, mask_i), bpi)
-        bj = backend.right_shift(backend.bitwise_and(self._basis_tensor, mask_j), bpj)
-        diff = backend.bitwise_xor(bi, bj)
-        mask_swap = (1 << bpi) | (1 << bpj)
-        new_basis = backend.bitwise_xor(self._basis_tensor, diff * mask_swap)
-        indices = backend.searchsorted(self._basis_tensor, new_basis)
+        _, indices = self._get_swapped_info(i, j)
         self._state = backend.gather1d(self._state, indices)
 
     def _apply_iswap(self, i: int, j: int, theta: Any) -> None:
         """Apply iSWAP(theta): parameterized iSWAP with angle theta*pi/2."""
-        bpi, bpj = self._bit_position(i), self._bit_position(j)
-        mask_i = 1 << bpi
-        mask_j = 1 << bpj
-        bi = backend.right_shift(backend.bitwise_and(self._basis_tensor, mask_i), bpi)
-        bj = backend.right_shift(backend.bitwise_and(self._basis_tensor, mask_j), bpj)
-        diff = backend.bitwise_xor(bi, bj)
-        mask_swap = (1 << bpi) | (1 << bpj)
-        new_basis = backend.bitwise_xor(self._basis_tensor, diff * mask_swap)
-        indices = backend.searchsorted(self._basis_tensor, new_basis)
-
+        diff, indices = self._get_swapped_info(i, j)
         theta_c = backend.cast(backend.convert_to_tensor(theta), dtypestr)
         cos_t = backend.cos(theta_c * np.pi / 2)
         isin_t = 1j * backend.sin(theta_c * np.pi / 2)
@@ -220,20 +205,11 @@ class U1Circuit(AbstractCircuit):
 
     def _apply_diagonal(self, index: Sequence[int], diagonal: Any) -> None:
         """Apply diagonal gate on qubits specified by index."""
-        # Convert index to bit positions
-        bps = [self._bit_position(i) for i in index]
-
-        # Extract bits for each target qubit
-        # Basis shape: [dim]
-        # For each qubit, bit_val: [dim]
-        # We need to construct the index into the diagonal vector
         # Qubit index[0] corresponds to the most significant bit in the diagonal vector
         config_val = backend.cast(backend.zeros_like(self._basis_tensor), idtypestr)
         m = len(index)
-        for i, bp in enumerate(bps):
-            bit = backend.right_shift(
-                backend.bitwise_and(self._basis_tensor, (1 << bp)), bp
-            )
+        for i, idx in enumerate(index):
+            bit = self._get_bit(idx)
             config_val = backend.bitwise_xor(
                 config_val, backend.left_shift(bit, m - 1 - i)
             )
@@ -341,11 +317,7 @@ class U1Circuit(AbstractCircuit):
         :param i: Qubit index
         :return: Expectation value <Z_i>
         """
-        bp = self._bit_position(i)
-        bit_i = backend.cast(
-            backend.right_shift(backend.bitwise_and(self._basis_tensor, (1 << bp)), bp),
-            dtype=rdtypestr,
-        )
+        bit_i = backend.cast(self._get_bit(i), dtype=rdtypestr)
         z_vals = 1.0 - 2.0 * bit_i
         return backend.sum(
             backend.cast(backend.abs(self._state) ** 2, rdtypestr) * z_vals
@@ -409,13 +381,7 @@ class U1Circuit(AbstractCircuit):
 
         z_factor: Any = 1.0
         for idx in z:
-            bp = self._bit_position(idx)
-            bit = backend.cast(
-                backend.right_shift(
-                    backend.bitwise_and(self._basis_tensor, (1 << bp)), bp
-                ),
-                dtype=dtypestr,
-            )
+            bit = backend.cast(self._get_bit(idx), dtype=dtypestr)
             z_factor = z_factor * (1.0 - 2.0 * bit)
 
         all_xy = list(x) + list(y)
