@@ -169,6 +169,7 @@ def cite(format: str = "bib") -> str:
         return """S.-X. Zhang, J. Allcock, Z.-Q. Wan, S. Liu, J. Sun, H. Yu, X.-H. Yang, J. Qiu, Z. Ye, Y.-Q. Chen, C.-K. Lee, Y.-C. Zheng, S.-K. Jian, H. Yao, C.-Y. Hsieh, and S. Zhang, TensorCircuit: a Quantum Software Framework for the NISQ Era, Quantum 7, 912 (2023).
 
 S.-X. Zhang, Y.-Q. Chen, W. Li, J. Sun, W.-G. Ma, P.-L. Zheng, Y.-X. Huang, Q.-X. Wang, H. Yu, Z. Li, X. Huang, Z.-L. Li, Z.-Q. Wan, S. Liu, J. Qiu, J. Miao, Z. Song, Y. Yan, K. Tsuoka, P. Zhang, L. Wang, H. Fan, C.-Y. Hsieh, H. Yao, and T. Xiang, TensorCircuit-NG: A Universal, Composable, and Scalable Platform for Quantum Computing and Quantum Simulation, arXiv:2602.14167 (2026)."""
+    raise ValueError(f"Unsupported format: {format}")
 
 
 if __name__ == "__main__":
