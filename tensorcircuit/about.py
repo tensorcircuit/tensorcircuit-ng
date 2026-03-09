@@ -2,6 +2,8 @@
 Prints the information for tensorcircuit installation and environment.
 """
 
+# pylint: disable=line-too-long
+
 import platform
 import sys
 import numpy
@@ -155,10 +157,18 @@ def cite(format: str = "bib") -> str:
         month = feb,
         title = {{TensorCircuit: a Quantum Software Framework for the NISQ Era}},
         volume = {7},
-        year = {2023}}"""
+        year = {2023}}
+
+@article{Zhang_TensorCircuitNG_2026,
+        author = {Zhang, Shi-Xin and Chen, Yu-Qin and Li, Weitang and Sun, Jiace and Ma, Wei-Guo and Zheng, Pei-Lin and Huang, Yu-Xiang and Wang, Qi-Xiang and Yu, Hui and Li, Zhuo and Huang, Xuyang and Li, Zong-Liang and Wan, Zhou-Quan and Liu, Shuo and Qiu, Jiezhong and Miao, Jiaqi and Song, Zixuan and Yan, Yuxuan and Tsuoka, Kazuki and Zhang, Pan and Wang, Lei and Fan, Heng and Hsieh, Chang-Yu and Yao, Hong and Xiang, Tao},
+        doi = {10.48550/arXiv.2602.14167},
+        journal = {arXiv preprint arXiv:2602.14167},
+        title = {{TensorCircuit-NG: A Universal, Composable, and Scalable Platform for Quantum Computing and Quantum Simulation}},
+        year = {2026}}"""
     elif format == "aps":
-        return """S.-X. Zhang, J. Allcock, Z.-Q. Wan, S. Liu, J. Sun, H. Yu, X.-H. Yang, J. Qiu, Z. Ye, Y.-Q. Chen, C.-K. Lee, Y.-C. Zheng, S.-K. Jian, H. Yao, C.-Y. Hsieh, and S. Zhang, TensorCircuit: a Quantum Software Framework for the NISQ Era, Quantum 7, 912 (2023)."""  # pylint: disable=line-too-long
-    raise ValueError(f"Unsupported format: {format}")
+        return """S.-X. Zhang, J. Allcock, Z.-Q. Wan, S. Liu, J. Sun, H. Yu, X.-H. Yang, J. Qiu, Z. Ye, Y.-Q. Chen, C.-K. Lee, Y.-C. Zheng, S.-K. Jian, H. Yao, C.-Y. Hsieh, and S. Zhang, TensorCircuit: a Quantum Software Framework for the NISQ Era, Quantum 7, 912 (2023).
+
+S.-X. Zhang, Y.-Q. Chen, W. Li, J. Sun, W.-G. Ma, P.-L. Zheng, Y.-X. Huang, Q.-X. Wang, H. Yu, Z. Li, X. Huang, Z.-L. Li, Z.-Q. Wan, S. Liu, J. Qiu, J. Miao, Z. Song, Y. Yan, K. Tsuoka, P. Zhang, L. Wang, H. Fan, C.-Y. Hsieh, H. Yao, and T. Xiang, TensorCircuit-NG: A Universal, Composable, and Scalable Platform for Quantum Computing and Quantum Simulation, arXiv:2602.14167 (2026)."""
 
 
 if __name__ == "__main__":

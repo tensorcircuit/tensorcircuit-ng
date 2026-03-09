@@ -169,7 +169,8 @@ def global_shadow_state(
     pauli_strings: Optional[Tensor] = None,
     sub: Optional[Sequence[int]] = None,
 ) -> Tensor:
-    r"""To generate the global shadow state from local snapshot states or snapshots and pauli strings
+    r"""To generate the global shadow state from local snapshot states or snapshots and pauli strings.
+    This is the recommended implementation as it typically offers the best performance
 
     :param snapshots: shape = (ns, repeat, nq, 2, 2) or (ns, repeat, nq)
     :type: Tensor
@@ -371,7 +372,9 @@ def global_shadow_state1(
     pauli_strings: Optional[Tensor] = None,
     sub: Optional[Sequence[int]] = None,
 ) -> Tensor:
-    r"""To generate the global snapshots states from local snapshot states or snapshots and pauli strings
+    r"""To generate the global snapshots states from local snapshot states or snapshots and pauli strings.
+    Note: This version uses a single pure einsum which may be slower during compilation
+    and execution for larger qubit counts compared to `global_shadow_state`.
 
     :param snapshots: shape = (ns, repeat, nq, 2, 2) or (ns, repeat, nq)
     :type: Tensor
@@ -418,7 +421,9 @@ def global_shadow_state2(
     pauli_strings: Optional[Tensor] = None,
     sub: Optional[Sequence[int]] = None,
 ) -> Tensor:
-    r"""To generate the global snapshots states from local snapshot states or snapshots and pauli strings
+    r"""To generate the global snapshots states from local snapshot states or snapshots and pauli strings.
+    Note: This version uses vmap over einsum which may be slower during compilation
+    and execution for larger qubit counts compared to `global_shadow_state`.
 
     :param snapshots: shape = (ns, repeat, nq, 2, 2) or (ns, repeat, nq)
     :type: Tensor
