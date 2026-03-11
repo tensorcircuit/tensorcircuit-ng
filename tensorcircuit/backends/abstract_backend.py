@@ -79,6 +79,31 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `eigvalsh`.".format(self.name)
         )
 
+    def lobpcg_standard(
+        self: Any,
+        a: Tensor,
+        x0: Tensor,
+        m: int = 100,
+        tol: Optional[Union[Tensor, float]] = None,
+    ) -> Tuple[Tensor, Tensor, Tensor]:
+        """
+        Compute top-k eigenpairs via LOBPCG for Hermitian matrices.
+
+        :param a: linear operator or matrix tensor
+        :type a: Tensor
+        :param x0: initial guess matrix of shape (n, k)
+        :type x0: Tensor
+        :param m: maximum iterations
+        :type m: int
+        :param tol: convergence tolerance
+        :type tol: Optional[Union[Tensor, float]]
+        :return: (eigenvalues, eigenvectors, iterations)
+        :rtype: Tuple[Tensor, Tensor, Tensor]
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `lobpcg_standard`.".format(self.name)
+        )
+
     def sin(self: Any, a: Tensor) -> Tensor:
         """
         Return the  elementwise sine of a tensor ``a``.

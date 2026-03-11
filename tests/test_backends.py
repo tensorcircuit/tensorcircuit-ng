@@ -181,6 +181,82 @@ def test_backend_jv_grad(jaxb, highp):
     print(tc.backend.jit(tc.backend.value_and_grad(f))(0.2))
 
 
+def _make_hermitian_matrix(n: int, dtype: str) -> np.ndarray:
+    rng = np.random.RandomState(0)
+    a = rng.normal(size=(n, n))
+    b = rng.normal(size=(n, n))
+    z = a + 1j * b
+    h = (z + z.conj().T) / 2.0
+    return h.astype(dtype)
+
+
+def _make_symmetric_matrix(n: int, dtype: str) -> np.ndarray:
+    rng = np.random.RandomState(3)
+    a = rng.normal(size=(n, n))
+    h = (a + a.T) / 2.0
+    return h.astype(dtype)
+
+
+def _lobpcg_check(a: np.ndarray, x0: np.ndarray, tol: float) -> None:
+    a_t = tc.backend.convert_to_tensor(a)
+    a_t = tc.backend.cast(a_t, str(a.dtype))
+    x0_t = tc.backend.convert_to_tensor(x0)
+    x0_t = tc.backend.cast(x0_t, str(x0.dtype))
+
+    theta, u, _ = tc.backend.lobpcg_standard(a_t, x0_t, m=80, tol=None)
+    evals, _ = tc.backend.eigh(a_t)
+    evals = tc.backend.numpy(evals)
+
+    theta_np = np.sort(tc.backend.numpy(theta))[::-1]
+    evals_topk = np.sort(evals)[::-1][: theta_np.shape[0]]
+
+    r = a_t @ u - u * theta
+    res = tc.backend.sum(tc.backend.conj(r) * r, axis=0)
+    res = tc.backend.sqrt(tc.backend.real(res))
+    res_np = tc.backend.numpy(res)
+
+    np.testing.assert_allclose(theta_np, evals_topk, atol=tol, rtol=0)
+    assert np.max(res_np) < tol
+
+
+def test_backend_lobpcg_complex64(jaxb):
+    n = 40
+    k = 3
+    a = _make_hermitian_matrix(n, "complex64")
+    rng = np.random.RandomState(1)
+    x0 = rng.normal(size=(n, k)) + 1j * rng.normal(size=(n, k))
+    x0 = x0.astype("complex64")
+    _lobpcg_check(a, x0, tol=1e-3)
+
+
+def test_backend_lobpcg_complex128(jaxb, highp):
+    n = 31
+    k = 4
+    a = _make_hermitian_matrix(n, "complex128")
+    rng = np.random.RandomState(2)
+    x0 = rng.normal(size=(n, k)) + 1j * rng.normal(size=(n, k))
+    x0 = x0.astype("complex128")
+    _lobpcg_check(a, x0, tol=1e-3)
+
+
+def test_backend_lobpcg_real32(jaxb):
+    n = 39
+    k = 5
+    a = _make_symmetric_matrix(n, "float32")
+    rng = np.random.RandomState(4)
+    x0 = rng.normal(size=(n, k)).astype("float32")
+    _lobpcg_check(a, x0, tol=1e-3)
+
+
+def test_backend_lobpcg_real64(jaxb, highp):
+    n = 40
+    k = 4
+    a = _make_symmetric_matrix(n, "float64")
+    rng = np.random.RandomState(5)
+    x0 = rng.normal(size=(n, k)).astype("float64")
+    _lobpcg_check(a, x0, tol=1e-3)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_scatter(backend):
     np.testing.assert_allclose(
