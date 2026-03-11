@@ -21,84 +21,36 @@ from jax.experimental.sparse.linalg import lobpcg_standard
 def local_eigen_solver(L, W, R, M_init, num_krylov=10):
     shape = M_init.shape
     M_flat = tc.backend.reshape(M_init, [-1])
-    dim = M_flat.shape[0]
 
     def heff_matvec(v_flat):
-        # lobpcg standard might pass (dim, k) where k is the search block size.
-        # we apply matvec to each column.
         def apply_single(v):
             M_tensor = tc.backend.reshape(v, shape)
             M_out_tensor = apply_heff(L, W, R, M_tensor)
-            out = tc.backend.reshape(M_out_tensor, [-1])
-            return out
+            return tc.backend.reshape(M_out_tensor, [-1])
 
-        # apply to all columns
-        # v_flat shape is (dim, k)
         out = jax.vmap(apply_single, in_axes=1, out_axes=1)(v_flat)
-
-        # We want the lowest eigenvalue of H_eff.
-        # jax.experimental.sparse.linalg.lobpcg_standard finds the *largest* eigenvalues.
-        # Therefore, we negate the action of H_eff to find the largest eigenvalue of -H_eff.
         return tc.backend.cast(-out, M_flat.dtype)
 
     norm = tc.backend.norm(M_flat)
     v0 = M_flat / tc.backend.cast(norm, M_flat.dtype)
     v0 = tc.backend.reshape(v0, [-1, 1])
 
-    # Check dimension requirement: k*5 < n, so n must be > 5 for k=1.
-    # We use jax.lax.cond to conditionally run full eigensolver or lobpcg based on dim
+    # Safe real-subspace LOBPCG mapping
+    v0_real = tc.backend.real(v0)
 
-    def exact_diag(_):
-        # Fallback to full exact diagonalization
-        # We construct the full matrix.
-        eye = jnp.eye(dim, dtype=M_flat.dtype)
+    def heff_matvec_real(v_real):
+        return tc.backend.real(heff_matvec(tc.backend.cast(v_real, M_flat.dtype)))
 
-        def apply_col(i):
-            v_col = tc.backend.reshape(eye[:, i], [-1, 1])
-            # note we apply positive H here to get the smallest eval correctly from eigh
-            out = -heff_matvec(v_col)
-            return tc.backend.reshape(out, [-1])
+    evals, evecs, _ = lobpcg_standard(heff_matvec_real, v0_real, m=num_krylov, tol=1e-5)
 
-        H_full = jax.vmap(apply_col)(jnp.arange(dim)).T
-        evals, evecs = tc.backend.eigh(H_full)
-        E0 = evals[0]
-        vec0 = evecs[:, 0]
-        M_opt_out = tc.backend.reshape(vec0, shape)
-        return E0, M_opt_out
+    # Recover exact energies and vectors
+    E0 = tc.backend.cast(-evals[0], M_flat.dtype)
+    vec0 = tc.backend.cast(evecs[:, 0], M_flat.dtype)
+    M_opt_res = tc.backend.reshape(vec0, shape)
 
-    def lobpcg_diag(_):
-        # We use lobpcg
-        # jax.experimental.sparse.linalg.lobpcg_standard has a known issue with complex matrices
-        # due to internal carry type mismatches (complex128 vs float64) during Rayleigh-Ritz.
-        # However, for TFIM and Heisenberg models, the MPOs are completely real.
-        # So we can safely run LOBPCG in the real subspace.
-        # We cast both v0 and the output of heff_matvec to float64 for the eigensolver.
-
-        v0_real = tc.backend.real(v0)
-
-        def heff_matvec_real(v_real):
-            # v_real is float64. heff_matvec returns float64 if inputs are real,
-            # but we explicitly enforce it.
-            return tc.backend.real(heff_matvec(tc.backend.cast(v_real, M_flat.dtype)))
-
-        evals, evecs, i = lobpcg_standard(
-            heff_matvec_real, v0_real, m=num_krylov, tol=1e-5
-        )
-
-        # evals is for -H_eff. So E0 is -evals[0].
-        E0 = -evals[0]
-        # if M_flat is float64, E0 and vec0 should be float64
-        # if M_flat is complex128, E0 should be float64, and vec0 should be complex128
-        # but exact_diag returns E0 as float64 (from eigh) implicitly.
-        # we will ensure E0 is M_flat.dtype but real part.
-        vec0 = tc.backend.cast(evecs[:, 0], M_flat.dtype)
-        M_opt_out = tc.backend.reshape(vec0, shape)
-        return tc.backend.cast(E0, M_flat.dtype), M_opt_out
-
-    E0_res, M_opt_res = jax.lax.cond(dim <= 5, exact_diag, lobpcg_diag, None)
-
+    # Final normalization
     M_opt_res = M_opt_res / tc.backend.cast(tc.backend.norm(M_opt_res), M_opt_res.dtype)
-    return E0_res, M_opt_res
+    return E0, M_opt_res
 
 
 def update_L(L, W, M):
@@ -151,7 +103,6 @@ def sweep_left_to_right(
         M_opt = M_opt * local_mask
 
         Q_tensor, R_mat = left_canonicalize(M_opt)
-        Q_tensor = Q_tensor * local_mask
         L_new = update_L(L_e, W_local, Q_tensor)
 
         return (L_new, R_mat), (E0, Q_tensor, L_new)
@@ -185,7 +136,6 @@ def sweep_right_to_left(
         M_opt = M_opt * local_mask
 
         L_mat, Q_tensor = right_canonicalize(M_opt)
-        Q_tensor = Q_tensor * local_mask
 
         R_new = update_R(R_e, W_local, Q_tensor)
 
@@ -241,7 +191,6 @@ def one_site_dmrg(
         M_local_absorbed = tc.backend.einsum("abc,cd->abd", M_local, L_mat_next)
         M_local_absorbed = M_local_absorbed * local_mask
         L_mat, Q_tensor = right_canonicalize(M_local_absorbed)
-        Q_tensor = Q_tensor * local_mask
         return L_mat, Q_tensor
 
     init_L_mat = tc.backend.eye(chi, dtype=M_list.dtype)
