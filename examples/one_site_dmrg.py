@@ -133,13 +133,19 @@ def right_canonicalize(M):
     return L_out, Q_tensor
 
 
-def sweep_left_to_right(M_list, W_list, R_env_list, init_L_env, init_R_mat, num_krylov):
+def sweep_left_to_right(
+    M_list, W_list, R_env_list, init_L_env, init_R_mat, num_krylov, mask_list
+):
     def step(carry, xs):
         L_e, R_mat_prev = carry
-        M_local, W_local, R_e = xs
+        M_local, W_local, R_e, local_mask = xs
 
         M_local_absorbed = tc.backend.einsum("ab,bcd->acd", R_mat_prev, M_local)
         E0, M_opt = local_eigen_solver(L_e, W_local, R_e, M_local_absorbed, num_krylov)
+
+        # Multiply with the local mask to maintain strictly zero null-space
+        # avoiding dense float noise orthogonalization by QR.
+        M_opt = M_opt * local_mask
 
         Q_tensor, R_mat = left_canonicalize(M_opt)
         L_new = update_L(L_e, W_local, Q_tensor)
@@ -147,7 +153,7 @@ def sweep_left_to_right(M_list, W_list, R_env_list, init_L_env, init_R_mat, num_
         return (L_new, R_mat), (E0, Q_tensor, L_new)
 
     init_carry = (init_L_env, init_R_mat)
-    xs = (M_list, W_list, R_env_list)
+    xs = (M_list, W_list, R_env_list, mask_list)
 
     final_carry, (E0_list, Q_list, L_env_list) = jax.lax.scan(step, init_carry, xs)
 
@@ -159,13 +165,18 @@ def sweep_left_to_right(M_list, W_list, R_env_list, init_L_env, init_R_mat, num_
     return E0_list, Q_list, L_env_aligned, final_carry[1]
 
 
-def sweep_right_to_left(M_list, W_list, L_env_list, init_R_env, init_L_mat, num_krylov):
+def sweep_right_to_left(
+    M_list, W_list, L_env_list, init_R_env, init_L_mat, num_krylov, mask_list
+):
     def step(carry, xs):
         R_e, L_mat_next = carry
-        M_local, W_local, L_e = xs
+        M_local, W_local, L_e, local_mask = xs
 
         M_local_absorbed = tc.backend.einsum("abc,cd->abd", M_local, L_mat_next)
         E0, M_opt = local_eigen_solver(L_e, W_local, R_e, M_local_absorbed, num_krylov)
+
+        # Apply boundary mask to prevent null space leakage
+        M_opt = M_opt * local_mask
 
         L_mat, Q_tensor = right_canonicalize(M_opt)
         R_new = update_R(R_e, W_local, Q_tensor)
@@ -175,9 +186,10 @@ def sweep_right_to_left(M_list, W_list, L_env_list, init_R_env, init_L_mat, num_
     M_list_rev = M_list[::-1]
     W_list_rev = W_list[::-1]
     L_env_list_rev = L_env_list[::-1]
+    mask_list_rev = mask_list[::-1]
 
     init_carry = (init_R_env, init_L_mat)
-    xs = (M_list_rev, W_list_rev, L_env_list_rev)
+    xs = (M_list_rev, W_list_rev, L_env_list_rev, mask_list_rev)
 
     final_carry, (E0_list_rev, Q_list_rev, R_env_list_rev) = jax.lax.scan(
         step, init_carry, xs
@@ -201,7 +213,9 @@ from functools import partial
 
 
 @partial(jax.jit, static_argnames=["num_sweeps", "num_krylov"])
-def one_site_dmrg(M_list, W_list, init_L_env, init_R_env, num_sweeps=4, num_krylov=10):
+def one_site_dmrg(
+    M_list, W_list, mask_list, init_L_env, init_R_env, num_sweeps=4, num_krylov=10
+):
     """
     Jittable DMRG that runs num_sweeps.
     M_list should be randomly initialized before passing.
@@ -242,10 +256,10 @@ def one_site_dmrg(M_list, W_list, init_L_env, init_R_env, num_sweeps=4, num_kryl
     def sweep_body(i, val):
         M, R_envs, _, _, init_R_mat = val
         E0_l2r, M_l2r, L_envs, final_R_mat = sweep_left_to_right(
-            M, W_list, R_envs, init_L_env, init_R_mat, num_krylov
+            M, W_list, R_envs, init_L_env, init_R_mat, num_krylov, mask_list
         )
         E0_r2l, M_r2l, R_envs_new, final_L_mat = sweep_right_to_left(
-            M_l2r, W_list, L_envs, init_R_env, final_R_mat, num_krylov
+            M_l2r, W_list, L_envs, init_R_env, final_R_mat, num_krylov, mask_list
         )
         return M_r2l, R_envs_new, L_envs, E0_r2l[0], final_L_mat
 
@@ -331,23 +345,23 @@ def get_initial_envs(chi, D, D_env_left, D_env_right):
     return tc.backend.convert_to_tensor(L_env), tc.backend.convert_to_tensor(R_env)
 
 
-def generate_random_mps(L, chi, d):
+def get_mps_masks(L, chi, d):
+    masks = np.ones((L, chi, d, chi), dtype=np.float64)
+    # The left-most tensor (site 0) must only connect via index 0 of its left bond
+    masks[0, 1:, :, :] = 0.0
+    # The right-most tensor (site L-1) must only connect via index 0 of its right bond
+    masks[-1, :, :, 1:] = 0.0
+    return tc.backend.convert_to_tensor(masks)
+
+
+def generate_random_mps(L, chi, d, masks):
     key = jax.random.PRNGKey(42)
     # Generate real random MPS to avoid complex `lobpcg_standard` bug in JAX
     # Since TFIM and Heisenberg are real Hamiltonians, real initial state works.
     M_list = jax.random.normal(key, (L, chi, d, chi))
 
-    # Bug Fix: Mask boundaries to avoid null-space leakage
-    # The left-most tensor (site 0) must only connect via index 0 of its left bond
-    mask_left = np.zeros((chi, d, chi))
-    mask_left[0, :, :] = 1.0
-
-    # The right-most tensor (site L-1) must only connect via index 0 of its right bond
-    mask_right = np.zeros((chi, d, chi))
-    mask_right[:, :, 0] = 1.0
-
-    M_list = M_list.at[0].multiply(mask_left)
-    M_list = M_list.at[-1].multiply(mask_right)
+    # Apply the exact masks to avoid null-space leakage at initialization
+    M_list = M_list * masks
 
     return tc.backend.convert_to_tensor(M_list)
 
@@ -361,15 +375,21 @@ if __name__ == "__main__":
     print(f"Running 1D TFIM DMRG for L={L}, chi={chi}")
     W_tfim = get_tfim_mpo(L)
     L_e_tfim, R_e_tfim = get_initial_envs(chi, 3, 2, 0)
-    M_init_tfim = generate_random_mps(L, chi, 2)
-    E_tfim, _ = one_site_dmrg(M_init_tfim, W_tfim, L_e_tfim, R_e_tfim, num_sweeps=4)
+    masks = get_mps_masks(L, chi, 2)
+    M_init_tfim = generate_random_mps(L, chi, 2, masks)
+    E_tfim, _ = one_site_dmrg(
+        M_init_tfim, W_tfim, masks, L_e_tfim, R_e_tfim, num_sweeps=4
+    )
     print("Final Energy TFIM:", tc.backend.numpy(E_tfim))
 
     print(f"\nRunning 1D Heisenberg DMRG for L={L}, chi={chi}")
     W_heis = get_heisenberg_mpo(L)
     L_e_heis, R_e_heis = get_initial_envs(chi, 5, 4, 0)
-    M_init_heis = generate_random_mps(L, chi, 2)
-    E_heis, _ = one_site_dmrg(M_init_heis, W_heis, L_e_heis, R_e_heis, num_sweeps=4)
+    masks_heis = get_mps_masks(L, chi, 2)
+    M_init_heis = generate_random_mps(L, chi, 2, masks_heis)
+    E_heis, _ = one_site_dmrg(
+        M_init_heis, W_heis, masks_heis, L_e_heis, R_e_heis, num_sweeps=4
+    )
     print("Final Energy Heisenberg:", tc.backend.numpy(E_heis))
 
     print(f"\nComparing with Quimb 1D Heisenberg DMRG for L={L}, chi={chi}")
@@ -423,9 +443,10 @@ if __name__ == "__main__":
     W_list_quimb = tc.backend.convert_to_tensor(W_list_quimb)
 
     L_e_quimb, R_e_quimb = get_initial_envs(chi, 5, 4, 0)
-    M_init_quimb = generate_random_mps(L, chi, 2)
+    masks_quimb = get_mps_masks(L, chi, 2)
+    M_init_quimb = generate_random_mps(L, chi, 2, masks_quimb)
     E_heis_quimb, _ = one_site_dmrg(
-        M_init_quimb, W_list_quimb, L_e_quimb, R_e_quimb, num_sweeps=4
+        M_init_quimb, W_list_quimb, masks_quimb, L_e_quimb, R_e_quimb, num_sweeps=4
     )
     print(
         "Final Energy Heisenberg (using quimb2qop MPO):", tc.backend.numpy(E_heis_quimb)
