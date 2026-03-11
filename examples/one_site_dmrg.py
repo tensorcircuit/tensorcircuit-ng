@@ -141,6 +141,9 @@ def sweep_left_to_right(
         M_local, W_local, R_e, local_mask = xs
 
         M_local_absorbed = tc.backend.einsum("ab,bcd->acd", R_mat_prev, M_local)
+        # Apply mask before solving to avoid wasting Krylov vectors on numerical noise
+        M_local_absorbed = M_local_absorbed * local_mask
+
         E0, M_opt = local_eigen_solver(L_e, W_local, R_e, M_local_absorbed, num_krylov)
 
         # Multiply with the local mask to maintain strictly zero null-space
@@ -148,6 +151,7 @@ def sweep_left_to_right(
         M_opt = M_opt * local_mask
 
         Q_tensor, R_mat = left_canonicalize(M_opt)
+        Q_tensor = Q_tensor * local_mask
         L_new = update_L(L_e, W_local, Q_tensor)
 
         return (L_new, R_mat), (E0, Q_tensor, L_new)
@@ -173,12 +177,16 @@ def sweep_right_to_left(
         M_local, W_local, L_e, local_mask = xs
 
         M_local_absorbed = tc.backend.einsum("abc,cd->abd", M_local, L_mat_next)
+        M_local_absorbed = M_local_absorbed * local_mask
+
         E0, M_opt = local_eigen_solver(L_e, W_local, R_e, M_local_absorbed, num_krylov)
 
         # Apply boundary mask to prevent null space leakage
         M_opt = M_opt * local_mask
 
         L_mat, Q_tensor = right_canonicalize(M_opt)
+        Q_tensor = Q_tensor * local_mask
+
         R_new = update_R(R_e, W_local, Q_tensor)
 
         return (R_new, L_mat), (E0, Q_tensor, R_new)
@@ -227,14 +235,19 @@ def one_site_dmrg(
     M_list = M_list / tc.backend.cast(tc.backend.norm(M_list), M_list.dtype)
 
     # Right canonicalize the initial MPS to build valid initial R_envs
-    def step_rc(carry, M_local):
+    def step_rc(carry, xs):
         L_mat_next = carry
+        M_local, local_mask = xs
         M_local_absorbed = tc.backend.einsum("abc,cd->abd", M_local, L_mat_next)
+        M_local_absorbed = M_local_absorbed * local_mask
         L_mat, Q_tensor = right_canonicalize(M_local_absorbed)
+        Q_tensor = Q_tensor * local_mask
         return L_mat, Q_tensor
 
     init_L_mat = tc.backend.eye(chi, dtype=M_list.dtype)
-    _, M_list_rc_rev = jax.lax.scan(step_rc, init_L_mat, M_list[::-1])
+    _, M_list_rc_rev = jax.lax.scan(
+        step_rc, init_L_mat, (M_list[::-1], mask_list[::-1])
+    )
     M_list = M_list_rc_rev[::-1]
 
     # Build initial R_envs
