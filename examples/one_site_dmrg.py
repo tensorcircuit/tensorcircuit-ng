@@ -1,7 +1,10 @@
-import tensorcircuit as tc
+from functools import partial
+import numpy as np
 import jax
 import jax.numpy as jnp
-import numpy as np
+from jax.experimental.sparse.linalg import lobpcg_standard
+import quimb.tensor as qtn
+import tensorcircuit as tc
 
 tc.set_backend("jax")
 tc.set_dtype("float64")
@@ -13,9 +16,6 @@ def apply_heff(L, W, R, M):
     T2 = tc.backend.einsum("abde,bfdg->afeg", T1, W)
     M_out = tc.backend.einsum("afeg,hge->afh", T2, R)
     return M_out
-
-
-from jax.experimental.sparse.linalg import lobpcg_standard
 
 
 def local_eigen_solver(L, W, R, M_init, num_krylov=10):
@@ -167,7 +167,6 @@ def sweep_right_to_left(
 
 # Make `chi`, `num_sweeps` and `num_krylov` static using `static_argnums`.
 # We'll put them at the end. Or we can just use partial.
-from functools import partial
 
 
 @partial(jax.jit, static_argnames=["num_sweeps", "num_krylov"])
@@ -217,7 +216,7 @@ def one_site_dmrg(
 
     def sweep_body(i, val):
         M, R_envs, _, _, init_R_mat = val
-        E0_l2r, M_l2r, L_envs, final_R_mat = sweep_left_to_right(
+        _, M_l2r, L_envs, final_R_mat = sweep_left_to_right(
             M, W_list, R_envs, init_L_env, init_R_mat, num_krylov, mask_list
         )
         E0_r2l, M_r2l, R_envs_new, final_L_mat = sweep_right_to_left(
@@ -232,9 +231,7 @@ def one_site_dmrg(
         0.0,
         tc.backend.eye(chi, dtype=M_list.dtype),
     )
-    final_M, final_R_envs, final_L_envs, final_E, _ = jax.lax.fori_loop(
-        0, num_sweeps, sweep_body, init_val
-    )
+    final_M, _, _, final_E, _ = jax.lax.fori_loop(0, num_sweeps, sweep_body, init_val)
 
     return final_E, final_M
 
@@ -363,8 +360,6 @@ if __name__ == "__main__":
     # For benchmark part compared with the energy obtained via dmrg of quimb
     # We extract MPO from quimb directly instead of building the eval_matrix()
     # because eval_matrix is a 2^L x 2^L full matrix, which will OOM for L=100.
-    # The requirement: "generate the mpo from quimb using tc.quantum.quimb2qop and for benchmark part compared with the energy obtained via dmrg of quimb"
-
     # Use quimb2qop to wrap it as QuOperator
     op = tc.quantum.quimb2qop(H_quimb)
 
