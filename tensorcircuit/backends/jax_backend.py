@@ -341,6 +341,20 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def eigvalsh(self, a: Tensor) -> Tensor:
         return jnp.linalg.eigvalsh(a)
 
+    def lobpcg_standard(
+        self,
+        a: Union[Tensor, Callable[[Tensor], Tensor]],
+        x0: Tensor,
+        m: int = 100,
+        tol: Optional[Union[Tensor, float]] = None,
+    ) -> Tuple[Tensor, Tensor, Tensor]:
+        """
+        Compute top-k eigenpairs via LOBPCG for Hermitian matrices.
+        """
+        from .jax_ops import lobpcg_standard_jax
+
+        return lobpcg_standard_jax(a, x0, m, tol)
+
     def kron(self, a: Tensor, b: Tensor) -> Tensor:
         return jnp.kron(a, b)
 

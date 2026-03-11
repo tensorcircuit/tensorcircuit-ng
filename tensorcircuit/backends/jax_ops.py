@@ -6,7 +6,7 @@ Customized ops for ML framework
 # pylint: disable=unused-variable
 
 
-from typing import Any, Tuple, Sequence
+from typing import Any, Tuple, Sequence, Callable, Optional, Union
 from functools import partial
 
 import jax
@@ -177,6 +177,185 @@ def jaxeigh_bwd(r: Array, tangents: Array) -> Array:
 
 adaware_eigh.defvjp(jaxeigh_fwd, jaxeigh_bwd)
 adaware_eigh_jit = jax.jit(adaware_eigh)
+
+# copied from jax implementation but fix complex dtype support
+
+
+def _adjoint_jax(a: Array) -> Array:
+    return jnp.conj(jnp.swapaxes(a, -1, -2))
+
+
+def _real_dtype_jax(dt: Any) -> Any:
+    return jnp.real(jnp.zeros((), dtype=dt)).dtype
+
+
+def _mm_jax(a: Array, b: Array, precision: Any = None) -> Array:
+    if precision is None:
+        precision = jax.lax.Precision.HIGHEST
+    return jax.lax.dot(a, b, (precision, precision))
+
+
+def _eigh_descending_jax(a: Array) -> Tuple[Array, Array]:
+    w, v = jnp.linalg.eigh(a)
+    return w[::-1], v[:, ::-1]
+
+
+def _svqb_jax(x: Array) -> Array:
+    norms = jnp.linalg.norm(x, ord=2, axis=0, keepdims=True)
+    x /= jnp.where(norms == 0, 1.0, norms)
+
+    inner = _mm_jax(_adjoint_jax(x), x)
+    w, v = _eigh_descending_jax(inner)
+
+    tau = jnp.finfo(_real_dtype_jax(x.dtype)).eps * w[0]
+    padded = jnp.maximum(w, tau)
+    sqrted = jnp.where(tau > 0, padded, 1.0) ** (-0.5)
+
+    scaled_v = v * sqrted[jnp.newaxis, :]
+    ortho_x = _mm_jax(x, scaled_v)
+
+    keep = ((w > tau) * (jnp.real(jnp.diag(inner)) > 0.0))[jnp.newaxis, :]
+    ortho_x *= keep.astype(ortho_x.dtype)
+    norms = jnp.linalg.norm(ortho_x, ord=2, axis=0, keepdims=True)
+    keep *= norms > 0.0
+    ortho_x /= jnp.where(keep, norms, 1.0)
+    return ortho_x
+
+
+def _orthonormalize_jax(basis: Array) -> Array:
+    for _ in range(2):
+        basis = _svqb_jax(basis)
+    return basis
+
+
+def _project_out_jax(basis: Array, u: Array) -> Array:
+    for _ in range(2):
+        u -= _mm_jax(basis, _mm_jax(_adjoint_jax(basis), u))
+        u = _orthonormalize_jax(u)
+
+    for _ in range(2):
+        u -= _mm_jax(basis, _mm_jax(_adjoint_jax(basis), u))
+    norm_u = jnp.linalg.norm(u, ord=2, axis=0, keepdims=True)
+    u *= (norm_u >= 0.99).astype(u.dtype)
+    return u
+
+
+def _extend_basis_jax(x: Array, m: int) -> Array:
+    n, k = x.shape
+    xupper, xlower = jnp.split(x, [k], axis=0)
+    u, s, vt = jnp.linalg.svd(xupper)
+
+    y = jnp.concatenate([xupper + _mm_jax(u, vt), xlower], axis=0)
+
+    other = jnp.concatenate(
+        [jnp.eye(m, dtype=x.dtype), jnp.zeros((n - k - m, m), dtype=x.dtype)],
+        axis=0,
+    )
+    v = _adjoint_jax(vt)
+    w = _mm_jax(y, v * ((2 * (1 + s)) ** (-0.5))[jnp.newaxis, :])
+    h = -2 * jnp.linalg.multi_dot(
+        [w, _adjoint_jax(w[k:, :]), other], precision=jax.lax.Precision.HIGHEST
+    )
+    return h.at[k:].add(other)
+
+
+def _rayleigh_ritz_orth_jax(
+    a: Callable[[Array], Array], s: Array
+) -> Tuple[Array, Array]:
+    sas = _mm_jax(_adjoint_jax(s), a(s))
+    return _eigh_descending_jax(sas)
+
+
+def _check_inputs_jax(a: Callable[[Array], Array], x: Array) -> None:
+    n, k = x.shape
+    if k == 0:
+        raise ValueError(f"must have search dim > 0, got {k}")
+    if k * 5 >= n:
+        raise ValueError(f"expected search dim * 5 < matrix dim (got {k * 5}, {n})")
+    test_output = a(jnp.zeros((n, 1), dtype=x.dtype))
+    if test_output.dtype != x.dtype:
+        raise ValueError(
+            f"A, X must have same dtypes (were {test_output.dtype}, {x.dtype})"
+        )
+    if test_output.shape != (n, 1):
+        s = test_output.shape
+        raise ValueError(f"A must be ({n}, {n}) matrix A, got output {s}")
+
+
+def _lobpcg_standard_callable_jax(
+    a: Callable[[Array], Array],
+    x: Array,
+    m: int,
+    tol: Optional[Union[Array, float]],
+) -> Tuple[Array, Array, Array]:
+    n, k = x.shape
+    _check_inputs_jax(a, x)
+
+    if tol is None:
+        tol = float(jnp.finfo(_real_dtype_jax(x.dtype)).eps)
+
+    x = _orthonormalize_jax(x)
+    p = _extend_basis_jax(x, x.shape[1])
+
+    ax = a(x)
+    theta = jnp.sum(jnp.conj(x) * ax, axis=0, keepdims=True)
+    theta = jnp.real(theta)
+    r = ax - theta * x
+
+    def cond(state: Tuple[Array, ...]) -> Array:
+        i, _x, _p, _r, converged, _ = state
+        return jnp.logical_and(i < m, converged < k)
+
+    def body(state: Tuple[Array, ...]) -> Tuple[Array, ...]:
+        i, x, p, r, _, theta = state
+
+        r = _project_out_jax(jnp.concatenate((x, p), axis=1), r)
+        xpr = jnp.concatenate((x, p, r), axis=1)
+
+        theta, q = _rayleigh_ritz_orth_jax(a, xpr)
+
+        b = q[:, :k]
+        norm_b = jnp.linalg.norm(b, ord=2, axis=0, keepdims=True)
+        b /= norm_b
+        x = _mm_jax(xpr, b)
+        norm_x = jnp.linalg.norm(x, ord=2, axis=0, keepdims=True)
+        x /= norm_x
+
+        qsub, _ = jnp.linalg.qr(_adjoint_jax(q[:k, k:]))
+        diff_rayleigh_ortho = _mm_jax(q[:, k:], qsub)
+        p = _mm_jax(xpr, diff_rayleigh_ortho)
+        norm_p = jnp.linalg.norm(p, ord=2, axis=0, keepdims=True)
+        p /= jnp.where(norm_p == 0, 1.0, norm_p)
+
+        ax = a(x)
+        r = ax - theta[jnp.newaxis, :k] * x
+        resid_norms = jnp.linalg.norm(r, ord=2, axis=0)
+
+        reltol = jnp.linalg.norm(ax, ord=2, axis=0) + theta[:k]
+        reltol *= n
+        reltol *= 10
+        res_converged = resid_norms < tol * reltol
+        converged = jnp.sum(res_converged)
+
+        return i + 1, x, p, r, converged, theta[jnp.newaxis, :k]
+
+    state = (0, x, p, r, 0, theta)
+    state = jax.lax.while_loop(cond, body, state)
+    i, x, _p, _r, _converged, theta = state
+    return theta[0, :], x, i
+
+
+def lobpcg_standard_jax(
+    a: Union[Array, Callable[[Array], Array]],
+    x: Array,
+    m: int = 100,
+    tol: Optional[Union[Array, float]] = None,
+) -> Tuple[Array, Array, Array]:
+    if callable(a):
+        op = a
+    else:
+        op = lambda v: a @ v
+    return _lobpcg_standard_callable_jax(op, x, m, tol)
 
 
 @partial(jax.jit, static_argnums=[0, 2])
