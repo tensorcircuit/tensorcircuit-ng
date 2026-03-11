@@ -84,7 +84,7 @@ def get_dmrg_ground_state_quimb(N, h1, h2, J=1.0, bond_dim=16):
         H = H + term_mpo * (-h1)
 
     # XX terms
-    if h2 != 0.0:
+    if np.abs(h2) > 1e-10:
         for i in range(N - 1):
             ops = [np.eye(2)] * N
             ops[i] = qu.pauli("X")

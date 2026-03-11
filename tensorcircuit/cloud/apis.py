@@ -198,7 +198,9 @@ def set_token(
     """
     global saved_token
     homedir = os.path.expanduser("~")
-    authpath = os.path.join(homedir, ".tc.auth.json")
+    authpath = os.environ.get("TC_AUTH_PATH")
+    if not authpath:
+        authpath = os.path.join(homedir, ".tc.auth.json")
     if clear is True:
         saved_token = {}
     if token is None:
@@ -234,8 +236,11 @@ def set_token(
     if cached:
         file_token = {k: b64encode_s(v) for k, v in saved_token.items()}
         if file_token:
-            with open(authpath, "w") as f:
-                json.dump(file_token, f)
+            try:
+                with open(authpath, "w") as f:
+                    json.dump(file_token, f)
+            except OSError:
+                logger.warning("token file writing failure, skip cache saving")
 
     return saved_token
 
