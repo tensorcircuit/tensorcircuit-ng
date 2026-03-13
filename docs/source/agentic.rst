@@ -3,6 +3,17 @@ AI-Assisted Development
 
 TensorCircuit-NG is the world's first AI-native quantum programming platform, purpose-built for agentic research and automated scientific discovery. To write scripts and applications efficiently with AI coding agents (e.g., Claude Code, Cursor, Antigravity, or Gemini CLI), we strongly recommend working directly within the local repository.
 
+.. grid:: 1
+   :margin: 4
+
+   .. grid-item-card:: 🚀 Experience Agent-Native Discovery
+      :link: agent_landing/index.html
+      :link-type: url
+      :shadow: lg
+      :class-card: sd-bg-light sd-text-primary sd-font-weight-bold
+
+      Click here to see how AI agents autonomously solve complex quantum problems in TensorCircuit-NG.
+
 Why Work Within the Repository?
 -------------------------------
 

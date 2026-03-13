@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Native | TensorCircuit-NG</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>TensorCircuit-NG: Agent Native</h1>
+        <p>Empowering researchers with the world's first AI-native quantum programming platform. Autonomously discover, optimize, and synthesize quantum algorithms.</p>
+    </header>
+
+    <main>
+        <div class="terminal-container">
+            <div class="terminal-header">
+                <div class="terminal-dot dot-red"></div>
+                <div class="terminal-dot dot-yellow"></div>
+                <div class="terminal-dot dot-green"></div>
+                <span class="terminal-title">~/research/discovery - bash</span>
+            </div>
+            <div class="terminal-body" id="terminal-content"></div>
+        </div>
+
+        <section>
+            <h2 style="text-align: center; font-size: 2rem; margin-bottom: 40px;">Proactive Scientific Capabilities</h2>
+            <div class="skill-grid">
+                <div class="skill-card">
+                    <span class="skill-icon">📄</span>
+                    <h3>arxiv-reproduce</h3>
+                    <p>Autonomously translates arXiv paper concepts into high-performance, JAX-accelerated code with full validation.</p>
+                </div>
+                <div class="skill-card">
+                    <span class="skill-icon">⚡</span>
+                    <h3>performance-optimize</h3>
+                    <p>Scientific execution and memory optimization. JAX scanning, vectorized parallelism, and peak flop utilization.</p>
+                </div>
+                <div class="skill-card">
+                    <span class="skill-icon">🔍</span>
+                    <h3>meta-explorer</h3>
+                    <p>High-intensity research agent for circuit architecture discovery and multi-frontier optimization strategies.</p>
+                </div>
+                <div class="skill-card">
+                    <span class="skill-icon">🌹</span>
+                    <h3>tc-rosetta</h3>
+                    <p>Seamless translation from legacy frameworks like Qiskit or PennyLane into optimized TC-NG implementations.</p>
+                </div>
+                <div class="skill-card">
+                    <span class="skill-icon">🎨</span>
+                    <h3>demo-generator</h3>
+                    <p>Instant transformation of physics scripts into interactive Streamlit GUI applications with one command.</p>
+                </div>
+                <div class="skill-card">
+                    <span class="skill-icon">⚖️</span>
+                    <h3>code-reviewer</h3>
+                    <p>Mathematical correctness verification and performance auditing powered by expert domain knowledge.</p>
+                </div>
+            </div>
+        </section>
+
+        <div class="cta-container">
+            <a href="../agentic.html" class="btn">Get Started with Agentic TC-NG</a>
+            <a href="../index.html" class="back-link">Return to Main Documentation</a>
+        </div>
+    </main>
+
+    <footer>
+        &copy; 2020-2026 TensorCircuit-NG Development Team. Built for the future of scientific discovery.
+    </footer>
+
+    <script>
+        const terminal = document.getElementById('terminal-content');
+        const script = [
+            { text: "optimize VQE architecture for a 20-qubit one-dimension antiferromagnetic Heisenberg model", color: "#58a6ff" },
+            { text: "\n\n[INFO] Initializing Meta-Explorer Research Agent...", color: "#8b949e" },
+            { text: "\n[INFO] Current backend: JAX - GPU detected.", color: "#8b949e" },
+            { text: "\n[STEP] Exploring 5 unique circuit architectures...", color: "#d1d5db" },
+            { text: "\n  -> Exploring ADAPT-VQE variants... Done", color: "#27c93f" },
+            { text: "\n  -> Testing Hardware-Efficient Ansatze... Done", color: "#27c93f" },
+            { text: "\n[STEP] Running vectorized optimization on H100 cluster...", color: "#d1d5db" },
+            { text: "\n  >> Epoch 100/500 - Energy: -42.8431 +/- 0.0002", color: "#ffbd2e" },
+            { text: "\n  >> Epoch 200/500 - Energy: -43.1205 +/- 0.0001", color: "#ffbd2e" },
+            { text: "\n[SUCCESS] Reached target convergence of 1e-4.", color: "#27c93f" },
+            { text: "\n[RESULT] Optimal circuit found: 'Heisenberg-HEAL-v2'", color: "#58a6ff" },
+            { text: "\n[RESULT] Saved checkpoint to research/vqe_optimized.json", color: "#d1d5db" },
+            { text: "\n$ ", color: "#58a6ff" }
+        ];
+
+        let lineIndex = 0;
+        let charIndex = 0;
+
+        function typeWriter() {
+            if (lineIndex < script.length) {
+                const currentLine = script[lineIndex];
+                if (charIndex === 0) {
+                    const span = document.createElement('span');
+                    span.style.color = currentLine.color;
+                    span.id = `line-${lineIndex}`;
+                    terminal.appendChild(span);
+                }
+                
+                const span = document.getElementById(`line-${lineIndex}`);
+                if (charIndex < currentLine.text.length) {
+                    span.textContent += currentLine.text.charAt(charIndex);
+                    charIndex++;
+                    const delay = currentLine.text.includes('STEP') || currentLine.text.includes('RESULT') ? 50 : 20;
+                    setTimeout(typeWriter, delay);
+                } else {
+                    lineIndex++;
+                    charIndex = 0;
+                    setTimeout(typeWriter, 500);
+                }
+            } else {
+                const cursor = document.createElement('span');
+                cursor.className = 'cursor';
+                terminal.appendChild(cursor);
+            }
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        window.onload = () => setTimeout(typeWriter, 1000);
+    </script>
+</body>
+</html>
