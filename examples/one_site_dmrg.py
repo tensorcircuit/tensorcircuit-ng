@@ -1,3 +1,8 @@
+"""
+One-site DMRG
+JITTABLE and GPU-accelerated
+"""
+
 from functools import partial
 import time
 import inspect

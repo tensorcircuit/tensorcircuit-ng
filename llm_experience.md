@@ -227,3 +227,20 @@ To maintain high development standards, use the following specialized skills:
 2.  **performance-optimize**: Scientific bottleneck diagnosis and refactoring. Enforces the "Hypothesis -> Benchmark -> Refactor" workflow using JAX primitives.
 3.  **tc-rosetta**: End-to-end intent-based translation from Qiskit/PennyLane to TC-NG. Prioritizes functional rewrites over syntax mapping to achieve maximum speedup.
 4.  **tutorial-crafter**: Transforms raw TC-NG scripts into comprehensive, narrative-driven Markdown educational tutorials, highlighting HPC programming practices.
+
+## Agentic Sandbox & CLI Protocols
+
+1.  **Environment Variables for Read-Only Runtimes**:
+    *   **Context**: The agentic sandbox environment often has restricted write permissions to default configuration and cache directories (e.g., `~/.cache`, `~/.config`).
+    *   **Protocol**: Always prepend critical cache redirection variables when running scripts that use Numba, Matplotlib, or JAX.
+    *   **Required Variables**:
+        *   `NUMBA_CACHE_DIR=/tmp/numba_cache`: Prevents `PermissionError` when Numba (used by `quimb`, `scipy`) tries to write specialized kernels.
+        *   `MPLCONFIGDIR=/tmp/matplotlib_cache`: Prevents `PermissionError` when `matplotlib` attempts to write font caches or configuration.
+    *   **Execution Template**:
+        ```bash
+        NUMBA_CACHE_DIR=/tmp/numba_cache MPLCONFIGDIR=/tmp/matplotlib_cache conda run -n <env> python3 <script.py>
+        ```
+
+2.  **Output Redirection and Paging**:
+    *   The sandbox terminal often handles large outputs poorly or requires non-interactive execution.
+    *   **Protocol**: Use `PAGER=cat` (often default in agent tools) to ensure logs are fully captured without getting stuck in a `less` prompt.
