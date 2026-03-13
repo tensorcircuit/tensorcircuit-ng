@@ -50,7 +50,7 @@ For more information on software usage, sota algorithm implementation and engine
 
 For beginners, please refer to [quantum computing lectures with TC-NG](https://github.com/sxzgroup/qc_lecture) to learn both quantum computing basics and representative usage of TensorCircuit-NG.
 
-### AI-Assisted Development (Recommended)
+### AI-Native R&D (Recommended)
 
 To write TC-NG scripts and applications efficiently with AI coding agents (e.g., Claude Code, Cursor, Antigravity), we strongly recommend **working directly within the local tensorcircuit-ng repository** rather than an empty folder.
 

@@ -45,7 +45,7 @@ TensorCircuit-NG 是 TensorCircuit 在技术与架构上的演进版本，由原
 
 有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 140+ [示例脚本](/examples) 和 40+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
 
-### AI 辅助开发 (推荐)
+### AI 原生开发 (推荐)
 
 若使用 AI 编程助手（如 Claude Code, Cursor, Antigravity）编写 TC-NG 应用，我们强烈建议**直接在克隆的本地代码库中进行开发**，以便为 AI 提供更丰富的上下文。
 
