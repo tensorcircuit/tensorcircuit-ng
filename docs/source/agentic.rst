@@ -58,3 +58,8 @@ Recommended Workflow
 3. **Open the repository folder in your AI IDE**: Start writing TC-NG-based scripts using natural language instructions.
 
 By integrating extreme performance with an autonomous, intent-driven AI workflow, TensorCircuit-NG empowers researchers to transition from manual coding to automated scientific discovery.
+
+AI-Native Documentation
+-----------------------
+
+One can also refer to AI-native docs for tensorcircuit-ng: `Devin Deepwiki <https://deepwiki.com/tensorcircuit/tensorcircuit-ng>`_, `Google Code Wiki <https://codewiki.google/github.com/tensorcircuit/tensorcircuit-ng>`_, and `Context7 MCP <https://context7.com/tensorcircuit/tensorcircuit-ng>`_.

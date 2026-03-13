@@ -218,4 +218,5 @@ def test_vmap(backend):
 ### AI-Native Documentation Services
 
 - Devin Deepwiki: https://deepwiki.com/tensorcircuit/tensorcircuit-ng
+- Google Code Wiki: https://codewiki.google/github.com/tensorcircuit/tensorcircuit-ng
 - Context7 MCP: https://context7.com/tensorcircuit/tensorcircuit-ng

@@ -62,7 +62,7 @@ TensorCircuit-NG 是 TensorCircuit 在技术与架构上的演进版本，由原
 
 现在，快来体验完全通过自然语言实现量子算法吧！通过将极致性能与全自动的意图驱动的 AI 工作流（`.agents/skills/`）无缝集成，TC-NG 赋能研究人员从繁琐的手动编码跨越到数秒内自动完成论文复现、性能极致优化以及跨框架代码翻译的新范式。
 
-您可以参考相关的 AI 原生文档：[Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng) 和 [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
+您可以参考相关的 AI 原生文档：[Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng), [Google Code Wiki](https://codewiki.google/github.com/tensorcircuit/tensorcircuit-ng) 和 [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
 
 初学者也可以参考[量子计算教程](https://github.com/sxzgroup/qc_lecture)学习量子计算基础和 TensorCircuit-NG 的典型用法.
 

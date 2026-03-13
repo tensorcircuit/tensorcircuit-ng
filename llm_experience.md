@@ -244,3 +244,7 @@ To maintain high development standards, use the following specialized skills:
 2.  **Output Redirection and Paging**:
     *   The sandbox terminal often handles large outputs poorly or requires non-interactive execution.
     *   **Protocol**: Use `PAGER=cat` (often default in agent tools) to ensure logs are fully captured without getting stuck in a `less` prompt.
+
+## AI-Native Documentation Resources
+
+One can also refer to AI-native docs for tensorcircuit-ng: [Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng), [Google Code Wiki](https://codewiki.google/github.com/tensorcircuit/tensorcircuit-ng), and [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
