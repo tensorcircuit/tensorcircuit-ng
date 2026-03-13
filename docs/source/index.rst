@@ -59,7 +59,7 @@ It is designed for researchers and engineers who demand **Speed, Flexibility, an
 
 
 Get Started in Seconds
-----------------------
+-----------------------
 
 Install with one line:
 

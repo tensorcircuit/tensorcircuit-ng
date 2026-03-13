@@ -33,7 +33,7 @@
 
 <p align="center"> English | <a href="README_cn.md"> 简体中文 </a></p>
 
-TensorCircuit-NG is the next-generation open-source high-performance quantum software framework, and the world's first AI-native quantum programming platform purpose-built for agentic research and automated scientific discovery.
+TensorCircuit-NG is the next-generation open-source high-performance quantum software framework, and the world's first [AI-native quantum programming platform](https://tensorcircuit-ng.readthedocs.io/en/latest/agent_landing/index.html) purpose-built for agentic research and automated scientific discovery.
 
 TensorCircuit-NG is built upon tensornetwork engines, supporting for automatic differentiation, just-in-time compiling, hardware acceleration, vectorized parallelism and distributed training, providing unified infrastructures and interfaces for quantum programming. It can compose quantum circuits, neural networks and tensor networks seamlessly with high simulation efficiency and flexibility.
 

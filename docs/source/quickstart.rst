@@ -20,12 +20,6 @@ please refer to the GPU aware installation guide of corresponding machine learni
 `Jax <https://docs.jax.dev/en/latest/installation.html#pip-installation-nvidia-gpu-cuda-installed-via-pip-easier>`_ (``pip install 'jax[cuda-12]'``), 
 or `PyTorch <https://pytorch.org/get-started/locally/>`_.
 
-Docker is also accessible: 
-
-``sudo docker run -it --network host --gpus all tensorcircuit/tensorcircuit``.
-
-For more details on docker setup, please refer to `docker readme <https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/docker>`_.
-
 
 Overall, the installation of TensorCircuit-NG is simple, since it is purely in Python and hence portable. 
 As long as the users can take care of the installation of ML frameworks on the corresponding operating system, TensorCircuit-NG will work as expected.
