@@ -32,6 +32,7 @@ class DMCircuit(BaseCircuit):
         empty: bool = False,
         inputs: Optional[Tensor] = None,
         mps_inputs: Optional[QuOperator] = None,
+        tensors: Optional[Sequence[Tensor]] = None,
         dminputs: Optional[Tensor] = None,
         mpo_dminputs: Optional[QuOperator] = None,
         split: Optional[Dict[str, Any]] = None,
@@ -49,6 +50,9 @@ class DMCircuit(BaseCircuit):
         :type inputs: Optional[Tensor], optional
         :param mps_inputs: QuVector for a MPS like initial pure state.
         :type mps_inputs: Optional[QuOperator]
+        :param tensors: Sequence of tensors for a MPS like initial pure state.
+            The order of legs for each tensor is assumed to be (bond-left, physical, bond-right).
+        :type tensors: Optional[Sequence[Tensor]]
         :param dminputs: the density matrix input for the circuit, defaults to None
         :type dminputs: Optional[Tensor], optional
         :param mpo_dminputs: QuOperator for a MPO like initial density matrix.
@@ -64,6 +68,7 @@ class DMCircuit(BaseCircuit):
                 and (dminputs is None)
                 and (mps_inputs is None)
                 and (mpo_dminputs is None)
+                and (tensors is None)
             ):
                 # Get nodes on the interior
                 self._nodes = self.all_zero_nodes(nqubits)
@@ -105,6 +110,10 @@ class DMCircuit(BaseCircuit):
                 self._front = [dminputs_gate.get_edge(i) for i in range(2 * nqubits)]
                 self._nodes = nodes
                 self.coloring_nodes(self._nodes)
+            elif tensors is not None:
+                self._nodes, self._front = self._tensors_to_nodes(tensors)
+                self.coloring_nodes(self._nodes)
+                self._double_nodes_front()
 
             else:  # mpo_dminputs is not None
                 mpo_nodes = list(mpo_dminputs.nodes)  # type: ignore
@@ -121,6 +130,7 @@ class DMCircuit(BaseCircuit):
         self.inputs = inputs
         self.dminputs = dminputs
         self.mps_inputs = mps_inputs
+        self.tensors = tensors
         self.mpo_dminputs = mpo_dminputs
         self.split = split
 
@@ -128,9 +138,11 @@ class DMCircuit(BaseCircuit):
             "nqubits": nqubits,
             "inputs": inputs,
             "mps_inputs": mps_inputs,
+            "tensors": tensors,
             "dminputs": dminputs,
             "mpo_dminputs": mpo_dminputs,
             "split": split,
+            "dim": dim,
         }
 
         self._qir: List[Dict[str, Any]] = []

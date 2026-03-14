@@ -66,6 +66,38 @@ class BaseCircuit(AbstractCircuit):
     def front_from_nodes(nodes: List[tn.Node]) -> List[tn.Edge]:
         return [n.get_edge(0) for n in nodes]
 
+    def _tensors_to_nodes(
+        self, tensors: Sequence[Tensor]
+    ) -> Tuple[List[tn.Node], List[tn.Edge]]:
+        """
+        Internal method to convert a sequence of MPS tensors to a list of nodes and front edges.
+        (bond-left, physical, bond-right) order is assumed for MPS tensors.
+
+        :param tensors: A sequence of tensors representing an MPS.
+        :type tensors: Sequence[Tensor]
+        :return: A tuple of (all nodes including dummy boundary nodes, front/physical edges).
+        :rtype: Tuple[List[tn.Node], List[tn.Edge]]
+        """
+        nodes = [
+            tn.Node(backend.cast(backend.convert_to_tensor(t), dtypestr))
+            for t in tensors
+        ]
+        for i in range(len(nodes) - 1):
+            nodes[i].get_edge(2) ^ nodes[i + 1].get_edge(0)
+
+        q_nodes = nodes
+        all_nodes = list(q_nodes)
+        for i, axis in zip([0, -1], [0, 2]):
+            if q_nodes[i].get_edge(axis).dimension == 1:
+                dummy = tn.Node(
+                    backend.cast(backend.convert_to_tensor([1.0]), dtypestr)
+                )
+                q_nodes[i].get_edge(axis) ^ dummy.get_edge(0)
+                all_nodes.append(dummy)
+
+        front = [q_nodes[i].get_edge(1) for i in range(len(tensors))]
+        return all_nodes, front
+
     @staticmethod
     def coloring_nodes(
         nodes: Sequence[tn.Node], is_dagger: bool = False, flag: str = "inputs"

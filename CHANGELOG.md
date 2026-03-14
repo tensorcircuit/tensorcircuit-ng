@@ -44,6 +44,8 @@
 
 - Add new way for expectation: `PauliStringSum2MVP`.
 
+- Add `tensors` for inputs of `Circuit`.
+
 
 ### Fixed
 

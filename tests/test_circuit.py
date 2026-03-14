@@ -417,6 +417,63 @@ def test_any_inputs_state(backend):
     np.testing.assert_allclose(tc.backend.numpy(z0), 0.0, rtol=1e-4, atol=1e-4)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_init_tensors(backend):
+    n = 3
+    # GHZ state tensors
+    t1 = np.zeros([1, 2, 2], dtype=np.complex64)
+    t1[0, 0, 0] = 1
+    t1[0, 1, 1] = 1
+
+    t2 = np.zeros([2, 2, 2], dtype=np.complex64)
+    t2[0, 0, 0] = 1
+    t2[1, 1, 1] = 1
+
+    t3 = np.zeros([2, 2, 1], dtype=np.complex64)
+    t3[0, 0, 0] = 1 / np.sqrt(2)
+    t3[1, 1, 0] = 1 / np.sqrt(2)
+
+    c = tc.Circuit(n, tensors=[t1, t2, t3])
+    ghz = np.zeros(8)
+    ghz[0] = 1 / np.sqrt(2)
+    ghz[7] = 1 / np.sqrt(2)
+    np.testing.assert_allclose(tc.backend.numpy(c.wavefunction()), ghz, atol=1e-5)
+
+    # DMCircuit
+    dc = tc.DMCircuit(n, tensors=[t1, t2, t3])
+    np.testing.assert_allclose(
+        tc.backend.numpy(dc.densitymatrix())[0, 0], 0.5, atol=1e-5
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(dc.densitymatrix())[7, 7], 0.5, atol=1e-5
+    )
+
+    # compare with MPS tensors
+    c = tc.MPSCircuit(3)
+    c.h(0)
+    c.cx(0, 1)
+    c.cx(1, 2)
+    mps_tensors = [tc.backend.numpy(t) for t in c.get_tensors()]
+    c2 = tc.Circuit(3, tensors=mps_tensors)
+    c3 = tc.MPSCircuit(3, tensors=mps_tensors)
+    c.cz(2, 0)
+    c2.cz(2, 0)
+    c3.cz(2, 0)
+    c.rx(1, theta=0.6)
+    c2.rx(1, theta=0.6)
+    c3.rx(1, theta=0.6)
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.wavefunction()),
+        tc.backend.numpy(c2.wavefunction()),
+        atol=1e-5,
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.wavefunction()),
+        tc.backend.numpy(c3.wavefunction()),
+        atol=1e-5,
+    )
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("cpb")])
 def test_postselection(backend):
     c = tc.Circuit(3)
@@ -1130,6 +1187,7 @@ def test_qir2qiskit(backend):
 
 
 def test_qiskit2tc():
+    # there is a heisenbug in qiskit
     try:
         import qiskit.quantum_info as qi
         from qiskit import QuantumCircuit

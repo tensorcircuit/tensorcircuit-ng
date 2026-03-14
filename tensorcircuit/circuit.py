@@ -46,6 +46,7 @@ class Circuit(BaseCircuit):
         nqubits: int,
         inputs: Optional[Tensor] = None,
         mps_inputs: Optional[QuOperator] = None,
+        tensors: Optional[Sequence[Tensor]] = None,
         split: Optional[Dict[str, Any]] = None,
         dim: Optional[int] = None,
     ) -> None:
@@ -62,6 +63,9 @@ class Circuit(BaseCircuit):
         :type inputs: Optional[Tensor], optional
         :param mps_inputs: QuVector for a MPS like initial wavefunction.
         :type mps_inputs: Optional[QuOperator]
+        :param tensors: Sequence of tensors for a MPS like initial wavefunction.
+            The order of legs for each tensor is assumed to be (bond-left, physical, bond-right).
+        :type tensors: Optional[Sequence[Tensor]]
         :param split: dict if two qubit gate is ready for split, including parameters for at least one of
             ``max_singular_values`` and ``max_truncation_err``.
         :type split: Optional[Dict[str, Any]]
@@ -76,10 +80,11 @@ class Circuit(BaseCircuit):
             "nqubits": nqubits,
             "inputs": inputs,
             "mps_inputs": mps_inputs,
+            "tensors": tensors,
             "split": split,
             "dim": dim,
         }
-        if (inputs is None) and (mps_inputs is None):
+        if (inputs is None) and (mps_inputs is None) and (tensors is None):
             nodes = self.all_zero_nodes(nqubits, dim=self._d)
             self._front = [n.get_edge(0) for n in nodes]
         elif inputs is not None:  # provide input function
@@ -93,7 +98,7 @@ class Circuit(BaseCircuit):
             inputs = Gate(inputs)
             nodes = [inputs]
             self._front = [inputs.get_edge(i) for i in range(n)]
-        else:  # mps_inputs is not None
+        elif mps_inputs is not None:
             mps_nodes = list(mps_inputs.nodes)  # type: ignore
             for i, n in enumerate(mps_nodes):
                 mps_nodes[i].tensor = backend.cast(n.tensor, dtypestr)  # type: ignore
@@ -107,6 +112,10 @@ class Circuit(BaseCircuit):
                 new_front.append(edict[e])
             nodes = new_nodes
             self._front = new_front
+        elif tensors is not None:
+            nodes, self._front = self._tensors_to_nodes(tensors)
+        else:
+            raise ValueError("No inputs provided")  # should not be reached
 
         self.coloring_nodes(nodes)
         self._nodes = nodes
