@@ -57,6 +57,8 @@
 
 - Generalize `scatter` method for backends.
 
+- Lazy import for tensorflow and torch.
+
 
 ## v1.4.0
 

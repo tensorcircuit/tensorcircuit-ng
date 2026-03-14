@@ -2,6 +2,8 @@ __version__ = "1.5.0"
 __author__ = "TensorCircuit-NG Authors"
 __creator__ = "refraction-ray"
 
+import importlib
+from typing import Any, List
 from .utils import gpu_memory_share
 
 gpu_memory_share()
@@ -62,17 +64,34 @@ from . import timeevol
 
 FGSCircuit = FGSSimulator
 
-try:
-    from . import keras
-    from .keras import KerasLayer, KerasHardwareLayer
-except ModuleNotFoundError:
-    pass  # in case tf is not installed
+# lazy imports for heavy frameworks
+# name: (module_relative_path, is_module)
+_lazy_imports = {
+    "keras": (".keras", True),
+    "KerasLayer": (".keras", False),
+    "KerasHardwareLayer": (".keras", False),
+    "torchnn": (".torchnn", True),
+    "TorchLayer": (".torchnn", False),
+    "TorchHardwareLayer": (".torchnn", False),
+}
 
-try:
-    from . import torchnn
-    from .torchnn import TorchLayer, TorchHardwareLayer
-except ModuleNotFoundError:
-    pass  # in case torch is not installed
+
+def __getattr__(name: str) -> Any:
+    if name in _lazy_imports:
+        path, is_module = _lazy_imports[name]
+        module = importlib.import_module(path, __package__)
+        if is_module:
+            attr = module
+        else:
+            attr = getattr(module, name)
+        globals()[name] = attr
+        return attr
+    raise AttributeError("module %s has no attribute %s" % (__name__, name))
+
+
+def __dir__() -> List[str]:
+    return sorted(set(globals().keys()).union(_lazy_imports.keys()))
+
 
 try:
     import qiskit
