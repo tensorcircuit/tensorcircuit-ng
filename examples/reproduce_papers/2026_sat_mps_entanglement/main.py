@@ -11,15 +11,20 @@ the full paper settings (n=4-20, 1000 instances, Panel B n=8-13).
 """
 
 from __future__ import annotations
+import os
+
+for _k in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ[_k] = "1"
 
 import argparse
 from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
 
+import jax
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import optimize
 import tensorcircuit as tc
 
 PAPER_COLORS = {
@@ -29,20 +34,8 @@ PAPER_COLORS = {
     "very_light_purple": "#D0D0E0",
 }
 
-
-def set_backend() -> tuple:
-    """Set TensorCircuit backend with graceful fallback.
-
-    Returns (backend_object, backend_name).
-    """
-    try:
-        backend = tc.set_backend("jax")
-        backend_name = "jax"
-    except ImportError:
-        backend = tc.set_backend("numpy")
-        backend_name = "numpy"
-    tc.set_dtype("complex128")
-    return backend, backend_name
+K = tc.set_backend("jax")
+tc.set_dtype("complex128")
 
 
 @lru_cache(maxsize=None)
@@ -53,97 +46,118 @@ def all_bitstrings(n_variables: int) -> np.ndarray:
     return bits.astype(np.int8)
 
 
-def generate_weigt_satisfiable_instance_signed(
-    n_variables: int, n_clauses: int, rng: np.random.Generator, p0: float
-) -> np.ndarray:
-    """Generate a hard satisfiable random 3-SAT instance via Weigt protocol.
-
-    Clause literals are signed integers in +/-{1,...,n}. Signs are sampled by
-    the p0/p1/p2 rule; variables are a random permutation and the first 3 are
-    used. Default p0=0.08 corresponds to the hard satisfiable ensemble.
-    """
-    p1 = (1.0 - 4.0 * p0) / 6.0
-    p2 = (1.0 + 2.0 * p0) / 6.0
-    clauses = np.empty((n_clauses, 3), dtype=np.int16)
-
-    for clause_id in range(n_clauses):
-        p = rng.random()
-        terms = rng.permutation(np.arange(1, n_variables + 1, dtype=np.int16))
-        signs = np.array([1, 1, 1], dtype=np.int8)
-
-        if p < p0:
-            pass
-        elif p < p0 + 3.0 * p1:
-            idx = int(np.floor((p - p0) / p1))
-            signs[idx] = -1
-        else:
-            signs[:] = -1
-            idx = int(np.floor((p - p0 - 3.0 * p1) / p2))
-            signs[idx] = 1
-
-        clauses[clause_id] = (signs * terms[:3]).astype(np.int16)
-    return clauses
+@lru_cache(maxsize=None)
+def _cached_bit_table_jax(n_variables: int):
+    """Cache the JAX device-side bit table per n."""
+    return K.convert_to_tensor(all_bitstrings(n_variables))
 
 
-def violation_vector(
-    n_variables: int, signed_clauses: np.ndarray, bit_table: np.ndarray
-) -> np.ndarray:
-    """Count clause violations for every computational-basis state."""
-    violations = np.zeros(1 << n_variables, dtype=np.int16)
-    clause_vars = np.abs(signed_clauses).astype(np.int16) - 1
-    clause_negs = (signed_clauses < 0).astype(np.int8)
-    selected_bits = bit_table[:, clause_vars]
-    violated = np.all(selected_bits == clause_negs[None, :, :], axis=-1)
-    violations += violated.sum(axis=-1).astype(np.int16)
-    return violations
-
-
-def build_init_state(n_variables: int):
-    """Prepare the uniform superposition |+...+> via tc.Circuit."""
+@lru_cache(maxsize=None)
+def _cached_init_state(n_variables: int):
+    """Cache the uniform superposition |+...+> per n (immutable for same n)."""
     c = tc.Circuit(n_variables)
     for i in range(n_variables):
         c.h(i)
     return c.state()
 
 
-def half_chain_entropy(state_vector, n_variables: int) -> float:
-    """Compute half-chain von Neumann entropy S = -Tr(rho log rho)."""
-    psi_np = np.asarray(state_vector)
-    norm_val = np.linalg.norm(psi_np)
-    if norm_val < 1e-15:
-        return 0.0
-    n_left = n_variables // 2
-    n_right = n_variables - n_left
-    psi_matrix = (psi_np / norm_val).reshape(1 << n_left, 1 << n_right)
-    singular_values = np.linalg.svd(psi_matrix, compute_uv=False, full_matrices=False)
-    probabilities = np.abs(singular_values) ** 2
-    probabilities = probabilities[probabilities > 1e-14]
-    return float(-(probabilities * np.log(probabilities)).sum())
+def _generate_batch_clauses(key, n_variables, n_clauses, batch_size, p0):
+    """Generate a batch of Weigt hard-satisfiable 3-SAT instances (JAX-vectorized).
 
-
-def maximal_bump_height(
-    energies: np.ndarray, n_variables: int, init_state, backend
-) -> tuple[float, float]:
-    """Find the maximal entanglement bump height over imaginary time.
-
-    Constructs |psi(tau)> = e^{-tau H}|+...+> using tc.Circuit for the initial
-    state and tc.backend for the Boltzmann weights, then optimises tau in
-    [0, 7.5].  Rejects samples with entropy still increasing at tau=7.5
-    (checked via comparison with tau=10.0).
+    Replaces the per-clause Python loop with fully vectorized JAX operations.
+    Returns int16 array of shape (batch_size, n_clauses, 3).
     """
-    e_tensor = backend.convert_to_tensor(energies.astype(np.float64))
+    p1 = (1.0 - 4.0 * p0) / 6.0
+    p2 = (1.0 + 2.0 * p0) / 6.0
 
-    def neg_entropy(x: np.ndarray) -> float:
-        tau = float(np.ravel(x)[0])
-        boltzmann = backend.exp(-tau * e_tensor)
-        psi = init_state * boltzmann
-        return -half_chain_entropy(psi, n_variables)
+    k1, k2 = jax.random.split(key)
+    p_vals = jax.random.uniform(k1, (batch_size, n_clauses))
 
-    if neg_entropy(np.array([7.5])) > neg_entropy(np.array([10.0])):
-        return -1.0, -1.0
+    # variable selection: argsort of uniform noise → random permutation, take first 3
+    noise = jax.random.uniform(k2, (batch_size, n_clauses, n_variables))
+    terms = K.argsort(noise, axis=-1)[:, :, :3] + 1
 
-    result = optimize.minimize_scalar(neg_entropy, bounds=(0.0, 7.5), method="bounded")
-    return float(-result.fun), float(result.x)
+    eye3 = K.eye(3, dtype="int16")
+
+    in_c2 = (p_vals >= p0) & (p_vals < p0 + 3.0 * p1)
+    idx2 = K.cast(K.clip(K.floor((p_vals - p0) / p1), 0, 2), "int32")
+    signs = K.where(in_c2[:, :, None], 1 - 2 * eye3[idx2], 1)
+
+    in_c3 = p_vals >= p0 + 3.0 * p1
+    idx3 = K.cast(K.clip(K.floor((p_vals - p0 - 3.0 * p1) / p2), 0, 2), "int32")
+    signs = K.where(in_c3[:, :, None], -1 + 2 * eye3[idx3], signs)
+
+    return K.cast(signs * terms, "int16")
+
+
+_jit_generate_clauses = K.jit(_generate_batch_clauses, static_argnums=(1, 2, 3, 4))
+
+
+def _batch_violation_jax(all_clauses, bit_table):
+    """Batch violation vectors for B instances at once."""
+    clause_vars = K.cast(K.abs(all_clauses), "int32") - 1
+    clause_negs = K.cast(all_clauses < 0, "int8")
+    selected = bit_table[:, clause_vars].transpose(1, 0, 2, 3)
+    violated = K.all(selected == clause_negs[:, None, :, :], axis=-1)
+    return K.cast(violated.sum(axis=-1), "float64")
+
+
+_jit_batch_violation = K.jit(_batch_violation_jax)
+
+
+_N_COARSE = 16
+_N_FINE = 8
+_MAX_BATCH_BYTES = 1 << 30
+
+
+def _svd_entropy(psi_batch, n_left):
+    """Batched half-chain von Neumann entropy via SVD."""
+    dim_left = 1 << n_left
+    mat = psi_batch.reshape(-1, dim_left, psi_batch.shape[-1] // dim_left)
+    s = jnp.linalg.svd(mat, compute_uv=False)
+    p = K.clip(s**2, 1e-30, 1e30)
+    return -K.sum(p * K.log(p), axis=-1)
+
+
+def _batch_grid_search_core(all_energies, init_state, n_left):
+    """Jittable: batch coarse+fine grid search over tau in [0, 7.5]."""
+    b_size = all_energies.shape[0]
+
+    tau_coarse = jnp.linspace(0.0, 7.5, _N_COARSE)
+    tau_scan = K.concat([tau_coarse, K.convert_to_tensor([10.0])])
+    m_scan = tau_scan.shape[0]
+
+    boltz = K.exp(-tau_scan[None, :, None] * all_energies[:, None, :])
+    psi = init_state[None, None, :] * boltz
+    psi = psi / jnp.linalg.norm(psi, axis=-1, keepdims=True)
+    scan_ent = _svd_entropy(psi.reshape(b_size * m_scan, -1), n_left).reshape(
+        b_size, m_scan
+    )
+
+    coarse_ent = scan_ent[:, :-1]
+    is_valid = coarse_ent[:, -1] >= scan_ent[:, -1]
+    best_idx = K.argmax(coarse_ent, axis=-1)
+    best_tau = tau_coarse[best_idx]
+    delta = (7.5 / (_N_COARSE - 1)) * 2.0
+
+    t_lo = jnp.maximum(best_tau - delta, 0.0)
+    t_hi = jnp.minimum(best_tau + delta, 7.5)
+    t = jnp.linspace(0.0, 1.0, _N_FINE)
+    tau_fine = t_lo[:, None] + t[None, :] * (t_hi - t_lo)[:, None]
+
+    boltz_f = K.exp(-tau_fine[:, :, None] * all_energies[:, None, :])
+    psi_f = init_state[None, None, :] * boltz_f
+    psi_f = psi_f / jnp.linalg.norm(psi_f, axis=-1, keepdims=True)
+    fine_ent = _svd_entropy(psi_f.reshape(b_size * _N_FINE, -1), n_left).reshape(
+        b_size, _N_FINE
+    )
+
+    fine_best_idx = K.argmax(fine_ent, axis=-1)
+    max_ent = fine_ent[K.arange(0, b_size, 1), fine_best_idx]
+    return max_ent, is_valid
+
+
+_jit_batch_grid_search = K.jit(_batch_grid_search_core, static_argnums=(2,))
 
 
 def sample_bump_heights(
@@ -152,26 +166,32 @@ def sample_bump_heights(
     n_instances: int,
     rng: np.random.Generator,
     p0: float,
-    backend,
 ) -> np.ndarray:
     """Sample maximal entanglement bump heights for fixed n and alpha."""
-    n_clauses = int(round(alpha * n_variables))
-    bit_table = all_bitstrings(n_variables)
-    init_state = build_init_state(n_variables)
-    heights = np.empty(n_instances, dtype=np.float64)
+    n_clauses = int(alpha * n_variables)
+    bit_table_jax = _cached_bit_table_jax(n_variables)
+    init_state = _cached_init_state(n_variables)
+    n_left = n_variables // 2
 
-    for sample_id in range(n_instances):
-        max_entropy = -1.0
-        while max_entropy < 0.0:
-            clauses = generate_weigt_satisfiable_instance_signed(
-                n_variables=n_variables, n_clauses=n_clauses, rng=rng, p0=p0
-            )
-            energies = violation_vector(n_variables, clauses, bit_table)
-            max_entropy, _ = maximal_bump_height(
-                energies, n_variables, init_state, backend
-            )
-        heights[sample_id] = max_entropy
-    return heights
+    bytes_per_inst = (_N_COARSE + _N_FINE + 1) * (1 << n_variables) * 16
+    mem_limit = max(1, _MAX_BATCH_BYTES // bytes_per_inst)
+    batch = min(mem_limit, max(n_instances, 256))
+
+    key = jax.random.PRNGKey(int(rng.integers(0, 2**31)))
+    collected = []
+    filled = 0
+
+    while filled < n_instances:
+        key, subkey = jax.random.split(key)
+        all_clauses = _jit_generate_clauses(subkey, n_variables, n_clauses, batch, p0)
+        all_energies = _jit_batch_violation(all_clauses, bit_table_jax)
+        max_ent, is_valid = _jit_batch_grid_search(all_energies, init_state, n_left)
+
+        valid_heights = np.asarray(max_ent)[np.asarray(is_valid)]
+        collected.append(valid_heights)
+        filled += len(valid_heights)
+
+    return np.concatenate(collected)[:n_instances]
 
 
 def collect_panel_a(
@@ -180,15 +200,12 @@ def collect_panel_a(
     n_instances: int,
     rng: np.random.Generator,
     p0: float,
-    backend,
 ) -> dict[int, np.ndarray]:
     """Collect data for Figure 2(a)-style scaling at alpha=alpha_c."""
     panel_a: dict[int, np.ndarray] = {}
     for n_value in n_values:
         print(f"[Panel A] n={n_value}, alpha={alpha_c}, instances={n_instances}")
-        panel_a[n_value] = sample_bump_heights(
-            n_value, alpha_c, n_instances, rng, p0, backend
-        )
+        panel_a[n_value] = sample_bump_heights(n_value, alpha_c, n_instances, rng, p0)
     return panel_a
 
 
@@ -198,24 +215,31 @@ def collect_panel_b(
     n_instances: int,
     rng: np.random.Generator,
     p0: float,
-    backend,
-) -> dict[int, np.ndarray]:
-    """Collect data for Figure 2(b)-style universal curve of <S_hat>/n."""
-    panel_b: dict[int, np.ndarray] = {}
+) -> dict[int, tuple[np.ndarray, np.ndarray]]:
+    """Collect data for Figure 2(b)-style universal curve of <S_hat>/n.
+
+    Following the Julia reference: m = floor(alpha*n), actual_alpha = m/n.
+    Returns {n: (alpha_actual, S_over_n)} with per-n discretized x-axis.
+    """
+    panel_b: dict[int, tuple[np.ndarray, np.ndarray]] = {}
     for n_value in n_values:
-        normalized_curve = np.empty(alpha_values.shape[0], dtype=np.float64)
+        m_values = np.floor(alpha_values * n_value).astype(int)
+        alpha_actual = m_values / n_value
+        normalized_curve = np.empty(len(alpha_values), dtype=np.float64)
         for idx, alpha in enumerate(alpha_values):
-            print(f"[Panel B] n={n_value}, alpha={alpha:.2f}, instances={n_instances}")
-            heights = sample_bump_heights(n_value, alpha, n_instances, rng, p0, backend)
+            print(
+                f"[Panel B] n={n_value}, m={m_values[idx]}, "
+                f"alpha_actual={alpha_actual[idx]:.4f}, instances={n_instances}"
+            )
+            heights = sample_bump_heights(n_value, alpha, n_instances, rng, p0)
             normalized_curve[idx] = heights.mean() / n_value
-        panel_b[n_value] = normalized_curve
+        panel_b[n_value] = (alpha_actual, normalized_curve)
     return panel_b
 
 
 def plot_results(
     panel_a: dict[int, np.ndarray],
-    panel_b: dict[int, np.ndarray],
-    alpha_values: np.ndarray,
+    panel_b: dict[int, tuple[np.ndarray, np.ndarray]],
     alpha_c: float,
     output_file: Path,
 ) -> None:
@@ -244,7 +268,7 @@ def plot_results(
     y_top = 3.0
     ax_a.fill_between(
         n_values_a,
-        s_max,
+        np.minimum(s_max, y_top),
         y_top,
         facecolor="none",
         hatch="////",
@@ -310,9 +334,10 @@ def plot_results(
         PAPER_COLORS["very_light_purple"],
     ]
     for curve_id, n_value in enumerate(sorted(panel_b.keys())):
+        alpha_actual, s_over_n = panel_b[n_value]
         ax_b.plot(
-            alpha_values,
-            panel_b[n_value],
+            alpha_actual,
+            s_over_n,
             marker="o",
             markersize=3.2,
             linewidth=1.4,
@@ -323,7 +348,8 @@ def plot_results(
     ax_b.set_title(r"(b) $\langle\hat{S}\rangle/n$ vs clause-variable ratio")
     ax_b.set_xlabel(r"clause-variable ratio $\alpha$")
     ax_b.set_ylabel(r"$\langle\hat{S}\rangle/n$")
-    ax_b.set_xlim(alpha_values[0], alpha_values[-1])
+    all_alphas = np.concatenate([panel_b[n][0] for n in panel_b])
+    ax_b.set_xlim(all_alphas.min(), all_alphas.max())
     ax_b.legend(frameon=False, ncol=2)
 
     fig.tight_layout()
@@ -357,8 +383,6 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """Run data generation and plot Figure 2 reproduction."""
     args = parse_args()
-    backend, backend_name = set_backend()
-    print(f"TensorCircuit backend: {backend_name}")
 
     alpha_values = np.linspace(args.alpha_min, args.alpha_max, args.alpha_points)
     rng = np.random.default_rng(args.seed)
@@ -369,7 +393,6 @@ def main() -> None:
         n_instances=args.instances_a,
         rng=rng,
         p0=args.weigt_p0,
-        backend=backend,
     )
     panel_b = collect_panel_b(
         n_values=args.n_values_b,
@@ -377,7 +400,6 @@ def main() -> None:
         n_instances=args.instances_b,
         rng=rng,
         p0=args.weigt_p0,
-        backend=backend,
     )
 
     base_dir = Path(__file__).resolve().parent
@@ -385,8 +407,7 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     output_image = output_dir / "result.png"
 
-    plot_results(panel_a, panel_b, alpha_values, args.alpha_c, output_image)
-    print(f"Saved figure: {output_image}")
+    plot_results(panel_a, panel_b, args.alpha_c, output_image)
 
 
 if __name__ == "__main__":
