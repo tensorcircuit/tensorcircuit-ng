@@ -1,0 +1,21 @@
+title: "Entanglement Barriers from Computational Complexity: Matrix-Product-State Approach to Satisfiability"
+arxiv_id: "2602.20299"
+url: "https://arxiv.org/abs/2602.20299"
+year: 2026
+authors:
+  - "Tim Pokart"
+  - "Frank Pollmann"
+  - "Jan Carl Budich"
+tags:
+  - "MPS"
+  - "3-SAT"
+  - "imaginary time propagation"
+  - "entanglement entropy"
+hardware_requirements:
+  gpu: False
+  min_memory: "4GB"
+description: "Figure 2 reproduction using the authors' Zenodo protocol (10.5281/zenodo.18743084): Weigt hard-satisfiable 3-SAT generator with p0=0.08, violation-vector Hamiltonian, and continuous tau optimization in [0,7.5] with the same sample-rejection criterion f(7.5) > f(10.0). Scaled down to n=4-15 (Panel A), n=8-10 (Panel B), 200 instances for feasible runtimes while preserving the core physics (linear entropy scaling and alpha_c peak)."
+outputs:
+  - target: "Figure 2: (a) <S_hat> vs n at alpha_c, (b) <S_hat>/n vs alpha"
+    path: "outputs/result.png"
+    script: "main.py"
