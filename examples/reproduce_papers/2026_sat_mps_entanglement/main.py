@@ -11,10 +11,6 @@ the full paper settings (n=4-20, 1000 instances, Panel B n=8-13).
 """
 
 from __future__ import annotations
-import os
-
-for _k in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
-    os.environ[_k] = "1"
 
 import argparse
 from collections.abc import Iterable
@@ -35,7 +31,7 @@ PAPER_COLORS = {
 }
 
 K = tc.set_backend("jax")
-tc.set_dtype("complex128")
+tc.set_dtype("float64")
 
 
 @lru_cache(maxsize=None)
@@ -54,28 +50,22 @@ def _cached_bit_table_jax(n_variables: int):
 
 @lru_cache(maxsize=None)
 def _cached_init_state(n_variables: int):
-    """Cache the uniform superposition |+...+> per n (immutable for same n)."""
-    c = tc.Circuit(n_variables)
-    for i in range(n_variables):
-        c.h(i)
-    return c.state()
+    """Uniform superposition |+...+> as real float64 (diagonal H => always real)."""
+    dim = 1 << n_variables
+    return jnp.ones(dim, dtype=jnp.float64) / jnp.sqrt(float(dim))
 
 
 def _generate_batch_clauses(key, n_variables, n_clauses, batch_size, p0):
-    """Generate a batch of Weigt hard-satisfiable 3-SAT instances (JAX-vectorized).
-
-    Replaces the per-clause Python loop with fully vectorized JAX operations.
-    Returns int16 array of shape (batch_size, n_clauses, 3).
-    """
+    """Generate a batch of Weigt hard-satisfiable 3-SAT instances"""
     p1 = (1.0 - 4.0 * p0) / 6.0
     p2 = (1.0 + 2.0 * p0) / 6.0
 
     k1, k2 = jax.random.split(key)
     p_vals = jax.random.uniform(k1, (batch_size, n_clauses))
 
-    # variable selection: argsort of uniform noise → random permutation, take first 3
     noise = jax.random.uniform(k2, (batch_size, n_clauses, n_variables))
-    terms = K.argsort(noise, axis=-1)[:, :, :3] + 1
+    _, terms = jax.lax.top_k(noise, 3)
+    terms = terms + 1
 
     eye3 = K.eye(3, dtype="int16")
 
@@ -90,108 +80,159 @@ def _generate_batch_clauses(key, n_variables, n_clauses, batch_size, p0):
     return K.cast(signs * terms, "int16")
 
 
-_jit_generate_clauses = K.jit(_generate_batch_clauses, static_argnums=(1, 2, 3, 4))
-
-
-def _batch_violation_jax(all_clauses, bit_table):
-    """Batch violation vectors for B instances at once."""
-    clause_vars = K.cast(K.abs(all_clauses), "int32") - 1
-    clause_negs = K.cast(all_clauses < 0, "int8")
-    selected = bit_table[:, clause_vars].transpose(1, 0, 2, 3)
-    violated = K.all(selected == clause_negs[:, None, :, :], axis=-1)
+def _single_violation(instance_clauses, bit_table, clause_mask):
+    """Violation count for each bitstring of one instance (avoids 4D broadcast)."""
+    clause_vars = K.cast(K.abs(instance_clauses), "int32") - 1
+    clause_negs = K.cast(instance_clauses < 0, "int8")
+    selected = bit_table[:, clause_vars]
+    violated = K.all(selected == clause_negs[None, :, :], axis=-1)
+    violated = violated & clause_mask[None, :]
     return K.cast(violated.sum(axis=-1), "float64")
 
 
-_jit_batch_violation = K.jit(_batch_violation_jax)
-
-
-_N_COARSE = 16
-_N_FINE = 8
+# Same setting as author's Julia reference
+_TAU_UPPER = 7.5
+_TAU_VALID = 10.0
+_GSS_ITERS = 13
+# Batch size setting which can be tuned by user for different hardware.
+_CHECK_BATCH = 1024
+_GSS_BATCH = 256
 _MAX_BATCH_BYTES = 1 << 30
 
 
-def _svd_entropy(psi_batch, n_left):
-    """Batched half-chain von Neumann entropy via SVD."""
+def _entropy_at_tau(tau, energies, init_state, n_left):
+    """Half-chain von Neumann entropy of the imaginary-time evolved state."""
+    psi = init_state * K.exp(-tau * energies)
     dim_left = 1 << n_left
-    mat = psi_batch.reshape(-1, dim_left, psi_batch.shape[-1] // dim_left)
-    s = jnp.linalg.svd(mat, compute_uv=False)
-    p = K.clip(s**2, 1e-30, 1e30)
-    return -K.sum(p * K.log(p), axis=-1)
+    s = jnp.linalg.svd(psi.reshape(dim_left, -1), compute_uv=False)
+    p = s**2
+    p = K.where(p < 1e-10, 0.0, p)
+    p = p / K.sum(p)
+    p = K.clip(p, 1e-30, 1.0)
+    return -K.sum(p * K.log(p))
 
 
-def _batch_grid_search_core(all_energies, init_state, n_left):
-    """Jittable: batch coarse+fine grid search over tau in [0, 7.5]."""
-    b_size = all_energies.shape[0]
-
-    tau_coarse = jnp.linspace(0.0, 7.5, _N_COARSE)
-    tau_scan = K.concat([tau_coarse, K.convert_to_tensor([10.0])])
-    m_scan = tau_scan.shape[0]
-
-    boltz = K.exp(-tau_scan[None, :, None] * all_energies[:, None, :])
-    psi = init_state[None, None, :] * boltz
-    psi = psi / jnp.linalg.norm(psi, axis=-1, keepdims=True)
-    scan_ent = _svd_entropy(psi.reshape(b_size * m_scan, -1), n_left).reshape(
-        b_size, m_scan
+def _check_valid_single(energies, init_state, n_left):
+    """Validity check per Julia reference: S(7.5) >= S(10.0)."""
+    return _entropy_at_tau(_TAU_UPPER, energies, init_state, n_left) >= _entropy_at_tau(
+        _TAU_VALID, energies, init_state, n_left
     )
 
-    coarse_ent = scan_ent[:, :-1]
-    is_valid = coarse_ent[:, -1] >= scan_ent[:, -1]
-    best_idx = K.argmax(coarse_ent, axis=-1)
-    best_tau = tau_coarse[best_idx]
-    delta = (7.5 / (_N_COARSE - 1)) * 2.0
 
-    t_lo = jnp.maximum(best_tau - delta, 0.0)
-    t_hi = jnp.minimum(best_tau + delta, 7.5)
-    t = jnp.linspace(0.0, 1.0, _N_FINE)
-    tau_fine = t_lo[:, None] + t[None, :] * (t_hi - t_lo)[:, None]
-
-    boltz_f = K.exp(-tau_fine[:, :, None] * all_energies[:, None, :])
-    psi_f = init_state[None, None, :] * boltz_f
-    psi_f = psi_f / jnp.linalg.norm(psi_f, axis=-1, keepdims=True)
-    fine_ent = _svd_entropy(psi_f.reshape(b_size * _N_FINE, -1), n_left).reshape(
-        b_size, _N_FINE
-    )
-
-    fine_best_idx = K.argmax(fine_ent, axis=-1)
-    max_ent = fine_ent[K.arange(0, b_size, 1), fine_best_idx]
-    return max_ent, is_valid
+def _stage1_generate_and_check(
+    key, bit_table, init_state, n_variables, max_clauses, batch_size, p0, n_clauses
+):
+    """generate instances, compute energies, check validity."""
+    n_left = n_variables // 2
+    clauses = _generate_batch_clauses(key, n_variables, max_clauses, batch_size, p0)
+    clause_mask = jnp.arange(max_clauses) < n_clauses
+    energies = K.vmap(lambda c: _single_violation(c, bit_table, clause_mask))(clauses)
+    is_valid = K.vmap(lambda e: _check_valid_single(e, init_state, n_left))(energies)
+    return energies, is_valid
 
 
-_jit_batch_grid_search = K.jit(_batch_grid_search_core, static_argnums=(2,))
+def _find_peak_single(energies, init_state, n_left):
+    """Golden section search for peak entropy over tau in [0, TAU_UPPER]."""
+    gr = (K.sqrt(5.0) + 1.0) / 2.0
+
+    def _ent(tau):
+        return _entropy_at_tau(tau, energies, init_state, n_left)
+
+    a, b = 0.0, _TAU_UPPER
+    c = b - (b - a) / gr
+    d = a + (b - a) / gr
+
+    def body(_, state):
+        a, b, c, d, fc, fd = state
+        cond = fc > fd
+        a_new = jnp.where(cond, a, c)
+        b_new = jnp.where(cond, d, b)
+        tau_new = jnp.where(
+            cond,
+            b_new - (b_new - a_new) / gr,
+            a_new + (b_new - a_new) / gr,
+        )
+        ent_new = _ent(tau_new)
+        c_new = jnp.where(cond, tau_new, d)
+        d_new = jnp.where(cond, c, tau_new)
+        fc_new = jnp.where(cond, ent_new, fd)
+        fd_new = jnp.where(cond, fc, ent_new)
+        return (a_new, b_new, c_new, d_new, fc_new, fd_new)
+
+    state = jax.lax.fori_loop(0, _GSS_ITERS, body, (a, b, c, d, _ent(c), _ent(d)))
+    return _ent((state[0] + state[1]) / 2.0)
+
+
+def _stage2_find_peaks(energies_batch, init_state, n_left):
+    """run GSS on a batch of valid energies."""
+    return K.vmap(lambda e: _find_peak_single(e, init_state, n_left))(energies_batch)
+
+
+_jit_stage1 = K.jit(_stage1_generate_and_check, static_argnums=(3, 4, 5))
+_jit_stage2 = K.jit(_stage2_find_peaks, static_argnums=(2,))
+
+
+def _next_pow2(x: int) -> int:
+    """Round up to the smallest power of 2 >= x."""
+    p = 1
+    while p < x:
+        p <<= 1
+    return p
 
 
 def sample_bump_heights(
     n_variables: int,
-    alpha: float,
+    n_clauses: int,
     n_instances: int,
     rng: np.random.Generator,
     p0: float,
+    max_clauses: int | None = None,
 ) -> np.ndarray:
-    """Sample maximal entanglement bump heights for fixed n and alpha."""
-    n_clauses = int(alpha * n_variables)
+    """Sample maximal entanglement bump heights for fixed n and m (clause count)."""
+    if max_clauses is None:
+        max_clauses = n_clauses
+    stage1_mc = _next_pow2(n_clauses)
     bit_table_jax = _cached_bit_table_jax(n_variables)
     init_state = _cached_init_state(n_variables)
     n_left = n_variables // 2
 
-    bytes_per_inst = (_N_COARSE + _N_FINE + 1) * (1 << n_variables) * 16
+    bytes_per_inst = (1 << n_variables) * stage1_mc * 4
     mem_limit = max(1, _MAX_BATCH_BYTES // bytes_per_inst)
-    batch = min(mem_limit, max(n_instances, 256))
+    check_batch = min(mem_limit, _CHECK_BATCH)
+    gss_batch = min(mem_limit, _GSS_BATCH)
 
-    key = jax.random.PRNGKey(int(rng.integers(0, 2**31)))
-    collected = []
-    filled = 0
+    key = jax.random.key(int(rng.integers(0, 2**31)))
 
-    while filled < n_instances:
+    valid_energies: list[np.ndarray] = []
+    n_valid = 0
+    while n_valid < n_instances:
         key, subkey = jax.random.split(key)
-        all_clauses = _jit_generate_clauses(subkey, n_variables, n_clauses, batch, p0)
-        all_energies = _jit_batch_violation(all_clauses, bit_table_jax)
-        max_ent, is_valid = _jit_batch_grid_search(all_energies, init_state, n_left)
+        energies, is_valid = _jit_stage1(
+            subkey,
+            bit_table_jax,
+            init_state,
+            n_variables,
+            stage1_mc,
+            check_batch,
+            p0,
+            n_clauses,
+        )
+        e_np, v_np = jax.device_get((energies, is_valid))
+        valid_energies.append(e_np[v_np])
+        n_valid += int(v_np.sum())
 
-        valid_heights = np.asarray(max_ent)[np.asarray(is_valid)]
-        collected.append(valid_heights)
-        filled += len(valid_heights)
+    all_valid = np.concatenate(valid_energies)[:n_instances]
 
-    return np.concatenate(collected)[:n_instances]
+    peaks: list[np.ndarray] = []
+    for start in range(0, n_instances, gss_batch):
+        end = min(start + gss_batch, n_instances)
+        chunk = all_valid[start:end]
+        if len(chunk) < gss_batch:
+            chunk = np.pad(chunk, ((0, gss_batch - len(chunk)), (0, 0)))
+        peak = _jit_stage2(jnp.array(chunk), init_state, n_left)
+        peaks.append(np.asarray(jax.device_get(peak))[: end - start])
+
+    return np.concatenate(peaks)
 
 
 def collect_panel_a(
@@ -204,8 +245,9 @@ def collect_panel_a(
     """Collect data for Figure 2(a)-style scaling at alpha=alpha_c."""
     panel_a: dict[int, np.ndarray] = {}
     for n_value in n_values:
-        print(f"[Panel A] n={n_value}, alpha={alpha_c}, instances={n_instances}")
-        panel_a[n_value] = sample_bump_heights(n_value, alpha_c, n_instances, rng, p0)
+        n_clauses = int(np.floor(alpha_c * n_value))
+        print(f"[Panel A] n={n_value}, m={n_clauses}, instances={n_instances}")
+        panel_a[n_value] = sample_bump_heights(n_value, n_clauses, n_instances, rng, p0)
     return panel_a
 
 
@@ -225,15 +267,19 @@ def collect_panel_b(
     for n_value in n_values:
         m_values = np.floor(alpha_values * n_value).astype(int)
         alpha_actual = m_values / n_value
-        normalized_curve = np.empty(len(alpha_values), dtype=np.float64)
-        for idx, alpha in enumerate(alpha_values):
+        unique_m, inv = np.unique(m_values, return_inverse=True)
+        max_m = int(unique_m.max())
+        unique_vals = np.empty(len(unique_m), dtype=np.float64)
+        for i, m in enumerate(unique_m):
             print(
-                f"[Panel B] n={n_value}, m={m_values[idx]}, "
-                f"alpha_actual={alpha_actual[idx]:.4f}, instances={n_instances}"
+                f"[Panel B] n={n_value}, m={m}, "
+                f"alpha_actual={m / n_value:.4f}, instances={n_instances}"
             )
-            heights = sample_bump_heights(n_value, alpha, n_instances, rng, p0)
-            normalized_curve[idx] = heights.mean() / n_value
-        panel_b[n_value] = (alpha_actual, normalized_curve)
+            heights = sample_bump_heights(
+                n_value, int(m), n_instances, rng, p0, max_clauses=max_m
+            )
+            unique_vals[i] = heights.mean() / n_value
+        panel_b[n_value] = (alpha_actual, unique_vals[inv])
     return panel_b
 
 
@@ -326,12 +372,12 @@ def plot_results(
     inset.legend(fontsize=5, frameon=False, loc="upper right")
 
     curve_palette = [
-        PAPER_COLORS["deep_purple"],
-        PAPER_COLORS["mid_purple"],
-        "#8078B8",
-        "#928FC2",
-        PAPER_COLORS["light_purple"],
         PAPER_COLORS["very_light_purple"],
+        PAPER_COLORS["light_purple"],
+        "#928FC2",
+        "#8078B8",
+        PAPER_COLORS["mid_purple"],
+        PAPER_COLORS["deep_purple"],
     ]
     for curve_id, n_value in enumerate(sorted(panel_b.keys())):
         alpha_actual, s_over_n = panel_b[n_value]
