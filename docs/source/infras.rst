@@ -48,6 +48,26 @@ Overview of Modules
 
 - :py:mod:`tensorcircuit.mpscircuit`: :py:obj:`tensorcircuit.mpscircuit.MPSCircuit` class with similar (but subtly different) APIs as ``tc.Circuit``, where the simulation engine is based on MPS TEBD.
 
+**Specialized Simulator Modules:**
+
+- :py:mod:`tensorcircuit.analogcircuit`: Hybrid digital-analog quantum simulation with time-dependent Hamiltonians.
+
+- :py:mod:`tensorcircuit.fgs`: Fermion Gaussian State (FGS) simulator for non-interacting fermionic systems.
+
+- :py:mod:`tensorcircuit.pauliprop`: Pauli Propagation Engine (PPE) for tracking Heisenberg-picture evolution of Pauli observables.
+
+- :py:mod:`tensorcircuit.quditcircuit`: Higher-dimensional qudit state-vector simulator supporting $d$-level systems ($3 \le d \le 36$).
+
+- :py:mod:`tensorcircuit.stabilizercircuit`: Clifford/stabilizer circuit simulator using the high-performance Stim backend.
+
+- :py:mod:`tensorcircuit.u1circuit`: $U(1)$ symmetry-protected circuit simulator for particle number conserving systems.
+
+**Advanced Simulation Utilities:**
+
+- :py:mod:`tensorcircuit.shadows`: Utilities for classical shadows, efficient state estimation, and entropy calculation.
+
+- :py:mod:`tensorcircuit.timeevol`: Advanced time evolution engines including Krylov, Lanczos, ODE-based, and Chebyshev methods.
+
 **Supplemental Modules:**
 
 - :py:mod:`tensorcircuit.simplify`: Provide tools and utility functions to simplify the tensornetworks before the real contractions.
@@ -103,10 +123,16 @@ Relations of Circuit-like classes
 
 .. code-block::
 
-                                           |- Circuit
-                        |- BaseCircuit --- |
-    AbstractCircuit  ---|                  |- DMCircuitReference --- DMCircuit
-                        |- MPSCircuit
+                                                 |- Circuit
+                              |- BaseCircuit --- |
+    AbstractCircuit  ---------|                  |- DMCircuit
+                              |- MPSCircuit
+                              |- StabilizerCircuit
+                              |- U1Circuit
+
+.. note::
+
+    ``AnalogCircuit`` and ``QuditCircuit`` are high-level wrappers for hybrid digital-analog and qudit systems respectively, but they share similar APIs with the circuit classes above.
 
 
 
