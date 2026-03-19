@@ -852,12 +852,10 @@ def krausmatrix_to_krausgate(kraus_list: Sequence[Matrix]) -> Sequence[Gate]:
     :return: A list of Kraus operators
     :rtype: Sequence[Gate]
     """
-    if isinstance(kraus_list[0], Gate):
+    if not kraus_list or isinstance(kraus_list[0], Gate):
         return kraus_list
 
-    newkraus = [backend.reshape2(k) for k in kraus_list]
-
-    return [Gate(k) for k in newkraus]
+    return [Gate(backend.reshape2(k)) for k in kraus_list]
 
 
 @partial(
