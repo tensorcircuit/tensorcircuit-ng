@@ -801,7 +801,7 @@ def any_gate(unitary: Tensor, name: str = "any", dim: Optional[int] = None) -> G
     else:
         unitary = backend.reshaped(unitary, dim)
     # nleg = int(np.log2(backend.sizen(unitary)))
-    # unitary = backend.reshape(unitary, [2 for _ in range(nleg)])
+    # unitary = backend.reshape(unitary, [2] * nleg)
     return Gate(unitary, name=name)
 
 
@@ -828,7 +828,7 @@ def exponential_gate(unitary: Tensor, theta: float, name: str = "none") -> Gate:
     mat = backend.expm(-backend.i() * theta * unitary)
     dimension = reduce(mul, mat.shape)
     nolegs = int(np.log(dimension) / np.log(2))
-    mat = backend.reshape(mat, shape=[2 for _ in range(nolegs)])
+    mat = backend.reshape(mat, shape=[2] * nolegs)
     return Gate(mat, name="exp-" + name)
 
 
@@ -863,8 +863,8 @@ def exponential_gate_unity(
     size = int(reduce(mul, unitary.shape))
     n = int(np.log2(size))
     i = np.eye(2 ** (int(n / 2)))
-    i_reshaped = i.reshape([2 for _ in range(n)])
-    unitary = backend.reshape(unitary, [2 for _ in range(n)])
+    i_reshaped = i.reshape([2] * n)
+    unitary = backend.reshape(unitary, [2] * n)
     it = array_to_tensor(i_reshaped)
     if half is True:
         theta = theta / 2.0
@@ -1008,7 +1008,7 @@ def diagonal_gate(diag: Tensor, dim: int = 2, name: str = "diagonal") -> Gate:
     """
     diag = backend.cast(diag, dtype=dtypestr)
     noe = int(np.round(np.log(reduce(mul, backend.shape_tuple(diag))) / np.log(dim)))
-    shape = [dim for _ in range(noe)]
+    shape = [dim] * noe
     diag_reshaped = backend.reshape(diag, shape)
     return Gate(diag_reshaped, name=name)
 
