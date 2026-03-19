@@ -109,7 +109,7 @@ class MADE(Model):  # type: ignore
                     output_space % input_space == 0
                 ), "output space must by multiple of input space"
                 self._m.append(
-                    np.hstack([m for _ in range(output_space // input_space)])
+                    np.hstack([m] * (output_space // input_space))
                 )
             else:  # middle layer
                 # assign hidden layer units a number between 1 and D-1
@@ -120,7 +120,7 @@ class MADE(Model):  # type: ignore
                     m = np.arange(1, input_space)
                     # TODO: whether 0 is ok need further scrunity, this is a bit away from original MADE idea
                     self._m.append(
-                        np.hstack([m for _ in range(hidden_space // (input_space - 1))])
+                        np.hstack([m] * (hidden_space // (input_space - 1)))
                     )
                 else:
                     self._m.append(np.random.randint(1, input_space, size=hidden_space))
@@ -378,7 +378,7 @@ class NMF(Model):  # type: ignore
     def sample(self, batch_size: int) -> Tuple[tf.Tensor, tf.Tensor]:
         x_hat = self.call()
         x_hat = x_hat[tf.newaxis, :]
-        tile_shape = tuple([batch_size] + [1 for _ in range(self.D + 1)])
+        tile_shape = tuple([batch_size] + [1] * (self.D + 1))
         x_hat = tf.tile(x_hat, tile_shape)
         totalsize = tf.reduce_prod(self.dimensions)
         logits = tf.reshape(x_hat, (batch_size * totalsize, self.spin_channel))

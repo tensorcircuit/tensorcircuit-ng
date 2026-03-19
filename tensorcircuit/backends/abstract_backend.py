@@ -458,7 +458,7 @@ class ExtendedBackend:
         :rtype: Tensor
         """
         nleg = int(np.log2(self.sizen(a)))
-        a = self.reshape(a, [2 for _ in range(nleg)])
+        a = self.reshape(a, [2] * nleg)
         return a
 
     def reshaped(self: Any, a: Tensor, d: int) -> Tensor:

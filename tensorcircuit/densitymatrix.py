@@ -83,7 +83,7 @@ class DMCircuit(BaseCircuit):
                 N = inputs.shape[0]
                 n = _infer_num_sites(N, self._d)
                 assert n == nqubits
-                inputs = backend.reshape(inputs, [self._d for _ in range(n)])
+                inputs = backend.reshape(inputs, [self._d] * n)
                 inputs_gate = Gate(inputs)
                 self._nodes = [inputs_gate]
                 self.coloring_nodes(self._nodes)
@@ -103,7 +103,7 @@ class DMCircuit(BaseCircuit):
                 dminputs = backend.convert_to_tensor(dminputs)
                 dminputs = backend.cast(dminputs, dtype=dtypestr)
                 dminputs = backend.reshape(
-                    dminputs, [self._d for _ in range(2 * nqubits)]
+                    dminputs, [self._d] * 2 * nqubits
                 )
                 dminputs_gate = Gate(dminputs)
                 nodes = [dminputs_gate]
@@ -392,7 +392,7 @@ class DMCircuit2(DMCircuit):
         #     index = [index[0] for _ in range(len(kraus))]
         super_op = kraus_to_super_gate(kraus)
         nlegs = 4 * len(index)
-        super_op = backend.reshape(super_op, [self._d for _ in range(nlegs)])
+        super_op = backend.reshape(super_op, [self._d] * nlegs)
         super_op = Gate(super_op)
         o2i = int(nlegs / 2)
         r2l = int(nlegs / 4)

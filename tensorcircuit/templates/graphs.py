@@ -33,11 +33,11 @@ def Line1D(
     if edge_weight is None:
         edge_weight = 1.0  # type: ignore
     if not isinstance(edge_weight, list):
-        edge_weight = [edge_weight for _ in range(n)]  # type: ignore
+        edge_weight = [edge_weight] * n  # type: ignore
     if node_weight is None:
         node_weight = 0.0  # type: ignore
     if not isinstance(node_weight, list):
-        node_weight = [node_weight for _ in range(n)]  # type: ignore
+        node_weight = [node_weight] * n  # type: ignore
     for i in range(n):
         g.add_node(i, weight=node_weight[i])
     for i in range(n - 1):

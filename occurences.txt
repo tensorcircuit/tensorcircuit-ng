@@ -1,0 +1,55 @@
+tensorcircuit/results/qem/qem_methods.py:269:    for combo in product(*[range(4) for _ in range(4)])
+tensorcircuit/vis.py:84:    tex_string_table
+tensorcircuit/templates/graphs.py:36:        edge_weight = [edge_weight for _ in range(n)]  # type
+tensorcircuit/templates/graphs.py:40:        node_weight = [node_weight for _ in range(n)]  # type
+tensorcircuit/abstractcircuit.py:1060:            init = ["" for _ in range(self._nqubits)]
+tensorcircuit/quantum.py:1214:    ps = [0 for _ in range(n)]
+tensorcircuit/quantum.py:1450:    sites = [Site(LegCharge.from_trivial(physical_dim), "q") for _ in range(nwires)]
+tensorcircuit/quantum.py:1878:            r = [0 for _ in range(n)]
+tensorcircuit/quantum.py:1884:            r = [0 for _ in range(n)]
+tensorcircuit/quantum.py:1890:            r = [0 for _ in range(n)]
+tensorcircuit/quantum.py:1897:            r = [0 for _ in range(n)]
+tensorcircuit/quantum.py:1902:            r = [0 for _ in range(n)]
+tensorcircuit/quantum.py:1907:            r = [0 for _ in range(n)]
+tensorcircuit/quantum.py:2122:        weight = [1.0 for _ in range(nterms)]
+tensorcircuit/quantum.py:2212:        weight = [1.0 for _ in range(nterms)]
+tensorcircuit/quantum.py:2533:        w = backend.reshape(w, [dim for _ in range(freedom)])
+tensorcircuit/quantum.py:2593:    s = 1 / (1 - k) * backend.real(backend.log(trace_product(*[rho for _ in range(k)])))
+tensorcircuit/basecircuit.py:51:        l = [0.0 for _ in range(dim)]
+tensorcircuit/basecircuit.py:986:        inputs = backend.reshape(inputs, [self._d for _ in range(n)])
+tensorcircuit/gates.py:804:    # unitary = backend.reshape(unitary, [2 for _ in range(nleg)])
+tensorcircuit/gates.py:831:    mat = backend.reshape(mat, shape=[2 for _ in range(nolegs)])
+tensorcircuit/gates.py:866:    i_reshaped = i.reshape([2 for _ in range(n)])
+tensorcircuit/gates.py:867:    unitary = backend.reshape(unitary, [2 for _ in range(n)])
+tensorcircuit/gates.py:1011:    shape = [dim for _ in range(noe)]
+tensorcircuit/gates.py:1066:    tensors = [m1] + [mk for _ in range(n - 2)] + [mn]
+tensorcircuit/gates.py:1118:    tensors = [m1] + [mk for _ in range(n - 2)] + [mn]
+tensorcircuit/interfaces/tensortrans.py:115:            dtype = [dtype for _ in range(len(leaves))]
+tensorcircuit/interfaces/tensortrans.py:144:        dtype = [dtype for _ in range(len(leaves))]
+tensorcircuit/densitymatrix.py:86:                inputs = backend.reshape(inputs, [self._d for _ in range(n)])
+tensorcircuit/densitymatrix.py:106:                    dminputs, [self._d for _ in range(2 * nqubits)]
+tensorcircuit/densitymatrix.py:228:            index = [index[0] for _ in range(len(kraus))]
+tensorcircuit/densitymatrix.py:392:        #     index = [index[0] for _ in range(len(kraus))]
+tensorcircuit/densitymatrix.py:395:        super_op = backend.reshape(super_op, [self._d for _ in range(nlegs)])
+tensorcircuit/applications/graphdata.py:311:    result = _maxcut(g, [1 for _ in range(l)])
+tensorcircuit/applications/graphdata.py:312:    result_value = [1 for _ in range(l)]
+tensorcircuit/applications/graphdata.py:313:    for v in itertools.product(*[[1, -1] for _ in range(l)])
+tensorcircuit/applications/graphdata.py:339:    for missing_edges in itertools.product(*[[i for i in range(e)] for _ in range(m)])
+tensorcircuit/applications/graphdata.py:391:    gs = [nx.Graph() for _ in range(split)]
+tensorcircuit/applications/vqes.py:242:        self.base = tf.constant(list(product(*[[0, 1] for _ in range(n)])))
+tensorcircuit/applications/layers.py:301:for gates in itertools.product(*[["x", "y", "z"] for _ in range(2)])
+tensorcircuit/applications/layers.py:312:    *[["rx", "ry", "rz", "xx", "yy", "zz"] for _ in range(2)]
+tensorcircuit/applications/layers.py:507:    for gates in itertools.product(*[["x", "y", "z"] for _ in range(2)])
+tensorcircuit/applications/van.py:112:                    np.hstack([m for _ in range(output_space // input_space)])
+tensorcircuit/applications/van.py:123:                        np.hstack([m for _ in range(hidden_space // (input_space - 1))])
+tensorcircuit/applications/van.py:381:        tile_shape = tuple([batch_size] + [1 for _ in range(self.D + 1)])
+tensorcircuit/applications/vags.py:1100:    w = tf.reshape(w, [2 for _ in range(freedom)])
+tensorcircuit/keras.py:56:            initializer = [initializer for _ in range(self.number_weights)]  # type
+tensorcircuit/keras.py:62:            constraint = [constraint for _ in range(self.number_weights)]  # type
+tensorcircuit/keras.py:68:            regularizer = [regularizer for _ in range(self.number_weights)]  # type
+tensorcircuit/circuit.py:97:            inputs = backend.reshape(inputs, [self._d for _ in range(n)])
+tensorcircuit/circuit.py:486:        g = backend.reshape(g, [self._d for _ in range(sites * 2)])
+tensorcircuit/circuit.py:752:        mps = identity([self._d for _ in range(self._nqubits)])
+tensorcircuit/circuit.py:773:        mps = identity([self._d for _ in range(self._nqubits)])
+tensorcircuit/compiler/composed_compiler.py:29:            self.compiled_options = [{} for _ in range(len(self.compile_funcs))]  # type
+tensorcircuit/backends/abstract_backend.py:461:        a = self.reshape(a, [2 for _ in range(nleg)])

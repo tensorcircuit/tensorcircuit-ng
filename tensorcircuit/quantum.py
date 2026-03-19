@@ -1211,7 +1211,7 @@ def xyz2ps(xyz: Dict[str, List[int]], n: Optional[int] = None) -> List[int]:
     """
     if n is None:
         n = max(xyz.get("x", []) + xyz.get("y", []) + xyz.get("z", [])) + 1
-    ps = [0 for _ in range(n)]
+    ps = [0] * n
     for i in range(n):
         if i in xyz.get("x", []):
             ps[i] = 1
@@ -1875,36 +1875,36 @@ def heisenberg_hamiltonian(
     weight = []
     for e in g.edges:
         if hzz != 0:
-            r = [0 for _ in range(n)]
+            r = [0] * n
             r[e[0]] = 3
             r[e[1]] = 3
             ls.append(r)
             weight.append(hzz)
         if hxx != 0:
-            r = [0 for _ in range(n)]
+            r = [0] * n
             r[e[0]] = 1
             r[e[1]] = 1
             ls.append(r)
             weight.append(hxx)
         if hyy != 0:
-            r = [0 for _ in range(n)]
+            r = [0] * n
             r[e[0]] = 2
             r[e[1]] = 2
             ls.append(r)
             weight.append(hyy)
     for node in g.nodes:
         if hz != 0:
-            r = [0 for _ in range(n)]
+            r = [0] * n
             r[node] = 3
             ls.append(r)
             weight.append(hz)
         if hx != 0:
-            r = [0 for _ in range(n)]
+            r = [0] * n
             r[node] = 1
             ls.append(r)
             weight.append(hx)
         if hy != 0:
-            r = [0 for _ in range(n)]
+            r = [0] * n
             r[node] = 2
             ls.append(r)
             weight.append(hy)
@@ -2119,7 +2119,7 @@ def PauliStringSum2COO(
     # n = len(ls[0])
     # s = 0b1 << n
     if weight is None:
-        weight = [1.0 for _ in range(nterms)]
+        weight = [1.0] * nterms
     weight = num_to_tensor(weight)
     ls = num_to_tensor(ls)
     # rsparse = get_backend("numpy").coo_sparse_matrix(
@@ -2209,7 +2209,7 @@ def PauliStringSum2COO_tf(
     n = len(ls[0])
     s = 0b1 << n
     if weight is None:
-        weight = [1.0 for _ in range(nterms)]
+        weight = [1.0] * nterms
     if not (isinstance(weight, tf.Tensor) or isinstance(weight, tf.Variable)):
         weight = tf.constant(weight, dtype=getattr(tf, dtypestr))
     rsparse = tf.SparseTensor(
@@ -2530,7 +2530,7 @@ def reduced_density_matrix(
         freedom = _infer_num_sites(size, dim)
         perm = [i for i in range(freedom) if i not in traceout]
         perm = perm + traceout
-        w = backend.reshape(w, [dim for _ in range(freedom)])
+        w = backend.reshape(w, [dim] * freedom)
         w = backend.transpose(w, perm=perm)
         w = backend.reshape(w, [-1, dim ** len(traceout)])
         if p is None:
@@ -2590,7 +2590,7 @@ def renyi_entropy(rho: Union[Tensor, QuOperator], k: int = 2) -> Tensor:
     :return: The :math:`k` th order of Renyi entropy.
     :rtype: Tensor
     """
-    s = 1 / (1 - k) * backend.real(backend.log(trace_product(*[rho for _ in range(k)])))
+    s = 1 / (1 - k) * backend.real(backend.log(trace_product(*[rho] * k)))
     return s
 
 
