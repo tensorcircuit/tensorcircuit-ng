@@ -102,9 +102,7 @@ class DMCircuit(BaseCircuit):
             elif dminputs is not None:
                 dminputs = backend.convert_to_tensor(dminputs)
                 dminputs = backend.cast(dminputs, dtype=dtypestr)
-                dminputs = backend.reshape(
-                    dminputs, [self._d] * (2 * nqubits)
-                )
+                dminputs = backend.reshape(dminputs, [self._d] * (2 * nqubits))
                 dminputs_gate = Gate(dminputs)
                 nodes = [dminputs_gate]
                 self._front = [dminputs_gate.get_edge(i) for i in range(2 * nqubits)]

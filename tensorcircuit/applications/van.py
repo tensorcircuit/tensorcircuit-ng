@@ -108,9 +108,7 @@ class MADE(Model):  # type: ignore
                 assert (
                     output_space % input_space == 0
                 ), "output space must by multiple of input space"
-                self._m.append(
-                    np.hstack([m] * (output_space // input_space))
-                )
+                self._m.append(np.hstack([m] * (output_space // input_space)))
             else:  # middle layer
                 # assign hidden layer units a number between 1 and D-1
                 if evenly:
@@ -119,9 +117,7 @@ class MADE(Model):  # type: ignore
                     ), "hidden space must be multiple of input space -1 when you set evenly as True"
                     m = np.arange(1, input_space)
                     # TODO: whether 0 is ok need further scrunity, this is a bit away from original MADE idea
-                    self._m.append(
-                        np.hstack([m] * (hidden_space // (input_space - 1)))
-                    )
+                    self._m.append(np.hstack([m] * (hidden_space // (input_space - 1))))
                 else:
                     self._m.append(np.random.randint(1, input_space, size=hidden_space))
             if i == depth:
