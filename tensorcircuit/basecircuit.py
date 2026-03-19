@@ -410,44 +410,6 @@ class BaseCircuit(AbstractCircuit):
                 newdang[j] ^ newdang[j + nq]
         return nodes
 
-    def to_qir(self) -> List[Dict[str, Any]]:
-        """
-        Return the quantum intermediate representation of the circuit.
-
-        :Example:
-
-        .. code-block:: python
-
-            >>> c = tc.Circuit(2)
-            >>> c.CNOT(0, 1)
-            >>> c.to_qir()
-            [{'gatef': cnot, 'gate': Gate(
-                name: 'cnot',
-                tensor:
-                    array([[[[1.+0.j, 0.+0.j],
-                            [0.+0.j, 0.+0.j]],
-
-                            [[0.+0.j, 1.+0.j],
-                            [0.+0.j, 0.+0.j]]],
-
-
-                        [[[0.+0.j, 0.+0.j],
-                            [0.+0.j, 1.+0.j]],
-
-                            [[0.+0.j, 0.+0.j],
-                            [1.+0.j, 0.+0.j]]]], dtype=complex64),
-                edges: [
-                    Edge(Dangling Edge)[0],
-                    Edge(Dangling Edge)[1],
-                    Edge('cnot'[2] -> 'qb-1'[0] ),
-                    Edge('cnot'[3] -> 'qb-2'[0] )
-                ]), 'index': (0, 1), 'name': 'cnot', 'split': None, 'mpo': False}]
-
-        :return: The quantum intermediate representation of the circuit.
-        :rtype: List[Dict[str, Any]]
-        """
-        return self._qir
-
     def perfect_sampling(self, status: Optional[Tensor] = None) -> Tuple[str, float]:
         """
         Sampling base-d strings (0-9A-Z when d <= 36) from the circuit output based on quantum amplitudes.
