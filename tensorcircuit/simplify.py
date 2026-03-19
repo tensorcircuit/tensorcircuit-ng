@@ -145,11 +145,8 @@ def _rank_simplify(nodes: List[Any]) -> Tuple[List[Any], bool]:
                 if not e.is_dangling():
                     nd, ad, bd = infer_new_shape(e.node1, e.node2)
                     if nd <= ad or nd <= bd:
-                        njs = [
-                            i
-                            for i, n in enumerate(nodes)
-                            if id(n) in [id(e.node1), id(e.node2)]
-                        ]
+                        n1, n2 = e.node1, e.node2
+                        njs = [i for i, n in enumerate(nodes) if n is n1 or n is n2]
                         new_node = tn.contract_between(e.node1, e.node2)
                         # contract(e) is not enough for multi edges between two tensors
                         nodes[njs[0]] = new_node
@@ -234,11 +231,11 @@ def _light_cone_cancel(nodes: List[Any]) -> Tuple[List[Any], bool]:
             if e.axis1 != e.axis2:
                 break
         else:
-            if id(n1) != id(n):
+            if n1 is not n:
                 n1, n2 = n2, n1  # make sure n1 is n dagger is False
 
             # contract
-            njs = [i for i, n in enumerate(nodes) if id(n) in [id(n1), id(n2)]]
+            njs = [i for i, n in enumerate(nodes) if n is n1 or n is n2]
             # new_node = tn.contract_between(e.node1, e.node2)
             # contract(e) is not enough for multi edges between two tensors
             for i in range(noe // 2):
