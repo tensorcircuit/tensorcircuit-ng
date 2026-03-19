@@ -226,7 +226,7 @@ def _light_cone_cancel(nodes: List[Any]) -> Tuple[List[Any], bool]:
             n3, n4 = e.node1, e.node2  # should also be n1 and n2
             if n3 is None or n4 is None:
                 break
-            if sorted([id(n3), id(n4)]) != sorted([id(n1), id(n2)]):
+            if not ((n3 is n1 and n4 is n2) or (n3 is n2 and n4 is n1)):
                 break
             if e.axis1 != e.axis2:
                 break
@@ -242,14 +242,14 @@ def _light_cone_cancel(nodes: List[Any]) -> Tuple[List[Any], bool]:
                 e = n1[noe // 2 + i]
                 m1, m3 = e.node1, e.node2
                 i1, i3 = e.axis1, e.axis2
-                if id(m1) != id(n1):
+                if m1 is not n1:
                     m1, m3 = m3, m1  # m1 is n1, m3 is the one behind m1
                     i1, i3 = i3, i1
                 e.disconnect()
                 e = n2[noe // 2 + i]
                 m2, m4 = e.node1, e.node2
                 i2, i4 = e.axis1, e.axis2
-                if id(m2) != id(n2):
+                if m2 is not n2:
                     m2, m4 = m4, m2  # m1 is n1, m3 is the one behind m1
                     i2, i4 = i4, i2
                 e.disconnect()
