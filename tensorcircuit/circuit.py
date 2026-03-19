@@ -483,7 +483,7 @@ class Circuit(BaseCircuit):
         if get_gate_from_index is None:
             raise ValueError("no `get_gate_from_index` implementation is provided")
         g = get_gate_from_index(r, kraus)
-        g = backend.reshape(g, [self._d] * sites * 2)
+        g = backend.reshape(g, [self._d] * (sites * 2))
         self.any(*index, unitary=g, name=name, dim=self._d)  # type: ignore
         return r
 

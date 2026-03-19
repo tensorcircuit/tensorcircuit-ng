@@ -103,7 +103,7 @@ class DMCircuit(BaseCircuit):
                 dminputs = backend.convert_to_tensor(dminputs)
                 dminputs = backend.cast(dminputs, dtype=dtypestr)
                 dminputs = backend.reshape(
-                    dminputs, [self._d] * 2 * nqubits
+                    dminputs, [self._d] * (2 * nqubits)
                 )
                 dminputs_gate = Gate(dminputs)
                 nodes = [dminputs_gate]
