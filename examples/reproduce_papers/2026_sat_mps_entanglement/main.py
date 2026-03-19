@@ -21,6 +21,7 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy import optimize
 import tensorcircuit as tc
 
 PAPER_COLORS = {
@@ -31,7 +32,7 @@ PAPER_COLORS = {
 }
 
 K = tc.set_backend("jax")
-tc.set_dtype("float64")
+tc.set_dtype("complex128")
 
 
 @lru_cache(maxsize=None)
@@ -50,9 +51,9 @@ def _cached_bit_table_jax(n_variables: int):
 
 @lru_cache(maxsize=None)
 def _cached_init_state(n_variables: int):
-    """Uniform superposition |+...+> as real float64 (diagonal H => always real)."""
+    """Uniform superposition |+...+> in complex128."""
     dim = 1 << n_variables
-    return jnp.ones(dim, dtype=jnp.float64) / jnp.sqrt(float(dim))
+    return jnp.ones(dim, dtype=jnp.complex128) / jnp.sqrt(float(dim))
 
 
 def _generate_batch_clauses(key, n_variables, n_clauses, batch_size, p0):
@@ -80,104 +81,86 @@ def _generate_batch_clauses(key, n_variables, n_clauses, batch_size, p0):
     return K.cast(signs * terms, "int16")
 
 
-def _single_violation(instance_clauses, bit_table, clause_mask):
-    """Violation count for each bitstring of one instance (avoids 4D broadcast)."""
+def _single_violation(instance_clauses, bit_table):
+    """Violation count for each bitstring of one instance."""
     clause_vars = K.cast(K.abs(instance_clauses), "int32") - 1
     clause_negs = K.cast(instance_clauses < 0, "int8")
     selected = bit_table[:, clause_vars]
     violated = K.all(selected == clause_negs[None, :, :], axis=-1)
-    violated = violated & clause_mask[None, :]
     return K.cast(violated.sum(axis=-1), "float64")
 
 
 # Same setting as author's Julia reference
 _TAU_UPPER = 7.5
 _TAU_VALID = 10.0
-_GSS_ITERS = 13
-# Batch size setting which can be tuned by user for different hardware.
-_CHECK_BATCH = 1024
-_GSS_BATCH = 256
+_CHECK_BATCH = 2048
 _MAX_BATCH_BYTES = 1 << 30
 
 
-def _entropy_at_tau(tau, energies, init_state, n_left):
-    """Half-chain von Neumann entropy of the imaginary-time evolved state."""
+def _entropy_from_singular_values(s, xp):
+    """Shared entropy helper from singular values."""
+    s2 = s * s
+    p = xp.where(s2 < 1e-10, 0.0, s2)
+    p = p / xp.sum(p)
+    p = xp.clip(p, 1e-30, None)
+    return -xp.sum(p * xp.log(p))
+
+
+def _entropy_at_tau_jax(tau, energies, init_state, n_left):
+    """JAX entropy used by stage1 validity filtering."""
     psi = init_state * K.exp(-tau * energies)
     dim_left = 1 << n_left
     s = jnp.linalg.svd(psi.reshape(dim_left, -1), compute_uv=False)
-    p = s**2
-    p = K.where(p < 1e-10, 0.0, p)
-    p = p / K.sum(p)
-    p = K.clip(p, 1e-30, 1.0)
-    return -K.sum(p * K.log(p))
+    return _entropy_from_singular_values(s, jnp)
+
+
+def _entropy_at_tau(tau, energies_np, init_state_np, n_left):
+    """NumPy entropy for host-side SciPy peak search."""
+    tau = float(tau)
+    psi = init_state_np * np.exp(-tau * energies_np)
+    dim_left = 1 << n_left
+    s = np.linalg.svd(psi.reshape(dim_left, -1), compute_uv=False)
+    return float(_entropy_from_singular_values(s, np))
 
 
 def _check_valid_single(energies, init_state, n_left):
     """Validity check per Julia reference: S(7.5) >= S(10.0)."""
-    return _entropy_at_tau(_TAU_UPPER, energies, init_state, n_left) >= _entropy_at_tau(
-        _TAU_VALID, energies, init_state, n_left
-    )
+    return _entropy_at_tau_jax(
+        _TAU_UPPER, energies, init_state, n_left
+    ) >= _entropy_at_tau_jax(_TAU_VALID, energies, init_state, n_left)
 
 
 def _stage1_generate_and_check(
-    key, bit_table, init_state, n_variables, max_clauses, batch_size, p0, n_clauses
+    key, bit_table, init_state, n_variables, n_clauses, batch_size, p0
 ):
     """generate instances, compute energies, check validity."""
     n_left = n_variables // 2
-    clauses = _generate_batch_clauses(key, n_variables, max_clauses, batch_size, p0)
-    clause_mask = jnp.arange(max_clauses) < n_clauses
-    energies = K.vmap(lambda c: _single_violation(c, bit_table, clause_mask))(clauses)
+    clauses = _generate_batch_clauses(key, n_variables, n_clauses, batch_size, p0)
+    energies = K.vmap(lambda c: _single_violation(c, bit_table))(clauses)
     is_valid = K.vmap(lambda e: _check_valid_single(e, init_state, n_left))(energies)
     return energies, is_valid
 
 
-def _find_peak_single(energies, init_state, n_left):
-    """Golden section search for peak entropy over tau in [0, TAU_UPPER]."""
-    gr = (K.sqrt(5.0) + 1.0) / 2.0
+def _find_peak_single(energies_np, init_state_np, n_left):
+    """Find peak entropy via coarse scan + bounded scalar minimize."""
+    tau_grid = np.array([0.0, 1.5, 3.0, 4.5, 6.0, _TAU_UPPER], dtype=np.float64)
+    coarse_max = max(
+        _entropy_at_tau(t, energies_np, init_state_np, n_left) for t in tau_grid
+    )
 
-    def _ent(tau):
-        return _entropy_at_tau(tau, energies, init_state, n_left)
+    def neg_entropy(tau):
+        return -_entropy_at_tau(tau, energies_np, init_state_np, n_left)
 
-    a, b = 0.0, _TAU_UPPER
-    c = b - (b - a) / gr
-    d = a + (b - a) / gr
-
-    def body(_, state):
-        a, b, c, d, fc, fd = state
-        cond = fc > fd
-        a_new = jnp.where(cond, a, c)
-        b_new = jnp.where(cond, d, b)
-        tau_new = jnp.where(
-            cond,
-            b_new - (b_new - a_new) / gr,
-            a_new + (b_new - a_new) / gr,
-        )
-        ent_new = _ent(tau_new)
-        c_new = jnp.where(cond, tau_new, d)
-        d_new = jnp.where(cond, c, tau_new)
-        fc_new = jnp.where(cond, ent_new, fd)
-        fd_new = jnp.where(cond, fc, ent_new)
-        return (a_new, b_new, c_new, d_new, fc_new, fd_new)
-
-    state = jax.lax.fori_loop(0, _GSS_ITERS, body, (a, b, c, d, _ent(c), _ent(d)))
-    return _ent((state[0] + state[1]) / 2.0)
-
-
-def _stage2_find_peaks(energies_batch, init_state, n_left):
-    """run GSS on a batch of valid energies."""
-    return K.vmap(lambda e: _find_peak_single(e, init_state, n_left))(energies_batch)
+    result = optimize.minimize_scalar(
+        neg_entropy,
+        bounds=(0.0, _TAU_UPPER),
+        method="bounded",
+        options={"xatol": 1e-3, "maxiter": 64},
+    )
+    return max(coarse_max, -float(result.fun))
 
 
 _jit_stage1 = K.jit(_stage1_generate_and_check, static_argnums=(3, 4, 5))
-_jit_stage2 = K.jit(_stage2_find_peaks, static_argnums=(2,))
-
-
-def _next_pow2(x: int) -> int:
-    """Round up to the smallest power of 2 >= x."""
-    p = 1
-    while p < x:
-        p <<= 1
-    return p
 
 
 def sample_bump_heights(
@@ -186,20 +169,16 @@ def sample_bump_heights(
     n_instances: int,
     rng: np.random.Generator,
     p0: float,
-    max_clauses: int | None = None,
 ) -> np.ndarray:
     """Sample maximal entanglement bump heights for fixed n and m (clause count)."""
-    if max_clauses is None:
-        max_clauses = n_clauses
-    stage1_mc = _next_pow2(n_clauses)
     bit_table_jax = _cached_bit_table_jax(n_variables)
     init_state = _cached_init_state(n_variables)
+    init_state_np = np.asarray(jax.device_get(init_state), dtype=np.complex128)
     n_left = n_variables // 2
 
-    bytes_per_inst = (1 << n_variables) * stage1_mc * 4
+    bytes_per_inst = (1 << n_variables) * n_clauses * 4
     mem_limit = max(1, _MAX_BATCH_BYTES // bytes_per_inst)
     check_batch = min(mem_limit, _CHECK_BATCH)
-    gss_batch = min(mem_limit, _GSS_BATCH)
 
     key = jax.random.key(int(rng.integers(0, 2**31)))
 
@@ -212,27 +191,19 @@ def sample_bump_heights(
             bit_table_jax,
             init_state,
             n_variables,
-            stage1_mc,
+            n_clauses,
             check_batch,
             p0,
-            n_clauses,
         )
         e_np, v_np = jax.device_get((energies, is_valid))
         valid_energies.append(e_np[v_np])
         n_valid += int(v_np.sum())
 
     all_valid = np.concatenate(valid_energies)[:n_instances]
-
-    peaks: list[np.ndarray] = []
-    for start in range(0, n_instances, gss_batch):
-        end = min(start + gss_batch, n_instances)
-        chunk = all_valid[start:end]
-        if len(chunk) < gss_batch:
-            chunk = np.pad(chunk, ((0, gss_batch - len(chunk)), (0, 0)))
-        peak = _jit_stage2(jnp.array(chunk), init_state, n_left)
-        peaks.append(np.asarray(jax.device_get(peak))[: end - start])
-
-    return np.concatenate(peaks)
+    peaks = np.array(
+        [float(_find_peak_single(row, init_state_np, n_left)) for row in all_valid]
+    )
+    return peaks
 
 
 def collect_panel_a(
@@ -268,16 +239,13 @@ def collect_panel_b(
         m_values = np.floor(alpha_values * n_value).astype(int)
         alpha_actual = m_values / n_value
         unique_m, inv = np.unique(m_values, return_inverse=True)
-        max_m = int(unique_m.max())
         unique_vals = np.empty(len(unique_m), dtype=np.float64)
         for i, m in enumerate(unique_m):
             print(
                 f"[Panel B] n={n_value}, m={m}, "
                 f"alpha_actual={m / n_value:.4f}, instances={n_instances}"
             )
-            heights = sample_bump_heights(
-                n_value, int(m), n_instances, rng, p0, max_clauses=max_m
-            )
+            heights = sample_bump_heights(n_value, int(m), n_instances, rng, p0)
             unique_vals[i] = heights.mean() / n_value
         panel_b[n_value] = (alpha_actual, unique_vals[inv])
     return panel_b
