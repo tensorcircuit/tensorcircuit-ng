@@ -308,8 +308,8 @@ def _maxcut(g: Graph, values: Sequence[int]) -> float:
 
 def maxcut_solution_bruteforce(g: Graph) -> Tuple[float, Sequence[int]]:
     l = len(g.nodes)
-    result = _maxcut(g, [1 for _ in range(l)])
-    result_value = [1 for _ in range(l)]
+    result = _maxcut(g, [1] * l)
+    result_value = [1] * l
     for v in itertools.product(*[[1, -1] for _ in range(l)]):
         nr = _maxcut(g, v)
         if result < nr:

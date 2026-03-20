@@ -53,19 +53,19 @@ class QuantumLayer(Layer):  # type: ignore
         self.f = f
         self.weights_shape = weights_shape
         if not (isinstance(initializer, list) or isinstance(initializer, tuple)):
-            initializer = [initializer for _ in range(self.number_weights)]  # type: ignore
+            initializer = [initializer] * self.number_weights  # type: ignore
         self.initializer = [
             initializers.get(item) if isinstance(item, str) else item
             for item in initializer
         ]
         if not (isinstance(constraint, list) or isinstance(constraint, tuple)):
-            constraint = [constraint for _ in range(self.number_weights)]  # type: ignore
+            constraint = [constraint] * self.number_weights  # type: ignore
         self.constraint = [
             constraints.get(item) if isinstance(item, str) else item
             for item in constraint
         ]
         if not (isinstance(regularizer, list) or isinstance(regularizer, tuple)):
-            regularizer = [regularizer for _ in range(self.number_weights)]  # type: ignore
+            regularizer = [regularizer] * self.number_weights  # type: ignore
         self.regularizer = [
             regularizers.get(item) if isinstance(item, str) else item
             for item in regularizer

@@ -1097,7 +1097,7 @@ def reduced_density_matrix(
     w = state / tf.linalg.norm(state)
     perm = [i for i in range(freedom) if i not in traceout]
     perm = perm + traceout
-    w = tf.reshape(w, [2 for _ in range(freedom)])
+    w = tf.reshape(w, [2] * freedom)
     w = tf.transpose(w, perm=perm)
     w = tf.reshape(w, [-1, 2 ** len(traceout)])
     if p is None:

@@ -48,7 +48,7 @@ class BaseCircuit(AbstractCircuit):
     @staticmethod
     def all_zero_nodes(n: int, prefix: str = "qb-", dim: int = 2) -> List[tn.Node]:
         prefix = "qd-" if dim > 2 else prefix
-        l = [0.0 for _ in range(dim)]
+        l = [0.0] * dim
         l[0] = 1.0
         nodes = [
             tn.Node(
@@ -945,7 +945,7 @@ class BaseCircuit(AbstractCircuit):
         N = inputs.shape[0]
         n = _infer_num_sites(N, self._d)
         assert n == self._nqubits
-        inputs = backend.reshape(inputs, [self._d for _ in range(n)])
+        inputs = backend.reshape(inputs, [self._d] * n)
         if self.inputs is not None:
             self._nodes[0].tensor = inputs
             if self.is_dm:

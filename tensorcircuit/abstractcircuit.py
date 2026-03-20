@@ -1057,7 +1057,7 @@ class AbstractCircuit:
         :rtype: str
         """
         if (not self.is_mps) and (self.inputs is not None):
-            init = ["" for _ in range(self._nqubits)]
+            init = [""] * self._nqubits
             init[self._nqubits // 2] = r"\psi"
             okws = {"init": init}
         else:

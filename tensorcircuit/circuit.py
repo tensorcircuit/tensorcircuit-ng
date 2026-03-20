@@ -94,7 +94,7 @@ class Circuit(BaseCircuit):
             N = inputs.shape[0]
             n = _infer_num_sites(N, dim=self._d)
             assert n == nqubits or n == 2 * nqubits
-            inputs = backend.reshape(inputs, [self._d for _ in range(n)])
+            inputs = backend.reshape(inputs, [self._d] * n)
             inputs = Gate(inputs)
             nodes = [inputs]
             self._front = [inputs.get_edge(i) for i in range(n)]
@@ -483,7 +483,7 @@ class Circuit(BaseCircuit):
         if get_gate_from_index is None:
             raise ValueError("no `get_gate_from_index` implementation is provided")
         g = get_gate_from_index(r, kraus)
-        g = backend.reshape(g, [self._d for _ in range(sites * 2)])
+        g = backend.reshape(g, [self._d] * (sites * 2))
         self.any(*index, unitary=g, name=name, dim=self._d)  # type: ignore
         return r
 
@@ -749,7 +749,7 @@ class Circuit(BaseCircuit):
         :return: ``QuOperator`` object for the circuit unitary (open indices for the input state)
         :rtype: QuOperator
         """
-        mps = identity([self._d for _ in range(self._nqubits)])
+        mps = identity([self._d] * self._nqubits)
         c = Circuit(self._nqubits, dim=self._d)
         ns, es = self._copy()
         c._nodes = ns
@@ -770,7 +770,7 @@ class Circuit(BaseCircuit):
         :return: The circuit unitary matrix
         :rtype: Tensor
         """
-        mps = identity([self._d for _ in range(self._nqubits)])
+        mps = identity([self._d] * self._nqubits)
         c = Circuit(self._nqubits, dim=self._d)
         ns, es = self._copy()
         c._nodes = ns
