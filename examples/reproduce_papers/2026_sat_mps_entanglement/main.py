@@ -90,7 +90,6 @@ def _single_violation(instance_clauses, bit_table):
     return K.cast(violated.sum(axis=-1), "float64")
 
 
-# Same setting as author's Julia reference
 _TAU_UPPER = 7.5
 _TAU_VALID = 10.0
 _CHECK_BATCH = 2048
@@ -124,7 +123,7 @@ def _entropy_at_tau(tau, energies_np, init_state_np, n_left):
 
 
 def _check_valid_single(energies, init_state, n_left):
-    """Validity check per Julia reference: S(7.5) >= S(10.0)."""
+    """Validity check: S(7.5) >= S(10.0)."""
     return _entropy_at_tau_jax(
         _TAU_UPPER, energies, init_state, n_left
     ) >= _entropy_at_tau_jax(_TAU_VALID, energies, init_state, n_left)
@@ -231,7 +230,7 @@ def collect_panel_b(
 ) -> dict[int, tuple[np.ndarray, np.ndarray]]:
     """Collect data for Figure 2(b)-style universal curve of <S_hat>/n.
 
-    Following the Julia reference: m = floor(alpha*n), actual_alpha = m/n.
+    Uses m = floor(alpha*n), actual_alpha = m/n.
     Returns {n: (alpha_actual, S_over_n)} with per-n discretized x-axis.
     """
     panel_b: dict[int, tuple[np.ndarray, np.ndarray]] = {}
