@@ -446,7 +446,7 @@ Reference paper: https://arxiv.org/abs/2311.01393 (published in PRL).
 
 For the simulation implementation of quantum states based on neural networks, tensor networs and quantum circuits using TensorCircuit-NG, see the [project repo](https://github.com/sxzgroup/et).
 
-Reference paper: https://arxiv.org/abs/2411.18921.
+Reference paper: https://arxiv.org/abs/2411.18921 (published in PRR).
 
 ### A Unified Variational Framework for Quantum Excited States
 
@@ -458,13 +458,13 @@ Reference paper: https://arxiv.org/abs/2504.21459.
 
 For the simulation code for the work "superior resilience to poisoning and amenability to unlearning in quantum machine learning", see the [project repo](https://github.com/yutuer21/quantum-machine-unlearning).
 
-Reference paper: https://arxiv.org/abs/2508.02422.
+Reference paper: https://arxiv.org/abs/2508.02422 (published in Nature Communications).
 
 ### Low Weight Pauli Propagation Simulation
 
 For the simulation code and data for the work on low weight Pauli propagation in the context of variational quantum algorithms, see the [project repo](https://github.com/ZongliangLi/lwpp_init).
 
-Reference paper: https://arxiv.org/abs/2508.06358.
+Reference paper: https://arxiv.org/abs/2508.06358 (published in PRR).
 
 ### Quantum Continual Learning
 
@@ -529,7 +529,7 @@ Reference paper: https://arxiv.org/abs/2511.17228.
 
 - Quantum deep generative prior with programmable quantum circuits: https://www.nature.com/articles/s42005-024-01765-9 (published in Communications Physics).
 
-- Symmetry Breaking Dynamics in Quantum Many-Body Systems: https://arxiv.org/abs/2501.13459.
+- Symmetry Breaking Dynamics in Quantum Many-Body Systems: https://arxiv.org/abs/2501.13459 (published in CPL).
 
 - Entanglement growth and information capacity in a quasiperiodic system with a single-particle mobility edge: https://arxiv.org/abs/2506.18076.
 
@@ -537,9 +537,9 @@ Reference paper: https://arxiv.org/abs/2511.17228.
 
 - A Neural-Guided Variational Quantum Algorithm for Efficient Sign Structure Learning in Hybrid Architectures: https://arxiv.org/abs/2507.07555.
 
-- Quantum Pontus-Mpemba Effects in Real and Imaginary-time Dynamics: https://arxiv.org/abs/2509.01960.
+- Quantum Pontus-Mpemba Effects in Real and Imaginary-time Dynamics: https://arxiv.org/abs/2509.01960 (published in PRB).
 
-- Quantum Mpemba effect in long-ranged U(1)-symmetric random circuits: https://arxiv.org/abs/2512.06775.
+- Quantum Mpemba effect in long-ranged U(1)-symmetric random circuits: https://arxiv.org/abs/2512.06775 (published in PRB).
 
 - A Qudit-native Framework for Discrete Time Crystals: https://arxiv.org/abs/2512.04577.
 

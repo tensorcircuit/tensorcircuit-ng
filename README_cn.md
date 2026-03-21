@@ -200,7 +200,7 @@ VQEX 在 MBL 相位识别上的应用见 [教程](/docs/source/tutorials/vqex_mb
 
 利用我们提出的随机量子门激活策略训练优化变分量子算法的实现请参考 [项目](https://github.com/ls-iastu/RAtraining).
 
-参考论文: https://arxiv.org/abs/2303.08154。
+参考论文: https://arxiv.org/abs/2303.08154 (PRR)。
 
 ### TenCirChem
 
@@ -212,19 +212,19 @@ VQEX 在 MBL 相位识别上的应用见 [教程](/docs/source/tutorials/vqex_mb
 
 数值模拟和带错误消除的真实量子硬件实验验证 QAOA 优化的代码请参考 [项目](https://github.com/sherrylixuecheng/EMQAOA-DARBO)。
 
-参考论文: https://arxiv.org/abs/2303.14877。
+参考论文: https://arxiv.org/abs/2303.14877 (Communications Physics)。
 
 ### NN-VQA
 
 关于神经网络编码的变分量子算法的实现和工作流, 见 [教程](/docs/source/tutorials/nnvqe.ipynb)。
 
-参考论文: https://arxiv.org/abs/2308.01068。
+参考论文: https://arxiv.org/abs/2308.01068 (PRApplied)。
 
 ### 变分多体态的等效温度
 
 关于基于神经网络、张量网络和量子线路的变分量子态的模拟优化和分析，见 [项目](https://github.com/sxzgroup/et).
 
-参考论文: https://arxiv.org/abs/2411.18921.
+参考论文: https://arxiv.org/abs/2411.18921 (PRR).
 
 ## 用户
 
