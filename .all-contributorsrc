@@ -412,6 +412,15 @@
       "contributions": [
         "code"
       ]
+    },
+    {
+      "login": "QingyunQian",
+      "name": "QingyunQian",
+      "avatar_url": "https://avatars.githubusercontent.com/u/69110244?v=4",
+      "profile": "https://github.com/QingyunQian",
+      "contributions": [
+        "example"
+      ]
     }
   ],
   "contributorsPerLine": 6,
