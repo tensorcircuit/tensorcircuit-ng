@@ -2,12 +2,42 @@
 compiler interface via qiskit
 """
 
+import ast
 import re
 from typing import Any, Dict, Optional
 
 from ..abstractcircuit import AbstractCircuit
 from ..circuit import Circuit
 from ..translation import qiskit_from_qasm_str_ordered_measure, get_qiskit_qasm
+
+
+def _safe_eval(s: str) -> Any:
+    operators = {
+        ast.Add: lambda a, b: a + b,
+        ast.Sub: lambda a, b: a - b,
+        ast.Mult: lambda a, b: a * b,
+        ast.Div: lambda a, b: a / b,
+        ast.Pow: lambda a, b: a ** b,
+        ast.USub: lambda a: -a,
+        ast.UAdd: lambda a: a,
+    }
+
+    def _eval(node: Any) -> Any:
+        if isinstance(node, ast.Expression):
+            return _eval(node.body)
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.Num):  # python < 3.8
+            return node.n
+        if isinstance(node, ast.BinOp):
+            return operators[type(node.op)](_eval(node.left), _eval(node.right))
+        if isinstance(node, ast.UnaryOp):
+            return operators[type(node.op)](_eval(node.operand))
+        if isinstance(node, ast.Tuple):
+            return tuple(_eval(n) for n in node.elts)
+        raise ValueError(f"Unsupported node type: {type(node)}")
+
+    return _eval(ast.parse(s, mode="eval"))
 
 
 def _free_pi(s: str) -> str:
@@ -21,7 +51,7 @@ def _free_pi(s: str) -> str:
             rs.append(r)
         else:
             v = r[inc.start() : inc.end()]
-            v = eval(v)
+            v = _safe_eval(v)
             if not isinstance(v, tuple):
                 r = r[: inc.start()] + "(" + str(v) + ")" + r[inc.end() :]
             else:  # u gate case
