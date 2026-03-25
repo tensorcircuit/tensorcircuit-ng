@@ -320,7 +320,7 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         return np.any(a)
 
     def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Any:
-        return np.all(a, axis=axis)
+        return np.all(a, axis=axis)  # type: ignore
 
     def solve(self, A: Tensor, b: Tensor, assume_a: str = "gen") -> Tensor:  # type: ignore
         # gen, sym, her, pos
