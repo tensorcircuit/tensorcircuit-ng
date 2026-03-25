@@ -281,6 +281,21 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
     def left_shift(self, x: Tensor, y: Tensor) -> Tensor:
         return cp.left_shift(x, y)
 
+    def bitwise_and(self, x: Tensor, y: Tensor) -> Tensor:
+        return cp.bitwise_and(x, y)
+
+    def bitwise_xor(self, x: Tensor, y: Tensor) -> Tensor:
+        return cp.bitwise_xor(x, y)
+
+    def bitwise_or(self, x: Tensor, y: Tensor) -> Tensor:
+        return cp.bitwise_or(x, y)
+
+    def any(self, a: Tensor) -> Any:
+        return cp.any(a)
+
+    def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Any:
+        return cp.all(a, axis=axis)
+
     def solve(self, A: Tensor, b: Tensor, assume_a: str = "gen") -> Tensor:  # type: ignore
         raise NotImplementedError
 

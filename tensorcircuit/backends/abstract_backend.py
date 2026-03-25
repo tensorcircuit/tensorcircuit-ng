@@ -722,7 +722,7 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `lexsort`.".format(self.name)
         )
 
-    def all(self: Any, a: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
+    def all(self: Any, a: Tensor, axis: Optional[Sequence[int]] = None) -> Any:
         """
         Test whether all array elements along a given axis evaluate to True.
 
@@ -732,7 +732,7 @@ class ExtendedBackend:
             defaults to None
         :type axis: Optional[Sequence[int]], optional
         :return: A new boolean or tensor resulting from the AND reduction
-        :rtype: Tensor
+        :rtype: Any
         """
         raise NotImplementedError(
             "Backend '{}' has not implemented `all`.".format(self.name)
@@ -1095,6 +1095,34 @@ class ExtendedBackend:
         """
         raise NotImplementedError(
             "Backend '{}' has not implemented `bitwise_xor`.".format(self.name)
+        )
+
+    def bitwise_or(self: Any, x: Tensor, y: Tensor) -> Tensor:
+        """
+        Compute the element-wise bitwise OR of two integer tensors.
+
+        :param x: first input tensor
+        :type x: Tensor
+        :param y: second input tensor
+        :type y: Tensor
+        :return: element-wise bitwise OR of ``x`` and ``y``
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `bitwise_or`.".format(self.name)
+        )
+
+    def any(self: Any, a: Tensor) -> Any:
+        """
+        Check whether any element of the input tensor evaluates to True.
+
+        :param a: Input tensor
+        :type a: Tensor
+        :return: True if any element is True, False otherwise
+        :rtype: Any
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `any`.".format(self.name)
         )
 
     def arange(

@@ -522,14 +522,6 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def argsort(self, a: Tensor, axis: int = -1) -> Tensor:
         return torchlib.argsort(a, dim=axis)
 
-    def all(self, tensor: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
-        """
-        Corresponds to torch.all.
-        """
-        if axis is None:
-            return torchlib.all(tensor)
-        return torchlib.all(tensor, dim=axis)
-
     def unique_with_counts(self, a: Tensor, **kws: Any) -> Tuple[Tensor, Tensor]:
         return torchlib.unique(a, return_counts=True)  # type: ignore
 
@@ -591,6 +583,17 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
 
     def bitwise_xor(self, x: Tensor, y: Tensor) -> Tensor:
         return torchlib.bitwise_xor(x, y)
+
+    def bitwise_or(self, x: Tensor, y: Tensor) -> Tensor:
+        return torchlib.bitwise_or(x, y)
+
+    def any(self, a: Tensor) -> Any:
+        return torchlib.any(a)
+
+    def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Any:
+        if axis is None:
+            return torchlib.all(a)
+        return torchlib.all(a, dim=axis)
 
     def solve(self, A: Tensor, b: Tensor, **kws: Any) -> Tensor:
         return torchlib.linalg.solve(A, b)

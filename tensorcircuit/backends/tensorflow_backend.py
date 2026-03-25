@@ -559,9 +559,6 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def max(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
         return tf.reduce_max(a, axis=axis)
 
-    def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
-        return tf.reduce_all(tf.cast(a, tf.bool), axis=axis)
-
     def where(
         self,
         condition: Tensor,
@@ -719,6 +716,15 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
 
     def bitwise_xor(self, x: Tensor, y: Tensor) -> Tensor:
         return tf.bitwise.bitwise_xor(x, y)
+
+    def bitwise_or(self, x: Tensor, y: Tensor) -> Tensor:
+        return tf.bitwise.bitwise_or(x, y)
+
+    def any(self, a: Tensor) -> Any:
+        return tf.reduce_any(tf.cast(a, tf.bool))
+
+    def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Any:
+        return tf.reduce_all(tf.cast(a, tf.bool), axis=axis)
 
     def solve(self, A: Tensor, b: Tensor, **kws: Any) -> Tensor:
         if b.shape[-1] == A.shape[-1]:

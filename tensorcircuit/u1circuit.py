@@ -2,7 +2,7 @@
 Circuit class for U(1) conserving circuits.
 """
 
-from functools import partial
+from functools import lru_cache, partial
 from itertools import combinations
 from math import comb
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -17,11 +17,48 @@ from .utils import arg_alias
 Tensor = Any
 
 
+@lru_cache(maxsize=128)
+def _get_subsystem_basis_static(n: int, k: int) -> np.ndarray:  # type: ignore
+    """
+    Get U(1) basis for n qubits and k particles (Cached Static version).
+    """
+    basis = []
+    for filled_combo in combinations(range(n), k):
+        state = 0
+        for bit_idx in filled_combo:
+            state |= 1 << (n - 1 - bit_idx)
+        basis.append(state)
+    basis = sorted(basis)
+    return np.array(basis, dtype=np.int64)
+
+
+@lru_cache(maxsize=128)
+def _extract_subsystem_bits_static(
+    nqubits: int, k: int, subsystem: Tuple[int, ...]
+) -> np.ndarray:  # type: ignore
+    """
+    Extract bits of subsystem and pack them into a contiguous integer (Cached Static version).
+    """
+    basis_np = _get_subsystem_basis_static(nqubits, k)
+    n = len(subsystem)
+    res = np.zeros(len(basis_np), dtype=np.int64)
+    for i, q_idx in enumerate(subsystem):
+        old_bp = nqubits - 1 - q_idx
+        new_bp = n - 1 - i
+        bits = (basis_np >> old_bp) & 1
+        res |= bits << new_bp
+    return res
+
+
 class U1Circuit(AbstractCircuit):
     """
     Circuit class for U(1) conserving circuits (particle number conservation).
-    Note: Currently only supports nqubits < 64 due to the use of 64-bit integer
-    bitmasks for basis state representation.
+    The simulation is performed entirely within the compressed U(1) subspace,
+    enabling efficient simulation of systems where the total number of excitations
+    is preserved.
+
+    Note: Supports up to 64 qubits by utilizing 64-bit integer bitmasks for
+    basis state representation.
     """
 
     def __init__(
@@ -31,6 +68,22 @@ class U1Circuit(AbstractCircuit):
         filled: Optional[Sequence[int]] = None,
         inputs: Optional[Any] = None,
     ) -> None:
+        """
+        Initialize a U(1) conserving circuit.
+
+        :param nqubits: Number of qubits in the circuit.
+        :type nqubits: int
+        :param k: Total number of excitations (particles) to preserve.
+            If None, it is inferred from the length of ``filled``.
+        :type k: Optional[int], defaults to None
+        :param filled: Initial indices of qubits that are occupied (|1> state).
+            If provided and ``inputs`` is None, the initial state is set to this
+            computational basis state.
+        :type filled: Optional[Sequence[int]], defaults to None
+        :param inputs: Initial state vector already defined in the U(1) subspace.
+            If provided, must have shape (comb(nqubits, k),).
+        :type inputs: Optional[Any], defaults to None
+        """
         self._nqubits = nqubits
         if nqubits >= 64:
             raise ValueError(
@@ -80,33 +133,33 @@ class U1Circuit(AbstractCircuit):
         # So qubit i corresponds to bit position (n-1-i) in the state integer
         assert k is not None
         self._dim = comb(nqubits, k)
-        self._basis: List[int] = []
-        for filled_combo in combinations(range(nqubits), k):
-            state = 0
-            for bit in filled_combo:
-                state |= 1 << (nqubits - 1 - bit)  # Reversed bit ordering
-            self._basis.append(state)
-        self._basis = sorted(self._basis)
+        self._basis_np = _get_subsystem_basis_static(nqubits, k)
+        self._basis = self._basis_np.tolist()
+
+        self._idtypestr = "int64" if nqubits > 30 else idtypestr
 
         # Convert basis to backend tensor for faster lookup
         self._basis_tensor = backend.cast(
-            backend.convert_to_tensor(self._basis), dtype=idtypestr
+            backend.convert_to_tensor(self._basis_np), dtype=self._idtypestr
         )
 
         if inputs is not None:
             self._state = backend.cast(inputs, dtypestr)
         else:
-            filled_tensor = backend.cast(backend.convert_to_tensor(filled), idtypestr)
+            filled_tensor = backend.cast(
+                backend.convert_to_tensor(filled), self._idtypestr
+            )
             bit_positions = nqubits - 1 - filled_tensor
             bits = backend.left_shift(
-                backend.cast(backend.convert_to_tensor(1), idtypestr), bit_positions
+                backend.cast(backend.convert_to_tensor(1), self._idtypestr),
+                bit_positions,
             )
             filled_state = backend.sum(bits)
 
             # Find the index in our basis - JIT FRIENDLY
             # Use searchsorted and one_hot to stay within the graph
             fs_tensor = backend.reshape(
-                backend.cast(filled_state, dtype=idtypestr), [1]
+                backend.cast(filled_state, dtype=self._idtypestr), [1]
             )
             initial_idx = backend.searchsorted(self._basis_tensor, fs_tensor)[0]
             # Clip index for safety - searchsorted should always find exact match
@@ -130,9 +183,9 @@ class U1Circuit(AbstractCircuit):
     def _get_bit(self, i: int) -> Tensor:
         """Extract bit value (0 or 1) at position corresponding to qubit i."""
         bp = self._bit_position(i)
-        return backend.right_shift(
-            backend.bitwise_and(self._basis_tensor, (1 << bp)), bp
-        )
+        one = backend.cast(backend.convert_to_tensor(1), self._idtypestr)
+        mask = backend.left_shift(one, bp)
+        return backend.right_shift(backend.bitwise_and(self._basis_tensor, mask), bp)
 
     def _get_swapped_info(self, i: int, j: int) -> Tuple[Tensor, Tensor]:
         """Get XOR difference and target indices for swapping qubits i and j."""
@@ -140,7 +193,10 @@ class U1Circuit(AbstractCircuit):
         bi = self._get_bit(i)
         bj = self._get_bit(j)
         diff = backend.bitwise_xor(bi, bj)
-        mask_swap = (1 << bpi) | (1 << bpj)
+        one = backend.cast(backend.convert_to_tensor(1), self._idtypestr)
+        mask_swap = backend.bitwise_or(
+            backend.left_shift(one, bpi), backend.left_shift(one, bpj)
+        )
         new_basis = backend.bitwise_xor(self._basis_tensor, diff * mask_swap)
         indices = backend.searchsorted(self._basis_tensor, new_basis)
         return diff, indices
@@ -168,7 +224,11 @@ class U1Circuit(AbstractCircuit):
 
     def _apply_cz(self, i: int, j: int) -> None:
         """Apply CZ gate: |11> -> -|11>, others unchanged."""
-        mask = (1 << self._bit_position(i)) | (1 << self._bit_position(j))
+        one = backend.cast(backend.convert_to_tensor(1), self._idtypestr)
+        mask = backend.bitwise_or(
+            backend.left_shift(one, self._bit_position(i)),
+            backend.left_shift(one, self._bit_position(j)),
+        )
         both_on = backend.cast(
             backend.bitwise_and(self._basis_tensor, mask) == mask, dtype=dtypestr
         )
@@ -176,7 +236,11 @@ class U1Circuit(AbstractCircuit):
 
     def _apply_cphase(self, i: int, j: int, theta: Any) -> None:
         """Apply controlled-phase: |11> -> e^{i*theta}|11>, others unchanged."""
-        mask = (1 << self._bit_position(i)) | (1 << self._bit_position(j))
+        one = backend.cast(backend.convert_to_tensor(1), self._idtypestr)
+        mask = backend.bitwise_or(
+            backend.left_shift(one, self._bit_position(i)),
+            backend.left_shift(one, self._bit_position(j)),
+        )
         both_on = backend.cast(
             backend.bitwise_and(self._basis_tensor, mask) == mask, dtype=dtypestr
         )
@@ -206,7 +270,9 @@ class U1Circuit(AbstractCircuit):
     def _apply_diagonal(self, index: Sequence[int], diagonal: Any) -> None:
         """Apply diagonal gate on qubits specified by index."""
         # Qubit index[0] corresponds to the most significant bit in the diagonal vector
-        config_val = backend.cast(backend.zeros_like(self._basis_tensor), idtypestr)
+        config_val = backend.cast(
+            backend.zeros_like(self._basis_tensor), self._idtypestr
+        )
         m = len(index)
         for i, idx in enumerate(index):
             bit = self._get_bit(idx)
@@ -379,22 +445,31 @@ class U1Circuit(AbstractCircuit):
         y = y or []
         z = z or []
 
-        z_factor: Any = 1.0
+        # Weight check: X and Y flip bits. To preserve U(1) symmetry,
+        # the total number of flips must be even, and they must preserve particle number.
+        # But here we just want to compute the expectation in the U(1) sector.
+        # If the Pauli string moves the state out of the sector, the expectation is 0.
+
+        all_xy = sorted(list(set(x) | set(y)))
+        # For U(1) sector, expectation is 0 if total bit flips is odd
+        if len(all_xy) % 2 != 0:
+            return backend.cast(backend.convert_to_tensor(0.0), dtypestr)
+
+        # Z contribution: Z_i |s> = (-1)^{s_i} |s>
+        z_factor = backend.cast(backend.convert_to_tensor(1.0), dtypestr)
         for idx in z:
-            bit = backend.cast(self._get_bit(idx), dtype=dtypestr)
-            z_factor = z_factor * (1.0 - 2.0 * bit)
+            bits = self._get_bit(idx)
+            z_factor = z_factor * (1.0 - 2.0 * backend.cast(bits, dtypestr))
 
-        all_xy = list(x) + list(y)
         if not all_xy:
-            return backend.sum(
-                backend.conj(self._state)
-                * self._state
-                * backend.cast(z_factor, dtypestr)
-            )
+            return backend.sum(backend.conj(self._state) * self._state * z_factor)
 
-        swap_mask = 0
+        swap_mask = backend.cast(backend.convert_to_tensor(0), self._idtypestr)
+        one = backend.cast(backend.convert_to_tensor(1), self._idtypestr)
         for idx in all_xy:
-            swap_mask |= 1 << self._bit_position(idx)
+            swap_mask = backend.bitwise_or(
+                swap_mask, backend.left_shift(one, self._bit_position(idx))
+            )
 
         new_basis = backend.bitwise_xor(self._basis_tensor, swap_mask)
 
@@ -406,14 +481,15 @@ class U1Circuit(AbstractCircuit):
             backend.gather1d(self._basis_tensor, safe_indices) == new_basis
         )
 
-        phase = backend.cast(backend.convert_to_tensor(z_factor), dtypestr)
+        phase = z_factor
         for idx in y:
             bp = self._bit_position(idx)
             # Y phase depends on the bit value in the KET (target) state
             # Y|0> = i|1>, Y|1> = -i|0>
             # Read bit from new_basis (the ket side, before Y flips it)
+            mask = backend.left_shift(one, bp)
             bit = backend.cast(
-                backend.right_shift(backend.bitwise_and(new_basis, (1 << bp)), bp),
+                backend.right_shift(backend.bitwise_and(new_basis, mask), bp),
                 dtype=dtypestr,
             )
             # bit=0 -> Y|0>=i|1> -> phase=i, bit=1 -> Y|1>=-i|0> -> phase=-i
@@ -455,7 +531,7 @@ class U1Circuit(AbstractCircuit):
         # Scatter the U(1) state into the full space at basis positions
         # indices should be shape [n, 1] for 1D scatter
         indices = backend.reshape(
-            backend.cast(self._basis_tensor, idtypestr), [self._dim, 1]
+            backend.cast(self._basis_tensor, self._idtypestr), [self._dim, 1]
         )
         dense_state = backend.scatter(dense_state, indices, self._state)
         return dense_state
@@ -553,7 +629,7 @@ class U1Circuit(AbstractCircuit):
 
         # Use sample2all for format conversion
         # full_indices are already integers representing the full basis states
-        ch = backend.cast(full_indices, idtypestr)
+        ch = backend.cast(full_indices, self._idtypestr)
         return sample2all(
             ch,
             n=self._nqubits,
@@ -609,6 +685,233 @@ class U1Circuit(AbstractCircuit):
             return outcome_tensor, prob
         else:
             return outcome_tensor, -1.0
+
+    def _process_subsystem(
+        self,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
+        subsystem_to_traceout: Optional[Sequence[int]] = None,
+    ) -> Tuple[
+        Sequence[int],
+        int,
+        int,
+        np.ndarray[Any, Any],
+        np.ndarray[Any, Any],
+        np.ndarray[Any, Any],
+        int,
+        int,
+    ]:
+        """
+        Shared logic for subsystem validation and basis mapping.
+        """
+        if subsystem_to_keep is None and subsystem_to_traceout is None:
+            raise ValueError(
+                "Either subsystem_to_keep or subsystem_to_traceout must be provided"
+            )
+        if subsystem_to_keep is not None and subsystem_to_traceout is not None:
+            raise ValueError(
+                "Only one of subsystem_to_keep or subsystem_to_traceout should be provided"
+            )
+
+        if subsystem_to_keep is None:
+            # Type ignore since we already checked both aren't None
+            subsystem_to_keep = [
+                i
+                for i in range(self._nqubits)
+                if i not in subsystem_to_traceout  # type: ignore
+            ]
+
+        nA = len(subsystem_to_keep)
+        nB = self._nqubits - nA
+        subsystem_B = [
+            i for i in range(self._nqubits) if i not in subsystem_to_keep  # type: ignore
+        ]
+
+        # Use static mapping to stay JIT friendly
+        # Now using cached global helper functions
+        sA_all = _extract_subsystem_bits_static(
+            self._nqubits, self._k, tuple(subsystem_to_keep)
+        )
+        sB_all = _extract_subsystem_bits_static(
+            self._nqubits, self._k, tuple(subsystem_B)
+        )
+
+        # Calculate kA for each basis state statically
+        kA_all = np.array([bin(x).count("1") for x in sA_all])
+
+        k_min = max(0, self._k - nB)  # type: ignore
+        k_max = min(self._k, nA)  # type: ignore
+
+        return (  # type: ignore
+            subsystem_to_keep,
+            nA,
+            nB,
+            sA_all,
+            sB_all,
+            kA_all,
+            k_min,
+            k_max,
+        )
+
+    def reduced_density_matrix(
+        self,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
+        subsystem_to_traceout: Optional[Sequence[int]] = None,
+        return_blocks: bool = False,
+    ) -> Any:
+        """
+        Compute the reduced density matrix for the specified qubits.
+
+        :param subsystem_to_keep: The qubits to keep (all others are traced out).
+        :type subsystem_to_keep: Sequence[int], optional
+        :param subsystem_to_traceout: The qubits to trace out.
+        :type subsystem_to_traceout: Sequence[int], optional
+        :param return_blocks: If true, return a list of RDM blocks for each k_A.
+        :type return_blocks: bool
+        :return: The reduced density matrix or a list of blocks.
+        :rtype: Any
+        """
+        (
+            _,
+            nA,
+            nB,
+            sA_all,
+            sB_all,
+            kA_all,
+            k_min,
+            k_max,
+        ) = self._process_subsystem(subsystem_to_keep, subsystem_to_traceout)
+
+        blocks = []
+        if not return_blocks:
+            if nA > 14:
+                raise ValueError(
+                    f"Subsystem size {nA} is too large to return a dense RDM. "
+                    "Please use return_blocks=True or compute entropy directly."
+                )
+            full_dim = 2**nA
+            rho_full = backend.zeros([full_dim, full_dim], dtype=dtypestr)
+
+        for kA in range(k_min, k_max + 1):  # type: ignore
+            kB = self._k - kA  # type: ignore
+            mask = kA_all == kA
+            if not np.any(mask):
+                continue
+
+            indices = np.where(mask)[0]
+            sA_sector = sA_all[indices]
+            sB_sector = sB_all[indices]
+
+            # Move coefficients to backend
+            coeffs_sector = backend.gather1d(
+                self._state, backend.convert_to_tensor(indices)
+            )
+
+            # Map to local subspace indices
+            basisA = _get_subsystem_basis_static(nA, kA)
+            basisB = _get_subsystem_basis_static(nB, kB)
+
+            idxA = np.searchsorted(basisA, sA_sector)
+            idxB = np.searchsorted(basisB, sB_sector)
+
+            dimA = comb(nA, kA)
+            dimB = comb(nB, kB)
+
+            # Form coefficient matrix M: dimA x dimB
+            M = backend.zeros([dimA, dimB], dtype=dtypestr)
+            # Use backend tensors for scatter
+            scatter_indices = backend.convert_to_tensor(np.stack([idxA, idxB], axis=1))
+            M = backend.scatter(M, scatter_indices, coeffs_sector)
+
+            # Compute block RDM
+            rho_k = backend.matmul(M, backend.conj(backend.transpose(M)))
+
+            if return_blocks:
+                blocks.append(rho_k)
+            else:
+                # Scatter rho_k into rho_full
+                ii, jj = np.meshgrid(basisA, basisA, indexing="ij")
+                scatter_idx_full = backend.convert_to_tensor(
+                    np.stack([ii.flatten(), jj.flatten()], axis=1)
+                )
+                rho_full = backend.scatter(
+                    rho_full, scatter_idx_full, backend.reshape(rho_k, [-1])
+                )
+
+        if return_blocks:
+            return blocks
+        return rho_full
+
+    def entanglement_entropy(
+        self,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
+        subsystem_to_traceout: Optional[Sequence[int]] = None,
+    ) -> Tensor:
+        """
+        Compute the von Neumann entanglement entropy for the specified qubits.
+
+        :param subsystem_to_keep: The qubits to keep.
+        :type subsystem_to_keep: Sequence[int], optional
+        :param subsystem_to_traceout: The qubits to trace out.
+        :type subsystem_to_traceout: Sequence[int], optional
+        :return: Entanglement entropy.
+        :rtype: Tensor
+        """
+        (
+            _,
+            nA,
+            nB,
+            sA_all,
+            sB_all,
+            kA_all,
+            k_min,
+            k_max,
+        ) = self._process_subsystem(subsystem_to_keep, subsystem_to_traceout)
+
+        entropy = backend.cast(backend.convert_to_tensor(0.0), rdtypestr)
+        eps = 1e-12
+
+        for kA in range(k_min, k_max + 1):  # type: ignore
+            kB = self._k - kA  # type: ignore
+            mask = kA_all == kA
+            if not np.any(mask):
+                continue
+
+            indices = np.where(mask)[0]
+            sA_sector = sA_all[indices]
+            sB_sector = sB_all[indices]
+            coeffs_sector = backend.gather1d(
+                self._state, backend.convert_to_tensor(indices)
+            )
+
+            basisA = _get_subsystem_basis_static(nA, kA)
+            basisB = _get_subsystem_basis_static(nB, kB)
+
+            idxA = np.searchsorted(basisA, sA_sector)
+            idxB = np.searchsorted(basisB, sB_sector)
+
+            dimA = comb(nA, kA)
+            dimB = comb(nB, kB)
+
+            M = backend.zeros([dimA, dimB], dtype=dtypestr)
+            scatter_indices = backend.convert_to_tensor(np.stack([idxA, idxB], axis=1))
+            M = backend.scatter(M, scatter_indices, coeffs_sector)
+
+            # Optimization: Use eigh on the smaller covariance matrix instead of SVD
+            if dimA <= dimB:
+                # rho_A = M @ M.H
+                rho = backend.matmul(M, backend.conj(backend.transpose(M)))
+            else:
+                # rho_B = M.H @ M (same non-zero eigenvalues)
+                rho = backend.matmul(backend.conj(backend.transpose(M)), M)
+
+            lbd = backend.eigh(rho)[0]
+            probs = backend.real(lbd)
+            # Still use where for AD safety but now we avoid dynamic shape from nonzero
+            entropy -= backend.sum(
+                backend.where(probs > eps, probs * backend.log(probs + eps), 0.0)
+            )
+
+        return entropy
 
 
 # Register gates via _meta_apply

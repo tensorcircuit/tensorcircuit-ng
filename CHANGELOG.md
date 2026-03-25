@@ -14,7 +14,9 @@
 
 - Add `reduced_density_matrix` method for `MPSCircuit`.
 
-- Add `diagonal` gate for `U1Circuit`.
+- Add `reduced_density_matrix` and `entanglement_entropy` methods for `U1Circuit`.
+
+- Add `bitwise_or`, `any`, `all` methods for backends.
 
 ### Fixed
 
@@ -46,7 +48,6 @@
 
 - Add `tensors` for inputs of `Circuit`.
 
-
 ### Fixed
 
 - Fix the breaking logic change in jax from dlpack API, dlcapsule -> tensor.
@@ -60,7 +61,6 @@
 - Generalize `scatter` method for backends.
 
 - Lazy import for tensorflow and torch.
-
 
 ## v1.4.0
 

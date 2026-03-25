@@ -754,3 +754,149 @@ def test_u1circuit_inverse(backend):
     # After U and U^dagger, state should be back to |1100>
     assert np.allclose(tc.backend.numpy(sim.expectation_z(0)), -1.0, atol=1e-5)
     assert np.allclose(tc.backend.numpy(sim.expectation_z(2)), 1.0, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_u1circuit_rdm(backend):
+    n, k = 4, 2
+    filled = [0, 1]
+    subsystem = [0, 1]
+
+    u1c = U1Circuit(n, k, filled=filled)
+    u1c.iswap(0, 2, theta=0.5)
+    u1c.iswap(1, 3, theta=0.3)
+
+    # 1. Test RDM blocks
+    blocks = u1c.reduced_density_matrix(subsystem, return_blocks=True)
+    # kA can be 0, 1, 2
+    # But for n=4, k=2, if we keep [0, 1], kA can only be:
+    # kA=2 (k_B=0), kA=1 (k_B=1), kA=0 (k_B=2)
+    assert len(blocks) <= 3
+    for b in blocks:
+        assert b.shape[0] == b.shape[1]
+        # Trace of each block is the probability of that sector
+        assert tc.backend.numpy(tc.backend.real(tc.backend.trace(b))) >= 0
+
+    # 2. Test full RDM vs dense
+    rdm_u1 = u1c.reduced_density_matrix(subsystem)
+
+    c = tc.Circuit(n)
+    c.x(0)
+    c.x(1)
+    c.iswap(0, 2, theta=0.5)
+    c.iswap(1, 3, theta=0.3)
+
+    traceout = [2, 3]
+    rdm_dense = tc.quantum.reduced_density_matrix(
+        tc.backend.reshape(c.state(), [-1]), traceout
+    )
+
+    assert np.allclose(tc.backend.numpy(rdm_u1), tc.backend.numpy(rdm_dense), atol=1e-5)
+
+    # 3. Test non-contiguous subsystem
+    subsystem2 = [0, 2]
+    rdm_u1_2 = u1c.reduced_density_matrix(subsystem2)
+    traceout2 = [1, 3]
+    rdm_dense_2 = tc.quantum.reduced_density_matrix(
+        tc.backend.reshape(c.state(), [-1]), traceout2
+    )
+    assert np.allclose(
+        tc.backend.numpy(rdm_u1_2), tc.backend.numpy(rdm_dense_2), atol=1e-5
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_u1circuit_entropy(backend):
+    n, k = 6, 3
+    subsystem = [0, 1, 2]
+
+    u1c = U1Circuit(n, k, filled=[0, 1, 2])
+    u1c.iswap(0, 3, theta=0.5)
+    u1c.iswap(1, 4, theta=0.5)
+    u1c.iswap(2, 5, theta=0.5)
+
+    entropy = u1c.entanglement_entropy(subsystem)
+
+    c = tc.Circuit(n)
+    for i in range(3):
+        c.x(i)
+    c.iswap(0, 3, theta=0.5)
+    c.iswap(1, 4, theta=0.5)
+    c.iswap(2, 5, theta=0.5)
+
+    rdm_dense = tc.quantum.reduced_density_matrix(
+        tc.backend.reshape(c.state(), [-1]), [3, 4, 5]
+    )
+    entropy_dense = tc.quantum.entropy(rdm_dense)
+
+    assert np.allclose(
+        tc.backend.numpy(entropy), tc.backend.numpy(entropy_dense), atol=1e-5
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_u1circuit_entropy_vmap(backend):
+    def run(theta):
+        c = U1Circuit(4, 2, filled=[0, 1])
+        c.iswap(0, 2, theta=theta)
+        return tc.backend.real(c.entanglement_entropy([0, 1]))
+
+    vrun = tc.backend.vmap(run)
+    results = vrun(tc.backend.convert_to_tensor([0.0, 0.5], dtype="float32"))
+    assert results.shape == (2,)
+    assert np.allclose(tc.backend.numpy(results[0]), 0.0, atol=1e-5)
+    assert tc.backend.numpy(results[1]) > 0.0
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+def test_u1circuit_entropy_ad(backend):
+    def loss_u1(theta):
+        u1c = U1Circuit(4, 2, filled=[0, 1])
+        u1c.iswap(0, 2, theta=theta)
+        return tc.backend.real(u1c.entanglement_entropy([0, 1]))
+
+    def loss_circuit(theta):
+        c = tc.Circuit(4)
+        c.x(0)
+        c.x(1)
+        c.iswap(0, 2, theta=theta)
+        rdm = tc.quantum.reduced_density_matrix(
+            tc.backend.reshape(c.state(), [-1]), [2, 3]
+        )
+        return tc.backend.real(tc.quantum.entropy(rdm))
+
+    vg_u1 = tc.backend.value_and_grad(loss_u1)
+    vg_circuit = tc.backend.value_and_grad(loss_circuit)
+
+    theta_v = tc.backend.convert_to_tensor(0.2, dtype="float32")
+    val_u1, grad_u1 = vg_u1(theta_v)
+    val_c, grad_c = vg_circuit(theta_v)
+
+    assert np.allclose(tc.backend.numpy(val_u1), tc.backend.numpy(val_c), atol=1e-5)
+    assert np.allclose(tc.backend.numpy(grad_u1), tc.backend.numpy(grad_c), atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+def test_u1circuit_expectation_ps_ad(backend):
+    def loss_u1(theta):
+        u1c = U1Circuit(4, 2, filled=[0, 1])
+        u1c.iswap(0, 2, theta=theta)
+        # Use non-overlapping indices for regular circuit comparison
+        return tc.backend.real(u1c.expectation_ps(x=[0], y=[1], z=[2]))
+
+    def loss_circuit(theta):
+        c = tc.Circuit(4)
+        c.x(0)
+        c.x(1)
+        c.iswap(0, 2, theta=theta)
+        return tc.backend.real(c.expectation_ps(x=[0], y=[1], z=[2]))
+
+    vg_u1 = tc.backend.value_and_grad(loss_u1)
+    vg_circuit = tc.backend.value_and_grad(loss_circuit)
+
+    theta_v = tc.backend.convert_to_tensor(0.3, dtype="float32")
+    val_u1, grad_u1 = vg_u1(theta_v)
+    val_c, grad_c = vg_circuit(theta_v)
+
+    assert np.allclose(tc.backend.numpy(val_u1), tc.backend.numpy(val_c), atol=1e-5)
+    assert np.allclose(tc.backend.numpy(grad_u1), tc.backend.numpy(grad_c), atol=1e-5)

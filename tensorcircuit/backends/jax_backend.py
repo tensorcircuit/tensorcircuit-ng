@@ -429,6 +429,15 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def bitwise_xor(self, x: Tensor, y: Tensor) -> Tensor:
         return jnp.bitwise_xor(x, y)
 
+    def bitwise_or(self, x: Tensor, y: Tensor) -> Tensor:
+        return jnp.bitwise_or(x, y)
+
+    def any(self, a: Tensor) -> Any:
+        return jnp.any(a)
+
+    def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Any:
+        return jnp.all(a, axis=axis)
+
     def expm(self, a: Tensor) -> Tensor:
         return jsp.linalg.expm(a)
         # currently expm in jax doesn't support AD, it will raise an AssertError,
@@ -500,9 +509,6 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
 
     def cumsum(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
         return jnp.cumsum(a, axis)
-
-    def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
-        return jnp.all(a, axis=axis)
 
     def is_tensor(self, a: Any) -> bool:
         if not isinstance(a, jnp.ndarray):

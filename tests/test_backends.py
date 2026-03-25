@@ -484,6 +484,23 @@ def test_backend_methods_2(backend):
         ),  # 12 ^ 10 = 1100 ^ 1010 = 0110 = 6, 7 ^ 5 = 0111 ^ 0101 = 0010 = 2
     )
     np.testing.assert_allclose(
+        tc.backend.bitwise_or(
+            tc.backend.convert_to_tensor(np.array([12, 7])),
+            tc.backend.convert_to_tensor(np.array([10, 5])),
+        ),
+        np.array(
+            [14, 7]
+        ),  # 12 | 10 = 1100 | 1010 = 1110 = 14, 7 | 5 = 0111 | 0101 = 0111 = 7
+    )
+    assert tc.backend.any(tc.backend.convert_to_tensor(np.array([True, False])))
+    assert not tc.backend.any(tc.backend.convert_to_tensor(np.array([False, False])))
+    assert tc.backend.all(tc.backend.convert_to_tensor(np.array([True, True])))
+    assert not tc.backend.all(tc.backend.convert_to_tensor(np.array([True, False])))
+    assert tc.backend.any(tc.backend.convert_to_tensor(np.array([1, 0])))
+    assert not tc.backend.any(tc.backend.convert_to_tensor(np.array([0, 0])))
+    assert tc.backend.all(tc.backend.convert_to_tensor(np.array([1, 1])))
+    assert not tc.backend.all(tc.backend.convert_to_tensor(np.array([1, 0])))
+    np.testing.assert_allclose(
         tc.backend.mod(
             tc.backend.convert_to_tensor(np.array([4, 3])),
             tc.backend.convert_to_tensor(np.array([2, 2])),

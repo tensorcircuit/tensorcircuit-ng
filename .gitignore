@@ -37,3 +37,5 @@ venv/
 examples/ng_whitepaper/*.pdf
 examples/ng_whitepaper/trials/
 examples/agent_develop/
+.claude/
+.gemini/

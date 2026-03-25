@@ -202,9 +202,6 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     ) -> Tensor:
         return np.std(a, axis=axis, keepdims=keepdims)
 
-    def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Tensor:
-        return np.all(a, axis=axis)  # type: ignore
-
     def unique_with_counts(self, a: Tensor, **kws: Any) -> Tuple[Tensor, Tensor]:
         return np.unique(a, return_counts=True)  # type: ignore
 
@@ -315,6 +312,15 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
 
     def bitwise_xor(self, x: Tensor, y: Tensor) -> Tensor:
         return np.bitwise_xor(x, y)
+
+    def bitwise_or(self, x: Tensor, y: Tensor) -> Tensor:
+        return np.bitwise_or(x, y)
+
+    def any(self, a: Tensor) -> Any:
+        return np.any(a)
+
+    def all(self, a: Tensor, axis: Optional[Sequence[int]] = None) -> Any:
+        return np.all(a, axis=axis)
 
     def solve(self, A: Tensor, b: Tensor, assume_a: str = "gen") -> Tensor:  # type: ignore
         # gen, sym, her, pos
