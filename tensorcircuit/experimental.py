@@ -554,7 +554,6 @@ def broadcast_py_object_jax(obj: Any) -> Any:
     :return: The broadcasted object, now present on all processes.
     """
     import jax as jaxlib
-    import pickle
     from jax.experimental import multihost_utils
 
     # Serialize to bytes on process 0, empty bytes on others

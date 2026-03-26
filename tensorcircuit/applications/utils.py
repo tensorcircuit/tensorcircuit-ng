@@ -4,6 +4,7 @@ or await for further refactor
 """
 
 import logging
+import xml
 from typing import Any, Callable, Iterator, Optional, Sequence, Tuple
 
 import numpy as np
@@ -353,7 +354,6 @@ def color_svg(circuit: cirq.Circuit, *coords: Tuple[int, int]) -> Any:
     :param coords: integer coordinate which gate is colored
     :return:
     """
-    import xml
     from cirq.contrib.svg import SVGCircuit
 
     svg_str = SVGCircuit(circuit)._repr_svg_()
