@@ -544,6 +544,7 @@ class BaseCircuit(AbstractCircuit):
         no, d_edges = self._copy()
         if isinstance(l, str):
             l = _decode_basis_label(l, n=self._nqubits, dim=self._d)
+        l = backend.convert_to_tensor(l)
         endns = onehot_d_tensor(l, d=self._d)
         ms = []
         if self.is_dm:
@@ -1057,7 +1058,7 @@ class BaseCircuit(AbstractCircuit):
         :rtype: Tensor
         """
 
-        traceout = backend.cast(traceout, dtypestr)
+        traceout = backend.convert_to_tensor(traceout, dtype=dtypestr)
         all_endns = onehot_d_tensor(traceout, d=self._d)
         nodes, front = self._copy()
         L = self._nqubits

@@ -79,6 +79,7 @@ def onehot_d_tensor(_k: Union[int, Tensor], d: int = 2) -> Tensor:
     if isinstance(_k, int):
         vec = backend.one_hot(_k, d)
     else:
+        _k = backend.convert_to_tensor(_k)
         vec = backend.one_hot(backend.cast(_k, "int32"), d)
     return backend.cast(vec, dtypestr)
 
