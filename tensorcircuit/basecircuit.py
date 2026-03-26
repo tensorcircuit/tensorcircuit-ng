@@ -545,34 +545,41 @@ class BaseCircuit(AbstractCircuit):
         ms = []
         if self.is_dm:
             msconj = []
+
         if isinstance(l, str):
             symbols = _decode_basis_label(l, n=self._nqubits, dim=self._d)
-            for k in symbols:
-                n = onehot_d_tensor(k, d=self._d)
-                ms.append(tn.Node(n))
+            for i, k in enumerate(symbols):
+                n = tn.Node(onehot_d_tensor(k, d=self._d))
+                n.flag = "measurement"
+                n.is_dagger = False
+                n.id = id(n)
+                d_edges[i] ^ n.get_edge(0)
+                ms.append(n)
                 if self.is_dm:
-                    msconj.append(tn.Node(n))
+                    n_conj = tn.Node(onehot_d_tensor(k, d=self._d))
+                    n_conj.flag = "measurement"
+                    n_conj.is_dagger = True
+                    n_conj.id = id(n)
+                    d_edges[i + self._nqubits] ^ n_conj.get_edge(0)
+                    msconj.append(n_conj)
         else:
             l = backend.cast(l, dtype=dtypestr)
             for i in range(self._nqubits):
                 endn = onehot_d_tensor(l[i], d=self._d)
-                ms.append(tn.Node(endn))
+                n = tn.Node(endn)
+                n.flag = "measurement"
+                n.is_dagger = False
+                n.id = id(n)
+                d_edges[i] ^ n.get_edge(0)
+                ms.append(n)
                 if self.is_dm:
-                    msconj.append(tn.Node(endn))
+                    n_conj = tn.Node(endn)
+                    n_conj.flag = "measurement"
+                    n_conj.is_dagger = True
+                    n_conj.id = id(n)
+                    d_edges[i + self._nqubits] ^ n_conj.get_edge(0)
+                    msconj.append(n_conj)
 
-        for i in range(self._nqubits):
-            d_edges[i] ^ ms[i].get_edge(0)
-            if self.is_dm:
-                d_edges[i + self._nqubits] ^ msconj[i].get_edge(0)
-        for n in ms:
-            n.flag = "measurement"
-            n.is_dagger = False
-            n.id = id(n)
-            if self.is_dm:
-                for n0, n in zip(ms, msconj):
-                    n.flag = "measurement"
-                    n.is_dagger = True
-                    n.id = id(n0)
         no.extend(ms)
         if self.is_dm:
             no.extend(msconj)
