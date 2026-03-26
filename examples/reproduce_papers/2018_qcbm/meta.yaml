@@ -1,0 +1,19 @@
+title: "Differentiable Learning of Quantum Circuit Born Machine"
+arxiv_id: "1804.04168"
+url: "https://arxiv.org/abs/1804.04168"
+year: 2018
+authors:
+  - "Jin-Guo Liu"
+  - "Lei Wang"
+tags:
+  - "QCBM"
+  - "Generative Modeling"
+  - "Differentiable Programming"
+hardware_requirements:
+  gpu: False
+  min_memory: "4GB"
+description: "Reproduction of Figure 6: QCBM learning a mixture of Gaussians. The QCBM uses 10 qubits and a hardware-efficient ansatz. The training objective is to minimize the MMD (Maximum Mean Discrepancy) loss."
+outputs:
+  - target: "Figure 6"
+    path: outputs/result.png
+    script: "main.py"
