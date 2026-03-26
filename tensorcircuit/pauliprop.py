@@ -13,6 +13,7 @@ Key Features:
 """
 
 from typing import Any, Callable, Dict, List, Optional, Tuple, Sequence
+import itertools
 import logging
 import numpy as np
 
@@ -80,8 +81,6 @@ class PauliPropagationEngine:
         self.string_to_idx: Dict[Tuple[Tuple[int, ...], Tuple[int, ...]], int] = {
             ((), ()): 0
         }
-
-        import itertools
 
         for loc in range(1, self.k + 1):
             for qubits in itertools.combinations(range(self.N), loc):
