@@ -13,7 +13,8 @@ from tensorcircuit.applications.ai.ensemble import bagging
 
 
 @pytest.mark.xfail(
-    int(tf.__version__.split(".")[1]) >= 16, reason="legacy optimizer fails tf>=2.16"
+    tuple(int(v) for v in tf.__version__.split(".")[:2]) >= (2, 16),
+    reason="legacy optimizer fails tf>=2.16",
 )
 def test_ensemble_bagging():
     data_amount = 100  # Amount of data to be used

@@ -905,7 +905,7 @@ class ExtendedBackend:
     def matvec(self: Any, A: Tensor, x: Tensor) -> Tensor:
         return self.tensordot(A, x, axes=[[1], [0]])
 
-    def cast(self: Any, a: Tensor, dtype: str) -> Tensor:
+    def cast(self: Any, a: Tensor, dtype: Union[str, Any]) -> Tensor:
         """
         Cast the tensor dtype of a ``a``.
 

@@ -5,15 +5,9 @@ Backend magic inherited from tensornetwork: numpy backend
 # pylint: disable=invalid-name
 
 import logging
-import warnings
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import numpy as np
-
-try:
-    from numpy import ComplexWarning  # type: ignore
-except ImportError:  # np2.0 compatibility
-    from numpy.exceptions import ComplexWarning  # type: ignore
 
 import tensornetwork
 from scipy.linalg import expm, solve, schur
@@ -275,14 +269,17 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     def imag(self, a: Tensor) -> Tensor:
         return np.imag(a)
 
-    def cast(self, a: Tensor, dtype: str) -> Tensor:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", ComplexWarning)
-            if isinstance(dtype, str):
-                if dtype == "bool":
-                    return a.astype(bool)
-                return a.astype(getattr(np, dtype))
-            return a.astype(dtype)
+    def cast(self, a: Tensor, dtype: Union[str, Any]) -> Tensor:
+        if isinstance(dtype, str):
+            if dtype == "bool":
+                np_dtype = bool
+            else:
+                np_dtype = getattr(np, dtype)
+        else:
+            np_dtype = dtype
+        if np.iscomplexobj(a) and not np.issubdtype(np_dtype, np.complexfloating):
+            a = np.real(a)
+        return a.astype(np_dtype)
 
     def arange(self, start: int, stop: Optional[int] = None, step: int = 1) -> Tensor:
         if stop is None:

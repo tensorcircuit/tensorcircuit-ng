@@ -550,10 +550,14 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
             return True
         return False
 
-    def cast(self, a: Tensor, dtype: str) -> Tensor:
+    def cast(self, a: Tensor, dtype: Union[str, Any]) -> Tensor:
         if isinstance(dtype, str):
-            return a.type(getattr(torchlib, dtype))
-        return a.type(dtype)
+            torch_dtype = getattr(torchlib, dtype)
+        else:
+            torch_dtype = dtype
+        if torchlib.is_complex(a) and not getattr(torch_dtype, "is_complex", False):
+            a = torchlib.real(a)
+        return a.to(torch_dtype)
 
     def arange(self, start: int, stop: Optional[int] = None, step: int = 1) -> Tensor:
         if stop is None:

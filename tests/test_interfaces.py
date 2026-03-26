@@ -179,8 +179,8 @@ def test_torch_interface_kws(backend):
 
 @pytest.mark.skipif(is_torch is False, reason="torch not installed")
 @pytest.mark.xfail(
-    (int(tf.__version__.split(".")[1]) < 9)
-    or (int("".join(jax.__version__.split(".")[1:])) < 314),
+    tuple(int(v) for v in tf.__version__.split(".")[:2]) < (2, 9)
+    or tuple(int(v) for v in jax.__version__.split(".")[:3]) < (0, 3, 14),
     reason="version too low for tf or jax",
 )
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])

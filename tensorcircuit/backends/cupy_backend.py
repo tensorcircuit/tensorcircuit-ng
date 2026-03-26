@@ -5,15 +5,9 @@ CuPy backend. Not in the tensornetwork package and highly experimental.
 # pylint: disable=invalid-name
 
 import logging
-import warnings
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import numpy as np
-
-try:
-    from numpy import ComplexWarning  # type: ignore
-except ImportError:  # np2.0 compatibility
-    from numpy.exceptions import ComplexWarning  # type: ignore
 
 import scipy
 
@@ -260,12 +254,14 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
     def imag(self, a: Tensor) -> Tensor:
         return cp.imag(a)
 
-    def cast(self, a: Tensor, dtype: str) -> Tensor:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", ComplexWarning)
-            if isinstance(dtype, str):
-                return a.astype(getattr(np, dtype))
-            return a.astype(dtype)
+    def cast(self, a: Tensor, dtype: Union[str, Any]) -> Tensor:
+        if isinstance(dtype, str):
+            cp_dtype = getattr(cp, dtype)
+        else:
+            cp_dtype = dtype
+        if cp.iscomplexobj(a) and not cp.issubdtype(cp_dtype, cp.complexfloating):
+            a = cp.real(a)
+        return a.astype(cp_dtype)
 
     def arange(self, start: int, stop: Optional[int] = None, step: int = 1) -> Tensor:
         if stop is None:

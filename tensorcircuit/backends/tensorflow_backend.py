@@ -692,10 +692,16 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def imag(self, a: Tensor) -> Tensor:
         return tf.math.imag(a)
 
-    def cast(self, a: Tensor, dtype: str) -> Tensor:
+    def cast(self, a: Tensor, dtype: Union[str, Any]) -> Tensor:
         if isinstance(dtype, str):
-            return tf.cast(a, dtype=getattr(tf, dtype))
-        return tf.cast(a, dtype=dtype)
+            tf_dtype = getattr(tf, dtype)
+        else:
+            tf_dtype = tf.as_dtype(dtype)
+        if not (isinstance(a, tf.Tensor) or isinstance(a, tf.Variable)):
+            a = tf.convert_to_tensor(a)
+        if a.dtype.is_complex and not tf_dtype.is_complex:
+            a = tf.math.real(a)
+        return tf.cast(a, dtype=tf_dtype)
 
     def arange(self, start: int, stop: Optional[int] = None, step: int = 1) -> Tensor:
         if stop is None:

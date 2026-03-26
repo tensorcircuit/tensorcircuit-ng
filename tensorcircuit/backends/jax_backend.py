@@ -5,16 +5,10 @@ Backend magic inherited from tensornetwork: jax backend
 # pylint: disable=invalid-name
 
 import logging
-import warnings
 from functools import partial
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import numpy as np
-
-try:
-    from numpy import ComplexWarning  # type: ignore
-except ImportError:  # np2.0 compatibility
-    from numpy.exceptions import ComplexWarning  # type: ignore
 
 import tensornetwork
 from scipy.sparse import coo_matrix
@@ -387,12 +381,14 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def dtype(self, a: Tensor) -> str:
         return a.dtype.__str__()  # type: ignore
 
-    def cast(self, a: Tensor, dtype: str) -> Tensor:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", ComplexWarning)
-            if isinstance(dtype, str):
-                return a.astype(getattr(jnp, dtype))
-            return a.astype(dtype)
+    def cast(self, a: Tensor, dtype: Union[str, Any]) -> Tensor:
+        if isinstance(dtype, str):
+            jax_dtype = getattr(jnp, dtype)
+        else:
+            jax_dtype = dtype
+        if jnp.iscomplexobj(a) and not jnp.issubdtype(jax_dtype, jnp.complexfloating):
+            a = jnp.real(a)
+        return a.astype(jax_dtype)
 
     def arange(self, start: int, stop: Optional[int] = None, step: int = 1) -> Tensor:
         if stop is None:
