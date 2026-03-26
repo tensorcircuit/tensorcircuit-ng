@@ -66,3 +66,27 @@ def test_simplify_extra():
     qir = c.to_qir()
     nodes = [g["gate"] for g in qir]
     simplify._full_light_cone_cancel(nodes)
+
+
+def test_pseudo_contract_between():
+    a = tn.Node(np.ones([2, 3, 5]))
+    b = tn.Node(np.ones([3, 5, 7]))
+    a[1] ^ b[0]
+    a[2] ^ b[1]
+
+    # dangling edges
+    a_dangling = a[0]
+    b_dangling = b[2]
+
+    new_node = simplify.pseudo_contract_between(a, b)
+
+    assert new_node.tensor.shape == (2, 7)
+    assert len(new_node.edges) == 2
+    assert new_node.edges[0] is a_dangling
+    assert new_node.edges[1] is b_dangling
+
+    # test outer product
+    a2 = tn.Node(np.ones([2]))
+    b2 = tn.Node(np.ones([3]))
+    new_node2 = simplify.pseudo_contract_between(a2, b2)
+    assert new_node2.tensor.shape == (2, 3)
