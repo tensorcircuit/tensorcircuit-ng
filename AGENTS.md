@@ -22,6 +22,10 @@ TensorCircuit is a **Tensor Network-first**, **Multi-Backend** quantum computing
 - **Pattern**: Avoid Python control flow (if/else) that depends on tensor values. Use `tc.backend.cond` or `tc.backend.switch` if necessary, or structure code to be statically analyzable.
 - **Benefit**: This enables massive speedups on JAX and TensorFlow backends.
 
+### Known Issues and Intermittent Failures
+
+- **`tests/test_circuit.py::test_qiskit2tc`**: This test may fail intermittently (e.g., in Qiskit 0.46.3+) due to non-deterministic behavior in Qiskit's `UnitaryGate.control()` method during circuit translation. If this test fails while other tests pass, it is likely a framework-level "heisenbug" and not a regression in TensorCircuit core logic.
+
 ## Repository Structure
 
 - `tensorcircuit/`: Core package source code.
@@ -32,6 +36,12 @@ TensorCircuit is a **Tensor Network-first**, **Multi-Backend** quantum computing
 - `docs/`: Sphinx documentation source.
 
 ## Configuration and Dependencies
+
+### Python Environment Management
+
+- **Rule**: Never install packages in the default system or user Python environment unless explicitly directed by the user.
+- **Protocol**: If a command fails due to a missing package or `ModuleNotFoundError`, **explicitly ask the user** for the correct Python environment to use (e.g., a specific Conda environment name like `2602`).
+- **Workflow**: Once an environment is identified, prefix all Python/pytest/pylint commands with `conda run -n <env_name>` or the appropriate environment activator.
 
 ### Core Dependencies
 

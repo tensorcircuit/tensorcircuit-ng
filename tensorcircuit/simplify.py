@@ -203,79 +203,100 @@ def _full_rank_simplify(nodes: List[Any]) -> List[Any]:
 
 
 def _light_cone_cancel(nodes: List[Any]) -> Tuple[List[Any], bool]:
+    """
+    Scan the nodes and cancel pairs of U and U^dagger that are directly connected.
+    Assumes that for a gate node, the first half of its edges are 'output' (future-facing)
+    and the second half are 'input' (past-facing).
+    """
     is_changed = False
-    for ind in range(len(nodes) // 2, 0, -1):
-        n = nodes[ind]
-        if n.is_dagger is True:
+    nodes_to_remove = set()
+
+    # Identify the "future" side. Nodes in expectation are typically [ket_nodes, bra_nodes, ops]
+    # We scan backward through the nodes list.
+    for i in range(len(nodes) - 1, -1, -1):
+        n = nodes[i]
+        if n in nodes_to_remove:
             continue
+        if getattr(n, "is_dagger", None) is True:
+            continue
+
         noe = len(n.shape)
         if noe % 2 != 0:
             continue
-        e = n[0]
-        n1, n2 = e.node1, e.node2  # one of them is n itself
-        if n1 is None or n2 is None:
-            continue
-        if n1.is_dagger == n2.is_dagger:
-            continue
-        if n1.id != n2.id:
-            continue
-        if e.axis1 != e.axis2:
-            continue
-        for i in range(noe // 2):
-            e = n[i]
-            n3, n4 = e.node1, e.node2  # should also be n1 and n2
-            if n3 is None or n4 is None:
+
+        # Check if all output legs (0 to noe//2 - 1) are connected to the same conjugate node
+        match_node = None
+        for leg_idx in range(noe // 2):
+            e = n[leg_idx]
+            if e.is_dangling():
                 break
-            if not ((n3 is n1 and n4 is n2) or (n3 is n2 and n4 is n1)):
+            n1, n2 = e.node1, e.node2
+            other = n2 if n1 is n else n1
+
+            if getattr(other, "is_dagger", None) is not True:
+                break
+            if getattr(other, "id", None) != getattr(n, "id", -1):
                 break
             if e.axis1 != e.axis2:
                 break
+
+            if match_node is None:
+                match_node = other
+            elif match_node is not other:
+                break
         else:
-            if n1 is not n:
-                n1, n2 = n2, n1  # make sure n1 is n dagger is False
+            if match_node is not None and match_node not in nodes_to_remove:
+                # Perform cancellation by bypass
+                for leg_idx in range(noe // 2, noe):
+                    e_n = n[leg_idx]
+                    e_m = match_node[leg_idx]
 
-            # contract
-            njs = [i for i, n in enumerate(nodes) if n is n1 or n is n2]
-            # new_node = tn.contract_between(e.node1, e.node2)
-            # contract(e) is not enough for multi edges between two tensors
-            for i in range(noe // 2):
-                e = n1[noe // 2 + i]
-                m1, m3 = e.node1, e.node2
-                i1, i3 = e.axis1, e.axis2
-                if m1 is not n1:
-                    m1, m3 = m3, m1  # m1 is n1, m3 is the one behind m1
-                    i1, i3 = i3, i1
-                e.disconnect()
-                e = n2[noe // 2 + i]
-                m2, m4 = e.node1, e.node2
-                i2, i4 = e.axis1, e.axis2
-                if m2 is not n2:
-                    m2, m4 = m4, m2  # m1 is n1, m3 is the one behind m1
-                    i2, i4 = i4, i2
-                e.disconnect()
-                m3[i3] ^ m4[i4]
-            nodes = _multi_remove(nodes, njs)
+                    m_n, i_n = (
+                        (e_n.node2, e_n.axis2)
+                        if e_n.node1 is n
+                        else (e_n.node1, e_n.axis1)
+                    )
+                    m_m, i_m = (
+                        (e_m.node2, e_m.axis2)
+                        if e_m.node1 is match_node
+                        else (e_m.node1, e_m.axis1)
+                    )
 
-            is_changed = True
-            break  # switch to the next node
-    return nodes, is_changed
+                    e_n.disconnect()
+                    e_m.disconnect()
+                    m_n[i_n] ^ m_m[i_m]
+
+                nodes_to_remove.add(n)
+                nodes_to_remove.add(match_node)
+                is_changed = True
+
+    if is_changed:
+        new_nodes = [n for n in nodes if n not in nodes_to_remove]
+        return new_nodes, True
+    return nodes, False
 
 
 # TODO(@refraction-ray): better light cone cancellation in terms of MPO gates (three legs one)
+# MPO cancellation requires matching internal bond dimensions and identities of all nodes in the MPO.
 
 
 def _full_light_cone_cancel(nodes: List[Any]) -> List[Any]:
     """
     Simplify the list of tc.Nodes using casual lightcone structure.
 
-    :param nodes: _description_
+    :param nodes: List of nodes representing the tensor network.
     :type nodes: List[Any]
-    :return: _description_
+    :return: Simplified list of nodes.
     :rtype: List[Any]
     """
-    for n in nodes:
-        if getattr(n, "is_dagger", None) is None:
-            return nodes
+    if not nodes:
+        return nodes
+    # Check metadata availability
+    if any(getattr(n, "is_dagger", None) is None for n in nodes):
+        return nodes
+
+    # A single pass of _light_cone_cancel (optimized for O(N)) is often sufficient
+    # but we use a while loop to ensure all possible cancellations are resolved.
     nodes, is_changed = _light_cone_cancel(nodes)
     while is_changed:
         nodes, is_changed = _light_cone_cancel(nodes)

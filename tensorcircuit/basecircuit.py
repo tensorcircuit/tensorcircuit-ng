@@ -102,6 +102,18 @@ class BaseCircuit(AbstractCircuit):
     def coloring_nodes(
         nodes: Sequence[tn.Node], is_dagger: bool = False, flag: str = "inputs"
     ) -> None:
+        r"""
+        Tag nodes with metadata used for casual lightcone simplification and tracing.
+
+        :param nodes: A sequence of tensornetwork nodes to tag.
+        :type nodes: Sequence[tn.Node]
+        :param is_dagger: Whether the nodes represent conjugate operations (U^\dagger),
+            defaults to False.
+        :type is_dagger: bool, optional
+        :param flag: A label for the node type (e.g., "gate", "inputs", "operator"),
+            defaults to "inputs".
+        :type flag: str, optional
+        """
         for node in nodes:
             node.is_dagger = is_dagger
             node.flag = flag
@@ -114,6 +126,19 @@ class BaseCircuit(AbstractCircuit):
         is_dagger: bool = True,
         flag: str = "inputs",
     ) -> None:
+        """
+        Tag copied nodes while preserving the original node's identity for lightcone cancellation.
+
+        :param nodes: A sequence of newly copied nodes.
+        :type nodes: Sequence[tn.Node]
+        :param nodes0: The sequence of original nodes from which `nodes` were copied.
+        :type nodes0: Sequence[tn.Node]
+        :param is_dagger: Whether the copied nodes represent conjugate operations,
+            defaults to True.
+        :type is_dagger: bool, optional
+        :param flag: A label for the node type, defaults to "inputs".
+        :type flag: str, optional
+        """
         for node, n0 in zip(nodes, nodes0):
             node.is_dagger = is_dagger
             node.flag = flag
@@ -238,7 +263,7 @@ class BaseCircuit(AbstractCircuit):
 
             if applied is False:
                 gate.name = name
-                self.coloring_nodes([gate])
+                self.coloring_nodes([gate], flag="gate")
                 # gate.flag = "gate"
                 # gate.is_dagger = False
                 # gate.id = id(gate)
@@ -257,18 +282,16 @@ class BaseCircuit(AbstractCircuit):
         elif mpo:  # gate in MPO format
             assert isinstance(gate, QuOperator)
             gatec = gate.copy()
+            self.coloring_nodes(gatec.nodes, flag="gate")
             for n in gatec.nodes:
-                n.flag = "gate"
-                n.is_dagger = False
                 n.id = id(gate)
                 n.name = name
             self._nodes += gatec.nodes
             if self.is_dm:
                 gateconj = gate.adjoint()
-                for n0, n in zip(gatec.nodes, gateconj.nodes):
-                    n.flag = "gate"
-                    n.is_dagger = True
-                    n.id = id(n0)
+                self.coloring_nodes(gateconj.nodes, flag="gate", is_dagger=True)
+                for _, n in zip(gatec.nodes, gateconj.nodes):
+                    n.id = id(gate)
                     n.name = name
                 self._nodes += gateconj.nodes
 
@@ -284,9 +307,8 @@ class BaseCircuit(AbstractCircuit):
                 mps_nodes = [gate]
             else:
                 mps_nodes = gate.nodes
+            self.coloring_nodes(mps_nodes, flag="gate")
             for n in mps_nodes:
-                n.flag = "gate"
-                n.is_dagger = False
                 n.id = id(gate)
                 n.name = name
             self._nodes += mps_nodes
@@ -299,10 +321,9 @@ class BaseCircuit(AbstractCircuit):
                 else:
                     gateconj = gate.adjoint()
                     gateconj_nodes = gateconj.nodes
-                for n0, n in zip(mps_nodes, gateconj_nodes):
-                    n.flag = "gate"
-                    n.is_dagger = True
-                    n.id = id(n0)
+                self.coloring_nodes(gateconj_nodes, flag="gate", is_dagger=True)
+                for _, n in zip(mps_nodes, gateconj_nodes):
+                    n.id = id(gate)
                     n.name = name
                 self._nodes += gateconj_nodes
 
@@ -463,15 +484,11 @@ class BaseCircuit(AbstractCircuit):
                 else:
                     m = onehot_d_tensor(sample[i], d=self._d)
                 g1 = Gate(m)
-                g1.id = id(g1)
-                g1.is_dagger = False
-                g1.flag = "measurement"
+                self.coloring_nodes([g1], flag="measurement")
                 newnodes.append(g1)
                 g1.get_edge(0) ^ edge1[index[i]]
                 g2 = Gate(m)
-                g2.id = id(g2)
-                g2.is_dagger = True
-                g2.flag = "measurement"
+                self.coloring_nodes([g2], flag="measurement", is_dagger=True)
                 newnodes.append(g2)
                 g2.get_edge(0) ^ edge2[index[i]]
 
@@ -551,16 +568,14 @@ class BaseCircuit(AbstractCircuit):
             msconj = []
         for i in range(self._nqubits):
             n = tn.Node(endns[i])
-            n.flag = "measurement"
-            n.is_dagger = False
-            n.id = id(n)
+            self.coloring_nodes([n], flag="measurement")
             ms.append(n)
             d_edges[i] ^ n.get_edge(0)
             if self.is_dm:
                 nconj = tn.Node(endns[i])
-                nconj.flag = "measurement"
-                nconj.is_dagger = True
-                nconj.id = id(n)
+                self.coloring_copied_nodes(
+                    [nconj], [n], flag="measurement", is_dagger=True
+                )
                 msconj.append(nconj)
                 d_edges[i + self._nqubits] ^ nconj.get_edge(0)
         no.extend(ms)

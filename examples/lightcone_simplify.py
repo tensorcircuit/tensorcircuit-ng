@@ -5,7 +5,8 @@ comparison between expectation evaluation with/wo lightcone simplification
 import numpy as np
 import tensorcircuit as tc
 
-K = tc.set_backend("tensorflow")
+K = tc.set_backend("jax")
+tc.set_contractor("cotengra")
 
 
 def brickwall_ansatz(c, params, gatename, nlayers):
@@ -34,8 +35,10 @@ vg1 = K.jit(K.value_and_grad(loss), static_argnums=(1, 2, 3))
 
 
 def efficiency():
-    for n in range(6, 40, 4):
-        for nlayers in range(2, 6, 2):
+    for n in range(10, 40, 4):
+        for nlayers in range(2, 6, 3):
+            if n > 20 and nlayers > 4:
+                continue
             print(n, nlayers)
             print("w lightcone")
             (v2, g2), _, _ = tc.utils.benchmark(
@@ -60,5 +63,5 @@ def correctness(n, nlayers):
 
 
 if __name__ == "__main__":
-    efficiency()
     correctness(7, 3)
+    efficiency()

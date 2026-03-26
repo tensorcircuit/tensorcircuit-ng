@@ -18,11 +18,16 @@
 
 - Add `bitwise_or`, `any`, `all` methods for backends.
 
+- Better lightcone cancellation.
+
 ### Fixed
 
 - Fix pauli propagation sign error for Y operator.
 
 - Fix jax backend QR gradient bug.
+
+- Lazy import for tensorflow and torch.
+
 
 ## v1.5.0
 
@@ -59,8 +64,6 @@
 - End-to-end differentiable PauliStringSum2COO on jax backend.
 
 - Generalize `scatter` method for backends.
-
-- Lazy import for tensorflow and torch.
 
 ## v1.4.0
 

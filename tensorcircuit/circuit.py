@@ -117,7 +117,7 @@ class Circuit(BaseCircuit):
         else:
             raise ValueError("No inputs provided")  # should not be reached
 
-        self.coloring_nodes(nodes)
+        self.coloring_nodes(nodes, flag="inputs")
         self._nodes = nodes
 
         self._start_index = len(nodes)
@@ -180,7 +180,7 @@ class Circuit(BaseCircuit):
                         new_front[j] ^ other[0][other[1]]
         j += 1
         self._front += new_front[j:]
-        self.coloring_nodes(new_nodes)
+        self.coloring_nodes(new_nodes, flag="inputs")
         self._nodes = new_nodes + self._nodes[self._start_index :]
         self._start_index = len(new_nodes)
 
