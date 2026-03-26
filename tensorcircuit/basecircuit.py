@@ -542,37 +542,26 @@ class BaseCircuit(AbstractCircuit):
         """
 
         no, d_edges = self._copy()
+        if isinstance(l, str):
+            l = _decode_basis_label(l, n=self._nqubits, dim=self._d)
+        endns = onehot_d_tensor(l, d=self._d)
         ms = []
         if self.is_dm:
             msconj = []
-        if isinstance(l, str):
-            symbols = _decode_basis_label(l, n=self._nqubits, dim=self._d)
-            for k in symbols:
-                n = onehot_d_tensor(k, d=self._d)
-                ms.append(tn.Node(n))
-                if self.is_dm:
-                    msconj.append(tn.Node(n))
-        else:
-            l = backend.cast(l, dtype=dtypestr)
-            for i in range(self._nqubits):
-                endn = onehot_d_tensor(l[i], d=self._d)
-                ms.append(tn.Node(endn))
-                if self.is_dm:
-                    msconj.append(tn.Node(endn))
-
         for i in range(self._nqubits):
-            d_edges[i] ^ ms[i].get_edge(0)
-            if self.is_dm:
-                d_edges[i + self._nqubits] ^ msconj[i].get_edge(0)
-        for n in ms:
+            n = tn.Node(endns[i])
             n.flag = "measurement"
             n.is_dagger = False
             n.id = id(n)
+            ms.append(n)
+            d_edges[i] ^ n.get_edge(0)
             if self.is_dm:
-                for n0, n in zip(ms, msconj):
-                    n.flag = "measurement"
-                    n.is_dagger = True
-                    n.id = id(n0)
+                nconj = tn.Node(endns[i])
+                nconj.flag = "measurement"
+                nconj.is_dagger = True
+                nconj.id = id(n)
+                msconj.append(nconj)
+                d_edges[i + self._nqubits] ^ nconj.get_edge(0)
         no.extend(ms)
         if self.is_dm:
             no.extend(msconj)
@@ -1069,12 +1058,13 @@ class BaseCircuit(AbstractCircuit):
         """
 
         traceout = backend.cast(traceout, dtypestr)
+        all_endns = onehot_d_tensor(traceout, d=self._d)
         nodes, front = self._copy()
         L = self._nqubits
         edges = []
         for i in range(len(traceout)):
             if i not in left:
-                n = Gate(onehot_d_tensor(traceout[i], d=self._d))
+                n = Gate(all_endns[i])
                 nodes.append(n)
                 front[i] ^ n[0]
             else:
@@ -1083,7 +1073,7 @@ class BaseCircuit(AbstractCircuit):
         if self.is_dm:
             for i in range(len(traceout)):
                 if i not in left:
-                    n = Gate(onehot_d_tensor(traceout[i], d=self._d))
+                    n = Gate(all_endns[i])
                     nodes.append(n)
                     front[i + L] ^ n[0]
                 else:
