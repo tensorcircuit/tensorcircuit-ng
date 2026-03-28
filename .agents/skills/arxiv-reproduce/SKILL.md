@@ -9,6 +9,7 @@ When tasked with reproducing an arXiv paper using TensorCircuit-NG, you act as a
 ### 1. Paper Reading & Adaptive Scaling
 - **Analyze**: Extract the core algorithms, target figure/table, and specific physical phenomena from the provided arXiv link or paper details.
 - **Scale Down**: Assess the original problem size. Intelligently reduce the qubit counts, circuit depth, or bond dimension so the simulation is computationally feasible on the current machine, while still theoretically preserving the core phenomenon. Also, plan to compare with exact `tc.Circuit` results for small-size systems to ensure correctness.
+- **Result Alignment Goal**: The final goal is to ensure the reproduced results (even if scaled down) qualitatively and quantitatively align with the trends and values in the manuscript.
 
 ### 2. Standardized Workspace Initialization
 - **Create Directories**: Strictly follow the repository's folder structure convention. Create a new directory named `examples/reproduce_papers/<YYYY>_<keywords>/` (e.g., `examples/reproduce_papers/2022_dmrg_circuit/`).
@@ -64,7 +65,9 @@ When tasked with reproducing an arXiv paper using TensorCircuit-NG, you act as a
 ### 5. Research Integrity & Transparency
 - **No Cheating**: You MUST NOT "cheat" on key steps by using fake data, hardcoding expected results, or implementing meaningless workarounds just to get a plot to look right. The physics must be genuine.
 - **No Laziness**: Do not skip foundational derivations or critical algorithmic steps in the original paper. Every line of code should have a physical or mathematical basis referenced from the paper.
-- **Explicit Simplifications**: If you take any numerical shortcuts or simplify the implementation (e.g., reducing lattice size, skipping noise channels per section 1.1), you MUST explicitly state exactly **which part** was simplified, **how** it was simplified, and **why** the core physics is still preserved. This should be documented in both the `meta.yaml` and the final report to the user.
+- **Explicit Simplifications & Discrepancies**: If you take any numerical shortcuts or simplify the implementation (e.g., reducing lattice size, skipping noise channels per section 1.1), you MUST explicitly state exactly **which part** was simplified, **how** it was simplified, and **why** the core physics is still preserved. This information should be documented in both the `meta.yaml` and the final report to the user.
+- **Result Analysis**: If the problem scale or hyperparameters are adapted for fast running, you must analyze the results to ensure they remain reasonable within the manuscript's theoretical framework.
+- **Identify Non-Identical Results**: If the reproduction is not identical to the original manuscript (e.g., due to scaling, different optimization paths, or hardware constraints), you MUST explicitly mention this to the user in the final report.
 
 ### 6. Post-Execution Code Review & Refactoring
 Once the script runs successfully and generates the target output, you MUST pause and deeply review your own code:
@@ -80,5 +83,6 @@ Before completing the task, you MUST execute the following terminal commands and
 1. **Formatting**: Run `black examples/reproduce_papers/<paper_subfolder>/*.py`
 2. **Linting**: Run `pylint examples/reproduce_papers/<paper_subfolder>/*.py`
 3. **Output Check**: Verify that `outputs/result.png` exists and matches the expected dimensions/trends of the scaled-down paper results.
+4. **Manuscript Comparison**: Rigorously compare the final numerical and visualized results with the manuscript's figures and tables. Document any discrepancies or confirm the alignment in your final summary.
 
-Conclude your task by summarizing the execution results, confirming that the checklist has been fully met, and providing the path to the reproduced figure. Explicitly list any implementation simplifications made for computational feasibility.
+Conclude your task by summarizing the execution results, confirming that the checklist has been fully met, and providing the path to the reproduced figure. Explicitly list any implementation simplifications made for computational feasibility and clearly state if the final results differ from the original manuscript.
