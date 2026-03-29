@@ -335,13 +335,31 @@ def parameter_shift_grad_v2(
     :param jit: whether jit the original function `f` at the beginning,
         defaults to False
     :type jit: bool, optional
+    :param random_argnums: label which args should be treated as random sources,
+        including JAX PRNG keys or uniform random status tensors,
+        defaults to None.
+        If a JAX PRNG key is provided, it is split into independent subkeys for each
+        shifted circuit instance evaluation.
+        If a status tensor is provided, it should be pre-batched to match the
+        shifted circuit instances. Specifically, if the status tensor has shape
+        [2, size, ...], the first slice [0, size, ...] is used for the positive
+        shifts and the second slice [1, size, ...] is used for the negative shifts.
+        If the status tensor has shape [size, ...], it is used for both positive
+        and negative shifts (Common Random Numbers).
+        Here `size` refers to the total number of elements in the parameter tensor
+        being differentiated (i.e., `backend.sizen(args[argnum])`).
+    :type random_argnums: Optional[Sequence[int]], optional
     :param shifts: two floats for the delta shift on the numerator and dominator,
         defaults to (pi/2, 2) for parameter shift
     :type shifts: Tuple[float, float]
     :return: the grad function
     :rtype: Callable[..., Tensor]
+
+    .. note::
+        While the wrapper logic is backend-agnostic, stochastic functions (like those
+        using `sample`) may only be differentiable via this wrapper on the JAX backend
+        due to limited `vmap` support for such operations in other backends.
     """
-    # TODO(@refraction-ray): replace with new status support for the sample API
     if jit is True:
         f = backend.jit(f)
 
@@ -374,17 +392,31 @@ def parameter_shift_grad_v2(
             nargs2[i] = batched_arg - onehot
             if random_argnums is not None:
                 for j in random_argnums:
-                    keys = []
-                    key = args[j]
-                    for _ in range(size):
-                        key, subkey = backend.random_split(key)
-                        keys.append(subkey)
-                    nargs[j] = backend.stack(keys)
-                    keys = []
-                    for _ in range(size):
-                        key, subkey = backend.random_split(key)
-                        keys.append(subkey)
-                    nargs2[j] = backend.stack(keys)
+                    _is_jax_key = False
+                    if backend.name == "jax":
+                        try:
+                            keys = []
+                            key = args[j]
+                            for _ in range(size):
+                                key, subkey = backend.random_split(key)
+                                keys.append(subkey)
+                            nargs[j] = backend.stack(keys)
+                            keys = []
+                            for _ in range(size):
+                                key, subkey = backend.random_split(key)
+                                keys.append(subkey)
+                            nargs2[j] = backend.stack(keys)
+                            _is_jax_key = True
+                        except (TypeError, ValueError, AttributeError):
+                            pass
+                    if not _is_jax_key:
+                        s_shape = backend.shape_tuple(args[j])
+                        if len(s_shape) > 0 and s_shape[0] == 2:
+                            nargs[j] = args[j][0]
+                            nargs2[j] = args[j][1]
+                        else:
+                            nargs[j] = args[j]
+                            nargs2[j] = args[j]
             r = (vfs[i](*nargs, **kws) - vfs[i](*nargs2, **kws)) / shifts[1]
             r = backend.reshape(r, shape)
             grad_values.append(r)

@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add support for both JAX PRNG keys and uniform random status tensors in `parameter_shift_grad_v2`.
+
 - Add `bitwise_and`, `bitwise_xor` methods for backends.
 
 - Add `tc.U1Circuit` for U(1) charge conservation circuits.

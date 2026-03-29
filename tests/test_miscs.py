@@ -353,6 +353,65 @@ def test_parameter_shift_grad_v2(backend):
     np.testing.assert_allclose(g_ps, g_ad, atol=1e-5)
 
 
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
+def test_parameter_shift_grad_v2_status(backend):
+    shots = 1000
+
+    def f(params, status):
+        c = tc.Circuit(1)
+        c.rx(0, theta=params[0])
+        return tc.backend.real(
+            c.sample_expectation_ps(z=[0], shots=shots, status=status)
+        )
+
+    params = tc.backend.convert_to_tensor(np.array([0.5]))
+    params = tc.backend.cast(params, "float32")
+    status = tc.backend.stateful_randu(
+        tc.backend.get_random_state(42), shape=[2, 1, shots]
+    )
+    status = tc.backend.cast(status, "float32")
+
+    # Test with random_argnums=1 (the status argument)
+    g_ps_fn = experimental.parameter_shift_grad_v2(f, argnums=0, random_argnums=1)
+    g_ps = g_ps_fn(params, status)
+
+    def f_exact(p):
+        c = tc.Circuit(1)
+        c.rx(0, theta=p[0])
+        return tc.backend.real(c.expectation_ps(z=[0]))
+
+    g_ad = tc.backend.grad(f_exact)(params)
+    np.testing.assert_allclose(g_ps, g_ad, atol=5e-2)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_parameter_shift_grad_v2_jax_key(backend):
+    shots = 1000
+
+    def f(params, key):
+        c = tc.Circuit(1)
+        c.rx(0, theta=params[0])
+        return tc.backend.real(
+            c.sample_expectation_ps(z=[0], shots=shots, random_generator=key)
+        )
+
+    params = tc.backend.convert_to_tensor(np.array([0.5]))
+    params = tc.backend.cast(params, "float32")
+    key = tc.backend.get_random_state(42)
+
+    # Test with random_argnums=1 (the JAX key)
+    g_ps_fn = experimental.parameter_shift_grad_v2(f, argnums=0, random_argnums=1)
+    g_ps = g_ps_fn(params, key)
+
+    def f_exact(p):
+        c = tc.Circuit(1)
+        c.rx(0, theta=p[0])
+        return tc.backend.real(c.expectation_ps(z=[0]))
+
+    g_ad = tc.backend.grad(f_exact)(params)
+    np.testing.assert_allclose(g_ps, g_ad, atol=5e-2)
+
+
 def test_broadcast_py_object_single_process(jaxb):
     # In a single process environment, broadcast should just return the object
     # though it uses jax.experimental.multihost_utils.broadcast_one_to_all
