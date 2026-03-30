@@ -221,7 +221,7 @@ def test_vmap(backend):
 
 ## Further Reading
 
-- **Specific Protocols**: See `llm_experience.md` for detailed protocols on development, profiling, and performance tuning.
+- **Progressive Memory Disclosure**: See `.agents/memory/index.md` for a modular, categorized index of development protocols, backend quirks, and advanced optimization tips. Agents should review the index first, then read or `grep` specific `.md` files in `.agents/memory/` as needed to load targeted context efficiently. When discovering new non-obvious technical lessons or fixing emergent framework-level issues, agents must record these findings into the appropriate memory file or create a new one to preserve the "Long-Term Memory" of the repository.
 
 - **Official Docs**: https://tensorcircuit-ng.readthedocs.io/
 

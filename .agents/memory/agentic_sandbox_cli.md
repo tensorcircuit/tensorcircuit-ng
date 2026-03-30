@@ -1,0 +1,16 @@
+# Agentic Sandbox & CLI Protocols
+
+1.  **Environment Variables for Read-Only Runtimes**:
+    - **Context**: The agentic sandbox environment often has restricted write permissions to default configuration and cache directories (e.g., `~/.cache`, `~/.config`).
+    - **Protocol**: Always prepend critical cache redirection variables when running scripts that use Numba, Matplotlib, or JAX.
+    - **Required Variables**:
+      - `NUMBA_CACHE_DIR=/tmp/numba_cache`: Prevents `PermissionError` when Numba (used by `quimb`, `scipy`) tries to write specialized kernels.
+      - `MPLCONFIGDIR=/tmp/matplotlib_cache`: Prevents `PermissionError` when `matplotlib` attempts to write font caches or configuration.
+    - **Execution Template**:
+      ```bash
+      NUMBA_CACHE_DIR=/tmp/numba_cache MPLCONFIGDIR=/tmp/matplotlib_cache conda run -n <env> python3 <script.py>
+      ```
+
+2.  **Output Redirection and Paging**:
+    - The sandbox terminal often handles large outputs poorly or requires non-interactive execution.
+    - **Protocol**: Use `PAGER=cat` (often default in agent tools) to ensure logs are fully captured without getting stuck in a `less` prompt.
