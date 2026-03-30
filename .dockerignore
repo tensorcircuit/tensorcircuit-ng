@@ -9,6 +9,9 @@
 **/*htmlcov
 **/*__pycache__
 **/*.pyc
+**/*.token
+**/.vscode/
+**/.idea/
 **/*.outdated
 **/*.result
 **/*.results

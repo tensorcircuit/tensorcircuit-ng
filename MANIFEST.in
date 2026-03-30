@@ -11,3 +11,7 @@ prune benchmarks
 prune docs
 global-exclude __pycache__
 global-exclude .DS_Store
+global-exclude *.token
+global-exclude .vscode/*
+global-exclude .idea/*
+global-exclude .env*
