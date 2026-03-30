@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.6.0
+
 ### Added
 
 - Add support for both JAX PRNG keys and uniform random status tensors in `parameter_shift_grad_v2`.
