@@ -25,6 +25,7 @@ Your goal is **NOT** to do a naive 1:1 syntax or line-by-line translation. You m
   tc.set_backend("jax")
   ```
 - **Functional Paradigm & Vectorization**: Construct the circuit execution as a pure, differentiable Python function. Apply `tc.backend.vmap` natively for any batched operations.
+- **Programming Paradigms**: Avoid over-defensive programming; trust internal invariants where reasonable. Use `try...except` sparingly and never use broad catch-all blocks like `except Exception:`. Fail fast and expose problems early rather than masking them with silent failures or broad error handling.
 
 ### 3. Execution, Verification & Strict Benchmarking
 - **Run the Source Code**: If the original script is executable, run it and strictly record its total execution time using `time` or a simple bash `time python script.py`.

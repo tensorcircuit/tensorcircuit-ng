@@ -407,6 +407,28 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def eigvalsh(self, a: Tensor) -> Tensor:
         return torchlib.linalg.eigvalsh(a)
 
+    def lobpcg_standard(
+        self,
+        a: Union[Tensor, Callable[[Tensor], Tensor]],
+        x0: Tensor,
+        m: int = 100,
+        tol: Optional[Union[Tensor, float]] = None,
+    ) -> Tuple[Tensor, Tensor, int]:
+        """
+        PyTorch LOBPCG implementation.
+        Note:
+        1. Complex input is not officially supported and is numerically unstable.
+        2. Callable input for operator 'a' is not supported.
+        """
+        if callable(a):
+            raise NotImplementedError(
+                "PyTorch backend `lobpcg` does not support callable linear operator yet."
+            )
+        theta, x = torchlib.lobpcg(
+            a, X=x0, niter=m, tol=tol, largest=True, ortho_fparams={"eps": 1e-6}
+        )
+        return theta, x, m
+
     def kron(self, a: Tensor, b: Tensor) -> Tensor:
         return torchlib.kron(a, b)
 

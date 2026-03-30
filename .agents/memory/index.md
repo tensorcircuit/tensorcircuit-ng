@@ -22,6 +22,7 @@ This directory contains progressive disclosure documents of TensorCircuit develo
 - `module_integration_protocols.md`: Export guidelines, backwards compatibility layers, and strict standards for testing and documentation.
 - `testing_and_benchmarking.md`: Sparse matrix compatibility and robust testing practices, plus guidelines for benchmarking external packages safely.
 - `visualization.md`: Standardized protocols for non-blocking subplots embedded during visualization.
+- `coding_paradigms.md`: Guidelines for error handling, avoiding defensive over-programming, and early feedback.
 
 ## Agent System & Environment
 - `agentic_skills_workflows.md`: Available specialized skills (e.g., arxiv-reproduce, code-reviewer, performance-optimize, meta-explorer).

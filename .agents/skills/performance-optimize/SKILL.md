@@ -44,6 +44,7 @@ You MUST NOT assume an optimization is inherently better.
 
 ### 4. Refactoring & Clean Execution
 - **Apply Validated Changes**: Modify the target script with the optimizations that passed the trade-off analysis. Leave clear comments (e.g., `# Using scan + checkpoint here to prevent OOM during grad, accepting ~20% time overhead`).
+- **Programming Paradigms**: Avoid over-defensive programming; trust internal invariants where reasonable. Use `try...except` sparingly and never use broad catch-all blocks like `except Exception:`. Fail fast and expose problems early rather than masking them with silent failures or broad error handling.
 - **Dry Run**: Execute the final refactored script to ensure mathematically identical results to the original.
 
 ### 5. Output & Delivery

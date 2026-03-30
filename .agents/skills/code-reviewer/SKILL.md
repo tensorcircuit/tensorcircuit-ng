@@ -32,7 +32,7 @@ When tasked with reviewing or auditing a TensorCircuit-NG (TC-NG) codebase, you 
 - **Avoid Side Effects**: No global state mutations within potentially JIT-ed regions.
 
 ### 5. Code Quality & Static Analysis
-- **Defensive Coding**: Avoid "over-defense". **Never** use general catch-all blocks like `except Exception:`. Catch only specific, expected errors.
+- **Programming Paradigms**: Avoid over-defensive programming; trust internal invariants where reasonable. Use `try...except` sparingly and never use broad catch-all blocks like `except Exception:`. Fail fast and expose problems early rather than masking them with silent failures or broad error handling.
 - **Cruft Removal (Minimal Changes)**: Eliminate duplication and explicitly unreachable dead branches, but *do not* rewrite perfectly functional abstractions or serialization schemas correctly handling edge-cases. Ensure the proposed changes are minimal for the intented targets.
 - **Import Manners**:
     - **Core Dependency**: Top-level imports in the `tensorcircuit` package are reserved for core dependencies.

@@ -100,11 +100,15 @@ TensorCircuit is a **Tensor Network-first**, **Multi-Backend** quantum computing
 
 Follow these rules for all code changes in this repository:
 
-- Minimize comments; be concise; code should be self-explanatory and self-documenting.
-- Do not include chain-of-thought or debugging steps in comments.
-- Comments should be useful, for example, comments that remind the reader about some global context that is non-obvious and can't be inferred locally.
-- Match existing code style and architectural patterns of the codebase.
-- If uncertain, choose the simpler, more concise implementation.
+- **Minimalism**: Minimize comments; be concise; code should be self-explanatory and self-documenting.
+- **No Chain-of-Thought**: Do not include chain-of-thought or debugging steps in comments.
+- **Contextual Comments**: Comments should be useful, reminding the reader about non-obvious global context.
+- **Consistency**: Match existing code style and architectural patterns of the codebase.
+- **Simplicity**: If uncertain, choose the simpler, more concise implementation.
+- **Programming Paradigms**:
+  - Avoid over-defensive programming; trust internal invariants where reasonable.
+  - Use `try...except` sparingly; only catch exceptions you can meaningfully handle.
+  - Fail fast: Expose problems early to locate and solve them immediately, rather than masking them with broad error handling or silent failures.
 
 ### Common Workflows
 

@@ -13,6 +13,7 @@ import tensornetwork
 from scipy.linalg import expm, solve, schur
 from scipy.special import softmax, expit, jv
 from scipy.sparse import coo_matrix, issparse
+from scipy.sparse.linalg import lobpcg, LinearOperator
 from tensornetwork.backends.numpy import numpy_backend
 from .abstract_backend import ExtendedBackend
 
@@ -142,6 +143,21 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
 
     def eigvalsh(self, a: Tensor) -> Tensor:
         return np.linalg.eigvalsh(a)
+
+    def lobpcg_standard(
+        self,
+        a: Union[Tensor, Callable[[Tensor], Tensor]],
+        x0: Tensor,
+        m: int = 100,
+        tol: Optional[Union[Tensor, float]] = None,
+    ) -> Tuple[Tensor, Tensor, int]:
+        if callable(a):
+            a = LinearOperator(
+                shape=(x0.shape[0], x0.shape[0]), matvec=a, matmat=a, dtype=x0.dtype
+            )
+
+        theta, x = lobpcg(a, x0, maxiter=m, tol=tol, largest=True)
+        return theta, x, m
 
     def kron(self, a: Tensor, b: Tensor) -> Tensor:
         return np.kron(a, b)

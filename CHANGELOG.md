@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Add `lobpcg` method for backends.
+
 ## v1.6.0
 
 ### Added
