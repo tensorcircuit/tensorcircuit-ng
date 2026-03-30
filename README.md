@@ -46,7 +46,7 @@ TensorCircuit-NG is the technical successor to TensorCircuit, led and maintained
 
 Please begin with [Quick Start](/docs/source/quickstart.rst) in the [full documentation](https://tensorcircuit-ng.readthedocs.io/).
 
-For more information on software usage, sota algorithm implementation and engineer paradigm demonstration, please refer to 140+ [example scripts](/examples) and 40+ [tutorial notebooks](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials). API docstrings and test cases in [tests](/tests) are also informative. One can also refer to AI-native docs for tensorcircuit-ng: [Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng), [Google Code Wiki](https://codewiki.google/github.com/tensorcircuit/tensorcircuit-ng), and [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
+For more information on software usage, sota algorithm implementation and engineer paradigm demonstration, please refer to 150+ [example scripts](/examples) and 40+ [tutorial notebooks](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials). API docstrings and test cases in [tests](/tests) are also informative. One can also refer to AI-native docs for tensorcircuit-ng: [Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng), [Google Code Wiki](https://codewiki.google/github.com/tensorcircuit/tensorcircuit-ng), and [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
 
 For beginners, please refer to [quantum computing lectures with TC-NG](https://github.com/sxzgroup/qc_lecture) to learn both quantum computing basics and representative usage of TensorCircuit-NG.
 
@@ -99,7 +99,7 @@ print(c.sample(allow_state=True, batch=1024, format="count_dict_bin"))
 - Runtime behavior customization:
 
 ```python
-tc.set_backend("tensorflow")
+tc.set_backend("jax")
 tc.set_dtype("complex128")
 tc.set_contractor("greedy")
 ```
