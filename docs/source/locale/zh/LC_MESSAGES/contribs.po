@@ -9,14 +9,14 @@ msgid ""
 msgstr ""
 "Project-Id-Version: tensorcircuit \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2023-07-14 15:43+0800\n"
+"POT-Creation-Date: 2026-03-31 12:24+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Generated-By: Babel 2.12.1\n"
+"Generated-By: Babel 2.18.0\n"
 
 #: ../../source/contribs/development_Mac.md:1
 #: ../../source/contribs/development_MacARM.md:1
@@ -41,90 +41,104 @@ msgid "Starting From Scratch"
 msgstr ""
 
 #: ../../source/contribs/development_Mac.md:9
-msgid "For completely new Macos or Macos without Xcode and Homebrew installed."
+msgid "For completely new Macos or Macos without Xcode installed."
 msgstr ""
 
 #: ../../source/contribs/development_Mac.md:11
+msgid "If you have Xcode installed, skip to Install TC backends."
+msgstr ""
+
+#: ../../source/contribs/development_Mac.md:13
 #: ../../source/contribs/development_MacARM.md:12
 #: ../../source/contribs/development_MacM2.md:12
 msgid "Install Xcode Command Line Tools"
 msgstr ""
 
-#: ../../source/contribs/development_Mac.md:13
+#: ../../source/contribs/development_Mac.md:15
 #: ../../source/contribs/development_MacARM.md:14
 #: ../../source/contribs/development_MacM2.md:14
 msgid "<font color=gray><em>Need graphical access to the machine.</em></font>"
 msgstr ""
 
-#: ../../source/contribs/development_Mac.md:15
+#: ../../source/contribs/development_Mac.md:17
 #: ../../source/contribs/development_MacARM.md:16
 #: ../../source/contribs/development_MacM2.md:16
 msgid "Run `xcode-select --install` to install if on optimal internet."
 msgstr ""
 
-#: ../../source/contribs/development_Mac.md:17
+#: ../../source/contribs/development_Mac.md:19
 msgid ""
 "Or Download it from [Apple](https://developer.apple.com/download/more/) "
 "Command Line Tools installation image then install it if the internet "
 "connection is weak."
 msgstr ""
 
-#: ../../source/contribs/development_Mac.md:19
-#: ../../source/contribs/development_MacARM.md:20
-#: ../../source/contribs/development_MacM2.md:20
-msgid "Install Miniconda"
-msgstr ""
-
 #: ../../source/contribs/development_Mac.md:21
-msgid ""
-"Due to the limitation of MacOS and packages, the latest version of Python"
-" does not always function as desired, thus miniconda installation is "
-"advised to solve the issues."
-msgstr ""
-
-#: ../../source/contribs/development_Mac.md:30
 #: ../../source/contribs/development_MacARM.md:37
 msgid "Install TC Backends"
 msgstr ""
 
-#: ../../source/contribs/development_Mac.md:32
+#: ../../source/contribs/development_Mac.md:23
 msgid "There are four backends to choose from, Numpy, Tensorflow, Jax, and Torch."
 msgstr ""
 
+#: ../../source/contribs/development_Mac.md:25
+msgid "Install Jax, Pytorch (Optional)"
+msgstr ""
+
+#: ../../source/contribs/development_Mac.md:30
+msgid "Install Tensorflow (Optional - Recommended)"
+msgstr ""
+
+#: ../../source/contribs/development_Mac.md:32
+msgid "Install Miniconda (Optional - Recommended)"
+msgstr ""
+
 #: ../../source/contribs/development_Mac.md:34
-#: ../../source/contribs/development_MacARM.md:41
-msgid "Install Jax, Pytorch, Qiskit, Cirq (Optional)"
+msgid ""
+"If you wish to install Tensorflow optimized for MacOS (`tensorflow-"
+"macos`) or Tensorflow GPU optimized (`tensorflow-metal`) please install "
+"miniconda."
 msgstr ""
 
-#: ../../source/contribs/development_Mac.md:40
-#: ../../source/contribs/development_MacARM.md:47
-msgid "Install Tensorflow (Optional)"
+#: ../../source/contribs/development_Mac.md:36
+msgid ""
+"If you wish to install Vanilla Tensorflow developed by Google "
+"(`tensorflow`) please skip this step."
 msgstr ""
 
-#: ../../source/contribs/development_Mac.md:42
+#: ../../source/contribs/development_Mac.md:45
 msgid "Installation"
 msgstr ""
 
-#: ../../source/contribs/development_Mac.md:44
-msgid "For Tensorflow version 2.13 or later:"
+#: ../../source/contribs/development_Mac.md:51
+msgid ""
+"If you wish to use tensorflow-metal PluggableDevice, then continue "
+"install (not recommended):"
 msgstr ""
 
-#: ../../source/contribs/development_Mac.md:50
-msgid "For Tensorflow version 2.12 or earlier:"
-msgstr ""
-
-#: ../../source/contribs/development_Mac.md:56
+#: ../../source/contribs/development_Mac.md:57
 #: ../../source/contribs/development_MacARM.md:57
 #: ../../source/contribs/development_MacARM.md:89
 msgid "Verify Tensorflow Installation"
 msgstr ""
 
-#: ../../source/contribs/development_Mac.md:74
+#: ../../source/contribs/development_Mac.md:75
 #: ../../source/contribs/development_MacARM.md:107
 msgid "Install Tensorcircuit"
 msgstr ""
 
-#: ../../source/contribs/development_Mac.md:80
+#: ../../source/contribs/development_Mac.md:81
+msgid "Benchmarking"
+msgstr ""
+
+#: ../../source/contribs/development_Mac.md:83
+msgid ""
+"This data is collected by running `benchmarks/scripts/vqe_tc.py` 10 times"
+" and average results."
+msgstr ""
+
+#: ../../source/contribs/development_Mac.md:113
 msgid ""
 "Until July 2023, this has been tested on Intel Macs running Ventura, M1 "
 "Macs running Ventura, M2 Macs running Ventura, and M2 Macs running Sonoma"
@@ -154,6 +168,11 @@ msgid ""
 " is weak."
 msgstr ""
 
+#: ../../source/contribs/development_MacARM.md:20
+#: ../../source/contribs/development_MacM2.md:20
+msgid "Install Miniconda"
+msgstr ""
+
 #: ../../source/contribs/development_MacARM.md:22
 msgid ""
 "Due to the limitation of MacOS and packages, the lastest version of "
@@ -167,6 +186,14 @@ msgstr ""
 
 #: ../../source/contribs/development_MacARM.md:39
 msgid "There are four backends to choose from, Numpy, Tensorflow, Jax, Torch."
+msgstr ""
+
+#: ../../source/contribs/development_MacARM.md:41
+msgid "Install Jax, Pytorch, Qiskit, Cirq (Optional)"
+msgstr ""
+
+#: ../../source/contribs/development_MacARM.md:47
+msgid "Install Tensorflow (Optional)"
 msgstr ""
 
 #: ../../source/contribs/development_MacARM.md:49
@@ -407,70 +434,84 @@ msgid "从头开始"
 msgstr ""
 
 #: ../../source/contribs/development_Mac_cn.md:9
-msgid "对于全新的Macos或未安装Xcode和Homebrew的Macos。"
+msgid "对于全新的Macos或未安装Xcode的Macos。"
 msgstr ""
 
 #: ../../source/contribs/development_Mac_cn.md:11
-msgid "安装Xcode命令行工具"
+msgid "若您已安装Xcode，请跳转到安装TC后端。"
 msgstr ""
 
 #: ../../source/contribs/development_Mac_cn.md:13
-msgid "<font color=gray><em>需要对机器的图形访问。</em></font>"
+msgid "安装Xcode命令行工具"
 msgstr ""
 
 #: ../../source/contribs/development_Mac_cn.md:15
-msgid "如果网络良好，请运行`xcode-select --install`进行安装。"
+msgid "<font color=gray><em>需要对机器的图形访问</em></font>"
 msgstr ""
 
 #: ../../source/contribs/development_Mac_cn.md:17
-msgid "或者，如果网络连接较弱，请从[苹果](https://developer.apple.com/download/more/)下载命令行工具安装映像，然后进行安装。"
+msgid "如果网络良好，请运行`xcode-select --install`进行安装。"
 msgstr ""
 
 #: ../../source/contribs/development_Mac_cn.md:19
-msgid "安装Miniconda"
+msgid "或者，如果网络连接不理想，请从[苹果](https://developer.apple.com/download/more/)下载命令行工具安装映像，然后进行安装。"
 msgstr ""
 
 #: ../../source/contribs/development_Mac_cn.md:21
-msgid "由于MacOS和软件包的限制，因此建议安装miniconda以解决问题。"
-msgstr ""
-
-#: ../../source/contribs/development_Mac_cn.md:30
 msgid "安装TC后端"
 msgstr ""
 
-#: ../../source/contribs/development_Mac_cn.md:32
+#: ../../source/contribs/development_Mac_cn.md:23
 msgid "有四个后端可供选择，Numpy，Tensorflow，Jax和Torch。"
 msgstr ""
 
-#: ../../source/contribs/development_Mac_cn.md:34
-msgid "安装Jax，Pytorch，Qiskit，Cirq（可选）"
+#: ../../source/contribs/development_Mac_cn.md:25
+msgid "安装Jax、Pytorch（可选）"
 msgstr ""
 
-#: ../../source/contribs/development_Mac_cn.md:40
-msgid "安装Tensorflow（可选）"
+#: ../../source/contribs/development_Mac_cn.md:31
+msgid "安装Tensorflow（可选 - 推荐）"
 msgstr ""
 
-#: ../../source/contribs/development_Mac_cn.md:42
+#: ../../source/contribs/development_Mac_cn.md:33
+msgid "安装miniconda（可选 - 推荐）"
+msgstr ""
+
+#: ../../source/contribs/development_Mac_cn.md:35
+msgid ""
+"若您希望使用苹果为MacOS优化的Tensorflow（`tensorflow-macos`）或使用Tensorflow GPU优化"
+"（`tensorflow-metal`）请安装mimiconda。"
+msgstr ""
+
+#: ../../source/contribs/development_Mac_cn.md:37
+msgid "若您希望使Google开发的原版Tensorflow（`tensorflow`）请跳过此步骤。"
+msgstr ""
+
+#: ../../source/contribs/development_Mac_cn.md:46
 msgid "安装步骤"
 msgstr ""
 
-#: ../../source/contribs/development_Mac_cn.md:44
-msgid "Tensorflow版本2.13或之后："
+#: ../../source/contribs/development_Mac_cn.md:52
+msgid "若您希望使用苹果为Tensorflow优化的Metal后端，请继续运行（不建议）："
 msgstr ""
 
-#: ../../source/contribs/development_Mac_cn.md:50
-msgid "Tensorflow版本2.12或之前："
-msgstr ""
-
-#: ../../source/contribs/development_Mac_cn.md:56
+#: ../../source/contribs/development_Mac_cn.md:58
 msgid "验证Tensorflow安装"
 msgstr ""
 
-#: ../../source/contribs/development_Mac_cn.md:74
+#: ../../source/contribs/development_Mac_cn.md:76
 msgid "安装Tensorcircuit"
 msgstr ""
 
-#: ../../source/contribs/development_Mac_cn.md:80
+#: ../../source/contribs/development_Mac_cn.md:82
+msgid "测试与比较"
+msgstr ""
+
+#: ../../source/contribs/development_Mac_cn.md:84
+msgid "以下数据由运行`benchmarks/scripts/vqe_tc.py` 10次并取平均值得到。"
+msgstr ""
+
+#: ../../source/contribs/development_Mac_cn.md:114
 msgid ""
 "直到2023年7月，这已在运行Ventura的英特尔i9 Mac、运行Ventura的M1 Mac、运行Ventura的M2 "
 "Mac、运行Sonoma测试版的M2 Mac上进行了测试。"
@@ -920,5 +961,49 @@ msgstr ""
 #~ "This page is deprecated. Please visit"
 #~ " `the update tutorial <development_MacARM.html>`_"
 #~ " for latest information."
+#~ msgstr ""
+
+#~ msgid "For completely new Macos or Macos without Xcode and Homebrew installed."
+#~ msgstr ""
+
+#~ msgid ""
+#~ "Due to the limitation of MacOS and"
+#~ " packages, the latest version of "
+#~ "Python does not always function as "
+#~ "desired, thus miniconda installation is "
+#~ "advised to solve the issues."
+#~ msgstr ""
+
+#~ msgid "For Tensorflow version 2.13 or later:"
+#~ msgstr ""
+
+#~ msgid "For Tensorflow version 2.12 or earlier:"
+#~ msgstr ""
+
+#~ msgid "对于全新的Macos或未安装Xcode和Homebrew的Macos。"
+#~ msgstr ""
+
+#~ msgid "<font color=gray><em>需要对机器的图形访问。</em></font>"
+#~ msgstr ""
+
+#~ msgid "或者，如果网络连接较弱，请从[苹果](https://developer.apple.com/download/more/)下载命令行工具安装映像，然后进行安装。"
+#~ msgstr ""
+
+#~ msgid "安装Miniconda"
+#~ msgstr ""
+
+#~ msgid "由于MacOS和软件包的限制，因此建议安装miniconda以解决问题。"
+#~ msgstr ""
+
+#~ msgid "安装Jax，Pytorch，Qiskit，Cirq（可选）"
+#~ msgstr ""
+
+#~ msgid "安装Tensorflow（可选）"
+#~ msgstr ""
+
+#~ msgid "Tensorflow版本2.13或之后："
+#~ msgstr ""
+
+#~ msgid "Tensorflow版本2.12或之前："
 #~ msgstr ""
 

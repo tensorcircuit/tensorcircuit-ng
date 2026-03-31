@@ -4,38 +4,38 @@
 # package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2022.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: tensorcircuit \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2023-05-07 10:47+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: LANGUAGE <LL@li.org>\n"
+"POT-Creation-Date: 2026-03-31 12:24+0800\n"
+"PO-Revision-Date: 2026-03-31 13:35+0800\n"
+"Last-Translator: Gemini CLI\n"
+"Language: zh_CN\n"
+"Language-Team: \n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Generated-By: Babel 2.9.1\n"
+"Generated-By: Babel 2.18.0\n"
 
 #: ../../source/sharpbits.rst:3
 msgid "TensorCircuit: The Sharp Bits 🔪"
-msgstr "TensorCircuit: 常见错误 🔪"
+msgstr "TensorCircuit: 常见陷阱 🔪"
 
 #: ../../source/sharpbits.rst:5
 msgid ""
-"Be fast is never for free, though much cheaper in TensorCircuit, but you "
-"have to be cautious especially in terms of AD, JIT compatibility. We will"
-" go through the main sharp edges 🔪 in this note."
-msgstr "虽然在TensorCircuit中速度很快，但是你必须小心，尤其是在AD和JIT兼容性方面。"
+"Be fast is never for free, though much cheaper in TensorCircuit-NG, but "
+"you have to be cautious especially in terms of AD, JIT compatibility. We "
+"will go through the main sharp edges 🔪 in this note."
+msgstr "极致的速度并非毫无代价，虽然在 TensorCircuit-NG 中这种代价已经低得多，但在自动微分（AD）和即时编译（JIT）兼容性方面仍需格外小心。本笔记将介绍一些主要的“锋利边缘（常见陷阱）”🔪。"
 
 #: ../../source/sharpbits.rst:9
 msgid "Jit Compatibility"
-msgstr "Jit 兼容性"
+msgstr "JIT 兼容性"
 
 #: ../../source/sharpbits.rst:12
 msgid "Non tensor input or varying shape tensor input"
-msgstr "非向量输入或者变化形状的向量输入"
+msgstr "非张量输入或变长形状张量输入"
 
 #: ../../source/sharpbits.rst:14
 msgid ""
@@ -43,11 +43,11 @@ msgid ""
 " otherwise the recompilation is incurred which is time-consuming. "
 "Therefore, if there are input args that are non-tensor or varying shape "
 "tensors and frequently change, jit is not recommend."
-msgstr "输入必须是张量形式，且输入张量的形状必须固定，否则会重新编译，这是非常耗时的。因此，如果有输入参数是非张量或者变化形状的张量，且经常变化，不建议使用jit。"
+msgstr "输入必须是张量形式，且输入张量的形状必须固定，否则会引发耗时的重新编译。因此，如果输入参数包含经常变化的非张量或形状可变的张量，则不建议使用 JIT。"
 
 #: ../../source/sharpbits.rst:38
 msgid "Mix use of numpy and ML backend APIs"
-msgstr "混合使用numpy和ML后端API"
+msgstr "混合使用 NumPy 和机器学习后端 API"
 
 #: ../../source/sharpbits.rst:40
 msgid ""
@@ -57,117 +57,148 @@ msgid ""
 " create the computational graph to carry out AD and JIT transformation. "
 "For numpy ops, they will be only called in jit staging time (the first "
 "run)."
-msgstr ""
-"为了使函数可jit和可AD，函数中的每个操作都应该通过ML后端（``tc.backend`` API或者直接调用后端API ``tf`` 或者 "
-"``jax``）。这是因为ML后端必须创建计算图来\"进行AD和JIT转换。对于numpy操作，它们只会在jit编译阶段被调用（第一次运行）。"
+msgstr "为了使函数支持 JIT 编译和自动微分，函数中的每个操作都应通过机器学习后端调用（使用 ``tc.backend`` API 或所选后端 ``tf``/``jax`` 的直接 API）。这是因为后端必须创建计算图才能执行 AD 和 JIT 转换。对于 NumPy 操作，它们仅在 JIT 编译阶段（即第一次运行）被调用。"
 
 #: ../../source/sharpbits.rst:54
 msgid ""
 "Numpy call inside jitted function can be helpful if you are sure of the "
 "behavior is what you expect."
-msgstr "如果你确定numpy调用的行为是你期望的，那么在jit函数中调用numpy是有帮助的。"
+msgstr "如果您确定其行为符合预期，在 JIT 函数内部调用 NumPy 也是有帮助的。"
 
 #: ../../source/sharpbits.rst:83
 msgid "list append under if"
-msgstr "if下的list append"
+msgstr "if 条件下的列表附加 (list append)"
 
 #: ../../source/sharpbits.rst:85
 msgid ""
 "Append something to a Python list within if whose condition is based on "
 "tensor values will lead to wrong results. Actually values of both branch "
 "will be attached to the list. See example below."
-msgstr "在if条件基于张量值的情况下，将内容附加到Python列表中会导致错误的结果。实际上，两个分支的值都会被附加到列表中。参见下面的例子。"
+msgstr "在条件基于张量值的 if 语句内向 Python 列表附加（append）内容会导致错误的结果。实际上，两个分支的值都会被附加到列表中。请参见下面的示例。"
 
 #: ../../source/sharpbits.rst:108
 msgid ""
 "The above code raise ``ConcretizationTypeError`` exception directly for "
 "Jax backend since Jax jit doesn't support tensor value if condition."
-msgstr "上面的代码直接为Jax后端引发了``ConcretizationTypeError``异常，因为Jax jit不支持张量值if条件。"
+msgstr "上述代码在 JAX 后端会直接抛出 ``ConcretizationTypeError`` 异常，因为 JAX 的 JIT 不支持基于张量值的 if 条件。"
 
 #: ../../source/sharpbits.rst:110
 msgid "Similarly, conditional gate application must be takend carefully."
-msgstr "类似地，必须小心地应用条件门。"
+msgstr "类似地，条件门的评估也必须谨慎处理。"
 
 #: ../../source/sharpbits.rst:145
 msgid "Tensor variables consistency"
-msgstr ""
+msgstr "张量变量的一致性"
 
 #: ../../source/sharpbits.rst:148
 msgid ""
 "All tensor variables' backend (tf vs jax vs ..), dtype (float vs "
 "complex), shape and device (cpu vs gpu) must be compatible/consistent."
-msgstr ""
+msgstr "所有张量变量的后端（tf 对比 jax 等）、数据类型（实数对比复数）、形状以及设备（CPU 对比 GPU）必须兼容/一致。"
 
 #: ../../source/sharpbits.rst:150
 msgid "Inspect the backend, dtype, shape and device using the following codes."
-msgstr ""
+msgstr "使用以下代码检查后端、数据类型、形状和设备。"
 
 #: ../../source/sharpbits.rst:162
 msgid ""
 "If the backend is inconsistent, one can convert the tensor backend via "
 ":py:meth:`tensorcircuit.interfaces.tensortrans.general_args_to_backend`."
-msgstr ""
+msgstr "如果后端不一致，可以通过 :py:meth:`tensorcircuit.interfaces.tensortrans.general_args_to_backend` 转换张量后端。"
 
 #: ../../source/sharpbits.rst:173
 msgid ""
 "If the dtype is inconsistent, one can convert the tensor dtype using "
 "``tc.backend.cast``."
-msgstr ""
+msgstr "如果数据类型不一致，可以使用 ``tc.backend.cast`` 进行转换。"
 
 #: ../../source/sharpbits.rst:184
 msgid ""
 "Also note the jax issue on float64/complex128, see `jax gotcha "
 "<https://github.com/google/jax#current-gotchas>`_."
-msgstr ""
+msgstr "另请注意 JAX 在 float64/complex128 上的问题，请参阅 `JAX 注意事项 <https://github.com/google/jax#current-gotchas>`_。"
 
 #: ../../source/sharpbits.rst:186
 msgid ""
 "If the shape is not consistent, one can convert the shape by "
 "``tc.backend.reshape``."
-msgstr ""
+msgstr "如果形状不一致，可以使用 ``tc.backend.reshape`` 转换形状。"
 
 #: ../../source/sharpbits.rst:188
 msgid ""
 "If the device is not consistent, one can move the tensor between devices "
 "by ``tc.backend.device_move``."
-msgstr ""
+msgstr "如果设备不一致，可以使用 ``tc.backend.device_move`` 在设备间移动张量。"
 
 #: ../../source/sharpbits.rst:192
 msgid "AD Consistency"
-msgstr "AD一致性"
+msgstr "自动微分（AD）一致性"
 
-#: ../../source/sharpbits.rst:194
+#: ../../source/sharpbits.rst:195
+msgid "Gradients in terms of complex dtypes"
+msgstr "关于复数数据类型的梯度"
+
+#: ../../source/sharpbits.rst:197
 msgid ""
 "TF and JAX backend manage the differentiation rules differently for "
 "complex-valued function (actually up to a complex conjuagte). See issue "
 "discussion `tensorflow issue "
 "<https://github.com/tensorflow/tensorflow/issues/3348>`_."
-msgstr ""
-"TF和JAX后端对复值函数的微分规则的管理方式不同（实际上是复共轭）。参见讨论 `tensorflow issue "
-"<https://github.com/tensorflow/tensorflow/issues/3348>`_。"
+msgstr "TensorFlow 和 JAX 后端对复值函数的微分规则管理不同（实际上相差一个复共轭）。请参阅相关讨论 `TensorFlow issue <https://github.com/tensorflow/tensorflow/issues/3348>`_。"
 
-#: ../../source/sharpbits.rst:196
+#: ../../source/sharpbits.rst:199
 msgid ""
-"In TensorCircuit, currently we make the difference in AD transparent, "
+"In TensorCircuit-NG, currently we make the difference in AD transparent, "
 "namely, when switching the backend, the AD behavior and result for "
 "complex valued function can be different and determined by the nature "
 "behavior of the corresponding backend framework. All AD relevant ops such"
 " as ``grad`` or ``jacrev`` may be affected. Therefore, the user must be "
 "careful when dealing with AD on complex valued function in a backend "
 "agnostic way in TensorCircuit."
-msgstr ""
-"在TensorCircuit中，我们目前使AD的差异透明，即在切换后端时，复值函数的AD行为和结果可能不同，并由相应后端框架的本质行为决定。所有与AD相关的操作，如"
-" ``grad`` 或者 ``jacrev`` "
-"都可能受到影响。因此，用户在TensorCircuit中以后端无关的方式处理复值函数的AD时必须小心。"
+msgstr "在 TensorCircuit-NG 中，目前我们使这种 AD 差异透明化，即切换后端时，复值函数的 AD 行为和结果可能会有所不同，这取决于相应后端框架的原生行为。所有与 AD 相关的操作（如 ``grad`` 或 ``jacrev``）都可能受到影响。因此，在 TensorCircuit 中以后端无关的方式处理复值函数的 AD 时，用户必须格外小心。"
 
-#: ../../source/sharpbits.rst:199
+#: ../../source/sharpbits.rst:202
 msgid ""
 "See example script on computing Jacobian with different modes on "
-"different backends: `jacobian_cal.py <https://github.com/tencent-quantum-"
-"lab/tensorcircuit/blob/master/examples/jacobian_cal.py>`_. Also see the "
+"different backends: `jacobian_cal.py <https://github.com/tensorcircuit"
+"/tensorcircuit-ng/blob/master/examples/jacobian_cal.py>`_. Also see the "
 "code below for a reference:"
-msgstr ""
-"参考不同后端的不同模式下计算Jacobian的示例脚本：`jacobian_cal.py <https://github.com/tencent-"
-"quantum-"
-"lab/tensorcircuit/blob/master/examples/jacobian_cal.py>`_。另外请参考下面的代码:"
+msgstr "有关在不同后端使用不同模式计算雅可比矩阵的示例脚本，请参阅：`jacobian_cal.py <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/jacobian_cal.py>`_。另请参考下面的代码："
 
+#: ../../source/sharpbits.rst:232
+msgid "VMAP outside grad-like function on tensorflow backend"
+msgstr "在 TensorFlow 后端将 vmap 置于梯度类函数之外"
+
+#: ../../source/sharpbits.rst:234
+msgid ""
+"Vmap (vectorized map) outside a grad-like function may cause incorrected "
+"results on TensorFlow backends due to a long existing `bug "
+"<https://github.com/tensorflow/tensorflow/issues/52148>`_ in TensorFlow "
+"codebase. So better always stick to the first-vmap-then-differentiated "
+"paradigm."
+msgstr "由于 TensorFlow 代码库中长期存在的一个 `bug <https://github.com/tensorflow/tensorflow/issues/52148>`_，在 TensorFlow 后端将 vmap 置于梯度类函数之外可能会导致错误的结果。因此，最好始终坚持“先 vmap 再求导”的范式。"
+
+#: ../../source/sharpbits.rst:237
+msgid "Grad over vmap function"
+msgstr "对 vmap 函数求导"
+
+#: ../../source/sharpbits.rst:239
+msgid ""
+"A related issue is the different behavior for ``K.grad(K.vmap(f))`` on "
+"different backends. For tensorflow backend, the function to be "
+"differentiated has a scalar output which is the sum of all outputs."
+msgstr "一个相关的问题是 ``K.grad(K.vmap(f))`` 在不同后端上的不同行为。对于 TensorFlow 后端，待求导的函数具有标量输出，该输出是所有输出的总和。"
+
+#: ../../source/sharpbits.rst:241
+msgid ""
+"However, for Jax backend, the function simply raise error as only scalar "
+"output function can be differentiated, no implicit sum of the vectorized "
+"``f`` is assumed. For non-scalar output, one should use `jacrev` or "
+"`jacfwd` to get the gradient information."
+msgstr "然而，对于 JAX 后端，由于只有标量输出函数才能求梯度，该函数会直接报错，它不会假设向量化 ``f`` 的隐式求和。对于非标量输出，应使用 `jacrev` 或 `jacfwd` 获取梯度信息。"
+
+#: ../../source/sharpbits.rst:243
+msgid ""
+"Specifically, ``K.grad(K.vmap(f))`` on TensorFlow backend is equilvalent "
+"to ``K.grad(K.append(K.vamp(f), K.sum))`` on Jax backend."
+msgstr "具体来说，TensorFlow 后端上的 ``K.grad(K.vmap(f))`` 等效于 JAX 后端上的 ``K.grad(K.append(K.vamp(f), K.sum))``。"
