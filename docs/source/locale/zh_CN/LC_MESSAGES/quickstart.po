@@ -82,7 +82,7 @@ msgid ""
 "agents (e.g., Cursor, Claude Code, Gemini CLI) directly within the cloned"
 " repository to leverage the rich context from examples and tests. See "
 ":doc:`agentic` for details."
-msgstr "**AI 原生开发：** 我们强烈建议直接在克隆的仓库中使用 AI 编程助手（如 Cursor、Claude Code、Gemini CLI）进行开发，以利用来自示例和测试的丰富上下文。详见 :doc:`agentic`。"
+msgstr "**AI 原生开发：** 我们强烈建议直接在克隆的仓库中使用 AI 编程助手（如 Cursor、Claude Code、Gemini CLI）进行开发，以利用来自示例和测试的丰富上下文。详见 :doc:`agentic` 。"
 
 #: ../../source/quickstart.rst:39
 msgid "Circuit Object"
@@ -98,7 +98,7 @@ msgstr "用量子比特数(n) ``c=tc.Circuit(n)`` 来初始化电路。"
 
 #: ../../source/quickstart.rst:45
 msgid "**Input States:**"
-msgstr "**输入状态:**"
+msgstr "**输入状态：**"
 
 #: ../../source/quickstart.rst:47
 msgid ""
@@ -117,7 +117,7 @@ msgstr "也可以将矩阵乘积状态作为电路的输入状态，但我们将
 
 #: ../../source/quickstart.rst:51
 msgid "**Quantum Gates:**"
-msgstr "**量子门:**"
+msgstr "**量子门：**"
 
 #: ../../source/quickstart.rst:53
 #, python-brace-format
@@ -158,7 +158,7 @@ msgstr "这两个例子很灵活，支持任意数量的量子比特上的门。
 
 #: ../../source/quickstart.rst:65
 msgid "**Measurements and Expectations:**"
-msgstr "**测量与期望**"
+msgstr "**测量与期望：**"
 
 #: ../../source/quickstart.rst:67
 msgid ""
@@ -220,7 +220,7 @@ msgstr "我们还可以提取整个电路对应的幺正矩阵，如下所示：
 
 #: ../../source/quickstart.rst:110
 msgid "**Circuit Transformations:**"
-msgstr "**电路转换**"
+msgstr "**电路转换：**"
 
 #: ../../source/quickstart.rst:112
 msgid ""
@@ -240,11 +240,11 @@ msgid ""
 "Parameterized Qiskit circuit is supported by passing the parameters to "
 "the ``binding_parameters`` argument of the ``from_qiskit`` function, "
 "similar to the ``assign_parameters`` function in Qiskit."
-msgstr "从 Qiskit 导入：``c = tc.Circuit.from_qiskit(QuantumCircuit, n)``。通过将参数传递给 ``from_qiskit`` 函数的 ``binding_parameters`` 参数，可以支持参数化的 Qiskit 线路，类似于 Qiskit 中的 ``assign_parameters`` 函数。"
+msgstr "从 Qiskit 导入：``c = tc.Circuit.from_qiskit(QuantumCircuit, n)`` 。通过将参数传递给 ``from_qiskit`` 函数的 ``binding_parameters`` 参数，可以支持参数化的 Qiskit 线路，类似于 Qiskit 中的 ``assign_parameters`` 函数。"
 
 #: ../../source/quickstart.rst:120
 msgid "**Circuit Visualization:**"
-msgstr "**电路可视化**"
+msgstr "**电路可视化：**"
 
 #: ../../source/quickstart.rst:122
 msgid ""
@@ -285,7 +285,7 @@ msgstr ""
 
 #: ../../source/quickstart.rst:130
 msgid "**Circuit Intermediate Representation:**"
-msgstr "**电路中间表示:**"
+msgstr "**电路中间表示：**"
 
 #: ../../source/quickstart.rst:132
 msgid ""
@@ -519,7 +519,7 @@ msgid ""
 "TensorCircuit-NG supports numerical simulation with both **32-bit** "
 "(default) and **64-bit** precision. You can switch the global precision "
 "using ``tc.set_dtype``."
-msgstr "TensorCircuit-NG 支持 **32 位**（默认）和 **64 位**精度的数值模拟。您可以使用 ``tc.set_dtype`` 切换全局精度。"
+msgstr "TensorCircuit-NG 支持 **32 位**（默认）和 **64 位** 精度的数值模拟。您可以使用 ``tc.set_dtype`` 切换全局精度。"
 
 #: ../../source/quickstart.rst:375
 msgid ""

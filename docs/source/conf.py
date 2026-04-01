@@ -207,6 +207,7 @@ texinfo_documents = [
 ]
 
 locale_dirs = ["locale/"]  # path is example but recommended.
+# toctree_filter_re = [language]
 # -- Extension configuration -------------------------------------------------
 
 # sphinx-copybutton

@@ -250,8 +250,8 @@ The following documentation sections include integrated examples in the form of 
 .. toctree-filt::
    :maxdepth: 2
 
-   :zh:tutorial.rst
-   :zh:whitepapertoc.rst
+   :zh_CN:tutorial.rst
+   :zh_CN:whitepapertoc.rst
    :en:tutorial_cn.rst
    :en:whitepapertoc_cn.rst
    :en:textbooktoc.rst

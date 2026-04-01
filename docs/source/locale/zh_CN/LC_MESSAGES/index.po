@@ -40,7 +40,7 @@ msgid ""
 "demand **Speed, Flexibility, and Elegance**."
 msgstr ""
 "`TensorCircuit-NG <https://github.com/tensorcircuit/tensorcircuit-ng>`_ "
-"是一个工业级、开源的高性能 Python 量子软件框架。它专为追求**速度、灵活性和优雅**的研究人员和工程师而设计。"
+"是一个工业级、开源的高性能 Python 量子软件框架。它专为追求 **速度、灵活性和优雅** 的研究人员和工程师而设计。"
 
 #: ../../source/index.rst:20
 msgid "🧬 Built for Humans"
@@ -80,7 +80,7 @@ msgstr "⛓️ 先进引擎"
 msgid ""
 "State-of-the-art support for **Noisy, Analog, Approximate and "
 "Stabilizer** simulations."
-msgstr "为**含噪、模拟、近似和稳定器**模拟提供最先进的支持。"
+msgstr "为 **含噪、模拟、近似和稳定器** 模拟提供最先进的支持。"
 
 #: ../../source/index.rst:40
 msgid "☁️ Hardware Agnostic"
@@ -90,7 +90,7 @@ msgstr "☁️ 硬件无关"
 msgid ""
 "Run your code anywhere: from local CPUs to distributed GPUs/TPUs and "
 "**QPU providers** via a unified interface."
-msgstr "随处运行你的代码：从本地 CPU 到分布式 GPU/TPU，以及通过统一接口访问的**量子硬件（QPU）提供商**。"
+msgstr "随处运行你的代码：从本地 CPU 到分布式 GPU/TPU，以及通过统一接口访问的 **量子硬件（QPU）提供商**。"
 
 #: ../../source/index.rst:45
 msgid "🛠 Industrial Strength"
