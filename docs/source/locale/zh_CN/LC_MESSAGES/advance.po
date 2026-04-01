@@ -137,7 +137,7 @@ msgid ""
 ":py:meth:`tensorcircuit.timeevol.ed_evol` method provides exact time "
 "evolution by directly computing matrix exponentials (alias "
 ":py:meth:`tensorcircuit.timeevol.hamiltonian_evol`):"
-msgstr "对于全对角化可行的小系统，:py:meth:`tensorcircuit.timeevol.ed_evol` 方法通过直接计算矩阵指数提供精确的时间演化（别名 :py:meth:`tensorcircuit.timeevol.hamiltonian_evol`）："
+msgstr "对于全对角化可行的小系统，:py:meth:`tensorcircuit.timeevol.ed_evol` 方法通过直接计算矩阵指数提供精确的时间演化（别名 :py:meth:`tensorcircuit.timeevol.hamiltonian_evol` ）："
 
 #: ../../source/advance.rst:196
 msgid ""
@@ -385,21 +385,21 @@ msgid ""
 "We wrap the tf-backend ``SavedModel`` as very easy-to-use function "
 ":py:meth:`tensorcircuit.keras.save_func` and "
 ":py:meth:`tensorcircuit.keras.load_func`."
-msgstr "我们将 tf 后端的 ``SavedModel`` 封装为非常易于使用的函数 :py:meth:`tensorcircuit.keras.save_func` 和 :py:meth:`tensorcircuit.keras.load_func`。"
+msgstr "我们将 tf 后端的 ``SavedModel`` 封装为非常易于使用的函数 :py:meth:`tensorcircuit.keras.save_func` 和 :py:meth:`tensorcircuit.keras.load_func` 。"
 
 #: ../../source/advance.rst:451
 msgid ""
 "For the JAX-backend quantum function, one can first transform them into "
 "the tf-backend function via JAX experimental support: `jax2tf "
 "<https://github.com/google/jax/tree/main/jax/experimental/jax2tf>`_."
-msgstr "对于 JAX 后端的量子函数，可以先通过 JAX 实验性支持将它们转换为 tf 后端函数：`jax2tf <https://github.com/google/jax/tree/main/jax/experimental/jax2tf>`_。"
+msgstr "对于 JAX 后端的量子函数，可以先通过 JAX 实验性支持将它们转换为 tf 后端函数： `jax2tf <https://github.com/google/jax/tree/main/jax/experimental/jax2tf>`_ 。"
 
 #: ../../source/advance.rst:453
 msgid ""
 "**Updates**: jax now also support jitted function save/load via "
 "``export`` module, see `jax documentation "
 "<https://jax.readthedocs.io/en/latest/export/export.html>`_."
-msgstr "**更新**: JAX 现在也支持通过 ``export`` 模块保存/加载即时编译函数，请参阅 `JAX 文档 <https://jax.readthedocs.io/en/latest/export/export.html>`_。"
+msgstr "**更新**: JAX 现在也支持通过 ``export`` 模块保存/加载即时编译函数，请参阅 `JAX 文档 <https://jax.readthedocs.io/en/latest/export/export.html>`_ 。"
 
 #: ../../source/advance.rst:455
 msgid ""
@@ -417,7 +417,7 @@ msgid ""
 "tc.Circuit(3)``, if we want to evaluate the expectation :math:`<Z_1Z_2>`,"
 " we need to call the API as ``c.expectation((tc.gates.z(), [1]), "
 "(tc.gates.z(), [2]))``."
-msgstr "对于 ``tc.Circuit`` 上的普通测量 API，例如 ``c = tc.Circuit(3)``，如果要评估期望 :math:`<Z_1Z_2>`，我们需要调用 API 为 ``c.expectation((tc.gates.z(), [1]), (tc.gates.z(), [2]))``。"
+msgstr "对于 ``tc.Circuit`` 上的普通测量 API，例如 ``c = tc.Circuit(3)`` ，如果要评估期望 :math:`<Z_1Z_2>` ，我们需要调用 API 为 ``c.expectation((tc.gates.z(), [1]), (tc.gates.z(), [2]))`` 。"
 
 #: ../../source/advance.rst:483
 msgid ""
@@ -425,13 +425,13 @@ msgid ""
 "tensor fashion. For example, if we want to get the above expectation, we "
 "can use the following API: "
 ":py:meth:`tensorcircuit.templates.measurements.parameterized_measurements`."
-msgstr "在某些情况下，我们可能希望以张量形式告诉软件要测量什么。例如，如果要获得上述期望，可以使用以下 API：:py:meth:`tensorcircuit.templates.measurements.parameterized_measurements`。"
+msgstr "在某些情况下，我们可能希望以张量形式告诉软件要测量什么。例如，如果要获得上述期望，可以使用以下 API：:py:meth:`tensorcircuit.templates.measurements.parameterized_measurements` 。"
 
 #: ../../source/advance.rst:490
 msgid ""
 "This API corresponds to measure :math:`I_0Z_1Z_2I_3` where 0, 1, 2, 3 are"
 " for local I, X, Y, and Z operators respectively."
-msgstr "此 API 对应于测量 :math:`I_0Z_1Z_2I_3`，其中 0、1、2、3 分别代表局部的 I、X、Y 和 Z 算符。"
+msgstr "此 API 对应于测量 :math:`I_0Z_1Z_2I_3` ，其中 0、1、2、3 分别代表局部的 I、X、Y 和 Z 算符。"
 
 #: ../../source/advance.rst:493
 msgid "Sparse Matrix"
@@ -457,7 +457,7 @@ msgstr "稀疏矩阵在评估线路上的哈密顿量期望时特别有用，稀
 msgid ""
 "For different representations to evaluate Hamiltonian expectation in "
 "tensorcircuit, please refer to :doc:`tutorials/tfim_vqe_diffreph`."
-msgstr "关于在 TensorCircuit 中评估哈密顿量期望的不同表示方法，请参阅 :doc:`tutorials/tfim_vqe_diffreph`。"
+msgstr "关于在 TensorCircuit 中评估哈密顿量期望的不同表示方法，请参阅 :doc:`tutorials/tfim_vqe_diffreph` 。"
 
 #: ../../source/advance.rst:517
 msgid "Hamiltonian Matrix Building"
@@ -541,7 +541,7 @@ msgid ""
 "The stabilizer simulation is backend by Python package `Stim "
 "<https://github.com/quantumlib/Stim>`_, please ensure you have ``pip "
 "install stim`` first."
-msgstr "稳定器模拟由 Python 包 `Stim <https://github.com/quantumlib/Stim>`_ 支持，请确保您已先执行了 ``pip install stim``。"
+msgstr "稳定器模拟由 Python 包 `Stim <https://github.com/quantumlib/Stim>`_ 支持，请确保您已先执行了 ``pip install stim`` 。"
 
 #: ../../source/advance.rst:672
 msgid "**Supported Operations**"
@@ -563,7 +563,7 @@ msgstr "双量子比特门：CNOT, CZ, SWAP"
 msgid ""
 "Measurements: projective measurements (``c.measurement`` doesn't affect "
 "the state while ``c.cond_measure`` collpases the state)"
-msgstr "测量：投影测量（``c.measurement`` 不影响状态，而 ``c.cond_measure`` 会导致状态坍缩）"
+msgstr "测量：投影测量（ ``c.measurement`` 不影响状态，而 ``c.cond_measure`` 会导致状态坍缩）"
 
 #: ../../source/advance.rst:679
 msgid "Post-selection (``c.post_select``)"

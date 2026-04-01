@@ -207,7 +207,7 @@ msgstr ""
 
 #: ../../source/contribution.rst:109
 msgid "pylint: configure file is ``.pylintrc``"
-msgstr "pylint: 设置文件是 ``.pylintrc``。"
+msgstr "pylint: 设置文件是 ``.pylintrc`` 。"
 
 #: ../../source/contribution.rst:111
 msgid "pytest: see :ref:`Pytest` sections for details."

@@ -60,7 +60,7 @@ msgstr "🚀 极致性能"
 msgid ""
 "Achieve **10-100x GPU speedup**. Powered by JIT compilation and optimized"
 " tensor engines."
-msgstr "实现 **10-100 倍 GPU 加速**。由 JIT 编译和优化的张量引擎驱动。"
+msgstr "实现 **10-100 倍 GPU 加速** 。由 JIT 编译和优化的张量引擎驱动。"
 
 #: ../../source/index.rst:30
 msgid "🤖 Deep ML Fusion"
@@ -70,7 +70,7 @@ msgstr "🤖 深度机器学习融合"
 msgid ""
 "Native integration with **JAX, TensorFlow, and PyTorch**. Seamlessly "
 "combine AD with quantum kernels."
-msgstr "原生集成 **JAX、TensorFlow 和 PyTorch**。将自动微分与量子核无缝结合。"
+msgstr "原生集成 **JAX、TensorFlow 和 PyTorch** 。将自动微分与量子核无缝结合。"
 
 #: ../../source/index.rst:35
 msgid "⛓️ Advanced Engines"
@@ -90,7 +90,7 @@ msgstr "☁️ 硬件无关"
 msgid ""
 "Run your code anywhere: from local CPUs to distributed GPUs/TPUs and "
 "**QPU providers** via a unified interface."
-msgstr "随处运行你的代码：从本地 CPU 到分布式 GPU/TPU，以及通过统一接口访问的 **量子硬件（QPU）提供商**。"
+msgstr "随处运行你的代码：从本地 CPU 到分布式 GPU/TPU，以及通过统一接口访问的 **量子硬件（QPU）提供商** 。"
 
 #: ../../source/index.rst:45
 msgid "🛠 Industrial Strength"
@@ -100,7 +100,7 @@ msgstr "🛠 工业级强度"
 msgid ""
 "Committed to stability and performance. **Long-term support** and proven "
 "by extensive research and industrial applications."
-msgstr "致力于稳定性和性能。**长期支持**，并经过广泛的研究和工业应用验证。"
+msgstr "致力于稳定性和性能。 **长期支持** ，并经过广泛的研究和工业应用验证。"
 
 #: ../../source/index.rst:52
 msgid ""
@@ -109,7 +109,7 @@ msgid ""
 "TensorCircuit-NG in your research. The bibtex information is provided by "
 "``tc.cite()``."
 msgstr ""
-"在研究中使用 TensorCircuit 或 TensorCircuit-NG 时，请引用我们已发表的`白皮书 <https://quantum-journal.org/papers/q-2023-02-02-912/>`_。BibTeX 信息可通过 ``tc.cite()`` 获取。"
+"在研究中使用 TensorCircuit 或 TensorCircuit-NG 时，请引用我们已发表的 `白皮书 <https://quantum-journal.org/papers/q-2023-02-02-912/>`_。BibTeX 信息可通过 ``tc.cite()`` 获取。"
 
 #: ../../source/index.rst:55
 msgid ""
@@ -150,7 +150,7 @@ msgid ""
 "<https://github.com/yutuer21>`_. We also thank `contributions "
 "<https://github.com/tensorcircuit/tensorcircuit-ng/graphs/contributors>`_"
 " from the open source community."
-msgstr "TensorCircuit-NG 目前的核心作者是 `Shi-Xin Zhang <https://github.com/refraction-ray>`_ 和 `Yu-Qin Chen <https://github.com/yutuer21>`_。我们也感谢来自开源社区的`贡献 <https://github.com/tensorcircuit/tensorcircuit-ng/graphs/contributors>`_。"
+msgstr "TensorCircuit-NG 目前的核心作者是 `Shi-Xin Zhang <https://github.com/refraction-ray>`_ 和 `Yu-Qin Chen <https://github.com/yutuer21>`_ 。我们也感谢来自开源社区的 `贡献 <https://github.com/tensorcircuit/tensorcircuit-ng/graphs/contributors>`_ 。"
 
 #: ../../source/index.rst:97
 msgid ""

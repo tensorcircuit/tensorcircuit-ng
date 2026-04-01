@@ -50,7 +50,7 @@ msgid ""
 ":py:obj:`tensorcircuit.circuit.Circuit`. It supports circuit "
 "construction, simulation, representation, and visualization without noise"
 " or with noise using the Monte Carlo trajectory approach."
-msgstr ":py:mod:`tensorcircuit.circuit`: 核心对象 :py:obj:`tensorcircuit.circuit.Circuit`。它支持无噪声或使用蒙特卡洛轨迹方法处理有噪声的线路构建、仿真、表示和可视化。"
+msgstr ":py:mod:`tensorcircuit.circuit`: 核心对象 :py:obj:`tensorcircuit.circuit.Circuit` 。它支持无噪声或使用蒙特卡洛轨迹方法处理有噪声的线路构建、仿真、表示和可视化。"
 
 #: ../../source/infras.rst:17
 msgid ""
@@ -292,7 +292,7 @@ msgid ""
 "Recommend reading order -- only read the part of code you care about for "
 "your purpose. If you want to get an overview of the codebase, please read"
 " ``tc.circuit`` followed by ``tc.cons`` and ``tc.gates``."
-msgstr "推荐阅读顺序 —— 仅阅读您感兴趣的代码部分。如果您想对代码库有一个概览，请阅读 ``tc.circuit``，然后是 ``tc.cons`` 和 ``tc.gates``。"
+msgstr "推荐阅读顺序 —— 仅阅读您感兴趣的代码部分。如果您想对代码库有一个概览，请阅读 ``tc.circuit`` ，然后是 ``tc.cons`` 和 ``tc.gates`` 。"
 
 #: ../../source/infras.rst:108
 msgid "Relation between TensorCircuit-NG and TensorNetwork-NG"
@@ -339,7 +339,7 @@ msgid ""
 "We borrow the TensorNetwork's code in /matrixproductstates as "
 "``tc.mps_base`` for bug fixing and jit/AD compatibility, so that we have "
 "better support for our MPS based quantum circuit simulator."
-msgstr "我们借用了 /matrixproductstates 中 TensorNetwork 的代码作为 ``tc.mps_base``，用于错误修复和 JIT/AD 兼容性，以便更好地支持我们基于 MPS 的量子线路模拟器。"
+msgstr "我们借用了 /matrixproductstates 中 TensorNetwork 的代码作为 ``tc.mps_base`` ，用于错误修复和 JIT/AD 兼容性，以便更好地支持我们基于 MPS 的量子线路模拟器。"
 
 #: ../../source/infras.rst:122
 msgid "Relations of Circuit-like classes"
@@ -364,7 +364,7 @@ msgid ""
 "from TensorNetwork package. They behave like a matrix/vector (column or "
 "row) when interacting with other ingredients while the inner structure is"
 " maintained by the tensornetwork for efficiency and compactness."
-msgstr ":py:class:`tensorcircuit.quantum.QuOperator`、:py:class:`tensorcircuit.quantum.QuVector` 和 :py:class:`tensorcircuit.quantum.QuAdjointVector` 是从 TensorNetwork 包中采用的类。它们在与其他组件交互时表现得像矩阵/向量（列或行），而内部结构由张量网络维护，以确保效率和紧凑性。"
+msgstr ":py:class:`tensorcircuit.quantum.QuOperator` 、:py:class:`tensorcircuit.quantum.QuVector` 和 :py:class:`tensorcircuit.quantum.QuAdjointVector` 是从 TensorNetwork 包中采用的类。它们在与其他组件交互时表现得像矩阵/向量（列或行），而内部结构由张量网络维护，以确保效率和紧凑性。"
 
 #: ../../source/infras.rst:145
 msgid ""
@@ -376,7 +376,7 @@ msgstr "我们使用代码示例和相关的张量图来说明这些对象抽象
 msgid ""
 "``QuOperator`` can express MPOs and ``QuVector`` can express MPSs, but "
 "they can express more than these fixed structured tensor networks."
-msgstr "``QuOperator`` 可以表示 MPO，``QuVector`` 可以表示 MPS，但它们可以表示的内容不仅限于这些固定结构的张量网络。"
+msgstr "``QuOperator`` 可以表示 MPO， ``QuVector`` 可以表示 MPS，但它们可以表示的内容不仅限于这些固定结构的张量网络。"
 
 #: ../../source/infras.rst:177
 msgid ""
@@ -385,14 +385,14 @@ msgid ""
 "of dangling edges of the same dimension can be treated as ``QuOperator``."
 " ``QuVector`` is even more flexible since we can treat all dangling edges"
 " as the vector dimension."
-msgstr "请注意在此示例中，``matrix`` 并不是一个典型的 MPO，但仍然可以表示为 ``QuOperator``。实际上，任何具有两组相同维度悬空边的张量网络都可以被视为 ``QuOperator``。``QuVector`` 甚至更加灵活，因为我们可以将所有悬空边都视为向量维度。"
+msgstr "请注意在此示例中， ``matrix`` 并不是一个典型的 MPO，但仍然可以表示为 ``QuOperator`` 。实际上，任何具有两组相同维度悬空边的张量网络都可以被视为 ``QuOperator`` 。 ``QuVector`` 甚至更加灵活，因为我们可以将所有悬空边都视为向量维度。"
 
 #: ../../source/infras.rst:179
 msgid ""
 "Also, note how ``^`` is overloaded as ``tn.connect`` to connect edges "
 "between different nodes in TensorNetwork. And indexing the node gives the"
 " edges of the node, eg. ``n1[0]`` means the first edge of node ``n1``."
-msgstr "另外，请注意 ``^`` 如何被重载为 ``tn.connect``，以连接 TensorNetwork 中不同节点之间的边。对节点进行索引会得到该节点的边，例如 ``n1[0]`` 表示节点 ``n1`` 的第一条边。"
+msgstr "另外，请注意 ``^`` 如何被重载为 ``tn.connect`` ，以连接 TensorNetwork 中不同节点之间的边。对节点进行索引会得到该节点的边，例如 ``n1[0]`` 表示节点 ``n1`` 的第一条边。"
 
 #: ../../source/infras.rst:181
 msgid ""
@@ -400,7 +400,7 @@ msgid ""
 "``out_edges`` (left index or row index of the matrix) and then giving "
 "``in_edges`` (right index or column index of the matrix). The edges list "
 "contains edge objects from the TensorNetwork library."
-msgstr "定义 ``QuOperator`` 的惯例是首先给出 ``out_edges``（矩阵的左索引或行索引），然后给出 ``in_edges``（矩阵的右索引或列索引）。边列表包含来自 TensorNetwork 库的边对象。"
+msgstr "定义 ``QuOperator`` 的惯例是首先给出 ``out_edges`` （矩阵的左索引或行索引），然后给出 ``in_edges`` （矩阵的右索引或列索引）。边列表包含来自 TensorNetwork 库的边对象。"
 
 #: ../../source/infras.rst:183
 msgid ""
@@ -412,7 +412,7 @@ msgid ""
 "or ``.eval_matrix()``, the former keeps the shape information of the "
 "tensor network while the latter gives the matrix representation with "
 "shape rank 2."
-msgstr "此类 QuOperator/QuVector 抽象支持各种仅在矩阵/向量上可能的计算，例如矩阵乘法 (``@``)、伴随 (``.adjoint()``)、标量乘法 (``*``)、张量积 (``|``) 和偏迹 (``.partial_trace(subsystems_to_trace_out)``)。要提取这些对象的矩阵信息，可以使用 ``.eval()`` 或 ``.eval_matrix()``，前者保留张量网络的形状信息，而后者提供秩为 2 的矩阵表示。"
+msgstr "此类 QuOperator/QuVector 抽象支持各种仅在矩阵/向量上可能的计算，例如矩阵乘法 (``@``)、伴随 (``.adjoint()``)、标量乘法 (``*``)、张量积 (``|``) 和偏迹 (``.partial_trace(subsystems_to_trace_out)``)。要提取这些对象的矩阵信息，可以使用 ``.eval()`` 或 ``.eval_matrix()`` ，前者保留张量网络的形状信息，而后者提供秩为 2 的矩阵表示。"
 
 #: ../../source/infras.rst:188
 msgid "Quantum Cloud SDK: Layerwise API design"
@@ -426,31 +426,31 @@ msgstr "从底层到高层，调用 QPU 的 API 层级视图"
 msgid ""
 "Vendor specific implementation of functional API in, e.g., "
 ":py:mod:`tensorcircuit.cloud.tencent`"
-msgstr "供应商特定的函数式 API 实现，例如 :py:mod:`tensorcircuit.cloud.tencent`。"
+msgstr "供应商特定的函数式 API 实现，例如 :py:mod:`tensorcircuit.cloud.tencent` 。"
 
 #: ../../source/infras.rst:194
 msgid ""
 "Provider agnostic functional lower level API for task/device management "
 "in :py:mod:`tensorcircuit.cloud.apis`"
-msgstr "与供应商无关的底层任务/设备管理函数式 API，见 :py:mod:`tensorcircuit.cloud.apis`。"
+msgstr "与供应商无关的底层任务/设备管理函数式 API，见 :py:mod:`tensorcircuit.cloud.apis` 。"
 
 #: ../../source/infras.rst:196
 msgid ""
 "Object oriented abstraction for Provider/Device/Task in "
 ":py:mod:`tensorcircuit.cloud.abstraction`"
-msgstr "面向提供商/设备/任务的对象抽象，见 :py:mod:`tensorcircuit.cloud.abstraction`。"
+msgstr "面向提供商/设备/任务的对象抽象，见 :py:mod:`tensorcircuit.cloud.abstraction` 。"
 
 #: ../../source/infras.rst:198
 msgid ""
 "Unified batch submission interface as standarized in "
 ":py:meth:`tensorcircuit.cloud.wrapper.batch_submit_template`"
-msgstr "标准化的统一批量提交接口，见 :py:meth:`tensorcircuit.cloud.wrapper.batch_submit_template`。"
+msgstr "标准化的统一批量提交接口，见 :py:meth:`tensorcircuit.cloud.wrapper.batch_submit_template` 。"
 
 #: ../../source/infras.rst:200
 msgid ""
 "Numerical and experimental unified all-in-one interface as "
 ":py:meth:`tensorcircuit.cloud.wrapper.batch_expectation_ps`"
-msgstr "数值模拟与实验统一的全功能接口，见 :py:meth:`tensorcircuit.cloud.wrapper.batch_expectation_ps`。"
+msgstr "数值模拟与实验统一的全功能接口，见 :py:meth:`tensorcircuit.cloud.wrapper.batch_expectation_ps` 。"
 
 #: ../../source/infras.rst:202
 msgid ""
