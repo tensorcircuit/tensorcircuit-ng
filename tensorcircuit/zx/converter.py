@@ -569,20 +569,30 @@ def y_error(b: GraphRepresentation, qubit: int, p: float) -> None:
 
 def mr(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -> None:
     """Z-basis demolition measurement (optionally noisy)."""
+    if p > 0:
+        x_error(b, qubit, p)
     m(b, qubit, p=p, invert=invert)
-    r(b, qubit)
+    _r(b, qubit, perform_trace=False)
 
 
 def mrx(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -> None:
     """X-basis demolition measurement (optionally noisy)."""
-    mx(b, qubit, p=p, invert=invert)
-    r(b, qubit)
+    h_gate(b, qubit)
+    if p > 0:
+        x_error(b, qubit, p)
+    m(b, qubit, p=p, invert=invert)
+    _r(b, qubit, perform_trace=False)
+    h_gate(b, qubit)
 
 
 def mry(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -> None:
     """Y-basis demolition measurement (optionally noisy)."""
-    my(b, qubit, p=p, invert=invert)
-    r(b, qubit)
+    h_yz(b, qubit)
+    if p > 0:
+        x_error(b, qubit, p)
+    m(b, qubit, p=p, invert=invert)
+    _r(b, qubit, perform_trace=False)
+    h_yz(b, qubit)
 
 
 def mrz(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -> None:

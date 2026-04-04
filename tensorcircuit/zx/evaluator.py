@@ -38,66 +38,79 @@ def _scalar_to_complex(data: jax.Array) -> jax.Array:
 
 
 class ExactScalarArray(NamedTuple):
-    """Exact scalar array for ZX-calculus phase arithmetic using dyadic representation."""
+    """Exact scalar array for ZX-calculus phase arithmetic using dyadic representation.
+
+    Represents values of the form (c_0 + c_1·ω + c_2·ω² + c_3·ω³) × 2^power
+    where ω = e^(iπ/4).
+    """
 
     coeffs: Array
     power: Array
 
+    @classmethod
+    def create(cls, coeffs: Array, power: Array | None = None) -> "ExactScalarArray":
+        if power is None:
+            power = jnp.zeros(coeffs.shape[:-1], dtype=jnp.int32)
+        return cls(coeffs, power)
 
-def exact_scalar_mul(a: ExactScalarArray, b: ExactScalarArray) -> ExactScalarArray:
-    return ExactScalarArray(_scalar_mul(a.coeffs, b.coeffs), a.power + b.power)
+    def __mul__(self, other: "ExactScalarArray") -> "ExactScalarArray":
+        new_coeffs = _scalar_mul(self.coeffs, other.coeffs)
+        new_power = self.power + other.power
+        return ExactScalarArray(new_coeffs, new_power)
 
+    def reduce(self) -> "ExactScalarArray":
+        def cond_fun(carry):
+            coeffs, _ = carry
+            reducible = jnp.all(coeffs % 2 == 0, axis=-1) & jnp.any(
+                coeffs != 0, axis=-1
+            )
+            return jnp.any(reducible)
 
-def exact_scalar_reduce(a: ExactScalarArray) -> ExactScalarArray:
-    def cond_fun(carry):
-        coeffs, _ = carry
-        reducible = jnp.all(coeffs % 2 == 0, axis=-1) & jnp.any(coeffs != 0, axis=-1)
-        return jnp.any(reducible)
+        def body_fun(carry):
+            coeffs, power = carry
+            reducible = jnp.all(coeffs % 2 == 0, axis=-1) & jnp.any(
+                coeffs != 0, axis=-1
+            )
+            coeffs = jnp.where(reducible[..., None], coeffs // 2, coeffs)
+            power = jnp.where(reducible, power + 1, power)
+            return coeffs, power
 
-    def body_fun(carry):
-        coeffs, power = carry
-        reducible = jnp.all(coeffs % 2 == 0, axis=-1) & jnp.any(coeffs != 0, axis=-1)
-        coeffs = jnp.where(reducible[..., None], coeffs // 2, coeffs)
-        power = jnp.where(reducible, power + 1, power)
-        return coeffs, power
+        new_coeffs, new_power = jax.lax.while_loop(
+            cond_fun, body_fun, (self.coeffs, self.power)
+        )
+        return ExactScalarArray(new_coeffs, new_power)
 
-    new_coeffs, new_power = jax.lax.while_loop(cond_fun, body_fun, (a.coeffs, a.power))
-    return ExactScalarArray(new_coeffs, new_power)
+    def sum(self) -> "ExactScalarArray":
+        min_power = jnp.min(self.power, keepdims=True, axis=-1)
+        pow = (self.power - min_power)[..., None]
+        aligned_coeffs = self.coeffs * 2**pow
+        summed_coeffs = jnp.sum(aligned_coeffs, axis=-2)
+        return ExactScalarArray(summed_coeffs, min_power.squeeze(-1))
 
+    def prod(self, axis: int = -1) -> "ExactScalarArray":
+        if axis < 0:
+            axis = self.coeffs.ndim + axis
 
-def exact_scalar_sum(a: ExactScalarArray) -> ExactScalarArray:
-    min_power = jnp.min(a.power, keepdims=True, axis=-1)
-    pow = (a.power - min_power)[..., None]
-    aligned_coeffs = a.coeffs * 2**pow
-    summed_coeffs = jnp.sum(aligned_coeffs, axis=-2)
-    return ExactScalarArray(summed_coeffs, min_power.squeeze(-1))
+        if self.coeffs.shape[axis] == 0:
+            coeffs_shape = self.coeffs.shape[:axis] + self.coeffs.shape[axis + 1 :]
+            result_coeffs = jnp.zeros(coeffs_shape, dtype=self.coeffs.dtype)
+            result_coeffs = result_coeffs.at[..., 0].set(1)
 
+            power_shape = self.power.shape[:axis] + self.power.shape[axis + 1 :]
+            result_power = jnp.zeros(power_shape, dtype=self.power.dtype)
 
-def exact_scalar_prod(a: ExactScalarArray, axis: int = -1) -> ExactScalarArray:
-    if axis < 0:
-        axis = a.coeffs.ndim + axis
+            return ExactScalarArray(result_coeffs, result_power)
 
-    if a.coeffs.shape[axis] == 0:
-        coeffs_shape = a.coeffs.shape[:axis] + a.coeffs.shape[axis + 1 :]
-        result_coeffs = jnp.zeros(coeffs_shape, dtype=a.coeffs.dtype)
-        result_coeffs = result_coeffs.at[..., 0].set(1)
-
-        power_shape = a.power.shape[:axis] + a.power.shape[axis + 1 :]
-        result_power = jnp.zeros(power_shape, dtype=a.power.dtype)
+        scanned = lax.associative_scan(_scalar_mul, self.coeffs, axis=axis)
+        result_coeffs = jnp.take(scanned, indices=-1, axis=axis)
+        result_power = jnp.sum(self.power, axis=axis)
 
         return ExactScalarArray(result_coeffs, result_power)
 
-    scanned = lax.associative_scan(_scalar_mul, a.coeffs, axis=axis)
-    result_coeffs = jnp.take(scanned, indices=-1, axis=axis)
-    result_power = jnp.sum(a.power, axis=axis)
-
-    return ExactScalarArray(result_coeffs, result_power)
-
-
-def exact_scalar_to_complex(a: ExactScalarArray) -> jax.Array:
-    c_val = _scalar_to_complex(a.coeffs)
-    scale = jnp.pow(2.0, a.power)
-    return c_val * scale
+    def to_complex(self) -> jax.Array:
+        c_val = _scalar_to_complex(self.coeffs)
+        scale = jnp.pow(2.0, self.power)
+        return c_val * scale
 
 
 # ==============================================================================
@@ -152,10 +165,8 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
     )
     term_vals_a_exact = jnp.where(a_mask[..., None], term_vals_a_exact, _IDENTITY)
 
-    term_vals_a = ExactScalarArray(
-        term_vals_a_exact, jnp.zeros(term_vals_a_exact.shape[:-1], dtype=jnp.int32)
-    )
-    summands_a = exact_scalar_prod(term_vals_a, axis=-2)
+    term_vals_a = ExactScalarArray.create(term_vals_a_exact)
+    summands_a = term_vals_a.prod(axis=-2)
 
     # ====================================================================
     # TYPE B: Half-Pi Terms (e^(i*beta))
@@ -167,9 +178,7 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
     sum_phases_b = jnp.sum(phase_idx_b, axis=-1) % 8
 
     summands_b_exact = _UNIT_PHASES[sum_phases_b]
-    summands_b = ExactScalarArray(
-        summands_b_exact, jnp.zeros(summands_b_exact.shape[:-1], dtype=jnp.int32)
-    )
+    summands_b = ExactScalarArray.create(summands_b_exact)
 
     # ====================================================================
     # TYPE C: Pi-Pair Terms, (-1)^(Psi*Phi)
@@ -187,9 +196,7 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
     summands_c_exact = (1 - 2 * sum_exponents_c)[..., None] * jnp.array(
         [1, 0, 0, 0], dtype=jnp.int32
     )
-    summands_c = ExactScalarArray(
-        summands_c_exact, jnp.zeros(summands_c_exact.shape[:-1], dtype=jnp.int32)
-    )
+    summands_c = ExactScalarArray.create(summands_c_exact)
 
     # ====================================================================
     # TYPE D: Phase Pairs (1 + e^a + e^b - e^g)
@@ -211,42 +218,33 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
     )
     term_vals_d_exact = jnp.where(d_mask[..., None], term_vals_d_exact, _IDENTITY)
 
-    term_vals_d = ExactScalarArray(
-        term_vals_d_exact, jnp.zeros(term_vals_d_exact.shape[:-1], dtype=jnp.int32)
-    )
-    summands_d = exact_scalar_prod(term_vals_d, axis=-2)
+    term_vals_d = ExactScalarArray.create(term_vals_d_exact)
+    summands_d = term_vals_d.prod(axis=-2)
 
     # ====================================================================
     # FINAL COMBINATION
     # ====================================================================
-    static_phases = ExactScalarArray(
-        _UNIT_PHASES[circuit.phase_indices],
-        jnp.zeros(circuit.phase_indices.shape, dtype=jnp.int32),
-    )
-    float_factor = ExactScalarArray(
-        circuit.floatfactor, jnp.zeros(circuit.floatfactor.shape[:-1], dtype=jnp.int32)
-    )
+    static_phases = ExactScalarArray.create(_UNIT_PHASES[circuit.phase_indices])
+    float_factor = ExactScalarArray.create(circuit.floatfactor)
 
     total_summands = functools.reduce(
-        exact_scalar_mul,
+        lambda a, b: a * b,
         [summands_a, summands_b, summands_c, summands_d, static_phases, float_factor],
     )
 
-    # total_summands has shape (num_graphs, 4) or similar depending on prod axis
+    def res_exact():
+        ts = ExactScalarArray(
+            total_summands.coeffs, total_summands.power + circuit.power2
+        )
+        ts = ts.reduce()
+        return ts.sum().to_complex()
 
-    # Exact branch
-    total_summands_exact = ExactScalarArray(
-        total_summands.coeffs, total_summands.power + circuit.power2
-    )
-    total_summands_exact = exact_scalar_reduce(total_summands_exact)
-    res_exact = exact_scalar_to_complex(exact_scalar_sum(total_summands_exact))
+    def res_approx():
+        return jnp.sum(
+            total_summands.to_complex()
+            * circuit.approximate_floatfactors
+            * 2.0**circuit.power2,
+            axis=-1,
+        )
 
-    # Approximate branch
-    res_approx = jnp.sum(
-        exact_scalar_to_complex(total_summands)
-        * circuit.approximate_floatfactors
-        * 2.0**circuit.power2,
-        axis=-1,
-    )
-
-    return lax.select(circuit.has_approximate_floatfactors, res_approx, res_exact)
+    return lax.cond(circuit.has_approximate_floatfactors, res_approx, res_exact)

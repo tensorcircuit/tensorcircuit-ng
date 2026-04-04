@@ -551,3 +551,95 @@ def test_stabilizertcircuit_mirror_all_zero(backend):
     samples = stc.sample_measurements(shots=batch, seed=42)
     assert samples.shape == (batch, n)
     assert np.all(samples == 0)
+
+
+# --- Stim Import & Integration Tests (Borrowed from tsim) ---
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_from_stim_bell_state(backend):
+    import stim
+
+    stim_str = """
+    R 0 1
+    H 0
+    CNOT 0 1
+    M 0 1
+    DETECTOR rec[-1] rec[-2]
+    """
+    stc = StabilizerTCircuit.from_stim_str(stim_str)
+    # Bell state: m0 and m1 should be correlated, so detector (m0^m1) should be 0
+    res = stc.sample_detectors(shots=100)
+    assert np.all(res == 0)
+
+    m_res = stc.sample_measurements(shots=100)
+    assert np.all(m_res[:, 0] == m_res[:, 1])
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_from_stim_t_gate(backend):
+    # Tests T gate decomposition and sampling statistics
+    stim_str = """
+    RX 0
+    S 0
+    H 0
+    M 0
+    """
+    # S on |+> gives |+i> = (|0>+i|1>)/sqrt(2)
+    # H on |+i> gives (|0>+|1> + i|0>-i|1>)/2 = (1+i)/2 |0> + (1-i)/2 |1>
+    # Prob(0) = |(1+i)/2|^2 = 2/4 = 0.5
+    stc = StabilizerTCircuit.from_stim_str(stim_str)
+    res = stc.sample_measurements(shots=1000)
+    mean_val = np.mean(res)
+    assert 0.4 < mean_val < 0.6
+
+
+@pytest.mark.parametrize("basis", ["X", "Y", "Z"])
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_from_stim_reset_after_state_change(backend, basis):
+    reset_gate = "R" if basis == "Z" else f"R{basis}"
+    measure_gate = "M" if basis == "Z" else f"M{basis}"
+    stim_str = f"""
+    H 0
+    S 0
+    {reset_gate} 0
+    {measure_gate} 0
+    """
+    stc = StabilizerTCircuit.from_stim_str(stim_str)
+    res = stc.sample_measurements(shots=100)
+    assert np.all(res == 0)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_from_stim_singlet_state(backend):
+    # Borrowed from tsim: test_singlet_state
+    # High-level check for CNOT, H, X, Z
+    stim_str = """
+    R 0 1
+    X 0
+    H 1
+    CNOT 1 0
+    Z 0
+    M 0 1
+    """
+    stc = StabilizerTCircuit.from_stim_str(stim_str)
+    res = stc.sample_measurements(shots=100)
+    # Singlet state (|01> - |10>)/sqrt(2) has anti-correlated Z outcomes
+    assert np.all(res[:, 0] != res[:, 1])
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_from_stim_noisy_bell_detector(backend):
+    # Surface code style check: detector should flip if error occurs
+    stim_str = """
+    H 0
+    CNOT 0 1
+    X_ERROR(0.1) 0
+    M 0 1
+    DETECTOR rec[-1] rec[-2]
+    """
+    stc = StabilizerTCircuit.from_stim_str(stim_str)
+    res = stc.sample_detectors(shots=10000)
+    mean_flip = np.mean(res)
+    # Error on q0 with prob 0.1 -> m0 flips -> detector flips
+    assert 0.07 < mean_flip < 0.13

@@ -44,7 +44,14 @@ class CompiledScalarGraphs(NamedTuple):
 
 
 def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScalarGraphs:
-    g_list = [g for g in g_list if not g.scalar.is_zero]
+    # Filter out zero graphs but keep at least one to avoid num_graphs=0
+    active_graphs = [g for g in g_list if not g.scalar.is_zero]
+    if not active_graphs and len(g_list) > 0:
+        # Keep the first graph even if it's zero
+        g_list = [g_list[0]]
+    else:
+        g_list = active_graphs
+
     n_params, num_graphs = len(params), len(g_list)
     char_to_idx = {char: i for i, char in enumerate(params)}
 

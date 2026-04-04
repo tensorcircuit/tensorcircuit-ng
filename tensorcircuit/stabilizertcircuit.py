@@ -15,7 +15,7 @@ from pyzx_param.simulate import DecompositionStrategy
 
 from .zx.evaluator import evaluate
 from .zx.scalar_graph import compile_program, CompiledProgram, CompiledComponent
-from .zx.converter import prepare_graph
+from .zx.converter import prepare_graph, circuit_to_zx, build_sampling_graph
 from .zx.noise_model import ChannelSampler
 from .abstractcircuit import AbstractCircuit
 
@@ -222,57 +222,6 @@ class StabilizerTCircuit(AbstractCircuit):
         )
         force_measure_all = (not has_m) and (len(state) == self._nqubits)
 
-        # We need two programs: one for normalization, one for the outcome state
-        # tsim uses 'joint' mode for this.
-        # Prepared representation
-        built = prepare_graph(
-            self, sample_detectors=has_m, force_measure_all=force_measure_all
-        )
-
-        # Create a copy of the graph and plug the outputs with the desired state
-        # In ZX, P(s) = |<s|psi>|^2 / |<psi|psi>|^2
-        # We use pyzx_param's apply_effect to plug the outputs
-        plugged_graph = built.graph.copy()
-        effect = "".join(["1" if b else "0" for b in state])
-        plugged_graph.apply_effect(effect)
-
-        # Also need the normalization graph (norm = <psi|psi>)
-        norm_graph = built.graph.copy()
-        norm_graph.apply_effect("+" * len(state))
-
-        # Compile both
-        # find_stab expects GraphS
-        from .zx.scalar_graph import find_stab, compile_scalar_graphs
-
-        # Selecting f-params
-        f_params_names = [
-            f"e{i}" for i in range(built.num_error_bits)
-        ]  # Simplified for now, should ideally come from built
-        # But prepare_graph does transform_error_basis, so we need to match that.
-
-        # Actually, let's use the high-level API if possible, but it's easier to do it directly here
-        # to match tsim's logic perfectly.
-
-        # To handle noise correctly across shots, we must use the same f-selection
-        # For simplicity, we can just compile them together or ensure they share params.
-
-        # Let's align with tsim's CompiledStateProbs logic:
-        # It takes the SamplingGraph, plugs the state, and evaluates.
-
-        def _get_evaluable(g):
-            stabs = find_stab(g, strategy=self.strategy)
-            # Find active f-params
-            from .zx.utils import active_phase_vars
-
-            active = set()
-            for sg in stabs:
-                active |= active_phase_vars(sg)
-            f_vars = sorted([v for v in active if v.startswith("f")])
-            return compile_scalar_graphs(stabs, f_vars), f_vars
-
-        # This is getting complex. Let's use the fact that evaluate(joint_circuit, ...)
-        # in StabilizerTCircuit was almost correct, but it lacked the basis state plugging.
-
         # Re-implementing based on tsim.CompiledStateProbs:
         # We use sample_detectors=False to ensure the outputs are the measurement records
         built = circuit_to_zx(self, force_measure_all=force_measure_all)
@@ -285,13 +234,31 @@ class StabilizerTCircuit(AbstractCircuit):
         g_norm = prepared.copy()
         g_norm.apply_effect("+" * len(state))
 
+        # Compensate power for trace of unplugged outputs
+        # In joint mode, we plug all outputs of the component.
+        # But here we are plugging all outputs of the WHOLE graph.
+        # tsim: g.scalar.add_power(num_outputs - num_plugged)
+        # For g_state: num_plugged = len(state), so add_power(0)
+        # For g_norm: num_plugged = 0 (since it's all '+'), so add_power(len(state))
+        g_norm.scalar.add_power(len(state))
+
         # Compile them
+        # find_stab expects GraphS
+        from .zx.scalar_graph import find_stab, compile_scalar_graphs
+
         stabs_state = find_stab(g_state, strategy=self.strategy)
         stabs_norm = find_stab(g_norm, strategy=self.strategy)
 
-        from .zx.utils import active_phase_vars
+        # Transform error basis to get f-params
+        from .zx.converter import transform_error_basis
 
-        active = active_phase_vars(prepared.graph)  # Use original graph's vars
+        prepared, error_transform = transform_error_basis(
+            prepared, num_e=built.num_error_bits
+        )
+
+        from .zx.utils import get_params
+
+        active = get_params(prepared)  # Use transformed graph's vars
         f_vars = sorted([v for v in active if v.startswith("f")])
 
         compiled_state = compile_scalar_graphs(stabs_state, f_vars)
@@ -299,7 +266,7 @@ class StabilizerTCircuit(AbstractCircuit):
 
         # Sample f-params
         channel_sampler = ChannelSampler(
-            prepared.channel_probs, prepared.error_transform, seed=self._seed
+            built.channel_probs, error_transform, seed=self._seed
         )
         f_samples = jnp.asarray(channel_sampler.sample(shots))
         # f_samples has all f-params, but evaluate expects only the ones in f_vars
@@ -315,7 +282,7 @@ class StabilizerTCircuit(AbstractCircuit):
         p_state = jnp.abs(evaluate(compiled_state, f_selected))
         p_norm = jnp.abs(evaluate(compiled_norm, f_selected))
 
-        return (p_state**2) / (p_norm**2)
+        return p_state / p_norm
 
     def _sample_batches(self, shots: int, batch_size: int = 1000) -> jax.Array:
         batches = []
@@ -429,20 +396,20 @@ class StabilizerTCircuit(AbstractCircuit):
     def reset_instruction(self, q: int):
         self._qir.append({"name": "RESET", "index": [q]})
 
-    def measure_instruction(self, q: int):
-        self._qir.append({"name": "MEASURE", "index": [q]})
+    def measure_instruction(self, q: int, p: float = 0):
+        self._qir.append({"name": "MEASURE", "index": [q], "p": p})
 
-    def mr_instruction(self, q: int):
-        self._qir.append({"name": "MR", "index": [q]})
+    def mr_instruction(self, q: int, p: float = 0):
+        self._qir.append({"name": "MR", "index": [q], "p": p})
 
-    def mrx_instruction(self, q: int):
-        self._qir.append({"name": "MRX", "index": [q]})
+    def mrx_instruction(self, q: int, p: float = 0):
+        self._qir.append({"name": "MRX", "index": [q], "p": p})
 
-    def mry_instruction(self, q: int):
-        self._qir.append({"name": "MRY", "index": [q]})
+    def mry_instruction(self, q: int, p: float = 0):
+        self._qir.append({"name": "MRY", "index": [q], "p": p})
 
-    def mrz_instruction(self, q: int):
-        self._qir.append({"name": "MRZ", "index": [q]})
+    def mrz_instruction(self, q: int, p: float = 0):
+        self._qir.append({"name": "MRZ", "index": [q], "p": p})
 
     def depolarizing(self, q: int, p: float):
         self._qir.append({"name": "DEPOLARIZE1", "index": [q], "parameters": {"p": p}})
@@ -480,6 +447,93 @@ class StabilizerTCircuit(AbstractCircuit):
 
     def z_error(self, q: int, p: float):
         self._qir.append({"name": "Z_ERROR", "index": [q], "parameters": {"p": p}})
+
+    @classmethod
+    def from_stim_circuit(cls, stim_circuit: Any) -> "StabilizerTCircuit":
+        """
+        Creates a StabilizerTCircuit from a stim.Circuit object.
+        Reference: 100% replica of tsim.core.parse.parse_stim_circuit
+        """
+        inst = cls(stim_circuit.num_qubits)
+        # We directly populate inst._qir for efficiency
+        for instruction in stim_circuit.flattened():
+            name = instruction.name
+            if name in ["QUBIT_COORDS", "SHIFT_COORDS", "I_ERROR"]:
+                continue
+
+            targets = [t.value for t in instruction.targets_copy()]
+            args = instruction.gate_args_copy()
+
+            if name == "TICK":
+                inst._qir.append({"name": "TICK"})
+                continue
+
+            if name == "DETECTOR":
+                inst._qir.append({"name": "DETECTOR", "index": targets})
+                continue
+
+            if name == "OBSERVABLE_INCLUDE":
+                inst._qir.append(
+                    {"name": "OBSERVABLE_INCLUDE", "index": targets, "p": int(args[0])}
+                )
+                continue
+
+            # Map stim names to TC _qir names
+            # Reference: tsim.core.instructions.GATE_TABLE
+            num_qubits = 1
+            if name in [
+                "CNOT",
+                "CX",
+                "CZ",
+                "CY",
+                "SWAP",
+                "DEPOLARIZE2",
+                "PAULI_CHANNEL_2",
+            ]:
+                num_qubits = 2
+            elif name in ["SQRT_XX", "SQRT_YY", "SQRT_ZZ", "ISWAP"]:
+                num_qubits = 2
+            elif name.startswith(("XC", "YC", "ZC")):
+                num_qubits = 2
+
+            for i in range(0, len(targets), num_qubits):
+                chunk = targets[i : i + num_qubits]
+                qir_item: Dict[str, Any] = {"name": name, "index": chunk}
+
+                # Special parameter handling for noise and measurements
+                if name in ["DEPOLARIZE1", "X_ERROR", "Y_ERROR", "Z_ERROR"]:
+                    qir_item["parameters"] = {"p": args[0]}
+                elif name == "DEPOLARIZE2":
+                    qir_item["parameters"] = {"p": args[0]}
+                elif name == "PAULI_CHANNEL_1":
+                    qir_item["parameters"] = {
+                        "px": args[0],
+                        "py": args[1],
+                        "pz": args[2],
+                    }
+                elif name == "M" or name == "MEASURE" or name == "MZ":
+                    qir_item["name"] = "MEASURE"
+                    if args:
+                        qir_item["p"] = args[0]
+                elif name in ["MR", "MRX", "MRY", "MRZ"]:
+                    if args:
+                        qir_item["p"] = args[0]
+                elif name in ["MX", "MY"]:
+                    if args:
+                        qir_item["p"] = args[0]
+
+                inst._qir.append(qir_item)
+
+        return inst
+
+    @classmethod
+    def from_stim_str(cls, stim_str: str) -> "StabilizerTCircuit":
+        """
+        Creates a StabilizerTCircuit from a stim circuit string.
+        """
+        import stim
+
+        return cls.from_stim_circuit(stim.Circuit(stim_str))
 
 
 # StabilizerTCircuit._meta_apply()

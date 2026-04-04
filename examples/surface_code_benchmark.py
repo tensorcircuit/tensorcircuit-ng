@@ -15,103 +15,6 @@ import tensorcircuit as tc
 from tensorcircuit.stabilizertcircuit import StabilizerTCircuit
 
 
-def stim_to_tc(stim_circuit: stim.Circuit) -> StabilizerTCircuit:
-    """
-    Parser to convert a stim circuit to StabilizerTCircuit directly.
-    """
-    nqubits = stim_circuit.num_qubits
-    c = StabilizerTCircuit(nqubits)
-
-    rec_count = 0
-
-    for instr in stim_circuit:
-        name = instr.name
-        targets = instr.targets_copy()
-
-        if name == "H":
-            for t in targets:
-                c.h(t.value)
-        elif name == "X":
-            for t in targets:
-                c.x(t.value)
-        elif name == "Y":
-            for t in targets:
-                c.y(t.value)
-        elif name == "Z":
-            for t in targets:
-                c.z(t.value)
-        elif name == "S":
-            for t in targets:
-                c.s(t.value)
-        elif name == "S_DAG":
-            for t in targets:
-                c.sd(t.value)
-        elif name == "CNOT" or name == "CX":
-            for i in range(0, len(targets), 2):
-                c.cnot(targets[i].value, targets[i + 1].value)
-        elif name == "CZ":
-            for i in range(0, len(targets), 2):
-                c.cz(targets[i].value, targets[i + 1].value)
-        elif name == "SWAP":
-            for i in range(0, len(targets), 2):
-                c.swap(targets[i].value, targets[i + 1].value)
-        elif name == "M":
-            for t in targets:
-                c.measure_instruction(t.value)
-                rec_count += 1
-        elif name == "MR":
-            for t in targets:
-                c.mr_instruction(t.value)
-                rec_count += 1
-        elif name == "R":
-            for t in targets:
-                c.reset_instruction(t.value)
-        elif name == "DETECTOR":
-            recs = []
-            for t in targets:
-                if t.is_measurement_record_target:
-                    abs_idx = rec_count + t.value
-                    recs.append(abs_idx)
-            c.detector_instruction(recs)
-        elif name == "OBSERVABLE_INCLUDE":
-            recs = []
-            obs_idx = int(instr.gate_args_copy()[0])
-            for t in targets:
-                if t.is_measurement_record_target:
-                    abs_idx = rec_count + t.value
-                    recs.append(abs_idx)
-            c.observable_instruction(recs, observable_index=obs_idx)
-        elif name == "DEPOLARIZE1":
-            p = instr.gate_args_copy()[0]
-            for t in targets:
-                c.depolarizing(t.value, p=p)
-        elif name == "DEPOLARIZE2":
-            p = instr.gate_args_copy()[0]
-            for i in range(0, len(targets), 2):
-                c.depolarizing2(targets[i].value, targets[i + 1].value, p=p)
-        elif name == "X_ERROR":
-            p = instr.gate_args_copy()[0]
-            for t in targets:
-                c.x_error(t.value, p=p)
-        elif name == "Y_ERROR":
-            p = instr.gate_args_copy()[0]
-            for t in targets:
-                c.y_error(t.value, p=p)
-        elif name == "Z_ERROR":
-            p = instr.gate_args_copy()[0]
-            for t in targets:
-                c.z_error(t.value, p=p)
-        elif name == "TICK":
-            c.tick_instruction()
-        elif name == "QUBIT_COORDS":
-            coords = instr.gate_args_copy()
-            for t in targets:
-                c.qubit_coords_instruction(t.value, list(coords))
-        elif name == "SHIFT_COORDS":
-            pass
-    return c
-
-
 def run_benchmark(distance=3, rounds=3, batch=1000):
     print(
         f"--- Surface Code Benchmark (d={distance}, rounds={rounds}, batch={batch}) ---"
@@ -131,7 +34,7 @@ def run_benchmark(distance=3, rounds=3, batch=1000):
     print(f"Circuit stats: Qubits: {num_qubits}, Detectors: {num_detectors}")
 
     # 2. Convert to TC
-    tc_c = stim_to_tc(stim_sc.flattened())
+    stc = StabilizerTCircuit.from_stim_circuit(stim_sc)
 
     # --- StabilizerCircuit (Stim Backend) ---
     print("\n[StabilizerCircuit / Stim Backend]")
@@ -145,8 +48,6 @@ def run_benchmark(distance=3, rounds=3, batch=1000):
 
     # --- StabilizerTCircuit (ZX+JAX Backend) ---
     print("\n[StabilizerTCircuit / ZX+JAX Backend]")
-
-    stc = stim_to_tc(stim_sc.flattened())
 
     # Compilation time (includes ZX reduction)
     start_comp = time.time()
