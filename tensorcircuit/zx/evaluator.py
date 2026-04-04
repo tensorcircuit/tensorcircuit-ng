@@ -3,7 +3,7 @@ Evaluation of compiled scalar graphs using exact arithmetic.
 """
 
 import functools
-from typing import Literal, overload, Any, NamedTuple, Tuple, cast
+from typing import Any, NamedTuple, Tuple, cast
 
 import jax
 import jax.numpy as jnp

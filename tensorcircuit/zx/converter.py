@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
-from typing import Any, Dict, List, Optional, Tuple, cast, Literal, Callable
+from typing import Any, Dict, List, Optional, cast, Callable
 
 import numpy as np
 import pyzx_param as pyzx
@@ -16,14 +16,12 @@ from pyzx_param.graph.graph_s import GraphS
 from pyzx_param.utils import VertexType, EdgeType
 
 from ..abstractcircuit import AbstractCircuit
-from ..cons import backend
 from .. import gates as tcgates
 from .utils import find_basis
 from .noise_model import (
     pauli_channel_1_probs,
     pauli_channel_2_probs,
     error_probs,
-    correlated_error_probs,
 )
 
 
@@ -381,10 +379,6 @@ def _cx_cz(b: GraphRepresentation, is_cx: bool, control: int, target: int) -> No
     ensure_lane(b, control)
     ensure_lane(b, target)
     v1 = b.last_vertex[control]
-    vertex_type = VertexType.Z if is_cx else VertexType.Z
-    edge_type = (
-        EdgeType.SIMPLE if is_cx else EdgeType.SIMPLE
-    )  # Wait, CZ is just an edge between Z spiders
     # CX: Z on control, X on target, SIMPLE edge
     # CZ: Z on control, Z on target, HADAMARD edge
     if is_cx:
@@ -808,7 +802,7 @@ def circuit_to_zx(
         elif name in ["QUBIT_COORDS", "SHIFT_COORDS", "TICK"]:
             continue
         elif name in GATE_TABLE:
-            func, n_q = GATE_TABLE[name]
+            func, _ = GATE_TABLE[name]
             if name in [
                 "M",
                 "R",

@@ -4,12 +4,11 @@ Stabilizer+T Circuit class using ZX-calculus and JAX.
 
 from __future__ import annotations
 from math import ceil
-from typing import Any, Dict, List, Optional, cast, Literal, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-import psutil
 from pyzx_param.simulate import DecompositionStrategy
 
 from ..cons import rdtypestr
@@ -84,9 +83,9 @@ def sample_program(
     results = []
     for comp in program.components:
         if len(comp.output_indices) <= 1:
-            s, key, dev = sample_component(comp, f_params, key)
+            s, key, _ = sample_component(comp, f_params, key)
         else:
-            s, key, dev = _sample_component_jit(comp, f_params, key)
+            s, key, _ = _sample_component_jit(comp, f_params, key)
         results.append(s)
     if not results:
         return jnp.zeros(

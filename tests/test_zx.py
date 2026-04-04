@@ -542,7 +542,6 @@ def test_stabilizertcircuit_mirror_all_zero(backend):
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
 def test_zx_from_stim_bell_state(backend):
-    import stim
 
     stim_str = """
     R 0 1

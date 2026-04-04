@@ -5,19 +5,16 @@ Decomposition of ZX graphs into scalar graphs and JAX-compatible IR.
 from __future__ import annotations
 from collections import defaultdict
 from fractions import Fraction
-from typing import Any, Dict, List, Literal, NamedTuple, Sequence, Tuple, cast
+from typing import Any, Dict, List, NamedTuple, Sequence, Tuple, cast
 
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
 import pyzx_param as zx
+from pyzx_param.graph.scalar import DyadicNumber
+from pyzx_param.simulate import DecompositionStrategy
 
 from ..cons import dtypestr, idtypestr
-from pyzx_param.graph.scalar import DyadicNumber, Scalar
-from pyzx_param.simulate import DecompositionStrategy
-from pyzx_param.utils import VertexType, EdgeType
-
-from .evaluator import ExactScalarArray
 
 
 class CompiledScalarGraphs(NamedTuple):
