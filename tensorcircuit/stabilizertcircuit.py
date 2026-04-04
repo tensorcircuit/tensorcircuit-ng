@@ -13,6 +13,8 @@ import numpy as np
 import psutil
 from pyzx_param.simulate import DecompositionStrategy
 
+from .cons import rdtypestr
+
 from .zx.evaluator import evaluate
 from .zx.scalar_graph import compile_program, CompiledProgram, CompiledComponent
 from .zx.converter import prepare_graph, circuit_to_zx, build_sampling_graph
@@ -31,7 +33,7 @@ def sample_component(
     ones, zero = jnp.ones((batch_size, 1), dtype=jnp.bool_), jnp.zeros(
         (1, 1), dtype=jnp.bool_
     )
-    max_dev = jnp.array(0.0)
+    max_dev = jnp.array(0.0, dtype=rdtypestr)
     for i, circuit in enumerate(comp.compiled_scalar_graphs[1:]):
         params = jnp.hstack([f_selected, m_acc[:, :i], ones])
         check_row = jnp.hstack([f_selected[:1], m_acc[:1, :i], zero])

@@ -10,6 +10,8 @@ import jax
 import jax.numpy as jnp
 from jax import Array, lax
 
+from ..cons import dtypestr, idtypestr
+
 # ==============================================================================
 # Exact Scalar (from tsim/core/exact_scalar.py)
 # ==============================================================================
@@ -34,7 +36,14 @@ def _scalar_mul(d1: jax.Array, d2: jax.Array) -> jax.Array:
 
 def _scalar_to_complex(data: jax.Array) -> jax.Array:
     """Convert a (N, 4) array of coefficients to a (N,) array of complex numbers."""
-    return data[..., 0] + data[..., 1] * _E4 + data[..., 2] * 1j + data[..., 3] * _E4D
+    e4 = jnp.exp(jnp.array(1j * jnp.pi / 4, dtype=dtypestr))
+    e4d = jnp.exp(jnp.array(-1j * jnp.pi / 4, dtype=dtypestr))
+    return (
+        data[..., 0].astype(dtypestr)
+        + data[..., 1].astype(dtypestr) * e4
+        + data[..., 2].astype(dtypestr) * 1j
+        + data[..., 3].astype(dtypestr) * e4d
+    )
 
 
 class ExactScalarArray(NamedTuple):
@@ -50,7 +59,7 @@ class ExactScalarArray(NamedTuple):
     @classmethod
     def create(cls, coeffs: Array, power: Array | None = None) -> "ExactScalarArray":
         if power is None:
-            power = jnp.zeros(coeffs.shape[:-1], dtype=jnp.int32)
+            power = jnp.zeros(coeffs.shape[:-1], dtype=idtypestr)
         return cls(coeffs, power)
 
     def __mul__(self, other: "ExactScalarArray") -> "ExactScalarArray":
@@ -117,8 +126,10 @@ class ExactScalarArray(NamedTuple):
 # Evaluate (from tsim/compile/evaluate.py)
 # ==============================================================================
 
-# Pre-computed exact scalars for phase values, for powers of omega = e^(i*pi/4)
-_UNIT_PHASES = jnp.array(
+# Lookup table for exact scalars (1 + omega^k)
+# These will be cast to idtypestr when used in evaluate
+_ONE_PLUS_PHASES = None
+_UNIT_PHASES_BASE = jnp.array(
     [
         [1, 0, 0, 0],  # omega^0 = 1
         [0, 1, 0, 0],  # omega^1
@@ -129,13 +140,15 @@ _UNIT_PHASES = jnp.array(
         [0, 0, -1, 0],  # omega^6 = -i
         [0, 0, 0, 1],  # omega^7
     ],
-    dtype=jnp.int32,
+    dtype=jnp.int64,  # Use int64 for the base to avoid any truncation
 )
 
-# Lookup table for exact scalars (1 + omega^k)
-_ONE_PLUS_PHASES = _UNIT_PHASES.at[:, 0].add(1)
 
-_IDENTITY = jnp.array([1, 0, 0, 0], dtype=jnp.int32)
+def _get_lookup_tables():
+    unit_phases = _UNIT_PHASES_BASE.astype(idtypestr)
+    one_plus_phases = unit_phases.at[:, 0].add(1)
+    identity = jnp.array([1, 0, 0, 0], dtype=idtypestr)
+    return unit_phases, one_plus_phases, identity
 
 
 def _matmul_gf2(a: Array, b: Array) -> Array:
@@ -155,15 +168,17 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
     # Padded values are masked to multiplicative identity.
     # ====================================================================
     # a_param_bits: (num_graphs, max_a, n_params), param_vals: (batch_size, n_params,)
+    unit_phases, one_plus_phases, identity = _get_lookup_tables()
+
     rowsum_a = _matmul_gf2(circuit.a_param_bits, param_vals)
     phase_idx_a = (4 * rowsum_a + circuit.a_const_phases) % 8
 
-    term_vals_a_exact = _ONE_PLUS_PHASES[phase_idx_a]
+    term_vals_a_exact = one_plus_phases[phase_idx_a]
     a_mask = (
         jnp.arange(circuit.a_const_phases.shape[1])[None, :]
         < circuit.a_num_terms[:, None]
     )
-    term_vals_a_exact = jnp.where(a_mask[..., None], term_vals_a_exact, _IDENTITY)
+    term_vals_a_exact = jnp.where(a_mask[..., None], term_vals_a_exact, identity)
 
     term_vals_a = ExactScalarArray.create(term_vals_a_exact)
     summands_a = term_vals_a.prod(axis=-2)
@@ -177,7 +192,7 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
 
     sum_phases_b = jnp.sum(phase_idx_b, axis=-1) % 8
 
-    summands_b_exact = _UNIT_PHASES[sum_phases_b]
+    summands_b_exact = unit_phases[sum_phases_b]
     summands_b = ExactScalarArray.create(summands_b_exact)
 
     # ====================================================================
@@ -193,9 +208,7 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
     exponent_c = (rowsum_a_c * rowsum_b_c) % 2
     sum_exponents_c = jnp.sum(exponent_c, axis=-1) % 2
 
-    summands_c_exact = (1 - 2 * sum_exponents_c)[..., None] * jnp.array(
-        [1, 0, 0, 0], dtype=jnp.int32
-    )
+    summands_c_exact = (1 - 2 * sum_exponents_c)[..., None] * identity
     summands_c = ExactScalarArray.create(summands_c_exact)
 
     # ====================================================================
@@ -210,13 +223,13 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
     gamma = (alpha + beta) % 8
 
     term_vals_d_exact = (
-        _IDENTITY + _UNIT_PHASES[alpha] + _UNIT_PHASES[beta] - _UNIT_PHASES[gamma]
+        identity + unit_phases[alpha] + unit_phases[beta] - unit_phases[gamma]
     )
     d_mask = (
         jnp.arange(circuit.d_const_alpha.shape[1])[None, :]
         < circuit.d_num_terms[:, None]
     )
-    term_vals_d_exact = jnp.where(d_mask[..., None], term_vals_d_exact, _IDENTITY)
+    term_vals_d_exact = jnp.where(d_mask[..., None], term_vals_d_exact, identity)
 
     term_vals_d = ExactScalarArray.create(term_vals_d_exact)
     summands_d = term_vals_d.prod(axis=-2)
@@ -224,7 +237,7 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
     # ====================================================================
     # FINAL COMBINATION
     # ====================================================================
-    static_phases = ExactScalarArray.create(_UNIT_PHASES[circuit.phase_indices])
+    static_phases = ExactScalarArray.create(unit_phases[circuit.phase_indices])
     float_factor = ExactScalarArray.create(circuit.floatfactor)
 
     total_summands = functools.reduce(

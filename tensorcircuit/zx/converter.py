@@ -800,7 +800,9 @@ def circuit_to_zx(
         elif name == "":
             continue
         else:
-            raise ValueError(f"Unknown instruction name: '{name}' in {d}. GATE_TABLE keys: {list(GATE_TABLE.keys())}")
+            raise ValueError(
+                f"Unknown instruction name: '{name}' in {d}. GATE_TABLE keys: {list(GATE_TABLE.keys())}"
+            )
     if force_measure_all:
         for i in range(n):
             _m(b, i)

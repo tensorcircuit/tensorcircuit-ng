@@ -293,22 +293,6 @@ def test_converter_all_two_qubit_gates(backend):
         assert_unitary_match(g, c), f"Gate {g_name} failed"
 
 
-@pytest.mark.skip(
-    reason="pyzx_param tensorfy doesn't support X/Z-spiders as inputs/outputs"
-)
-@pytest.mark.parametrize("backend", [lf("npb")])
-def test_converter_rotations_extensive(backend):
-    # StabilizerTCircuit focuses on Clifford+T, arbitrary rotations might not be perfectly supported via GATE_TABLE
-    # but we can test small set
-    angles = [0, np.pi / 2, np.pi]
-    for a in angles:
-        for g_name in ["rx", "rz"]:
-            c = tc.Circuit(1)
-            getattr(c, g_name)(0, theta=a)
-            g = circuit_to_zx(c)
-            assert_unitary_match(g, c), f"{g_name}({a}) failed"
-
-
 @pytest.mark.parametrize("backend", [lf("npb")])
 def test_is_pauli(backend):
     from tensorcircuit.zx.converter import is_pauli
@@ -750,10 +734,15 @@ def test_zx_outcome_probability_vs_exact_10q(backend):
     # Add some T gates to make it interesting
     c.t(2)
     c.t(5)
+    c.cnot(2, 4)
+    c.h(4)
+    c.cnot(8, 5)
     c.t(8)
+    c.s(8)
+
     # More Cliffords
     c.s(3)
-    c.cz(4, 7)
+    c.cz(4, 8)
     c.h(1)
 
     # We must add measurements to define the record indices for outcome_probability
@@ -779,3 +768,24 @@ def test_zx_outcome_probability_vs_exact_10q(backend):
         prob_exact = tc.backend.abs(amp) ** 2
 
         np.testing.assert_allclose(prob_zx, prob_exact, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_high_precision(backend, highp):
+    # Verify that complex128 and int64 are active
+    assert tc.dtypestr == "complex128"
+    assert tc.idtypestr == "int64"
+
+    # Test with a case where high precision might matter
+    stc = StabilizerTCircuit(1)
+    stc.h(0)
+    stc.t(0)
+    stc.h(0)
+
+    # Use outcome_probability for a more precise check
+    p0 = stc.outcome_probability(jnp.array([0]))
+    expected_p0 = (2 + np.sqrt(2)) / 4
+
+    # Check that the result is indeed float64
+    assert p0.dtype == jnp.float64
+    np.testing.assert_allclose(p0, expected_p0, atol=1e-12)

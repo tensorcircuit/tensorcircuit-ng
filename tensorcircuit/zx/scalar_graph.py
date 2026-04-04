@@ -12,6 +12,8 @@ import jax.numpy as jnp
 import numpy as np
 from jax import Array
 import pyzx_param as zx
+
+from ..cons import dtypestr, idtypestr
 from pyzx_param.graph.scalar import DyadicNumber, Scalar
 from pyzx_param.simulate import DecompositionStrategy
 from pyzx_param.utils import VertexType, EdgeType
@@ -65,7 +67,7 @@ def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScala
                     bitstr[char_to_idx[v]] = 1
 
             a_terms[i].append((int(g.scalar.phasenodes[term] * 4), bitstr))
-    a_num_terms = np.array([len(t) for t in a_terms], dtype=np.int32)
+    a_num_terms = np.array([len(t) for t in a_terms], dtype=idtypestr)
     max_a = int(a_num_terms.max()) if a_num_terms.size else 0
     a_const_phases = np.zeros((num_graphs, max_a), dtype=np.uint8)
     a_param_bits = np.zeros((num_graphs, max_a, n_params), dtype=np.uint8)
@@ -132,7 +134,7 @@ def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScala
             for v in pp.paramsB:
                 pb[char_to_idx[v]] = 1
             d_terms[i].append((int(pp.alpha), int(pp.beta), pa, pb))
-    d_num_terms = np.array([len(t) for t in d_terms], dtype=np.int32)
+    d_num_terms = np.array([len(t) for t in d_terms], dtype=idtypestr)
     max_d = int(d_num_terms.max()) if d_num_terms.size else 0
     d_const_alpha = np.zeros((num_graphs, max_d), dtype=np.uint8)
     d_const_beta = np.zeros((num_graphs, max_d), dtype=np.uint8)
@@ -188,10 +190,10 @@ def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScala
             g.scalar.approximate_floatfactor != 1.0 for g in g_list
         ),
         approximate_floatfactors=jnp.array(
-            [g.scalar.approximate_floatfactor for g in g_list], dtype=jnp.complex64
+            [g.scalar.approximate_floatfactor for g in g_list], dtype=dtypestr
         ),
-        power2=jnp.array(power2, dtype=jnp.int32),
-        floatfactor=jnp.array(exact_floatfactor, dtype=jnp.int32),
+        power2=jnp.array(power2, dtype=idtypestr),
+        floatfactor=jnp.array(exact_floatfactor, dtype=idtypestr),
     )
 
 
