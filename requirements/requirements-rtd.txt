@@ -4,6 +4,7 @@ cirq
 tensorflow
 tensornetwork
 stim
+pyzx-param
 graphviz
 networkx
 jax

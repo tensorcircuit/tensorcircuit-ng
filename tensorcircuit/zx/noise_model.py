@@ -472,6 +472,12 @@ class ChannelSampler:
 
     @property
     def num_f_params(self) -> int:
+        """
+        Number of reduced basis parameters (f-basis).
+
+        :return: Number of parameters.
+        :rtype: int
+        """
         return int(self.signature_matrix.shape[1])
 
     @staticmethod

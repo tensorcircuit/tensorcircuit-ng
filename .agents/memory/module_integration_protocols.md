@@ -18,7 +18,13 @@
 
 4.  **Documentation & Linting**:
     - Achieve **10/10 pylint score** and pass `mypy` before finalizing a module.
-    - Follow Google-style docstrings with reStructuredText markers. This is critical for automated documentation generation.
+    - **Docstring Standard**: Use reStructuredText format with explicitly typed parameters and return values:
+      - `:param <name>: Description`
+      - `:type <name>: <type_hint>`
+      - `:return: Description`
+      - `:rtype: <type_hint>`
+    - **Import Placement**: All internal (`tensorcircuit.*`) and core package (`numpy`, `jax`, `scipy`) imports MUST be moved to the top of the file. Only optional or conditional dependencies (e.g., `stim`, `qiskit`) should remain deferred inside functions if not in minimal requirements.
+    - **Comment Cleanup**: Remove all "think-out-loud" development comments, debug print leftovers, and redundant Phase/Part header comments that do not add value to the end user.
 
 5.  **User Verification (Walkthroughs)**:
     - Always provide a production-ready example in `examples/` (e.g., `pauli_propagation_vqe.py`) that showcases a real-world use case (optimization, dynamics, etc.) and demonstrates performance features like JAX JIT and Scanning.

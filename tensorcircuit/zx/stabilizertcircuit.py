@@ -529,7 +529,6 @@ class StabilizerTCircuit(AbstractCircuit):
             f"'{type(self).__name__}' object has no attribute '{name}'"
         )
 
-    # Simplified StabilizerTCircuit methods for compatibility
     def h(self, q: int) -> None:
         self._qir.append({"name": "H", "index": [q]})
 

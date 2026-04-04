@@ -69,6 +69,12 @@ class GraphRepresentation:
 
     @property
     def observables(self) -> list[int]:
+        """
+        List of observable vertices.
+
+        :return: List of vertex indices.
+        :rtype: list[int]
+        """
         return [self.observables_dict[i] for i in sorted(self.observables_dict)]
 
     def add_edge(self, e: Any, t: Any = EdgeType.SIMPLE) -> None:
@@ -80,6 +86,20 @@ class GraphRepresentation:
     def add_vertex(
         self, t: Any = VertexType.Z, qubit: int = -1, row: float = -1, phase: Any = 0
     ) -> int:
+        """
+        Add a vertex to the graph.
+
+        :param t: Vertex type, defaults to VertexType.Z.
+        :type t: Any, optional
+        :param qubit: Qubit index, defaults to -1.
+        :type qubit: int, optional
+        :param row: Row index for layout, defaults to -1.
+        :type row: float, optional
+        :param phase: Vertex phase, defaults to 0.
+        :type phase: Any, optional
+        :return: The index of the new vertex.
+        :rtype: int
+        """
         v = self.graph.add_vertex(t, qubit, row)
         self.graph.set_phase(v, phase)
         return v
@@ -108,9 +128,25 @@ class GraphRepresentation:
         return self.graph.num_edges()  # type: ignore[no-any-return]
 
     def incident_edges(self, v: Any) -> Any:
+        """
+        Get edges incident to a vertex.
+
+        :param v: Vertex index.
+        :type v: Any
+        :return: Iterable of edges.
+        :rtype: Any
+        """
         return self.graph.incident_edges(v)
 
     def edge_st(self, e: Any) -> Any:
+        """
+        Get the endpoints of an edge.
+
+        :param e: Edge.
+        :type e: Any
+        :return: Tuple of vertex indices (v1, v2).
+        :rtype: Any
+        """
         return self.graph.edge_st(e)
 
     def add_edges(self, edges: list[tuple[Any, Any]], t: Any = EdgeType.SIMPLE) -> None:
@@ -282,16 +318,48 @@ class GraphRepresentation:
 
 
 def last_row(b: GraphRepresentation, qubit: int) -> float:
+    """
+    Get the row index of the last vertex on a qubit lane.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param qubit: The qubit index.
+    :type qubit: int
+    :return: Highest row index on the lane.
+    :rtype: float
+    """
     return float(b.graph.row(b.last_vertex[qubit]))  # type: ignore[no-any-return]
 
 
 def last_edge(b: GraphRepresentation, qubit: int) -> Any:
+    """
+    Get the last edge on a qubit lane.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param qubit: The qubit index.
+    :type qubit: int
+    :return: The last edge index.
+    :rtype: Any
+    """
     return list(b.graph.incident_edges(b.last_vertex[qubit]))[0]
 
 
 def add_dummy(
     b: GraphRepresentation, qubit: int, row: float | int | None = None
 ) -> int:
+    """
+    Add a dummy boundary vertex to a qubit lane.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param qubit: The qubit index.
+    :type qubit: int
+    :param row: Row index, defaults to last_row + 1.
+    :type row: float | int | None, optional
+    :return: The index of the new vertex.
+    :rtype: int
+    """
     if row is None:
         row = last_row(b, qubit) + 1
     v1 = b.graph.add_vertex(VertexType.BOUNDARY, qubit=qubit, row=row)
@@ -300,6 +368,16 @@ def add_dummy(
 
 
 def add_lane(b: GraphRepresentation, qubit: int) -> int:
+    """
+    Initialize a new qubit lane with two boundary vertices.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param qubit: The qubit index.
+    :type qubit: int
+    :return: The index of the first vertex.
+    :rtype: int
+    """
     v1 = b.graph.add_vertex(VertexType.BOUNDARY, qubit=qubit, row=0)
     v2 = b.graph.add_vertex(VertexType.BOUNDARY, qubit=qubit, row=1)
     b.graph.add_edge((v1, v2), EdgeType.SIMPLE)
@@ -308,11 +386,29 @@ def add_lane(b: GraphRepresentation, qubit: int) -> int:
 
 
 def ensure_lane(b: GraphRepresentation, qubit: int) -> None:
+    """
+    Ensure a qubit lane exists in the graph.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param qubit: The qubit index.
+    :type qubit: int
+    """
     if qubit not in b.last_vertex:
         add_lane(b, qubit)
 
 
 def x_phase(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
+    """
+    Apply an X spider with the given phase to a qubit.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param qubit: The qubit index.
+    :type qubit: int
+    :param phase: Phase in units of π.
+    :type phase: Fraction
+    """
     ensure_lane(b, qubit)
     v1 = b.last_vertex[qubit]
     b.graph.set_type(v1, VertexType.X)
@@ -324,6 +420,16 @@ def x_phase(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
 
 
 def z_phase(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
+    """
+    Apply a Z spider with the given phase to a qubit.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param qubit: The qubit index.
+    :type qubit: int
+    :param phase: Phase in units of π.
+    :type phase: Fraction
+    """
     ensure_lane(b, qubit)
     v1 = b.last_vertex[qubit]
     b.graph.set_type(v1, VertexType.Z)
@@ -352,6 +458,9 @@ def z_gate(b: GraphRepresentation, qubit: int) -> None:
 
 
 def h_gate(b: GraphRepresentation, qubit: int) -> None:
+    """
+    Apply Hadamard gate.
+    """
     ensure_lane(b, qubit)
     e = last_edge(b, qubit)
     b.graph.set_edge_type(
@@ -379,34 +488,55 @@ def h_yz(b: GraphRepresentation, qubit: int) -> None:
 
 
 def sqrt_x(b: GraphRepresentation, qubit: int) -> None:
+    """
+    Apply SQRT_X gate.
+    """
     x_phase(b, qubit, Fraction(1, 2))
 
 
 def sqrt_x_dag(b: GraphRepresentation, qubit: int) -> None:
+    """
+    Apply SQRT_X_DAG gate.
+    """
     x_phase(b, qubit, Fraction(-1, 2))
 
 
 def sqrt_y(b: GraphRepresentation, qubit: int) -> None:
+    """
+    Apply SQRT_Y gate.
+    """
     z_gate(b, qubit)
     h_gate(b, qubit)
     b.graph.scalar.add_phase(Fraction(1, 4))
 
 
 def sqrt_y_dag(b: GraphRepresentation, qubit: int) -> None:
+    """
+    Apply SQRT_Y_DAG gate.
+    """
     h_gate(b, qubit)
     z_gate(b, qubit)
     b.graph.scalar.add_phase(Fraction(-1, 4))
 
 
 def sqrt_z(b: GraphRepresentation, qubit: int) -> None:
+    """
+    Apply SQRT_Z gate.
+    """
     _s_gate(b, qubit)
 
 
 def sqrt_z_dag(b: GraphRepresentation, qubit: int) -> None:
+    """
+    Apply SQRT_Z_DAG gate.
+    """
     _s_dag_gate(b, qubit)
 
 
 def y_phase(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
+    """
+    Apply Y-basis spider with the given phase.
+    """
     h_yz(b, qubit)
     z_phase(b, qubit, phase)
     h_yz(b, qubit)
@@ -519,6 +649,14 @@ def _r(b: GraphRepresentation, qubit: int, perform_trace: bool) -> None:
 
 
 def detector(b: GraphRepresentation, rec: list[int]) -> None:
+    """
+    Add a detector vertex defined by a set of measurement outcomes.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param rec: Indices of measurement records involved in the detector.
+    :type rec: list[int]
+    """
     rec_vertices = [b.rec[r] for r in rec]
     row = min((b.graph.row(v) for v in rec_vertices), default=0) - 0.5
     v0 = b.graph.add_vertex(VertexType.X, qubit=-1, row=row)
@@ -529,6 +667,16 @@ def detector(b: GraphRepresentation, rec: list[int]) -> None:
 
 
 def observable_include(b: GraphRepresentation, rec: list[int], idx: int) -> None:
+    """
+    Add an observable vertex defined by a set of measurement outcomes.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param rec: Indices of measurement records involved in the observable.
+    :type rec: list[int]
+    :param idx: Index of the observable.
+    :type idx: int
+    """
     idx = int(idx)
     rec_vertices = [b.rec[r] for r in rec]
     if idx not in b.observables_dict:
@@ -542,10 +690,32 @@ def observable_include(b: GraphRepresentation, rec: list[int], idx: int) -> None
 
 
 def depolarize1(b: GraphRepresentation, qubit: int, p: float) -> None:
+    """
+    Apply single-qubit depolarizing channel.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param qubit: Qubit index.
+    :type qubit: int
+    :param p: Depolarizing probability.
+    :type p: float
+    """
     pauli_channel_1(b, qubit, p / 3, p / 3, p / 3)
 
 
 def depolarize2(b: GraphRepresentation, q1: int, q2: int, p: float) -> None:
+    """
+    Apply two-qubit depolarizing channel.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param q1: First qubit index.
+    :type q1: int
+    :param q2: Second qubit index.
+    :type q2: int
+    :param p: Depolarizing probability.
+    :type p: float
+    """
     b.channel_probs.append(pauli_channel_2_probs(*([p / 15] * 15)))
     for i in range(4):
         _error(
@@ -560,6 +730,20 @@ def depolarize2(b: GraphRepresentation, q1: int, q2: int, p: float) -> None:
 def pauli_channel_1(
     b: GraphRepresentation, qubit: int, px: float = 0, py: float = 0, pz: float = 0
 ) -> None:
+    """
+    Apply single-qubit Pauli channel.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param qubit: Qubit index.
+    :type qubit: int
+    :param px: Probability of X error, defaults to 0.
+    :type px: float, optional
+    :param py: Probability of Y error, defaults to 0.
+    :type py: float, optional
+    :param pz: Probability of Z error, defaults to 0.
+    :type pz: float, optional
+    """
     b.channel_probs.append(pauli_channel_1_probs(px, py, pz))
     _error(b, qubit, VertexType.Z, f"e{b.num_error_bits}")
     _error(b, qubit, VertexType.X, f"e{b.num_error_bits + 1}")
@@ -586,6 +770,18 @@ def pauli_channel_2(
     pzy: float = 0,
     pzz: float = 0,
 ) -> None:
+    """
+    Apply two-qubit Pauli channel.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param qubit_i: First qubit index.
+    :type qubit_i: int
+    :param qubit_j: Second qubit index.
+    :type qubit_j: int
+    :param pix: Probability of error IX.
+    ...
+    """
     b.channel_probs.append(
         pauli_channel_2_probs(
             pix, piy, piz, pxi, pxx, pxy, pxz, pyi, pyx, pyy, pyz, pzi, pzx, pzy, pzz
@@ -670,24 +866,66 @@ def mrz(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) 
 
 
 def mx(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -> None:
+    """
+    Apply X-basis measurement.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param qubit: Qubit index.
+    :type qubit: int
+    :param p: Error probability, defaults to 0.
+    :type p: float, optional
+    :param invert: Whether to invert measurement result, defaults to False.
+    :type invert: bool, optional
+    """
     h_gate(b, qubit)
     m(b, qubit, p=p, invert=invert)
     h_gate(b, qubit)
 
 
 def my(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -> None:
+    """
+    Apply Y-basis measurement.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param qubit: Qubit index.
+    :type qubit: int
+    :param p: Error probability, defaults to 0.
+    :type p: float, optional
+    :param invert: Whether to invert measurement result, defaults to False.
+    :type invert: bool, optional
+    """
     h_yz(b, qubit)
     m(b, qubit, p=p, invert=invert)
     h_yz(b, qubit)
 
 
 def r(b: GraphRepresentation, qubit: int, p: float = 0) -> None:
+    """
+    Reset qubit to |0> state.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param qubit: Qubit index.
+    :type qubit: int
+    :param p: Error probability, defaults to 0.
+    :type p: float, optional
+    """
     if p > 0:
         x_error(b, qubit, p)
     _r(b, qubit, perform_trace=True)
 
 
 def rx(b: GraphRepresentation, qubit: int) -> None:
+    """
+    Reset qubit in X basis.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param qubit: Qubit index.
+    :type qubit: int
+    """
     if qubit in b.last_vertex:
         h_gate(b, qubit)
     r(b, qubit)
@@ -695,6 +933,14 @@ def rx(b: GraphRepresentation, qubit: int) -> None:
 
 
 def ry(b: GraphRepresentation, qubit: int) -> None:
+    """
+    Reset qubit in Y basis.
+
+    :param b: The graph representation.
+    :type b: GraphRepresentation
+    :param qubit: Qubit index.
+    :type qubit: int
+    """
     if qubit in b.last_vertex:
         h_yz(b, qubit)
     r(b, qubit)
@@ -811,7 +1057,6 @@ def circuit_to_zx(
     :return: The ZX graph representation of the circuit.
     :rtype: GraphRepresentation
     """
-    # print(f"DEBUG: GATE_TABLE keys at start: {list(GATE_TABLE.keys())}")
     b = GraphRepresentation()
     b.graph.track_phases = True
     n = c._nqubits
@@ -1155,10 +1400,15 @@ def transform_error_basis(g: Any, num_e: int | None = None) -> tuple[Any, Any]:
     for v, row in zip(p_v, transform):
         g._phaseVars[v] = {f"f{j}" for j in np.nonzero(row)[0]}
     return g, basis
-    return g, basis
 
 
 def squash_graph(g: Any) -> None:
+    """
+    Compact the graph layout by re-assigning qubit and row indices.
+
+    :param g: The ZX graph.
+    :type g: Any
+    """
     outputs = list(g.outputs())
     if not outputs:
         return

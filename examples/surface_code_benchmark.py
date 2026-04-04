@@ -6,12 +6,7 @@ on a surface code circuit with detectors.
 import time
 import numpy as np
 import stim
-import jax
 
-# Enable x64 for ExactScalarArray's int64 coefficients
-jax.config.update("jax_enable_x64", True)
-
-import tensorcircuit as tc
 from tensorcircuit.zx.stabilizertcircuit import StabilizerTCircuit
 
 
@@ -63,19 +58,9 @@ def run_benchmark(distance=3, rounds=3, batch=1000):
 
     # Execution (Run 2: pure execution)
     start_exec2 = time.time()
-    stc.sample_detectors(shots=batch, seed=43)
+    stc.sample_detectors(shots=batch, seed=43, batch_size=2000)
     end_exec2 = time.time()
-    print(
-        f"Execution Time (Run 2, pure execution, batch=1000): {end_exec2 - start_exec2:.4f}s"
-    )
-
-    # Execution (Run 3: larger batch_size)
-    start_exec3 = time.time()
-    stc.sample_detectors(shots=batch, seed=44, batch_size=1000)
-    end_exec3 = time.time()
-    print(
-        f"Execution Time (Run 3, larger batch, batch=5000): {end_exec3 - start_exec3:.4f}s"
-    )
+    print(f"Execution Time (Run 2, pure execution): {end_exec2 - start_exec2:.4f}s")
 
     p_jax = np.mean(samples_jax, axis=0)
 

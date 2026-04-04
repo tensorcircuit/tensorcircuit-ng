@@ -13,3 +13,4 @@ openfermion
 stim
 pylatexenc
 cotengra
+pyzx-param==0.9.3

@@ -1,3 +1,4 @@
+import random
 import pytest
 import numpy as np
 import jax.numpy as jnp
@@ -5,11 +6,11 @@ import pyzx_param as pyzx
 from pytest_lazyfixture import lazy_fixture as lf
 import tensorcircuit as tc
 from tensorcircuit.zx.stabilizertcircuit import StabilizerTCircuit
-from tensorcircuit.zx.converter import circuit_to_zx
 from tensorcircuit.zx.scalar_graph import (
     find_stab,
     compile_scalar_graphs,
 )
+from tensorcircuit.zx.converter import circuit_to_zx, is_pauli
 
 # --- Helpers ---
 
@@ -271,9 +272,6 @@ def test_zx_observable_include_logical(backend):
     assert np.all(obs == 1)
 
 
-# --- Phase 1: Converter Tests (Exhaustive) ---
-
-
 @pytest.mark.parametrize("backend", [lf("npb")])
 def test_converter_all_single_qubit_gates(backend):
     # Test every single qubit gate supported
@@ -295,7 +293,7 @@ def test_converter_all_two_qubit_gates(backend):
 
 @pytest.mark.parametrize("backend", [lf("npb")])
 def test_is_pauli(backend):
-    from tensorcircuit.zx.converter import is_pauli
+    _ = is_pauli(tc.gates.x().tensor)
 
     assert is_pauli(tc.gates.x().tensor) == "x"
     assert is_pauli(tc.gates.y().tensor) == "y"
@@ -317,9 +315,6 @@ def test_converter_complex_circuit(backend):
     c.h(2)
     g = circuit_to_zx(c)
     assert_unitary_match(g, c)
-
-
-# --- Phase 2: Scalar IR & Decomposition Tests (Exhaustive) ---
 
 
 @pytest.mark.parametrize("backend", [lf("npb")])
@@ -360,9 +355,6 @@ def test_scalar_ir_variable_mapping(backend):
     params = ["rec[0]"]
     data = compile_scalar_graphs(graphs, params)
     assert data.a_param_bits is not None
-
-
-# --- Phase 4 & 5: Circuit & QEC Specifics ---
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
@@ -631,7 +623,6 @@ def test_zx_from_stim_noisy_bell_detector(backend):
 @pytest.mark.parametrize("backend", [lf("jaxb")])
 def test_zx_vs_stim_random_clifford(backend):
     import stim
-    import random
 
     num_qubits = 4
     num_gates = 20

@@ -14,6 +14,9 @@
 
       # For Mypy checks
       conda run -n <env> mypy --cache-dir=/tmp/.mypy_cache <path>
+
+      # For Pylint checks (ignore sandbox cache permission warnings)
+      conda run -n <env> pylint <path> --rcfile=.pylintrc --persistent=n
       ```
 
 2.  **Output Redirection and Paging**:
