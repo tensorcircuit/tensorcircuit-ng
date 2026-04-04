@@ -1,6 +1,5 @@
 """
 Stabilizer+T Circuit class using ZX-calculus and JAX.
-Pixel-perfect copy of tsim.sampler.
 """
 
 from __future__ import annotations
@@ -13,18 +12,30 @@ import numpy as np
 import psutil
 from pyzx_param.simulate import DecompositionStrategy
 
-from .cons import rdtypestr
+from ..cons import rdtypestr
 
-from .zx.evaluator import evaluate
-from .zx.scalar_graph import compile_program, CompiledProgram, CompiledComponent
-from .zx.converter import prepare_graph, circuit_to_zx, build_sampling_graph
-from .zx.noise_model import ChannelSampler
-from .abstractcircuit import AbstractCircuit
+from .evaluator import evaluate
+from .scalar_graph import compile_program, CompiledProgram, CompiledComponent
+from .converter import prepare_graph, circuit_to_zx, build_sampling_graph
+from .noise_model import ChannelSampler
+from ..abstractcircuit import AbstractCircuit
 
 
 def sample_component(
     comp: CompiledComponent, f_params: jax.Array, key: Any
 ) -> Tuple[jax.Array, Any, jax.Array]:
+    """
+    Sample measurement outcomes for a single compiled component.
+
+    :param comp: The compiled component to sample from.
+    :type comp: CompiledComponent
+    :param f_params: The sampled error bit parameters (f-basis).
+    :type f_params: jax.Array
+    :param key: JAX PRNG key for sampling.
+    :type key: Any
+    :return: A tuple containing the measurement samples, next PRNG key, and maximum deviation.
+    :rtype: Tuple[jax.Array, Any, jax.Array]
+    """
     batch_size = f_params.shape[0]
     num_outputs = len(comp.compiled_scalar_graphs) - 1
     f_selected = f_params[:, comp.f_selection].astype(jnp.bool_)
@@ -58,6 +69,18 @@ def _sample_component_jit(
 def sample_program(
     program: CompiledProgram, f_params: jax.Array, key: Any
 ) -> jax.Array:
+    """
+    Sample measurement outcomes for an entire compiled program.
+
+    :param program: The compiled program to sample from.
+    :type program: CompiledProgram
+    :param f_params: The sampled error bit parameters (f-basis).
+    :type f_params: jax.Array
+    :param key: JAX PRNG key for sampling.
+    :type key: Any
+    :return: The measurement samples for all qubits.
+    :rtype: jax.Array
+    """
     results = []
     for comp in program.components:
         if len(comp.output_indices) <= 1:
@@ -80,6 +103,16 @@ class StabilizerTCircuit(AbstractCircuit):
         seed: Optional[int] = None,
         strategy: DecompositionStrategy = "cat5",
     ):
+        """
+        Initialize a StabilizerTCircuit.
+
+        :param nqubits: Number of qubits in the circuit.
+        :type nqubits: int
+        :param seed: Random seed for sampling, defaults to None.
+        :type seed: Optional[int], optional
+        :param strategy: Decomposition strategy for T gates, defaults to "cat5".
+        :type strategy: DecompositionStrategy, optional
+        """
         self._nqubits = nqubits
         self._qir = []
         self._extra_qir = []
@@ -117,7 +150,14 @@ class StabilizerTCircuit(AbstractCircuit):
         cls, circuit: AbstractCircuit, strategy: DecompositionStrategy = "cat5"
     ) -> StabilizerTCircuit:
         """
-        Create a StabilizerTCircuit from an existing circuit.
+        Create a StabilizerTCircuit from an existing TensorCircuit AbstractCircuit.
+
+        :param circuit: The source circuit to convert.
+        :type circuit: AbstractCircuit
+        :param strategy: Decomposition strategy for T gates, defaults to "cat5".
+        :type strategy: DecompositionStrategy, optional
+        :return: A new StabilizerTCircuit instance.
+        :rtype: StabilizerTCircuit
         """
         stc = cls(circuit._nqubits, strategy=strategy)
 
@@ -158,7 +198,16 @@ class StabilizerTCircuit(AbstractCircuit):
         self, shots: int = 1, seed: Optional[int] = None, batch_size: int = 1000
     ) -> jax.Array:
         """
-        Samples all measurement outcomes in the circuit.
+        Sample all measurement outcomes in the circuit.
+
+        :param shots: Number of samples to draw, defaults to 1.
+        :type shots: int, optional
+        :param seed: Random seed for this sampling run, defaults to None.
+        :type seed: Optional[int], optional
+        :param batch_size: Number of shots per JIT batch, defaults to 1000.
+        :type batch_size: int, optional
+        :return: Array of measurement samples with shape (shots, num_measurements).
+        :rtype: jax.Array
         """
         if seed is not None:
             self._key = jax.random.key(seed)
@@ -183,7 +232,20 @@ class StabilizerTCircuit(AbstractCircuit):
         batch_size: int = 1000,
     ) -> Union[jax.Array, Tuple[jax.Array, jax.Array]]:
         """
-        Samples detectors and observables.
+        Sample detector and observable outcomes.
+
+        :param shots: Number of samples to draw, defaults to 1.
+        :type shots: int, optional
+        :param separate_objects: Whether to return detectors and observables separately, defaults to False.
+        :type separate_objects: bool, optional
+        :param use_reference: Whether to XOR results with a noiseless reference run, defaults to False.
+        :type use_reference: bool, optional
+        :param seed: Random seed for this sampling run, defaults to None.
+        :type seed: Optional[int], optional
+        :param batch_size: Number of shots per JIT batch, defaults to 1000.
+        :type batch_size: int, optional
+        :return: Array of samples or tuple of (detectors, observables) arrays.
+        :rtype: Union[jax.Array, Tuple[jax.Array, jax.Array]]
         """
         if seed is not None:
             self._key = jax.random.key(seed)
@@ -214,7 +276,14 @@ class StabilizerTCircuit(AbstractCircuit):
 
     def outcome_probability(self, state: jax.Array, shots: int = 1) -> jax.Array:
         """
-        Computes P(state | noise_i) for a specific bitstring 'state' across 'shots' noise realizations.
+        Compute the probability of a specific measurement outcome state.
+
+        :param state: The target measurement bitstring.
+        :type state: jax.Array
+        :param shots: Number of noise realizations to average over, defaults to 1.
+        :type shots: int, optional
+        :return: Probability of the outcome state for each noise realization.
+        :rtype: jax.Array
         """
         # 1. Prepare graphs
         has_m = any(
@@ -246,19 +315,19 @@ class StabilizerTCircuit(AbstractCircuit):
 
         # Compile them
         # find_stab expects GraphS
-        from .zx.scalar_graph import find_stab, compile_scalar_graphs
+        from .scalar_graph import find_stab, compile_scalar_graphs
 
         stabs_state = find_stab(g_state, strategy=self.strategy)
         stabs_norm = find_stab(g_norm, strategy=self.strategy)
 
         # Transform error basis to get f-params
-        from .zx.converter import transform_error_basis
+        from .converter import transform_error_basis
 
         prepared, error_transform = transform_error_basis(
             prepared, num_e=built.num_error_bits
         )
 
-        from .zx.utils import get_params
+        from .utils import get_params
 
         active = get_params(prepared)  # Use transformed graph's vars
         f_vars = sorted([v for v in active if v.startswith("f")])
@@ -453,8 +522,12 @@ class StabilizerTCircuit(AbstractCircuit):
     @classmethod
     def from_stim_circuit(cls, stim_circuit: Any) -> "StabilizerTCircuit":
         """
-        Creates a StabilizerTCircuit from a stim.Circuit object.
-        Reference: 100% replica of tsim.core.parse.parse_stim_circuit
+        Create a StabilizerTCircuit from a stim.Circuit object.
+
+        :param stim_circuit: The stim circuit to convert.
+        :type stim_circuit: Any
+        :return: A new StabilizerTCircuit instance.
+        :rtype: StabilizerTCircuit
         """
         inst = cls(stim_circuit.num_qubits)
         # We directly populate inst._qir for efficiency
@@ -531,7 +604,12 @@ class StabilizerTCircuit(AbstractCircuit):
     @classmethod
     def from_stim_str(cls, stim_str: str) -> "StabilizerTCircuit":
         """
-        Creates a StabilizerTCircuit from a stim circuit string.
+        Create a StabilizerTCircuit from a stim circuit string.
+
+        :param stim_str: The stim circuit string to parse.
+        :type stim_str: str
+        :return: A new StabilizerTCircuit instance.
+        :rtype: StabilizerTCircuit
         """
         import stim
 

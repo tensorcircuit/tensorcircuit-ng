@@ -28,14 +28,29 @@ class Channel:
 
 
 def error_probs(p: float) -> np.ndarray:
-    """Single-bit error channel. Returns shape (2,)."""
+    """
+    Single-bit error channel probability distribution.
+
+    :param p: Error probability.
+    :type p: float
+    :return: Array [1-p, p] of shape (2,).
+    :rtype: np.ndarray
+    """
     return np.array([1 - p, p], dtype=np.float64)
 
 
 def pauli_channel_1_probs(px: float, py: float, pz: float) -> np.ndarray:
-    """Single-qubit Pauli channel. Returns shape (4,).
+    """
+    Single-qubit Pauli channel probability distribution.
 
-    Order: [I, Z, X, Y] mapped to bits [00, 01, 10, 11].
+    :param px: X error probability.
+    :type px: float
+    :param py: Y error probability.
+    :type py: float
+    :param pz: Z error probability.
+    :type pz: float
+    :return: Array [I, Z, X, Y] of shape (4,).
+    :rtype: np.ndarray
     """
     return np.array([1 - px - py - pz, pz, px, py], dtype=np.float64)
 
@@ -57,7 +72,14 @@ def pauli_channel_2_probs(
     pzy: float,
     pzz: float,
 ) -> np.ndarray:
-    """Two-qubit Pauli channel. Returns shape (16,)."""
+    """
+    Two-qubit Pauli channel probability distribution.
+
+    :param pix: Probability of error I on qubit 1 and X on qubit 2.
+    ...
+    :return: Array of shape (16,).
+    :rtype: np.ndarray
+    """
     remainder = (
         1
         - pix
@@ -132,17 +154,15 @@ def correlated_error_probs(probabilities: list[float]) -> np.ndarray:
 
 
 def xor_convolve(probs_a: np.ndarray, probs_b: np.ndarray) -> np.ndarray:
-    """XOR convolution of two probability distributions.
+    """
+    XOR convolution of two probability distributions.
 
-    Computes P(A XOR B = o) = sum_{a ^ b = o} P(A=a) * P(B=b)
-
-    Args:
-        probs_a: Shape (2^k,) probabilities for channel A
-        probs_b: Shape (2^k,) probabilities for channel B (same size as A)
-
-    Returns:
-        Shape (2^k,) probabilities for the combined channel
-
+    :param probs_a: Probability distribution of channel A.
+    :type probs_a: np.ndarray
+    :param probs_b: Probability distribution of channel B.
+    :type probs_b: np.ndarray
+    :return: Combined probability distribution.
+    :rtype: np.ndarray
     """
     n = len(probs_a)
     if len(probs_b) != n:
@@ -358,17 +378,17 @@ def absorb_subset_channels(channels: list[Channel], max_bits: int = 4) -> list[C
 def simplify_channels(
     channels: list[Channel], max_bits: int = 4, null_col_id: int | None = None
 ) -> list[Channel]:
-    """Simplify channels by removing null columns, merging identical and absorbing subsets.
+    """
+    Simplify a list of channels by reducing null bits, merging identical signatures, and absorbing subsets.
 
-    Args:
-        channels: List of channels to simplify
-        max_bits: Maximum number of bits allowed per channel
-        null_col_id: Column ID representing the all-zero column, or None if
-            there is no all-zero column.
-
-    Returns:
-        Simplified list of channels
-
+    :param channels: List of input channels.
+    :type channels: list[Channel]
+    :param max_bits: Maximum number of bits allowed per simplified channel, defaults to 4.
+    :type max_bits: int, optional
+    :param null_col_id: ID of the all-zero column in the error transform, defaults to None.
+    :type null_col_id: int, optional
+    :return: Simplified list of channels.
+    :rtype: list[Channel]
     """
     channels = reduce_null_bits(channels, null_col_id)
     channels = normalize_channels(channels)
@@ -457,24 +477,15 @@ class ChannelSampler:
     def _precompute_sparse(
         channels: list[Channel], signature_matrix: np.ndarray
     ) -> list[tuple[float, np.ndarray, np.ndarray]]:
-        """Precompute per-channel data for geometric-skip sampling.
+        """
+        Precompute per-channel data for geometric-skip sampling.
 
-        For each channel with non-trivial fire probability, computes:
-        - p_fire: probability of any non-identity outcome
-        - cond_cdf: conditional CDF over non-identity outcomes
-        - xor_patterns: precomputed XOR output patterns per outcome
-
-        Args:
-            channels: List of noise channels to precompute data for.
-            signature_matrix: Binary matrix of shape (num_e, num_f) mapping
-                error-variable columns to output f-variables.
-
-        Returns:
-            List of (p_fire, cond_cdf, xor_patterns) tuples, one per channel
-            with non-trivial fire probability. ``p_fire`` is a float,
-            ``cond_cdf`` is a float64 array of shape (n_outcomes - 1,), and
-            ``xor_patterns`` is a uint8 array of shape (n_outcomes - 1, num_f).
-
+        :param channels: List of error channels.
+        :type channels: list[Channel]
+        :param signature_matrix: Binary matrix mapping error bits to f-basis bits.
+        :type signature_matrix: np.ndarray
+        :return: List of precomputed sampling data (p_fire, cond_cdf, xor_patterns).
+        :rtype: list[tuple[float, np.ndarray, np.ndarray]]
         """
         data: list[tuple[float, np.ndarray, np.ndarray]] = []
         for ch in channels:
@@ -500,18 +511,15 @@ class ChannelSampler:
         return data
 
     def sample(self, num_samples: int = 1) -> np.ndarray:
-        """Sample from all error channels and transform to new error basis.
+        """
+        Sample from all error channels and transform to the f-basis.
 
-        Uses geometric-skip sampling, optimized for low-noise regimes where
-        P(non-identity) << 1 per channel.
+        Uses geometric-skip sampling optimized for low-noise regimes.
 
-        Args:
-            num_samples: Number of samples to draw.
-
-        Returns:
-            NumPy array of shape (num_samples, num_f) with uint8 values indicating
-            which f-variables are set for each sample.
-
+        :param num_samples: Number of samples to draw, defaults to 1.
+        :type num_samples: int, optional
+        :return: Binary array of shape (num_samples, num_f) containing sampled outcomes.
+        :rtype: np.ndarray
         """
         num_outputs = self.signature_matrix.shape[1]
         result = np.zeros((num_samples, num_outputs), dtype=np.uint8)

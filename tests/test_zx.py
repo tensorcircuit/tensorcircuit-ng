@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import pyzx_param as pyzx
 from pytest_lazyfixture import lazy_fixture as lf
 import tensorcircuit as tc
-from tensorcircuit.stabilizertcircuit import StabilizerTCircuit
+from tensorcircuit.zx.stabilizertcircuit import StabilizerTCircuit
 from tensorcircuit.zx.converter import circuit_to_zx
 from tensorcircuit.zx.scalar_graph import (
     find_stab,

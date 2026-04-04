@@ -1,6 +1,5 @@
 """
 Decomposition of ZX graphs into scalar graphs and JAX-compatible IR.
-Pixel-perfect copy of tsim's compile.py and stabrank.py and pipeline.py.
 """
 
 from __future__ import annotations
@@ -46,6 +45,16 @@ class CompiledScalarGraphs(NamedTuple):
 
 
 def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScalarGraphs:
+    """
+    Compile a list of ZX scalar graphs into a JAX-compatible IR format.
+
+    :param g_list: List of ZX scalar graphs.
+    :type g_list: list[Any]
+    :param params: List of parameter names (e.g., 'f0', 'm0').
+    :type params: list[str]
+    :return: Compiled scalar graphs in IR format.
+    :rtype: CompiledScalarGraphs
+    """
     # Filter out zero graphs but keep at least one to avoid num_graphs=0
     active_graphs = [g for g in g_list if not g.scalar.is_zero]
     if not active_graphs and len(g_list) > 0:
@@ -246,6 +255,16 @@ def find_stab_u3(graphs: List[Any], strategy: DecompositionStrategy) -> list[Any
 
 
 def find_stab(graph: Any, strategy: DecompositionStrategy) -> List[Any]:
+    """
+    Decompose a ZX graph into a sum of stabilizer graphs.
+
+    :param graph: The ZX graph to decompose.
+    :type graph: Any
+    :param strategy: Decomposition strategy for T gates.
+    :type strategy: DecompositionStrategy
+    :return: List of stabilizer graphs.
+    :rtype: List[Any]
+    """
     if hasattr(graph, "graph") and not hasattr(graph, "add_vertex"):
         graph = graph.graph
     zx.full_reduce(graph, paramSafe=True)
@@ -355,6 +374,18 @@ def compile_program(
     mode: str,
     strategy: DecompositionStrategy = "cat5",
 ) -> CompiledProgram:
+    """
+    Compile a prepared sampling graph into a multicomponent program.
+
+    :param prepared: The prepared sampling graph metadata.
+    :type prepared: Any
+    :param mode: Compilation mode, currently only 'sequential' is supported.
+    :type mode: str
+    :param strategy: Decomposition strategy for T gates, defaults to "cat5".
+    :type strategy: DecompositionStrategy, optional
+    :return: The compiled program metadata.
+    :rtype: CompiledProgram
+    """
     from .utils import connected_components
 
     components = connected_components(prepared.graph)

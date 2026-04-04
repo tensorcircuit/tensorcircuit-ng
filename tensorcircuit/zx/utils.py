@@ -1,6 +1,5 @@
 """
-ZX utility functions for basis finding and graph manipulation.
-Pixel-perfect copy of tsim.utils.linalg and tsim.core.graph (parts).
+Utility functions for ZX-calculus and stabilizer decomposition.
 """
 
 from __future__ import annotations
@@ -12,8 +11,13 @@ from pyzx_param.graph.graph_s import GraphS as Graph
 
 
 def find_basis(vectors: Any) -> tuple[Any, Any]:
-    """Decompose a set of binary vectors into a basis subset and a transformation matrix over GF(2).
-    Pixel-perfect copy of tsim.utils.linalg.find_basis.
+    """
+    Decompose a set of binary vectors into a basis subset and a transformation matrix over GF(2).
+
+    :param vectors: Input binary vectors (2D array-like).
+    :type vectors: Any
+    :return: Tuple of (basis_vectors, transformation_matrix).
+    :rtype: tuple[Any, Any]
     """
     vecs = np.array(vectors, dtype=np.uint8)
     num_vectors, _ = vecs.shape
@@ -64,17 +68,20 @@ def find_basis(vectors: Any) -> tuple[Any, Any]:
 
 @dataclass
 class ConnectedComponent:
-    """A connected subgraph with its associated output indices.
-    Pixel-perfect copy of tsim.core.graph.ConnectedComponent.
-    """
+    """A connected subgraph with its associated output indices."""
 
     graph: Any
     output_indices: list[int]
 
 
 def connected_components(g: Any) -> list[ConnectedComponent]:
-    """Return each connected component of ``g`` as its own ZX subgraph.
-    Pixel-perfect copy of tsim.core.graph.connected_components.
+    """
+    Return each connected component of ``g`` as its own ZX subgraph.
+
+    :param g: The input ZX graph.
+    :type g: Any
+    :return: List of ConnectedComponent objects.
+    :rtype: list[ConnectedComponent]
     """
     components: list[ConnectedComponent] = []
     visited: set[Any] = set()
@@ -179,8 +186,13 @@ def _induced_subgraph(
 
 
 def get_params(g: Any) -> set[str]:
-    """Get all parameter variables that appear in the graph and its scalar.
-    Pixel-perfect copy of tsim.core.graph.get_params.
+    """
+    Get all parameter variables that appear in the graph and its scalar.
+
+    :param g: The ZX graph to inspect.
+    :type g: Any
+    :return: A set of parameter names.
+    :rtype: set[str]
     """
     active: set[str] = set()
     for v in g.vertices():

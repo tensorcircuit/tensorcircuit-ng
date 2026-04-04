@@ -1,6 +1,5 @@
-"""Evaluation of compiled scalar graphs using exact arithmetic.
-
-Combines tsim's exact_scalar.py and evaluate.py.
+"""
+Evaluation of compiled scalar graphs using exact arithmetic.
 """
 
 import functools
@@ -13,7 +12,7 @@ from jax import Array, lax
 from ..cons import dtypestr, idtypestr
 
 # ==============================================================================
-# Exact Scalar (from tsim/core/exact_scalar.py)
+# Exact Scalar arithmetic
 # ==============================================================================
 
 _E4 = jnp.exp(1j * jnp.pi / 4)  # e^(i*pi/4)
@@ -117,13 +116,19 @@ class ExactScalarArray(NamedTuple):
         return ExactScalarArray(result_coeffs, result_power)
 
     def to_complex(self) -> jax.Array:
+        """
+        Convert the exact scalar to a complex JAX array.
+
+        :return: Complex representation of the scalar.
+        :rtype: jax.Array
+        """
         c_val = _scalar_to_complex(self.coeffs)
         scale = jnp.pow(2.0, self.power)
         return c_val * scale
 
 
 # ==============================================================================
-# Evaluate (from tsim/compile/evaluate.py)
+# Evaluation logic
 # ==============================================================================
 
 # Lookup table for exact scalars (1 + omega^k)
@@ -162,7 +167,16 @@ def _matmul_gf2(a: Array, b: Array) -> Array:
 
 @jax.jit
 def evaluate(circuit: Any, param_vals: Array) -> Array:
-    """Evaluate compiled circuit with batched parameter values."""
+    """
+    Evaluate a compiled scalar graph circuit with batched parameter values.
+
+    :param circuit: The compiled scalar graph program.
+    :type circuit: Any
+    :param param_vals: Array of parameter bit values (f-basis and measurement records).
+    :type param_vals: Array
+    :return: Evaluation results as a complex JAX array.
+    :rtype: Array
+    """
     # ====================================================================
     # TYPE A: Node Terms (1 + e^(i*alpha))
     # Padded values are masked to multiplicative identity.

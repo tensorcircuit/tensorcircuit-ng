@@ -1,7 +1,6 @@
 """
 Converter from TensorCircuit to PyZX.
-Includes graph preparation and reduction utilities aligned with tsim.
-100% replica of tsim core logic.
+Includes graph preparation and reduction utilities.
 """
 
 from __future__ import annotations
@@ -29,6 +28,14 @@ from .noise_model import (
 
 
 def is_pauli(matrix: np.ndarray) -> Optional[str]:
+    """
+    Check if a matrix is a Pauli matrix.
+
+    :param matrix: The matrix to check.
+    :type matrix: np.ndarray
+    :return: The name of the Pauli matrix ('i', 'x', 'y', 'z') or None.
+    :rtype: Optional[str]
+    """
     for name, gate in zip(
         ["i", "x", "y", "z"], [tcgates.i(), tcgates.x(), tcgates.y(), tcgates.z()]
     ):
@@ -708,6 +715,16 @@ GATE_TABLE: Dict[str, tuple[Callable[..., None], int]] = {
 def circuit_to_zx(
     c: AbstractCircuit, force_measure_all: bool = False
 ) -> GraphRepresentation:
+    """
+    Convert a TensorCircuit AbstractCircuit to a ZX-calculus GraphRepresentation.
+
+    :param c: The source circuit.
+    :type c: AbstractCircuit
+    :param force_measure_all: Whether to force measurements on all qubits at the end, defaults to False.
+    :type force_measure_all: bool, optional
+    :return: The ZX graph representation of the circuit.
+    :rtype: GraphRepresentation
+    """
     # print(f"DEBUG: GATE_TABLE keys at start: {list(GATE_TABLE.keys())}")
     b = GraphRepresentation()
     b.graph.track_phases = True
@@ -814,6 +831,16 @@ def circuit_to_zx(
 
 
 def build_sampling_graph(built: GraphRepresentation, sample_detectors: bool) -> GraphS:
+    """
+    Build a doubled sampling graph from a ZX representation.
+
+    :param built: The input ZX representation.
+    :type built: GraphRepresentation
+    :param sample_detectors: Whether to prepare for detector/observable sampling or measurement records.
+    :type sample_detectors: bool
+    :return: The prepared ZX graph.
+    :rtype: GraphS
+    """
     g = built.graph.copy()
 
     # Initialize un-initialized first vertices to the 0 state
@@ -908,6 +935,16 @@ def build_sampling_graph(built: GraphRepresentation, sample_detectors: bool) -> 
 
 
 def transform_error_basis(g: Any, num_e: int | None = None) -> tuple[Any, Any]:
+    """
+    Transform error bit variables from original 'e' basis to a reduced 'f' basis.
+
+    :param g: The ZX graph containing error variables.
+    :type g: Any
+    :param num_e: Total number of error bits, defaults to None.
+    :type num_e: int, optional
+    :return: A tuple of (transformed_graph, basis_transformation_matrix).
+    :rtype: tuple[Any, Any]
+    """
     p_v = [
         v
         for v in g.vertices()
@@ -965,6 +1002,18 @@ def squash_graph(g: Any) -> None:
 def prepare_graph(
     circuit: AbstractCircuit, *, sample_detectors: bool, force_measure_all: bool = False
 ) -> SamplingGraph:
+    """
+    Prepare a circuit for sampling by converting to ZX and reducing.
+
+    :param circuit: The input circuit.
+    :type circuit: AbstractCircuit
+    :param sample_detectors: Whether to prepare for detector/observable sampling.
+    :type sample_detectors: bool
+    :param force_measure_all: Whether to force final measurements, defaults to False.
+    :type force_measure_all: bool, optional
+    :return: A SamplingGraph object containing the reduced graph and metadata.
+    :rtype: SamplingGraph
+    """
     built = circuit_to_zx(circuit, force_measure_all=force_measure_all)
     graph = build_sampling_graph(built, sample_detectors=sample_detectors)
     pyzx.full_reduce(graph, paramSafe=True)

@@ -12,7 +12,7 @@ import jax
 jax.config.update("jax_enable_x64", True)
 
 import tensorcircuit as tc
-from tensorcircuit.stabilizertcircuit import StabilizerTCircuit
+from tensorcircuit.zx.stabilizertcircuit import StabilizerTCircuit
 
 
 def run_benchmark(distance=3, rounds=3, batch=1000):
