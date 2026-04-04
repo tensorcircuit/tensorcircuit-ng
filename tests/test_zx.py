@@ -643,3 +643,139 @@ def test_zx_from_stim_noisy_bell_detector(backend):
     mean_flip = np.mean(res)
     # Error on q0 with prob 0.1 -> m0 flips -> detector flips
     assert 0.07 < mean_flip < 0.13
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_vs_stim_random_clifford(backend):
+    import stim
+    import random
+
+    num_qubits = 4
+    num_gates = 20
+    c = stim.Circuit()
+    gates = ["H", "S", "CX", "CZ", "X", "Y", "Z", "SQRT_X", "SWAP"]
+    for _ in range(num_gates):
+        g = random.choice(gates)
+        if g in ["CX", "CZ", "SWAP"]:
+            q = random.sample(range(num_qubits), 2)
+            c.append(g, q)
+        else:
+            q = random.randrange(num_qubits)
+            c.append(g, q)
+    c.append("M", range(num_qubits))
+
+    # Reference from Stim
+    sampler_stim = c.compile_sampler()
+    batch = 10000
+    samples_stim = sampler_stim.sample(batch)
+    p_stim = np.mean(samples_stim, axis=0)
+
+    # Result from StabilizerTCircuit
+    stc = StabilizerTCircuit.from_stim_circuit(c)
+    samples_tc = stc.sample_measurements(shots=batch)
+    p_tc = np.mean(samples_tc, axis=0)
+
+    # Statistical check
+    diff = np.abs(p_stim - p_tc)
+    threshold = 5 * np.sqrt(0.5 * 0.5 / batch)
+    assert np.all(diff < threshold)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_vs_stim_noisy_circuit(backend):
+    import stim
+
+    stim_str = """
+    H 0
+    CNOT 0 1
+    X_ERROR(0.1) 0
+    Y_ERROR(0.1) 1
+    DEPOLARIZE1(0.1) 0
+    M 0 1
+    """
+    stim_circuit = stim.Circuit(stim_str)
+
+    # Reference
+    sampler_stim = stim_circuit.compile_sampler()
+    batch = 10000
+    samples_stim = sampler_stim.sample(batch)
+    p_stim = np.mean(samples_stim, axis=0)
+
+    # TC
+    stc = StabilizerTCircuit.from_stim_circuit(stim_circuit)
+    samples_tc = stc.sample_measurements(shots=batch)
+    p_tc = np.mean(samples_tc, axis=0)
+
+    # Statistical check
+    diff = np.abs(p_stim - p_tc)
+    threshold = 5 * np.sqrt(0.5 * 0.5 / batch)
+    assert np.all(diff < threshold)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_outcome_probability_rigorous(backend):
+    # Test complex amplitudes via outcome_probability
+    stc = StabilizerTCircuit(2)
+    stc.h(0)
+    stc.cnot(0, 1)
+    # Bell state |00>+|11> / sqrt(2)
+    stc.measure_instruction(0)
+    stc.measure_instruction(1)
+
+    # P(00) = 0.5, P(11) = 0.5, P(01) = 0, P(10) = 0
+    assert np.allclose(stc.outcome_probability(jnp.array([0, 0])), 0.5)
+    assert np.allclose(stc.outcome_probability(jnp.array([1, 1])), 0.5)
+    assert np.allclose(stc.outcome_probability(jnp.array([0, 1])), 0.0)
+    assert np.allclose(stc.outcome_probability(jnp.array([1, 0])), 0.0)
+
+    # Add T gate
+    stc2 = StabilizerTCircuit(1)
+    stc2.h(0)
+    stc2.t(0)
+    stc2.h(0)
+    stc2.measure_instruction(0)
+    expected_p0 = (2 + np.sqrt(2)) / 4
+    assert np.allclose(stc2.outcome_probability(jnp.array([0])), expected_p0, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_outcome_probability_vs_exact_10q(backend):
+    # 10 qubit circuit with some Clifford and T gates
+    n = 10
+    c = tc.Circuit(n)
+    for i in range(n):
+        c.h(i)
+    for i in range(n - 1):
+        c.cnot(i, i + 1)
+    # Add some T gates to make it interesting
+    c.t(2)
+    c.t(5)
+    c.t(8)
+    # More Cliffords
+    c.s(3)
+    c.cz(4, 7)
+    c.h(1)
+
+    # We must add measurements to define the record indices for outcome_probability
+    for i in range(n):
+        c.measure_instruction(i)
+
+    stc = StabilizerTCircuit.from_circuit(c)
+
+    # Select a few bitstrings
+    test_bitstrings = [
+        [0] * n,
+        [1] * n,
+        [0, 1] * 5,
+        [1, 0, 1, 0, 0, 1, 1, 0, 0, 1],
+    ]
+
+    for bs in test_bitstrings:
+        state = jnp.array(bs)
+        prob_zx = stc.outcome_probability(state)
+
+        # Exact result from amplitude
+        amp = c.amplitude("".join(map(str, bs)))
+        prob_exact = tc.backend.abs(amp) ** 2
+
+        np.testing.assert_allclose(prob_zx, prob_exact, atol=1e-5)

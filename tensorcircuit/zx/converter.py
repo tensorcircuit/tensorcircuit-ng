@@ -633,14 +633,8 @@ def ry(b: GraphRepresentation, qubit: int) -> None:
 
 
 GATE_TABLE: Dict[str, tuple[Callable[..., None], int]] = {
-    "H": (h_gate, 1),
-    "CNOT": (lambda b, c, t: _cx_cz(b, True, c, t), 2),
-    "CX": (lambda b, c, t: _cx_cz(b, True, c, t), 2),
-    "CZ": (lambda b, c, t: _cx_cz(b, False, c, t), 2),
-    "M": (m, 1),
-    "R": (r, 1),
-    "MEASURE": (m, 1),
-    "RESET": (r, 1),
+    # ---- Pauli gates -----------------------------------------------------------
+    "I": (lambda b, q: None, 1),
     "X": (lambda b, q: x_phase(b, q, Fraction(1, 1)), 1),
     "Y": (
         lambda b, q: (
@@ -651,10 +645,36 @@ GATE_TABLE: Dict[str, tuple[Callable[..., None], int]] = {
         1,
     ),
     "Z": (lambda b, q: z_phase(b, q, Fraction(1, 1)), 1),
+    # ---- Non-Clifford gates ---------------------------------------------------
     "S": (lambda b, q: z_phase(b, q, Fraction(1, 2)), 1),
-    "T": (lambda b, q: z_phase(b, q, Fraction(1, 4)), 1),
     "SD": (lambda b, q: z_phase(b, q, Fraction(-1, 2)), 1),
+    "S_DAG": (lambda b, q: z_phase(b, q, Fraction(-1, 2)), 1),
+    "T": (lambda b, q: z_phase(b, q, Fraction(1, 4)), 1),
     "TD": (lambda b, q: z_phase(b, q, Fraction(-1, 4)), 1),
+    "T_DAG": (lambda b, q: z_phase(b, q, Fraction(-1, 4)), 1),
+    "SQRT_X": (sqrt_x, 1),
+    "SQRT_X_DAG": (sqrt_x_dag, 1),
+    "SQRT_Y": (sqrt_y, 1),
+    "SQRT_Y_DAG": (sqrt_y_dag, 1),
+    "H": (h_gate, 1),
+    "H_XY": (
+        lambda b, q: (
+            z_phase(b, q, Fraction(1, 1)),
+            x_phase(b, q, Fraction(1, 1)),
+            z_phase(b, q, Fraction(1, 2)),
+            b.graph.scalar.add_phase(Fraction(-1, 4)),
+        ),
+        1,
+    ),
+    "SQRT_Z": (lambda b, q: z_phase(b, q, Fraction(1, 2)), 1),
+    "H_YZ": (h_yz, 1),
+    "H_XZ": (h_gate, 1),
+    "S": (lambda b, q: z_phase(b, q, Fraction(1, 2)), 1),
+    "S_DAG": (lambda b, q: z_phase(b, q, Fraction(-1, 2)), 1),
+    # ---- Two-qubit gates ------------------------------------------------------
+    "CNOT": (lambda b, c, t: _cx_cz(b, True, c, t), 2),
+    "CX": (lambda b, c, t: _cx_cz(b, True, c, t), 2),
+    "CZ": (lambda b, c, t: _cx_cz(b, False, c, t), 2),
     "SWAP": (
         lambda b, q1, q2: (
             ensure_lane(b, q1),
@@ -667,6 +687,11 @@ GATE_TABLE: Dict[str, tuple[Callable[..., None], int]] = {
         ),
         2,
     ),
+    # ---- Collapsing gates -----------------------------------------------------
+    "M": (m, 1),
+    "R": (r, 1),
+    "MEASURE": (m, 1),
+    "RESET": (r, 1),
     "MR": (mr, 1),
     "MRX": (mrx, 1),
     "MRY": (mry, 1),
@@ -677,13 +702,13 @@ GATE_TABLE: Dict[str, tuple[Callable[..., None], int]] = {
     "RX": (rx, 1),
     "RY": (ry, 1),
     "RZ": (r, 1),
-    "I": (lambda b, q: None, 1),
 }
 
 
 def circuit_to_zx(
     c: AbstractCircuit, force_measure_all: bool = False
 ) -> GraphRepresentation:
+    # print(f"DEBUG: GATE_TABLE keys at start: {list(GATE_TABLE.keys())}")
     b = GraphRepresentation()
     b.graph.track_phases = True
     n = c._nqubits
@@ -775,7 +800,7 @@ def circuit_to_zx(
         elif name == "":
             continue
         else:
-            raise ValueError(f"Unknown instruction name: '{name}' in {d}")
+            raise ValueError(f"Unknown instruction name: '{name}' in {d}. GATE_TABLE keys: {list(GATE_TABLE.keys())}")
     if force_measure_all:
         for i in range(n):
             _m(b, i)
