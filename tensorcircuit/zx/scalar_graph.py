@@ -305,16 +305,17 @@ def _compile_component(
 
     if mode == "sequential":
         outputs_to_plug = list(range(num_component_outputs + 1))
-    else:
+    else:  # mode == "joint"
         outputs_to_plug = [0, num_component_outputs]
 
     compiled_graphs: list[CompiledScalarGraphs] = []
     component_m_chars = [f"m{i}" for i in output_indices]
-    plugged_graphs = _plug_outputs(graph, component_m_chars, outputs_to_plug)
+    plugged_graphs = _plug_outputs(graph, component_m_chars, outputs_to_plug, mode=mode)
 
     power2_base: int | None = None
 
-    for num_m_plugged, plugged_graph in zip(outputs_to_plug, plugged_graphs):
+    for i, plugged_graph in enumerate(plugged_graphs):
+        num_m_plugged = outputs_to_plug[i]
         g_copy = plugged_graph.copy()
         if hasattr(plugged_graph, "track_phases"):
             g_copy.track_phases = plugged_graph.track_phases
@@ -330,7 +331,11 @@ def _compile_component(
         _remove_phase_terms(g_copy)
 
         param_names = [f"f{i}" for i in f_selection]
-        param_names += [f"m{output_indices[j]}" for j in range(num_m_plugged)]
+        if mode == "sequential":
+            param_names += [f"m{output_indices[j]}" for j in range(num_m_plugged)]
+        else:  # mode == "joint"
+            if num_m_plugged > 0:
+                param_names += [f"m{output_indices[j]}" for j in range(num_m_plugged)]
 
         g_list = find_stab(g_copy, strategy=strategy)
 
@@ -351,6 +356,7 @@ def _plug_outputs(
     graph: Any,
     m_chars: list[str],
     outputs_to_plug: list[int],
+    mode: str = "sequential",
 ) -> list[Any]:
     graphs: list[Any] = []
     num_outputs = len(graph.outputs())
@@ -363,12 +369,20 @@ def _plug_outputs(
             g.merge_vdata = graph.merge_vdata
         output_vertices = list(g.outputs())
 
-        effect = "0" * num_plugged + "+" * (num_outputs - num_plugged)
-        g.apply_effect(effect)
-        for i, v in enumerate(output_vertices[:num_plugged]):
-            g.set_phase(v, m_chars[i])
-
-        g.scalar.add_power(num_outputs - num_plugged)
+        if mode == "sequential" or num_plugged == 0:
+            effect = "0" * num_plugged + "+" * (num_outputs - num_plugged)
+            g.apply_effect(effect)
+            for i, v in enumerate(output_vertices[:num_plugged]):
+                g.set_phase(v, m_chars[i])
+            g.scalar.add_power(num_outputs - num_plugged)
+        else:  # mode == "joint"
+            # Symbolic plugging for all outputs
+            # We plug with 0 state but add symbolic phase variable s_i * pi
+            # In ZX, this is equivalent to Z spider with phase m_i * pi
+            g.apply_effect("0" * num_outputs)
+            for i, v in enumerate(output_vertices):
+                g.set_phase(v, m_chars[i])
+            # No normalization power added here as it's a joint probability numerator
 
         graphs.append(g)
 

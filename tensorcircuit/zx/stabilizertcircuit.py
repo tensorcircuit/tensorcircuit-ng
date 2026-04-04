@@ -135,7 +135,9 @@ class StabilizerTCircuit(AbstractCircuit):
         self._key = jax.random.key(seed)
         self.strategy = strategy
         self._compiled_program: Optional[CompiledProgram] = None
+        self._compiled_probs: Optional[CompiledProgram] = None
         self._channel_sampler: Optional[ChannelSampler] = None
+        self._channel_sampler_probs: Optional[ChannelSampler] = None
         self._num_detectors = 0
         self._num_observables = 0
 
@@ -299,7 +301,6 @@ class StabilizerTCircuit(AbstractCircuit):
         :return: Probability of the outcome state for each noise realization.
         :rtype: jax.Array
         """
-        # 1. Prepare graphs
         has_m = any(
             d.get("name", "").upper()
             in ["MEASURE", "M", "MR", "MRX", "MRY", "MRZ", "MX", "MY", "MZ"]
@@ -307,61 +308,38 @@ class StabilizerTCircuit(AbstractCircuit):
         )
         force_measure_all = (not has_m) and (len(state) == self._nqubits)
 
-        # Re-implementing based on tsim.CompiledStateProbs:
-        # We use sample_detectors=False to ensure the outputs are the measurement records
-        built = circuit_to_zx(self, force_measure_all=force_measure_all)
-        prepared = build_sampling_graph(built, sample_detectors=False)
-        # We don't reduce here to ensure outputs stay
+        if self._compiled_probs is None:
+            prepared = prepare_graph(
+                self, sample_detectors=False, force_measure_all=force_measure_all
+            )
+            self._compiled_probs = compile_program(
+                prepared, mode="joint", strategy=self.strategy
+            )
+            self._channel_sampler_probs = ChannelSampler(
+                prepared.channel_probs, prepared.error_transform, seed=self._seed
+            )
 
-        g_state = prepared.copy()
-        g_state.apply_effect("".join(["1" if b else "0" for b in state]))
+        f_samples = jnp.asarray(self._channel_sampler_probs.sample(shots))
+        p_norm = jnp.ones(shots)
+        p_joint = jnp.ones(shots)
 
-        g_norm = prepared.copy()
-        g_norm.apply_effect("+" * len(state))
+        for component in self._compiled_probs.components:
+            assert len(component.compiled_scalar_graphs) == 2
 
-        # Compensate power for trace of unplugged outputs
-        # In joint mode, we plug all outputs of the component.
-        # But here we are plugging all outputs of the WHOLE graph.
-        # tsim: g.scalar.add_power(num_outputs - num_plugged)
-        # For g_state: num_plugged = len(state), so add_power(0)
-        # For g_norm: num_plugged = 0 (since it's all '+'), so add_power(len(state))
-        g_norm.scalar.add_power(len(state))
+            f_selected = f_samples[:, component.f_selection]
 
-        # Compile them
-        # find_stab expects GraphS
-        stabs_state = find_stab(g_state, strategy=self.strategy)
-        stabs_norm = find_stab(g_norm, strategy=self.strategy)
+            norm_circuit, joint_circuit = component.compiled_scalar_graphs
 
-        # Transform error basis to get f-params
-        prepared, error_transform = transform_error_basis(
-            prepared, num_e=built.num_error_bits
-        )
+            # Normalization: only f-params
+            p_norm = p_norm * jnp.abs(evaluate(norm_circuit, f_selected))
 
-        active = get_params(prepared)  # Use transformed graph's vars
-        f_vars = sorted([v for v in active if v.startswith("f")])
+            # Joint probability: f-params + state
+            component_state = state[jnp.array(component.output_indices)]
+            tiled_state = jnp.tile(component_state, (shots, 1))
+            joint_params = jnp.hstack([f_selected, tiled_state])
+            p_joint = p_joint * jnp.abs(evaluate(joint_circuit, joint_params))
 
-        compiled_state = compile_scalar_graphs(stabs_state, f_vars)
-        compiled_norm = compile_scalar_graphs(stabs_norm, f_vars)
-
-        # Sample f-params
-        channel_sampler = ChannelSampler(
-            built.channel_probs, error_transform, seed=self._seed
-        )
-        f_samples = jnp.asarray(channel_sampler.sample(shots))
-        # f_samples has all f-params, but evaluate expects only the ones in f_vars
-        # Actually, f_vars are the names like 'f0', 'f1'.
-        # We need to map these to indices.
-        f_indices = [int(v[1:]) for v in f_vars]
-        f_selected = (
-            f_samples[:, jnp.array(f_indices)]
-            if f_indices
-            else jnp.zeros((shots, 0), dtype=jnp.bool_)
-        )
-
-        p_state = jnp.abs(evaluate(compiled_state, f_selected))
-        p_norm = jnp.abs(evaluate(compiled_norm, f_selected))
-
-        return p_state / p_norm
+        return p_joint / p_norm
 
     def _sample_batches(self, shots: int, batch_size: int = 1000) -> jax.Array:
         batches = []
