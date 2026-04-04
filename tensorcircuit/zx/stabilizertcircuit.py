@@ -12,7 +12,6 @@ import jax.numpy as jnp
 import numpy as np
 import pyzx_param as pyzx
 from pyzx_param.simulate import DecompositionStrategy
-from fractions import Fraction
 
 from ..cons import rdtypestr
 
@@ -27,9 +26,7 @@ from .scalar_graph import (
 from .converter import (
     prepare_graph,
     circuit_to_zx,
-    build_sampling_graph,
     build_amplitude_graph,
-    transform_error_basis,
     GATE_TABLE,
 )
 from .noise_model import ChannelSampler
@@ -466,7 +463,7 @@ class StabilizerTCircuit(AbstractCircuit):
             if prepared.error_transform.size > 0
             else np.zeros((nmc, 0), dtype=np.uint8)
         )
-        param_cols: list[np.ndarray] = []
+        param_cols: list[Any] = []
         for pname in param_names:
             idx = int(pname[1:])
             if pname.startswith("e"):

@@ -985,7 +985,7 @@ def test_expectation_amplitude_clean_diverse(backend):
         ({"ps": [1, 2, 3, 0]}, "XYZI"),
     ]
 
-    for kwargs, name in test_cases:
+    for kwargs, _ in test_cases:
         exp_zx = stc.expectation_ps(**kwargs)
         exp_exact = c.expectation_ps(**kwargs)
         np.testing.assert_allclose(exp_zx, exp_exact, atol=1e-5)

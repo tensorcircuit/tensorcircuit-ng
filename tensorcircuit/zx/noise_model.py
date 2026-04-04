@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from typing import Any
 from dataclasses import dataclass
 
 import numpy as np
@@ -18,7 +19,7 @@ class Channel:
 
     """
 
-    probs: np.ndarray
+    probs: Any
     unique_col_ids: tuple[int, ...]
 
     @property
@@ -27,7 +28,7 @@ class Channel:
         return int(np.log2(len(self.probs)))
 
 
-def error_probs(p: float) -> np.ndarray:
+def error_probs(p: float) -> Any:
     """
     Single-bit error channel probability distribution.
 
@@ -39,7 +40,7 @@ def error_probs(p: float) -> np.ndarray:
     return np.array([1 - p, p], dtype=np.float64)
 
 
-def pauli_channel_1_probs(px: float, py: float, pz: float) -> np.ndarray:
+def pauli_channel_1_probs(px: float, py: float, pz: float) -> Any:
     """
     Single-qubit Pauli channel probability distribution.
 
@@ -71,7 +72,7 @@ def pauli_channel_2_probs(
     pzx: float,
     pzy: float,
     pzz: float,
-) -> np.ndarray:
+) -> Any:
     """
     Two-qubit Pauli channel probability distribution.
 
@@ -122,7 +123,7 @@ def pauli_channel_2_probs(
     return probs
 
 
-def correlated_error_probs(probabilities: list[float]) -> np.ndarray:
+def correlated_error_probs(probabilities: list[float]) -> Any:
     """Build probability distribution for correlated error chain.
 
     Given conditional probabilities [p1, p2, ..., pk] from a chain of
@@ -153,7 +154,7 @@ def correlated_error_probs(probabilities: list[float]) -> np.ndarray:
     return probs
 
 
-def xor_convolve(probs_a: np.ndarray, probs_b: np.ndarray) -> np.ndarray:
+def xor_convolve(probs_a: Any, probs_b: Any) -> Any:
     """
     XOR convolution of two probability distributions.
 
@@ -247,7 +248,7 @@ def normalize_channels(channels: list[Channel]) -> list[Channel]:
     for channel in channels:
         n = channel.num_bits
         source_col_ids = np.array(channel.unique_col_ids)
-        axis_perm = np.argsort(source_col_ids, stable=True)
+        axis_perm = np.argsort(source_col_ids, kind="stable")
         probs_tensor = channel.probs.reshape((2,) * n, order="F")
         new_probs = probs_tensor.transpose(axis_perm).reshape(2**n, order="F")
 
@@ -424,8 +425,8 @@ class ChannelSampler:
 
     def __init__(
         self,
-        channel_probs: list[np.ndarray],
-        error_transform: np.ndarray,
+        channel_probs: list[Any],
+        error_transform: Any,
         seed: int | None = None,
     ):
         """Initialize the sampler with channel probabilities and a basis transformation.
@@ -475,8 +476,8 @@ class ChannelSampler:
 
     @staticmethod
     def _precompute_sparse(
-        channels: list[Channel], signature_matrix: np.ndarray
-    ) -> list[tuple[float, np.ndarray, np.ndarray]]:
+        channels: list[Channel], signature_matrix: Any
+    ) -> list[tuple[float, Any, Any]]:
         """
         Precompute per-channel data for geometric-skip sampling.
 
@@ -487,7 +488,7 @@ class ChannelSampler:
         :return: List of precomputed sampling data (p_fire, cond_cdf, xor_patterns).
         :rtype: list[tuple[float, np.ndarray, np.ndarray]]
         """
-        data: list[tuple[float, np.ndarray, np.ndarray]] = []
+        data: list[tuple[float, Any, Any]] = []
         for ch in channels:
             probs = ch.probs.astype(np.float64)
             p_fire = 1.0 - float(probs[0])
@@ -510,7 +511,7 @@ class ChannelSampler:
             data.append((p_fire, cond_cdf, xor_patterns))
         return data
 
-    def sample(self, num_samples: int = 1) -> np.ndarray:
+    def sample(self, num_samples: int = 1) -> Any:
         """
         Sample from all error channels and transform to the f-basis.
 

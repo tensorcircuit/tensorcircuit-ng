@@ -25,7 +25,7 @@ from .noise_model import (
 )
 
 
-def is_pauli(matrix: np.ndarray) -> Optional[str]:
+def is_pauli(matrix: Any) -> Optional[str]:
     """
     Check if a matrix is a Pauli matrix.
 
@@ -62,7 +62,7 @@ class GraphRepresentation:
     observables_dict: Dict[int, int] = field(default_factory=dict)
     first_vertex: Dict[int, int] = field(default_factory=dict)
     last_vertex: Dict[int, int] = field(default_factory=dict)
-    channel_probs: List[np.ndarray] = field(default_factory=list)
+    channel_probs: List[Any] = field(default_factory=list)
     correlated_error_probs: List[float] = field(default_factory=list)
     num_error_bits: int = 0
     num_correlated_error_bits: int = 0
