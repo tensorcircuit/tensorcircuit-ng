@@ -455,7 +455,21 @@ class Circuit(BaseCircuit):
                 for k in kraus
             ]
             kraus = [
-                k / backend.cast(backend.sqrt(p), dtypestr) for k, p in zip(kraus, prob)
+                k
+                / backend.cast(
+                    backend.where(
+                        p
+                        > backend.cast(
+                            backend.convert_to_tensor(0.0), p.dtype  # type: ignore
+                        ),
+                        backend.sqrt(p),
+                        backend.cast(
+                            backend.convert_to_tensor(1.0), p.dtype  # type: ignore
+                        ),
+                    ),
+                    dtypestr,
+                )
+                for k, p in zip(kraus, prob)
             ]
         if not backend.is_tensor(prob):
             prob = backend.convert_to_tensor(prob)

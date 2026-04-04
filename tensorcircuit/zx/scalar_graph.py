@@ -92,7 +92,8 @@ def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScala
             for term in g.scalar.phasevars_halfpi[j]:
                 bitstr = [0] * n_params
                 for v in cast(Sequence[str], term):
-                    bitstr[char_to_idx[v]] = 1
+                    if v in char_to_idx:
+                        bitstr[char_to_idx[v]] = 1
                 bitstr_to_j[tuple(bitstr)] = (bitstr_to_j[tuple(bitstr)] + j) % 4
         for b_key, val in bitstr_to_j.items():
             if val != 0:
@@ -113,8 +114,9 @@ def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScala
                 c_bits.append(1 if "1" in ps else 0)
                 p_bits = [0] * n_params
                 for p in ps:
-                    if str(p) != "1":
-                        p_bits[char_to_idx[str(p)]] = 1
+                    p_str = str(p)
+                    if p_str != "1" and p_str in char_to_idx:
+                        p_bits[char_to_idx[p_str]] = 1
                 c_bits.append(cast(int, p_bits))  # type: ignore
             c_terms[i].append(tuple(c_bits))
     max_c = max((len(t) for t in c_terms), default=0)
@@ -139,9 +141,11 @@ def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScala
         for pp in g.scalar.phasepairs:
             pa, pb = [0] * n_params, [0] * n_params
             for v in pp.paramsA:
-                pa[char_to_idx[v]] = 1
+                if v in char_to_idx:
+                    pa[char_to_idx[v]] = 1
             for v in pp.paramsB:
-                pb[char_to_idx[v]] = 1
+                if v in char_to_idx:
+                    pb[char_to_idx[v]] = 1
             d_terms[i].append((int(pp.alpha), int(pp.beta), pa, pb))
     d_num_terms = np.array([len(t) for t in d_terms], dtype=idtypestr)
     max_d = int(d_num_terms.max()) if d_num_terms.size else 0
@@ -174,6 +178,10 @@ def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScala
 
     exact_floatfactor, power2 = [], []
     for g in g_list:
+        if g.scalar.is_zero:
+            power2.append(0)
+            exact_floatfactor.append([0, 0, 0, 0])
+            continue
         dn, p_sqrt2 = g.scalar.floatfactor.copy(), g.scalar.power2
         if p_sqrt2 % 2 != 0:
             p_sqrt2 -= 1

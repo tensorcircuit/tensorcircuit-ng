@@ -936,7 +936,11 @@ def circuit_to_zx(
     return b
 
 
-def build_sampling_graph(built: GraphRepresentation, sample_detectors: bool) -> GraphS:
+def build_sampling_graph(
+    built: GraphRepresentation,
+    sample_detectors: bool,
+    pauli: Optional[Dict[int, str]] = None,
+) -> GraphS:
     """
     Build a doubled sampling graph from a ZX representation.
 
@@ -944,6 +948,9 @@ def build_sampling_graph(built: GraphRepresentation, sample_detectors: bool) -> 
     :type built: GraphRepresentation
     :param sample_detectors: Whether to prepare for detector/observable sampling or measurement records.
     :type sample_detectors: bool
+    :param pauli: Optional Pauli string to insert at the junction for expectation values.
+        Dictionary mapping qubit index to Pauli operator ('I', 'X', 'Y', 'Z').
+    :type pauli: Optional[Dict[int, str]]
     :return: The prepared ZX graph.
     :rtype: GraphS
     """
@@ -966,10 +973,51 @@ def build_sampling_graph(built: GraphRepresentation, sample_detectors: bool) -> 
 
     # Graph doubling: composed with adjoint
     g_adj = g.adjoint()
-    g.compose(g_adj)
 
-    # Re-copy to ensure fresh state
-    g = g.copy()
+    if pauli is not None:
+        # Insert Pauli operators at the junction
+        # We modify the output boundary types of g before composition
+        outputs = list(g.outputs())
+        for v in outputs:
+            op = pauli.get(int(g.qubit(v)), "I").upper()
+            if op == "I":
+                continue
+            nbs = list(g.neighbors(v))
+            if not nbs:
+                continue
+            nb = nbs[0]
+            et = g.edge_type((nb, v))
+            g.remove_edge((nb, v))
+
+            if op == "Z":
+                mid = g.add_vertex(VertexType.Z, qubit=g.qubit(v), row=g.row(v) - 0.05)
+                g.set_phase(mid, Fraction(1, 1))
+                g.add_edge((nb, mid), et)
+                g.add_edge((mid, v), EdgeType.SIMPLE)
+            elif op == "X":
+                mid = g.add_vertex(VertexType.X, qubit=g.qubit(v), row=g.row(v) - 0.05)
+                g.set_phase(mid, Fraction(1, 1))
+                g.add_edge((nb, mid), et)
+                g.add_edge((mid, v), EdgeType.SIMPLE)
+            elif op == "Y":
+                # Y = i X Z (up to phase, which we'll handle)
+                # We insert X and Z
+                z_mid = g.add_vertex(
+                    VertexType.Z, qubit=g.qubit(v), row=g.row(v) - 0.06
+                )
+                g.set_phase(z_mid, Fraction(1, 1))
+                x_mid = g.add_vertex(
+                    VertexType.X, qubit=g.qubit(v), row=g.row(v) - 0.03
+                )
+                g.set_phase(x_mid, Fraction(1, 1))
+
+                g.add_edge((nb, z_mid), et)
+                g.add_edge((z_mid, x_mid), EdgeType.SIMPLE)
+                g.add_edge((x_mid, v), EdgeType.SIMPLE)
+                # Y = iXZ. We add pi/2 phase to the scalar.
+                g.scalar.add_phase(Fraction(1, 2))
+
+    g.compose(g_adj)
 
     l2v = defaultdict(list)
     a2v = defaultdict(list)
@@ -988,12 +1036,16 @@ def build_sampling_graph(built: GraphRepresentation, sample_detectors: bool) -> 
     for i in range(num_m):
         label = f"rec[{i}]"
         vertices = l2v[label]
+        if not vertices:
+            continue
         assert len(vertices) == 2
         v0, v1 = vertices
         if not g.connected(v0, v1):
             g.add_edge((v0, v1))
         g.set_phase(v0, 0)
         g.set_phase(v1, 0)
+        # Substitute the rec variable with 0 as they cancel each other in doubling if not measured
+        # Actually in sampling, we keep rec variables to build the measurement IR
         if not sample_detectors:
             v3 = g.add_vertex(VertexType.BOUNDARY, qubit=-1, row=i + 1)
             outputs[i] = v3
@@ -1040,6 +1092,38 @@ def build_sampling_graph(built: GraphRepresentation, sample_detectors: bool) -> 
     return cast(GraphS, g)
 
 
+def build_amplitude_graph(
+    built: GraphRepresentation, bitstring: Sequence[int]
+) -> GraphS:
+    """
+    Build a scalar graph representing the amplitude <bitstring|psi>.
+
+    :param built: The input ZX representation.
+    :type built: GraphRepresentation
+    :param bitstring: The target bitstring as a sequence of 0s and 1s.
+    :type bitstring: Sequence[int]
+    :return: The scalar ZX graph.
+    :rtype: GraphS
+    """
+    g = built.graph.copy()
+    for v in built.first_vertex.values():
+        if g.type(v) == VertexType.BOUNDARY:
+            g.set_type(v, VertexType.X)
+            g.set_phase(v, 0)
+
+    outputs = list(g.outputs())
+    for i, v in enumerate(outputs):
+        val = 1 if i < len(bitstring) and bitstring[i] == 1 else 0
+        # outputs in GraphRepresentation are typically Z-spiders or boundaries
+        # We set them to X-spiders with phase pi * bit to project onto |bit>
+        g.set_type(v, VertexType.X)
+        g.set_phase(v, Fraction(val, 1))
+
+    g.set_inputs(tuple())
+    g.set_outputs(tuple())
+    return cast(GraphS, g)
+
+
 def transform_error_basis(g: Any, num_e: int | None = None) -> tuple[Any, Any]:
     """
     Transform error bit variables from original 'e' basis to a reduced 'f' basis.
@@ -1057,7 +1141,6 @@ def transform_error_basis(g: Any, num_e: int | None = None) -> tuple[Any, Any]:
         if v in g._phaseVars and any(var.startswith("e") for var in g._phaseVars[v])
     ]
     if not p_v:
-        g.scalar = Scalar()
         return g, np.zeros((0, num_e if num_e else 0), dtype=np.uint8)
     e_idx = [
         [int(var[1:]) for var in g._phaseVars[v] if var.startswith("e")] for v in p_v
@@ -1106,7 +1189,12 @@ def squash_graph(g: Any) -> None:
 
 
 def prepare_graph(
-    circuit: AbstractCircuit, *, sample_detectors: bool, force_measure_all: bool = False
+    circuit: AbstractCircuit,
+    *,
+    sample_detectors: bool,
+    force_measure_all: bool = False,
+    pauli: Optional[Dict[int, str]] = None,
+    reset_scalar: bool = True,
 ) -> SamplingGraph:
     """
     Prepare a circuit for sampling by converting to ZX and reducing.
@@ -1117,15 +1205,18 @@ def prepare_graph(
     :type sample_detectors: bool
     :param force_measure_all: Whether to force final measurements, defaults to False.
     :type force_measure_all: bool, optional
+    :param pauli: Optional Pauli string to insert at the junction.
+    :type pauli: Optional[Dict[int, str]]
     :return: A SamplingGraph object containing the reduced graph and metadata.
     :rtype: SamplingGraph
     """
     built = circuit_to_zx(circuit, force_measure_all=force_measure_all)
-    graph = build_sampling_graph(built, sample_detectors=sample_detectors)
+    graph = build_sampling_graph(built, sample_detectors=sample_detectors, pauli=pauli)
     pyzx.full_reduce(graph, paramSafe=True)
     squash_graph(graph)
     graph, error_transform = transform_error_basis(graph, num_e=built.num_error_bits)
-    graph.scalar = Scalar()
+    if reset_scalar:
+        graph.scalar = Scalar()
     return SamplingGraph(
         graph,
         error_transform,

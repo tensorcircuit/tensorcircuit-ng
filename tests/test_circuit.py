@@ -251,6 +251,24 @@ def test_large_scale_sample(backend):
     )
 
 
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_depolarizing_zero_prob_channel_no_nan(backend):
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cnot(0, 1)
+    c.s(1)
+    c.depolarizing(0, px=0.05, py=0.05, pz=0.05)
+    c.depolarizing(1, px=0.1, py=0.0, pz=0.0)
+    c.h(1)
+
+    wf = tc.backend.numpy(c.wavefunction())
+    exp = tc.backend.numpy(c.expectation_ps(x=[0], z=[1]))
+
+    assert np.isfinite(wf).all()
+    assert np.isfinite(exp).all()
+    np.testing.assert_allclose(np.linalg.norm(wf), 1.0, atol=1e-5)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("cpb")])
 def test_expectation(backend):
     c = tc.Circuit(2)

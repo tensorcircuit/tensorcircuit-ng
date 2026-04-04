@@ -905,3 +905,169 @@ def test_zx_exact_scalar_alignment(backend):
     p0_ref = tc.backend.abs(c.amplitude("0")) ** 2
 
     np.testing.assert_allclose(p0, p0_ref, atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_amplitude_expectation_random(backend):
+    n = 3
+    for _ in range(4):
+        c = tc.Circuit(n)
+        for i in range(n):
+            c.h(i)
+        for i in range(n - 1):
+            c.cnot(i, i + 1)
+        # Add some T gates
+        c.t(0)
+        c.t(1)
+        c.cnot(0, 2)
+        c.s(2)
+        c.t(2)
+
+        stc = StabilizerTCircuit.from_circuit(c)
+
+        # Test amplitude
+        bitstrings = ["000", "011", "101", "110"]
+        for bs in bitstrings:
+            amp_zx = stc.amplitude(bs)
+            amp_exact = c.amplitude(bs)
+            np.testing.assert_allclose(amp_zx, amp_exact, atol=1e-5)
+
+        # Test expectation_ps
+        # Z0
+        exp_zx = stc.expectation_ps(z=[0])
+        exp_exact = c.expectation_ps(z=[0])
+        np.testing.assert_allclose(exp_zx, exp_exact, atol=1e-5)
+
+        # X1 Z2
+        exp_zx = stc.expectation_ps(x=[1], z=[2])
+        exp_exact = c.expectation_ps(x=[1], z=[2])
+        np.testing.assert_allclose(exp_zx, exp_exact, atol=1e-5)
+
+        # Y0 Y1
+        exp_zx = stc.expectation_ps(y=[0, 1])
+        exp_exact = c.expectation_ps(y=[0, 1])
+        np.testing.assert_allclose(exp_zx, exp_exact, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_expectation_amplitude_clean_diverse(backend):
+    # More comprehensive clean circuit tests against tc.Circuit
+    n = 4
+    c = tc.Circuit(n)
+    c.x(0)
+    c.h(1)
+    c.y(2)
+    c.z(3)
+    c.t(0)
+    c.cnot(0, 1)
+    c.s(2)
+    c.cz(2, 3)
+    c.swap(0, 2)
+    c.h(3)
+    c.t(1)  # Non-Clifford gate
+    c.cnot(1, 3)
+
+    stc = StabilizerTCircuit.from_circuit(c)
+
+    # 1. Test amplitudes
+    for bs_int in range(2**n):
+        bs = bin(bs_int)[2:].zfill(n)
+        amp_zx = stc.amplitude(bs)
+        amp_exact = c.amplitude(bs)
+        np.testing.assert_allclose(amp_zx, amp_exact, atol=1e-5)
+
+    # 2. Test diverse Pauli expectations
+    test_cases = [
+        ({"z": [0, 1, 2, 3]}, "ZZZZ"),
+        ({"x": [0, 2]}, "X0 X2"),
+        ({"y": [1, 3]}, "Y1 Y3"),
+        ({"x": [0], "y": [1], "z": [2]}, "X0 Y1 Z2"),
+        ({"ps": [1, 2, 3, 0]}, "XYZI"),
+    ]
+
+    for kwargs, name in test_cases:
+        exp_zx = stc.expectation_ps(**kwargs)
+        exp_exact = c.expectation_ps(**kwargs)
+        np.testing.assert_allclose(exp_zx, exp_exact, atol=1e-5)
+
+    # Canonical ps API should agree with equivalent explicit x/y/z specification.
+    ps_case = [1, 2, 3, 0]
+    xyz_case = {"x": [0], "y": [1], "z": [2]}
+    np.testing.assert_allclose(
+        stc.expectation_ps(ps=ps_case),
+        stc.expectation_ps(**xyz_case),
+        atol=1e-5,
+    )
+    np.testing.assert_allclose(
+        c.expectation_ps(ps=ps_case),
+        c.expectation_ps(**xyz_case),
+        atol=1e-5,
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_random_clifford_expectation(backend):
+    """Test random Clifford circuits against tc.Circuit."""
+    n = 3
+    for _ in range(5):
+        c = tc.Circuit(n)
+        for _ in range(10):
+            gate_type = np.random.choice(["h", "s", "cnot", "cz", "x", "y", "z"])
+            q1 = np.random.randint(n)
+            if gate_type in ["cnot", "cz"]:
+                q2 = np.random.randint(n)
+                while q1 == q2:
+                    q2 = np.random.randint(n)
+                getattr(c, gate_type)(q1, q2)
+            else:
+                getattr(c, gate_type)(q1)
+
+        stc = StabilizerTCircuit.from_circuit(c)
+
+        # Random Pauli string
+        ps = np.random.randint(0, 4, size=n)
+        exp_zx = stc.expectation_ps(ps=list(ps))
+        exp_exact = c.expectation_ps(ps=list(ps))
+        np.testing.assert_allclose(exp_zx, exp_exact, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_noisy_expectation_ps_x_error_mc(backend):
+    p = 0.2
+    stc = StabilizerTCircuit(1, seed=123)
+    stc.x_error(0, p)
+    exp_mc = stc.expectation_ps(z=[0], nmc=20000)
+    np.testing.assert_allclose(exp_mc, 1.0 - 2.0 * p, atol=0.03)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_noisy_expectation_ps_matches_weighted_reference(backend):
+    p_dep = 0.15
+    p_x = 0.1
+    pauli_spec = [1, 3]  # X0 Z1
+
+    stc = StabilizerTCircuit(2, seed=321)
+    stc.h(0)
+    stc.cnot(0, 1)
+    stc.s(1)
+    stc.depolarizing(0, p_dep)
+    stc.x_error(1, p_x)
+    stc.h(1)
+
+    ntraj = 5000
+    exp_mc = stc.expectation_ps(ps=pauli_spec, nmc=ntraj)
+
+    # Trajectory-level tc.Circuit baseline via built-in depolarizing noise sampling.
+    ref_vals = []
+    for _ in range(ntraj):
+        c = tc.Circuit(2)
+        c.h(0)
+        c.cnot(0, 1)
+        c.s(1)
+        c.depolarizing(0, px=p_dep / 3, py=p_dep / 3, pz=p_dep / 3)
+        c.depolarizing(1, px=p_x, py=0.0, pz=0.0)
+        c.h(1)
+        ref_vals.append(c.expectation_ps(ps=pauli_spec))
+    ref = np.mean(np.asarray(ref_vals, dtype=np.complex128))
+
+    np.testing.assert_allclose(exp_mc, ref, atol=0.04)

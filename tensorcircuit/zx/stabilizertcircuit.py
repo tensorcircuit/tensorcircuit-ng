@@ -4,13 +4,15 @@ Stabilizer+T Circuit class using ZX-calculus and JAX.
 
 from __future__ import annotations
 from math import ceil
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import re
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pyzx_param as pyzx
 from pyzx_param.simulate import DecompositionStrategy
+from fractions import Fraction
 
 from ..cons import rdtypestr
 
@@ -26,6 +28,7 @@ from .converter import (
     prepare_graph,
     circuit_to_zx,
     build_sampling_graph,
+    build_amplitude_graph,
     transform_error_basis,
     GATE_TABLE,
 )
@@ -340,6 +343,143 @@ class StabilizerTCircuit(AbstractCircuit):
             p_joint = p_joint * jnp.abs(evaluate(joint_circuit, joint_params))
 
         return p_joint / p_norm
+
+    def amplitude(self, state: Union[jax.Array, Sequence[int], str]) -> jax.Array:
+        """
+        Calculate the complex amplitude <state|psi> for a noiseless circuit.
+        Fails if the circuit contains non-unitary operations or noise.
+
+        :param state: The target bitstring.
+        :type state: Union[jax.Array, Sequence[int], str]
+        :return: The complex amplitude.
+        :rtype: jax.Array
+        """
+        if isinstance(state, str):
+            state = [int(x) for x in state]
+        built = circuit_to_zx(self, force_measure_all=True)
+        if built.num_error_bits > 0:
+            raise ValueError("amplitude() only supported for noiseless circuits.")
+
+        graph = build_amplitude_graph(built, state)
+        pyzx.full_reduce(graph, paramSafe=True)
+        graphs = find_stab(graph, strategy=self.strategy)
+        compiled = compile_scalar_graphs(graphs, [])
+        dummy_f = jnp.zeros((1, 0), dtype=jnp.bool_)
+        amp = evaluate(compiled, dummy_f)
+        # Divide by sqrt(2)^n due to ZX boundary conventions
+        return amp[0] / (2.0 ** (self._nqubits / 2.0))
+
+    def expectation_ps(
+        self,
+        x: Optional[Sequence[int]] = None,
+        y: Optional[Sequence[int]] = None,
+        z: Optional[Sequence[int]] = None,
+        ps: Optional[Sequence[int]] = None,
+        nmc: int = 1000,
+        **kwargs: Any,
+    ) -> jax.Array:
+        """
+        Calculate the expectation value <psi|O|psi> for a Pauli string O.
+        Supports noiseless and noisy circuits.
+
+        :param x: Qubit indices for X operators.
+        :type x: Optional[Sequence[int]]
+        :param y: Qubit indices for Y operators.
+        :type y: Optional[Sequence[int]]
+        :param z: Qubit indices for Z operators.
+        :type z: Optional[Sequence[int]]
+        :param ps: Pauli string as a sequence of integers (0:I, 1:X, 2:Y, 3:Z).
+        :type ps: Optional[Sequence[int]]
+        :param nmc: Number of Monte Carlo trajectories for noisy circuits.
+        :type nmc: int
+        :return: The expectation value.
+        :rtype: jax.Array
+        """
+        pauli_dict: Dict[int, str] = {}
+        if ps is not None:
+            for i, p in enumerate(ps):
+                if p == 1:
+                    pauli_dict[i] = "X"
+                elif p == 2:
+                    pauli_dict[i] = "Y"
+                elif p == 3:
+                    pauli_dict[i] = "Z"
+        if x is not None:
+            for i in x:
+                pauli_dict[i] = "X"
+        if y is not None:
+            for i in y:
+                pauli_dict[i] = "Y"
+        if z is not None:
+            for i in z:
+                pauli_dict[i] = "Z"
+
+        prepared = prepare_graph(
+            self,
+            sample_detectors=False,
+            force_measure_all=False,
+            pauli=pauli_dict,
+            reset_scalar=False,
+        )
+        graphs = find_stab(prepared.graph, strategy=self.strategy)
+        param_names = sorted(
+            [
+                p
+                for p in get_params(prepared.graph)
+                if p != "1" and (p.startswith("e") or p.startswith("f"))
+            ],
+            key=lambda p: (p[0], int(p[1:])),
+        )
+        compiled = compile_scalar_graphs(graphs, param_names)
+
+        if prepared.num_error_bits == 0:
+            vals = evaluate(compiled, jnp.zeros((1, 0), dtype=jnp.bool_))
+            # Divide by 2^n due to ZX doubled boundary conventions
+            return vals[0] / (2.0**self._nqubits)
+
+        if nmc <= 0:
+            raise ValueError("nmc must be positive for noisy expectation_ps().")
+
+        self._key, subkey = jax.random.split(self._key)
+        mc_seed = int(
+            np.asarray(
+                jax.random.randint(
+                    subkey, shape=(), minval=0, maxval=2**31 - 1, dtype=jnp.int32
+                )
+            )
+        )
+        rng = np.random.default_rng(mc_seed)
+        sampled_e = np.zeros((nmc, prepared.num_error_bits), dtype=np.uint8)
+        e_offset = 0
+        for probs in prepared.channel_probs:
+            probs = np.asarray(probs, dtype=np.float64)
+            nbits = int(np.log2(len(probs)))
+            outcomes = rng.choice(len(probs), size=nmc, p=probs)
+            bits = ((outcomes[:, None] >> np.arange(nbits)) & 1).astype(np.uint8)
+            sampled_e[:, e_offset : e_offset + nbits] = bits
+            e_offset += nbits
+
+        sampled_f = (
+            (sampled_e.astype(np.uint8) @ prepared.error_transform.T.astype(np.uint8))
+            % 2
+            if prepared.error_transform.size > 0
+            else np.zeros((nmc, 0), dtype=np.uint8)
+        )
+        param_cols: list[np.ndarray] = []
+        for p in param_names:
+            idx = int(p[1:])
+            if p.startswith("e"):
+                param_cols.append(sampled_e[:, idx])
+            else:
+                param_cols.append(sampled_f[:, idx])
+
+        if param_cols:
+            param_values = jnp.asarray(np.stack(param_cols, axis=1), dtype=jnp.bool_)
+        else:
+            param_values = jnp.zeros((nmc, 0), dtype=jnp.bool_)
+
+        vals = evaluate(compiled, param_values)
+        return jnp.mean(vals) / (2.0**self._nqubits)
 
     def _sample_batches(self, shots: int, batch_size: int = 1000) -> jax.Array:
         batches = []
