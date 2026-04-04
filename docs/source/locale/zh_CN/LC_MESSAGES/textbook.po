@@ -1,0 +1,3585 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2020, The TensorCircuit Authors
+# This file is distributed under the same license as the tensorcircuit
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2022.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: tensorcircuit \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-03-31 12:24+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../source/textbook/chap1.ipynb:9
+msgid "第一章 线性代数 (Linear Algebra)"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:33
+msgid "1 向量"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:36
+msgid "1.1 向量 （vector）"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:38
+msgid ""
+"具有大小和方向的量，用 :math:`\\vert v\\rangle` 表示列向量，\\ :math:`\\langle v\\vert` "
+"表示行向量。"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:107
+msgid "1.2 线性无关（linear independent）"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:109
+msgid ""
+"在线性代数里，一组向量中\\ :math:`A: a_1, a_2, ... a_n`\\ "
+"，没有向量可以通过其他向量的线性组合而得到，我们称这一组向量为线性无关。"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:111
+msgid "公式上，如果只存在\\ :math:`k_1,k_2, \\cdots k_n`\\ 全为0的一组解满足"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:113
+msgid "k_1 a_1 + k_2 a_2 + \\cdots k_n a_n = 0"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:118
+msgid "则向量组\\ :math:`A`\\ 是线性无关。"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:175
+msgid "1.3 基 (Basis)"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:177
+#, python-brace-format
+msgid ""
+"在线性空间中，一组向量 :math:`\\{ |v_0\\rangle, |v_1\\rangle, ...\\} \\in "
+"\\mathbb{C}^m` 的所有线性组合（span）的集合叫 :math:`\\mathbb{C}^m`\\ 的子空间(subspace)."
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:179
+msgid "如果这一组向量是线性无关的，那么这组向量是所有线性组合所构成的子空间中的基。"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:181
+msgid "假设一组向量是基，那么基中的向量的个数 <= :math:`m`\\ ，反之，向量个数大于所在空间维度则一定不是基。"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:193
+msgid "2. 矩阵 （matrix）"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:195
+msgid ""
+"数学上，一个\\ :math:`m \\times n`\\ 的矩阵是一个由\\ :math:`m`\\ 行\\ :math:`n`\\ "
+"列元素排列成的矩阵阵列。矩阵可以将向量进行线性变换："
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:197
+#, python-brace-format
+msgid "|v\\rangle \\rightarrow | v^{\\prime} \\rangle = M |v\\rangle"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:251
+msgid "2.1 矩阵相乘"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:253
+msgid ""
+"若\\ :math:`A`\\ 为\\ :math:`m \\times n`\\ 的矩阵，\\ :math:`B`\\ 为\\ :math:`n"
+" \\times p`\\ 的矩阵，则他们的乘积\\ :math:`AB`\\ （有时记作\\ :math:`A \\cdot B`\\ "
+"）是一个\\ :math:`m \\times p`\\ 的矩阵，记作\\ :math:`C = A \\cdot B`\\ ，其中矩阵\\ "
+":math:`C`\\ 中的第\\ :math:`i`\\ 行第\\ :math:`j`\\ 列元素可以表示为："
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:255
+#, python-brace-format
+msgid ""
+"C_{ij} = (AB)_{ij} =\n"
+"a_{i1}b_{1j} + a_{i2}b_{2j} + \\cdots + a_{in}b_{nj} =\n"
+"\\sum_{r=1}^na_{ir}b_{rj}"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:315
+msgid "2.2 内积（inner product）"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:317
+msgid ""
+"內积可以看成是一种特殊的矩阵乘法。对于在希尔伯特空间中的两个向量\\ :math:`|a\\rangle`\\ 和\\ "
+":math:`|b\\rangle`\\ ，\\ :math:`\\langle a | b \\rangle`\\ 表示它们的内积，\\ "
+":math:`\\langle a|`\\ 定义为向量\\ :math:`|a\\rangle`\\ 的共轭转置（conjugate "
+"transpose），也可以记作\\ :math:`|a\\rangle^\\dagger`\\ ，有"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:319
+#, python-brace-format
+msgid ""
+"\\langle a|b \\rangle = (a_1^*, a_2^*, \\cdots, a_n^*)\\left(\n"
+"    \\begin{array}{c}\n"
+"        b_1 \\\\\n"
+"        b_2 \\\\\n"
+"        \\vdots \\\\\n"
+"        b_n \\\\\n"
+"    \\end{array}\n"
+"   \\right) = a_1^*b_1 + a_2^*b_2 + \\cdots + a_n^*b_n"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:330
+msgid ""
+"​此处\\ :math:`*`\\ 表示共轭复数（对于实数\\ :math:`a`\\ 和\\ :math:`b`\\ ，\\ "
+":math:`a+ib`\\ 的共轭复数是\\ :math:`a-ib`\\ ）。"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:429
+msgid "2.3 外积（outer product）"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:431
+msgid ":math:`| a \\rangle \\langle b |`\\ 表示希尔伯特空间中两个向量的外积，有"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:433
+#, python-brace-format
+msgid ""
+"|a \\rangle \\langle b| =\n"
+"\\begin{pmatrix}\n"
+" a_1 \\\\\n"
+" a_2 \\\\\n"
+" \\vdots \\\\\n"
+" a_n \\\\\n"
+"\\end{pmatrix}(b_1^*, b_2^*, \\cdots, b_n^*) =\n"
+" \\begin{pmatrix}\n"
+" a_1b_1^* & a_1b_2^* & \\cdots & a_1b_n^* \\\\\n"
+" a_2b_1^* & a_2b_2^* & & \\vdots \\\\\n"
+" \\vdots & & \\ddots & \\vdots \\\\\n"
+" a_nb_1^* & \\cdots & \\cdots & a_nb_n^* \\\\\n"
+"\\end{pmatrix}"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:502
+msgid "2.4 张量积（tensor product）"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:504
+msgid ":math:`| a \\rangle \\otimes | b \\rangle`\\ 表示希尔伯特空间中两个向量的张量积，有"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:506
+#, python-brace-format
+msgid ""
+"|a \\rangle \\otimes |b \\rangle =\n"
+"\\begin{pmatrix}\n"
+" a_1 \\begin{pmatrix} b_1 \\\\ b_2 \\end{pmatrix} \\\\\n"
+" a_2 \\begin{pmatrix} b_1 \\\\ b_2 \\end{pmatrix} \\\\\n"
+"\\end{pmatrix} =\n"
+"\\begin{pmatrix}\n"
+" a_1b_1 \\\\\n"
+" a_1b_2 \\\\\n"
+" a_2b_1 \\\\\n"
+" a_2b_2 \\\\\n"
+"\\end{pmatrix}"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:569
+msgid "矩阵\\ :math:`A`\\ 和\\ :math:`B`\\ 的张量积，有"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:571
+#, python-brace-format
+msgid ""
+"A \\otimes B =\n"
+"\\begin{pmatrix}\n"
+" a_{11}B & \\cdots & a_{1n}B \\\\\n"
+" \\vdots & \\ddots & \\vdots \\\\\n"
+" a_{m1}B & \\cdots & a_{mn}B \\\\\n"
+"\\end{pmatrix}"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:636
+msgid "2.5 正交完备集"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:638
+msgid "集合只含有单位向量（向量长度为1）"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:639
+msgid "两两向量之间的内积都为0"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:641
+msgid "以下就是一组正交完备集。"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:750
+msgid "3. 特殊矩阵"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:753
+msgid "3.1 可逆矩阵"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:755
+#, python-brace-format
+msgid ""
+"给定一个\\ :math:`n`\\ 阶方阵\\ :math:`A`\\ ，若存在一\\ :math:`n`\\ 阶方阵\\ "
+":math:`B`\\ ，使得\\ :math:`AB = BA = I_n`\\ ，其中\\ :math:`I_n`\\ 为\\ "
+":math:`n`\\ 阶单位矩阵，则称\\ :math:`A`\\ 是可逆的，且\\ :math:`B`\\ 是\\ :math:`A`\\ "
+"的逆矩阵，记作\\ :math:`A^{-1}`\\ 。"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:821
+msgid "3.2 转置（transpose）"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:823
+msgid "矩阵\\ :math:`A`\\ 的转置是另一个矩阵\\ :math:`A^T`\\ ，由下列等价动作建立："
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:825
+msgid "把\\ :math:`A`\\ 的横行写为\\ :math:`A^T`\\ 的纵列"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:826
+msgid "把\\ :math:`A`\\ 的纵列写为\\ :math:`A^T`\\ 的横行"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:828
+msgid "形式上说，\\ :math:`m \\times n`\\ 矩阵的转置是\\ :math:`n \\times m`\\ 的矩阵。"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:884
+msgid "3.3 共轭转置（conjugate transpose）"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:886
+msgid ""
+"矩阵\\ :math:`A`\\ 的共轭转置\\ :math:`A^\\dagger`\\ "
+"是通过对矩阵A转置后再将所有元素替换为各自的共轭复数得到的。"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:943
+msgid "3.4 厄米矩阵（Hermitian matrix)"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:945
+msgid ":math:`H`\\ 是一个厄米矩阵，满足"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:947
+msgid ""
+"H = H^\\dagger，\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:949
+#, python-brace-format
+msgid "也就是 :math:`H_{ij} = H_{ji}^*`\\ 。"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:1001
+msgid "3.5 幺正矩阵（unitary matrix）"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:1003
+msgid ":math:`U` 是一个幺正矩阵，满足"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:1005
+msgid ""
+"UU^\\dagger = I,\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:1007
+msgid "也就是"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:1009
+#, python-brace-format
+msgid ""
+"\\sum_j U_{ij}U^*_{jk} = \\delta_{ik}.\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:1011
+msgid "幺正矩阵的各行和各列可以看做正交完备向量组。 幺正矩阵作用在向量上，向量的长度不变。"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:1064
+msgid "4. 矩阵本征分解"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:1066
+msgid ""
+"A|v \\rangle = \\lambda|v \\rangle\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:1068
+msgid ""
+"符合上式的向量\\ :math:`|v \\rangle`\\ 是矩阵A的特征向量（eigenvector），\\ "
+":math:`\\lambda`\\ 是与特征向量对应的特征值（eigenvalue）。值得注意的是，任意满足\\ "
+":math:`AA^\\dagger = A^\\dagger A`\\ 的矩阵可以进行以下分解："
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:1070
+msgid ""
+"A = \\sum_j \\lambda_j|v_j\\rangle\\langle v_j|\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:1072
+#, python-brace-format
+msgid ""
+"其中，\\ :math:`\\lambda_j` 是\\ :math:`A`\\ 的第\\ :math:`j`\\ 个本征值，\\ "
+":math:`|v_j\\rangle` 是是其对应的本征向量，且\\ :math:`\\{|v_j\\rangle\\}`\\ "
+"构成正交归一的基。"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:1153
+msgid "5. 矩阵函数"
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:1155
+#, python-brace-format
+msgid ""
+"矩阵函数根据泰勒展开定义（对于矩阵，乘法和加法有定义，而泰勒展开中只有这两种计算） 特殊的对于 Hermitian 矩阵 A，我们有对角化 "
+":math:`A = U^\\dagger \\Lambda U` ，其中 :math:`\\Lambda_{ij} = "
+"(\\lambda_i)\\delta_{ij}` 是对角矩阵。那么我们有 :math:`f(A) = U^\\dagger "
+"f(\\Lambda) U`, 其中 :math:`f(\\Lambda)_{ij} = f(\\lambda_i)\\delta_{ij}` ."
+msgstr ""
+
+#: ../../source/textbook/chap1.ipynb:1157
+#, python-brace-format
+msgid "例子：根据以上矩阵函数定义，分析对于矩阵欧拉公式是否成立 何时成立 :math:`e^{ix} = \\cos(x)+i\\sin(x)`"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:9
+msgid "第二章 量子力学 (Quantum Mechanics)"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:21
+msgid "1. 量子力学基础"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:23
+msgid ""
+"量子计算顾名思义，是使用量子力学规律进行计算的全新范式。目前理论和实验已经揭示，量子计算在计算能力上有远远超过传统计算机（也称经典计算）的潜力。量子力学是描述微观物理的最精确的理论，迄今为止得到了海量实验的验证。从数学上来说，量子力学的本质是希尔伯特空间（Hilbert"
+" space）及作用于其上的算子。当空间维数有限的情况下等价于在复数域上的线性空间。在本节中，我们将考虑有限维的线性空间及量子计算的基础。 "
+"相关线性代数的基础知识在附录中给出以供参考。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:25
+msgid "量子力学的基本原理是一组数学公理，我们先介绍这些公理。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:37
+msgid "1.1 公设1：希尔伯特空间（Hilbert space）"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:39
+#, python-brace-format
+msgid ""
+"任意封闭物理系统都具有一个相关联的具有內积结构的复向量空间（希尔伯特空间），称为量子态空间 :math:`\\mathcal{H}` "
+"。整个系统的物理性质完全由此空间中的向量来描述，称为态向量 :math:`\\vert\\psi\\rangle` 。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:41 ../../source/textbook/chap2.ipynb:247
+msgid "**说明**\\ ："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:43
+#, python-brace-format
+msgid ""
+"在量子力学中，通常使用狄拉克符号（Dirac notation） :math:`|\\cdot \\rangle` 来表示希尔伯特空间\\ "
+":math:`\\mathcal{H}`\\ 中的向量，读作“ket”。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:45
+#, python-brace-format
+msgid ""
+"数学上，我们可以用一个复向量簇（Ray）来表示量子态。这里，\\ :math:`|\\psi\\rangle` 所在的向量簇指代任意向量\\ "
+":math:`|\\psi'\\rangle = C|\\psi\\rangle, C\\in \\mathbb{C}, C\\neq 0`\\ "
+"，这些向量在物理上都是等价的。量子态代表物理系统的一种状态，例如具有某个特定的能量，动量，角动量等。我们可能听说过量子力学的叠加性原理（例如著名的薛定谔的猫）。"
+" 具体来说，对任意两个量子态\\ :math:`|u\\rangle,|v\\rangle \\in \\mathcal{H}`, "
+":math:`|u\\rangle + |v\\rangle \\in \\mathcal{H}`\\ ，即系统可以“同时”处于多种状态。 "
+"在我们关心的量子计算领域，\\ :math:`\\mathcal{H}`\\ 维数是有限的(设为\\ "
+":math:`N`)，那么我们可以选取一组线性无关的向量\\ "
+":math:`\\{|\\phi_i\\rangle\\}=\\{|\\phi_i\\rangle|i=0,\\cdots,N-1\\}`\\ "
+"作为基向量（basis，例如日常的三维空间在\\ :math:`x`,\\ :math:`y`,\\ :math:`z`\\ "
+"方向的三个单位向量\\ :math:`\\{e_x, e_y,e_z\\}`\\ 即为一组基向量）。\\ "
+":math:`\\mathcal{H}`\\ 中的任意量子态都可以用这组基线性展开："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:48
+#, python-brace-format
+msgid ""
+"|\\psi\\rangle = \\sum_i c_i |\\phi_i\\rangle, \\quad c_i \\in "
+"\\mathbb{C}，\\forall i\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:50
+msgid "这组基向量也称为完备基。方便起见，在这组基向量下，我们可以将\\ :math:`|\\psi\\rangle`\\ 表示成："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:52
+#, python-brace-format
+msgid ""
+"|\\psi \\rangle \\cong (c_0, c_2,\\cdots, c_{N-1})^T, \\quad\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:54
+#, python-brace-format
+msgid ""
+"称为\\ :math:`|\\psi\\rangle`\\ 在\\ :math:`\\{|\\phi\\rangle\\}_i`\\ "
+"下的表示。这里的展开系数\\ :math:`c_i`\\ 称为几率幅，\\ :math:`T`\\ 代表向量和矩阵的转置。这就是我们所熟悉\\ "
+":math:`n`\\ 维复数向量（列向量）。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:56
+msgid ""
+"正如在欧几里得空间可以定义向量內积一样，我们也可以定义希尔伯特空间的向量內积。我们可以定义\\ :math:`|v\\rangle` 的对偶向量 "
+":math:`\\langle v|`\\ （\\ :math:`\\langle\\cdot|` 称为“bra”)。这样我们就有"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:58
+#, python-brace-format
+msgid ""
+"|v\\rangle \\cong (v_0, \\cdots, v_{N-1})^T, \\quad \\langle v| \\cong "
+"(v_0^*, \\cdots, v_{N-1}^*)。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:60
+msgid "使用Dirac notation方便的原因之一是我们可以将内积表示为“braket”:"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:62
+#, python-brace-format
+msgid ""
+"\\langle v|w\\rangle = \\sum_{i,j=0}^{N-1} v_i^* w_j "
+"\\langle\\phi_i|\\phi_j \\rangle。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:64
+msgid ""
+"可以看出，內积是一种线性算运算，且满足\\ :math:`\\langle u|v\\rangle=\\langle "
+"v|u\\rangle^*`\\ 和\\ :math:`\\langle v|v \\rangle\\geq 0`\\ "
+"。有了內积的概念，我们就可以定义向量的长度：\\ :math:`\\|v \\|_2 = \\sqrt{\\sum_{i=0}^{N-1} "
+"|v_i|^2} = \\sqrt{\\langle v|v\\rangle}`\\ "
+"。我们称长度为1的向量为单位长度向量。在接下来的讨论中，我们默认\\ **描述系统**\\ 的量子态的长度为1。至此，我们对\\ "
+":math:`N`\\ 维希尔伯特空间有"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:66
+#, python-brace-format
+msgid ""
+"\\mathcal{H}\\cong \\mathbb{C}^N。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:68
+#, python-brace-format
+msgid ""
+"如果两个向量\\ :math:`|v\\rangle,|w\\rangle` 满足 :math:`\\langle w |v \\rangle ="
+" 0`, 则我们称这两个向量是正交的。如果我们选定一组基\\ :math:`\\{|i\\rangle|i=0,\\cdots,N-1\\}`, "
+"满足"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:70
+#, python-brace-format
+msgid ""
+"\\langle j | i\\rangle = \\delta_{ij} =\n"
+"\\begin{cases}\n"
+"& 1, \\quad  i = j\\\\\n"
+"& 0, \\quad  i\\neq j\\\\\n"
+"\\end{cases},"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:78
+msgid ""
+"且\\ :math:`\\|i\\|_2=1, \\forall i`, "
+"那么这组基称为正交归一。如不明确说明，接下来我们都将使用正交归一基。这样\\ :math:`|\\psi\\rangle`\\ 就可以表示为:"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:80
+#, python-brace-format
+msgid ""
+"|\\psi\\rangle = \\sum_i \\psi_i |i\\rangle \\cong（\\psi_0,\\cdots, "
+"\\psi_{N-1})^T, \\quad \\psi_i \\in \\mathbb{C}，\\quad \\sum_i "
+"|\\psi_i|^2 = 1。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:87
+#, python-brace-format
+msgid ""
+"例子：考虑一个二维系统\\ :math:`\\mathcal{H}\\cong \\mathbb{C}^2`\\ ，定义两个基向量为\\ "
+":math:`|0\\rangle`\\ 和\\ :math:`|1\\rangle`\\ 。这样任意量子态可以表示为"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:89
+msgid ""
+"|\\psi\\rangle = \\alpha|0\\rangle+\\beta|1\\rangle,\\quad "
+"|\\alpha|^2+|\\beta|^2 =1,"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:94
+msgid "其中\\ :math:`\\alpha,\\beta`\\ 都是复数。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:96
+msgid "在正交归一基下，任意两个向量 :math:`|u\\rangle`\\ ，\\ :math:`|v\\rangle` 的內积可以简化为："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:98
+#, python-brace-format
+msgid ""
+"\\langle v|w\\rangle = (v_0^*, \\cdots, v_{N-1}^*)\\left(\n"
+"  \\begin{array}{c}\n"
+"    w_0 \\\\\n"
+"    \\vdots \\\\\n"
+"    w_{N-1}\\\\\n"
+"  \\end{array}\n"
+"  \\right) = \\sum_j v^*_jw_j"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:108
+#, python-brace-format
+msgid "类似地，我们可以定义两个向量之间的外积及其在基\\ :math:`\\{|j\\rangle\\}`\\ 下的表示："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:110
+#, python-brace-format
+msgid ""
+"|v\\rangle \\langle w| \\cong \\left(\n"
+"  \\begin{array}{c}\n"
+"    v_0 \\\\\n"
+"    \\vdots \\\\\n"
+"    v_{N-1}\\\\\n"
+"  \\end{array}\n"
+"  \\right) (w_0^*, \\cdots, w_{N-1}^*) = \\left(\n"
+"  \\begin{array}{ccc}\n"
+"    v_0w_0^* &   \\ldots &  v_0w_{N-1}^* \\\\\n"
+"    \\vdots &  \\ddots &  \\vdots  \\\\\n"
+"    v_{N-1}w^*_0 &  \\ldots  &  v_{N-1}w^*_{N-1}\\\\\n"
+"  \\end{array}\n"
+"\\right)。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:127
+#, python-brace-format
+msgid "注意，与內积不同，外积是一个作用在\\ :math:`\\mathcal{H}`\\ 上的算子（矩阵）。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:139
+msgid "1.2 公设2：薛定谔方程(Schördinger equation)"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:141
+msgid "系统演化：封闭量子系统的演化由薛定谔方程描述："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:143
+#, python-brace-format
+msgid ""
+"i \\frac{d|\\psi(t)\\rangle}{dt} = H(t) |\\psi(t)\\rangle,\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:145
+msgid "其中\\ :math:`t`\\ 是时间，\\ :math:`H(t)` 是一个厄米算子，称为系统的哈密顿量。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:147 ../../source/textbook/chap2.ipynb:179
+msgid "**说明：**"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:149
+msgid "这里我们使用了原子单位，即约化普朗克常数\\ :math:`\\hbar = 1`\\ 。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:151
+msgid ""
+"对量子计算来说，我们可能不用太关心\\ :math:`H(t)`\\ "
+"的具体细节（只需要知道他是一个厄米矩阵)，而更关心信息的载体——量子态的演化。这样，从时间\\ :math:`t_i` 到\\ "
+":math:`t_f`\\ ，由薛定谔方程，系统从\\ :math:`|\\psi(t_i)\\rangle` 演化至 "
+":math:`|\\psi(t_f)\\rangle`\\ 可以等效地写为:"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:153
+msgid ""
+"|\\psi(t_f)\\rangle = U(t_f, t_i) |\\psi(t_i)\\rangle，\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:155
+msgid "这里\\ :math:`U(t_f, t_i)`\\ 是一个幺正算符（矩阵），具体推导可见Nielson and Chuang教科书第二章。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:157
+msgid "原则上只要我们知道一个系统的哈密顿量，那么我们就可以完全了解系统的动力学。确定具体的哈密顿量就是在量子力学框架下理论物理的研究目标——不同的的物理系统会涉及到不同的哈密顿量，但这不是量子力学作为基本框架所关心的问题。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:159
+msgid "在量子计算中，量子逻辑门正是一种幺正变换，其实现是靠工程上构建不同的哈密顿量来产生。详细的细节见第三章。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:171
+msgid "1.3 公设3: 量子态测量 (state measurement)"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:173
+#, python-brace-format
+msgid ""
+"量子态测量（Born 法则）：量子测量是由一组\\ :math:`\\{M_k\\}_{k=1}^l`\\ 的测量算子组成，这组算子满足 "
+":math:`\\sum_k M_k^\\dagger M_k = I`\\ 。 对任意量子态\\ "
+":math:`|\\psi\\rangle\\in \\mathcal{H}`,在测量之后立刻以概率\\ :math:`p_k`\\ 变成"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:175
+msgid ""
+"|\\psi\\rangle\\mapsto \\frac{M_k|\\psi\\rangle}{\\sqrt{p_k}} = "
+"|\\psi_k\\rangle\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:177
+msgid ""
+"其中 :math:`p_k=\\langle M_k^\\dagger M_k\\rangle \\equiv \\langle \\psi| "
+"M_k^\\dagger M_k| \\psi\\rangle = \\|M_k|\\psi\\rangle\\|_2^2\\geq 0`\\ 。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:181
+#, python-brace-format
+msgid ""
+":math:`M^\\dagger` 代表\\ :math:`M`\\ 的共轭转置，即\\ :math:`M^\\dagger_{ij} = "
+"M^*_{ji}`\\ 。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:183
+msgid ""
+"测量结果为指标\\ :math:`k`\\ ，同时量子态发生了“塌缩”, :math:`|\\psi\\rangle` “瞬间”变成了\\ "
+":math:`|\\psi_k\\rangle`\\ 。我们可以验证"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:185
+msgid ""
+"\\sum_k p_k = \\langle \\psi | \\sum_k M_k^\\dagger M_k |\\psi  \\rangle "
+"= 1。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:187
+#, python-brace-format
+msgid ""
+"冯-诺依曼（von "
+"Neumann）测量。在实际中，我们需要对一实际物理量进行测量（例如坐标，动量，角动量、能量等）。这些物理量在量子力学中都是厄米算子。原则上，在有限维\\"
+" :math:`\\mathcal{H}`\\ 上, 我们可以对任意厄米算子\\ :math:`O`\\ 进行测量。任意厄米算子\\ "
+":math:`O` 可以进行如下分解"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:189
+msgid ""
+"O = \\sum_j \\lambda_j |j\\rangle\\langle j|,\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:191
+#, python-brace-format
+msgid ""
+"其中，\\ :math:`\\{|j\\rangle\\}`\\ 是一组正交归一基，称为\\ :math:`O`\\ "
+"的本征向量（eigenstate）,\\ :math:`\\lambda_j` 称为 :math:`|j\\rangle`\\ "
+"对应的本征值（eigenvalue）。对\\ :math:`O`\\ 进行测量，即设定"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:193
+msgid ""
+"M_k=P_k= |k \\rangle\\langle k |,\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:195
+msgid ""
+"那么我们测量到\\ :math:`k` 的概率为 :math:`p_k=\\langle\\psi|P_k|\\psi\\rangle`, "
+"对应测到的物理量的值为\\ :math:`\\lambda_k`\\ 。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:197
+msgid ""
+"例：假设\\ :math:`|\\psi\\rangle = \\alpha|0\\rangle + \\beta|1\\rangle`\\ "
+"，我们需要测量厄米算子"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:199
+#, python-brace-format
+msgid ""
+"Z=\\left(\n"
+"\\begin{array}{cc}\n"
+"    1 & 0  \\\\\n"
+"    0 & -1 \\\\\n"
+"\\end{array}\n"
+"\\right)"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:208
+msgid ""
+"那么，我们就有\\ :math:`M_0 = |0\\rangle\\langle0|`\\ ，\\ "
+":math:`M_1=|1\\rangle\\langle1|`\\ 。我们就会以概率\\ :math:`|\\alpha|^2`\\ 得到\\ "
+":math:`0`\\ ，量子态塌缩到\\ :math:`|0\\rangle`\\ （测到相应的物理值\\ :math:`1`\\ "
+"）；以概率\\ :math:`|\\beta|^2`\\ 得到\\ :math:`1`\\ ，量子态塌缩到\\ "
+":math:`|1\\rangle`\\ （测到相应的物理值\\ :math:`-1`\\ ）。   现在考虑对另一个厄米算子进行测量:"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:210
+#, python-brace-format
+msgid ""
+"X=\\left(\n"
+"\\begin{array}{cc}\n"
+"    0 & 1  \\\\\n"
+"    1 & 0 \\\\\n"
+"\\end{array}\n"
+"\\right)"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:219
+msgid ""
+"注意\\ :math:`X`\\ 的本征是为\\ :math:`1`\\ 和\\ :math:`-1`\\ ，对应的本征向量为\\ "
+":math:`|+\\rangle=\\frac{1}{\\sqrt{2}}(|0\\rangle+|1\\rangle)`\\ 和\\ "
+":math:`|-\\rangle=\\frac{1}{\\sqrt{2}}(|0\\rangle-|1\\rangle)` (注意 "
+":math:`\\langle-|+\\rangle=0` )。那么我们可以将量子态表示为"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:221
+msgid ""
+"\\begin{aligned}\n"
+"|\\psi\\rangle &= \\alpha|0\\rangle + \\beta|1\\rangle = "
+"\\frac{\\alpha}{\\sqrt{2}}(|+\\rangle+|-\\rangle) + "
+"\\frac{\\beta}{\\sqrt{2}}(|+\\rangle-|-\\rangle)\\\\\n"
+"&=\\frac{\\alpha+\\beta}{\\sqrt{2}}|+\\rangle + "
+"\\frac{\\alpha-\\beta}{\\sqrt{2}}|-\\rangle\n"
+"\\end{aligned}"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:228
+msgid ""
+"这时，我们有\\ :math:`M_+ = |+\\rangle\\langle+|，M_- = |-\\rangle\\langle-|`\\ "
+"，\\ :math:`P_+= |\\alpha+\\beta|^2/2`\\ ，\\ :math:`P_-= "
+"|\\alpha-\\beta|^2/2`\\ 。\\ :math:`|\\psi\\rangle`\\ 以概率\\ :math:`P_+`\\ "
+"（\\ :math:`P_-`\\ ）塌缩到\\ :math:`|+\\rangle` (:math:`|-\\rangle`) "
+",得到测量结果\\ :math:`+`\\ (:math:`-`)。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:230
+msgid ""
+"公设3作为一条公设的基础地位非常具有争议性。如果将测量设备看成是量子力学系统，被测量的量子系统和测量设备一起形成一个更大的、孤立的、量子力学系统。"
+" "
+"根据公设2，这个更大的孤立系统的演化可以用单一幺正变换来描述。是否有可能根据这种观点推导出公设3？即测量结果的随机性能否从确定的薛定谔方程推导出来？尽管沿着这些方向进行了大量研究，但仍然面临极大的困难，有些甚至是根本性的。"
+" "
+"这里，我们将采取非常务实的方法，即在实践中很清楚何时应用公设2（只涉及微观系统），何时使用公设3（宏观的仪器参与测量的过程）。这样，我们就必须明确一条宏观和微观的界限。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:243
+msgid "1.4 公设4：多体量子系统"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:245
+#, python-brace-format
+msgid ""
+"给定两个具有各自希尔伯特空间的量子系统\\ :math:`\\mathcal{H}_1`\\ 和\\ :math:`\\mathcal{H}_2`"
+" 那么他们组合量子系统对应的希尔伯特空间是这两个空间的直积：\\ :math:`\\mathcal{H}_1\\otimes "
+"\\mathcal{H}_2` ."
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:249
+msgid "这里两个希尔伯特空间可以代表完全不同的物理系统。例如：第一个系统可以是电子自旋，而第二系统可以是光子的极化。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:251
+#, python-brace-format
+msgid ""
+"关于直积：定义\\ :math:`\\mathcal{H}_1 = "
+"\\text{span}\\{|v_i\\rangle\\}_{i=0}^{d_1-1}`, :math:`\\mathcal{H}_2 = "
+"\\text{span}\\{|w_i\\rangle\\}_{i=0}^{d_2-1}`\\ ， 那么\\ "
+":math:`\\mathcal{H} = \\text{span}\\{|v_i\\rangle\\otimes "
+"|w_j\\rangle\\}_{i=0,j=0}^{d_1-1,d_2-1}` 。考虑两个量子态\\ "
+":math:`|\\psi\\rangle\\in\\mathcal{H}_1`, :math:`|\\varphi\\rangle\\in "
+"\\mathcal{H}_2`, 那么他们的直积是"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:253
+#, python-brace-format
+msgid ""
+"|\\psi\\rangle\\otimes |\\varphi\\rangle = (\\psi_0, \\cdots, "
+"\\psi_{d_1-1})^T \\otimes  (\\varphi_0, \\cdots, \\varphi_{d_2-1})^T = "
+"(\\psi_0\\varphi_0\\cdots, "
+"\\psi_0\\varphi_{d_2-1},\\cdots,\\psi_{d_1-1}\\varphi_{d_2-1})^T.\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:255
+msgid "我们也可以定义矩阵的直积：如果"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:257
+#, python-brace-format
+msgid ""
+"A = \\left(\n"
+"  \\begin{array}{ccc}\n"
+"    a_{0,0} &   \\ldots &  a_{0,d_1-1} \\\\\n"
+"    \\vdots &  \\ddots &  \\vdots  \\\\\n"
+"    a_{d_1-1,0} &  \\ldots  & a_{d_1-1,d_1-1}\\\\\n"
+"  \\end{array}\n"
+"\\right), \\quad\n"
+"B = \\left(\n"
+"  \\begin{array}{ccc}\n"
+"    b_{0,0} &   \\ldots &  b_{0,d_2-1} \\\\\n"
+"    \\vdots &  \\ddots &  \\vdots  \\\\\n"
+"    b_{d_2-1,0} &  \\ldots  & b_{d_2-1,d_2-1}\\\\\n"
+"  \\end{array}\n"
+"\\right), \\quad"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:274
+msgid "那么"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:276
+#, python-brace-format
+msgid ""
+"A\\otimes B = \\left(\n"
+"  \\begin{array}{ccc}\n"
+"    a_{0,0}B &   \\ldots &  a_{0,d_1-1}B \\\\\n"
+"    \\vdots &  \\ddots &  \\vdots  \\\\\n"
+"    a_{d_1-1,0}B &  \\ldots  & a_{d_1-1,d_1-1}B\\\\\n"
+"  \\end{array}\n"
+"\\right)."
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:286
+#, python-brace-format
+msgid ""
+"更多的量子系统的可以通过类似地方式构造其希尔伯特空间：考虑\\ :math:`n`\\ 个系统，那么系统的希尔伯特空间是\\ "
+":math:`\\mathcal{H}=\\mathcal{H}_1\\otimes \\mathcal{H}_2\\cdots\\otimes "
+"\\mathcal{H}_n`\\ 。如果第\\ :math:`k`\\ 个系统的空间维数是\\ :math:`d_k`,那么整个系统的维数是\\"
+" :math:`N=\\Pi_{k=1}^n d_k`\\ ，需要同样数量的复数来描述。随着\\ :math:`n`\\ "
+"的增加，复杂性是呈指数上升，这正是量子系统难以计算的原因，也是量子计算潜在计算能力的来源。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:290
+#, python-brace-format
+msgid ""
+"例子：考虑一个二维系统和一个三维系统，那么\\ :math:`\\mathcal{H}=\\mathcal{H}_1\\otimes "
+"\\mathcal{H}_2=\\mathbb{C}^{2}\\otimes \\mathbb{C}^3\\cong "
+"\\mathbb{C}^{6}`\\ 。如果\\ :math:`|\\psi\\rangle = "
+"\\alpha|0\\rangle+\\beta|1\\rangle\\in \\mathcal{H}_1`\\ ， "
+":math:`|\\phi\\rangle=\\gamma|0\\rangle+\\delta|1\\rangle + \\xi "
+"|2\\rangle\\in \\mathcal{H}_2`\\ ，那么"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:292
+msgid ""
+"|\\psi\\rangle\\otimes|\\phi\\rangle = \\alpha\\gamma|00\\rangle + "
+"\\alpha\\delta|01\\rangle+ \\alpha\\xi |02 \\rangle "
+"+\\beta\\gamma|10\\rangle + \\beta\\delta|11\\rangle + \\beta\\xi "
+"|12\\rangle.\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:304
+msgid "1.5 量子概率与经典概率"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:306
+msgid ""
+"现在，我们已经了解了量子力学的全部原理。我们可以发现，量子力学的原理与牛顿力学和麦克斯韦方程描述的电磁学（两者统称为经典物理学）完全不同，体现在根本没有“力”这个概念。事实上，由于量子力学的几率本质，他与经典概率学的关系更为密切，而“力”的性质体现在决定系统演化的哈密顿量之中。考虑一个包含"
+" :math:`n` 个可能取值的随机变量，我们可以定义其几率分布："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:308
+#, python-brace-format
+msgid ""
+"\\vec{p} = (p_1,p_2, \\cdots, p_N)^T, \\quad  p_i \\in \\mathbb{R}_+, "
+"\\sum_i {p_i} = 1。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:310
+msgid "经过一个经典信息处理过程后，概率分布发生了变化，我们可以用一个线性变换描述这个过程："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:312
+#, python-brace-format
+msgid ""
+"\\vec{p}' = \\mathcal{T} \\vec{p},\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:314
+msgid "这里矩阵\\ :math:`T`\\ 定义为："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:316
+#, python-brace-format
+msgid ""
+"\\mathcal{T} = \\left(\n"
+"  \\begin{array}{cccc}\n"
+"    p(1|1) & p(1|2) & \\ldots & p(1|N)    \\\\\n"
+"    p(2|1) & p(2|2) & \\ldots & p(N|N)     \\\\\n"
+"      \\vdots     &  \\vdots    &  \\ddots  &  \\vdots         \\\\\n"
+"    p(N|1) & p(N|2) &  \\ldots & p(N|N)     \\\\\n"
+"  \\end{array}\n"
+"\\right)"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:327
+#, python-brace-format
+msgid ""
+"称为概率转移矩阵，其中\\ :math:`p(i|j)\\in \\mathbb{R}`\\ 就是条件概率。我们可以简单地验证：\\ "
+":math:`p'_j = \\sum_i p(j|i)p(i)`\\ 。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:329
+msgid "类似地，在量子力学里，我们也有量子态的几率幅分布："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:331
+#, python-brace-format
+msgid ""
+"|\\psi\\rangle = (\\psi_0, \\psi_1, \\cdots, \\psi_{N-1})^T, \\quad, "
+"\\psi_i \\in \\mathbb{C}, \\quad \\sum_{i} |\\psi_i|^2 =1\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:333
+msgid "对量子态的信息处理也可以看成是一个变换："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:335
+#, python-brace-format
+msgid ""
+"|\\phi\\rangle = U|\\psi\\rangle= \\sum_j "
+"\\left(\\sum_lU_{jl}\\psi_l\\right)|j\\rangle =\\sum_j\\phi_j |j\\rangle,"
+"\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:337
+msgid "其中"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:339
+#, python-brace-format
+msgid ""
+"U = \\left(\n"
+"  \\begin{array}{cccc}\n"
+"    U_{1|1} & U_{1|2} & \\ldots & U_{1|N}    \\\\\n"
+"    U_{2|1} & U_{2|2} & \\ldots & U_{2|N}    \\\\\n"
+"      \\vdots     &  \\vdots    &  \\ddots  &  \\vdots         \\\\\n"
+"    U_{N|1} & U_{N|2} &  \\ldots & U_{N|N}     \\\\\n"
+"  \\end{array}\n"
+"\\right)."
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:350
+msgid ""
+"这里，我们可以发现量子和经典概率的相似性——:math:`U`\\ "
+"可以看成是量子概率幅的转移矩阵。我们可以发现，正是由于Born法则的的要求可以验证，为了满足\\ "
+":math:`\\sum_j|\\phi_j|^2 = 1`\\ 以保证测量结果的统计解释, :math:`U`\\ "
+"必须是一个幺正矩阵，这也正呼应了公设2的要求。我们可以对一个向量\\ :math:`v`\\ 定义\\ :math:`l_p`\\ 长度:"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:352
+#, python-brace-format
+msgid ""
+"\\| v\\|_p = \\left(\\sum_i |v_i|^p\\right)^{1/p} , \\quad p\\in N_+，\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:354
+#, python-brace-format
+msgid ""
+"那么更抽象地说，经典信息处理是对\\ :math:`\\mathbb{R}_+^{n}` 进行保持\\ :math:`l_1`\\ 的变换， "
+"而量子信息处理是对\\ :math:`\\mathbb{C}^n`\\ 进行保持\\ :math:`l_2`\\ 的变换（\\ "
+":math:`N`\\ 维幺正矩阵）。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:366
+msgid "2. 量子比特（qubit）"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:368
+msgid "为了利用量子力学的性质进行信息处理，我们需要进行信息编码。量子比特就是这种编码的基本载体。数学上来看，量子比特只是量子系统的一种特殊形式（维数为2的希尔伯特空间）。在本节，我们将利用之前学到的量子力学原理来进一步了解量子比特。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:371
+msgid "2.1 单量子比特和Bloch球"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:373
+#, python-brace-format
+msgid ""
+"简而言之，单个量子比特就是一个二维的希尔伯特空间 :math:`\\cong\\mathbb{C}^{2}` 。我们可以分别定义\\ "
+":math:`|0\\rangle`\\ 和\\ :math:`|1\\rangle`\\ 态来编码信息0和1："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:375
+#, python-brace-format
+msgid ""
+"|0\\rangle = \\left(\n"
+"  \\begin{array}{c}\n"
+"    1 \\\\\n"
+"    0 \\\\\n"
+"  \\end{array}\n"
+"  \\right), \\quad\n"
+"|1\\rangle = \\left(\n"
+"  \\begin{array}{c}\n"
+"    0 \\\\\n"
+"    1 \\\\\n"
+"  \\end{array}\n"
+"  \\right), \\quad"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:390
+msgid ""
+":math:`|0\\rangle`\\ 和\\ :math:`|1\\rangle`\\ "
+"同时也构成希尔伯特空间的基向量。任意单量子比特态可以表示为："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:392
+#, python-brace-format
+msgid ""
+"|\\psi\\rangle = \\alpha|0\\rangle+\\beta|1\\rangle = "
+"C(\\cos(\\theta/2)|0\\rangle+e^{i\\varphi}\\sin(\\theta/2)|1\\rangle) "
+"\\cong "
+"\\cos(\\theta/2)|0\\rangle+e^{i\\varphi}\\sin(\\theta/2)|1\\rangle，\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:394
+msgid ""
+"其中\\ :math:`C`\\ 作为一个常数没有物理意义。另外\\ :math:`\\theta\\in[-\\pi, \\pi)`, "
+":math:`\\varphi\\in[0,2\\pi）`\\ "
+"。这样,单个量子比特态仅仅需要2个角度就能完全刻画，而这两个角正好可以对应球坐标中的方位角(:math:`\\theta`)和极角\\ "
+":math:`(\\varphi)`\\ "
+"（如下图所示）。这样就赋予了每个量子态独特的几何意义：单个量子比特的量子态对应一个单位球面上的一点，这个球称为Bloch球。我们可以验证，\\ "
+":math:`|0\\rangle`\\ 和\\ :math:`|1\\rangle`\\ 正位于Bloch球的北极和南极。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:400
+msgid "|488f0ae99cb1418fb7a36cfa5037803b|"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:416
+msgid "488f0ae99cb1418fb7a36cfa5037803b"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:406
+msgid "Bloch 球"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:429
+msgid "2.2 多量子比特和量子纠缠（entanglement）"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:431
+#, python-brace-format
+msgid ""
+"为了进行信息处理，我们也要考虑使用多个量子比特。考虑 :math:`n` 个量子比特，那么根据公设4, 我们需要处理的希尔伯特空间是\\ "
+":math:`\\mathbb{C}^{2^n}`\\ ，这个空间是由以下\\ :math:`2^n`\\ 个基向量张成："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:433
+msgid ""
+"\\begin{aligned}\n"
+"\\{&|0_10_20_3\\cdots0_{n-1}0_n\\rangle, "
+"|0_10_20_3\\cdots0_{n-1}1_n\\rangle,  "
+"|0_10_20_3\\cdots1_{n-1}0_n\\rangle,  \\\\\n"
+"&|0_10_20_3\\cdots1_{n-1}1_n\\rangle, \\cdots \\cdots， |1_1 1_2 "
+"1_3\\cdots0_{n-1}0_n\\rangle, |1_1 1_2 1_3\\cdots0_{n-1}1_n\\rangle，\\\\"
+"\n"
+"&|1_1 1_2 1_3\\cdots1_{n-1}0_n\\rangle,|1_1 1_2 1_3\\cdots "
+"1_{n-1}1_n\\rangle\\}。\n"
+"\\end{aligned}"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:441
+msgid "以 :math:`n=2` 为例，我们可以有一个最大\\ **纠缠态**\\ （也称为Bell态）："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:443
+msgid ""
+"|\\Phi_+\\rangle = \\frac{1}{\\sqrt{2}}(|00\\rangle + |11\\rangle) = "
+"(1/\\sqrt{2}, 0, 0, 1/\\sqrt{2})^T。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:445
+msgid ""
+"这个量子态无法分解成两个量子态的直积（满足这种条件的量子态称为可分离态），具有经典概率不能描述的统计性质，在量子信息学中具有极其重要的意义。同样地，当\\"
+" :math:`n=3`\\ 时，我们也能找到一类相似的纠缠态："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:447
+msgid ""
+"|{\\rm GHZ}\\rangle = \\frac{1}{\\sqrt{2}}(|000\\rangle + |111\\rangle)\n"
+"=(1/\\sqrt{2} , 0 , 0 , 0 , 0 , 0 , 0 , 1/\\sqrt{2})^T。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:452
+msgid ""
+"事实上，与直觉相反，纠缠态无处不在，而可分离态却非常少。纠缠态的性质较为复杂，遗憾的是，对多量子比特系统，哪怕是在 :math:`n=2` "
+"的情形下，我们也没有像单个量子比特那样清晰的几何图像帮助我们理解。我们在下一节也会看到，一些特殊的纠缠态正是量子算法可以加速完成计算任务的关键。值得注意的是，多量子比特的纠缠态是非常复杂的。\\"
+" **当多个量子比特纠缠在一起时，单个量子比特的量子态信息会在某种意义上变得不确定**\\ ，所以我们有时需要消除不需要的纠缠。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:456
+msgid ""
+"例子：对纠缠态的测量。如果我们对\\ :math:`|\\Phi_+\\rangle`\\ 第一个量子比特进行\\ :math:`Z`\\ "
+"的测量。那么我们有\\ :math:`P_0 = |0_0\\rangle\\langle0_0|, P_1 = "
+"|1_0\\rangle\\langle 1_0|`, 和\\ :math:`p_0 = 1/2`, :math:`p_1=1/2`\\ "
+"。在测量结束后，我们以概率\\ :math:`1/2`\\ 得到\\ :math:`0`\\ 和\\ "
+":math:`1`,两比特系统相应的最终态为\\ :math:`|00\\rangle` 和 :math:`|11\\rangle`\\ "
+"，量子纠缠不再存在。这里我们注意到，当测量第一个量子比特得到结果0时，第二个量子比特也必须同时塌缩到\\ :math:`|0\\rangle`\\"
+" 态。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:468
+msgid "2.3 密度矩阵"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:471
+msgid "2.3.1 纯态与混合态"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:473
+#, python-brace-format
+msgid ""
+"一个纯态的量子系统，其量子态可以用态向量表示 :math:`|\\psi \\rangle`\\ "
+"。而几种纯态依照概率组成的量子态称为混合态。例如，假设一个量子系统处于纯态 :math:`|\\psi _{1}\\rangle |\\psi "
+"_{2}\\rangle` "
+"的概率都为50%，则这量子系统处于混合态。密度矩阵专门用来表示混合态。任何量子态，不管是纯态，还是混合态，都可以用密度矩阵表示。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:475
+#, python-brace-format
+msgid ""
+"混合态与叠加态的概念不同，几种纯态通过量子叠加所组成的叠加态仍旧是纯态。例如，\\ :math:`(|\\psi _{1}\\rangle "
+"+|\\psi _{2}\\rangle )/\\sqrt  {2}` 是个纯态。"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:487
+msgid "2.3.2 密度矩阵 (density matrix)"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:489
+#, python-brace-format
+msgid ""
+"假设一个量子系统处于纯态 :math:`|\\psi _{1}\\rangle、|\\psi _{2}\\rangle、|\\psi "
+"_{3}\\rangle`\\ 、……的概率分别为 :math:`w_{1}、w_{2}、w_{3}`\\ 、……，则这混合态量子系统的密度算符 "
+":math:`\\rho` 为"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:491
+#, python-brace-format
+msgid ""
+"{\\rho }=\\sum _{i}w_{i}|\\psi _{i}\\rangle \\langle \\psi _{i}|\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:493
+msgid "注意到所有概率的总和为1："
+msgstr ""
+
+#: ../../source/textbook/chap2.ipynb:495
+#, python-brace-format
+msgid ""
+"\\sum _{i}w_{i}=1\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:9
+msgid "第三章 量子线路 (Quantum Circuit)"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:21
+msgid "1 逻辑门与电路"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:23
+msgid "量子计算通过量子电路来实现。量子电路的本质是幺正变换和测量的组合。在物理上，我们无法直接实现过分复杂的幺正变换，所以期望通过一些容易实现的幺正变化来产生更复杂的幺正变换，这些较容易实现的变换则称为量子门。这个过程就类似于通过最基本的逻辑操作（与非门）来搭建大规模的数字电路一样。在本小节，我们将学习最基本的量子门，并简单了解一下如何通过她们来搭建复杂的量子电路。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:26
+msgid "1.1 经典逻辑门与电路"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:28
+msgid ""
+"在了解量子电路之前我们可以先看一下经典计算是如何进行的。在本节中，我们介绍一种直观的经典计算模型，即电路模型。电路模型不只是一种数学模型，它也是真实计算机的实际物理实现方式。一个电路由导线和门组成，它们分别携带信息并执行简单的计算任务。例如，下图显示了一些简单的电路，他们只包含单个逻辑门进行逻辑上的非（NOT），与(AND)，或(OR)"
+" "
+"，异或（XOR），NAND（与非）和或非（NOR）操作，称为量子门。输入和输出都只能是0（False）或者1(True)，称为经典比特（简称比特，和量子比特进行区分）。电路可以代表比特在空间中的运动，或者经过一段时间的状态变换。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:35
+msgid "|5157b59b593242f98db5559f81d9819e|"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:96
+msgid "5157b59b593242f98db5559f81d9819e"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:41
+msgid "经典逻辑门"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:53
+#, python-brace-format
+msgid ""
+"\\begin{aligned}\n"
+"&x = 0, y = 0 \\rightarrow c = 0, x\\oplus y = 0\\\\\n"
+"&x = 0, y = 1 \\rightarrow c = 0, x\\oplus y = 1\\\\\n"
+"\\end{aligned}"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:60
+msgid "而这正是两个比特相加的结果（包括进位比特）。这个电路称为半加器的原因是，其输入并没有包含进位比特。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:66
+msgid "|9fef6dee9d234a30bd04346abdffb604|"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:99
+msgid "9fef6dee9d234a30bd04346abdffb604"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:72
+msgid "半加器电路，其中c是进位符"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:82
+msgid ""
+"我们可以发现，这里的“电路”是指代数字逻辑电路，与高中所学到的电阻、电源组成的电路有一定的区别。真实的计算机（包括电脑，手机等）通过使用高级语言的编程来实现算法功能。在计算机芯片层面，这些高级语言（Java,"
+" C, Python等）写的程序最终被转换（编译）成二进制数据，驱动CPU上一个个的逻辑门，并最终完成算法运算（本质是逻辑运算）。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:84
+msgid "更一般地，一个电路可以有很多输入和输出比特。任意一般的逻辑函数可以定义为"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:86
+#, python-brace-format
+msgid ""
+"f:\\{0,1\\}^n \\rightarrow \\{0,1\\}^l\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:88
+#, python-brace-format
+msgid "例如，半加器就是一个\\ :math:`\\{0,1\\}^2`\\ 到\\ :math:`\\{0,1\\}^2`\\ 的逻辑函数。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:90
+msgid "这里有一个重要的结论:"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:92
+msgid ""
+"(经典线路)普适性定理：任意逻辑函数 :math:`f` "
+"，都可以由仅仅包含NAND门的电路来实现。我们称NAND门对经典逻辑计算是普适（universal）的。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:94
+msgid "由于篇幅限制，我们这里不给出相关的证明，有兴趣的读者可以参考任意一本数字逻辑电路的教科书。这个定理的意义在于，我们只需要实现一种类型的逻辑门，就能实现所有的逻辑电路，这将极大地简化理论分析和工程实现。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:111
+msgid "1.2 量子逻辑门与电路"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:113
+msgid "与经典计算类似，在本节中，我们提供量子电路这种语言来描述量子计算过程的离散单元（量子门）的集合。对量子信息的处理本质上是一种幺正变换（配合额外的测量）。在我们考虑量子电路时，不失一般性，总是将测量放到整个计算过程的最后。这样，我们也可以仅将整个幺正变换看成是量子电路。这样，通用的量子计算过程可以如下图所示："
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:119
+msgid "|f04cf045bb3449468221b1897cf44092|"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:137
+msgid "f04cf045bb3449468221b1897cf44092"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:125
+msgid "量子计算过程"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:135
+msgid "接下来，我们将具体介绍不同类型的量子门，并演示他们如何组合成一些量子电路。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:149
+msgid "2 量子比特门"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:152
+msgid "2.1 单量子比特门"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:154
+msgid ""
+"与经典逻辑门不同，量子电路对单个比特的操作要丰富得多。直觉地理解，经典比特对应 :math:`|0\\rangle` 和 "
+":math:`|1\\rangle` "
+"两个量子态，在Bloch球上分别是北极和南极，唯一能涉及的操作也就是在这两个点之间翻转（NOT门）。与之不同，单量子比特态却对应整个球面，我们可以通过变换连接球面上任意两个点。一些最重要的量子门包括泡利（Pauli）矩阵："
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:156
+#, python-brace-format
+msgid ""
+"X = \\left(\n"
+"  \\begin{array}{cc}\n"
+"    0 & 1  \\\\\n"
+"    1 & 0 \\\\\n"
+"  \\end{array}\n"
+"\\right), \\quad\n"
+"Y = \\left(\n"
+"  \\begin{array}{cc}\n"
+"    0 & -i  \\\\\n"
+"    i & 0 \\\\\n"
+"  \\end{array}\n"
+"\\right), \\quad\n"
+"Z =  \\left(\n"
+"  \\begin{array}{cc}\n"
+"    1 & 0  \\\\\n"
+"    0 & -1 \\\\\n"
+"  \\end{array}\n"
+"\\right)。\\quad"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:177
+msgid ""
+"要注意\\ :math:`X`\\ ，\\ :math:`Y`\\ 和\\ :math:`Z`\\ "
+"这三个矩阵既是幺正的，又是厄米的。所以我们可以将他们看做量子门，也可以对他们进行测量。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:179
+msgid "另外三个在量子计算中极为重要的量子门包括:"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:181
+msgid ""
+"H = \\frac{1}{\\sqrt{2}}\\left(\n"
+"  \\begin{array}{cc}\n"
+"    1 & 1  \\\\\n"
+"    1 & -1 \\\\\n"
+"  \\end{array}\n"
+"\\right), \\quad\n"
+"S = \\left(\n"
+"  \\begin{array}{cc}\n"
+"    1 & 0  \\\\\n"
+"    0 & i \\\\\n"
+"  \\end{array}\n"
+"\\right), \\quad\n"
+"T = \\left(\n"
+"  \\begin{array}{cc}\n"
+"    1 & 0  \\\\\n"
+"    0 & e^{i\\pi/4} \\\\\n"
+"  \\end{array}\n"
+"\\right)。\\quad"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:202
+msgid "为了更深入地理解单量子比特门，我们可以用泡利矩阵定义如下三个幺正矩阵："
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:204
+#, python-brace-format
+msgid ""
+"\\begin{aligned}\n"
+"R_x(\\theta) &= \\cos(\\theta/2)I - i\\sin(\\theta/2) X = \\left(\n"
+"  \\begin{array}{cc}\n"
+"    \\cos(\\theta/2) & -i\\sin(\\theta/2)  \\\\\n"
+"    -i\\sin(\\theta/2) & \\cos(\\theta/2) \\\\\n"
+"  \\end{array}\n"
+"\\right)，\\\\\n"
+"R_y(\\theta) &= \\cos(\\theta/2)I - i\\sin(\\theta/2) Y =  \\left(\n"
+"  \\begin{array}{cc}\n"
+"    \\cos(\\theta/2) & -\\sin(\\theta/2)  \\\\\n"
+"    \\sin(\\theta/2) & \\cos(\\theta/2) \\\\\n"
+"  \\end{array}\n"
+"\\right)，\\\\\n"
+"R_z(\\theta) &= \\cos(\\theta/2)I - i\\sin(\\theta/2) Z =  \\left(\n"
+"  \\begin{array}{cc}\n"
+"    e^{-i\\theta/2} & 0  \\\\\n"
+"    0 & e^{i\\theta/2} \\\\\n"
+"  \\end{array}\n"
+"\\right)。\n"
+"\\end{aligned}"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:227
+msgid ""
+"这三个矩阵分别称为绕Bloch球上的\\ :math:`x,y,z`\\ 轴顺时针旋转\\ :math:`\\theta`\\ 角。我们以\\ "
+":math:`R_z`\\ 为例："
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:229
+#, python-brace-format
+msgid ""
+"R_z(\\alpha)(\\cos(\\theta/2)|0\\rangle + "
+"\\sin(\\theta/2)e^{i\\varphi}|1\\rangle) \\cong "
+"\\cos(\\theta/2)|0\\rangle + "
+"\\sin(\\theta/2)e^{i(\\varphi+\\theta)}|1\\rangle\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:231
+#, python-brace-format
+msgid ""
+"而这正是量子态在Bloch球上绕着\\ :math:`Z`\\ 轴顺时针旋转了\\ :math:`\\theta`\\ 。\\ "
+":math:`R_x，R_y`\\ 的验证要复杂些，我们这边不做展开。除了\\ :math:`x,y,z`\\ "
+"轴的旋转外，我们也可以找到绕任意单位向量\\ :math:`\\hat{n}=(n_x,n_y,n_z)`\\ 旋转的单量子比特门："
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:233
+msgid ""
+"R_{\\hat{n}}(\\theta)=\\cos(\\theta/2)I + i \\sin(\\theta/2)(n_xX + n_y Y"
+" +n_z Z)。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:235
+#, python-brace-format
+msgid "事实上，任意单量子比特门都可以看成是绕某根特定轴\\ :math:`\\hat{n}`\\ 的旋转，满足："
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:237
+msgid ""
+"U_1 \\cong R_{\\hat{n}}(\\theta)，\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:239
+#, python-brace-format
+msgid "其中\\ :math:`\\theta`\\ ，\\ :math:`\\hat{n}`\\ 完全由\\ :math:`U_1`\\ 决定。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:241
+msgid "如果我们只能进行绕固定轴的旋转，我们仍然可以实现任意单量子比特门的幺正变化。这里我们有以下非常有用的定理："
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:243
+msgid ""
+"定理：任意作用在单量子比特上的幺正操作 :math:`U_1` ,都可以分解为绕任意2根固定的互相垂直的轴的旋转。以\\ :math:`y`\\ "
+"轴和\\ :math:`z`\\ 轴为例，我们有："
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:245
+msgid ""
+"U_1\\cong R_z(\\beta)R_y(\\gamma)R_z(\\delta),\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:247
+msgid "其中\\ :math:`\\beta,\\gamma,\\delta`\\ 由\\ :math:`U_1`\\ 决定。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:408
+msgid "2.2 两量子比特门"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:410
+msgid ""
+"如果我们只能使用单量子比特门，那么能做的事情是相当有限的，因为每个量子比特都相互独立。为了充分利用量子力学的特性，我们需要考虑作用在多个量子比特上的量子门。本节考虑作用在两个量子比特上的量子门。数学上，两量子比特门只是一个4维的幺正矩阵。这里我们着重介绍一个特别重要的两量子比特门——受控非门"
+" (controlled NOT 或者 :math:`\\rm CNOT`)。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:414
+msgid "由于幺正变换是一个线性变换，我们只需要考察基向量在\\ :math:`\\rm CNOT`\\ 的变换，即可完全确定这个幺正变换。这是因为"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:416
+#, python-brace-format
+msgid ""
+"\\begin{aligned}\n"
+"\\rm CNOT |\\psi\\rangle &= \\rm "
+"CNOT(\\alpha|00\\rangle+\\beta|01\\rangle+\\gamma|10\\rangle+\\delta|11\\rangle)\\\\"
+"\n"
+"&=\\alpha \\rm CNOT |00\\rangle+\\beta \\rm CNOT |01\\rangle+\\gamma \\rm"
+" CNOT |10\\rangle+\\delta \\rm CNOT|11\\rangle)\n"
+"\\end{aligned}"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:423
+msgid "如果我们定义\\ :math:`\\rm CNOT`\\ 对基向量做了以下变换："
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:425
+#, python-brace-format
+msgid ""
+"\\begin{aligned}\n"
+"&|00\\rangle \\rightarrow |00\\rangle,\\\\\n"
+"&|01\\rangle \\rightarrow |01\\rangle,\\\\\n"
+"&|10\\rangle \\rightarrow |11\\rangle,\\\\\n"
+"&|11\\rangle \\rightarrow |10\\rangle，\n"
+"\\end{aligned}"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:434
+msgid "那么\\ :math:`\\rm CNOT |\\psi\\rangle`\\ 的状态就完全确定了。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:436
+msgid ""
+"我们可以发现，当第一个量子比特处在 :math:`|0\\rangle` 时，第二个量子比特的状态不变；如果第一个量子比特处于\\ "
+":math:`|1\\rangle`\\ "
+"态时，那么第二个量子比特状态发生翻转。这就像是第一个量子比特控制了第二个量子比特，这就是“受控”一词的来源。因此，第一个量子比特也叫控制比特（Control"
+" 或者 C），第二个量子比特称为目标比特（Target或者T）。将\\ :math:`\\rm CNOT`\\ 写成矩阵的形式，我们就有："
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:438
+#, python-brace-format
+msgid ""
+"{\\rm CNOT} = \\left(\n"
+"  \\begin{array}{cccc}\n"
+"    1 & 0 & 0 & 0 \\\\\n"
+"    0 & 1 & 0 & 0 \\\\\n"
+"    0 & 0 & 0 & 1 \\\\\n"
+"    0 & 0 & 1 & 0 \\\\\n"
+"  \\end{array}\n"
+"\\right)，"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:449
+msgid ""
+"其中第1-4列分别对应\\ :math:`|00\\rangle， |01\\rangle，|10\\rangle， |11\\rangle`\\"
+" 。通常，我们用以下符号来表示\\ :math:`\\rm CNOT`\\ ："
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:455
+msgid "|f2681edf897d4d83a53709a6db43202c|"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:509
+msgid "f2681edf897d4d83a53709a6db43202c"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:461
+msgid "CNOT门"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:471
+msgid "其中，\\ :math:`\\bullet` 所在的横线代表控制量子比特，\\ :math:`\\oplus` 所在的横线代表目标量子比特。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:473
+msgid ""
+":math:`\\rm CNOT`\\ 门一个重要的作用就是制备纠缠态。考虑三个量子比特初始制备于\\ "
+":math:`|000\\rangle`\\ 态（可以通过分别对三个量子比特进行\\ :math:`Z`\\ "
+"的测量来完成），那么我们就能通过下图所示的电路来制备3比特的GHZ态："
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:479
+msgid "|9ccb56bb86b646b7b6c0b066be43d6dd|"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:512
+msgid "9ccb56bb86b646b7b6c0b066be43d6dd"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:485
+msgid "GHZ态的制备电路"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:497
+msgid "**GHZ态的制备：** 经过第一个H门后，量子态变为"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:499
+#, python-brace-format
+msgid ""
+"|\\psi\\rangle_1=1/\\sqrt{2}(|0\\rangle+|1\\rangle)|00\\rangle=1/\\sqrt{2}(|0\\rangle|00\\rangle+|1\\rangle|00\\rangle)，"
+"\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:501
+#, python-brace-format
+msgid "经过第一个\\ :math:`{\\rm CNOT}`\\ 门后，量子态变成"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:503
+#, python-brace-format
+msgid ""
+"|\\psi\\rangle_2=1/\\sqrt{2}(|0\\rangle|00\\rangle+|1\\rangle|10\\rangle)=1/\\sqrt{2}(|00\\rangle+|11\\rangle)|0\\rangle，"
+"\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:505
+#, python-brace-format
+msgid "经过第二个\\ :math:`{\\rm CNOT}`\\ 门后，量子态变成"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:507
+#, python-brace-format
+msgid ""
+"|\\psi\\rangle_3=1/\\sqrt{2}(|000\\rangle+|111\\rangle)。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:587
+msgid "3 量子门的普适性（universality）"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:589
+msgid "正如经典逻辑电路都可以用NAND门来构造一样，对量子电路，我们也希望可以找到一个固定的量子门的集合，并通过这个集合中的量子门来构造所有的量子电路。但是注意，这里的挑战在于，幺正变换是连续变换，而给定的一个量子门集合，有限个量子门所能实现的幺正变换数量是有限的。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:591
+msgid "但实际上，我们仍然可以用有限的量子门“足够好”地近似任意幺正变换。这里我们不加证明地给出以下重要定理："
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:593
+#, python-brace-format
+msgid ""
+"量子普适性定理：任意作用在\\ :math:`n`\\ 个量子比特上的幺正变换\\ :math:`U_n`\\ ，都可以拆分成包含 "
+":math:`m=O(4^n)`\\ 个单量子比特门和CNOT门电路。更进一步，我们可以仅通过\\ :math:`H`,\\ "
+":math:`S`,\\ :math:`T`\\ 和 :math:`\\rm CNOT`\\ 这组有限个量子门所组成的电路\\ "
+":math:`\\tilde{U}_n`\\ 来近似这\\ :math:`m`\\ 个量子门组成的电路\\ :math:`U_n`\\ "
+"，所需要\\ :math:`H`,\\ :math:`S`,\\ :math:`T`\\ 和 :math:`\\rm CNOT`\\ "
+"量子门的总数为\\ :math:`O(m\\log(m/\\epsilon))`\\ ，其中\\ :math:`\\epsilon`\\ 为\\ "
+":math:`U_n`\\ 与\\ :math:`\\tilde{U}_n`\\ 间的误差。{:math:`H`,\\ :math:`S`,\\ "
+":math:`T`\\ 和 :math:`\\rm CNOT`}称为普适门集（universal gate set）"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:596
+msgid "这样，我们可以通过增加少量的量子门，使量子电路产生的幺正变化和目标幺正变换之间的差距指数地减少！"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:600
+#, python-brace-format
+msgid ""
+"例子：\\ :math:`{\\rm Toffoli}` 门。这种门可以看成是\\ :math:`{\\rm CNOT}`\\ "
+"门的一种拓展——它有两个控制量子比特和一个目标量子比特。只有当两个控制量子比特处于\\ :math:`|11\\rangle`\\ "
+"态时，目标量子比特才会翻转。它的电路符号如下图所示，其矩阵表示是："
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:602
+#, python-brace-format
+msgid ""
+"{\\rm Toffoli} = \\left(\n"
+"  \\begin{array}{cccccccc}\n"
+"    1 & 0 & 0 & 0  & 0 & 0& 0&0 \\\\\n"
+"    0 & 1 & 0 & 0 & 0 & 0& 0&0\\\\\n"
+"    0 & 0 & 1& 0 & 0 & 0& 0&0\\\\\n"
+"    0 & 0 & 0 & 1  & 0 & 0& 0&0\\\\\n"
+"     0 & 0 & 0 & 0  & 1 & 0& 0&0\\\\\n"
+"      0 & 0 & 0 & 0  & 0 & 1& 0&0\\\\\n"
+"       0 & 0 & 0 & 0  & 0 & 0& 0&1\\\\\n"
+"        0 & 0 & 0 & 0  & 0 & 0& 1&0\\\\\n"
+"  \\end{array}\n"
+"\\right)"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:621
+msgid "|0096870cbc86452ea224ec3df764f540|"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:672
+msgid "0096870cbc86452ea224ec3df764f540"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:627
+msgid "Toffoli门"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:639
+#, python-brace-format
+msgid ""
+":math:`{\\rm Toffoli}` 门的分解：正如普适性定律所陈述的，我们可以通过\\ :math:`H`\\ ，\\ "
+":math:`T`\\ ，\\ :math:`S`\\ 和\\ :math:`{\\rm CNOT}`\\ 门来构造\\ :math:`{\\rm"
+" Toffoli}`\\ 门，具体的电路图如下图所示，其中"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:641
+#, python-brace-format
+msgid ""
+"T^\\dagger = \\left(\n"
+"  \\begin{array}{cc}\n"
+"    1 & 0  \\\\\n"
+"    0 & e^{-i\\pi/4} \\\\\n"
+"  \\end{array}\n"
+"\\right) = S^3T。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:650
+#, python-brace-format
+msgid "称为\\ :math:`T`\\ 的共轭。注意，这里对\\ :math:`{\\rm Toffoli}`\\ 的构造是精确无误差的。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:656
+msgid "|b40644156a2a42e9a9c60acaa1cdb8b0|"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:675
+msgid "b40644156a2a42e9a9c60acaa1cdb8b0"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:662
+msgid "Toffoli门的分解"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:771
+msgid "4 量子线路"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:774
+msgid "4.1 经典可逆线路"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:776
+msgid ""
+"一般来说，大部分的经典的逻辑门是不可逆。比如\\ **与**\\ 门（AND），当输出是0时我们无法得知输入是00、01或者10；但最简单就如\\"
+" **非**\\ 门就是可逆的，可以通过输出值取反得到输入值。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:778
+msgid "但想要构造更复杂的电路，还是要通过结构上的构造，使用更多的门来构造出可逆的线路的，这时线路的输入输出有且仅有唯一确定的值。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:790
+msgid "4.2 可逆计算 （reversible computation）"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:792
+#, python-brace-format
+msgid ""
+"如果一个逻辑门存在逆操作，即给定输出，我们可以确定输入状态，那我们称其为可逆的。我们可能已经发现，经典逻辑门和量子逻辑门的一个区别在于，经典逻辑门有时是不可逆的（例如AND门的输出0对应00，10，01三个输入状态，我们无法判断哪一个是真正的输入态），而量子逻辑门必须是可逆的（因为幺正变换是可逆的，且有"
+" :math:`U^{-1}=U^\\dagger` "
+"）。但是如果稍微小心一点，在有辅助比特的帮助下，我们可以将经典逻辑门转换成可逆的。通过构造可逆电路，我们就有了从经典计算到量子计算的桥梁。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:794
+msgid ""
+"我们先看一个经典逻辑门，Fredkin门。这个逻辑门的真值表如下图所示。通过观察，我们可以发现，当 :math:`c=1` "
+"时，Fredkin门对\\ :math:`a`\\ 和\\ :math:`b`\\ "
+"进行了置换（SWAP）。从真值表可以看出，Fredkin门的输入和输出是一一对应的，所以它是可逆的（它的逆运算就是自己）。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:800
+msgid "|67de1f63b925475490ad1e2c0ff1f108|"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:863
+msgid "67de1f63b925475490ad1e2c0ff1f108"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:806
+msgid "Fredkin 门"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:816
+msgid "对Fredkin的一个重要的应用是构造可逆电路。我们以AND， NOT和SWAP门来说明，它们都可以用可逆的Fredkin门来构造。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:818
+msgid "当\\ :math:`a=0，b=y，c=x`\\ 时， 我们可以从真值表中提取："
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:820
+#, python-brace-format
+msgid ""
+"\\begin{aligned}\n"
+"x = 0, y = 0 \\rightarrow a'= 0, b' = 0\\\\\n"
+"x = 0, y = 1 \\rightarrow a'= 0, b' = 1 \\\\\n"
+"x = 1, y = 0 \\rightarrow a'= 0, b' = 0\\\\\n"
+"x = 1, y = 1 \\rightarrow a'= 1, b' = 0\\\\\n"
+"\\end{aligned}"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:829
+#, python-brace-format
+msgid ""
+"我们就能发现\\ :math:`a' = xy`\\ 和\\ :math:`b'=\\bar{x}y`\\ "
+"(:math:`\\bar{(\\cdot)}`\\ "
+"代表取反)。这样我们就通过一个辅助比特实现了AND门。利用类似的想法，我们也能构造NOT门和SWAP门，如下图所示。有了AND和NOT，我们就能构造NAND门。由经典普适性定理，所有的经典计算都可以是可逆的。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:835
+msgid "|99bddfc970374794ab5929970ca46014|"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:866
+msgid "99bddfc970374794ab5929970ca46014"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:841
+msgid "Fredkin 门构造可逆的"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:851
+msgid ""
+"如果我们构造Fredkin的幺正变换，那我们就能对任意量子态做可逆的经典计算。事实上，\\ :math:`\\rm Toffoli`\\ "
+"门也对任意经典计算构造可逆电路。值得注意的是，可逆计算通常需要很多辅助比特（通常正比于所考虑电路的门的数量）。这在经典计算中或许不是问题，但是对量子计算却是致命的。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:855
+msgid ""
+"例：假设三个量子比特初始态为\\ "
+":math:`\\frac{1}{\\sqrt{2}}|0\\rangle|y\\rangle\\sum_{x\\in "
+"\\{0,1\\}}|x\\rangle`\\ ，那么经过量子Fredkin门之后，状态变为"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:857
+msgid ""
+"\\frac{1}{\\sqrt{2}}\\sum_{x\\in "
+"\\{0,1\\}}|xy\\rangle|\\bar{x}y\\rangle|x\\rangle\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:859
+msgid ""
+"如果只看量子比特1， 我们发现\\ :math:`y\\cdot 0`\\ 和 :math:`y\\cdot 1` "
+"处于“叠加”的状态，似乎同时进行了两次AND运算。但是注意，第1个量子比特和第2，3个量子纠缠在一起的，会引起量子干涉，这时我们无法获取关于量子比特1的任何信息。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:861
+msgid ""
+"事实上我们可以完全消除这些辅助量子比特的影响，但是这需要额外的电路设计。在此不做展开，有兴趣的读者可以参考：https://qiskit.org/textbook"
+"/ch-gates/oracles.html"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:878
+msgid "4.3 量子可逆线路"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:880
+msgid "了解到经典计算线路都可以改造成可逆计算线路，逻辑门由矩阵表示后。结合量子线路所有的量子门都是幺正可逆的，我们就知道，量子线路能够实现的计算模型是经典计算的一个超集。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:882
+msgid ""
+"事实上，我们相信对于量子线路多项式时间可以解决的问题 BQP 集合是严格大于经典线路多项式时间可以解决的问题 P "
+"集合的，也即量子计算具有本质上超越经典计算的优势。"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:950
+msgid "5 总结"
+msgstr ""
+
+#: ../../source/textbook/chap3.ipynb:952
+msgid "本节我们学习了重要的电路概念。相对于离散的经典逻辑门，量子逻辑门是可以连续变化，且可逆的。我们发现，量子逻辑门包含经典逻辑门。在初态为直积态时，原则上量子计算可以完成所有经典计算的任务（由于可逆性的要求，效率会有所下降），毕竟世界的本质还是量子的。同时，与经典电路一样，对量子电路我们也有普适性定理，即任意幺正变换所对应量子电路都可以用普适门集合中的量子门组成的电路来很好地近似。所以在接下来的算法讨论中，我们也使用局限于普适门集合中的量子门。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:9
+msgid "第四章 量子算法（Quantum Algorithm）"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:20
+msgid ""
+"在第三章可逆计算里，给定\\ :math:`f(x)`\\ "
+"，我们可以通过构造与辅助比特没有纠缠的可逆电路，从而系统地构造对应的量子电路。这样当输入态是\\ "
+":math:`\\frac{1}{2^{n/2}}\\sum_{x= 0}^{2^n-1}|x\\rangle`\\ "
+"时，我们似乎可以“并行”运算\\ :math:`2^n`\\ 个输入的值\\ :math:`x`\\ "
+"。但是由于测量的过程会随机塌缩到某一个输出态，例如\\ :math:`f(x_k)`\\ "
+"，我们并不能真正同时得到所有的计算结果。因此，为了真正利用量子并行性，我们需要非常巧妙的算法设计来提取有用的计算结果，起到加速的效果。本节尽量以直观的方式介绍一些简单的算法框架。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:44
+msgid "1. Dense Coding 算法"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:46
+msgid ""
+"我们先看一个利用量子力学性质实现的量子通讯里的巧妙协议，在这一算法中，Alice 和 Bob 相处两地，但利用量子纠缠的特性，Alice "
+"可以通过发送给 Bob 一个量子比特（量子态）来传递两个经典比特的信息。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:48
+msgid ""
+"Alice 首先将 EPR 纠缠对中的一个粒子发送给 Bob。此时 Alice 对自己的粒子做 I，X，Y，Z 操作中的一个。则相应的原始的 "
+":math:`\\vert 00\\rangle + \\vert 11\\rangle` 的态对应转化为 :math:`\\vert "
+"00\\rangle + \\vert 11\\rangle`, :math:`\\vert 10\\rangle + \\vert "
+"01\\rangle`, :math:`\\vert 10\\rangle - \\vert 01\\rangle`\\ ，\\ "
+":math:`\\vert 00\\rangle - \\vert 11\\rangle`\\ 。操作后， Alice 将该粒子也发送给 "
+"Bob。注意到此过程，只传递了一个 qubit（第一次的准备工作不算，可以理解为初始 Alice Bob 即共享一个纠缠对）。而 Bob "
+"最后收到全部两个粒子后，可以进行 Bell 基测量，从而知道对应的态，也即 Alice 的 I，X，Y，Z "
+"信息，恰好为两个经典比特。由此实现了用一个 qubit 进行两个经典 bit 的密集编码。整个过程对应的线路图如下："
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:55
+msgid "|2c1bfc0a2d0e4dd89d9d463c3d07a4fe|"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:71
+msgid "2c1bfc0a2d0e4dd89d9d463c3d07a4fe"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:61
+msgid "密集编码算法示意图"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:220
+msgid "2. Teleportation 算法"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:222
+msgid ""
+"量子隐形传态和量子密集编码相反，是 Alice 通过发送两个经典比特的信息来完整传递一个量子比特的信息（量子态）。Alice 和 Bob 共享一个"
+" EPR 对（第2和第3个 qubit），Alice 在要传递的量子比特和 Bell 对上的一个量子比特上做一个 Bell "
+"基测量，并将测量结果的两个经典比特发送给 Bob，Bob 根据测量结果相应的在第三个比特上作用量子门，即可在第三个比特上复原初始 Alice "
+"第一个量子比特上的量子态。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:228
+msgid "|8c48793fc51a41fb8b858a14d321d661|"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:244
+msgid "8c48793fc51a41fb8b858a14d321d661"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:234
+msgid "量子隐形传态算法示意图"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:412
+msgid "3. Deutsch-Jozsa 算法"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:414
+msgid "我们将从一个简单的例子来介绍量子算法，请着重体会与经典计算的区别和对量子并行概念的利用。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:416
+msgid ""
+"**问题定义：** Alice从 :math:`0` 到 :math:`2^n − 1` 中选择一个值\\ :math:`x`\\ "
+"，并将它寄给Bob。Bob计算某个函数\\ :math:`f(x)`\\ 并返回结果，该结果要么是\\ :math:`0`\\ ，要么是\\ "
+":math:`1`\\ 。现在，Bob 承诺使用函数 :math:`f`\\ ，它是两种函数之一；\\ :math:`f(x)` "
+"要么是常数（所有\\ :math:`f(x)`\\ 的值都一样），要么\\ :math:`f(x)`\\ 是“平衡”的（对于所有可能的\\ "
+":math:`x`\\ ，恰好有一半等于1，对于另一半等于0）。 Alice "
+"的目标是确定Bob选择的是常数函数还是平衡函数，并尽可能少地与他通信。问题：Alice能多快地决定\\ :math:`f(x)`\\ 是哪一种？"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:419
+msgid ""
+"在经典计算情况下，Alice在每次通信中只能向Bob发送一个\\ :math:`x`\\ 值。 在最坏的情况下，Alice将需要查询Bob至少\\"
+" :math:`2^n/2+1`\\ 次，因为对平衡函数，在最终得到\\ :math:`1`\\ 之前她可能会收到\\ "
+":math:`2^n/2`\\ 个\\ :math:`0`\\ 。 因此，她可以使用的最佳确定性经典算法需要\\ :math:`2^n/2 + "
+"1`\\ 次查询。 请注意，在每次通信中，Alice向Bob发送\\ :math:`n`\\ 位信息。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:421
+msgid ""
+"如果 Bob 和 Alice 能够交换量子比特，而不仅仅是经典比特，并且如果Bob同意使用幺正变换\\ :math:`U_f`\\ 计算\\ "
+":math:`f(x)`\\ ，那么Alice可以仅通过\\ **一次**\\ 询问来完成函数类型判定， 称为Deutsch-"
+"Jozsa算法。我们来看一下具体如何实现。具体电路见下图"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:427
+msgid "|2fa5e12a150b4da19e7946d7310f28ed|"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:465
+msgid "2fa5e12a150b4da19e7946d7310f28ed"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:433
+msgid "Deutsch_Jozsa算法电路图"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:443
+#, python-brace-format
+msgid ""
+"假设初始状态为\\ :math:`|\\psi_0\\rangle = |0\\rangle^{\\otimes n} "
+"|1\\rangle=|0_10_2\\cdots 0_n\\rangle|1\\rangle`\\ ，则经过上图中的H门（注意，\\ "
+":math:`H^{\\otimes n} = H_1H_2 \\cdots H_n`\\ ）之后，量子态变为"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:445
+msgid ""
+"|\\psi_1\\rangle= \\sum_{x} "
+"\\frac{1}{\\sqrt{2^n}}|x\\rangle\\frac{1}{\\sqrt{2}}(|0\\rangle-|1\\rangle)。"
+"\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:447
+msgid ""
+"图中\\ :math:`U_f`\\ 的作用是\\ :math:`U_f |x,y\\rangle=|x,y\\oplus "
+"f(x)\\rangle`\\ 。那么经过\\ :math:`U_f`\\ 之后，我们得到"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:449
+msgid ""
+"|\\psi_2\\rangle = \\sum_x \\frac{1}{\\sqrt{2^n}}|x\\rangle "
+"\\frac{1}{\\sqrt{2}}(|0\\oplus f(x)\\rangle - |1 \\oplus f(x)\\rangle) = "
+"\\sum_{x} "
+"\\frac{(-1)^{f(x)}}{\\sqrt{2^n}}|x\\rangle\\frac{1}{\\sqrt{2}}(|0\\rangle-|1\\rangle)。"
+"\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:451
+#, python-brace-format
+msgid "经过之后的\\ :math:`H^{\\otimes n}`\\ 之后，我们得到(这里推导不予给出，有兴趣的读者请自行证明):"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:453
+msgid ""
+"|\\psi_3\\rangle = \\sum_z \\left(\\sum_{x} \\frac{(-1)^{f(x)+x\\cdot "
+"z}}{2^n}\\right)|z\\rangle\\frac{1}{\\sqrt{2}}(|0\\rangle-|1\\rangle)。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:455
+#, python-brace-format
+msgid ""
+"最后Alice 对\\ :math:`n`\\ 个量子比特进行测量。我们只关注\\ :math:`|0\\rangle^{\\otimes "
+"n}`\\ 这个状态。得到这个状态的概率是"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:457
+msgid ""
+"P_0=\\left(\\sum_x\\frac{(-1)^{f(x)}}{2^n}\\right)^2\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:459
+msgid ""
+"我们可以发现，当\\ :math:`f(x)`\\ 是常数时，\\ :math:`P_0`\\ 必须等于1。当\\ :math:`f(x)`\\ "
+"是平衡时，\\ :math:`P_0=0`\\ ，因为\\ :math:`f(x)=1`\\ 的那部分和\\ :math:`f(x)=0`\\ "
+"的那部分求和后相抵消。这样，只要我们测到全\\ :math:`0`\\ ，那么就可以判定\\ :math:`f(x)`\\ 是常数，否则\\ "
+":math:`f(x)`\\ 为平衡。这样，只需要一次运行电路即可完成判定，较经典计算的\\ :math:`2^n/2+1`\\ 次有巨大的提升。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:463
+msgid ""
+"Deuch-Jozsa "
+"算法有很明显的人工构造痕迹，实际价值不明显。但是它清楚地显示了量子计算可以在某些特定的场景下远远超过经典计算，从而为寻找更有价值的量子算法提供了线索。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:584
+msgid "4. Simon 算法"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:595
+msgid ""
+"判定一个函数是常数函数还是平衡函数时，根据上一小节的讨论，经典确定性算法需要调用 :math:`O(2^n)` 次函数，而 D-J "
+"算法只需要调用一次。 但是，如果考虑概率随机算法的话存在经典概率算法只需要调用 2 次函数就能以固定概率成功判定其是常数函数还是平衡函数。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:597
+msgid "Simon 算法则是从概率算法的意义上，依然有 query 复杂度的指数加速。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:599
+msgid "其问题如下："
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:601
+#, python-brace-format
+msgid ""
+"给定一个函数 :math:`f: \\{0, 1\\}^n \\rightarrow \\{0, 1\\}^n`\\ "
+"，且该函数的映射是二对一的，存在非零比特串密钥 :math:`s\\in \\{0, 1\\}^n`\\ ，使得"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:603
+#, python-brace-format
+msgid ""
+"\\forall x, y \\in \\{0, 1\\}^n, f(x)=f(y) ~\\rm{iff}~ x\\oplus y = s.\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:605
+msgid "算法则是需要找到该比特串密钥。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:607
+msgid "Simon 算法的线路结构与 DJ 算法一致。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:609
+#, python-brace-format
+msgid ""
+"假设初始状态为\\ :math:`|\\psi_0\\rangle = |0\\rangle^{\\otimes n} \\otimes  "
+"|0\\rangle^{\\otimes n}`\\ ，则经过H门（注意，\\ :math:`H^{\\otimes n} = H_1H_2 "
+"\\cdots H_n`\\ ）之后，量子态变为"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:611
+msgid ""
+"|\\psi_1\\rangle = \\frac{1}{\\sqrt{2^n}} \\sum_{x=0}^{2^n-1} |x\\rangle "
+"\\otimes |0\\rangle^{\\otimes n}。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:613
+msgid "经过\\ :math:`U_f`\\ 之后，我们得到"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:615
+msgid ""
+"|\\psi_2\\rangle = \\frac{1}{\\sqrt{2^n}} \\sum_{x=0}^{2^n-1} U_f "
+"(|x\\rangle \\otimes |0\\rangle ^ {\\otimes n}) = \\frac{1}{\\sqrt{2^n}} "
+"\\sum_{x=0}^{2^n-1} |x\\rangle \\otimes|f(x)\\rangle 。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:617
+msgid "经过之后的\\ :math:`H`\\ 之后，我们得到:"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:619
+msgid ""
+"\\begin{split}\n"
+"|\\psi_3\\rangle &= (H^{\\otimes n} \\otimes I_n) |\\psi_2\\rangle \\\\\n"
+"&= \\frac{1}{\\sqrt{2^n}} \\sum_{x=0}^{2^n-1} H^{\\otimes n} |x\\rangle "
+"\\otimes|f(x)\\rangle \\\\\n"
+"&= \\frac{1}{\\sqrt{2^n}} \\sum_{x=0}^{2^n-1} (\\frac{1}{\\sqrt{2^n}} "
+"\\sum_{x=0}^{2^n-1} (-1)^{x \\cdot y} |y\\rangle ) \\otimes|f(x)\\rangle "
+"\\\\\n"
+"&= \\sum_{y=0}^{2^n-1}|y\\rangle \\otimes (\\frac{1}{2^n} "
+"\\sum_{x=0}^{2^n-1} (-1)^{x \\cdot y} |f(x)\\rangle)\n"
+"\\end{split}"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:628
+msgid "测量"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:630
+msgid ""
+"P_y = \\left | {\\frac{1}{2^n} \\sum_{x=0}^{2^n-1} (-1)^{x \\cdot y} "
+"|f(x)\\rangle}\\right |^2\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:632
+#, python-brace-format
+msgid ""
+"R 是f的值域，根据f(x)的定义可知 :math:`|R| = 2^{n-1}`, 同时 :math:`x_z \\oplus x_z^{'} "
+"= s`\\ ，带入等式"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:634
+msgid ""
+"\\begin{split}\n"
+"p_y = \\left | {\\frac{1}{2^n}} \\sum_{z \\in R} (-1)^{x \\cdot y} |f(x) "
+"\\rangle \\right |^2\n"
+"&= \\begin{cases}\n"
+"\\frac{1}{2^{n-1}}, & \\text{如果} s\\cdot y = 0 \\\\\n"
+"0, & \\text{如果} s\\cdot y = 1\n"
+"\\end{cases}\n"
+"\\end{split}"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:644
+msgid ""
+"集合 :math:`S = \\{ y | y \\in \\{0,1\\}^n, s\\cdot y = 0\\}`\\ "
+"，易见测量结果比特串\\ :math:`y`\\ 等价于在集合\\ :math:`S`\\ 中均匀随机采样得到。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:826
+msgid "5. Grover 搜索 （Grover search）"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:828
+msgid ""
+"搜索问题一直处于计算机算法的核心。本节介绍一个重要的量子搜索框架：Grover Search。需要说明的是，Grover search "
+"只是一个解决搜索问题的框架，需要根据具体的问题设计特定的模块算法。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:830
+msgid ""
+"**问题定义:** 考虑\\ :math:`N=2^n`\\ 个数（从0至\\ :math:`2^n-1`\\ ），里面有\\ "
+":math:`M`\\ 个值满足\\ :math:`f(x)=1`\\ ，称为\\ :math:`f(x)`\\ 的解，对其余的\\ "
+":math:`x`\\ 值，\\ :math:`f(x)=0`\\ 。找出所有的解(假设我们已经知道\\ :math:`M`\\ 的值)。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:832
+msgid ""
+"这是一个给定函数寻找解的问题，大量实际的问题可以约化到这种形式。一般情况下，最好的经典算法也要进行\\ :math:`O(N)`\\ 次\\ "
+":math:`f(x)`\\ 的计算。但是我们将会看到，量子算法可以大大减少计算量。我们这里额外需要一个概念叫量子Oracle。Oracle "
+"只是一个完成特定功能的量子电路（内部结构我们不是很关心），在这里，我们需要的Oracle满足"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:834
+#, python-brace-format
+msgid ""
+"|x\\rangle|q\\rangle \\xmapsto{O} |x\\rangle|q\\oplus f(x)\\rangle\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:836
+msgid ""
+"（注意与Deutch-Jozsa 算法中的\\ :math:`U_f`\\ 变换的对比）。\\ :math:`|q\\rangle`\\ "
+"所在的量子比特称为Oracle的辅助量子比特，如果我们将其制备于\\ "
+":math:`\\frac{1}{\\sqrt{2}}(|0\\rangle-|1\\rangle)`\\ ，那么就会有"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:838
+msgid ""
+"|x\\rangle\\frac{1}{\\sqrt{2}}(|0\\rangle-|1\\rangle) \\xmapsto{O} "
+"(-1)^{f(x)}|x\\rangle\\frac{1}{\\sqrt{2}}(|0\\rangle-|1\\rangle)\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:840
+msgid "由于Oracle作用前后辅助量子比特状态都不变，我们在讨论算法时可以先忽略它的存在，而认为"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:842
+#, python-brace-format
+msgid ""
+"|x\\rangle\\xmapsto{O}(-1)^{f(x)}|x\\rangle。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:846
+#, python-brace-format
+msgid ""
+"例子(Oracle的电路)： 考虑一个计算空间\\ :math:`N=4`\\ 的函数\\ :math:`f(x)`\\ ，其中\\ "
+":math:`f(0)=0,f(1)=0,f(2)=1,f(3)=0`\\ ，那么由Deutsch-Jozsa算法类似的电路，我们可以用\\ "
+":math:`\\rm Toffoli`\\ 和\\ :math:`X`\\ 门构造这个Oracle，如下图。这里\\ :math:`q_0`\\"
+" 和\\ :math:`q_1`\\ 代表计算用的2个比特，\\ :math:`q_2`\\ 是辅助Oracle量子比特，初始制备在\\ "
+":math:`1/\\sqrt{2}(|0\\rangle-|1\\rangle)`\\ 态上。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:852
+msgid "|bbf00f9fe7ca49baaee10526eba8035b|"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1097
+msgid "bbf00f9fe7ca49baaee10526eba8035b"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:858
+msgid "f(x) 的Oracle电路"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:870
+#, python-brace-format
+msgid ""
+"区分“计算”和“识别”问题的解。“计算”问题的解和能够“识别”解决方案之间的区别；关键是可以做后者的时候不必做前者。一个简单的例子来说明这一点是质因数分解问题。假设我们得到了一个大数\\"
+" :math:`m`\\ ，并告诉我们它是两个素数\\ :math:`p` 和\\ :math:`q`\\ 的乘积。要计算出\\ "
+":math:`p`\\ ，\\ :math:`q`\\ 很困难，但是给定\\ :math:`p`\\ ，\\ :math:`q`\\ "
+"，我们却能很快识别他们的积是否是\\ :math:`m`\\ 。要确定\\ :math:`p`\\ 和\\ :math:`q`\\ "
+"，在经典计算机上显而易见的方法是搜索从2到 :math:`m^{1/2}`\\ 的所有数字，以寻找两个质因数中较小的一个。也就是说，我们依次对 "
+":math:`2` 到 :math:`m^{1/2}` 范围内的每个数进行对\\ :math:`m`\\ 的试除，直到找到更小的素因数。 "
+"然后可以通过将\\ :math:`m`\\ 除以较小的素数来找到另一个素数因子。 显然，这种基于搜索的方法需要大约 :math:`m^{1/2}`"
+" 次试验才能在经典计算机上找到一个因子。而Grover Search正式要加速这种过程。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:873
+msgid "**算法过程：**"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:875
+msgid ""
+"我们假设 :math:`O` 的构造已经给出，我们可以调用\\ :math:`O`\\ 。我们首先制备一个量子态\\ "
+":math:`|\\psi\\rangle`\\ 处于所有\\ :math:`x`\\ 的均匀叠加："
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:877
+msgid ""
+"|\\psi\\rangle=\\frac{1}{\\sqrt{N}}\\sum_{x=0}^{N-1}|x\\rangle。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:879
+msgid "我们定义一下两个量子态："
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:881
+msgid ""
+"\\begin{aligned}\n"
+"|\\alpha\\rangle &= \\frac{1}{\\sqrt{N-M}}\\sum_{x\\notin "
+"S}|x\\rangle，\\\\\n"
+"|\\beta\\rangle &= \\frac{1}{\\sqrt{M}}\\sum_{x \\in S}|x\\rangle\n"
+"\\end{aligned}"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:888
+msgid ""
+":math:`|\\beta\\rangle`\\ 代表所有解的均匀叠加态，\\ :math:`|\\alpha\\rangle`\\ "
+"代表剩余的\\ :math:`x`\\ 的均匀叠加态。这两个态互相正交，见下图。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:894
+msgid "|5bc9c680856d4aadb6faee6697e233c0|"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1100
+msgid "5bc9c680856d4aadb6faee6697e233c0"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:900
+msgid "Grover search的可视化"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:910
+msgid "通过简单计算，我们有："
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:912
+msgid ""
+"|\\psi\\rangle=\\sqrt{\\frac{N-M}{N}}|\\alpha\\rangle+\\sqrt{\\frac{M}{N}}|\\beta\\rangle"
+" = \\cos(\\theta/2)|\\alpha\\rangle+\\sin(\\theta/2)|\\beta\\rangle。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:914
+msgid ""
+"注意\\ :math:`|\\alpha\\rangle`\\ ， :math:`|\\beta\\rangle`\\ 和\\ "
+":math:`|\\psi\\rangle` 在同一平面上，如上图。算法的目标是要让\\ :math:`|\\psi\\rangle`\\ "
+"通过计算之后尽量逼近\\ :math:`|\\beta\\rangle`\\ ，然后对量子比特进行测量后得到的结果就会是\\ "
+":math:`f(x)`\\ 的解。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:916
+msgid "我们作用Oracle :math:`O`\\ ，就会发现"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:918
+msgid ""
+"|\\psi_1\\rangle=O|\\psi\\rangle = "
+"\\cos(\\theta/2)|\\alpha\\rangle-\\sin(\\theta/2)|\\beta\\rangle，\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:920
+msgid "因为"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:922
+msgid ""
+"O|\\alpha\\rangle = \\frac{1}{\\sqrt{N-M}}\\sum_{x\\notin S}O|x\\rangle ="
+" \\frac{1}{\\sqrt{N-M}}\\sum_{x\\notin S}|x\\rangle=|\\alpha\\rangle,\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:924
+msgid "和"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:926
+msgid ""
+"O|\\beta\\rangle = \\frac{1}{\\sqrt{M}}\\sum_{x \\in S}O|x\\rangle = "
+"\\frac{1}{\\sqrt{M}}\\sum_{x \\in S}(-1)|x\\rangle=-|\\beta\\rangle。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:928
+#, python-brace-format
+msgid ""
+"我们可以发现，\\ :math:`O`\\ 的作用是将\\ :math:`|\\psi\\rangle`\\ 对\\ "
+":math:`|\\alpha\\rangle`\\ （或\\ :math:`|\\beta\\rangle`\\ "
+"，这里等价）所在轴进行反射。\\ :math:`O`\\ 在\\ "
+":math:`\\{|\\alpha\\rangle，|\\beta\\rangle\\}`\\ 这组基下的表示为："
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:930
+#, python-brace-format
+msgid ""
+"O= \\left(\n"
+"  \\begin{array}{cc}\n"
+"    1 & 0  \\\\\n"
+"    0 & -1 \\\\\n"
+"  \\end{array}\n"
+"\\right)"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:939
+msgid "然后我们考虑下面这个算子（具体电路构造之后会给出）"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:941
+msgid ""
+"2|\\psi\\rangle\\langle\\psi| - I，\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:943
+#, python-brace-format
+msgid "这个算子在\\ :math:`\\{|\\alpha\\rangle，|\\beta\\rangle\\}`\\ 这组基下的表示为"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:945
+#, python-brace-format
+msgid ""
+"2|\\psi\\rangle\\langle\\psi| - I= \\left(\n"
+"  \\begin{array}{cc}\n"
+"    \\cos(\\theta) & \\sin(\\theta)  \\\\\n"
+"    \\sin(\\theta) & -\\cos(\\theta) \\\\\n"
+"  \\end{array}\n"
+"\\right)"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:954
+msgid "这正是将量子态对\\ :math:`|\\psi\\rangle`\\ 所在轴进行反射。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:958
+#, python-brace-format
+msgid ""
+"关于翻转算符：我们以三维欧几里得空间为例来说明\\ :math:`2|\\psi\\rangle\\langle\\psi| - I`\\ "
+"的翻转效果。考虑三维空间的两个单位向量\\ :math:`\\vec{v}`\\ 和\\ :math:`\\vec{a}`\\ ，并在\\ "
+":math:`\\vec{v}`\\ 和\\ :math:`\\vec{a}`\\ 组成的平面中将\\ :math:`\\vec{v}`\\ "
+"对\\ :math:`\\vec{a}`\\ 进行翻转。我们有\\ "
+":math:`\\vec{v}=\\vec{v}_\\perp+\\vec{v}_{\\|}`\\ ，其中\\ "
+":math:`\\vec{v}_\\perp`\\ ，\\ :math:`\\vec{v}_{\\|}`\\ 分别对应于\\ "
+":math:`\\vec{v}`\\ 垂直和平行于\\ :math:`\\vec{a}`\\ 的分量。那么我们就有\\ "
+":math:`\\vec{v}`\\ 的反射向量："
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:960
+#, python-brace-format
+msgid ""
+"\\vec{v}_R = "
+"\\vec{v}-2\\vec{v}_{\\perp}=2\\vec{v}_{\\|}-\\vec{v}=2\\vec{a}(\\vec{a}^T"
+" \\vec{v})-\\vec{v}=2(\\vec{a}\\vec{a}^T-I)\\cdot \\vec{v}\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:962
+#, python-brace-format
+msgid ""
+"这里，\\ :math:`\\vec{a}\\vec{a}^T`\\ "
+"可以看成是一个并矢量，其表示是一个矩阵，也就对应我们的外积（注意，这里考虑的是实空间）。将\\ :math:`\\vec{a}`\\ 用\\ "
+":math:`|\\psi\\rangle`\\ 替代，我们就得到对\\ :math:`|\\psi\\rangle`\\ 的反射算符\\ "
+":math:`2|\\psi\\rangle\\langle\\psi| - I`\\ 。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:964
+msgid ""
+"这样，我们将\\ :math:`2|\\psi\\rangle\\langle\\psi| - I`\\ 作用于\\ "
+":math:`|\\psi_1\\rangle`\\ 上，就有"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:966
+#, python-brace-format
+msgid ""
+"|\\psi_2\\rangle=(2|\\psi\\rangle\\langle\\psi| - I)|\\psi_1\\rangle=\n"
+"\\cos\\left(\\frac{3\\theta}{2}\\right)|\\alpha\\rangle+\\sin\\left(\\frac{3\\theta}{2}\\right)|\\beta\\rangle，"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:971
+msgid ""
+"也就是说，经过两次反射之后，整体效果是\\ :math:`|\\psi\\rangle`\\ 朝\\ "
+":math:`|\\beta\\rangle`\\ 方向旋转了\\ :math:`\\theta`\\ 角度，如上图所示。\\ "
+":math:`G`\\ 的实现如下图所示。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:977
+msgid "|19a98b67e12c40a0b6cce3aedac174bc|"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1103
+msgid "19a98b67e12c40a0b6cce3aedac174bc"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:983
+msgid "G 算子电路构造图"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:995
+msgid ""
+"例：\\ :math:`G`\\ 算符的量子电路实现：我们仍然使用之前的例子，考虑一个计算空间\\ :math:`N=4`\\ 的函数\\ "
+":math:`f(x)`\\ ，其中\\ :math:`f(0)=0,f(1)=0,f(2)=1,f(3)=0`\\ ，那么整个\\ "
+":math:`G`\\ 的电路图如下图所示："
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1001
+msgid "|6c73e9b394b24da081a6be9287ad0102|"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1106
+msgid "6c73e9b394b24da081a6be9287ad0102"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1007
+msgid "f(x) 的G算子电路"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1017
+msgid "我们也可以显式地定义两次翻转的算符\\ :math:`G`:"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1019
+#, python-brace-format
+msgid ""
+"G = (2|\\psi\\rangle\\langle\\psi| - I)O = \\left(\n"
+"  \\begin{array}{cc}\n"
+"    \\cos(\\theta) & -\\sin(\\theta)  \\\\\n"
+"    \\sin(\\theta) & \\cos(\\theta) \\\\\n"
+"  \\end{array}\n"
+"\\right)，"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1028
+msgid ""
+"这也正是旋转\\ :math:`\\theta`\\ 的矩阵（\\ :math:`\\sin(\\theta) = "
+"\\frac{2\\sqrt{M(N-M)}}{N}`\\ ）。可以验证，重复作用\\ :math:`G`\\ 算子\\ :math:`k`\\ "
+"次，我们有"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1030
+#, python-brace-format
+msgid ""
+"G^k = \\left(\n"
+"  \\begin{array}{cc}\n"
+"    \\cos(k\\theta) & -\\sin(k\\theta)  \\\\\n"
+"    \\sin(k\\theta) & \\cos(k\\theta) \\\\\n"
+"  \\end{array}\n"
+"\\right)"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1039
+msgid "这样，总共经过"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1041
+msgid ""
+"R = \\left\\lceil \\frac{\\arccos\\sqrt{M/N}}{\\theta}  \\right\\rceil "
+"\\leq \\lceil \\frac{\\pi}{4}\\sqrt{N/M} \\rceil \\sim O(\\sqrt{N/M})\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1043
+msgid ""
+"次\\ :math:`G`\\ 算子作用后，我们就能达到\\ :math:`|\\beta\\rangle`\\ 态，即找到\\ "
+":math:`f(x)`\\ 的解。整个过程如下图所示。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1049
+msgid "|8e9606ea0f78436c80a01970ef55ba89|"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1109
+msgid "8e9606ea0f78436c80a01970ef55ba89"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1055
+msgid "Grover search的整体电路图"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1065
+msgid "**算法过程总结：** 输入："
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1067
+msgid "一个Oracle :math:`O` （及相应的实现电路）进行以下变换"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1069
+msgid ""
+"O|x\\rangle|q\\rangle = |x\\rangle|q\\oplus f(x)\\rangle，\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1071
+msgid ""
+"其中对\\ :math:`x`\\ 的\\ :math:`2^n`\\ 种不同取值，除了\\ :math:`x_0`\\ 之外，\\ "
+":math:`f(x) = 0`\\ 。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1073
+#, python-brace-format
+msgid ":math:`n+1`\\ 个量子比特处于\\ :math:`|0\\rangle^{\\otimes n}`\\ 。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1075
+msgid "输出：\\ :math:`x_0` 过程："
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1077
+#, python-brace-format
+msgid ":math:`|0\\rangle^{\\otimes n}|0\\rangle`"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1078
+#, python-brace-format
+msgid "经过\\ :math:`H^{\\otimes (n+1) } X_{n}` 之后得到"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1080
+msgid ""
+"\\frac{1}{\\sqrt{2^n}}\\sum_{x=0}^{2^n-1}|x\\rangle\\frac{1}{\\sqrt{2}}(|0\\rangle-|1\\rangle)=|\\psi\\rangle\\frac{1}{\\sqrt{2}}(|0\\rangle-|1\\rangle)"
+"\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1082
+#, python-brace-format
+msgid ""
+"重复\\ :math:`R`\\ 次Grover 算符\\ "
+":math:`G=(2|\\psi\\rangle\\langle\\psi|-I)O` （\\ :math:`R\\sim "
+"\\sqrt{2^n}`)，得到"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1084
+msgid ""
+"G^R\\frac{1}{\\sqrt{2^n}}\\sum_{x=0}^{2^n-1}|x\\rangle\\frac{1}{\\sqrt{2}}(|0\\rangle-|1\\rangle)\\approx|x_0\\rangle\\frac{1}{\\sqrt{2}}(|0\\rangle-|1\\rangle)"
+"\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1086
+msgid "以概率~1得到\\ :math:`x_0`"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1088
+#, python-brace-format
+msgid ""
+"总调用量子门数量为\\ :math:`O\\left(\\sqrt{2^n}g_G(n)\\right)`\\ ， "
+":math:`g_G(n)`\\ 为实现G电路所需要的量子门数量。与之对比，最好的经典算法需要的门数量为\\ :math:`O\\left(2^n"
+" g_f(n)\\right)`\\ ，\\ :math:`g_f`\\ 为计算\\ :math:`f`\\ 所需要的门的数量。当\\ "
+":math:`g_G(n)\\sim g_f(n)`\\ 时，Grover search "
+"可以平方地提升计算速度。但可惜的是，经过加速之后的算法仍然是指数复杂的。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1092
+#, python-brace-format
+msgid ""
+"关于Grover search的进一步说明：我们从以上的推导可以发现，Grover Search "
+"应用于搜索某个问题的解。在经典计算中，对某些问题，最好的方法也只能通过暴力尝试所有\\ :math:`O(N)`\\ 个输入并计算\\ "
+":math:`f(x)`\\ 来找到解，而Grover search 可以将尝试的次数减少到\\ :math:`O(\\sqrt{N})`\\ "
+"。如果每一次经典的尝试和量子的尝试相差的时间不大的话，那么量子计算就会比经典计算快得多。值得注意的是，这种搜索与数据库的搜索并不一致，是无序无结构的搜索。Grover"
+" search原则上也可以进行数据库搜索，但其相对于经典算法的优越性则要看数据存储的结构。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1095
+msgid "更多关于基础 Grover 搜索算法的扩展和证明，可以参考【1】。"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1247 ../../source/textbook/chap5.ipynb:987
+msgid "参考文献"
+msgstr ""
+
+#: ../../source/textbook/chap4.ipynb:1249
+msgid "【1】https://arxiv.org/pdf/quant-ph/9605034.pdf"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:9
+msgid "第五章 变分量子算法 （Variational quantum algorithms）"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:35
+msgid "1. 变分量子算法：框架和组件"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:46
+msgid ""
+"变分量子算法是一种适合“近期有噪声中等规模量子线路”（Noisy Intermediate-Scale Quantum, "
+"NISQ）的基于变分优化的量子经典混合算法。其是在近期最有希望达成量子优势的算法方向。通过充分利用大量含噪声的量子比特的表达能力，来实现无完整纠错情况下相关问题的近似和解决。深入了解这一领域可以参考综述性文章【1,2】。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:48
+msgid ""
+"变分量子算法典型的工作流类似于深度学习，主要区别是深度学习中的神经网络组件被参数化的量子线路替代。所谓参数化量子线路 "
+":math:`U(\\theta)` 指的是对应线路矩阵由可变参数组 :math:`\\theta` "
+"决定的线路。实现上，一般以旋转角度可变的参数化量子门来表达参数化量子线路，旋转门上的参数构成了参数集。我们通过经典的优化器来调整线路上的参数，使得参数化量子线路输出的波函数为"
+" :math:`\\vert \\psi\\rangle = U(\\theta)\\vert 0\\rangle`\\ "
+"，其对应的具体问题损失函数 :math:`L(\\vert \\psi\\rangle)` 最小。整体计算过程如下图所示："
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:54
+msgid "|d362674367704aefab322ea2b9a2705b|"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:70
+msgid "d362674367704aefab322ea2b9a2705b"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:60
+msgid "变分量子算法结构"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:82
+msgid "1.1 变分算法"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:84
+msgid ""
+"在介绍变分量子算法的组件前，我们先回顾变分算法的框架，本节我们以求目标函数 :math:`f(x, y) = x^2 + y^2 + 2x + "
+"xy` 的最小值为例，来展示变分算法的框架。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:86
+msgid "首先我们定义函数，输入为参数，输出为目标函数的标量值。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:137
+msgid ""
+"对于输入参数的调整，如果调整是沿着参数的梯度方向，则对应的函数值将会下降，这也就是梯度下降优化。那么我们需要首先知道 "
+":math:`\\partial f/\\partial x` 和 :math:`\\partial f/\\partial y`\\ "
+"。对于这些梯度信息，复杂函数将无法解析求得，我们才有机器学习库的自动微分框架来计算，这一框架对用户是透明的，我们只需要调用如下 API。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:185
+#, python-brace-format
+msgid ""
+"上述函数的意思即为 :math:`\\partial f/\\partial x\\vert _{x=0.2, y=0.5} = 2.9`, "
+":math:`\\partial f/\\partial y\\vert _{x=0.2, y=0.5} = 1.2`\\ "
+"。该结果在现在简单的解析表达式损失函数下，可以解析验证。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:197
+msgid "1.2 参数化量子线路"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:199
+msgid "参数化量子线路在变分量子算法中的角色类似于神经网络在深度学习中的角色，量子线路中的参数对应了神经网络中的可调权重。更具体地说，通过在参数化量子线路上测量各种观察量的期望值，我们可以通过这些期望值来构造适合具体问题的相应损失函数。通过经典的优化器的算法，我们可以根据不同线路参数对应的损失函数的值来进一步调节线路参数的取值，从而使得问题对应的损失函数最小，实现对该类问题的近似解。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:201
+msgid ""
+"变分线路 :math:`U(\\theta)` 可以具有多样的结构，比如同类型原生量子门密排的硬件节约假设（hardware efficient "
+"ansatz），或是基于量子化学变分波函数的 UCC "
+"假设等。此外还有受绝热演化启发和张量网络启发的量子线路结构实现。两种阶梯排布和砖块排布的硬件节约假设如下。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:212
+msgid "双比特门阶梯排布"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:290
+msgid "双比特门砖块排布"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:368
+#, python-brace-format
+msgid "对于双比特门，我们也可以直接使用参数化的双比特门，比如 :math:`e^{i\\theta ZZ}`\\ ，该形式的门可以程序表示为"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:458
+msgid "1.3 损失函数"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:460
+msgid "损失函数为通过线路输出上的各种观察量的值构造的适合特定问题解决的需要最小化的标量函数。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:462
+msgid ""
+"假设参数化线路输出的波函数为 :math:`\\vert\\psi\\rangle = U(\\theta)\\vert 0\\rangle`, "
+"常见的损失函数包括："
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:464
+msgid ""
+"特定系统的基态能量，若系统的厄米哈密顿量矩阵为 :math:`H`, 损失函数为 :math:`L=\\langle \\psi \\vert "
+"H\\vert \\psi\\rangle`."
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:465
+msgid ""
+"特定的生成目标态 :math:`\\vert \\phi \\rangle`\\ ，可以以内积为损失函数 :math:`L=\\langle "
+"\\psi\\vert \\phi\\rangle`."
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:466
+msgid ""
+"有监督的量子机器学习任务，若数据集为 :math:`\\vert \\psi_i\\rangle, y_i`\\ ，变分线路为 "
+":math:`U`\\ ，则损失函数可取为"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:468
+#, python-brace-format
+msgid ""
+"L=\\sum_{j} \\left(\\left\\langle\\psi_{j}|U^{\\dagger}H U| "
+"\\psi_{j}\\right\\rangle-y_{j}\\right)^{2}。\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:479
+msgid ""
+"对于能量估计类型的损失函数 1，测量上通常可以将哈密顿量矩阵 H 分解成若干个 Pauli 算符直积态的和，比如一维 n "
+"个自由度横场伊辛模型的哈密顿量为："
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:481
+#, python-brace-format
+msgid ""
+"H = \\sum_{i=0}^{n-1} J_i Z_i Z_{i+1} + h_i X_i.\n"
+"\n"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:483
+msgid ""
+"比如 :math:`Z_0Z_1` 即是 :math:`Z\\otimes Z \\otimes I \\otimes I \\otimes "
+"\\cdots` 的简写，代表了一个 Pauli 字符串。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:485
+msgid ""
+"数值上我们既可以一次构造出各个 Pauli 字符串测量，也可以直接根据 kronecker "
+"积的定义计算出具体的哈密顿量矩阵的形式，从而加速计算，两种方式的能量函数计算展示如下。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:496
+msgid "能量期望（Pauli 字符串期望相加形式）"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:554
+msgid "能量期望（矩阵形式）"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:654
+msgid "内积"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:714
+msgid "1.4 优化器与梯度下降"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:725
+msgid "和经典变分优化类似，为了优化损失函数，需要对量子线路中的参数进行调整，这一调整通常通过经典的优化器进行，包括了常见的基于梯度下降的优化器，因此我们需要得到损失函数相对线路参数的梯度信息。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:727
+msgid ""
+"为了得到损失函数关于量子线路参数的梯度数值，真实硬件上需要使用参数平移的方法（可参考如 "
+"https://pennylane.ai/qml/glossary/parameter_shift.html 计算严格的导数。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:729
+msgid "数值上，我们可以利用深度学习库的反向传播来更高效地计算线路参数梯度。示例如下。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:863
+msgid "梯度下降的优化循环和深度学习类似，我们需要一个优化器并迭代更新参数："
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:941
+msgid "2. 变分量子算法：应用"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:943
+msgid ""
+"**广泛应用**\\ "
+"：组合优化问题、多体系统（量子格点模型或分子）的基态和激发态的求解问题、变分的线性方程和微分方程的近似解、机器学习相关的如判别模型或生成模型问题、基于变分的质因数分解问题等等。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:955
+msgid "2.1 变分量子算法在组合优化问题上的应用"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:957
+msgid "https://tensorcircuit.readthedocs.io/en/latest/tutorials/qaoa.html"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:960
+msgid "2.2 变分量子算法在量子机器学习上的应用"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:962
+msgid "量子机器学习利用变分量子线路作为判别器进行训练，有望实现较传统经典神经网络更加强大的泛化性能，从而体现量子优势。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:964
+msgid "https://tensorcircuit.readthedocs.io/zh/latest/tutorials/mnist_qml_cn.html"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:965
+msgid "https://tensorcircuit.readthedocs.io/zh/latest/tutorials/torch_qml_cn.html"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:966
+msgid "https://tensorcircuit.readthedocs.io/zh/latest/tutorials/qml_scenarios_cn.html"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:969
+msgid "2.3 变分量子算法在物理化学系统量子模拟上的应用"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:971
+msgid "物理模型和化学分子的模拟评估，是量子计算机发挥作用的最重要领域之一，有望引领新材料和新能源的发现和创新。"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:973
+msgid "https://tensorcircuit.readthedocs.io/zh/latest/tutorials/tfim_vqe_cn.html"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:974
+msgid "https://tensorcircuit.readthedocs.io/zh/latest/tutorials/vqe_h2o_cn.html"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:975
+msgid "https://tensorcircuit.readthedocs.io/zh/latest/tutorials/tfim_vqe_diffreph_cn.html"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:989
+msgid ""
+"【1】Bharti, K., Cervera-Lierta, A., Kyaw, T. H., Haug, T., Alperin-Lea, "
+"S., Anand, A., Degroote, M., Heimonen, H., Kottmann, J. S., Menke, T., "
+"Mok, W.-K., Sim, S., Kwek, L.-C., & Aspuru-Guzik, A. (2022). Noisy "
+"intermediate-scale quantum algorithms. Reviews of Modern Physics, 94(1), "
+"015004. https://doi.org/10.1103/RevModPhys.94.015004"
+msgstr ""
+
+#: ../../source/textbook/chap5.ipynb:991
+msgid ""
+"【2】Cerezo, M., Arrasmith, A., Babbush, R., Benjamin, S. C., Endo, S., "
+"Fujii, K., McClean, J. R., Mitarai, K., Yuan, X., Cincio, L., & Coles, P."
+" J. (2021). Variational quantum algorithms. Nature Reviews Physics, 3(9),"
+" 625–644. https://doi.org/10.1038/s42254-021-00348-9"
+msgstr ""
+
+#~ msgid "|482c502b10a34f5d9936637a20b9e6e5|"
+#~ msgstr ""
+
+#~ msgid "482c502b10a34f5d9936637a20b9e6e5"
+#~ msgstr ""
+
+#~ msgid "【WIP】insert tutorial link here"
+#~ msgstr ""
+
+#~ msgid "|6344071ed5a84ceca7763f45deb4c33e|"
+#~ msgstr ""
+
+#~ msgid "6344071ed5a84ceca7763f45deb4c33e"
+#~ msgstr ""
+
+#~ msgid ""
+#~ "事实上，与直觉相反，纠缠态无处不在，而可分离态却非常少。纠缠态的性质较为复杂，遗憾的是，对多量子比特系统，哪怕是在\\ "
+#~ ":math:`n=2`\\ "
+#~ "的情形下，我们也没有像单个量子比特那样清晰的几何图像帮助我们理解。我们在下一节也会看到，一些特殊的纠缠态正是量子算法可以加速完成计算任务的关键。值得注意的是，多量子比特的纠缠态是非常复杂的。\\"
+#~ " **当多个量子比特纠缠在一起时，单个量子比特的量子态信息会在某种意义上变得不确定**\\ "
+#~ "，所以我们有时需要消除不需要的纠缠。"
+#~ msgstr ""
+
+#~ msgid "|de1f063a9627428ab64c468ac4e3b327|"
+#~ msgstr ""
+
+#~ msgid "de1f063a9627428ab64c468ac4e3b327"
+#~ msgstr ""
+
+#~ msgid "|39b785fa950743fab702465595a0f16c|"
+#~ msgstr ""
+
+#~ msgid "39b785fa950743fab702465595a0f16c"
+#~ msgstr ""
+
+#~ msgid "|e8b298659de3402690bef8fcadb1be35|"
+#~ msgstr ""
+
+#~ msgid "e8b298659de3402690bef8fcadb1be35"
+#~ msgstr ""
+
+#~ msgid "|802a9a367912482cb93ccfaaa2809c00|"
+#~ msgstr ""
+
+#~ msgid "802a9a367912482cb93ccfaaa2809c00"
+#~ msgstr ""
+
+#~ msgid "|f0282f6dd7984c8099985e25ace0ccd0|"
+#~ msgstr ""
+
+#~ msgid "f0282f6dd7984c8099985e25ace0ccd0"
+#~ msgstr ""
+
+#~ msgid "|435b7e1c36224d61ba4f5a7c0f1fcb05|"
+#~ msgstr ""
+
+#~ msgid "435b7e1c36224d61ba4f5a7c0f1fcb05"
+#~ msgstr ""
+
+#~ msgid "|c9dac789ac984ceab78509d8a1b79eb2|"
+#~ msgstr ""
+
+#~ msgid "c9dac789ac984ceab78509d8a1b79eb2"
+#~ msgstr ""
+
+#~ msgid "|507b85bf30f84339bdf8fcd8076fecde|"
+#~ msgstr ""
+
+#~ msgid "507b85bf30f84339bdf8fcd8076fecde"
+#~ msgstr ""
+
+#~ msgid "|4cbf17fae71c43859c28f727f929e68f|"
+#~ msgstr ""
+
+#~ msgid "4cbf17fae71c43859c28f727f929e68f"
+#~ msgstr ""
+
+#~ msgid "|10b45e0a62a84cc19ded9b5a499b065a|"
+#~ msgstr ""
+
+#~ msgid "10b45e0a62a84cc19ded9b5a499b065a"
+#~ msgstr ""
+
+#~ msgid "|33b11c45d22d4b248d40c93c420e0e18|"
+#~ msgstr ""
+
+#~ msgid "33b11c45d22d4b248d40c93c420e0e18"
+#~ msgstr ""
+
+#~ msgid "|eb8811de814c4f2b9c5d3e0ac2fbe3a7|"
+#~ msgstr ""
+
+#~ msgid "eb8811de814c4f2b9c5d3e0ac2fbe3a7"
+#~ msgstr ""
+
+#~ msgid "|d29a7445b86847d7a1cb4c1f4d2cfb81|"
+#~ msgstr ""
+
+#~ msgid "d29a7445b86847d7a1cb4c1f4d2cfb81"
+#~ msgstr ""
+
+#~ msgid "|221de407e64642c2b27b82918a108fab|"
+#~ msgstr ""
+
+#~ msgid "221de407e64642c2b27b82918a108fab"
+#~ msgstr ""
+
+#~ msgid "|f2993e39e4a340b596a429b773771062|"
+#~ msgstr ""
+
+#~ msgid "f2993e39e4a340b596a429b773771062"
+#~ msgstr ""
+
+#~ msgid "|6dd30f7d3ece490099c5af1d1c89ab08|"
+#~ msgstr ""
+
+#~ msgid "6dd30f7d3ece490099c5af1d1c89ab08"
+#~ msgstr ""
+
+#~ msgid "|dd8ac9f1080c4bdcbeb25250f9624b79|"
+#~ msgstr ""
+
+#~ msgid "dd8ac9f1080c4bdcbeb25250f9624b79"
+#~ msgstr ""
+
+#~ msgid "|8ec5dbe19f634d8ea06805dd6755865c|"
+#~ msgstr ""
+
+#~ msgid "8ec5dbe19f634d8ea06805dd6755865c"
+#~ msgstr ""
+
+#~ msgid "|ad1b4bbbe6f94c9996122763005c6a33|"
+#~ msgstr ""
+
+#~ msgid "ad1b4bbbe6f94c9996122763005c6a33"
+#~ msgstr ""
+
+#~ msgid "|258252d9e3cf47ff9dfef2adb5e64008|"
+#~ msgstr ""
+
+#~ msgid "258252d9e3cf47ff9dfef2adb5e64008"
+#~ msgstr ""
+
+#~ msgid "|1fd819a35348407587fccc3956ba49e5|"
+#~ msgstr ""
+
+#~ msgid "1fd819a35348407587fccc3956ba49e5"
+#~ msgstr ""
+
+#~ msgid "|fec9c786037c4c948112405b13da1d50|"
+#~ msgstr ""
+
+#~ msgid "fec9c786037c4c948112405b13da1d50"
+#~ msgstr ""
+
+#~ msgid "|6ac488854c9a45abb6aa5dce3df5a1ea|"
+#~ msgstr ""
+
+#~ msgid "6ac488854c9a45abb6aa5dce3df5a1ea"
+#~ msgstr ""
+
+#~ msgid "|03b37ebc5b5c4ccd925c9cd7b266644d|"
+#~ msgstr ""
+
+#~ msgid "03b37ebc5b5c4ccd925c9cd7b266644d"
+#~ msgstr ""
+
+#~ msgid "|5a84aa6072574291b24c0835e92b1c8b|"
+#~ msgstr ""
+
+#~ msgid "5a84aa6072574291b24c0835e92b1c8b"
+#~ msgstr ""
+
+#~ msgid "|9c4e1f57c25b4b709c9ad3b274ac0cd1|"
+#~ msgstr ""
+
+#~ msgid "9c4e1f57c25b4b709c9ad3b274ac0cd1"
+#~ msgstr ""
+
+#~ msgid "|d43cc5ee8c8b4bcf86919b3914b7651b|"
+#~ msgstr ""
+
+#~ msgid "d43cc5ee8c8b4bcf86919b3914b7651b"
+#~ msgstr ""
+
+#~ msgid "|4ed717dff0aa4560bcea6aa5e8557d0c|"
+#~ msgstr ""
+
+#~ msgid "4ed717dff0aa4560bcea6aa5e8557d0c"
+#~ msgstr ""
+
+#~ msgid "|a08129dc4dea480bb8ffbf6fb34994d0|"
+#~ msgstr ""
+
+#~ msgid "a08129dc4dea480bb8ffbf6fb34994d0"
+#~ msgstr ""
+
+#~ msgid "|f6c45d7ded354e14b78b2f272dccdede|"
+#~ msgstr ""
+
+#~ msgid "f6c45d7ded354e14b78b2f272dccdede"
+#~ msgstr ""
+
+#~ msgid "|89b8001967f04978b51c2bf048eade4d|"
+#~ msgstr ""
+
+#~ msgid "89b8001967f04978b51c2bf048eade4d"
+#~ msgstr ""
+
+#~ msgid "|c0e97187aaa843b6a0b126e11fa980cf|"
+#~ msgstr ""
+
+#~ msgid "c0e97187aaa843b6a0b126e11fa980cf"
+#~ msgstr ""
+
+#~ msgid "|f401bd7d4fa746a4a6d6fd9499ce6e42|"
+#~ msgstr ""
+
+#~ msgid "f401bd7d4fa746a4a6d6fd9499ce6e42"
+#~ msgstr ""
+
+#~ msgid "|3e940717dc9f4782bbdad4ae9e1bf0a4|"
+#~ msgstr ""
+
+#~ msgid "3e940717dc9f4782bbdad4ae9e1bf0a4"
+#~ msgstr ""
+
+#~ msgid "|9fee4f0c8e5446918f5bf7e4319a9406|"
+#~ msgstr ""
+
+#~ msgid "9fee4f0c8e5446918f5bf7e4319a9406"
+#~ msgstr ""
+
+#~ msgid "|767d526b09424e6185cc3e6389d3cbb2|"
+#~ msgstr ""
+
+#~ msgid "767d526b09424e6185cc3e6389d3cbb2"
+#~ msgstr ""
+
+#~ msgid "|470448fa56074ff2b655c6a676e84b60|"
+#~ msgstr ""
+
+#~ msgid "470448fa56074ff2b655c6a676e84b60"
+#~ msgstr ""
+
+#~ msgid "|35073b50b58f4d7aabb1be3323c24d6c|"
+#~ msgstr ""
+
+#~ msgid "35073b50b58f4d7aabb1be3323c24d6c"
+#~ msgstr ""
+
+#~ msgid "|6c46a39654f443cea0963447dad8ab50|"
+#~ msgstr ""
+
+#~ msgid "6c46a39654f443cea0963447dad8ab50"
+#~ msgstr ""
+
+#~ msgid "|0dbe2490dc54454b8b9cd600f5e64599|"
+#~ msgstr ""
+
+#~ msgid "0dbe2490dc54454b8b9cd600f5e64599"
+#~ msgstr ""
+
+#~ msgid "|ab85bb04287f4f14a274f85870da4958|"
+#~ msgstr ""
+
+#~ msgid "ab85bb04287f4f14a274f85870da4958"
+#~ msgstr ""
+
+#~ msgid "|096fdfb811124b5993ac314e3b2104fe|"
+#~ msgstr ""
+
+#~ msgid "096fdfb811124b5993ac314e3b2104fe"
+#~ msgstr ""
+
+#~ msgid "|9e1c53ce91ba440f8fbc1f6df1269adb|"
+#~ msgstr ""
+
+#~ msgid "9e1c53ce91ba440f8fbc1f6df1269adb"
+#~ msgstr ""
+
+#~ msgid "|bf5d863ce0c24dc5a4219535fca9c4bd|"
+#~ msgstr ""
+
+#~ msgid "bf5d863ce0c24dc5a4219535fca9c4bd"
+#~ msgstr ""
+
+#~ msgid "|e048a92a22474ad899bcf9037e4d8337|"
+#~ msgstr ""
+
+#~ msgid "e048a92a22474ad899bcf9037e4d8337"
+#~ msgstr ""
+
+#~ msgid "|fb78a76aa42c427a86d92dd7ee84818a|"
+#~ msgstr ""
+
+#~ msgid "fb78a76aa42c427a86d92dd7ee84818a"
+#~ msgstr ""
+
+#~ msgid "|eb5e0c1e04da453f9d7a99ffef2520ed|"
+#~ msgstr ""
+
+#~ msgid "eb5e0c1e04da453f9d7a99ffef2520ed"
+#~ msgstr ""
+
+#~ msgid "|e92425211aab45e5b5be3c0b09fa6a76|"
+#~ msgstr ""
+
+#~ msgid "e92425211aab45e5b5be3c0b09fa6a76"
+#~ msgstr ""
+
+#~ msgid "|2d8df98a6cf742e3ada8490f67bf2cc0|"
+#~ msgstr ""
+
+#~ msgid "2d8df98a6cf742e3ada8490f67bf2cc0"
+#~ msgstr ""
+
+#~ msgid "|1fa7ec7c354540f79f3684396aedcd79|"
+#~ msgstr ""
+
+#~ msgid "1fa7ec7c354540f79f3684396aedcd79"
+#~ msgstr ""
+
+#~ msgid "|dc27b8c70d86468da3cdda2b55d65f33|"
+#~ msgstr ""
+
+#~ msgid "dc27b8c70d86468da3cdda2b55d65f33"
+#~ msgstr ""
+
+#~ msgid "|91b6691cc6a540d481d58fdb34178ef3|"
+#~ msgstr ""
+
+#~ msgid "91b6691cc6a540d481d58fdb34178ef3"
+#~ msgstr ""
+
+#~ msgid "|ce06d80fa5e34ec19c9912d902d125b4|"
+#~ msgstr ""
+
+#~ msgid "ce06d80fa5e34ec19c9912d902d125b4"
+#~ msgstr ""
+
+#~ msgid "|6ca92547654346dfb36ffbce6d5cc4ce|"
+#~ msgstr ""
+
+#~ msgid "6ca92547654346dfb36ffbce6d5cc4ce"
+#~ msgstr ""
+
+#~ msgid "|41b710a85aee47f1b559e192f4a4762a|"
+#~ msgstr ""
+
+#~ msgid "41b710a85aee47f1b559e192f4a4762a"
+#~ msgstr ""
+
+#~ msgid "|eb3c3f59b5474a958b2890c6be06c416|"
+#~ msgstr ""
+
+#~ msgid "eb3c3f59b5474a958b2890c6be06c416"
+#~ msgstr ""
+
+#~ msgid "|2a73ad24e6b94c5391c0f8b00088a25e|"
+#~ msgstr ""
+
+#~ msgid "2a73ad24e6b94c5391c0f8b00088a25e"
+#~ msgstr ""
+
+#~ msgid "|009a3727e3174aa2a7fccb6866fef07a|"
+#~ msgstr ""
+
+#~ msgid "009a3727e3174aa2a7fccb6866fef07a"
+#~ msgstr ""
+
+#~ msgid "|9f08b4d0ff834bb99a5a3818d21392af|"
+#~ msgstr ""
+
+#~ msgid "9f08b4d0ff834bb99a5a3818d21392af"
+#~ msgstr ""
+
+#~ msgid "|b64237aa801749fb9ffa7e6e925edd83|"
+#~ msgstr ""
+
+#~ msgid "b64237aa801749fb9ffa7e6e925edd83"
+#~ msgstr ""
+
+#~ msgid "|0604da04747c4cfaad4b0b81341e5a05|"
+#~ msgstr ""
+
+#~ msgid "0604da04747c4cfaad4b0b81341e5a05"
+#~ msgstr ""
+
+#~ msgid "|6e2554a6775d4e629bea958f58567e4c|"
+#~ msgstr ""
+
+#~ msgid "6e2554a6775d4e629bea958f58567e4c"
+#~ msgstr ""
+
+#~ msgid "|b369aa5c5c214547853ef577df95fe51|"
+#~ msgstr ""
+
+#~ msgid "b369aa5c5c214547853ef577df95fe51"
+#~ msgstr ""
+
+#~ msgid "|12c0927969ec437abada8d59bdc7bd76|"
+#~ msgstr ""
+
+#~ msgid "12c0927969ec437abada8d59bdc7bd76"
+#~ msgstr ""
+
+#~ msgid "|dd5a91dab4844625a23c9f9b2a768864|"
+#~ msgstr ""
+
+#~ msgid "dd5a91dab4844625a23c9f9b2a768864"
+#~ msgstr ""
+
+#~ msgid "|4b58854163b7447bbbe8ae1519ccd916|"
+#~ msgstr ""
+
+#~ msgid "4b58854163b7447bbbe8ae1519ccd916"
+#~ msgstr ""
+
+#~ msgid "|f266d8f4f2204c82b4b3e0049a2eec93|"
+#~ msgstr ""
+
+#~ msgid "f266d8f4f2204c82b4b3e0049a2eec93"
+#~ msgstr ""
+
+#~ msgid "|7dbdd529c18349cfb48190a3b7878d09|"
+#~ msgstr ""
+
+#~ msgid "7dbdd529c18349cfb48190a3b7878d09"
+#~ msgstr ""
+
+#~ msgid "|965195b885b6404b86e9e432ce6226e3|"
+#~ msgstr ""
+
+#~ msgid "965195b885b6404b86e9e432ce6226e3"
+#~ msgstr ""
+
+#~ msgid "|98b45db162fa4bb0b00d4a749310ab6e|"
+#~ msgstr ""
+
+#~ msgid "98b45db162fa4bb0b00d4a749310ab6e"
+#~ msgstr ""
+
+#~ msgid "|6329cb3d07d84a9488a5f8ec7511ec1b|"
+#~ msgstr ""
+
+#~ msgid "6329cb3d07d84a9488a5f8ec7511ec1b"
+#~ msgstr ""
+
+#~ msgid "|b79b505aa93b4d6a83b14ede43b64a2c|"
+#~ msgstr ""
+
+#~ msgid "b79b505aa93b4d6a83b14ede43b64a2c"
+#~ msgstr ""
+
+#~ msgid "|e9741c04cebc4e6fa7bd4a0acb570803|"
+#~ msgstr ""
+
+#~ msgid "e9741c04cebc4e6fa7bd4a0acb570803"
+#~ msgstr ""
+
+#~ msgid "|f7f8fcc8365843fda002a0f56310565f|"
+#~ msgstr ""
+
+#~ msgid "f7f8fcc8365843fda002a0f56310565f"
+#~ msgstr ""
+
+#~ msgid "|6d52aaa3ed424ef4aa1519d7d94d3f92|"
+#~ msgstr ""
+
+#~ msgid "6d52aaa3ed424ef4aa1519d7d94d3f92"
+#~ msgstr ""
+
+#~ msgid "|33253cc3dd6e450095feb4cc36c4b758|"
+#~ msgstr ""
+
+#~ msgid "33253cc3dd6e450095feb4cc36c4b758"
+#~ msgstr ""
+
+#~ msgid ""
+#~ "混合态与叠加态的概念不同，几种纯态通过量子叠加所组成的叠加态仍旧是纯态。例如，\\ :math:`(|\\psi "
+#~ "_{1}\\rangle +|\\psi _{2}\\rangle )/\\sqrt "
+#~ "{2}` 是个纯态。"
+#~ msgstr ""
+
+#~ msgid "|456232a82e3b4ebea5c3ec34f7c1c2cf|"
+#~ msgstr ""
+
+#~ msgid "456232a82e3b4ebea5c3ec34f7c1c2cf"
+#~ msgstr ""
+
+#~ msgid "|aa9ed8d425a143f18ad5e6dd00e9f193|"
+#~ msgstr ""
+
+#~ msgid "aa9ed8d425a143f18ad5e6dd00e9f193"
+#~ msgstr ""
+
+#~ msgid "|8a85bd714d154295b33cd835162403e2|"
+#~ msgstr ""
+
+#~ msgid "8a85bd714d154295b33cd835162403e2"
+#~ msgstr ""
+
+#~ msgid "|ee07807bfd734d48bc8a47a8925daa68|"
+#~ msgstr ""
+
+#~ msgid "ee07807bfd734d48bc8a47a8925daa68"
+#~ msgstr ""
+
+#~ msgid "|ee8c871737c542eb8c9cbc60ed4a61b2|"
+#~ msgstr ""
+
+#~ msgid "ee8c871737c542eb8c9cbc60ed4a61b2"
+#~ msgstr ""
+
+#~ msgid "|28d6f1131fb84455bbba87351c2f47a2|"
+#~ msgstr ""
+
+#~ msgid "28d6f1131fb84455bbba87351c2f47a2"
+#~ msgstr ""
+
+#~ msgid "|aa449640a6e04ba19f19ec7648059851|"
+#~ msgstr ""
+
+#~ msgid "aa449640a6e04ba19f19ec7648059851"
+#~ msgstr ""
+
+#~ msgid "|42c286b532b446f0ab4d776bc56365a1|"
+#~ msgstr ""
+
+#~ msgid "42c286b532b446f0ab4d776bc56365a1"
+#~ msgstr ""
+
+#~ msgid "|279b8d8cacbb47cba696c52ae9e033b7|"
+#~ msgstr ""
+
+#~ msgid "279b8d8cacbb47cba696c52ae9e033b7"
+#~ msgstr ""
+
+#~ msgid "|a66c322b5dbb47f9bd66e5d2e9b6b2fd|"
+#~ msgstr ""
+
+#~ msgid "a66c322b5dbb47f9bd66e5d2e9b6b2fd"
+#~ msgstr ""
+
+#~ msgid "|69368ffe29ad47cd8b6348693f34ee69|"
+#~ msgstr ""
+
+#~ msgid "69368ffe29ad47cd8b6348693f34ee69"
+#~ msgstr ""
+
+#~ msgid "|8928a1410d854275b96a0b8ca42775b3|"
+#~ msgstr ""
+
+#~ msgid "8928a1410d854275b96a0b8ca42775b3"
+#~ msgstr ""
+
+#~ msgid ""
+#~ "假设初始状态为\\ :math:`|\\psi_0\\rangle = "
+#~ "|0\\rangle^{\\otimes n} \\otimes "
+#~ "|0\\rangle^{\\otimes n}`\\ ，则经过H门（注意，\\ "
+#~ ":math:`H^{\\otimes n} = H_1H_2 \\cdots "
+#~ "H_n`\\ ）之后，量子态变为"
+#~ msgstr ""
+
+#~ msgid "|2f11c59dc0804bc1843d105eae787296|"
+#~ msgstr ""
+
+#~ msgid "2f11c59dc0804bc1843d105eae787296"
+#~ msgstr ""
+
+#~ msgid ""
+#~ "区分“计算”和“识别”问题的解。“计算”问题的解和能够“识别”解决方案之间的区别；关键是可以做后者的时候不必做前者。一个简单的例子来说明这一点是质因数分解问题。假设我们得到了一个大数\\"
+#~ " :math:`m`\\ ，并告诉我们它是两个素数\\ :math:`p` 和\\ "
+#~ ":math:`q`\\ 的乘积。要计算出\\ :math:`p`\\ ，\\ "
+#~ ":math:`q`\\ 很困难，但是给定\\ :math:`p`\\ ，\\ "
+#~ ":math:`q`\\ ，我们却能很快识别他们的积是否是\\ :math:`m`\\ 。要确定\\"
+#~ " :math:`p`\\ 和\\ :math:`q`\\ "
+#~ "，在经典计算机上显而易见的方法是搜索从2到"
+#~ msgstr ""
+
+#~ msgid ""
+#~ ":math:`m^{1/2}`\\ 的所有数字，以寻找两个质因数中较小的一个。也就是说，我们依次对 "
+#~ ":math:`2` 到 :math:`m^{1/2}` 范围内的每个数进行对\\ "
+#~ ":math:`m`\\ 的试除，直到找到更小的素因数。 然后可以通过将\\ :math:`m`\\"
+#~ " 除以较小的素数来找到另一个素数因子。 显然，这种基于搜索的方法需要大约 :math:`m^{1/2}`"
+#~ " 次试验才能在经典计算机上找到一个因子。而Grover Search正式要加速这种过程。"
+#~ msgstr ""
+
+#~ msgid "|37347ef10e314a1d8af80c624b8578d5|"
+#~ msgstr ""
+
+#~ msgid "37347ef10e314a1d8af80c624b8578d5"
+#~ msgstr ""
+
+#~ msgid "|215b75308a8e42629ea35d4967a05903|"
+#~ msgstr ""
+
+#~ msgid "215b75308a8e42629ea35d4967a05903"
+#~ msgstr ""
+
+#~ msgid "|dd63b326f5ce43a1a94bfa2d96f1dbf1|"
+#~ msgstr ""
+
+#~ msgid "dd63b326f5ce43a1a94bfa2d96f1dbf1"
+#~ msgstr ""
+
+#~ msgid "|62104124495544748d8eff953327ffa3|"
+#~ msgstr ""
+
+#~ msgid "62104124495544748d8eff953327ffa3"
+#~ msgstr ""
+
+#~ msgid "**算法过程总结：** 输入： \\* 一个Oracle :math:`O` （及相应的实现电路）进行以下变换"
+#~ msgstr ""
+
+#~ msgid "输出：\\ :math:`x_0` 过程： 1. :math:`|0\\rangle^{\\otimes n}|0\\rangle`"
+#~ msgstr ""
+
+#~ msgid "2. 经过\\ :math:`H^{\\otimes (n+1) } X_{n}` 之后得到"
+#~ msgstr ""
+
+#~ msgid ""
+#~ "关于Grover search的进一步说明：我们从以上的推导可以发现，Grover Search "
+#~ "应用于搜索某个问题的解。在经典计算中，对某些问题，最好的方法也只能通过暴力尝试所有\\ :math:`O(N)`\\ "
+#~ "个输入并计算\\ :math:`f(x)`\\ 来找到解，而Grover search "
+#~ "可以将尝试的次数减少到\\ :math:`O(\\sqrt{N})`\\ "
+#~ "。如果每一次经典的尝试和量子的尝试相差的时间不大的话，那么量子计算就会比经典计算快得多。值得注意的是，这种搜索与数据库的搜索并不一致，是无序无结构的搜索。Grover"
+#~ msgstr ""
+
+#~ msgid "search原则上也可以进行数据库搜索，但其相对于经典算法的优越性则要看数据存储的结构。"
+#~ msgstr ""
+
+#~ msgid "|371d326c9b604819a1b4340f67f8d13a|"
+#~ msgstr ""
+
+#~ msgid "371d326c9b604819a1b4340f67f8d13a"
+#~ msgstr ""
+

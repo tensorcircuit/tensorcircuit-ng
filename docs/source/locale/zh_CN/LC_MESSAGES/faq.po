@@ -1,0 +1,659 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2020, The TensorCircuit Authors
+# This file is distributed under the same license as the tensorcircuit
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2022.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version:  tensorcircuit\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-03-31 12:24+0800\n"
+"PO-Revision-Date: 2026-03-31 13:25+0800\n"
+"Last-Translator: Gemini CLI\n"
+"Language: zh_CN\n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../source/faq.rst:2
+msgid "Frequently Asked Questions"
+msgstr "常见问题"
+
+#: ../../source/faq.rst:5
+msgid "What is the relation between TensorCircuit and TensorCircuit-NG?"
+msgstr "TensorCircuit 和 TensorCircuit-NG 之间是什么关系？"
+
+#: ../../source/faq.rst:7
+msgid ""
+"Both packages are created by `Shi-Xin Zhang "
+"<https://www.iop.cas.cn/rcjy/tpyjy/?id=6789>`_ (`@refraction-ray "
+"<https://github.com/refraction-ray>`_). For the history of the evolution "
+"of TensorCircuit-NG, please refer to `history "
+"<https://github.com/tensorcircuit/tensorcircuit-"
+"ng/blob/master/HISTORY.md>`_."
+msgstr "这两个软件包均由 `Shi-Xin Zhang <https://www.iop.cas.cn/rcjy/tpyjy/?id=6789>`_ (`@refraction-ray <https://github.com/refraction-ray>`_) 创建。有关 TensorCircuit-NG 的演进历史，请参阅 `history <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/HISTORY.md>`_ 。"
+
+#: ../../source/faq.rst:9
+msgid ""
+"From users' perspective, TensorCircuit-NG maintains full compatibility "
+"with the TensorCircuit API, enhancing it with additional features and "
+"critical bug fixes. Only TensorCircuit-NG is kept up-to-date with the "
+"fast evolving scientific computing and machine learning ecosystem in "
+"Python."
+msgstr "从用户的角度来看，TensorCircuit-NG 与 TensorCircuit API 保持完全兼容，并增加了新特性和关键错误修复。目前只有 TensorCircuit-NG 能够紧跟 Python 中快速演进的科学计算和机器学习生态系统。"
+
+#: ../../source/faq.rst:11
+msgid ""
+"TensorCircuit-NG is intended as a drop-in replacement for TensorCircuit, "
+"namely, by simply ``pip uninstall tensorcircuit`` and ``pip install "
+"tensorcircuit-ng``, your existing applications should continue to "
+"function seamlessly without requiring any modification to the codebase "
+"(``import tensorcircuit`` still works)."
+msgstr "TensorCircuit-NG 旨在作为 TensorCircuit 的无缝替代方案，即只需运行 ``pip uninstall tensorcircuit && pip install tensorcircuit-ng`` ，您现有的应用程序应能继续运行，而无需修改代码库（ ``import tensorcircuit`` 依然有效）。"
+
+#: ../../source/faq.rst:16
+msgid "How can I run TensorCircuit-NG on GPU?"
+msgstr "如何在 GPU 上运行 TensorCircuit-NG？"
+
+#: ../../source/faq.rst:18
+msgid ""
+"This is done directly through the ML backend. GPU support is determined "
+"by whether ML libraries can run on GPU, we don't handle this within "
+"tensorcircuit-ng. It is the users' responsibility to configure a GPU-"
+"compatible environment for these ML packages. Please refer to the "
+"installation documentation for these ML packages and directly use the "
+"official dockerfiles provided by TensorCircuit-NG."
+msgstr "这直接通过机器学习后端完成。GPU 支持取决于机器学习库是否可以在 GPU 上运行，我们不在 TensorCircuit-NG 内部处理此问题。用户负责为这些机器学习包配置兼容 GPU 的环境。请参阅这些机器学习包的安装文档，或直接使用 TensorCircuit-NG 提供的官方 Dockerfile。"
+
+#: ../../source/faq.rst:21
+msgid "TensorFlow: ``pip install \"tensorflow[and-cuda]\"``"
+msgstr "TensorFlow: ``pip install \"tensorflow[and-cuda]\"``"
+
+#: ../../source/faq.rst:23
+msgid "Jax: ``pip install -U \"jax[cuda12]\"``"
+msgstr "Jax: ``pip install -U \"jax[cuda12]\"``"
+
+#: ../../source/faq.rst:25
+msgid ""
+"With GPU compatible environment, we can switch the use of GPU or CPU by a"
+" backend agnostic environment variable ``CUDA_VISIBLE_DEVICES``."
+msgstr "在兼容 GPU 的环境下，我们可以通过后端无关的环境变量 ``CUDA_VISIBLE_DEVICES`` 来切换使用 GPU 或 CPU。"
+
+#: ../../source/faq.rst:29
+msgid "When should I use GPU?"
+msgstr "我应该什么时候使用 GPU？"
+
+#: ../../source/faq.rst:31
+msgid ""
+"In general, for a circuit with qubit count larger than 16 or for circuit "
+"simulation with large batch dimension more than 16, GPU simulation will "
+"be faster than CPU simulation. Typically, GPU can provide 10-100 times "
+"acceleration compared to a CPU node. That is to say, for very small "
+"circuits and the very small batch dimensions of vectorization, GPU may "
+"show worse performance than CPU. But one have to carry out detailed "
+"benchmarks on the hardware choice, since the performance is determined by"
+" the hardware and task details."
+msgstr "通常情况下，对于量子比特数超过 16 或批量维度超过 16 的线路模拟，GPU 模拟会比 CPU 模拟更快。通常，GPU 相比 CPU 节点可以提供 10-100 倍的加速。也就是说，对于非常小的线路或非常小的向量化批量维度，GPU 的性能可能不如 CPU。但用户必须根据硬件选择进行详细的基准测试，因为性能取决于硬件和任务细节。"
+
+#: ../../source/faq.rst:36
+msgid ""
+"For tensor network tasks of more regular shape, such as MPS-MPO "
+"contraction, GPU can be much more favored and efficient than CPU (usually"
+" 50-100 times acceleration)."
+msgstr "对于形状更规则的张量网络任务（如 MPS-MPO 收缩），GPU 相比 CPU 更有优势且效率更高（通常有 50-100 倍的加速）。"
+
+#: ../../source/faq.rst:40
+msgid "How can I use multiple GPUs?"
+msgstr "如何使用多个 GPU？"
+
+#: ../../source/faq.rst:42
+msgid ""
+"For different observables evaluation on different cards, see `example "
+"<https://github.com/tensorcircuit/tensorcircuit-"
+"ng/blob/master/examples/vqe_parallel_pmap.py>`_."
+msgstr "有关在不同显卡上评估不同可观测量的示例，请参阅 `示例 <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/vqe_parallel_pmap.py>`_ 。"
+
+#: ../../source/faq.rst:44
+msgid ""
+"For distributed simulation of one circuit on multiple cards, see `example"
+" for expectation <https://github.com/tensorcircuit/tensorcircuit-"
+"ng/blob/master/examples/slicing_auto_pmap_vqa.py>`_ and `example for MPO "
+"<https://github.com/tensorcircuit/tensorcircuit-"
+"ng/blob/master/examples/slicing_auto_pmap_mpo.py>`_. We also introduce a "
+"new interface for the multi-GPU tensornetwork contraction, see `example "
+"for VQE <https://github.com/tensorcircuit/tensorcircuit-"
+"ng/blob/master/examples/distributed_interface_vqe.py>`_ and `example for "
+"amplitude <https://github.com/tensorcircuit/tensorcircuit-"
+"ng/blob/master/examples/distributed_interface_amplitude.py>`_."
+msgstr "有关在多张显卡上对单个线路进行分布式模拟的示例，请参阅 `期望值示例 <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/slicing_auto_pmap_vqa.py>`_ 和 `MPO 示例 <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/slicing_auto_pmap_mpo.py>`_ 。我们还为多 GPU 张量网络收缩引入了新接口，请参阅 `VQE 示例 <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/distributed_interface_vqe.py>`_ 和 `振幅示例 <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/distributed_interface_amplitude.py>`_ 。"
+
+#: ../../source/faq.rst:49
+msgid "When should I jit the function?"
+msgstr "我应该什么时候即时编译（JIT）函数？"
+
+#: ../../source/faq.rst:51
+msgid ""
+"For a jittable function, it should be designed as \"tensor in and tensor "
+"out\" to ensure full compatibility and maximum performance across "
+"different backends. Wrapping it with jit will greatly accelerate the "
+"evaluation. Since the first time of evaluation takes longer time (staging"
+" time), jit is only good for functions which have to be evaluated "
+"frequently."
+msgstr "对于可 JIT 的函数，应将其设计为“张量输入，张量输出”，以确保在不同后端上的完全兼容性和最高性能。使用 JIT 封装函数将大大加速评估。由于第一次评估需要较长时间（编译时间），JIT 仅适用于需要频繁调用的函数。"
+
+#: ../../source/faq.rst:57
+msgid ""
+"Be caution that jit can be easily misused if the users are not familiar "
+"with jit mechanism, which may lead to:"
+msgstr "请注意，如果用户不熟悉 JIT 机制，很容易误用，这可能导致："
+
+#: ../../source/faq.rst:59
+msgid "very slow performance due to recompiling/staging for each run,"
+msgstr "由于每次运行都重新编译，导致性能非常缓慢；"
+
+#: ../../source/faq.rst:60
+msgid "error when run function with jit,"
+msgstr "使用 JIT 运行函数时报错；"
+
+#: ../../source/faq.rst:61
+msgid "or wrong results without any warning."
+msgstr "或者在没有任何警告的情况下得到错误结果。"
+
+#: ../../source/faq.rst:63
+msgid "The most possible reasons for each problem are:"
+msgstr "每个问题最可能的原因分别是："
+
+#: ../../source/faq.rst:65
+msgid "function input are not all in the tensor form,"
+msgstr "函数输入并非全是张量形式；"
+
+#: ../../source/faq.rst:66
+msgid ""
+"the output shape of all ops in the function may require the knowledge of "
+"the input value more than the input shape, or use mixed ops from numpy "
+"and ML framework"
+msgstr "函数中所有操作的输出形状可能需要输入值（而不仅仅是输入形状）的信息，或者混合使用了 NumPy 和机器学习框架的操作；"
+
+#: ../../source/faq.rst:67
+msgid ""
+"subtle interplay between random number generation and jit (see "
+":ref:`advance:Randoms, Jit, Backend Agnostic, and Their Interplay` for "
+"the correct solution), respectively."
+msgstr "随机数生成与 JIT 之间的微妙相互作用（正确解决方案请参阅 :ref:`advance:Randoms, Jit, Backend Agnostic, and Their Interplay` ）。"
+
+#: ../../source/faq.rst:70
+msgid ""
+"For very deep quantum circuits (e.g., hundreds of layers), the JIT "
+"compilation (staging) time can become significant. To mitigate this, one "
+"can use the ``scan`` mechanism supported by ML backends to iterate "
+"through circuit layers."
+msgstr "对于非常深的量子线路（如数百层），JIT 编译（Staging）时间可能会变得非常显著。为了缓解这种情况，可以使用机器学习后端支持的 ``scan`` 机制来遍历线路层。"
+
+#: ../../source/faq.rst:72
+msgid ""
+"Specifically, use ``tc.backend.scan`` to wrap the repeating layers. This "
+"keeps the computation graph size independent of the circuit depth, "
+"leading to much faster JIT compilation and lower memory usage during "
+"staging. For a concrete implementation, please refer to "
+"`examples/hea_scan_jit_acc.py <https://github.com/tensorcircuit"
+"/tensorcircuit-ng/blob/master/examples/hea_scan_jit_acc.py>`_."
+msgstr "具体来说，使用 ``tc.backend.scan`` 封装重复层。这使得计算图的大小与线路深度无关，从而实现更快的 JIT 编译并降低编译期间的内存占用。具体实现请参阅 `examples/hea_scan_jit_acc.py <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/hea_scan_jit_acc.py>`_ 。"
+
+#: ../../source/faq.rst:76
+msgid "General tips of good performance for circuit simulation?"
+msgstr "获得良好线路模拟性能的一般建议？"
+
+#: ../../source/faq.rst:78
+msgid ""
+"To achieve the best performance with TensorCircuit-NG, consider the "
+"following checklist:"
+msgstr "为了获得 TensorCircuit-NG 的最佳性能，请参考以下清单："
+
+#: ../../source/faq.rst:80
+msgid ""
+"**GPU Acceleration**: Use GPU for 20+ qubits or large batch dimensions. "
+"Expect 10-100x speedup for one GPU card over one CPU node."
+msgstr "**GPU 加速**: 量子比特数超过 20 或批量维度较大时使用 GPU。预计单张 GPU 卡相比单个 CPU 节点有 10-100 倍的加速。"
+
+#: ../../source/faq.rst:81
+msgid ""
+"**Vectorization**: Always use ``K.vmap``  for simulating multiple "
+"circuits or batches of parameters or inputs; it is much more efficient "
+"than manual loops."
+msgstr "**向量化**: 始终使用 ``K.vmap`` 模拟多个线路或多批参数/输入；它比手动循环高效得多。"
+
+#: ../../source/faq.rst:82
+msgid ""
+"**JIT Compilation**: Wrap your performance-critical functions with "
+"``tc.backend.jit``. Ensure the function follows the \"tensor in, tensor "
+"out\" pattern to avoid unnecessary recompilation."
+msgstr "**JIT 编译**: 使用 ``tc.backend.jit`` 封装性能关键函数。确保函数遵循“张量输入，张量输出”模式，以避免不必要的重新编译。"
+
+#: ../../source/faq.rst:83
+msgid ""
+"**Backend Choice**: **JAX** is generally recommended for its superior JIT"
+" and vectorization performance, as well as automatic type promotion and "
+"easy-to-use distributed runtime."
+msgstr "**后端选择 **: 通常推荐使用 **JAX** ，因为它具有卓越的 JIT 和向量化性能，以及自动类型提升和易用的分布式运行时。"
+
+#: ../../source/faq.rst:84
+msgid ""
+"**Scan for Depth**: Use ``K.scan`` for deep circuits with repeating "
+"structures to avoid exorbitant JIT staging time and memory consumption."
+msgstr "**Scan 处理深度**: 对具有重复结构的深层线路使用 ``K.scan`` ，以避免过长的 JIT 编译时间和过高的内存消耗。"
+
+#: ../../source/faq.rst:85
+msgid ""
+"**Advanced Contractor**: For circuits with large qubits and depth counts,"
+" use the ``cotengra`` contractor (via "
+"``tc.set_contractor(\"cotengra\")``) to find more efficient contraction "
+"paths and reduce peak memory usage."
+msgstr "**高级 Contractor**: 对于量子比特数和深度较大的线路，使用 ``cotengra`` contractor（通过 ``tc.set_contractor(\"cotengra\")`` ）来寻找更高效的收缩路径并降低峰值内存占用。"
+
+#: ../../source/faq.rst:86
+msgid ""
+"**Sparse/MPO Operators**: For expectation evaluation of large systems or "
+"complex observables, utilize sparse matrix or MPO representations to "
+"avoid constructing the full dense Hamiltonian or measuring each Pauli "
+"string separately."
+msgstr "**稀疏/MPO 算符**: 对于大型系统或复杂可观测量的期望值评估，利用稀疏矩阵或 MPO 表示，以避免构建完整的稠密哈密顿量或分别测量每个泡利字符串。"
+
+#: ../../source/faq.rst:90
+msgid "Which ML framework backend should I use?"
+msgstr "我应该使用哪个机器学习框架后端？"
+
+#: ../../source/faq.rst:92
+msgid ""
+"Since the Numpy backend has no support for AD, if you want to evaluate "
+"the circuit gradient, you must set the backend as one of the ML "
+"frameworks beyond Numpy."
+msgstr "由于 NumPy 后端不支持自动微分（AD），如果您想评估线路梯度，必须将后端设置为 NumPy 之外的机器学习框架之一。"
+
+#: ../../source/faq.rst:94
+msgid ""
+"While PyTorch is widely used, its native simulation performance is often "
+"limited due to the lack of mature vectorization and JIT support for "
+"quantum kernels. If you prefer the PyTorch ecosystem, we recommend using "
+"the **JAX backend for fast simulation** and wrapping the results with "
+"function level :py:meth:`tensorcircuit.interfaces.torch_interface` or "
+"object level :py:class:`tensorcircuit.torchnn.TorchLayer`."
+msgstr "虽然 PyTorch 使用广泛，但由于缺乏成熟的向量化和对量子核的 JIT 支持，其原生模拟性能通常有限。如果您偏好 PyTorch 生态系统，我们建议使用 **JAX 后端进行快速模拟** ，并使用函数级的 :py:meth:`tensorcircuit.interfaces.torch_interface` 或对象级的 :py:class:`tensorcircuit.torchnn.TorchLayer` 封装结果。"
+
+#: ../../source/faq.rst:96
+msgid ""
+"In terms of the choice between TensorFlow and Jax backend, the better one"
+" may depend on the use cases and one may want to benchmark both to pick "
+"the better one. There is no one-for-all recommendation and this is why we"
+" maintain the backend agnostic form of our software."
+msgstr "至于在 TensorFlow 和 JAX 后端之间如何选择，由于两者孰优孰劣取决于具体用例，用户可能需要对两者进行基准测试以做出选择。目前没有一劳永逸的建议，这也是我们坚持软件后端无关特性的原因。"
+
+#: ../../source/faq.rst:98
+msgid "Some general rules of thumb:"
+msgstr "一些一般性经验规则："
+
+#: ../../source/faq.rst:100
+msgid ""
+"On both CPU and GPU, the running time of a jitted function is faster for "
+"jax backend."
+msgstr "在 CPU 和 GPU 上，JAX 后端的 JIT 函数运行时间通常更快。"
+
+#: ../../source/faq.rst:102
+msgid ""
+"For hybrid machine learning tasks, TensorFlow has a better ML ecosystem "
+"and reusable classical ML models."
+msgstr "对于混合机器学习任务，TensorFlow 拥有更好的机器学习生态系统和可重用的经典机器学习模型。"
+
+#: ../../source/faq.rst:104
+msgid ""
+"Jax has some built-in advanced features that are lacking in TensorFlow, "
+"such as checkpoint in AD and pmap/jit for distributed computing."
+msgstr "JAX 具有一些 TensorFlow 缺乏的内置高级功能，例如自动微分中的检查点（checkpoint）以及用于分布式计算的 pmap/jit。"
+
+#: ../../source/faq.rst:106
+msgid ""
+"Jax is much insensitive to dtype where type promotion is handled "
+"automatically which means easier debugging."
+msgstr "JAX 对数据类型（dtype）不太敏感，能够自动处理类型提升，这意味着调试更容易。"
+
+#: ../../source/faq.rst:108
+msgid ""
+"Both TensorFlow and Jax can cache the jitted function on the disk, which "
+"further amortizes the staging time."
+msgstr "TensorFlow 和 JAX 都可以将 JIT 编译后的函数缓存在磁盘上，从而进一步平摊编译时间。"
+
+#: ../../source/faq.rst:112
+msgid "What is the counterpart of ``QuantumLayer`` for PyTorch and Jax backend?"
+msgstr "PyTorch 和 JAX 后端中与 ``QuantumLayer`` 对应的是什么？"
+
+#: ../../source/faq.rst:114
+msgid ""
+"While TensorFlow's ``QuantumLayer`` is a powerful tool for hybrid tasks, "
+"TensorCircuit-NG offers robust solutions for other frameworks as well."
+msgstr "虽然 TensorFlow 的 ``QuantumLayer`` 是处理混合任务的强大工具，但 TensorCircuit-NG 也为其他框架提供了可靠的解决方案。"
+
+#: ../../source/faq.rst:116
+msgid ""
+"For **PyTorch** users, we provide "
+":py:class:`tensorcircuit.torchnn.TorchLayer`. We highly recommend using "
+"the **JAX backend** to power the underlying simulation, as this "
+"combination provides the best of both worlds: the familiar PyTorch "
+"ecosystem for classical layers and JAX's high-performance simulation for "
+"quantum kernels. This is handled seamlessly via the "
+":py:meth:`tensorcircuit.interfaces.torch_interface`."
+msgstr "对于 **PyTorch** 用户，我们提供了 :py:class:`tensorcircuit.torchnn.TorchLayer` 。我们强烈建议使用 **JAX 后端** 来驱动底层模拟，因为这种组合兼具两者的优点：熟悉的 PyTorch 生态系统用于经典层，而 JAX 的高性能模拟用于量子核。这可以通过 :py:meth:`tensorcircuit.interfaces.torch_interface` 无缝处理。"
+
+#: ../../source/faq.rst:118
+msgid ""
+"For the **JAX** ecosystem, quantum circuits can be naturally integrated "
+"into functional ML libraries like **Flax**. For a concrete implementation"
+" of a hybrid model, see our example: `examples/flax_mnist_hybrid.py "
+"<https://github.com/tensorcircuit/tensorcircuit-"
+"ng/blob/master/examples/flax_mnist_hybrid.py>`_."
+msgstr "对于 **JAX** 生态系统，量子线路可以自然地集成到 **Flax** 等函数式机器学习库中。有关混合模型的具体实现，请参阅我们的示例： `examples/flax_mnist_hybrid.py <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/flax_mnist_hybrid.py>`_ 。"
+
+#: ../../source/faq.rst:120
+msgid ""
+"JIT and vmap are automatically managed in these high-level wrappers "
+"(``QuantumLayer``, ``TorchLayer``, etc.), ensuring efficient execution of"
+" your hybrid workflows."
+msgstr "在这些高层包装器（ ``QuantumLayer`` 、 ``TorchLayer`` 等）中，JIT 和 vmap 会被自动管理，从而确保混合工作流的高效执行。"
+
+#: ../../source/faq.rst:123
+msgid "When do I need to customize the contractor and how?"
+msgstr "我什么时候需要定制 contractor，以及如何定制？"
+
+#: ../../source/faq.rst:125
+msgid ""
+"As a rule of thumb, for the circuit with qubit counts larger than 14 and "
+"circuit depth larger than 6, customized contraction may significantly "
+"outperform the default built-in greedy contraction strategy."
+msgstr "经验法则是，对于量子比特数超过 14 且线路深度超过 6 的线路，自定义收缩策略可能显著优于默认内置的贪婪收缩策略。"
+
+#: ../../source/faq.rst:127
+msgid ""
+"To set up or not set up the customized contractor is about a trade-off "
+"between the time on contraction pathfinding and the time on the real "
+"contraction via matmul."
+msgstr "是否设置自定义 contractor 是在收缩路径搜索时间与通过矩阵乘法进行的实际收缩时间之间进行的权衡。"
+
+#: ../../source/faq.rst:129
+msgid ""
+"The customized contractor costs much more time than the default "
+"contractor in terms of contraction path searching, and via the path it "
+"finds, the real contraction can take less time and space."
+msgstr "在收缩路径搜索方面，自定义 contractor 相比默认 contractor 需要多得多的时间，但通过它找到的路径，实际收缩可以消耗更少的时间和空间。"
+
+#: ../../source/faq.rst:131
+msgid ""
+"If the circuit simulation time is the bottleneck of the whole workflow, "
+"one can always try customized contractors to see whether there is some "
+"performance improvement."
+msgstr "如果线路模拟时间是整个工作流的瓶颈，可以尝试自定义 contractor，以查看是否有性能提升。"
+
+#: ../../source/faq.rst:133
+msgid ""
+"We recommend using the `cotengra library "
+"<https://cotengra.readthedocs.io/en/latest/index.html>`_ to set up the "
+"contractor. It provides more stable and faster simulation for large-scale"
+" tensor network contractions. Since there are lots of interesting "
+"hyperparameters to tune, we can achieve a better trade-off between the "
+"time on contraction path search and the time on the real tensor network "
+"contraction."
+msgstr "我们建议使用 `cotengra 库 <https://cotengra.readthedocs.io/en/latest/index.html>`_ 来设置 contractor。它为大规模张量网络收缩提供了更稳定、更快速的模拟。由于有许多有趣的超参数可供调节，我们可以在收缩路径搜索时间与实际张量网络收缩时间之间达成更好的平衡。"
+
+#: ../../source/faq.rst:135
+msgid ""
+"It is also worth noting that for jitted function which we usually use, "
+"the contraction path search is only called at the first run of the "
+"function, which further amortizes the time and favors the use of a highly"
+" customized contractor."
+msgstr "另外值得注意的是，对于我们通常使用的 JIT 函数，收缩路径搜索仅在函数第一次运行时调用，这进一步平摊了时间，有利于使用高度定制的 contractor。"
+
+#: ../../source/faq.rst:137
+msgid ""
+"In terms of how-to on contractor setup, please refer to "
+":ref:`quickstart:Setup the Contractor`."
+msgstr "有关如何设置 contractor，请参阅 :ref:`quickstart:Setup the Contractor` 。"
+
+#: ../../source/faq.rst:140
+msgid "Is there some API less cumbersome than ``expectation`` for Pauli string?"
+msgstr "对于泡利字符串，有没有比 ``expectation`` 更简洁的 API？"
+
+#: ../../source/faq.rst:142
+msgid ""
+"Say we want to measure something like :math:`\\langle X_0Z_1Y_2Z_4 "
+"\\rangle` for a six-qubit system, the general ``expectation`` API may "
+"seem to be cumbersome. So one can try one of the following options:"
+msgstr "假设我们要为一个六量子比特系统测量类似 :math:`\\langle X_0Z_1Y_2Z_4 \\rangle` 的算符，通用的 ``expectation`` API 可能显得有些繁琐。因此，可以尝试以下选项之一："
+
+#: ../../source/faq.rst:145
+msgid "``c.expectation_ps(x=[0], y=[2], z=[1, 4])``"
+msgstr "``c.expectation_ps(x=[0], y=[2], z=[1, 4])``"
+
+#: ../../source/faq.rst:147
+msgid ""
+"``tc.templates.measurements.parameterized_measurements(c, np.array([1, 3,"
+" 2, 0, 3, 0]), onehot=True)``"
+msgstr "``tc.templates.measurements.parameterized_measurements(c, np.array([1, 3, 2, 0, 3, 0]), onehot=True)``"
+
+#: ../../source/faq.rst:150
+msgid "How to efficiently evaluate expectations for large systems?"
+msgstr "如何高效评估大型系统的期望值？"
+
+#: ../../source/faq.rst:152
+msgid ""
+"For large-scale quantum systems or complex observables, the standard "
+"``expectation`` API may be slow or memory-intensive. We first need to "
+"switch off the `reuse=False` option in ``expectation`` API to avoid "
+"directly compute the wavefunction. TensorCircuit-NG provides several "
+"specialized alternatives:"
+msgstr "对于大规模量子系统或复杂可观测量，标准的 ``expectation`` API 可能会很慢或非常耗费内存。我们首先需要在 ``expectation`` API 中关闭 `reuse=False` 选项，以避免直接计算波函数。TensorCircuit-NG 提供了几种专门的替代方案："
+
+#: ../../source/faq.rst:155
+msgid ""
+"**Sparse Expectation**: Use "
+":py:meth:`tensorcircuit.templates.measurements.sparse_expectation` when "
+"the Hamiltonian is given in a sparse matrix form."
+msgstr "**稀疏期望值 (Sparse Expectation)**: 当哈密顿量以稀疏矩阵形式给出时，使用 :py:meth:`tensorcircuit.templates.measurements.sparse_expectation` 。"
+
+#: ../../source/faq.rst:156
+msgid ""
+"**MPO Expectation**: Use "
+":py:meth:`tensorcircuit.templates.measurements.mpo_expectation` for "
+"systems where the operator is represented as a Matrix Product Operator "
+"(MPO)."
+msgstr "**MPO 期望值 (MPO Expectation)**: 对于算符表示为矩阵乘积算符（MPO）的系统，使用 :py:meth:`tensorcircuit.templates.measurements.mpo_expectation` 。"
+
+#: ../../source/faq.rst:157
+msgid ""
+"**MVP (Matrix-Vector Product)**: For even larger systems where the "
+"Hamiltonian cannot be explicitly stored, use Matrix-Vector Product "
+"functions like :py:meth:`tensorcircuit.quantum.PauliStringSum2MVP` to "
+"evaluate expectations without constructing the full matrix."
+msgstr "**MVP (矩阵-向量积)**: 对于由于规模太大而无法显式存储哈密顿量的系统，可以使用矩阵-向量积（Matrix-Vector Product）函数（如 :py:meth:`tensorcircuit.quantum.PauliStringSum2MVP` ）来评估期望值，而无需构建完整的矩阵。"
+
+#: ../../source/faq.rst:160
+msgid ""
+"Can I apply quantum operation based on previous classical measurement "
+"results?"
+msgstr "我是否可以根据之前的经典测量结果应用量子操作？"
+
+#: ../../source/faq.rst:162
+msgid "Try the following: (the pipeline is even fully jittable!)"
+msgstr "尝试以下方法：（该流程甚至是完全可 JIT 编译的！）"
+
+#: ../../source/faq.rst:171
+msgid ""
+"``cond_measurement`` will return 0 or 1 based on the measurement result "
+"on z-basis, and ``conditional_gate`` applies gate_list[r] on the circuit."
+msgstr "``cond_measurement`` 将根据 Z 基下的测量结果返回 0 或 1，而 ``conditional_gate`` 在电路上应用 gate_list[r]。"
+
+#: ../../source/faq.rst:174
+msgid ""
+"How to understand the difference between different measurement methods "
+"for ``Circuit``?"
+msgstr "如何理解 ``Circuit`` 不同测量方法之间的区别？"
+
+#: ../../source/faq.rst:176
+msgid ""
+":py:meth:`tensorcircuit.circuit.Circuit.measure` : used at the end of the"
+" circuit execution, return bitstring based on quantum amplitude "
+"probability (can also with the probability), the circuit and the output "
+"state are unaffected (no collapse). The jittable version is "
+"``measure_jit``."
+msgstr ":py:meth:`tensorcircuit.circuit.Circuit.measure`: 在线路执行结束时使用，基于量子幅度概率返回位串（也可带概率），线路和输出状态不受影响（不坍缩）。可 JIT 编译的版本是 ``measure_jit`` 。"
+
+#: ../../source/faq.rst:178
+msgid ""
+":py:meth:`tensorcircuit.circuit.Circuit.cond_measure`: also with alias "
+"``cond_measurement``, usually used in the middle of the circuit "
+"execution. Apply a POVM on z basis on the given qubit, the state is "
+"collapsed and nomarlized based on the measurement projection. The method "
+"returns an integer Tensor indicating the measurement result 0 or 1 based "
+"on the quantum amplitude probability."
+msgstr ":py:meth:`tensorcircuit.circuit.Circuit.cond_measure`: 别名 ``cond_measurement`` ，通常用于线路执行中间。在给定量子比特上应用 Z 基下的 POVM，状态会根据测量投影坍缩并归一化。该方法返回一个整数张量，表示基于量子幅度概率的测量结果 0 或 1。"
+
+#: ../../source/faq.rst:180
+msgid ""
+":py:meth:`tensorcircuit.circuit.Circuit.post_select`: also with alia "
+"``mid_measurement``, usually used in the middle of the circuit execution."
+" The measurement result is fixed as given from ``keep`` arg of this "
+"method. The state is collapsed but unnormalized based on the given "
+"measurement projection."
+msgstr ":py:meth:`tensorcircuit.circuit.Circuit.post_select`: 别名 ``mid_measurement`` ，通常用于线路执行中间。测量结果由该方法的 ``keep`` 参数固定。状态会根据给定的测量投影坍缩，但不进行归一化。"
+
+#: ../../source/faq.rst:182
+msgid "Please refer to the following demos:"
+msgstr "请参阅以下演示："
+
+#: ../../source/faq.rst:214
+msgid ""
+"How to understand difference between ``tc.array_to_tensor`` and "
+"``tc.backend.convert_to_tensor``?"
+msgstr "如何理解 ``tc.array_to_tensor`` 和 ``tc.backend.convert_to_tensor`` 之间的区别？"
+
+#: ../../source/faq.rst:216
+msgid ""
+"``tc.array_to_tensor`` converts one or multiple arrays to tensors and "
+"automatically casts them to the default dtype of TensorCircuit-NG (i.e., "
+"``tc.dtypestr``). It also supports specifying a specific dtype and can "
+"handle multiple inputs: ``a_tensor, b_tensor = "
+"tc.array_to_tensor(a_array, b_array)``."
+msgstr "``tc.array_to_tensor`` 将一个或多个数组转换为张量，并自动将其转换为 TensorCircuit-NG 的默认数据类型（即 ``tc.dtypestr`` ）。它还支持指定特定数据类型，并能处理多个输入： ``a_tensor, b_tensor = tc.array_to_tensor(a_array, b_array)`` 。"
+
+#: ../../source/faq.rst:218
+msgid ""
+"In contrast, ``tc.backend.convert_to_tensor`` is a lower-level API that "
+"converts a single array into a tensor for the active backend. By default,"
+" it preserves the input's dtype, but it now also supports an optional "
+"``dtype`` argument to specify the desired type during conversion."
+msgstr "相比之下， ``tc.backend.convert_to_tensor`` 是一个更底层的 API，用于将单个数组转换为当前后端的张量。默认情况下，它保留输入的 dtype，但现在也支持可选的 ``dtype`` 参数以在转换时指定目标类型。"
+
+#: ../../source/faq.rst:222
+msgid ""
+"How to arrange the circuit gate placement in the visualization from "
+"``c.tex()``?"
+msgstr "如何在 ``c.tex()`` 生成的可视化结果中安排线路门的放置？"
+
+#: ../../source/faq.rst:224
+msgid ""
+"Try ``lcompress=True`` or ``rcompress=True`` option in "
+":py:meth:`tensorcircuit.circuit.Circuit.tex` API to make the circuit "
+"align from the left or from the right."
+msgstr "在 :py:meth:`tensorcircuit.circuit.Circuit.tex` API 中尝试 ``lcompress=True`` 或 ``rcompress=True`` 选项，使线路向左或向右对齐。"
+
+#: ../../source/faq.rst:226
+msgid ""
+"Or try ``c.unitary(0, unitary=tc.backend.eye(2), name=\"invisible\")`` to"
+" add placeholder on the circuit which is invisible for circuit "
+"visualization."
+msgstr "或者尝试使用 ``c.unitary(0, unitary=tc.backend.eye(2), name=\"invisible\")`` 在线路上添加占位符，这在线路可视化中是不可见的。"
+
+#: ../../source/faq.rst:230
+msgid "How many different formats for the circuit sample results?"
+msgstr "线路采样结果有多少种不同的格式？"
+
+#: ../../source/faq.rst:232
+msgid ""
+"When performing measurements or sampling in TensorCircuit-NG, there are "
+"six different formats available for the results:"
+msgstr "在 TensorCircuit-NG 中进行测量或采样时，结果有六种不同的可用格式："
+
+#: ../../source/faq.rst:234
+msgid "``\"sample_int\"``"
+msgstr "``\"sample_int\"``"
+
+#: ../../source/faq.rst:235
+msgid "Returns measurement results as integer array."
+msgstr "以整数数组形式返回测量结果。"
+
+#: ../../source/faq.rst:244
+msgid "``\"sample_bin\"``"
+msgstr "``\"sample_bin\"``"
+
+#: ../../source/faq.rst:245
+msgid "Returns measurement results as a list of binary arrays."
+msgstr "以二进制数组列表形式返回测量结果。"
+
+#: ../../source/faq.rst:254
+msgid "``\"count_vector\"``"
+msgstr "``\"count_vector\"``"
+
+#: ../../source/faq.rst:255
+msgid "Returns counts as a vector where index represents the state."
+msgstr "以向量形式返回计数，其中索引代表状态。"
+
+#: ../../source/faq.rst:262
+msgid "``\"count_tuple\"``"
+msgstr "``\"count_tuple\"``"
+
+#: ../../source/faq.rst:263
+msgid "Returns counts as a tuple of indices and their frequencies."
+msgstr "以包含索引及其频率的元组形式返回计数。"
+
+#: ../../source/faq.rst:270
+msgid "``\"count_dict_bin\"``"
+msgstr "``\"count_dict_bin\"``"
+
+#: ../../source/faq.rst:271
+msgid "Returns counts as a dictionary with binary strings as keys."
+msgstr "以二进制字符串为键的字典形式返回计数。"
+
+#: ../../source/faq.rst:278
+msgid "``\"count_dict_int\"``"
+msgstr "``\"count_dict_int\"``"
+
+#: ../../source/faq.rst:279
+msgid "Returns counts as a dictionary with integers as keys."
+msgstr "以整数为键的字典形式返回计数。"
+
+#: ../../source/faq.rst:287
+msgid ""
+"For more input parameters, see API doc "
+":py:meth:`tensorcircuit.circuit.Circuit.sample`."
+msgstr "更多输入参数请参阅 API 文档 :py:meth:`tensorcircuit.circuit.Circuit.sample` 。"
+
+#: ../../source/faq.rst:291
+msgid "How to get the entanglement entropy from the circuit output?"
+msgstr "如何从线路输出中获取纠缠熵？"
+
+#: ../../source/faq.rst:293
+msgid "Try the following:"
+msgstr "尝试以下代码："
+
+#: ../../source/faq.rst:314
+msgid "What is the long-term support (LTS) commitment for TensorCircuit-NG?"
+msgstr "TensorCircuit-NG 的长期支持（LTS）承诺是什么？"
+
+#: ../../source/faq.rst:316
+msgid ""
+"TensorCircuit-NG is committed to long-term maintenance and stability. We "
+"ensure compatibility with the latest versions of major ML frameworks "
+"(Numpy, TensorFlow, JAX, PyTorch) and provide timely updates to stay "
+"aligned with the evolving Python scientific computing ecosystem. Our "
+"priority is to provide a reliable, performant, and future-proof platform "
+"for both research and production-grade quantum simulation tasks."
+msgstr "TensorCircuit-NG 致力于长期维护和稳定性。我们确保与主要机器学习框架（NumPy、TensorFlow、JAX、PyTorch）的最新版本兼容，并提供及时更新以保持与不断演进的 Python 科学计算生态系统一致。我们的首要任务是为科学研究和生产级量子模拟任务提供一个可靠、高性能且面向未来的平台。"

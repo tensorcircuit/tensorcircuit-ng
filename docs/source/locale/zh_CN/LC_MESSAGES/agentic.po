@@ -1,0 +1,180 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2020-2026, TensorCircuit-NG Development Team. Created by
+# Shi-Xin Zhang.
+# This file is distributed under the same license as the tensorcircuit-ng
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: tensorcircuit-ng \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-03-31 12:24+0800\n"
+"PO-Revision-Date: 2026-03-31 13:30+0800\n"
+"Last-Translator: Gemini CLI\n"
+"Language: zh_CN\n"
+"Language-Team: \n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../source/agentic.rst:2
+msgid "Agentic Development"
+msgstr "智能体（Agent）开发"
+
+#: ../../source/agentic.rst:5
+msgid ""
+"TensorCircuit-NG is the world's first AI-native quantum programming "
+"platform, purpose-built for agentic research and automated scientific "
+"discovery."
+msgstr "TensorCircuit-NG 是全球首个 AI 原生量子编程平台，专为智能体（Agent）辅助研究和自动化科学发现而设计。"
+
+#: ../../source/agentic.rst:10
+msgid "🚀 Experience Agent-Native Discovery"
+msgstr "🚀 体验智能体原生发现"
+
+#: ../../source/agentic.rst:16
+msgid ""
+"Click here to see how AI agents autonomously solve complex quantum "
+"problems in TensorCircuit-NG."
+msgstr "点击这里查看 AI 智能体如何在 TensorCircuit-NG 中自主解决复杂的量子问题。"
+
+#: ../../source/agentic.rst:21
+msgid "Why Work Within the Repository?"
+msgstr "为什么要在仓库内工作？"
+
+#: ../../source/agentic.rst:23
+msgid ""
+"To write scripts and applications efficiently with AI coding agents "
+"(e.g., ClaudeCode, Cursor, Codex, Antigravity, Gemini-CLI, OpenCode), we "
+"strongly recommend working directly within the local repository."
+msgstr ""
+"为了高效地使用 AI 编程智能体（如 ClaudeCode、Cursor、Codex、Antigravity、Gemini-"
+"CLI、OpenCode）编写脚本和应用程序，我们强烈建议直接在本地仓库内工作。"
+
+#: ../../source/agentic.rst:26
+msgid ""
+"**Rich Context**: The repository contains over 100 scripts in "
+"``examples/`` and extensive test cases in ``tests/``. These provide "
+"essential references that significantly reduce AI hallucinations and help"
+" the agent understand idiomatic usage."
+msgstr ""
+"**丰富的上下文**: 仓库中的 ``examples/`` 目录下包含 100 多个脚本，``tests/`` 目录下有大量的测试用例。这些为 "
+"AI 提供了必不可少的参考，显著减少了 AI 幻觉，并帮助智能体理解地道的用法。"
+
+#: ../../source/agentic.rst:27
+msgid ""
+"**Built-in Rules**: We provide a dedicated `AGENTS.md "
+"<https://github.com/tensorcircuit/tensorcircuit-"
+"ng/blob/master/AGENTS.md>`_ file. It serves as the \"handbook\" (similar "
+"to ``CLAUDE.md``) for AI agents, defining coding standards and best "
+"practices."
+msgstr ""
+"**内置规则**: 我们提供了一个专门的 `AGENTS.md <https://github.com/tensorcircuit"
+"/tensorcircuit-ng/blob/master/AGENTS.md>`_ 文件。它是 AI 智能体的“手册”（类似于 "
+"``CLAUDE.md``），定义了编码标准和最佳实践。"
+
+#: ../../source/agentic.rst:28
+msgid ""
+"**Specialized Agentic Skills**: The ``.agents/skills/`` directory "
+"contains specialized workflows to guide AI assistants on complex, multi-"
+"step tasks."
+msgstr "**专业智能体技能**: ``.agents/skills/`` 目录包含了专门的工作流，用于引导 AI 助手完成复杂的多步任务。"
+
+#: ../../source/agentic.rst:31
+msgid "Specialized Agentic Skills"
+msgstr "专业智能体技能"
+
+#: ../../source/agentic.rst:33
+msgid ""
+"TensorCircuit-NG includes built-in agentic skills that can be activated "
+"by compatible AI agents to perform advanced tasks:"
+msgstr "TensorCircuit-NG 包含了内置的智能体技能，可由兼容的 AI 智能体激活以执行高级任务："
+
+#: ../../source/agentic.rst:35
+msgid ""
+"**arxiv-reproduce**: Autonomously reproduces arXiv papers with "
+"standardized output and code quality validation."
+msgstr "**arxiv-reproduce**: 自主复现 arXiv 论文，具有标准化的输出和代码质量校验。"
+
+#: ../../source/agentic.rst:36
+msgid ""
+"**performance-optimize**: Scientific execution and memory optimization "
+"workflow (JAX scanning, vectorized parallelism, etc.)."
+msgstr "**performance-optimize**: 科学执行与内存优化工作流（JAX scanning、向量化并行等）。"
+
+#: ../../source/agentic.rst:37
+msgid ""
+"**tc-rosetta**: End-to-end framework translation (from Qiskit, PennyLane,"
+" etc.) with intrinsic mathematical intent rewriting."
+msgstr "**tc-rosetta**: 端到端框架转换（从 Qiskit、PennyLane 等转换），具有内在数学意图重写功能。"
+
+#: ../../source/agentic.rst:38
+msgid ""
+"**tutorial-crafter**: Transforms raw scripts into comprehensive, "
+"narrative-driven educational tutorials."
+msgstr "**tutorial-crafter**: 将原始脚本转换为全面的、叙事驱动的教学教程。"
+
+#: ../../source/agentic.rst:39
+msgid ""
+"**demo-generator**: Transforms scripts into interactive, high-performance"
+" Streamlit GUI applications."
+msgstr "**demo-generator**: 将脚本转换为交互式、高性能的 Streamlit GUI 应用程序。"
+
+#: ../../source/agentic.rst:40
+msgid ""
+"**code-reviewer**: Autonomously reviews and refactors code for "
+"mathematical correctness and performance."
+msgstr "**code-reviewer**: 自主审查和重构代码，以确保数学正确性和性能。"
+
+#: ../../source/agentic.rst:41
+msgid ""
+"**meta-explorer**: High-intensity autonomous research agent for circuit "
+"architecture and optimization strategy discovery (VQE, QML, QAOA, etc.)."
+msgstr "**meta-explorer**: 高强度的自主研究智能体，用于线路架构和优化策略发现（VQE、QML、QAOA 等）。"
+
+#: ../../source/agentic.rst:44
+msgid "Recommended Workflow"
+msgstr "推荐工作流"
+
+#: ../../source/agentic.rst:46
+msgid "**Clone the repository**:"
+msgstr "**克隆仓库**:"
+
+#: ../../source/agentic.rst:52
+msgid "**Switch to a local playground branch**:"
+msgstr "**切换到本地测试（playground）分支**:"
+
+#: ../../source/agentic.rst:58
+msgid ""
+"**Open the repository folder in your AI IDE**: Start writing TC-NG-based "
+"scripts using natural language instructions."
+msgstr "**在 AI IDE 中打开仓库文件夹**: 开始使用自然语言指令编写基于 TensorCircuit-NG 的脚本。"
+
+#: ../../source/agentic.rst:60
+msgid ""
+"By integrating extreme performance with an autonomous, intent-driven AI "
+"workflow, TensorCircuit-NG empowers researchers to transition from manual"
+" coding to automated scientific discovery."
+msgstr "通过将极致性能与自主的、意图驱动的 AI 工作流相结合，TensorCircuit-NG 助力研究人员从手动编码转向自动化的科学发现。"
+
+#: ../../source/agentic.rst:63
+msgid "AI-Native Documentation"
+msgstr "AI 原生文档"
+
+#: ../../source/agentic.rst:65
+#, fuzzy
+msgid ""
+"One can also refer to AI-native docs for tensorcircuit-ng: `Devin "
+"Deepwiki <https://deepwiki.com/tensorcircuit/tensorcircuit-ng>`_, `Google"
+" Code Wiki <https://codewiki.google/github.com/tensorcircuit"
+"/tensorcircuit-ng>`_, and `Context7 MCP "
+"<https://context7.com/tensorcircuit/tensorcircuit-ng>`_."
+msgstr ""
+"您也可以参考 TensorCircuit-NG 的 AI 原生文档：`Devin Deepwiki "
+"<https://deepwiki.com/tensorcircuit/tensorcircuit-ng>`_、`Google Code Wiki"
+" <https://codewiki.google/github/tensorcircuit/tensorcircuit-ng>`_ 和 "
+"`Context7 MCP <https://context7.com/tensorcircuit/tensorcircuit-ng>`_。"
+

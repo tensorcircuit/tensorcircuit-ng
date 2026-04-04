@@ -48,6 +48,30 @@ def test_merge_count():
     assert merged == c1
 
 
+def test_sort_count():
+    assert counts.sort_count({}) == {}
+    d1 = {"a": 1, "b": 3, "c": 2}
+    sorted_d1 = counts.sort_count(d1)
+    assert list(sorted_d1.keys()) == ["b", "c", "a"]
+    assert list(sorted_d1.values()) == [3, 2, 1]
+    d2 = {"a": 2, "b": 2, "c": 1}
+    sorted_d2 = counts.sort_count(d2)
+    assert list(sorted_d2.keys()) == ["a", "b", "c"]
+
+
+def test_reverse_count():
+    assert counts.reverse_count({}) == {}
+    d = {"01": 10, "11": 20}
+    reversed_d = counts.reverse_count(d)
+    assert reversed_d == {"10": 10, "11": 20}
+
+
+def test_normalized_count():
+    d = {"00": 5, "01": 15}
+    normalized_d = counts.normalized_count(d)
+    assert normalized_d == {"00": 0.25, "01": 0.75}
+
+
 def test_count2vec():
     assert counts.vec2count(counts.count2vec(d, normalization=False), prune=True) == d
     assert (
