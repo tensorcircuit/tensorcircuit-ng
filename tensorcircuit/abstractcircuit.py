@@ -780,6 +780,8 @@ class AbstractCircuit:
         :type index: int
         """
         l = len(self._qir)
+        if not hasattr(self, "_measure_counter"):
+            self._measure_counter = 0
         for ind in index:
             d = {
                 "index": [ind],
@@ -787,8 +789,34 @@ class AbstractCircuit:
                 "gatef": "measure",
                 "instruction": True,
                 "pos": l,
+                "record_index": self._measure_counter,
             }
+            self._measure_counter += 1
             self._extra_qir.append(d)
+
+    def detector_instruction(self, record_indices: Sequence[int], **kws: Any) -> None:
+        """
+        add a detector instruction flag, no effect on numerical simulation
+
+        :param record_indices: the corresponding measurement record indices
+        :type record_indices: Sequence[int]
+        """
+        l = len(self._qir)
+        d = {
+            "index": record_indices,
+            "name": "detector",
+            "gatef": "detector",
+            "instruction": True,
+            "pos": l,
+        }
+        d.update(kws)
+        self._extra_qir.append(d)
+
+    def sample_detector(self) -> Any:
+        """
+        placeholder for sample detector results
+        """
+        raise NotImplementedError("sample_detector is not implemented for this circuit")
 
     def reset_instruction(self, *index: int) -> None:
         """
@@ -807,6 +835,86 @@ class AbstractCircuit:
                 "pos": l,
             }
             self._extra_qir.append(d)
+
+    def mr_instruction(self, *index: int) -> None:
+        """
+        add a measure-reset instruction flag, no effect on numerical simulation
+
+        :param index: the corresponding qubits
+        :type index: int
+        """
+        self.measure_instruction(*index)
+        self.reset_instruction(*index)
+
+    def depolarizing_instruction(self, qubit: int, **kws: Any) -> None:
+        """
+        add a depolarizing instruction flag, no effect on numerical simulation
+        """
+        l = len(self._qir)
+        d = {
+            "index": [qubit],
+            "name": "depolarizing",
+            "instruction": True,
+            "pos": l,
+        }
+        d.update(kws)
+        self._extra_qir.append(d)
+
+    def depolarizing2_instruction(self, qubit1: int, qubit2: int, **kws: Any) -> None:
+        """
+        add a 2-qubit depolarizing instruction flag, no effect on numerical simulation
+        """
+        l = len(self._qir)
+        d = {
+            "index": [qubit1, qubit2],
+            "name": "depolarizing2",
+            "instruction": True,
+            "pos": l,
+        }
+        d.update(kws)
+        self._extra_qir.append(d)
+
+    def pauli_instruction(self, qubit: int, **kws: Any) -> None:
+        """
+        add a pauli instruction flag, no effect on numerical simulation
+        """
+        l = len(self._qir)
+        d = {
+            "index": [qubit],
+            "name": "pauli",
+            "instruction": True,
+            "pos": l,
+        }
+        d.update(kws)
+        self._extra_qir.append(d)
+
+    def pauli2_instruction(self, qubit1: int, qubit2: int, **kws: Any) -> None:
+        """
+        add a 2-qubit pauli instruction flag, no effect on numerical simulation
+        """
+        l = len(self._qir)
+        d = {
+            "index": [qubit1, qubit2],
+            "name": "pauli2",
+            "instruction": True,
+            "pos": l,
+        }
+        d.update(kws)
+        self._extra_qir.append(d)
+
+    def general_error_instruction(self, qubit: int, **kws: Any) -> None:
+        """
+        add a general error instruction flag, no effect on numerical simulation
+        """
+        l = len(self._qir)
+        d = {
+            "index": [qubit],
+            "name": "error",
+            "instruction": True,
+            "pos": l,
+        }
+        d.update(kws)
+        self._extra_qir.append(d)
 
     def barrier_instruction(self, *index: List[int]) -> None:
         """

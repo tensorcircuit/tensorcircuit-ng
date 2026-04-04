@@ -128,6 +128,7 @@ class Circuit(BaseCircuit):
         # self._qcode += str(self._nqubits) + "\n"
         self._qir: List[Dict[str, Any]] = []
         self._extra_qir: List[Dict[str, Any]] = []
+        self._measure_counter = 0
 
     def replace_mps_inputs(self, mps_inputs: QuOperator) -> None:
         """
@@ -667,6 +668,8 @@ class Circuit(BaseCircuit):
             **vars: float,
         ) -> None:
             kraus = krausf(**vars)
+            if name is None:
+                name = getattr(kraus, "name", None)
             if not is_unitary:
                 self.apply_general_kraus(kraus, *index, status=status, name=name)
             else:
