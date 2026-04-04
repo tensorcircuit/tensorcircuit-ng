@@ -258,10 +258,11 @@ class StabilizerTCircuit(AbstractCircuit):
         samples = self._sample_batches(shots, batch_size)
 
         if use_reference:
-            # For reference, we need f_params = 0
+            assert self._channel_sampler is not None
             f_zeros = jnp.zeros(
                 (1, self._channel_sampler.num_f_params), dtype=jnp.bool_
             )
+            assert self._compiled_program is not None
             ref_sample = sample_program(self._compiled_program, f_zeros, self._key)
             samples = samples ^ ref_sample
 
@@ -358,8 +359,10 @@ class StabilizerTCircuit(AbstractCircuit):
     def _sample_batches(self, shots: int, batch_size: int = 1000) -> jax.Array:
         batches = []
         for _ in range(ceil(shots / batch_size)):
+            assert self._channel_sampler is not None
             f_params = jnp.asarray(self._channel_sampler.sample(batch_size))
             self._key, subkey = jax.random.split(self._key)
+            assert self._compiled_program is not None
             samples = sample_program(self._compiled_program, f_params, subkey)
             batches.append(samples)
         return jnp.concatenate(batches, axis=0)[:shots]
@@ -440,16 +443,18 @@ class StabilizerTCircuit(AbstractCircuit):
     def swap(self, q1: int, q2: int) -> None:
         self._qir.append({"name": "SWAP", "index": [q1, q2]})
 
-    def detector_instruction(
-        self, lookback_indices: list[int], coords: list[float] = None
-    ):
+    def detector_instruction(  # type: ignore[override]
+        self,
+        lookback_indices: list[int],
+        coords: Optional[list[float]] = None,
+    ) -> None:
         self._qir.append(
             {"name": "DETECTOR", "index": lookback_indices, "coords": coords}
         )
 
-    def observable_instruction(
+    def observable_instruction(  # type: ignore[override]
         self, lookback_indices: list[int], observable_index: int = 0
-    ):
+    ) -> None:
         self._qir.append(
             {
                 "name": "OBSERVABLE_INCLUDE",
@@ -458,45 +463,47 @@ class StabilizerTCircuit(AbstractCircuit):
             }
         )
 
-    def qubit_coords_instruction(self, qubit: int, coords: list[float]):
+    def qubit_coords_instruction(self, qubit: int, coords: list[float]) -> None:
         self._qir.append({"name": "QUBIT_COORDS", "index": [qubit], "coords": coords})
 
-    def tick_instruction(self):
+    def tick_instruction(self) -> None:
         self._qir.append({"name": "TICK"})
 
-    def reset_instruction(self, q: int):
+    def reset_instruction(self, q: int) -> None:  # type: ignore[override]
         self._qir.append({"name": "RESET", "index": [q]})
 
-    def measure_instruction(self, q: int, p: float = 0):
+    def measure_instruction(self, q: int, p: float = 0) -> None:  # type: ignore[override]
         self._qir.append({"name": "MEASURE", "index": [q], "p": p})
 
-    def mr_instruction(self, q: int, p: float = 0):
+    def mr_instruction(self, q: int, p: float = 0) -> None:  # type: ignore[override]
         self._qir.append({"name": "MR", "index": [q], "p": p})
 
-    def mrx_instruction(self, q: int, p: float = 0):
+    def mrx_instruction(self, q: int, p: float = 0) -> None:
         self._qir.append({"name": "MRX", "index": [q], "p": p})
 
-    def mry_instruction(self, q: int, p: float = 0):
+    def mry_instruction(self, q: int, p: float = 0) -> None:
         self._qir.append({"name": "MRY", "index": [q], "p": p})
 
-    def mrz_instruction(self, q: int, p: float = 0):
+    def mrz_instruction(self, q: int, p: float = 0) -> None:
         self._qir.append({"name": "MRZ", "index": [q], "p": p})
 
-    def depolarizing(self, q: int, p: float):
+    def depolarizing(self, q: int, p: float) -> None:
         self._qir.append({"name": "DEPOLARIZE1", "index": [q], "parameters": {"p": p}})
 
-    def depolarizing2(self, q1: int, q2: int, p: float):
+    def depolarizing2(self, q1: int, q2: int, p: float) -> None:
         self._qir.append(
             {"name": "DEPOLARIZE2", "index": [q1, q2], "parameters": {"p": p}}
         )
 
-    def depolarizing_instruction(self, q: int, p: float):
+    def depolarizing_instruction(self, q: int, p: float) -> None:  # type: ignore[override]
         self.depolarizing(q, p)
 
-    def depolarizing2_instruction(self, q1: int, q2: int, p: float):
+    def depolarizing2_instruction(self, q1: int, q2: int, p: float) -> None:  # type: ignore[override]
         self.depolarizing2(q1, q2, p)
 
-    def pauli_instruction(self, q: int, px: float = 0, py: float = 0, pz: float = 0):
+    def pauli_instruction(  # type: ignore[override]
+        self, q: int, px: float = 0, py: float = 0, pz: float = 0
+    ) -> None:
         self._qir.append(
             {
                 "name": "PAULI_CHANNEL_1",
@@ -505,18 +512,18 @@ class StabilizerTCircuit(AbstractCircuit):
             }
         )
 
-    def pauli(self, q: int, probs: list[float]):
+    def pauli(self, q: int, probs: list[float]) -> None:
         self._qir.append(
             {"name": "PAULI_CHANNEL_1", "index": [q], "parameters": {"probs": probs}}
         )
 
-    def x_error(self, q: int, p: float):
+    def x_error(self, q: int, p: float) -> None:
         self._qir.append({"name": "X_ERROR", "index": [q], "parameters": {"p": p}})
 
-    def y_error(self, q: int, p: float):
+    def y_error(self, q: int, p: float) -> None:
         self._qir.append({"name": "Y_ERROR", "index": [q], "parameters": {"p": p}})
 
-    def z_error(self, q: int, p: float):
+    def z_error(self, q: int, p: float) -> None:
         self._qir.append({"name": "Z_ERROR", "index": [q], "parameters": {"p": p}})
 
     @classmethod

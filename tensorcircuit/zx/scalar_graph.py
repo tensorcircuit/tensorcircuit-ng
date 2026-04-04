@@ -67,7 +67,7 @@ def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScala
     char_to_idx = {char: i for i, char in enumerate(params)}
 
     # Type A
-    a_terms = [[] for _ in range(num_graphs)]
+    a_terms: List[List[Tuple[int, List[int]]]] = [[] for _ in range(num_graphs)]
     for i, g in enumerate(g_list):
         for term in range(len(g.scalar.phasenodevars)):
             bitstr = [0] * n_params
@@ -80,20 +80,20 @@ def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScala
     max_a = int(a_num_terms.max()) if a_num_terms.size else 0
     a_const_phases = np.zeros((num_graphs, max_a), dtype=np.uint8)
     a_param_bits = np.zeros((num_graphs, max_a, n_params), dtype=np.uint8)
-    for i, terms in enumerate(a_terms):
-        for j, (p, b) in enumerate(terms):
+    for i, a_terms_list in enumerate(a_terms):
+        for j, (p, b) in enumerate(a_terms_list):
             a_const_phases[i, j], a_param_bits[i, j] = p, b
 
     # Type B
-    b_terms = [[] for _ in range(num_graphs)]
+    b_terms: List[List[Tuple[int, List[int]]]] = [[] for _ in range(num_graphs)]
     for i, g in enumerate(g_list):
-        bitstr_to_j = defaultdict(int)
+        bitstr_to_j: Dict[Tuple[int, ...], int] = defaultdict(int)
         for j in [1, 3]:
             if j not in g.scalar.phasevars_halfpi:
                 continue
             for term in g.scalar.phasevars_halfpi[j]:
                 bitstr = [0] * n_params
-                for v in term:
+                for v in cast(Sequence[str], term):
                     bitstr[char_to_idx[v]] = 1
                 bitstr_to_j[tuple(bitstr)] = (bitstr_to_j[tuple(bitstr)] + j) % 4
         for b_key, val in bitstr_to_j.items():
@@ -102,12 +102,12 @@ def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScala
     max_b = max((len(t) for t in b_terms), default=0)
     b_term_types = np.zeros((num_graphs, max_b), dtype=np.uint8)
     b_param_bits = np.zeros((num_graphs, max_b, n_params), dtype=np.uint8)
-    for i, terms in enumerate(b_terms):
-        for j, (p, b) in enumerate(terms):
+    for i, b_terms_list in enumerate(b_terms):
+        for j, (p, b) in enumerate(b_terms_list):
             b_term_types[i, j], b_param_bits[i, j] = p, b
 
     # Type C
-    c_terms = [[] for _ in range(num_graphs)]
+    c_terms: List[List[Tuple[Any, ...]]] = [[] for _ in range(num_graphs)]
     for i, g in enumerate(g_list):
         for p_set in g.scalar.phasevars_pi_pair:
             c_bits = []
@@ -115,17 +115,17 @@ def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScala
                 c_bits.append(1 if "1" in ps else 0)
                 p_bits = [0] * n_params
                 for p in ps:
-                    if p != "1":
-                        p_bits[char_to_idx[p]] = 1
-                c_bits.append(p_bits)
+                    if str(p) != "1":
+                        p_bits[char_to_idx[str(p)]] = 1
+                c_bits.append(cast(int, p_bits))  # type: ignore
             c_terms[i].append(tuple(c_bits))
     max_c = max((len(t) for t in c_terms), default=0)
     c_const_bits_a = np.zeros((num_graphs, max_c), dtype=np.uint8)
     c_param_bits_a = np.zeros((num_graphs, max_c, n_params), dtype=np.uint8)
     c_const_bits_b = np.zeros((num_graphs, max_c), dtype=np.uint8)
     c_param_bits_b = np.zeros((num_graphs, max_c, n_params), dtype=np.uint8)
-    for i, terms in enumerate(c_terms):
-        for j, (ca, pa, cb, pb) in enumerate(terms):
+    for i, c_terms_list in enumerate(c_terms):
+        for j, (ca, pa, cb, pb) in enumerate(c_terms_list):
             (
                 c_const_bits_a[i, j],
                 c_param_bits_a[i, j],
@@ -134,7 +134,9 @@ def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScala
             ) = (ca, pa, cb, pb)
 
     # Type D
-    d_terms = [[] for _ in range(num_graphs)]
+    d_terms: List[List[Tuple[int, int, List[int], List[int]]]] = [
+        [] for _ in range(num_graphs)
+    ]
     for i, g in enumerate(g_list):
         for pp in g.scalar.phasepairs:
             pa, pb = [0] * n_params, [0] * n_params
@@ -149,8 +151,8 @@ def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScala
     d_const_beta = np.zeros((num_graphs, max_d), dtype=np.uint8)
     d_param_bits_a = np.zeros((num_graphs, max_d, n_params), dtype=np.uint8)
     d_param_bits_b = np.zeros((num_graphs, max_d, n_params), dtype=np.uint8)
-    for i, terms in enumerate(d_terms):
-        for j, (ca, cb, pa, pb) in enumerate(terms):
+    for i, d_terms_list in enumerate(d_terms):
+        for j, (ca, cb, pa, pb) in enumerate(d_terms_list):
             (
                 d_const_alpha[i, j],
                 d_const_beta[i, j],

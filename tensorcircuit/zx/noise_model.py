@@ -471,7 +471,7 @@ class ChannelSampler:
 
     @property
     def num_f_params(self) -> int:
-        return self.signature_matrix.shape[1]
+        return int(self.signature_matrix.shape[1])
 
     @staticmethod
     def _precompute_sparse(

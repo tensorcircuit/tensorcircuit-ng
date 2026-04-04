@@ -37,7 +37,7 @@ def is_pauli(matrix: np.ndarray) -> Optional[str]:
     :rtype: Optional[str]
     """
     for name, gate in zip(
-        ["i", "x", "y", "z"], [tcgates.i(), tcgates.x(), tcgates.y(), tcgates.z()]
+        ["i", "x", "y", "z"], [tcgates.i(), tcgates.x(), tcgates.y(), tcgates.z()]  # type: ignore
     ):
         if np.allclose(matrix, gate.tensor, atol=1e-5):
             return name
@@ -104,10 +104,10 @@ class GraphRepresentation:
         return self.graph.edge_set()
 
     def num_vertices(self) -> int:
-        return self.graph.num_vertices()
+        return self.graph.num_vertices()  # type: ignore[no-any-return]
 
     def num_edges(self) -> int:
-        return self.graph.num_edges()
+        return self.graph.num_edges()  # type: ignore[no-any-return]
 
     def incident_edges(self, v: Any) -> Any:
         return self.graph.incident_edges(v)
@@ -135,10 +135,10 @@ class GraphRepresentation:
         return self.graph.row(v)
 
     def is_ground(self, v: Any) -> bool:
-        return self.graph.is_ground(v)
+        return self.graph.is_ground(v)  # type: ignore[no-any-return]
 
     def vertex_degree(self, v: Any) -> int:
-        return self.graph.vertex_degree(v)
+        return self.graph.vertex_degree(v)  # type: ignore[no-any-return]
 
     def remove_isolated_vertices(self) -> None:
         for v in list(self.graph.vertices()):
@@ -214,7 +214,7 @@ class GraphRepresentation:
         self.graph.set_auto_simplify(v)
 
     def is_multigraph(self) -> bool:
-        return self.graph.is_multigraph()
+        return self.graph.is_multigraph()  # type: ignore
 
     def edge(self, v1: Any, v2: Any) -> Any:
         return self.graph.edge(v1, v2)
@@ -230,7 +230,8 @@ class GraphRepresentation:
 
     def copy(self) -> GraphRepresentation:
         new_b = replace(self)
-        new_b.graph = self.graph.copy()
+        assert isinstance(new_b, GraphRepresentation)
+        new_b.graph = cast(GraphS, self.graph.copy())
         new_b.rec = list(self.rec)
         new_b.silent_rec = list(self.silent_rec)
         new_b.detectors = list(self.detectors)
@@ -283,10 +284,10 @@ class GraphRepresentation:
 
 
 def last_row(b: GraphRepresentation, qubit: int) -> float:
-    return b.graph.row(b.last_vertex[qubit])
+    return float(b.graph.row(b.last_vertex[qubit]))  # type: ignore[no-any-return]
 
 
-def last_edge(b: GraphRepresentation, qubit: int):
+def last_edge(b: GraphRepresentation, qubit: int) -> Any:
     return list(b.graph.incident_edges(b.last_vertex[qubit]))[0]
 
 
@@ -639,61 +640,72 @@ def ry(b: GraphRepresentation, qubit: int) -> None:
     h_yz(b, qubit)
 
 
-GATE_TABLE: Dict[str, tuple[Callable[..., None], int]] = {
+def _swap(b: GraphRepresentation, q1: int, q2: int) -> None:
+    ensure_lane(b, q1)
+    ensure_lane(b, q2)
+    b.last_vertex = {**b.last_vertex, q1: b.last_vertex[q2], q2: b.last_vertex[q1]}
+
+
+def _y_gate(b: GraphRepresentation, q: int) -> None:
+    z_phase(b, q, Fraction(1, 1))
+    x_phase(b, q, Fraction(1, 1))
+    b.graph.scalar.add_phase(Fraction(1, 2))
+
+
+def _h_xy(b: GraphRepresentation, q: int) -> None:
+    z_phase(b, q, Fraction(1, 1))
+    x_phase(b, q, Fraction(1, 1))
+    z_phase(b, q, Fraction(1, 2))
+    b.graph.scalar.add_phase(Fraction(-1, 4))
+
+
+def _s_gate(b: GraphRepresentation, q: int) -> None:
+    z_phase(b, q, Fraction(1, 2))
+
+
+def _s_dag_gate(b: GraphRepresentation, q: int) -> None:
+    z_phase(b, q, Fraction(-1, 2))
+
+
+def _t_gate(b: GraphRepresentation, q: int) -> None:
+    z_phase(b, q, Fraction(1, 4))
+
+
+def _t_dag_gate(b: GraphRepresentation, q: int) -> None:
+    z_phase(b, q, Fraction(-1, 4))
+
+
+def _sqrt_z_gate(b: GraphRepresentation, q: int) -> None:
+    z_phase(b, q, Fraction(1, 2))
+
+
+GATE_TABLE: Dict[str, tuple[Callable[..., Any], int]] = {
     # ---- Pauli gates -----------------------------------------------------------
     "I": (lambda b, q: None, 1),
     "X": (lambda b, q: x_phase(b, q, Fraction(1, 1)), 1),
-    "Y": (
-        lambda b, q: (
-            z_phase(b, q, Fraction(1, 1)),
-            x_phase(b, q, Fraction(1, 1)),
-            b.graph.scalar.add_phase(Fraction(1, 2)),
-        ),
-        1,
-    ),
+    "Y": (_y_gate, 1),
     "Z": (lambda b, q: z_phase(b, q, Fraction(1, 1)), 1),
     # ---- Non-Clifford gates ---------------------------------------------------
-    "S": (lambda b, q: z_phase(b, q, Fraction(1, 2)), 1),
-    "SD": (lambda b, q: z_phase(b, q, Fraction(-1, 2)), 1),
-    "S_DAG": (lambda b, q: z_phase(b, q, Fraction(-1, 2)), 1),
-    "T": (lambda b, q: z_phase(b, q, Fraction(1, 4)), 1),
-    "TD": (lambda b, q: z_phase(b, q, Fraction(-1, 4)), 1),
-    "T_DAG": (lambda b, q: z_phase(b, q, Fraction(-1, 4)), 1),
+    "S": (_s_gate, 1),
+    "SD": (_s_dag_gate, 1),
+    "S_DAG": (_s_dag_gate, 1),
+    "T": (_t_gate, 1),
+    "TD": (_t_dag_gate, 1),
+    "T_DAG": (_t_dag_gate, 1),
     "SQRT_X": (sqrt_x, 1),
     "SQRT_X_DAG": (sqrt_x_dag, 1),
     "SQRT_Y": (sqrt_y, 1),
     "SQRT_Y_DAG": (sqrt_y_dag, 1),
     "H": (h_gate, 1),
-    "H_XY": (
-        lambda b, q: (
-            z_phase(b, q, Fraction(1, 1)),
-            x_phase(b, q, Fraction(1, 1)),
-            z_phase(b, q, Fraction(1, 2)),
-            b.graph.scalar.add_phase(Fraction(-1, 4)),
-        ),
-        1,
-    ),
-    "SQRT_Z": (lambda b, q: z_phase(b, q, Fraction(1, 2)), 1),
+    "H_XY": (_h_xy, 1),
+    "SQRT_Z": (_sqrt_z_gate, 1),
     "H_YZ": (h_yz, 1),
     "H_XZ": (h_gate, 1),
-    "S": (lambda b, q: z_phase(b, q, Fraction(1, 2)), 1),
-    "S_DAG": (lambda b, q: z_phase(b, q, Fraction(-1, 2)), 1),
     # ---- Two-qubit gates ------------------------------------------------------
     "CNOT": (lambda b, c, t: _cx_cz(b, True, c, t), 2),
     "CX": (lambda b, c, t: _cx_cz(b, True, c, t), 2),
     "CZ": (lambda b, c, t: _cx_cz(b, False, c, t), 2),
-    "SWAP": (
-        lambda b, q1, q2: (
-            ensure_lane(b, q1),
-            ensure_lane(b, q2),
-            setattr(
-                b,
-                "last_vertex",
-                {**b.last_vertex, q1: b.last_vertex[q2], q2: b.last_vertex[q1]},
-            ),
-        ),
-        2,
-    ),
+    "SWAP": (_swap, 2),
     # ---- Collapsing gates -----------------------------------------------------
     "M": (m, 1),
     "R": (r, 1),
@@ -931,7 +943,7 @@ def build_sampling_graph(built: GraphRepresentation, sample_detectors: bool) -> 
             outputs.append(vb)
 
     g.set_outputs(tuple(outputs))
-    return g
+    return cast(GraphS, g)
 
 
 def transform_error_basis(g: Any, num_e: int | None = None) -> tuple[Any, Any]:

@@ -3,7 +3,7 @@ Evaluation of compiled scalar graphs using exact arithmetic.
 """
 
 import functools
-from typing import Literal, overload, Any, NamedTuple
+from typing import Literal, overload, Any, NamedTuple, Tuple, cast
 
 import jax
 import jax.numpy as jnp
@@ -61,20 +61,20 @@ class ExactScalarArray(NamedTuple):
             power = jnp.zeros(coeffs.shape[:-1], dtype=idtypestr)
         return cls(coeffs, power)
 
-    def __mul__(self, other: "ExactScalarArray") -> "ExactScalarArray":
+    def __mul__(self, other: "ExactScalarArray") -> "ExactScalarArray":  # type: ignore[override]
         new_coeffs = _scalar_mul(self.coeffs, other.coeffs)
         new_power = self.power + other.power
         return ExactScalarArray(new_coeffs, new_power)
 
     def reduce(self) -> "ExactScalarArray":
-        def cond_fun(carry):
+        def cond_fun(carry: Tuple[Array, Array]) -> Any:
             coeffs, _ = carry
             reducible = jnp.all(coeffs % 2 == 0, axis=-1) & jnp.any(
                 coeffs != 0, axis=-1
             )
             return jnp.any(reducible)
 
-        def body_fun(carry):
+        def body_fun(carry: Tuple[Array, Array]) -> Tuple[Array, Array]:
             coeffs, power = carry
             reducible = jnp.all(coeffs % 2 == 0, axis=-1) & jnp.any(
                 coeffs != 0, axis=-1
@@ -145,11 +145,11 @@ _UNIT_PHASES_BASE = jnp.array(
         [0, 0, -1, 0],  # omega^6 = -i
         [0, 0, 0, 1],  # omega^7
     ],
-    dtype=jnp.int64,  # Use int64 for the base to avoid any truncation
+    dtype=idtypestr,  # Use idtypestr to stay consistent with precision settings
 )
 
 
-def _get_lookup_tables():
+def _get_lookup_tables() -> Tuple[Array, Array, Array]:
     unit_phases = _UNIT_PHASES_BASE.astype(idtypestr)
     one_plus_phases = unit_phases.at[:, 0].add(1)
     identity = jnp.array([1, 0, 0, 0], dtype=idtypestr)
@@ -259,14 +259,14 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
         [summands_a, summands_b, summands_c, summands_d, static_phases, float_factor],
     )
 
-    def res_exact():
+    def res_exact() -> Array:
         ts = ExactScalarArray(
             total_summands.coeffs, total_summands.power + circuit.power2
         )
         ts = ts.reduce()
         return ts.sum().to_complex()
 
-    def res_approx():
+    def res_approx() -> Array:
         return jnp.sum(
             total_summands.to_complex()
             * circuit.approximate_floatfactors
@@ -274,4 +274,6 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
             axis=-1,
         )
 
-    return lax.cond(circuit.has_approximate_floatfactors, res_approx, res_exact)
+    return cast(
+        Array, lax.cond(circuit.has_approximate_floatfactors, res_approx, res_exact)
+    )
