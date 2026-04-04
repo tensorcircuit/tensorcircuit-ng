@@ -334,6 +334,23 @@ def z_phase(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
     b.last_vertex[qubit] = v2
 
 
+def x_gate(b: GraphRepresentation, qubit: int) -> None:
+    """Apply Pauli X gate."""
+    x_phase(b, qubit, Fraction(1, 1))
+
+
+def y_gate(b: GraphRepresentation, qubit: int) -> None:
+    """Apply Pauli Y gate."""
+    z_gate(b, qubit)
+    x_gate(b, qubit)
+    b.graph.scalar.add_phase(Fraction(1, 2))
+
+
+def z_gate(b: GraphRepresentation, qubit: int) -> None:
+    """Apply Pauli Z gate."""
+    z_phase(b, qubit, Fraction(1, 1))
+
+
 def h_gate(b: GraphRepresentation, qubit: int) -> None:
     ensure_lane(b, qubit)
     e = last_edge(b, qubit)
@@ -347,9 +364,17 @@ def h_gate(b: GraphRepresentation, qubit: int) -> None:
     )
 
 
+def h_xy(b: GraphRepresentation, qubit: int) -> None:
+    """Apply variant of Hadamard gate that swaps the X and Y axes (instead of X and Z)."""
+    x_gate(b, qubit)
+    _s_gate(b, qubit)
+    b.graph.scalar.add_phase(Fraction(-1, 4))
+
+
 def h_yz(b: GraphRepresentation, qubit: int) -> None:
+    """Apply variant of Hadamard gate that swaps the Y and Z axes (instead of X and Z)."""
     sqrt_x(b, qubit)
-    z_phase(b, qubit, Fraction(1, 1))
+    z_gate(b, qubit)
     b.graph.scalar.add_phase(Fraction(-1, 4))
 
 
@@ -362,54 +387,96 @@ def sqrt_x_dag(b: GraphRepresentation, qubit: int) -> None:
 
 
 def sqrt_y(b: GraphRepresentation, qubit: int) -> None:
-    y_phase(b, qubit, Fraction(1, 2))
+    z_gate(b, qubit)
+    h_gate(b, qubit)
+    b.graph.scalar.add_phase(Fraction(1, 4))
 
 
 def sqrt_y_dag(b: GraphRepresentation, qubit: int) -> None:
-    y_phase(b, qubit, Fraction(-1, 2))
+    h_gate(b, qubit)
+    z_gate(b, qubit)
+    b.graph.scalar.add_phase(Fraction(-1, 4))
+
+
+def sqrt_z(b: GraphRepresentation, qubit: int) -> None:
+    _s_gate(b, qubit)
+
+
+def sqrt_z_dag(b: GraphRepresentation, qubit: int) -> None:
+    _s_dag_gate(b, qubit)
 
 
 def y_phase(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
-    sqrt_x_dag(b, qubit)
+    h_yz(b, qubit)
     z_phase(b, qubit, phase)
-    sqrt_x(b, qubit)
+    h_yz(b, qubit)
+
+
+def r_z(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
+    """Apply R_Z rotation gate with given phase (in units of π)."""
+    z_phase(b, qubit, phase)
+    b.graph.scalar.add_phase(-phase / 2)
+
+
+def r_x(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
+    """Apply R_X rotation gate with given phase (in units of π)."""
+    x_phase(b, qubit, phase)
+    b.graph.scalar.add_phase(-phase / 2)
+
+
+def r_y(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
+    """Apply R_Y rotation gate with given phase (in units of π)."""
+    h_yz(b, qubit)
+    r_z(b, qubit, phase)
+    h_yz(b, qubit)
+
+
+def u3(
+    b: GraphRepresentation,
+    qubit: int,
+    theta: Fraction,
+    phi: Fraction,
+    lambda_: Fraction,
+) -> None:
+    """Apply U3 gate: U3(θ,φ,λ) = R_Z(φ)·R_Y(θ)·R_Z(λ)."""
+    r_z(b, qubit, lambda_)
+    r_y(b, qubit, theta)
+    r_z(b, qubit, phi)
+    b.graph.scalar.add_phase((phi + lambda_) / 2)
 
 
 def _cx_cz(b: GraphRepresentation, is_cx: bool, control: int, target: int) -> None:
     ensure_lane(b, control)
     ensure_lane(b, target)
     v1 = b.last_vertex[control]
+    v3 = b.last_vertex[target]
+
+    row = max(b.graph.row(v1), b.graph.row(v3))
+
+    b.graph.set_row(v1, row)
+    b.graph.set_row(v3, row)
+
     # CX: Z on control, X on target, SIMPLE edge
     # CZ: Z on control, Z on target, HADAMARD edge
     if is_cx:
         b.graph.set_type(v1, VertexType.Z)
-        v2 = b.graph.add_vertex(
-            VertexType.BOUNDARY, qubit=control, row=b.graph.row(v1) + 1
-        )
+        v2 = b.graph.add_vertex(VertexType.BOUNDARY, qubit=control, row=row + 1)
         b.graph.add_edge((v1, v2), EdgeType.SIMPLE)
         b.last_vertex[control] = v2
 
-        v3 = b.last_vertex[target]
         b.graph.set_type(v3, VertexType.X)
-        v4 = b.graph.add_vertex(
-            VertexType.BOUNDARY, qubit=target, row=b.graph.row(v3) + 1
-        )
+        v4 = b.graph.add_vertex(VertexType.BOUNDARY, qubit=target, row=row + 1)
         b.graph.add_edge((v3, v4), EdgeType.SIMPLE)
         b.last_vertex[target] = v4
         b.graph.add_edge((v1, v3), EdgeType.SIMPLE)
     else:
         b.graph.set_type(v1, VertexType.Z)
-        v2 = b.graph.add_vertex(
-            VertexType.BOUNDARY, qubit=control, row=b.graph.row(v1) + 1
-        )
+        v2 = b.graph.add_vertex(VertexType.BOUNDARY, qubit=control, row=row + 1)
         b.graph.add_edge((v1, v2), EdgeType.SIMPLE)
         b.last_vertex[control] = v2
 
-        v3 = b.last_vertex[target]
         b.graph.set_type(v3, VertexType.Z)
-        v4 = b.graph.add_vertex(
-            VertexType.BOUNDARY, qubit=target, row=b.graph.row(v3) + 1
-        )
+        v4 = b.graph.add_vertex(VertexType.BOUNDARY, qubit=target, row=row + 1)
         b.graph.add_edge((v3, v4), EdgeType.SIMPLE)
         b.last_vertex[target] = v4
         b.graph.add_edge((v1, v3), EdgeType.HADAMARD)
@@ -673,12 +740,21 @@ def _sqrt_z_gate(b: GraphRepresentation, q: int) -> None:
     z_phase(b, q, Fraction(1, 2))
 
 
+# NOTE on Gate Naming Convention:
+# -----------------------------
+# We distinguish between demolition measurements (resets) and parametric rotations:
+# - RX, RY, RZ (no underscore): Demolition measurements (resets) in X, Y, Z bases.
+# - R_X, R_Y, R_Z (with underscore): Parametric rotation gates with 'theta' parameter.
+# This convention aligns with the 'tsim' reference implementation and prevents
+# ambiguity in the dispatch logic within circuit_to_zx.
+
+
 GATE_TABLE: Dict[str, tuple[Callable[..., Any], int]] = {
     # ---- Pauli gates -----------------------------------------------------------
     "I": (lambda b, q: None, 1),
-    "X": (lambda b, q: x_phase(b, q, Fraction(1, 1)), 1),
-    "Y": (_y_gate, 1),
-    "Z": (lambda b, q: z_phase(b, q, Fraction(1, 1)), 1),
+    "X": (x_gate, 1),
+    "Y": (y_gate, 1),
+    "Z": (z_gate, 1),
     # ---- Non-Clifford gates ---------------------------------------------------
     "S": (_s_gate, 1),
     "SD": (_s_dag_gate, 1),
@@ -695,6 +771,10 @@ GATE_TABLE: Dict[str, tuple[Callable[..., Any], int]] = {
     "SQRT_Z": (_sqrt_z_gate, 1),
     "H_YZ": (h_yz, 1),
     "H_XZ": (h_gate, 1),
+    "R_Z": (r_z, 1),
+    "R_X": (r_x, 1),
+    "R_Y": (r_y, 1),
+    "U3": (u3, 1),
     # ---- Two-qubit gates ------------------------------------------------------
     "CNOT": (lambda b, c, t: _cx_cz(b, True, c, t), 2),
     "CX": (lambda b, c, t: _cx_cz(b, True, c, t), 2),
@@ -802,24 +882,44 @@ def circuit_to_zx(
         elif name in ["QUBIT_COORDS", "SHIFT_COORDS", "TICK"]:
             continue
         elif name in GATE_TABLE:
-            func, _ = GATE_TABLE[name]
-            if name in [
-                "M",
-                "R",
-                "MEASURE",
-                "RESET",
-                "MR",
-                "MRX",
-                "MRY",
-                "MRZ",
-                "MX",
-                "MY",
-                "MZ",
-            ]:
-                for q in index:
-                    func(b, q, p=p)
-            else:
-                func(b, *index)
+            func, num_qubits = GATE_TABLE[name]
+            if name in ["R_X", "R_Y", "R_Z"]:
+                theta = params.get("theta", params.get("phi", params.get("phase", 0.0)))
+                if isinstance(theta, (float, int)):
+                    theta = Fraction(theta) / np.pi
+            elif name == "U3":
+                theta = params.get("theta", 0.0)
+                phi = params.get("phi", 0.0)
+                lam = params.get("lambda", params.get("lam", 0.0))
+                if isinstance(theta, (float, int)):
+                    theta = Fraction(theta) / np.pi
+                if isinstance(phi, (float, int)):
+                    phi = Fraction(phi) / np.pi
+                if isinstance(lam, (float, int)):
+                    lam = Fraction(lam) / np.pi
+
+            for i_target in range(0, len(index), num_qubits):
+                chunk = index[i_target : i_target + num_qubits]
+                if name in [
+                    "M",
+                    "R",
+                    "MEASURE",
+                    "RESET",
+                    "MR",
+                    "MRX",
+                    "MRY",
+                    "MRZ",
+                    "MX",
+                    "MY",
+                    "MZ",
+                ]:
+                    func(b, *chunk, p=p)
+                elif name in ["R_X", "R_Y", "R_Z"]:
+                    func(b, *chunk, theta)
+                elif name == "U3":
+                    func(b, *chunk, theta, phi, lam)
+                else:
+                    func(b, *chunk)
         elif name == "":
             continue
         else:

@@ -5,6 +5,7 @@ Stabilizer+T Circuit class using ZX-calculus and JAX.
 from __future__ import annotations
 from math import ceil
 from typing import Any, Dict, List, Optional, Tuple, Union
+import re
 
 import jax
 import jax.numpy as jnp
@@ -14,9 +15,22 @@ from pyzx_param.simulate import DecompositionStrategy
 from ..cons import rdtypestr
 
 from .evaluator import evaluate
-from .scalar_graph import compile_program, CompiledProgram, CompiledComponent
-from .converter import prepare_graph, circuit_to_zx, build_sampling_graph
+from .scalar_graph import (
+    compile_program,
+    CompiledProgram,
+    CompiledComponent,
+    find_stab,
+    compile_scalar_graphs,
+)
+from .converter import (
+    prepare_graph,
+    circuit_to_zx,
+    build_sampling_graph,
+    transform_error_basis,
+    GATE_TABLE,
+)
 from .noise_model import ChannelSampler
+from .utils import get_params
 from ..abstractcircuit import AbstractCircuit
 
 
@@ -315,19 +329,13 @@ class StabilizerTCircuit(AbstractCircuit):
 
         # Compile them
         # find_stab expects GraphS
-        from .scalar_graph import find_stab, compile_scalar_graphs
-
         stabs_state = find_stab(g_state, strategy=self.strategy)
         stabs_norm = find_stab(g_norm, strategy=self.strategy)
 
         # Transform error basis to get f-params
-        from .converter import transform_error_basis
-
         prepared, error_transform = transform_error_basis(
             prepared, num_e=built.num_error_bits
         )
-
-        from .utils import get_params
 
         active = get_params(prepared)  # Use transformed graph's vars
         f_vars = sorted([v for v in active if v.startswith("f")])
@@ -393,7 +401,7 @@ class StabilizerTCircuit(AbstractCircuit):
             )
 
     def __getattr__(self, name: str) -> Any:
-        if name in self.defined_gates:
+        if name.upper() in GATE_TABLE:
 
             def wrapper(*index: int, **kwargs: Any) -> None:
                 self._qir.append(
@@ -486,6 +494,15 @@ class StabilizerTCircuit(AbstractCircuit):
     def mrz_instruction(self, q: int, p: float = 0) -> None:
         self._qir.append({"name": "MRZ", "index": [q], "p": p})
 
+    def rx(self, q: int, theta: float = 0) -> None:
+        self._qir.append({"name": "R_X", "index": [q], "parameters": {"theta": theta}})
+
+    def ry(self, q: int, theta: float = 0) -> None:
+        self._qir.append({"name": "R_Y", "index": [q], "parameters": {"theta": theta}})
+
+    def rz(self, q: int, theta: float = 0) -> None:
+        self._qir.append({"name": "R_Z", "index": [q], "parameters": {"theta": theta}})
+
     def depolarizing(self, q: int, p: float) -> None:
         self._qir.append({"name": "DEPOLARIZE1", "index": [q], "parameters": {"p": p}})
 
@@ -544,6 +561,22 @@ class StabilizerTCircuit(AbstractCircuit):
 
             targets = [t.value for t in instruction.targets_copy()]
             args = instruction.gate_args_copy()
+
+            if name == "I" and instruction.tag:
+                match = re.match(r"^(\w+)\((.*)\)$", instruction.tag)
+                if match:
+                    gate_name, params_str = match.groups()
+                    params = {}
+                    for param in params_str.split(","):
+                        if "=" in param:
+                            k, v = param.strip().split("=")
+                            params[k] = (
+                                float(v[:-3]) * np.pi if v.endswith("*pi") else float(v)
+                            )
+                    inst._qir.append(
+                        {"name": gate_name, "index": targets, "parameters": params}
+                    )
+                    continue
 
             if name == "TICK":
                 inst._qir.append({"name": "TICK"})

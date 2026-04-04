@@ -15,6 +15,7 @@ from pyzx_param.graph.scalar import DyadicNumber
 from pyzx_param.simulate import DecompositionStrategy
 
 from ..cons import dtypestr, idtypestr
+from .utils import get_params, connected_components
 
 
 class CompiledScalarGraphs(NamedTuple):
@@ -159,8 +160,16 @@ def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScala
 
     # Static Data
     for g in g_list:
-        if g.scalar.phase.denominator not in [1, 2, 4]:
-            g.scalar.approximate_floatfactor *= np.exp(1j * g.scalar.phase * np.pi)
+        if not isinstance(
+            g.scalar.phase, Fraction
+        ) or g.scalar.phase.denominator not in [
+            1,
+            2,
+            4,
+        ]:
+            g.scalar.approximate_floatfactor *= np.exp(
+                1j * float(g.scalar.phase) * np.pi
+            )
             g.scalar.phase = Fraction(0, 1)
 
     exact_floatfactor, power2 = [], []
@@ -272,8 +281,6 @@ def find_stab(graph: Any, strategy: DecompositionStrategy) -> List[Any]:
 
 
 def _get_f_indices(graph: Any) -> list[int]:
-    from .utils import get_params
-
     all_params = get_params(graph)
     return sorted([int(p[1:]) for p in all_params if p.startswith("f")])
 
@@ -385,8 +392,6 @@ def compile_program(
     :return: The compiled program metadata.
     :rtype: CompiledProgram
     """
-    from .utils import connected_components
-
     components = connected_components(prepared.graph)
 
     f_indices_global = _get_f_indices(prepared.graph)
