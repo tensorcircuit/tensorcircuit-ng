@@ -20,3 +20,15 @@ TensorCircuit values **clarity**, **predictability**, and **directness** in its 
 - **Direct Feedback**: If an operation is invalid (e.g., mismatched gate dimensions), raise an error immediately. 
 - **Transparent Backends**: Because TensorCircuit is multi-backend, some errors may propagate differently. Structure code so that backend-specific errors (e.g., JAX tracer errors) are exposed clearly to the user, aiding in debugging JIT/AD issues.
 - **Locate and Fix**: The goal is to make the root cause obvious. Masking errors with defaults or silent failures leads to "Heisenbugs" that are much harder to resolve later.
+
+## 4. Static Analysis and Mypy Fix Principles
+
+When resolving type-checking errors in the codebase, adhere to these principles:
+
+- **Minimal Change Strategy**: Prioritize the smallest possible code change that satisfies the type checker.
+- **Preserve Implementation Logic**: Never alter the functional behavior or physics code to satisfy a type hint unless the error reveals a genuine bug.
+- **Pragmatic Type Suppression**: 
+  - If a type issue is minor or "not a big deal" (e.g., complex JAX tracer interactions, third-party library gaps), use `# type: ignore[error-code]`.
+  - For complex union types or return values where strict typing is impractical, use `Any`.
+- **Incompatible Overrides**: When a subclass method must have a different signature than the base class (e.g., specialized simulation parameters), use `# type: ignore[override]` rather than polluting the base class with unused arguments.
+- **Variable Name Conflicts**: Avoid reusing the same variable name for different types within the same scope, as this often confuses static analysis even if valid in Python.

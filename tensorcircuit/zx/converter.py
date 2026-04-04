@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
-from typing import Any, Dict, List, Optional, cast, Callable
+from typing import Any, Dict, List, Optional, cast, Callable, Sequence
 
 import numpy as np
 import pyzx_param as pyzx

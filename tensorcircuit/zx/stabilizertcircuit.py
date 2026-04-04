@@ -322,6 +322,7 @@ class StabilizerTCircuit(AbstractCircuit):
                 prepared.channel_probs, prepared.error_transform, seed=self._seed
             )
 
+        assert self._channel_sampler_probs is not None
         f_samples = jnp.asarray(self._channel_sampler_probs.sample(shots))
         p_norm = jnp.ones(shots)
         p_joint = jnp.ones(shots)
@@ -360,16 +361,16 @@ class StabilizerTCircuit(AbstractCircuit):
         if built.num_error_bits > 0:
             raise ValueError("amplitude() only supported for noiseless circuits.")
 
-        graph = build_amplitude_graph(built, state)
+        graph = build_amplitude_graph(built, state)  # type: ignore[arg-type]
         pyzx.full_reduce(graph, paramSafe=True)
         graphs = find_stab(graph, strategy=self.strategy)
         compiled = compile_scalar_graphs(graphs, [])
         dummy_f = jnp.zeros((1, 0), dtype=jnp.bool_)
         amp = evaluate(compiled, dummy_f)
         # Divide by sqrt(2)^n due to ZX boundary conventions
-        return amp[0] / (2.0 ** (self._nqubits / 2.0))
+        return amp[0] / (2.0 ** (self._nqubits / 2.0))  # type: ignore[no-any-return]
 
-    def expectation_ps(
+    def expectation_ps(  # type: ignore[override]
         self,
         x: Optional[Sequence[int]] = None,
         y: Optional[Sequence[int]] = None,
@@ -435,7 +436,7 @@ class StabilizerTCircuit(AbstractCircuit):
         if prepared.num_error_bits == 0:
             vals = evaluate(compiled, jnp.zeros((1, 0), dtype=jnp.bool_))
             # Divide by 2^n due to ZX doubled boundary conventions
-            return vals[0] / (2.0**self._nqubits)
+            return vals[0] / (2.0**self._nqubits)  # type: ignore[no-any-return]
 
         if nmc <= 0:
             raise ValueError("nmc must be positive for noisy expectation_ps().")
@@ -466,9 +467,9 @@ class StabilizerTCircuit(AbstractCircuit):
             else np.zeros((nmc, 0), dtype=np.uint8)
         )
         param_cols: list[np.ndarray] = []
-        for p in param_names:
-            idx = int(p[1:])
-            if p.startswith("e"):
+        for pname in param_names:
+            idx = int(pname[1:])
+            if pname.startswith("e"):
                 param_cols.append(sampled_e[:, idx])
             else:
                 param_cols.append(sampled_f[:, idx])

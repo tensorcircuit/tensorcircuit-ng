@@ -6,9 +6,14 @@
     - **Required Variables**:
       - `NUMBA_CACHE_DIR=/tmp/numba_cache`: Prevents `PermissionError` when Numba (used by `quimb`, `scipy`) tries to write specialized kernels.
       - `MPLCONFIGDIR=/tmp/matplotlib_cache`: Prevents `PermissionError` when `matplotlib` attempts to write font caches or configuration.
+      - `mypy --cache-dir=/tmp/.mypy_cache`: Prevents `PermissionError` when `mypy` tries to write to the default `.mypy_cache` directory in the sandbox.
     - **Execution Template**:
       ```bash
+      # For Python scripts
       NUMBA_CACHE_DIR=/tmp/numba_cache MPLCONFIGDIR=/tmp/matplotlib_cache conda run -n <env> python3 <script.py>
+
+      # For Mypy checks
+      conda run -n <env> mypy --cache-dir=/tmp/.mypy_cache <path>
       ```
 
 2.  **Output Redirection and Paging**:
