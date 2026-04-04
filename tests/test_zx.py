@@ -788,3 +788,120 @@ def test_zx_high_precision(backend, highp):
     # Check that the result is indeed float64
     assert p0.dtype == jnp.float64
     np.testing.assert_allclose(p0, expected_p0, atol=1e-12)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_numerical_probability_sum(backend):
+    """Verify that sum of outcome probabilities equals 1.0."""
+    n = 2
+
+    # --- Part 1: Noiseless (Strict Identity) ---
+    stc_none = StabilizerTCircuit(n, seed=42)
+    stc_none.h(0)
+    stc_none.cnot(0, 1)
+    stc_none.t(1)
+    for i in range(n):
+        stc_none.measure_instruction(i)
+
+    total_p_none = 0.0
+    for i in range(2**n):
+        state = jnp.array([(i >> j) & 1 for j in range(n)])
+        # Noiseless case should be deterministic, shots=1 is sufficient
+        p = stc_none.outcome_probability(state, shots=1)
+        total_p_none += jnp.sum(p)
+
+    # Must be exactly 1.0 within float32 precision
+    np.testing.assert_allclose(total_p_none, 1.0, atol=1e-6)
+
+    # --- Part 2: Noisy (Statistical Consistency) ---
+    stc_noise = StabilizerTCircuit(n, seed=42)
+    stc_noise.h(0)
+    stc_noise.cnot(0, 1)
+    stc_noise.t(1)
+    stc_noise.depolarizing(0, 0.05)
+    stc_noise.x_error(1, 0.02)
+    for i in range(n):
+        stc_noise.measure_instruction(i)
+
+    total_p_noise = 0.0
+    shots = 4096  # Higher shots for better statistics
+    for i in range(2**n):
+        state = jnp.array([(i >> j) & 1 for j in range(n)])
+        p = stc_noise.outcome_probability(state, shots=shots)
+        total_p_noise += jnp.mean(p)
+
+    # Statistical sum should be 1.0 within 3-sigma (approx 0.02 for 4096 shots)
+    np.testing.assert_allclose(total_p_noise, 1.0, atol=0.03)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_autoregressive_consistency(backend):
+    """Check consistency between sample_measurements and outcome_probability."""
+    stc = StabilizerTCircuit(1)
+    stc.h(0)
+    stc.t(0)
+    stc.h(0)
+    stc.measure_instruction(0)
+
+    # 1. Frequency from sampler
+    shots = 20000
+    samples = stc.sample_measurements(shots=shots, seed=42)
+    freq1 = jnp.mean(samples)
+
+    # 2. Probability from API
+    prob1 = stc.outcome_probability(jnp.array([1]))
+
+    # Compare
+    stderr = jnp.sqrt(prob1 * (1 - prob1) / shots)
+    assert abs(freq1 - prob1) < 5 * stderr
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_stabilizer_rank_6(backend):
+    """Test a circuit with T-count=6 (decomposes to 7 stabilizer states in cat5)."""
+    n = 3
+    stc = StabilizerTCircuit(n)
+    for i in range(6):
+        stc.h(i % n)
+        stc.t(i % n)
+    stc.measure_instruction(0)
+    stc.measure_instruction(1)
+    stc.measure_instruction(2)
+
+    # Compare with exact amplitude from statevector
+    c = tc.Circuit(n)
+    for i in range(6):
+        c.h(i % n)
+        c.t(i % n)
+
+    state = jnp.array([1, 0, 1])
+    prob_zx = stc.outcome_probability(state)
+
+    amp = c.amplitude("101")
+    prob_exact = tc.backend.abs(amp) ** 2
+
+    np.testing.assert_allclose(prob_zx, prob_exact, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_exact_scalar_alignment(backend):
+    """Test complex circuit that triggers recursive reduction in ExactScalarArray."""
+    # A sequence of T gates and Hadamards can lead to large coefficients
+    # and deep power reductions.
+    n = 1
+    stc = StabilizerTCircuit(n)
+    for _ in range(12):
+        stc.h(0)
+        stc.t(0)
+    stc.measure_instruction(0)
+
+    p0 = stc.outcome_probability(jnp.array([0]))
+
+    # Exact statevector reference
+    c = tc.Circuit(n)
+    for _ in range(12):
+        c.h(0)
+        c.t(0)
+    p0_ref = tc.backend.abs(c.amplitude("0")) ** 2
+
+    np.testing.assert_allclose(p0, p0_ref, atol=1e-6)
