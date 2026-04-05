@@ -1,3 +1,7 @@
+"""
+15-to-1 distillation demonstrating stabilizertcircuit
+"""
+
 import time
 import numpy as np
 import jax.numpy as jnp
