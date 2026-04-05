@@ -235,7 +235,7 @@ def test_stabilizertcircuit_from_circuit_gatef():
 def test_stabilizertcircuit_expectation_noisy_f():
     # Trigger line 472: f-parameter handling in expectation_ps
     stc = StabilizerTCircuit(2)
-    stc.depolarizing(0, 0.1)
+    stc.depolarizing(0, px=0.1 / 3, py=0.1 / 3, pz=0.1 / 3)
     exp = stc.expectation_ps(z=[0], nmc=100)
     assert exp is not None
 
@@ -411,12 +411,17 @@ def test_stabilizertcircuit_one_liners():
     stc.rx(0, theta=0.1)
     stc.ry(0, theta=0.1)
     stc.rz(0, theta=0.1)
-    stc.depolarizing_instruction(0, 0.1)
+    stc.depolarizing_instruction(0, px=0.1 / 3, py=0.1 / 3, pz=0.1 / 3)
+    stc.depolarizing_instruction(0, 0.1)  # fallback test
     stc.depolarizing2_instruction(0, 1, 0.1)
     stc.pauli_instruction(0, px=0.1, py=0.1, pz=0.1)
-    stc.pauli(0, [0.7, 0.1, 0.1, 0.1])
+    stc.pauli_instruction(0, 0.1)  # fallback test
+    stc.pauli(0, 0.1)  # fallback test
     stc.y_error(0, 0.1)
     stc.z_error(0, 0.1)
+    stc.reset_x(0)
+    stc.reset_y(0)
+    stc.reset_z(0, p=0.1)
 
     class G:
         def __init__(self):

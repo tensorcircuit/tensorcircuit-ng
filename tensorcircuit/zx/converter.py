@@ -901,9 +901,9 @@ def my(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -
     h_yz(b, qubit)
 
 
-def r(b: GraphRepresentation, qubit: int, p: float = 0) -> None:
+def reset_z(b: GraphRepresentation, qubit: int, p: float = 0) -> None:
     """
-    Reset qubit to |0> state.
+    Reset qubit to |0> state (Z-basis reset).
 
     :param b: The graph representation.
     :type b: GraphRepresentation
@@ -917,7 +917,7 @@ def r(b: GraphRepresentation, qubit: int, p: float = 0) -> None:
     _r(b, qubit, perform_trace=True)
 
 
-def rx(b: GraphRepresentation, qubit: int) -> None:
+def reset_x(b: GraphRepresentation, qubit: int) -> None:
     """
     Reset qubit in X basis.
 
@@ -928,11 +928,11 @@ def rx(b: GraphRepresentation, qubit: int) -> None:
     """
     if qubit in b.last_vertex:
         h_gate(b, qubit)
-    r(b, qubit)
+    reset_z(b, qubit)
     h_gate(b, qubit)
 
 
-def ry(b: GraphRepresentation, qubit: int) -> None:
+def reset_y(b: GraphRepresentation, qubit: int) -> None:
     """
     Reset qubit in Y basis.
 
@@ -943,7 +943,7 @@ def ry(b: GraphRepresentation, qubit: int) -> None:
     """
     if qubit in b.last_vertex:
         h_yz(b, qubit)
-    r(b, qubit)
+    reset_z(b, qubit)
     h_yz(b, qubit)
 
 
@@ -990,9 +990,8 @@ def _sqrt_z_gate(b: GraphRepresentation, q: int) -> None:
 # -----------------------------
 # We distinguish between demolition measurements (resets) and parametric rotations:
 # - RX, RY, RZ (no underscore): Demolition measurements (resets) in X, Y, Z bases.
+#   These map to reset_x, reset_y, and reset_z internally.
 # - R_X, R_Y, R_Z (with underscore): Parametric rotation gates with 'theta' parameter.
-# This convention aligns with the 'tsim' reference implementation and prevents
-# ambiguity in the dispatch logic within circuit_to_zx.
 
 
 GATE_TABLE: Dict[str, tuple[Callable[..., Any], int]] = {
@@ -1028,9 +1027,12 @@ GATE_TABLE: Dict[str, tuple[Callable[..., Any], int]] = {
     "SWAP": (_swap, 2),
     # ---- Collapsing gates -----------------------------------------------------
     "M": (m, 1),
-    "R": (r, 1),
+    "R": (reset_z, 1),
     "MEASURE": (m, 1),
-    "RESET": (r, 1),
+    "RESET": (reset_z, 1),
+    "RESET_X": (reset_x, 1),
+    "RESET_Y": (reset_y, 1),
+    "RESET_Z": (reset_z, 1),
     "MR": (mr, 1),
     "MRX": (mrx, 1),
     "MRY": (mry, 1),
@@ -1038,9 +1040,9 @@ GATE_TABLE: Dict[str, tuple[Callable[..., Any], int]] = {
     "MX": (mx, 1),
     "MY": (my, 1),
     "MZ": (m, 1),
-    "RX": (rx, 1),
-    "RY": (ry, 1),
-    "RZ": (r, 1),
+    "RX": (reset_x, 1),
+    "RY": (reset_y, 1),
+    "RZ": (reset_z, 1),
 }
 
 

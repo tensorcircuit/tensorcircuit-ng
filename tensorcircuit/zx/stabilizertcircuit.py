@@ -588,11 +588,23 @@ class StabilizerTCircuit(AbstractCircuit):
     def qubit_coords_instruction(self, qubit: int, coords: list[float]) -> None:
         self._qir.append({"name": "QUBIT_COORDS", "index": [qubit], "coords": coords})
 
-    def tick_instruction(self) -> None:
-        self._qir.append({"name": "TICK"})
+    def reset_z(self, q: int, p: float = 0) -> None:
+        self._qir.append({"name": "RZ", "index": [q], "parameters": {"p": p}})
+
+    def reset_x(self, q: int) -> None:
+        self._qir.append({"name": "RX", "index": [q]})
+
+    def reset_y(self, q: int) -> None:
+        self._qir.append({"name": "RY", "index": [q]})
+
+    def r(self, q: int, p: float = 0) -> None:
+        self.reset_z(q, p)
 
     def reset_instruction(self, q: int) -> None:  # type: ignore[override]
-        self._qir.append({"name": "RESET", "index": [q]})
+        self.reset_z(q)
+
+    def tick_instruction(self) -> None:
+        self._qir.append({"name": "TICK"})
 
     def measure_instruction(self, q: int, p: float = 0) -> None:  # type: ignore[override]
         self._qir.append({"name": "MEASURE", "index": [q], "p": p})
@@ -618,23 +630,59 @@ class StabilizerTCircuit(AbstractCircuit):
     def rz(self, q: int, theta: float = 0) -> None:
         self._qir.append({"name": "R_Z", "index": [q], "parameters": {"theta": theta}})
 
-    def depolarizing(self, q: int, p: float) -> None:
-        self._qir.append({"name": "DEPOLARIZE1", "index": [q], "parameters": {"p": p}})
+    def depolarizing(
+        self,
+        q: int,
+        px: Optional[float] = None,
+        py: Optional[float] = None,
+        pz: Optional[float] = None,
+    ) -> None:
+        if py is None and pz is None:
+            p = px if px is not None else 0.0
+            px = py = pz = p / 3.0
+        else:
+            px = px if px is not None else 0.0
+            py = py if py is not None else 0.0
+            pz = pz if pz is not None else 0.0
+        self._qir.append(
+            {
+                "name": "DEPOLARIZE1",
+                "index": [q],
+                "parameters": {"px": px, "py": py, "pz": pz},
+            }
+        )
 
     def depolarizing2(self, q1: int, q2: int, p: float) -> None:
         self._qir.append(
             {"name": "DEPOLARIZE2", "index": [q1, q2], "parameters": {"p": p}}
         )
 
-    def depolarizing_instruction(self, q: int, p: float) -> None:  # type: ignore[override]
-        self.depolarizing(q, p)
+    def depolarizing_instruction(  # type: ignore[override]
+        self,
+        q: int,
+        px: Optional[float] = None,
+        py: Optional[float] = None,
+        pz: Optional[float] = None,
+    ) -> None:
+        self.depolarizing(q, px, py, pz)
 
     def depolarizing2_instruction(self, q1: int, q2: int, p: float) -> None:  # type: ignore[override]
         self.depolarizing2(q1, q2, p)
 
     def pauli_instruction(  # type: ignore[override]
-        self, q: int, px: float = 0, py: float = 0, pz: float = 0
+        self,
+        q: int,
+        px: Optional[float] = None,
+        py: Optional[float] = None,
+        pz: Optional[float] = None,
     ) -> None:
+        if py is None and pz is None:
+            p = px if px is not None else 0.0
+            px = py = pz = p / 3.0
+        else:
+            px = px if px is not None else 0.0
+            py = py if py is not None else 0.0
+            pz = pz if pz is not None else 0.0
         self._qir.append(
             {
                 "name": "PAULI_CHANNEL_1",
@@ -643,10 +691,14 @@ class StabilizerTCircuit(AbstractCircuit):
             }
         )
 
-    def pauli(self, q: int, probs: list[float]) -> None:
-        self._qir.append(
-            {"name": "PAULI_CHANNEL_1", "index": [q], "parameters": {"probs": probs}}
-        )
+    def pauli(
+        self,
+        q: int,
+        px: Optional[float] = None,
+        py: Optional[float] = None,
+        pz: Optional[float] = None,
+    ) -> None:
+        self.pauli_instruction(q, px, py, pz)
 
     def x_error(self, q: int, p: float) -> None:
         self._qir.append({"name": "X_ERROR", "index": [q], "parameters": {"p": p}})
@@ -730,8 +782,22 @@ class StabilizerTCircuit(AbstractCircuit):
                 qir_item: Dict[str, Any] = {"name": name, "index": chunk}
 
                 # Special parameter handling for noise and measurements
-                if name in ["DEPOLARIZE1", "X_ERROR", "Y_ERROR", "Z_ERROR"]:
-                    qir_item["parameters"] = {"p": args[0]}
+                if name == "DEPOLARIZE1":
+                    p = args[0]
+                    qir_item["parameters"] = {
+                        "px": p / 3.0,
+                        "py": p / 3.0,
+                        "pz": p / 3.0,
+                    }
+                elif name == "X_ERROR":
+                    qir_item["parameters"] = {"px": args[0], "py": 0.0, "pz": 0.0}
+                    qir_item["name"] = "PAULI_CHANNEL_1"
+                elif name == "Y_ERROR":
+                    qir_item["parameters"] = {"px": 0.0, "py": args[0], "pz": 0.0}
+                    qir_item["name"] = "PAULI_CHANNEL_1"
+                elif name == "Z_ERROR":
+                    qir_item["parameters"] = {"px": 0.0, "py": 0.0, "pz": args[0]}
+                    qir_item["name"] = "PAULI_CHANNEL_1"
                 elif name == "DEPOLARIZE2":
                     qir_item["parameters"] = {"p": args[0]}
                 elif name == "PAULI_CHANNEL_1":
