@@ -8,6 +8,8 @@
 
 - Add `zx` module and `zx.StabilizerTCircuit` for Clifford + T simulation (adopted from tsim).
 
+- Add channel support in qir.
+
 ## v1.6.0
 
 ### Added

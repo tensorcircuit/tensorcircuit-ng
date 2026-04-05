@@ -681,13 +681,22 @@ class Circuit(BaseCircuit):
             name: Optional[str] = None,
             **vars: float,
         ) -> None:
+            channel_parameters = dict(vars)
             kraus = krausf(**vars)
             if name is None:
                 name = getattr(kraus, "name", None)
+            if name is None:
+                name = getattr(krausf, "__name__", "channel").replace("channel", "")
             if not is_unitary:
                 self.apply_general_kraus(kraus, *index, status=status, name=name)
             else:
                 self.unitary_kraus(kraus, *index, status=status, name=name)
+            if len(self._qir) > 0:
+                self._qir[-1]["name"] = name
+                self._qir[-1]["is_channel"] = True
+                self._qir[-1]["channel_f"] = krausf
+                self._qir[-1]["channel_parameters"] = channel_parameters
+                self._qir[-1]["channel_unitary"] = is_unitary
 
         return apply
 

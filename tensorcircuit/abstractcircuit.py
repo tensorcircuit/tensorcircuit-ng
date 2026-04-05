@@ -457,6 +457,19 @@ class AbstractCircuit:
         c: "AbstractCircuit", qir: List[Dict[str, Any]]
     ) -> "AbstractCircuit":
         for d in qir:
+            if d.get("is_channel", False):
+                channel_f = d.get("channel_f", None)
+                if channel_f is None:
+                    raise ValueError("QIR channel entry is missing `channel_f`.")
+                channel_parameters = d.get("channel_parameters", {})
+                kwargs = dict(channel_parameters)
+                if "name" in d:
+                    kwargs["name"] = d["name"]
+                channel_unitary = d.get("channel_unitary", False)
+                c.apply_general_kraus_delayed(channel_f, is_unitary=channel_unitary)(  # type: ignore
+                    c, *d["index"], **kwargs
+                )
+                continue
             if "parameters" not in d:
                 c.apply_general_gate_delayed(d["gatef"], d["name"], mpo=d["mpo"])(
                     c, *d["index"], split=d["split"]
@@ -515,6 +528,10 @@ class AbstractCircuit:
 
         c = type(self)(**circuit_params)
         for d in reversed(self._qir):
+            if d.get("is_channel", False):
+                # Channels are generally non-unitary and not invertible.
+                # Keep inverse behavior consistent with previous logic.
+                continue
             if "parameters" not in d:
                 gate_n = getattr(d["gatef"], "n", None)
                 if gate_n in self.sgates and gate_n not in [
@@ -640,6 +657,19 @@ class AbstractCircuit:
 
         for d in self.to_qir():
             mapped_index = [logical_physical_mapping[i] for i in d["index"]]
+            if d.get("is_channel", False):
+                channel_f = d.get("channel_f", None)
+                if channel_f is None:
+                    raise ValueError("QIR channel entry is missing `channel_f`.")
+                channel_parameters = d.get("channel_parameters", {})
+                kwargs = dict(channel_parameters)
+                if "name" in d:
+                    kwargs["name"] = d["name"]
+                channel_unitary = d.get("channel_unitary", False)
+                c.apply_general_kraus_delayed(channel_f, is_unitary=channel_unitary)(  # type: ignore
+                    c, *mapped_index, **kwargs
+                )
+                continue
 
             if "parameters" not in d:
                 c.apply_general_gate_delayed(d["gatef"], d["name"], mpo=d["mpo"])(
@@ -728,7 +758,11 @@ class AbstractCircuit:
             gate_list = [self.standardize_gate(g) for g in gate_list]
             c = 0
             for d in self._qir:
-                if d["gatef"].n in gate_list:
+                if d.get("is_channel", False):
+                    gate_name = d.get("name", "").lower()
+                else:
+                    gate_name = d["gatef"].n
+                if gate_name in gate_list:
                     c += 1
             return c
 

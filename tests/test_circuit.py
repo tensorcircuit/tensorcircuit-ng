@@ -1589,6 +1589,20 @@ def test_channel_auto_register(backend, highp):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_channel_qir_roundtrip(backend):
+    c = tc.Circuit(1)
+    c.depolarizing(0, px=0.0, py=0.0, pz=0.0)
+    qir = c.to_qir()
+    assert qir[-1]["is_channel"] is True
+    assert qir[-1]["name"] == "depolarizing"
+    c2 = tc.Circuit.from_qir(qir, circuit_params={"nqubits": 1})
+    qir2 = c2.to_qir()
+    assert qir2[-1]["is_channel"] is True
+    assert qir2[-1]["name"] == "depolarizing"
+    np.testing.assert_allclose(c.state(), c2.state(), atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_circuit_to_json(backend):
     c = tc.Circuit(3)
     c.h(0)

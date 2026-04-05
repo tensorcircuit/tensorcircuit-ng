@@ -166,6 +166,8 @@ def qir2cirq(
     qbits = cirq.LineQubit.range(n)
     cmd = []
     for gate_info in qir:
+        if gate_info.get("is_channel", False):
+            continue
         index = [qbits[i] for i in gate_info["index"]]
         gate_name = str(gate_info["gatef"])
         if "parameters" in gate_info:
@@ -257,6 +259,8 @@ def qir2qiskit(
         qiskit_circ.initialize(initialization)
     measure_cbit = 0
     for gate_info in qir:
+        if gate_info.get("is_channel", False):
+            continue
         index = gate_info["index"]
         gate_name = str(gate_info["gatef"])
         qis_name = gate_name
@@ -651,6 +655,8 @@ def qir2json(
     qir = deepcopy(qir)
     tcqasm = []
     for r in qir:
+        if r.get("is_channel", False):
+            continue
         if r["mpo"] is True:
             nm = backend.reshapem(r["gate"].eval())
         else:

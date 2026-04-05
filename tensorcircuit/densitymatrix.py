@@ -243,14 +243,34 @@ class DMCircuit(BaseCircuit):
     @staticmethod
     def apply_general_kraus_delayed(
         krausf: Callable[..., Sequence[Gate]],
+        **kws: Any,
     ) -> Callable[..., None]:
+        _ = kws
+
         def apply(self: "DMCircuit", *index: int, **vars: float) -> None:
+            localname = vars.get("name", None)
             for key in ["status", "name"]:
                 if key in vars:
                     del vars[key]
             # compatibility with circuit API
             kraus = krausf(**vars)
+            if localname is None:
+                localname = getattr(kraus, "name", None)
+            if localname is None:
+                localname = getattr(krausf, "__name__", "channel").replace(  # type: ignore
+                    "channel", ""
+                )
             self.apply_general_kraus(kraus, [index])
+            self._qir.append(
+                {
+                    "index": index,
+                    "name": localname,
+                    "is_channel": True,
+                    "channel_f": krausf,
+                    "channel_parameters": vars,
+                    "channel_unitary": False,
+                }
+            )
 
         return apply
 
@@ -407,13 +427,33 @@ class DMCircuit2(DMCircuit):
     @staticmethod
     def apply_general_kraus_delayed(
         krausf: Callable[..., Sequence[Gate]],
+        **kws: Any,
     ) -> Callable[..., None]:
+        _ = kws
+
         def apply(self: "DMCircuit2", *index: int, **vars: float) -> None:
+            localname = vars.get("name", None)
             for key in ["status", "name"]:
                 if key in vars:
                     del vars[key]
             kraus = krausf(**vars)
+            if localname is None:
+                localname = getattr(kraus, "name", None)
+            if localname is None:
+                localname = getattr(krausf, "__name__", "channel").replace(  # type: ignore
+                    "channel", ""
+                )
             self.apply_general_kraus(kraus, *index)
+            self._qir.append(
+                {
+                    "index": index,
+                    "name": localname,
+                    "is_channel": True,
+                    "channel_f": krausf,
+                    "channel_parameters": vars,
+                    "channel_unitary": False,
+                }
+            )
 
         return apply
 

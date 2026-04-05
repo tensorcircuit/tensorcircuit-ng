@@ -471,6 +471,17 @@ def test_prepend_dmcircuit(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_dm_channel_qir_roundtrip(backend):
+    c = tc.DMCircuit(1)
+    c.depolarizing(0, px=0.1, py=0.0, pz=0.0)
+    qir = c.to_qir()
+    assert qir[-1]["is_channel"] is True
+    assert qir[-1]["name"] == "depolarizing"
+    c2 = tc.DMCircuit.from_qir(qir, circuit_params={"nqubits": 1})
+    np.testing.assert_allclose(c.state(), c2.state(), atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_dm_sexpps(backend):
     c = tc.DMCircuit(1, inputs=1 / np.sqrt(2) * np.array([1.0, 1.0j]))
     y = c.sample_expectation_ps(y=[0])
