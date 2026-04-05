@@ -554,13 +554,19 @@ class StabilizerTCircuit(AbstractCircuit):
         self._qir.append({"name": "S", "index": [q]})
 
     def sd(self, q: int) -> None:
-        self._qir.append({"name": "SD", "index": [q]})
+        self._qir.append({"name": "S_DAG", "index": [q]})
+
+    def sdg(self, q: int) -> None:
+        self.sd(q)
 
     def t(self, q: int) -> None:
         self._qir.append({"name": "T", "index": [q]})
 
     def td(self, q: int) -> None:
-        self._qir.append({"name": "TD", "index": [q]})
+        self._qir.append({"name": "T_DAG", "index": [q]})
+
+    def tdg(self, q: int) -> None:
+        self.td(q)
 
     def swap(self, q1: int, q2: int) -> None:
         self._qir.append({"name": "SWAP", "index": [q1, q2]})

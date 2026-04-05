@@ -411,6 +411,8 @@ def test_stabilizertcircuit_one_liners():
     stc.rx(0, theta=0.1)
     stc.ry(0, theta=0.1)
     stc.rz(0, theta=0.1)
+    stc.sdg(0)
+    stc.tdg(0)
     stc.depolarizing_instruction(0, px=0.1 / 3, py=0.1 / 3, pz=0.1 / 3)
     stc.depolarizing_instruction(0, 0.1)  # fallback test
     stc.depolarizing2_instruction(0, 1, 0.1)
