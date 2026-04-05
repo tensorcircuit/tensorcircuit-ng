@@ -376,7 +376,7 @@ def test_stabilizertcircuit_from_stim_tagged_i():
     sc.append("I", [0], tag="H(theta=0.5*pi)")
     stc = StabilizerTCircuit.from_stim_circuit(sc)
     assert stc._qir[0]["name"] == "H"
-    assert stc._qir[0]["parameters"]["theta"] == 0.5 * np.pi
+    assert np.isclose(stc._qir[0]["parameters"]["theta"], 0.5 * np.pi)
 
 
 def test_scalar_graph_find_stab_wrapped():
