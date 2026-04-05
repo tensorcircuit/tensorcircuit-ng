@@ -52,7 +52,7 @@ def run_benchmark(distance=3, rounds=3, batch=1000):
 
     # Execution (Run 1: includes JIT)
     start_exec1 = time.time()
-    samples_jax = stc.sample_detectors(shots=batch, seed=42)
+    samples_jax = stc.sample_detectors(shots=batch, seed=42, batch_size=2000)
     end_exec1 = time.time()
     print(f"Execution Time (Run 1, including JIT): {end_exec1 - start_exec1:.4f}s")
 

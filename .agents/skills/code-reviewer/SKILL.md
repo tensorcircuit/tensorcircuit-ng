@@ -10,7 +10,8 @@ When tasked with reviewing or auditing a TensorCircuit-NG (TC-NG) codebase, you 
 - **Default Scope**: Unless otherwise specified, the review focuses strictly on the combined output of `git diff` and `git diff --cached`. 
 - **Report Format**: Generate a structured Review Report. Highlight **only** problems, smells, and issues categorized by severity (e.g., Critical, Warning, Optimization). **Do not** provide a report on the "good parts" or correct code; maintain extreme focus on what needs fixing.
 - **Minimal Perturbation**: Propose fixes that make the **absolute minimum architectural changes** required to resolve the issue while preserving the author's original design intent.
-- **No Immediate Edits**: You MUST NOT modify any files until the USER has reviewed and explicitly approved the report. Your first response must be the report only.
+- **Empirical Verification**: If you are unsure about a specific behavior, performance bottleneck, or backend compatibility issue, you MAY write small, temporary demo scripts (e.g., `review_demo_*.py`) to gather evidence. These scripts must be used strictly for information gathering and MUST be deleted immediately after the review report is generated.
+- **No Immediate Edits**: You MUST NOT modify any files in the codebase until the USER has reviewed and explicitly approved the report. Your first response must be the report only. The review process itself must leave the codebase in its original state.
 
 ### 2. Mathematical & Physics Correctness
 - **Correctness**: Verify that the code implements the intended physics. 
@@ -46,7 +47,9 @@ When tasked with reviewing or auditing a TensorCircuit-NG (TC-NG) codebase, you 
 
 ### 7. Review Workflow
 1. **Audit**: Run `git diff` and `git diff --cached`. Identify violations in the changes.
-2. **Report**: Present the findings (Issues/Problems only). Recommend minimal, non-invasive fixes.
-3. **Wait**: Wait for USER approval.
-4. **Refactor**: Only after approval, apply the literal minimum footprint fixes required.
-5. **Final Polish**: Run `black`, `mypy`, `pylint` and verify tests pass.
+2. **Empirical Check (Optional)**: Write temporary `review_demo_*.py` scripts to confirm any suspected issues or test fixes.
+3. **Report**: Present the findings (Issues/Problems only). Include evidence from empirical checks if applicable.
+4. **Cleanup**: Immediately delete all `review_demo_*.py` scripts after generating the report.
+5. **Wait**: Wait for USER approval.
+6. **Refactor**: Only after approval, apply the literal minimum footprint fixes required.
+7. **Final Polish**: Run `black`, `mypy`, `pylint` and verify tests pass.

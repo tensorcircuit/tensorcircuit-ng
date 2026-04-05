@@ -794,20 +794,26 @@ class AbstractCircuit:
             self._measure_counter += 1
             self._extra_qir.append(d)
 
-    def detector_instruction(self, record_indices: Sequence[int], **kws: Any) -> None:
+    def detector_instruction(
+        self,
+        lookback_indices: Sequence[int],
+        coords: Optional[Sequence[float]] = None,
+        **kws: Any,
+    ) -> None:
         """
         add a detector instruction flag, no effect on numerical simulation
 
-        :param record_indices: the corresponding measurement record indices
-        :type record_indices: Sequence[int]
+        :param lookback_indices: the corresponding measurement record indices
+        :type lookback_indices: Sequence[int]
         """
         l = len(self._qir)
         d = {
-            "index": record_indices,
+            "index": lookback_indices,
             "name": "detector",
             "gatef": "detector",
             "instruction": True,
             "pos": l,
+            "coords": coords,
         }
         d.update(kws)
         self._extra_qir.append(d)
@@ -836,80 +842,85 @@ class AbstractCircuit:
             }
             self._extra_qir.append(d)
 
-    def mr_instruction(self, *index: int) -> None:
+    def mr_instruction(self, q: int, p: float = 0.0, **kws: Any) -> None:
         """
         add a measure-reset instruction flag, no effect on numerical simulation
 
-        :param index: the corresponding qubits
-        :type index: int
+        :param q: the corresponding qubit
+        :type q: int
         """
-        self.measure_instruction(*index)
-        self.reset_instruction(*index)
+        self.measure_instruction(q)
+        self.reset_instruction(q)
 
-    def depolarizing_instruction(self, qubit: int, **kws: Any) -> None:
+    def depolarizing_instruction(
+        self,
+        q: int,
+        px: Optional[float] = None,
+        py: Optional[float] = None,
+        pz: Optional[float] = None,
+        **kws: Any,
+    ) -> None:
         """
         add a depolarizing instruction flag, no effect on numerical simulation
         """
         l = len(self._qir)
         d = {
-            "index": [qubit],
+            "index": [q],
             "name": "depolarizing",
             "instruction": True,
             "pos": l,
         }
+        if px is not None or py is not None or pz is not None:
+            d["parameters"] = {"px": px, "py": py, "pz": pz}
         d.update(kws)
         self._extra_qir.append(d)
 
-    def depolarizing2_instruction(self, qubit1: int, qubit2: int, **kws: Any) -> None:
+    def depolarizing2_instruction(self, q1: int, q2: int, p: float, **kws: Any) -> None:
         """
         add a 2-qubit depolarizing instruction flag, no effect on numerical simulation
         """
         l = len(self._qir)
         d = {
-            "index": [qubit1, qubit2],
+            "index": [q1, q2],
             "name": "depolarizing2",
             "instruction": True,
             "pos": l,
         }
+        d["parameters"] = {"p": p}
         d.update(kws)
         self._extra_qir.append(d)
 
-    def pauli_instruction(self, qubit: int, **kws: Any) -> None:
+    def pauli_instruction(
+        self,
+        q: int,
+        px: Optional[float] = None,
+        py: Optional[float] = None,
+        pz: Optional[float] = None,
+        **kws: Any,
+    ) -> None:
         """
         add a pauli instruction flag, no effect on numerical simulation
         """
         l = len(self._qir)
         d = {
-            "index": [qubit],
+            "index": [q],
             "name": "pauli",
             "instruction": True,
             "pos": l,
         }
+        if px is not None or py is not None or pz is not None:
+            d["parameters"] = {"px": px, "py": py, "pz": pz}
         d.update(kws)
         self._extra_qir.append(d)
 
-    def pauli2_instruction(self, qubit1: int, qubit2: int, **kws: Any) -> None:
+    def pauli2_instruction(self, q1: int, q2: int, **kws: Any) -> None:
         """
         add a 2-qubit pauli instruction flag, no effect on numerical simulation
         """
         l = len(self._qir)
         d = {
-            "index": [qubit1, qubit2],
+            "index": [q1, q2],
             "name": "pauli2",
-            "instruction": True,
-            "pos": l,
-        }
-        d.update(kws)
-        self._extra_qir.append(d)
-
-    def general_error_instruction(self, qubit: int, **kws: Any) -> None:
-        """
-        add a general error instruction flag, no effect on numerical simulation
-        """
-        l = len(self._qir)
-        d = {
-            "index": [qubit],
-            "name": "error",
             "instruction": True,
             "pos": l,
         }

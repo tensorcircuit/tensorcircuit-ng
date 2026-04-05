@@ -580,7 +580,7 @@ class StabilizerTCircuit(AbstractCircuit):
             {"name": "DETECTOR", "index": lookback_indices, "coords": coords}
         )
 
-    def observable_instruction(  # type: ignore[override]
+    def observable_instruction(
         self, lookback_indices: list[int], observable_index: int = 0
     ) -> None:
         self._qir.append(
