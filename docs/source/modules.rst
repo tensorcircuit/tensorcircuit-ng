@@ -36,3 +36,4 @@ tensorcircuit
     ./api/u1circuit.rst
     ./api/utils.rst
     ./api/vis.rst
+    ./api/zx.rst

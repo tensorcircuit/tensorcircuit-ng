@@ -6,6 +6,8 @@
 
 - Add `lobpcg` method for backends.
 
+- Add `zx` module and `zx.StabilizerTCircuit` for Clifford + T simulation (adopted from tsim).
+
 ## v1.6.0
 
 ### Added
