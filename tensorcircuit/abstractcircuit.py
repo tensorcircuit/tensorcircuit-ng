@@ -848,6 +848,7 @@ class AbstractCircuit:
             "instruction": True,
             "pos": l,
             "coords": coords,
+            "current_m_count": getattr(self, "_measure_counter", 0),
         }
         d.update(kws)
         self._extra_qir.append(d)

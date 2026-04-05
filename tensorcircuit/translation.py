@@ -94,16 +94,17 @@ def _merge_extra_qir(
 ) -> List[Dict[str, Any]]:
     nqir = []
     # caution on the same pos!
-    inds: Dict[int, List[Dict[str, Any]]] = {}
+    inds: Dict[Union[int, float], List[Dict[str, Any]]] = {}
     for d in extra_qir:
-        if d["pos"] not in inds:
-            inds[d["pos"]] = []
-        inds[d["pos"]].append(d)
+        pos = d.get("pos", len(qir))
+        if pos not in inds:
+            inds[pos] = []
+        inds[pos].append(d)
     for i, q in enumerate(qir):
         if i in inds:
             nqir += inds[i]
         nqir.append(q)
-    for k in inds:
+    for k in sorted(inds):
         if k >= len(qir):
             nqir += inds[k]
     return nqir

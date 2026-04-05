@@ -10,6 +10,8 @@
 
 - Add channel support in qir.
 
+- Add detector support for `BaseCircuit`.
+
 ## v1.6.0
 
 ### Added

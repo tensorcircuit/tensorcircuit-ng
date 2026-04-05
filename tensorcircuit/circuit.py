@@ -188,6 +188,11 @@ class Circuit(BaseCircuit):
     # TODO(@refraction-ray): add noise support in IR
     # TODO(@refraction-ray): unify mid measure to basecircuit
 
+    def _new_detector_work_circuit(self) -> BaseCircuit:
+        from .densitymatrix import DMCircuit2
+
+        return DMCircuit2(self._nqubits)
+
     def mid_measurement(self, index: int, keep: int = 0) -> Tensor:
         """
         Middle measurement in z-basis on the circuit, note the wavefunction output is not normalized

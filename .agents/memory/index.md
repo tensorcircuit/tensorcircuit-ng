@@ -20,7 +20,7 @@ This directory contains progressive disclosure documents of TensorCircuit develo
 ## Architecture, Testing & API
 - `circuit_architecture_api.md`: Inheritance hierarchy (U1Circuit, MPSCircuit, AnalogCircuit), the `.inverse()` method's effect on parameters, and QIR roundtripping.
 - `module_integration_protocols.md`: Export guidelines, backwards compatibility layers, and strict standards for testing and documentation.
-- `testing_and_benchmarking.md`: Sparse matrix compatibility and robust testing practices, plus guidelines for benchmarking external packages safely.
+- `testing_and_benchmarking.md`: Pytest acceleration, sparse matrix compatibility, robust testing practices, and guidelines for benchmarking external packages safely.
 - `visualization.md`: Standardized protocols for non-blocking subplots embedded during visualization.
 - `coding_paradigms.md`: Guidelines for error handling, avoiding defensive over-programming, and early feedback.
 

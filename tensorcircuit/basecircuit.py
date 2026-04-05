@@ -10,6 +10,7 @@ Note:
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from functools import partial
+import logging
 
 import numpy as np
 import graphviz
@@ -32,6 +33,8 @@ from .abstractcircuit import AbstractCircuit
 from .cons import npdtype, backend, dtypestr, contractor, rdtypestr
 from .simplify import _split_two_qubit_gate
 from .utils import arg_alias
+
+logger = logging.getLogger(__name__)
 
 Gate = gates.Gate
 Tensor = Any
@@ -624,6 +627,707 @@ class BaseCircuit(AbstractCircuit):
             diag = backend.diagonal(s)
             p = backend.real(backend.reshape(diag, [-1]))
         return p
+
+    def _merge_qir_with_extra(self) -> List[Dict[str, Any]]:
+        from .translation import _merge_extra_qir
+
+        return _merge_extra_qir(self._qir, getattr(self, "_extra_qir", []))
+
+    @staticmethod
+    def _is_measure_instruction_name(name: str) -> bool:
+        return name.upper() in ["MEASURE", "M", "MZ", "MR"]
+
+    @staticmethod
+    def _is_random_instruction_name(name: str) -> bool:
+        return name.upper() in [
+            "MEASURE",
+            "M",
+            "MZ",
+            "MR",
+            "RESET",
+            "DEPOLARIZING",
+            "PAULI",
+        ]
+
+    def _count_detector_random_events(
+        self, merged_qir: Sequence[Dict[str, Any]]
+    ) -> int:
+        c = 0
+        for d in merged_qir:
+            if d.get("is_channel", False):
+                if self._is_random_instruction_name(str(d.get("name", ""))):
+                    c += 1
+                continue
+            if d.get("instruction", False) and self._is_random_instruction_name(
+                str(d.get("name", ""))
+            ):
+                c += 1
+        return c
+
+    def _resolve_detectors(
+        self, merged_qir: Sequence[Dict[str, Any]]
+    ) -> List[List[int]]:
+        measured_so_far = 0
+        resolved: List[List[int]] = []
+        for d in merged_qir:
+            if not d.get("instruction", False):
+                continue
+            name = str(d.get("name", "")).upper()
+            if self._is_measure_instruction_name(name):
+                measured_so_far += 1
+                continue
+            if name != "DETECTOR":
+                continue
+            lookback_indices = [int(v) for v in d.get("index", [])]
+            base = int(d.get("current_m_count", measured_so_far))
+            abs_indices = []
+            for v in lookback_indices:
+                rid = base + v if v < 0 else v
+                if rid < 0:
+                    raise ValueError(
+                        f"Invalid detector lookback index {v} with base {base}."
+                    )
+                if rid >= measured_so_far:
+                    raise ValueError(
+                        f"Detector index {rid} is out of range for {measured_so_far} measurements."
+                    )
+                abs_indices.append(rid)
+            resolved.append(abs_indices)
+        return resolved
+
+    def _record_qubits_terminal_measure_only(
+        self, merged_qir: Sequence[Dict[str, Any]]
+    ) -> List[int]:
+        measured_so_far = 0
+        record_to_qubit: Dict[int, int] = {}
+        for d in merged_qir:
+            if not d.get("instruction", False):
+                continue
+            name = str(d.get("name", "")).upper()
+            if name in ["DETECTOR", "BARRIER", "TICK", "QUBIT_COORDS", "SHIFT_COORDS"]:
+                continue
+            if name in ["MEASURE", "M", "MZ"]:
+                if int(d.get("pos", len(self._qir))) < len(self._qir):
+                    raise NotImplementedError(
+                        "allow_state=True currently supports terminal measure_instruction only."
+                    )
+                rid = int(d.get("record_index", measured_so_far))
+                record_to_qubit[rid] = int(d["index"][0])
+                measured_so_far += 1
+                continue
+            raise NotImplementedError(
+                f"allow_state=True does not support instruction `{name}`."
+            )
+        if measured_so_far == 0:
+            raise ValueError("No measurements defined for detector sampling.")
+        record_qubits = [-1] * measured_so_far
+        for rid, q in record_to_qubit.items():
+            if rid < measured_so_far:
+                record_qubits[rid] = q
+        if any(q < 0 for q in record_qubits):
+            raise ValueError(
+                "Measurement records are incomplete for detector resolution."
+            )
+        return record_qubits
+
+    def _run_instruction_trajectory(
+        self,
+        merged_qir: Sequence[Dict[str, Any]],
+        status_row: Optional[Tensor] = None,
+    ) -> Tensor:
+        c = type(self)(**self.circuit_param)
+        active = [True] * self._nqubits
+        records: List[Tensor] = []
+        status_i = 0
+        status_len = 0
+        if status_row is not None:
+            status_len = int(backend.shape_tuple(status_row)[0])
+
+        def next_status() -> Optional[Tensor]:
+            nonlocal status_i
+            if status_row is None:
+                return None
+            if status_i >= status_len:
+                raise ValueError(
+                    "Provided status is shorter than required random events."
+                )
+            s = status_row[status_i]
+            status_i += 1
+            return s
+
+        for d in merged_qir:
+            name = str(d.get("name", "")).upper()
+            if d.get("is_channel", False):
+                q = int(d["index"][0])
+                if not active[q]:
+                    raise NotImplementedError(
+                        "Noise after measure requires reset first."
+                    )
+                if name in ["DEPOLARIZING", "PAULI"]:
+                    params = d.get("channel_parameters", {})
+                    px = float(params.get("px", 0.0))
+                    py = float(params.get("py", 0.0))
+                    pz = float(params.get("pz", 0.0))
+                    c.depolarizing(q, px=px, py=py, pz=pz, status=next_status())  # type: ignore
+                    continue
+                self._apply_qir(c, [d])  # type: ignore[arg-type]
+                continue
+            if not d.get("instruction", False):
+                inds = [int(i) for i in d.get("index", [])]
+                for q in inds:
+                    if q < self._nqubits and not active[q]:
+                        raise NotImplementedError(
+                            "Gate after measure requires reset_instruction first."
+                        )
+                self._apply_qir(c, [d])  # type: ignore[arg-type]
+                continue
+            if name in ["MEASURE", "M", "MZ"]:
+                q = int(d["index"][0])
+                if not active[q]:
+                    raise NotImplementedError("Repeated measure on inactive line.")
+                m = backend.cast(c.cond_measurement(q, status=next_status()), "int32")
+                records.append(m)
+                active[q] = False
+                continue
+            if name == "MR":
+                q = int(d["index"][0])
+                if not active[q]:
+                    raise NotImplementedError("MR on inactive line.")
+                m = backend.cast(c.cond_measurement(q, status=next_status()), "int32")
+                records.append(m)
+                c.conditional_gate(m, [gates.i(), gates.x()], q)  # type: ignore
+                active[q] = True
+                continue
+            if name == "RESET":
+                q = int(d["index"][0])
+                m = c.cond_measurement(q, status=next_status())
+                c.conditional_gate(m, [gates.i(), gates.x()], q)  # type: ignore
+                active[q] = True
+                continue
+            if name in ["DEPOLARIZING", "PAULI"]:
+                q = int(d["index"][0])
+                params = d.get("parameters", {})
+                px = float(params.get("px", d.get("px", 0.0)))
+                py = float(params.get("py", d.get("py", 0.0)))
+                pz = float(params.get("pz", d.get("pz", 0.0)))
+                c.depolarizing(q, px=px, py=py, pz=pz, status=next_status())  # type: ignore
+                continue
+            if name in ["DETECTOR", "BARRIER", "TICK", "QUBIT_COORDS", "SHIFT_COORDS"]:
+                continue
+            raise NotImplementedError(
+                f"Unsupported instruction in sample_detector: {name}"
+            )
+        if status_row is not None and status_i != status_len:
+            logger.warning("Provided status is longer than required random events.")
+        if len(records) == 0:
+            return backend.cast(backend.convert_to_tensor([]), "int32")
+        return backend.cast(backend.stack(records), "int32")
+
+    def _build_detector_tn_wht(
+        self, record_qubits: Sequence[int], resolved_detectors: Sequence[Sequence[int]]
+    ) -> Tuple[List[tn.Node], List[tn.Edge]]:
+        hadamard = np.array([[1.0, 1.0], [1.0, -1.0]], dtype=npdtype)
+        tracev = np.array([1.0, 1.0], dtype=npdtype)
+        if self.is_dm:
+            nodes, front = self._copy()
+            ket_front = front[: self._nqubits]
+            bra_front = front[self._nqubits : 2 * self._nqubits]
+            nodes = list(nodes)
+        else:
+            ket_nodes, ket_front = self._copy()
+            bra_nodes, bra_front = self._copy(conj=True)
+            nodes = list(ket_nodes) + list(bra_nodes)
+
+        record_edges: List[Optional[tn.Edge]] = [None] * len(record_qubits)
+        qubit_records: Dict[int, List[int]] = {}
+        for rid, q in enumerate(record_qubits):
+            qubit_records.setdefault(q, []).append(rid)
+
+        for q in range(self._nqubits):
+            rids = qubit_records.get(q, [])
+            if len(rids) == 0:
+                ket_front[q] ^ bra_front[q]
+                continue
+            if len(rids) > 1:
+                raise NotImplementedError(
+                    "allow_state=True currently supports at most one terminal measurement per qubit."
+                )
+            qcopy = tn.CopyNode(3, 2)
+            qcopy[0] ^ ket_front[q]
+            qcopy[1] ^ bra_front[q]
+            nodes.append(qcopy)
+            record_edges[rids[0]] = qcopy[2]
+
+        rid_usage_count: Dict[int, int] = {}
+        for det in resolved_detectors:
+            for rid in det:
+                rid_usage_count[rid] = rid_usage_count.get(rid, 0) + 1
+
+        fanned_out_edges: Dict[int, List[tn.Edge]] = {}
+        for rid, count in rid_usage_count.items():
+            redge = record_edges[rid]
+            if redge is None:
+                raise ValueError(f"Missing measurement edge for record {rid}.")
+            if count == 1:
+                fanned_out_edges[rid] = [redge]
+            else:
+                fanout = tn.CopyNode(count + 1, 2)
+                nodes.append(fanout)
+                redge ^ fanout[0]
+                fanned_out_edges[rid] = [fanout[i + 1] for i in range(count)]
+
+        rid_pop_index = {rid: 0 for rid in rid_usage_count}
+        detector_edges: List[tn.Edge] = []
+        for det in resolved_detectors:
+            dcopy = tn.CopyNode(len(det) + 1, 2)
+            nodes.append(dcopy)
+            for i, rid in enumerate(det):
+                hnode = tn.Node(hadamard)
+                nodes.append(hnode)
+                edge_to_use = fanned_out_edges[rid][rid_pop_index[rid]]
+                rid_pop_index[rid] += 1
+                edge_to_use ^ hnode[0]
+                hnode[1] ^ dcopy[i]
+            hout = tn.Node(hadamard)
+            nodes.append(hout)
+            dcopy[len(det)] ^ hout[0]
+            detector_edges.append(hout[1])
+
+        for rid, redge in enumerate(record_edges):
+            if rid in rid_usage_count:
+                continue
+            if redge is None:
+                raise ValueError(f"Missing measurement edge for record {rid}.")
+            tnode = tn.Node(tracev)
+            nodes.append(tnode)
+            redge ^ tnode[0]
+        return nodes, detector_edges
+
+    def detector_probabilities(self) -> Tensor:
+        """
+        Calculate the joint probability distribution of all detectors in the circuit.
+
+        :return: A tensor representing the joint probability distribution.
+        :rtype: Tensor
+        """
+        merged_qir = self._merge_qir_with_extra()
+        resolved_detectors = self._resolve_detectors(merged_qir)
+        if len(resolved_detectors) == 0:
+            raise ValueError("No detectors defined in the circuit.")
+        nodes, detector_edges = self._build_detector_tn_from_qir(
+            merged_qir, resolved_detectors
+        )
+        pt = contractor(nodes, output_edge_order=detector_edges).tensor
+        p = backend.abs(backend.real(pt))
+        return p / backend.sum(p)
+
+    def outcome_probability(self, state: Sequence[int]) -> Tensor:
+        """
+        Calculate the probability of a specific detector outcome bitstring.
+
+        :param state: The detector outcome bitstring as a sequence of 0s and 1s.
+        :type state: Sequence[int]
+        :return: The probability of the given outcome.
+        :rtype: Tensor
+        """
+        merged_qir = self._merge_qir_with_extra()
+        resolved_detectors = self._resolve_detectors(merged_qir)
+        if len(resolved_detectors) == 0:
+            raise ValueError("No detectors defined in the circuit.")
+        if len(state) != len(resolved_detectors):
+            raise ValueError(
+                f"State length {len(state)} does not match number of detectors {len(resolved_detectors)}."
+            )
+        nodes, detector_edges = self._build_detector_tn_from_qir(
+            merged_qir, resolved_detectors
+        )
+        nodes_num, detector_edges_num = self.copy_nodes(nodes, detector_edges)
+        for i, s in enumerate(state):
+            s_val = backend.cast(backend.convert_to_tensor(s), "int32")
+            p_vec = backend.onehot(s_val, 2)
+            p_node = tn.Node(backend.cast(p_vec, dtypestr))
+            nodes_num.append(p_node)
+            detector_edges_num[i] ^ p_node[0]
+        p_num = contractor(nodes_num).tensor
+
+        nodes_den, detector_edges_den = self.copy_nodes(nodes, detector_edges)
+        tracev = tn.Node(backend.cast(backend.convert_to_tensor([1.0, 1.0]), dtypestr))
+        for i in range(len(detector_edges_den)):
+            tnode = tn.Node(tracev.tensor)
+            nodes_den.append(tnode)
+            detector_edges_den[i] ^ tnode[0]
+        p_den = contractor(nodes_den).tensor
+        return backend.abs(backend.real(p_num)) / backend.abs(backend.real(p_den))
+
+    def _build_detector_tn_from_qir(
+        self,
+        merged_qir: Sequence[Dict[str, Any]],
+        resolved_detectors: Sequence[Sequence[int]],
+    ) -> Tuple[List[tn.Node], List[tn.Edge]]:
+        if self._can_build_detector_from_existing_nodes(merged_qir):
+            record_qubits = self._record_qubits_terminal_measure_only(merged_qir)
+            return self._build_detector_tn_wht(record_qubits, resolved_detectors)
+
+        n = self._nqubits
+        work = self._new_detector_work_circuit()
+        work._qir = []
+        work._extra_qir = []
+        active = [True] * n
+        record_edges: Dict[int, tn.Edge] = {}
+        measured_so_far = 0
+        hadamard = np.array([[1.0, 1.0], [1.0, -1.0]], dtype=npdtype)
+        tracev = np.array([1.0, 1.0], dtype=npdtype)
+        zero = np.array([1.0, 0.0], dtype=npdtype)
+
+        for d in merged_qir:
+            name = str(d.get("name", "")).upper()
+            if not d.get("instruction", False):
+                inds = [int(i) for i in d.get("index", [])]
+                for q in inds:
+                    if q < n and not active[q]:
+                        raise NotImplementedError(
+                            "Gate/noise after measure requires reset_instruction first."
+                        )
+                self._apply_qir(work, [d])  # type: ignore[arg-type]
+                continue
+
+            if name in ["MEASURE", "M", "MZ"]:
+                q = int(d["index"][0])
+                if not active[q]:
+                    raise NotImplementedError("Repeated measure on inactive line.")
+                qcopy = tn.CopyNode(3, 2)
+                work._nodes.append(qcopy)
+                qcopy[0] ^ work._front[q]
+                qcopy[1] ^ work._front[q + n]
+                rid = int(d.get("record_index", measured_so_far))
+                measured_so_far += 1
+                record_edges[rid] = qcopy[2]
+                active[q] = False
+                continue
+
+            if name == "MR":
+                q = int(d["index"][0])
+                if not active[q]:
+                    raise NotImplementedError("MR on inactive line.")
+                qcopy = tn.CopyNode(3, 2)
+                work._nodes.append(qcopy)
+                qcopy[0] ^ work._front[q]
+                qcopy[1] ^ work._front[q + n]
+                rid = int(d.get("record_index", measured_so_far))
+                measured_so_far += 1
+                record_edges[rid] = qcopy[2]
+                kn = tn.Node(zero)
+                bn = tn.Node(zero)
+                work._nodes.extend([kn, bn])
+                work._front[q] = kn[0]
+                work._front[q + n] = bn[0]
+                active[q] = True
+                continue
+
+            if name == "RESET":
+                q = int(d["index"][0])
+                if active[q]:
+                    work._front[q] ^ work._front[q + n]
+                kn = tn.Node(zero)
+                bn = tn.Node(zero)
+                work._nodes.extend([kn, bn])
+                work._front[q] = kn[0]
+                work._front[q + n] = bn[0]
+                active[q] = True
+                continue
+
+            if name in ["DETECTOR", "BARRIER", "TICK", "QUBIT_COORDS", "SHIFT_COORDS"]:
+                continue
+
+            if name in ["DEPOLARIZING", "PAULI"]:
+                q = int(d["index"][0])
+                if not active[q]:
+                    raise NotImplementedError("Noise on inactive line.")
+                params = d.get("parameters", {})
+                px = float(params.get("px", d.get("px", 0.0)))
+                py = float(params.get("py", d.get("py", 0.0)))
+                pz = float(params.get("pz", d.get("pz", 0.0)))
+                work.depolarizing(q, px=px, py=py, pz=pz)  # type: ignore
+                continue
+
+            raise NotImplementedError(
+                f"Unsupported instruction `{name}` in detector TN."
+            )
+
+        for q in range(n):
+            if active[q]:
+                work._front[q] ^ work._front[q + n]
+
+        nodes = list(work._nodes)
+        rid_usage_count: Dict[int, int] = {}
+        for det in resolved_detectors:
+            for rid in det:
+                rid_usage_count[rid] = rid_usage_count.get(rid, 0) + 1
+
+        fanned_out_edges: Dict[int, List[tn.Edge]] = {}
+        for rid, count in rid_usage_count.items():
+            if rid not in record_edges:
+                raise ValueError(
+                    f"Detector references unknown measurement record {rid}."
+                )
+            redge = record_edges[rid]
+            if count == 1:
+                fanned_out_edges[rid] = [redge]
+            else:
+                fanout = tn.CopyNode(count + 1, 2)
+                nodes.append(fanout)
+                redge ^ fanout[0]
+                fanned_out_edges[rid] = [fanout[i + 1] for i in range(count)]
+
+        rid_pop_index = {rid: 0 for rid in rid_usage_count}
+        detector_edges: List[tn.Edge] = []
+        for det in resolved_detectors:
+            dcopy = tn.CopyNode(len(det) + 1, 2)
+            nodes.append(dcopy)
+            for i, rid in enumerate(det):
+                hnode = tn.Node(hadamard)
+                nodes.append(hnode)
+                edge_to_use = fanned_out_edges[rid][rid_pop_index[rid]]
+                rid_pop_index[rid] += 1
+                edge_to_use ^ hnode[0]
+                hnode[1] ^ dcopy[i]
+            hout = tn.Node(hadamard)
+            nodes.append(hout)
+            dcopy[len(det)] ^ hout[0]
+            detector_edges.append(hout[1])
+
+        for rid, redge in record_edges.items():
+            if rid in rid_usage_count:
+                continue
+            tnode = tn.Node(tracev)
+            nodes.append(tnode)
+            redge ^ tnode[0]
+        return nodes, detector_edges
+
+    def _new_detector_work_circuit(self) -> "BaseCircuit":
+        return type(self)(**self.circuit_param)
+
+    def _can_build_detector_from_existing_nodes(
+        self, merged_qir: Sequence[Dict[str, Any]]
+    ) -> bool:
+        for d in merged_qir:
+            if d.get("is_channel", False):
+                return False
+            if not d.get("instruction", False):
+                continue
+            name = str(d.get("name", "")).upper()
+            if name in ["DETECTOR", "BARRIER", "TICK", "QUBIT_COORDS", "SHIFT_COORDS"]:
+                continue
+            if name in ["MEASURE", "M", "MZ"]:
+                if int(d.get("pos", len(self._qir))) < len(self._qir):
+                    return False
+                continue
+            return False
+        return True
+
+    def sample_detector(
+        self,
+        shots: int = 1,
+        batch: Optional[int] = None,
+        allow_state: bool = False,
+        status: Optional[Tensor] = None,
+        seed: Optional[int] = None,
+        **kws: Any,
+    ) -> Tensor:
+        """
+        Sample detector outcomes from instruction-annotated circuits.
+
+        :param shots: Number of samples to draw, defaults to 1.
+        :type shots: int, optional
+        :param batch: Number of samples to process in a single batch, defaults to None (equal to shots).
+        :type batch: int, optional
+        :param allow_state: If True, uses the full detector probability distribution for sampling
+            (faster but memory-intensive); if False, uses an autoregressive sampling method based on
+            the tensor network, defaults to False.
+        :type allow_state: bool, optional
+        :param status: Random numbers in [0, 1] used for sampling, defaults to None.
+            If allow_state is True, shape should be [shots] or [shots, 1];
+            if allow_state is False, shape should be [shots, num_detectors].
+        :type status: Optional[Tensor], optional
+        :param seed: Random seed for sampling, defaults to None.
+        :type seed: Optional[int], optional
+        :return: A boolean tensor containing the sampled detector outcomes with shape [shots, num_detectors].
+        :rtype: Tensor
+        """
+        if "batch_size" in kws and "shots" not in kws:
+            shots = int(kws["batch_size"])
+        if "shots" in kws:
+            shots = int(kws["shots"])
+        if shots <= 0:
+            raise ValueError("shots must be positive.")
+        if batch is None:
+            batch = shots
+        if batch <= 0:
+            raise ValueError("batch must be positive.")
+
+        merged_qir = self._merge_qir_with_extra()
+        resolved_detectors = self._resolve_detectors(merged_qir)
+        if len(resolved_detectors) == 0:
+            raise ValueError("No detectors defined in the circuit.")
+        num_detectors = len(resolved_detectors)
+
+        if allow_state:
+            status_state: Optional[Tensor] = None
+            if status is not None:
+                status_state = backend.cast(
+                    backend.convert_to_tensor(status), rdtypestr
+                )
+                ss = backend.shape_tuple(status_state)
+                if len(ss) == 2:
+                    if int(ss[1]) != 1:
+                        raise ValueError(
+                            "allow_state=True expects status shape [shots] or [shots, 1]."
+                        )
+                    status_state = backend.reshape(status_state, [int(ss[0])])
+                    ss = backend.shape_tuple(status_state)
+                if len(ss) != 1 or int(ss[0]) != shots:
+                    raise ValueError(
+                        "allow_state=True expects status shape [shots] or [shots, 1]."
+                    )
+            else:
+                if seed is not None:
+                    g = backend.get_random_state(seed)
+                    status_state = backend.cast(
+                        backend.stateful_randu(g, shape=[shots]), rdtypestr
+                    )
+            p = backend.reshape(self.detector_probabilities(), [-1])
+            sample_int = backend.probability_sample(shots, p, status_state)
+            sample_bin = sample_int2bin(sample_int, num_detectors, dim=2)
+            return backend.cast(sample_bin, "bool")
+
+        status2d: Optional[Tensor]
+        if (not self.is_dm) and (not allow_state):
+            num_random_events = self._count_detector_random_events(merged_qir)
+            if status is not None:
+                status2d = backend.cast(backend.convert_to_tensor(status), rdtypestr)
+                ss = backend.shape_tuple(status2d)
+                if len(ss) == 1:
+                    if shots != 1:
+                        raise ValueError("1D status is only valid when shots == 1.")
+                    status2d = backend.reshape(status2d, [1, int(ss[0])])
+                    ss = backend.shape_tuple(status2d)
+                if len(ss) != 2 or int(ss[0]) != shots:
+                    raise ValueError(
+                        "allow_state=False trajectory mode expects status shape [shots, num_random_events]."
+                    )
+                if int(ss[1]) != num_random_events:
+                    raise ValueError(
+                        f"status second dimension must equal number of random events ({num_random_events})."
+                    )
+            else:
+                if num_random_events == 0:
+                    status2d = None
+                elif seed is not None:
+                    g = backend.get_random_state(seed)
+                    status2d = backend.cast(
+                        backend.stateful_randu(g, shape=[shots, num_random_events]),
+                        rdtypestr,
+                    )
+                else:
+                    status2d = backend.cast(
+                        backend.implicit_randu(shape=[shots, num_random_events]),
+                        rdtypestr,
+                    )
+
+            two_i = backend.cast(backend.convert_to_tensor(2), "int32")
+
+            def trajectory_one(row: Any) -> Tensor:
+                records = self._run_instruction_trajectory(merged_qir, row)
+                det_row: List[Tensor] = []
+                for rec_indices in resolved_detectors:
+                    inds = backend.cast(
+                        backend.convert_to_tensor(rec_indices), dtype="int32"
+                    )
+                    bits = backend.gather1d(records, inds)
+                    parity = backend.mod(backend.sum(bits), two_i)
+                    det_row.append(backend.cast(parity, "int32"))
+                return backend.stack(det_row)
+
+            trajectory_batch = backend.jit(backend.vmap(trajectory_one))
+
+            if status2d is None:
+                # num_random_events == 0 case, results are deterministic
+                res = backend.jit(trajectory_one)(None)
+                return backend.cast(backend.tile(res[None, :], [shots, 1]), "bool")
+
+            shot_rows: List[Tensor] = []
+            start = 0
+            while start < shots:
+                stop = min(start + batch, shots)
+                sb = status2d[start:stop]
+                shot_rows.append(trajectory_batch(sb))
+                start = stop
+            return backend.cast(backend.concat(shot_rows, axis=0), "bool")
+
+        if status is not None:
+            status2d = backend.cast(backend.convert_to_tensor(status), rdtypestr)
+            ss = backend.shape_tuple(status2d)
+            if len(ss) == 1:
+                if shots != 1:
+                    raise ValueError("1D status is only valid when shots == 1.")
+                status2d = backend.reshape(status2d, [1, int(ss[0])])
+                ss = backend.shape_tuple(status2d)
+            if len(ss) != 2 or int(ss[0]) != shots:
+                raise ValueError(
+                    "allow_state=False expects status shape [shots, num_detectors]."
+                )
+            if int(ss[1]) != num_detectors:
+                raise ValueError(
+                    f"status second dimension must equal number of detectors ({num_detectors})."
+                )
+        else:
+            if seed is not None:
+                g = backend.get_random_state(seed)
+                status2d = backend.cast(
+                    backend.stateful_randu(g, shape=[shots, num_detectors]), rdtypestr
+                )
+            else:
+                status2d = backend.cast(
+                    backend.implicit_randu(shape=[shots, num_detectors]), rdtypestr
+                )
+
+        base_nodes, base_detector_edges = self._build_detector_tn_from_qir(
+            merged_qir, resolved_detectors
+        )
+        tracev = backend.cast(backend.convert_to_tensor([1.0, 1.0]), dtypestr)
+
+        def sample_one(status_row: Tensor) -> Tensor:
+            assigned: List[Tensor] = []
+            for j in range(num_detectors):
+                nodes, detector_edges = self.copy_nodes(base_nodes, base_detector_edges)
+                for k, bit in enumerate(assigned):
+                    pnode = tn.Node(backend.cast(backend.onehot(bit, 2), dtypestr))
+                    nodes.append(pnode)
+                    detector_edges[k] ^ pnode[0]
+                for k in range(j + 1, num_detectors):
+                    tnode = tn.Node(tracev)
+                    nodes.append(tnode)
+                    detector_edges[k] ^ tnode[0]
+                pt = contractor(nodes, output_edge_order=[detector_edges[j]]).tensor
+                p2 = backend.abs(backend.real(backend.reshape(pt, [2])))
+                p2 = p2 / backend.sum(p2)
+                sampled = backend.probability_sample(1, p2, status_row[j : j + 1])[0]
+                assigned.append(backend.cast(sampled, "int32"))
+            return backend.cast(backend.stack(assigned), "bool")
+
+        sample_one_jit = backend.jit(sample_one)
+        sample_batch_jit = backend.jit(backend.vmap(sample_one_jit))
+
+        outs = []
+        start = 0
+        while start < shots:
+            stop = min(start + batch, shots)
+            sb = status2d[start:stop]
+            outs.append(sample_batch_jit(sb))
+            start = stop
+        if len(outs) == 1:
+            return outs[0]
+        return backend.concat(outs, axis=0)
 
     @partial(arg_alias, alias_dict={"format": ["format_"]})
     def sample(
