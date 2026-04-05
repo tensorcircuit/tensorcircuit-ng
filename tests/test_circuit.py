@@ -829,6 +829,26 @@ def test_toqir():
     np.testing.assert_allclose(z3, 0.202728, atol=1e-5)
 
 
+def test_qir_channel():
+    c = tc.Circuit(2)
+    c.h(0)
+    c.depolarizing(1, px=0.1, py=0.1, pz=0.1)
+    qir = c.to_qir()
+
+    # allow_channel=False (default)
+    c1 = tc.Circuit.from_qir(qir)
+    assert c1.gate_count() == 1  # only H gate
+
+    # allow_channel=True
+    c2 = tc.Circuit.from_qir(qir, allow_channel=True)
+    assert c2.gate_count() == 2  # H gate + Depolarizing channel
+
+    # append_from_qir
+    c3 = tc.Circuit(2)
+    c3.append_from_qir(qir, allow_channel=True)
+    assert c3.gate_count() == 2
+
+
 def test_vis_tex():
     c = tc.Circuit(3)
     for i in range(3):
@@ -1595,7 +1615,7 @@ def test_channel_qir_roundtrip(backend):
     qir = c.to_qir()
     assert qir[-1]["is_channel"] is True
     assert qir[-1]["name"] == "depolarizing"
-    c2 = tc.Circuit.from_qir(qir, circuit_params={"nqubits": 1})
+    c2 = tc.Circuit.from_qir(qir, circuit_params={"nqubits": 1}, allow_channel=True)
     qir2 = c2.to_qir()
     assert qir2[-1]["is_channel"] is True
     assert qir2[-1]["name"] == "depolarizing"

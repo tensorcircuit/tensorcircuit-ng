@@ -770,7 +770,7 @@ class BaseCircuit(AbstractCircuit):
                     pz = float(params.get("pz", 0.0))
                     c.depolarizing(q, px=px, py=py, pz=pz, status=next_status())  # type: ignore
                     continue
-                self._apply_qir(c, [d])  # type: ignore[arg-type]
+                self._apply_qir(c, [d], allow_channel=True)  # type: ignore[arg-type]
                 continue
             if not d.get("instruction", False):
                 inds = [int(i) for i in d.get("index", [])]
@@ -779,7 +779,7 @@ class BaseCircuit(AbstractCircuit):
                         raise NotImplementedError(
                             "Gate after measure requires reset_instruction first."
                         )
-                self._apply_qir(c, [d])  # type: ignore[arg-type]
+                self._apply_qir(c, [d], allow_channel=True)  # type: ignore[arg-type]
                 continue
             if name in ["MEASURE", "M", "MZ"]:
                 q = int(d["index"][0])
@@ -988,7 +988,7 @@ class BaseCircuit(AbstractCircuit):
                         raise NotImplementedError(
                             "Gate/noise after measure requires reset_instruction first."
                         )
-                self._apply_qir(work, [d])  # type: ignore[arg-type]
+                self._apply_qir(work, [d], allow_channel=True)  # type: ignore[arg-type]
                 continue
 
             if name in ["MEASURE", "M", "MZ"]:

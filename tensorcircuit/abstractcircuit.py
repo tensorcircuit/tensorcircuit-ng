@@ -407,7 +407,10 @@ class AbstractCircuit:
 
     @classmethod
     def from_qir(
-        cls, qir: List[Dict[str, Any]], circuit_params: Optional[Dict[str, Any]] = None
+        cls,
+        qir: List[Dict[str, Any]],
+        circuit_params: Optional[Dict[str, Any]] = None,
+        allow_channel: bool = False,
     ) -> "AbstractCircuit":
         """
         Restore the circuit from the quantum intermediate representation.
@@ -449,26 +452,27 @@ class AbstractCircuit:
             circuit_params["nqubits"] = nqubits
 
         c = cls(**circuit_params)
-        c = cls._apply_qir(c, qir)
+        c = cls._apply_qir(c, qir, allow_channel=allow_channel)
         return c
 
     @staticmethod
     def _apply_qir(
-        c: "AbstractCircuit", qir: List[Dict[str, Any]]
+        c: "AbstractCircuit", qir: List[Dict[str, Any]], allow_channel: bool = False
     ) -> "AbstractCircuit":
         for d in qir:
             if d.get("is_channel", False):
-                channel_f = d.get("channel_f", None)
-                if channel_f is None:
-                    raise ValueError("QIR channel entry is missing `channel_f`.")
-                channel_parameters = d.get("channel_parameters", {})
-                kwargs = dict(channel_parameters)
-                if "name" in d:
-                    kwargs["name"] = d["name"]
-                channel_unitary = d.get("channel_unitary", False)
-                c.apply_general_kraus_delayed(channel_f, is_unitary=channel_unitary)(  # type: ignore
-                    c, *d["index"], **kwargs
-                )
+                if allow_channel:
+                    channel_f = d.get("channel_f", None)
+                    if channel_f is None:
+                        raise ValueError("QIR channel entry is missing `channel_f`.")
+                    channel_parameters = d.get("channel_parameters", {})
+                    kwargs = dict(channel_parameters)
+                    if "name" in d:
+                        kwargs["name"] = d["name"]
+                    channel_unitary = d.get("channel_unitary", False)
+                    c.apply_general_kraus_delayed(channel_f, is_unitary=channel_unitary)(  # type: ignore
+                        c, *d["index"], **kwargs
+                    )
                 continue
             if "parameters" not in d:
                 c.apply_general_gate_delayed(d["gatef"], d["name"], mpo=d["mpo"])(
@@ -603,7 +607,9 @@ class AbstractCircuit:
 
         return c
 
-    def append_from_qir(self, qir: List[Dict[str, Any]]) -> None:
+    def append_from_qir(
+        self, qir: List[Dict[str, Any]], allow_channel: bool = False
+    ) -> None:
         """
         Apply the ciurict in form of quantum intermediate representation after the current cirucit.
 
@@ -624,8 +630,10 @@ class AbstractCircuit:
 
         :param qir: The quantum intermediate representation.
         :type qir: List[Dict[str, Any]]
+        :param allow_channel: whether to allow channel in the qir, defaults to False
+        :type allow_channel: bool, optional
         """
-        self._apply_qir(self, qir)
+        self._apply_qir(self, qir, allow_channel=allow_channel)
 
     def initial_mapping(
         self,

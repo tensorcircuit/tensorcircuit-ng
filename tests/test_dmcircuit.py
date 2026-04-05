@@ -477,7 +477,7 @@ def test_dm_channel_qir_roundtrip(backend):
     qir = c.to_qir()
     assert qir[-1]["is_channel"] is True
     assert qir[-1]["name"] == "depolarizing"
-    c2 = tc.DMCircuit.from_qir(qir, circuit_params={"nqubits": 1})
+    c2 = tc.DMCircuit.from_qir(qir, circuit_params={"nqubits": 1}, allow_channel=True)
     np.testing.assert_allclose(c.state(), c2.state(), atol=1e-5)
 
 
