@@ -57,41 +57,16 @@ class ExactScalarArray(NamedTuple):
 
     @classmethod
     def create(cls, coeffs: Array, power: Array | None = None) -> "ExactScalarArray":
-        """
-        Create a new ExactScalarArray.
-
-        :param coeffs: Dyadic coefficients (omega^k).
-        :type coeffs: Array
-        :param power: Power of 2 exponent, defaults to zeros.
-        :type power: Array | None, optional
-        :return: A new ExactScalarArray.
-        :rtype: ExactScalarArray
-        """
         if power is None:
             power = jnp.zeros(coeffs.shape[:-1], dtype=idtypestr)
         return cls(coeffs, power)
 
     def __mul__(self, other: "ExactScalarArray") -> "ExactScalarArray":  # type: ignore[override]
-        """
-        Multiply two ExactScalarArrays.
-
-        :param other: Another ExactScalarArray.
-        :type other: ExactScalarArray
-        :return: The product.
-        :rtype: ExactScalarArray
-        """
         new_coeffs = _scalar_mul(self.coeffs, other.coeffs)
         new_power = self.power + other.power
         return ExactScalarArray(new_coeffs, new_power)
 
     def reduce(self) -> "ExactScalarArray":
-        """
-        Reduce the dyadic representation by shifting common factors of 2 from coefficients to power.
-
-        :return: Reduced ExactScalarArray.
-        :rtype: ExactScalarArray
-        """
-
         def cond_fun(carry: Tuple[Array, Array]) -> Any:
             coeffs, _ = carry
             reducible = jnp.all(coeffs % 2 == 0, axis=-1) & jnp.any(
@@ -114,12 +89,6 @@ class ExactScalarArray(NamedTuple):
         return ExactScalarArray(new_coeffs, new_power)
 
     def sum(self) -> "ExactScalarArray":
-        """
-        Sum coefficients across the last axis after aligning powers.
-
-        :return: Summed ExactScalarArray.
-        :rtype: ExactScalarArray
-        """
         min_power = jnp.min(self.power, keepdims=True, axis=-1)
         pow = (self.power - min_power)[..., None]
         aligned_coeffs = self.coeffs * 2**pow
@@ -127,14 +96,6 @@ class ExactScalarArray(NamedTuple):
         return ExactScalarArray(summed_coeffs, min_power.squeeze(-1))
 
     def prod(self, axis: int = -1) -> "ExactScalarArray":
-        """
-        Compute the product across a given axis.
-
-        :param axis: Axis to reduce, defaults to -1.
-        :type axis: int, optional
-        :return: Product ExactScalarArray.
-        :rtype: ExactScalarArray
-        """
         if axis < 0:
             axis = self.coeffs.ndim + axis
 

@@ -387,9 +387,6 @@ class StabilizerCircuit(AbstractCircuit):
         :param p: Noise parameter (probability of depolarizing)
         :type p: float
         """
-        self._qir.append(
-            {"name": "depolarizing", "index": index, "parameters": {"p": p}}
-        )
         self._stim_circuit.append_from_stim_program_text(
             f"DEPOLARIZE1({p}) {' '.join(map(str, index))}"
         )
