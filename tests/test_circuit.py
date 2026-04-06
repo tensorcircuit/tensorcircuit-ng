@@ -1974,3 +1974,86 @@ def test_expectation_error_handling(backend):
         tc.expectation(
             (tc.gates.z(), [0]), (tc.gates.x(), [0]), ket=c.state(), normalization=True
         )
+
+
+def test_stim2tc_basics():
+    pytest.importorskip("stim")
+    import stim
+    from tensorcircuit.translation import stim2tc
+
+    # 1. Basic Clifford
+    sc = stim.Circuit("H 0\nCNOT 0 1")
+    c = stim2tc(sc)
+    assert c._nqubits == 2
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.expectation_ps(z=[0, 1])), 1.0, atol=1e-5
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.expectation_ps(x=[0, 1])), 1.0, atol=1e-5
+    )
+
+    # 2. Measurement & Reset
+    sc = stim.Circuit("X 0\nM 0\nRZ 0")
+    c = stim2tc(sc)
+    # trajectory mode or dm mode needed for reset normally,
+    # but here we just check qir
+    assert c._extra_qir[0]["name"] == "measure"
+    assert c._extra_qir[1]["name"] == "reset"
+
+    # 3. Basis-changed M & R
+    sc = stim.Circuit("MX 0\nRY 0")
+    c = stim2tc(sc)
+    # MX -> H, M, H
+    names = [d["name"] for d in c._qir]
+    assert "h" in names
+    # RY -> sdg, h, reset, h, s
+    assert "sd" in names or "sdg" in names
+
+    # 4. Noise
+    sc = stim.Circuit("X_ERROR(0.1) 0\nDEPOLARIZE2(0.2) 0 1")
+    c = stim2tc(sc, is_dm=True)
+    # Both are named "depolarizing" in qir
+    found_1q = False
+    found_2q = False
+    for d in c._qir:
+        if d["name"] == "depolarizing":
+            if len(d["index"]) == 1:
+                found_1q = True
+            if len(d["index"]) == 2:
+                found_2q = True
+    assert found_1q and found_2q
+
+    # 5. Detector
+    sc = stim.Circuit("M 0\nDETECTOR(42) rec[-1]")
+    c = stim2tc(sc)
+    assert c._extra_qir[1]["name"] == "detector"
+    assert c._extra_qir[1]["index"] == [-1]
+
+
+def test_stim2tc_detector_sampling():
+    pytest.importorskip("stim")
+    import stim
+    from tensorcircuit.translation import stim2tc
+
+    p = 0.1
+    shots = 1000
+    sc = stim.Circuit(f"""
+        X_ERROR({p}) 0
+        M 0
+        DETECTOR rec[-1]
+    """)
+
+    # stim sampling
+    sampler = sc.compile_detector_sampler()
+    stim_samples = sampler.sample(shots=shots)
+    stim_avg = np.mean(stim_samples)
+
+    # tc sampling
+    c = stim2tc(sc)
+    tc_samples = c.sample_detector(shots=shots)
+    tc_avg = tc.backend.numpy(tc.backend.mean(tc.backend.cast(tc_samples, "float32")))
+
+    # Compare
+    # Expected average is p
+    np.testing.assert_allclose(stim_avg, p, atol=0.1)
+    np.testing.assert_allclose(tc_avg, p, atol=0.1)

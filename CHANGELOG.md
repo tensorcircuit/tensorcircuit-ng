@@ -12,6 +12,8 @@
 
 - Add detector support for `BaseCircuit`.
 
+- Add `stim2tc` translation in translation.py
+
 ## v1.6.0
 
 ### Added
