@@ -176,9 +176,9 @@ class StabilizerTCircuit(AbstractCircuit):
         """
         stc = cls(circuit._nqubits, strategy=strategy)
 
-        # Collect all operations with their position
-        all_ops = []
-        for i, d in enumerate(circuit._qir):
+        # Collect all operations and normalize names
+        qir = []
+        for d in circuit._qir:
             new_d = d.copy()
             if "gatef" in new_d:
                 if "name" not in new_d or not new_d["name"]:
@@ -189,23 +189,18 @@ class StabilizerTCircuit(AbstractCircuit):
                         new_d["name"] = gatef.__name__.upper()
             if "name" in new_d:
                 new_d["name"] = new_d["name"].upper()
-            all_ops.append((float(i), new_d))
+            qir.append(new_d)
 
+        extra_qir = []
         for d in getattr(circuit, "_extra_qir", []):
             new_d = d.copy()
             if "name" in new_d:
                 new_d["name"] = new_d["name"].upper()
-            # Interleave based on 'pos' field
-            pos = float(new_d.get("pos", len(circuit._qir)))
-            # Ties: instructions at same 'pos' as a gate should typically come after the gate?
-            # Or before? AbstractCircuit appends to _extra_qir AFTER the gate is added to _qir.
-            # So pos = len(_qir) before the gate? No, l = len(_qir) is the index of the gate about to be added.
-            # So it should be pos + some small epsilon to be consistent with the order they were called.
-            all_ops.append((pos + 0.1, new_d))
+            extra_qir.append(new_d)
 
-        # Sort by position
-        all_ops.sort(key=lambda x: x[0])
-        stc._qir = [op for _, op in all_ops]
+        from ..translation import _merge_extra_qir
+
+        stc._qir = _merge_extra_qir(qir, extra_qir)
 
         return stc
 

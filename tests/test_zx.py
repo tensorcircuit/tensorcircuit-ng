@@ -1062,3 +1062,22 @@ def test_zx_noisy_expectation_ps_matches_weighted_reference(backend):
     ref = np.mean(np.asarray(ref_vals, dtype=np.complex128))
 
     np.testing.assert_allclose(exp_mc, ref, atol=0.04)
+
+
+@pytest.mark.parametrize("backend", [lf("npb")])
+def test_from_circuit_ordering(backend):
+    c = tc.Circuit(1)
+    c.h(0)
+    # len(c._qir) is 1
+    c.measure_instruction(0)
+    c.reset_instruction(0)
+    # len(c._qir) is still 1, but next gate will be at index 1
+    c.x(0)
+    # len(c._qir) is 2
+
+    stc = StabilizerTCircuit.from_circuit(c)
+
+    names = [d["name"].upper() for d in stc._qir]
+    # translation._merge_extra_qir logic: extra instructions at pos i come BEFORE qir[i]
+    expected = ["H", "MEASURE", "RESET", "X"]
+    assert names == expected
