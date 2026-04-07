@@ -1,236 +1,60 @@
 # TensorCircuit-NG Repository Guide for AI Agents
 
-## Core Philosophy
+## Mission
 
-TensorCircuit is a **Tensor Network-first**, **Multi-Backend** quantum computing framework. When contributing to this codebase, you must adhere to the following architectural principles:
+TensorCircuit is a tensor-network-first, multi-backend quantum computing framework. Optimize for backend-agnostic, differentiable, JIT-friendly code changes that match existing repository style.
 
-### Unified Backend Interface
+## Non-Negotiable Rules
 
-- **Rule**: Never use backend-specific libraries (numpy, tensorflow, jax) directly in core logic.
-- **Pattern**: Use the `tc.backend` abstraction for all tensor operations.
-- **Example**: Use `tc.backend.sin(x)` instead of `np.sin(x)` or `tf.math.sin(x)`. This ensures code runs seamlessly on TensorFlow, JAX, PyTorch, and NumPy.
+- Use `tc.backend` for core tensor operations. Do not call backend-specific APIs such as NumPy, JAX, or TensorFlow directly in core logic.
+- Prefer backend-native abstractions already used in the repo, including `tc.backend.jit`, `tc.backend.grad`, `tc.backend.vmap`, and backend control-flow helpers when applicable.
+- Preserve differentiability. Avoid graph-breaking conversions, in-place tensor mutation, and other patterns that block autodiff.
+- Preserve JIT compatibility. Avoid Python control flow that depends on tensor values; prefer backend control-flow helpers or static structure.
+- Keep changes minimal and consistent with existing architecture.
+- Prefer simple, direct implementations. Avoid defensive complexity and broad `try...except` blocks.
+- Fail fast. Expose real problems early instead of masking them with silent fallbacks or workaround-heavy logic.
+- Do not cheat around repository invariants, tests, or framework behavior just to make a local change appear to pass.
 
-### Differentiable Programming (AD)
+## Environment Rules
 
-- **Rule**: All core components must be differentiable.
-- **Pattern**: Avoid operations that break the computation graph (e.g., converting to numpy inside a differentiable function, using in-place assignments on tensors).
-- **Goal**: End-to-end differentiability allows variational algorithms and gradient-based optimization to work out of the box.
+- Never install packages into system or user Python unless the user explicitly asks.
+- If a command fails because of missing Python packages or `ModuleNotFoundError`, ask the user which environment to use.
+- Once the environment is known, run Python tooling through that environment, for example `conda run -n <env> ...`.
+- Dependency and tool configuration lives in `requirements/`, `pyproject.toml`, and `.pylintrc`.
 
-### JIT-First Optimization
+## Where To Look First
 
-- **Rule**: Write code that is JIT-compilable (Just-In-Time).
-- **Pattern**: Avoid Python control flow (if/else) that depends on tensor values. Use `tc.backend.cond` or `tc.backend.switch` if necessary, or structure code to be statically analyzable.
-- **Benefit**: This enables massive speedups on JAX and TensorFlow backends.
+- Search before guessing file locations.
+- Treat `tests/test_*.py` as the source of truth for intended behavior.
+- Core library code lives in `tensorcircuit/`.
+- Examples in `examples/` are useful reference implementations.
+- Documentation sources live in `docs/`.
 
-### Known Issues and Intermittent Failures
+## Coding Rules
 
-- **`tests/test_circuit.py::test_qiskit2tc`**: This test may fail intermittently (e.g., in Qiskit 0.46.3+) due to non-deterministic behavior in Qiskit's `UnitaryGate.control()` method during circuit translation. If this test fails while other tests pass, it is likely a framework-level "heisenbug" and not a regression in TensorCircuit core logic.
+- Match existing naming, structure, and API patterns.
+- Keep comments minimal and useful; avoid explanatory debugging commentary.
+- Use type hints where they improve clarity and static analysis.
+- Write clear public docstrings when changing public APIs.
+- Backend-agnostic, autodiff-friendly, and JIT-friendly patterns are preferred throughout the codebase.
 
-## Repository Structure
+## Testing Rules
 
-- `tensorcircuit/`: Core package source code.
-  - `backends/`: Backend implementations (avoid modifying unless necessary).
-  - `templates/`: High-level modules (ansatzes, Hamiltonians, graphs).
-- `examples/`: Usage demos and benchmarks. Use these as reference implementations.
-- `tests/`: Comprehensive test suite. Check these for expected behavior.
-- `docs/`: Sphinx documentation source.
+- Use fixtures from `tests/conftest.py`.
+- In tests, never call `tc.set_backend()` or `tc.set_dtype()` directly.
+- Use backend fixtures such as `npb`, `tfb`, `jaxb`, `torchb`, and `cpb` instead of manual backend switching.
+- Use the `highp` fixture when a test requires `complex128` precision.
+- Prefer targeted tests first, then broader validation as needed.
+- Use `pytest -n auto` when broader test execution is needed and the environment supports it.
+- For code quality, follow existing `black` and `pylint` expectations.
+- `.pylintrc` is the source of truth for linter behavior.
+- Run `bash check_all.sh` before submitting substantial code changes when the environment is available.
 
-## Configuration and Dependencies
+## Known Issue
 
-### Python Environment Management
-
-- **Rule**: Never install packages in the default system or user Python environment unless explicitly directed by the user.
-- **Protocol**: If a command fails due to a missing package or `ModuleNotFoundError`, **explicitly ask the user** for the correct Python environment to use (e.g., a specific Conda environment name like `2602`).
-- **Workflow**: Once an environment is identified, prefix all Python/pytest/pylint commands with `conda run -n <env_name>` or the appropriate environment activator.
-
-### Core Dependencies
-
-- numpy
-- scipy
-- tensornetwork-ng
-- networkx
-
-### Backend Dependencies (Optional)
-
-- tensorflow
-- jax
-- jaxlib
-- torch
-- qiskit
-- sympy
-- symengine
-- mthree
-
-### Development Dependencies
-
-- mypy
-- pytest
-- black (with jupyter support)
-- pylint
-- sphinx (>=4.0)
-
-### Configuration Files
-
-1. `requirements/` - Contains various requirement files:
-   - [requirements.txt](requirements/requirements.txt) - Core dependencies
-   - [requirements-dev.txt](requirements/requirements-dev.txt) - Development tools
-   - [requirements-extra.txt](requirements/requirements-extra.txt) - Optional dependencies
-   - [requirements-types.txt](requirements/requirements-types.txt) - Type checking dependencies
-
-2. [pyproject.toml](pyproject.toml) - Build system configuration with mypy and pytest settings
-
-3. `.pylintrc` - Code style enforcement with specific rules enabled
-
-## AI Agent Best Practices
-
-### Code Navigation
-
-- **Search First**: The codebase is extensive. Search for class definitions (e.g., `class Hamiltonian`) rather than guessing file paths.
-- **Check Tests**: `tests/test_*.py` files are the ultimate source of truth for how APIs are intended to be used.
-
-### Coding Standards
-
-- **Linting**: We enforce strict **Pylint** and **Black** formatting.
-  - Run `bash check_all.sh` before submitting changes.
-  - Target Pylint score: 10.0/10.
-- **Type Hinting**: Use type hints liberally to aid static analysis.
-- **Documentation**: Write clear docstrings (reStructuredText format) for all public APIs.
-
-### Coding Style Suggestions
-
-Follow these rules for all code changes in this repository:
-
-- **Minimalism**: Minimize comments; be concise; code should be self-explanatory and self-documenting.
-- **No Chain-of-Thought**: Do not include chain-of-thought or debugging steps in comments.
-- **Contextual Comments**: Comments should be useful, reminding the reader about non-obvious global context.
-- **Consistency**: Match existing code style and architectural patterns of the codebase.
-- **Simplicity**: If uncertain, choose the simpler, more concise implementation.
-- **Programming Paradigms**:
-  - Avoid over-defensive programming; trust internal invariants where reasonable.
-  - Use `try...except` sparingly; only catch exceptions you can meaningfully handle.
-  - Fail fast: Expose problems early to locate and solve them immediately, rather than masking them with broad error handling or silent failures.
-
-### Common Workflows
-
-#### 1. Running Tests
-
-```bash
-# Run all tests (auto-parallelized)
-pytest -n auto
-
-# Run specific test file (useful during debugging)
-pytest tests/test_hamiltonians.py
-```
-
-#### 2. Checking Code Quality
-
-```bash
-# Check formatting
-black . --check
-
-# Run linter on specific file
-pylint tensorcircuit/quantum.py
-```
-
-### Common Patterns in the Codebase
-
-- Backend-agnostic operations through the tc.backend interface
-- JIT compilation support via tc.backend.jit(), JIT is prefered for performance
-- Automatic differentiation support via tc.backend.grad()
-- Vectorized operations using tc.backend.vmap patterns
-- Context managers for temporary configuration changes
-
-### Branch Strategy
-
-- master branch for stable releases
-- beta branch for nightly builds (as seen in nightly_release.yml)
-- pull requests for feature development
-
-### Test Structure
-
-- Tests located in /tests/ directory
-- Example scripts in /examples/ directory also serve as integration tests
-- CI runs example demos to ensure functionality
-
-### Pytest Fixtures
-
-All fixtures are defined in `tests/conftest.py`. Use these instead of manually calling `tc.set_backend()` or `tc.set_dtype()`.
-
-**Backend Fixtures** (use with `@pytest.mark.parametrize` and `lazy_fixture`):
-| Fixture | Backend | Notes |
-|---------|---------|-------|
-| `npb` | NumPy | Default, always available |
-| `tfb` | TensorFlow | Requires tensorflow |
-| `jaxb` | JAX | Requires jax/jaxlib |
-| `torchb` | PyTorch | Requires torch |
-| `cpb` | CuPy | Requires cupy (GPU) |
-
-**Configuration Fixtures** (use as additional function parameter):
-| Fixture | Effect |
-|---------|--------|
-| `highp` | Sets `complex128` dtype, resets to `complex64` after test |
-
-**Usage Patterns**:
-```python
-from pytest_lazyfixture import lazy_fixture as lf
-
-# Standard multi-backend test
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
-def test_feature(backend):
-    # Test runs on numpy, tensorflow, and jax backends
-    c = tc.Circuit(2)
-    c.h(0)
-    assert tc.backend.numpy(c.expectation_z(0)) is not None
-
-# Test with high precision (complex128)
-@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
-def test_high_precision(backend, highp):
-    # dtype is complex128 here
-    pass
-
-# AD/JIT tests (exclude numpy which doesn't support these)
-@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
-def test_gradients(backend):
-    @tc.backend.jit
-    def loss(theta):
-        c = tc.Circuit(1)
-        c.rx(0, theta=theta)
-        return tc.backend.real(c.expectation_z(0))
-
-    vg = tc.backend.value_and_grad(loss)
-    val, grad = vg(tc.backend.convert_to_tensor(0.5))
-    assert grad is not None
-
-# vmap tests (JAX only)
-@pytest.mark.parametrize("backend", [lf("jaxb")])
-def test_vmap(backend):
-    pass
-```
-
-**Important Rules**:
-- Never call `tc.set_backend()` or `tc.set_dtype()` directly in tests
-- Always use fixtures for proper setup/teardown
-- Fixtures automatically reset state after each test
-
-### Documentation
-
-- Documentation built with Sphinx
-- Both English and Chinese versions generated
-- Located in /docs/ directory
-
-### Package Distribution
-
-- Distributed as tensorcircuit-ng package in PyPI
-- Supports extra dependencies for specific backends (tensorflow, jax, torch, qiskit, cloud)
+- `tests/test_circuit.py::test_qiskit2tc` can fail intermittently because of non-deterministic behavior in Qiskit's `UnitaryGate.control()` path. If this is the only failure, treat it as a likely upstream flake rather than a TensorCircuit regression.
 
 ## Further Reading
 
-- **Progressive Memory Disclosure**: See `.agents/memory/index.md` for a modular, categorized index of development protocols, backend quirks, and advanced optimization tips. Agents should review the index first, then read or `grep` specific `.md` files in `.agents/memory/` as needed to load targeted context efficiently. When discovering new non-obvious technical lessons or fixing emergent framework-level issues, agents must record these findings into the appropriate memory file or create a new one to preserve the "Long-Term Memory" of the repository.
-
-- **Official Docs**: https://tensorcircuit-ng.readthedocs.io/
-
-### AI-Native Documentation Services
-
-- Devin Deepwiki: https://deepwiki.com/tensorcircuit/tensorcircuit-ng
-- Google Code Wiki: https://codewiki.google/github.com/tensorcircuit/tensorcircuit-ng
-- Context7 MCP: https://context7.com/tensorcircuit/tensorcircuit-ng
+- Progressive Memory Disclosure: review `.agents/memory/index.md` first, then load only the relevant memory files.
+- If you discover a durable, non-obvious repo lesson, record it in the appropriate memory file.

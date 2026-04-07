@@ -1,5 +1,6 @@
 """
-15-to-1 distillation demonstrating stabilizertcircuit
+15-to-1 distillation demonstrating stabilizertcircuit,
+oversimplified toy model demosntration
 """
 
 import time
@@ -83,9 +84,7 @@ def main():
     print(
         f"Exact Analytical Acceptance:     {prob_exact:.6f} (Time: {time_exact:.4f}s)"
     )
-    print(
-        "=> Successfully reproduced 100% noiseless acceptance rate from literature!\n"
-    )
+    print("=> Successfully reproduced 100% noiseless acceptance rate\n")
 
     print("=== Part 2: Noisy Factory Simulation (p=0.01) ===")
     p_noise = 0.01
