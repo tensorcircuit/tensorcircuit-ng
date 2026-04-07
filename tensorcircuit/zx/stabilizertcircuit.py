@@ -54,17 +54,15 @@ def sample_component(
     f_selected = f_params[:, comp.f_selection].astype(jnp.bool_)
     m_acc = jnp.zeros((batch_size, num_outputs), dtype=jnp.bool_)
     prev = jnp.abs(evaluate(comp.compiled_scalar_graphs[0], f_selected))
-    ones, zero = jnp.ones((batch_size, 1), dtype=jnp.bool_), jnp.zeros(
-        (1, 1), dtype=jnp.bool_
-    )
+    ones = jnp.ones((batch_size, 1), dtype=jnp.bool_)
+    # Normalization check (p0+p1≈prev) was removed for throughput: it required
+    # evaluating an extra row per iteration (batch_size+1) and the result was
+    # never acted upon by callers.  max_dev is kept as a constant zero to
+    # preserve the return signature.
     max_dev = jnp.array(0.0, dtype=rdtypestr)
     for i, circuit in enumerate(comp.compiled_scalar_graphs[1:]):
         params = jnp.hstack([f_selected, m_acc[:, :i], ones])
-        check_row = jnp.hstack([f_selected[:1], m_acc[:1, :i], zero])
-        probs = jnp.abs(evaluate(circuit, jnp.vstack([params, check_row])))
-        p1, p0_single = probs[:batch_size], probs[-1]
-        norm = (p0_single + p1[0]) / prev[0]
-        max_dev = jnp.maximum(max_dev, jnp.abs(norm - 1.0))
+        p1 = jnp.abs(evaluate(circuit, params))
         key, subkey = jax.random.split(key)
         bits = jax.random.bernoulli(subkey, p=p1 / prev)
         m_acc = m_acc.at[:, i].set(bits)
@@ -315,7 +313,11 @@ class StabilizerTCircuit(AbstractCircuit):
             )
 
         assert self._channel_sampler_probs is not None
-        f_samples = jnp.asarray(self._channel_sampler_probs.sample(shots))
+        self._key, subkey = jax.random.split(self._key)
+        if jax.default_backend() != "cpu":
+            f_samples, subkey = self._channel_sampler_probs.sample_jax(shots, subkey)
+        else:
+            f_samples = jnp.asarray(self._channel_sampler_probs.sample(shots))
         p_norm = jnp.ones(shots)
         p_joint = jnp.ones(shots)
 
@@ -476,10 +478,14 @@ class StabilizerTCircuit(AbstractCircuit):
 
     def _sample_batches(self, shots: int, batch_size: int = 1000) -> jax.Array:
         batches = []
+        use_jax_sampler = jax.default_backend() != "cpu"
         for _ in range(ceil(shots / batch_size)):
             assert self._channel_sampler is not None
-            f_params = jnp.asarray(self._channel_sampler.sample(batch_size))
             self._key, subkey = jax.random.split(self._key)
+            if use_jax_sampler:
+                f_params, subkey = self._channel_sampler.sample_jax(batch_size, subkey)
+            else:
+                f_params = jnp.asarray(self._channel_sampler.sample(batch_size))
             assert self._compiled_program is not None
             samples = sample_program(self._compiled_program, f_params, subkey)
             batches.append(samples)

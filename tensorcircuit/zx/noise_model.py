@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import functools
 from collections import defaultdict
 from typing import Any
 from dataclasses import dataclass
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 
@@ -469,6 +472,7 @@ class ChannelSampler:
         self._sparse_data = self._precompute_sparse(
             self.channels, self.signature_matrix
         )
+        self._jax_data = self._precompute_jax(self.channels, self.signature_matrix)
 
     @property
     def num_f_params(self) -> int:
@@ -549,3 +553,104 @@ class ChannelSampler:
             result[positions] ^= xor_pats[outcome_idx]
 
         return result
+
+    @staticmethod
+    def _precompute_jax(
+        channels: list[Channel], signature_matrix: Any
+    ) -> tuple[Any, Any] | None:
+        """Precompute batched JAX arrays for on-device categorical sampling.
+
+        Returns (log_probs_padded, xor_patterns_padded) or None if no active
+        channels.  log_probs_padded has shape (num_channels, max_outcomes) and
+        xor_patterns_padded has shape (num_channels, max_outcomes, num_f).
+        Inactive outcome slots are filled with -inf log-prob so they are never
+        sampled.
+        """
+        num_f = signature_matrix.shape[1]
+        active: list[tuple[Any, Any]] = []
+
+        for ch in channels:
+            probs = ch.probs.astype(np.float64)
+            p_fire = 1.0 - float(probs[0])
+            n_outcomes = len(probs)
+
+            if p_fire <= 1e-15 or n_outcomes <= 1:
+                continue
+
+            col_ids = np.asarray(ch.unique_col_ids)
+            num_bits = len(col_ids)
+            outcomes = np.arange(n_outcomes)
+            bits_mask = ((outcomes[:, None] >> np.arange(num_bits)) & 1).astype(
+                np.uint8
+            )
+            xor_patterns = (bits_mask @ signature_matrix[col_ids] % 2).astype(np.uint8)
+
+            log_probs = np.log(np.maximum(probs, 1e-30)).astype(np.float32)
+            active.append((log_probs, xor_patterns))
+
+        if not active:
+            return None
+
+        max_outcomes = max(lp.shape[0] for lp, _ in active)
+
+        # Pad all channels to the same number of outcomes
+        log_probs_list = []
+        xor_pats_list = []
+        for lp, xp in active:
+            n = lp.shape[0]
+            if n < max_outcomes:
+                lp_padded = np.full(max_outcomes, -1e30, dtype=np.float32)
+                lp_padded[:n] = lp
+                xp_padded = np.zeros((max_outcomes, num_f), dtype=np.uint8)
+                xp_padded[:n] = xp
+            else:
+                lp_padded = lp
+                xp_padded = xp
+            log_probs_list.append(lp_padded)
+            xor_pats_list.append(xp_padded)
+
+        return (
+            jnp.array(np.stack(log_probs_list)),  # (num_channels, max_outcomes)
+            jnp.array(np.stack(xor_pats_list)),  # (num_channels, max_outcomes, num_f)
+        )
+
+    def sample_jax(self, num_samples: int, key: Any) -> tuple[Any, Any]:
+        """Sample from all error channels on-device using JAX categorical sampling.
+
+        :param num_samples: Number of samples to draw.
+        :type num_samples: int
+        :param key: JAX PRNG key.
+        :type key: Any
+        :return: Tuple of (samples, next_key) where samples is a JAX array
+            of shape (num_samples, num_f) with dtype uint8.
+        :rtype: tuple[jax.Array, Any]
+        """
+        num_outputs = self.signature_matrix.shape[1]
+
+        if self._jax_data is None:
+            return jnp.zeros((num_samples, num_outputs), dtype=jnp.uint8), key
+
+        log_probs_all, xor_pats_all = self._jax_data
+
+        key, subkey = jax.random.split(key)
+        result = _sample_jax_impl(log_probs_all, xor_pats_all, subkey, num_samples)
+        return result, key
+
+
+@functools.partial(jax.jit, static_argnums=(3,))
+def _sample_jax_impl(
+    log_probs_all: jax.Array,
+    xor_pats_all: jax.Array,
+    key: jax.Array,
+    num_samples: int,
+) -> jax.Array:
+    """JIT-compiled core of JAX categorical sampling."""
+    num_channels = log_probs_all.shape[0]
+    subkeys = jax.random.split(key, num_channels)
+
+    outcome_indices = jax.vmap(
+        lambda k, lp: jax.random.categorical(k, lp, shape=(num_samples,))
+    )(subkeys, log_probs_all)
+
+    gathered = jax.vmap(lambda xp, idx: xp[idx])(xor_pats_all, outcome_indices)
+    return jnp.bitwise_xor.reduce(gathered, axis=0)

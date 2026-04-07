@@ -109,8 +109,13 @@ class ExactScalarArray(NamedTuple):
 
             return ExactScalarArray(result_coeffs, result_power)
 
-        scanned = lax.associative_scan(_scalar_mul, self.coeffs, axis=axis)
-        result_coeffs = jnp.take(scanned, indices=-1, axis=axis)
+        # Move the reduction axis to position 0 for sequential multiplication
+        coeffs_t = jnp.moveaxis(self.coeffs, axis, 0)
+
+        def body_fn(carry: Array, x: Array) -> Tuple[Array, Any]:
+            return _scalar_mul(carry, x), None
+
+        result_coeffs, _ = lax.scan(body_fn, coeffs_t[0], coeffs_t[1:])
         result_power = jnp.sum(self.power, axis=axis)
 
         return ExactScalarArray(result_coeffs, result_power)

@@ -270,7 +270,11 @@ def find_stab_u3(graphs: List[Any], strategy: DecompositionStrategy) -> list[Any
     )
 
 
-def find_stab(graph: Any, strategy: DecompositionStrategy) -> List[Any]:
+def find_stab(
+    graph: Any,
+    strategy: DecompositionStrategy,
+    pre_reduced: bool = False,
+) -> List[Any]:
     """
     Decompose a ZX graph into a sum of stabilizer graphs.
 
@@ -278,12 +282,15 @@ def find_stab(graph: Any, strategy: DecompositionStrategy) -> List[Any]:
     :type graph: Any
     :param strategy: Decomposition strategy for T gates.
     :type strategy: DecompositionStrategy
+    :param pre_reduced: If True, skip the initial full_reduce (caller already reduced).
+    :type pre_reduced: bool
     :return: List of stabilizer graphs.
     :rtype: List[Any]
     """
     if hasattr(graph, "graph") and not hasattr(graph, "add_vertex"):
         graph = graph.graph
-    zx.full_reduce(graph, paramSafe=True)
+    if not pre_reduced:
+        zx.full_reduce(graph, paramSafe=True)
     graphs = find_stab_u3([graph], strategy=strategy)
     return find_stab_magic(graphs, strategy=strategy)
 
@@ -349,7 +356,7 @@ def _compile_component(
         param_names += [f"m{output_indices[j]}" for j in range(num_m_plugged)]
 
         # Perform stabilizer rank decomposition and compile
-        g_list = find_stab(g_copy, strategy=strategy)
+        g_list = find_stab(g_copy, strategy=strategy, pre_reduced=True)
 
         if len(g_list) == 1:
             # This is a Clifford graph, we can clear the global phase terms
