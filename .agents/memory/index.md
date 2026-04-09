@@ -16,6 +16,7 @@ This directory contains progressive disclosure documents of TensorCircuit develo
 - `symmetry_aware_simulation.md`: Details on $U(1)$ subspace optimizations, Schmidt advantage for entropy, and large qubit bitwise protections.
 - `pauli_operator_evolution.md`: Advice for the Heisenberg picture, backward circuit evolution, tracer accumulation, and real-valued exceptions.
 - `noise_modeling_mitigation.md`: Readout errors, formatting requirements, and thermal relaxation quirks.
+- `stabilizer_zx_qec_simulation.md`: Vectorized QEC simulation via `StabilizerTCircuit`: noise channels vs. explicit Pauli gates, DETECTOR/OBSERVABLE annotation indexing (0-based absolute, not Stim-style negative), `sample_detectors` output structure, and post-selection pattern.
 
 ## Architecture, Testing & API
 - `circuit_architecture_api.md`: Inheritance hierarchy (U1Circuit, MPSCircuit, AnalogCircuit), the `.inverse()` method's effect on parameters, and QIR roundtripping.
