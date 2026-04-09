@@ -833,3 +833,40 @@ def test_chebyshev_evol_ad_on_t(jaxb, highp):
     print(gradient)
     # Gradient should be a scalar
     assert gradient.shape == ()
+
+
+def test_estimate_k():
+    # Case 1: tau = 0
+    # a = (1.0 - (-1.0)) / 2.0 = 1.0
+    # tau = 1.0 * 0.0 = 0.0
+    # max(int(1.1 * 0), int(0 + 20)) = 20
+    assert tc.timeevol.estimate_k(0.0, (1.0, -1.0)) == 20
+
+    # Case 2: tau = 100
+    # a = (2.0 - 0.0) / 2.0 = 1.0
+    # tau = 1.0 * 100.0 = 100.0
+    # max(int(1.1 * 100), int(100 + 20)) = max(110, 120) = 120
+    assert tc.timeevol.estimate_k(100.0, (2.0, 0.0)) == 120
+
+    # Case 3: tau = 200 (crossover point)
+    # a = 1.0, t = 200.0, tau = 200.0
+    # max(int(1.1 * 200), int(200 + 20)) = max(220, 220) = 220
+    assert tc.timeevol.estimate_k(200.0, (2.0, 0.0)) == 220
+
+    # Case 4: tau = 300
+    # a = 1.0, t = 300.0, tau = 300.0
+    # max(int(1.1 * 300), int(300 + 20)) = max(330, 320) = 330
+    assert tc.timeevol.estimate_k(300.0, (2.0, 0.0)) == 330
+
+
+def test_estimate_M():
+    # Case 1: tau = 100, k = 120
+    # a = 1.0, t = 100.0, tau = 100.0
+    # M1 = max(120, 100) + 15 * sqrt(100) = 120 + 150 = 270
+    # M = max(270, 120 + 30) = 270
+    assert tc.timeevol.estimate_M(100.0, (2.0, 0.0), 120) == 270
+
+    # Case 2: tau = 0, k = 20
+    # M1 = max(20, 0) + 15 * 0 = 20
+    # M = max(20, 20 + 30) = 50
+    assert tc.timeevol.estimate_M(0.0, (1.0, -1.0), 20) == 50
