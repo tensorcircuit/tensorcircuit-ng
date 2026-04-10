@@ -1,0 +1,23 @@
+title: "Exponential quantum advantage in processing massive classical data"
+arxiv_id: "2604.07639"
+url: "https://arxiv.org/pdf/2604.07639"
+year: 2026
+authors: 
+  - "Haimeng Zhao"
+  - "Alexander Zlokapa"
+  - "Hartmut Neven"
+  - "Ryan Babbush"
+  - "John Preskill"
+  - "Jarrod R. McClean"
+  - "Hsin-Yuan Huang"
+tags:
+  - "Quantum Oracle Sketching"
+  - "Binary Classification"
+hardware_requirements:
+  gpu: False
+  min_memory: "2GB"
+description: "Reproduces Figure 4(a) logic using a subset of MNIST (1 and 9) to simulate the binary classification task. We compare classical streaming, sparse representations, and the quantum oracle sketching size scaling. Additionally, we explicitly implement the quantum oracle sketching (QOS) circuit for small vectors using TensorCircuit to verify the foundational physics without 'cheating'."
+outputs:
+  - target: "Figure 4(a) - Binary classification"
+    path: outputs/result.png
+    script: "main.py"
