@@ -1081,3 +1081,88 @@ def test_from_circuit_ordering(backend):
     # translation._merge_extra_qir logic: extra instructions at pos i come BEFORE qir[i]
     expected = ["H", "MEASURE", "RESET", "X"]
     assert names == expected
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_mpp_basic(backend):
+    """Test MPP (multi-Pauli product) measurements."""
+    import stim
+
+    # Test 1: MPP X0*X1 on Bell state |00⟩+|11⟩ should give deterministic result
+    stim_circuit = stim.Circuit("""
+        H 0
+        CNOT 0 1
+        MPP X0*X1
+    """)
+
+    stc = StabilizerTCircuit.from_stim_circuit(stim_circuit)
+    samples = stc.sample_measurements(shots=100)
+    # X0*X1 is a stabilizer of Bell state, eigenvalue +1
+    assert np.all(samples == 0), "MPP X0*X1 on Bell state should be deterministic 0"
+
+    # Test 2: MPP Z0*Z1 on Bell state should also be deterministic
+    stim_circuit = stim.Circuit("""
+        H 0
+        CNOT 0 1
+        MPP Z0*Z1
+    """)
+
+    stc = StabilizerTCircuit.from_stim_circuit(stim_circuit)
+    samples = stc.sample_measurements(shots=100)
+    # Z0*Z1 is a stabilizer of Bell state, eigenvalue +1
+    assert np.all(samples == 0), "MPP Z0*Z1 on Bell state should be deterministic 0"
+
+    # Test 3: MPP Y0*Y1 on Bell state
+    stim_circuit = stim.Circuit("""
+        H 0
+        CNOT 0 1
+        MPP Y0*Y1
+    """)
+
+    stc = StabilizerTCircuit.from_stim_circuit(stim_circuit)
+    samples = stc.sample_measurements(shots=100)
+    # Y0*Y1 = -X0*X1*Z0*Z1 on Bell state, eigenvalue -1
+    assert np.all(samples == 1), "MPP Y0*Y1 on Bell state should be deterministic 1"
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_mpp_with_noise(backend):
+    """Test MPP measurements with noise model."""
+    import stim
+
+    # X error should flip Z-basis MPP result
+    stim_circuit = stim.Circuit("""
+        H 0
+        CNOT 0 1
+        X_ERROR(0.2) 0
+        MPP Z0*Z1
+    """)
+
+    stc = StabilizerTCircuit.from_stim_circuit(stim_circuit)
+    samples = stc.sample_measurements(shots=5000)
+    flip_rate = np.mean(samples)
+    # X error on qubit 0 anticommutes with Z0, so flips the parity
+    assert abs(flip_rate - 0.2) < 0.05, f"Expected ~0.2 flip rate, got {flip_rate}"
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_mpp_detector(backend):
+    """Test MPP in detector context (syndrome extraction pattern)."""
+    import stim
+
+    # Repeated syndrome measurement pattern
+    # Z error anticommutes with X0*X1, so it flips the parity
+    stim_circuit = stim.Circuit("""
+        H 0
+        CNOT 0 1
+        MPP X0*X1
+        Z_ERROR(0.1) 0
+        MPP X0*X1
+        DETECTOR rec[-1] rec[-2]
+    """)
+
+    stc = StabilizerTCircuit.from_stim_circuit(stim_circuit)
+    det_samples = stc.sample_detectors(shots=5000)
+    det_rate = np.mean(det_samples)
+    # Detector should fire when Z error occurs between measurements
+    assert abs(det_rate - 0.1) < 0.05, f"Expected ~0.1 detector rate, got {det_rate}"

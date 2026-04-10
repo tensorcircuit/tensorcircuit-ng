@@ -986,6 +986,42 @@ def _sqrt_z_gate(b: GraphRepresentation, q: int) -> None:
     z_phase(b, q, Fraction(1, 2))
 
 
+def mpp(
+    b: GraphRepresentation,
+    paulis: list[tuple[str, int]],
+    invert: bool = False,
+) -> None:
+    """Measure a multi-Pauli product.
+
+    Identical implementation to tsim.core.instructions.mpp.
+
+    Args:
+        b: The graph representation to modify.
+        paulis: List of (pauli_type, qubit) pairs defining the Pauli product.
+                pauli_type should be 'X', 'Y', or 'Z'.
+        invert: Whether to invert the measurement result.
+    """
+    aux = -2
+    reset_z(b, aux)
+    h_gate(b, aux)
+
+    for pauli_type, qubit in paulis:
+        if pauli_type == "X":
+            _cx_cz(b, True, aux, qubit)
+        elif pauli_type == "Z":
+            _cx_cz(b, False, aux, qubit)
+        elif pauli_type == "Y":
+            # cy(b, aux, qubit) = S_dag(qubit); CNOT(aux, qubit); S(qubit)
+            _s_dag_gate(b, qubit)
+            _cx_cz(b, True, aux, qubit)
+            _s_gate(b, qubit)
+        else:
+            raise ValueError(f"Invalid Pauli operator: {pauli_type}")
+
+    h_gate(b, aux)
+    m(b, aux, invert=invert)
+
+
 # NOTE on Gate Naming Convention:
 # -----------------------------
 # We distinguish between demolition measurements (resets) and parametric rotations:
@@ -1130,6 +1166,23 @@ def circuit_to_zx(
             observable_include(
                 b, index, d.get("observable_index", params.get("index", 0))
             )
+        elif name == "MPP":
+            # Parse MPP targets: list of Pauli*qubit pairs
+            # Stim format: MPP X0*Y1*Z2 becomes targets with Pauli info
+            targets = d.get("targets", [])
+            paulis = []
+            for target in targets:
+                # Each target is a dict with 'pauli' and 'qubit' keys
+                # or it could be encoded differently depending on the parser
+                if isinstance(target, dict):
+                    pauli_type = target.get("pauli", "Z")
+                    qubit = target.get("qubit", target.get("index", 0))
+                    paulis.append((pauli_type, qubit))
+                elif isinstance(target, (list, tuple)) and len(target) == 2:
+                    paulis.append((target[0], target[1]))
+            if paulis:
+                invert = d.get("invert", False)
+                mpp(b, paulis, invert=invert)
         elif name in ["QUBIT_COORDS", "SHIFT_COORDS", "TICK"]:
             continue
         elif name in GATE_TABLE:

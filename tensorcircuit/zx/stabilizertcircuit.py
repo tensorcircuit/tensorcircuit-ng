@@ -221,7 +221,7 @@ class StabilizerTCircuit(AbstractCircuit):
             self._key = jax.random.key(seed)
         has_m = any(
             d.get("name", "").upper()
-            in ["MEASURE", "M", "MR", "MRX", "MRY", "MRZ", "MX", "MY", "MZ"]
+            in ["MEASURE", "M", "MR", "MRX", "MRY", "MRZ", "MX", "MY", "MZ", "MPP"]
             for d in self._qir
         )
         if (
@@ -296,7 +296,7 @@ class StabilizerTCircuit(AbstractCircuit):
         """
         has_m = any(
             d.get("name", "").upper()
-            in ["MEASURE", "M", "MR", "MRX", "MRY", "MRZ", "MX", "MY", "MZ"]
+            in ["MEASURE", "M", "MR", "MRX", "MRY", "MRZ", "MX", "MY", "MZ", "MPP"]
             for d in self._qir
         )
         force_measure_all = (not has_m) and (len(state) == self._nqubits)
@@ -764,6 +764,50 @@ class StabilizerTCircuit(AbstractCircuit):
                 inst._qir.append(
                     {"name": "OBSERVABLE_INCLUDE", "index": targets, "p": int(args[0])}
                 )
+                continue
+
+            if name == "MPP":
+                # Parse MPP (multi-Pauli product measurement)
+                # Stim encoding: combiners join Paulis into products
+                # Example: MPP X0*X1 -> [X0, combiner, X1] (1 measurement)
+                # Example: MPP X0*X1 Y2*Y3 -> [X0, combiner, X1, Y2, combiner, Y3] (2 measurements)
+                # Example: MPP X0 X1 -> [X0, X1] (2 separate measurements)
+
+                targets = instruction.targets_copy()
+                mpp_groups = []
+                current_group = []
+
+                for i, t in enumerate(targets):
+                    if t.is_combiner:
+                        # Combiner joins the previous and next Pauli into a product
+                        continue
+
+                    # Add Pauli to current group
+                    if t.is_x_target:
+                        current_group.append(("X", t.value))
+                    elif t.is_y_target:
+                        current_group.append(("Y", t.value))
+                    elif t.is_z_target:
+                        current_group.append(("Z", t.value))
+                    else:
+                        current_group.append(("Z", t.value))
+
+                    # Check if next target is a combiner
+                    # If not (or we're at the end), this group is complete
+                    if i + 1 >= len(targets) or not targets[i + 1].is_combiner:
+                        if current_group:
+                            mpp_groups.append(current_group)
+                            current_group = []
+
+                # Each MPP group is a separate measurement
+                for paulis in mpp_groups:
+                    inst._qir.append(
+                        {
+                            "name": "MPP",
+                            "targets": paulis,
+                            "invert": False,
+                        }
+                    )
                 continue
 
             # Map stim names to TC _qir names
