@@ -18,6 +18,9 @@ This directory contains progressive disclosure documents of TensorCircuit develo
 - `noise_modeling_mitigation.md`: Readout errors, formatting requirements, and thermal relaxation quirks.
 - `stabilizer_zx_qec_simulation.md`: Vectorized QEC simulation via `StabilizerTCircuit`: noise channels vs. explicit Pauli gates, DETECTOR/OBSERVABLE annotation indexing (0-based absolute, not Stim-style negative), `sample_detectors` output structure, and post-selection pattern.
 
+## Symbolic Circuits & Fourier Analysis
+- `symbolcircuit_lambdify.md`: SymbolCircuit gotchas: construct before `set_backend`, `real=True` on symbols, bind all free symbols in `to_circuit`; lambdify to JAX (`modules=[jnp,"math"]`, use `expr.free_symbols`); `to_qiskit` vs `qir2qiskit` incompatibility.
+
 ## Architecture, Testing & API
 - `circuit_architecture_api.md`: Inheritance hierarchy (U1Circuit, MPSCircuit, AnalogCircuit), the `.inverse()` method's effect on parameters, and QIR roundtripping.
 - `module_integration_protocols.md`: Export guidelines, backwards compatibility layers, and strict standards for testing and documentation.

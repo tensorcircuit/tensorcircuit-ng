@@ -28,3 +28,7 @@
 
 5.  **User Verification (Walkthroughs)**:
     - Always provide a production-ready example in `examples/` (e.g., `pauli_propagation_vqe.py`) that showcases a real-world use case (optimization, dynamics, etc.) and demonstrates performance features like JAX JIT and Scanning.
+
+6.  **File Add Procedure** — when adding a new module file (alongside its test file and example file), also:
+    - Run `python generate_rst.py` inside `docs/source/` to regenerate the API reference `.rst` files.
+    - Update `changelog.md` with a brief entry describing the new module.
