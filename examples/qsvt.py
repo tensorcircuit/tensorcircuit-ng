@@ -5,195 +5,248 @@ This script contains a small QSVT solver and runs a basic identity-target
 demo when executed directly.
 """
 
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 
 import numpy as np
-from scipy.optimize import minimize
+
+from qsp import fit_qsp_phases_variational
 
 import tensorcircuit as tc
 
 
-def hermitian_sqrt(matrix: np.ndarray) -> np.ndarray:
-    """Compute the Hermitian square root of a positive semi-definite matrix.
-
-    :param matrix: A positive semi-definite matrix.
-    :returns: The Hermitian square root of the matrix.
-    """
-    eigvals, eigvecs = np.linalg.eigh(matrix)
-    eigvals = np.clip(eigvals, 0, None)
-    sqrt_matrix = eigvecs @ np.diag(np.sqrt(eigvals)) @ eigvecs.conj().T
-    if np.max(np.abs(np.imag(sqrt_matrix))) < 1e-10:
-        sqrt_matrix = np.real(sqrt_matrix)
-    return sqrt_matrix
+def _complex_tensor(value: object) -> object:
+    return tc.backend.cast(tc.backend.convert_to_tensor(value), tc.dtypestr)
 
 
-def block_encode(matrix: np.ndarray) -> np.ndarray:
-    """Block encode a 2x2 matrix A with ||A|| <= 1.
-
-    Returns the unitary:
-    U = [[A, sqrt(I - A A†)], [sqrt(I - A† A), -A†]]
-
-    :param matrix: A 2x2 matrix with operator norm <= 1.
-    :returns: 4x4 block-encoded unitary matrix.
-    """
-    identity = np.eye(2, dtype=complex)
-    sqrt_right = hermitian_sqrt(identity - matrix @ matrix.conj().T)
-    sqrt_left = hermitian_sqrt(identity - matrix.conj().T @ matrix)
-    return np.block([[matrix, sqrt_right], [sqrt_left, -matrix.conj().T]])
+def _system_qubit_count(matrix: object) -> int:
+    shape = tuple(matrix.shape)
+    if len(shape) != 2 or shape[0] != shape[1]:
+        raise ValueError("matrix must be a square matrix")
+    dimension = shape[0]
+    qubits = int(np.log2(dimension))
+    if 2**qubits != dimension:
+        raise ValueError("matrix dimension must be a power of two")
+    return qubits
 
 
-class QSVTSolver:
-    """Solver for Quantum Singular Value Transformation.
+def _phase_rotation_for_system(phi: object, system_dimension: int) -> object:
+    phase = tc.backend.exp(1.0j * _complex_tensor(phi))
+    zero = _complex_tensor(0.0)
+    ancilla_rotation = tc.backend.stack(
+        [
+            tc.backend.stack([phase, zero], axis=0),
+            tc.backend.stack([zero, tc.backend.conj(phase)], axis=0),
+        ],
+        axis=0,
+    )
+    return tc.backend.kron(
+        ancilla_rotation,
+        tc.backend.eye(system_dimension, dtype=tc.dtypestr),
+    )
 
-    :param degree: Polynomial degree (number of phases = degree + 1).
-    :param matrix: Input 2x2 matrix for the transformation.
-    :param target_function: Target matrix function to approximate.
-    :param solver_type: Optimization method, 'classical' or 'variational'.
-    """
 
-    def __init__(
-        self,
-        degree: int,
-        matrix: np.ndarray,
-        target_function: Callable[[np.ndarray], np.ndarray],
-        solver_type: str = "classical",
-    ) -> None:
-        self.degree = degree
-        self.matrix = matrix
-        self.target_function = target_function
-        self.solver_type = solver_type
+def block_encode(matrix: object) -> object:
+    """Block encode a matrix A with ||A|| <= 1."""
+    matrix_tensor = _complex_tensor(matrix)
+    matrix_dag = tc.backend.adjoint(matrix_tensor)
+    identity = tc.backend.eye(matrix_tensor.shape[0], dtype=tc.dtypestr)
+    sqrt_right = tc.backend.sqrtmh(identity - matrix_tensor @ matrix_dag, psd=True)
+    sqrt_left = tc.backend.sqrtmh(identity - matrix_dag @ matrix_tensor, psd=True)
+    top = tc.backend.concat([matrix_tensor, sqrt_right], axis=1)
+    bottom = tc.backend.concat([sqrt_left, -matrix_dag], axis=1)
+    return tc.backend.concat([top, bottom], axis=0)
 
-    def build_qsvt_unitary(self, phases: np.ndarray, unitary: np.ndarray) -> np.ndarray:
-        """Build the QSVT unitary with alternating U and U†."""
-        identity_2 = np.eye(2, dtype=complex)
-        unitary_dag = unitary.conj().T
-        degree = len(phases) - 1
 
-        def rotation(phi: float) -> np.ndarray:
-            return np.kron(np.diag([np.exp(-1j * phi), np.exp(1j * phi)]), identity_2)
+def _leading_basis_inputs(system_dimension: int) -> object:
+    return tc.backend.eye(2 * system_dimension, dtype=tc.dtypestr)[:system_dimension]
 
-        result_unitary = rotation(phases[0])
-        for k in range(1, degree + 1):
-            if degree % 2 == 1:
-                gate = unitary if k % 2 == 1 else unitary_dag
+
+def spectral_samples(matrix: np.ndarray) -> np.ndarray:
+    spectrum = np.linalg.eigvalsh(np.asarray(matrix, dtype=np.complex128))
+    return np.asarray(np.real_if_close(spectrum), dtype=np.float64)
+
+
+def target_matrix(
+    matrix: np.ndarray,
+    target_function: Callable[[float], float],
+) -> np.ndarray:
+    eigvals, eigvecs = np.linalg.eigh(np.asarray(matrix, dtype=np.complex128))
+    transformed_eigvals = np.asarray(
+        [target_function(float(np.real(eigval))) for eigval in eigvals],
+        dtype=np.complex128,
+    )
+    return eigvecs @ np.diag(transformed_eigvals) @ eigvecs.conj().T
+
+
+def _transform_qsp_phases_to_qsvt(phases: np.ndarray) -> np.ndarray:
+    """Convert QSP phases to the reflection-convention QSVT phases."""
+    qsp_phases = np.asarray(phases, dtype=np.float64)
+    updates = np.empty_like(qsp_phases)
+    updates[0] = 3 * np.pi / 4 - (3 + len(qsp_phases) % 4) * np.pi / 2
+    updates[1:-1] = np.pi / 2
+    updates[-1] = -np.pi / 4
+    return qsp_phases + updates
+
+
+def _transition_unitary(
+    degree: int,
+    index: int,
+    unitary: object,
+    unitary_dag: object,
+) -> object:
+    if (degree + index) % 2 == 1:
+        return unitary_dag
+    return unitary
+
+
+def build_qsvt_unitary(
+    phases: np.ndarray,
+    unitary: object,
+    system_dimension: int,
+) -> object:
+    """Build the QSVT unitary with alternating U and U†."""
+    phases_tensor = _complex_tensor(phases)
+    unitary_tensor = _complex_tensor(unitary)
+    unitary_dag = tc.backend.adjoint(unitary_tensor)
+    degree = int(phases_tensor.shape[0]) - 1
+    result_unitary = _phase_rotation_for_system(phases_tensor[0], system_dimension)
+    for index in range(1, degree + 1):
+        gate = _transition_unitary(degree, index, unitary_tensor, unitary_dag)
+        result_unitary = (
+            result_unitary
+            @ gate
+            @ _phase_rotation_for_system(phases_tensor[index], system_dimension)
+        )
+    return result_unitary
+
+
+def build_qsvt_circuit(
+    phases: np.ndarray,
+    unitary_matrix: object,
+    total_qubits: int,
+    inputs: Optional[object] = None,
+) -> tc.Circuit:
+    """Build the QSVT circuit using tensorcircuit."""
+    degree = len(phases) - 1
+    unitary_tensor = _complex_tensor(unitary_matrix)
+    unitary_dag = tc.backend.adjoint(unitary_tensor)
+    circuit = tc.Circuit(total_qubits, inputs=inputs)
+    unitary_qubits = tuple(range(total_qubits))
+    for index in range(degree, -1, -1):
+        circuit.rz(0, theta=-2.0 * phases[index])
+        if index > 0:
+            gate = _transition_unitary(degree, index, unitary_tensor, unitary_dag)
+            if (degree + index) % 2 == 1:
+                circuit.any(*unitary_qubits, unitary=gate, name="Udag")
             else:
-                gate = unitary_dag if k % 2 == 1 else unitary
-            result_unitary = gate @ result_unitary
-            result_unitary = rotation(phases[k]) @ result_unitary
-        return result_unitary
+                circuit.any(*unitary_qubits, unitary=gate, name="U")
+    return circuit
 
-    def build_qsvt_circuit(
-        self, phases: np.ndarray, unitary_matrix: np.ndarray
-    ) -> tc.Circuit:
-        """Build the QSVT circuit using tensorcircuit."""
-        import torch
 
-        degree = len(phases) - 1
-        unitary_dag = unitary_matrix.conj().T
-        if not isinstance(unitary_matrix, torch.Tensor):
-            unitary_matrix = torch.tensor(unitary_matrix, dtype=torch.complex128)
-        if not isinstance(unitary_dag, torch.Tensor):
-            unitary_dag = torch.tensor(unitary_dag, dtype=torch.complex128)
-        circuit = tc.Circuit(2)
-        for k in range(0, degree + 1):
-            circuit.rz(0, theta=2.0 * phases[k])
-            if k < degree:
-                if (degree - k - 1) % 2 == 0:
-                    circuit.any(0, 1, unitary=unitary_matrix, name="U")
-                else:
-                    circuit.any(0, 1, unitary=unitary_dag, name="Udag")
-        return circuit
+def matrix_block(
+    phases: np.ndarray,
+    unitary_matrix: object,
+    system_dimension: int,
+) -> object:
+    unitary = build_qsvt_unitary(phases, unitary_matrix, system_dimension)
+    basis_inputs = _leading_basis_inputs(system_dimension)
+    outputs = tc.backend.vmap(
+        lambda input_state: unitary @ input_state, vectorized_argnums=0
+    )(basis_inputs)
+    return tc.backend.transpose(outputs[:, :system_dimension])
 
-    def validate_phases(
-        self,
-        phases: np.ndarray,
-        unitary_a: np.ndarray,
-        target_f_a: np.ndarray,
-    ) -> Tuple[float, float]:
-        """Validate optimized phases by comparing matrix and circuit results."""
-        unitary_mat = self.build_qsvt_unitary(phases, unitary_a)
-        approx_mat = unitary_mat[0:2, 0:2]
-        err_classical = np.linalg.norm(approx_mat - target_f_a, "fro") / np.linalg.norm(
-            target_f_a, "fro"
-        )
-        circuit = self.build_qsvt_circuit(phases, unitary_a)
-        approx_circ = circuit.matrix()[0:2, 0:2]
-        err_circuit = np.linalg.norm(approx_circ - target_f_a, "fro") / np.linalg.norm(
-            target_f_a, "fro"
-        )
-        return err_classical, err_circuit
 
-    def fit_phases(self, max_steps: int = 1000, lr: float = 0.01) -> np.ndarray:
-        """Optimize QSVT phases to approximate the target function."""
-        unitary_a = block_encode(self.matrix)
-        target_f_a = self.target_function(self.matrix)
-        if self.solver_type == "classical":
+def circuit_block(
+    phases: np.ndarray,
+    unitary_matrix: object,
+    system_dimension: int,
+    total_qubits: int,
+) -> object:
+    basis_inputs = _leading_basis_inputs(system_dimension)
+    columns = tc.backend.vmap(
+        lambda input_state: build_qsvt_circuit(
+            phases, unitary_matrix, total_qubits, inputs=input_state
+        ).state()[:system_dimension],
+        vectorized_argnums=0,
+    )(basis_inputs)
+    return tc.backend.transpose(columns)
 
-            def loss(phases: np.ndarray) -> float:
-                unitary = self.build_qsvt_unitary(phases, unitary_a)
-                approx_f_a = unitary[0:2, 0:2]
-                return (
-                    np.linalg.norm(approx_f_a - target_f_a, "fro") ** 2
-                    / np.linalg.norm(target_f_a, "fro") ** 2
-                )
 
-            result = minimize(
-                loss,
-                np.random.randn(self.degree + 1) * 0.1,
-                method="L-BFGS-B",
-                bounds=[(-np.pi, np.pi)] * (self.degree + 1),
-                options={"maxiter": 10000},
-            )
-            return result.x
-        if self.solver_type == "variational":
-            import torch
+def validate_phases(
+    phases: np.ndarray,
+    unitary_a: np.ndarray,
+    target_f_a: np.ndarray,
+    system_dimension: int,
+    total_qubits: int,
+) -> Tuple[float, float]:
+    """Validate optimized phases by comparing matrix and circuit results."""
+    unitary_tensor = _complex_tensor(unitary_a)
+    target_tensor = _complex_tensor(target_f_a)
+    target_norm = tc.backend.norm(target_tensor)
+    approx_mat = matrix_block(phases, unitary_tensor, system_dimension)
+    matrix_error = tc.backend.numpy(
+        tc.backend.norm(approx_mat - target_tensor) / target_norm
+    )
+    approx_circ = circuit_block(phases, unitary_tensor, system_dimension, total_qubits)
+    circuit_error = tc.backend.numpy(
+        tc.backend.norm(approx_circ - target_tensor) / target_norm
+    )
+    return float(matrix_error), float(circuit_error)
 
-            phases = [
-                torch.tensor(
-                    np.random.randn() * 0.1, dtype=torch.float64, requires_grad=True
-                )
-                for _ in range(self.degree + 1)
-            ]
-            optimizer = torch.optim.Adam(phases, lr=lr)
-            unitary_a_torch = torch.tensor(unitary_a, dtype=torch.complex128)
-            unitary_a_dag_torch = unitary_a_torch.conj().T
-            target_f_a_torch = torch.tensor(target_f_a, dtype=torch.complex128)
-            degree = self.degree
-            for step in range(max_steps):
-                optimizer.zero_grad()
-                circuit = tc.Circuit(2)
-                for k in range(0, degree + 1):
-                    circuit.rz(0, theta=2.0 * phases[k])
-                    if k < degree:
-                        if (degree - k - 1) % 2 == 0:
-                            circuit.any(0, 1, unitary=unitary_a_torch, name="U")
-                        else:
-                            circuit.any(0, 1, unitary=unitary_a_dag_torch, name="Udag")
-                unitary = circuit.matrix()
-                approx_f_a = unitary[0:2, 0:2]
-                loss = (
-                    torch.norm(approx_f_a - target_f_a_torch, p="fro") ** 2
-                    / torch.norm(target_f_a_torch, p="fro") ** 2
-                )
-                loss.backward()
-                optimizer.step()
-                if step % 100 == 0:
-                    print(f"QSVT variational step {step}, loss={loss.item():.6f}")
-            return np.array([phase.detach().cpu().numpy() for phase in phases])
-        raise ValueError(f"Unknown solver_type: {self.solver_type}")
+
+def fit_phases(
+    target_function: Callable[[float], float],
+    degree: int,
+    x_samples: np.ndarray,
+    max_steps: int = 1000,
+    initial_phases: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    """Optimize QSVT phases using the circuit-based QSP solver."""
+    if initial_phases is None:
+        initial_phases = np.linspace(-0.2, 0.2, degree + 1, dtype=np.float64)
+    qsp_phases = fit_qsp_phases_variational(
+        target_function,
+        degree=degree,
+        x_samples=np.asarray(x_samples, dtype=np.float64),
+        initial_phases=initial_phases,
+        maxiter=max_steps,
+    )
+    return _transform_qsp_phases_to_qsvt(qsp_phases)
+
+
+def _example_target_matrix() -> np.ndarray:
+    diagonal_entries = np.linspace(-0.75, 0.75, 8, dtype=np.float64)
+    return np.diag(diagonal_entries).astype(np.complex128)
 
 
 def main() -> None:
-    """Run a minimal QSVT demonstration."""
-    matrix = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=complex) / np.sqrt(2.0)
-    solver = QSVTSolver(degree=3, matrix=matrix, target_function=lambda a: a)
-    phases = solver.fit_phases(max_steps=200)
-    classical_error, circuit_error = solver.validate_phases(
-        phases, block_encode(matrix), matrix
+    """Run a multi-qubit QSVT demonstration."""
+    tc.set_backend("jax")
+    matrix = _example_target_matrix()
+    target = lambda x: x
+    sample_points = spectral_samples(matrix)
+    system_qubits = _system_qubit_count(matrix)
+    system_dimension = 2**system_qubits
+    total_qubits = system_qubits + 1
+
+    print("Target polynomial: f(x) = x")
+    print(f"Target matrix shape: {matrix.shape}")
+    print("Target matrix:")
+    with np.printoptions(precision=3, suppress=True):
+        print(matrix)
+    print("Running multi-qubit QSVT identity-target demo with the quantum solver.")
+    phases = fit_phases(target, degree=3, x_samples=sample_points, max_steps=200)
+    expected_matrix = target_matrix(matrix, target)
+    matrix_error, circuit_error = validate_phases(
+        phases,
+        block_encode(matrix),
+        expected_matrix,
+        system_dimension,
+        total_qubits,
     )
-    print("QSVT phases:", phases)
-    print("QSVT classical error:", float(classical_error))
-    print("QSVT circuit error:", float(circuit_error))
+    print(f"QSVT phases: {phases}")
+    print(f"QSVT matrix error: {float(matrix_error):.6e}")
+    print(f"QSVT circuit error: {float(circuit_error):.6e}")
 
 
 if __name__ == "__main__":
