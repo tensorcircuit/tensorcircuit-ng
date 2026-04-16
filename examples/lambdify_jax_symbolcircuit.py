@@ -6,9 +6,6 @@ Gate parameters must be declared with real=True so that sympy can resolve
 conjugate(sin(theta)) → sin(theta) when building the bra side of <psi|O|psi>.
 Without real=True, conjugate() wrappers remain unevaluated and the symbolic
 expression looks complex even though the value is always real for real inputs.
-
-Run with:
-    conda run -n 2602 python examples/lambdify_jax.py
 """
 
 import sympy
@@ -100,17 +97,3 @@ print("\n--- vmap ---")
 batch = jnp.linspace(0.0, jnp.pi, 9)
 f_zz_vmap = jax.vmap(f_zz)
 print("batch <ZZ> over [0, π]:", f_zz_vmap(batch))
-
-# ── 9. Complex-output observable ──────────────────────────────────────────────
-
-print("\n--- <Y0> ---")
-if syms_y0:
-    arg_vals = {theta: TH, phi: PH}
-    call_args = [jnp.array(float(arg_vals[s])) for s in syms_y0]
-    val_y0 = f_y0(*call_args)
-    ref_y0 = c_ref.expectation_ps(y=[0])
-    print(f"f_y0({syms_y0}):", val_y0)
-    print("tc  <Y0>:", ref_y0)
-    print("match:", jnp.allclose(jnp.array(val_y0, dtype=jnp.complex128), ref_y0))
-else:
-    print("<Y0> has no free symbols (constant):", complex(expr_y0))

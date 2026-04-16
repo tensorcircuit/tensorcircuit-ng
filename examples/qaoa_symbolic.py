@@ -32,9 +32,6 @@ QAOA ansatz (1 layer):
                  x RZZ(-gamma) on (0,1)  and  RZZ(-gamma) on (1,2)
 
     U_M(beta)  = prod_i RX(2 beta)
-
-Run:
-    conda run -n 2602 python examples/qaoa_symbolic.py
 """
 
 import sympy
