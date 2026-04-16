@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 import sympy
 import tensorcircuit as tc
+from tensorcircuit.simplify import _full_light_cone_cancel
 from tensorcircuit.symbolic_gates import (
     sym_cphase,
     sym_cr,
@@ -221,6 +222,36 @@ def test_expectation_bell_state_zz(SymbolCircuit):
     sc.cnot(0, 1)
     expr = sc.expectation_ps(z=[0, 1])
     assert sympy.simplify(expr - 1) == 0
+
+
+def test_lightcone_cancellation(SymbolCircuit, sym):
+    sc = SymbolCircuit(4)
+    # Layer 1
+    for i in range(4):
+        sc.rx(i, theta=sym["theta"])
+    for i in range(3):
+        sc.cnot(i, i + 1)
+    # Layer 2
+    for i in range(4):
+        sc.rx(i, theta=sym["theta"])
+    for i in range(3):
+        sc.cnot(i, i + 1)
+
+    # Check expectation with and without lightcone
+    res1 = sc.expectation((tc.gates.z(), [0]), enable_lightcone=False)
+    res2 = sc.expectation((tc.gates.z(), [0]), enable_lightcone=True)
+
+    # Check correctness at theta=0.5
+    val1 = res1.subs(sym["theta"], 0.5).evalf()
+    val2 = res2.subs(sym["theta"], 0.5).evalf()
+    assert abs(val1 - val2) < 1e-10
+
+    # Check node reduction from light cone cancellation
+    nodes_full = sc.expectation_before((tc.gates.z(), [0]), reuse=False)
+    nodes_lc = _full_light_cone_cancel(
+        sc.expectation_before((tc.gates.z(), [0]), reuse=False)
+    )
+    assert len(nodes_lc) < len(nodes_full)
 
 
 # ── free_symbols ───────────────────────────────────────────────────────────────

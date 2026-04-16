@@ -36,6 +36,7 @@ from .gates import Gate
 from .quantum import QuOperator, _decode_basis_label
 from .symbolic_gates import SYM_SGATE_MAP, SYM_VGATE_MAP, sym_r
 from .utils import is_sequence
+from .simplify import _full_light_cone_cancel
 
 logger = logging.getLogger(__name__)
 
@@ -423,7 +424,7 @@ class SymbolCircuit(Circuit):
             all_endns.append(vec)
 
         nodes, front = self._copy()
-        L = self._nqubits
+        # L = self._nqubits
         edges = []
         for i in range(len(traceout)):
             if i not in left:
@@ -433,25 +434,7 @@ class SymbolCircuit(Circuit):
             else:
                 edges.append(front[i])
 
-        if self.is_dm:
-            for i in range(len(traceout)):
-                if i not in left:
-                    n = Gate(all_endns[i])
-                    nodes.append(n)
-                    front[i + L] ^ n.get_edge(0)
-                else:
-                    edges.append(front[i + L])
-
         t = contractor(nodes, output_edge_order=edges)
-        if self.is_dm:
-            rho = t.tensor.reshape(2 ** len(left), 2 ** len(left))
-            trace = np.trace(rho)
-            if trace == 0:
-                raise ValueError(
-                    "Projected subsystem has zero trace (impossible projection)."
-                )
-            return rho / trace
-
         # backend.norm fails on sympy object array, we do it manually symbolically
         raw_tensor = t.tensor
         norm_sq = np.sum([sympy.Abs(x) ** 2 for x in raw_tensor.reshape(-1)])
@@ -461,13 +444,6 @@ class SymbolCircuit(Circuit):
             )
         norm = sympy.sqrt(norm_sq)
         return (raw_tensor / norm).reshape(-1)
-
-    @backend_numpy
-    def is_valid(self) -> bool:
-        """
-        Check if the symbolic circuit is valid.
-        """
-        return super().is_valid()
 
     # ── expectation ────────────────────────────────────────────────────────────
 
@@ -544,11 +520,15 @@ class SymbolCircuit(Circuit):
         :param reuse: Cache the contracted state vector for repeated calls,
             defaults to True.
         :type reuse: bool
-        :param enable_lightcone: Not supported for symbolic circuits; ignored.
+        :param enable_lightcone: whether enable light cone simplification, defaults to False
         :type enable_lightcone: bool
         :return: Sympy expression for the expectation value.
         """
+        if enable_lightcone:
+            reuse = False
         nodes = self.expectation_before(*ops, reuse=reuse)
+        if enable_lightcone:
+            nodes = _full_light_cone_cancel(nodes)
         result = contractor(nodes).tensor
         if hasattr(result, "item"):
             result = result.item()
@@ -600,7 +580,7 @@ class SymbolCircuit(Circuit):
             )
 
         # Analytical (symbolic) expectation
-        return self.expectation_ps(x=x, y=y, z=z)
+        return self.expectation_ps(x=x, y=y, z=z, **kws)
 
     def sample(self, *args: Any, **kwargs: Any) -> Any:
         """

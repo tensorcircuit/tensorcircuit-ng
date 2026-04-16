@@ -142,11 +142,12 @@ def main():
     F = sympy.Integer(0) + const
     for i, hi in h.items():
         if hi:
-            F = F + hi * sc.expectation_ps(z=[i])
+            F = F + hi * sc.expectation_ps(z=[i], enable_lightcone=True)
     for (i, j), Jij in J.items():
         if Jij:
-            F = F + Jij * sc.expectation_ps(z=[i, j])
+            F = F + Jij * sc.expectation_ps(z=[i, j], enable_lightcone=True)
 
+    F = sympy.re(F)
     F = sympy.trigsimp(F.rewrite(sympy.cos))
     print("Closed-form expectation  F(gamma, beta) = <H_C>:")
     print(" ", F)
@@ -180,9 +181,9 @@ def main():
     print()
 
     # ── Landscape: lambdify for fast numpy evaluation ─────────────────────────
-    F_func = sympy.lambdify([gamma, beta], F, "numpy")
+    F_func = sympy.lambdify([gamma, beta], F, "numpy", cse=True)
 
-    gammas = np.linspace(0, np.pi, 200)
+    gammas = np.linspace(1e-6, np.pi, 200)
     betas = np.linspace(0, np.pi / 2, 200)
     GG, BB = np.meshgrid(gammas, betas)
     FF = F_func(GG, BB)
