@@ -1,6 +1,6 @@
-tensorcircuit.symbolic_gates
+tensorcircuit.symbolgates
 ================================================================================
-.. automodule:: tensorcircuit.symbolic_gates
+.. automodule:: tensorcircuit.symbolgates
     :members:
     :undoc-members:
     :show-inheritance:

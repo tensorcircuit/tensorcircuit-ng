@@ -7,7 +7,7 @@ producing sympy expressions. The class also supports translation to a Qiskit
 QuantumCircuit with Parameter objects for hardware compilation reuse.
 
 Key design: inherit from Circuit, override gate registration to use symbolic
-factories from symbolic_gates.py instead of the standard backend-coupled ones,
+factories from symbolgates.py instead of the standard backend-coupled ones,
 and override the handful of computation methods that call backend.* on tensor
 values.
 """
@@ -34,7 +34,7 @@ from .circuit import Circuit
 from .cons import contractor, runtime_backend, set_function_backend
 from .gates import Gate
 from .quantum import QuOperator, _decode_basis_label
-from .symbolic_gates import SYM_SGATE_MAP, SYM_VGATE_MAP, sym_r
+from .symbolgates import SYM_SGATE_MAP, SYM_VGATE_MAP, sym_r
 from .utils import is_sequence
 from .simplify import _full_light_cone_cancel
 

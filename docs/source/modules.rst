@@ -30,7 +30,7 @@ tensorcircuit
     ./api/simplify.rst
     ./api/stabilizercircuit.rst
     ./api/symbolcircuit.rst
-    ./api/symbolic_gates.rst
+    ./api/symbolgates.rst
     ./api/templates.rst
     ./api/timeevol.rst
     ./api/torchnn.rst

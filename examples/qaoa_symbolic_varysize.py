@@ -4,11 +4,6 @@ One-layer QAOA for a weighted QUBO — tunable n, random 3-regular graph, closed
 Generalises examples/qaoa_symbolic.py to an arbitrary even n with a random
 3-regular graph and uniformly-sampled edge weights.
 
-Usage::
-
-    python examples/qaoa_symbolic_tunable.py          # default n=6, seed=0
-    python examples/qaoa_symbolic_tunable.py --n 8 --seed 42
-
 Outputs:
   * Graph edges with their random weights
   * Symbolic QUBO Hamiltonian H_QUBO in binary variables x_0, ..., x_{n-1}
@@ -164,7 +159,7 @@ def build_qaoa(n: int, h: dict, J: dict, gamma, beta) -> tc.SymbolCircuit:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Tunable-n QAOA symbolic example on a random 3-regular graph"
+        description="QAOA symbolic example on a random 3-regular graph"
     )
     parser.add_argument(
         "--n", type=int, default=6, help="Number of qubits (even, >= 4; default: 6)"

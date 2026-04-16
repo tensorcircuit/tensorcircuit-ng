@@ -3,9 +3,12 @@ from typing import Any
 import numpy as np
 import pytest
 import sympy
+import tensornetwork as tn
+
 import tensorcircuit as tc
+from tensorcircuit.gates import Gate
 from tensorcircuit.simplify import _full_light_cone_cancel
-from tensorcircuit.symbolic_gates import (
+from tensorcircuit.symbolgates import (
     sym_cphase,
     sym_cr,
     sym_crx,
@@ -632,7 +635,7 @@ def test_mixed_sympy_and_numpy_numeric_params(SymbolCircuit, sym):
     assert abs(sym_val - ref_val) < 1e-6
 
 
-# ── symbolic_gates factory tests ──────────────────────────────────────────────
+# ── symbolgates factory tests ─────────────────────────────────────────────────
 
 
 def _mat(gate: Any, n: int) -> np.ndarray:  # type: ignore[type-arg]
@@ -962,15 +965,12 @@ def test_expectation_before_duplicate_index_raises(SymbolCircuit: Any) -> None:
 
 def test_expectation_before_tn_node_numeric_dtype(SymbolCircuit: Any) -> None:
     """Operator passed as a tn.Node with float dtype should be converted to object."""
-    import tensornetwork as tn
-
     theta = sympy.Symbol("theta", real=True)
     sc = SymbolCircuit(1)
     sc.rx(0, theta=theta)
     # Build a Z node with float64 tensor (not object dtype)
     z_numeric = tn.Node(np.array([[1.0, 0.0], [0.0, -1.0]], dtype=float))
     z_numeric = z_numeric.reorder_edges([z_numeric[0], z_numeric[1]])
-    from tensorcircuit.gates import Gate
 
     z_gate = Gate(np.array([[1.0, 0.0], [0.0, -1.0]], dtype=float).reshape(2, 2))
     expr = sc.expectation((z_gate, [0]))
@@ -995,9 +995,8 @@ def test_to_circuit_none_param_dict(SymbolCircuit: Any) -> None:
     sc.h(0)
     sc.cnot(0, 1)
     c = sc.to_circuit()  # param_dict defaults to None
-    import tensorcircuit as tc_mod
 
-    ref = tc_mod.Circuit(2)
+    ref = tc.Circuit(2)
     ref.h(0)
     ref.cnot(0, 1)
     for bs in ["00", "01", "10", "11"]:
