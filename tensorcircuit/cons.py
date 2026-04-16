@@ -148,8 +148,10 @@ def set_function_backend(backend: Optional[str] = None) -> Callable[..., Any]:
         def newf(*args: Any, **kws: Any) -> Any:
             old_backend = getattr(thismodule, "backend").name
             set_backend(backend)
-            r = f(*args, **kws)
-            set_backend(old_backend)
+            try:
+                r = f(*args, **kws)
+            finally:
+                set_backend(old_backend)
             return r
 
         return newf

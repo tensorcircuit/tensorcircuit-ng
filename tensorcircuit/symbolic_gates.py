@@ -358,6 +358,16 @@ def sym_orz(theta: Any = 0) -> Gate:
     return _sym_ocontrolled_1q(sym_rz, theta)
 
 
+def sym_any(unitary: Any = None, **kws: Any) -> Gate:
+    """
+    Symbolic 'any' gate from a unitary matrix.
+    Extra keyword arguments are ignored (compatibility with delayed apply).
+    """
+    if unitary is None:
+        raise ValueError("unitary matrix must be provided for 'any' gate")
+    return _sym_gate(np.array(unitary, dtype=object))
+
+
 # Map: gate name → symbolic factory (accepts **parameters)
 SYM_VGATE_MAP = {
     "rx": sym_rx,
@@ -379,4 +389,5 @@ SYM_VGATE_MAP = {
     "orx": sym_orx,
     "ory": sym_ory,
     "orz": sym_orz,
+    "any": sym_any,
 }

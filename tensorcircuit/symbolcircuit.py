@@ -12,7 +12,17 @@ and override the handful of computation methods that call backend.* on tensor
 values.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 import logging
 import math
 
@@ -21,15 +31,17 @@ import sympy
 import tensornetwork as tn
 
 from .circuit import Circuit
-from .cons import contractor
+from .cons import contractor, runtime_backend, set_function_backend
 from .gates import Gate
-from .quantum import _decode_basis_label
+from .quantum import QuOperator, _decode_basis_label
 from .symbolic_gates import SYM_SGATE_MAP, SYM_VGATE_MAP, sym_r
 from .utils import is_sequence
 
 logger = logging.getLogger(__name__)
 
 Tensor = Any
+
+backend_numpy = set_function_backend("numpy")
 
 
 class SymbolCircuit(Circuit):
@@ -85,7 +97,15 @@ class SymbolCircuit(Circuit):
 
     # ── construction ──────────────────────────────────────────────────────────
 
-    def __init__(self, nqubits: int) -> None:
+    def __init__(
+        self,
+        nqubits: int,
+        inputs: Optional[Tensor] = None,
+        mps_inputs: Optional[Any] = None,
+        tensors: Optional[Any] = None,
+        split: Optional[Dict[str, Any]] = None,
+        dim: Optional[int] = None,
+    ) -> None:
         """
         Initialize a SymbolCircuit with ``nqubits`` qubits.
 
@@ -95,24 +115,45 @@ class SymbolCircuit(Circuit):
         :param nqubits: Number of qubits.
         :type nqubits: int
         """
+        if dim is not None and dim != 2:
+            raise ValueError("SymbolCircuit only supports qubit (dim=2) for now.")
+        if mps_inputs is not None or tensors is not None:
+            raise NotImplementedError(
+                "mps_inputs and tensors are not yet supported in SymbolCircuit"
+            )
+
         self._nqubits = nqubits
         self._d = 2
-        self.split = None
-        self.inputs = None
-        self.mps_inputs = None
+        self.split = split
+        self.inputs = inputs
 
-        self.circuit_param = {"nqubits": nqubits}
+        self.circuit_param = {
+            "nqubits": nqubits,
+            "inputs": inputs,
+            "split": split,
+            "dim": dim,
+        }
 
-        # Create |0> nodes as object-dtype numpy arrays — all backend-agnostic
-        nodes = []
-        for _ in range(nqubits):
-            node = tn.Node(np.array([1, 0], dtype=object), name="qb")
-            self.coloring_nodes([node], flag="inputs")
-            nodes.append(node)
+        with runtime_backend("numpy"):
+            if inputs is None:
+                # Create |0> nodes as object-dtype numpy arrays — all backend-agnostic
+                nodes = []
+                for _ in range(nqubits):
+                    node = tn.Node(np.array([1, 0], dtype=object), name="qb")
+                    self.coloring_nodes([node], flag="inputs")
+                    nodes.append(node)
 
-        self._front: List[tn.Edge] = [n.get_edge(0) for n in nodes]
+                self._front: List[tn.Edge] = [n.get_edge(0) for n in nodes]
+            else:
+                inputs = np.asarray(inputs, dtype=object)
+                inputs = inputs.reshape([self._d] * nqubits)
+                inputs_node = Gate(inputs)
+                self.coloring_nodes([inputs_node], flag="inputs")
+                nodes = [inputs_node]
+                self._front = [inputs_node.get_edge(i) for i in range(nqubits)]
+
         self._nodes: List[tn.Node] = nodes
-        self._start_index = nqubits
+        self._start_index = len(nodes)
 
         self._qir: List[Dict[str, Any]] = []
         self._extra_qir: List[Dict[str, Any]] = []
@@ -134,6 +175,7 @@ class SymbolCircuit(Circuit):
             name = getattr(gatef, "n")
         defaultname = name
 
+        @backend_numpy
         def apply(
             self: "SymbolCircuit",
             *index: int,
@@ -141,7 +183,7 @@ class SymbolCircuit(Circuit):
             name: Optional[str] = None,
         ) -> None:
             localname = name if name is not None else defaultname
-            sym_gatef = SYM_SGATE_MAP.get(localname)
+            sym_gatef = SYM_SGATE_MAP.get(localname)  # type: ignore
             if sym_gatef is None:
                 sym_gatef = SYM_SGATE_MAP.get(defaultname)
             if sym_gatef is not None:
@@ -182,13 +224,14 @@ class SymbolCircuit(Circuit):
         if name is None:
             name = getattr(gatef, "n")
 
+        @backend_numpy
         def apply(self: "SymbolCircuit", *index: int, **vars: Any) -> None:
             split = vars.pop("split", None)
             localname = vars.pop("name", name)
 
-            sym_gatef = SYM_VGATE_MAP.get(localname)
+            sym_gatef = SYM_VGATE_MAP.get(localname)  # type: ignore
             if sym_gatef is None:
-                sym_gatef = SYM_VGATE_MAP.get(name)
+                sym_gatef = SYM_VGATE_MAP.get(name)  # type: ignore
             if sym_gatef is not None:
                 gate = sym_gatef(**vars)  # type: ignore[operator]
             else:
@@ -232,8 +275,51 @@ class SymbolCircuit(Circuit):
 
         return apply_list
 
+    @backend_numpy
+    def apply_general_gate(
+        self,
+        gate: Union[Gate, QuOperator],
+        *index: int,
+        name: Optional[str] = None,
+        split: Optional[Dict[str, Any]] = None,
+        mpo: bool = False,
+        diagonal: bool = False,
+        ir_dict: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Override for backend isolation.
+        """
+        super().apply_general_gate(
+            gate,
+            *index,
+            name=name,
+            split=split,
+            mpo=mpo,
+            diagonal=diagonal,
+            ir_dict=ir_dict,
+        )
+
+    @backend_numpy
+    def _copy(
+        self, conj: Optional[bool] = False
+    ) -> Tuple[List[tn.Node], List[tn.Edge]]:
+        """
+        Override for backend isolation.
+        """
+        return super()._copy(conj=conj)
+
+    @backend_numpy
+    def _copy_state_tensor(
+        self, conj: bool = False, reuse: bool = True
+    ) -> Tuple[List[tn.Node], List[tn.Edge]]:
+        """
+        Override for backend isolation.
+        """
+        return super()._copy_state_tensor(conj=conj, reuse=reuse)
+
     # ── amplitude ──────────────────────────────────────────────────────────────
 
+    @backend_numpy
     def amplitude(self, l: Union[str, Sequence[int]]) -> Any:
         r"""
         Compute :math:`\langle l \vert \psi \rangle` symbolically.
@@ -267,6 +353,7 @@ class SymbolCircuit(Circuit):
 
     # ── wavefunction / state ──────────────────────────────────────────────────
 
+    @backend_numpy
     def wavefunction(self, form: str = "default") -> np.ndarray:  # type: ignore[type-arg]
         """
         Compute the symbolic output state vector.
@@ -291,8 +378,100 @@ class SymbolCircuit(Circuit):
 
     state = wavefunction
 
+    @backend_numpy
+    def matrix(self) -> np.ndarray:  # type: ignore[type-arg]
+        """
+        Compute the symbolic unitary matrix of the circuit.
+        """
+        return super().matrix()  # type: ignore[no-any-return]
+
+    @backend_numpy
+    def probability(self) -> np.ndarray:  # type: ignore[type-arg]
+        """
+        Compute the symbolic probability distribution.
+        """
+        psi = self.wavefunction()
+        return np.array([sympy.Abs(amp) ** 2 for amp in psi], dtype=object)
+
+    @backend_numpy
+    def get_quoperator(self) -> QuOperator:
+        """
+        Get symbolic QuOperator representation.
+        """
+        return super().get_quoperator()
+
+    quoperator = get_quoperator
+
+    @backend_numpy
+    def projected_subsystem(self, traceout: Any, left: Tuple[int, ...]) -> Any:
+        """
+        Compute symbolic projected subsystem.
+        """
+        # Ensure traceout is concrete (not symbolic) for bit selection
+        try:
+            traceout = [int(v) for v in traceout]
+        except (TypeError, AttributeError):
+            raise ValueError(
+                "Symbolic projected_subsystem requires concrete integer-convertible "
+                "basis states in `traceout`."
+            ) from None
+
+        all_endns = []
+        for v in traceout:
+            vec = np.zeros(self._d, dtype=object)
+            vec[v] = 1
+            all_endns.append(vec)
+
+        nodes, front = self._copy()
+        L = self._nqubits
+        edges = []
+        for i in range(len(traceout)):
+            if i not in left:
+                n = Gate(all_endns[i])
+                nodes.append(n)
+                front[i] ^ n.get_edge(0)
+            else:
+                edges.append(front[i])
+
+        if self.is_dm:
+            for i in range(len(traceout)):
+                if i not in left:
+                    n = Gate(all_endns[i])
+                    nodes.append(n)
+                    front[i + L] ^ n.get_edge(0)
+                else:
+                    edges.append(front[i + L])
+
+        t = contractor(nodes, output_edge_order=edges)
+        if self.is_dm:
+            rho = t.tensor.reshape(2 ** len(left), 2 ** len(left))
+            trace = np.trace(rho)
+            if trace == 0:
+                raise ValueError(
+                    "Projected subsystem has zero trace (impossible projection)."
+                )
+            return rho / trace
+
+        # backend.norm fails on sympy object array, we do it manually symbolically
+        raw_tensor = t.tensor
+        norm_sq = np.sum([sympy.Abs(x) ** 2 for x in raw_tensor.reshape(-1)])
+        if norm_sq == 0:
+            raise ValueError(
+                "Projected subsystem has zero norm (impossible projection)."
+            )
+        norm = sympy.sqrt(norm_sq)
+        return (raw_tensor / norm).reshape(-1)
+
+    @backend_numpy
+    def is_valid(self) -> bool:
+        """
+        Check if the symbolic circuit is valid.
+        """
+        return super().is_valid()
+
     # ── expectation ────────────────────────────────────────────────────────────
 
+    @backend_numpy
     def expectation_before(
         self,
         *ops: Tuple[Any, List[int]],
@@ -345,8 +524,9 @@ class SymbolCircuit(Circuit):
             if j not in occupied:
                 newdang[j] ^ newdang[j + nq]
 
-        return nodes
+        return nodes  # type: ignore[no-any-return]
 
+    @backend_numpy
     def expectation(
         self,
         *ops: Tuple[Any, List[int]],
@@ -374,6 +554,107 @@ class SymbolCircuit(Circuit):
             result = result.item()
         return result
 
+    @backend_numpy
+    def sample_expectation_ps(
+        self,
+        x: Optional[Sequence[int]] = None,
+        y: Optional[Sequence[int]] = None,
+        z: Optional[Sequence[int]] = None,
+        shots: Optional[int] = None,
+        random_generator: Optional[Any] = None,
+        status: Optional[Any] = None,
+        readout_error: Optional[Sequence[Any]] = None,
+        noise_conf: Optional[Any] = None,
+        nmc: int = 1000,
+        statusc: Optional[Any] = None,
+        **kws: Any,
+    ) -> Any:
+        """
+        Symbolic execution for analytical Pauli string expectation.
+
+        :param x: List of indices for Pauli X.
+        :type x: Optional[Sequence[int]]
+        :param y: List of indices for Pauli Y.
+        :type y: Optional[Sequence[int]]
+        :param z: List of indices for Pauli Z.
+        :type z: Optional[Sequence[int]]
+        :param shots: Must be None for analytical symbolic result.
+        :type shots: Optional[int]
+        :return: Sympy expression for the expectation value.
+        """
+        if shots is not None:
+            raise NotImplementedError(
+                "SymbolCircuit does not support numerical sampling. "
+                "Use sc.to_circuit() to convert to a numerical circuit first."
+            )
+        if (
+            random_generator is not None
+            or status is not None
+            or readout_error is not None
+            or noise_conf is not None
+            or statusc is not None
+        ):
+            raise NotImplementedError(
+                "SymbolCircuit analytical expectation does not support noise or custom "
+                "sampling parameters."
+            )
+
+        # Analytical (symbolic) expectation
+        return self.expectation_ps(x=x, y=y, z=z)
+
+    def sample(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Overridden to provide better error message for symbolic circuits.
+        """
+        try:
+            return self.to_circuit().sample(*args, **kwargs)
+        except ValueError as e:
+            if "free symbols" in str(e):
+                raise NotImplementedError(
+                    "SymbolCircuit.sample is only supported when all symbols are bound. "
+                    "Bind symbols first using sc.to_circuit(param_dict)."
+                ) from None
+            raise
+
+    def measure(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Overridden to provide better error message for symbolic circuits.
+        """
+        try:
+            return self.to_circuit().measure(*args, **kwargs)
+        except ValueError as e:
+            if "free symbols" in str(e):
+                raise NotImplementedError(
+                    "SymbolCircuit.measure is only supported when all symbols are bound. "
+                    "Bind symbols first using sc.to_circuit(param_dict)."
+                ) from None
+            raise
+
+    def measure_reference(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Overridden to provide better error message for symbolic circuits.
+        """
+        try:
+            return self.to_circuit().measure_reference(*args, **kwargs)
+        except ValueError as e:
+            if "free symbols" in str(e):
+                raise NotImplementedError(
+                    "SymbolCircuit.measure_reference is only supported when all symbols are bound. "
+                    "Bind symbols first using sc.to_circuit(param_dict)."
+                ) from None
+            raise
+
+    def cond_measurement(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Overridden to provide better error message for symbolic circuits.
+        """
+        raise NotImplementedError(
+            "SymbolCircuit does not support cond_measurement (Monte Carlo). "
+            "Convert to a numerical circuit using sc.to_circuit() first."
+        )
+
+    cond_measure = cond_measurement
+
     # ── symbol utilities ──────────────────────────────────────────────────────
 
     def free_symbols(self) -> Set[sympy.Symbol]:
@@ -389,6 +670,26 @@ class SymbolCircuit(Circuit):
                 if hasattr(v, "free_symbols"):
                     syms |= v.free_symbols
         return syms
+
+    def _bind_scalar(self, k: str, v: Any, param_dict: Dict[sympy.Symbol, Any]) -> Any:
+        if hasattr(v, "subs"):
+            v = v.subs(param_dict)
+        if hasattr(v, "free_symbols") and v.free_symbols:
+            raise ValueError(
+                f"Parameter '{k}' still contains free symbols "
+                f"{v.free_symbols} after substitution. "
+                "Pass a complete param_dict to to_circuit()."
+            )
+        return complex(v) if hasattr(v, "free_symbols") else v
+
+    def _bind_array(
+        self, k: str, v: Any, param_dict: Dict[sympy.Symbol, Any]
+    ) -> np.ndarray:  # type: ignore[type-arg]
+        arr = np.asarray(v)
+        if arr.dtype != object:
+            return arr
+        bound = np.vectorize(lambda x: self._bind_scalar(k, x, param_dict))(arr)
+        return bound.astype(complex)  # type: ignore[no-any-return]
 
     def to_circuit(
         self, param_dict: Optional[Dict[sympy.Symbol, Any]] = None
@@ -408,24 +709,15 @@ class SymbolCircuit(Circuit):
         for d in self._qir:
             gate_name = d["name"]
             index = d["index"]
-            params = {}
-            for k, v in d.get("parameters", {}).items():
-                if param_dict and hasattr(v, "subs"):
-                    v = v.subs(param_dict)
-                try:
-                    v = complex(v)
-                except (TypeError, AttributeError):
-                    if hasattr(v, "free_symbols") and v.free_symbols:
-                        raise ValueError(
-                            f"Parameter '{k}' still contains free symbols "
-                            f"{v.free_symbols} after substitution. "
-                            "Pass a complete param_dict to to_circuit()."
-                        ) from None
-                params[k] = v
-            if params:
-                getattr(c, gate_name)(*index, **params)
-            else:
-                getattr(c, gate_name)(*index)
+            params = {
+                k: (
+                    self._bind_array(k, v, param_dict)
+                    if isinstance(v, (np.ndarray, list))
+                    else self._bind_scalar(k, v, param_dict)
+                )
+                for k, v in d.get("parameters", {}).items()
+            }
+            getattr(c, gate_name)(*index, **params)
         return c
 
     def bind(self, param_dict: Dict[sympy.Symbol, Any]) -> "SymbolCircuit":

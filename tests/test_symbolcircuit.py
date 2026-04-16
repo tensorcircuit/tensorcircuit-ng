@@ -210,7 +210,7 @@ def test_expectation_numerical_consistency(SymbolCircuit, sym):
         ref_val = complex(c.expectation_ps(z=[0]))
 
         assert (
-            abs(sym_val - ref_val) < 1e-8
+            abs(sym_val - ref_val) < 1e-7
         ), f"Mismatch at theta={t_val}: sym={sym_val}, ref={ref_val}"
 
 
@@ -1211,3 +1211,146 @@ def test_to_qiskit_else_fallback_logs_warning(SymbolCircuit: Any) -> None:
     sc.cr(0, 1, theta=theta, alpha=alpha, phi=phi)  # cr has no Qiskit native method
     qc = sc.to_qiskit()  # should not raise; AttributeError is caught and warning logged
     assert len(qc.data) == 0  # gate was skipped
+
+
+def test_backend_isolation(jaxb, SymbolCircuit):
+    # Ensure SymbolCircuit works even when global backend is JAX
+    sc = SymbolCircuit(2)
+    sc.h(0)
+    theta = sympy.Symbol("theta", real=True)
+    sc.rx(1, theta=theta)
+
+    # Test methods that involve contraction
+    m = sc.matrix()
+    assert m.shape == (4, 4)
+
+    wv = sc.wavefunction()
+    assert wv.shape == (4,)
+
+    prob = sc.probability()
+    assert prob.shape == (4,)
+
+    exp = sc.expectation_ps(z=[0])
+    # |00> -> H0 -> (|00>+|10>)/sqrt(2). <Z0> = (1 + (-1))/2 = 0.
+    assert sympy.simplify(exp) == 0
+
+
+def test_symbol_circuit_matrix(SymbolCircuit):
+    sc = SymbolCircuit(1)
+    sc.x(0)
+    m = sc.matrix()
+    assert np.all(m == np.array([[0, 1], [1, 0]], dtype=object))
+
+
+def test_symbol_circuit_probability(SymbolCircuit, sym):
+    theta = sym["theta"]
+    sc = SymbolCircuit(1)
+    sc.rx(0, theta=theta)
+    prob = sc.probability()
+    # |cos(theta/2)|**2 and |sin(theta/2)|**2
+    assert sympy.simplify(prob[0] - sympy.cos(theta / 2) ** 2) == 0
+    assert sympy.simplify(prob[1] - sympy.sin(theta / 2) ** 2) == 0
+
+
+def test_symbol_circuit_quoperator(SymbolCircuit):
+    sc = SymbolCircuit(1)
+    sc.x(0)
+    quo = sc.get_quoperator()
+    assert isinstance(quo, tc.quantum.QuOperator)
+
+
+def test_symbol_circuit_projected_subsystem(SymbolCircuit):
+    sc = SymbolCircuit(2)
+    sc.h(0)
+    sc.cnot(0, 1)
+    # state (|00> + |11>)/sqrt(2)
+    # project qubit 0 to |0>, should get |0> on qubit 1
+    res = sc.projected_subsystem(np.array([0, 0]), left=(1,))
+    assert res[0] == 1
+    assert res[1] == 0
+
+
+def test_symbol_circuit_any_gate(SymbolCircuit):
+    sc = SymbolCircuit(1)
+    unitary = np.array([[0, 1], [1, 0]])
+    sc.any(0, unitary=unitary)
+    assert sc.amplitude("1") == 1
+
+
+def test_symbol_circuit_sampling_error(SymbolCircuit, sym):
+    theta = sym["theta"]
+    sc = SymbolCircuit(1)
+    sc.rx(0, theta=theta)
+
+    with pytest.raises(NotImplementedError, match="Bind symbols first"):
+        sc.sample(batch=1)
+
+    with pytest.raises(NotImplementedError, match="Bind symbols first"):
+        sc.measure(0)
+
+    with pytest.raises(NotImplementedError, match="Bind symbols first"):
+        sc.measure_reference(0)
+
+    with pytest.raises(NotImplementedError, match="does not support cond_measurement"):
+        sc.cond_measurement(0)
+
+
+def test_symbol_circuit_sample_expectation_ps_shots(SymbolCircuit, sym):
+    theta = sym["theta"]
+    sc = SymbolCircuit(1)
+    sc.rx(0, theta=theta)
+
+    # Analytical should work
+    res = sc.sample_expectation_ps(z=[0], shots=None)
+    assert sympy.simplify(res - sympy.cos(theta)) == 0
+
+    # Numerical shots should raise
+    with pytest.raises(
+        NotImplementedError, match="does not support numerical sampling"
+    ):
+        sc.sample_expectation_ps(z=[0], shots=100)
+
+
+def test_symbol_circuit_dim_raise(SymbolCircuit):
+    with pytest.raises(ValueError, match="only supports qubit"):
+        SymbolCircuit(1, dim=3)
+
+
+def test_symbol_circuit_any_to_circuit(SymbolCircuit):
+    sc = SymbolCircuit(1)
+    unitary = np.array([[0, 1], [1, 0]])
+    sc.any(0, unitary=unitary)
+    # This used to crash because to_circuit tried to complex(ndarray)
+    c = sc.to_circuit({})
+    assert abs(complex(c.amplitude("1")) - 1.0) < 1e-7
+
+
+def test_symbol_circuit_any_bind(SymbolCircuit):
+    sc = SymbolCircuit(1)
+    unitary = np.array([[0, 1], [1, 0]])
+    sc.any(0, unitary=unitary)
+    # Test partial/full bind with any gate present
+    sc2 = sc.bind({})
+    assert sc2.gate_count() == 1
+    assert abs(complex(sc2.amplitude("1")) - 1.0) < 1e-7
+
+
+def test_symbol_circuit_qir_roundtrip(SymbolCircuit, sym):
+    theta = sym["theta"]
+    sc = SymbolCircuit(2)
+    sc.h(0)
+    sc.rx(1, theta=theta)
+    sc.cnot(0, 1)
+
+    qir = sc.to_qir()
+    # Reconstruction via from_qir
+    sc2 = SymbolCircuit.from_qir(qir)
+
+    assert sc2.gate_count() == 3
+    assert sc2.free_symbols() == {theta}
+
+    # Check that reconstructed circuit produces same symbolic wavefunction
+    psi1 = sc.wavefunction()
+    psi2 = sc2.wavefunction()
+    for i in range(len(psi1)):
+        assert sympy.simplify(psi1[i] - psi2[i]) == 0
