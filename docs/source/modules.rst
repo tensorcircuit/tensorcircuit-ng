@@ -29,6 +29,8 @@ tensorcircuit
     ./api/shadows.rst
     ./api/simplify.rst
     ./api/stabilizercircuit.rst
+    ./api/symbolcircuit.rst
+    ./api/symbolic_gates.rst
     ./api/templates.rst
     ./api/timeevol.rst
     ./api/torchnn.rst

@@ -32,6 +32,12 @@ from .quditcircuit import QuditCircuit
 from .analogcircuit import AnalogCircuit
 from .circuit import Circuit, expectation
 from .u1circuit import U1Circuit
+
+try:
+    from .symbolcircuit import SymbolCircuit
+except (ImportError, ModuleNotFoundError):
+    pass
+
 from .mpscircuit import MPSCircuit
 from .densitymatrix import DMCircuit as DMCircuit_reference
 from .densitymatrix import DMCircuit2
