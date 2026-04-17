@@ -32,6 +32,7 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 
 ## Coding Rules
 
+- Import Placement: All imports — internal (`tensorcircuit.*`) and any third-party package listed in `pyproject.toml` — MUST appear at the top of the file. Only third-party packages that are NOT declared as must dependencies in `pyproject.toml` (e.g. `stim`, `qiskit`) should be imported inside a function body (lazy/optional import pattern). In `examples/`, every dependecy should be imported at the top of file`
 - Match existing naming, structure, and API patterns.
 - Keep comments minimal and useful; avoid explanatory debugging commentary.
 - Use type hints where they improve clarity and static analysis.

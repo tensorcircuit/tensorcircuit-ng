@@ -1,4 +1,6 @@
 data
+docker/Dockerfile-image
+examples/meta_exploration
 tree.pkl
 *.bk
 git_stat_v2.sh

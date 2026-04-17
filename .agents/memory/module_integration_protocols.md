@@ -23,7 +23,7 @@
       - `:type <name>: <type_hint>`
       - `:return: Description`
       - `:rtype: <type_hint>`
-    - **Import Placement**: All internal (`tensorcircuit.*`) and core package (`numpy`, `jax`, `scipy`) imports MUST be moved to the top of the file. Only optional or conditional dependencies (e.g., `stim`, `qiskit`) should remain deferred inside functions if not in minimal requirements.
+    - **Import Placement**: All imports — internal (`tensorcircuit.*`) and any third-party package listed in `pyproject.toml` — MUST appear at the top of the file. Only third-party packages that are **not** declared as dependencies in `pyproject.toml` (e.g. `stim`, `qiskit`) may be imported inside a function body (lazy/optional import pattern).
     - **Comment Cleanup**: Remove all "think-out-loud" development comments, debug print leftovers, and redundant Phase/Part header comments that do not add value to the end user.
 
 5.  **User Verification (Walkthroughs)**:
