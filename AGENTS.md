@@ -14,6 +14,7 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 - Prefer simple, direct implementations. Avoid defensive complexity and broad `try...except` blocks.
 - Fail fast. Expose real problems early instead of masking them with silent fallbacks or workaround-heavy logic.
 - Do not cheat around repository invariants, tests, or framework behavior just to make a local change appear to pass.
+- Focus only on git-tracked files. Do not search for or modify files in `.gitignore` unless explicitly specified by the user.
 
 ## Environment Rules
 
@@ -35,7 +36,7 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 - Import Placement: All imports — internal (`tensorcircuit.*`) and any third-party package listed in `pyproject.toml` — MUST appear at the top of the file. Only third-party packages that are NOT declared as must dependencies in `pyproject.toml` (e.g. `stim`, `qiskit`) should be imported inside a function body (lazy/optional import pattern). In `examples/`, every dependecy should be imported at the top of file`
 - Match existing naming, structure, and API patterns.
 - Keep comments minimal and useful; avoid explanatory debugging commentary.
-- Use type hints where they improve clarity and static analysis.
+- Use type hints and static analysis in the `tensorcircuit/` module.
 - Write clear public docstrings when changing public APIs.
 - Backend-agnostic, autodiff-friendly, and JIT-friendly patterns are preferred throughout the codebase.
 
@@ -46,8 +47,8 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 - Use backend fixtures such as `npb`, `tfb`, `jaxb`, `torchb`, and `cpb` instead of manual backend switching.
 - Use the `highp` fixture when a test requires `complex128` precision.
 - Prefer targeted tests first, then broader validation as needed.
-- Use `pytest -n auto` when broader test execution is needed and the environment supports it.
-- For code quality, follow existing `black` and `pylint` expectations.
+- Use `pytest -n auto` to accelerate when broader test execution is needed and the environment supports it.
+- For code quality, follow existing `black` and `pylint` expectations in `check_all.sh`.
 - `.pylintrc` is the source of truth for linter behavior.
 - Run `bash check_all.sh` before submitting substantial code changes when the environment is available.
 
@@ -58,4 +59,4 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 ## Further Reading
 
 - Progressive Memory Disclosure: review `.agents/memory/index.md` first, then load only the relevant memory files.
-- If you discover a durable, non-obvious repo lesson, record it in the appropriate memory file.
+- If you discover a durable, non-obvious lesson for tensorcircuit-ng project, record it in the appropriate memory file.
