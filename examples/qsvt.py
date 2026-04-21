@@ -5,16 +5,16 @@ This script contains a small QSVT solver and runs a basic identity-target
 demo when executed directly.
 """
 
-from typing import Callable, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 import numpy as np
 
-from qsp import fit_qsp_phases_variational
+from qsp import _fit_qsp_phases
 
 import tensorcircuit as tc
 
 
-def _complex_tensor(value: object) -> object:
+def _complex_tensor(value: object) -> Any:
     return tc.backend.cast(tc.backend.convert_to_tensor(value), tc.dtypestr)
 
 
@@ -64,18 +64,6 @@ def _leading_basis_inputs(system_dimension: int) -> object:
 def spectral_samples(matrix: np.ndarray) -> np.ndarray:
     spectrum = np.linalg.eigvalsh(np.asarray(matrix, dtype=np.complex128))
     return np.asarray(np.real_if_close(spectrum), dtype=np.float64)
-
-
-def target_matrix(
-    matrix: np.ndarray,
-    target_function: Callable[[float], float],
-) -> np.ndarray:
-    eigvals, eigvecs = np.linalg.eigh(np.asarray(matrix, dtype=np.complex128))
-    transformed_eigvals = np.asarray(
-        [target_function(float(np.real(eigval))) for eigval in eigvals],
-        dtype=np.complex128,
-    )
-    return eigvecs @ np.diag(transformed_eigvals) @ eigvecs.conj().T
 
 
 def _transform_qsp_phases_to_qsvt(phases: np.ndarray) -> np.ndarray:
@@ -147,7 +135,7 @@ def matrix_block(
     phases: np.ndarray,
     unitary_matrix: object,
     system_dimension: int,
-) -> object:
+) -> Any:
     unitary = build_qsvt_unitary(phases, unitary_matrix, system_dimension)
     basis_inputs = _leading_basis_inputs(system_dimension)
     outputs = tc.backend.vmap(
@@ -161,7 +149,7 @@ def circuit_block(
     unitary_matrix: object,
     system_dimension: int,
     total_qubits: int,
-) -> object:
+) -> Any:
     basis_inputs = _leading_basis_inputs(system_dimension)
     columns = tc.backend.vmap(
         lambda input_state: build_qsvt_circuit(
@@ -172,46 +160,29 @@ def circuit_block(
     return tc.backend.transpose(columns)
 
 
-def validate_phases(
-    phases: np.ndarray,
-    unitary_a: np.ndarray,
-    target_f_a: np.ndarray,
-    system_dimension: int,
-    total_qubits: int,
-) -> Tuple[float, float]:
-    """Validate optimized phases by comparing matrix and circuit results."""
-    unitary_tensor = _complex_tensor(unitary_a)
-    target_tensor = _complex_tensor(target_f_a)
-    target_norm = tc.backend.norm(target_tensor)
-    approx_mat = matrix_block(phases, unitary_tensor, system_dimension)
-    matrix_error = tc.backend.numpy(
-        tc.backend.norm(approx_mat - target_tensor) / target_norm
-    )
-    approx_circ = circuit_block(phases, unitary_tensor, system_dimension, total_qubits)
-    circuit_error = tc.backend.numpy(
-        tc.backend.norm(approx_circ - target_tensor) / target_norm
-    )
-    return float(matrix_error), float(circuit_error)
-
-
 def fit_phases(
     target_function: Callable[[float], float],
     degree: int,
     x_samples: np.ndarray,
     max_steps: int = 1000,
     initial_phases: Optional[np.ndarray] = None,
-) -> np.ndarray:
+) -> Tuple[np.ndarray, float, bool, int]:
     """Optimize QSVT phases using the circuit-based QSP solver."""
     if initial_phases is None:
         initial_phases = np.linspace(-0.2, 0.2, degree + 1, dtype=np.float64)
-    qsp_phases = fit_qsp_phases_variational(
+    qsp_phases, optimizer_loss, success, iterations = _fit_qsp_phases(
         target_function,
         degree=degree,
         x_samples=np.asarray(x_samples, dtype=np.float64),
         initial_phases=initial_phases,
         maxiter=max_steps,
     )
-    return _transform_qsp_phases_to_qsvt(qsp_phases)
+    return (
+        _transform_qsp_phases_to_qsvt(qsp_phases),
+        optimizer_loss,
+        success,
+        iterations,
+    )
 
 
 def _example_target_matrix() -> np.ndarray:
@@ -225,9 +196,6 @@ def main() -> None:
     matrix = _example_target_matrix()
     target = lambda x: x
     sample_points = spectral_samples(matrix)
-    system_qubits = _system_qubit_count(matrix)
-    system_dimension = 2**system_qubits
-    total_qubits = system_qubits + 1
 
     print("Target polynomial: f(x) = x")
     print(f"Target matrix shape: {matrix.shape}")
@@ -235,18 +203,15 @@ def main() -> None:
     with np.printoptions(precision=3, suppress=True):
         print(matrix)
     print("Running multi-qubit QSVT identity-target demo with the quantum solver.")
-    phases = fit_phases(target, degree=3, x_samples=sample_points, max_steps=200)
-    expected_matrix = target_matrix(matrix, target)
-    matrix_error, circuit_error = validate_phases(
-        phases,
-        block_encode(matrix),
-        expected_matrix,
-        system_dimension,
-        total_qubits,
+    phases, optimizer_loss, success, _ = fit_phases(
+        target,
+        degree=3,
+        x_samples=sample_points,
+        max_steps=200,
     )
     print(f"QSVT phases: {phases}")
-    print(f"QSVT matrix error: {float(matrix_error):.6e}")
-    print(f"QSVT circuit error: {float(circuit_error):.6e}")
+    print(f"QSVT success: {success}")
+    print(f"QSVT final loss: {optimizer_loss:.6e}")
 
 
 if __name__ == "__main__":
