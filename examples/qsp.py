@@ -13,17 +13,12 @@ from scipy.optimize import minimize
 
 import tensorcircuit as tc
 
-MinimizeResult = tuple[np.ndarray, float, bool, int]
+MinimizeResult = tuple[Any, float, bool, int]
 RNG = np.random.default_rng(None)
 
 
 def _real_tensor(value: Union[float, np.ndarray, object]) -> Any:
     return tc.backend.cast(tc.backend.convert_to_tensor(value), tc.rdtypestr)
-
-
-def _qsp_circuit_value(phases: np.ndarray, x: object) -> object:
-    state = build_qsp_circuit(phases, x).state()
-    return tc.backend.real(state[0])
 
 
 def _minimize_with_scipy(
@@ -107,7 +102,7 @@ def _minimize_with_optax(
     bounded_parameters = np.pi * tc.backend.tanh(raw_parameters)
     gradient_norm = float(tc.backend.numpy(tc.backend.norm(gradients)))
     return (
-        np.asarray(tc.backend.numpy(bounded_parameters), dtype=np.float64),
+        bounded_parameters,
         float(tc.backend.numpy(loss_value)),
         bool(gradient_norm <= 1e-6),
         maxiter,
@@ -125,7 +120,7 @@ def minimize_backend_loss(
         return _minimize_with_optax(loss, initial_parameters, maxiter)
     result = _minimize_with_scipy(loss, initial_parameters, maxiter, use_gradient)
     return (
-        np.asarray(result.x, dtype=np.float64),
+        _real_tensor(result.x),
         float(result.fun),
         bool(result.success),
         int(getattr(result, "nit", maxiter)),
@@ -148,7 +143,7 @@ def build_qsp_circuit(phases: np.ndarray, x: float) -> tc.Circuit:
     return circuit
 
 
-def _fit_qsp_phases(
+def fit_qsp_phases(
     target: Callable[[Union[float, np.ndarray]], Union[float, np.ndarray]],
     degree: int,
     x_samples: Optional[np.ndarray],
@@ -159,21 +154,29 @@ def _fit_qsp_phases(
         maxiter = 500
     if x_samples is None:
         n_samples = max(20, degree * 10)
-        x_samples = np.linspace(-1.0, 1.0, n_samples)
-    x_samples = np.asarray(x_samples, dtype=np.float64)
+        x_samples = np.linspace(-1.0, 1.0, n_samples, dtype=tc.rdtypestr)
+    x_samples = np.asarray(x_samples, dtype=tc.rdtypestr)
     if initial_phases is None:
         initial_phases = RNG.normal(loc=0.0, scale=0.1, size=degree + 1)
-    target_values = np.asarray([target(float(x)) for x in x_samples], dtype=np.float64)
+    initial_phases = np.asarray(initial_phases, dtype=tc.rdtypestr)
+    target_values = np.asarray(
+        [target(float(x)) for x in x_samples], dtype=tc.rdtypestr
+    )
     x_tensor = _real_tensor(x_samples)
     target_tensor = _real_tensor(target_values)
+    sample_count = _real_tensor(tc.backend.shape_tuple(x_tensor)[0])
     use_gradient = tc.backend.name != "numpy"
+
+    def qsp_circuit_value(phases: Any, x: object) -> object:
+        state = build_qsp_circuit(phases, x).state()
+        return tc.backend.real(state[0])
 
     def loss(phases: np.ndarray) -> object:
         values = tc.backend.vmap(
-            lambda sample: _qsp_circuit_value(phases, sample), vectorized_argnums=0
+            lambda sample: qsp_circuit_value(phases, sample), vectorized_argnums=0
         )(x_tensor)
         difference = values - target_tensor
-        return tc.backend.mean(difference * difference)
+        return tc.backend.tensordot(difference, difference, 1) / sample_count
 
     return minimize_backend_loss(
         loss,
@@ -186,22 +189,24 @@ def _fit_qsp_phases(
 def main() -> None:
     """Run the circuit-based QSP demonstration."""
     tc.set_backend("jax")
+    tc.set_dtype("complex128")
     target = lambda x: x
     target_description = "f(x) = x"
-    sample_points = np.linspace(-1.0, 1.0, 21)
+    sample_points = np.linspace(-1.0, 1.0, 21, dtype=tc.rdtypestr)
 
     print(f"Target function: {target_description}")
     print("Running circuit-based quantum-solver QSP demo.")
-    quantum_phases, optimizer_loss, success, _ = _fit_qsp_phases(
+    quantum_phases, optimizer_loss, success, _ = fit_qsp_phases(
         target,
         degree=5,
         x_samples=sample_points,
         initial_phases=None,
         maxiter=None,
     )
+    quantum_phases_np = np.asarray(tc.backend.numpy(quantum_phases), dtype=tc.rdtypestr)
     print(f"Quantum solver success: {success}")
     print(f"Quantum solver optimizer loss: {optimizer_loss:.6e}")
-    print(f"Quantum solver phases: {quantum_phases}")
+    print(f"Quantum solver phases: {quantum_phases_np}")
 
 
 if __name__ == "__main__":
