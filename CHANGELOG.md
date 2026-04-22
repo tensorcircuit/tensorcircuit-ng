@@ -16,6 +16,8 @@
 
 - Add `SymbolCircuit` class.
 
+- Add `strip_exponent` support for `set_contractor`.
+
 ## v1.6.0
 
 ### Added
@@ -45,7 +47,6 @@
 - Fix jax backend QR gradient bug.
 
 - Lazy import for tensorflow and torch.
-
 
 ## v1.5.0
 

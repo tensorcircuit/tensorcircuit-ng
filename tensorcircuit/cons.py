@@ -578,7 +578,8 @@ def _algebraic_base_contraction(
     algorithm: Any,
     output_edge_order: Optional[Sequence[tn.Edge]] = None,
     ignore_edge_order: bool = False,
-) -> tn.Node:
+    **kws: Any,
+) -> Any:
     """
     Execute contraction using cotengra and autoray for bare tensors.
     """
@@ -591,6 +592,7 @@ def _algebraic_base_contraction(
     if len(raw_tensors) == 1:
         # Avoid cotengra bug for empty contraction paths
         final_raw_tensor = be.einsum(input_sets[0] + "->" + output_set, *raw_tensors)
+        exponent = 0.0
     else:
         path = algorithm(input_sets, output_set, size_dict)
         logger.info("the contraction path is given as %s" % str(path))
@@ -601,8 +603,11 @@ def _algebraic_base_contraction(
 
         # Use autoray to keep AD and JIT support across backends
         # Note: cotengra's make_contractor handles the orchestration
-        contractor = ctg.core.make_contractor(tree, implementation="autoray")
-        final_raw_tensor = contractor(*raw_tensors)
+        if not kws.get("strip_exponent", False):
+            contractor = ctg.core.make_contractor(tree, implementation="autoray")
+            final_raw_tensor = contractor(*raw_tensors)
+        else:
+            final_raw_tensor, exponent = tree.contract(raw_tensors, strip_exponent=True)
 
     final_node = tn.Node(final_raw_tensor, backend=be)
 
@@ -623,6 +628,9 @@ def _algebraic_base_contraction(
         if output_edge_order is None:
             output_edge_order = dangling_edges
         final_node.reorder_edges(list(output_edge_order))
+
+    if kws.get("strip_exponent", False):
+        return final_node, exponent
 
     return final_node
 
@@ -722,7 +730,8 @@ def _base(
     total_size: Optional[int] = None,
     debug_level: int = 0,
     use_primitives: Optional[bool] = None,
-) -> tn.Node:
+    **kws: Any,
+) -> Any:
     """
     The base method for all `opt_einsum` contractors.
 
@@ -774,7 +783,7 @@ def _base(
         # NEW ALGEBRAIC EXECUTION PATH (Opt-in)
         # ==========================================
         return _algebraic_base_contraction(
-            nodes, algorithm, output_edge_order, ignore_edge_order
+            nodes, algorithm, output_edge_order, ignore_edge_order, **kws
         )
 
     # ==========================================
@@ -906,6 +915,7 @@ def custom(
             ignore_edge_order,
             debug_level=debug_level,
             use_primitives=use_primitives,
+            **kws,
         )
 
     total_size = None
@@ -925,6 +935,7 @@ def custom(
         total_size,
         debug_level=debug_level,
         use_primitives=use_primitives,
+        **kws,
     )
 
 
@@ -1043,6 +1054,9 @@ def set_contractor(
         method = "greedy"
         # auto for small size fallbacks to dp, which has bug for now
         # see: https://github.com/dgasmith/opt_einsum/issues/172
+    if kws.get("strip_exponent", False):
+        if use_primitives is None:
+            use_primitives = True
     if method.startswith("cotengra"):
         # cotengra shortcut
         import cotengra

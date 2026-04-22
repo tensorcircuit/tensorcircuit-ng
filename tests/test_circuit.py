@@ -6,6 +6,7 @@ from functools import partial
 
 import numpy as np
 import opt_einsum as oem
+import tensornetwork as tn
 import pytest
 from pytest_lazyfixture import lazy_fixture as lf
 
@@ -2057,3 +2058,71 @@ def test_stim2tc_detector_sampling():
     # Expected average is p
     np.testing.assert_allclose(stim_avg, p, atol=0.1)
     np.testing.assert_allclose(tc_avg, p, atol=0.1)
+
+
+@pytest.fixture
+def reset_contractor():
+    yield
+    tc.set_contractor("greedy", preprocessing=True)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_strip_exponent(backend, reset_contractor):
+    """
+    Test the strip_exponent functionality for avoiding overflow/underflow.
+    """
+    # tfb is currently not supported: see https://github.com/jcmgray/cotengra/issues/81
+    # 1. Underflow test: 0.1^400
+    tc.set_contractor("cotengra", strip_exponent=True)
+
+    nodes = [
+        tn.Node(tc.backend.convert_to_tensor(0.1, tc.rdtypestr)) for _ in range(400)
+    ]
+
+    # contractor returns (final_node, exponent)
+    res_node, exponent = tc.cons.contractor(nodes)
+
+    np.testing.assert_allclose(tc.backend.numpy(res_node.tensor), 1.0, atol=1e-5)
+    np.testing.assert_allclose(exponent, -400.0, atol=1e-5)
+
+    # 2. Overflow test: 2.0^200 via Circuit expectation
+    n = 100
+    c = tc.Circuit(n)
+    matrix = np.array([[2.0, 0], [0, 2.0]])
+    for i in range(n):
+        c.any(i, unitary=matrix)
+
+    # Reset contractor to ensure strip_exponent is active
+    tc.set_contractor("cotengra", strip_exponent=True)
+
+    # expectation_before returns the nodes for contraction
+    nodes = c.expectation_before([tc.gates.z(), [0]], reuse=False)
+    res_node, exponent = tc.cons.contractor(nodes)
+
+    # Expected Log10 exponent: 200 * log10(2) approx 60.206
+    expected_exponent = 200 * np.log10(2.0)
+
+    np.testing.assert_allclose(tc.backend.numpy(res_node.tensor), 1.0, atol=1e-5)
+    np.testing.assert_allclose(exponent, expected_exponent, atol=1e-3)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_strip_exponent_no_hyperedge(backend, reset_contractor):
+    """
+    Verify that strip_exponent forces algebraic path even without hyperedges.
+    """
+    tc.set_contractor("cotengra", strip_exponent=True)
+
+    # Simple scalar contraction (no hyperedges)
+    nodes = [
+        tn.Node(tc.backend.convert_to_tensor(10.0, tc.rdtypestr)) for _ in range(10)
+    ]
+
+    # Should still return a tuple because strip_exponent is True
+    result = tc.cons.contractor(nodes)
+    assert isinstance(result, tuple)
+    assert len(result) == 2
+
+    res_node, exponent = result
+    np.testing.assert_allclose(tc.backend.numpy(res_node.tensor), 1.0, atol=1e-5)
+    np.testing.assert_allclose(exponent, 10.0, atol=1e-5)
