@@ -21,36 +21,6 @@ def _real_tensor(value: Union[float, np.ndarray, object]) -> Any:
     return tc.backend.cast(tc.backend.convert_to_tensor(value), tc.rdtypestr)
 
 
-def _complex_tensor(value: Union[complex, np.ndarray, object]) -> Any:
-    return tc.backend.cast(tc.backend.convert_to_tensor(value), tc.dtypestr)
-
-
-def _phase_matrix(phi: object) -> object:
-    phase = tc.backend.exp(1.0j * _complex_tensor(phi))
-    zero = _complex_tensor(0.0)
-    return tc.backend.stack(
-        [
-            tc.backend.stack([phase, zero], axis=0),
-            tc.backend.stack([zero, tc.backend.conj(phase)], axis=0),
-        ],
-        axis=0,
-    )
-
-
-def _signal_rotation(x: object) -> object:
-    x_tensor = tc.backend.clip(_real_tensor(x), -1.0, 1.0)
-    x_complex = _complex_tensor(x_tensor)
-    y_tensor = tc.backend.sqrt(tc.backend.relu(1.0 - x_tensor * x_tensor))
-    off_diagonal = -1.0j * _complex_tensor(y_tensor)
-    return tc.backend.stack(
-        [
-            tc.backend.stack([x_complex, off_diagonal], axis=0),
-            tc.backend.stack([off_diagonal, x_complex], axis=0),
-        ],
-        axis=0,
-    )
-
-
 def _qsp_circuit_value(phases: np.ndarray, x: object) -> object:
     state = build_qsp_circuit(phases, x).state()
     return tc.backend.real(state[0])
@@ -126,9 +96,10 @@ def _minimize_with_optax(
         parameters = optax.apply_updates(parameters, updates)
         return parameters, state, loss_value, gradients
 
-    loss_value = None
-    gradients = None
-    for _ in range(maxiter):
+    raw_parameters, optimizer_state, loss_value, gradients = update_step(
+        raw_parameters, optimizer_state
+    )
+    for _ in range(1, maxiter):
         raw_parameters, optimizer_state, loss_value, gradients = update_step(
             raw_parameters, optimizer_state
         )
@@ -159,44 +130,6 @@ def minimize_backend_loss(
         bool(result.success),
         int(getattr(result, "nit", maxiter)),
     )
-
-
-def _print_qsp_fit_summary(
-    label: str,
-    phases: np.ndarray,
-    optimizer_loss: Optional[float] = None,
-    success: Optional[bool] = None,
-) -> None:
-    if success is not None:
-        print(f"{label} success: {success}")
-    if optimizer_loss is not None:
-        print(f"{label} final loss: {optimizer_loss:.6e}")
-    print(f"{label} phases: {phases}")
-
-
-def qsp_unitary(phases: np.ndarray, x: float) -> Any:
-    """Return the QSP unitary U(x; phases) for a single signal x.
-
-    :param phases: Array of QSP phase angles.
-    :param x: Signal value in [-1, 1].
-    :returns: 2x2 QSP unitary matrix.
-    """
-    phases_tensor = _real_tensor(phases)
-    signal_rotation = _signal_rotation(x)
-    unitary = _phase_matrix(phases_tensor[0])
-    for index in range(1, int(phases_tensor.shape[0])):
-        unitary = unitary @ signal_rotation @ _phase_matrix(phases_tensor[index])
-    return unitary
-
-
-def qsp_polynomial(phases: np.ndarray, x: float) -> object:
-    """Return the real QSP polynomial P(x) = Re[U_{00}(x)].
-
-    :param phases: Array of QSP phase angles.
-    :param x: Signal value in [-1, 1].
-    :returns: Real part of the (0,0) element of the QSP unitary.
-    """
-    return tc.backend.real(qsp_unitary(phases, x)[0, 0])
 
 
 def build_qsp_circuit(phases: np.ndarray, x: float) -> tc.Circuit:
@@ -266,12 +199,9 @@ def main() -> None:
         initial_phases=None,
         maxiter=None,
     )
-    _print_qsp_fit_summary(
-        "Quantum solver",
-        quantum_phases,
-        optimizer_loss=optimizer_loss,
-        success=success,
-    )
+    print(f"Quantum solver success: {success}")
+    print(f"Quantum solver optimizer loss: {optimizer_loss:.6e}")
+    print(f"Quantum solver phases: {quantum_phases}")
 
 
 if __name__ == "__main__":
