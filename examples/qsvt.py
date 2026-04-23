@@ -89,24 +89,6 @@ def build_qsvt_circuit(
     return circuit
 
 
-def circuit_block(
-    phases: np.ndarray,
-    unitary_matrix: object,
-    system_dimension: int,
-    total_qubits: int,
-) -> Any:
-    basis_inputs = tc.backend.eye(2 * system_dimension, dtype=tc.dtypestr)[
-        :system_dimension
-    ]
-    columns = tc.backend.vmap(
-        lambda input_state: build_qsvt_circuit(
-            phases, unitary_matrix, total_qubits, inputs=input_state
-        ).state()[:system_dimension],
-        vectorized_argnums=0,
-    )(basis_inputs)
-    return tc.backend.transpose(columns)
-
-
 def circuit_error(
     phases: object,
     matrix: object,
@@ -118,20 +100,16 @@ def circuit_error(
     total_qubits = _system_qubit_count(matrix_tensor) + 1
     unitary_tensor = block_encode(matrix_tensor)
     eigvals, eigvecs = tc.backend.eigh(matrix_tensor)
-    transformed_eigvals = _complex_tensor(
-        np.asarray(
-            [
-                target_function(float(value))
-                for value in np.asarray(tc.backend.numpy(tc.backend.real(eigvals)))
-            ],
-            dtype=tc.dtypestr,
-        )
-    )
+    transformed_eigvals = _complex_tensor(target_function(tc.backend.real(eigvals)))
     target_tensor = (
         eigvecs @ tc.backend.diagflat(transformed_eigvals) @ tc.backend.adjoint(eigvecs)
     )
     target_norm = tc.backend.norm(target_tensor)
-    approx_circ = circuit_block(phases, unitary_tensor, system_dimension, total_qubits)
+    with tc.runtime_contractor("plain"):
+        circuit_matrix = build_qsvt_circuit(
+            phases, unitary_tensor, total_qubits
+        ).matrix()
+    approx_circ = circuit_matrix[:system_dimension, :system_dimension]
     normalized_error = tc.backend.numpy(
         tc.backend.norm(approx_circ - target_tensor) / target_norm
     )
@@ -150,7 +128,6 @@ def fit_phases(
         initial_phases = np.linspace(-0.2, 0.2, degree + 1, dtype=tc.rdtypestr)
     qsp_phases, _, _, _ = fit_qsp_phases(
         target_function,
-        degree=degree,
         x_samples=np.asarray(x_samples, dtype=tc.rdtypestr),
         initial_phases=initial_phases,
         maxiter=max_steps,

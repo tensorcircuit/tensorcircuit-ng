@@ -5,7 +5,7 @@ This script provides simple helper functions for constructing and fitting
 QSP unitaries and runs a circuit-based fitting demo when executed directly.
 """
 
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Union
 
 import numpy as np
 import optax
@@ -14,7 +14,7 @@ from scipy.optimize import minimize
 import tensorcircuit as tc
 
 MinimizeResult = tuple[Any, float, bool, int]
-RNG = np.random.default_rng(None)
+RNG = np.random.default_rng(42)
 
 
 def _real_tensor(value: Union[float, np.ndarray, object]) -> Any:
@@ -31,7 +31,7 @@ def _minimize_with_scipy(
     if tc.backend.name == "numpy":
 
         def numpy_loss(phases: np.ndarray) -> float:
-            return float(tc.backend.numpy(optimized_loss(phases)))
+            return optimized_loss(phases)
 
         loss_interface = numpy_loss
         jac = False
@@ -73,31 +73,28 @@ def _minimize_with_optax(
     value_and_grad = tc.backend.jit(tc.backend.value_and_grad(bounded_loss))
     optimizer = optax.lbfgs(learning_rate=1.0)
     optimizer_state = optimizer.init(raw_parameters)
-
-    @tc.backend.jit
-    def update_step(
-        parameters: object,
-        state: object,
-    ) -> tuple[object, object, object, object]:
-        loss_value, gradients = value_and_grad(parameters)
-        updates, state = optimizer.update(
+    optimizer_update = tc.backend.jit(
+        lambda gradients, state, parameters, loss_value, value_fn: optimizer.update(
             gradients,
             state,
             parameters,
             value=loss_value,
             grad=gradients,
-            value_fn=bounded_loss,
-        )
-        parameters = optax.apply_updates(parameters, updates)
-        return parameters, state, loss_value, gradients
-
-    raw_parameters, optimizer_state, loss_value, gradients = update_step(
-        raw_parameters, optimizer_state
+            value_fn=value_fn,
+        ),
+        static_argnums=(4,),
     )
-    for _ in range(1, maxiter):
-        raw_parameters, optimizer_state, loss_value, gradients = update_step(
-            raw_parameters, optimizer_state
+
+    for _ in range(maxiter):
+        loss_value, gradients = value_and_grad(raw_parameters)
+        updates, optimizer_state = optimizer_update(
+            gradients,
+            optimizer_state,
+            raw_parameters,
+            loss_value,
+            bounded_loss,
         )
+        raw_parameters = optax.apply_updates(raw_parameters, updates)
 
     bounded_parameters = np.pi * tc.backend.tanh(raw_parameters)
     gradient_norm = float(tc.backend.numpy(tc.backend.norm(gradients)))
@@ -145,25 +142,13 @@ def build_qsp_circuit(phases: np.ndarray, x: float) -> tc.Circuit:
 
 def fit_qsp_phases(
     target: Callable[[Union[float, np.ndarray]], Union[float, np.ndarray]],
-    degree: int,
-    x_samples: Optional[np.ndarray],
-    initial_phases: Optional[np.ndarray],
-    maxiter: Optional[int],
+    x_samples: np.ndarray,
+    initial_phases: np.ndarray,
+    maxiter: int,
 ) -> MinimizeResult:
-    if maxiter is None:
-        maxiter = 500
-    if x_samples is None:
-        n_samples = max(20, degree * 10)
-        x_samples = np.linspace(-1.0, 1.0, n_samples, dtype=tc.rdtypestr)
     x_samples = np.asarray(x_samples, dtype=tc.rdtypestr)
-    if initial_phases is None:
-        initial_phases = RNG.normal(loc=0.0, scale=0.1, size=degree + 1)
-    initial_phases = np.asarray(initial_phases, dtype=tc.rdtypestr)
-    target_values = np.asarray(
-        [target(float(x)) for x in x_samples], dtype=tc.rdtypestr
-    )
     x_tensor = _real_tensor(x_samples)
-    target_tensor = _real_tensor(target_values)
+    target_tensor = _real_tensor(target(x_samples))
     sample_count = _real_tensor(tc.backend.shape_tuple(x_tensor)[0])
     use_gradient = tc.backend.name != "numpy"
 
@@ -191,17 +176,19 @@ def main() -> None:
     tc.set_backend("jax")
     tc.set_dtype("complex128")
     target = lambda x: x
+    degree = 5
+    maxiter = 500
     target_description = "f(x) = x"
     sample_points = np.linspace(-1.0, 1.0, 21, dtype=tc.rdtypestr)
+    initial_phases = RNG.normal(loc=0.0, scale=0.1, size=degree + 1)
 
     print(f"Target function: {target_description}")
     print("Running circuit-based quantum-solver QSP demo.")
     quantum_phases, optimizer_loss, success, _ = fit_qsp_phases(
         target,
-        degree=5,
         x_samples=sample_points,
-        initial_phases=None,
-        maxiter=None,
+        initial_phases=initial_phases,
+        maxiter=maxiter,
     )
     quantum_phases_np = np.asarray(tc.backend.numpy(quantum_phases), dtype=tc.rdtypestr)
     print(f"Quantum solver success: {success}")
