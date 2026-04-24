@@ -13,7 +13,7 @@ from scipy.optimize import minimize
 
 import tensorcircuit as tc
 
-MinimizeResult = tuple[Any, float, bool, int]
+MinimizeResult = tuple[Any, Any, bool, int]
 RNG = np.random.default_rng(42)
 
 
@@ -30,7 +30,7 @@ def _minimize_with_scipy(
     optimized_loss = tc.backend.jit(loss)
     if tc.backend.name == "numpy":
 
-        def numpy_loss(phases: np.ndarray) -> float:
+        def numpy_loss(phases: np.ndarray) -> object:
             return optimized_loss(phases)
 
         loss_interface = numpy_loss
@@ -73,15 +73,25 @@ def _minimize_with_optax(
     value_and_grad = tc.backend.jit(tc.backend.value_and_grad(bounded_loss))
     optimizer = optax.lbfgs(learning_rate=1.0)
     optimizer_state = optimizer.init(raw_parameters)
-    optimizer_update = tc.backend.jit(
-        lambda gradients, state, parameters, loss_value, value_fn: optimizer.update(
+
+    def optimizer_update_step(
+        gradients: object,
+        state: object,
+        parameters: object,
+        loss_value: object,
+        value_fn: Callable[[object], object],
+    ) -> tuple[object, object]:
+        return optimizer.update(
             gradients,
             state,
             parameters,
             value=loss_value,
             grad=gradients,
             value_fn=value_fn,
-        ),
+        )
+
+    optimizer_update = tc.backend.jit(
+        optimizer_update_step,
         static_argnums=(4,),
     )
 
@@ -97,10 +107,10 @@ def _minimize_with_optax(
         raw_parameters = optax.apply_updates(raw_parameters, updates)
 
     bounded_parameters = np.pi * tc.backend.tanh(raw_parameters)
-    gradient_norm = float(tc.backend.numpy(tc.backend.norm(gradients)))
+    gradient_norm = tc.backend.numpy(tc.backend.norm(gradients))
     return (
         bounded_parameters,
-        float(tc.backend.numpy(loss_value)),
+        tc.backend.numpy(loss_value),
         bool(gradient_norm <= 1e-6),
         maxiter,
     )
@@ -118,7 +128,7 @@ def minimize_backend_loss(
     result = _minimize_with_scipy(loss, initial_parameters, maxiter, use_gradient)
     return (
         _real_tensor(result.x),
-        float(result.fun),
+        result.fun,
         bool(result.success),
         int(getattr(result, "nit", maxiter)),
     )
@@ -190,7 +200,7 @@ def main() -> None:
         initial_phases=initial_phases,
         maxiter=maxiter,
     )
-    quantum_phases_np = np.asarray(tc.backend.numpy(quantum_phases), dtype=tc.rdtypestr)
+    quantum_phases_np = tc.backend.numpy(quantum_phases)
     print(f"Quantum solver success: {success}")
     print(f"Quantum solver optimizer loss: {optimizer_loss:.6e}")
     print(f"Quantum solver phases: {quantum_phases_np}")

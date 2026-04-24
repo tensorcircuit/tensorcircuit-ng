@@ -9,6 +9,7 @@ from typing import Any, Callable, Optional
 
 import numpy as np
 
+# Imported from examples/qsp.py when running examples from this directory.
 from qsp import fit_qsp_phases
 
 import tensorcircuit as tc
@@ -93,7 +94,7 @@ def circuit_error(
     phases: object,
     matrix: object,
     target_function: Callable[[float], float],
-) -> float:
+) -> Any:
     """Validate optimized phases with the circuit realization only."""
     matrix_tensor = _complex_tensor(matrix)
     system_dimension = tc.backend.shape_tuple(matrix_tensor)[0]
@@ -110,10 +111,7 @@ def circuit_error(
             phases, unitary_tensor, total_qubits
         ).matrix()
     approx_circ = circuit_matrix[:system_dimension, :system_dimension]
-    normalized_error = tc.backend.numpy(
-        tc.backend.norm(approx_circ - target_tensor) / target_norm
-    )
-    return float(normalized_error)
+    return tc.backend.numpy(tc.backend.norm(approx_circ - target_tensor) / target_norm)
 
 
 def fit_phases(
@@ -128,7 +126,7 @@ def fit_phases(
         initial_phases = np.linspace(-0.2, 0.2, degree + 1, dtype=tc.rdtypestr)
     qsp_phases, _, _, _ = fit_qsp_phases(
         target_function,
-        x_samples=np.asarray(x_samples, dtype=tc.rdtypestr),
+        x_samples=x_samples,
         initial_phases=initial_phases,
         maxiter=max_steps,
     )
@@ -153,7 +151,7 @@ def main() -> None:
     print("Running multi-qubit QSVT identity-target demo with the quantum solver.")
     phases = fit_phases(target, degree=3, x_samples=sample_points, max_steps=200)
     normalized_circuit_error = circuit_error(phases, matrix, target)
-    phases_np = np.asarray(tc.backend.numpy(phases), dtype=tc.rdtypestr)
+    phases_np = tc.backend.numpy(phases)
     print(f"QSVT phases: {phases_np}")
     print(f"QSVT circuit error: {normalized_circuit_error:.6e}")
 
