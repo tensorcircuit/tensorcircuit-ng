@@ -106,10 +106,7 @@ def circuit_error(
         eigvecs @ tc.backend.diagflat(transformed_eigvals) @ tc.backend.adjoint(eigvecs)
     )
     target_norm = tc.backend.norm(target_tensor)
-    with tc.runtime_contractor("plain"):
-        circuit_matrix = build_qsvt_circuit(
-            phases, unitary_tensor, total_qubits
-        ).matrix()
+    circuit_matrix = build_qsvt_circuit(phases, unitary_tensor, total_qubits).matrix()
     approx_circ = circuit_matrix[:system_dimension, :system_dimension]
     return tc.backend.numpy(tc.backend.norm(approx_circ - target_tensor) / target_norm)
 
