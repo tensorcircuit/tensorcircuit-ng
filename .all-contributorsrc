@@ -421,6 +421,15 @@
       "contributions": [
         "example"
       ]
+    },
+    {
+      "login": "DeanTMaxim",
+      "name": "DeanT.Maxim",
+      "avatar_url": "https://avatars.githubusercontent.com/u/22721535?v=4",
+      "profile": "https://github.com/DeanTMaxim",
+      "contributions": [
+        "example"
+      ]
     }
   ],
   "contributorsPerLine": 6,
