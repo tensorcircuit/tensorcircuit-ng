@@ -1,7 +1,7 @@
 """
 Quantum Singular Value Transformation (QSVT) example.
 
-This script contains a small QSVT solver and runs a basic identity-target
+This script contains a small QSVT example, running a basic identity-target
 demo when executed directly.
 """
 
