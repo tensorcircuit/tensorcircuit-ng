@@ -20,6 +20,7 @@ TensorCircuit values **clarity**, **predictability**, and **directness** in its 
 - **Direct Feedback**: If an operation is invalid (e.g., mismatched gate dimensions), raise an error immediately. 
 - **Transparent Backends**: Because TensorCircuit is multi-backend, some errors may propagate differently. Structure code so that backend-specific errors (e.g., JAX tracer errors) are exposed clearly to the user, aiding in debugging JIT/AD issues.
 - **Locate and Fix**: The goal is to make the root cause obvious. Masking errors with defaults or silent failures leads to "Heisenbugs" that are much harder to resolve later.
+- **Validate Before Tracing/JIT When Possible**: For detector trajectories and similar structured instruction streams, reject unsupported patterns before entering the traced random-event execution path. Letting an unsupported branch reach JAX tracing can poison later computations in parallel test runs, even if the logical bug is simply "this instruction sequence is invalid."
 
 ## 4. Static Analysis and Mypy Fix Principles
 

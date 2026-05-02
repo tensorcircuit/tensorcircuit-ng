@@ -8,6 +8,8 @@ readout error mitigation functionalities
 from typing import Any, Callable, List, Sequence, Optional, Union, Dict
 import warnings
 from time import perf_counter
+import os
+import contextlib
 
 import numpy as np
 import scipy
@@ -16,12 +18,16 @@ import scipy.sparse.linalg as spla
 from scipy.optimize import minimize
 
 try:
-    from mthree.matrix import _reduced_cal_matrix
-    from mthree.utils import counts_to_vector, vector_to_quasiprobs
-    from mthree.norms import ainv_onenorm_est_lu, ainv_onenorm_est_iter
-    from mthree.matvec import M3MatVec
-    from mthree.exceptions import M3Error
-    from mthree.classes import QuasiCollection
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*NumPy 1.x.*")
+        with open(os.devnull, "w") as fnull:
+            with contextlib.redirect_stderr(fnull):
+                from mthree.matrix import _reduced_cal_matrix
+                from mthree.utils import counts_to_vector, vector_to_quasiprobs
+                from mthree.norms import ainv_onenorm_est_lu, ainv_onenorm_est_iter
+                from mthree.matvec import M3MatVec
+                from mthree.exceptions import M3Error
+                from mthree.classes import QuasiCollection
 
     mthree_installed = True
 except ImportError:

@@ -192,7 +192,7 @@ def _real_dtype_jax(dt: Any) -> Any:
 def _mm_jax(a: Array, b: Array, precision: Any = None) -> Array:
     if precision is None:
         precision = jax.lax.Precision.HIGHEST
-    return jax.lax.dot(a, b, (precision, precision))
+    return jax.lax.dot(a, b, precision=(precision, precision))
 
 
 def _eigh_descending_jax(a: Array) -> Tuple[Array, Array]:

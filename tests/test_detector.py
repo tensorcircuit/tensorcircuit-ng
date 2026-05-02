@@ -3,6 +3,7 @@ import pytest
 from pytest_lazyfixture import lazy_fixture as lf
 
 import tensorcircuit as tc
+from tensorcircuit import experimental
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -94,6 +95,30 @@ def test_detector_measure_then_gate_without_reset_raises(backend):
     c.detector_instruction([-1])
     with pytest.raises(NotImplementedError):
         c.sample_detector(batch_size=1)
+
+
+def test_detector_invalid_trajectory_does_not_poison_jax_highp(jaxb):
+    c = tc.Circuit(1)
+    c.x(0)
+    c.measure_instruction(0)
+    c.x(0)
+    c.detector_instruction([-1])
+    with pytest.raises(NotImplementedError):
+        c.sample_detector(batch_size=1)
+
+    n = 4
+    nlayers = 1
+    with tc.runtime_dtype("complex128"):
+
+        def state(params):
+            params = tc.backend.reshape(params, [2 * nlayers, n])
+            c2 = tc.Circuit(n)
+            c2 = tc.templates.blocks.example_block(c2, params, nlayers=nlayers)
+            return c2.state()
+
+        params = tc.backend.cast(tc.backend.ones([2 * nlayers * n]), "float32")
+        fim = experimental.qng(state)(params)
+        assert tc.backend.shape_tuple(fim) == (2 * nlayers * n, 2 * nlayers * n)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])

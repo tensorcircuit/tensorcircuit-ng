@@ -193,6 +193,14 @@ tensornetwork.backends.pytorch.pytorch_backend.PyTorchBackend.qr = _qr_torch
 tensornetwork.backends.pytorch.pytorch_backend.PyTorchBackend.rq = _rq_torch
 
 
+def _patched_eigh(self: Any, matrix: Any) -> Tuple[Any, Any]:
+    eigvals, eigvecs = torchlib.linalg.eigh(matrix)
+    return eigvals, eigvecs
+
+
+pytorch_backend.PyTorchBackend.eigh = _patched_eigh
+
+
 class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: ignore
     """
     See the original backend API at `pytorch backend

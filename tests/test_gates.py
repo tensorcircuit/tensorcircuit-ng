@@ -15,6 +15,20 @@ def test_rgate(highp):
     )
 
 
+# regression test for jax 0.10.0
+def test_builtin_gate_registry_survives_jax_dtype_switch(jaxb):
+    @tc.backend.jit
+    def f(x):
+        return tc.backend.sum(tc.gates.h().tensor) + tc.backend.sum(x)
+
+    v = f(tc.backend.ones([1]))
+    assert np.isfinite(float(np.asarray(tc.backend.numpy(tc.backend.real(v)))))
+
+    with tc.runtime_dtype("complex128"):
+        h = tc.gates.h()
+        assert tc.backend.dtype(h.tensor) == "complex128"
+
+
 def test_phase_gate():
     c = tc.Circuit(1)
     c.h(0)

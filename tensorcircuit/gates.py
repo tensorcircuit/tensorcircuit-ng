@@ -257,6 +257,12 @@ def gate_wrapper(m: Tensor, n: Optional[str] = None) -> Gate:
     return Gate(deepcopy(m), name=n)
 
 
+def _cast_registered_gate(m: Tensor) -> Tensor:
+    if isinstance(m, np.ndarray):
+        return np.asarray(m, dtype=npdtype)
+    return m
+
+
 class GateF:
     def __init__(
         self, m: Tensor, n: Optional[str] = None, ctrl: Optional[List[int]] = None
@@ -394,6 +400,7 @@ def meta_gate() -> None:
                 m = np.reshape(m, (2, 2, 2, 2))
             if m.shape[0] == 8:
                 m = np.reshape(m, (2, 2, 2, 2, 2, 2))
+            m = _cast_registered_gate(m)
             # m = m.astype(npdtype)
             # not enough for new mechanism: register method on class instead of instance
             # temp = partial(gate_wrapper, m, n)

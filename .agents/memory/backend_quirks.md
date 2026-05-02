@@ -27,3 +27,7 @@
 6.  **Numpy Operations on Backend Tensors**:
     - Avoid using native `numpy` functions on backend tensors (like `np.diag(tensor)`). This breaks JAX tracing, as the tensor might be an abstract Tracer during `jit`.
     - **Protocol**: Always use the equivalent backend method such as `tc.backend.diagflat(tensor)` instead of `np.diag`.
+
+7.  **JAX Dtype Switches and Long-Lived Registered Constants**:
+    - **Fixed issue**: Built-in gates used to be registered from module-global `np.ndarray` objects and only cast later inside `__call__`. Newer JAX exposed this after a low-precision JITted use followed by `tc.runtime_dtype("complex128")`.
+    - **Durable lesson**: For long-lived registered objects such as built-in gate factories, normalize raw NumPy matrices to the current TensorCircuit `npdtype` at registration/materialization boundaries, not only at the final `__call__`, because JAX may treat those arrays as closed-over constants during tracing/lowering.

@@ -747,6 +747,8 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         return tf.searchsorted(a, v, side)
 
     def from_dlpack(self, a: Any) -> Tensor:
+        if hasattr(a, "__dlpack__"):
+            a = a.__dlpack__()
         return tf.experimental.dlpack.from_dlpack(a)
 
     def to_dlpack(self, a: Tensor) -> Any:

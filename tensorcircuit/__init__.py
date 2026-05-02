@@ -100,14 +100,14 @@ def __dir__() -> List[str]:
 
 
 try:
-    import qiskit
+    from qiskit import QuantumCircuit
 
-    qiskit.QuantumCircuit.cnot = qiskit.QuantumCircuit.cx
-    qiskit.QuantumCircuit.toffoli = qiskit.QuantumCircuit.ccx
-    qiskit.QuantumCircuit.fredkin = qiskit.QuantumCircuit.cswap
+    QuantumCircuit.cnot = QuantumCircuit.cx
+    QuantumCircuit.toffoli = QuantumCircuit.ccx
+    QuantumCircuit.fredkin = QuantumCircuit.cswap
 
     # amazing qiskit 1.0 nonsense...
-except ModuleNotFoundError:
+except (ModuleNotFoundError, ImportError):
     pass
 
 # just for fun

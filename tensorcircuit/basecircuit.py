@@ -8,7 +8,7 @@ Note:
 
 # pylint: disable=invalid-name
 
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 from functools import partial
 import logging
 
@@ -730,13 +730,91 @@ class BaseCircuit(AbstractCircuit):
             )
         return record_qubits
 
+    def _walk_detector_trajectory_qir(
+        self,
+        merged_qir: Sequence[Dict[str, Any]],
+        on_channel: Optional[Callable[[Dict[str, Any], str, int], None]] = None,
+        on_gate: Optional[Callable[[Dict[str, Any]], None]] = None,
+        on_measure: Optional[Callable[[Dict[str, Any], int], None]] = None,
+        on_mr: Optional[Callable[[Dict[str, Any], int], None]] = None,
+        on_reset: Optional[Callable[[Dict[str, Any], int], None]] = None,
+        on_noise: Optional[Callable[[Dict[str, Any], int], None]] = None,
+    ) -> None:
+        active = [True] * self._nqubits
+        for d in merged_qir:
+            name = str(d.get("name", "")).upper()
+            if d.get("is_channel", False):
+                q = int(d["index"][0])
+                if not active[q]:
+                    raise NotImplementedError(
+                        "Noise after measure requires reset first."
+                    )
+                if on_channel is not None:
+                    on_channel(d, name, q)
+                continue
+
+            if not d.get("instruction", False):
+                inds = [int(i) for i in d.get("index", [])]
+                for q in inds:
+                    if q < self._nqubits and not active[q]:
+                        raise NotImplementedError(
+                            "Gate after measure requires reset_instruction first."
+                        )
+                if on_gate is not None:
+                    on_gate(d)
+                continue
+
+            if name in ["MEASURE", "M", "MZ"]:
+                q = int(d["index"][0])
+                if not active[q]:
+                    raise NotImplementedError("Repeated measure on inactive line.")
+                if on_measure is not None:
+                    on_measure(d, q)
+                active[q] = False
+                continue
+
+            if name == "MR":
+                q = int(d["index"][0])
+                if not active[q]:
+                    raise NotImplementedError("MR on inactive line.")
+                if on_mr is not None:
+                    on_mr(d, q)
+                active[q] = True
+                continue
+
+            if name == "RESET":
+                q = int(d["index"][0])
+                if on_reset is not None:
+                    on_reset(d, q)
+                active[q] = True
+                continue
+
+            if name in ["DEPOLARIZING", "PAULI"]:
+                q = int(d["index"][0])
+                if not active[q]:
+                    raise NotImplementedError("Noise on inactive line.")
+                if on_noise is not None:
+                    on_noise(d, q)
+                continue
+
+            if name in ["DETECTOR", "BARRIER", "TICK", "QUBIT_COORDS", "SHIFT_COORDS"]:
+                continue
+
+            raise NotImplementedError(
+                f"Unsupported instruction in sample_detector: {name}"
+            )
+
+    def _validate_detector_trajectory_qir(
+        self, merged_qir: Sequence[Dict[str, Any]]
+    ) -> None:
+        self._walk_detector_trajectory_qir(merged_qir)
+
     def _run_instruction_trajectory(
         self,
         merged_qir: Sequence[Dict[str, Any]],
         status_row: Optional[Tensor] = None,
     ) -> Tensor:
         c = type(self)(**self.circuit_param)
-        active = [True] * self._nqubits
         records: List[Tensor] = []
         status_i = 0
         status_len = 0
@@ -755,68 +833,48 @@ class BaseCircuit(AbstractCircuit):
             status_i += 1
             return s
 
-        for d in merged_qir:
-            name = str(d.get("name", "")).upper()
-            if d.get("is_channel", False):
-                q = int(d["index"][0])
-                if not active[q]:
-                    raise NotImplementedError(
-                        "Noise after measure requires reset first."
-                    )
-                if name in ["DEPOLARIZING", "PAULI"]:
-                    params = d.get("channel_parameters", {})
-                    px = float(params.get("px", 0.0))
-                    py = float(params.get("py", 0.0))
-                    pz = float(params.get("pz", 0.0))
-                    c.depolarizing(q, px=px, py=py, pz=pz, status=next_status())  # type: ignore
-                    continue
-                self._apply_qir(c, [d], allow_channel=True)  # type: ignore[arg-type]
-                continue
-            if not d.get("instruction", False):
-                inds = [int(i) for i in d.get("index", [])]
-                for q in inds:
-                    if q < self._nqubits and not active[q]:
-                        raise NotImplementedError(
-                            "Gate after measure requires reset_instruction first."
-                        )
-                self._apply_qir(c, [d], allow_channel=True)  # type: ignore[arg-type]
-                continue
-            if name in ["MEASURE", "M", "MZ"]:
-                q = int(d["index"][0])
-                if not active[q]:
-                    raise NotImplementedError("Repeated measure on inactive line.")
-                m = backend.cast(c.cond_measurement(q, status=next_status()), "int32")
-                records.append(m)
-                active[q] = False
-                continue
-            if name == "MR":
-                q = int(d["index"][0])
-                if not active[q]:
-                    raise NotImplementedError("MR on inactive line.")
-                m = backend.cast(c.cond_measurement(q, status=next_status()), "int32")
-                records.append(m)
-                c.conditional_gate(m, [gates.i(), gates.x()], q)  # type: ignore
-                active[q] = True
-                continue
-            if name == "RESET":
-                q = int(d["index"][0])
-                m = c.cond_measurement(q, status=next_status())
-                c.conditional_gate(m, [gates.i(), gates.x()], q)  # type: ignore
-                active[q] = True
-                continue
+        def on_channel(d: Dict[str, Any], name: str, q: int) -> None:
             if name in ["DEPOLARIZING", "PAULI"]:
-                q = int(d["index"][0])
-                params = d.get("parameters", {})
-                px = float(params.get("px", d.get("px", 0.0)))
-                py = float(params.get("py", d.get("py", 0.0)))
-                pz = float(params.get("pz", d.get("pz", 0.0)))
+                params = d.get("channel_parameters", {})
+                px = float(params.get("px", 0.0))
+                py = float(params.get("py", 0.0))
+                pz = float(params.get("pz", 0.0))
                 c.depolarizing(q, px=px, py=py, pz=pz, status=next_status())  # type: ignore
-                continue
-            if name in ["DETECTOR", "BARRIER", "TICK", "QUBIT_COORDS", "SHIFT_COORDS"]:
-                continue
-            raise NotImplementedError(
-                f"Unsupported instruction in sample_detector: {name}"
-            )
+                return
+            self._apply_qir(c, [d], allow_channel=True)  # type: ignore[arg-type]
+
+        def on_gate(d: Dict[str, Any]) -> None:
+            self._apply_qir(c, [d], allow_channel=True)  # type: ignore[arg-type]
+
+        def on_measure(_: Dict[str, Any], q: int) -> None:
+            m = backend.cast(c.cond_measurement(q, status=next_status()), "int32")
+            records.append(m)
+
+        def on_mr(_: Dict[str, Any], q: int) -> None:
+            m = backend.cast(c.cond_measurement(q, status=next_status()), "int32")
+            records.append(m)
+            c.conditional_gate(m, [gates.i(), gates.x()], q)  # type: ignore
+
+        def on_reset(_: Dict[str, Any], q: int) -> None:
+            m = c.cond_measurement(q, status=next_status())
+            c.conditional_gate(m, [gates.i(), gates.x()], q)  # type: ignore
+
+        def on_noise(d: Dict[str, Any], q: int) -> None:
+            params = d.get("parameters", {})
+            px = float(params.get("px", d.get("px", 0.0)))
+            py = float(params.get("py", d.get("py", 0.0)))
+            pz = float(params.get("pz", d.get("pz", 0.0)))
+            c.depolarizing(q, px=px, py=py, pz=pz, status=next_status())  # type: ignore
+
+        self._walk_detector_trajectory_qir(
+            merged_qir,
+            on_channel=on_channel,
+            on_gate=on_gate,
+            on_measure=on_measure,
+            on_mr=on_mr,
+            on_reset=on_reset,
+            on_noise=on_noise,
+        )
         if status_row is not None and status_i != status_len:
             logger.warning("Provided status is longer than required random events.")
         if len(records) == 0:
@@ -1202,6 +1260,7 @@ class BaseCircuit(AbstractCircuit):
 
         status2d: Optional[Tensor]
         if (not self.is_dm) and (not allow_state):
+            self._validate_detector_trajectory_qir(merged_qir)
             num_random_events = self._count_detector_random_events(merged_qir)
             if status is not None:
                 status2d = backend.cast(backend.convert_to_tensor(status), rdtypestr)
