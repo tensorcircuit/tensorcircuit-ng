@@ -11,6 +11,8 @@ import sys
 
 sys.path.insert(0, "../")
 import numpy as np
+import optax
+import tensorflow as tf
 import tensorcircuit as tc
 
 # (x, y) data preparation
@@ -53,12 +55,8 @@ def lr(xs, ys):
     weight = {"k": tc.backend.implicit_randn(), "b": tc.backend.implicit_randn()}
 
     if tc.backend.name == "tensorflow":
-        import tensorflow as tf
-
         opt = tc.backend.optimizer(tf.keras.optimizers.Adam(1e-2))
     elif tc.backend.name == "jax":
-        import optax
-
         opt = tc.backend.optimizer(optax.adam(1e-2))
     else:
         raise ValueError("Unsupported backend")

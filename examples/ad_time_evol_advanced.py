@@ -152,48 +152,41 @@ def benchmark_evolution(n=10, t_list=None, methods=None):
 
         for method in methods:
             print(f"  Testing {method}...")
-            try:
-                if method == "ed":
-                    loss_fn = loss_ed
-                elif method == "krylov":
-                    loss_fn = loss_krylov
-                elif method == "chebyshev":
-                    loss_fn = loss_chebyshev
-                else:
-                    continue
+            if method == "ed":
+                loss_fn = loss_ed
+            elif method == "krylov":
+                loss_fn = loss_krylov
+            elif method == "chebyshev":
+                loss_fn = loss_chebyshev
+            else:
+                continue
 
-                # JIT Compilation (Staging) Time
-                start_compile = time.time()
-                # Trigger compilation
+            # JIT Compilation (Staging) Time
+            start_compile = time.time()
+            # Trigger compilation
+            val, grad = loss_fn(params, t)
+            val.block_until_ready()
+            end_compile = time.time()
+            compile_time = end_compile - start_compile
+
+            # Execution Time
+            times = []
+            for _ in range(10):
+                start = time.time()
                 val, grad = loss_fn(params, t)
                 val.block_until_ready()
-                end_compile = time.time()
-                compile_time = end_compile - start_compile
+                end = time.time()
+                times.append(end - start)
 
-                # Execution Time
-                times = []
-                for _ in range(10):
-                    start = time.time()
-                    val, grad = loss_fn(params, t)
-                    val.block_until_ready()
-                    end = time.time()
-                    times.append(end - start)
+            avg_time = np.mean(times)
+            std_time = np.std(times)
 
-                avg_time = np.mean(times)
-                std_time = np.std(times)
+            print(f"    Compile time: {compile_time:.4f}s")
+            print(f"    Run time:     {avg_time:.4f}s (+/- {std_time:.4f})")
+            print(f"    Value:        {val:.6f}")
+            print(f"    Grad norm:    {jnp.linalg.norm(grad):.6f}")
 
-                print(f"    Compile time: {compile_time:.4f}s")
-                print(f"    Run time:     {avg_time:.4f}s (+/- {std_time:.4f})")
-                print(f"    Value:        {val:.6f}")
-                print(f"    Grad norm:    {jnp.linalg.norm(grad):.6f}")
-
-                results[method] = {"val": val, "grad": grad}
-
-            except Exception as e:
-                print(f"    FAILED: {e}")
-                import traceback
-
-                traceback.print_exc()
+            results[method] = {"val": val, "grad": grad}
 
         # Comparisons
         if "ed" in results:

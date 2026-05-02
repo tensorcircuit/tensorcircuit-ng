@@ -177,7 +177,7 @@ def test_stabilizertcircuit_amplitude_error():
     stc = StabilizerTCircuit(1)
     stc.x_error(0, 0.1)
     with pytest.raises(
-        ValueError, match="amplitude\(\) only supported for noiseless circuits"
+        ValueError, match=r"amplitude\(\) only supported for noiseless circuits"
     ):
         stc.amplitude("0")
 

@@ -25,6 +25,7 @@ The code defaults to a 2-qutrit (d=3) problem but can be changed via CLI flags.
 
 import time
 import argparse
+import optax
 import tensorcircuit as tc
 
 tc.set_backend("jax")
@@ -109,46 +110,9 @@ def main():
     shape = build_param_shape(args.nqudits, args.nlayers)
     param = tc.backend.random_uniform(shape, boundaries=(-0.1, 0.1), seed=42)
 
-    try:
-        import optax
-
-        optimizer = optax.adam(args.lr)
-        vgf = tc.backend.jit(
-            tc.backend.value_and_grad(
-                lambda p: vqe_forward(
-                    p,
-                    nqudits=args.nqudits,
-                    d=args.d,
-                    nlayers=args.nlayers,
-                    J=args.J,
-                    h=args.h,
-                )
-            )
-        )
-        opt_state = optimizer.init(param)
-
-        @tc.backend.jit
-        def train_step(p, opt_state):
-            loss, grads = vgf(p)
-            updates, opt_state = optimizer.update(grads, opt_state, p)
-            p = optax.apply_updates(p, updates)
-            return p, opt_state, loss
-
-        print("Starting VQE optimization (optax/adam)...")
-        loss = None
-        for i in range(args.steps):
-            t0 = time.time()
-            param, opt_state, loss = train_step(param, opt_state)
-            # ensure sync for accurate timing
-            _ = float(loss)
-            if i % 20 == 0:
-                dt = time.time() - t0
-                print(f"Step {i:4d}  loss={loss:.6f}  dt/step={dt:.4f}s")
-        print("Final loss:", float(loss) if loss is not None else "n/a")
-
-    except ModuleNotFoundError:
-        print("Optax not available; using naive gradient descent.")
-        value_and_grad = tc.backend.value_and_grad(
+    optimizer = optax.adam(args.lr)
+    vgf = tc.backend.jit(
+        tc.backend.value_and_grad(
             lambda p: vqe_forward(
                 p,
                 nqudits=args.nqudits,
@@ -158,14 +122,27 @@ def main():
                 h=args.h,
             )
         )
-        lr = args.lr
-        loss = None
-        for i in range(args.steps):
-            loss, grads = value_and_grad(param)
-            param = param - lr * grads
-            if i % 20 == 0:
-                print(f"Step {i:4d}  loss={float(loss):.6f}")
-        print("Final loss:", float(loss) if loss is not None else "n/a")
+    )
+    opt_state = optimizer.init(param)
+
+    @tc.backend.jit
+    def train_step(p, opt_state):
+        loss, grads = vgf(p)
+        updates, opt_state = optimizer.update(grads, opt_state, p)
+        p = optax.apply_updates(p, updates)
+        return p, opt_state, loss
+
+    print("Starting VQE optimization (optax/adam)...")
+    loss = None
+    for i in range(args.steps):
+        t0 = time.time()
+        param, opt_state, loss = train_step(param, opt_state)
+        # ensure sync for accurate timing
+        _ = float(loss)
+        if i % 20 == 0:
+            dt = time.time() - t0
+            print(f"Step {i:4d}  loss={loss:.6f}  dt/step={dt:.4f}s")
+    print("Final loss:", float(loss) if loss is not None else "n/a")
 
 
 if __name__ == "__main__":

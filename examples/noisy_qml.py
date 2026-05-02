@@ -10,6 +10,7 @@ import time
 import tensorflow as tf
 import numpy as np
 import optax
+from sklearn.decomposition import PCA
 import tensorcircuit as tc
 
 K = tc.set_backend("jax")
@@ -42,8 +43,6 @@ if data_preparation == "v1":
     x_train = np.squeeze(x_train).reshape([-1, n])
 
 else:  # "v2"
-    from sklearn.decomposition import PCA
-
     x_train = PCA(n).fit_transform(x_train.reshape([-1, 28 * 28]))
 
 

@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from scipy.sparse.linalg import eigsh
 import tensorcircuit as tc
 from tensorcircuit.experimental import parameter_shift_grad_v2
+from tensorcircuit.quantum import PauliStringSum2COO
 
 # Set JAX as the backend
 K = tc.set_backend("jax")
@@ -33,7 +34,6 @@ n_random = (n_layers * n + 1) * 2
 
 def get_exact_energy():
     """Exact ground state energy for OBC TFIM via scipy.sparse."""
-    from tensorcircuit.quantum import PauliStringSum2COO
 
     ls, weights = [], []
     for i in range(n - 1):
