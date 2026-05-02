@@ -20,6 +20,7 @@ import numpy as np
 import scipy.sparse as sp
 import optax
 import tensorcircuit as tc
+import tensorcircuit.quditgates as qg
 
 # Use JAX backend for high-performance JIT, VMAP and AD
 tc.set_backend("jax")
@@ -31,8 +32,6 @@ def get_clock_hamiltonian_sparse(n, d, J, h_field):
     Constructs the Transverse Field Clock Model Hamiltonian as a sparse matrix.
     H = - J * sum (Z_i Z_{i+1}^dag + h.c.) - h_field * sum (X_i + X_i^dag)
     """
-
-    import tensorcircuit.quditgates as qg
 
     X = qg.x_matrix_func(d)
     Z = qg.z_matrix_func(d)

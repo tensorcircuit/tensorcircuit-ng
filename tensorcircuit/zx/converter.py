@@ -248,7 +248,12 @@ class GraphRepresentation:
         self.graph.set_auto_simplify(v)
 
     def is_multigraph(self) -> bool:
-        return self.graph.is_multigraph()  # type: ignore
+        if hasattr(self.graph, "is_multigraph"):
+            return self.graph.is_multigraph()  # type: ignore[no-any-return]
+        multigraph = self.graph.multigraph
+        if callable(multigraph):
+            return bool(multigraph())
+        return bool(multigraph)
 
     def edge(self, v1: Any, v2: Any) -> Any:
         return self.graph.edge(v1, v2)

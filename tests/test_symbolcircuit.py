@@ -167,9 +167,16 @@ def test_amplitude_numerical_consistency(SymbolCircuit, sym):
         c.rz(0, theta=p_val)
         ref_val = complex(c.amplitude("10"))
 
-        assert (
-            abs(sym_val - ref_val) < 1e-7
-        ), f"Mismatch at theta={t_val}, phi={p_val}: sym={sym_val}, ref={ref_val}"
+        np.testing.assert_allclose(
+            sym_val,
+            ref_val,
+            atol=1e-7,
+            rtol=0.0,
+            err_msg=(
+                f"Mismatch at theta={t_val}, phi={p_val}: "
+                f"sym={sym_val}, ref={ref_val}"
+            ),
+        )
 
 
 # ── expectation ────────────────────────────────────────────────────────────────
@@ -213,9 +220,13 @@ def test_expectation_numerical_consistency(SymbolCircuit, sym):
         c.cnot(0, 1)
         ref_val = complex(c.expectation_ps(z=[0]))
 
-        assert (
-            abs(sym_val - ref_val) < 1e-7
-        ), f"Mismatch at theta={t_val}: sym={sym_val}, ref={ref_val}"
+        np.testing.assert_allclose(
+            sym_val,
+            ref_val,
+            atol=1e-7,
+            rtol=0.0,
+            err_msg=f"Mismatch at theta={t_val}: sym={sym_val}, ref={ref_val}",
+        )
 
 
 def test_expectation_bell_state_zz(SymbolCircuit):
@@ -247,7 +258,7 @@ def test_lightcone_cancellation(SymbolCircuit, sym):
     # Check correctness at theta=0.5
     val1 = res1.subs(sym["theta"], 0.5).evalf()
     val2 = res2.subs(sym["theta"], 0.5).evalf()
-    assert abs(val1 - val2) < 1e-10
+    np.testing.assert_allclose(complex(val1), complex(val2), atol=1e-10, rtol=0.0)
 
     # Check node reduction from light cone cancellation
     nodes_full = sc.expectation_before((tc.gates.z(), [0]), reuse=False)
@@ -297,9 +308,11 @@ def test_to_circuit(SymbolCircuit, sym):
     ref.rz(0, theta=p_val)
 
     for bitstring in ["00", "01", "10", "11"]:
-        assert (
-            abs(complex(c.amplitude(bitstring)) - complex(ref.amplitude(bitstring)))
-            < 1e-8
+        np.testing.assert_allclose(
+            complex(c.amplitude(bitstring)),
+            complex(ref.amplitude(bitstring)),
+            atol=1e-8,
+            rtol=0.0,
         )
 
 
@@ -379,9 +392,15 @@ def test_gate_definitions_match_tc_circuit(SymbolCircuit):
     for bitstring in all_bitstrings:
         sym_amp = complex(bound.amplitude(bitstring))
         ref_amp = complex(c.amplitude(bitstring))
-        assert abs(sym_amp - ref_amp) < 1e-6, (
-            f"Amplitude mismatch at |{bitstring}>: "
-            f"symbolic={sym_amp:.8f}, reference={ref_amp:.8f}"
+        np.testing.assert_allclose(
+            sym_amp,
+            ref_amp,
+            atol=1e-6,
+            rtol=0.0,
+            err_msg=(
+                f"Amplitude mismatch at |{bitstring}>: "
+                f"symbolic={sym_amp:.8f}, reference={ref_amp:.8f}"
+            ),
         )
 
 
@@ -609,7 +628,7 @@ def test_mixed_sympy_and_numeric_params(SymbolCircuit, sym):
 
     c = sc.to_circuit({theta: theta_val})
     ref_val = float(c.expectation_ps(z=[0]).real)
-    assert abs(sym_val - ref_val) < 1e-6
+    np.testing.assert_allclose(sym_val, ref_val, atol=1e-6, rtol=0.0)
 
 
 def test_mixed_sympy_and_numpy_numeric_params(SymbolCircuit, sym):
@@ -632,7 +651,7 @@ def test_mixed_sympy_and_numpy_numeric_params(SymbolCircuit, sym):
 
     c = sc.to_circuit({theta: theta_val})
     ref_val = float(c.expectation_ps(z=[0]).real)
-    assert abs(sym_val - ref_val) < 1e-6
+    np.testing.assert_allclose(sym_val, ref_val, atol=1e-6, rtol=0.0)
 
 
 # ── symbolgates factory tests ─────────────────────────────────────────────────
@@ -1000,7 +1019,12 @@ def test_to_circuit_none_param_dict(SymbolCircuit: Any) -> None:
     ref.h(0)
     ref.cnot(0, 1)
     for bs in ["00", "01", "10", "11"]:
-        assert abs(complex(c.amplitude(bs)) - complex(ref.amplitude(bs))) < 1e-8
+        np.testing.assert_allclose(
+            complex(c.amplitude(bs)),
+            complex(ref.amplitude(bs)),
+            atol=1e-8,
+            rtol=0.0,
+        )
 
 
 # -- bind with fixed gates (line 439) -----------------------------------------
@@ -1352,7 +1376,7 @@ def test_symbol_circuit_any_to_circuit(SymbolCircuit):
     sc.any(0, unitary=unitary)
     # This used to crash because to_circuit tried to complex(ndarray)
     c = sc.to_circuit({})
-    assert abs(complex(c.amplitude("1")) - 1.0) < 1e-7
+    np.testing.assert_allclose(complex(c.amplitude("1")), 1.0, atol=1e-7, rtol=0.0)
 
 
 def test_symbol_circuit_any_bind(SymbolCircuit):
@@ -1362,7 +1386,7 @@ def test_symbol_circuit_any_bind(SymbolCircuit):
     # Test partial/full bind with any gate present
     sc2 = sc.bind({})
     assert sc2.gate_count() == 1
-    assert abs(complex(sc2.amplitude("1")) - 1.0) < 1e-7
+    np.testing.assert_allclose(complex(sc2.amplitude("1")), 1.0, atol=1e-7, rtol=0.0)
 
 
 def test_symbol_circuit_qir_roundtrip(SymbolCircuit, sym):

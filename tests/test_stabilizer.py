@@ -35,7 +35,7 @@ def test_bell_state():
     assert samples.shape == (1000, 2)
     counts = np.sum(samples, axis=0)
     # Should be roughly equal number of 00 and 11 states
-    assert abs(counts[0] - counts[1]) < 50
+    np.testing.assert_allclose(counts[0], counts[1], atol=50)
 
 
 def test_ghz_state():
@@ -65,7 +65,7 @@ def test_sample_expectation():
     c.cnot(0, 1)
     # Test sampling-based expectation
     exp = c.sample_expectation_ps(z=[0, 1], shots=1000)
-    assert abs(exp - 1.0) < 0.1
+    np.testing.assert_allclose(exp, 1.0, atol=0.1)
 
 
 def test_invalid_gates():

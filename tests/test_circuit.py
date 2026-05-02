@@ -1566,7 +1566,7 @@ def test_sexpps(backend):
     ye = c.expectation_ps(x=[1], y=[0], z=[2, 3])
     np.testing.assert_allclose(ye, y, atol=1e-5)
     y2 = c.sample_expectation_ps(x=[1], y=[0], z=[2, 3], shots=81920)
-    assert np.abs(y2 - y) < 0.01
+    np.testing.assert_allclose(y2, y, atol=0.01)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])

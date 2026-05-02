@@ -46,6 +46,7 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 - In tests, never call `tc.set_backend()` or `tc.set_dtype()` directly.
 - Use backend fixtures such as `npb`, `tfb`, `jaxb`, `torchb`, and `cpb` instead of manual backend switching.
 - Use the `highp` fixture when a test requires `complex128` precision.
+- Prefer `np.testing.assert_allclose` for numeric comparisons instead of manual `abs(a - b) < tol` assertions. Use exact array equality helpers only when exact equality is the real intent.
 - Prefer targeted tests first, then broader validation as needed.
 - Use `pytest -n auto` to accelerate when broader test execution is needed and the environment supports it.
 - For code quality, follow existing `black` and `pylint` expectations in `check_all.sh`.

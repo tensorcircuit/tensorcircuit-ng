@@ -279,26 +279,35 @@ def test_converter_missing_gates():
     _y_gate(b, 0)
     _h_xy(b, 0)
 
-    try:
-        v = b.add_vertex()
-        b.set_qubit(v, 0)
-        b.vertex_degree(v)
-        b.remove_isolated_vertices()
-        b.get_params(v)
-        b.incident_edges(v)
-        b.vdata_keys(v)
-        b.vdata(v, "k")
-        b.set_vdata(v, "k", "v")
-        b.get_auto_simplify()
-        b.set_auto_simplify(True)
-        b.is_multigraph()
-        b.vertex_set()
-        b.edge_set()
-        b.num_vertices()
-        b.num_edges()
-        b.copy()
-    except Exception:
-        pass
+    num_vertices_before = b.num_vertices()
+    num_edges_before = b.num_edges()
+    v = b.add_vertex()
+    b.set_qubit(v, 0)
+    assert b.vertex_degree(v) == 0
+    b.remove_isolated_vertices()
+    assert b.num_vertices() == num_vertices_before
+
+    v = b.add_vertex()
+    b.set_qubit(v, 0)
+    _ = b.get_params(v)
+    assert list(b.incident_edges(v)) == []
+    b.set_vdata(v, "k", "v")
+    assert "k" in list(b.vdata_keys(v))
+    assert b.vdata(v, "k") == "v"
+    assert isinstance(b.get_auto_simplify(), bool)
+    b.set_auto_simplify(True)
+    assert b.get_auto_simplify() is True
+    expected_is_multigraph = b.graph.multigraph()
+    assert b.is_multigraph() == expected_is_multigraph
+    assert v in set(b.vertex_set())
+    assert len(list(b.edge_set())) == num_edges_before
+    assert b.num_vertices() == num_vertices_before + 1
+    assert b.num_edges() == num_edges_before
+
+    copied = b.copy()
+    assert copied is not b
+    assert copied.num_vertices() == b.num_vertices()
+    assert copied.num_edges() == b.num_edges()
 
 
 def test_converter_dispatch_more():

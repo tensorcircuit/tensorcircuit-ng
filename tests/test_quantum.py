@@ -526,8 +526,6 @@ def test_tenpy_roundtrip(backend):
     except ImportError:
         pytest.skip("TeNPy is not installed")
 
-    tc.set_backend(backend)
-
     # MPO roundtrip test
     nwires_mpo = 3
     chi_mpo = 4

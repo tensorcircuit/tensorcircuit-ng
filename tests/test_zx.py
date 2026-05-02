@@ -44,9 +44,13 @@ def assert_unitary_match(g, c, atol=1e-5):
     # Check if ratio magnitude is a power of sqrt(2) (unnormalized ZX) or 1
     mag = np.abs(ratio)
     log_ratio = 2 * np.log2(mag)
-    assert (
-        np.abs(log_ratio - np.round(log_ratio)) < 1e-5
-    ), f"Ratio {ratio} is not a power of sqrt(2)"
+    np.testing.assert_allclose(
+        log_ratio,
+        np.round(log_ratio),
+        atol=1e-5,
+        rtol=0.0,
+        err_msg=f"Ratio {ratio} is not a power of sqrt(2)",
+    )
 
 
 # --- New simple sanity tests ---
@@ -72,9 +76,13 @@ def test_zx_simple_cases(backend):
         stc = StabilizerTCircuit.from_circuit(c)
         res = stc.sample_measurements(shots=batch)
         prob = np.mean(res)
-        assert (
-            abs(prob - expected) < 0.05
-        ), f"Case {name} failed: got {prob}, exp {expected}"
+        np.testing.assert_allclose(
+            prob,
+            expected,
+            atol=0.05,
+            rtol=0.0,
+            err_msg=f"Case {name} failed: got {prob}, exp {expected}",
+        )
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
@@ -89,7 +97,7 @@ def test_zx_detector_xor_simple(backend):
     stc = StabilizerTCircuit.from_circuit(c)
     res = stc.sample_detectors(shots=batch)
     prob = np.mean(res)
-    assert abs(prob - 0.2) < 0.05
+    np.testing.assert_allclose(prob, 0.2, atol=0.05, rtol=0.0)
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
@@ -103,7 +111,7 @@ def test_zx_depolarize2_simple(backend):
     res = stc.sample_measurements(shots=batch)
     p11 = np.mean(res[:, 0] & res[:, 1])
     # Theory: 3/15 * 0.1 = 0.02
-    assert abs(p11 - 0.02) < 0.02
+    np.testing.assert_allclose(p11, 0.02, atol=0.02, rtol=0.0)
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
@@ -116,7 +124,7 @@ def test_zx_pauli_h_simple(backend):
     stc = StabilizerTCircuit.from_circuit(c)
     res = stc.sample_measurements(shots=batch)
     prob = np.mean(res)
-    assert abs(prob - 0.5) < 0.05
+    np.testing.assert_allclose(prob, 0.5, atol=0.05, rtol=0.0)
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
@@ -154,7 +162,9 @@ def test_zx_outcome_probability(backend):
     # If the error bit e0=1, then P(1|e0=1) = 1.0. If e0=0, P(1|e0=0) = 0.
     assert np.all(jnp.logical_or(jnp.isclose(p1, 0.0), jnp.isclose(p1, 1.0)))
     # Average should be around 0.1
-    assert abs(np.mean(p1) - 0.1) < 0.3  # low shots, just checking shape/range
+    np.testing.assert_allclose(
+        np.mean(p1), 0.1, atol=0.3, rtol=0.0
+    )  # low shots, just checking shape/range
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
@@ -200,7 +210,7 @@ def test_zx_multi_component_sampling(backend):
     samples = stc.sample_measurements(shots=1000)
     assert samples.shape == (1000, 2)
     assert np.all(samples[:, 0] == 1)
-    assert abs(np.mean(samples[:, 1]) - 0.5) < 0.1
+    np.testing.assert_allclose(np.mean(samples[:, 1]), 0.5, atol=0.1, rtol=0.0)
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
@@ -215,7 +225,7 @@ def test_zx_noisy_measurements(backend):
     stc1._qir.append({"name": "M", "index": [0], "parameters": {"p": p}})
     res1 = stc1.sample_measurements(shots=batch)
     prob1 = np.mean(res1)
-    assert abs(prob1 - p) < 0.05
+    np.testing.assert_allclose(prob1, p, atol=0.05, rtol=0.0)
 
     # Case 2: MR(p)
     stc2 = StabilizerTCircuit(1)
@@ -230,9 +240,9 @@ def test_zx_noisy_measurements(backend):
     # Total flip probability = p(1-p) + (1-p)p = 2p - 2p^2
     # For p=0.1, flip = 0.18. Since we start at 1 (X gate), m0 should be 1-0.18 = 0.82
     expected_m0 = 1 - (2 * p - 2 * p**2)
-    assert abs(m0 - expected_m0) < 0.05
+    np.testing.assert_allclose(m0, expected_m0, atol=0.05, rtol=0.0)
 
-    assert abs(m1 - 0.0) < 0.01
+    np.testing.assert_allclose(m1, 0.0, atol=0.01, rtol=0.0)
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
@@ -474,7 +484,7 @@ def test_stabilizertcircuit_sample_with_t_gate_statistics(backend):
     assert samples.shape == (8000, 1)
     p1 = np.mean(samples[:, 0])
     p1_theory = 0.5 * (1.0 - np.cos(np.pi / 4.0))
-    assert abs(p1 - p1_theory) < 0.03
+    np.testing.assert_allclose(p1, p1_theory, atol=0.03, rtol=0.0)
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
@@ -1142,7 +1152,13 @@ def test_zx_mpp_with_noise(backend):
     samples = stc.sample_measurements(shots=5000)
     flip_rate = np.mean(samples)
     # X error on qubit 0 anticommutes with Z0, so flips the parity
-    assert abs(flip_rate - 0.2) < 0.05, f"Expected ~0.2 flip rate, got {flip_rate}"
+    np.testing.assert_allclose(
+        flip_rate,
+        0.2,
+        atol=0.05,
+        rtol=0.0,
+        err_msg=f"Expected ~0.2 flip rate, got {flip_rate}",
+    )
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
@@ -1165,4 +1181,10 @@ def test_zx_mpp_detector(backend):
     det_samples = stc.sample_detectors(shots=5000)
     det_rate = np.mean(det_samples)
     # Detector should fire when Z error occurs between measurements
-    assert abs(det_rate - 0.1) < 0.05, f"Expected ~0.1 detector rate, got {det_rate}"
+    np.testing.assert_allclose(
+        det_rate,
+        0.1,
+        atol=0.05,
+        rtol=0.0,
+        err_msg=f"Expected ~0.1 detector rate, got {det_rate}",
+    )

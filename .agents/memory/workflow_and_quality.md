@@ -8,6 +8,7 @@ Use this file for changes that touch public API, tests, docs, or code quality.
 - Catch exceptions only when adding real context or recovery. Do not use broad exception handling as control flow.
 - Validate unsupported structured inputs before tracing or JIT so invalid patterns fail early and do not poison later compiled runs.
 - For type-checking fixes, prefer the smallest behavior-preserving change. Use targeted `# type: ignore[...]` or `Any` when the alternative would distort the runtime design.
+- For thin wrappers over third-party APIs, guard known method-vs-attribute compatibility differences at the wrapper boundary and keep the fallback explicit.
 
 ## Public module changes
 
@@ -21,6 +22,7 @@ Use this file for changes that touch public API, tests, docs, or code quality.
 - In tests, use backend fixtures from `tests/conftest.py`; do not switch backend or dtype globally inside test bodies.
 - Cover at least the core kernel, a correctness path against an existing reference API, and AD behavior when the feature is meant to be differentiable.
 - For sparse outputs, compare results numerically instead of assuming a specific sparse container layout.
+- Do not hide wrapper smoke tests behind `except Exception: pass`; assert the wrapped behavior directly against the underlying backend API so adapter bugs surface.
 - Use `pytest -n auto` when available for broader runs, and use `bash check_all.sh` before landing substantial changes.
 
 ## Benchmarking and tooling
@@ -28,3 +30,4 @@ Use this file for changes that touch public API, tests, docs, or code quality.
 - Benchmark external libraries in isolated environments and match precision/settings before making performance claims.
 - Library plotting helpers should accept an optional `ax` and should not call `plt.show()` internally.
 - In read-only or sandboxed environments, redirect caches such as `NUMBA_CACHE_DIR`, `MPLCONFIGDIR`, and mypy's cache directory to writable temporary locations.
+- Sanity-check automation should stay high-confidence and repo-aware: scan only git-tracked Python files, reserve subtle duplication/comment-quality judgments for LLM review, keep test-specific rules separate from library import-hygiene rules to avoid noise from test bootstrap patterns, and only flag optional-import hygiene when package import failures actually point to an optional dependency rather than a missing required package.

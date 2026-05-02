@@ -4,6 +4,8 @@ import numpy as np
 import tensornetwork as tn
 import tensorcircuit as tc
 
+BACKENDS = [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")]
+
 
 @pytest.fixture
 def contractor_setup(request):
@@ -46,19 +48,9 @@ def contractor_setup(request):
     tc.set_contractor("greedy")
 
 
-@pytest.fixture(params=["numpy", "jax", "tensorflow", "pytorch"])
-def backend_setup(request):
-    backend_name = request.param
-    try:
-        tc.set_backend(backend_name)
-    except ImportError:
-        pytest.skip(f"{backend_name} not installed")
-    yield backend_name
-    tc.set_backend("numpy")
-
-
+@pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("contractor_setup", ["cotengra", "greedy"], indirect=True)
-def test_single_hyperedge(contractor_setup, backend_setup):
+def test_single_hyperedge(contractor_setup, backend):
     # A(i), B(i), C(i)
     dim = 2
     a = tn.Node(tc.gates.num_to_tensor(np.array([1.0, 2.0])), name="A")
@@ -76,8 +68,9 @@ def test_single_hyperedge(contractor_setup, backend_setup):
     np.testing.assert_allclose(tc.backend.numpy(res.tensor), 9.0, atol=1e-5)
 
 
+@pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
-def test_chained_hyperedge(contractor_setup, backend_setup):
+def test_chained_hyperedge(contractor_setup, backend):
     # A(i), B(i), C(i), D(i)
     # Connected via two CopyNodes: A-CN1-B, CN1-CN2, C-CN2-D
     dim = 2
@@ -101,8 +94,9 @@ def test_chained_hyperedge(contractor_setup, backend_setup):
     np.testing.assert_allclose(tc.backend.numpy(res.tensor), 17.0, atol=1e-5)
 
 
+@pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
-def test_dangling_hyperedge(contractor_setup, backend_setup):
+def test_dangling_hyperedge(contractor_setup, backend):
     # A(i), B(i), Output(i)
     dim = 2
     a = tn.Node(tc.gates.num_to_tensor(np.array([1.0, 2.0])), name="A")
@@ -122,8 +116,9 @@ def test_dangling_hyperedge(contractor_setup, backend_setup):
     )
 
 
+@pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
-def test_tensorcircuit_circuit_hyperedge_support(contractor_setup, backend_setup):
+def test_tensorcircuit_circuit_hyperedge_support(contractor_setup, backend):
     c = tc.Circuit(2)
     c.H(0)
     c.CNOT(0, 1)
@@ -136,8 +131,9 @@ def test_tensorcircuit_circuit_hyperedge_support(contractor_setup, backend_setup
     )
 
 
+@pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
-def test_hyperedge_output_reordering(contractor_setup, backend_setup):
+def test_hyperedge_output_reordering(contractor_setup, backend):
     dim = 2
     a = tn.Node(tc.gates.num_to_tensor(np.array([1.0, 2.0])), name="A")
     b = tn.Node(tc.gates.num_to_tensor(np.array([3.0, 4.0])), name="B")
@@ -159,8 +155,9 @@ def test_hyperedge_output_reordering(contractor_setup, backend_setup):
     assert res.tensor.shape == (2, 2)
 
 
+@pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
-def test_large_hyperedge_chain(contractor_setup, backend_setup):
+def test_large_hyperedge_chain(contractor_setup, backend):
     # A chain of 12 nodes connected by CopyNodes
     n_nodes = 12
     dim = 2
@@ -197,8 +194,9 @@ def test_large_hyperedge_chain(contractor_setup, backend_setup):
     np.testing.assert_allclose(tc.backend.numpy(res.tensor), expected, atol=1e-5)
 
 
+@pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
-def test_large_star_hyperedge(contractor_setup, backend_setup):
+def test_large_star_hyperedge(contractor_setup, backend):
     n_nodes = 35
     dim = 2
     nodes = []
