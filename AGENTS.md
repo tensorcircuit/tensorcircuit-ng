@@ -15,6 +15,7 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 - Fail fast. Expose real problems early instead of masking them with silent fallbacks or workaround-heavy logic.
 - Do not cheat around repository invariants, tests, or framework behavior just to make a local change appear to pass.
 - Focus only on git-tracked files. Do not search for or modify files in `.gitignore` unless explicitly specified by the user.
+- `tensorcircuit/applications` and `benchmarks/` are deprecated, do not add or modify files there unless the user explicitly specified.
 
 ## Environment Rules
 
