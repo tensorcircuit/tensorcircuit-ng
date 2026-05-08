@@ -34,6 +34,8 @@ def local_eigen_solver(L, W, R, M_init, num_krylov=10):
     M_flat = tc.backend.reshape(M_init, [-1])
 
     def heff_matvec(v_flat):
+        # `lobpcg_standard` calls the operator on a block matrix of shape (n, k).
+        # Transpose so vmap iterates over the k search vectors column-by-column.
         v_cols = tc.backend.transpose(v_flat)
         out_cols = tc.backend.vmap(apply_single, vectorized_argnums=0)(v_cols)
         return -tc.backend.transpose(out_cols)
@@ -258,6 +260,7 @@ def generate_random_mps(L, chi, d, masks):
     key = jax.random.PRNGKey(42)
     M_list = jax.random.normal(key, (L, chi, d, chi))
     M_list = tc.backend.cast(M_list, masks.dtype)
+    M_list = M_list * masks
 
     # Apply the exact masks to avoid null-space leakage at initialization
     return tc.backend.convert_to_tensor(M_list)
