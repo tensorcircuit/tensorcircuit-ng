@@ -4,7 +4,7 @@ qiskit-aer<1.0
 qiskit-nature
 mitiq
 cirq
-torch
+torch<2.12
 physics-tenpy==1.0.6
 quimb==1.11.1
 # jupyter
