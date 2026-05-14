@@ -229,10 +229,9 @@ def num_to_tensor(*num: Union[float, Tensor], dtype: Optional[str] = None) -> An
     :type num: Union[float, Tensor]
     :param dtype: dtype of the output Tensors
     :type dtype: str, optional
-    :return: List of Tensors
-    :rtype: List[Tensor]
+    :return: List of Tensors or a single Tensor
+    :rtype: Union[List[Tensor], Tensor]
     """
-    # TODO(@YHPeter): fix __doc__ for same function with different names
 
     l = []
     if dtype is None:

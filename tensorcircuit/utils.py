@@ -53,8 +53,8 @@ def return_partial(
 
     :param f: The function to be applied this method
     :type f: Callable[..., Any]
-    :param return_partial: The ith parts of original output along the first axis (axis=0 or dim=0)
-    :type return_partial: Union[int, Sequence[int]]
+    :param return_argnums: The ith parts of original output along the first axis (axis=0 or dim=0)
+    :type return_argnums: Union[int, Sequence[int]]
     :return: The modified callable function
     :rtype: Callable[..., Any]
     """
