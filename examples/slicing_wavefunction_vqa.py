@@ -128,9 +128,7 @@ def sliced_expectation_and_grad(param, n, nlayers, ps, cut, is_vmap=True):
         # can modified to adpative pmap
         vs = 0.0
         gs = 0.0
-        for i in range(len(mask1s)):
-            mask1t = mask1s[i]
-            mask2t = mask2s[i]
+        for mask1t, mask2t in zip(mask1s, mask2s):
             v, g = sliced_core_vg(param, n, nlayers, pst, cut, mask1t, mask2t)
             vs += v
             gs += g
