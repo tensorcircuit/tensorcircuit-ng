@@ -1,5 +1,6 @@
 """Reproduction of "A Qutrit Time Crystal Stabilized with Native Chiral Interactions"
 Link: https://arxiv.org/abs/2605.14293
+This work shares strong conceptual similarity with https://arxiv.org/abs/2512.04577.
 Description:
 This script reproduces Figure 2(b) from the paper using TensorCircuit-NG.
 It performs a noiseless JAX simulation of the driven qutrit Floquet model,
