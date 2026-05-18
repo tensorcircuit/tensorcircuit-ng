@@ -23,6 +23,7 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 - If a command fails because of missing Python packages or `ModuleNotFoundError`, ask the user which environment to use.
 - Once the environment is known, run Python tooling through that environment, for example `conda run -n <env> ...`.
 - Dependency and tool configuration lives in `requirements/`, `pyproject.toml`, and `.pylintrc`.
+- Keep sandbox- or machine-specific execution workarounds out of tracked source files unless the user explicitly asks for a repo-level workaround. Examples include redirecting `MPLCONFIGDIR`, cache directories, or other local writable paths just to satisfy the current sandbox.
 
 ## Where To Look First
 
@@ -40,6 +41,7 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 - Use type hints and static analysis in the `tensorcircuit/` module.
 - Write clear public docstrings when changing public APIs.
 - Backend-agnostic, autodiff-friendly, and JIT-friendly patterns are preferred throughout the codebase.
+- When a sandbox needs writable cache or config directories for local validation, set those in the shell command or test harness rather than hardcoding them into repo files.
 
 ## Testing Rules
 

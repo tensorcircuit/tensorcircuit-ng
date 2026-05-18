@@ -1,0 +1,32 @@
+title: "A Qutrit Time Crystal Stabilized with Native Chiral Interactions"
+arxiv_id: "2605.14293"
+url: "https://arxiv.org/abs/2605.14293"
+year: 2026
+authors:
+  - "Noah Goss"
+  - "Nishchay Suri"
+  - "Brian Marinelli"
+  - "Larry Chen"
+  - "Akel Hashim"
+  - "Sajant Anand"
+  - "Alexis Morvan"
+  - "Ravi K. Naik"
+  - "Ermal Rrapaj"
+  - "David I. Santiago"
+  - "Wibe de Jong"
+  - "Norman Y. Yao"
+  - "Joel E. Moore"
+  - "Irfan Siddiqi"
+tags:
+  - "qutrit"
+  - "discrete-time-crystal"
+  - "floquet"
+  - "chiral-clock-model"
+hardware_requirements:
+  gpu: False
+  min_memory: "2GB"
+description: "Reproduces Figure 2(b) qualitatively with a noiseless TensorCircuit-NG and JAX simulation of the driven chiral clock model. The original 15-qutrit experiment is scaled to 9 qutrits for fast local execution, while keeping the same Floquet structure U_F = exp(-i H0) exp(-i Hint) X^g, disordered chiral couplings, the spin-1 magnetization observable M = |0><0| - |2><2|, and the DTC-versus-thermal comparison. The microwave kick is modeled as the fractional spectral power of the qutrit shift operator X^g, which is an explicit modeling simplification used to obtain a smooth noiseless interpolation away from the exact g = 1 kick."
+outputs:
+  - target: "Figure 2(b): Single-site magnetization traces and Fourier spectroscopy versus kick strength"
+    path: outputs/result.png
+    script: "main.py"

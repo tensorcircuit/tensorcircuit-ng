@@ -1,4 +1,5 @@
 data
+.conda
 docker/Dockerfile-image
 examples/meta_exploration
 tree.pkl
