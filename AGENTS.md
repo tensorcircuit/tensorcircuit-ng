@@ -40,6 +40,7 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 - Keep comments minimal and useful; avoid explanatory debugging commentary.
 - Use type hints and static analysis in the `tensorcircuit/` module.
 - Write clear public docstrings when changing public APIs.
+- When adding user-facing modules, classes, or convenience APIs, export them from `tensorcircuit/__init__.py` if they are peers of existing top-level TensorCircuit APIs; otherwise keep internal helpers unexported. Update relevant docs, examples, and changelog entries when applicable.
 - Backend-agnostic, autodiff-friendly, and JIT-friendly patterns are preferred throughout the codebase.
 - When a sandbox needs writable cache or config directories for local validation, set those in the shell command or test harness rather than hardcoding them into repo files.
 
