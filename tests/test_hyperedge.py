@@ -543,3 +543,24 @@ def test_qir_fallback(contractor_setup, backend):
     qir = c.to_qir()
     c2 = tc.Circuit.from_qir(qir, circuit_params={"nqubits": n})
     np.testing.assert_allclose(c.state(), c2.state(), atol=1e-5)
+
+@pytest.mark.parametrize("contractor_setup", [("cotengra", {"use_primitives": True})], indirect=True)
+def test_algebraic_contraction_edge_cases(contractor_setup, backend_setup):
+    from tensorcircuit.cons import _algebraic_base_contraction
+    import opt_einsum
+
+    # 0 nodes case
+    res0 = _algebraic_base_contraction([], opt_einsum.paths.greedy)
+    np.testing.assert_allclose(tc.backend.numpy(res0.tensor), 1.0)
+
+    # 1 node case
+    a = tn.Node(tc.backend.convert_to_tensor(np.array([1.0, 2.0])))
+    res1 = _algebraic_base_contraction([a], opt_einsum.paths.greedy)
+    np.testing.assert_allclose(tc.backend.numpy(res1.tensor), np.array([1.0, 2.0]))
+
+    # 1 node with self-loop (trace)
+    # _extract_topology handles traces by mapping them to symbols
+    b = tn.Node(tc.backend.convert_to_tensor(np.eye(2)))
+    b[0] ^ b[1]
+    res1_trace = _algebraic_base_contraction([b], opt_einsum.paths.greedy)
+    np.testing.assert_allclose(tc.backend.numpy(res1_trace.tensor), 2.0)
