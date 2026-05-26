@@ -14,6 +14,7 @@ Use this file for changes that touch public API, tests, docs, or code quality.
 
 - Export new public modules from `tensorcircuit/__init__.py`, including the main convenience alias when the repo already follows that pattern.
 - Keep public docstrings and examples aligned with the actual API. When a new module is user-facing, add or update a realistic example in `examples/`.
+- For optional contractor integrations, keep user-facing examples on the actual public entrypoint (`tc.set_contractor("custom", optimizer=...)`) and keep search-only benchmark scripts separate from end-to-end contraction demos.
 - When adding a new tracked module, also refresh the docs index from `docs/source/` and add a short changelog entry.
 - Keep imports at the top of the file unless the dependency is intentionally optional and not part of the core declared requirements.
 

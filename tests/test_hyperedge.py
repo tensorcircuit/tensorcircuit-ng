@@ -1,8 +1,12 @@
+import builtins
+import jax
 import pytest
 from pytest_lazyfixture import lazy_fixture as lf
 import numpy as np
+import opt_einsum
 import tensornetwork as tn
 import tensorcircuit as tc
+import tensorcircuit.cons as cons
 
 BACKENDS = [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")]
 
@@ -37,6 +41,24 @@ def contractor_setup(request):
             tc.set_contractor("custom", optimizer=opt, **kwargs)
         except ImportError:
             pytest.skip("cotengra not installed")
+    elif method == "omeco":
+        try:
+            import omeco
+
+            opt = omeco.TreeSA(
+                ntrials=2,
+                niters=2,
+                betas=[0.1, 1.0],
+                score=omeco.ScoreFunction(
+                    tc_weight=1.0,
+                    sc_weight=0.0,
+                    rw_weight=64.0,
+                    sc_target=20.0,
+                ),
+            )
+            tc.set_contractor("custom", optimizer=opt, preprocessing=True, **kwargs)
+        except ImportError:
+            pytest.skip("omeco not installed")
     else:
         tc.set_contractor(method, **kwargs)
 
@@ -217,8 +239,6 @@ def test_large_star_hyperedge(contractor_setup, backend):
 
 @pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
 def test_hyperedge_jit(jaxb, contractor_setup):
-    import jax
-
     @jax.jit
     def f(v1, v2):
         a = tn.Node(v1)
@@ -238,8 +258,6 @@ def test_hyperedge_jit(jaxb, contractor_setup):
 
 @pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
 def test_hyperedge_ad(jaxb, contractor_setup):
-    import jax
-
     def f(v1, v2):
         a = tn.Node(v1)
         b = tn.Node(v2)
@@ -256,6 +274,116 @@ def test_hyperedge_ad(jaxb, contractor_setup):
     gv1 = jax.grad(f, argnums=0)(v1, v2)
     # df/dv1 = [b[0], 0] = [3.0, 0]
     np.testing.assert_allclose(gv1, jax.numpy.array([3.0, 0.0]), atol=1e-5)
+
+
+@pytest.mark.parametrize("contractor_setup", ["omeco"], indirect=True)
+def test_omeco_optimizer_autowrap(contractor_setup):
+    assert isinstance(tc.contractor.keywords["optimizer"], cons.OMEOptimizer)
+
+
+def test_custom_callable_optimizer_does_not_import_omeco(monkeypatch):
+    original_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "omeco":
+            raise AssertionError("callable optimizers should not trigger omeco import")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    with tc.runtime_contractor("custom", optimizer=opt_einsum.paths.greedy):
+        a = tn.Node(np.array([1.0, 2.0]))
+        b = tn.Node(np.array([3.0, 4.0]))
+        a[0] ^ b[0]
+        res = tc.contractor([a, b])
+        np.testing.assert_allclose(tc.backend.numpy(res.tensor), 11.0, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("contractor_setup", ["omeco"], indirect=True)
+def test_omeco_chained_hyperedge(contractor_setup, backend):
+    dim = 2
+    a = tn.Node(tc.gates.num_to_tensor(np.array([1.0, 2.0])), name="A")
+    b = tn.Node(tc.gates.num_to_tensor(np.array([1.0, 2.0])), name="B")
+    c = tn.Node(tc.gates.num_to_tensor(np.array([1.0, 2.0])), name="C")
+    d = tn.Node(tc.gates.num_to_tensor(np.array([1.0, 2.0])), name="D")
+
+    cn1 = tn.CopyNode(3, dim, name="CN1")
+    cn2 = tn.CopyNode(3, dim, name="CN2")
+
+    a[0] ^ cn1[0]
+    b[0] ^ cn1[1]
+    cn1[2] ^ cn2[0]
+    c[0] ^ cn2[1]
+    d[0] ^ cn2[2]
+
+    nodes = [a, b, c, d, cn1, cn2]
+    res = tc.contractor(nodes)
+    np.testing.assert_allclose(tc.backend.numpy(res.tensor), 17.0, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("contractor_setup", ["omeco"], indirect=True)
+def test_omeco_regular_chain_contraction(contractor_setup, backend):
+    a = tn.Node(tc.gates.num_to_tensor(np.array([1.0, 2.0])), name="A")
+    b = tn.Node(tc.gates.num_to_tensor(np.diag([3.0, 4.0])), name="B")
+    c = tn.Node(tc.gates.num_to_tensor(np.diag([5.0, 6.0])), name="C")
+    d = tn.Node(tc.gates.num_to_tensor(np.diag([7.0, 8.0])), name="D")
+    e = tn.Node(tc.gates.num_to_tensor(np.array([9.0, 10.0])), name="E")
+
+    a[0] ^ b[0]
+    b[1] ^ c[0]
+    c[1] ^ d[0]
+    d[1] ^ e[0]
+
+    res = tc.contractor([a, b, c, d, e])
+    np.testing.assert_allclose(tc.backend.numpy(res.tensor), 4785.0, atol=1e-5)
+
+
+@pytest.mark.parametrize("contractor_setup", ["omeco"], indirect=True)
+def test_omeco_hyperedge_jit(jaxb, contractor_setup):
+    @jax.jit
+    def f(v1, v2, v3, v4):
+        a = tn.Node(v1)
+        b = tn.Node(v2)
+        c = tn.Node(v3)
+        d = tn.Node(v4)
+        cn = tn.CopyNode(5, 2)
+        a[0] ^ cn[0]
+        b[0] ^ cn[1]
+        c[0] ^ cn[2]
+        d[0] ^ cn[3]
+        res = tc.contractor([a, b, c, d, cn])
+        return res.tensor[0]
+
+    v1 = jax.numpy.array([1.0, 2.0])
+    v2 = jax.numpy.array([3.0, 4.0])
+    v3 = jax.numpy.array([5.0, 6.0])
+    v4 = jax.numpy.array([7.0, 8.0])
+    np.testing.assert_allclose(f(v1, v2, v3, v4), 105.0, atol=1e-5)
+
+
+@pytest.mark.parametrize("contractor_setup", ["omeco"], indirect=True)
+def test_omeco_hyperedge_ad(jaxb, contractor_setup):
+    def f(v1, v2, v3, v4):
+        a = tn.Node(v1)
+        b = tn.Node(v2)
+        c = tn.Node(v3)
+        d = tn.Node(v4)
+        cn = tn.CopyNode(5, 2)
+        a[0] ^ cn[0]
+        b[0] ^ cn[1]
+        c[0] ^ cn[2]
+        d[0] ^ cn[3]
+        res = tc.contractor([a, b, c, d, cn])
+        return tc.backend.real(res.tensor[0])
+
+    v1 = jax.numpy.array([1.0, 2.0])
+    v2 = jax.numpy.array([3.0, 4.0])
+    v3 = jax.numpy.array([5.0, 6.0])
+    v4 = jax.numpy.array([7.0, 8.0])
+    gv1 = jax.grad(f, argnums=0)(v1, v2, v3, v4)
+    np.testing.assert_allclose(gv1, jax.numpy.array([105.0, 0.0]), atol=1e-5)
 
 
 @pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)

@@ -573,6 +573,124 @@ def _extract_topology(
     )
 
 
+def _normalize_omeco_topology(
+    input_sets: Sequence[Sequence[Any]],
+    output_set: Sequence[Any],
+    size_dict: Dict[Any, int],
+) -> Tuple[List[List[int]], List[int], Dict[int, int]]:
+    mapping: Dict[Any, int] = {}
+
+    def relabel(symbol: Any) -> int:
+        if symbol not in mapping:
+            mapping[symbol] = len(mapping)
+        return mapping[symbol]
+
+    new_inputs = [[relabel(symbol) for symbol in term] for term in input_sets]
+    new_output = [relabel(symbol) for symbol in output_set]
+    new_sizes = {relabel(symbol): int(size) for symbol, size in size_dict.items()}
+    return new_inputs, new_output, new_sizes
+
+
+def _omeco_tree_to_path(tree: Dict[str, Any], ntensors: int) -> List[Tuple[int, int]]:
+    leaf_indices: List[int] = []
+
+    def collect(node: Dict[str, Any]) -> None:
+        if "tensor_index" in node:
+            leaf_indices.append(int(node["tensor_index"]))
+            return
+        if "tensorindex" in node:
+            leaf_indices.append(int(node["tensorindex"]))
+            return
+        for child in node["args"]:
+            collect(child)
+
+    collect(tree)
+    offset = 1 if sorted(leaf_indices) == list(range(1, ntensors + 1)) else 0
+    queue = list(range(ntensors))
+    path: List[Tuple[int, int]] = []
+    next_index = ntensors
+
+    def visit(node: Dict[str, Any]) -> int:
+        nonlocal next_index
+        if "tensor_index" in node:
+            return int(node["tensor_index"]) - offset
+        if "tensorindex" in node:
+            return int(node["tensorindex"]) - offset
+        if len(node["args"]) != 2:
+            raise ValueError("omeco returned a non-binary contraction tree")
+
+        left = visit(node["args"][0])
+        right = visit(node["args"][1])
+        left_index = queue.index(left)
+        right_index = queue.index(right)
+        if left_index > right_index:
+            pair = (left_index, right_index)
+        else:
+            pair = (right_index, left_index)
+        queue.pop(pair[0])
+        queue.pop(pair[1])
+        queue.append(next_index)
+        path.append(pair)
+        next_index += 1
+        return next_index - 1
+
+    visit(tree)
+    return path
+
+
+class OMEOptimizer:
+    """
+    Adapt an ``omeco`` optimizer for ``tc.set_contractor("custom", ...)``.
+
+    ``omeco`` stays an optional dependency and is imported lazily only when this
+    adapter is actually used.
+
+    Example:
+
+    >>> import omeco
+    >>> opt = omeco.TreeSA(ntrials=4, niters=8, betas=[0.1, 1.0, 10.0])
+    >>> tc.set_contractor("custom", optimizer=opt, preprocessing=True)
+    """
+
+    def __init__(self, optimizer: Optional[Any] = None):
+        self.optimizer = optimizer
+
+    def __call__(
+        self,
+        input_sets: Sequence[Sequence[Any]],
+        output_set: Sequence[Any],
+        size_dict: Dict[Any, int],
+        _memory_limit: Optional[int] = None,
+        **_kws: Any,
+    ) -> List[Tuple[int, int]]:
+        try:
+            import omeco
+        except ImportError as e:
+            raise ImportError(
+                "OMEOptimizer requires the optional dependency 'omeco'."
+            ) from e
+        inputs, output, sizes = _normalize_omeco_topology(
+            input_sets, output_set, size_dict
+        )
+        if self.optimizer is None:
+            tree = omeco.optimize_code(inputs, output, sizes)
+        else:
+            tree = omeco.optimize_code(inputs, output, sizes, self.optimizer)
+        return _omeco_tree_to_path(tree.to_dict(), len(inputs))
+
+
+def _wrap_omeco_optimizer(optimizer: Any) -> Any:
+    if optimizer is None or isinstance(optimizer, list) or callable(optimizer):
+        return optimizer
+    try:
+        import omeco
+    except ImportError:
+        return optimizer
+    if isinstance(optimizer, (omeco.GreedyMethod, omeco.TreeSA)):
+        return OMEOptimizer(optimizer)
+    return optimizer
+
+
 def _algebraic_base_contraction(
     nodes: List[tn.Node],
     algorithm: Any,
@@ -919,7 +1037,8 @@ def custom(
         )
 
     total_size = None
-    if kws.get("preprocessing", None):
+    has_hyperedges = any(isinstance(n, tn.CopyNode) for n in nodes)
+    if kws.get("preprocessing", None) and not has_hyperedges:
         # nodes = _full_light_cone_cancel(nodes)
         nodes, total_size = _merge_single_gates(nodes)
     if not isinstance(optimizer, list):
@@ -962,7 +1081,8 @@ def custom_stateful(
         )
 
     total_size = None
-    if kws.get("preprocessing", None):
+    has_hyperedges = any(isinstance(n, tn.CopyNode) for n in nodes)
+    if kws.get("preprocessing", None) and not has_hyperedges:
         nodes, total_size = _merge_single_gates(nodes)
     if opt_conf is None:
         opt_conf = {}
@@ -1116,6 +1236,8 @@ def set_contractor(
 
         if method != "custom":
             optimizer = getattr(opt_einsum.paths, method)
+        else:
+            optimizer = _wrap_omeco_optimizer(optimizer)
         if contraction_info is True:
             optimizer = contraction_info_decorator(optimizer)  # type: ignore
         cf = partial(

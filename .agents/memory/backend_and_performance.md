@@ -21,9 +21,12 @@ Use this file for backend-wrapper behavior, JIT/vmap issues, and contraction per
 ## Contraction patterns
 
 - For networks with hyperedges, prefer the algebraic contraction path so `cotengra` can optimize the whole einsum without constructing large diagonal copy tensors.
+- Do not run `_merge_single_gates`-style preprocessing on networks that still contain `CopyNode`s. Route those networks straight to the algebraic contractor; early preprocessing can contract into copy tensors and trigger backend dtype/device mismatches.
 - Sort nodes deterministically before building topology strings or einsum expressions. Stable ordering improves both contraction-path reuse and JIT cache hits.
 - After partially contracting a subgraph algebraically, reattach the original dangling edges to the replacement node before continuing.
 - For large contractions, `tc.set_contractor("cotengra")` plus a reusable optimizer is the default high-performance path.
+- When integrating a third-party path finder that only accepts integer labels, adapt the algebraic `input_sets`/`output_set`/`size_dict` into integer-labeled topology, reconstruct a standard pairwise contraction path, and reuse the existing algebraic contractor so hyperedge support stays shared.
+- Optional contraction optimizers with non-callable state should be normalized once at the `set_contractor("custom", optimizer=...)` boundary into a callable path finder. Keep the optional import lazy and avoid probing that dependency for ordinary callable optimizers or explicit path lists.
 
 ## Dtype and long-lived constants
 
