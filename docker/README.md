@@ -27,3 +27,5 @@ sudo docker run -it --network host --gpus all tensorcircuit
 ```
 
 `export CUDA_VISIBLE_DEVICES=-1` if you want to test only on CPU.
+
+Note: we don't provide latest docker images for tensorcircuit-ng, instead any docker image with GPU supported JAX is okay to use, just `pip install tensorcircuit-ng` in it.

@@ -472,7 +472,7 @@ Reference paper: https://arxiv.org/abs/2508.06358 (published in PRR).
 
 For the code implementation on the work of demonstrating plasticity in quantum continual learning, see the [project repo](https://github.com/sxzgroup/quantum-plasticity).
 
-Reference paper: https://arxiv.org/abs/2511.17228.
+Reference paper: https://arxiv.org/abs/2511.17228 (published in PRX Quantum).
 
 ### More works
 
