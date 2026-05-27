@@ -1,6 +1,6 @@
 # Symbolic and Translation
 
-Use this file for `SymbolCircuit`, SymPy-to-JAX, and Qiskit translation boundaries.
+Use this file for `SymbolCircuit`, SymPy-to-JAX, and translation or interoperability boundaries.
 
 ## SymbolCircuit rules
 
@@ -19,3 +19,9 @@ Use this file for `SymbolCircuit`, SymPy-to-JAX, and Qiskit translation boundari
 - `to_qiskit` and `translation.qir2qiskit` solve different problems and should not be forced into one dispatch path.
 - `to_qiskit` preserves symbolic parameters, while `qir2qiskit` reconstructs numeric gates from serialized QIR.
 - `_translate_qiskit_params` is the reverse-direction helper for Qiskit-to-TensorCircuit translation.
+
+## Stim translation
+
+- Keep `stim` imports optional and gate translation tests with `pytest.importorskip("stim")`.
+- Implement basis-changed Stim measurements and resets by explicit basis transforms around the existing Z-basis measurement or reset path instead of inventing separate semantics for each variant.
+- Preserve instruction arity when mapping noisy channels; multi-qubit noise should stay multi-qubit during translation instead of falling back to one-qubit helpers.

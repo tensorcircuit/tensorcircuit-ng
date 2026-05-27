@@ -24,4 +24,5 @@ Use this file for cross-cutting circuit invariants, serialization behavior, and 
 
 - `to_qir()` and `from_qir()` are the canonical serialization boundary across circuit types.
 - New gates should record enough information in `gatef` and `parameters` for reconstruction without hidden context.
+- For noise or channel instructions, store an explicit channel marker and replay them through the same delayed-channel application path during reconstruction. Do not rely on `TypeError` probing or method-name heuristics to distinguish gates from channels.
 - Cross-class `from_qir(...)` is expected to work only when the destination class supports the gates in the serialized program and the caller supplies any model-specific constructor arguments through `circuit_params`.
