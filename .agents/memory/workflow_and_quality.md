@@ -18,6 +18,15 @@ Use this file for changes that touch public API, tests, docs, or code quality.
 - When adding a new tracked module, also refresh the docs index from `docs/source/` and add a short changelog entry.
 - Keep imports at the top of the file unless the dependency is intentionally optional and not part of the core declared requirements.
 
+## Example-script style
+
+- Treat `examples/` as public reference material for both users and coding agents. Optimize for top-to-bottom readability and reuse of the main pattern, not for exhaustive configurability.
+- Prefer one concrete workflow per example. If a helper class, dataclass, or abstraction is only used once inside the script and does not clarify the main idea, inline it.
+- Expose only the flags that materially change the scientific or algorithmic point of the example. Hardcode incidental benchmarking knobs, validation harness details, and local execution scaffolding.
+- Keep examples on the real public API surface rather than private compatibility hacks, unless the example is explicitly about internal infrastructure.
+- In examples, fail fast on correctness mismatches instead of printing large debugging reports. The output should focus on the comparison or usage pattern the example is meant to teach.
+- Split exploratory benchmarking scripts from clean pedagogical examples. Once a conclusion is known, distill the stable pattern into a shorter example rather than preserving the full exploration scaffold.
+
 ## Testing defaults
 
 - In tests, use backend fixtures from `tests/conftest.py`; do not switch backend or dtype globally inside test bodies.

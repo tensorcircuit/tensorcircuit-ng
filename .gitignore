@@ -1,3 +1,4 @@
+.tmp
 data
 .conda
 docker/Dockerfile-image

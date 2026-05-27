@@ -18,6 +18,8 @@
 
 - Add `strip_exponent` support for `set_contractor`.
 
+- Add support for OMECO contraction path finder.
+
 ## v1.6.0
 
 ### Added

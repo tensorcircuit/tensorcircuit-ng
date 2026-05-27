@@ -24,6 +24,7 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 - Once the environment is known, run Python tooling through that environment, for example `conda run -n <env> ...`.
 - Dependency and tool configuration lives in `requirements/`, `pyproject.toml`, and `.pylintrc`.
 - Keep sandbox- or machine-specific execution workarounds out of tracked source files unless the user explicitly asks for a repo-level workaround. Examples include redirecting `MPLCONFIGDIR`, cache directories, or other local writable paths just to satisfy the current sandbox.
+- Do not hardcode or publicly expose local conda environment names, usernames, absolute paths, hostnames, or other machine-specific execution details in tracked docstrings, examples, or user-facing scripts. Use generic placeholders such as `conda run -n <env> ...` unless the repository explicitly needs a concrete value.
 
 ## Where To Look First
 

@@ -27,6 +27,9 @@ Use this file for backend-wrapper behavior, JIT/vmap issues, and contraction per
 - For large contractions, `tc.set_contractor("cotengra")` plus a reusable optimizer is the default high-performance path.
 - When integrating a third-party path finder that only accepts integer labels, adapt the algebraic `input_sets`/`output_set`/`size_dict` into integer-labeled topology, reconstruct a standard pairwise contraction path, and reuse the existing algebraic contractor so hyperedge support stays shared.
 - Optional contraction optimizers with non-callable state should be normalized once at the `set_contractor("custom", optimizer=...)` boundary into a callable path finder. Keep the optional import lazy and avoid probing that dependency for ordinary callable optimizers or explicit path lists.
+- When benchmarking explicit contraction-tree batching, keep the contraction tree fixed across variants. If each variant reruns path search, path-quality noise can hide or fake batching gains.
+- In the current JAX `jit` / XLA contraction-tree workflow, early independent small contractions are not automatically overlapped. In large circuit simulations this usually has limited end-to-end impact anyway, because runtime is dominated by the late large contractions.
+- On large JAX reverse-mode contraction workloads, batching same-shape leaf or ready-wave contractions often yields only modest steady-state gains while inflating compile time much more. Treat these batching schemes as optional tuning knobs, not default contractor behavior.
 
 ## Dtype and long-lived constants
 
