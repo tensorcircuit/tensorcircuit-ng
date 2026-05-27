@@ -80,6 +80,12 @@ _ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # these above lines are just for mypy, it is not very good at evaluating runtime object
 
 
+def _set_global_contractor(contractor_fn: Callable[..., Any]) -> None:
+    for module in sys.modules:
+        if module.startswith(package_name):
+            setattr(sys.modules[module], "contractor", contractor_fn)
+
+
 def set_tensornetwork_backend(
     backend: Optional[str] = None, set_global: bool = True
 ) -> Any:
@@ -1008,9 +1014,7 @@ def runtime_nodes_capture(key: str = "nodes") -> Iterator[Any]:
     except NodesReturn as e:
         captured_value[key] = e.value
     finally:
-        for module in sys.modules:
-            if module.startswith(package_name):
-                setattr(sys.modules[module], "contractor", old_contractor)
+        _set_global_contractor(old_contractor)
 
 
 def custom(
@@ -1023,6 +1027,8 @@ def custom(
     use_primitives: Optional[bool] = None,
     **kws: Any,
 ) -> Any:
+    local_kws = dict(kws)
+    debug_level = local_kws.pop("debug_level", debug_level)
     if len(nodes) < 5:
         alg = opt_einsum.paths.optimal
         # not good at minimize WRITE actually...
@@ -1033,19 +1039,18 @@ def custom(
             ignore_edge_order,
             debug_level=debug_level,
             use_primitives=use_primitives,
-            **kws,
+            **local_kws,
         )
 
     total_size = None
     has_hyperedges = any(isinstance(n, tn.CopyNode) for n in nodes)
-    if kws.get("preprocessing", None) and not has_hyperedges:
+    if local_kws.get("preprocessing", None) and not has_hyperedges:
         # nodes = _full_light_cone_cancel(nodes)
         nodes, total_size = _merge_single_gates(nodes)
     if not isinstance(optimizer, list):
         alg = partial(optimizer, memory_limit=memory_limit)
     else:
         alg = optimizer
-    debug_level = kws.get("debug_level", 0)
     return _base(
         nodes,
         alg,
@@ -1054,7 +1059,7 @@ def custom(
         total_size,
         debug_level=debug_level,
         use_primitives=use_primitives,
-        **kws,
+        **local_kws,
     )
 
 
@@ -1068,42 +1073,27 @@ def custom_stateful(
     use_primitives: Optional[bool] = None,
     **kws: Any,
 ) -> Any:
-    if len(nodes) < 5:
-        alg = opt_einsum.paths.optimal
-        # dynamic_programming has a potential bug for outer product
-        # not good at minimize WRITE actually...
-        return _base(
-            nodes,
-            alg,
-            output_edge_order,
-            ignore_edge_order,
-            use_primitives=use_primitives,
-        )
-
-    total_size = None
-    has_hyperedges = any(isinstance(n, tn.CopyNode) for n in nodes)
-    if kws.get("preprocessing", None) and not has_hyperedges:
-        nodes, total_size = _merge_single_gates(nodes)
     if opt_conf is None:
         opt_conf = {}
     opt = optimizer(**opt_conf)  # reinitiate the optimizer each time
     if kws.get("contraction_info", None):
         opt = contraction_info_decorator(opt)
-    alg = partial(opt, memory_limit=memory_limit)
-    debug_level = kws.get("debug_level", 0)
-
-    return _base(
+    local_kws = dict(kws)
+    debug_level = local_kws.pop("debug_level", 0)
+    local_kws.pop("contraction_info", None)
+    return custom(
         nodes,
-        alg,
-        output_edge_order,
-        ignore_edge_order,
-        total_size,
+        opt,
+        memory_limit=memory_limit,
+        output_edge_order=output_edge_order,
+        ignore_edge_order=ignore_edge_order,
         debug_level=debug_level,
         use_primitives=use_primitives,
+        **local_kws,
     )
 
 
-# only work for custom
+# used by custom contractor variants
 def contraction_info_decorator(algorithm: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator to add contraction information logging to an optimizer.
 
@@ -1249,9 +1239,7 @@ def set_contractor(
             **kws,
         )
     if set_global:
-        for module in sys.modules:
-            if module.startswith(package_name):
-                setattr(sys.modules[module], "contractor", cf)
+        _set_global_contractor(cf)
     return cf
 
 
@@ -1273,11 +1261,10 @@ def set_function_contractor(*confargs: Any, **confkws: Any) -> Callable[..., Any
         def newf(*args: Any, **kws: Any) -> Any:
             old_contractor = getattr(thismodule, "contractor")
             set_contractor(*confargs, **confkws)
-            r = f(*args, **kws)
-            for module in sys.modules:
-                if module.startswith(package_name):
-                    setattr(sys.modules[module], "contractor", old_contractor)
-            return r
+            try:
+                return f(*args, **kws)
+            finally:
+                _set_global_contractor(old_contractor)
 
         return newf
 
@@ -1294,10 +1281,10 @@ def runtime_contractor(*confargs: Any, **confkws: Any) -> Iterator[Any]:
     """
     old_contractor = getattr(thismodule, "contractor")
     nc = set_contractor(*confargs, **confkws)
-    yield nc
-    for module in sys.modules:
-        if module.startswith(package_name):
-            setattr(sys.modules[module], "contractor", old_contractor)
+    try:
+        yield nc
+    finally:
+        _set_global_contractor(old_contractor)
 
 
 def split_rules(

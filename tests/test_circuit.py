@@ -2126,3 +2126,24 @@ def test_strip_exponent_no_hyperedge(backend, reset_contractor):
     res_node, exponent = result
     np.testing.assert_allclose(tc.backend.numpy(res_node.tensor), 1.0, atol=1e-5)
     np.testing.assert_allclose(exponent, 10.0, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_custom_stateful_strip_exponent(backend, reset_contractor):
+    tc.set_contractor(
+        "custom_stateful",
+        optimizer=oem.RandomGreedy,
+        max_repeats=1,
+        strip_exponent=True,
+    )
+
+    nodes = [
+        tn.Node(tc.backend.convert_to_tensor(10.0, tc.rdtypestr)) for _ in range(6)
+    ]
+
+    result = tc.cons.contractor(nodes)
+    assert isinstance(result, tuple)
+
+    res_node, exponent = result
+    np.testing.assert_allclose(tc.backend.numpy(res_node.tensor), 1.0, atol=1e-5)
+    np.testing.assert_allclose(exponent, 6.0, atol=1e-5)

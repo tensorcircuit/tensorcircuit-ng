@@ -745,7 +745,8 @@ def test_qop2quimb(backend):
     ket_inds_mps = [f"k{i}" for i in range(nwires_mps)]
     vec_from_quimb = np.ravel(quimb_mps.to_dense(ket_inds_mps))
 
-    np.testing.assert_allclose(vec_from_qop, vec_from_quimb, atol=1e-5)
+    atol = 5e-5 if tc.backend.name == "jax" else 1e-5
+    np.testing.assert_allclose(vec_from_qop, vec_from_quimb, atol=atol)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])

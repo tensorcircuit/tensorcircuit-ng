@@ -25,7 +25,7 @@ def main():
 
     print(f"Created a {n}-qubit circuit with {len(c._nodes)} gates.")
 
-    # 2. Extract algebraic contraction topology
+    # 2. Extract a stable contraction topology description for cotengra
     # We use the internal `_nodes` which represents the state vector contraction
     info, _ = tc.cons.get_tn_info(c._nodes)
     inputs, output, size_dict = info
