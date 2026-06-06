@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version:  tensorcircuit\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-03-31 12:24+0800\n"
+"POT-Creation-Date: 2026-06-06 15:34+0800\n"
 "PO-Revision-Date: 2022-04-13 14:58+0800\n"
 "Last-Translator: Xinghan Yang\n"
 "Language: cn\n"
@@ -67,7 +67,8 @@ msgstr ""
 #: ../../source/api/results/qem/qem_methods.rst
 #: ../../source/api/results/readout_mitigation.rst ../../source/api/shadows.rst
 #: ../../source/api/simplify.rst ../../source/api/stabilizercircuit.rst
-#: ../../source/api/templates/ansatz.rst ../../source/api/templates/blocks.rst
+#: ../../source/api/symbolcircuit.rst ../../source/api/templates/ansatz.rst
+#: ../../source/api/templates/blocks.rst
 #: ../../source/api/templates/conversions.rst
 #: ../../source/api/templates/graphs.rst
 #: ../../source/api/templates/hamiltonians.rst
@@ -75,7 +76,10 @@ msgstr ""
 #: ../../source/api/templates/measurements.rst ../../source/api/timeevol.rst
 #: ../../source/api/torchnn.rst ../../source/api/translation.rst
 #: ../../source/api/u1circuit.rst ../../source/api/utils.rst
-#: ../../source/api/vis.rst
+#: ../../source/api/vis.rst ../../source/api/zx/converter.rst
+#: ../../source/api/zx/evaluator.rst ../../source/api/zx/noise_model.rst
+#: ../../source/api/zx/scalar_graph.rst ../../source/api/zx/simplifier.rst
+#: ../../source/api/zx/stabilizertcircuit.rst ../../source/api/zx/utils.rst
 #: keras.src.backend.tensorflow.trainer.TensorFlowTrainer.evaluate
 #: keras.src.layers.layer.Layer.stateless_call
 #: keras.src.models.model.Model.export
@@ -92,8 +96,10 @@ msgstr ""
 #: tensorcircuit.results.counts.sort_count
 #: tensorcircuit.results.readout_mitigation.ReadoutMit.apply_correction
 #: tensorcircuit.templates.conversions.QUBO_to_Ising
-#: tensorcircuit.translation.qir2cirq torch.nn.modules.module.Module.apply
-#: torch.nn.modules.module.Module.buffers
+#: tensorcircuit.translation.qir2cirq
+#: tensorcircuit.zx.converter.pauli_channel_2
+#: tensorcircuit.zx.noise_model.pauli_channel_2_probs
+#: torch.nn.modules.module.Module.apply torch.nn.modules.module.Module.buffers
 #: torch.nn.modules.module.Module.named_buffers
 #: torch.nn.modules.module.Module.named_modules
 #: torch.nn.modules.module.Module.named_parameters
@@ -141,7 +147,8 @@ msgstr ""
 #: ../../source/api/results/qem/qem_methods.rst
 #: ../../source/api/results/readout_mitigation.rst
 #: ../../source/api/simplify.rst ../../source/api/stabilizercircuit.rst
-#: ../../source/api/templates/ansatz.rst ../../source/api/templates/blocks.rst
+#: ../../source/api/symbolcircuit.rst ../../source/api/templates/ansatz.rst
+#: ../../source/api/templates/blocks.rst
 #: ../../source/api/templates/conversions.rst
 #: ../../source/api/templates/graphs.rst
 #: ../../source/api/templates/hamiltonians.rst
@@ -149,7 +156,10 @@ msgstr ""
 #: ../../source/api/templates/measurements.rst ../../source/api/timeevol.rst
 #: ../../source/api/torchnn.rst ../../source/api/translation.rst
 #: ../../source/api/u1circuit.rst ../../source/api/utils.rst
-#: ../../source/api/vis.rst
+#: ../../source/api/vis.rst ../../source/api/zx/converter.rst
+#: ../../source/api/zx/evaluator.rst ../../source/api/zx/noise_model.rst
+#: ../../source/api/zx/scalar_graph.rst ../../source/api/zx/simplifier.rst
+#: ../../source/api/zx/stabilizertcircuit.rst ../../source/api/zx/utils.rst
 #: keras.src.backend.tensorflow.trainer.TensorFlowTrainer.evaluate
 #: keras.src.layers.layer.Layer.stateless_call
 #: keras.src.models.model.Model.get_state_tree of
@@ -199,7 +209,7 @@ msgstr ""
 #: ../../source/api/results/qem/qem_methods.rst
 #: ../../source/api/results/readout_mitigation.rst ../../source/api/shadows.rst
 #: ../../source/api/simplify.rst ../../source/api/stabilizercircuit.rst
-#: ../../source/api/templates/blocks.rst
+#: ../../source/api/symbolcircuit.rst ../../source/api/templates/blocks.rst
 #: ../../source/api/templates/conversions.rst
 #: ../../source/api/templates/graphs.rst
 #: ../../source/api/templates/hamiltonians.rst
@@ -207,7 +217,11 @@ msgstr ""
 #: ../../source/api/templates/measurements.rst ../../source/api/timeevol.rst
 #: ../../source/api/torchnn.rst ../../source/api/translation.rst
 #: ../../source/api/u1circuit.rst ../../source/api/utils.rst
-#: ../../source/api/vis.rst keras.src.models.model.Model.get_state_tree of
+#: ../../source/api/vis.rst ../../source/api/zx/converter.rst
+#: ../../source/api/zx/evaluator.rst ../../source/api/zx/noise_model.rst
+#: ../../source/api/zx/scalar_graph.rst ../../source/api/zx/simplifier.rst
+#: ../../source/api/zx/stabilizertcircuit.rst ../../source/api/zx/utils.rst
+#: keras.src.models.model.Model.get_state_tree of
 #: tensorcircuit.mpscircuit.MPSCircuit.wavefunction
 #: tensorcircuit.results.counts.count2vec
 #: tensorcircuit.results.counts.marginal_count
@@ -340,7 +354,7 @@ msgstr ""
 #: tensorcircuit.translation.qir2qiskit tensorcircuit.translation.qiskit2tc
 #: tensorcircuit.utils.append tensorcircuit.utils.return_partial
 #: tensorcircuit.vis.gate_name_trans tensorcircuit.vis.qir2tex
-#: tensorcircuit.vis.render_pdf
+#: tensorcircuit.vis.render_pdf tensorcircuit.zx.noise_model.ChannelSampler:18
 msgid "Example"
 msgstr ""
 
@@ -348,8 +362,13 @@ msgstr ""
 msgid "The quantum intermediate representation."
 msgstr ""
 
+#: of tensorcircuit.abstractcircuit.AbstractCircuit.append_from_qir:20
+msgid "whether to allow channel in the qir, defaults to False"
+msgstr ""
+
 #: of tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate:1
 #: tensorcircuit.basecircuit.BaseCircuit.apply_general_gate:1
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.apply_general_gate:1
 msgid ""
 "An implementation of this method should also append gate directionary to "
 "self._qir"
@@ -362,6 +381,8 @@ msgstr ""
 #: of tensorcircuit.abstractcircuit.AbstractCircuit.barrier_instruction:3
 #: tensorcircuit.abstractcircuit.AbstractCircuit.measure_instruction:3
 #: tensorcircuit.abstractcircuit.AbstractCircuit.reset_instruction:3
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.measure_instruction:3
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.reset_instruction:3
 msgid "the corresponding qubits"
 msgstr ""
 
@@ -403,6 +424,28 @@ msgstr ""
 
 #: of tensorcircuit.abstractcircuit.AbstractCircuit.select_gate:7
 msgid "the qubit lines the gate applied on"
+msgstr ""
+
+#: of tensorcircuit.abstractcircuit.AbstractCircuit.depolarizing2_instruction:1
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.depolarizing2_instruction:1
+msgid ""
+"add a 2-qubit depolarizing instruction flag, no effect on numerical "
+"simulation"
+msgstr ""
+
+#: of tensorcircuit.abstractcircuit.AbstractCircuit.depolarizing_instruction:1
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.depolarizing_instruction:1
+msgid "add a depolarizing instruction flag, no effect on numerical simulation"
+msgstr ""
+
+#: of tensorcircuit.abstractcircuit.AbstractCircuit.detector_instruction:1
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.detector_instruction:1
+msgid "add a detector instruction flag, no effect on numerical simulation"
+msgstr ""
+
+#: of tensorcircuit.abstractcircuit.AbstractCircuit.detector_instruction:3
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.detector_instruction:3
+msgid "the corresponding measurement record indices"
 msgstr ""
 
 #: of tensorcircuit.abstractcircuit.AbstractCircuit.draw:1
@@ -684,7 +727,8 @@ msgstr ""
 #: tensorcircuit.cloud.apis.submit_task:9
 #: tensorcircuit.cloud.apis.submit_task:11 tensorcircuit.quantum.xyz2ps:5
 #: tensorcircuit.translation.cirq2tc:11 tensorcircuit.translation.cirq2tc:13
-#: tensorcircuit.translation.eqasm2tc:5
+#: tensorcircuit.translation.eqasm2tc:5 tensorcircuit.translation.stim2tc:9
+#: tensorcircuit.translation.stim2tc:11
 msgid "_description_, defaults to None"
 msgstr ""
 
@@ -804,7 +848,27 @@ msgid "the inversed circuit"
 msgstr ""
 
 #: of tensorcircuit.abstractcircuit.AbstractCircuit.measure_instruction:1
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.measure_instruction:1
 msgid "add a measurement instruction flag, no effect on numerical simulation"
+msgstr ""
+
+#: of tensorcircuit.abstractcircuit.AbstractCircuit.mr_instruction:1
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.mr_instruction:1
+msgid "add a measure-reset instruction flag, no effect on numerical simulation"
+msgstr ""
+
+#: of tensorcircuit.abstractcircuit.AbstractCircuit.mr_instruction:3
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.mr_instruction:3
+msgid "the corresponding qubit"
+msgstr ""
+
+#: of tensorcircuit.abstractcircuit.AbstractCircuit.pauli2_instruction:1
+msgid "add a 2-qubit pauli instruction flag, no effect on numerical simulation"
+msgstr ""
+
+#: of tensorcircuit.abstractcircuit.AbstractCircuit.pauli_instruction:1
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.pauli_instruction:1
+msgid "add a pauli instruction flag, no effect on numerical simulation"
 msgstr ""
 
 #: of tensorcircuit.abstractcircuit.AbstractCircuit.prepend:1
@@ -816,7 +880,12 @@ msgid "The other circuit to be prepended"
 msgstr ""
 
 #: of tensorcircuit.abstractcircuit.AbstractCircuit.reset_instruction:1
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.reset_instruction:1
 msgid "add a reset instruction flag, no effect on numerical simulation"
+msgstr ""
+
+#: of tensorcircuit.abstractcircuit.AbstractCircuit.sample_detector:1
+msgid "placeholder for sample detector results"
 msgstr ""
 
 #: of tensorcircuit.abstractcircuit.AbstractCircuit.standardize_gate:1
@@ -1132,6 +1201,7 @@ msgstr ""
 #: of tensorcircuit.analogcircuit.AnalogCircuit.expectation:8
 #: tensorcircuit.circuit.Circuit.expectation:34
 #: tensorcircuit.quditcircuit.QuditCircuit.expectation:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.expectation:10
 msgid "whether enable light cone simplification, defaults to False"
 msgstr ""
 
@@ -2330,6 +2400,7 @@ msgstr ""
 #: keras.src.trainers.trainer.Trainer.compile:3
 #: keras.src.trainers.trainer.Trainer.compute_loss:6
 #: keras.src.trainers.trainer.Trainer.compute_metrics:8 of
+#: tensorcircuit.cons.OMEOptimizer:6
 msgid "Example:"
 msgstr ""
 
@@ -5976,25 +6047,25 @@ msgid "dtype str, such as \"complex64\""
 msgstr ""
 
 #: of tensorcircuit.backends.jax_backend._eigh_jax:1
+#: tensorcircuit.backends.pytorch_backend._patched_eigh:1
 #: tensornetwork.backends.abstract_backend.AbstractBackend.eigh:1
 #: tensornetwork.backends.numpy.numpy_backend.NumPyBackend.eigh:1
-#: tensornetwork.backends.pytorch.pytorch_backend.PyTorchBackend.eigh:1
 #: tensornetwork.backends.tensorflow.tensorflow_backend.TensorFlowBackend.eigh:1
 msgid "Compute eigenvectors and eigenvalues of a hermitian matrix."
 msgstr ""
 
 #: of tensorcircuit.backends.jax_backend._eigh_jax:3
+#: tensorcircuit.backends.pytorch_backend._patched_eigh:3
 #: tensornetwork.backends.abstract_backend.AbstractBackend.eigh:3
 #: tensornetwork.backends.numpy.numpy_backend.NumPyBackend.eigh:3
-#: tensornetwork.backends.pytorch.pytorch_backend.PyTorchBackend.eigh:3
 #: tensornetwork.backends.tensorflow.tensorflow_backend.TensorFlowBackend.eigh:3
 msgid "A symetric matrix."
 msgstr ""
 
 #: of tensorcircuit.backends.jax_backend._eigh_jax:5
+#: tensorcircuit.backends.pytorch_backend._patched_eigh:5
 #: tensornetwork.backends.abstract_backend.AbstractBackend.eigh:5
 #: tensornetwork.backends.numpy.numpy_backend.NumPyBackend.eigh:5
-#: tensornetwork.backends.pytorch.pytorch_backend.PyTorchBackend.eigh:5
 #: tensornetwork.backends.tensorflow.tensorflow_backend.TensorFlowBackend.eigh:5
 msgid "The eigenvalues in ascending order. Tensor: The eigenvectors."
 msgstr ""
@@ -10152,6 +10223,16 @@ msgstr ""
 msgid "copy all nodes and dangling edges correspondingly"
 msgstr ""
 
+#: of tensorcircuit.basecircuit.BaseCircuit.detector_probabilities:1
+msgid ""
+"Calculate the joint probability distribution of all detectors in the "
+"circuit."
+msgstr ""
+
+#: of tensorcircuit.basecircuit.BaseCircuit.detector_probabilities:3
+msgid "A tensor representing the joint probability distribution."
+msgstr ""
+
 #: of tensorcircuit.basecircuit.BaseCircuit.expectation_before:1
 msgid ""
 "Get the tensor network in the form of a list of nodes for the expectation"
@@ -10182,6 +10263,18 @@ msgstr ""
 msgid ""
 "Take measurement on the given site indices (computational basis). This "
 "method is jittable is and about 100 times faster than unjit version!"
+msgstr ""
+
+#: of tensorcircuit.basecircuit.BaseCircuit.outcome_probability:1
+msgid "Calculate the probability of a specific detector outcome bitstring."
+msgstr ""
+
+#: of tensorcircuit.basecircuit.BaseCircuit.outcome_probability:3
+msgid "The detector outcome bitstring as a sequence of 0s and 1s."
+msgstr ""
+
+#: of tensorcircuit.basecircuit.BaseCircuit.outcome_probability:5
+msgid "The probability of the given outcome."
 msgstr ""
 
 #: of tensorcircuit.basecircuit.BaseCircuit.perfect_sampling:1
@@ -10330,6 +10423,48 @@ msgid ""
 "implementation"
 msgstr ""
 
+#: of tensorcircuit.basecircuit.BaseCircuit.sample_detector:1
+msgid "Sample detector outcomes from instruction-annotated circuits."
+msgstr ""
+
+#: of tensorcircuit.basecircuit.BaseCircuit.sample_detector:3
+#: tensorcircuit.zx.noise_model.ChannelSampler.sample:5
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.sample_detectors:3
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.sample_measurements:3
+msgid "Number of samples to draw, defaults to 1."
+msgstr ""
+
+#: of tensorcircuit.basecircuit.BaseCircuit.sample_detector:5
+msgid ""
+"Number of samples to process in a single batch, defaults to None (equal "
+"to shots)."
+msgstr ""
+
+#: of tensorcircuit.basecircuit.BaseCircuit.sample_detector:7
+msgid ""
+"If True, uses the full detector probability distribution for sampling "
+"(faster but memory-intensive); if False, uses an autoregressive sampling "
+"method based on the tensor network, defaults to False."
+msgstr ""
+
+#: of tensorcircuit.basecircuit.BaseCircuit.sample_detector:11
+msgid ""
+"Random numbers in [0, 1] used for sampling, defaults to None. If "
+"allow_state is True, shape should be [shots] or [shots, 1]; if "
+"allow_state is False, shape should be [shots, num_detectors]."
+msgstr ""
+
+#: of tensorcircuit.basecircuit.BaseCircuit.sample_detector:15
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.__init__:5
+msgid "Random seed for sampling, defaults to None."
+msgstr ""
+
+#: of tensorcircuit.basecircuit.BaseCircuit.sample_detector:17
+msgid ""
+"A boolean tensor containing the sampled detector outcomes with shape "
+"[shots, num_detectors]."
+msgstr ""
+
 #: of tensorcircuit.basecircuit.BaseCircuit.sample_expectation_ps:1
 msgid ""
 "Compute the expectation with given Pauli string with measurement shots "
@@ -10399,6 +10534,10 @@ msgid "Return a shallow copy of the list."
 msgstr ""
 
 #: of tensorcircuit.channels.KrausList.count:1
+#: tensorcircuit.zx.evaluator.ExactScalarArray.count:1
+#: tensorcircuit.zx.scalar_graph.CompiledComponent.count:1
+#: tensorcircuit.zx.scalar_graph.CompiledProgram.count:1
+#: tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.count:1
 msgid "Return number of occurrences of value."
 msgstr ""
 
@@ -10407,11 +10546,19 @@ msgid "Extend list by appending elements from the iterable."
 msgstr ""
 
 #: of tensorcircuit.channels.KrausList.index:1
+#: tensorcircuit.zx.evaluator.ExactScalarArray.index:1
+#: tensorcircuit.zx.scalar_graph.CompiledComponent.index:1
+#: tensorcircuit.zx.scalar_graph.CompiledProgram.index:1
+#: tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.index:1
 msgid "Return first index of value."
 msgstr ""
 
 #: of tensorcircuit.channels.KrausList.index:3
 #: tensorcircuit.channels.KrausList.remove:3
+#: tensorcircuit.zx.evaluator.ExactScalarArray.index:3
+#: tensorcircuit.zx.scalar_graph.CompiledComponent.index:3
+#: tensorcircuit.zx.scalar_graph.CompiledProgram.index:3
+#: tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.index:3
 msgid "Raises ValueError if the value is not present."
 msgstr ""
 
@@ -11021,6 +11168,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **ANY** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.any_gate`."
@@ -11031,17 +11179,22 @@ msgstr ""
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:5
 #: tensorcircuit.densitymatrix.DMCircuit.apply_general_kraus_delayed.<locals>.apply:4
 #: tensorcircuit.densitymatrix.DMCircuit2.apply_general_kraus_delayed.<locals>.apply:4
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:4
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:5
 msgid "Qubit number that the gate applies on."
 msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:6
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:7
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:6
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:7
 msgid "Parameters for the gate."
 msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply cmz gate on the circuit using hyperedge support for digonal gates. "
 "See :py:meth:`tensorcircuit.gates.cmz_gate`."
@@ -11049,6 +11202,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **CNOT** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.cnot_gate`."
@@ -11056,6 +11210,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11066,11 +11221,13 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 msgid "Qubit number that the gate applies on. The matrix for the gate is"
 msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid ""
 "\\begin{bmatrix}    1.+0.j & 0.+0.j & 0.+0.j & 0.+0.j\\\\    0.+0.j & "
@@ -11080,6 +11237,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **CPHASE** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.cphase_gate`."
@@ -11087,6 +11245,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **CR** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.cr_gate`."
@@ -11094,6 +11253,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **CRX** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.crx_gate`."
@@ -11101,6 +11261,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **CRY** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.cry_gate`."
@@ -11108,6 +11269,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **CRZ** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.crz_gate`."
@@ -11115,6 +11277,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **CU** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.cu_gate`."
@@ -11122,6 +11285,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **CY** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.cy_gate`."
@@ -11129,6 +11293,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11139,6 +11304,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid ""
 "\\begin{bmatrix}    1.+0.j & 0.+0.j & 0.+0.j & 0.+0.j\\\\    0.+0.j & "
@@ -11148,6 +11314,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **CZ** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.cz_gate`."
@@ -11155,6 +11322,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11165,6 +11333,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid ""
 "\\begin{bmatrix}    1.+0.j & 0.+0.j & 0.+0.j & 0.+0.j\\\\    0.+0.j & "
@@ -11174,6 +11343,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply diagonal gate on the circuit using hyperedge support for digonal "
 "gates. See :py:meth:`tensorcircuit.gates.diagonal_gate`."
@@ -11181,6 +11351,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **EXP** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.exp_gate`."
@@ -11188,6 +11359,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **EXP1** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.exp1_gate`."
@@ -11195,6 +11367,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **FREDKIN** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.fredkin_gate`."
@@ -11202,6 +11375,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11219,6 +11393,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid ""
 "\\begin{bmatrix}    1.+0.j & 0.+0.j & 0.+0.j & 0.+0.j & 0.+0.j & 0.+0.j &"
@@ -11235,6 +11410,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **H** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.h_gate`."
@@ -11242,6 +11418,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11251,6 +11428,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid ""
 "\\begin{bmatrix}    0.70710677+0.j & 0.70710677+0.j\\\\    0.70710677+0.j"
@@ -11259,6 +11437,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **I** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.i_gate`."
@@ -11266,6 +11445,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11275,12 +11455,14 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid "\\begin{bmatrix}    1.+0.j & 0.+0.j\\\\    0.+0.j & 1.+0.j \\end{bmatrix}"
 msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **ISWAP** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.iswap_gate`."
@@ -11288,6 +11470,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply mpo gate in MPO format on the circuit. See "
 ":py:meth:`tensorcircuit.gates.mpo_gate`."
@@ -11295,6 +11478,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply multicontrol gate in MPO format on the circuit. See "
 ":py:meth:`tensorcircuit.gates.multicontrol_gate`."
@@ -11302,6 +11486,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **ORX** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.orx_gate`."
@@ -11309,6 +11494,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **ORY** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.ory_gate`."
@@ -11316,6 +11502,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **ORZ** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.orz_gate`."
@@ -11323,6 +11510,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **OX** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.ox_gate`."
@@ -11330,6 +11518,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11340,6 +11529,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid ""
 "\\begin{bmatrix}    0.+0.j & 1.+0.j & 0.+0.j & 0.+0.j\\\\    1.+0.j & "
@@ -11349,6 +11539,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **OY** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.oy_gate`."
@@ -11356,6 +11547,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11366,6 +11558,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid ""
 "\\begin{bmatrix}    0.+0.j & 0.-1.j & 0.+0.j & 0.+0.j\\\\    0.+1.j & "
@@ -11375,6 +11568,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **OZ** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.oz_gate`."
@@ -11382,6 +11576,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11392,6 +11587,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid ""
 "\\begin{bmatrix}    1.+0.j & 0.+0.j & 0.+0.j & 0.+0.j\\\\    0.+0.j & "
@@ -11401,6 +11597,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **PHASE** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.phase_gate`."
@@ -11408,6 +11605,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **R** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.r_gate`."
@@ -11415,6 +11613,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **RX** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.rx_gate`."
@@ -11422,6 +11621,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **RXX** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.rxx_gate`."
@@ -11429,6 +11629,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **RY** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.ry_gate`."
@@ -11436,6 +11637,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **RYY** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.ryy_gate`."
@@ -11443,6 +11645,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **RZ** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.rz_gate`."
@@ -11450,6 +11653,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply rzm gate on the circuit using hyperedge support for digonal gates. "
 "See :py:meth:`tensorcircuit.gates.rzm_gate`."
@@ -11457,6 +11661,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **RZZ** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.rzz_gate`."
@@ -11464,6 +11669,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **S** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.s_gate`."
@@ -11471,6 +11677,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11480,12 +11687,14 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid "\\begin{bmatrix}    1.+0.j & 0.+0.j\\\\    0.+0.j & 0.+1.j \\end{bmatrix}"
 msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **SD** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.sd_gate`."
@@ -11493,6 +11702,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11502,12 +11712,14 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid "\\begin{bmatrix}    1.+0.j & 0.+0.j\\\\    0.+0.j & 0.-1.j \\end{bmatrix}"
 msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **SU4** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.su4_gate`."
@@ -11515,6 +11727,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **SWAP** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.swap_gate`."
@@ -11522,6 +11735,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11532,6 +11746,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid ""
 "\\begin{bmatrix}    1.+0.j & 0.+0.j & 0.+0.j & 0.+0.j\\\\    0.+0.j & "
@@ -11541,6 +11756,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **T** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.t_gate`."
@@ -11548,6 +11764,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11557,6 +11774,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid ""
 "\\begin{bmatrix}    1. & +0.j & 0. & +0.j\\\\    0. & +0.j & "
@@ -11565,6 +11783,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **TD** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.td_gate`."
@@ -11572,6 +11791,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11581,6 +11801,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid ""
 "\\begin{bmatrix}    1. & +0.j & 0. & +0.j\\\\    0. & +0.j & "
@@ -11589,6 +11810,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **TOFFOLI** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.toffoli_gate`."
@@ -11596,6 +11818,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11613,6 +11836,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid ""
 "\\begin{bmatrix}    1.+0.j & 0.+0.j & 0.+0.j & 0.+0.j & 0.+0.j & 0.+0.j &"
@@ -11629,6 +11853,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **U** gate with parameters on the circuit. See "
 ":py:meth:`tensorcircuit.gates.u_gate`."
@@ -11636,6 +11861,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **WROOT** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.wroot_gate`."
@@ -11643,6 +11869,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11652,6 +11879,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid ""
 "\\begin{bmatrix}    0.70710677+0.j & -0.5 & -0.5j\\\\    0.5 & -0.5j & "
@@ -11660,6 +11888,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **X** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.x_gate`."
@@ -11667,6 +11896,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11676,12 +11906,14 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid "\\begin{bmatrix}    0.+0.j & 1.+0.j\\\\    1.+0.j & 0.+0.j \\end{bmatrix}"
 msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **Y** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.y_gate`."
@@ -11689,6 +11921,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11698,12 +11931,14 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid "\\begin{bmatrix}    0.+0.j & 0.-1.j\\\\    0.+1.j & 0.+0.j \\end{bmatrix}"
 msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:1
 msgid ""
 "Apply **Z** gate on the circuit. See "
 ":py:meth:`tensorcircuit.gates.z_gate`."
@@ -11711,6 +11946,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:5
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:5
 #, python-brace-format
 msgid ""
 "Qubit number that the gate applies on. The matrix for the gate is  .. "
@@ -11720,6 +11956,7 @@ msgstr ""
 
 #: of
 #: tensorcircuit.abstractcircuit.AbstractCircuit.apply_general_gate_delayed.<locals>.apply_list:8
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed.<locals>.apply_list:8
 #, python-brace-format
 msgid "\\begin{bmatrix}    1.+0.j & 0.+0.j\\\\    0.+0.j & -1.+0.j \\end{bmatrix}"
 msgstr ""
@@ -12685,6 +12922,16 @@ msgstr ""
 
 #: of tensorcircuit.cons.NodesReturn:1
 msgid "Intentionally stop execution to return a value."
+msgstr ""
+
+#: of tensorcircuit.cons.OMEOptimizer:1
+msgid "Adapt an ``omeco`` optimizer for ``tc.set_contractor(\"custom\", ...)``."
+msgstr ""
+
+#: of tensorcircuit.cons.OMEOptimizer:3
+msgid ""
+"``omeco`` stays an optional dependency and is imported lazily only when "
+"this adapter is actually used."
 msgstr ""
 
 #: of tensorcircuit.cons.contraction_info_decorator:1
@@ -14189,7 +14436,7 @@ msgid "dtype of the output Tensors"
 msgstr ""
 
 #: of tensorcircuit.gates.num_to_tensor:39
-msgid "List of Tensors"
+msgid "List of Tensors or a single Tensor"
 msgstr ""
 
 #: of tensorcircuit.gates.bmatrix:1
@@ -18961,6 +19208,7 @@ msgstr ""
 #: tensorcircuit.shadows.local_snapshot_states
 #: tensorcircuit.shadows.renyi_entropy_2 tensorcircuit.shadows.shadow_bound
 #: tensorcircuit.shadows.shadow_snapshots tensorcircuit.shadows.slice_sub
+#: tensorcircuit.zx.noise_model.Channel
 msgid "type"
 msgstr ""
 
@@ -19456,6 +19704,312 @@ msgstr ""
 
 #: of tensorcircuit.stabilizercircuit.StabilizerCircuit.tableau_gate:6
 msgid "stim.Tableau representation of the gate"
+msgstr ""
+
+#: ../../source/api/symbolcircuit.rst:2
+msgid "tensorcircuit.symbolcircuit"
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit:1
+msgid "SymbolCircuit: symbolic parameterized quantum circuit."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit:3
+msgid ""
+"Gate parameters are sympy Symbols (or expressions). Amplitude and "
+"expectation values are computed via tensor network contraction of numpy "
+"object arrays, producing sympy expressions. The class also supports "
+"translation to a Qiskit QuantumCircuit with Parameter objects for "
+"hardware compilation reuse."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit:8
+msgid ""
+"Key design: inherit from Circuit, override gate registration to use "
+"symbolic factories from symbolgates.py instead of the standard backend-"
+"coupled ones, and override the handful of computation methods that call "
+"backend.* on tensor values."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit:1
+msgid "Quantum circuit with symbolic (sympy) gate parameters."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit:3
+msgid ""
+"Gate parameters are ``sympy.Symbol`` objects (or sympy expressions). "
+"Amplitude and expectation values return sympy expressions via tensor "
+"network contraction. The circuit can be translated to a Qiskit "
+"``QuantumCircuit`` with ``Parameter`` objects for hardware reuse."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit:8
+msgid ""
+"**Backend isolation** — ``SymbolCircuit`` is permanently fixed to the "
+"numpy backend regardless of any global backend setting.  Calling "
+"``tc.set_backend(\"jax\")`` (or ``\"tensorflow\"``, ``\"torch\"``, etc.) "
+"before or after constructing a ``SymbolCircuit`` has *no effect* on its "
+"internal computation.  This is by design: the class represents all state "
+"vectors and gate matrices as ``numpy.ndarray`` with ``dtype=object``, "
+"whose entries are sympy expressions.  The methods ``amplitude``, "
+"``wavefunction``, and ``expectation`` / ``expectation_before`` are all "
+"overridden to use plain NumPy operations instead of ``tc.backend.*`` "
+"calls, so they never touch the active backend."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit:19
+msgid ""
+"The isolation ends at :meth:`to_circuit`: the returned :class:`Circuit` "
+"is a standard numerical circuit that *does* respect the global backend "
+"setting at the time it is called."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit:23
+#: torch.nn.modules.module.Module.apply:12
+#: torch.nn.modules.module.Module.buffers:10
+#: torch.nn.modules.module.Module.modules:10
+#: torch.nn.modules.module.Module.named_buffers:14
+#: torch.nn.modules.module.Module.named_children:5
+#: torch.nn.modules.module.Module.named_modules:15
+#: torch.nn.modules.module.Module.named_parameters:15
+#: torch.nn.modules.module.Module.parameters:12
+#: torch.nn.modules.module.Module.register_buffer:25
+#: torch.nn.modules.module.Module.state_dict:38
+msgid "Example::"
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.__init__:1
+msgid "Initialize a SymbolCircuit with ``nqubits`` qubits."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.__init__:3
+#, python-brace-format
+msgid ""
+"The initial state is :math:`|0\\rangle^{\\otimes n}` represented as numpy"
+" object-dtype tensor network nodes (compatible with sympy)."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.__init__:6
+msgid "Number of qubits."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.amplitude:1
+msgid "Compute :math:`\\langle l \\vert \\psi \\rangle` symbolically."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.amplitude:3
+msgid "Bitstring as a string (e.g. ``\"01\"``) or sequence of ints."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.amplitude:5
+msgid "Sympy expression for the amplitude."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate:1
+msgid "Override for backend isolation."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_gate_delayed:1
+msgid ""
+"Override for fixed gates: use symbolic gate factory instead of the "
+"backend-coupled ``gatef()`` call."
+msgstr ""
+
+#: of
+#: tensorcircuit.symbolcircuit.SymbolCircuit.apply_general_variable_gate_delayed:1
+msgid ""
+"Override for variable gates: use symbolic gate factory (sympy cos/sin) "
+"instead of the backend-coupled ``gatef(**vars)`` call."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.bind:1
+msgid ""
+"Return a new :class:`SymbolCircuit` with some or all parameters "
+"substituted (partial or full binding)."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.bind:4
+msgid "Mapping from sympy Symbol to value (numeric or another sympy expression)."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.bind:7
+msgid "New :class:`SymbolCircuit` with substituted parameters."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.cond_measurement:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.measure:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.measure_reference:1
+#: tensorcircuit.symbolcircuit.SymbolCircuit.sample:1
+msgid "Overridden to provide better error message for symbolic circuits."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.expectation:1
+msgid "Compute :math:`\\langle \\psi | O | \\psi \\rangle` symbolically."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.expectation:3
+msgid ""
+"Pairs of ``(operator, qubit_indices)``.  The operator may be a ``Gate``, "
+"a ``tn.Node``, or a plain numpy array.  Symbolic (object-dtype) operators"
+" are supported."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.expectation:7
+msgid "Cache the contracted state vector for repeated calls, defaults to True."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.expectation:12
+#: tensorcircuit.symbolcircuit.SymbolCircuit.sample_expectation_ps:11
+msgid "Sympy expression for the expectation value."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.expectation_before:1
+msgid "Build the tensor network for ``<psi|O|psi>`` without contracting."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.expectation_before:3
+msgid ""
+"Operators may be: * A ``Gate`` / ``tn.Node`` (numerical or symbolic "
+"tensor) * A plain ``np.ndarray``"
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.expectation_before:7
+msgid ""
+"All operator tensors are converted to numpy ``dtype=object`` for "
+"compatibility with the symbolic state tensor."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.free_symbols:1
+msgid "Return the set of all free sympy Symbols used as gate parameters."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.free_symbols:3
+msgid "Set of sympy Symbols."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.get_quoperator:1
+msgid "Get symbolic QuOperator representation."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.matrix:1
+msgid "Compute the symbolic unitary matrix of the circuit."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.probability:1
+msgid "Compute the symbolic probability distribution."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.projected_subsystem:1
+msgid "Compute symbolic projected subsystem."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.sample_expectation_ps:1
+msgid "Symbolic execution for analytical Pauli string expectation."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.sample_expectation_ps:3
+msgid "List of indices for Pauli X."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.sample_expectation_ps:5
+msgid "List of indices for Pauli Y."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.sample_expectation_ps:7
+msgid "List of indices for Pauli Z."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.sample_expectation_ps:9
+msgid "Must be None for analytical symbolic result."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.wavefunction:1
+msgid "Compute the symbolic output state vector."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.wavefunction:3
+msgid ""
+"Returns a numpy object array containing sympy expressions. Only practical"
+" for small qubit counts where the full vector is manageable."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.wavefunction:6
+msgid ""
+"Shape of output: ``\"default\"`` → 1-D, ``\"ket\"`` → column, ``\"bra\"``"
+" → row.  Defaults to ``\"default\"``."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.wavefunction:9
+msgid "Numpy object array of sympy expressions."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.to_circuit:1
+msgid "Convert to a numerical :class:`Circuit` by binding symbolic parameters."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.to_circuit:3
+#, python-brace-format
+msgid ""
+"Mapping from sympy Symbol to numerical value. Pass ``None`` (or ``{}``) "
+"only if the circuit has no free symbols."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.to_circuit:6
+msgid "A fully numerical :class:`Circuit`."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.to_qiskit:1
+msgid "Translate to a Qiskit ``QuantumCircuit`` with ``Parameter`` objects."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.to_qiskit:3
+msgid ""
+"Each ``sympy.Symbol`` used as a gate parameter is mapped to a Qiskit "
+"``Parameter`` with the same name.  The resulting circuit can be bound "
+"with :meth:`qiskit.QuantumCircuit.assign_parameters` and executed on "
+"hardware or simulators."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.to_qiskit:8
+msgid ""
+"Simple arithmetic expressions involving symbols are translated when "
+"possible (``+``, ``-``, ``*``, ``/``).  Complex expressions (``sin``, "
+"``cos``, etc.) that appear directly as *gate-level parameters* will raise"
+" a ``NotImplementedError`` — but note that rotation angles are passed at "
+"the gate level (e.g. ``rx(theta)``), not as matrix entries, so this is "
+"rarely an issue for standard circuit translation."
+msgstr ""
+
+#: of tensorcircuit.symbolcircuit.SymbolCircuit.to_qiskit:15
+msgid "Qiskit ``QuantumCircuit`` with symbolic Parameters."
+msgstr ""
+
+#: ../../source/api/symbolgates.rst:2
+msgid "tensorcircuit.symbolgates"
+msgstr ""
+
+#: of tensorcircuit.symbolgates:1
+msgid "Symbolic gate matrix factories using sympy."
+msgstr ""
+
+#: of tensorcircuit.symbolgates:3
+msgid ""
+"These return Gate objects containing numpy object arrays with sympy "
+"expressions, compatible with tn.Node and the tc.contractor contraction "
+"pipeline."
+msgstr ""
+
+#: of tensorcircuit.symbolgates:6
+msgid ""
+"Convention: for an n-qubit gate, the tensor is shaped [2]*2n with the "
+"first n axes being output legs and the last n axes being input legs, "
+"matching the Gate convention in tensorcircuit."
+msgstr ""
+
+#: of tensorcircuit.symbolgates.sym_any:1
+msgid ""
+"Symbolic 'any' gate from a unitary matrix. Extra keyword arguments are "
+"ignored (compatibility with delayed apply)."
 msgstr ""
 
 #: ../../source/api/templates.rst:2
@@ -21174,19 +21728,6 @@ msgstr ""
 msgid "self"
 msgstr ""
 
-#: of torch.nn.modules.module.Module.apply:12
-#: torch.nn.modules.module.Module.buffers:10
-#: torch.nn.modules.module.Module.modules:10
-#: torch.nn.modules.module.Module.named_buffers:14
-#: torch.nn.modules.module.Module.named_children:5
-#: torch.nn.modules.module.Module.named_modules:15
-#: torch.nn.modules.module.Module.named_parameters:15
-#: torch.nn.modules.module.Module.parameters:12
-#: torch.nn.modules.module.Module.register_buffer:25
-#: torch.nn.modules.module.Module.state_dict:38
-msgid "Example::"
-msgstr ""
-
 #: of torch.nn.modules.module.Module.bfloat16:1
 msgid "Casts all floating point parameters and buffers to ``bfloat16`` datatype."
 msgstr ""
@@ -22208,7 +22749,7 @@ msgstr ""
 msgid "A quantum circuit in cirq"
 msgstr ""
 
-#: of tensorcircuit.translation.cirq2tc:5
+#: of tensorcircuit.translation.cirq2tc:5 tensorcircuit.translation.stim2tc:5
 msgid "# of qubits, defaults to None"
 msgstr ""
 
@@ -22216,7 +22757,7 @@ msgstr ""
 msgid "Input state of the circuit, defaults to None"
 msgstr ""
 
-#: of tensorcircuit.translation.cirq2tc:9
+#: of tensorcircuit.translation.cirq2tc:9 tensorcircuit.translation.stim2tc:7
 msgid "whether to use DMCircuit, defaults to False"
 msgstr ""
 
@@ -22335,6 +22876,18 @@ msgstr ""
 msgid "``qiskit.circuit.QuantumCircuit``"
 msgstr ""
 
+#: of tensorcircuit.translation.stim2tc:1
+msgid "Generate a tensorcircuit circuit from the stim circuit."
+msgstr ""
+
+#: of tensorcircuit.translation.stim2tc:3
+msgid "A quantum circuit in stim"
+msgstr ""
+
+#: of tensorcircuit.translation.stim2tc:13
+msgid "_description|"
+msgstr ""
+
 #: ../../source/api/u1circuit.rst:2
 msgid "tensorcircuit.u1circuit"
 msgstr ""
@@ -22362,6 +22915,7 @@ msgid "Initialize a U(1) conserving circuit."
 msgstr ""
 
 #: of tensorcircuit.u1circuit.U1Circuit.__init__:3
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.__init__:3
 msgid "Number of qubits in the circuit."
 msgstr ""
 
@@ -22784,6 +23338,1307 @@ msgstr ""
 
 #: of tensorcircuit.vis.render_pdf:25
 msgid "if notebook is True, return `Image` object; otherwise return `None`"
+msgstr ""
+
+#: ../../source/api/zx.rst:2
+msgid "tensorcircuit.zx"
+msgstr ""
+
+#: ../../source/api/zx/converter.rst:2
+msgid "tensorcircuit.zx.converter"
+msgstr ""
+
+#: of tensorcircuit.zx.converter:1
+msgid ""
+"Converter from TensorCircuit to PyZX. Includes graph preparation and "
+"reduction utilities."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.GraphRepresentation.add_vertex:1
+msgid "Add a vertex to the graph."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.GraphRepresentation.add_vertex:3
+msgid "Vertex type, defaults to VertexType.Z."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.GraphRepresentation.add_vertex:5
+msgid "Qubit index, defaults to -1."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.GraphRepresentation.add_vertex:7
+msgid "Row index for layout, defaults to -1."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.GraphRepresentation.add_vertex:9
+msgid "Vertex phase, defaults to 0."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.GraphRepresentation.add_vertex:11
+#: tensorcircuit.zx.converter.add_dummy:9
+msgid "The index of the new vertex."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.GraphRepresentation.edge_st:1
+msgid "Get the endpoints of an edge."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.GraphRepresentation.edge_st:3
+msgid "Edge."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.GraphRepresentation.edge_st:5
+msgid "Tuple of vertex indices (v1, v2)."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.GraphRepresentation.incident_edges:1
+msgid "Get edges incident to a vertex."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.GraphRepresentation.incident_edges:3
+msgid "Vertex index."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.GraphRepresentation.incident_edges:5
+msgid "Iterable of edges."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.GraphRepresentation.observables:1
+msgid "List of observable vertices."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.GraphRepresentation.observables:3
+msgid "List of vertex indices."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.add_dummy:1
+msgid "Add a dummy boundary vertex to a qubit lane."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.add_dummy:3
+#: tensorcircuit.zx.converter.add_lane:3
+#: tensorcircuit.zx.converter.depolarize1:3
+#: tensorcircuit.zx.converter.depolarize2:3
+#: tensorcircuit.zx.converter.detector:3
+#: tensorcircuit.zx.converter.ensure_lane:3
+#: tensorcircuit.zx.converter.last_edge:3 tensorcircuit.zx.converter.last_row:3
+#: tensorcircuit.zx.converter.mx:3 tensorcircuit.zx.converter.my:3
+#: tensorcircuit.zx.converter.observable_include:3
+#: tensorcircuit.zx.converter.pauli_channel_1:3
+#: tensorcircuit.zx.converter.pauli_channel_2:3
+#: tensorcircuit.zx.converter.reset_x:3 tensorcircuit.zx.converter.reset_y:3
+#: tensorcircuit.zx.converter.reset_z:3 tensorcircuit.zx.converter.x_phase:3
+#: tensorcircuit.zx.converter.z_phase:3
+msgid "The graph representation."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.add_dummy:5
+#: tensorcircuit.zx.converter.add_lane:5
+#: tensorcircuit.zx.converter.ensure_lane:5
+#: tensorcircuit.zx.converter.last_edge:5 tensorcircuit.zx.converter.last_row:5
+#: tensorcircuit.zx.converter.x_phase:5 tensorcircuit.zx.converter.z_phase:5
+msgid "The qubit index."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.add_dummy:7
+msgid "Row index, defaults to last_row + 1."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.add_lane:1
+msgid "Initialize a new qubit lane with two boundary vertices."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.add_lane:7
+msgid "The index of the first vertex."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.build_amplitude_graph:1
+msgid "Build a scalar graph representing the amplitude <bitstring|psi>."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.build_amplitude_graph:3
+#: tensorcircuit.zx.converter.build_sampling_graph:3
+msgid "The input ZX representation."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.build_amplitude_graph:5
+msgid "The target bitstring as a sequence of 0s and 1s."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.build_amplitude_graph:7
+msgid "The scalar ZX graph."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.build_sampling_graph:1
+msgid "Build a doubled sampling graph from a ZX representation."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.build_sampling_graph:5
+msgid ""
+"Whether to prepare for detector/observable sampling or measurement "
+"records."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.build_sampling_graph:7
+msgid ""
+"Optional Pauli string to insert at the junction for expectation values. "
+"Dictionary mapping qubit index to Pauli operator ('I', 'X', 'Y', 'Z')."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.build_sampling_graph:10
+msgid "The prepared ZX graph."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.circuit_to_zx:1
+msgid ""
+"Convert a TensorCircuit AbstractCircuit to a ZX-calculus "
+"GraphRepresentation."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.circuit_to_zx:3
+msgid "The source circuit."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.circuit_to_zx:5
+msgid "Whether to force measurements on all qubits at the end, defaults to False."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.circuit_to_zx:7
+msgid "The ZX graph representation of the circuit."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.depolarize1:1
+msgid "Apply single-qubit depolarizing channel."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.depolarize1:5 tensorcircuit.zx.converter.mx:5
+#: tensorcircuit.zx.converter.my:5 tensorcircuit.zx.converter.pauli_channel_1:5
+#: tensorcircuit.zx.converter.reset_x:5 tensorcircuit.zx.converter.reset_y:5
+#: tensorcircuit.zx.converter.reset_z:5
+msgid "Qubit index."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.depolarize1:7
+#: tensorcircuit.zx.converter.depolarize2:9
+msgid "Depolarizing probability."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.depolarize2:1
+msgid "Apply two-qubit depolarizing channel."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.depolarize2:5
+#: tensorcircuit.zx.converter.pauli_channel_2:5
+msgid "First qubit index."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.depolarize2:7
+#: tensorcircuit.zx.converter.pauli_channel_2:7
+msgid "Second qubit index."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.detector:1
+msgid "Add a detector vertex defined by a set of measurement outcomes."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.detector:5
+msgid "Indices of measurement records involved in the detector."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.ensure_lane:1
+msgid "Ensure a qubit lane exists in the graph."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.h_gate:1
+msgid "Apply Hadamard gate."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.h_xy:1
+msgid ""
+"Apply variant of Hadamard gate that swaps the X and Y axes (instead of X "
+"and Z)."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.h_yz:1
+msgid ""
+"Apply variant of Hadamard gate that swaps the Y and Z axes (instead of X "
+"and Z)."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.is_pauli:1
+msgid "Check if a matrix is a Pauli matrix."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.is_pauli:3
+msgid "The matrix to check."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.is_pauli:5
+msgid "The name of the Pauli matrix ('i', 'x', 'y', 'z') or None."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.last_edge:1
+msgid "Get the last edge on a qubit lane."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.last_edge:7
+msgid "The last edge index."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.last_row:1
+msgid "Get the row index of the last vertex on a qubit lane."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.last_row:7
+msgid "Highest row index on the lane."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.m:1
+msgid "Measure qubit in Z basis with optional bit-flip error probability p."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.mpp:1
+msgid "Measure a multi-Pauli product."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.mpp:3
+msgid "Identical implementation to tsim.core.instructions.mpp."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.mpp:5
+msgid "The graph representation to modify."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.mpp:6
+msgid ""
+"List of (pauli_type, qubit) pairs defining the Pauli product. pauli_type "
+"should be 'X', 'Y', or 'Z'."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.mpp:8
+msgid "Whether to invert the measurement result."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.mr:1 tensorcircuit.zx.converter.mrz:1
+msgid "Z-basis demolition measurement (optionally noisy)."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.mrx:1
+msgid "X-basis demolition measurement (optionally noisy)."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.mry:1
+msgid "Y-basis demolition measurement (optionally noisy)."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.mx:1
+msgid "Apply X-basis measurement."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.mx:7 tensorcircuit.zx.converter.my:7
+#: tensorcircuit.zx.converter.reset_z:7
+msgid "Error probability, defaults to 0."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.mx:9 tensorcircuit.zx.converter.my:9
+msgid "Whether to invert measurement result, defaults to False."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.my:1
+msgid "Apply Y-basis measurement."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.observable_include:1
+msgid "Add an observable vertex defined by a set of measurement outcomes."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.observable_include:5
+msgid "Indices of measurement records involved in the observable."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.observable_include:7
+msgid "Index of the observable."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.pauli_channel_1:1
+msgid "Apply single-qubit Pauli channel."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.pauli_channel_1:7
+msgid "Probability of X error, defaults to 0."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.pauli_channel_1:9
+msgid "Probability of Y error, defaults to 0."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.pauli_channel_1:11
+msgid "Probability of Z error, defaults to 0."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.pauli_channel_2:1
+msgid "Apply two-qubit Pauli channel."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.pauli_channel_2:9
+msgid "Probability of error IX."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.pauli_channel_2:10
+msgid "..."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.prepare_graph:1
+msgid "Prepare a circuit for sampling by converting to ZX and reducing."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.prepare_graph:3
+msgid "The input circuit."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.prepare_graph:5
+msgid "Whether to prepare for detector/observable sampling."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.prepare_graph:7
+msgid "Whether to force final measurements, defaults to False."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.prepare_graph:9
+msgid "Optional Pauli string to insert at the junction."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.prepare_graph:11
+msgid "A SamplingGraph object containing the reduced graph and metadata."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.r_x:1
+msgid "Apply R_X rotation gate with given phase (in units of π)."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.r_y:1
+msgid "Apply R_Y rotation gate with given phase (in units of π)."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.r_z:1
+msgid "Apply R_Z rotation gate with given phase (in units of π)."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.reset_x:1
+msgid "Reset qubit in X basis."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.reset_y:1
+msgid "Reset qubit in Y basis."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.reset_z:1
+msgid "Reset qubit to |0> state (Z-basis reset)."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.sqrt_x:1
+msgid "Apply SQRT_X gate."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.sqrt_x_dag:1
+msgid "Apply SQRT_X_DAG gate."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.sqrt_y:1
+msgid "Apply SQRT_Y gate."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.sqrt_y_dag:1
+msgid "Apply SQRT_Y_DAG gate."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.sqrt_z:1
+msgid "Apply SQRT_Z gate."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.sqrt_z_dag:1
+msgid "Apply SQRT_Z_DAG gate."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.squash_graph:1
+msgid "Compact the graph layout by re-assigning qubit and row indices."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.squash_graph:3
+#: tensorcircuit.zx.simplifier.full_reduce:3
+#: tensorcircuit.zx.simplifier.t_count:3
+#: tensorcircuit.zx.simplifier.teleport_reduce:3
+msgid "The ZX graph."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.transform_error_basis:1
+msgid ""
+"Transform error bit variables from original 'e' basis to a reduced 'f' "
+"basis."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.transform_error_basis:3
+msgid "The ZX graph containing error variables."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.transform_error_basis:5
+msgid "Total number of error bits, defaults to None."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.transform_error_basis:7
+msgid "A tuple of (transformed_graph, basis_transformation_matrix)."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.u3:1
+msgid "Apply U3 gate: U3(θ,φ,λ) = R_Z(φ)·R_Y(θ)·R_Z(λ)."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.x_gate:1
+msgid "Apply Pauli X gate."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.x_phase:1
+msgid "Apply an X spider with the given phase to a qubit."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.x_phase:7 tensorcircuit.zx.converter.z_phase:7
+msgid "Phase in units of π."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.y_error:1
+msgid "Apply Y error with probability p."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.y_gate:1
+msgid "Apply Pauli Y gate."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.y_phase:1
+msgid "Apply Y-basis spider with the given phase."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.z_gate:1
+msgid "Apply Pauli Z gate."
+msgstr ""
+
+#: of tensorcircuit.zx.converter.z_phase:1
+msgid "Apply a Z spider with the given phase to a qubit."
+msgstr ""
+
+#: ../../source/api/zx/evaluator.rst:2
+msgid "tensorcircuit.zx.evaluator"
+msgstr ""
+
+#: of tensorcircuit.zx.evaluator:1
+msgid "Evaluation of compiled scalar graphs using exact arithmetic."
+msgstr ""
+
+#: of tensorcircuit.zx.evaluator.ExactScalarArray:1
+msgid ""
+"Exact scalar array for ZX-calculus phase arithmetic using dyadic "
+"representation."
+msgstr ""
+
+#: of tensorcircuit.zx.evaluator.ExactScalarArray:3
+msgid ""
+"Represents values of the form (c_0 + c_1·ω + c_2·ω² + c_3·ω³) × 2^power "
+"where ω = e^(iπ/4)."
+msgstr ""
+
+#: of tensorcircuit.zx.evaluator.ExactScalarArray.coeffs:1
+#: tensorcircuit.zx.scalar_graph.CompiledComponent.output_indices:1
+#: tensorcircuit.zx.scalar_graph.CompiledProgram.components:1
+#: tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.num_graphs:1
+msgid "Alias for field number 0"
+msgstr ""
+
+#: of tensorcircuit.zx.evaluator.ExactScalarArray.power:1
+#: tensorcircuit.zx.scalar_graph.CompiledComponent.f_selection:1
+#: tensorcircuit.zx.scalar_graph.CompiledProgram.num_f_params:1
+#: tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.n_params:1
+msgid "Alias for field number 1"
+msgstr ""
+
+#: of tensorcircuit.zx.evaluator.ExactScalarArray.to_complex:1
+msgid "Convert the exact scalar to a complex JAX array."
+msgstr ""
+
+#: of tensorcircuit.zx.evaluator.ExactScalarArray.to_complex:3
+msgid "Complex representation of the scalar."
+msgstr ""
+
+#: of tensorcircuit.zx.evaluator.evaluate:1
+msgid "Evaluate a compiled scalar graph circuit with batched parameter values."
+msgstr ""
+
+#: of tensorcircuit.zx.evaluator.evaluate:3
+msgid "The compiled scalar graph program."
+msgstr ""
+
+#: of tensorcircuit.zx.evaluator.evaluate:5
+msgid "Array of parameter bit values (f-basis and measurement records)."
+msgstr ""
+
+#: of tensorcircuit.zx.evaluator.evaluate:7
+msgid "Evaluation results as a complex JAX array."
+msgstr ""
+
+#: ../../source/api/zx/noise_model.rst:2
+msgid "tensorcircuit.zx.noise_model"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model:1
+msgid "Pauli noise channels and error sampling infrastructure."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.Channel:1
+msgid "A probability distribution over error outcomes."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.Channel:5
+msgid "Shape (2^k,) probability array, sums to 1, dtype float64"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.Channel:7
+msgid "Any"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.Channel:11
+msgid "Tuple of column IDs, where each ID corresponds to a bit of the channel."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.Channel:13
+msgid "tuple[int, ...]"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.Channel.num_bits:1
+msgid "Number of bits in the channel (k where probs has shape 2^k)."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler:1
+msgid "Samples from multiple error channels and transforms to a reduced basis."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler:3
+msgid ""
+"This class combines multiple error channels (each producing error bits "
+"e0, e1, ...) and applies a linear transformation over GF(2) to convert "
+"samples from the original \"e\" basis to a reduced \"f\" basis using "
+"geometric-skip sampling optimized for low-noise regimes."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler:8
+msgid "f_i = error_transform_ij * e_j mod 2"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler:10
+msgid ""
+"Channels are automatically simplified by: 1. Removing bits e_i that do "
+"not affect any f-variable (i.e. all-zero columns in error_transform) 2. "
+"Merging channels with identical column signatures, i.e. channels whose "
+"corresponding"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler:13
+msgid "columns in error_transform are identical."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler:14
+msgid ""
+"Absorbing channels whose signatures are subsets of others, i.e. channels "
+"whose corresponding"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler:15
+msgid ""
+"columns in error_transform are a strict subset of another channel's "
+"columns."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler.__init__:1
+msgid ""
+"Initialize the sampler with channel probabilities and a basis "
+"transformation."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler.__init__:3
+#, python-brace-format
+msgid ""
+"List of probability arrays. Channel i has shape (2^k_i,) and produces k_i"
+" error bits starting at index sum(k_0:k_{i-1}). For example, if channels "
+"have shapes [(4,), (2,), (4,)], they produce variables [e0,e1], [e2], "
+"[e3,e4]."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler.__init__:7
+msgid ""
+"Binary matrix of shape (num_f, num_e) where entry [i, j] = 1 means f_i "
+"depends on e_j. For example, if row 0 is [0, 1, 0, 1], then f0 = e1 XOR "
+"e3."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler.__init__:10
+msgid "Random seed for sampling. If None, a random seed is generated."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler.num_f_params:1
+msgid "Number of reduced basis parameters (f-basis)."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler.num_f_params:3
+msgid "Number of parameters."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler.sample:1
+msgid "Sample from all error channels and transform to the f-basis."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler.sample:3
+msgid "Uses geometric-skip sampling optimized for low-noise regimes."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler.sample:7
+msgid "Binary array of shape (num_samples, num_f) containing sampled outcomes."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler.sample_jax:1
+msgid "Sample from all error channels on-device using JAX categorical sampling."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler.sample_jax:3
+msgid "Number of samples to draw."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler.sample_jax:5
+msgid "JAX PRNG key."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.ChannelSampler.sample_jax:7
+msgid ""
+"Tuple of (samples, next_key) where samples is a JAX array of shape "
+"(num_samples, num_f) with dtype uint8."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.absorb_subset_channels:1
+msgid "Absorb channels whose signatures are subsets of others."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.absorb_subset_channels:3
+msgid ""
+"If channel A's signatures are a strict subset of channel B's signatures, "
+"and |B| <= max_bits, then A is absorbed into B."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.absorb_subset_channels:6
+#: tensorcircuit.zx.noise_model.merge_identical_channels:6
+#: tensorcircuit.zx.noise_model.normalize_channels:6
+#: tensorcircuit.zx.noise_model.reduce_null_bits:7
+msgid "List of channels"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.absorb_subset_channels:7
+msgid "Maximum number of bits allowed per channel"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.absorb_subset_channels:9
+msgid "List with no channel being a strict subset of another"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.correlated_error_probs:1
+msgid "Build probability distribution for correlated error chain."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.correlated_error_probs:3
+msgid ""
+"Given conditional probabilities [p1, p2, ..., pk] from a chain of "
+"CORRELATED_ERROR(p1) ELSE_CORRELATED_ERROR(p2) ... "
+"ELSE_CORRELATED_ERROR(pk), computes the joint probability distribution "
+"over 2^k outcomes."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.correlated_error_probs:7
+#, python-brace-format
+msgid ""
+"Since errors are mutually exclusive, only outcomes with at most one bit "
+"set have non-zero probability: - P(0) = (1-p1)(1-p2)...(1-pk)  (no error)"
+" - P(2^i) = (1-p1)...(1-p_i) * p_{i+1}  (error i+1 occurred)"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.correlated_error_probs:12
+msgid "List of conditional probabilities [p1, p2, ..., pk]"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.correlated_error_probs:14
+msgid "Array of shape (2^k,) with probabilities for each outcome."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.error_probs:1
+msgid "Single-bit error channel probability distribution."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.error_probs:3
+msgid "Error probability."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.error_probs:5
+msgid "Array [1-p, p] of shape (2,)."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.expand_channel:1
+msgid "Expand a channel's distribution to a larger signature set."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.expand_channel:3
+msgid ""
+"The channel's existing col_ids must be a strict subset of target_col_ids."
+" Both must be sorted. New bit positions are treated as \"don't care\" "
+"(always 0)."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.expand_channel:6
+msgid "Channel to expand (must have sorted unique_col_ids)"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.expand_channel:7
+msgid "Target signature set (must be sorted superset)"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.expand_channel:9
+msgid "New channel with expanded distribution"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.merge_identical_channels:1
+msgid "Merge all channels with identical signature sets."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.merge_identical_channels:3
+msgid ""
+"Groups channels by their unique_col_ids and convolves all channels in "
+"each group into a single channel."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.merge_identical_channels:8
+msgid "List with at most one channel per unique signature set"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.normalize_channels:1
+msgid "Normalize channels by sorting unique_col_ids, permuting probs accordingly."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.normalize_channels:3
+msgid ""
+"This ensures channels affecting the same set of columns have identical "
+"unique_col_ids tuples, enabling merge_identical_channels to group them."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.normalize_channels:8
+msgid "List of channels with sorted unique_col_ids"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.pauli_channel_1_probs:1
+msgid "Single-qubit Pauli channel probability distribution."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.pauli_channel_1_probs:3
+msgid "X error probability."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.pauli_channel_1_probs:5
+msgid "Y error probability."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.pauli_channel_1_probs:7
+msgid "Z error probability."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.pauli_channel_1_probs:9
+msgid "Array [I, Z, X, Y] of shape (4,)."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.pauli_channel_2_probs:1
+msgid "Two-qubit Pauli channel probability distribution."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.pauli_channel_2_probs:3
+msgid "Probability of error I on qubit 1 and X on qubit 2."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.pauli_channel_2_probs:4
+msgid "... :return: Array of shape (16,). :rtype: np.ndarray"
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.reduce_null_bits:1
+msgid "Remove bits corresponding to the null column (all-zero column)."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.reduce_null_bits:3
+msgid ""
+"If a channel has bits mapped to null_col_id (representing an all-zero "
+"column in the transform matrix), those bits don't affect any f-variable "
+"and can be marginalized out by summing over them."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.reduce_null_bits:8
+msgid ""
+"Column ID representing the all-zero column, or None if there is no all-"
+"zero column."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.reduce_null_bits:11
+msgid ""
+"List of channels with null bits marginalized out. Channels with all null "
+"entries are removed entirely (they have no effect on outputs)."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.simplify_channels:1
+msgid ""
+"Simplify a list of channels by reducing null bits, merging identical "
+"signatures, and absorbing subsets."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.simplify_channels:3
+msgid "List of input channels."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.simplify_channels:5
+msgid "Maximum number of bits allowed per simplified channel, defaults to 4."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.simplify_channels:7
+msgid "ID of the all-zero column in the error transform, defaults to None."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.simplify_channels:9
+msgid "Simplified list of channels."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.xor_convolve:1
+msgid "XOR convolution of two probability distributions."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.xor_convolve:3
+msgid "Probability distribution of channel A."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.xor_convolve:5
+msgid "Probability distribution of channel B."
+msgstr ""
+
+#: of tensorcircuit.zx.noise_model.xor_convolve:7
+msgid "Combined probability distribution."
+msgstr ""
+
+#: ../../source/api/zx/scalar_graph.rst:2
+msgid "tensorcircuit.zx.scalar_graph"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph:1
+msgid "Decomposition of ZX graphs into scalar graphs and JAX-compatible IR."
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledComponent.compiled_scalar_graphs:1
+#: tensorcircuit.zx.scalar_graph.CompiledProgram.output_order:1
+#: tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.a_const_phases:1
+msgid "Alias for field number 2"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledProgram.mode:1
+#: tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.a_param_bits:1
+msgid "Alias for field number 3"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.a_num_terms:1
+msgid "Alias for field number 4"
+msgstr ""
+
+#: of
+#: tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.approximate_floatfactors:1
+msgid "Alias for field number 18"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.b_param_bits:1
+msgid "Alias for field number 6"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.b_term_types:1
+msgid "Alias for field number 5"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.c_const_bits_a:1
+msgid "Alias for field number 7"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.c_const_bits_b:1
+msgid "Alias for field number 9"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.c_param_bits_a:1
+msgid "Alias for field number 8"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.c_param_bits_b:1
+msgid "Alias for field number 10"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.d_const_alpha:1
+msgid "Alias for field number 11"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.d_const_beta:1
+msgid "Alias for field number 12"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.d_num_terms:1
+msgid "Alias for field number 15"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.d_param_bits_a:1
+msgid "Alias for field number 13"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.d_param_bits_b:1
+msgid "Alias for field number 14"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.floatfactor:1
+msgid "Alias for field number 20"
+msgstr ""
+
+#: of
+#: tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.has_approximate_floatfactors:1
+msgid "Alias for field number 17"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.phase_indices:1
+msgid "Alias for field number 16"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.CompiledScalarGraphs.power2:1
+msgid "Alias for field number 19"
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.compile_program:1
+msgid "Compile a prepared sampling graph into a multicomponent program."
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.compile_program:3
+msgid "The prepared sampling graph metadata."
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.compile_program:5
+msgid "Compilation mode, currently only 'sequential' is supported."
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.compile_program:7
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.__init__:7
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.from_circuit:5
+msgid "Decomposition strategy for T gates, defaults to \"cat5\"."
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.compile_program:9
+msgid "The compiled program metadata."
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.compile_scalar_graphs:1
+msgid "Compile a list of ZX scalar graphs into a JAX-compatible IR format."
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.compile_scalar_graphs:3
+msgid "List of ZX scalar graphs."
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.compile_scalar_graphs:5
+msgid "List of parameter names (e.g., 'f0', 'm0')."
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.compile_scalar_graphs:7
+msgid "Compiled scalar graphs in IR format."
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.find_stab:1
+msgid "Decompose a ZX graph into a sum of stabilizer graphs."
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.find_stab:3
+msgid "The ZX graph to decompose."
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.find_stab:5
+msgid "Decomposition strategy for T gates."
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.find_stab:7
+msgid "If True, skip the initial full_reduce (caller already reduced)."
+msgstr ""
+
+#: of tensorcircuit.zx.scalar_graph.find_stab:9
+msgid "List of stabilizer graphs."
+msgstr ""
+
+#: ../../source/api/zx/simplifier.rst:2
+msgid "tensorcircuit.zx.simplifier"
+msgstr ""
+
+#: of tensorcircuit.zx.simplifier:1
+msgid "ZX graph simplification wrapper."
+msgstr ""
+
+#: of tensorcircuit.zx.simplifier.full_reduce:1
+msgid "Apply PyZX full_reduce to the graph."
+msgstr ""
+
+#: of tensorcircuit.zx.simplifier.full_reduce:5
+msgid "Whether to use parameter-safe simplification, defaults to True."
+msgstr ""
+
+#: of tensorcircuit.zx.simplifier.t_count:1
+msgid "Return the T-count of the graph."
+msgstr ""
+
+#: of tensorcircuit.zx.simplifier.t_count:5
+msgid "Number of T or T-like vertices."
+msgstr ""
+
+#: of tensorcircuit.zx.simplifier.teleport_reduce:1
+msgid "Apply PyZX teleport_reduce to the graph."
+msgstr ""
+
+#: of tensorcircuit.zx.simplifier.teleport_reduce:5
+msgid "A new simplified graph."
+msgstr ""
+
+#: ../../source/api/zx/stabilizertcircuit.rst:2
+msgid "tensorcircuit.zx.stabilizertcircuit"
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit:1
+msgid "Stabilizer+T Circuit class using ZX-calculus and JAX."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.__init__:1
+msgid "Initialize a StabilizerTCircuit."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.amplitude:1
+msgid ""
+"Calculate the complex amplitude <state|psi> for a noiseless circuit. "
+"Fails if the circuit contains non-unitary operations or noise."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.amplitude:4
+msgid "The target bitstring."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.amplitude:6
+msgid "The complex amplitude."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.expectation_ps:1
+msgid ""
+"Calculate the expectation value <psi|O|psi> for a Pauli string O. "
+"Supports noiseless and noisy circuits."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.expectation_ps:4
+msgid "Qubit indices for X operators."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.expectation_ps:6
+msgid "Qubit indices for Y operators."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.expectation_ps:8
+msgid "Qubit indices for Z operators."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.expectation_ps:10
+msgid "Pauli string as a sequence of integers (0:I, 1:X, 2:Y, 3:Z)."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.expectation_ps:12
+msgid "Number of Monte Carlo trajectories for noisy circuits."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.expectation_ps:14
+msgid "The expectation value."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.from_circuit:1
+msgid ""
+"Create a StabilizerTCircuit from an existing TensorCircuit "
+"AbstractCircuit."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.from_circuit:3
+msgid "The source circuit to convert."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.from_circuit:7
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.from_stim_circuit:5
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.from_stim_str:5
+msgid "A new StabilizerTCircuit instance."
+msgstr ""
+
+#: of
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.from_stim_circuit:1
+msgid "Create a StabilizerTCircuit from a stim.Circuit object."
+msgstr ""
+
+#: of
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.from_stim_circuit:3
+msgid "The stim circuit to convert."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.from_stim_str:1
+msgid "Create a StabilizerTCircuit from a stim circuit string."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.from_stim_str:3
+msgid "The stim circuit string to parse."
+msgstr ""
+
+#: of
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.outcome_probability:1
+msgid "Compute the probability of a specific measurement outcome state."
+msgstr ""
+
+#: of
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.outcome_probability:3
+msgid "The target measurement bitstring."
+msgstr ""
+
+#: of
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.outcome_probability:5
+msgid "Number of noise realizations to average over, defaults to 1."
+msgstr ""
+
+#: of
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.outcome_probability:7
+msgid "Probability of the outcome state for each noise realization."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.sample_detectors:1
+msgid "Sample detector and observable outcomes."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.sample_detectors:5
+msgid "Whether to return detectors and observables separately, defaults to False."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.sample_detectors:7
+msgid "Whether to XOR results with a noiseless reference run, defaults to False."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.sample_detectors:9
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.sample_measurements:5
+msgid "Random seed for this sampling run, defaults to None."
+msgstr ""
+
+#: of
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.sample_detectors:11
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.sample_measurements:7
+msgid "Number of shots per JIT batch, defaults to 1000."
+msgstr ""
+
+#: of
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.sample_detectors:13
+msgid "Array of samples or tuple of (detectors, observables) arrays."
+msgstr ""
+
+#: of
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.sample_measurements:1
+msgid "Sample all measurement outcomes in the circuit."
+msgstr ""
+
+#: of
+#: tensorcircuit.zx.stabilizertcircuit.StabilizerTCircuit.sample_measurements:9
+msgid "Array of measurement samples with shape (shots, num_measurements)."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.sample_component:1
+msgid "Sample measurement outcomes for a single compiled component."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.sample_component:3
+msgid "The compiled component to sample from."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.sample_component:5
+#: tensorcircuit.zx.stabilizertcircuit.sample_program:5
+msgid "The sampled error bit parameters (f-basis)."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.sample_component:7
+#: tensorcircuit.zx.stabilizertcircuit.sample_program:7
+msgid "JAX PRNG key for sampling."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.sample_component:9
+msgid ""
+"A tuple containing the measurement samples, next PRNG key, and maximum "
+"deviation."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.sample_program:1
+msgid "Sample measurement outcomes for an entire compiled program."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.sample_program:3
+msgid "The compiled program to sample from."
+msgstr ""
+
+#: of tensorcircuit.zx.stabilizertcircuit.sample_program:9
+msgid "The measurement samples for all qubits."
+msgstr ""
+
+#: ../../source/api/zx/utils.rst:2
+msgid "tensorcircuit.zx.utils"
+msgstr ""
+
+#: of tensorcircuit.zx.utils:1
+msgid "Utility functions for ZX-calculus and stabilizer decomposition."
+msgstr ""
+
+#: of tensorcircuit.zx.utils.ConnectedComponent:1
+msgid "A connected subgraph with its associated output indices."
+msgstr ""
+
+#: of tensorcircuit.zx.utils.connected_components:1
+msgid "Return each connected component of ``g`` as its own ZX subgraph."
+msgstr ""
+
+#: of tensorcircuit.zx.utils.connected_components:3
+msgid "The input ZX graph."
+msgstr ""
+
+#: of tensorcircuit.zx.utils.connected_components:5
+msgid "List of ConnectedComponent objects."
+msgstr ""
+
+#: of tensorcircuit.zx.utils.find_basis:1
+msgid ""
+"Decompose a set of binary vectors into a basis subset and a "
+"transformation matrix over GF(2)."
+msgstr ""
+
+#: of tensorcircuit.zx.utils.find_basis:3
+msgid "Input binary vectors (2D array-like)."
+msgstr ""
+
+#: of tensorcircuit.zx.utils.find_basis:5
+msgid "Tuple of (basis_vectors, transformation_matrix)."
+msgstr ""
+
+#: of tensorcircuit.zx.utils.get_params:1
+msgid "Get all parameter variables that appear in the graph and its scalar."
+msgstr ""
+
+#: of tensorcircuit.zx.utils.get_params:3
+msgid "The ZX graph to inspect."
+msgstr ""
+
+#: of tensorcircuit.zx.utils.get_params:5
+msgid "A set of parameter names."
 msgstr ""
 
 #~ msgid ""

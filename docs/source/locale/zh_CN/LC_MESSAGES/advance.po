@@ -8,11 +8,12 @@ msgid ""
 msgstr ""
 "Project-Id-Version:  tensorcircuit\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-03-31 12:24+0800\n"
+"POT-Creation-Date: 2026-06-06 15:34+0800\n"
 "PO-Revision-Date: 2026-03-31 13:00+0800\n"
 "Last-Translator: Gemini CLI\n"
 "Language: zh_CN\n"
 "Language-Team: \n"
+"Plural-Forms: nplurals=1; plural=0;\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -32,14 +33,18 @@ msgid ""
 "efficient alternative to exact simulation for quantum circuits. MPS "
 "simulation can handle larger quantum systems by trading off accuracy for "
 "computational efficiency."
-msgstr "TensorCircuit-NG 提供了矩阵乘积态 (MPS) 模拟，作为量子线路精确模拟的高效替代方案。MPS 模拟可以通过权衡精度与计算效率来处理更大规模的量子系统。"
+msgstr ""
+"TensorCircuit-NG 提供了矩阵乘积态 (MPS) 模拟，作为量子线路精确模拟的高效替代方案。MPS "
+"模拟可以通过权衡精度与计算效率来处理更大规模的量子系统。"
 
 #: ../../source/advance.rst:10
 msgid ""
 "MPS simulator is very straightforward to use, we provide the same set of "
 "API for ``MPSCircuit`` as ``Circuit``, the only new line is to set the "
 "bond dimension for the new simulator."
-msgstr "MPS 模拟器的使用非常直观。我们为 ``MPSCircuit`` 提供了与 ``Circuit`` 相同的一套 API，唯一的区别是需要为新的模拟器设置截断维度 (bond dimension)。"
+msgstr ""
+"MPS 模拟器的使用非常直观。我们为 ``MPSCircuit`` 提供了与 ``Circuit`` 相同的一套 "
+"API，唯一的区别是需要为新的模拟器设置截断维度 (bond dimension)。"
 
 #: ../../source/advance.rst:18
 msgid ""
@@ -57,7 +62,9 @@ msgid ""
 "easily when multiple gate of the same type are applied on different "
 "qubits, namely, the index for gate call can accept list of ints instead "
 "of one integer."
-msgstr "堆叠门 (Stacked-gate) 是一种简单的语法糖，当需要在不同量子比特上应用多个同类型量子门时，它可以简化线路构建。即量子门调用的索引可以接受整数列表，而不仅仅是一个整数。"
+msgstr ""
+"堆叠门 (Stacked-gate) "
+"是一种简单的语法糖，当需要在不同量子比特上应用多个同类型量子门时，它可以简化线路构建。即量子门调用的索引可以接受整数列表，而不仅仅是一个整数。"
 
 #: ../../source/advance.rst:71
 msgid "Split Two-qubit Gates"
@@ -91,7 +98,10 @@ msgid ""
 "Hamiltonian. The simulation is still differentiable and jittable. Only "
 "jax backend is supported for analog simulation as the neural ode engine "
 "is built on top of jax."
-msgstr "TensorCircuit-NG 支持数模混合模拟（例如里德堡原子阵列中的情况），其中模拟部分由神经常微分方程 (ODE) 求解器模拟，并提供指定随时间变化的哈密顿量的 API。模拟过程仍然是可微且可 JIT 编译的。由于神经网络 ODE 引擎是构建在 JAX 之上的，因此模拟模拟目前仅支持 JAX 后端。"
+msgstr ""
+"TensorCircuit-NG 支持数模混合模拟（例如里德堡原子阵列中的情况），其中模拟部分由神经常微分方程 (ODE) "
+"求解器模拟，并提供指定随时间变化的哈密顿量的 API。模拟过程仍然是可微且可 JIT 编译的。由于神经网络 ODE 引擎是构建在 JAX "
+"之上的，因此模拟模拟目前仅支持 JAX 后端。"
 
 #: ../../source/advance.rst:104
 msgid ""
@@ -106,7 +116,10 @@ msgid ""
 "Hamiltonian define on the whole system, and "
 ":py:meth:`tensorcircuit.experimental.evol_local` evolve the state via a "
 "Hamiltonian define on a local subsystem."
-msgstr "我们支持两种模拟模拟模式：:py:meth:`tensorcircuit.experimental.evol_global` 通过定义在整个系统上的哈密顿量演化状态，而 :py:meth:`tensorcircuit.experimental.evol_local` 通过定义在局部子系统上的哈密顿量演化状态。"
+msgstr ""
+"我们支持两种模拟模拟模式：:py:meth:`tensorcircuit.experimental.evol_global` "
+"通过定义在整个系统上的哈密顿量演化状态，而 :py:meth:`tensorcircuit.experimental.evol_local` "
+"通过定义在局部子系统上的哈密顿量演化状态。"
 
 #: ../../source/advance.rst:110
 msgid ""
@@ -125,7 +138,9 @@ msgid ""
 "ODE-based approaches. These methods are essential for studying quantum "
 "dynamics, particularly in many-body systems, and all support automatic "
 "differentiation (AD) and JIT compilation for enhanced performance."
-msgstr "TensorCircuit-NG 提供了多种模拟量子时间演化的方法，包括精确对角化、Krylov 子空间方法和基于 ODE 的方法。这些方法对于研究量子动力学（特别是多体系统）至关重要，并且都支持自动微分 (AD) 和 JIT 编译以提高性能。"
+msgstr ""
+"TensorCircuit-NG 提供了多种模拟量子时间演化的方法，包括精确对角化、Krylov 子空间方法和基于 ODE "
+"的方法。这些方法对于研究量子动力学（特别是多体系统）至关重要，并且都支持自动微分 (AD) 和 JIT 编译以提高性能。"
 
 #: ../../source/advance.rst:158
 msgid "**Exact Diagonalization:**"
@@ -137,7 +152,10 @@ msgid ""
 ":py:meth:`tensorcircuit.timeevol.ed_evol` method provides exact time "
 "evolution by directly computing matrix exponentials (alias "
 ":py:meth:`tensorcircuit.timeevol.hamiltonian_evol`):"
-msgstr "对于全对角化可行的小系统，:py:meth:`tensorcircuit.timeevol.ed_evol` 方法通过直接计算矩阵指数提供精确的时间演化（别名 :py:meth:`tensorcircuit.timeevol.hamiltonian_evol` ）："
+msgstr ""
+"对于全对角化可行的小系统，:py:meth:`tensorcircuit.timeevol.ed_evol` "
+"方法通过直接计算矩阵指数提供精确的时间演化（别名 "
+":py:meth:`tensorcircuit.timeevol.hamiltonian_evol` ）："
 
 #: ../../source/advance.rst:196
 msgid ""
@@ -145,13 +163,17 @@ msgid ""
 "as it uses eigendecomposition to compute the evolution. It provides exact"
 " results but is limited to small systems (typically <16 qubits) due to "
 "the exponential growth of the Hilbert space."
-msgstr "该方法对于与时间无关的哈密顿量特别有效，因为它使用特征值分解来计算演化。它提供精确的结果，但由于希尔伯特空间的指数增长，仅限于小系统（通常 <16 个量子比特）。"
+msgstr ""
+"该方法对于与时间无关的哈密顿量特别有效，因为它使用特征值分解来计算演化。它提供精确的结果，但由于希尔伯特空间的指数增长，仅限于小系统（通常 <16"
+" 个量子比特）。"
 
 #: ../../source/advance.rst:201
 msgid ""
 "For real time evolution, the time should be chosen as ``times = 1.j * "
 "tc.backend.convert_to_tensor([0.0, 0.5, 1.0, 2.0])``"
-msgstr "对于实时演化，时间应选择为 ``times = 1.j * tc.backend.convert_to_tensor([0.0, 0.5, 1.0, 2.0])``"
+msgstr ""
+"对于实时演化，时间应选择为 ``times = 1.j * tc.backend.convert_to_tensor([0.0, 0.5, "
+"1.0, 2.0])``"
 
 #: ../../source/advance.rst:204
 msgid "**Krylov Subspace Methods:**"
@@ -163,7 +185,9 @@ msgid ""
 "Krylov subspace method provides an efficient approximation. The "
 ":py:meth:`tensorcircuit.timeevol.krylov_evol` function implements this "
 "approach:"
-msgstr "对于精确对角化难以处理的大系统，Krylov 子空间方法提供了一种高效的近似。:py:meth:`tensorcircuit.timeevol.krylov_evol` 函数实现了这种方法："
+msgstr ""
+"对于精确对角化难以处理的大系统，Krylov "
+"子空间方法提供了一种高效的近似。:py:meth:`tensorcircuit.timeevol.krylov_evol` 函数实现了这种方法："
 
 #: ../../source/advance.rst:243
 msgid ""
@@ -184,7 +208,10 @@ msgid ""
 "These methods solve the time-dependent Schrödinger equation directly by "
 "integrating the equation :math:`i\\frac{d}{dt}|\\psi(t)\\rangle = "
 "H(t)|\\psi(t)\\rangle`."
-msgstr "对于随时间变化的哈密顿量，或者需要对演化过程进行精细控制时，TensorCircuit 提供了基于 ODE 的演化方法。这些方法通过积分方程 :math:`i\\frac{d}{dt}|\\psi(t)\\rangle = H(t)|\\psi(t)\\rangle` 直接求解随时间变化的薛定谔方程。"
+msgstr ""
+"对于随时间变化的哈密顿量，或者需要对演化过程进行精细控制时，TensorCircuit 提供了基于 ODE 的演化方法。这些方法通过积分方程 "
+":math:`i\\frac{d}{dt}|\\psi(t)\\rangle = H(t)|\\psi(t)\\rangle` "
+"直接求解随时间变化的薛定谔方程。"
 
 #: ../../source/advance.rst:259
 msgid ""
@@ -198,14 +225,18 @@ msgid ""
 "**Global Evolution** (:py:meth:`tensorcircuit.timeevol.ode_evol_global`):"
 " For time-dependent Hamiltonians acting on the entire system. The "
 "Hamiltonian should be provided in sparse matrix format for efficiency."
-msgstr "**全局演化** (:py:meth:`tensorcircuit.timeevol.ode_evol_global`)：适用于作用于整个系统的随时间变化的哈密顿量。为了效率，哈密顿量应以稀疏矩阵格式提供。"
+msgstr ""
+"**全局演化** "
+"(:py:meth:`tensorcircuit.timeevol.ode_evol_global`)：适用于作用于整个系统的随时间变化的哈密顿量。为了效率，哈密顿量应以稀疏矩阵格式提供。"
 
 #: ../../source/advance.rst:344
 msgid ""
 "**Local Evolution** (:py:meth:`tensorcircuit.timeevol.ode_evol_local`): "
 "For time-dependent Hamiltonians acting on a subsystem of qubits. The "
 "Hamiltonian should be provided in dense matrix format."
-msgstr "**局部演化** (:py:meth:`tensorcircuit.timeevol.ode_evol_local`)：适用于作用于量子比特子系统的随时间变化的哈密顿量。哈密顿量应以稠密矩阵格式提供。"
+msgstr ""
+"**局部演化** "
+"(:py:meth:`tensorcircuit.timeevol.ode_evol_local`)：适用于作用于量子比特子系统的随时间变化的哈密顿量。哈密顿量应以稠密矩阵格式提供。"
 
 #: ../../source/advance.rst:389
 msgid ""
@@ -215,7 +246,9 @@ msgid ""
 " The methods integrate the time-dependent Schrödinger equation using "
 "JAX's ODE solvers, providing flexible and efficient simulation of quantum"
 " dynamics with time-dependent Hamiltonians."
-msgstr "两种基于 ODE 的方法在绘制 JAX 后端时都支持自动微分和 JIT 编译，使其适用于量子控制和变分量子算法中的优化任务。这些方法使用 JAX 的 ODE 求解器积分随时间变化的薛定谔方程，为具有随时间变化的哈密顿量的量子动力学提供灵活且高效的模拟。"
+msgstr ""
+"两种基于 ODE 的方法在绘制 JAX 后端时都支持自动微分和 JIT 编译，使其适用于量子控制和变分量子算法中的优化任务。这些方法使用 JAX "
+"的 ODE 求解器积分随时间变化的薛定谔方程，为具有随时间变化的哈密顿量的量子动力学提供灵活且高效的模拟。"
 
 #: ../../source/advance.rst:394
 msgid ""
@@ -350,7 +383,7 @@ msgid ""
 "the entire system."
 msgstr "**ODE 全局演化**: 最适合作用于整个系统的随时间变化的哈密顿量。"
 
-#: ../../source/advance.rst:423 ../../source/advance.rst:566
+#: ../../source/advance.rst:423 ../../source/advance.rst:593
 msgid "**Advanced Usage:**"
 msgstr "**高级用法:**"
 
@@ -378,28 +411,38 @@ msgid ""
 "<https://www.tensorflow.org/guide/saved_model>`_. That is to say, only "
 "jitted quantum function on the TensorFlow backend can be saved on the "
 "disk."
-msgstr "要重新使用可即时编译函数，我们可以通过 TensorFlow `SavedModel <https://www.tensorflow.org/guide/saved_model>`_ 的支持将其保存在磁盘上。也就是说，只有 TensorFlow 后端的可即时编译量子函数才能保存在磁盘上。"
+msgstr ""
+"要重新使用可即时编译函数，我们可以通过 TensorFlow `SavedModel "
+"<https://www.tensorflow.org/guide/saved_model>`_ 的支持将其保存在磁盘上。也就是说，只有 "
+"TensorFlow 后端的可即时编译量子函数才能保存在磁盘上。"
 
 #: ../../source/advance.rst:449
 msgid ""
 "We wrap the tf-backend ``SavedModel`` as very easy-to-use function "
 ":py:meth:`tensorcircuit.keras.save_func` and "
 ":py:meth:`tensorcircuit.keras.load_func`."
-msgstr "我们将 tf 后端的 ``SavedModel`` 封装为非常易于使用的函数 :py:meth:`tensorcircuit.keras.save_func` 和 :py:meth:`tensorcircuit.keras.load_func` 。"
+msgstr ""
+"我们将 tf 后端的 ``SavedModel`` 封装为非常易于使用的函数 "
+":py:meth:`tensorcircuit.keras.save_func` 和 "
+":py:meth:`tensorcircuit.keras.load_func` 。"
 
 #: ../../source/advance.rst:451
 msgid ""
 "For the JAX-backend quantum function, one can first transform them into "
 "the tf-backend function via JAX experimental support: `jax2tf "
 "<https://github.com/google/jax/tree/main/jax/experimental/jax2tf>`_."
-msgstr "对于 JAX 后端的量子函数，可以先通过 JAX 实验性支持将它们转换为 tf 后端函数： `jax2tf <https://github.com/google/jax/tree/main/jax/experimental/jax2tf>`_ 。"
+msgstr ""
+"对于 JAX 后端的量子函数，可以先通过 JAX 实验性支持将它们转换为 tf 后端函数： `jax2tf "
+"<https://github.com/google/jax/tree/main/jax/experimental/jax2tf>`_ 。"
 
 #: ../../source/advance.rst:453
 msgid ""
 "**Updates**: jax now also support jitted function save/load via "
 "``export`` module, see `jax documentation "
 "<https://jax.readthedocs.io/en/latest/export/export.html>`_."
-msgstr "**更新**: JAX 现在也支持通过 ``export`` 模块保存/加载即时编译函数，请参阅 `JAX 文档 <https://jax.readthedocs.io/en/latest/export/export.html>`_ 。"
+msgstr ""
+"**更新**: JAX 现在也支持通过 ``export`` 模块保存/加载即时编译函数，请参阅 `JAX 文档 "
+"<https://jax.readthedocs.io/en/latest/export/export.html>`_ 。"
 
 #: ../../source/advance.rst:455
 msgid ""
@@ -417,7 +460,10 @@ msgid ""
 "tc.Circuit(3)``, if we want to evaluate the expectation :math:`<Z_1Z_2>`,"
 " we need to call the API as ``c.expectation((tc.gates.z(), [1]), "
 "(tc.gates.z(), [2]))``."
-msgstr "对于 ``tc.Circuit`` 上的普通测量 API，例如 ``c = tc.Circuit(3)`` ，如果要评估期望 :math:`<Z_1Z_2>` ，我们需要调用 API 为 ``c.expectation((tc.gates.z(), [1]), (tc.gates.z(), [2]))`` 。"
+msgstr ""
+"对于 ``tc.Circuit`` 上的普通测量 API，例如 ``c = tc.Circuit(3)`` ，如果要评估期望 "
+":math:`<Z_1Z_2>` ，我们需要调用 API 为 ``c.expectation((tc.gates.z(), [1]), "
+"(tc.gates.z(), [2]))`` 。"
 
 #: ../../source/advance.rst:483
 msgid ""
@@ -425,7 +471,10 @@ msgid ""
 "tensor fashion. For example, if we want to get the above expectation, we "
 "can use the following API: "
 ":py:meth:`tensorcircuit.templates.measurements.parameterized_measurements`."
-msgstr "在某些情况下，我们可能希望以张量形式告诉软件要测量什么。例如，如果要获得上述期望，可以使用以下 API：:py:meth:`tensorcircuit.templates.measurements.parameterized_measurements` 。"
+msgstr ""
+"在某些情况下，我们可能希望以张量形式告诉软件要测量什么。例如，如果要获得上述期望，可以使用以下 "
+"API：:py:meth:`tensorcircuit.templates.measurements.parameterized_measurements`"
+" 。"
 
 #: ../../source/advance.rst:490
 msgid ""
@@ -451,13 +500,18 @@ msgid ""
 " tradeoff between space and time. Please refer to "
 ":py:meth:`tensorcircuit.templates.measurements.sparse_expectation` for "
 "more detail."
-msgstr "稀疏矩阵在评估线路上的哈密顿量期望时特别有用，稀疏矩阵表示在空间和时间之间有很好的权衡。请参阅 :py:meth:`tensorcircuit.templates.measurements.sparse_expectation` 了解更多详情。"
+msgstr ""
+"稀疏矩阵在评估线路上的哈密顿量期望时特别有用，稀疏矩阵表示在空间和时间之间有很好的权衡。请参阅 "
+":py:meth:`tensorcircuit.templates.measurements.sparse_expectation` "
+"了解更多详情。"
 
 #: ../../source/advance.rst:513
 msgid ""
 "For different representations to evaluate Hamiltonian expectation in "
 "tensorcircuit, please refer to :doc:`tutorials/tfim_vqe_diffreph`."
-msgstr "关于在 TensorCircuit 中评估哈密顿量期望的不同表示方法，请参阅 :doc:`tutorials/tfim_vqe_diffreph` 。"
+msgstr ""
+"关于在 TensorCircuit 中评估哈密顿量期望的不同表示方法，请参阅 :doc:`tutorials/tfim_vqe_diffreph`"
+" 。"
 
 #: ../../source/advance.rst:517
 msgid "Hamiltonian Matrix Building"
@@ -469,7 +523,9 @@ msgid ""
 "especially for sparse Hamiltonians constructed from Pauli strings. This "
 "is crucial for quantum many-body physics simulations and variational "
 "quantum algorithms."
-msgstr "TensorCircuit-NG 提供了多种构建哈密顿量矩阵的方法，特别是针对由泡利字符串构建的稀疏哈密顿量。这对于量子多体物理模拟和变分量子算法至关重要。"
+msgstr ""
+"TensorCircuit-NG "
+"提供了多种构建哈密顿量矩阵的方法，特别是针对由泡利字符串构建的稀疏哈密顿量。这对于量子多体物理模拟和变分量子算法至关重要。"
 
 #: ../../source/advance.rst:521
 msgid "**Pauli String Based Construction:**"
@@ -480,196 +536,229 @@ msgid "The most flexible way to build Hamiltonians is through Pauli strings:"
 msgstr "构建哈密顿量最灵活的方法是通过泡利字符串："
 
 #: ../../source/advance.rst:546
+msgid "**Matrix-Free Hamiltonian Representation (MVP):**"
+msgstr "**无矩阵哈密顿量表示 (MVP):**"
+
+#: ../../source/advance.rst:548
+msgid ""
+"For large-scale quantum systems where constructing or storing the full "
+"Hamiltonian matrix is memory-prohibitive, TensorCircuit-NG provides a "
+"matrix-free Matrix-Vector Product (MVP) representation via "
+":py:meth:`tensorcircuit.quantum.PauliStringSum2MVP`. This API returns a "
+"function that directly computes :math:`H|\\psi\\rangle` using backend-"
+"agnostic slicing and broadcasting operations, avoiding explicit matrix "
+"construction:"
+msgstr ""
+"对于由于规模太大而无法构建或存储完整哈密顿矩阵的大型量子系统，Tens"
+"orCircuit-NG 提供了通过 :py:meth:`tensor"
+"circuit.quantum.PauliStringSum2MVP`"
+" 实现的无矩阵矩阵-向量积 (MVP) 表示。此 API 返回一个函数"
+"，该函数使用与后端无关的分片和广播操作直接计算 :math:`H|\p"
+"si\rangle`，从而避免显式构建矩阵："
+
+#: ../../source/advance.rst:573
 msgid "**High-Level Hamiltonian Construction:**"
 msgstr "**高层哈密顿量构建:**"
 
-#: ../../source/advance.rst:548
+#: ../../source/advance.rst:575
 msgid "For common Hamiltonians like Heisenberg model:"
 msgstr "对于像海森堡模型这样的常见哈密顿量："
 
-#: ../../source/advance.rst:568
+#: ../../source/advance.rst:595
 msgid "Converting between xyz and Pauli string representations:"
 msgstr "在 xyz 和泡利字符串表示之间进行转换："
 
-#: ../../source/advance.rst:581
+#: ../../source/advance.rst:608
 msgid "Working with MPO format:"
 msgstr "使用 MPO 格式："
 
-#: ../../source/advance.rst:583
+#: ../../source/advance.rst:610
 msgid ""
 "TensorCircuit-NG supports conversion from different MPO (Matrix Product "
 "Operator) formats, particularly from TensorNetwork and Quimb libraries. "
 "This is useful when you want to leverage existing MPO implementations or "
 "convert between different frameworks."
-msgstr "TensorCircuit-NG 支持从不同的 MPO（矩阵乘积算子）格式进行转换，特别是来自 TensorNetwork 和 Quimb 库的格式。当您想利用现有的 MPO 实现或在不同框架之间进行转换时，这非常有用。"
+msgstr ""
+"TensorCircuit-NG 支持从不同的 MPO（矩阵乘积算子）格式进行转换，特别是来自 TensorNetwork 和 Quimb "
+"库的格式。当您想利用现有的 MPO 实现或在不同框架之间进行转换时，这非常有用。"
 
-#: ../../source/advance.rst:585
+#: ../../source/advance.rst:612
 msgid "**TensorNetwork MPO:**"
 msgstr "**TensorNetwork MPO:**"
 
-#: ../../source/advance.rst:587
+#: ../../source/advance.rst:614
 msgid ""
 "For TensorNetwork MPOs, you can convert predefined models like the "
 "Transverse Field Ising (TFI) model:"
 msgstr "对于 TensorNetwork MPO，您可以转换预定义的模型，如横场伊辛 (TFI) 模型："
 
-#: ../../source/advance.rst:611
+#: ../../source/advance.rst:638
 msgid "Note: TensorNetwork MPO currently only supports open boundary conditions."
 msgstr "注意：TensorNetwork MPO 目前仅支持开边界条件。"
 
-#: ../../source/advance.rst:613
+#: ../../source/advance.rst:640
 msgid "**Quimb MPO:**"
 msgstr "**Quimb MPO:**"
 
-#: ../../source/advance.rst:615
+#: ../../source/advance.rst:642
 msgid "Quimb provides more flexible MPO construction options:"
 msgstr "Quimb 提供了更灵活的 MPO 构建选项："
 
-#: ../../source/advance.rst:647
+#: ../../source/advance.rst:674
 msgid "Stabilizer Circuit Simulator"
 msgstr "稳定器线路模拟器"
 
-#: ../../source/advance.rst:649
+#: ../../source/advance.rst:676
 msgid ""
 "TensorCircuit-NG provides a Stabilizer Circuit simulator for efficient "
 "simulation of Clifford circuits. This simulator is particularly useful "
 "for quantum error correction, measurement induced phase transition, etc."
 msgstr "TensorCircuit-NG 提供了稳定器线路模拟器，用于高效模拟 Clifford 线路。该模拟器对于量子纠错、测量诱导相变等研究特别有用。"
 
-#: ../../source/advance.rst:652
+#: ../../source/advance.rst:679
 msgid ""
 "The stabilizer simulation is backend by Python package `Stim "
 "<https://github.com/quantumlib/Stim>`_, please ensure you have ``pip "
 "install stim`` first."
-msgstr "稳定器模拟由 Python 包 `Stim <https://github.com/quantumlib/Stim>`_ 支持，请确保您已先执行了 ``pip install stim`` 。"
+msgstr ""
+"稳定器模拟由 Python 包 `Stim <https://github.com/quantumlib/Stim>`_ 支持，请确保您已先执行了"
+" ``pip install stim`` 。"
 
-#: ../../source/advance.rst:672
+#: ../../source/advance.rst:699
 msgid "**Supported Operations**"
 msgstr "**支持的操作**"
 
-#: ../../source/advance.rst:674
+#: ../../source/advance.rst:701
 msgid "The simulator supports common Clifford gates and operations:"
 msgstr "该模拟器支持常见的 Clifford 门和操作："
 
-#: ../../source/advance.rst:676
+#: ../../source/advance.rst:703
 msgid "Single-qubit gates: H, X, Y, Z, S, SDG (S dagger)"
 msgstr "单量子比特门：H, X, Y, Z, S, SDG (S 伴随)"
 
-#: ../../source/advance.rst:677
+#: ../../source/advance.rst:704
 msgid "Two-qubit gates: CNOT, CZ, SWAP"
 msgstr "双量子比特门：CNOT, CZ, SWAP"
 
-#: ../../source/advance.rst:678
+#: ../../source/advance.rst:705
 msgid ""
 "Measurements: projective measurements (``c.measurement`` doesn't affect "
 "the state while ``c.cond_measure`` collpases the state)"
 msgstr "测量：投影测量（ ``c.measurement`` 不影响状态，而 ``c.cond_measure`` 会导致状态坍缩）"
 
-#: ../../source/advance.rst:679
+#: ../../source/advance.rst:706
 msgid "Post-selection (``c.post_select``)"
 msgstr "后选择 (``c.post_select``)"
 
-#: ../../source/advance.rst:680
+#: ../../source/advance.rst:707
 msgid "Random Clifford gates (``c.random_gate``)"
 msgstr "随机 Clifford 门 (``c.random_gate``)"
 
-#: ../../source/advance.rst:681
+#: ../../source/advance.rst:708
 msgid "Gates defined by tableau (``c.tableau_gate``)"
 msgstr "由 Tableau 定义的门 (``c.tableau_gate``)"
 
-#: ../../source/advance.rst:682
+#: ../../source/advance.rst:709
 msgid "Entanglement calculation (``c.entanglement_entropy``)"
 msgstr "纠缠计算 (``c.entanglement_entropy``)"
 
-#: ../../source/advance.rst:683
+#: ../../source/advance.rst:710
 msgid "Pauli string operator expectation (``c.expectation_ps``)"
 msgstr "泡利字符串算符期望 (``c.expectation_ps``)"
 
-#: ../../source/advance.rst:684
+#: ../../source/advance.rst:711
 msgid "Openqasm and qir transformation as usual circuits"
 msgstr "像普通线路一样进行 OpenQASM 和 QIR 转换"
 
-#: ../../source/advance.rst:685
+#: ../../source/advance.rst:712
 msgid ""
 "Initialization state provided by Pauli string stabilizer "
 "(``tc.StabCircuit(inputs=...)``) or inverse tableau "
 "(``tc.StabCircuit(tableau_inputs=)``)"
-msgstr "由泡利字符串稳定器 (``tc.StabCircuit(inputs=...)``) 或逆 Tableau (``tc.StabCircuit(tableau_inputs=)``) 提供的初始状态"
+msgstr ""
+"由泡利字符串稳定器 (``tc.StabCircuit(inputs=...)``) 或逆 Tableau "
+"(``tc.StabCircuit(tableau_inputs=)``) 提供的初始状态"
 
-#: ../../source/advance.rst:686
+#: ../../source/advance.rst:713
 msgid "Probabilistic noise (``c.depolarizing``)"
 msgstr "概率噪声 (``c.depolarizing``)"
 
-#: ../../source/advance.rst:689
+#: ../../source/advance.rst:716
 msgid "Example: Quantum Teleportation"
 msgstr "示例：量子隐形传态"
 
-#: ../../source/advance.rst:718
+#: ../../source/advance.rst:745
 msgid "Fermion Gaussian State Simulator"
 msgstr "费米子高斯态模拟器"
 
-#: ../../source/advance.rst:720
+#: ../../source/advance.rst:747
 msgid ""
 "TensorCircuit-NG provides a powerful Fermion Gaussian State (FGS) "
 "simulator for efficient simulation of non-interacting fermionic systems "
 "(with or without U(1) symmtery). The simulator is particularly useful for"
 " studying quantum many-body physics and entanglement properties."
-msgstr "TensorCircuit-NG 提供了一个强大的费米子高斯态 (FGS) 模拟器，用于高效模拟非相互作用费米子系统（带或不带 U(1) 对称性）。该模拟器对于研究量子多体物理和纠缠特性特别有用。"
+msgstr ""
+"TensorCircuit-NG 提供了一个强大的费米子高斯态 (FGS) 模拟器，用于高效模拟非相互作用费米子系统（带或不带 U(1) "
+"对称性）。该模拟器对于研究量子多体物理和纠缠特性特别有用。"
 
-#: ../../source/advance.rst:738
+#: ../../source/advance.rst:765
 msgid "The simulator supports various operations including:"
 msgstr "该模拟器支持多种操作，包括："
 
-#: ../../source/advance.rst:740
+#: ../../source/advance.rst:767
 msgid "State initialization from quadratic Hamiltonians ground states"
 msgstr "从二次型哈密顿量的基态初始化状态"
 
-#: ../../source/advance.rst:741
+#: ../../source/advance.rst:768
 msgid "Time evolution (real and imaginary)"
 msgstr "时间演化（实时和虚时）"
 
-#: ../../source/advance.rst:742
+#: ../../source/advance.rst:769
 msgid ""
 "Entanglement measures (von Neumann, Renyi entropies and entanglement "
 "asymmetry)"
 msgstr "纠缠度量（冯·诺依曼熵、雷尼熵和纠缠不对称性）"
 
-#: ../../source/advance.rst:743
+#: ../../source/advance.rst:770
 msgid "Correlation matrix calculations"
 msgstr "相关矩阵计算"
 
-#: ../../source/advance.rst:744
+#: ../../source/advance.rst:771
 msgid "Measurements"
 msgstr "测量"
 
-#: ../../source/advance.rst:747
+#: ../../source/advance.rst:774
 msgid ""
 "Here's an example studying entanglement asymmetry in tilted ferromagnet "
 "states:"
 msgstr "下面是一个研究倾斜铁磁态中纠缠不对称性的示例："
 
-#: ../../source/advance.rst:777
+#: ../../source/advance.rst:804
 msgid "Randoms, Jit, Backend Agnostic, and Their Interplay"
 msgstr "随机数，即时编译，后端无关特性，及其相互作用"
 
-#: ../../source/advance.rst:779
+#: ../../source/advance.rst:806
 msgid ""
 "This section explains how random number generation interacts with JIT "
 "compilation and backend agnosticism in TensorCircuit. Understanding this "
 "interplay is crucial for reproducible and correct simulation results, "
 "especially when using JAX."
-msgstr "本节解释了在 TensorCircuit 中，随机数生成如何与 JIT 编译和后端无关性相互作用。理解这种相互作用对于获得可重复且正确的模拟结果至关重要，特别是在使用 JAX 时。"
+msgstr ""
+"本节解释了在 TensorCircuit 中，随机数生成如何与 JIT "
+"编译和后端无关性相互作用。理解这种相互作用对于获得可重复且正确的模拟结果至关重要，特别是在使用 JAX 时。"
 
-#: ../../source/advance.rst:781
+#: ../../source/advance.rst:808
 msgid ""
 "**Key Management for Reproducibility:** In JAX, random number generation "
 "is deterministic and relies on explicit \"keys\" that manage the random "
 "state. This is different from TensorFlow or NumPy, where random states "
 "are often managed implicitly. For reproducible results and correct JIT "
 "compilation, JAX requires these keys to be passed and split explicitly."
-msgstr "**可重复性的密钥管理:** 在 JAX 中，随机数生成是确定性的，并依赖于管理随机状态的显式“密钥 (keys)”。这与 TensorFlow 或 NumPy 不同，后者的随机状态通常是隐式管理的。为了获得可重复的结果和正确的 JIT 编译，JAX 要求显式传递和分割这些密钥。"
+msgstr ""
+"**可重复性的密钥管理:** 在 JAX 中，随机数生成是确定性的，并依赖于管理随机状态的显式“密钥 (keys)”。这与 TensorFlow "
+"或 NumPy 不同，后者的随机状态通常是隐式管理的。为了获得可重复的结果和正确的 JIT 编译，JAX 要求显式传递和分割这些密钥。"
 
-#: ../../source/advance.rst:784
+#: ../../source/advance.rst:811
 msgid ""
 "**Why Explicit Key Management?** When a JIT-compiled function is called "
 "multiple times with the same inputs, JAX aims to produce the same output."
@@ -680,38 +769,132 @@ msgid ""
 " a random function, even within JIT, uses a new, distinct random state "
 "derived from a split key, thus maintaining the desired randomness and "
 "reproducibility."
-msgstr "**为什么要进行显式密钥管理？** 当使用相同的输入多次调用 JIT 编译的函数时，JAX 旨在产生相同的输出。如果随机数是在 JIT 编译的函数内隐式生成的，则后续调用将产生相同的“随机”数，这通常不是需要跨运行具有真实随机性的模拟所期望的行为。显式密钥管理确保每次调用随机函数（即使在 JIT 内部）都使用从分割密钥派生的新的、独特的随机状态，从而保持所需的随机性和可重复性。"
+msgstr ""
+"**为什么要进行显式密钥管理？** 当使用相同的输入多次调用 JIT 编译的函数时，JAX 旨在产生相同的输出。如果随机数是在 JIT "
+"编译的函数内隐式生成的，则后续调用将产生相同的“随机”数，这通常不是需要跨运行具有真实随机性的模拟所期望的行为。显式密钥管理确保每次调用随机函数（即使在"
+" JIT 内部）都使用从分割密钥派生的新的、独特的随机状态，从而保持所需的随机性和可重复性。"
 
-#: ../../source/advance.rst:829
+#: ../../source/advance.rst:856
 msgid ""
 "Therefore, a unified jittable random infrastructure with backend agnostic"
 " can be formulated as"
 msgstr "因此，一个统一的、支持 JIT 的后端无关随机基础设施可以表述为"
 
-#: ../../source/advance.rst:857
+#: ../../source/advance.rst:884
 msgid "And a more neat approach to achieve this is as follows:"
 msgstr "实现这一目标的更简洁的方法如下："
 
-#: ../../source/advance.rst:872
+#: ../../source/advance.rst:899
 msgid ""
 "It is worth noting that since ``Circuit.unitary_kraus`` and "
 "``Circuit.general_kraus`` call ``implicit_rand*`` API, the correct usage "
 "of these APIs is the same as above."
-msgstr "值得注意的是，由于 ``Circuit.unitary_kraus`` 和 ``Circuit.general_kraus`` 调用了 ``implicit_rand*`` API，这些 API 的正确用法与上述相同。"
+msgstr ""
+"值得注意的是，由于 ``Circuit.unitary_kraus`` 和 ``Circuit.general_kraus`` 调用了 "
+"``implicit_rand*`` API，这些 API 的正确用法与上述相同。"
 
-#: ../../source/advance.rst:874
+#: ../../source/advance.rst:901
 msgid ""
 "One may wonder why random numbers are dealt in such a complicated way, "
 "please refer to the `Jax design note "
 "<https://jax.readthedocs.io/en/latest/jep/263-prng.html>`_ for some "
 "hints."
-msgstr "有人可能想知道为什么以如此复杂的方式处理随机数，请参阅 `JAX 设计说明 <https://jax.readthedocs.io/en/latest/jep/263-prng.html>`_ 获取一些提示。"
+msgstr ""
+"有人可能想知道为什么以如此复杂的方式处理随机数，请参阅 `JAX 设计说明 "
+"<https://jax.readthedocs.io/en/latest/jep/263-prng.html>`_ 获取一些提示。"
 
-#: ../../source/advance.rst:876
+#: ../../source/advance.rst:903
 msgid ""
 "If vmap is also involved apart from jit, I currently find no way to "
 "maintain the backend agnosticity as TensorFlow seems to have no support "
 "of vmap over random keys (ping me on GitHub if you think you have a way "
 "to do this). I strongly recommend the users using Jax backend in the "
 "vmap+random setup."
-msgstr "如果除了 JIT 之外还涉及 vmap，我目前找不到保持后端无关性的方法，因为 TensorFlow 似乎不支持在随机密钥上进行 vmap（如果您认为有办法做到这一点，请在 GitHub 上联系我）。我强烈建议用户在 vmap+random 设置中使用 JAX 后端。"
+msgstr ""
+"如果除了 JIT 之外还涉及 vmap，我目前找不到保持后端无关性的方法，因为 TensorFlow 似乎不支持在随机密钥上进行 "
+"vmap（如果您认为有办法做到这一点，请在 GitHub 上联系我）。我强烈建议用户在 vmap+random 设置中使用 JAX 后端。"
+
+#: ../../source/advance.rst:907
+msgid "Distributed Simulation"
+msgstr "分布式模拟"
+
+#: ../../source/advance.rst:910
+msgid ""
+"For large quantum circuit simulations or expectation evaluations that "
+"exceed the memory of a single GPU, TensorCircuit-NG provides a "
+"distributed simulator engine called ``DistributedContractor`` (available "
+"under ``tensorcircuit.experimental``). This engine leverages multiple "
+"devices (e.g., GPUs or TPUs) in parallel to execute high-performance "
+"tensor network contractions."
+msgstr ""
+"对于超出单个 GPU 内存的大型量子线路模拟或期望值评估，Tensor"
+"Circuit-NG 提供了一个名为 ``DistributedCon"
+"tractor`` 的分布式模拟器引擎（位于 ``tensorcirc"
+"uit.experimental`` 下）。该引擎并行利用多个设备（例"
+"如 GPU 或 TPU）来执行高性能的张量网络收缩。"
+
+#: ../../source/advance.rst:912
+msgid "**Workflow of DistributedContractor:**"
+msgstr "**DistributedContractor 的工作流程：**"
+
+#: ../../source/advance.rst:914
+msgid ""
+"**Pathfinding & Slicing**: The user provides a parameter-dependent tensor"
+" network template function, ``nodes_fn``. The contractor invokes this "
+"template on process 0 to extract the contraction topology, and then runs "
+"the pathfinder (either ``cotengra`` or ``omeco``) to find an optimal "
+"contraction path. If the contraction exceeds the device memory limit, the"
+" pathfinder \"slices\" one or more edges, breaking the single huge "
+"contraction into many smaller, independent slice contractions."
+msgstr ""
+"**寻路与切片**：用户提供依赖参数的张量网络模板函数 ``nodes"
+"_fn``。收缩器在进程 0 上调用此模板以提取收缩拓扑，然后运行寻路"
+"器（``cotengra`` 或 ``omeco``）来寻找最佳收缩路"
+"径。如果收缩超出了设备内存限制，寻路器会“切片”一条或多条边，将单个巨"
+"大的收缩分解为许多较小的、独立的切片收缩。"
+
+#: ../../source/advance.rst:915
+msgid ""
+"**Multi-device Distribution**: The slice contractions are grouped, "
+"sharded, and mapped to multiple devices using JAX's ``NamedSharding`` "
+"mesh."
+msgstr "**多设备分发**：使用 JAX 的 ``NamedSharding`` 网格对切片收缩进行分组、分片并映射到多个设备。"
+
+#: ../../source/advance.rst:916
+msgid ""
+"**Execution & All-Reduce**: Each device computes its assigned slices "
+"sequentially (using JAX ``scan`` to minimize memory footprint and compile"
+" overhead). The results from different devices are then aggregated using "
+"a cross-device ``AllReduce`` operation."
+msgstr ""
+"**执行与 All-Reduce**：每个设备按顺序计算其分配的切片（"
+"使用 JAX ``scan`` 以最小化内存占用和编译开销）。然后使用"
+"跨设备 ``AllReduce`` 操作汇总来自不同设备的结果。"
+
+#: ../../source/advance.rst:918
+msgid ""
+"Here is a quick example of running distributed simulation to calculate "
+"expectations and gradients:"
+msgstr "下面是运行分布式模拟以计算期望值和梯度的简短示例："
+
+#: ../../source/advance.rst:956
+msgid ""
+"For detailed end-to-end examples, distributed scheduling details, and "
+"multi-GPU VQE optimizations, please refer to the `Distributed Simulation "
+"Tutorial <https://tensorcircuit-"
+"ng.readthedocs.io/en/latest/tutorials/distributed_simulation.html>`__."
+msgstr ""
+"有关详细的端到端示例、分布式调度细节和多 GPU VQE 优化，请参阅"
+" `分布式模拟教程 <https://tensorcircuit-ng"
+".readthedocs.io/en/latest/tutorials"
+"/distributed_simulation.html>`__。"
+
+
+
+
+
+
+
+
+
+

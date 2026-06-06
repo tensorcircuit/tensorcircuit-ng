@@ -8,11 +8,12 @@ msgid ""
 msgstr ""
 "Project-Id-Version:  tensorcircuit\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-03-31 12:24+0800\n"
+"POT-Creation-Date: 2026-06-06 15:34+0800\n"
 "PO-Revision-Date: 2026-03-31 12:45+0800\n"
 "Last-Translator: Gemini CLI\n"
 "Language: zh_CN\n"
 "Language-Team: \n"
+"Plural-Forms: nplurals=1; plural=0;\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -53,7 +54,13 @@ msgid ""
 "#pip-installation-nvidia-gpu-cuda-installed-via-pip-easier>`_ (``pip "
 "install 'jax[cuda-12]'``), or `PyTorch <https://pytorch.org/get-"
 "started/locally/>`_."
-msgstr "对于 Nvidia GPU，请参考相应机器学习框架的 GPU 感知安装指南： `TensorFlow <https://www.tensorflow.org/install/pip>`_ (``pip install 'tensorflow[and-cuda]'``), `Jax <https://docs.jax.dev/en/latest/installation.html#pip-installation-nvidia-gpu-cuda-installed-via-pip-easier>`_ (``pip install 'jax[cuda-12]'``), 或 `PyTorch <https://pytorch.org/get-started/locally/>`_ 。"
+msgstr ""
+"对于 Nvidia GPU，请参考相应机器学习框架的 GPU 感知安装指南： `TensorFlow "
+"<https://www.tensorflow.org/install/pip>`_ (``pip install 'tensorflow"
+"[and-cuda]'``), `Jax <https://docs.jax.dev/en/latest/installation.html"
+"#pip-installation-nvidia-gpu-cuda-installed-via-pip-easier>`_ (``pip "
+"install 'jax[cuda-12]'``), 或 `PyTorch <https://pytorch.org/get-"
+"started/locally/>`_ 。"
 
 #: ../../source/quickstart.rst:24
 msgid ""
@@ -61,7 +68,9 @@ msgid ""
 "purely in Python and hence portable. As long as the users can take care "
 "of the installation of ML frameworks on the corresponding operating "
 "system, TensorCircuit-NG will work as expected."
-msgstr "总的来说，TensorCircuit-NG 的安装非常简单，因为它纯粹由 Python 编写，因此具有良好的可移植性。只要用户能够在相应的操作系统上完成机器学习框架的安装，TensorCircuit-NG 就能按预期工作。"
+msgstr ""
+"总的来说，TensorCircuit-NG 的安装非常简单，因为它纯粹由 Python "
+"编写，因此具有良好的可移植性。只要用户能够在相应的操作系统上完成机器学习框架的安装，TensorCircuit-NG 就能按预期工作。"
 
 #: ../../source/quickstart.rst:27
 msgid ""
@@ -74,7 +83,9 @@ msgid ""
 "We also provide a nightly build of tensorcircuit via PyPI which can be "
 "accessed by ``pip uninstall tensorcircuit-ng``, then ``pip install "
 "tensorcircuit-nightly``"
-msgstr "我们还通过 PyPI 提供 tensorcircuit 的每日构建版本，可通过以下命令访问： ``pip uninstall tensorcircuit-ng`` ，然后 ``pip install tensorcircuit-nightly``"
+msgstr ""
+"我们还通过 PyPI 提供 tensorcircuit 的每日构建版本，可通过以下命令访问： ``pip uninstall "
+"tensorcircuit-ng`` ，然后 ``pip install tensorcircuit-nightly``"
 
 #: ../../source/quickstart.rst:35
 msgid ""
@@ -82,7 +93,9 @@ msgid ""
 "agents (e.g., Cursor, Claude Code, Gemini CLI) directly within the cloned"
 " repository to leverage the rich context from examples and tests. See "
 ":doc:`agentic` for details."
-msgstr "**AI 原生开发：** 我们强烈建议直接在克隆的仓库中使用 AI 编程助手（如 Cursor、Claude Code、Gemini CLI）进行开发，以利用来自示例和测试的丰富上下文。详见 :doc:`agentic` 。"
+msgstr ""
+"**AI 原生开发：** 我们强烈建议直接在克隆的仓库中使用 AI 编程助手（如 Cursor、Claude Code、Gemini "
+"CLI）进行开发，以利用来自示例和测试的丰富上下文。详见 :doc:`agentic` 。"
 
 #: ../../source/quickstart.rst:39
 msgid "Circuit Object"
@@ -240,7 +253,10 @@ msgid ""
 "Parameterized Qiskit circuit is supported by passing the parameters to "
 "the ``binding_parameters`` argument of the ``from_qiskit`` function, "
 "similar to the ``assign_parameters`` function in Qiskit."
-msgstr "从 Qiskit 导入： ``c = tc.Circuit.from_qiskit(QuantumCircuit, n)`` 。通过将参数传递给 ``from_qiskit`` 函数的 ``binding_parameters`` 参数，可以支持参数化的 Qiskit 线路，类似于 Qiskit 中的 ``assign_parameters`` 函数。"
+msgstr ""
+"从 Qiskit 导入： ``c = tc.Circuit.from_qiskit(QuantumCircuit, n)`` 。通过将参数传递给 "
+"``from_qiskit`` 函数的 ``binding_parameters`` 参数，可以支持参数化的 Qiskit 线路，类似于 "
+"Qiskit 中的 ``assign_parameters`` 函数。"
 
 #: ../../source/quickstart.rst:120
 msgid "**Circuit Visualization:**"
@@ -332,7 +348,8 @@ msgid ""
 " tensorcircuit-ng."
 msgstr ""
 "同样对于演示后端不可知特性的非量子示例（线性回归），pytree 支持变量、自动微分/即时编译/矢量并行化 用法和变分优化循环。请参考示例脚本: "
-"`线性回归示例 <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/universal_lr.py>`_ 。 "
+"`线性回归示例 <https://github.com/tensorcircuit/tensorcircuit-"
+"ng/blob/master/examples/universal_lr.py>`_ 。 "
 "这个例子可能对机器学习的用户更友好，因为它纯粹是经典的，同时也展示了 TensorCircuit-NG 的主要特征和范式。"
 
 #: ../../source/quickstart.rst:180
@@ -363,8 +380,8 @@ msgid ""
 "strongly recommend users learn some basics about Jax no matter which ML "
 "backend they intend to use."
 msgstr ""
-"TensorCircuit-NG 中的相关 API 设计与 Jax 中的函数式编程的设计模式密切相关，但是略有不同。因此，我们强烈建议用户学习一些有关 "
-"Jax 的基础知识，无论他们打算使用哪种机器学习后端。"
+"TensorCircuit-NG 中的相关 API 设计与 Jax "
+"中的函数式编程的设计模式密切相关，但是略有不同。因此，我们强烈建议用户学习一些有关 Jax 的基础知识，无论他们打算使用哪种机器学习后端。"
 
 #: ../../source/quickstart.rst:221
 msgid "**AD Support:**"
@@ -478,7 +495,9 @@ msgid ""
 "For more advanced usage patterns and detailed examples of vmap, refer to "
 "our `vmap tutorial <https://tensorcircuit-"
 "ng.readthedocs.io/en/latest/whitepaper/6-3-vmap.html>`_."
-msgstr "有关 vmap 的更多高级用法模式和详细示例，请参阅我们的 `vmap 教程 <https://tensorcircuit-ng.readthedocs.io/en/latest/whitepaper/6-3-vmap.html>`_ 。"
+msgstr ""
+"有关 vmap 的更多高级用法模式和详细示例，请参阅我们的 `vmap 教程 <https://tensorcircuit-"
+"ng.readthedocs.io/en/latest/whitepaper/6-3-vmap.html>`_ 。"
 
 #: ../../source/quickstart.rst:324
 msgid "Backend Agnosticism"
@@ -489,7 +508,9 @@ msgid ""
 "TensorCircuit-NG supports TensorFlow, Jax, and PyTorch backends. We "
 "recommend using TensorFlow or Jax backend since PyTorch lacks advanced "
 "jit and vmap features."
-msgstr "TensorCircuit-NG 支持 TensorFlow、Jax 和 PyTorch 后端。 我们建议使用 TensorFlow 或 Jax 后端，因为 PyTorch 缺乏高级 jit 和 vmap 功能。"
+msgstr ""
+"TensorCircuit-NG 支持 TensorFlow、Jax 和 PyTorch 后端。 我们建议使用 TensorFlow 或 Jax "
+"后端，因为 PyTorch 缺乏高级 jit 和 vmap 功能。"
 
 #: ../../source/quickstart.rst:328
 msgid ""
@@ -508,7 +529,11 @@ msgid ""
 " and the other part is implemented in `TensorCircuit-NG package "
 "<modules.html#module-tensorcircuit.backends>`__. To see all the backend "
 "agnostic APIs, try:"
-msgstr "在后端支持的 APIs 有两个来源 , 一个来自 `TensorNetwork <https://github.com/google/TensorNetwork/blob/master/tensornetwork/backends/abstract_backend.py>`__ 另一个来自 `TensorCircuit-NG package <modules.html#module-tensorcircuit.backends>`__。"
+msgstr ""
+"在后端支持的 APIs 有两个来源 , 一个来自 `TensorNetwork "
+"<https://github.com/google/TensorNetwork/blob/master/tensornetwork/backends/abstract_backend.py>`__"
+" 另一个来自 `TensorCircuit-NG package <modules.html#module-"
+"tensorcircuit.backends>`__。"
 
 #: ../../source/quickstart.rst:360
 msgid "Working with Data Types (Dtype)"
@@ -519,7 +544,9 @@ msgid ""
 "TensorCircuit-NG supports numerical simulation with both **32-bit** "
 "(default) and **64-bit** precision. You can switch the global precision "
 "using ``tc.set_dtype``."
-msgstr "TensorCircuit-NG 支持 **32 位 ** （默认）和 **64 位** 精度的数值模拟。您可以使用 ``tc.set_dtype`` 切换全局精度。"
+msgstr ""
+"TensorCircuit-NG 支持 **32 位 ** （默认）和 **64 位** 精度的数值模拟。您可以使用 "
+"``tc.set_dtype`` 切换全局精度。"
 
 #: ../../source/quickstart.rst:375
 msgid ""
@@ -579,78 +606,154 @@ msgstr ""
 msgid "Some setup cases:"
 msgstr "一些设置案例："
 
-#: ../../source/quickstart.rst:417
+#: ../../source/quickstart.rst:432
 msgid ""
 "For advanced configurations on cotengra contractors, please refer to "
 "cotengra `doc "
-"<https://cotengra.readthedocs.io/en/latest/advanced.html>`__ ."
-msgstr "有关 cotengra contractor 的高级配置，请参阅 cotengra `文档 <https://cotengra.readthedocs.io/en/latest/advanced.html>`__ 。"
+"<https://cotengra.readthedocs.io/en/latest/advanced.html>`__ . For OMECO "
+"path search and optimization configurations, the parameters inside "
+"``ScoreFunction`` control the search heuristics. The score for evaluating"
+" the contraction tree quality is computed as:"
+msgstr ""
+"对于 cotengra 收缩器的高级配置，请参阅 cotengra `"
+"文档 <https://cotengra.readthedocs.io"
+"/en/latest/advanced.html>`__。对于 OME"
+"CO 路径搜索和优化配置，``ScoreFunction`` 内部的参"
+"数控制搜索启发式。评估收缩树质量的分数计算如下："
 
-#: ../../source/quickstart.rst:419
+#: ../../source/quickstart.rst:435
+msgid ""
+"\\text{score} = \\text{tc\\_weight} \\times 2^{\\text{tc}} + "
+"\\text{rw\\_weight} \\times 2^{\\text{rw}} + \\text{sc\\_weight} \\times "
+"\\max(0, 2^{\\text{sc}} - 2^{\\text{sc\\_target}})"
+msgstr ""
+"\text{score} = \text{tc\_weight} \t"
+"imes 2^{\text{tc}} + \text{rw\_weig"
+"ht} \times 2^{\text{rw}} + \text{sc"
+"\_weight} \times \max(0, 2^{\text{s"
+"c}} - 2^{\text{sc\_target}})"
+
+#: ../../source/quickstart.rst:439
+msgid "Where:"
+msgstr "其中："
+
+#: ../../source/quickstart.rst:441
+msgid "``tc`` is the time complexity (log2 of total FLOP count)."
+msgstr "``tc`` 是时间复杂度（总 FLOP 计数的以 2 为底的对数）。"
+
+#: ../../source/quickstart.rst:442
+msgid ""
+"``sc`` is the space complexity (log2 of the largest intermediate tensor "
+"size)."
+msgstr "``sc`` 是空间复杂度（最大中间张量大小的以 2 为底的对数）。"
+
+#: ../../source/quickstart.rst:443
+msgid "``rw`` is the read-write complexity (log2 of total I/O operations)."
+msgstr "``rw`` 是读写复杂度（总 I/O 操作数的以 2 为底的对数）。"
+
+#: ../../source/quickstart.rst:445
+msgid "Specifically:"
+msgstr "具体而言："
+
+#: ../../source/quickstart.rst:447
+msgid ""
+"``tc_weight``: Time Complexity weight. Higher values prioritize paths "
+"with fewer total floating-point operations (FLOPs)."
+msgstr "``tc_weight``：时间复杂度权重。值越高，越优先选择总浮点运算次数（FLOPs）较少的路径。"
+
+#: ../../source/quickstart.rst:448
+msgid ""
+"``sc_weight``: Space Complexity weight. Higher values penalize "
+"contraction steps that exceed the space complexity target."
+msgstr "``sc_weight``：空间复杂度权重。值越高，对超出空间复杂度目标的收缩步骤处罚越重。"
+
+#: ../../source/quickstart.rst:449
+msgid ""
+"``rw_weight``: Read-Write weight. Higher values prioritize paths that "
+"minimize the read-write bandwidth."
+msgstr "``rw_weight``：读写权重。值越高，越优先选择最小化读写带宽的路径。"
+
+#: ../../source/quickstart.rst:450
+msgid ""
+"``sc_target``: Space Complexity target (in log2). Once the space "
+"complexity ``sc`` of a path is below ``sc_target``, the space penalty "
+"becomes 0, allowing the optimizer to focus entirely on minimizing FLOPs "
+"and I/O."
+msgstr ""
+"``sc_target``：空间复杂度目标（以 2 为底的对数）。一旦"
+"路径的空间复杂度 ``sc`` 低于 ``sc_target``，空间"
+"惩罚将变为 0，从而允许优化器完全专注于最小化 FLOPs 和 I/O"
+"。"
+
+#: ../../source/quickstart.rst:454
 msgid "**Setup in Function or Context Level**"
 msgstr "**函数和上下文级别的设置**"
 
-#: ../../source/quickstart.rst:421
+#: ../../source/quickstart.rst:456
 msgid ""
 "Beside global level setup, we can also setup the backend, the dtype, and "
 "the contractor at the function level or context manager level:"
 msgstr "除了全局级别设置，我们还可以在函数级别或上下文管理器级别设置后端、dtype 和contractor："
 
-#: ../../source/quickstart.rst:439
+#: ../../source/quickstart.rst:474
 msgid "Noisy Circuit Simulation"
 msgstr "噪声电路模拟"
 
-#: ../../source/quickstart.rst:441
+#: ../../source/quickstart.rst:476
 msgid "**Monte Carlo State Simulator:**"
 msgstr "**蒙特卡洛态模拟器**"
 
-#: ../../source/quickstart.rst:443
+#: ../../source/quickstart.rst:478
 msgid ""
 "For the Monte Carlo trajectory noise simulator, the unitary Kraus channel"
 " can be handled easily. TensorCircuit-NG also supports fully jittable and"
 " differentiable general Kraus channel Monte Carlo simulation, though."
-msgstr "对于蒙特卡洛轨迹噪声模拟器，可以轻松处理幺正的 Kraus 通道。 不过，TensorCircuit-NG 还支持完全可即时编译和可微分的通用 Kraus 通道蒙特卡罗模拟。"
+msgstr ""
+"对于蒙特卡洛轨迹噪声模拟器，可以轻松处理幺正的 Kraus 通道。 不过，TensorCircuit-NG 还支持完全可即时编译和可微分的通用 "
+"Kraus 通道蒙特卡罗模拟。"
 
-#: ../../source/quickstart.rst:470
+#: ../../source/quickstart.rst:505
 msgid "**Density Matrix Simulator:**"
 msgstr "**密度矩阵模拟器**"
 
-#: ../../source/quickstart.rst:472
+#: ../../source/quickstart.rst:507
 msgid ""
 "Density matrix simulator ``tc.DMCircuit`` simulates the noise in a full "
 "form, but takes twice qubits to do noiseless simulation. The API is the "
 "same as ``tc.Circuit``."
 msgstr "密度矩阵模拟器 ``tc.DMCircuit`` 以完整形式模拟噪声，但需要两倍的量子比特。API 与 ``tc.Circuit`` 基本相同。"
 
-#: ../../source/quickstart.rst:491
+#: ../../source/quickstart.rst:526
 msgid "**Experiment with quantum errors:**"
 msgstr "**量子误差实验：**"
 
-#: ../../source/quickstart.rst:493
+#: ../../source/quickstart.rst:528
 msgid "Multiple quantum errors can be added on circuit."
 msgstr "可以在线路上添加多种量子误差。"
 
-#: ../../source/quickstart.rst:509
+#: ../../source/quickstart.rst:544
 msgid "**Experiment with readout error:**"
 msgstr "**读取误差实验：**"
 
-#: ../../source/quickstart.rst:511
+#: ../../source/quickstart.rst:546
 msgid ""
 "Readout error can be added in experiments for sampling and expectation "
 "value calculation."
 msgstr "可以在采样和期望值计算的实验中添加读取误差。"
 
-#: ../../source/quickstart.rst:537
+#: ../../source/quickstart.rst:572
 msgid "MPS and MPO"
 msgstr "矩阵乘积状态和矩阵乘积算子"
 
-#: ../../source/quickstart.rst:539
+#: ../../source/quickstart.rst:574
 msgid ""
 "TensorCircuit-NG has its class for MPS and MPO originally defined in "
 "TensorNetwork as ``tc.QuVector``, ``tc.QuOperator``."
-msgstr "TensorCircuit-NG 有自己的 MPS 和 MPO 类，起初在 TensorNetwork 中定义为 ``tc.QuVector`` 和 ``tc.QuOperator`` 。"
+msgstr ""
+"TensorCircuit-NG 有自己的 MPS 和 MPO 类，起初在 TensorNetwork 中定义为 ``tc.QuVector`` "
+"和 ``tc.QuOperator`` 。"
 
-#: ../../source/quickstart.rst:541
+#: ../../source/quickstart.rst:576
 msgid ""
 "``tc.QuVector`` can be extracted from ``tc.Circuit`` as the tensor "
 "network form for the output state (uncontracted) by ``c.quvector()``."
@@ -658,7 +761,7 @@ msgstr ""
 "作为``c.quvector()`` 的输出状态（未收缩）的张量网络形式，``tc.QuVector`` 可以从``tc.Circuit`` "
 "中提取。"
 
-#: ../../source/quickstart.rst:543
+#: ../../source/quickstart.rst:578
 msgid ""
 "The QuVector forms a wavefunction w, which can also be fed into Circuit "
 "as the inputs state as ``c=tc.Circuit(n, mps_inputs=w)``."
@@ -666,61 +769,61 @@ msgstr ""
 "QuVector 形成一个波函数 w，它也可以作为 ``c=tc.Circuit(n, mps_inputs=w)`` 的输入状态输入到 "
 "Circuit 中。"
 
-#: ../../source/quickstart.rst:545
+#: ../../source/quickstart.rst:580
 msgid "MPS as input state for circuit"
 msgstr "MPS 作为电路的输入状态"
 
-#: ../../source/quickstart.rst:547
+#: ../../source/quickstart.rst:582
 msgid ""
 "The MPS/QuVector representation of the input state has a more efficient "
 "and compact form."
 msgstr "输入状态的 MPS/QuVector 表示具有更高效和紧凑的形式。"
 
-#: ../../source/quickstart.rst:559
+#: ../../source/quickstart.rst:594
 msgid "MPS as (uncomputed) output state for circuit"
 msgstr "MPS 作为电路的（未计算的）输出状态"
 
-#: ../../source/quickstart.rst:561
+#: ../../source/quickstart.rst:596
 msgid ""
 "For example, a quick way to calculate the wavefunction overlap without "
 "explicitly computing the state amplitude is given as below:"
 msgstr "例如，在不显式计算状态幅度的情况下，计算波函数重叠的快速方法如下："
 
-#: ../../source/quickstart.rst:578
+#: ../../source/quickstart.rst:613
 msgid "MPO as the gate on the circuit"
 msgstr "MPO 作为电路上的门"
 
-#: ../../source/quickstart.rst:580
+#: ../../source/quickstart.rst:615
 msgid ""
 "Instead of a common quantum gate in matrix/node format, we can directly "
 "apply a gate in MPO/QuOperator format."
 msgstr "代替矩阵/节点格式的普通量子门，我们可以直接应用 MPO/QuOperator 格式的门。"
 
-#: ../../source/quickstart.rst:591
+#: ../../source/quickstart.rst:626
 msgid ""
 "The representative gate defined in MPO format is the ``multicontrol`` "
 "gate."
 msgstr "以 MPO 格式定义的代表门是 ``multicontrol`` 门。"
 
-#: ../../source/quickstart.rst:593
+#: ../../source/quickstart.rst:628
 msgid "MPO as the operator for expectation evaluation on a circuit"
 msgstr "MPO作为电路期望估测算子"
 
-#: ../../source/quickstart.rst:595
+#: ../../source/quickstart.rst:630
 msgid ""
 "We can also measure operator expectation on the circuit output state "
 "where the operator is in MPO/QuOperator format."
 msgstr "我们还可以测量运算符对 MPO/QuOperator 格式的电路输出状态的期望。"
 
-#: ../../source/quickstart.rst:607
+#: ../../source/quickstart.rst:642
 msgid "Interfaces"
 msgstr "接口"
 
-#: ../../source/quickstart.rst:609
+#: ../../source/quickstart.rst:644
 msgid "**PyTorch Interface to Hybrid with PyTorch Modules:**"
 msgstr "**与 PyTorch 模块混合的 PyTorch 接口：**"
 
-#: ../../source/quickstart.rst:611
+#: ../../source/quickstart.rst:646
 msgid ""
 "As we have mentioned in the backend section, the PyTorch backend may lack"
 " advanced features. This doesn't mean we cannot hybrid the advanced "
@@ -731,141 +834,176 @@ msgstr ""
 "正如我们在后端部分提到的，PyTorch 后端可能缺少高级功能。 这并不意味着我们不能将高级量子电路模块与 PyTorch 神经模块混合。 "
 "我们可以在 TensorFlow 或 Jax 后端运行量子函数，同时使用 Torch 接口包装它。 "
 
-#: ../../source/quickstart.rst:638
+#: ../../source/quickstart.rst:673
 msgid ""
 "For a GPU/CPU, torch/tensorflow, quantum/classical hybrid machine "
 "learning pipeline enabled by tensorcircuit, see `example script "
 "<https://github.com/tensorcircuit/tensorcircuit-"
 "ng/blob/master/examples/hybrid_gpu_pipeline.py>`__."
-msgstr "对于由 tensorcircuit 支持的 GPU/CPU、torch/tensorflow、量子/经典混合机器学习流水线，请参见 `示例脚本 <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/hybrid_gpu_pipeline.py>`__。"
+msgstr ""
+"对于由 tensorcircuit 支持的 GPU/CPU、torch/tensorflow、量子/经典混合机器学习流水线，请参见 `示例脚本 "
+"<https://github.com/tensorcircuit/tensorcircuit-"
+"ng/blob/master/examples/hybrid_gpu_pipeline.py>`__。"
 
-#: ../../source/quickstart.rst:640
+#: ../../source/quickstart.rst:675
 msgid ""
 "There is also a more flexible torch interface that support static non-"
 "tensor inputs as keyword arguments, which can be utilized as below:"
 msgstr "还有一个更灵活的 torch 接口，支持将静态非张量输入作为关键字参数，用法如下："
 
-#: ../../source/quickstart.rst:654
+#: ../../source/quickstart.rst:689
 msgid ""
 "We also provider wrapper of quantum function for torch module as "
 ":py:meth:`tensorcircuit.TorchLayer` alias to "
 ":py:meth:`tensorcircuit.torchnn.QuantumNet`."
-msgstr "我们还为 torch 模块提供了量子函数的包装器，如 :py:meth:`tensorcircuit.TorchLayer` ，它是 :py:meth:`tensorcircuit.torchnn.QuantumNet` 的别名。"
+msgstr ""
+"我们还为 torch 模块提供了量子函数的包装器，如 :py:meth:`tensorcircuit.TorchLayer` ，它是 "
+":py:meth:`tensorcircuit.torchnn.QuantumNet` 的别名。"
 
-#: ../../source/quickstart.rst:656
+#: ../../source/quickstart.rst:691
 msgid ""
 "For ``TorchLayer``, ``use_interface=True`` is by default, which natively "
 "allow the quantum function defined on other tensorcircuit backends, such "
 "as jax or tf for speed consideration."
-msgstr "对于 ``TorchLayer`` ，默认情况下 ``use_interface=True`` ，这原生允许在其他 tensorcircuit 后端（如 jax 或 tf）上定义的量子函数，以考虑速度。"
+msgstr ""
+"对于 ``TorchLayer`` ，默认情况下 ``use_interface=True`` ，这原生允许在其他 tensorcircuit "
+"后端（如 jax 或 tf）上定义的量子函数，以考虑速度。"
 
-#: ../../source/quickstart.rst:658
+#: ../../source/quickstart.rst:693
 msgid ""
 "``TorchLayer`` can process multiple input arguments as multiple function "
 "inputs, following torch practice."
 msgstr "``TorchLayer`` 可以按照 torch 的惯例，将多个输入参数处理为多个函数输入。"
 
-#: ../../source/quickstart.rst:686
+#: ../../source/quickstart.rst:721
 msgid "**TensorFlow interfaces:**"
 msgstr "**TensorFlow 接口：**"
 
-#: ../../source/quickstart.rst:688
+#: ../../source/quickstart.rst:723
 msgid ""
 "Similar rules apply similar as torch interface. The interface can even be"
 " used within jit environment outside. See "
 ":py:meth:`tensorcircuit.interfaces.tensorflow.tensorflow_interface`."
-msgstr "类似于 torch 接口的规则也适用。该接口甚至可以在外部的 jit 环境中使用。参见 :py:meth:`tensorcircuit.interfaces.tensorflow.tensorflow_interface` 。"
+msgstr ""
+"类似于 torch 接口的规则也适用。该接口甚至可以在外部的 jit 环境中使用。参见 "
+":py:meth:`tensorcircuit.interfaces.tensorflow.tensorflow_interface` 。"
 
-#: ../../source/quickstart.rst:691
+#: ../../source/quickstart.rst:726
 msgid ""
 "We also provider ``enable_dlpack=True`` option in torch and tf "
 "interfaces, which allow the tensor transformation happen without memory "
 "transfer via dlpack, higher version of tf or torch package required."
-msgstr "我们还在 torch 和 tf 接口中提供了 ``enable_dlpack=True`` 选项，允许在不通过 dlpack 进行内存传输的情况下进行张量转换，需要更高版本的 tf 或 torch 包。"
+msgstr ""
+"我们还在 torch 和 tf 接口中提供了 ``enable_dlpack=True`` 选项，允许在不通过 dlpack "
+"进行内存传输的情况下进行张量转换，需要更高版本的 tf 或 torch 包。"
 
-#: ../../source/quickstart.rst:694
+#: ../../source/quickstart.rst:729
 msgid ""
 "We also provider wrapper of quantum function for keras layer as "
 ":py:meth:`tensorcircuit.KerasLayer` alias to "
 ":py:meth:`tensorcircuit.keras.KerasLayer`."
-msgstr "我们还为 keras 层提供了量子函数的包装器，如 :py:meth:`tensorcircuit.KerasLayer` ，它是 :py:meth:`tensorcircuit.keras.KerasLayer` 的别名。"
+msgstr ""
+"我们还为 keras 层提供了量子函数的包装器，如 :py:meth:`tensorcircuit.KerasLayer` ，它是 "
+":py:meth:`tensorcircuit.keras.KerasLayer` 的别名。"
 
-#: ../../source/quickstart.rst:696
+#: ../../source/quickstart.rst:731
 msgid ""
 "``KerasLayer`` can process multiple input arguments with the input as a "
 "dict, following the common keras practice, see example below."
 msgstr "``KerasLayer`` 可以按照通用的 keras 惯例，将输入作为字典处理多个输入参数，参见下面的示例。"
 
-#: ../../source/quickstart.rst:716
+#: ../../source/quickstart.rst:751
 msgid "**JAX interfaces:**"
 msgstr "**JAX 接口：**"
 
-#: ../../source/quickstart.rst:718
+#: ../../source/quickstart.rst:753
 msgid ""
 "TensorCircuit-NG also newly introduces JAX interface to seamlessly "
 "integrate with JAX's ecosystem. This allows you to use JAX's powerful "
 "features like automatic differentiation, JIT compilation, and "
 "vectorization with quantum circuits or functions running on any backend."
-msgstr "TensorCircuit-NG 最近还引入了 JAX 接口，以无缝集成到 JAX 的生态系统中。这允许您在任何后端上运行的量子线路或函数中使用 JAX 的强大功能，如自动微分、JIT 编译和向量化。"
+msgstr ""
+"TensorCircuit-NG 最近还引入了 JAX 接口，以无缝集成到 JAX 的生态系统中。这允许您在任何后端上运行的量子线路或函数中使用 "
+"JAX 的强大功能，如自动微分、JIT 编译和向量化。"
 
-#: ../../source/quickstart.rst:721
+#: ../../source/quickstart.rst:756
 msgid "Basic usage with JAX interface:"
 msgstr "JAX 接口的基本用法："
 
-#: ../../source/quickstart.rst:748
+#: ../../source/quickstart.rst:783
 msgid "Some advanced features:"
 msgstr "一些高级功能："
 
-#: ../../source/quickstart.rst:750
+#: ../../source/quickstart.rst:785
 msgid "DLPack support for efficient tensor conversion:"
 msgstr "DLPack 支持高效的张量转换："
 
-#: ../../source/quickstart.rst:759
+#: ../../source/quickstart.rst:794
 msgid "Explicit output shape specification for better performance:"
 msgstr "明确的输出形状规范以获得更好的性能："
 
-#: ../../source/quickstart.rst:769
+#: ../../source/quickstart.rst:804
 msgid "Multiple outputs support:"
 msgstr "多输出支持："
 
-#: ../../source/quickstart.rst:791
+#: ../../source/quickstart.rst:826
 msgid "**Scipy Interface to Utilize Scipy Optimizers:**"
 msgstr "**使用 scipy接口使用scipy优化器：**"
 
-#: ../../source/quickstart.rst:793
+#: ../../source/quickstart.rst:828
 msgid ""
 "Automatically transform quantum functions as scipy-compatible values and "
 "grad functions as provided for scipy interface with ``jac=True``."
 msgstr "为带有 jac=True 的 scipy 接口自动将量子函数转换为与 scipy 兼容的 value 和 grad 函数。"
 
-#: ../../source/quickstart.rst:819
+#: ../../source/quickstart.rst:854
 msgid "Templates as Shortcuts"
 msgstr "捷径模板"
 
-#: ../../source/quickstart.rst:821
+#: ../../source/quickstart.rst:856
 msgid "**Measurements:**"
 msgstr "**测量**"
 
-#: ../../source/quickstart.rst:823
+#: ../../source/quickstart.rst:858
 msgid "Ising type Hamiltonian defined on a general graph"
 msgstr "在一般图上定义的伊辛型哈密顿量"
 
-#: ../../source/quickstart.rst:825
+#: ../../source/quickstart.rst:860
 msgid ""
 "See "
 ":py:meth:`tensorcircuit.templates.measurements.spin_glass_measurements`"
 msgstr "参考 :py:meth:`tensorcircuit.templates.measurements.spin_glass_measurements`"
 
-#: ../../source/quickstart.rst:827
+#: ../../source/quickstart.rst:862
 msgid "Heisenberg Hamiltonian on a general graph with possible external fields"
 msgstr "具有可能存在的外场的一般图上的海森堡哈密顿量"
 
-#: ../../source/quickstart.rst:829
+#: ../../source/quickstart.rst:864
 msgid ""
 "See "
 ":py:meth:`tensorcircuit.templates.measurements.heisenberg_measurements`"
 msgstr "参考 :py:meth:`tensorcircuit.templates.measurements.heisenberg_measurements`"
 
-#: ../../source/quickstart.rst:831
+#: ../../source/quickstart.rst:866
 msgid "**Circuit Blocks:**"
 msgstr "**电路块**"
+
+#~ msgid ""
+#~ "For advanced configurations on cotengra "
+#~ "contractors, please refer to cotengra "
+#~ "`doc "
+#~ "<https://cotengra.readthedocs.io/en/latest/advanced.html>`__ ."
+#~ msgstr ""
+#~ "有关 cotengra contractor 的高级配置，请参阅 cotengra "
+#~ "`文档 <https://cotengra.readthedocs.io/en/latest/advanced.html>`__"
+#~ " 。"
+
+
+
+
+
+
+
+
+
+

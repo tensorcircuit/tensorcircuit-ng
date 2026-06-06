@@ -543,6 +543,33 @@ The most flexible way to build Hamiltonians is through Pauli strings:
     h_dense = tc.quantum.PauliStringSum2Dense(pauli_strings, weights)
 
 
+**Matrix-Free Hamiltonian Representation (MVP):**
+
+For large-scale quantum systems where constructing or storing the full Hamiltonian matrix is memory-prohibitive, TensorCircuit-NG provides a matrix-free Matrix-Vector Product (MVP) representation via :py:meth:`tensorcircuit.quantum.PauliStringSum2MVP`. This API returns a function that directly computes :math:`H|\psi\rangle` using backend-agnostic slicing and broadcasting operations, avoiding explicit matrix construction:
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+
+    pauli_strings = [
+        [1, 1, 0],  # X₁X₂I₃
+        [3, 3, 0],  # Z₁Z₂I₃
+    ]
+    weights = [0.5, 1.0]
+
+    # Generate the MVP function
+    h_mvp = tc.quantum.PauliStringSum2MVP(pauli_strings, weights)
+
+    # Compute expectation value on a state
+    c = tc.Circuit(3)
+    c.h(range(3))
+    psi = c.state()
+
+    h_psi = h_mvp(psi)
+    expectation = tc.backend.real(tc.backend.tensordot(tc.backend.conj(psi), h_psi, 1))
+    print(expectation)
+
+
 **High-Level Hamiltonian Construction:**
 
 For common Hamiltonians like Heisenberg model:
@@ -877,7 +904,8 @@ If vmap is also involved apart from jit, I currently find no way to maintain the
 
 
 Distributed Simulation
-======================
+-----------------------------
+
 
 For large quantum circuit simulations or expectation evaluations that exceed the memory of a single GPU, TensorCircuit-NG provides a distributed simulator engine called ``DistributedContractor`` (available under ``tensorcircuit.experimental``). This engine leverages multiple devices (e.g., GPUs or TPUs) in parallel to execute high-performance tensor network contractions.
 
@@ -925,5 +953,5 @@ Here is a quick example of running distributed simulation to calculate expectati
     # 3. Differentiate and evaluate values & gradients across all GPUs
     value, grad = dc.value_and_grad(params)
 
-For detailed end-to-end examples, distributed scheduling details, and multi-GPU VQE optimizations, please refer to the `Distributed Simulation Tutorial <../tutorials/distributed_simulation.html>`__.
+For detailed end-to-end examples, distributed scheduling details, and multi-GPU VQE optimizations, please refer to the `Distributed Simulation Tutorial <https://tensorcircuit-ng.readthedocs.io/en/latest/tutorials/distributed_simulation.html>`__.
 
