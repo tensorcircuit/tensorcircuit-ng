@@ -20,7 +20,7 @@ TensorCircuit-NG is the world's first AI-native quantum programming platform, pu
 Why Work Within the Repository?
 ----------------------------------
 
-To write scripts and applications efficiently with AI coding agents (e.g., ClaudeCode, Cursor, Codex, Antigravity, Gemini-CLI, OpenCode), we strongly recommend working directly within the local repository.
+To write scripts and applications efficiently with AI coding agents (e.g., ClaudeCode, Cursor, Codex, Antigravity, OpenCode), we strongly recommend working directly within the local repository.
 
 
 1. **Rich Context**: The repository contains over 100 scripts in ``examples/`` and extensive test cases in ``tests/``. These provide essential references that significantly reduce AI hallucinations and help the agent understand idiomatic usage.

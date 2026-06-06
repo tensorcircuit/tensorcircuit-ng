@@ -16,6 +16,8 @@ Use this file for backend-wrapper behavior, JIT/vmap issues, and contraction per
 - Put JIT around the outer computation step rather than around tiny inner helpers.
 - Warm up JIT with the same shapes used in the real run, especially for vmapped workloads, or compilation will leak into the timed path.
 - Benchmark JAX only after synchronizing the result with `.block_until_ready()`.
+- For VQE value-and-gradient benchmarks, report compile/warmup time separately from the first post-JIT value+grad step. Prebuild static objects such as contraction paths and sparse Hamiltonians outside the timed callable.
+- When comparing quantum simulators or backends, keep ansatz, dtype, device, and measurement algorithm identical, and verify energies/gradients before interpreting runtime. A sparse-Hamiltonian expectation path can be much fairer for high-qubit Hamiltonian sums than looping over Pauli strings, but the timed algorithm must be stated explicitly.
 - In contraction benchmarks, separate one-time path-search and compile costs from steady-state contraction time. For a fixed traced network, path search is usually a staging cost unless changing static structure or retracing forces it to rerun.
 - For very large reductions, prefer `scan` or another streaming pattern over `vmap` if `vmap` would materialize all intermediates at once.
 - When large-system APIs expose flags that avoid dense-state materialization, prefer those settings for high-qubit workloads.
@@ -50,3 +52,4 @@ Use this file for backend-wrapper behavior, JIT/vmap issues, and contraction per
 
 - If a registered object may survive across tracing boundaries, normalize raw NumPy inputs to the current TensorCircuit dtype before they become closed-over constants.
 - Do not assume a late cast inside `__call__` is enough once JAX has already captured the underlying array during lowering.
+- For GPU complex64 quantum-simulation benchmarks, disable TF32 or equivalent reduced-precision modes before trusting cross-backend numerical comparisons. Treat any speed result with mismatched energies or gradients as invalid until the precision mode is understood.

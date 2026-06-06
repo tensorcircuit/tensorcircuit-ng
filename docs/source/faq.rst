@@ -130,7 +130,7 @@ The customized contractor costs much more time than the default contractor in te
 
 If the circuit simulation time is the bottleneck of the whole workflow, one can always try customized contractors to see whether there is some performance improvement.
 
-We recommend using the `cotengra library <https://cotengra.readthedocs.io/en/latest/index.html>`_ to set up the contractor. It provides more stable and faster simulation for large-scale tensor network contractions. Since there are lots of interesting hyperparameters to tune, we can achieve a better trade-off between the time on contraction path search and the time on the real tensor network contraction.
+We recommend using the `cotengra library <https://cotengra.readthedocs.io/en/latest/index.html>`_ or the `omeco library <https://github.com/GiggleLiu/omeco>`_ to set up the contractor. They provide more stable and faster simulation for large-scale tensor network contractions. Since there are lots of interesting hyperparameters to tune, we can achieve a better trade-off between the time on contraction path search and the time on the real tensor network contraction.
 
 It is also worth noting that for jitted function which we usually use, the contraction path search is only called at the first run of the function, which further amortizes the time and favors the use of a highly customized contractor.
 
@@ -314,3 +314,9 @@ What is the long-term support (LTS) commitment for TensorCircuit-NG?
 ---------------------------------------------------------------------
 
 TensorCircuit-NG is committed to long-term maintenance and stability. We ensure compatibility with the latest versions of major ML frameworks (Numpy, TensorFlow, JAX, PyTorch) and provide timely updates to stay aligned with the evolving Python scientific computing ecosystem. Our priority is to provide a reliable, performant, and future-proof platform for both research and production-grade quantum simulation tasks.
+
+
+How can commercial partners or enterprises obtain custom support or technical consulting?
+--------------------------------------------------------------------------------------------
+
+We warmly welcome industrial project usage, commercial collaborations, commercial deployments, or generic technical consulting inquiries. We can provide **TensorCircuit-NG Enterprise Support** tailored to your organization's specific requirements (such as GPU cluster optimization, custom backend integration, and custom feature development). For any inquiries, please contact us via email at shixinzhang#iphy.ac.cn.

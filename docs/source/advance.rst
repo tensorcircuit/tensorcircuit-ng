@@ -874,3 +874,56 @@ It is worth noting that since ``Circuit.unitary_kraus`` and ``Circuit.general_kr
 One may wonder why random numbers are dealt in such a complicated way, please refer to the `Jax design note <https://jax.readthedocs.io/en/latest/jep/263-prng.html>`_ for some hints.
 
 If vmap is also involved apart from jit, I currently find no way to maintain the backend agnosticity as TensorFlow seems to have no support of vmap over random keys (ping me on GitHub if you think you have a way to do this). I strongly recommend the users using Jax backend in the vmap+random setup.
+
+
+Distributed Simulation
+======================
+
+For large quantum circuit simulations or expectation evaluations that exceed the memory of a single GPU, TensorCircuit-NG provides a distributed simulator engine called ``DistributedContractor`` (available under ``tensorcircuit.experimental``). This engine leverages multiple devices (e.g., GPUs or TPUs) in parallel to execute high-performance tensor network contractions.
+
+**Workflow of DistributedContractor:**
+
+1. **Pathfinding & Slicing**: The user provides a parameter-dependent tensor network template function, ``nodes_fn``. The contractor invokes this template on process 0 to extract the contraction topology, and then runs the pathfinder (either ``cotengra`` or ``omeco``) to find an optimal contraction path. If the contraction exceeds the device memory limit, the pathfinder "slices" one or more edges, breaking the single huge contraction into many smaller, independent slice contractions.
+2. **Multi-device Distribution**: The slice contractions are grouped, sharded, and mapped to multiple devices using JAX's ``NamedSharding`` mesh.
+3. **Execution & All-Reduce**: Each device computes its assigned slices sequentially (using JAX ``scan`` to minimize memory footprint and compile overhead). The results from different devices are then aggregated using a cross-device ``AllReduce`` operation.
+
+Here is a quick example of running distributed simulation to calculate expectations and gradients:
+
+.. code-block:: python
+
+    import jax
+    import tensorcircuit as tc
+    from tensorcircuit.experimental import DistributedContractor
+
+    tc.set_backend("jax")
+    tc.set_dtype("complex64")
+
+    n = 24
+
+    # 1. Define the parameterized tensor network template
+    def nodes_fn(params):
+        c = tc.Circuit(n)
+        c.h(range(n))
+        for i in range(n - 1):
+            c.rzz(i, i + 1, theta=params[i])
+        # Return a list of dangling edges or nodes for expectation value
+        return c.expectation_before([tc.gates.z(), [n // 2]], reuse=False)
+
+    params = tc.backend.ones([n - 1])
+
+    # 2. Initialize the DistributedContractor (runs pathfinder on process 0)
+    # Using cotengra or omeco options to configure slicing
+    dc = DistributedContractor(
+        nodes_fn,
+        params,
+        cotengra_options={
+            "slicing_reconf_opts": {"target_size": 2**24},
+            "minimize": "write"
+        }
+    )
+
+    # 3. Differentiate and evaluate values & gradients across all GPUs
+    value, grad = dc.value_and_grad(params)
+
+For detailed end-to-end examples, distributed scheduling details, and multi-GPU VQE optimizations, please refer to the `Distributed Simulation Tutorial <../tutorials/distributed_simulation.html>`__.
+

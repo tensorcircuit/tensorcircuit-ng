@@ -411,10 +411,45 @@ Some setup cases:
     # 2.  RandomGreedy contractor
     tc.set_contractor("custom_stateful", optimizer=oem.RandomGreedy, max_time=60, max_repeats=128, minimize="size")
 
-    # 3. state simulator like contractor provided by tensorcircuit, maybe better when there is ring topology for two-qubit gate layout
-    tc.set_contractor("plain-experimental")
+    # 3. OMECO simulated annealing contraction optimizer (Rust-accelerated)
+    import omeco
+
+    # Define a score function to rank the contraction tree quality
+    score = omeco.ScoreFunction(
+        tc_weight=1.0,  # Weight for time complexity (FLOPs)
+        sc_weight=1.0,  # Weight for space complexity (peak memory size)
+        rw_weight=64.0, # Weight for read-write operations volume
+        sc_target=24.0, # Target space complexity threshold
+    )
+    optimizer = omeco.TreeSA(
+        ntrials=16,
+        niters=32,
+        score=score,
+    )
+    tc.set_contractor("custom", optimizer=optimizer, preprocessing=True)
+
 
 For advanced configurations on cotengra contractors, please refer to cotengra `doc <https://cotengra.readthedocs.io/en/latest/advanced.html>`__ .
+For OMECO path search and optimization configurations, the parameters inside ``ScoreFunction`` control the search heuristics. The score for evaluating the contraction tree quality is computed as:
+
+.. math::
+
+    \text{score} = \text{tc\_weight} \times 2^{\text{tc}} + \text{rw\_weight} \times 2^{\text{rw}} + \text{sc\_weight} \times \max(0, 2^{\text{sc}} - 2^{\text{sc\_target}})
+
+Where:
+
+* ``tc`` is the time complexity (log2 of total FLOP count).
+* ``sc`` is the space complexity (log2 of the largest intermediate tensor size).
+* ``rw`` is the read-write complexity (log2 of total I/O operations).
+
+Specifically:
+
+* ``tc_weight``: Time Complexity weight. Higher values prioritize paths with fewer total floating-point operations (FLOPs).
+* ``sc_weight``: Space Complexity weight. Higher values penalize contraction steps that exceed the space complexity target.
+* ``rw_weight``: Read-Write weight. Higher values prioritize paths that minimize the read-write bandwidth.
+* ``sc_target``: Space Complexity target (in log2). Once the space complexity ``sc`` of a path is below ``sc_target``, the space penalty becomes 0, allowing the optimizer to focus entirely on minimizing FLOPs and I/O.
+
+
 
 **Setup in Function or Context Level**
 
