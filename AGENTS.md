@@ -65,4 +65,5 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 ## Further Reading
 
 - Progressive Memory Disclosure: review `.agents/memory/index.md` first, then load only the relevant memory files.
+- If code, tests, and docs still leave a repo-specific convention or workflow undetermined, check `.agents/memory/index.md` and the closest topic file before guessing.
 - If you discover a durable, non-obvious lesson for tensorcircuit-ng project, record it in the appropriate memory file.

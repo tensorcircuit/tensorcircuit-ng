@@ -94,7 +94,8 @@ TensorCircuit is created and now maintained as
 The current core authors of TensorCircuit-NG are `Shi-Xin Zhang <https://github.com/refraction-ray>`_ and `Yu-Qin Chen <https://github.com/yutuer21>`_.
 We also thank `contributions <https://github.com/tensorcircuit/tensorcircuit-ng/graphs/contributors>`_ from the open source community.
 
-If you have any further questions or collaboration ideas, please use the issue tracker or forum below, or send email to shixinzhang#iphy.ac.cn
+For bug reports and technical discussions, please use the issue tracker or forum below.
+For industrial project usage, commercial collaboration, enterprise deployment, or consulting inquiries, please contact shixinzhang#iphy.ac.cn.
 
 
 .. card-carousel:: 2
@@ -149,11 +150,11 @@ If you have any further questions or collaboration ideas, please use the issue t
       ``docker pull``
       
 
-   .. card:: Application
+   .. card:: Research and Applications
       :link: https://github.com/tensorcircuit/tensorcircuit-ng#research-and-applications
       :shadow: md
 
-      Research using TC
+      Academic and industrial use cases
 
 
 
