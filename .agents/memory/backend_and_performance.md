@@ -21,6 +21,9 @@ Use this file for backend-wrapper behavior, JIT/vmap issues, and contraction per
 - In contraction benchmarks, separate one-time path-search and compile costs from steady-state contraction time. For a fixed traced network, path search is usually a staging cost unless changing static structure or retracing forces it to rerun.
 - For very large reductions, prefer `scan` or another streaming pattern over `vmap` if `vmap` would materialize all intermediates at once.
 - When large-system APIs expose flags that avoid dense-state materialization, prefer those settings for high-qubit workloads.
+- For layered VQE circuits, scanning over layers can cut JAX compile time by keeping the traced program small, but it can also increase steady-state runtime versus an unrolled circuit. Treat `scan` as a fast-compile mode, not automatically as peak-runtime mode.
+- When reporting VQE performance, it can be useful to present two TensorCircuit-NG modes explicitly: a scan-based fast-compile mode for low first-call cost, and an unrolled peak-runtime mode for maximum post-compilation throughput. Do not mix the two in a single speedup claim.
+- For repeated VQE workloads, compute break-even in total value-and-gradient calls using `warmup + (N - 1) * run`. This is often more informative than reporting compile time and runtime independently.
 
 ## Contraction patterns
 
@@ -41,6 +44,7 @@ Use this file for backend-wrapper behavior, JIT/vmap issues, and contraction per
 - Cotengra hyper-optimization can fail inside the sandbox when `joblib` or `loky` needs process-pool primitives such as `SC_SEM_NSEMS_MAX`; for end-to-end benchmark validation, rerun the exact command with escalated permissions instead of changing TensorCircuit logic.
 - For cotengra-heavy benchmarks on this repo, prefer direct escalated runs over sandboxed dry-runs; sandbox failures can distort conclusions about search quality or correctness.
 - When comparing contraction-search strategies, keep the search budget comparable across methods unless the benchmark explicitly studies budget scaling.
+- Do not assume larger OMECo TreeSA budgets will materially improve runtime for a fixed scanned VQE topology. Moderate budgets can already find the useful path, and heavier searches should be justified by measured runtime gains, not only by path-search intuition.
 - Prefer `parallel="auto"` as the default cotengra benchmark mode for realistic end-to-end comparisons.
 - Search once and reuse the exact path or tree for both reported FLOPs-write metrics and timed execution. Make timed runs cache-only so they cannot silently re-search a different tree.
 - `tc_combo_default`-style unseeded combo searches are fine for realism, but any logged metrics must be tied to the exact reused path because repeated combo searches are not deterministic.

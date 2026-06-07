@@ -86,7 +86,7 @@ print(c.sample(allow_state=True, batch=1024, format="count_dict_bin"))
 ```python
 tc.set_backend("jax")
 tc.set_dtype("complex128")
-tc.set_contractor("greedy")
+tc.set_contractor("cotengra")
 ```
 
 - 使用即时编译 + 自动微分:
