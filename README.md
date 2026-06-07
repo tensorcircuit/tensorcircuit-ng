@@ -203,7 +203,7 @@ pip install tensorcircuit-nightly
 - HPC native, distributed simulation enabled, multiple devices/hosts support
 
 - Efficiency
-  - Time: 10 to 10^6+ times acceleration compared to TensorFlow Quantum, Pennylane or Qiskit
+  - Time: 10 to 10^6+ times acceleration compared to TensorFlow Quantum, Pennylane, CuQuantum, TorchQuantum or Qiskit
 
   - Space: 600+ qubits 1D VQE workflow (converged energy inaccuracy: < 1%)
 
