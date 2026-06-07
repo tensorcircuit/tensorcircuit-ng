@@ -72,6 +72,21 @@ For very deep quantum circuits (e.g., hundreds of layers), the JIT compilation (
 Specifically, use ``tc.backend.scan`` to wrap the repeating layers. This keeps the computation graph size independent of the circuit depth, leading to much faster JIT compilation and lower memory usage during staging. For a concrete implementation, please refer to `examples/hea_scan_jit_acc.py <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/hea_scan_jit_acc.py>`_.
 
 
+Are there useful JAX/XLA flags for TensorCircuit-NG?
+------------------------------------------------------
+
+Yes, especially when using the JAX backend on GPU. XLA flags are backend- and version-dependent, always set them before Python/JAX starts.
+
+Commonly useful settings include:
+
+* ``XLA_FLAGS=--xla_backend_optimization_level=<0..3>`` controls the XLA backend optimization level. Current XLA defaults to level ``3``. Lower levels can reduce some optimization work, but the compile-time and run-time trade-off is not guaranteed to be monotonic; benchmark the actual workload.
+
+* ``XLA_FLAGS=--xla_gpu_enable_llvm_module_compilation_parallelism=true`` can reduce GPU first-call compilation time by compiling LLVM modules in parallel. This is often a good first option for large jitted tensor-network contractions because it can reduce compilation time without changing the numerical algorithm or necessarily slowing steady-state execution.
+
+* ``XLA_FLAGS=--xla_disable_hlo_passes=fusion`` can be used as a more aggressive fast-compile diagnostic mode. It skips HLO fusion and may substantially reduce first-call compilation time, but it often slows the compiled function. Use it only after evaluating the break-even point between compile time saved and per-call run time lost.
+
+* ``JAX_DEFAULT_MATMUL_PRECISION=highest`` or ``jax.config.update("jax_default_matmul_precision", "highest")`` can be used when accuracy is more important than the default GPU matrix-multiplication speed. On NVIDIA GPUs with TensorFloat-32 (TF32) support, the default JAX/XLA matmul or convolution precision may use TF32-like kernels for ``float32`` computations, which can introduce small numerical differences.
+
 General tips of good performance for circuit simulation?
 ---------------------------------------------------------------------
 
