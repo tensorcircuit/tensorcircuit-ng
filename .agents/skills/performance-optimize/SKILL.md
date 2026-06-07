@@ -22,7 +22,44 @@ Consider the following optimizations, but treat them as hypotheses to be tested:
 - **Dtype Policy**: Use `complex64`/`float32` unless the physics or gradient check requires `complex128`/`float64`. Set dtype once before building long-lived constants and before JIT tracing so constants do not force recompilation or unintended casts.
 - **Avoid Full State Instantiation**: For large qubit counts, ensure switches like `reuse=False` or `allow_state=False` in methods like `expectation`, `expectation_ps`, or `sample` are turned off to not form the full state.
 - **Memory vs. Compute (Checkpointing)**: Nest `jax.checkpoint` within `scan` loops for deep circuit gradients. *Trade-off: This strictly trades increased forward-pass computation time for drastically reduced memory usage. Only apply if memory is the actual bottleneck.*
-- **Advanced Contractor**: Use `tc.set_contractor("cotengra")`. The cotengra contractor can be further tuned with its API for sufficiently large circuits. *Trade-off: Path-finding takes upfront time. It may be counterproductive for small or shallow circuits.* To manually set an optimizer with tunable hyperparameters, use a snippet like:
+- **Advanced Contractor / Contract Strategy**: Prefer `OMECO` for large unsliced contraction-path search when available; in this repository it is typically much faster than running a full cotengra hyper-optimization over the same unsliced problem. TensorCircuit can auto-wrap `omeco.TreeSA` and `omeco.GreedyMethod` passed via `tc.set_contractor("custom", optimizer=..., preprocessing=True)`. Start from a minimal OMECO setup like:
+  ```python
+  import omeco
+  import tensorcircuit as tc
+
+  score = omeco.ScoreFunction(
+      tc_weight=1.0,
+      sc_weight=0.0,
+      rw_weight=64.0,
+      sc_target=20.0,
+  )
+  opt = omeco.TreeSA(
+      ntrials=32,
+      niters=32,
+      betas=[0.5, 1.0, 2.0, 4.0, 8.0],
+      score=score,
+  )
+  tc.set_contractor("custom", optimizer=opt, preprocessing=True)
+  ```
+  If slicing is required, use a hybrid strategy instead of pure cotengra search: first let OMECO find an unsliced path/tree, then hand that tree to cotengra for `slice_` and optional subtree reconfiguration. This matches the workflow in `develop/distributed_intermediate_contraction/distributed_intermediate_contraction_demo.py`, where OMECO seeds the unsliced tree and cotengra only handles slicing/post-processing. The current interface is not an end-to-end distributed OMECO planner, so do not promise native distributed support from OMECO alone.
+  ```python
+  import cotengra as ctg
+  import omeco
+  import tensorcircuit as tc
+
+  ome_opt = tc.cons.OMEOptimizer(
+      omeco.TreeSA(ntrials=32, niters=32, betas=[0.5, 1.0, 2.0, 4.0, 8.0])
+  )
+  path = ome_opt(input_sets, output_set, size_dict)
+  tree = ctg.ContractionTree.from_path(input_sets, output_set, size_dict, path=path)
+  tree.slice_(target_slices=target_slices, minimize="flops")
+  tree = tree.subtree_reconfigure_forest(
+      num_trees=8,
+      num_restarts=16,
+      subtree_weight_what=("size",),
+  )
+  ```
+  If the target code only exposes a plain `tc.set_contractor(...)` hook and cannot manipulate a `ContractionTree` or cached path, fall back to tuned cotengra rather than forcing a brittle hybrid. In that fallback case, use a snippet like:
   ```python
   import cotengra as ctg
   import tensorcircuit as tc
@@ -44,7 +81,7 @@ Consider the following optimizations, but treat them as hypotheses to be tested:
 ### 3. Empirical Benchmarking & Trade-off Analysis
 You MUST NOT assume an optimization is inherently better. 
 - **A/B Testing**: Where computationally feasible, write a brief benchmarking snippet within the script (using `time` or `timeit`) to compare the original implementation against your refactored version on a scaled-down dummy input.
-- **Evaluate the Trade-off**: Did `checkpoint` save enough memory to justify the time penalty? Did `cotengra`'s pathfinding overhead eclipse the contraction speedup?
+- **Evaluate the Trade-off**: Did `checkpoint` save enough memory to justify the time penalty? Did OMECO alone outperform tuned cotengra? If slicing was needed, did the hybrid `OMECO unsliced seed -> cotengra slice/reconfigure` workflow beat pure cotengra enough to justify the extra plumbing?
 - **Revert on Regression**: If an "optimization" severely degrades overall performance for the specific use case, revert that specific change and document why.
 
 ### 4. Refactoring & Clean Execution

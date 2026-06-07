@@ -15,6 +15,11 @@ Use this file for model-specific performance patterns that are broader than one 
 - For expressive qudit ansaetze, include both all diagonal phase terms and all off-diagonal mixing terms rather than a shallow qubit-style template.
 - For large Hilbert spaces, prefer sparse Hamiltonian construction and the repo's sparse expectation helpers over dense matrix assembly.
 
+## Fixed-chi masked MPS/DMRG
+
+- In fixed-bond-dimension masked MPS/DMRG workflows, the mask constrains the local optimization variable, not the stored canonical tensor itself. After QR or other canonicalization steps, boundary tensors can become dense again as part of gauge completion.
+- Do not remask canonical tensors after QR just to preserve visual sparsity. That generally breaks canonicality; if exact structural zeros are required, use explicit boundary bond dimensions or a canonicalization scheme defined on the active subspace.
+
 ## Pauli and Heisenberg evolution
 
 - Pauli propagation evolves observables backward through the circuit, so apply gates in reversed chronological order.

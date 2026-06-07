@@ -47,7 +47,7 @@ TensorCircuit-NG 是 TensorCircuit 在技术与架构上的演进版本，由原
 
 ### AI 原生开发 (推荐)
 
-若使用 AI 编程助手（如 Claude Code, Cursor, Antigravity）编写 TC-NG 应用，我们强烈建议**直接在克隆的本地代码库中进行开发**，以便为 AI 提供更丰富的上下文。
+若使用 AI 编程助手（如 Claude Code, Cursor, CodeX）编写 TC-NG 应用，我们强烈建议**直接在克隆的本地代码库中进行开发**，以便为 AI 提供更丰富的上下文。
 
 1.  **丰富上下文：** `examples/` 中的 100 多个脚本和 `tests/` 中的大量测试用例提供了至关重要的参考，能显著减少 AI 幻觉。
 2.  **内置规则：** 我们提供了专门的 [AGENTS.md](/AGENTS.md) 文件。它是 AI 助手的“开发手册”（类似 `CLAUDE.md`），定义了编码标准和最佳实践，确保生成的代码符合 TC-NG 调用范式。
@@ -58,7 +58,7 @@ TensorCircuit-NG 是 TensorCircuit 在技术与架构上的演进版本，由原
 
 1.  克隆仓库：`git clone https://github.com/tensorcircuit/tensorcircuit-ng.git`
 2.  切换到本地实验分支：`git checkout -b my-playground`，以防弄乱原始仓库。
-3.  在 AI IDE 中打开仓库文件夹，即可开始编写基于 TC-NG 的脚本。
+3.  在 AI IDE 中打开仓库文件夹，即可开始开始基于 TC-NG 的应用和研究。
 
 现在，快来体验完全通过自然语言实现量子算法吧！通过将极致性能与全自动的意图驱动的 AI 工作流（`.agents/skills/`）无缝集成，TC-NG 赋能研究人员从繁琐的手动编码跨越到数秒内自动完成论文复现、性能极致优化以及跨框架代码翻译的新范式。
 

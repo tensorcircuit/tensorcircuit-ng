@@ -52,7 +52,7 @@ For beginners, please refer to [quantum computing lectures with TC-NG](https://g
 
 ### AI-Native R&D (Recommended)
 
-To write TC-NG scripts and applications efficiently with AI coding agents (e.g., Claude Code, Cursor, Antigravity), we strongly recommend **working directly within the local tensorcircuit-ng repository** rather than an empty folder.
+To write TC-NG scripts and applications efficiently with AI coding agents (e.g., Claude Code, Cursor, CodeX), we strongly recommend **working directly within the local tensorcircuit-ng repository** rather than an empty folder.
 
 1.  **Rich Context:** The 100+ scripts in `examples/` and extensive test cases in `tests/` provide essential references that significantly reduce AI hallucinations.
 2.  **Built-in Rules:** We provide a dedicated [AGENTS.md](/AGENTS.md) file. It serves as the "handbook" (i.e. `CLAUDE.md`) for AI agents, defining coding standards and best practices to ensure the generated code is idiomatic.

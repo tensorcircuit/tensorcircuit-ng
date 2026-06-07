@@ -16,8 +16,10 @@ Use this file for backend-wrapper behavior, JIT/vmap issues, and contraction per
 - Put JIT around the outer computation step rather than around tiny inner helpers.
 - Warm up JIT with the same shapes used in the real run, especially for vmapped workloads, or compilation will leak into the timed path.
 - Benchmark JAX only after synchronizing the result with `.block_until_ready()`.
+- `Circuit.matrix()` can hit the cotengra-backed algebraic hyperedge path even under the default global contractor. The identity-input construction introduces `CopyNode`s, so execution goes through algebraic contraction while path search still comes from the default `opt_einsum` greedy/optimal logic rather than `set_contractor("cotengra")` hyper-optimization.
 - For VQE value-and-gradient benchmarks, report compile/warmup time separately from the first post-JIT value+grad step. Prebuild static objects such as contraction paths and sparse Hamiltonians outside the timed callable.
 - When comparing quantum simulators or backends, keep ansatz, dtype, device, and measurement algorithm identical, and verify energies/gradients before interpreting runtime. A sparse-Hamiltonian expectation path can be much fairer for high-qubit Hamiltonian sums than looping over Pauli strings, but the timed algorithm must be stated explicitly.
+- `expectation_ps` defaults to `reuse=True`. When summing many Pauli terms on the same circuit state, TensorCircuit already reuses the contracted state unless the caller explicitly disables it, so benchmark or refactor plans should not assume every term recomputes the state from scratch.
 - In contraction benchmarks, separate one-time path-search and compile costs from steady-state contraction time. For a fixed traced network, path search is usually a staging cost unless changing static structure or retracing forces it to rerun.
 - For very large reductions, prefer `scan` or another streaming pattern over `vmap` if `vmap` would materialize all intermediates at once.
 - When large-system APIs expose flags that avoid dense-state materialization, prefer those settings for high-qubit workloads.
