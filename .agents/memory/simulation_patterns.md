@@ -25,3 +25,9 @@ Use this file for model-specific performance patterns that are broader than one 
 - Pauli propagation evolves observables backward through the circuit, so apply gates in reversed chronological order.
 - When operator coefficients are traced tensors, use functional indexed updates rather than Python-side mutation or direct array assignment.
 - If a Heisenberg-style expectation is used as a loss, return its real part explicitly before differentiation.
+- Dense Pauli propagation enumerates the full `k`-local Pauli basis, so it is useful as a correctness reference but scales combinatorially in `N` and `k`.
+- Sparse Pauli propagation stores only a `buffer_size` set of bit-packed Pauli strings plus coefficients. Its truncation semantics should always be: drop terms above locality `k`, aggregate duplicate codes, then keep top `buffer_size` by coefficient magnitude.
+- In sparse Pauli propagation, aggregation must retain only one row per unique code. After sort-and-segment aggregation, non-boundary duplicate rows can still be selected by top-k to fill the buffer and must be zeroed to avoid double counting.
+- Sparse Pauli initial-state construction should follow the same aggregate-then-top-k rule as gate propagation; never truncate initial terms by input order before duplicate aggregation.
+- Sparse Pauli bit-packing uses signed `int64` words, so keep 31 qubits per word rather than 32. The 32nd two-bit Pauli slot would occupy the sign bit and can overflow or corrupt sentinel handling.
+- Current Pauli propagation supports only one- and two-qubit gates. Unsupported higher-arity gates should fail fast instead of being silently ignored or routed through a two-qubit PTM path.

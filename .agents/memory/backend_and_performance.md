@@ -61,3 +61,4 @@ Use this file for backend-wrapper behavior, JIT/vmap issues, and contraction per
 - If a registered object may survive across tracing boundaries, normalize raw NumPy inputs to the current TensorCircuit dtype before they become closed-over constants.
 - Do not assume a late cast inside `__call__` is enough once JAX has already captured the underlying array during lowering.
 - For GPU complex64 quantum-simulation benchmarks, disable TF32 or equivalent reduced-precision modes before trusting cross-backend numerical comparisons. Treat any speed result with mismatched energies or gradients as invalid until the precision mode is understood.
+- JAX disables `int64` by default under TensorCircuit's complex64 mode. Sparse bit-packed algorithms that explicitly require `int64` bitwise operations should either run under the repo's high-precision dtype fixture or clearly fail/guard when x64 is unavailable; do not infer coefficient precision from this requirement.

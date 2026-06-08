@@ -20,6 +20,10 @@
 
 - Add support for OMECO contraction path finder.
 
+### Fixed
+
+- Fix sparse Pauli propagation aggregation, initial truncation, multi-word bit-packing, and unsupported multi-qubit gate handling.
+
 ## v1.6.0
 
 ### Added
