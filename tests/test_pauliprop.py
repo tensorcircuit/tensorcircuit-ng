@@ -3,6 +3,7 @@ import pytest
 import tensorcircuit as tc
 from tensorcircuit.pauliprop import (
     PauliPropagationEngine,
+    SPARSE_WORD_QUBITS,
     SparsePauliPropagationEngine,
     pauli_propagation,
 )
@@ -400,6 +401,113 @@ def test_truncation_and_buffer_sparse(request, backend, highp):
     s_codes, s_coeffs = s_state
     print(s_codes)
     assert np.allclose(K.numpy(K.sum(K.abs(s_coeffs))), expected_sum_abs, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", ["npb", "jaxb"])
+def test_sparse_aggregate_duplicate_boundaries(request, backend, highp):
+    request.getfixturevalue(backend)
+    K = tc.backend
+    spp = SparsePauliPropagationEngine(N=2, k=2, buffer_size=4)
+
+    code_z0 = spp.string_to_code(((0,), (3,)))
+    code_z1 = spp.string_to_code(((1,), (3,)))
+    empty = K.zeros((spp.W,), dtype="int64") - 1
+    codes = K.stack([code_z0, code_z0, code_z1, empty], axis=0)
+    coeffs = K.convert_to_tensor(np.array([1.0, 2.0, 3.0, 0.0], dtype=np.complex64))
+
+    state = spp._aggregate_and_truncate(codes, coeffs)
+
+    assert np.allclose(K.numpy(spp.expectation(state)), 6.0)
+    assert np.allclose(K.numpy(K.sum(K.abs(state[1]))), 6.0)
+
+
+@pytest.mark.parametrize("backend", ["npb", "jaxb"])
+def test_sparse_initial_state_aggregates_before_truncation(request, backend, highp):
+    request.getfixturevalue(backend)
+    K = tc.backend
+
+    spp = SparsePauliPropagationEngine(N=2, k=2, buffer_size=1)
+    structures = np.array([[3, 0], [0, 3]])
+    weights = np.array([0.1, 10.0], dtype=np.complex64)
+    state = spp.get_initial_state(structures, weights)
+    assert np.allclose(K.numpy(spp.expectation(state)), 10.0)
+
+    spp = SparsePauliPropagationEngine(N=1, k=1, buffer_size=1)
+    structures = np.array([[3], [3]])
+    weights = np.array([1.0, 2.0], dtype=np.complex64)
+    state = spp.get_initial_state(structures, weights)
+    assert np.allclose(K.numpy(spp.expectation(state)), 3.0)
+
+
+@pytest.mark.parametrize("backend", ["npb", "jaxb"])
+def test_pauli_propagation_rejects_multiqubit_gates(request, backend):
+    request.getfixturevalue(backend)
+
+    c = tc.Circuit(3)
+    c.any(0, 1, 2, unitary=np.eye(8, dtype=np.complex64), name="any")
+
+    with pytest.raises(NotImplementedError, match="one- and two-qubit gates"):
+        pauli_propagation(c, [(1.0, "ZII")], k=3)
+
+    spp = SparsePauliPropagationEngine(N=3, k=3)
+    state = spp.get_initial_state(np.array([[3, 0, 0]]), np.array([1.0]))
+    with pytest.raises(NotImplementedError, match="one- and two-qubit gates"):
+        spp.apply_gate(state, "any", [0, 1, 2], np.eye(8, dtype=np.complex64))
+
+
+@pytest.mark.parametrize("backend", ["npb", "jaxb"])
+def test_sparse_signed_word_uses_31_qubits(request, backend, highp):
+    request.getfixturevalue(backend)
+    K = tc.backend
+    N = 2 * SPARSE_WORD_QUBITS
+    spp = SparsePauliPropagationEngine(N=N, k=1, buffer_size=2)
+
+    legacy_word_32_z = 3 << (2 * SPARSE_WORD_QUBITS)
+    assert legacy_word_32_z > np.iinfo(np.int64).max
+
+    code = spp.string_to_code(((SPARSE_WORD_QUBITS - 1,), (3,)))
+    assert K.numpy(code)[0] == 3 << (2 * (SPARSE_WORD_QUBITS - 1))
+
+    code = spp.string_to_code(((SPARSE_WORD_QUBITS,), (3,)))
+    np.testing.assert_array_equal(K.numpy(code), np.array([0, 3]))
+
+    structures = np.zeros((1, N), dtype=int)
+    structures[0, SPARSE_WORD_QUBITS] = 3
+    state = spp.get_initial_state(structures, np.array([1.0]))
+    assert np.allclose(K.numpy(spp.expectation(state)), 1.0)
+
+
+@pytest.mark.parametrize("backend", ["npb", "jaxb"])
+def test_sparse_cross_word_light_cone_matches_exact(request, backend, highp):
+    request.getfixturevalue(backend)
+    K = tc.backend
+    N = SPARSE_WORD_QUBITS + 2
+    q0 = SPARSE_WORD_QUBITS - 1
+    q1 = SPARSE_WORD_QUBITS
+    theta0 = 0.37
+    theta1 = -0.61
+
+    spp = SparsePauliPropagationEngine(N=N, k=2, buffer_size=64)
+    structures = np.zeros((1, N), dtype=int)
+    structures[0, q0] = 3
+    structures[0, q1] = 3
+    state = spp.get_initial_state(structures, np.array([1.0]))
+    for name, wires, params in reversed(
+        [
+            ("h", [q0], {}),
+            ("rxx", [q0, q1], {"theta": theta0}),
+            ("ry", [q1], {"theta": theta1}),
+        ]
+    ):
+        state = spp.apply_gate(state, name, wires, params)
+
+    c = tc.Circuit(2)
+    c.h(0)
+    c.rxx(0, 1, theta=theta0)
+    c.ry(1, theta=theta1)
+    exact = c.expectation_ps(z=[0, 1])
+
+    assert np.allclose(K.numpy(spp.expectation(state)), K.numpy(exact), atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", ["npb", "jaxb"])

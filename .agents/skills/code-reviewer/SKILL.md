@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Autonomously reviews and refactors TensorCircuit-NG code to ensure mathematical correctness, high-performance JAX-native patterns, backend agnosticity, and strict adherence to software engineering best practices (DRY, no dead code, static analysis). Emphasizes making minimal architectural changes to respect the original design intent.
+description: Review TensorCircuit-NG code diffs for correctness, performance, backend agnosticity, and minimal high-quality fixes.
 allowed-tools: Bash, Read, Grep, Glob, Write
 ---
 
@@ -8,6 +8,7 @@ When tasked with reviewing or auditing a TensorCircuit-NG (TC-NG) codebase, you 
 
 ### 1. Audit Scope & Report-First Workflow
 - **Default Scope**: Unless otherwise specified, the review focuses strictly on the combined output of `git diff` and `git diff --cached`. 
+- **Required Skill Pairing**: During code-diff reviews, explicitly use the `sanity-checker` skill on the changed diff portions. Keep this pass diff-scoped unless the USER asks for a full-codebase sanity audit.
 - **Report Format**: Generate a structured Review Report. Highlight **only** problems, smells, and issues categorized by severity (e.g., Critical, Warning, Optimization). **Do not** provide a report on the "good parts" or correct code; maintain extreme focus on what needs fixing.
 - **Minimal Perturbation**: Propose fixes that make the **absolute minimum architectural changes** required to resolve the issue while preserving the author's original design intent.
 - **Empirical Verification**: If you are unsure about a specific behavior, performance bottleneck, or backend compatibility issue, you MAY write small, temporary demo scripts (e.g., `review_demo_*.py`) to gather evidence. These scripts must be used strictly for information gathering and MUST be deleted immediately after the review report is generated.
@@ -46,7 +47,7 @@ When tasked with reviewing or auditing a TensorCircuit-NG (TC-NG) codebase, you 
 - **Fixture-First**: Use `pytest` fixtures and lazy fixtures (e.g., `lf("jaxb")`, `lf("tfb")`, `lf("cotengra")`) to manage the environment. This ensures clean teardown and parallel test execution compatibility.
 
 ### 7. Review Workflow
-1. **Audit**: Run `git diff` and `git diff --cached`. Identify violations in the changes.
+1. **Audit**: Run `git diff` and `git diff --cached`. Identify violations in the changes, including the required diff-scoped `sanity-checker` skill pass.
 2. **Empirical Check (Optional)**: Write temporary `review_demo_*.py` scripts to confirm any suspected issues or test fixes.
 3. **Report**: Present the findings (Issues/Problems only). Include evidence from empirical checks if applicable.
 4. **Cleanup**: Immediately delete all `review_demo_*.py` scripts after generating the report.

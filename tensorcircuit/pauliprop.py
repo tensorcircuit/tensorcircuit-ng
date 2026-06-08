@@ -24,6 +24,7 @@ from .circuit import Circuit
 logger = logging.getLogger(__name__)
 
 Tensor = Any
+SPARSE_WORD_QUBITS = 31
 
 
 class PauliPropagationEngine:
@@ -276,6 +277,11 @@ class PauliPropagationEngine:
         :return: Updated observable state vector.
         :rtype: Any
         """
+        if len(wires) not in (1, 2):
+            raise NotImplementedError(
+                "PauliPropagationEngine only supports one- and two-qubit gates."
+            )
+
         gate_name = gate_name.lower()
         gate_func = getattr(gates, gate_name)
 
@@ -400,7 +406,8 @@ class PauliPropagationEngine:
         :type layer_fn: Callable
         :param params_batch: Batched parameters for the layers.
         :type params_batch: Any
-        :param extra_inputs: Optional static inputs for the layer function.
+        :param extra_inputs: Optional per-layer inputs for the layer function, with
+            leading dimension matching ``params_batch``.
         :type extra_inputs: Optional[Sequence[Any]]
         :return: Final expectation value.
         :rtype: Any
@@ -555,8 +562,9 @@ class SparsePauliPropagationEngine:
         self.N = N
         self.k = k
         self.buffer_size = buffer_size
-        # Number of int64 words to track 2 bits per qubit
-        self.W = (N + 31) // 32
+        # Number of signed int64 words to track 2 bits per qubit.
+        # Use 31 qubits per word so Pauli codes never occupy the sign bit.
+        self.W = (N + SPARSE_WORD_QUBITS - 1) // SPARSE_WORD_QUBITS
 
         self.pauli_mats = backend.convert_to_tensor(
             np.array(
@@ -598,8 +606,8 @@ class SparsePauliPropagationEngine:
         codes = []
         for w in range(self.W):
             word = K.zeros((M,), dtype="int64")
-            for i in range(32):
-                q = w * 32 + i
+            for i in range(SPARSE_WORD_QUBITS):
+                q = w * SPARSE_WORD_QUBITS + i
                 if q < self.N:
                     op = K.cast(structures[:, q], "int64")
                     word = word | (op << (2 * i))
@@ -610,11 +618,8 @@ class SparsePauliPropagationEngine:
         if num_pad > 0:
             codes = K.concat([codes, K.zeros((num_pad, self.W), dtype="int64") - 1])
             weights = K.concat([weights, K.zeros((num_pad,), dtype="complex64")])
-        else:
-            codes = codes[: self.buffer_size]
-            weights = weights[: self.buffer_size]
 
-        return (codes, weights)
+        return self._aggregate_and_truncate(codes, weights)
 
     def string_to_code(self, s: Tuple[Tuple[int, ...], Tuple[int, ...]]) -> Any:
         """
@@ -631,8 +636,8 @@ class SparsePauliPropagationEngine:
         codes = []
         for w in range(self.W):
             word = 0
-            for i in range(32):
-                q = w * 32 + i
+            for i in range(SPARSE_WORD_QUBITS):
+                q = w * SPARSE_WORD_QUBITS + i
                 if q in qubits:
                     idx = qubits.index(q)
                     op = opcodes[idx]
@@ -704,6 +709,11 @@ class SparsePauliPropagationEngine:
         final_codes = codes_s[top_idx]
         final_coeffs = agg_coeffs_at_i[top_idx]
 
+        # Only segment boundaries represent unique codes; non-boundary rows are
+        # duplicate slots that may be selected only to fill buffer_size.
+        boundary_selected = is_diff[top_idx]
+        final_coeffs = K.where(boundary_selected, final_coeffs, 0.0)
+
         # Nullify inactive/empty slots
         is_active = (K.abs(final_coeffs) > 1e-12) & (final_codes[:, 0] != -1)
         final_codes = K.where(K.reshape(is_active, [-1, 1]), final_codes, -1)
@@ -728,6 +738,11 @@ class SparsePauliPropagationEngine:
         :return: Updated sparse observable state (codes, weights).
         :rtype: Any
         """
+        if len(wires) not in (1, 2):
+            raise NotImplementedError(
+                "SparsePauliPropagationEngine only supports one- and two-qubit gates."
+            )
+
         indices, coeffs = state
         K = backend
         ptm = self._get_ptm(gate_name, wires, params)
@@ -735,7 +750,7 @@ class SparsePauliPropagationEngine:
 
         if len(wires) == 1:
             q = wires[0]
-            w_idx, b_pos = q // 32, (q % 32) * 2
+            w_idx, b_pos = q // SPARSE_WORD_QUBITS, (q % SPARSE_WORD_QUBITS) * 2
 
             # 1. Extract current ops (S,)
             curr_ops = K.where(
@@ -772,8 +787,8 @@ class SparsePauliPropagationEngine:
 
         elif len(wires) == 2:
             q1, q2 = wires
-            w1, b1 = q1 // 32, (q1 % 32) * 2
-            w2, b2 = q2 // 32, (q2 % 32) * 2
+            w1, b1 = q1 // SPARSE_WORD_QUBITS, (q1 % SPARSE_WORD_QUBITS) * 2
+            w2, b2 = q2 // SPARSE_WORD_QUBITS, (q2 % SPARSE_WORD_QUBITS) * 2
 
             o1 = K.where(indices[:, w1] != -1, (indices[:, w1] >> b1) & 3, 0)
             o2 = K.where(indices[:, w2] != -1, (indices[:, w2] >> b2) & 3, 0)
@@ -822,6 +837,11 @@ class SparsePauliPropagationEngine:
         return state
 
     def _get_ptm(self, gate_name: str, wires: Sequence[int], params: Any) -> Any:
+        if len(wires) not in (1, 2):
+            raise NotImplementedError(
+                "SparsePauliPropagationEngine only supports one- and two-qubit gates."
+            )
+
         K = backend
         gate_func = getattr(gates, gate_name.lower())
         if params is None:
