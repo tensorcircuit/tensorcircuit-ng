@@ -2353,7 +2353,7 @@
                     <ul class="arch-list">
                         <li>
                             <strong><i class="fas fa-circle-dot"></i> GPU Acceleration</strong>
-                            <span>Accelerated linear algebra kernels via NVIDIA CUDA and cuQuantum SDKs.</span>
+                            <span>Accelerated linear algebra kernels via NVIDIA CUDA.</span>
                         </li>
                         <li>
                             <strong><i class="fas fa-circle-dot"></i> TPU Acceleration</strong>
@@ -2793,7 +2793,9 @@
                     </a>
                 </div>
                 <div class="blog-sidebar">
-                    <img src="https://avatars.githubusercontent.com/u/35157286?v=4" alt="Shixin Zhang" class="blog-avatar">
+                    <a href="https://iop.cas.cn/rcjy/tpyjy/?id=6789" target="_blank" rel="noopener">
+                        <img src="https://avatars.githubusercontent.com/u/35157286?v=4" alt="Shixin Zhang" class="blog-avatar">
+                    </a>
                     <div class="blog-author-name">Shi-Xin Zhang</div>
                     <div class="blog-author-title">Platform Founder & Core Maintainer</div>
                     <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
@@ -3071,7 +3073,7 @@
                 task: "GPU VQE Gradient Acceleration",
                 subtitle: "TensorCircuit-NG speedup over comparable GPU value+gradient implementations",
                 icon: "fas fa-bolt",
-                body: "Composite view of VQE value-and-gradient benchmarks. Each ratio is normalized within its own source to the TensorCircuit-NG JAX GPU result, then placed on one log-scale chart to compare framework-level acceleration. Qubit counts and devices differ slightly, so this is a source-backed order-of-magnitude view.",
+                body: "High-level view of VQE value-and-gradient acceleration across representative GPU benchmark sources, normalized to TensorCircuit-NG for quick framework-level comparison.",
                 baselineRuntime: "1.0x",
                 hardware: "VQE Gradient",
                 sourceHtml: `Sources: <a href="https://quantum-journal.org/papers/q-2023-02-02-912/" target="_blank" rel="noopener">Quantum 2023 Table 6</a>, <a href="https://github.com/tensorcircuit/tensorcircuit-ng/discussions/116" target="_blank" rel="noopener">Discussion #116</a>, <a href="https://github.com/tensorcircuit/tensorcircuit-ng/discussions/117" target="_blank" rel="noopener">Discussion #117</a>, and <a href="https://github.com/tensorcircuit/tensorcircuit-ng/discussions/118" target="_blank" rel="noopener">Discussion #118</a>.`,
@@ -3089,7 +3091,7 @@
                 task: "QML Batch Acceleration",
                 subtitle: "TensorCircuit-NG speedup for batched quantum machine learning value+gradient",
                 icon: "fas fa-layer-group",
-                body: "Quantum 2023 reports a batched QML benchmark for binary MNIST classification with a 10-qubit, depth-3 PQC. This view normalizes the batch-512 value-and-gradient runtime to TC-NG on GPU, showing the effect of JIT and vectorized batching against TensorFlow Quantum and PennyLane.",
+                body: "High-level view of batched quantum machine learning acceleration, highlighting how compiled execution and vectorized batching improve end-to-end training throughput.",
                 baselineRuntime: "0.0054 s",
                 hardware: "Batch 512",
                 sourceHtml: `Source: <a href="https://quantum-journal.org/papers/q-2023-02-02-912/" target="_blank" rel="noopener">Quantum 2023 TensorCircuit whitepaper</a>, QML benchmark table.`,
@@ -3105,7 +3107,7 @@
                 task: "AD & VMAP Acceleration",
                 subtitle: "Acceleration from automatic differentiation, JIT, and vectorized circuit batches",
                 icon: "fas fa-fire",
-                body: "The original whitepaper reports workflow-level accelerations where AD, JIT, VMAP, and GPU execution matter more than raw gate kernels. These benchmarks target higher-order gradients and batched random-circuit gradient variance, which are common stress tests for differentiable simulators.",
+                body: "High-level view of workflow acceleration from automatic differentiation, compilation, and vectorized execution on differentiable quantum workloads.",
                 baselineRuntime: "1.0x",
                 hardware: "AD/VMAP",
                 sourceHtml: `Source: <a href="https://quantum-journal.org/papers/q-2023-02-02-912/" target="_blank" rel="noopener">Quantum 2023 TensorCircuit whitepaper</a>, barren-plateau and higher-order-gradient benchmark sections.`,
