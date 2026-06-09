@@ -4,16 +4,25 @@ Agentic Development
 
 TensorCircuit-NG is the world's first AI-native quantum programming platform, purpose-built for agentic research and automated scientific discovery. 
 
-.. grid:: 1
+.. grid:: 1 1 2 2
    :margin: 4
 
    .. grid-item-card:: 🚀 Experience Agent-Native Discovery
+      :columns: 12 12 6 6
       :link: agent_landing/index.html
       :link-type: url
       :shadow: lg
       :class-card: sd-bg-light sd-text-primary sd-font-weight-bold
 
       Click here to see how AI agents autonomously solve complex quantum problems in TensorCircuit-NG.
+
+   .. grid-item-card:: Platform Overview
+      :columns: 12 12 6 6
+      :link: platform/index.html
+      :link-type: url
+      :shadow: md
+
+      Review the broader TensorCircuit-NG architecture, performance evidence, and adoption landscape.
 
 
 
