@@ -1,0 +1,3231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TensorCircuit-NG — Next-Generation AI-Native Quantum Compute Core</title>
+    <meta name="description" content="TensorCircuit-NG: The Operating System for Quantum-AI Workflows. Build scalable quantum applications, train differentiable quantum models, and orchestrate AI-native scientific workflows.">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome for Premium Vector Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --bg-primary: #04060d;
+            --bg-secondary: #090c16;
+            --bg-card: rgba(13, 17, 33, 0.7);
+            --accent-cyan: #00f0ff;
+            --accent-violet: #8a2be2;
+            --accent-pink: #ff007f;
+            --text-primary: #ffffff;
+            --text-secondary: #b4c3df;
+            --text-muted: #6b7c96;
+            --border-glass: rgba(255, 255, 255, 0.05);
+            --border-glow: rgba(0, 240, 255, 0.2);
+            --glow-cyan: 0 0 20px rgba(0, 240, 255, 0.35);
+            --glow-violet: 0 0 20px rgba(138, 43, 226, 0.35);
+            --font-sans: 'Inter', sans-serif;
+            --font-display: 'Outfit', sans-serif;
+            --font-mono: 'Fira Code', monospace;
+            --transition-smooth: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(var(--accent-cyan), var(--accent-violet));
+            border-radius: 4px;
+        }
+
+        /* Utility Classes */
+        .container {
+            width: 100%;
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, var(--accent-cyan) 0%, #a450ff 50%, var(--accent-pink) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .gradient-border-box {
+            position: relative;
+            background: var(--bg-card);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: var(--transition-smooth);
+        }
+
+        .gradient-border-box::before {
+            content: '';
+            position: absolute;
+            top: -1px; left: -1px; right: -1px; bottom: -1px;
+            border-radius: 16px;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(0, 240, 255, 0.1), rgba(138, 43, 226, 0.1));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+            transition: var(--transition-smooth);
+        }
+
+        .gradient-border-box:hover::before {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
+        }
+
+        /* Glowing Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.8rem 1.8rem;
+            font-family: var(--font-display);
+            font-size: 0.95rem;
+            font-weight: 600;
+            border-radius: 8px;
+            text-decoration: none;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+            gap: 0.5rem;
+            border: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-violet) 100%);
+            color: #000;
+            font-weight: 700;
+            box-shadow: 0 4px 15px rgba(0, 240, 255, 0.25);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 6px 25px rgba(0, 240, 255, 0.5);
+            transform: translateY(-2px);
+            color: #000;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-primary);
+            border: 1px solid var(--border-glass);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+            transform: translateY(-2px);
+        }
+
+        /* Glassmorphism Navigation */
+        header.navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+            background: rgba(4, 6, 13, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-glass);
+            transition: var(--transition-smooth);
+        }
+
+        header.navbar.scrolled {
+            padding: 0.6rem 0;
+            background: rgba(4, 6, 13, 0.9);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .nav-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 80px;
+            transition: var(--transition-smooth);
+        }
+
+        header.navbar.scrolled .nav-container {
+            height: 60px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            text-decoration: none;
+        }
+
+        .logo-img {
+            height: 38px;
+            width: auto;
+        }
+
+        .logo-text {
+            font-family: var(--font-display);
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: -0.5px;
+        }
+
+        .logo-text span {
+            color: var(--accent-cyan);
+        }
+
+        .nav-menu {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-family: var(--font-display);
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: var(--transition-smooth);
+            position: relative;
+        }
+
+        .nav-link:hover {
+            color: var(--accent-cyan);
+        }
+
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 2px;
+            bottom: -6px;
+            left: 0;
+            background-color: var(--accent-cyan);
+            transition: var(--transition-smooth);
+        }
+
+        .nav-link:hover::after {
+            width: 100%;
+        }
+
+        .nav-cta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        /* Hero Section with Canvas Interactive Background */
+        .hero {
+            position: relative;
+            padding: 160px 0 100px 0;
+            background: radial-gradient(circle at 50% 30%, rgba(138, 43, 226, 0.15) 0%, rgba(4, 6, 13, 0) 60%);
+            min-height: 95vh;
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        #hero-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .hero-wrapper {
+            position: relative;
+            z-index: 2;
+            display: grid;
+            grid-template-columns: 0.95fr 1.05fr;
+            gap: 4rem;
+            align-items: center;
+        }
+
+        .hero-content {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .badge-hero {
+            background: rgba(0, 240, 255, 0.08);
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            color: var(--accent-cyan);
+            padding: 6px 16px;
+            border-radius: 100px;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            font-weight: 500;
+            margin-bottom: 1.5rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.05);
+        }
+
+        .badge-hero i {
+            animation: pulse-ring 2s infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+
+        .hero-title {
+            font-family: var(--font-display);
+            font-size: 3.8rem;
+            font-weight: 800;
+            line-height: 1.15;
+            margin-bottom: 1.5rem;
+            letter-spacing: -1.5px;
+        }
+
+        .hero-subtitle {
+            font-size: 1.15rem;
+            color: var(--text-secondary);
+            margin-bottom: 2.5rem;
+            max-width: 650px;
+            font-weight: 300;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 1.2rem;
+            margin-bottom: 4rem;
+        }
+
+        /* Hero Statistics Grid */
+        .hero-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.5rem;
+            width: 100%;
+            border-top: 1px solid var(--border-glass);
+            padding-top: 2.5rem;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            padding: 16px 20px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.02);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            transition: var(--transition-smooth);
+        }
+
+        .stat-item:hover {
+            border-color: rgba(0, 240, 255, 0.25);
+            background: rgba(0, 240, 255, 0.03);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-val {
+            font-family: var(--font-display);
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            line-height: 1;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #fff 40%, var(--text-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-val span {
+            color: var(--accent-cyan);
+            -webkit-text-fill-color: initial;
+        }
+
+        .stat-lbl {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Runtime Orchestration Layer Widget (Prototype Merge) */
+        .runtime {
+            position: relative;
+            min-height: 720px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 34px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 24%), var(--bg-card);
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+
+        .runtime::before {
+            content: "";
+            position: absolute;
+            inset: -1px;
+            padding: 1px;
+            border-radius: inherit;
+            pointer-events: none;
+            background: linear-gradient(135deg, rgba(0, 240, 255, 0.4), transparent 34%, rgba(138, 43, 226, 0.3));
+            -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+        }
+
+        .runtime-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 24px 26px 18px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .runtime-kicker {
+            color: var(--accent-cyan);
+            font-family: var(--font-mono);
+            font-size: 11px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .runtime-title {
+            margin-top: 5px;
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+            white-space: nowrap;
+        }
+
+        .status {
+            align-self: start;
+            padding: 6px 12px;
+            color: var(--accent-cyan);
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            border-radius: 999px;
+            background: rgba(0, 240, 255, 0.07);
+            font-family: var(--font-mono);
+            font-size: 11px;
+            white-space: nowrap;
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.1);
+        }
+
+        .map {
+            position: relative;
+            height: 430px;
+            margin: 18px 22px 0;
+        }
+
+        .flow-lines {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .flow-lines path {
+            fill: none;
+            stroke: url(#flowGradient);
+            stroke-width: 2.2;
+            stroke-linecap: round;
+            stroke-dasharray: 8 14;
+            animation: dash 1.8s linear infinite;
+            filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.4));
+        }
+
+        @keyframes dash {
+            to {
+                stroke-dashoffset: -44;
+            }
+        }
+
+        .node {
+            position: absolute;
+            width: 178px;
+            padding: 14px 15px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+            background: rgba(13, 17, 33, 0.85);
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            animation: float 4.8s ease-in-out infinite;
+            transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .node:hover {
+            border-color: rgba(0, 240, 255, 0.4);
+            box-shadow: 0 15px 35px rgba(0, 240, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            transform: translateY(-4px) scale(1.02);
+        }
+
+        .node:nth-of-type(2n) {
+            animation-delay: -1.3s;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-8px);
+            }
+        }
+
+        .node .label {
+            color: var(--text-primary);
+            font-family: var(--font-display);
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            display: flex;
+            align-items: center;
+        }
+
+        .node .desc {
+            margin-top: 6px;
+            color: var(--text-secondary);
+            font-family: var(--font-sans);
+            font-size: 10.5px;
+            line-height: 1.4;
+        }
+
+        .node .dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            margin-right: 8px;
+            border-radius: 50%;
+        }
+
+        .node.agent .dot {
+            background: var(--accent-cyan);
+            box-shadow: 0 0 10px var(--accent-cyan);
+        }
+
+        .node.compiler .dot {
+            background: var(--accent-violet);
+            box-shadow: 0 0 10px var(--accent-violet);
+        }
+
+        .node.engine .dot {
+            background: var(--accent-pink);
+            box-shadow: 0 0 10px var(--accent-pink);
+        }
+
+        .node.hardware .dot {
+            background: var(--accent-cyan);
+            box-shadow: 0 0 10px var(--accent-cyan);
+        }
+
+        .node.apps .dot {
+            background: #72f5a0;
+            box-shadow: 0 0 10px #72f5a0;
+        }
+
+        .node.agent {
+            top: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        @keyframes floatAgent {
+            0%, 100% {
+                transform: translate(-50%, 0);
+            }
+            50% {
+                transform: translate(-50%, -8px);
+            }
+        }
+
+        .node.agent {
+            animation-name: floatAgent;
+        }
+
+        .node.compiler {
+            top: 106px;
+            left: 50%;
+            width: 228px;
+            border-color: rgba(138, 43, 226, 0.3);
+            background: rgba(18, 14, 36, 0.85);
+            animation-name: floatAgent;
+        }
+
+        .node.engine {
+            top: 206px;
+            left: 50%;
+            width: 260px;
+            border-color: rgba(255, 0, 127, 0.25);
+            background: rgba(26, 12, 28, 0.85);
+            animation-name: floatAgent;
+        }
+
+        .node.hardware {
+            bottom: 18px;
+            left: 18px;
+        }
+
+        .node.apps {
+            right: 18px;
+            bottom: 18px;
+        }
+
+        .orbit {
+            position: absolute;
+            inset: 66px 30px 54px;
+            border: 1px dashed rgba(255, 255, 255, 0.06);
+            border-radius: 44%;
+            animation: slowRotate 22s linear infinite;
+        }
+
+        @keyframes slowRotate {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .chip {
+            position: absolute;
+            padding: 6px 12px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-secondary);
+            font-family: var(--font-mono);
+            font-size: 10px;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            transition: border-color 0.3s ease, background 0.3s ease;
+        }
+
+        .chip:hover {
+            border-color: var(--accent-cyan);
+            background: rgba(0, 240, 255, 0.05);
+        }
+
+        .chip.c1 {
+            top: 78px;
+            left: 34px;
+        }
+
+        .chip.c2 {
+            top: 82px;
+            right: 32px;
+        }
+
+        .chip.c3 {
+            left: 46px;
+            bottom: 96px;
+        }
+
+        .chip.c4 {
+            right: 42px;
+            bottom: 104px;
+        }
+
+        .console {
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 14px;
+            padding: 18px 22px 22px;
+        }
+
+        .terminal,
+        .traction {
+            min-height: 176px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 22px;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            overflow: hidden;
+        }
+
+        .terminal-head,
+        .traction-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            color: var(--text-muted);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            font-family: var(--font-mono);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .terminal-body {
+            padding: 16px;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            line-height: 1.7;
+        }
+
+        .terminal-body div {
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .terminal-body span.prompt {
+            color: var(--accent-cyan);
+            margin-right: 6px;
+        }
+
+        .terminal-body span.cmd {
+            color: var(--text-primary);
+        }
+
+        .terminal-body span.keyword {
+            color: #ff007f;
+        }
+
+        .terminal-body span.param {
+            color: #72f5a0;
+        }
+
+        .cursor::after {
+            content: "";
+            display: inline-block;
+            width: 7px;
+            height: 13px;
+            margin-left: 4px;
+            vertical-align: -2px;
+            background: var(--accent-cyan);
+            animation: blink 1s steps(2) infinite;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0;
+            }
+        }
+
+        .fabric-body {
+            position: relative;
+            min-height: 132px;
+            padding: 14px;
+            overflow: hidden;
+        }
+
+        .fabric-body::before {
+            content: "";
+            position: absolute;
+            inset: 14px;
+            border: 1px solid rgba(0, 240, 255, 0.08);
+            border-radius: 18px;
+            background:
+                linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+            background-size: 18px 18px;
+            mask-image: radial-gradient(circle at 50% 50%, #000 0%, transparent 76%);
+        }
+
+        .fabric-body::after {
+            content: "";
+            position: absolute;
+            width: 120px;
+            height: 120px;
+            left: calc(50% - 60px);
+            top: calc(50% - 60px);
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, transparent, rgba(0, 240, 255, 0.35), transparent 34%);
+            animation: spin 4.5s linear infinite;
+            opacity: 0.6;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .fabric-core {
+            position: absolute;
+            z-index: 2;
+            left: 50%;
+            top: 50%;
+            width: 74px;
+            height: 74px;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            border: 1px solid rgba(138, 43, 226, 0.4);
+            background:
+                radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.2), transparent 28%),
+                radial-gradient(circle, rgba(138, 43, 226, 0.2), rgba(0, 240, 255, 0.08) 52%, rgba(0, 0, 0, 0.4));
+            box-shadow: 0 0 24px rgba(0, 240, 255, 0.2), inset 0 0 15px rgba(138, 43, 226, 0.2);
+            display: grid;
+            place-items: center;
+            color: var(--text-primary);
+            font-family: var(--font-display);
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            text-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
+        }
+
+        .fabric-ring {
+            position: absolute;
+            z-index: 1;
+            left: 50%;
+            top: 50%;
+            width: 154px;
+            height: 92px;
+            transform: translate(-50%, -50%);
+            border: 1px dashed rgba(0, 240, 255, 0.15);
+            border-radius: 50%;
+            animation: tiltPulse 5s ease-in-out infinite;
+        }
+
+        .fabric-ring.alt {
+            width: 188px;
+            height: 70px;
+            rotate: -24deg;
+            border-color: rgba(255, 0, 127, 0.12);
+            animation-duration: 6.5s;
+        }
+
+        @keyframes tiltPulse {
+            0%, 100% {
+                opacity: 0.55;
+                transform: translate(-50%, -50%) rotate(18deg) scale(1);
+            }
+            50% {
+                opacity: 0.9;
+                transform: translate(-50%, -50%) rotate(18deg) scale(1.04);
+            }
+        }
+
+        .fabric-node {
+            position: absolute;
+            z-index: 3;
+            min-width: 42px;
+            padding: 4px 8px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 999px;
+            background: rgba(10, 13, 26, 0.85);
+            color: var(--text-secondary);
+            font-family: var(--font-mono);
+            font-size: 9px;
+            text-align: center;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .fabric-node::before {
+            content: "";
+            display: inline-block;
+            width: 5px;
+            height: 5px;
+            margin-right: 4px;
+            border-radius: 50%;
+        }
+
+        .fabric-node.n1 {
+            left: 12px;
+            top: 22px;
+        }
+
+        .fabric-node.n1::before {
+            background: var(--accent-cyan);
+            box-shadow: 0 0 6px var(--accent-cyan);
+        }
+
+        .fabric-node.n2 {
+            right: 18px;
+            top: 18px;
+        }
+
+        .fabric-node.n2::before {
+            background: var(--accent-pink);
+            box-shadow: 0 0 6px var(--accent-pink);
+        }
+
+        .fabric-node.n3 {
+            left: 18px;
+            bottom: 20px;
+        }
+
+        .fabric-node.n3::before {
+            background: var(--accent-violet);
+            box-shadow: 0 0 6px var(--accent-violet);
+        }
+
+        .fabric-node.n4 {
+            right: 12px;
+            bottom: 24px;
+        }
+
+        .fabric-node.n4::before {
+            background: #72f5a0;
+            box-shadow: 0 0 6px #72f5a0;
+        }
+
+        .fabric-node.n5 {
+            left: 50%;
+            top: 4px;
+            transform: translateX(-50%);
+        }
+
+        .fabric-node.n5::before {
+            background: var(--accent-cyan);
+            box-shadow: 0 0 6px var(--accent-cyan);
+        }
+
+        .fabric-node.n6 {
+            left: 50%;
+            bottom: 4px;
+            transform: translateX(-50%);
+        }
+
+        .fabric-node.n6::before {
+            background: var(--accent-pink);
+            box-shadow: 0 0 6px var(--accent-pink);
+        }
+
+        .fabric-packet {
+            position: absolute;
+            z-index: 4;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent-cyan);
+            box-shadow: 0 0 10px var(--accent-cyan);
+            animation: packet 3.4s ease-in-out infinite;
+        }
+
+        .fabric-packet.p1 {
+            left: 22%;
+            top: 32%;
+        }
+
+        .fabric-packet.p2 {
+            right: 24%;
+            bottom: 34%;
+            animation-delay: -1.2s;
+            background: var(--accent-pink);
+            box-shadow: 0 0 10px var(--accent-pink);
+        }
+
+        @keyframes packet {
+            0%, 100% {
+                transform: translate(0, 0) scale(0.8);
+                opacity: 0.35;
+            }
+            50% {
+                transform: translate(34px, 22px) scale(1.25);
+                opacity: 1;
+            }
+        }
+
+        /* 3-Column Core Substrate Matrix Section */
+        .arch-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .arch-card {
+            padding: 2.5rem;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: linear-gradient(135deg, rgba(13, 17, 33, 0.6) 0%, rgba(9, 12, 22, 0.9) 100%);
+        }
+
+        .arch-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .arch-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            background: rgba(0, 240, 255, 0.06);
+            border: 1px solid rgba(0, 240, 255, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            color: var(--accent-cyan);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.1);
+        }
+
+        .arch-card:nth-child(2) .arch-icon {
+            background: rgba(138, 43, 226, 0.06);
+            border-color: rgba(138, 43, 226, 0.15);
+            color: var(--accent-violet);
+            box-shadow: 0 0 15px rgba(138, 43, 226, 0.1);
+        }
+
+        .arch-card:nth-child(3) .arch-icon {
+            background: rgba(255, 0, 127, 0.06);
+            border-color: rgba(255, 0, 127, 0.15);
+            color: var(--accent-pink);
+            box-shadow: 0 0 15px rgba(255, 0, 127, 0.1);
+        }
+
+        .arch-card h3 {
+            font-family: var(--font-display);
+            font-size: 1.4rem;
+            font-weight: 700;
+        }
+
+        .arch-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 1.2rem;
+        }
+
+        .arch-list li {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+
+        .arch-list strong {
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .arch-list strong i {
+            font-size: 0.75rem;
+            opacity: 0.8;
+        }
+
+        .arch-card:nth-child(1) .arch-list strong i { color: var(--accent-cyan); }
+        .arch-card:nth-child(2) .arch-list strong i { color: var(--accent-violet); }
+        .arch-card:nth-child(3) .arch-list strong i { color: var(--accent-pink); }
+
+        .arch-list span {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            padding-left: 1.3rem;
+            line-height: 1.4;
+        }
+
+        /* 5-Dimension Validation Matrix */
+        .section {
+            padding: 100px 0;
+            border-top: 1px solid var(--border-glass);
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .section-tag {
+            font-family: var(--font-mono);
+            color: var(--accent-cyan);
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 0.8rem;
+            display: block;
+        }
+
+        .section-title {
+            font-family: var(--font-display);
+            font-size: 2.5rem;
+            font-weight: 800;
+            letter-spacing: -0.8px;
+            margin-bottom: 1rem;
+        }
+
+        .section-subtitle {
+            color: var(--text-secondary);
+            max-width: 700px;
+            margin: 0 auto;
+            font-size: 1.05rem;
+            font-weight: 300;
+        }
+
+        .matrix-container {
+            display: grid;
+            grid-template-columns: 0.8fr 1.2fr;
+            gap: 3rem;
+            align-items: start;
+        }
+
+        .matrix-tabs {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .matrix-tab {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            padding: 1.2rem;
+            text-align: left;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .matrix-tab:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(0, 240, 255, 0.3);
+        }
+
+        .matrix-tab.active {
+            background: rgba(0, 240, 255, 0.05);
+            border-color: var(--accent-cyan);
+            box-shadow: var(--glow-cyan);
+        }
+
+        .matrix-tab-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.03);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            transition: var(--transition-smooth);
+        }
+
+        .matrix-tab.active .matrix-tab-icon {
+            background: var(--accent-cyan);
+            color: #000;
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+        }
+
+        .matrix-tab-info h4 {
+            font-family: var(--font-display);
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.2rem;
+        }
+
+        .matrix-tab-info p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .matrix-pane {
+            min-height: 480px;
+            padding: 3rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .pane-content {
+            display: none;
+            animation: fadeIn 0.4s ease forwards;
+        }
+
+        .pane-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .pane-header {
+            margin-bottom: 2rem;
+        }
+
+        .pane-header h3 {
+            font-family: var(--font-display);
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .pane-header .metric-highlight {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            color: var(--accent-cyan);
+            font-weight: 500;
+        }
+
+        .pane-body {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            margin-bottom: 2rem;
+        }
+
+        .pane-body p {
+            margin-bottom: 1.2rem;
+        }
+
+        .pane-list {
+            list-style: none;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.8rem;
+        }
+
+        .pane-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.8rem;
+        }
+
+        .pane-list li i {
+            color: var(--accent-cyan);
+            margin-top: 0.3rem;
+            font-size: 0.85rem;
+        }
+
+        .pane-footer {
+            border-top: 1px solid var(--border-glass);
+            padding-top: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .pane-footer-text {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* Interactive Performance Showdown Chart */
+        .chart-card {
+            padding: 3rem;
+        }
+
+        .chart-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .chart-tab-btn {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-glass);
+            color: var(--text-secondary);
+            font-family: var(--font-display);
+            font-size: 0.9rem;
+            font-weight: 600;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+        }
+
+        .chart-tab-btn:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(0, 240, 255, 0.3);
+        }
+
+        .chart-tab-btn.active {
+            background: rgba(0, 240, 255, 0.05);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.1);
+        }
+
+        .chart-container {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 4rem;
+            align-items: center;
+        }
+
+        .bar-chart-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .chart-bar-row {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .bar-label-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            font-family: var(--font-mono);
+            color: var(--text-secondary);
+        }
+
+        .bar-label-framework {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .bar-label-value {
+            color: var(--text-muted);
+        }
+
+        .bar-track {
+            height: 14px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 100px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid rgba(255, 255, 255, 0.01);
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 100px;
+            width: 0%; /* Animated via JS */
+            transition: width 1s cubic-bezier(0.25, 0.8, 0.25, 1);
+            background: var(--text-muted);
+        }
+
+        .bar-fill.highlight {
+            background: linear-gradient(to right, var(--accent-cyan), var(--accent-violet));
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+        }
+
+        .chart-details {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 16px;
+            padding: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.01);
+        }
+
+        .detail-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .detail-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: rgba(0, 240, 255, 0.05);
+            color: var(--accent-cyan);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            border: 1px solid rgba(0, 240, 255, 0.1);
+        }
+
+        .detail-title h4 {
+            font-family: var(--font-display);
+            font-size: 1.15rem;
+            font-weight: 700;
+        }
+
+        .detail-title p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+        }
+
+        .detail-body {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .detail-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .detail-metric-card {
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid var(--border-glass);
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .detail-metric-num {
+            font-family: var(--font-display);
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: var(--accent-cyan);
+            margin-bottom: 0.2rem;
+        }
+
+        .detail-metric-lbl {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .detail-source {
+            margin-top: 1.5rem;
+            padding-top: 1.2rem;
+            border-top: 1px solid var(--border-glass);
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        .detail-source a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .detail-source a:hover {
+            color: var(--text-primary);
+        }
+
+        /* Vertical Solutions / Applications Grid */
+        .solutions-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.5rem;
+        }
+
+        .solution-card {
+            padding: 2.2rem;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .solution-icon {
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            width: fit-content;
+        }
+
+        .solution-title {
+            font-family: var(--font-display);
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .solution-desc {
+            font-size: 0.88rem;
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            flex-grow: 1;
+        }
+
+        .solution-tag {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--accent-cyan);
+            background: rgba(0, 240, 255, 0.04);
+            padding: 4px 10px;
+            border-radius: 4px;
+            width: fit-content;
+            border: 1px solid rgba(0, 240, 255, 0.1);
+            margin-bottom: 1rem;
+        }
+
+        .solution-link {
+            font-size: 0.82rem;
+            color: var(--accent-cyan);
+            text-decoration: none;
+            font-weight: 600;
+            transition: var(--transition-smooth);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .solution-link:hover {
+            color: var(--text-primary);
+            transform: translateX(3px);
+        }
+
+        /* Ecosystem Partners Grid (Using the SVG user logos) */
+        .partners-section {
+            background: linear-gradient(to bottom, var(--bg-primary), var(--bg-secondary));
+            padding: 80px 0;
+            text-align: center;
+            border-top: 1px solid var(--border-glass);
+        }
+
+        .partners-header h3 {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 2.5rem;
+            color: var(--text-secondary);
+            letter-spacing: -0.5px;
+        }
+
+        .logo-cloud {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .logo-cloud img.user-logos {
+            width: 100%;
+            max-width: 900px;
+            height: auto;
+            opacity: 0.8;
+            filter: grayscale(100%) brightness(150%) contrast(120%);
+            transition: var(--transition-smooth);
+        }
+
+        .logo-cloud img.user-logos:hover {
+            opacity: 1;
+            filter: grayscale(0%) brightness(100%);
+        }
+
+        .logo-grid-text {
+            display: flex;
+            justify-content: center;
+            gap: 4rem;
+            flex-wrap: wrap;
+            margin-top: 2rem;
+            font-family: var(--font-display);
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 1rem;
+        }
+
+        .logo-grid-text span {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: var(--transition-smooth);
+        }
+
+        .logo-grid-text span:hover {
+            color: var(--accent-cyan);
+        }
+
+        /* References / Publications & Peer-Reviewed Backings */
+        .references-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .ref-card {
+            padding: 2rem;
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        .ref-icon {
+            font-size: 2.2rem;
+            color: var(--accent-violet);
+            margin-top: 0.2rem;
+        }
+
+        .ref-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .ref-tag {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--accent-pink);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+        }
+
+        .ref-title {
+            font-family: var(--font-display);
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 0.8rem;
+            color: var(--text-primary);
+            line-height: 1.4;
+        }
+
+        .ref-citation {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-bottom: 1.2rem;
+        }
+
+        .ref-link {
+            font-size: 0.85rem;
+            color: var(--accent-cyan);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-weight: 600;
+            width: fit-content;
+            transition: var(--transition-smooth);
+        }
+
+        .ref-link:hover {
+            color: var(--text-primary);
+            transform: translateX(3px);
+        }
+
+        /* Endorsements / Mentions Grid */
+        .endorsements-section {
+            margin-top: 4rem;
+        }
+
+        .endorsements-header h3 {
+            font-family: var(--font-display);
+            font-size: 1.8rem;
+            font-weight: 800;
+            margin-bottom: 2rem;
+            text-align: center;
+            letter-spacing: -0.5px;
+        }
+
+        .endorsements-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+        }
+
+        .endorsement-card {
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid var(--border-glass);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+            text-decoration: none;
+            color: inherit;
+            transition: var(--transition-smooth);
+        }
+
+        .endorsement-card:hover {
+            background: rgba(255, 255, 255, 0.03);
+            border-color: var(--accent-cyan);
+            box-shadow: 0 4px 20px rgba(0, 240, 255, 0.05);
+            transform: translateY(-2px);
+        }
+
+        .endorsement-quote {
+            font-size: 0.88rem;
+            color: var(--text-secondary);
+            font-style: italic;
+            line-height: 1.5;
+            margin-bottom: 1.5rem;
+            position: relative;
+        }
+
+        .endorsement-quote::before {
+            content: '"';
+            font-size: 3rem;
+            font-family: serif;
+            position: absolute;
+            top: -20px;
+            left: -10px;
+            color: rgba(0, 240, 255, 0.1);
+            line-height: 1;
+        }
+
+        .endorsement-source {
+            border-top: 1px solid var(--border-glass);
+            padding-top: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+
+        .endorsement-brand-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.03);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            color: var(--accent-cyan);
+            border: 1px solid var(--border-glass);
+        }
+
+        .endorsement-source-info h5 {
+            font-family: var(--font-display);
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .endorsement-source-info p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* Large Blog Spotlight Section */
+        .blog-spotlight {
+            background: linear-gradient(135deg, rgba(138, 43, 226, 0.05) 0%, rgba(0, 240, 255, 0.05) 100%);
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            padding: 3rem;
+            margin-top: 5rem;
+            display: grid;
+            grid-template-columns: 1.3fr 0.7fr;
+            gap: 3rem;
+            align-items: center;
+        }
+
+        .blog-content h4 {
+            font-family: var(--font-display);
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .blog-content p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .blog-quotes {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+            margin-bottom: 2rem;
+        }
+
+        .blog-quotes li {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            display: flex;
+            gap: 0.8rem;
+            align-items: flex-start;
+        }
+
+        .blog-quotes li i {
+            color: var(--accent-cyan);
+            margin-top: 0.3rem;
+        }
+
+        .blog-sidebar {
+            text-align: center;
+            border-left: 1px solid var(--border-glass);
+            padding-left: 3rem;
+        }
+
+        .blog-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 2px solid var(--accent-cyan);
+            box-shadow: var(--glow-cyan);
+            margin-bottom: 1rem;
+        }
+
+        .blog-author-name {
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .blog-author-title {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+        }
+
+        /* Investor / Partner Portal CTA Form */
+        .cta-section {
+            background: radial-gradient(circle at 50% 80%, rgba(0, 240, 255, 0.1) 0%, rgba(4, 6, 13, 0) 60%);
+            position: relative;
+            overflow: hidden;
+            padding: 120px 0;
+        }
+
+        .cta-container {
+            display: grid;
+            grid-template-columns: 0.9fr 1.1fr;
+            gap: 5rem;
+            align-items: center;
+        }
+
+        .cta-info h2 {
+            font-family: var(--font-display);
+            font-size: 2.8rem;
+            font-weight: 800;
+            line-height: 1.15;
+            margin-bottom: 1.5rem;
+            letter-spacing: -1px;
+        }
+
+        .cta-info p {
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+            margin-bottom: 2.5rem;
+            font-weight: 300;
+        }
+
+        .cta-contact-methods {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .contact-method-item {
+            display: flex;
+            align-items: center;
+            gap: 1.2rem;
+        }
+
+        .contact-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-glass);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            color: var(--accent-cyan);
+        }
+
+        .contact-details h5 {
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 0.1rem;
+        }
+
+        .contact-details a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.88rem;
+            transition: var(--transition-smooth);
+            font-family: var(--font-mono);
+        }
+
+        .contact-details a:hover {
+            color: var(--accent-cyan);
+        }
+
+        /* Glassmorphism Inquiry Form */
+        .cta-form-card {
+            padding: 3rem;
+            position: relative;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-family: var(--font-display);
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-control {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--border-glass);
+            border-radius: 8px;
+            padding: 0.9rem 1.2rem;
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            font-size: 0.95rem;
+            outline: none;
+            transition: var(--transition-smooth);
+        }
+
+        .form-control:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.15);
+            background: rgba(0, 0, 0, 0.4);
+        }
+
+        .form-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23b4c3df' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: calc(100% - 20px) center;
+            cursor: pointer;
+        }
+
+        textarea.form-control {
+            resize: vertical;
+            min-height: 120px;
+        }
+
+        /* Form dynamic context boxes based on user role select */
+        .form-context-box {
+            background: rgba(0, 240, 255, 0.03);
+            border: 1px dashed rgba(0, 240, 255, 0.15);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .form-help {
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            line-height: 1.5;
+            margin: -0.4rem 0 1.5rem;
+        }
+
+        /* Footer */
+        footer {
+            border-top: 1px solid var(--border-glass);
+            background: #020307;
+            padding: 60px 0 30px 0;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 0.6fr 0.6fr 0.6fr;
+            gap: 3rem;
+            margin-bottom: 3rem;
+        }
+
+        .footer-logo-desc {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .footer-logo-desc p {
+            max-width: 280px;
+            line-height: 1.5;
+        }
+
+        .footer-links h5 {
+            color: var(--text-primary);
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 1.2rem;
+        }
+
+        .footer-links ul {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .footer-links ul a {
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: var(--transition-smooth);
+        }
+
+        .footer-links ul a:hover {
+            color: var(--accent-cyan);
+        }
+
+        .footer-bottom {
+            border-top: 1px solid rgba(255, 255, 255, 0.02);
+            padding-top: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Responsiveness Media Queries */
+        @media (max-width: 1200px) {
+            .solutions-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .arch-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            .arch-card:nth-child(3) {
+                grid-column: span 2;
+            }
+            .endorsements-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            .endorsement-card:nth-child(3) {
+                grid-column: span 2;
+            }
+        }
+
+        @media (max-width: 1024px) {
+            .hero-wrapper {
+                grid-template-columns: 1fr;
+                gap: 3rem;
+                text-align: center;
+            }
+
+            .hero-content {
+                align-items: center;
+            }
+
+            .hero-actions {
+                justify-content: center;
+            }
+
+            .runtime {
+                order: -1;
+                width: 100%;
+                max-width: 720px;
+                margin: 0 auto;
+            }
+
+            .matrix-container {
+                grid-template-columns: 1fr;
+            }
+
+            .chart-container {
+                grid-template-columns: 1fr;
+                gap: 2.5rem;
+            }
+
+            .cta-container {
+                grid-template-columns: 1fr;
+                gap: 4rem;
+            }
+
+            .blog-spotlight {
+                grid-template-columns: 1fr;
+                gap: 2.5rem;
+            }
+
+            .blog-sidebar {
+                border-left: none;
+                border-top: 1px solid var(--border-glass);
+                padding-left: 0;
+                padding-top: 2rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .nav-menu {
+                display: none;
+            }
+
+            .hero-stats {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 1.5rem;
+            }
+
+            .hero-title {
+                font-size: 2.6rem;
+            }
+
+            .arch-grid {
+                grid-template-columns: 1fr;
+            }
+            .arch-card:nth-child(3) {
+                grid-column: span 1;
+            }
+
+            .endorsements-grid {
+                grid-template-columns: 1fr;
+            }
+            .endorsement-card:nth-child(3) {
+                grid-column: span 1;
+            }
+
+            .solutions-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .references-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .footer-grid {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+
+            /* Responsive styles for runtime widget */
+            .runtime {
+                min-height: auto;
+            }
+            .console {
+                grid-template-columns: 1fr;
+            }
+            .map {
+                height: 480px;
+                margin-inline: 12px;
+            }
+            .node,
+            .node.compiler,
+            .node.engine {
+                width: min(210px, calc(100vw - 84px));
+            }
+            .node.hardware,
+            .node.apps {
+                left: 50%;
+                right: auto;
+                transform: translateX(-50%);
+                animation-name: floatAgent;
+            }
+            .node.hardware {
+                bottom: 92px;
+            }
+            .node.apps {
+                bottom: 4px;
+            }
+            .chip {
+                display: none;
+            }
+            .runtime-title {
+                white-space: normal;
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Glass Navigation Bar -->
+    <header class="navbar" id="main-nav">
+        <div class="container nav-container">
+            <a href="#" class="logo">
+                <img src="assets/logong.png" alt="TensorCircuit-NG Logo" class="logo-img">
+                <span class="logo-text">TensorCircuit<span>-NG</span></span>
+            </a>
+            
+            <ul class="nav-menu">
+                <li><a href="#architecture" class="nav-link">Architecture</a></li>
+                <li><a href="#matrix" class="nav-link">Validation</a></li>
+                <li><a href="#showdown" class="nav-link">Performance</a></li>
+                <li><a href="#applications" class="nav-link">Solutions</a></li>
+                <li><a href="#publications" class="nav-link">Research</a></li>
+                <li><a href="#partner" class="nav-link">Partnership</a></li>
+            </ul>
+
+            <div class="nav-cta">
+                <a href="https://github.com/tensorcircuit/tensorcircuit-ng" target="_blank" rel="noopener" class="btn btn-secondary" style="padding: 0.5rem 1.2rem; font-size: 0.85rem;">
+                    <i class="fab fa-github"></i> Repository
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero" id="hero">
+        <canvas id="hero-canvas"></canvas>
+        <div class="container hero-wrapper">
+            <div class="hero-content">
+                <div class="badge-hero">
+                    <i class="fas fa-circle-notch fa-spin"></i> Build, optimize and deploy at industrial scale
+                </div>
+                <h1 class="hero-title">The OS and CUDA for <br><span class="gradient-text">Quantum-AI-HPC</span></h1>
+                <p class="hero-subtitle">
+                    TensorCircuit-NG unifies quantum circuits, tensor networks, machine learning backends, QPU access, and HPC execution into one programmable substrate for simulation, QML, and quantum many-body physics.
+                </p>
+                <div class="hero-actions">
+                    <a class="btn btn-primary" href="#partner">Discuss Strategic Fit <i class="fas fa-handshake"></i></a>
+                    <a class="btn btn-secondary" href="#showdown">Review Benchmarks <i class="fas fa-chart-line"></i></a>
+                </div>
+                
+                <div class="hero-stats">
+                    <div class="stat-item">
+                        <div class="stat-val">1<span>M+</span></div>
+                        <div class="stat-lbl">PyPI Downloads</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-val">600<span>+</span></div>
+                        <div class="stat-lbl">Simulated Qubits</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-val">10<span><sup>6</sup>x</span></div>
+                        <div class="stat-lbl">Simulation Speedup</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-val">170<span>+</span></div>
+                        <div class="stat-lbl">Published Citations</div>
+                    </div>
+                </div>
+            </div>
+
+            <section class="runtime" aria-label="TensorCircuit-NG infrastructure runtime visualization">
+                <div class="runtime-header">
+                    <div>
+                        <div class="runtime-title">Compile intelligence into quantum-scale compute</div>
+                    </div>
+                </div>
+
+                <div class="map">
+                    <svg class="flow-lines" viewBox="0 0 640 430" preserveAspectRatio="none" aria-hidden="true">
+                        <defs>
+                            <linearGradient id="flowGradient" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0%" stop-color="var(--accent-cyan)" stop-opacity="0.2" />
+                                <stop offset="48%" stop-color="var(--accent-cyan)" />
+                                <stop offset="75%" stop-color="var(--accent-violet)" />
+                                <stop offset="100%" stop-color="var(--accent-pink)" />
+                            </linearGradient>
+                        </defs>
+                        <path d="M320 50 C320 78 320 92 320 118" />
+                        <path d="M320 166 C320 194 320 206 320 232" />
+                        <path d="M275 286 C210 322 150 346 102 398" />
+                        <path d="M365 286 C430 322 490 346 538 398" />
+                    </svg>
+
+                    <div class="orbit"></div>
+                    <div class="chip c1">auto-diff</div>
+                    <div class="chip c2">vmap / jit</div>
+                    <div class="chip c3">tensor networks</div>
+                    <div class="chip c4">agent workflows</div>
+
+                    <article class="node agent">
+                        <div class="label"><span class="dot"></span>Intent Layer</div>
+                        <div class="desc">AI agent, scientist, enterprise pipeline</div>
+                    </article>
+                    <article class="node compiler">
+                        <div class="label"><span class="dot"></span>TC-NG Compiler</div>
+                        <div class="desc">Circuit IR, gradients, contraction planning, backend staging</div>
+                    </article>
+                    <article class="node engine">
+                        <div class="label"><span class="dot"></span>Unified Engine</div>
+                        <div class="desc">Quantum circuits + tensor networks + ML frameworks in one graph</div>
+                    </article>
+                    <article class="node hardware">
+                        <div class="label"><span class="dot"></span>Compute Substrate</div>
+                        <div class="desc">GPU, TPU, multi-node HPC, and QPU execution paths</div>
+                    </article>
+                    <article class="node apps">
+                        <div class="label"><span class="dot"></span>Vertical Outputs</div>
+                        <div class="desc">Chemistry, QML, optimization, many-body physics</div>
+                    </article>
+                </div>
+
+                <div class="console">
+                    <div class="terminal">
+                        <div class="terminal-head">
+                            <span>agent_run.tcng</span>
+                            <span>compiled</span>
+                        </div>
+                        <div class="terminal-body">
+                            <div><span class="prompt">&gt;</span><span class="cmd">parse</span> quantum workflow</div>
+                            <div><span class="prompt">&gt;</span><span class="cmd">stage</span> differentiable circuit graph</div>
+                            <div><span class="prompt">&gt;</span><span class="cmd">search</span> <span class="param">tensor contraction path</span></div>
+                            <div><span class="prompt">&gt;</span><span class="cmd">dispatch</span> <span class="param">batched gradients</span> to GPU/HPC</div>
+                            <div class="cursor"><span class="prompt">&gt;</span><span class="cmd">return</span> verified benchmark artifact</div>
+                        </div>
+                    </div>
+
+                    <div class="traction">
+                        <div class="traction-head">
+                            <span>compute fabric</span>
+                            <span>orchestrated</span>
+                        </div>
+                        <div class="fabric-body">
+                            <div class="fabric-ring"></div>
+                            <div class="fabric-ring alt"></div>
+                            <div class="fabric-core">TC-NG</div>
+                            <div class="fabric-node n1">GPU</div>
+                            <div class="fabric-node n2">QPU</div>
+                            <div class="fabric-node n3">TPU</div>
+                            <div class="fabric-node n4">HPC</div>
+                            <div class="fabric-node n5">AD</div>
+                            <div class="fabric-node n6">TN</div>
+                            <div class="fabric-packet p1"></div>
+                            <div class="fabric-packet p2"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </section>
+
+    <!-- 3-Column Core Substrate Matrix Section -->
+    <section class="section" id="architecture" style="background-color: var(--bg-secondary);">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">System Architecture</span>
+                <h2 class="section-title">Unified. Scalable. Autonomous.</h2>
+                <p class="section-subtitle">
+                    A holistic engineering architecture designed from the ground up to unify quantum compilation, high-performance computing, and agentic machine learning workflows.
+                </p>
+            </div>
+
+            <div class="arch-grid">
+                <!-- Column 1: UNIFIED (统一) -->
+                <div class="gradient-border-box arch-card">
+                    <div class="arch-header">
+                        <div class="arch-icon"><i class="fas fa-cubes"></i></div>
+                        <h3>Unified Engine</h3>
+                    </div>
+                    <ul class="arch-list">
+                        <li>
+                            <strong><i class="fas fa-circle-dot"></i> Quantum Circuits</strong>
+                            <span>Differentiable ideal, noisy, stabilizer, and qudit circuit models.</span>
+                        </li>
+                        <li>
+                            <strong><i class="fas fa-circle-dot"></i> Tensor Networks</strong>
+                            <span>MPS, MPO representations, and customized contraction path finding.</span>
+                        </li>
+                        <li>
+                            <strong><i class="fas fa-circle-dot"></i> AI Models</strong>
+                            <span>Native layers and interfaces integrated into JAX, TensorFlow, and PyTorch.</span>
+                        </li>
+                        <li>
+                            <strong><i class="fas fa-circle-dot"></i> Physical Simulations</strong>
+                            <span>Pulse-level analog simulation and exact solvers (Krylov/Trotter/ODE).</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Column 2: SUBSTRATE SUPPORT (支持) -->
+                <div class="gradient-border-box arch-card">
+                    <div class="arch-header">
+                        <div class="arch-icon"><i class="fas fa-server"></i></div>
+                        <h3>HPC Substrate</h3>
+                    </div>
+                    <ul class="arch-list">
+                        <li>
+                            <strong><i class="fas fa-circle-dot"></i> GPU Acceleration</strong>
+                            <span>Accelerated linear algebra kernels via NVIDIA CUDA and cuQuantum SDKs.</span>
+                        </li>
+                        <li>
+                            <strong><i class="fas fa-circle-dot"></i> TPU Acceleration</strong>
+                            <span>Compilation to TPU matrix multiplication units using Google JAX XLA.</span>
+                        </li>
+                        <li>
+                            <strong><i class="fas fa-circle-dot"></i> HPC Orchestration</strong>
+                            <span>Distributed, multi-node, multi-GPU parallel circuit evaluations.</span>
+                        </li>
+                        <li>
+                            <strong><i class="fas fa-circle-dot"></i> Hardware Agnostic</strong>
+                            <span>Backend-agnostic design, writing code once to execute across heterogeneous chips.</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Column 3: AGENTS & AUTOMATION (支持) -->
+                <div class="gradient-border-box arch-card">
+                    <div class="arch-header">
+                        <div class="arch-icon"><i class="fas fa-robot"></i></div>
+                        <h3>Autonomous R&D</h3>
+                    </div>
+                    <ul class="arch-list">
+                        <li>
+                            <strong><i class="fas fa-circle-dot"></i> AI Coding Agents</strong>
+                            <span>Standardized AGENTS.md rulesets, providing memory, skills, and tools for AI IDEs.</span>
+                        </li>
+                        <li>
+                            <strong><i class="fas fa-circle-dot"></i> LLM Optimization</strong>
+                            <span>Intent-driven translation and automated generation of quantum algorithms.</span>
+                        </li>
+                        <li>
+                            <strong><i class="fas fa-circle-dot"></i> Auto-Optimization</strong>
+                            <span>Autonomous searching of contraction paths and quantum circuit architectures.</span>
+                        </li>
+                        <li>
+                            <strong><i class="fas fa-circle-dot"></i> Performance Squeezing</strong>
+                            <span>Automatic staging and vectorization of quantum parameters on target backends.</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 5-Dimension Validation Matrix -->
+    <section class="section" id="matrix">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Validation Matrix</span>
+                <h2 class="section-title">The Five Pillars of Technical Maturity</h2>
+                <p class="section-subtitle">
+                    How to distinguish an enterprise-grade platform from mere concept wrappers. TensorCircuit-NG delivers verified performance, peer-reviewed science, and commercial production readiness.
+                </p>
+            </div>
+
+            <div class="matrix-container">
+                <div class="matrix-tabs">
+                    <div class="matrix-tab active" onclick="switchMatrixTab(0)">
+                        <div class="matrix-tab-icon"><i class="fas fa-code-branch"></i></div>
+                        <div class="matrix-tab-info">
+                            <h4>1. Open Source Ecosystem</h4>
+                            <p>Proven community trust and distribution</p>
+                        </div>
+                    </div>
+                    <div class="matrix-tab" onclick="switchMatrixTab(1)">
+                        <div class="matrix-tab-icon"><i class="fas fa-chart-line"></i></div>
+                        <div class="matrix-tab-info">
+                            <h4>2. Public Benchmarks</h4>
+                            <p>Independently verifiable speedups</p>
+                        </div>
+                    </div>
+                    <div class="matrix-tab" onclick="switchMatrixTab(2)">
+                        <div class="matrix-tab-icon"><i class="fas fa-graduation-cap"></i></div>
+                        <div class="matrix-tab-info">
+                            <h4>3. Academic Integration</h4>
+                            <p>Backed by elite global institutions</p>
+                        </div>
+                    </div>
+                    <div class="matrix-tab" onclick="switchMatrixTab(3)">
+                        <div class="matrix-tab-icon"><i class="fas fa-industry"></i></div>
+                        <div class="matrix-tab-info">
+                            <h4>4. Commercial Verticals</h4>
+                            <p>Real-world pipelines in active trials</p>
+                        </div>
+                    </div>
+                    <div class="matrix-tab" onclick="switchMatrixTab(4)">
+                        <div class="matrix-tab-icon"><i class="fas fa-project-diagram"></i></div>
+                        <div class="matrix-tab-info">
+                            <h4>5. Continuous Evolution</h4>
+                            <p>6+ years of architecture refinement</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="gradient-border-box matrix-pane">
+                    <!-- Pane 1: Open Source -->
+                    <div class="pane-content active">
+                        <div class="pane-header">
+                            <h3>Open Source & Production Ready</h3>
+                            <span class="pane-footer-text">Star count > 500 | Contributions > 30 Authors | 1,000,000+ Installs</span>
+                        </div>
+                        <div class="pane-body">
+                            <p>For scientific infrastructure, open source means code auditability, reproducibility, and local deployment options without proprietary lock-in.</p>
+                            <ul class="pane-list">
+                                <li><i class="fas fa-check-circle"></i> <span><strong>70,000+ Lines of Production-Grade Code</strong>: Complemented by rigorous CI/CD, type comments, and extensive unit testing.</span></li>
+                                <li><i class="fas fa-check-circle"></i> <span><strong>AI-Native Ecosystem Integration</strong>: Equipped with structured schemas and metadata to allow AI Coding Agents to autonomously draft, optimize, and execute quantum algorithms.</span></li>
+                                <li><i class="fas fa-check-circle"></i> <span><strong>1,000,000+ Downloads on PyPI</strong>: Demonstrates wide deployment across active developer setups and corporate CI pipelines.</span></li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Pane 2: Benchmarks -->
+                    <div class="pane-content">
+                        <div class="pane-header">
+                            <h3>Rigorous Performance Metrics</h3>
+                            <span class="pane-footer-text">Quantum 2023 | arXiv 2026 | GitHub discussions #116-#118</span>
+                        </div>
+                        <div class="pane-body">
+                            <p>Benchmark claims are tied to specific workloads, hardware, precision, and source scripts rather than mixed into a single universal speedup number.</p>
+                            <ul class="pane-list">
+                                <li><i class="fas fa-check-circle"></i> <span><strong>Published Benchmarks</strong>: The Quantum 2023 whitepaper reports value-and-gradient timings for TFIM VQE, QML, barren-plateau, QFI, and large 1D VQE workloads.</span></li>
+                                <li><i class="fas fa-check-circle"></i> <span><strong>Current Comparisons</strong>: Discussions #116-#118 report post-compilation VQE value-and-gradient comparisons against PyTorch/TorchQuantum, MindQuantum, and cuQuantum with source scripts.</span></li>
+                                <li><i class="fas fa-check-circle"></i> <span><strong>Scale Boundary</strong>: The original whitepaper reports a 600-qubit 1D TFIM VQE workflow at 18.2 s per value-and-gradient step with 99.4% energy accuracy on an A100 GPU.</span></li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Pane 3: Academic -->
+                    <div class="pane-content">
+                        <div class="pane-header">
+                            <h3>High-Impact Academic Footprint</h3>
+                            <span class="pane-footer-text">170+ Citations | Published in PRL, Nature Comm, PRX Quantum</span>
+                        </div>
+                        <div class="pane-body">
+                            <p>Academic adoption represents a rigorous community peer-review. TensorCircuit-NG is actively used by top physicists globally to drive fundamental discoveries.</p>
+                            <ul class="pane-list">
+                                <li><i class="fas fa-check-circle"></i> <span><strong>Elite Research Centers</strong>: Used in work from MIT, Harvard University, Google, IBM, Caltech, and the Perimeter Institute.</span></li>
+                                <li><i class="fas fa-check-circle"></i> <span><strong>Broad Physics Domains</strong>: Powering research in non-equilibrium dynamics, quantum machine learning generalization, quantum error mitigation, and quantum many-body physics.</span></li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Pane 4: Commercial -->
+                    <div class="pane-content">
+                        <div class="pane-header">
+                            <h3>Real-World Industry Applications</h3>
+                            <span class="pane-footer-text">TenCirChem-NG Ecosystem | Pharmaceutical Pipelines & Diagnostic Models</span>
+                        </div>
+                        <div class="pane-body">
+                            <p>Bridging quantum software and enterprise domains. TensorCircuit-NG is selected for vertical applications where speed translates directly to cost efficiency.</p>
+                            <ul class="pane-list">
+                                <li><i class="fas fa-check-circle"></i> <span><strong>Quantum Chemistry & Material Modeling</strong>: Powering TenCirChem-NG, the industry-standard package for molecular property computations.</span></li>
+                                <li><i class="fas fa-check-circle"></i> <span><strong>Healthcare & Biotech</strong>: Deployed in hybrid pipelines exploring brain age prediction, long-tailed chest X-ray classification, and drug design workflows.</span></li>
+                                <li><i class="fas fa-check-circle"></i> <span><strong>Finance & Telecom Optimization</strong>: Deployed for risk-valued portfolio optimizations (QAOA) and mobile edge resource allocation (VQC).</span></li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Pane 5: Evolution -->
+                    <div class="pane-content">
+                        <div class="pane-header">
+                            <h3>6+ Years of Continuous Iteration</h3>
+                            <span class="pane-footer-text">From 2020 Prototype to 2026 Enterprise-Scale Platform</span>
+                        </div>
+                        <div class="pane-body">
+                            <p>Platform maturity is forged over time. TensorCircuit-NG benefits from years of structural improvements that ensure maximum stability and forward compatibility.</p>
+                            <ul class="pane-list">
+                                <li><i class="fas fa-check-circle"></i> <span><strong>AI-Native Leap (2024-2026)</strong>: Re-engineered to support agentic AI R&D, making it the first quantum platform that AI agents can program, test, and optimize.</span></li>
+                                <li><i class="fas fa-check-circle"></i> <span><strong>Unified Computational Substrate</strong>: Merges Quantum Circuits, Neural Networks, and Tensor Networks into a single compiled JAX/TF graph.</span></li>
+                                <li><i class="fas fa-check-circle"></i> <span><strong>Upstream Framework Contributions</strong>: Developers have actively contributed patches and features back to TensorFlow and Google TensorNetwork.</span></li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="pane-footer">
+                        <span class="pane-footer-text">All documentation and source data are fully verifiable.</span>
+                        <a href="https://arxiv.org/abs/2602.14167" target="_blank" rel="noopener" style="color: var(--accent-cyan); text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem; transition: var(--transition-smooth);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--accent-cyan)'">
+                            View Whitepaper <i class="fas fa-external-link-alt"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Interactive Performance Showdown -->
+    <section class="section" id="showdown" style="background-color: var(--bg-secondary);">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Performance Showdown</span>
+                <h2 class="section-title">Verified Acceleration Ratios</h2>
+                <p class="section-subtitle">
+                    Reported benchmark families are normalized to TensorCircuit-NG and shown as acceleration ratios, with source notes kept in the details for auditability.
+                </p>
+            </div>
+
+            <div class="gradient-border-box chart-card">
+                <div class="chart-tabs">
+                    <button class="chart-tab-btn active" onclick="switchChartTab(0)">GPU VQE Gradient Acceleration</button>
+                    <button class="chart-tab-btn" onclick="switchChartTab(1)">QML Batch Acceleration</button>
+                    <button class="chart-tab-btn" onclick="switchChartTab(2)">AD & VMAP Acceleration</button>
+                </div>
+
+                <div class="chart-container">
+                    <div class="bar-chart-grid" id="bar-chart-grid">
+                        <!-- Bars will be generated/animated dynamically by JS -->
+                    </div>
+
+                    <div class="chart-details">
+                        <div class="detail-header">
+                            <div class="detail-icon" id="detail-icon">
+                                <i class="fas fa-bolt"></i>
+                            </div>
+                            <div class="detail-title">
+                                <h4 id="detail-title">GPU VQE Gradient Acceleration</h4>
+                                <p id="detail-subtitle">TensorCircuit-NG speedup over comparable GPU value+gradient implementations</p>
+                            </div>
+                        </div>
+                        <div class="detail-body" id="detail-body">
+                            Composite view of VQE value-and-gradient benchmarks, normalized within each source to TensorCircuit-NG on GPU.
+                        </div>
+                        <div class="detail-metrics">
+                            <div class="detail-metric-card">
+                                <div class="detail-metric-num" id="metric-speedup">1.0x</div>
+                                <div class="detail-metric-lbl">TC-NG Baseline</div>
+                            </div>
+                            <div class="detail-metric-card">
+                                <div class="detail-metric-num" id="metric-hardware">GPU VQE</div>
+                                <div class="detail-metric-lbl">Benchmark Family</div>
+                            </div>
+                        </div>
+                        <div class="detail-source" id="detail-source"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Vertical Solutions -->
+    <section class="section" id="applications">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Vertical Solutions</span>
+                <h2 class="section-title">Designed for High-Impact Verticals</h2>
+                <p class="section-subtitle">
+                    From pharmaceuticals to deep tech infrastructure, TensorCircuit-NG provides the core mathematical engine to solve high-dimension combinatorial problems.
+                </p>
+            </div>
+
+            <div class="solutions-grid">
+                <div class="gradient-border-box solution-card">
+                    <div class="solution-icon"><i class="fas fa-flask"></i></div>
+                    <h3 class="solution-title">TenCirChem-NG</h3>
+                    <p class="solution-desc">The primary computational backend for molecular property prediction, excited state calculations, and chemical bonding simulation at industrial scales.</p>
+                    <span class="solution-tag">Quantum Chemistry</span>
+                    <a href="https://github.com/tensorcircuit/TenCirChem-NG" target="_blank" rel="noopener" class="solution-link">View Repository <i class="fas fa-external-link-alt"></i></a>
+                </div>
+
+                <div class="gradient-border-box solution-card">
+                    <div class="solution-icon"><i class="fas fa-brain"></i></div>
+                    <h3 class="solution-title">Quantum ML</h3>
+                    <p class="solution-desc">Advancing quantum machine learning across robustness, plasticity in continual learning, federated quantum learning, quantum generative models, and quantum architecture search.</p>
+                    <span class="solution-tag">Artificial Intelligence</span>
+                </div>
+
+                <div class="gradient-border-box solution-card">
+                    <div class="solution-icon"><i class="fas fa-dna"></i></div>
+                    <h3 class="solution-title">Drug Discovery</h3>
+                    <p class="solution-desc">Accelerating virtual screening pipelines by simulating macromolecular structures and drug-target binding affinities through fast tensor network contraction.</p>
+                    <span class="solution-tag">Biotech & Pharma</span>
+                </div>
+
+                <div class="gradient-border-box solution-card">
+                    <div class="solution-icon"><i class="fas fa-coins"></i></div>
+                    <h3 class="solution-title">Quantum Finance</h3>
+                    <p class="solution-desc">Executing high-speed portfolio optimization, risk analysis, and arbitrage opportunity mapping using CVaR-enhanced variational algorithms.</p>
+                    <span class="solution-tag">Asset Management</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Ecosystem Partners & Real User Logos -->
+    <section class="partners-section">
+        <div class="container">
+            <div class="partners-header">
+                <h3>Trusted by Leading Research Labs and Corporate Partners</h3>
+            </div>
+            <div class="logo-cloud">
+                <img src="assets/user_logo.png" alt="Collaborator & User Logos" class="user-logos">
+                
+                <div class="logo-grid-text">
+                    <span><i class="fas fa-circle-check"></i> Tencent Quantum Lab</span>
+                    <span><i class="fas fa-circle-check"></i> Tsinghua University</span>
+                    <span><i class="fas fa-circle-check"></i> Zhejiang University</span>
+                    <span><i class="fas fa-circle-check"></i> NVIDIA cuQuantum</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- References, Blogs and Publications -->
+    <section class="section" id="publications">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Scientific Citations</span>
+                <h2 class="section-title">Core Publications & Reference Material</h2>
+                <p class="section-subtitle">
+                    Explore the underlying mathematics, software architectures, and validation methodologies of TensorCircuit-NG.
+                </p>
+            </div>
+
+            <div class="references-grid">
+                <div class="gradient-border-box ref-card">
+                    <div class="ref-icon"><i class="fas fa-file-invoice"></i></div>
+                    <div class="ref-info">
+                        <span class="ref-tag">arXiv Pre-print (2026)</span>
+                        <h4 class="ref-title">TensorCircuit-NG: A Universal, Composable, and Scalable Platform for Quantum Computing and Quantum Simulation</h4>
+                        <p class="ref-citation">S.X. Zhang, Y.Q. Chen, et al. Detail of multi-node GPU scaling, stabilizer/qudit simulation features, and compilation pipelines.</p>
+                        <a href="https://arxiv.org/abs/2602.14167" target="_blank" rel="noopener" class="ref-link">Read on arXiv <i class="fas fa-external-link-alt"></i></a>
+                    </div>
+                </div>
+
+                <div class="gradient-border-box ref-card">
+                    <div class="ref-icon"><i class="fas fa-bookmark"></i></div>
+                    <div class="ref-info">
+                        <span class="ref-tag">Quantum Journal (2023)</span>
+                        <h4 class="ref-title">TensorCircuit: a Quantum Software Framework for the NISQ Era</h4>
+                        <p class="ref-citation">Published peer-reviewed study laying down the mathematical architecture of automatic differentiation and tensor-network simulation.</p>
+                        <a href="https://quantum-journal.org/papers/q-2023-02-02-912/" target="_blank" rel="noopener" class="ref-link">Read Paper <i class="fas fa-external-link-alt"></i></a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Strategic Peer-Reviewed Backings -->
+            <div class="endorsements-section">
+                <div class="endorsements-header">
+                    <h3>Enterprise Endorsements & Peer-Reviewed Backing</h3>
+                </div>
+                <div class="endorsements-grid">
+                    <!-- NVIDIA -->
+                    <a href="https://developer.nvidia.com/blog/accelerate-quantum-circuit-simulation-with-nvidia-cuquantum-23-10/" target="_blank" rel="noopener" class="endorsement-card">
+                        <p class="endorsement-quote">
+                            NVIDIA's cuQuantum 23.10 benchmark features TensorCircuit as the only quantum software framework, comparing its cotengra pathfinder against cuTensorNet APIs and raw PyTorch/JAX contractions.
+                        </p>
+                        <div class="endorsement-source">
+                            <div class="endorsement-brand-icon"><i class="fas fa-microchip"></i></div>
+                            <div class="endorsement-source-info">
+                                <h5>NVIDIA cuQuantum Benchmark</h5>
+                                <p>NVIDIA Technical Blog</p>
+                            </div>
+                        </div>
+                    </a>
+                    <!-- Google & Caltech -->
+                    <a href="https://journals.aps.org/prxquantum/abstract/10.1103/PRXQuantum.5.040306" target="_blank" rel="noopener" class="endorsement-card">
+                        <p class="endorsement-quote">
+                            Google Quantum AI and Caltech researchers utilized the platform to benchmark the gate complexity limits of learning physical unitaries and complex quantum states.
+                        </p>
+                        <div class="endorsement-source">
+                            <div class="endorsement-brand-icon"><i class="fas fa-graduation-cap"></i></div>
+                            <div class="endorsement-source-info">
+                                <h5>PRX Quantum (2024)</h5>
+                                <p>Google AI & Caltech Teams</p>
+                            </div>
+                        </div>
+                    </a>
+                    <!-- MIT & Harvard -->
+                    <a href="https://quantum-journal.org/papers/q-2024-07-23-1422/" target="_blank" rel="noopener" class="endorsement-card">
+                        <p class="endorsement-quote">
+                            Researchers simulated high-temperature thermodynamic states and resource scaling bounds for quantum magic, enabled by the fast JIT compilation pipeline.
+                        </p>
+                        <div class="endorsement-source">
+                            <div class="endorsement-brand-icon"><i class="fas fa-atom"></i></div>
+                            <div class="endorsement-source-info">
+                                <h5>Quantum (2024)</h5>
+                                <p>MIT, Harvard, & Google co-authors</p>
+                            </div>
+                        </div>
+                    </a>
+                    <!-- IBM Quantum -->
+                    <a href="https://arxiv.org/abs/2411.05760" target="_blank" rel="noopener" class="endorsement-card">
+                        <p class="endorsement-quote">
+                            IBM Quantum researchers leveraged high-speed gradient evaluation to simulate dynamic parameterized quantum circuits free of barren plateau bottlenecks.
+                        </p>
+                        <div class="endorsement-source">
+                            <div class="endorsement-brand-icon"><i class="fas fa-server"></i></div>
+                            <div class="endorsement-source-info">
+                                <h5>IBM Quantum Research</h5>
+                                <p>Dynamic Circuit Simulations</p>
+                            </div>
+                        </div>
+                    </a>
+                    <!-- Jens Eisert (Freie Universität Berlin) -->
+                    <a href="https://www.nature.com/articles/s41467-024-45882-z" target="_blank" rel="noopener" class="endorsement-card">
+                        <p class="endorsement-quote">
+                            Eisert's lab employed the JAX-based backend of the simulator to perform dense gradient sweeps and evaluate the generalization bounds of quantum machine learning model architectures.
+                        </p>
+                        <div class="endorsement-source">
+                            <div class="endorsement-brand-icon"><i class="fas fa-globe"></i></div>
+                            <div class="endorsement-source-info">
+                                <h5>Nature Communications</h5>
+                                <p>Jens Eisert Lab, Berlin</p>
+                            </div>
+                        </div>
+                    </a>
+                    <!-- PRL Generative Quantum Machine Learning -->
+                    <a href="https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.132.100602" target="_blank" rel="noopener" class="endorsement-card">
+                        <p class="endorsement-quote">
+                            Generative quantum machine learning via denoising diffusion probabilistic models, demonstrating diffusion-based quantum data generation workflows.
+                        </p>
+                        <div class="endorsement-source">
+                            <div class="endorsement-brand-icon"><i class="fas fa-vial"></i></div>
+                            <div class="endorsement-source-info">
+                                <h5>Physical Review Letters</h5>
+                                <p>Quntao Zhuang, USC</p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Spotlight Blog Post -->
+            <div class="blog-spotlight">
+                <div class="blog-content">
+                    <span class="section-tag" style="margin-bottom: 0.5rem;">Scientific Infrastructure Showcase</span>
+                    <h4>TensorCircuit-NG: 下一代科研基础设施</h4>
+                    <p>
+                        "When promotional claims begin to align, how do you judge if a quantum-classical platform is mature and ready for production? Authentic infrastructure is built on five checkable dimensions: Openness, Benchmarks, Academic citation, Industry applications, and Continuous architectural iteration."
+                    </p>
+                    <ul class="blog-quotes">
+                        <li><i class="fas fa-quote-left"></i> <span>真正的可信度来自第三方用户能够独立运行代码、检查实现、复现实验和构建自己的工作流，代码本身永远比宣传材料更诚实。</span></li>
+                        <li><i class="fas fa-quote-left"></i> <span>在 TC-NG 架构中，Quantum Circuit、Neural Network、Tensor Network 被纳入统一计算图，将 CPU、GPU、HPC 和 QPU 编排为统一算力。</span></li>
+                    </ul>
+                    <a href="https://re-ra.xyz/TensorCircuit-NG-%E4%B8%8B%E4%B8%80%E4%BB%A3%E7%A7%91%E7%A0%94%E5%9F%BA%E7%A1%80%E8%AE%BE%E6%96%BD/" target="_blank" rel="noopener" style="color: var(--accent-cyan); text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem; transition: var(--transition-smooth);" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--accent-cyan)'">
+                        Read Full Infrastructure Blog <i class="fas fa-external-link-alt"></i>
+                    </a>
+                </div>
+                <div class="blog-sidebar">
+                    <img src="https://avatars.githubusercontent.com/u/35157286?v=4" alt="Shixin Zhang" class="blog-avatar">
+                    <div class="blog-author-name">Shi-Xin Zhang</div>
+                    <div class="blog-author-title">Platform Founder & Core Maintainer</div>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+                        Lead Author of TensorCircuit-NG, researching high performance quantum software, machine learning, and quantum many-body physics.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Strategic Partnership / Contact Form -->
+    <section class="cta-section" id="partner">
+        <div class="container cta-container">
+            <div class="cta-info">
+                <h2>Build the Future of <br><span class="gradient-text">Quantum Compute</span></h2>
+                <p>
+                    We welcome thoughtful conversations with long-term technology partners, including venture capital firms, enterprise computing groups, hyper-scale cloud providers, and academic labs interested in quantum software infrastructure.
+                </p>
+                
+                <div class="cta-contact-methods">
+                    <div class="contact-method-item">
+                        <div class="contact-icon"><i class="fas fa-envelope"></i></div>
+                        <div class="contact-details">
+                            <h5>General Inquiries</h5>
+                            <a href="mailto:shixinzhang@iphy.ac.cn">shixinzhang@iphy.ac.cn</a>
+                        </div>
+                    </div>
+                    <div class="contact-method-item">
+                        <div class="contact-icon"><i class="fab fa-github"></i></div>
+                        <div class="contact-details">
+                            <h5>Open Source Collaboration</h5>
+                            <a href="https://github.com/tensorcircuit/tensorcircuit-ng" target="_blank" rel="noopener">github.com/tensorcircuit/tensorcircuit-ng</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="gradient-border-box cta-form-card">
+                <form id="partnership-form" onsubmit="submitPartnershipForm(event)">
+                    <p class="form-help">
+                        This form opens your email client with a pre-filled draft. No message is stored or transmitted by this page.
+                    </p>
+                    <div class="form-group">
+                        <label for="user-name">Your Name</label>
+                        <input type="text" id="user-name" class="form-control" placeholder="Dr. Elizabeth Vance" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="user-org">Organization / Institution</label>
+                        <input type="text" id="user-org" class="form-control" placeholder="Quantum Software Fund / HPC Lab" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="user-role">Strategic Profile</label>
+                        <select id="user-role" class="form-control form-select" onchange="handleRoleChange()" required>
+                            <option value="" disabled selected>Select your profile</option>
+                            <option value="investor">Venture Capital / Strategic Partner</option>
+                            <option value="enterprise">Commercial Enterprise / Technology Partner</option>
+                            <option value="hpc">HPC Administrator / Cloud Provider</option>
+                            <option value="research">Academic Institution / Scientific Partner</option>
+                        </select>
+                    </div>
+
+                    <!-- Role-specific context display boxes -->
+                    <div class="form-context-box" id="context-investor">
+                        <i class="fas fa-info-circle"></i> &nbsp;<strong>VC Context</strong>: We are open to discussing the technical roadmap, market landscape, ecosystem moat, and commercialization paths when there is a strong long-term fit.
+                    </div>
+                    <div class="form-context-box" id="context-enterprise">
+                        <i class="fas fa-info-circle"></i> &nbsp;<strong>Enterprise Context</strong>: Let's address custom pipeline licensing, hardware integration, and proprietary model training solutions.
+                    </div>
+                    <div class="form-context-box" id="context-hpc">
+                        <i class="fas fa-info-circle"></i> &nbsp;<strong>HPC Context</strong>: We can share benchmarks for multi-node multi-GPU clusters, Slurm resource allocation, and cloud APIs.
+                    </div>
+                    <div class="form-context-box" id="context-research">
+                        <i class="fas fa-info-circle"></i> &nbsp;<strong>Researcher Context</strong>: Ask about paper reproduction pipelines, special backend features, or community-sponsored PRs.
+                    </div>
+
+                    <div class="form-group">
+                        <label for="user-message">Collaboration Scope / Message</label>
+                        <textarea id="user-message" class="form-control" placeholder="Outline the integration goals, hardware parameters, or timeline requirements..." required></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.9rem;">
+                        Open Email Draft <i class="fas fa-paper-plane"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container footer-grid">
+            <div class="footer-logo-desc">
+                <a href="#" class="logo">
+                    <img src="assets/logong.png" alt="TensorCircuit-NG Logo" class="logo-img" style="height: 30px;">
+                    <span class="logo-text" style="font-size: 1.15rem;">TensorCircuit<span>-NG</span></span>
+                </a>
+                <p>The next-generation open-source quantum simulation engine, integrating AI-native agentic pipelines with extreme GPU speedups.</p>
+            </div>
+            
+            <div class="footer-links">
+                <h5>Platform</h5>
+                <ul>
+                    <li><a href="#matrix">Validation Matrix</a></li>
+                    <li><a href="#showdown">Performance Benchmarks</a></li>
+                    <li><a href="#applications">Solutions</a></li>
+                    <li><a href="https://github.com/tensorcircuit/tensorcircuit-ng" target="_blank" rel="noopener">Git Repository</a></li>
+                </ul>
+            </div>
+
+            <div class="footer-links">
+                <h5>Ecosystem</h5>
+                <ul>
+                    <li><a href="https://github.com/tensorcircuit/TenCirChem-NG" target="_blank" rel="noopener">TenCirChem-NG</a></li>
+                    <li><a href="https://tensorcircuit-ng.readthedocs.io/" target="_blank" rel="noopener">Documentation</a></li>
+                    <li><a href="https://arxiv.org/abs/2602.14167" target="_blank" rel="noopener">White Paper (2026)</a></li>
+                    <li><a href="https://quantum-journal.org/papers/q-2023-02-02-912/" target="_blank" rel="noopener">White Paper (2023)</a></li>
+                </ul>
+            </div>
+
+            <div class="footer-links">
+                <h5>Research & Group</h5>
+                <ul>
+                    <li><a href="https://sxzgroup.github.io/" target="_blank" rel="noopener">SXZ Research Group</a></li>
+                    <li><a href="mailto:shixinzhang@iphy.ac.cn">shixinzhang@iphy.ac.cn</a></li>
+                    <li><a href="https://re-ra.xyz" target="_blank" rel="noopener">refraction-ray blog</a></li>
+                    <li><a href="https://github.com/tensorcircuit/tensorcircuit-ng/issues" target="_blank" rel="noopener">Report Issue</a></li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="container footer-bottom">
+            <p>&copy; 2026 TensorCircuit-NG Development Team. Released under the Apache 2.0 License.</p>
+        </div>
+    </footer>
+
+    <!-- Vanilla Javascript for Premium Interactions and Live Animations -->
+    <script>
+        // --- 1. Dynamic Navbar Scroll Effect ---
+        window.addEventListener('scroll', () => {
+            const nav = document.getElementById('main-nav');
+            if (window.scrollY > 50) {
+                nav.classList.add('scrolled');
+            } else {
+                nav.classList.remove('scrolled');
+            }
+        });
+
+        // --- 2. Canvas Floating Particle Network Background ---
+        const canvas = document.getElementById('hero-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        const particleCount = 70;
+        const maxDistance = 120;
+        let mouse = { x: null, y: null };
+
+        // Handle canvas sizing
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.offsetWidth;
+            canvas.height = canvas.parentElement.offsetHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 2 + 1;
+                this.speedX = (Math.random() - 0.5) * 0.4;
+                this.speedY = (Math.random() - 0.5) * 0.4;
+                this.color = Math.random() > 0.5 ? 'rgba(0, 240, 255, 0.4)' : 'rgba(138, 43, 226, 0.4)';
+            }
+
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+
+                if (this.x < 0 || this.x > canvas.width) this.speedX *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.speedY *= -1;
+
+                // Mouse interaction
+                if (mouse.x !== null && mouse.y !== null) {
+                    let dx = mouse.x - this.x;
+                    let dy = mouse.y - this.y;
+                    let dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < 150) {
+                        const force = (150 - dist) / 150;
+                        this.x -= dx * force * 0.03;
+                        this.y -= dy * force * 0.03;
+                    }
+                }
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function initParticles() {
+            particles = [];
+            for (let i = 0; i < particleCount; i++) {
+                particles.push(new Particle());
+            }
+        }
+        initParticles();
+
+        window.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = e.clientX - rect.left;
+            mouse.y = e.clientY - rect.top;
+        });
+
+        window.addEventListener('mouseleave', () => {
+            mouse.x = null;
+            mouse.y = null;
+        });
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Update and draw particles
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update();
+                particles[i].draw();
+            }
+
+            // Draw connecting lines
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    let dx = particles[i].x - particles[j].x;
+                    let dy = particles[i].y - particles[j].y;
+                    let dist = Math.sqrt(dx*dx + dy*dy);
+
+                    if (dist < maxDistance) {
+                        let alpha = (1 - (dist / maxDistance)) * 0.15;
+                        ctx.strokeStyle = `rgba(0, 240, 255, ${alpha})`;
+                        ctx.lineWidth = 0.6;
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.stroke();
+                    }
+                }
+            }
+            requestAnimationFrame(animateParticles);
+        }
+        animateParticles();
+
+
+
+        // --- 4. 5-Dimension Validation Matrix Tabs Switcher ---
+        function switchMatrixTab(tabIndex) {
+            const tabs = document.querySelectorAll('.matrix-tab');
+            const contents = document.querySelectorAll('.pane-content');
+            
+            tabs.forEach((tab, index) => {
+                if (index === tabIndex) {
+                    tab.classList.add('active');
+                    contents[index].classList.add('active');
+                } else {
+                    tab.classList.remove('active');
+                    contents[index].classList.remove('active');
+                }
+            });
+        }
+
+        // --- 5. Interactive Performance Showdown Chart System ---
+        // Values are TensorCircuit-NG acceleration factors normalized within
+        // each reported benchmark family. Source notes keep the merge auditable.
+        const performanceData = [
+            {
+                task: "GPU VQE Gradient Acceleration",
+                subtitle: "TensorCircuit-NG speedup over comparable GPU value+gradient implementations",
+                icon: "fas fa-bolt",
+                body: "Composite view of VQE value-and-gradient benchmarks. Each ratio is normalized within its own source to the TensorCircuit-NG JAX GPU result, then placed on one log-scale chart to compare framework-level acceleration. Qubit counts and devices differ slightly, so this is a source-backed order-of-magnitude view.",
+                baselineRuntime: "1.0x",
+                hardware: "VQE Gradient",
+                sourceHtml: `Sources: <a href="https://quantum-journal.org/papers/q-2023-02-02-912/" target="_blank" rel="noopener">Quantum 2023 Table 6</a>, <a href="https://github.com/tensorcircuit/tensorcircuit-ng/discussions/116" target="_blank" rel="noopener">Discussion #116</a>, <a href="https://github.com/tensorcircuit/tensorcircuit-ng/discussions/117" target="_blank" rel="noopener">Discussion #117</a>, and <a href="https://github.com/tensorcircuit/tensorcircuit-ng/discussions/118" target="_blank" rel="noopener">Discussion #118</a>.`,
+                frameworks: [
+                    { name: "TensorCircuit-NG (JAX GPU)", val: 1.0, note: "baseline", highlight: true },
+                    { name: "Qibo GPU", val: 8.6, note: "Quantum 2023, N=16" },
+                    { name: "cuStateVec adjoint", val: 11.8, note: "#118, N=24" },
+                    { name: "MindQuantum mqvector_gpu", val: 12.8, note: "#117, N=24" },
+                    { name: "TorchQuantum optimized", val: 15.7, note: "#116, N=20" },
+                    { name: "PennyLane GPU/JAX", val: 29.6, note: "Quantum 2023, N=16" },
+                    { name: "cuTensorNet autograd", val: 90.5, note: "#118, N=24" }
+                ]
+            },
+            {
+                task: "QML Batch Acceleration",
+                subtitle: "TensorCircuit-NG speedup for batched quantum machine learning value+gradient",
+                icon: "fas fa-layer-group",
+                body: "Quantum 2023 reports a batched QML benchmark for binary MNIST classification with a 10-qubit, depth-3 PQC. This view normalizes the batch-512 value-and-gradient runtime to TC-NG on GPU, showing the effect of JIT and vectorized batching against TensorFlow Quantum and PennyLane.",
+                baselineRuntime: "0.0054 s",
+                hardware: "Batch 512",
+                sourceHtml: `Source: <a href="https://quantum-journal.org/papers/q-2023-02-02-912/" target="_blank" rel="noopener">Quantum 2023 TensorCircuit whitepaper</a>, QML benchmark table.`,
+                frameworks: [
+                    { name: "TensorCircuit-NG (JAX GPU)", val: 1.0, note: "0.0054 s", highlight: true },
+                    { name: "PennyLane GPU/JAX", val: 3.7, note: "0.020 s" },
+                    { name: "TensorCircuit-NG (JAX CPU)", val: 15.7, note: "0.085 s" },
+                    { name: "TensorFlow Quantum", val: 90.7, note: "0.49 s" },
+                    { name: "PennyLane CPU", val: 1629.6, note: "8.80 s" }
+                ]
+            },
+            {
+                task: "AD & VMAP Acceleration",
+                subtitle: "Acceleration from automatic differentiation, JIT, and vectorized circuit batches",
+                icon: "fas fa-fire",
+                body: "The original whitepaper reports workflow-level accelerations where AD, JIT, VMAP, and GPU execution matter more than raw gate kernels. These benchmarks target higher-order gradients and batched random-circuit gradient variance, which are common stress tests for differentiable simulators.",
+                baselineRuntime: "1.0x",
+                hardware: "AD/VMAP",
+                sourceHtml: `Source: <a href="https://quantum-journal.org/papers/q-2023-02-02-912/" target="_blank" rel="noopener">Quantum 2023 TensorCircuit whitepaper</a>, barren-plateau and higher-order-gradient benchmark sections.`,
+                frameworks: [
+                    { name: "TensorCircuit-NG", val: 1.0, note: "baseline", highlight: true },
+                    { name: "TensorFlow Quantum barren plateau", val: 567.0, note: "100 circuits" },
+                    { name: "PennyLane CPU barren plateau", val: 14116.0, note: "100 circuits" },
+                    { name: "Qiskit QFI/Hessian", val: 1000000.0, note: "nearly million-fold" }
+                ]
+            }
+        ];
+
+        function renderChart(index) {
+            const data = performanceData[index];
+            
+            // Update Text Details
+            document.getElementById('detail-icon').innerHTML = `<i class="${data.icon}"></i>`;
+            document.getElementById('detail-title').textContent = data.task;
+            document.getElementById('detail-subtitle').textContent = data.subtitle;
+            document.getElementById('detail-body').textContent = data.body;
+            document.getElementById('metric-speedup').textContent = data.baselineRuntime;
+            document.getElementById('metric-hardware').textContent = data.hardware;
+            document.getElementById('detail-source').innerHTML = data.sourceHtml;
+
+            // Generate Bars HTML
+            const grid = document.getElementById('bar-chart-grid');
+            grid.innerHTML = '';
+            
+            // Logarithmic mapping keeps single-source ratios readable across wide ranges.
+            const values = data.frameworks.map(fw => fw.val);
+            const maxVal = Math.max(...values);
+            const logMax = Math.log10(maxVal);
+            
+            data.frameworks.forEach(fw => {
+                // Determine display width percentage via logarithmic scaling
+                let pctWidth = 0;
+                if (fw.val === 1.0) {
+                    pctWidth = 6; // base offset for 1.0x
+                } else {
+                    // map logarithmically between 1 and maxVal into 15% and 100%
+                    pctWidth = 6 + (Math.log10(fw.val) / logMax) * 94;
+                }
+                
+                const isBase = fw.val === 1.0;
+                const displayVal = isBase
+                    ? "1.0x baseline"
+                    : `${fw.val.toLocaleString()}x acceleration${fw.note ? ` (${fw.note})` : ''}`;
+
+                const row = document.createElement('div');
+                row.className = 'chart-bar-row';
+                row.innerHTML = `
+                    <div class="bar-label-row">
+                        <span class="bar-label-framework">${fw.name}</span>
+                        <span class="bar-label-value">${displayVal}</span>
+                    </div>
+                    <div class="bar-track">
+                        <div class="bar-fill ${fw.highlight ? 'highlight' : ''}" style="width: 0%;"></div>
+                    </div>
+                `;
+                grid.appendChild(row);
+                
+                // Trigger animation layout
+                setTimeout(() => {
+                    row.querySelector('.bar-fill').style.width = pctWidth + '%';
+                }, 50);
+            });
+        }
+
+        function switchChartTab(tabIndex) {
+            const btns = document.querySelectorAll('.chart-tab-btn');
+            btns.forEach((btn, idx) => {
+                if (idx === tabIndex) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+            renderChart(tabIndex);
+        }
+        renderChart(0); // Initial load
+
+        // --- 6. Form Integration ---
+        const userRoleSelect = document.getElementById('user-role');
+        const roleContexts = {
+            investor: document.getElementById('context-investor'),
+            enterprise: document.getElementById('context-enterprise'),
+            hpc: document.getElementById('context-hpc'),
+            research: document.getElementById('context-research')
+        };
+
+        function handleRoleChange() {
+            // Hide all contexts first
+            for (let role in roleContexts) {
+                roleContexts[role].style.display = 'none';
+            }
+            // Show selected context
+            const selected = userRoleSelect.value;
+            if (roleContexts[selected]) {
+                roleContexts[selected].style.display = 'block';
+            }
+        }
+
+        function submitPartnershipForm(event) {
+            event.preventDefault();
+
+            const name = document.getElementById('user-name').value.trim();
+            const org = document.getElementById('user-org').value.trim();
+            const role = userRoleSelect.options[userRoleSelect.selectedIndex].text;
+            const message = document.getElementById('user-message').value.trim();
+            const subject = `TensorCircuit-NG Partnership Inquiry - ${org || name}`;
+            const body = [
+                'TensorCircuit-NG partnership inquiry',
+                '',
+                `Name: ${name}`,
+                `Organization / Institution: ${org}`,
+                `Strategic Profile: ${role}`,
+                '',
+                'Collaboration Scope / Message:',
+                message
+            ].join('\n');
+
+            window.location.href = `mailto:shixinzhang@iphy.ac.cn?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        }
+    </script>
+</body>
+</html>

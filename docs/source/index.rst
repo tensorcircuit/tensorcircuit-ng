@@ -121,6 +121,13 @@ For industrial project usage, commercial collaboration, enterprise deployment, o
       Readthedocs
 
 
+   .. card:: Platform Overview
+      :link: platform/index.html
+      :shadow: md
+
+      Performance, architecture, and adoption
+
+
    .. card:: Whitepaper
       :link: https://quantum-journal.org/papers/q-2023-02-02-912/
       :shadow: md
