@@ -33,7 +33,7 @@ class _TreeDef:
         self.children = children
         self.num_leaves = num_leaves
 
-    def unflatten(self, leaves: list) -> Any:
+    def unflatten(self, leaves: List[Any]) -> Any:
         if self.typ is _LEAF:
             if not leaves:
                 raise ValueError(
@@ -41,6 +41,7 @@ class _TreeDef:
                 )
             return leaves.pop(0)
         if self.typ is dict:
+            assert self.sorted_keys is not None
             return {
                 k: child.unflatten(leaves)
                 for k, child in zip(self.sorted_keys, self.children)
