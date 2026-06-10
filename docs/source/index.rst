@@ -54,8 +54,6 @@ It is designed for researchers and engineers who demand **Speed, Flexibility, an
 .. note::
    TensorCircuit-NG is the active continuation of TensorCircuit project.
    We recommend upgrading to TensorCircuit-NG for the latest features and improvements. 
-   You can upgrade by running the following command:
-   ``pip uninstall tensorcircuit && pip install tensorcircuit-ng``
 
 
 Get Started in Seconds
@@ -95,16 +93,24 @@ The current core authors of TensorCircuit-NG are `Shi-Xin Zhang <https://github.
 We also thank `contributions <https://github.com/tensorcircuit/tensorcircuit-ng/graphs/contributors>`_ from the open source community.
 
 For bug reports and technical discussions, please use the issue tracker or forum below.
-For industrial project usage, commercial collaboration, enterprise deployment, or consulting inquiries, please contact shixinzhang#iphy.ac.cn.
+
+For industrial project usage, commercial collaboration, enterprise deployment, or consulting inquiries, please refer to the `product page <platform/index.html>`_ and contact ``shixinzhang at iphy.ac.cn``. 
+We offer standardized engagement options, including one-time consultations, project-based technical support, and long-term advisory partnerships.
 
 
 .. card-carousel:: 2
 
-   .. card:: Source code
+   .. card:: Source Code
       :link: https://github.com/tensorcircuit/tensorcircuit-ng
       :shadow: md
 
       GitHub
+
+   .. card:: Platform Overview
+      :link: platform/index.html
+      :shadow: md
+
+      Performance, architecture, and adoption
 
    
    .. card:: PyPI
@@ -119,13 +125,6 @@ For industrial project usage, commercial collaboration, enterprise deployment, o
       :shadow: md
 
       Readthedocs
-
-
-   .. card:: Platform Overview
-      :link: platform/index.html
-      :shadow: md
-
-      Performance, architecture, and adoption
 
 
    .. card:: Whitepaper
@@ -147,14 +146,6 @@ For industrial project usage, commercial collaboration, enterprise deployment, o
       :shadow: md
 
       GitHub Discussions
-
-
-
-   .. card:: DockerHub
-      :link: https://hub.docker.com/repository/docker/tensorcircuit/tensorcircuit
-      :shadow: md
-
-      ``docker pull``
       
 
    .. card:: Research and Applications

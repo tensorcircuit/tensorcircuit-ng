@@ -2,6 +2,12 @@
 Quick Start
 ================
 
+
+.. Note::
+    New to TensorCircuit-NG? See the `platform overview <platform/index.html>`_ for architecture, performance evidence, and adoption context.
+
+
+
 Installation
 --------------
 
@@ -33,9 +39,6 @@ To debug the installation issue or report bugs, please check the environment inf
 
 .. Tip::
     **AI-Native Development:** We highly recommend developing with AI coding agents (e.g., Cursor, Claude Code, Gemini CLI) directly within the cloned repository to leverage the rich context from examples and tests. See :doc:`agentic` for details.
-
-.. Note::
-    New to TensorCircuit-NG as a platform? See the `platform overview <platform/index.html>`_ for architecture, performance evidence, and adoption context.
 
 
 Circuit Object
