@@ -16,69 +16,190 @@ from ..utils import return_partial
 Tensor = Any
 
 
+class _TreeDef:
+    """A JAX-compatible treedef that records pytree structure for unflattening."""
+
+    __slots__ = ("typ", "sorted_keys", "children", "num_leaves")
+
+    def __init__(
+        self,
+        typ: type,
+        sorted_keys: Optional[Tuple[str, ...]],
+        children: Tuple["_TreeDef", ...],
+        num_leaves: int,
+    ) -> None:
+        self.typ = typ
+        self.sorted_keys = sorted_keys  # non-None only for dict
+        self.children = children
+        self.num_leaves = num_leaves
+
+    def unflatten(self, leaves: list) -> Any:
+        if self.typ is _LEAF:
+            if not leaves:
+                raise ValueError(
+                    "Not enough leaves to unflatten. Expected at least 1, got 0."
+                )
+            return leaves.pop(0)
+        if self.typ is dict:
+            return {
+                k: child.unflatten(leaves)
+                for k, child in zip(self.sorted_keys, self.children)
+            }
+        if self.typ is _NONE_TYPE:
+            return None
+        if issubclass(self.typ, tuple):
+            result = tuple(child.unflatten(leaves) for child in self.children)
+            if self.typ is not tuple:
+                return self.typ(*result)
+            return result
+        # list
+        return [child.unflatten(leaves) for child in self.children]
+
+
+class _LeafSentinel:
+    """Sentinel type so that ``_TreeDef`` can represent a leaf node."""
+
+    pass
+
+
+_LEAF = _LeafSentinel
+_NONE_TYPE = type(None)
+
+
 def _is_leaf(obj: Any) -> bool:
-    """Check if obj is a leaf (not a list/tuple/dict container)."""
-    return not isinstance(obj, (list, tuple, dict))
+    """Check whether *obj* is a leaf managed by the pure-pytree machinery.
+
+    Everything that is not a recognised pytree container (dict, list, tuple,
+    namedtuple, or ``None``) is a leaf.  This deliberately matches JAX
+    semantics for the types supported here.
+    """
+    if obj is None:
+        return False
+    if isinstance(obj, dict):
+        return False
+    if isinstance(obj, (list, tuple)):
+        return False
+    return True
 
 
-def _pure_tree_flatten(pytree: Any) -> Tuple[List[Any], Any]:
+def _meta_type(obj: Any) -> type:
+    """Return the structural type tag for *obj* (tuple vs namedtuple vs ...)."""
+    if isinstance(obj, tuple) and hasattr(type(obj), "_fields"):
+        return type(obj)
+    return type(obj)
+
+
+def _pure_tree_flatten(pytree: Any) -> Tuple[List[Any], _TreeDef]:
     """
-    Pure Python tree flattening.
-    Returns (leaves, treedef) where treedef is the original pytree structure.
+    Pure Python tree flattening with JAX-compatible semantics.
+
+    Key differences from a naïve implementation:
+    * ``None`` is an empty pytree (0 leaves), not a leaf.
+    * ``dict`` keys are iterated in **sorted** order so that leaves are
+      deterministic regardless of insertion order.
+    * ``namedtuple`` is tracked as a separate type from plain ``tuple``.
     """
+    if pytree is None:
+        return [], _TreeDef(_NONE_TYPE, None, (), 0)
     if _is_leaf(pytree):
-        return [pytree], pytree
+        return [pytree], _TreeDef(_LEAF, None, (), 1)
     leaves: List[Any] = []
     if isinstance(pytree, dict):
-        for v in pytree.values():
-            child_leaves, _ = _pure_tree_flatten(v)
+        sorted_keys = tuple(sorted(pytree.keys()))
+        children = []
+        for k in sorted_keys:
+            child_leaves, child_td = _pure_tree_flatten(pytree[k])
             leaves.extend(child_leaves)
-    else:  # list or tuple
-        for v in pytree:
-            child_leaves, _ = _pure_tree_flatten(v)
-            leaves.extend(child_leaves)
-    return leaves, pytree
+            children.append(child_td)
+        return leaves, _TreeDef(dict, sorted_keys, tuple(children), len(leaves))
+    # list, tuple, namedtuple
+    children = []
+    for v in pytree:
+        child_leaves, child_td = _pure_tree_flatten(v)
+        leaves.extend(child_leaves)
+        children.append(child_td)
+    return leaves, _TreeDef(_meta_type(pytree), None, tuple(children), len(leaves))
 
 
-def _pure_tree_unflatten(treedef: Any, leaves: List[Any]) -> Any:
+def _pure_tree_unflatten(treedef: _TreeDef, leaves: List[Any]) -> Any:
     """
-    Pure Python tree unflattening using the original pytree structure as treedef.
-    Consumes leaves from the front of the list.
+    Pure Python tree unflattening using a :class:`_TreeDef` produced by
+    :func:`_pure_tree_flatten`.  **Copies** *leaves* so that the original
+    list is not mutated.  Raises :class:`ValueError` when the number of
+    leaves does not match *treedef*.
     """
-    if _is_leaf(treedef):
-        return leaves.pop(0)
-    if isinstance(treedef, dict):
-        return {k: _pure_tree_unflatten(v, leaves) for k, v in treedef.items()}
-    if isinstance(treedef, tuple):
-        return tuple(_pure_tree_unflatten(v, leaves) for v in treedef)
-    # list
-    return [_pure_tree_unflatten(v, leaves) for v in treedef]
+    leaves_copy = list(leaves)
+    result = treedef.unflatten(leaves_copy)
+    if leaves_copy:
+        raise ValueError(
+            f"Too many leaves for treedef: expected {treedef.num_leaves}, "
+            f"got {len(leaves)}."
+        )
+    return result
+
+
+def _treedefs_compatible(a: _TreeDef, b: _TreeDef) -> bool:
+    """Check whether two treedefs have compatible structure for tree_map."""
+    if a.typ is not b.typ:
+        return False
+    if a.typ is _LEAF:
+        return True
+    if a.typ is _NONE_TYPE:
+        return True
+    if a.typ is dict:
+        if a.sorted_keys != b.sorted_keys:
+            return False
+        return all(
+            _treedefs_compatible(ac, bc) for ac, bc in zip(a.children, b.children)
+        )
+    if len(a.children) != len(b.children):
+        return False
+    return all(_treedefs_compatible(ac, bc) for ac, bc in zip(a.children, b.children))
 
 
 def _pure_tree_map(f: Callable[..., Any], *pytrees: Any) -> Any:
     """
-    Pure Python tree_map. Applies f element-wise to corresponding leaves.
-    Supports broadcasting of leaf arguments to match the structure of non-leaf arguments,
-    consistent with tf.nest.map_structure.
+    Pure Python ``tree_map`` with JAX-compatible semantics.
+
+    Applies *f* element-wise to corresponding leaves.  All non-leaf
+    arguments must share the **same** pytree structure (type, key order,
+    and nesting); a :class:`ValueError` is raised on mismatch.
     """
+    if not pytrees:
+        raise TypeError("_pure_tree_map requires at least one pytree argument")
+
+    # Fast path when all arguments are leaves
     if all(_is_leaf(p) for p in pytrees):
         return f(*pytrees)
-    first = next(p for p in pytrees if not _is_leaf(p))
-    if isinstance(first, dict):
-        return {
-            k: _pure_tree_map(f, *(p if _is_leaf(p) else p[k] for p in pytrees))
-            for k in first
-        }
-    if isinstance(first, tuple):
-        return tuple(
-            _pure_tree_map(f, *(p if _is_leaf(p) else p[i] for p in pytrees))
-            for i in range(len(first))
-        )
-    # list
-    return [
-        _pure_tree_map(f, *(p if _is_leaf(p) else p[i] for p in pytrees))
-        for i in range(len(first))
-    ]
+
+    # Flatten and validate structure
+    flat_results = []
+    first_treedef = None
+    first_leaves: Optional[List[Any]] = None
+    for tree in pytrees:
+        leaves, td = _pure_tree_flatten(tree)
+        if first_treedef is None:
+            first_treedef = td
+            first_leaves = leaves
+        else:
+            if not _treedefs_compatible(first_treedef, td):
+                raise ValueError(
+                    "Pytree structure mismatch: all non-leaf arguments to "
+                    "tree_map must have the same structure."
+                )
+
+    assert first_leaves is not None and first_treedef is not None
+    # Collect all leaf lists
+    all_leaves: List[List[Any]] = []
+    for tree in pytrees:
+        leaves, _ = _pure_tree_flatten(tree)
+        all_leaves.append(leaves)
+
+    # Apply f to corresponding leaves
+    for i in range(first_treedef.num_leaves):
+        flat_results.append(f(*(ls[i] for ls in all_leaves)))
+
+    return _pure_tree_unflatten(first_treedef, flat_results)
 
 
 class ExtendedBackend:
@@ -1322,8 +1443,7 @@ class ExtendedBackend:
         :return: Packed pytree
         :rtype: Any
         """
-        leaves_copy = list(leaves)
-        return _pure_tree_unflatten(treedef, leaves_copy)
+        return _pure_tree_unflatten(treedef, leaves)
 
     def to_dlpack(self: Any, a: Tensor) -> Any:
         """
