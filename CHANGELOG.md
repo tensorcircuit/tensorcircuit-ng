@@ -20,10 +20,17 @@
 
 - Add support for OMECO contraction path finder.
 
+### Changed
+
+- Replace hardcoded `np.complex128`/`np.complex64` with `cons.npdtype`/`dtypestr` in gates and translation modules, making the codebase respect `tc.set_dtype()`.
+
+- Add pure Python tree utility functions (`_pure_tree_flatten`, `_pure_tree_unflatten`, `_pure_tree_map`) as TensorFlow fallback in the abstract backend, with leaf broadcasting support.
+
 ### Fixed
 
-- Fix sparse Pauli propagation aggregation, initial truncation, multi-word bit-packing, and unsupported multi-qubit gate handling.
+- Fix `numpy_backend.cast()`, `jax_backend.cast()`, and `pytorch_backend.cast()` to correctly handle Python scalar inputs.
 
+- Fix sparse Pauli propagation aggregation, initial truncation, multi-word bit-packing, and unsupported multi-qubit gate handling.
 ## v1.6.0
 
 ### Added

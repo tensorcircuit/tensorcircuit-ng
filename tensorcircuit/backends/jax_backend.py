@@ -386,6 +386,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
             jax_dtype = getattr(jnp, dtype)
         else:
             jax_dtype = dtype
+        a = jnp.asarray(a)
         if jnp.iscomplexobj(a) and not jnp.issubdtype(jax_dtype, jnp.complexfloating):
             a = jnp.real(a)
         return a.astype(jax_dtype)

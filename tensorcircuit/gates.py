@@ -1041,11 +1041,9 @@ def rzm_gate(theta: float, n: int, dim: int = 2, name: str = "rzm") -> Operator:
     if n < 2:
         raise ValueError("Gate requires at least 2 qubits.")
     if dim != 2:
-        # TODO: support general dimensions
         raise ValueError("rzm gate only supports dim=2 at the moment.")
 
     theta_t = backend.cast(backend.convert_to_tensor(theta), dtype=dtypestr)
-
     i_tensor = backend.cast(backend.convert_to_tensor(1j), dtypestr)
     c = backend.cast(backend.cos(theta_t / 2.0), dtypestr)
     s = backend.cast(backend.sin(theta_t / 2.0), dtypestr)
@@ -1055,14 +1053,14 @@ def rzm_gate(theta: float, n: int, dim: int = 2, name: str = "rzm") -> Operator:
         (dim, 2),
     )
 
-    mk_np = np.zeros((2, dim, 2), dtype=np.complex128)
+    mk_np = np.zeros((2, dim, 2), dtype=npdtype)
     mk_np[0, 0, 0] = 1.0
     mk_np[0, 1, 0] = 1.0
     mk_np[1, 0, 1] = 1.0
     mk_np[1, 1, 1] = -1.0
     mk = backend.cast(backend.convert_to_tensor(mk_np), dtype=dtypestr)
 
-    mn_np = np.zeros((2, dim), dtype=np.complex128)
+    mn_np = np.zeros((2, dim), dtype=npdtype)
     mn_np[0, 0] = 1.0
     mn_np[0, 1] = 1.0
     mn_np[1, 0] = 1.0
@@ -1100,22 +1098,21 @@ def cmz_gate(n: int, dim: int = 2, name: str = "cmz") -> Operator:
     if n < 2:
         raise ValueError("Gate requires at least 2 qubits.")
     if dim != 2:
-        # TODO: support general dimensions
         raise ValueError("cmz gate only supports dim=2 at the moment.")
 
-    m1_np = np.zeros((dim, 2), dtype=np.complex128)
+    m1_np = np.zeros((dim, 2), dtype=npdtype)
     m1_np[0, 0] = 1.0
     m1_np[1, 0] = 1.0
     m1_np[1, 1] = -2.0
     m1 = backend.cast(backend.convert_to_tensor(m1_np), dtype=dtypestr)
 
-    mk_np = np.zeros((2, dim, 2), dtype=np.complex128)
+    mk_np = np.zeros((2, dim, 2), dtype=npdtype)
     mk_np[0, 0, 0] = 1.0
     mk_np[0, 1, 0] = 1.0
     mk_np[1, 1, 1] = 1.0
     mk = backend.cast(backend.convert_to_tensor(mk_np), dtype=dtypestr)
 
-    mn_np = np.zeros((2, dim), dtype=np.complex128)
+    mn_np = np.zeros((2, dim), dtype=npdtype)
     mn_np[0, 0] = 1.0
     mn_np[0, 1] = 1.0
     mn_np[1, 1] = 1.0

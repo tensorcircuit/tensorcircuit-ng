@@ -293,6 +293,7 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
                 np_dtype = getattr(np, dtype)
         else:
             np_dtype = dtype
+        a = np.asarray(a)
         if np.iscomplexobj(a) and not np.issubdtype(np_dtype, np.complexfloating):
             a = np.real(a)
         return a.astype(np_dtype)

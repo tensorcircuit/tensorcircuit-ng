@@ -16,6 +16,71 @@ from ..utils import return_partial
 Tensor = Any
 
 
+def _is_leaf(obj: Any) -> bool:
+    """Check if obj is a leaf (not a list/tuple/dict container)."""
+    return not isinstance(obj, (list, tuple, dict))
+
+
+def _pure_tree_flatten(pytree: Any) -> Tuple[List[Any], Any]:
+    """
+    Pure Python tree flattening.
+    Returns (leaves, treedef) where treedef is the original pytree structure.
+    """
+    if _is_leaf(pytree):
+        return [pytree], pytree
+    leaves: List[Any] = []
+    if isinstance(pytree, dict):
+        for v in pytree.values():
+            child_leaves, _ = _pure_tree_flatten(v)
+            leaves.extend(child_leaves)
+    else:  # list or tuple
+        for v in pytree:
+            child_leaves, _ = _pure_tree_flatten(v)
+            leaves.extend(child_leaves)
+    return leaves, pytree
+
+
+def _pure_tree_unflatten(treedef: Any, leaves: List[Any]) -> Any:
+    """
+    Pure Python tree unflattening using the original pytree structure as treedef.
+    Consumes leaves from the front of the list.
+    """
+    if _is_leaf(treedef):
+        return leaves.pop(0)
+    if isinstance(treedef, dict):
+        return {k: _pure_tree_unflatten(v, leaves) for k, v in treedef.items()}
+    if isinstance(treedef, tuple):
+        return tuple(_pure_tree_unflatten(v, leaves) for v in treedef)
+    # list
+    return [_pure_tree_unflatten(v, leaves) for v in treedef]
+
+
+def _pure_tree_map(f: Callable[..., Any], *pytrees: Any) -> Any:
+    """
+    Pure Python tree_map. Applies f element-wise to corresponding leaves.
+    Supports broadcasting of leaf arguments to match the structure of non-leaf arguments,
+    consistent with tf.nest.map_structure.
+    """
+    if all(_is_leaf(p) for p in pytrees):
+        return f(*pytrees)
+    first = next(p for p in pytrees if not _is_leaf(p))
+    if isinstance(first, dict):
+        return {
+            k: _pure_tree_map(f, *(p if _is_leaf(p) else p[k] for p in pytrees))
+            for k in first
+        }
+    if isinstance(first, tuple):
+        return tuple(
+            _pure_tree_map(f, *(p if _is_leaf(p) else p[i] for p in pytrees))
+            for i in range(len(first))
+        )
+    # list
+    return [
+        _pure_tree_map(f, *(p if _is_leaf(p) else p[i] for p in pytrees))
+        for i in range(len(first))
+    ]
+
+
 class ExtendedBackend:
     """
     Add tensorcircuit specific backend methods, especially with their docstrings.
@@ -1229,17 +1294,10 @@ class ExtendedBackend:
         :type f: Callable[..., Any]
         :param pytrees: inputs as any python structure
         :type pytrees: Any
-        :raises NotImplementedError: raise when neither tensorflow or jax is installed.
         :return: The new tree map with the same structure but different values.
         :rtype: Any
         """
-        try:
-            import tensorflow as tf
-
-        except ImportError:
-            raise NotImplementedError("No installed ML backend for `tree_map`")
-
-        return tf.nest.map_structure(f, *pytrees)
+        return _pure_tree_map(f, *pytrees)
 
     def tree_flatten(self: Any, pytree: Any) -> Tuple[Any, Any]:
         """
@@ -1251,16 +1309,7 @@ class ExtendedBackend:
             which can be used for later unflatten
         :rtype: Tuple[Any, Any]
         """
-        try:
-            import tensorflow as tf
-
-        except ImportError:
-            raise NotImplementedError("No installed ML backend for `tree_flatten`")
-
-        leaves = tf.nest.flatten(pytree)
-        treedef = pytree
-
-        return leaves, treedef
+        return _pure_tree_flatten(pytree)
 
     def tree_unflatten(self: Any, treedef: Any, leaves: Any) -> Any:
         """
@@ -1273,13 +1322,8 @@ class ExtendedBackend:
         :return: Packed pytree
         :rtype: Any
         """
-        try:
-            import tensorflow as tf
-
-        except ImportError:
-            raise NotImplementedError("No installed ML backend for `tree_unflatten`")
-
-        return tf.nest.pack_sequence_as(treedef, leaves)
+        leaves_copy = list(leaves)
+        return _pure_tree_unflatten(treedef, leaves_copy)
 
     def to_dlpack(self: Any, a: Tensor) -> Any:
         """
