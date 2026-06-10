@@ -41,7 +41,8 @@ class _TreeDef:
                 )
             return leaves.pop(0)
         if self.typ is dict:
-            assert self.sorted_keys is not None
+            if self.sorted_keys is None:
+                raise ValueError("sorted_keys required for dict treedef")
             return {
                 k: child.unflatten(leaves)
                 for k, child in zip(self.sorted_keys, self.children)
