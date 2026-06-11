@@ -607,12 +607,7 @@ class TestTreeMapCornerCases:
 
 
 class TestJAXComparisonTreeMap:
-    """Directly compare tree_map behaviour with JAX.
-    These tests are skipped if JAX is not available."""
-
-    @pytest.fixture(autouse=True)
-    def _require_jax(self):
-        pytest.importorskip("jax")
+    """Directly compare tree_map behaviour with JAX."""
 
     def test_tree_map_basic_matches_jax(self):
         tree = {"a": [1, 2], "b": 3}
@@ -649,10 +644,6 @@ class TestJAXComparisonTreeMap:
 class TestJAXComparisonEmptyStructures:
     """Compare empty structure handling with JAX."""
 
-    @pytest.fixture(autouse=True)
-    def _require_jax(self):
-        pytest.importorskip("jax")
-
     def test_empty_list_matches_jax(self):
         jax_leaves, _ = tree_util.tree_flatten([])
         pure_leaves, _ = _pure_tree_flatten([])
@@ -677,12 +668,7 @@ class TestJAXComparisonEmptyStructures:
 
 
 class TestJAXComparison:
-    """Directly compare behaviour with JAX ``tree_util``.
-    These tests are skipped if JAX is not available."""
-
-    @pytest.fixture(autouse=True)
-    def _require_jax(self):
-        pytest.importorskip("jax")
+    """Directly compare behaviour with JAX ``tree_util``."""
 
     def test_flatten_dict_key_order_matches_jax(self):
         tree = {"b": 2, "a": 1}
