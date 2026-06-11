@@ -20,10 +20,7 @@ from collections import namedtuple
 import numpy as np
 import pytest
 
-try:
-    from jax import tree_util
-except ImportError:
-    tree_util = None  # type: ignore[assignment]
+from jax import tree_util
 
 thisfile = os.path.abspath(__file__)
 modulepath = os.path.dirname(os.path.dirname(thisfile))
