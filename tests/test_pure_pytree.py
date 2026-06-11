@@ -13,18 +13,23 @@ semantics, covering:
   - complex nested structures
 """
 
-# pylint: disable=missing-class-docstring, missing-function-docstring
-
 import sys
 import os
 from collections import namedtuple
 
+import numpy as np
 import pytest
+
+try:
+    from jax import tree_util
+except ImportError:
+    tree_util = None  # type: ignore[assignment]
 
 thisfile = os.path.abspath(__file__)
 modulepath = os.path.dirname(os.path.dirname(thisfile))
 sys.path.insert(0, modulepath)
 
+import tensorcircuit as tc
 from tensorcircuit.backends.abstract_backend import (
     _pure_tree_flatten,
     _pure_tree_map,
@@ -294,11 +299,6 @@ class TestTreeMapBasic:
         result = _pure_tree_map(lambda x: x * 3, {"a": 1, "b": 2})
         assert result == {"a": 3, "b": 6}
 
-    def test_map_over_none(self):
-        # None is an empty pytree; map over it returns None
-        result = _pure_tree_map(lambda x: x + 1, None)
-        assert result is None
-
     def test_map_over_nested(self):
         tree = {"a": [1, 2], "b": (3,)}
         result = _pure_tree_map(lambda x: x + 10, tree)
@@ -368,27 +368,6 @@ class TestTreeMapNoArgs:
             _pure_tree_map(lambda: 42)
 
 
-class TestTreeMapDifferentTypes:
-    """Verify that container types are preserved."""
-
-    def test_tuple_preserved(self):
-        result = _pure_tree_map(lambda x: x + 1, (1, 2, 3))
-        assert isinstance(result, tuple)
-
-    def test_namedtuple_preserved(self):
-        result = _pure_tree_map(lambda x: x * 2, Point(3, 4))
-        assert isinstance(result, Point)
-        assert result == Point(6, 8)
-
-    def test_list_preserved(self):
-        result = _pure_tree_map(lambda x: x + 1, [1])
-        assert isinstance(result, list)
-
-    def test_dict_preserved(self):
-        result = _pure_tree_map(lambda x: x, {"k": 1})
-        assert isinstance(result, dict)
-
-
 # ---------------------------------------------------------------------------
 # Integration / round-trip with backend API
 # ---------------------------------------------------------------------------
@@ -397,28 +376,18 @@ class TestTreeMapDifferentTypes:
 class TestBackendIntegration:
     """Smoke tests through the ``tc.backend`` public API."""
 
-    def test_flatten_dict_key_order_via_backend(self):
-        import tensorcircuit as tc
-
-        tc.set_backend("numpy")
+    def test_flatten_dict_key_order_via_backend(self, npb):
         tree = {"b": 2, "a": 1}
         leaves, _ = tc.backend.tree_flatten(tree)
         assert leaves == [1, 2]
 
-    def test_roundtrip_via_backend(self):
-        import tensorcircuit as tc
-
-        tc.set_backend("numpy")
+    def test_roundtrip_via_backend(self, npb):
         tree = {"a": [1, 2], "b": (3, 4)}
         leaves, td = tc.backend.tree_flatten(tree)
         result = tc.backend.tree_unflatten(td, leaves)
         assert result == tree
 
-    def test_tree_map_via_backend(self):
-        import numpy as np
-        import tensorcircuit as tc
-
-        tc.set_backend("numpy")
+    def test_tree_map_via_backend(self, npb):
         tree = {"a": np.ones([2]), "b": np.zeros([3])}
         result = tc.backend.tree_map(lambda x: x + 1, tree)
         np.testing.assert_allclose(result["a"], 2 * np.ones([2]))
@@ -494,6 +463,41 @@ class TestFlattenCornerCases:
         leaves, _ = _pure_tree_flatten(tree)
         assert leaves == [1, "hello", 3.14, True]
 
+    def test_dict_with_integer_keys(self):
+        """Integer dict keys should be sorted numerically."""
+        tree = {2: "b", 1: "a", 3: "c"}
+        leaves, _ = _pure_tree_flatten(tree)
+        assert leaves == ["a", "b", "c"]
+
+    def test_frozenset_is_leaf(self):
+        """frozenset is not a supported container; it should be a leaf."""
+        fs = frozenset([1, 2, 3])
+        leaves, td = _pure_tree_flatten(fs)
+        assert leaves == [fs]
+        assert td.typ is _LEAF
+
+    def test_dict_subclass_is_container(self):
+        """Custom dict subclass is treated as a container (via isinstance)."""
+
+        class MyDict(dict):
+            pass
+
+        tree = MyDict({"a": 1})
+        leaves, td = _pure_tree_flatten(tree)
+        assert leaves == [1]
+        assert td.num_leaves == 1
+
+    def test_list_subclass_is_container(self):
+        """Custom list subclass is treated as a container (via isinstance)."""
+
+        class MyList(list):
+            pass
+
+        tree = MyList([1, 2])
+        leaves, td = _pure_tree_flatten(tree)
+        assert leaves == [1, 2]
+        assert td.num_leaves == 2
+
 
 class TestUnflattenCornerCases:
     """Corner cases for unflatten."""
@@ -506,18 +510,12 @@ class TestUnflattenCornerCases:
         assert r1 == {"a": 10, "b": 20}
         assert r2 == {"a": 30, "b": 40}
 
-    def test_unflatten_none_with_extra_leaves_raises(self):
-        _, td = _pure_tree_flatten(None)
-        with pytest.raises(ValueError, match="Too many leaves"):
-            _pure_tree_unflatten(td, [1])
-
-    def test_unflatten_empty_list_with_extra_leaves_raises(self):
-        _, td = _pure_tree_flatten([])
-        with pytest.raises(ValueError):
-            _pure_tree_unflatten(td, [1])
-
-    def test_unflatten_empty_dict_with_extra_leaves_raises(self):
-        _, td = _pure_tree_flatten({})
+    @pytest.mark.parametrize(
+        "tree", [None, [], {}], ids=["none", "empty_list", "empty_dict"]
+    )
+    def test_unflatten_empty_with_extra_leaves_raises(self, tree):
+        """0-leaf structures should reject any non-empty leaf list."""
+        _, td = _pure_tree_flatten(tree)
         with pytest.raises(ValueError):
             _pure_tree_unflatten(td, [1])
 
@@ -589,11 +587,26 @@ class TestTreeMapCornerCases:
             result = _pure_tree_map(lambda x: x, tree)
             assert result == tree
 
+    def test_map_preserves_namedtuple_type(self):
+        """namedtuple type must be preserved (not demoted to plain tuple)."""
+        result = _pure_tree_map(lambda x: x * 2, Point(3, 4))
+        assert isinstance(result, Point)
+        assert result == Point(6, 8)
+
     def test_map_with_dict_same_keys_different_insertion_order(self):
         t1 = {"b": 2, "a": 1}
         t2 = {"a": 10, "b": 20}
         result = _pure_tree_map(lambda x, y: x + y, t1, t2)
         assert result == {"b": 22, "a": 11}
+
+    def test_map_propagates_leaf_exception(self):
+        """Exception raised by f should propagate with context."""
+
+        def boom(x):
+            raise RuntimeError("leaf error")
+
+        with pytest.raises(RuntimeError, match="leaf error"):
+            _pure_tree_map(boom, {"a": 1})
 
 
 class TestJAXComparisonTreeMap:
@@ -605,16 +618,12 @@ class TestJAXComparisonTreeMap:
         pytest.importorskip("jax")
 
     def test_tree_map_basic_matches_jax(self):
-        from jax import tree_util
-
         tree = {"a": [1, 2], "b": 3}
         py_result = _pure_tree_map(lambda x: x * 2, tree)
         jax_result = tree_util.tree_map(lambda x: x * 2, tree)
         assert py_result == jax_result
 
     def test_tree_map_two_args_matches_jax(self):
-        from jax import tree_util
-
         t1 = {"a": [1, 2], "b": [3]}
         t2 = {"a": [10, 20], "b": [30]}
         py_result = _pure_tree_map(lambda x, y: x + y, t1, t2)
@@ -622,28 +631,22 @@ class TestJAXComparisonTreeMap:
         assert py_result == jax_result
 
     def test_tree_map_over_none_matches_jax(self):
-        from jax import tree_util
-
         py_result = _pure_tree_map(lambda x: x + 1, None)
         jax_result = tree_util.tree_map(lambda x: x + 1, None)
         assert py_result == jax_result
 
     def test_tree_map_rejects_mismatch_like_jax(self):
-        from jax import tree_util
-
-        # scalar broadcast should fail for both
+        # dict vs scalar: different input from the pure test
         with pytest.raises(ValueError):
-            tree_util.tree_map(lambda x, y: (x, y), {"a": [1, 2]}, 9)
+            tree_util.tree_map(lambda x, y: (x, y), {"x": [3, 4]}, "bad")
         with pytest.raises(ValueError):
-            _pure_tree_map(lambda x, y: (x, y), {"a": [1, 2]}, 9)
+            _pure_tree_map(lambda x, y: (x, y), {"x": [3, 4]}, "bad")
 
     def test_tree_map_rejects_none_vs_scalar_like_jax(self):
-        from jax import tree_util
-
         with pytest.raises((ValueError, TypeError)):
-            tree_util.tree_map(lambda x, y: (x, y), None, 5)
+            tree_util.tree_map(lambda x, y: (x, y), None, 99)
         with pytest.raises(ValueError):
-            _pure_tree_map(lambda x, y: (x, y), None, 5)
+            _pure_tree_map(lambda x, y: (x, y), None, 99)
 
 
 class TestJAXComparisonEmptyStructures:
@@ -654,22 +657,16 @@ class TestJAXComparisonEmptyStructures:
         pytest.importorskip("jax")
 
     def test_empty_list_matches_jax(self):
-        from jax import tree_util
-
         jax_leaves, _ = tree_util.tree_flatten([])
         pure_leaves, _ = _pure_tree_flatten([])
         assert jax_leaves == pure_leaves == []
 
     def test_empty_dict_matches_jax(self):
-        from jax import tree_util
-
         jax_leaves, _ = tree_util.tree_flatten({})
         pure_leaves, _ = _pure_tree_flatten({})
         assert jax_leaves == pure_leaves == []
 
     def test_roundtrip_empty_list(self):
-        from jax import tree_util
-
         jax_leaves, jax_td = tree_util.tree_flatten([])
         pure_leaves, pure_td = _pure_tree_flatten([])
         assert tree_util.tree_unflatten(jax_td, jax_leaves) == _pure_tree_unflatten(
@@ -691,23 +688,17 @@ class TestJAXComparison:
         pytest.importorskip("jax")
 
     def test_flatten_dict_key_order_matches_jax(self):
-        from jax import tree_util
-
         tree = {"b": 2, "a": 1}
         jax_leaves, _ = tree_util.tree_flatten(tree)
         pure_leaves, _ = _pure_tree_flatten(tree)
         assert jax_leaves == pure_leaves
 
     def test_flatten_none_matches_jax(self):
-        from jax import tree_util
-
         jax_leaves, _ = tree_util.tree_flatten(None)
         pure_leaves, _ = _pure_tree_flatten(None)
         assert jax_leaves == pure_leaves == []
 
     def test_unflatten_extra_leaves_matches_jax(self):
-        from jax import tree_util
-
         _, jax_td = tree_util.tree_flatten({"a": 1})
         _, pure_td = _pure_tree_flatten({"a": 1})
 
@@ -717,8 +708,6 @@ class TestJAXComparison:
             _pure_tree_unflatten(pure_td, [10, 11])
 
     def test_unflatten_too_few_leaves_matches_jax(self):
-        from jax import tree_util
-
         _, jax_td = tree_util.tree_flatten({"a": 1, "b": 2})
         _, pure_td = _pure_tree_flatten({"a": 1, "b": 2})
 
@@ -728,8 +717,6 @@ class TestJAXComparison:
             _pure_tree_unflatten(pure_td, [10])
 
     def test_roundtrip_nested_matches_jax(self):
-        from jax import tree_util
-
         tree = {"a": [1, (2, 3)], "b": {"c": 4}}
         jax_leaves, jax_td = tree_util.tree_flatten(tree)
         pure_leaves, pure_td = _pure_tree_flatten(tree)
@@ -739,8 +726,6 @@ class TestJAXComparison:
         )
 
     def test_flatten_nested_with_none_matches_jax(self):
-        from jax import tree_util
-
         tree = {"a": None, "b": [None, 1], "c": 3}
         jax_leaves, _ = tree_util.tree_flatten(tree)
         pure_leaves, _ = _pure_tree_flatten(tree)

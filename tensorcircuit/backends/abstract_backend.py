@@ -1413,6 +1413,27 @@ class ExtendedBackend:
         """
         Return the new tree map with multiple arg function ``f`` through pytrees.
 
+        Backend pytree utilities.
+
+        For the NumPy/CuPy fallback, TensorCircuit uses a pure Python implementation
+        designed to match JAX jax.tree_util semantics for supported containers:
+        None is an empty pytree, dict keys are traversed in sorted order, namedtuple
+        types are distinguished from plain tuples, and tree_map requires matching
+        tree structure.
+
+        Other backends may follow their native tree utility semantics instead. In
+        particular, TensorFlow tf.nest treats None as a leaf, and PyTorch
+        torch.utils._pytree preserves dict insertion order rather than JAX's sorted
+        dict-key order. Therefore corner cases involving None, dict insertion order,
+        or mixed namedtuple/tuple structures may differ across backends.
+
+        Example:
+            JAX/NumPy-style mapping over ``{"b": 2, "a": 1}`` and ``{"a": 10, "b": 20}``
+            pairs leaves by sorted keys, yielding ``{"a": 11, "b": 22}``.
+
+            PyTorch-native flattening may pair leaves by insertion order, which can
+            yield backend-specific results for the same inputs.
+
         :param f: The function
         :type f: Callable[..., Any]
         :param pytrees: inputs as any python structure
