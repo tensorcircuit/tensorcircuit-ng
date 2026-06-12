@@ -15,7 +15,7 @@ semantics, covering:
 
 import sys
 import os
-from collections import namedtuple
+from collections import namedtuple, OrderedDict, defaultdict
 
 import numpy as np
 import pytest
@@ -52,7 +52,6 @@ class TestFlattenBasic:
         assert td.typ is _LEAF
 
     def test_flatten_single_string(self):
-        # strings are leaves (not treated as containers)
         leaves, _ = _pure_tree_flatten("hello")
         assert leaves == ["hello"]
 
@@ -83,7 +82,6 @@ class TestFlattenBasic:
 
     def test_flatten_flat_dict(self):
         leaves, td = _pure_tree_flatten({"x": 1, "y": 2})
-        # keys should be sorted → [1, 2]
         assert leaves == [1, 2]
         assert td.num_leaves == 2
         assert td.sorted_keys == ("x", "y")
@@ -113,7 +111,6 @@ class TestFlattenDictKeyOrder:
     def test_unsorted_keys(self):
         tree = {"b": 2, "a": 1}
         leaves, td = _pure_tree_flatten(tree)
-        # JAX sorts dict keys; leaves should follow sorted order
         assert leaves == [1, 2]
         assert td.sorted_keys == ("a", "b")
 
@@ -121,6 +118,43 @@ class TestFlattenDictKeyOrder:
         tree = {"2": "x", "1": "y", "3": "z"}
         leaves, _ = _pure_tree_flatten(tree)
         assert leaves == ["y", "x", "z"]
+
+
+class TestFlattenOrderedDict:
+    """OrderedDict preserves insertion order (not sorted like dict)."""
+
+    def test_orderedict_preserves_insertion_order(self):
+        od = OrderedDict([("c", 3), ("a", 1), ("b", 2)])
+        leaves, td = _pure_tree_flatten(od)
+        # Insertion order, not sorted
+        assert leaves == [3, 1, 2]
+        assert td.sorted_keys == ("c", "a", "b")
+
+    def test_orderedict_type_recorded(self):
+        od = OrderedDict([("a", 1)])
+        _, td = _pure_tree_flatten(od)
+        assert td.typ is OrderedDict
+
+
+class TestFlattenDefaultDict:
+    """defaultdict uses sorted keys and records default_factory."""
+
+    def test_defaultdict_sorted_keys(self):
+        dd = defaultdict(int, {"b": 2, "a": 1})
+        leaves, td = _pure_tree_flatten(dd)
+        assert leaves == [1, 2]
+        assert td.sorted_keys == ("a", "b")
+
+    def test_defaultdict_type_recorded(self):
+        dd = defaultdict(list, {"a": [1]})
+        _, td = _pure_tree_flatten(dd)
+        assert td.typ is defaultdict
+        assert td.aux_data is list
+
+    def test_defaultdict_none_factory(self):
+        dd = defaultdict(None, {"a": 1})
+        _, td = _pure_tree_flatten(dd)
+        assert td.aux_data is None
 
 
 class TestFlattenNamedTuple:
@@ -148,7 +182,6 @@ class TestFlattenNested:
     def test_nested_list_dict(self):
         tree = {"a": [1, 2], "b": (3, {"c": 4})}
         leaves, td = _pure_tree_flatten(tree)
-        # sorted keys: a → [1,2], b → (3, {"c": 4})
         assert leaves == [1, 2, 3, 4]
         assert td.num_leaves == 4
 
@@ -161,7 +194,6 @@ class TestFlattenNested:
     def test_mixed_none_and_values(self):
         tree = {"a": None, "b": [None, 1], "c": 3}
         leaves, _ = _pure_tree_flatten(tree)
-        # sorted keys: a→None(0 leaves), b→[None, 1] → [1], c→3
         assert leaves == [1, 3]
 
 
@@ -213,6 +245,43 @@ class TestUnflattenBasic:
         assert leaves == original_leaves
 
 
+class TestUnflattenOrderedDict:
+    """OrderedDict round-trips and preserves insertion order."""
+
+    def test_roundtrip_ordereddict(self):
+        od = OrderedDict([("c", 3), ("a", 1), ("b", 2)])
+        leaves, td = _pure_tree_flatten(od)
+        result = _pure_tree_unflatten(td, leaves)
+        assert isinstance(result, OrderedDict)
+        assert list(result.keys()) == ["c", "a", "b"]
+        assert result == {"c": 3, "a": 1, "b": 2}
+
+    def test_ordereddict_not_plain_dict(self):
+        od = OrderedDict([("a", 1)])
+        _, td = _pure_tree_flatten(od)
+        result = _pure_tree_unflatten(td, [10])
+        assert type(result) is OrderedDict
+
+
+class TestUnflattenDefaultDict:
+    """defaultdict round-trips and preserves default_factory."""
+
+    def test_roundtrip_defaultdict(self):
+        dd = defaultdict(list, {"a": [1, 2], "b": [3]})
+        leaves, td = _pure_tree_flatten(dd)
+        result = _pure_tree_unflatten(td, leaves)
+        assert isinstance(result, defaultdict)
+        assert result.default_factory is list
+        assert result == {"a": [1, 2], "b": [3]}
+
+    def test_roundtrip_defaultdict_none_factory(self):
+        dd = defaultdict(None, {"a": 1})
+        leaves, td = _pure_tree_flatten(dd)
+        result = _pure_tree_unflatten(td, leaves)
+        assert isinstance(result, defaultdict)
+        assert result.default_factory is None
+
+
 class TestUnflattenNamedTuple:
     """namedtuple round-trips correctly."""
 
@@ -243,7 +312,6 @@ class TestUnflattenNested:
     def test_replace_values(self):
         tree = {"a": [1, 2], "b": [3]}
         leaves, td = _pure_tree_flatten(tree)
-        # Replace with doubled values
         result = _pure_tree_unflatten(td, [x * 2 for x in leaves])
         assert result == {"a": [2, 4], "b": [6]}
 
@@ -301,6 +369,20 @@ class TestTreeMapBasic:
         result = _pure_tree_map(lambda x: x + 10, tree)
         assert result == {"a": [11, 12], "b": (13,)}
 
+    def test_map_preserves_orderedict_type(self):
+        od = OrderedDict([("c", 1), ("a", 2)])
+        result = _pure_tree_map(lambda x: x * 10, od)
+        assert isinstance(result, OrderedDict)
+        assert list(result.keys()) == ["c", "a"]
+        assert result == {"c": 10, "a": 20}
+
+    def test_map_preserves_defaultdict_type(self):
+        dd = defaultdict(int, {"a": 1, "b": 2})
+        result = _pure_tree_map(lambda x: x * 10, dd)
+        assert isinstance(result, defaultdict)
+        assert result.default_factory is int
+        assert result == {"a": 10, "b": 20}
+
 
 class TestTreeMapMultiArg:
     """Mapping with multiple tree arguments."""
@@ -330,17 +412,14 @@ class TestTreeMapStructureMismatch:
     """JAX raises ValueError on structure mismatch."""
 
     def test_scalar_broadcast_is_rejected(self):
-        """Passing a scalar where a container is expected should fail."""
         with pytest.raises(ValueError, match="structure mismatch"):
             _pure_tree_map(lambda x, y: (x, y), {"a": [1, 2]}, 9)
 
     def test_none_vs_scalar_is_rejected(self):
-        """``None`` is an empty pytree; mapping it with a scalar leaf mismatches."""
         with pytest.raises(ValueError, match="structure mismatch"):
             _pure_tree_map(lambda x, y: (x, y), None, 5)
 
     def test_namedtuple_vs_tuple_is_rejected(self):
-        """namedtuple and plain tuple are different types."""
         with pytest.raises(ValueError, match="structure mismatch"):
             _pure_tree_map(lambda x, y: (x, y), Point(1, 2), (3, 4))
 
@@ -455,27 +534,22 @@ class TestFlattenCornerCases:
         assert result == [[[[[42]]]]]
 
     def test_mixed_types_in_list(self):
-        """Container types become leaves when inside a list."""
         tree = [1, "hello", 3.14, True]
         leaves, _ = _pure_tree_flatten(tree)
         assert leaves == [1, "hello", 3.14, True]
 
     def test_dict_with_integer_keys(self):
-        """Integer dict keys should be sorted numerically."""
         tree = {2: "b", 1: "a", 3: "c"}
         leaves, _ = _pure_tree_flatten(tree)
         assert leaves == ["a", "b", "c"]
 
     def test_frozenset_is_leaf(self):
-        """frozenset is not a supported container; it should be a leaf."""
         fs = frozenset([1, 2, 3])
         leaves, td = _pure_tree_flatten(fs)
         assert leaves == [fs]
         assert td.typ is _LEAF
 
     def test_dict_subclass_is_container(self):
-        """Custom dict subclass is treated as a container (via isinstance)."""
-
         class MyDict(dict):
             pass
 
@@ -485,8 +559,6 @@ class TestFlattenCornerCases:
         assert td.num_leaves == 1
 
     def test_list_subclass_is_container(self):
-        """Custom list subclass is treated as a container (via isinstance)."""
-
         class MyList(list):
             pass
 
@@ -500,7 +572,6 @@ class TestUnflattenCornerCases:
     """Corner cases for unflatten."""
 
     def test_treedef_is_reusable(self):
-        """The same _TreeDef should be usable multiple times."""
         _, td = _pure_tree_flatten({"a": 1, "b": 2})
         r1 = _pure_tree_unflatten(td, [10, 20])
         r2 = _pure_tree_unflatten(td, [30, 40])
@@ -511,7 +582,6 @@ class TestUnflattenCornerCases:
         "tree", [None, [], {}], ids=["none", "empty_list", "empty_dict"]
     )
     def test_unflatten_empty_with_extra_leaves_raises(self, tree):
-        """0-leaf structures should reject any non-empty leaf list."""
         _, td = _pure_tree_flatten(tree)
         with pytest.raises(ValueError):
             _pure_tree_unflatten(td, [1])
@@ -524,12 +594,9 @@ class TestUnflattenCornerCases:
         assert result == tree
 
     def test_unflatten_dict_key_to_sorted_leaf_mapping(self):
-        """unflatten maps leaves in sorted-key order back to dict keys."""
         tree = {"z": 1, "a": 2, "m": 3}
         leaves, td = _pure_tree_flatten(tree)
-        # leaves are in sorted-key order: a→2, m→3, z→1
         assert leaves == [2, 3, 1]
-        # unflatten also consumes leaves in sorted-key order
         result = _pure_tree_unflatten(td, [20, 30, 40])
         assert result == {"z": 40, "a": 20, "m": 30}
 
@@ -546,31 +613,24 @@ class TestTreeMapCornerCases:
         assert result == 7
 
     def test_nested_structure_mismatch_deep(self):
-        """Mismatch at a deeply nested level should be detected."""
         t1 = {"a": {"b": [1, 2]}}
-        t2 = {"a": {"b": [1, 2, 3]}}  # deeper mismatch
+        t2 = {"a": {"b": [1, 2, 3]}}
         with pytest.raises(ValueError, match="structure mismatch"):
             _pure_tree_map(lambda x, y: x + y, t1, t2)
 
     def test_nested_type_mismatch(self):
-        """Type mismatch at a nested level."""
         t1 = {"a": [1, 2]}
-        t2 = {"a": (1, 2)}  # list vs tuple at nested level
+        t2 = {"a": (1, 2)}
         with pytest.raises(ValueError, match="structure mismatch"):
             _pure_tree_map(lambda x, y: x + y, t1, t2)
 
     def test_different_namedtuple_types_mismatch(self):
-        """Two different namedtuple types should not match."""
         RGB = namedtuple("RGB", ["r", "g"])
-        # Point and RGB are different namedtuples with same field count
-        # _treedefs_compatible checks `a.typ is not b.typ` → mismatch
         with pytest.raises(ValueError, match="structure mismatch"):
             _pure_tree_map(lambda x, y: x + y, Point(1, 2), RGB(10, 20))
 
     def test_different_arities_namedtuple_mismatch(self):
-        """namedtuples with different field counts should mismatch."""
         RGB3 = namedtuple("RGB3", ["r", "g", "b"])
-        # Point has 2 fields, RGB3 has 3 → length mismatch
         with pytest.raises(ValueError, match="structure mismatch"):
             _pure_tree_map(lambda x, y: x + y, Point(1, 2), RGB3(10, 20, 30))
 
@@ -585,7 +645,6 @@ class TestTreeMapCornerCases:
             assert result == tree
 
     def test_map_preserves_namedtuple_type(self):
-        """namedtuple type must be preserved (not demoted to plain tuple)."""
         result = _pure_tree_map(lambda x: x * 2, Point(3, 4))
         assert isinstance(result, Point)
         assert result == Point(6, 8)
@@ -597,8 +656,6 @@ class TestTreeMapCornerCases:
         assert result == {"b": 22, "a": 11}
 
     def test_map_propagates_leaf_exception(self):
-        """Exception raised by f should propagate with context."""
-
         def boom(x):
             raise RuntimeError("leaf error")
 
@@ -628,7 +685,6 @@ class TestJAXComparisonTreeMap:
         assert py_result == jax_result
 
     def test_tree_map_rejects_mismatch_like_jax(self):
-        # dict vs scalar: different input from the pure test
         with pytest.raises(ValueError):
             tree_util.tree_map(lambda x, y: (x, y), {"x": [3, 4]}, "bad")
         with pytest.raises(ValueError):
@@ -663,7 +719,7 @@ class TestJAXComparisonEmptyStructures:
 
 
 # ---------------------------------------------------------------------------
-# JAX comparison tests (requires jax)
+# JAX comparison tests
 # ---------------------------------------------------------------------------
 
 

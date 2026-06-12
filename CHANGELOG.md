@@ -24,7 +24,7 @@
 
 - Replace hardcoded `np.complex128`/`np.complex64` with `cons.npdtype`/`dtypestr` in gates and translation modules, making the codebase respect `tc.set_dtype()`.
 
-- **Align `_pure_tree_flatten`, `_pure_tree_unflatten`, `_pure_tree_map` with JAX `tree_util` semantics**: `None` is now an empty pytree (0 leaves); dict keys are sorted; namedtuple is tracked as a distinct type from plain tuple; `tree_map` enforces strict structure matching (no scalar broadcast); `unflatten` raises `ValueError` on leaf count mismatch. Added comprehensive test suite (`test_pure_pytree.py`) with JAX comparison tests.
+- Align pure pytree utilities (`_pure_tree_flatten`, `_pure_tree_unflatten`, `_pure_tree_map`) with JAX `tree_util` semantics, including `OrderedDict` (insertion-order) and `defaultdict` (sorted keys + `default_factory`) round-trip support.
 
 ### Fixed
 
