@@ -317,7 +317,7 @@ class TestUnflattenNested:
 
 
 class TestUnflattenLeafCountValidation:
-    """Validate leaf count on unflatten (JAX raises ValueError)."""
+    """Validate leaf count on unflatten."""
 
     def test_extra_leaves_raises_valueerror(self):
         _, td = _pure_tree_flatten({"a": 1})
@@ -409,7 +409,7 @@ class TestTreeMapMultiArg:
 
 
 class TestTreeMapStructureMismatch:
-    """JAX raises ValueError on structure mismatch."""
+    """Reject structure mismatches with ValueError."""
 
     def test_scalar_broadcast_is_rejected(self):
         with pytest.raises(ValueError, match="structure mismatch"):
@@ -549,23 +549,46 @@ class TestFlattenCornerCases:
         assert leaves == [fs]
         assert td.typ is _LEAF
 
-    def test_dict_subclass_is_container(self):
+    def test_dict_subclass_is_leaf(self):
         class MyDict(dict):
             pass
 
         tree = MyDict({"a": 1})
         leaves, td = _pure_tree_flatten(tree)
-        assert leaves == [1]
+        assert leaves == [tree]
+        assert td.typ is _LEAF
         assert td.num_leaves == 1
 
-    def test_list_subclass_is_container(self):
+    def test_list_subclass_is_leaf(self):
         class MyList(list):
             pass
 
         tree = MyList([1, 2])
         leaves, td = _pure_tree_flatten(tree)
+        assert leaves == [tree]
+        assert td.typ is _LEAF
+        assert td.num_leaves == 1
+
+    def test_tuple_subclass_is_leaf(self):
+        class MyTuple(tuple):
+            pass
+
+        tree = MyTuple((1, 2))
+        leaves, td = _pure_tree_flatten(tree)
+        assert leaves == [tree]
+        assert td.typ is _LEAF
+        assert td.num_leaves == 1
+
+    def test_namedtuple_subclass_is_container(self):
+        class SubPoint(Point):
+            pass
+
+        tree = SubPoint(1, 2)
+        leaves, td = _pure_tree_flatten(tree)
         assert leaves == [1, 2]
-        assert td.num_leaves == 2
+        result = _pure_tree_unflatten(td, leaves)
+        assert type(result) is SubPoint
+        assert result == SubPoint(1, 2)
 
 
 class TestUnflattenCornerCases:
@@ -663,8 +686,13 @@ class TestTreeMapCornerCases:
             _pure_tree_map(boom, {"a": 1})
 
 
-class TestJAXComparisonTreeMap:
-    """Directly compare tree_map behaviour with JAX."""
+# ---------------------------------------------------------------------------
+# JAX cross-validation
+# ---------------------------------------------------------------------------
+
+
+class TestJAXComparison:
+    """Directly compare behaviour with JAX ``tree_util``."""
 
     def test_tree_map_basic_matches_jax(self):
         tree = {"a": [1, 2], "b": 3}
@@ -696,10 +724,6 @@ class TestJAXComparisonTreeMap:
         with pytest.raises(ValueError):
             _pure_tree_map(lambda x, y: (x, y), None, 99)
 
-
-class TestJAXComparisonEmptyStructures:
-    """Compare empty structure handling with JAX."""
-
     def test_empty_list_matches_jax(self):
         jax_leaves, _ = tree_util.tree_flatten([])
         pure_leaves, _ = _pure_tree_flatten([])
@@ -716,15 +740,6 @@ class TestJAXComparisonEmptyStructures:
         assert tree_util.tree_unflatten(jax_td, jax_leaves) == _pure_tree_unflatten(
             pure_td, pure_leaves
         )
-
-
-# ---------------------------------------------------------------------------
-# JAX comparison tests
-# ---------------------------------------------------------------------------
-
-
-class TestJAXComparison:
-    """Directly compare behaviour with JAX ``tree_util``."""
 
     def test_flatten_dict_key_order_matches_jax(self):
         tree = {"b": 2, "a": 1}

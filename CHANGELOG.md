@@ -20,11 +20,11 @@
 
 - Add support for OMECO contraction path finder.
 
+- Add pure-Python pytree utilities for the abstract backend.
+
 ### Changed
 
 - Replace hardcoded `np.complex128`/`np.complex64` with `cons.npdtype`/`dtypestr` in gates and translation modules, making the codebase respect `tc.set_dtype()`.
-
-- Align pure pytree utilities (`_pure_tree_flatten`, `_pure_tree_unflatten`, `_pure_tree_map`) with JAX `tree_util` semantics, including `OrderedDict` (insertion-order) and `defaultdict` (sorted keys + `default_factory`) round-trip support.
 
 ### Fixed
 
