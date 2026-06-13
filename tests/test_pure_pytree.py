@@ -123,14 +123,14 @@ class TestFlattenDictKeyOrder:
 class TestFlattenOrderedDict:
     """OrderedDict preserves insertion order (not sorted like dict)."""
 
-    def test_orderedict_preserves_insertion_order(self):
+    def test_ordereddict_preserves_insertion_order(self):
         od = OrderedDict([("c", 3), ("a", 1), ("b", 2)])
         leaves, td = _pure_tree_flatten(od)
         # Insertion order, not sorted
         assert leaves == [3, 1, 2]
         assert td.sorted_keys == ("c", "a", "b")
 
-    def test_orderedict_type_recorded(self):
+    def test_ordereddict_type_recorded(self):
         od = OrderedDict([("a", 1)])
         _, td = _pure_tree_flatten(od)
         assert td.typ is OrderedDict
@@ -369,7 +369,7 @@ class TestTreeMapBasic:
         result = _pure_tree_map(lambda x: x + 10, tree)
         assert result == {"a": [11, 12], "b": (13,)}
 
-    def test_map_preserves_orderedict_type(self):
+    def test_map_preserves_ordereddict_type(self):
         od = OrderedDict([("c", 1), ("a", 2)])
         result = _pure_tree_map(lambda x: x * 10, od)
         assert isinstance(result, OrderedDict)
@@ -434,6 +434,14 @@ class TestTreeMapStructureMismatch:
     def test_type_mismatch_dict_vs_list(self):
         with pytest.raises(ValueError, match="structure mismatch"):
             _pure_tree_map(lambda x, y: (x, y), {"a": 1}, [1])
+
+    def test_defaultdict_factory_mismatch(self):
+        with pytest.raises(ValueError, match="structure mismatch"):
+            _pure_tree_map(
+                lambda x, y: (x, y),
+                defaultdict(int, {"a": 1}),
+                defaultdict(list, {"a": 2}),
+            )
 
 
 class TestTreeMapNoArgs:

@@ -242,6 +242,8 @@ def _treedefs_compatible(treedef_a: _TreeDef, treedef_b: _TreeDef) -> bool:
     if issubclass(treedef_a.typ, dict):
         if treedef_a.sorted_keys != treedef_b.sorted_keys:
             return False
+        if treedef_a.aux_data != treedef_b.aux_data:
+            return False
         return all(
             _treedefs_compatible(ac, bc)
             for ac, bc in zip(treedef_a.children, treedef_b.children)
