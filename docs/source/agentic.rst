@@ -69,6 +69,25 @@ Recommended Workflow
 
 By integrating extreme performance with an autonomous, intent-driven AI workflow, TensorCircuit-NG empowers researchers to transition from manual coding to automated scientific discovery.
 
+Initial Prompt for Empty Workspace Setup
+----------------------------------------
+
+When starting in a completely empty folder/workspace with an AI agent, you can copy and paste the following initial prompt to bootstrap the agent. 
+This instructs the agent to clone the repository, read coding guidelines/skills, and execute tasks accordingly:
+
+.. code-block:: markdown
+
+    You are an AI coding assistant. Please follow these steps to set up our project workspace and solve my requests:
+    
+    1. Run `git clone https://github.com/tensorcircuit/tensorcircuit-ng.git .` to download the repository in this empty folder.
+    2. Read `AGENTS.md` at the root of the repository to understand the coding standards.
+    3. Review the available agentic workflow scripts and skill files under `.agents/skills/` to see if a specialized workflow is suitable for the current task.
+    4. Reference existing implementations in `examples/` and test cases in `tests/` to write differentiable, and JIT-friendly code.
+    5. Respond to my later requests, write code, and execute experiments/tests to analyse the results.
+    
+    Let me know when the initialization is complete and ask for my requests.
+
+
 AI-Native Documentation
 -----------------------
 

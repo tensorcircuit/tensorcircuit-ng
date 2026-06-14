@@ -741,6 +741,101 @@ Example: Quantum Teleportation
 
 
 
+Symbolic Circuit
+-----------------
+
+TensorCircuit-NG supports symbolic circuit simulation via ``tc.SymbolCircuit`` and SymPy. 
+This allows developers to build circuits with symbolic parameters, derive closed-form algebraic expressions for quantum states, expectation values, or amplitudes, and then lambdify or compile them for fast execution on various backends.
+
+**Basic Usage**
+
+To build a symbolic circuit, we can instantiate ``tc.SymbolCircuit`` and define symbols using SymPy:
+
+.. code-block:: python
+
+    import sympy
+    import tensorcircuit as tc
+
+    # Define symbolic parameters
+    theta = sympy.Symbol("theta", real=True)
+    phi = sympy.Symbol("phi", real=True)
+
+    # Create a symbolic circuit
+    sc = tc.SymbolCircuit(2)
+    sc.h(0)
+    sc.rx(0, theta=theta)
+    sc.ry(1, theta=phi)
+    sc.cnot(0, 1)
+
+    # Retrieve free symbols
+    print(sc.free_symbols())  # {theta, phi}
+
+**Evaluating Symbolic Expectation Values**
+
+We can evaluate symbolic expectation values, which returns algebraic SymPy expressions:
+
+.. code-block:: python
+
+    # Obtain symbolic expectation value of Z_0
+    exp_z0 = sc.expectation_ps(z=[0])
+    print(exp_z0)  # Algebraic expression in terms of theta
+
+**Converting to a Concrete Circuit**
+
+To evaluate the circuit at specific parameter values, we can map the symbols to concrete numerical values and convert it to a regular ``tc.Circuit``:
+
+.. code-block:: python
+
+    # Bind concrete values to symbols
+    c = sc.to_circuit({theta: 0.5, phi: 0.1})
+
+    # Evaluate the concrete state or expectation values
+    print(c.state())
+    print(c.expectation_ps(z=[0]))
+
+**Qiskit Parameterized Circuit Translation**
+
+We can translate a ``SymbolCircuit`` into a Qiskit ``QuantumCircuit``, which preserves Qiskit ``Parameter`` objects for further analysis or hardware deployment:
+
+.. code-block:: python
+
+    # Convert symbolic circuit to Qiskit Circuit (keeps Qiskit Parameter objects)
+    qc = sc.to_qiskit()
+    print(qc.parameters)  # ParameterView([Parameter(phi), Parameter(theta)])
+
+**JAX Lambdify Optimization**
+
+We can convert symbolic expressions to highly optimized backend-native functions (like JAX) using ``sympy.lambdify``, which can then be composed with ``jit``, ``grad``, or ``vmap``:
+
+.. code-block:: python
+
+    import sympy
+    import jax.numpy as jnp
+    import tensorcircuit as tc
+
+    tc.set_backend("jax")
+
+    theta = sympy.Symbol("theta", real=True)
+    sc = tc.SymbolCircuit(1)
+    sc.rx(0, theta=theta)
+    exp = sc.expectation_ps(z=[0])
+
+    # Convert SymPy expression to JAX-compatible function
+    # Note: Use modules=[jnp, "math"] instead of string "jax.numpy"
+    f_jax = sympy.lambdify([theta], exp, modules=[jnp, "math"])
+
+    # Compiling with JIT and computing gradients
+    f_jit = tc.backend.jit(f_jax)
+    f_grad = tc.backend.jit(tc.backend.grad(f_jax))
+
+    print(f_jit(0.5))
+    print(f_grad(0.5))
+
+For an end-to-end example implementing symbolic QAOA, please refer to the script `qaoa_symbolic.py <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/qaoa_symbolic.py>`_.
+
+
+
+
 Fermion Gaussian State Simulator
 --------------------------------
 
