@@ -585,6 +585,7 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
             torch_dtype = getattr(torchlib, dtype)
         else:
             torch_dtype = dtype
+        a = torchlib.as_tensor(a)
         if torchlib.is_complex(a) and not getattr(torch_dtype, "is_complex", False):
             a = torchlib.real(a)
         return a.to(torch_dtype)

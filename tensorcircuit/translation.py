@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
+from .cons import rdtypestr
+
 logger = logging.getLogger(__name__)
 
 
@@ -327,7 +329,7 @@ def qir2qiskit(
         elif gate_name in ["exp", "exp1"]:
             unitary = backend.numpy(backend.convert_to_tensor(parameters["unitary"]))
             theta = backend.numpy(backend.convert_to_tensor(parameters["theta"]))
-            theta = np.array(np.real(theta)).astype(np.float64)
+            theta = np.array(np.real(theta)).astype(getattr(np, rdtypestr))
             # cast theta to real, since qiskit only support unitary.
             # Error can be presented if theta is actually complex in this procedure.
             exp_op = qi.Operator(unitary)

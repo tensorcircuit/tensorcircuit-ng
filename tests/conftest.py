@@ -2,6 +2,10 @@ import sys
 import os
 import pytest
 
+# NOTE: If Intel OpenMP abort occurs on Windows (PyTorch + scipy DLL conflict),
+# set KMP_DUPLICATE_LIB_OK=TRUE in the test runner environment, e.g.:
+#   $env:KMP_DUPLICATE_LIB_OK = "TRUE"
+
 thisfile = os.path.abspath(__file__)
 modulepath = os.path.dirname(os.path.dirname(thisfile))
 

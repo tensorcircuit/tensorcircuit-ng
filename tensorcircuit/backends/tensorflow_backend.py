@@ -1200,5 +1200,16 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
 
     optimizer = keras_optimizer
 
+    def tree_map(self: Any, f: Callable[..., Any], *pytrees: Any) -> Any:
+        return tf.nest.map_structure(f, *pytrees)
+
+    def tree_flatten(self: Any, pytree: Any) -> Tuple[Any, Any]:
+        leaves = tf.nest.flatten(pytree)
+        treedef = pytree
+        return leaves, treedef
+
+    def tree_unflatten(self: Any, treedef: Any, leaves: Any) -> Any:
+        return tf.nest.pack_sequence_as(treedef, leaves)
+
     def expand_dims(self, a: Tensor, axis: int) -> Tensor:
         return tf.expand_dims(a, axis)

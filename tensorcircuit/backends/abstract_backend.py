@@ -3,17 +3,303 @@ Backend magic inherited from tensornetwork: abstract backend
 """
 
 # pylint: disable=invalid-name
-# pylint: disable=unused-variable
 
+from collections import OrderedDict, defaultdict
 from functools import reduce, partial
 from operator import mul
-from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Iterator, List, Optional, Sequence, Tuple, Union
 
 import math
 import numpy as np
 from ..utils import return_partial
 
 Tensor = Any
+
+
+class _TreeDef:
+    """
+    A JAX-compatible treedef that records pytree structure for unflattening.
+    """
+
+    __slots__ = ("typ", "sorted_keys", "children", "num_leaves", "aux_data")
+
+    def __init__(
+        self,
+        typ: type,
+        sorted_keys: Optional[Tuple[str, ...]],
+        children: Tuple["_TreeDef", ...],
+        num_leaves: int,
+        aux_data: Any = None,
+    ) -> None:
+        """
+        Store the structure of one pytree node.
+
+        :param typ: Python type of this node (a container type, ``NoneType``
+            for an empty pytree, or :class:`_LeafSentinel` for a leaf)
+        :type typ: type
+        :param sorted_keys: keys of a dict-like node in flatten order, else ``None``
+        :type sorted_keys: Optional[Tuple[str, ...]]
+        :param children: the :class:`_TreeDef` of each child node
+        :type children: Tuple["_TreeDef", ...]
+        :param num_leaves: total number of leaves contained in this subtree
+        :type num_leaves: int
+        :param aux_data: per-type payload such as a ``defaultdict`` factory,
+            defaults to ``None``
+        :type aux_data: Any
+        """
+        self.typ = typ
+        self.sorted_keys = sorted_keys
+        self.children = children
+        self.num_leaves = num_leaves
+        self.aux_data = aux_data
+
+
+class _LeafSentinel:
+    """
+    Sentinel type so that :class:`_TreeDef` can represent a leaf node.
+    """
+
+    pass
+
+
+_LEAF = _LeafSentinel
+_NONE_TYPE = type(None)
+
+
+def _is_leaf(obj: Any) -> bool:
+    """
+    Check whether *obj* is a leaf managed by the pure-pytree machinery.
+
+    Uses **exact** type matching, mirroring JAX ``tree_util``: only the
+    built-in container types (``dict``, ``OrderedDict``, ``defaultdict``,
+    ``list``, ``tuple``) and ``namedtuple`` classes are traversed.  Arbitrary
+    subclasses (e.g. ``class MyDict(dict)``) are **leaves** — in JAX a
+    subclass must be explicitly registered as a pytree node to be traversed,
+    so without registration the whole instance is a single leaf.
+
+    :param obj: any Python object to classify
+    :type obj: Any
+    :return: ``False`` for recognised containers and ``None``, ``True`` otherwise
+    :rtype: bool
+    """
+    if obj is None:
+        return False
+    t = type(obj)
+    if t is dict or t is OrderedDict or t is defaultdict:
+        return False
+    if t is list or t is tuple:
+        return False
+    # ``namedtuple`` (and its subclasses) are tuple subclasses carrying
+    # ``_fields``; keep them as containers while plain tuple subclasses
+    # such as ``class MyTuple(tuple)`` remain leaves.
+    if isinstance(obj, tuple) and hasattr(obj, "_fields"):
+        return False
+    return True
+
+
+def _pure_tree_flatten(pytree: Any) -> Tuple[List[Any], _TreeDef]:
+    """
+    Pure Python tree flattening with JAX-compatible semantics.
+
+    Key behaviors:
+
+    * ``None`` is an empty pytree (0 leaves), not a leaf.
+    * ``dict`` and ``defaultdict`` keys are iterated in **sorted** order
+      for deterministic leaf ordering.  ``defaultdict`` preserves the
+      ``default_factory`` for round-trip.
+    * ``OrderedDict`` keys are iterated in **insertion** order.
+    * ``namedtuple`` is tracked as a separate type from plain ``tuple``.
+
+    :param pytree: the Python structure to flatten
+    :type pytree: Any
+    :return: the flat list of leaves and the :class:`_TreeDef` describing the structure
+    :rtype: Tuple[List[Any], _TreeDef]
+    """
+    if pytree is None:
+        return [], _TreeDef(_NONE_TYPE, None, (), 0)
+    if _is_leaf(pytree):
+        return [pytree], _TreeDef(_LEAF, None, (), 1)
+    leaves: List[Any] = []
+    if isinstance(pytree, dict):
+        actual_type = type(pytree)
+        if actual_type is OrderedDict:
+            # OrderedDict: preserve insertion order (JAX semantics)
+            keys = tuple(pytree.keys())
+            aux_data = None
+        else:
+            # dict and defaultdict: sorted keys for determinism
+            keys = tuple(sorted(pytree.keys()))
+            aux_data = (
+                pytree.default_factory if isinstance(pytree, defaultdict) else None
+            )
+        children = []
+        for k in keys:
+            child_leaves, child_td = _pure_tree_flatten(pytree[k])
+            leaves.extend(child_leaves)
+            children.append(child_td)
+        return leaves, _TreeDef(
+            actual_type, keys, tuple(children), len(leaves), aux_data
+        )
+    # list, tuple, namedtuple
+    children = []
+    for v in pytree:
+        child_leaves, child_td = _pure_tree_flatten(v)
+        leaves.extend(child_leaves)
+        children.append(child_td)
+    return leaves, _TreeDef(type(pytree), None, tuple(children), len(leaves))
+
+
+def _unflatten_from_iter(treedef: _TreeDef, leaf_iter: Iterator[Any]) -> Any:
+    """
+    Recursively rebuild one node, consuming leaves from *leaf_iter*.
+
+    :param treedef: the structure to rebuild
+    :type treedef: _TreeDef
+    :param leaf_iter: iterator over leaves, consumed left to right
+    :type leaf_iter: Iterator[Any]
+    :return: the rebuilt pytree node
+    :rtype: Any
+    """
+    if treedef.typ is _LEAF:
+        return next(leaf_iter)
+    if issubclass(treedef.typ, dict):
+        if treedef.sorted_keys is None:
+            raise ValueError("sorted_keys required for dict treedef")
+        pairs = [
+            (k, _unflatten_from_iter(child, leaf_iter))
+            for k, child in zip(treedef.sorted_keys, treedef.children)
+        ]
+        if treedef.typ is defaultdict:
+            return defaultdict(treedef.aux_data, pairs)
+        if treedef.typ is OrderedDict:
+            return OrderedDict(pairs)
+        return dict(pairs)
+    if treedef.typ is _NONE_TYPE:
+        return None
+    if issubclass(treedef.typ, tuple):
+        result = tuple(
+            _unflatten_from_iter(child, leaf_iter) for child in treedef.children
+        )
+        if treedef.typ is not tuple:
+            return treedef.typ(*result)
+        return result
+    # list
+    return [_unflatten_from_iter(child, leaf_iter) for child in treedef.children]
+
+
+def _pure_tree_unflatten(treedef: _TreeDef, leaves: List[Any]) -> Any:
+    """
+    Rebuild a pytree from *treedef* and *leaves*.
+
+    Uses the :class:`_TreeDef` produced by :func:`_pure_tree_flatten`.
+    The input *leaves* list is **not** mutated; a :class:`ValueError` is
+    raised when the number of leaves does not match the structure
+    recorded in *treedef* (either too few or too many).
+
+    :param treedef: the structure describing the target pytree
+    :type treedef: _TreeDef
+    :param leaves: the flat leaves to repack; not mutated
+    :type leaves: List[Any]
+    :return: the rebuilt pytree
+    :rtype: Any
+    :raises ValueError: if the number of leaves does not match *treedef*
+    """
+    leaf_iter = iter(leaves)
+    try:
+        result = _unflatten_from_iter(treedef, leaf_iter)
+    except StopIteration:
+        raise ValueError(
+            f"Not enough leaves for treedef: expected {treedef.num_leaves}, "
+            f"got fewer."
+        ) from None
+    # Check for leftover leaves
+    rest = list(leaf_iter)
+    if rest:
+        raise ValueError(
+            f"Too many leaves for treedef: expected {treedef.num_leaves}, "
+            f"got {treedef.num_leaves + len(rest)}."
+        )
+    return result
+
+
+def _treedefs_compatible(treedef_a: _TreeDef, treedef_b: _TreeDef) -> bool:
+    """
+    Check whether two treedefs have compatible structure for ``tree_map``.
+
+    :param treedef_a: the first treedef to compare
+    :type treedef_a: _TreeDef
+    :param treedef_b: the second treedef to compare
+    :type treedef_b: _TreeDef
+    :return: ``True`` if both treedefs share type, key order, and nesting
+    :rtype: bool
+    """
+    if treedef_a.typ is not treedef_b.typ:
+        return False
+    if treedef_a.typ is _LEAF:
+        return True
+    if treedef_a.typ is _NONE_TYPE:
+        return True
+    if issubclass(treedef_a.typ, dict):
+        if treedef_a.sorted_keys != treedef_b.sorted_keys:
+            return False
+        if treedef_a.aux_data != treedef_b.aux_data:
+            return False
+        return all(
+            _treedefs_compatible(ac, bc)
+            for ac, bc in zip(treedef_a.children, treedef_b.children)
+        )
+    if len(treedef_a.children) != len(treedef_b.children):
+        return False
+    return all(
+        _treedefs_compatible(ac, bc)
+        for ac, bc in zip(treedef_a.children, treedef_b.children)
+    )
+
+
+def _pure_tree_map(f: Callable[..., Any], *pytrees: Any) -> Any:
+    """
+    Pure Python ``tree_map`` with JAX-compatible semantics.
+
+    Applies *f* element-wise to corresponding leaves.  All non-leaf
+    arguments must share the **same** pytree structure (type, key order,
+    and nesting); a :class:`ValueError` is raised on mismatch.
+
+    :param f: function applied to each tuple of corresponding leaves
+    :type f: Callable[..., Any]
+    :param pytrees: one or more pytrees with matching structure
+    :type pytrees: Any
+    :return: a pytree shaped like the inputs with ``f`` applied to the leaves
+    :rtype: Any
+    :raises ValueError: if the non-leaf arguments have mismatched structure
+    """
+    if not pytrees:
+        raise TypeError("_pure_tree_map requires at least one pytree argument")
+
+    # Fast path when all arguments are leaves
+    if all(_is_leaf(p) for p in pytrees):
+        return f(*pytrees)
+
+    flat_results = []
+    first_treedef = None
+    all_leaves: List[List[Any]] = []
+    for tree in pytrees:
+        leaves, td = _pure_tree_flatten(tree)
+        all_leaves.append(leaves)
+        if first_treedef is None:
+            first_treedef = td
+        elif not _treedefs_compatible(first_treedef, td):
+            raise ValueError(
+                "Pytree structure mismatch: all non-leaf arguments to "
+                "tree_map must have the same structure."
+            )
+
+    assert first_treedef is not None
+
+    for i in range(first_treedef.num_leaves):
+        corresponding_leaves = [leaves[i] for leaves in all_leaves]
+        flat_results.append(f(*corresponding_leaves))
+
+    return _pure_tree_unflatten(first_treedef, flat_results)
 
 
 class ExtendedBackend:
@@ -1225,21 +1511,37 @@ class ExtendedBackend:
         """
         Return the new tree map with multiple arg function ``f`` through pytrees.
 
+        Backend pytree utilities.
+
+        For the NumPy/CuPy fallback, TensorCircuit uses a pure Python implementation
+        designed to match JAX jax.tree_util semantics for supported containers:
+        None is an empty pytree, dict and defaultdict keys are traversed in sorted
+        order (OrderedDict preserves insertion order), namedtuple types are
+        distinguished from plain tuples, and tree_map requires matching tree
+        structure.  OrderedDict and defaultdict round-trip correctly with their
+        respective type, key order, and ``default_factory`` preserved.
+
+        Other backends may follow their native tree utility semantics instead. In
+        particular, TensorFlow tf.nest treats None as a leaf, and PyTorch
+        torch.utils._pytree preserves dict insertion order rather than JAX's sorted
+        dict-key order. Therefore corner cases involving None, dict insertion order,
+        or mixed namedtuple/tuple structures may differ across backends.
+
+        Example:
+            JAX/NumPy-style mapping over ``{"b": 2, "a": 1}`` and ``{"a": 10, "b": 20}``
+            pairs leaves by sorted keys, yielding ``{"a": 11, "b": 22}``.
+
+            PyTorch-native flattening may pair leaves by insertion order, which can
+            yield backend-specific results for the same inputs.
+
         :param f: The function
         :type f: Callable[..., Any]
         :param pytrees: inputs as any python structure
         :type pytrees: Any
-        :raises NotImplementedError: raise when neither tensorflow or jax is installed.
         :return: The new tree map with the same structure but different values.
         :rtype: Any
         """
-        try:
-            import tensorflow as tf
-
-        except ImportError:
-            raise NotImplementedError("No installed ML backend for `tree_map`")
-
-        return tf.nest.map_structure(f, *pytrees)
+        return _pure_tree_map(f, *pytrees)
 
     def tree_flatten(self: Any, pytree: Any) -> Tuple[Any, Any]:
         """
@@ -1251,16 +1553,7 @@ class ExtendedBackend:
             which can be used for later unflatten
         :rtype: Tuple[Any, Any]
         """
-        try:
-            import tensorflow as tf
-
-        except ImportError:
-            raise NotImplementedError("No installed ML backend for `tree_flatten`")
-
-        leaves = tf.nest.flatten(pytree)
-        treedef = pytree
-
-        return leaves, treedef
+        return _pure_tree_flatten(pytree)
 
     def tree_unflatten(self: Any, treedef: Any, leaves: Any) -> Any:
         """
@@ -1273,13 +1566,7 @@ class ExtendedBackend:
         :return: Packed pytree
         :rtype: Any
         """
-        try:
-            import tensorflow as tf
-
-        except ImportError:
-            raise NotImplementedError("No installed ML backend for `tree_unflatten`")
-
-        return tf.nest.pack_sequence_as(treedef, leaves)
+        return _pure_tree_unflatten(treedef, leaves)
 
     def to_dlpack(self: Any, a: Tensor) -> Any:
         """
