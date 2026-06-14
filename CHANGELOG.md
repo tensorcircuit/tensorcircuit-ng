@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.7.0
+
 ### Added
 
 - Add `lobpcg` method for backends.
@@ -31,6 +33,7 @@
 - Fix `numpy_backend.cast()`, `jax_backend.cast()`, and `pytorch_backend.cast()` to correctly handle Python scalar inputs.
 
 - Fix sparse Pauli propagation aggregation, initial truncation, multi-word bit-packing, and unsupported multi-qubit gate handling.
+
 ## v1.6.0
 
 ### Added
