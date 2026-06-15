@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: tensorcircuit-ng \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-06-10 09:49+0800\n"
+"POT-Creation-Date: 2026-06-15 16:24+0800\n"
 "PO-Revision-Date: 2026-03-31 13:30+0800\n"
 "Last-Translator: Gemini CLI\n"
 "Language: zh_CN\n"
@@ -177,10 +177,23 @@ msgid ""
 msgstr "通过将极致性能与自主的、意图驱动的 AI 工作流相结合，TensorCircuit-NG 助力研究人员从手动编码转向自动化的科学发现。"
 
 #: ../../source/agentic.rst:73
+msgid "Initial Prompt for Empty Workspace Setup"
+msgstr "空白工作区初始设置提示词"
+
+#: ../../source/agentic.rst:75
+msgid ""
+"When starting in a completely empty folder/workspace with an AI agent, "
+"you can copy and paste the following initial prompt to bootstrap the "
+"agent. This instructs the agent to clone the repository, read coding "
+"guidelines/skills, and execute tasks accordingly:"
+msgstr ""
+"当在完全空白的文件夹/工作区中使用 AI 智能体时，您可以复制并粘贴以下初始提示词以引导该智能体。这将指示智能体克隆仓库、阅读编码规范与技能文件，并相应地执行任务："
+
+#: ../../source/agentic.rst:93
 msgid "AI-Native Documentation"
 msgstr "AI 原生文档"
 
-#: ../../source/agentic.rst:75
+#: ../../source/agentic.rst:95
 msgid ""
 "One can also refer to AI-native docs for tensorcircuit-ng: `Devin "
 "Deepwiki <https://deepwiki.com/tensorcircuit/tensorcircuit-ng>`_, `Google"

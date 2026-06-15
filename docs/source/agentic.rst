@@ -80,10 +80,11 @@ This instructs the agent to clone the repository, read coding guidelines/skills,
     You are an AI coding assistant. Please follow these steps to set up our project workspace and solve my requests:
     
     1. Run `git clone https://github.com/tensorcircuit/tensorcircuit-ng.git .` to download the repository in this empty folder.
-    2. Read `AGENTS.md` at the root of the repository to understand the coding standards.
-    3. Review the available agentic workflow scripts and skill files under `.agents/skills/` to see if a specialized workflow is suitable for the current task.
-    4. Reference existing implementations in `examples/` and test cases in `tests/` to write differentiable, and JIT-friendly code.
-    5. Respond to my later requests, write code, and execute experiments/tests to analyse the results.
+    2. Install the git-cloned TensorCircuit-NG library locally in the appropriate Python environment. If unsure which Python environment is appropriate, ask the user.
+    3. Read `AGENTS.md` at the root of the repository to understand the coding standards.
+    4. Review the available agentic workflow scripts and skill files under `.agents/skills/` to see if a specialized workflow is suitable for the current task.
+    5. Reference existing implementations in `examples/` and test cases in `tests/` to write differentiable, and JIT-friendly code.
+    6. Respond to my later requests, write code, and execute experiments/tests to analyse the results.
     
     Let me know when the initialization is complete and ask for my requests.
 
