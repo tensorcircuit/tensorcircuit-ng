@@ -900,3 +900,206 @@ def test_u1circuit_expectation_ps_ad(backend):
 
     assert np.allclose(tc.backend.numpy(val_u1), tc.backend.numpy(val_c), atol=1e-5)
     assert np.allclose(tc.backend.numpy(grad_u1), tc.backend.numpy(grad_c), atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_u1_expectation_pss_correctness(backend):
+    # Test case 1: Diagonal Hamiltonian
+    # H = 0.5 * Z0 - 0.3 * Z1 + 0.8 * Z0*Z1
+    n, k = 3, 2
+    ps_list = [
+        [3, 0, 0],  # Z0
+        [0, 3, 0],  # Z1
+        [3, 3, 0],  # Z0*Z1
+    ]
+    coefficients = [0.5, -0.3, 0.8]
+
+    u1c = U1Circuit(n, k, filled=[0, 1])
+    # state is |110>
+    # Z0 = -1, Z1 = -1, Z2 = 1
+    # Z0*Z1 = 1
+    # Expected energy: 0.5 * (-1) - 0.3 * (-1) + 0.8 * 1 = -0.5 + 0.3 + 0.8 = 0.6
+    expected_energy = 0.6
+    energy = u1c.expectation_pss(ps_list, coefficients)
+    np.testing.assert_allclose(tc.backend.numpy(energy), expected_energy, atol=1e-5)
+
+    # Test case 2: Off-diagonal terms (XX + YY hopping, and XY/YX terms)
+    # H = 1.0 * (X0*X1 + Y0*Y1) - 0.5 * Z0 + 0.3 * X0*Y1 - 0.2 * Y0*X1
+    ps_list = [
+        [1, 1, 0],  # X0*X1
+        [2, 2, 0],  # Y0*Y1
+        [3, 0, 0],  # Z0
+        [1, 2, 0],  # X0*Y1
+        [2, 1, 0],  # Y0*X1
+    ]
+    coefficients = [1.0, 1.0, -0.5, 0.3, -0.2]
+
+    u1c2 = U1Circuit(n, k, filled=[0, 2])  # |101>
+    u1c2.iswap(0, 1, theta=0.3)  # superposition of |101> and |011>
+
+    # Calculate expectation value using original expectation_ps term-by-term
+    term_expectations = []
+    for ps in ps_list:
+        term_expectations.append(u1c2.expectation_ps(ps=ps))
+    expected_energy = sum(c * e for c, e in zip(coefficients, term_expectations))
+
+    energy = u1c2.expectation_pss(ps_list, coefficients)
+    np.testing.assert_allclose(tc.backend.numpy(energy), expected_energy, atol=1e-5)
+
+    # Test case 3: Purely off-diagonal Hamiltonian (no diagonal terms)
+    # H = 1.0 * X0*X1 + 1.0 * Y0*Y1 + 0.3 * X0*Y1
+    ps_list = [
+        [1, 1, 0],  # X0*X1
+        [2, 2, 0],  # Y0*Y1
+        [1, 2, 0],  # X0*Y1
+    ]
+    coefficients = [1.0, 1.0, 0.3]
+
+    u1c3 = U1Circuit(n, k, filled=[0, 2])  # |101>
+    u1c3.iswap(0, 1, theta=0.5)
+
+    term_expectations = []
+    for ps in ps_list:
+        term_expectations.append(u1c3.expectation_ps(ps=ps))
+    expected_energy = sum(c * e for c, e in zip(coefficients, term_expectations))
+
+    energy = u1c3.expectation_pss(ps_list, coefficients)
+    np.testing.assert_allclose(tc.backend.numpy(energy), expected_energy, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+def test_u1_expectation_pss_gradients(backend):
+    n, k = 4, 2
+    ps_list = [
+        [1, 1, 0, 0],
+        [2, 2, 0, 0],
+        [3, 0, 0, 0],
+        [1, 2, 0, 0],
+        [2, 1, 0, 0],
+    ]
+
+    def loss(theta_and_coefs):
+        theta = theta_and_coefs[0]
+        coefficients = theta_and_coefs[1:]
+        u1c = U1Circuit(n, k, filled=[0, 1])
+        u1c.iswap(1, 2, theta=theta)
+        return tc.backend.real(u1c.expectation_pss(ps_list, coefficients))
+
+    def loss_ref(theta_and_coefs):
+        theta = theta_and_coefs[0]
+        coefficients = theta_and_coefs[1:]
+        u1c = U1Circuit(n, k, filled=[0, 1])
+        u1c.iswap(1, 2, theta=theta)
+        energy = 0.0
+        for i, ps in enumerate(ps_list):
+            c_comp = tc.backend.cast(coefficients[i], dtype=tc.dtypestr)
+            energy += c_comp * u1c.expectation_ps(ps=ps)
+        return tc.backend.real(energy)
+
+    params = tc.backend.convert_to_tensor([0.4, 0.9, 0.9, -0.2, 0.3, -0.1])
+
+    val1, grad1 = tc.backend.value_and_grad(loss)(params)
+    val2, grad2 = tc.backend.value_and_grad(loss_ref)(params)
+
+    np.testing.assert_allclose(
+        tc.backend.numpy(val1), tc.backend.numpy(val2), atol=1e-5
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(grad1), tc.backend.numpy(grad2), atol=1e-5
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+def test_u1_expectation_pss_jit_vmap(backend):
+    n, k = 4, 2
+    ps_list = [
+        [1, 1, 0, 0],
+        [2, 2, 0, 0],
+        [3, 0, 0, 0],
+    ]
+    coefficients = tc.backend.convert_to_tensor([1.0, 1.0, -0.5])
+
+    @tc.backend.jit
+    def run(theta):
+        u1c = U1Circuit(n, k, filled=[0, 1])
+        u1c.iswap(1, 2, theta=theta)
+        return tc.backend.real(u1c.expectation_pss(ps_list, coefficients))
+
+    # Test JIT execution
+    res1 = run(tc.backend.convert_to_tensor(0.5))
+    assert res1 is not None
+
+    # Test vmap execution
+    vrun = tc.backend.vmap(run)
+    thetas = tc.backend.convert_to_tensor([0.2, 0.5, 0.8])
+    results = vrun(thetas)
+    assert len(tc.backend.numpy(results)) == 3
+
+
+@pytest.mark.parametrize("backend", [lf("npb")])
+def test_u1_operator_cache_warning(backend, caplog):
+    import logging
+    from tensorcircuit.u1circuit import _u1_operator_cache
+
+    _u1_operator_cache.clear()
+
+    has_warning = False
+
+    try:
+        with caplog.at_level(logging.WARNING):
+            for i in range(105):
+                ps = [0] * 8
+                # Binary encoding of i to generate unique Pauli strings
+                for bit in range(8):
+                    if (i >> bit) & 1:
+                        ps[bit] = 3
+
+                u1c = U1Circuit(8, 2, filled=[0, 1])
+                u1c.expectation_pss([ps], [1.0])
+
+            for record in caplog.records:
+                if "U1Operator cache size" in record.message:
+                    has_warning = True
+                    break
+
+        assert has_warning, "Cache size warning was not logged"
+    finally:
+        _u1_operator_cache.clear()
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_u1_expectation_pss_vs_exact_circuit(backend):
+    n, k = 4, 2
+    # H = 0.5 * Z0 - 0.3 * Z1 + 1.0 * (X0*X1 + Y0*Y1) + 0.3 * X0*Y1 - 0.2 * Y0*X1
+    ps_list = [
+        [3, 0, 0, 0],  # Z0
+        [0, 3, 0, 0],  # Z1
+        [1, 1, 0, 0],  # X0*X1
+        [2, 2, 0, 0],  # Y0*Y1
+        [1, 2, 0, 0],  # X0*Y1
+        [2, 1, 0, 0],  # Y0*X1
+    ]
+    coefficients = [0.5, -0.3, 1.0, 1.0, 0.3, -0.2]
+
+    # U1Circuit expectation
+    u1c = U1Circuit(n, k, filled=[0, 1])
+    u1c.iswap(0, 2, theta=0.5)
+    u1c.iswap(1, 3, theta=0.3)
+    u1_energy = u1c.expectation_pss(ps_list, coefficients)
+
+    # Standard exact Circuit expectation
+    c = tc.Circuit(n)
+    c.x(0)
+    c.x(1)
+    c.iswap(0, 2, theta=0.5)
+    c.iswap(1, 3, theta=0.3)
+
+    exact_energy = 0.0
+    for ps, coef in zip(ps_list, coefficients):
+        exact_energy += coef * c.expectation_ps(ps=ps)
+
+    np.testing.assert_allclose(
+        tc.backend.numpy(u1_energy),
+        tc.backend.numpy(tc.backend.real(exact_energy)),
+        atol=1e-5,
+    )

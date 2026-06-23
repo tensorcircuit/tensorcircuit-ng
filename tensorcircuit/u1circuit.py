@@ -4,6 +4,7 @@ Circuit class for U(1) conserving circuits.
 
 from functools import lru_cache, partial
 from itertools import combinations
+import logging
 from math import comb
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -13,6 +14,8 @@ from .abstractcircuit import AbstractCircuit
 from .cons import backend, dtypestr, rdtypestr, idtypestr
 from .quantum import sample2all
 from .utils import arg_alias
+
+logger = logging.getLogger(__name__)
 
 Tensor = Any
 
@@ -48,6 +51,131 @@ def _extract_subsystem_bits_static(
         bits = (basis_np >> old_bp) & 1
         res |= bits << new_bp
     return res
+
+
+def _normalize_ps_list(
+    nqubits: int, ps_list: Sequence[Any]
+) -> Tuple[Tuple[int, ...], ...]:
+    """
+    Normalize a list of Pauli strings (as dicts or sequences) into a tuple of tuples.
+    """
+    standard_ps_list = []
+    for ps in ps_list:
+        if isinstance(ps, dict):
+            x = ps.get("x", [])
+            y = ps.get("y", [])
+            z = ps.get("z", [])
+            s_ps = [0] * nqubits
+            for idx in x:
+                s_ps[idx] = 1
+            for idx in y:
+                s_ps[idx] = 2
+            for idx in z:
+                s_ps[idx] = 3
+            standard_ps_list.append(tuple(s_ps))
+        elif hasattr(ps, "__len__") and len(ps) == nqubits:
+            standard_ps_list.append(tuple(ps))
+        else:
+            raise ValueError(f"Invalid Pauli string format: {ps}")
+    return tuple(standard_ps_list)
+
+
+_u1_operator_cache: Dict[Tuple[int, int, Tuple[Tuple[int, ...], ...]], "U1Operator"] = (
+    {}
+)
+
+
+class U1Operator:
+    """
+    Operator helper class for fast expectation calculation in the U(1) subspace.
+    """
+
+    def __init__(
+        self,
+        nqubits: int,
+        k: int,
+        ps_list: Sequence[Any],
+    ) -> None:
+        self.nqubits = nqubits
+        self.k = k
+
+        self.ps_tuple = _normalize_ps_list(nqubits, ps_list)
+
+        basis = _get_subsystem_basis_static(nqubits, k)
+        dim = len(basis)
+        basis_index = {int(state): i for i, state in enumerate(basis)}
+        occupied = (basis[:, None] >> (nqubits - 1 - np.arange(nqubits)[None, :])) & 1
+
+        diagonal_indices = []
+        diagonal_vectors = []
+
+        off_diagonal_indices = []
+        off_diagonal_targets = []
+        off_diagonal_phases = []
+
+        for term_idx, ps in enumerate(self.ps_tuple):
+            x_indices = []
+            y_indices = []
+            z_indices = []
+            for i, val in enumerate(ps):
+                if val == 1:
+                    x_indices.append(i)
+                elif val == 2:
+                    y_indices.append(i)
+                elif val == 3:
+                    z_indices.append(i)
+
+            xy_len = len(x_indices) + len(y_indices)
+            if xy_len == 0:
+                if len(z_indices) > 0:
+                    D_a = np.prod(1.0 - 2.0 * occupied[:, z_indices], axis=1)
+                else:
+                    D_a = np.ones(dim, dtype=np.float64)
+                diagonal_indices.append(term_idx)
+                diagonal_vectors.append(D_a)
+            else:
+                if xy_len % 2 != 0:
+                    # U(1) symmetry: odd number of X/Y flips -> zero expectation
+                    continue
+
+                swap_mask = 0
+                for idx in x_indices + y_indices:
+                    swap_mask |= 1 << (nqubits - 1 - idx)
+                target_s_arr = basis ^ swap_mask
+                target_idx_arr = np.array(
+                    [basis_index.get(ts, -1) for ts in target_s_arr],
+                    dtype=np.int64,
+                )
+                valid = target_idx_arr != -1
+                target_idx_safe = np.where(valid, target_idx_arr, 0)
+
+                phase = np.ones(dim, dtype=np.complex128)
+                if len(z_indices) > 0:
+                    phase = phase * np.prod(1.0 - 2.0 * occupied[:, z_indices], axis=1)
+                if len(y_indices) > 0:
+                    phase = phase * np.prod(
+                        1j * (1.0 - 2.0 * occupied[target_idx_safe][:, y_indices]),
+                        axis=1,
+                    )
+                phase = np.where(valid, phase, 0.0)
+
+                off_diagonal_indices.append(term_idx)
+                off_diagonal_targets.append(target_idx_safe)
+                off_diagonal_phases.append(phase)
+
+        self.diagonal_indices = np.array(diagonal_indices, dtype=np.int64)
+        if len(diagonal_vectors) > 0:
+            self.diagonal_vectors = np.stack(diagonal_vectors, axis=0)
+        else:
+            self.diagonal_vectors = np.empty((0, dim), dtype=np.float64)
+
+        self.off_diagonal_indices = np.array(off_diagonal_indices, dtype=np.int64)
+        if len(off_diagonal_targets) > 0:
+            self.off_diagonal_targets = np.stack(off_diagonal_targets, axis=0)
+            self.off_diagonal_phases = np.stack(off_diagonal_phases, axis=0)
+        else:
+            self.off_diagonal_targets = np.empty((0, dim), dtype=np.int64)
+            self.off_diagonal_phases = np.empty((0, dim), dtype=np.complex128)
 
 
 class U1Circuit(AbstractCircuit):
@@ -912,6 +1040,87 @@ class U1Circuit(AbstractCircuit):
             )
 
         return entropy
+
+    def expectation_pss(
+        self,
+        ps_list: Sequence[Any],
+        coefficients: Any,
+    ) -> Tensor:
+        """
+        Compute the expectation value of a sum of Pauli strings in the U(1) subspace.
+
+        :param ps_list: A sequence of Pauli strings. Each can be represented as a list of
+            integers of length nqubits (0=I, 1=X, 2=Y, 3=Z) or a dict with 'x', 'y', 'z' keys.
+        :type ps_list: Sequence[Any]
+        :param coefficients: The coefficients for each Pauli string in the sum. Can be a list
+            of floats or a backend tensor of coefficients.
+        :type coefficients: Any
+        :return: The expectation value of the sum of Pauli strings.
+        :rtype: Tensor
+        """
+        nqubits = self._nqubits
+        k = self._k
+        assert k is not None
+
+        # 1. Parse ps_list to a standard tuple of tuples for caching
+        ps_tuple = _normalize_ps_list(nqubits, ps_list)
+
+        key = (nqubits, k, ps_tuple)
+        if key not in _u1_operator_cache:
+            if len(_u1_operator_cache) >= 100:
+                logger.warning(
+                    "U1Operator cache size has reached %d. "
+                    "This might indicate memory consumption issues if new operators are "
+                    "continually created.",
+                    len(_u1_operator_cache),
+                )
+            _u1_operator_cache[key] = U1Operator(nqubits, k, ps_tuple)
+
+        op = _u1_operator_cache[key]
+        state = self._state
+        coefs = backend.cast(backend.convert_to_tensor(coefficients), dtype=dtypestr)
+
+        total_energy = backend.cast(backend.convert_to_tensor(0.0), dtypestr)
+
+        # A. Diagonal energy
+        if len(op.diagonal_indices) > 0:
+            coefs_diag = backend.gather1d(
+                coefs, backend.convert_to_tensor(op.diagonal_indices)
+            )
+            diag_vecs = backend.cast(
+                backend.convert_to_tensor(op.diagonal_vectors), dtype=dtypestr
+            )
+            coefs_diag_2d = backend.reshape(coefs_diag, [-1, 1])
+            diag_vector_2d = backend.matmul(backend.transpose(diag_vecs), coefs_diag_2d)
+            diag_vector = backend.reshape(diag_vector_2d, [-1])
+            diagonal_energy = backend.tensordot(
+                backend.conj(state), diag_vector * state, 1
+            )
+            total_energy = total_energy + diagonal_energy
+
+        # B. Off-diagonal energy
+        if len(op.off_diagonal_indices) > 0:
+            coefs_off = backend.gather1d(
+                coefs, backend.convert_to_tensor(op.off_diagonal_indices)
+            )
+            targets = backend.convert_to_tensor(op.off_diagonal_targets)
+            phases = backend.cast(
+                backend.convert_to_tensor(op.off_diagonal_phases), dtype=dtypestr
+            )
+
+            weighted_phases = phases * backend.reshape(coefs_off, [-1, 1])
+
+            def term_expectation(target_idx: Tensor, phase_fact: Tensor) -> Tensor:
+                target_state = backend.gather1d(state, target_idx)
+                return backend.tensordot(
+                    backend.conj(state), phase_fact * target_state, 1
+                )
+
+            vmapped_expect = backend.vmap(term_expectation, vectorized_argnums=(0, 1))
+            off_diagonal_energy = backend.sum(vmapped_expect(targets, weighted_phases))
+            total_energy = total_energy + off_diagonal_energy
+
+        return backend.real(total_energy)
 
 
 # Register gates via _meta_apply

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Add efficient `expectation_pss` method for `U1Circuit`.
+
+### Fixed
+
+- Fix the nonjit path for sampling when status is provided
+
 ## v1.7.0
 
 ### Added

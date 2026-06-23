@@ -1457,8 +1457,13 @@ class BaseCircuit(AbstractCircuit):
                 r = []  # type: ignore
                 if status is not None:
                     assert backend.shape_tuple(status)[0] == batch
+
+                    @backend.jit
+                    def perfect_sampling(seed: Tensor) -> Any:
+                        return self.perfect_sampling(seed)
+
                     for seed in status:
-                        r.append(self.perfect_sampling(seed))  # type: ignore
+                        r.append(perfect_sampling(seed))  # type: ignore
 
                 else:
 
