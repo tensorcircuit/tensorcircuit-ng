@@ -463,13 +463,48 @@ def _solve_ode(
         "Kvaerno5": diffrax.Kvaerno5,
     }
 
+    solver_obj = all_solvers[solver]()
+    is_implicit = isinstance(solver_obj, diffrax.AbstractImplicitSolver)
+    is_complex = "complex" in backend.dtype(s)
+
+    if is_implicit and is_complex:
+        # Implicit diffrax solvers require real-valued state.
+        # Split complex state into real/imaginary parts and wrap the ODE.
+        s_re = backend.real(s)
+        s_im = backend.imag(s)
+        s_real = backend.concat([s_re, s_im], axis=-1)
+        n = s.shape[-1]
+
+        def f_real(y_real: Tensor, t: Any, *fargs: Any) -> Tensor:
+            y_complex = y_real[..., :n] + 1j * y_real[..., n:]
+            dy_complex = f(y_complex, t, *fargs)
+            return backend.concat(
+                [backend.real(dy_complex), backend.imag(dy_complex)], axis=-1
+            )
+
+        term = diffrax.ODETerm(lambda t, y, fargs: f_real(y, t, *fargs))
+        s1_real = diffrax.diffeqsolve(
+            terms=term,
+            solver=solver_obj,
+            t0=times[0],
+            t1=times[-1],
+            dt0=dt0,
+            y0=s_real,
+            saveat=diffrax.SaveAt(ts=times),
+            args=args,
+            stepsize_controller=diffrax.PIDController(rtol=rtol, atol=atol),
+            max_steps=max_steps,
+        ).ys
+        s1 = s1_real[..., :n] + 1j * s1_real[..., n:]
+        return backend.cast(s1, dtype=dtypestr)
+
     # ODE
     term = diffrax.ODETerm(lambda t, y, args: f(y, t, *args))
 
     # solve ODE
     s1 = diffrax.diffeqsolve(
         terms=term,
-        solver=all_solvers[solver](),
+        solver=solver_obj,
         t0=times[0],
         t1=times[-1],
         dt0=dt0,

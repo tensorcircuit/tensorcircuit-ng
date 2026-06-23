@@ -8,7 +8,9 @@
 
 ### Fixed
 
-- Fix the nonjit path for sampling when status is provided
+- Fix the nonjit path for sampling when status is provided.
+
+- Fix the interplay of complex ODE and implict solver in diffrax backend.
 
 ## v1.7.0
 

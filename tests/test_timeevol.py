@@ -191,8 +191,8 @@ def test_ode_evol_global(highp, jaxb):
             tc.backend.convert_to_tensor([0, 1.0]),
             None,
             *params,
-            atol=1.0e-15,
-            rtol=1.0e-15,
+            atol=1.0e-10,
+            rtol=1.0e-10,
             solver="Kvaerno5",
             ode_backend="diffrax",
         )
@@ -238,8 +238,8 @@ def test_ode_evol_jit_grad(highp, jaxb):
             tc.backend.convert_to_tensor([0, 10.0]),
             None,
             *params,
-            atol=1.0e-15,
-            rtol=1.0e-15,
+            atol=1.0e-10,
+            rtol=1.0e-10,
             solver="Kvaerno5",
             ode_backend="diffrax",
         )
