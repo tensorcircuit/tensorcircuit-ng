@@ -178,8 +178,6 @@ def run_solution(config):
         "final_loss": K.numpy(final_loss),
         "energy_density_history": K.numpy(K.stack(energy_density_history)),
         "success_probability_history": K.numpy(K.stack(success_probability_history)),
-        "mean_log_probability_history": K.numpy(
-            K.stack(mean_log_probability_history)
-        ),
+        "mean_log_probability_history": K.numpy(K.stack(mean_log_probability_history)),
         "loss_history": K.numpy(K.stack(loss_history)),
     }
