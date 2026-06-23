@@ -118,7 +118,6 @@ def run_solution(config):
 
     energy, grads = value_and_grad(params, mps_input)
     grad_norm = K.norm(grads)
-    initial_energy = float(K.numpy(energy))
 
     energy_history = []
     grad_norm_history = []
@@ -130,13 +129,10 @@ def run_solution(config):
             energy, grads = value_and_grad(params, mps_input)
             grad_norm = K.norm(grads)
 
-    final_energy, _ = value_and_grad(params, mps_input)
-    final_energy = float(K.numpy(final_energy))
-
     return {
         "dmrg_energy": np.asarray(dmrg_energy),
-        "initial_energy": np.asarray(initial_energy),
-        "final_energy": np.asarray(final_energy),
+        "initial_energy": np.asarray(K.numpy(energy_history[0])),
+        "final_energy": np.asarray(K.numpy(energy_history[-1])),
         "energy_history": np.asarray(K.numpy(K.stack(energy_history))),
         "grad_norm_history": np.asarray(K.numpy(K.stack(grad_norm_history))),
     }

@@ -29,6 +29,12 @@ Use this file for backend-wrapper behavior, JIT/vmap issues, and contraction per
 - When reporting VQE performance, it can be useful to present two TensorCircuit-NG modes explicitly: a scan-based fast-compile mode for low first-call cost, and an unrolled peak-runtime mode for maximum post-compilation throughput. Do not mix the two in a single speedup claim.
 - For repeated VQE workloads, compute break-even in total value-and-gradient calls using `warmup + (N - 1) * run`. This is often more informative than reporting compile time and runtime independently.
 
+## Hamiltonian MVPs and ODE hot paths
+
+- In JAX/Diffrax ODE vector fields, prefer matrix-free Pauli-sum MVP callables such as `H_mvp(y)` over sparse COO matmul such as `H @ y` when the Hamiltonian is a Pauli-string sum. Nested adaptive-solve tracing and reverse-mode AD can otherwise drag large COO index constants through `jit` / `grad` / `eval_shape`, causing very slow compilation.
+- Benchmark this as an ODE-specific optimization, not just an observable optimization. In the challenge-suite digital-analog VQE pattern, replacing analog `COO @ y` calls with `PauliStringSum2MVP(y)` kept the final energy essentially unchanged and reduced end-to-end runtime by about an order of magnitude.
+- Keep MVP closures pure under JAX transformations. Do not store backend tensors created during a trace in mutable Python caches inside the MVP closure, because cached tracers can leak across nested transforms such as Diffrax's shape evaluation.
+
 ## Contraction patterns
 
 - For networks with hyperedges, prefer the algebraic contraction path so `cotengra` can optimize the whole einsum without constructing large diagonal copy tensors.

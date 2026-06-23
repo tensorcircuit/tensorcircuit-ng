@@ -158,16 +158,13 @@ def run_solution(config):
         entropy_history.append(entropies)
         params = optimizer.update(grads, params)
 
-    (final_loss, final_aux), _ = value_and_grad(params)
-    final_energy_density, final_entropies, final_entropy_mse = final_aux
-
     return {
         "initial_energy_density": K.numpy(energy_density_history[0]),
-        "final_energy_density": K.numpy(final_energy_density),
-        "final_block_entropies": K.numpy(final_entropies),
-        "final_entropy_mse": K.numpy(final_entropy_mse),
+        "final_energy_density": K.numpy(energy_density_history[-1]),
+        "final_block_entropies": K.numpy(entropy_history[-1]),
+        "final_entropy_mse": K.numpy(entropy_mse_history[-1]),
         "initial_loss": K.numpy(loss_history[0]),
-        "final_loss": K.numpy(final_loss),
+        "final_loss": K.numpy(loss_history[-1]),
         "energy_density_history": K.numpy(K.stack(energy_density_history)),
         "loss_history": K.numpy(K.stack(loss_history)),
         "entropy_mse_history": K.numpy(K.stack(entropy_mse_history)),

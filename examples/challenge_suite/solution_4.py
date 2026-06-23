@@ -132,12 +132,10 @@ def run_solution(config):
     loss_history = []
     initial_p01, initial_p10 = probabilities(params)
     for _ in range(config["max_steps"]):
-        (loss, _), grads = value_and_grad(params)
+        (loss, aux), grads = value_and_grad(params)
+        final_p01, final_p10, fitted_expectations = aux
         loss_history.append(loss)
         params = optimizer.update(grads, params)
-
-    (final_loss, final_aux), _ = value_and_grad(params)
-    final_p01, final_p10, fitted_expectations = final_aux
 
     return {
         "initial_p01": K.numpy(initial_p01),
@@ -145,7 +143,7 @@ def run_solution(config):
         "final_p01": K.numpy(final_p01),
         "final_p10": K.numpy(final_p10),
         "initial_loss": K.numpy(loss_history[0]),
-        "final_loss": K.numpy(final_loss),
+        "final_loss": K.numpy(loss_history[-1]),
         "loss_history": K.numpy(K.stack(loss_history)),
         "target_expectations": K.numpy(true_target),
         "fitted_expectations": K.numpy(fitted_expectations),

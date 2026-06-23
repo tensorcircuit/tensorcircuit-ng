@@ -166,16 +166,13 @@ def run_solution(config):
         loss_history.append(loss)
         params = optimizer.update(grads, params)
 
-    (final_loss, final_aux), _ = value_and_grad(params)
-    final_energy_density, final_success, final_mean_log_probability = final_aux
-
     return {
         "initial_energy_density": K.numpy(energy_density_history[0]),
-        "final_energy_density": K.numpy(final_energy_density),
-        "final_success_probability": K.numpy(final_success),
-        "final_mean_log_probability": K.numpy(final_mean_log_probability),
+        "final_energy_density": K.numpy(energy_density_history[-1]),
+        "final_success_probability": K.numpy(success_probability_history[-1]),
+        "final_mean_log_probability": K.numpy(mean_log_probability_history[-1]),
         "initial_loss": K.numpy(loss_history[0]),
-        "final_loss": K.numpy(final_loss),
+        "final_loss": K.numpy(loss_history[-1]),
         "energy_density_history": K.numpy(K.stack(energy_density_history)),
         "success_probability_history": K.numpy(K.stack(success_probability_history)),
         "mean_log_probability_history": K.numpy(K.stack(mean_log_probability_history)),

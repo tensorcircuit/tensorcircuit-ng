@@ -1987,7 +1987,6 @@ def PauliStringSum2MVP(
         term_weights.append(phase_c)
 
     z_base_np = np.array([1.0, -1.0])
-    z_base_cache: Dict[Any, Tensor] = {}
 
     def mvp(psi: Tensor) -> Tensor:
         psi_shape = backend.shape_tuple(psi)
@@ -1999,13 +1998,7 @@ def PauliStringSum2MVP(
             psi_tensor = psi
 
         dtype = backend.dtype(psi_tensor)
-
-        if dtype not in z_base_cache:
-            z_base = backend.convert_to_tensor(z_base_np)
-            z_base = backend.cast(z_base, dtype)
-            z_base_cache[dtype] = z_base
-        else:
-            z_base = z_base_cache[dtype]
+        z_base = backend.cast(backend.convert_to_tensor(z_base_np), dtype)
 
         total_res = backend.zeros_like(psi_tensor)
 
