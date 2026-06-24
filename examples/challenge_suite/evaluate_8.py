@@ -121,7 +121,6 @@ def evaluate(solution_module, config):
     single_z_error = np.max(np.abs(empirical_single_z - exact_single_z))
     edge_zz_error = np.max(np.abs(empirical_edge_zz - exact_edge_zz))
     parity_error = abs(empirical_parity - exact_parity)
-    largest_index_dimension = int(results["largest_index_dimension"])
 
     criteria = {
         "sample shape": samples.shape == (config["n_samples"], config["n_qubits"]),
@@ -130,7 +129,6 @@ def evaluate(solution_module, config):
         "grid-edge ZZ finite-sample error": edge_zz_error
         <= config["edge_zz_tolerance"],
         "parity symmetry": parity_error <= config["parity_tolerance"],
-        "index dimension is 2": largest_index_dimension == 2,
     }
 
     print("Challenge 8 evaluation")
@@ -146,7 +144,6 @@ def evaluate(solution_module, config):
     print(f"Full-grid parity absolute error: {parity_error:.10f}")
     print(f"Max single-site Z absolute error: {single_z_error:.10f}")
     print(f"Max grid-edge ZZ absolute error: {edge_zz_error:.10f}")
-    print(f"Largest tensor index dimension: {largest_index_dimension}")
     print(f"Returned NumPy keys: {sorted(results)}")
     print("Passing criteria:")
     for name, passed in criteria.items():

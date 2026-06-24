@@ -71,24 +71,24 @@ def evaluate(solution_module, config):
     exact_energy = eigsh(hamiltonian, k=1, which="SA", return_eigenvectors=False)[0]
     exact_energy_density = exact_energy / n_qubits
 
-    final_entropies = np.asarray(results["final_block_entropies"], dtype=float)
+    energy_history = np.asarray(results["energy_density_history"], dtype=float)
+    loss_history = np.asarray(results["loss_history"], dtype=float)
+    entropy_mse_history = np.asarray(results["entropy_mse_history"], dtype=float)
+    entropy_history = np.asarray(results["entropy_history"], dtype=float)
+    final_entropies = entropy_history[-1]
     target_entropies = np.asarray(config["target_entropies"], dtype=float)
     recomputed_entropy_mse = float(np.mean((final_entropies - target_entropies) ** 2))
     entropy_rmse = float(np.sqrt(recomputed_entropy_mse))
-    reported_entropy_mse = float(results["final_entropy_mse"])
+    reported_entropy_mse = float(entropy_mse_history[-1])
 
-    entropy_history = np.asarray(results["entropy_history"])
     criteria = {
-        "energy history length": len(results["energy_density_history"])
-        == config["max_steps"],
-        "loss history length": len(results["loss_history"]) == config["max_steps"],
-        "entropy mse history length": len(results["entropy_mse_history"])
-        == config["max_steps"],
+        "energy history length": len(energy_history) == config["max_steps"],
+        "loss history length": len(loss_history) == config["max_steps"],
+        "entropy mse history length": len(entropy_mse_history) == config["max_steps"],
         "entropy history shape": entropy_history.shape
         == (config["max_steps"], len(config["target_entropies"])),
-        "loss improves": float(results["final_loss"]) < float(results["initial_loss"]),
-        "energy density improves": float(results["final_energy_density"])
-        < float(results["initial_energy_density"]),
+        "loss improves": float(loss_history[-1]) < float(loss_history[0]),
+        "energy density improves": float(energy_history[-1]) < float(energy_history[0]),
         "reported entropy mse matches": np.isclose(
             recomputed_entropy_mse, reported_entropy_mse, rtol=1e-5, atol=1e-7
         ),
@@ -98,16 +98,16 @@ def evaluate(solution_module, config):
     print(f"Solution module: {solution_module}")
     print(f"End-to-end solution time: {elapsed:.2f}s")
     print(f"Exact sparse ground energy density: {exact_energy_density:.8f}")
-    print(f"Initial energy density: {float(results['initial_energy_density']):.8f}")
-    print(f"Final energy density: {float(results['final_energy_density']):.8f}")
+    print(f"Initial energy density: {float(energy_history[0]):.8f}")
+    print(f"Final energy density: {float(energy_history[-1]):.8f}")
     print(f"Final block entropies: {format_array(final_entropies)}")
     print(f"Target entropies: {format_array(target_entropies)}")
     print(f"Entropy-profile MSE: {reported_entropy_mse:.8e}")
     print(f"Entropy-profile RMSE: {entropy_rmse:.8e}")
-    print(f"Initial loss: {float(results['initial_loss']):.8f}")
-    print(f"Final loss: {float(results['final_loss']):.8f}")
-    print(f"Energy history length: {len(results['energy_density_history'])}")
-    print(f"Loss history length: {len(results['loss_history'])}")
+    print(f"Initial loss: {float(loss_history[0]):.8f}")
+    print(f"Final loss: {float(loss_history[-1]):.8f}")
+    print(f"Energy history length: {len(energy_history)}")
+    print(f"Loss history length: {len(loss_history)}")
     print(f"Entropy history shape: {entropy_history.shape}")
     print(f"Returned NumPy keys: {sorted(results)}")
     print("Passing criteria:")

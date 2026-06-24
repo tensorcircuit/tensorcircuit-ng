@@ -49,11 +49,11 @@ The solution should not print progress. It should perform the core computation a
 
 Required result keys:
 
-- `initial_energy_density`: scalar float.
-- `final_energy_density`: scalar float.
 - `final_a`: NumPy array with shape `(5, 2)` containing learned one-qubit filter strengths, where each row is one even+odd block and the two columns are the even and odd sublayers.
 - `final_b`: NumPy array with shape `(5, 2)` containing learned two-qubit filter strengths, with the same block and sublayer layout.
 - `energy_density_history`: NumPy array with length `config["max_steps"]`.
+
+`energy_density_history` records one value per optimizer update, evaluated immediately before applying that update. The evaluator derives initial and final energy density from the first and last entries of `energy_density_history`.
 
 The solution may use any quantum software framework, but it must consume only the evaluator-provided configuration and return only this NumPy-format dictionary.
 

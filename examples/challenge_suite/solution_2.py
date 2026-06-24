@@ -58,13 +58,6 @@ def initial_parameters(config):
     }
 
 
-def initial_state(config):
-    circuit = tc.Circuit(config["n_qubits"])
-    for i in range(1, config["n_qubits"], 2):
-        circuit.x(i)
-    return circuit.state()
-
-
 def apply_layer(circuit, layer_params, bonds, config):
     for i in range(config["n_qubits"]):
         circuit.ry(i, theta=layer_params["ry"][i])
@@ -133,7 +126,10 @@ def observables(params, input_state, hamiltonian_mvp, config, target_entropies):
 
 def run_solution(config):
     params = initial_parameters(config)
-    input_state = initial_state(config)
+    circuit = tc.Circuit(config["n_qubits"])
+    for i in range(1, config["n_qubits"], 2):
+        circuit.x(i)
+    input_state = circuit.state()
     hamiltonian_mvp = build_xxz_mvp(config)
     target_entropies = K.convert_to_tensor(
         np.asarray(config["target_entropies"], dtype=np.float32)
@@ -161,12 +157,6 @@ def run_solution(config):
         params = optax.apply_updates(params, updates)
 
     return {
-        "initial_energy_density": K.numpy(energy_density_history[0]),
-        "final_energy_density": K.numpy(energy_density_history[-1]),
-        "final_block_entropies": K.numpy(entropy_history[-1]),
-        "final_entropy_mse": K.numpy(entropy_mse_history[-1]),
-        "initial_loss": K.numpy(loss_history[0]),
-        "final_loss": K.numpy(loss_history[-1]),
         "energy_density_history": K.numpy(K.stack(energy_density_history)),
         "loss_history": K.numpy(K.stack(loss_history)),
         "entropy_mse_history": K.numpy(K.stack(entropy_mse_history)),

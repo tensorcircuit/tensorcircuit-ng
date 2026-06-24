@@ -120,9 +120,5 @@ def run_solution(config):
         params = optax.apply_updates(params, updates)
 
     return {
-        "initial_energy": K.numpy(energy_history[0]),
-        "final_energy": K.numpy(energy_history[-1]),
-        "final_excitation_number": np.asarray(config["n_particles"], dtype=np.float64),
         "energy_history": K.numpy(K.stack(energy_history)),
-        "steps_run": np.asarray(len(energy_history), dtype=np.int32),
     }

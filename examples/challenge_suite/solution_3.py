@@ -57,13 +57,6 @@ def initial_parameters(config):
     }
 
 
-def initial_state(config):
-    circuit = tc.Circuit(config["n_qubits"])
-    for i in range(config["n_qubits"]):
-        circuit.h(i)
-    return circuit.state()
-
-
 def build_tfim_mvp(config):
     structures = []
     weights = []
@@ -143,7 +136,10 @@ def observables(params, input_state, hamiltonian_mvp, config):
 
 def run_solution(config):
     params = initial_parameters(config)
-    input_state = initial_state(config)
+    circuit = tc.Circuit(config["n_qubits"])
+    for i in range(config["n_qubits"]):
+        circuit.h(i)
+    input_state = circuit.state()
     hamiltonian_mvp = build_tfim_mvp(config)
     optimizer = optax.adam(config["learning_rate"])
     opt_state = optimizer.init(params)
@@ -169,12 +165,6 @@ def run_solution(config):
         params = optax.apply_updates(params, updates)
 
     return {
-        "initial_energy_density": K.numpy(energy_density_history[0]),
-        "final_energy_density": K.numpy(energy_density_history[-1]),
-        "final_success_probability": K.numpy(success_probability_history[-1]),
-        "final_mean_log_probability": K.numpy(mean_log_probability_history[-1]),
-        "initial_loss": K.numpy(loss_history[0]),
-        "final_loss": K.numpy(loss_history[-1]),
         "energy_density_history": K.numpy(K.stack(energy_density_history)),
         "success_probability_history": K.numpy(K.stack(success_probability_history)),
         "mean_log_probability_history": K.numpy(K.stack(mean_log_probability_history)),

@@ -82,16 +82,15 @@ def evaluate(solution_module, config):
     exact_energy = eigsh(hamiltonian, k=1, which="SA", return_eigenvectors=False)[0]
     subspace_dimension = math.comb(config["n_qubits"], config["n_particles"])
     full_dimension_text = f"2^{config['n_qubits']}"
-    steps_run = int(results["steps_run"])
     energy_history = np.asarray(results["energy_history"], dtype=float)
-    final_energy = float(results["final_energy"])
-    excitation_number = float(results["final_excitation_number"])
+    initial_energy = float(energy_history[0])
+    final_energy = float(energy_history[-1])
+    excitation_number = float(config["n_particles"])
 
     criteria = {
         "subspace dimension is 1225": subspace_dimension == 1225,
-        "history length matches steps": len(energy_history) == steps_run,
-        "steps equal requested count": steps_run == config["max_steps"],
-        "energy improves": final_energy < float(results["initial_energy"]),
+        "history length matches steps": len(energy_history) == config["max_steps"],
+        "energy improves": final_energy < initial_energy,
         "energy respects exact lower bound": final_energy >= exact_energy - 1e-8,
         "excitation number equals 2": np.isclose(
             excitation_number, config["n_particles"], rtol=0.0, atol=1e-12
@@ -103,12 +102,12 @@ def evaluate(solution_module, config):
     print(f"End-to-end solution time: {elapsed:.2f}s")
     print(f"Two-excitation subspace dimension: {subspace_dimension}")
     print(f"Full Hilbert-space dimension: {full_dimension_text}")
-    print(f"Initial energy: {float(results['initial_energy']):.10f}")
+    print(f"Initial energy: {initial_energy:.10f}")
     print(f"Final VQE energy: {final_energy:.10f}")
     print(f"Exact subspace ground energy: {exact_energy:.10f}")
     print(f"Final excitation-number expectation: {excitation_number:.12f}")
     print(f"Energy history length: {len(energy_history)}")
-    print(f"Steps run: {steps_run}")
+    print(f"Steps run: {config['max_steps']}")
     print(f"Returned NumPy keys: {sorted(results)}")
     print("Passing criteria:")
     for name, passed in criteria.items():

@@ -1,12 +1,12 @@
 """
 Challenge Suite Problem 6: digital-analog hybrid VQE with trainable analog blocks.
 
-Each block evolves under a trainable sparse Hamiltonian via diffrax, then applies
-trainable local digital rotations. The block loop uses jax.lax.scan for JIT-friendly
-staging. The solution returns only NumPy values consumed by evaluate_6.py.
+Each block evolves under a trainable sparse Hamiltonian via
+tc.timeevol.ode_evol_global raw mode, then applies trainable local digital
+rotations. The block loop uses jax.lax.scan for JIT-friendly staging. The
+solution returns only NumPy values consumed by evaluate_6.py.
 """
 
-import diffrax
 import jax
 import numpy as np
 import optax
@@ -89,20 +89,20 @@ def forward(params, psi0, Hxy_mvp, Hfield_mvp, Htarget_mvp, config):
         Jc = K.cast(K.tanh(j_l), tc.dtypestr)
         Dc = K.cast(K.tanh(d_l), tc.dtypestr)
 
-        def vf(tt, y, args):
+        def vf(y, tt):
             return -1.0j * (Jc * Hxy_mvp(y) + Dc * Hfield_mvp(y))
 
-        sol = diffrax.diffeqsolve(
-            diffrax.ODETerm(vf),
-            diffrax.Tsit5(),
-            t0=0.0,
-            t1=t,
-            dt0=0.01,
-            y0=psi,
-            stepsize_controller=diffrax.PIDController(rtol=rtol, atol=atol),
+        times = K.stack([t * 0.0, t])
+        psi = tc.timeevol.ode_evol_global(
+            vf,
+            psi,
+            times,
+            mode="raw",
+            ode_backend="diffrax",
+            rtol=rtol,
+            atol=atol,
             max_steps=config["ode_max_steps"],
-        )
-        psi = sol.ys[-1]
+        )[-1]
 
         circuit = tc.Circuit(config["n_qubits"], inputs=psi)
         for i in range(config["n_qubits"]):
@@ -149,16 +149,9 @@ def run_solution(config):
     final_couplings = K.numpy(K.tanh(params["j"])).astype(np.float32)
     final_detunings = K.numpy(K.tanh(params["d"])).astype(np.float32)
 
-    total_analog = float(np.sum(final_times))
-    total_digital = float(K.numpy(K.sum(K.abs(params["rot"]))))
-    analog_time_fraction = total_analog / (total_analog + total_digital)
-
     return {
-        "initial_energy_density": K.numpy(energy_density_history[0]),
-        "final_energy_density": K.numpy(energy_density_history[-1]),
         "final_analog_times": final_times,
         "final_analog_couplings": final_couplings,
         "final_analog_detunings": final_detunings,
-        "analog_time_fraction": float(analog_time_fraction),
         "energy_density_history": K.numpy(K.stack(energy_density_history)),
     }

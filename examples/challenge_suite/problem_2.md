@@ -81,16 +81,12 @@ The solution should not print progress. It should perform the core computation a
 
 Required result keys:
 
-- `initial_energy_density`: scalar float.
-- `final_energy_density`: scalar float.
-- `final_block_entropies`: NumPy array with shape `(3,)`.
-- `final_entropy_mse`: scalar float.
-- `initial_loss`: scalar float.
-- `final_loss`: scalar float.
 - `energy_density_history`: NumPy array with length `config["max_steps"]`.
 - `loss_history`: NumPy array with length `config["max_steps"]`.
 - `entropy_mse_history`: NumPy array with length `config["max_steps"]`.
 - `entropy_history`: NumPy array with shape `(config["max_steps"], 3)`.
+
+Each history records one value per optimizer update, evaluated immediately before applying that update. The evaluator derives initial/final energy density, initial/final loss, final block entropies, and final entropy-profile MSE from the history arrays.
 
 The solution may use any quantum software framework, but it must consume only the evaluator-provided configuration and return only this NumPy-format dictionary.
 
@@ -121,9 +117,9 @@ A run is considered functionally successful when all of the following hold for t
 
 - `len(energy_density_history) == 500`, `len(loss_history) == 500`, and `len(entropy_mse_history) == 500`.
 - `entropy_history.shape == (500, 3)`.
-- `final_loss < initial_loss`.
-- `final_energy_density < initial_energy_density`.
-- The reported final entropy-profile MSE matches the MSE recomputed from `final_block_entropies` and `target_entropies`.
+- The final loss is lower than the initial loss, derived from `loss_history`.
+- The final energy density is lower than the initial energy density, derived from `energy_density_history`.
+- The final entropy-profile MSE matches the MSE recomputed from the last row of `entropy_history` and `target_entropies`.
 - All returned values are NumPy arrays or NumPy-compatible scalars.
 
 The evaluator reports these metrics directly so another framework's `solution_2.py` can be compared without changing `evaluate_2.py`.

@@ -73,8 +73,8 @@ def evaluate(solution_module, config):
     final_times = np.asarray(results["final_analog_times"], dtype=float)
     final_couplings = np.asarray(results["final_analog_couplings"], dtype=float)
     final_detunings = np.asarray(results["final_analog_detunings"], dtype=float)
-    final_energy_density = float(results["final_energy_density"])
-    energy_history = np.asarray(results["energy_density_history"])
+    energy_history = np.asarray(results["energy_density_history"], dtype=float)
+    final_energy_density = float(energy_history[-1])
 
     criteria = {
         "energy history length": len(energy_history) == config["max_steps"],
@@ -84,8 +84,7 @@ def evaluate(solution_module, config):
         ),
         "couplings in bounds": bool(np.all(np.abs(final_couplings) < 1.0)),
         "detunings in bounds": bool(np.all(np.abs(final_detunings) < 1.0)),
-        "energy density improves": final_energy_density
-        < float(results["initial_energy_density"]),
+        "energy density improves": final_energy_density < float(energy_history[0]),
         "energy respects exact lower bound": final_energy_density
         >= exact_energy_density - 1e-6,
     }
@@ -94,12 +93,11 @@ def evaluate(solution_module, config):
     print(f"Solution module: {solution_module}")
     print(f"End-to-end solution time: {elapsed:.2f}s")
     print(f"Exact sparse ground energy density: {exact_energy_density:.10f}")
-    print(f"Initial energy density: {float(results['initial_energy_density']):.10f}")
+    print(f"Initial energy density: {float(energy_history[0]):.10f}")
     print(f"Final energy density: {final_energy_density:.10f}")
     print(f"Learned analog times: {format_array(final_times)}")
     print(f"Learned analog couplings (J): {format_array(final_couplings)}")
     print(f"Learned analog detunings (Delta): {format_array(final_detunings)}")
-    print(f"Analog time fraction: {float(results['analog_time_fraction']):.6f}")
     print(f"Energy history length: {len(energy_history)}")
     print(f"Returned NumPy keys: {sorted(results)}")
     print("Passing criteria:")

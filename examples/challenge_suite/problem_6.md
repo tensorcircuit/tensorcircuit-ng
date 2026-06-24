@@ -70,13 +70,12 @@ The solution should not print progress. It should perform the core computation a
 
 Required result keys:
 
-- `initial_energy_density`: scalar float.
-- `final_energy_density`: scalar float.
 - `final_analog_times`: NumPy array with shape `(n_blocks,)` containing the learned analog evolution times $t_l$.
 - `final_analog_couplings`: NumPy array with shape `(n_blocks,)` containing the learned XY couplings $J_l = \tanh(j_l)$.
 - `final_analog_detunings`: NumPy array with shape `(n_blocks,)` containing the learned detunings $\Delta_l = \tanh(d_l)$.
-- `analog_time_fraction`: scalar float, fraction of total circuit time spent in analog blocks, defined as $\sum_l t_l / (\sum_l t_l + \text{total digital angle magnitude})$ where the denominator adds the L1 norm of all rotation angles.
 - `energy_density_history`: NumPy array with length `config["max_steps"]`.
+
+`energy_density_history` records one value per optimizer update, evaluated immediately before applying that update. The evaluator derives initial and final energy density from the first and last entries of `energy_density_history`.
 
 The solution may use any quantum software framework, but it must consume only the evaluator-provided configuration and return only this NumPy-format dictionary.
 
@@ -88,7 +87,7 @@ The evaluator file is `evaluate_6.py`. It dynamically imports a solution module 
 python evaluate_6.py --solution solution_6
 ```
 
-The evaluator consumes only the returned result dictionary. It computes the exact 14-qubit sparse ground-state energy independently using `scipy.sparse.linalg.eigsh`, then prints initial and final energy density, exact ground-state energy density, learned analog parameters, analog time fraction, energy history length, returned keys, and pass/fail criteria. It does not save files or create plots by default.
+The evaluator consumes only the returned result dictionary. It computes the exact 14-qubit sparse ground-state energy independently using `scipy.sparse.linalg.eigsh`, then prints initial and final energy density, exact ground-state energy density, learned analog parameters, energy history length, returned keys, and pass/fail criteria. It does not save files or create plots by default.
 
 ## Passing Criteria
 

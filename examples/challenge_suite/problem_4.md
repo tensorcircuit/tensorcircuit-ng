@@ -33,7 +33,7 @@ Here `p01` is the probability for `0 -> 1` and `p10` is the probability for `1 -
 
 Use four fixed 12-qubit product-state inputs and the same noisy probe circuit for every input. The four inputs are `|0>^12`, `|1>^12`, `|010101010101>`, and `|+>^12`.
 
-The shared probe circuit is one even-bond brickwork entangler layer. On every bond `(0,1), (2,3), ..., (10,11)`, apply `RXX(0.31)` and then apply the asymmetric bit-flip channel independently to the two qubits in that bond.
+The shared probe circuit is one even-bond brickwork entangler layer. On every bond `(0,1), (2,3), ..., (10,11)`, apply `RXX(0.31)` with convention `RXX(theta) = exp(-i theta X_i X_j / 2)`, and then apply the asymmetric bit-flip channel independently to the two qubits in that bond.
 
 All probes therefore have identical circuit structure and differ only in the initial state.
 
@@ -61,17 +61,11 @@ The solution should not print progress. It should perform the core computation a
 
 Required result keys:
 
-- `initial_p01`: scalar float.
-- `initial_p10`: scalar float.
-- `final_p01`: scalar float.
-- `final_p10`: scalar float.
-- `initial_loss`: scalar float.
-- `final_loss`: scalar float.
 - `loss_history`: NumPy array with length `config["max_steps"]`.
-- `target_expectations`: NumPy array with shape `(4, 13)`.
+- `final_probabilities`: NumPy array with shape `(2,)`, storing final `[p01, p10]`.
 - `fitted_expectations`: NumPy array with shape `(4, 13)`.
 
-The solution may use any quantum software framework, but it must consume only the evaluator-provided configuration and return only this NumPy-format dictionary.
+`loss_history` records one loss value per optimizer update, evaluated immediately before applying that update. The solution may use any quantum software framework, but it must consume only the evaluator-provided configuration and return only this NumPy-format dictionary.
 
 ## Evaluation Interface
 
@@ -81,15 +75,15 @@ The evaluator file is `evaluate_4.py`. It dynamically imports a solution module 
 python evaluate_4.py --solution solution_4
 ```
 
-The evaluator consumes only the returned result dictionary. It prints the true probabilities, initialized probabilities, fitted probabilities, absolute parameter errors, initial and final loss, expectation-table errors, trace-preserving error for the fitted Kraus operators, loss-history length, returned keys, and a target-versus-fitted observable table.
+The evaluator consumes only the returned result dictionary. It prints the true probabilities, initialized probabilities, fitted probabilities, absolute parameter errors, initial and final loss, trace-preserving error for the fitted Kraus operators, loss-history length, fitted expectation shape, returned keys, and pass/fail criteria.
 
 ## Passing Criteria
 
 A run is considered functionally successful when all of the following hold for the default 120-step configuration:
 
 - `len(loss_history) == 120`.
-- `target_expectations.shape == (4, 13)` and `fitted_expectations.shape == (4, 13)`.
-- `final_loss < initial_loss`.
+- `final_probabilities.shape == (2,)` and `fitted_expectations.shape == (4, 13)`.
+- The final loss is lower than the initial loss, derived from `loss_history`.
 - The absolute errors of both fitted probabilities are at most `1e-4`.
 - The fitted Kraus operators satisfy `max(abs(sum_a K_a^\dagger K_a - I)) <= 1e-8`.
 - All returned values are NumPy arrays or NumPy-compatible scalars.
@@ -111,7 +105,6 @@ Observed TensorCircuit-NG baseline with the default 120-step configuration:
 - Final loss: `1.92410443e-09`.
 - Fitted `p01`: `0.03398204`.
 - Fitted `p10`: `0.01099501`.
-- Max expectation absolute error: `1.97350979e-04`.
 - Trace-preserving error: `0.00000000e+00`.
 
 ## Implementation Hint

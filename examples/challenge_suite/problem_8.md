@@ -2,7 +2,7 @@
 
 ## Goal
 
-Sample from a 49-qubit shallow two-dimensional IQP-style circuit without constructing the full `2^49` statevector. The task is designed so a one-dimensional MPS representation is not the natural simulation object: the entangling graph is a 7 by 7 square grid, while TensorCircuit can sample from the circuit by contracting the corresponding tensor network directly.
+Sample from a 49-qubit shallow two-dimensional IQP-style circuit without constructing the full `2^49` statevector. The task is designed so a one-dimensional MPS representation is not the natural simulation object: the entangling graph is a 7 by 7 square grid, and the intended computation samples by contracting the corresponding tensor network directly.
 
 ## Fixed Problem Configuration
 
@@ -48,12 +48,11 @@ def run_solution(config):
     return results
 ```
 
-The solution should not print progress. It should build the TensorCircuit circuit, sample from the tensor network with `allow_state=False`, and return only the NumPy-format quantities that the evaluator checks.
+The solution should not print progress. It should implement the fixed circuit, sample from the computational-basis distribution without materializing the full statevector or dense output probability vector, and return only the NumPy-format quantities that the evaluator checks.
 
 Required result keys:
 
 - `samples`: integer NumPy array with shape `(n_samples, n_qubits)` containing computational-basis bits `0` and `1`.
-- `largest_index_dimension`: integer scalar reporting the largest tensor index dimension used by the qubit tensor network.
 
 ## Evaluation Interface
 
@@ -63,7 +62,7 @@ The evaluator file is `evaluate_8.py`. It dynamically imports a solution module 
 python evaluate_8.py --solution solution_8
 ```
 
-The evaluator consumes only the returned result dictionary. It prints sampled bitstrings, empirical and exact full-grid parity, maximum absolute error over all single-site `Z_i`, maximum absolute error over all grid-edge `Z_i Z_j`, sample shape, largest tensor index dimension, returned keys, and pass/fail criteria. It does not save files or create plots by default.
+The evaluator consumes only the returned result dictionary. It prints sampled bitstrings, empirical and exact full-grid parity, maximum absolute error over all single-site `Z_i`, maximum absolute error over all grid-edge `Z_i Z_j`, sample shape, returned keys, and pass/fail criteria. It does not save files or create plots by default.
 
 ## Passing Criteria
 
@@ -74,14 +73,19 @@ A run is considered functionally successful when all of the following hold for t
 - The maximum single-site `Z_i` finite-sample error is at most `0.1`.
 - The maximum grid-edge `Z_i Z_j` finite-sample error is at most `0.1`.
 - The full-grid parity error is at most `1e-6`.
-- The largest reported tensor index dimension is exactly `2`.
 - All returned values are NumPy arrays or NumPy-compatible scalars.
 
 The evaluator reports these metrics directly so another framework's `solution_8.py` can be compared without changing `evaluate_8.py`.
 
-## Reference TensorCircuit-NG Baseline Run
+## TC-NG Baseline
 
-A verified TensorCircuit-NG/JAX baseline run with the default 8192-shot configuration produced sample shape `(8192, 49)`, full-grid parity absolute error `0.0000000000`, maximum single-site Z absolute error `0.0279209603`, maximum grid-edge ZZ absolute error `0.0195386093`, and overall `PASS`. The evaluator-measured `run_solution(config)` time for that run was `98.90s`; this time is a reference measurement only and is not a passing criterion.
+The TensorCircuit-NG solution in `solution_8.py` can be evaluated with:
+
+```bash
+python evaluate_8.py --solution solution_8
+```
+
+A verified TensorCircuit-NG/JAX baseline run with the default 8192-shot configuration produced sample shape `(8192, 49)`, full-grid parity absolute error `0.0000000000`, maximum single-site Z absolute error `0.0279209603`, maximum grid-edge ZZ absolute error `0.0195386093`, and overall `PASS`. The evaluator-measured `run_solution(config)` time for that run was `101.26s`; this time is a reference measurement only and is not a passing criterion.
 
 ## Implementation Hint
 

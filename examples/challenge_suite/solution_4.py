@@ -131,7 +131,6 @@ def run_solution(config):
     value_and_grad = K.jit(K.value_and_grad(loss_fn, has_aux=True))
 
     loss_history = []
-    initial_p01, initial_p10 = probabilities(params)
     for _ in range(config["max_steps"]):
         (loss, aux), grads = value_and_grad(params)
         final_p01, final_p10, fitted_expectations = aux
@@ -140,13 +139,7 @@ def run_solution(config):
         params = optax.apply_updates(params, updates)
 
     return {
-        "initial_p01": K.numpy(initial_p01),
-        "initial_p10": K.numpy(initial_p10),
-        "final_p01": K.numpy(final_p01),
-        "final_p10": K.numpy(final_p10),
-        "initial_loss": K.numpy(loss_history[0]),
-        "final_loss": K.numpy(loss_history[-1]),
         "loss_history": K.numpy(K.stack(loss_history)),
-        "target_expectations": K.numpy(true_target),
+        "final_probabilities": K.numpy(K.stack([final_p01, final_p10])),
         "fitted_expectations": K.numpy(fitted_expectations),
     }

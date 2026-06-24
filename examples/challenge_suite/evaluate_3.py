@@ -60,24 +60,23 @@ def evaluate(solution_module, config):
     exact_energy = eigsh(hamiltonian, k=1, which="SA", return_eigenvectors=False)[0]
     exact_energy_density = exact_energy / config["n_qubits"]
 
-    success_probability = float(results["final_success_probability"])
-    mean_log_probability = float(results["final_mean_log_probability"])
+    energy_history = np.asarray(results["energy_density_history"], dtype=float)
+    success_history = np.asarray(results["success_probability_history"], dtype=float)
+    mean_log_history = np.asarray(results["mean_log_probability_history"], dtype=float)
+    loss_history = np.asarray(results["loss_history"], dtype=float)
+    success_probability = float(success_history[-1])
+    mean_log_probability = float(mean_log_history[-1])
     n_events = config["n_steps"] * len(range(0, config["n_qubits"], 2))
     recomputed_success = float(np.exp(n_events * mean_log_probability))
 
     criteria = {
-        "energy history length": len(results["energy_density_history"])
+        "energy history length": len(energy_history) == config["max_steps"],
+        "success history length": len(success_history) == config["max_steps"],
+        "mean log probability history length": len(mean_log_history)
         == config["max_steps"],
-        "success history length": len(results["success_probability_history"])
-        == config["max_steps"],
-        "mean log probability history length": len(
-            results["mean_log_probability_history"]
-        )
-        == config["max_steps"],
-        "loss history length": len(results["loss_history"]) == config["max_steps"],
-        "loss improves": float(results["final_loss"]) < float(results["initial_loss"]),
-        "energy density improves": float(results["final_energy_density"])
-        < float(results["initial_energy_density"]),
+        "loss history length": len(loss_history) == config["max_steps"],
+        "loss improves": float(loss_history[-1]) < float(loss_history[0]),
+        "energy density improves": float(energy_history[-1]) < float(energy_history[0]),
         "success probability is valid": 0.0 < success_probability <= 1.0,
         "success matches mean log probability": np.isclose(
             success_probability, recomputed_success, rtol=1e-4, atol=1e-30
@@ -88,19 +87,16 @@ def evaluate(solution_module, config):
     print(f"Solution module: {solution_module}")
     print(f"End-to-end solution time: {elapsed:.2f}s")
     print(f"Exact sparse ground energy density: {exact_energy_density:.8f}")
-    print(f"Initial energy density: {float(results['initial_energy_density']):.8f}")
-    print(f"Final energy density: {float(results['final_energy_density']):.8f}")
+    print(f"Initial energy density: {float(energy_history[0]):.8f}")
+    print(f"Final energy density: {float(energy_history[-1]):.8f}")
     print(f"Final success probability: {success_probability:.8e}")
     print(f"Final mean log event probability: {mean_log_probability:.8e}")
-    print(f"Initial loss: {float(results['initial_loss']):.8f}")
-    print(f"Final loss: {float(results['final_loss']):.8f}")
-    print(f"Energy history length: {len(results['energy_density_history'])}")
-    print(f"Success history length: {len(results['success_probability_history'])}")
-    print(
-        "Mean log probability history length: "
-        f"{len(results['mean_log_probability_history'])}"
-    )
-    print(f"Loss history length: {len(results['loss_history'])}")
+    print(f"Initial loss: {float(loss_history[0]):.8f}")
+    print(f"Final loss: {float(loss_history[-1]):.8f}")
+    print(f"Energy history length: {len(energy_history)}")
+    print(f"Success history length: {len(success_history)}")
+    print("Mean log probability history length: " f"{len(mean_log_history)}")
+    print(f"Loss history length: {len(loss_history)}")
     print(f"Returned NumPy keys: {sorted(results)}")
     print("Passing criteria:")
     for name, passed in criteria.items():

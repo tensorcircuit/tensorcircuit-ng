@@ -8,6 +8,8 @@
 
 - Support MVP mode for timeevol methods.
 
+- Add `tc.set_contractor("omeco")` as a shortcut.
+
 ### Fixed
 
 - Fix the nonjit path for sampling when status is provided.

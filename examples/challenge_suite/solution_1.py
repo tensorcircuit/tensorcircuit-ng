@@ -7,7 +7,6 @@ returns NumPy values only; external validation lives in evaluate_1.py.
 
 import numpy as np
 import optax
-import quimb.tensor as qtn
 
 import tensorcircuit as tc
 from tensorcircuit.templates.measurements import parameterized_measurements
@@ -15,20 +14,6 @@ from tensorcircuit.templates.measurements import parameterized_measurements
 K = tc.set_backend("jax")
 tc.set_dtype("complex64")
 tc.set_contractor("omeco")
-
-
-def build_tfim_mpo(config):
-    ham = qtn.SpinHam1D(S=0.5)
-    ham += -4.0, "Z", "Z"
-    ham += -2.0 * config["field"], "X"
-    return ham.build_mpo(config["n_qubits"])
-
-
-def dmrg_initial_state(config):
-    mpo = build_tfim_mpo(config)
-    dmrg = qtn.DMRG2(mpo, bond_dims=[config["dmrg_chi"]], cutoffs=1e-8)
-    dmrg.solve(tol=1e-7, max_sweeps=config["dmrg_sweeps"], verbosity=0)
-    return tc.quantum.quimb2qop(dmrg.state), float(dmrg.energy)
 
 
 def parameter_count(config):
@@ -96,7 +81,7 @@ def circuit_energy(params, mps_input, config, patterns, weights):
 
 
 def run_solution(config):
-    mps_input, dmrg_energy = dmrg_initial_state(config)
+    mps_input = tc.quantum.quimb2qop(config["dmrg_state"])
     params = initial_parameters(config)
     patterns, weights = tfim_measurement_data(config)
     optimizer = optax.adam(config["learning_rate"])
@@ -119,9 +104,6 @@ def run_solution(config):
             grad_norm = K.norm(grads)
 
     return {
-        "dmrg_energy": np.asarray(dmrg_energy),
-        "initial_energy": np.asarray(K.numpy(energy_history[0])),
-        "final_energy": np.asarray(K.numpy(energy_history[-1])),
-        "energy_history": np.asarray(K.numpy(K.stack(energy_history))),
-        "grad_norm_history": np.asarray(K.numpy(K.stack(grad_norm_history))),
+        "energy_history": K.numpy(K.stack(energy_history)),
+        "grad_norm_history": K.numpy(K.stack(grad_norm_history)),
     }

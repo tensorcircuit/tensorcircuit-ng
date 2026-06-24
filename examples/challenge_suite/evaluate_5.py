@@ -66,16 +66,15 @@ def evaluate(solution_module, config):
 
     final_a = np.asarray(results["final_a"], dtype=float)
     final_b = np.asarray(results["final_b"], dtype=float)
-    final_energy_density = float(results["final_energy_density"])
+    energy_history = np.asarray(results["energy_density_history"], dtype=float)
+    final_energy_density = float(energy_history[-1])
     strength_shape = (config["n_layers"] // 2, 2)
 
     criteria = {
-        "energy history length": len(results["energy_density_history"])
-        == config["max_steps"],
+        "energy history length": len(energy_history) == config["max_steps"],
         "final a shape": final_a.shape == strength_shape,
         "final b shape": final_b.shape == strength_shape,
-        "energy density improves": final_energy_density
-        < float(results["initial_energy_density"]),
+        "energy density improves": final_energy_density < float(energy_history[0]),
         "energy respects exact lower bound": final_energy_density
         >= exact_energy_density - 1e-8,
     }
@@ -84,11 +83,11 @@ def evaluate(solution_module, config):
     print(f"Solution module: {solution_module}")
     print(f"End-to-end solution time: {elapsed:.2f}s")
     print(f"Exact sparse ground energy density: {exact_energy_density:.10f}")
-    print(f"Initial energy density: {float(results['initial_energy_density']):.10f}")
+    print(f"Initial energy density: {float(energy_history[0]):.10f}")
     print(f"Final energy density: {final_energy_density:.10f}")
     print(f"Learned a strengths by block [even, odd]: {format_array(final_a)}")
     print(f"Learned b strengths by block [even, odd]: {format_array(final_b)}")
-    print(f"Energy history length: {len(results['energy_density_history'])}")
+    print(f"Energy history length: {len(energy_history)}")
     print(f"Returned NumPy keys: {sorted(results)}")
     print("Passing criteria:")
     for name, passed in criteria.items():

@@ -20,6 +20,13 @@ The evaluator defines and passes the following configuration dictionary into `ru
 }
 ```
 
+Before timing `run_solution(config)`, the evaluator runs DMRG itself and augments this dictionary with:
+
+- `dmrg_state`: the normalized quimb MPS DMRG state.
+- `dmrg_energy`: the corresponding DMRG energy.
+
+These runtime keys are intentionally supplied by the evaluator so the DMRG preparation time is excluded from solution timing and every solution optimizes from the same deterministic MPS input.
+
 The Hamiltonian is the open-boundary transverse-field Ising model
 
 $$
@@ -42,13 +49,10 @@ The solution should not print progress. It should perform the core computation a
 
 Required result keys:
 
-- `dmrg_energy`: scalar float, DMRG-MPS input energy.
-- `initial_energy`: scalar float, energy after applying the initial variational parameters, sampled from a fixed Gaussian distribution with standard deviation $10^{-4}$.
-- `final_energy`: scalar float, energy after exactly `config["max_steps"]` optimizer updates.
 - `energy_history`: NumPy array with length `config["max_steps"]`.
 - `grad_norm_history`: NumPy array with length `config["max_steps"]`.
 
-The solution may use any quantum software framework, but it must consume only the evaluator-provided configuration and return only this NumPy-format dictionary.
+Each history records one value per optimizer update, evaluated immediately before applying that update. The evaluator derives the initial and final variational energies from the first and last entries of `energy_history`. The solution may use any quantum software framework, but it must consume only the evaluator-provided configuration, including the supplied `dmrg_state`, and return only this NumPy-format dictionary. The solution should not run DMRG internally.
 
 ## Evaluation Interface
 
@@ -58,10 +62,10 @@ The evaluator file is `evaluate_1.py`. It dynamically imports a solution module 
 python evaluate_1.py --solution solution_1
 ```
 
-The evaluator consumes only the returned result dictionary. It independently builds a sparse TFIM Hamiltonian, computes the exact ground-state energy by sparse diagonalization, and prints:
+The evaluator computes the DMRG-MPS input before timing, passes that quimb MPS into the solution through `config["dmrg_state"]`, and then consumes only the returned result dictionary. It independently builds a sparse TFIM Hamiltonian, computes the exact ground-state energy by sparse diagonalization, and prints:
 
 - solution module name,
-- end-to-end solution time,
+- end-to-end solution time, excluding evaluator-side DMRG preparation,
 - exact sparse energy,
 - DMRG energy error,
 - initial variational error,
@@ -92,15 +96,15 @@ python evaluate_1.py --solution solution_1
 
 Observed TensorCircuit-NG baseline on a MacBook Pro:
 
-- End-to-end solution time: `27.85s`.
+- End-to-end solution time: `28.98s`.
 - Exact sparse energy: `-25.82210541`.
-- DMRG energy error: `1.21044611e-04`.
-- Initial variational error: `1.06811523e-04`.
-- Final variational error: `6.48498535e-05`.
-- Energy improvement from circuit refinement: `4.19616699e-05`.
+- DMRG energy error: `1.23596250e-04`.
+- Initial variational error: `1.10626221e-04`.
+- Final variational error: `7.24792480e-05`.
+- Energy improvement from circuit refinement: `3.81469727e-05`.
 
-This baseline includes DMRG state generation, first compilation/path setup, all 500 optimizer updates, and result materialization into NumPy arrays.
+This baseline includes first compilation/path setup, all 500 optimizer updates, and result materialization into NumPy arrays. It excludes evaluator-side DMRG state generation.
 
 ## Implementation Hint
 
-An efficient TensorCircuit-NG implementation can inject the DMRG MPS into a regular circuit input, build the four-layer variational circuit on top, construct the fixed 39 TFIM Pauli terms inside the solution from the Hamiltonian definition, and evaluate them through `vmap(parameterized_measurements)`. OMECO can be used as the tensor-network contraction planner. The problem itself does not require a specific implementation strategy.
+An efficient TensorCircuit-NG implementation can convert the evaluator-provided quimb MPS with `tc.quantum.quimb2qop(config["dmrg_state"])`, inject it into a regular circuit input, build the four-layer variational circuit on top, construct the fixed 39 TFIM Pauli terms inside the solution from the Hamiltonian definition, and evaluate them through `vmap(parameterized_measurements)`. OMECO can be used as the tensor-network contraction planner. The problem itself does not require a specific implementation strategy.

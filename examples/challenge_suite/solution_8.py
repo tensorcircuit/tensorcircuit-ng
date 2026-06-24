@@ -14,59 +14,45 @@ tc.set_dtype("complex64")
 tc.set_contractor("omeco-32-32")
 
 
-def grid_sublayers(config):
+def run_solution(config):
     n_side = config["grid_side"]
-    layers = []
-
-    for parity in (0, 1):
-        layers.append(
-            [
-                (row * n_side + col, row * n_side + col + 1)
-                for row in range(n_side)
-                for col in range(parity, n_side - 1, 2)
-            ]
-        )
-
-    for parity in (0, 1):
-        layers.append(
-            [
-                (row * n_side + col, (row + 1) * n_side + col)
-                for row in range(parity, n_side - 1, 2)
-                for col in range(n_side)
-            ]
-        )
-
-    return layers
-
-
-def edge_angle(index, left, right, config):
-    return (
-        config["theta_offset"]
-        + config["theta_sin_scale"]
-        * np.sin(config["theta_sin_frequency"] * (index + 1))
-        + config["theta_cos_scale"]
-        * np.cos(config["theta_cos_frequency"] * (left + 2 * right + 1))
-    )
-
-
-def build_circuit(config):
     circuit = tc.Circuit(config["n_qubits"])
     for i in range(config["n_qubits"]):
         circuit.h(i)
 
     edge_index = 0
-    for layer in grid_sublayers(config):
-        for left, right in layer:
-            circuit.rzz(left, right, theta=edge_angle(edge_index, left, right, config))
-            edge_index += 1
+    for parity in (0, 1):
+        for row in range(n_side):
+            for col in range(parity, n_side - 1, 2):
+                left = row * n_side + col
+                right = left + 1
+                theta = (
+                    config["theta_offset"]
+                    + config["theta_sin_scale"]
+                    * np.sin(config["theta_sin_frequency"] * (edge_index + 1))
+                    + config["theta_cos_scale"]
+                    * np.cos(config["theta_cos_frequency"] * (left + 2 * right + 1))
+                )
+                circuit.rzz(left, right, theta=theta)
+                edge_index += 1
+
+    for parity in (0, 1):
+        for row in range(parity, n_side - 1, 2):
+            for col in range(n_side):
+                left = row * n_side + col
+                right = (row + 1) * n_side + col
+                theta = (
+                    config["theta_offset"]
+                    + config["theta_sin_scale"]
+                    * np.sin(config["theta_sin_frequency"] * (edge_index + 1))
+                    + config["theta_cos_scale"]
+                    * np.cos(config["theta_cos_frequency"] * (left + 2 * right + 1))
+                )
+                circuit.rzz(left, right, theta=theta)
+                edge_index += 1
 
     for i in range(config["n_qubits"]):
         circuit.h(i)
-    return circuit
-
-
-def run_solution(config):
-    circuit = build_circuit(config)
     rng = np.random.default_rng(2033)
     status = K.convert_to_tensor(
         rng.random((config["n_samples"], config["n_qubits"]), dtype=np.float32)
@@ -79,5 +65,4 @@ def run_solution(config):
     )
     return {
         "samples": K.numpy(samples),
-        "largest_index_dimension": np.asarray(2, dtype=np.int32),
     }

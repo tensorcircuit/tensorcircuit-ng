@@ -57,16 +57,12 @@ The solution should not print progress. It should perform the core computation a
 
 Required result keys:
 
-- `initial_energy_density`: scalar float.
-- `final_energy_density`: scalar float.
-- `final_success_probability`: scalar float.
-- `final_mean_log_probability`: scalar float.
-- `initial_loss`: scalar float.
-- `final_loss`: scalar float.
 - `energy_density_history`: NumPy array with length `config["max_steps"]`.
 - `success_probability_history`: NumPy array with length `config["max_steps"]`.
 - `mean_log_probability_history`: NumPy array with length `config["max_steps"]`.
 - `loss_history`: NumPy array with length `config["max_steps"]`.
+
+Each history records one value per optimizer update, evaluated immediately before applying that update. The evaluator derives initial/final energy density, final success probability, final mean log probability, and initial/final loss from these histories.
 
 The solution may use any quantum software framework, but it must consume only the evaluator-provided configuration and return only this NumPy-format dictionary.
 
@@ -95,10 +91,10 @@ The evaluator consumes only the returned result dictionary. It independently bui
 A run is considered functionally successful when all of the following hold for the default 300-step configuration:
 
 - `len(energy_density_history) == 300`, `len(success_probability_history) == 300`, `len(mean_log_probability_history) == 300`, and `len(loss_history) == 300`.
-- `final_loss < initial_loss`.
-- `final_energy_density < initial_energy_density`.
-- `0 < final_success_probability <= 1`.
-- The reported final success probability matches `exp(60 * final_mean_log_probability)`.
+- The final loss is lower than the initial loss, derived from `loss_history`.
+- The final energy density is lower than the initial energy density, derived from `energy_density_history`.
+- The final success probability derived from `success_probability_history` is in `(0, 1]`.
+- The final success probability matches `exp(60 * final_mean_log_probability)`, where both values are derived from their histories.
 - All returned values are NumPy arrays or NumPy-compatible scalars.
 
 The evaluator reports these metrics directly so another framework's `solution_3.py` can be compared without changing `evaluate_3.py`.

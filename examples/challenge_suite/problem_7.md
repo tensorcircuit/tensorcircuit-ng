@@ -60,11 +60,9 @@ The solution should not print progress. It should perform the core computation a
 
 Required result keys:
 
-- `initial_energy`: scalar float.
-- `final_energy`: scalar float.
-- `final_excitation_number`: scalar float.
 - `energy_history`: NumPy array with length equal to the number of optimizer updates.
-- `steps_run`: integer scalar.
+
+`energy_history` records one energy value per optimizer update, evaluated immediately before applying that update. The evaluator derives initial and final energy from the first and last entries of `energy_history`. The excitation number and requested step count are fixed by the evaluator configuration and are not returned by the solution.
 
 The solution may use any quantum software framework, but it must consume only the evaluator-provided configuration and return only this NumPy-format dictionary.
 
@@ -83,7 +81,7 @@ The evaluator consumes only the returned result dictionary. It builds the exact 
 A run is considered functionally successful when all of the following hold for the default configuration:
 
 - The two-excitation subspace dimension is `1225`.
-- `len(energy_history) == steps_run == 500`.
+- `len(energy_history) == 500`.
 - The final VQE energy is lower than the initial energy.
 - The final VQE energy is no lower than the exact sparse ground-state energy beyond numerical tolerance.
 - The final excitation-number expectation equals `2` to numerical tolerance `1e-12`.

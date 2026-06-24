@@ -10,6 +10,7 @@ import importlib
 import time
 
 import numpy as np
+import quimb.tensor as qtn
 from scipy.sparse.linalg import eigsh
 
 import tensorcircuit as tc
@@ -50,24 +51,49 @@ def build_sparse_tfim(n_qubits, field):
     return tc.quantum.PauliStringSum2COO(patterns, weights, numpy=True)
 
 
+def build_tfim_mpo(config):
+    hamiltonian = qtn.SpinHam1D(S=0.5)
+    hamiltonian += -4.0, "Z", "Z"
+    hamiltonian += -2.0 * config["field"], "X"
+    return hamiltonian.build_mpo(config["n_qubits"])
+
+
+def dmrg_initial_state(config):
+    mpo = build_tfim_mpo(config)
+    dmrg = qtn.DMRG2(mpo, bond_dims=[config["dmrg_chi"]], cutoffs=1e-8)
+    dmrg.solve(tol=1e-7, max_sweeps=config["dmrg_sweeps"], verbosity=0)
+    dmrg.state.normalize()
+    return dmrg.state, float(dmrg.energy)
+
+
 def evaluate(solution_module, config):
+    dmrg_state, dmrg_energy = dmrg_initial_state(config)
+    solution_config = dict(config)
+    solution_config["dmrg_state"] = dmrg_state
+    solution_config["dmrg_energy"] = dmrg_energy
+
     module = importlib.import_module(solution_module)
 
     start = time.perf_counter()
-    results = module.run_solution(config)
+    results = module.run_solution(solution_config)
     elapsed = time.perf_counter() - start
 
     hamiltonian = build_sparse_tfim(config["n_qubits"], config["field"])
     exact_energy = eigsh(hamiltonian, k=1, which="SA", return_eigenvectors=False)[0]
 
-    dmrg_error = float(results["dmrg_energy"] - exact_energy)
-    initial_error = float(results["initial_energy"] - exact_energy)
-    final_error = float(results["final_energy"] - exact_energy)
-    energy_gain = float(results["initial_energy"] - results["final_energy"])
+    energy_history = np.asarray(results["energy_history"], dtype=float)
+    grad_norm_history = np.asarray(results["grad_norm_history"], dtype=float)
+    initial_energy = float(energy_history[0])
+    final_energy = float(energy_history[-1])
+    dmrg_error = float(dmrg_energy - exact_energy)
+    initial_error = initial_energy - exact_energy
+    final_error = final_energy - exact_energy
+    energy_gain = initial_energy - final_energy
     criteria = {
-        "energy history length": len(results["energy_history"]) == config["max_steps"],
-        "gradient history length": len(results["grad_norm_history"])
-        == config["max_steps"],
+        "energy history length": len(energy_history) == config["max_steps"],
+        "gradient history length": len(grad_norm_history) == config["max_steps"],
+        "histories finite": np.all(np.isfinite(energy_history))
+        and np.all(np.isfinite(grad_norm_history)),
         "refinement improves energy": energy_gain > 0.0,
         "refinement beats dmrg": final_error < dmrg_error,
         "final error <= 1.5e-3": final_error <= 1.5e-3,

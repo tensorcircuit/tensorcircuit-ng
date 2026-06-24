@@ -104,8 +104,6 @@ def run_solution(config):
         params = optax.apply_updates(params, updates)
 
     return {
-        "initial_energy_density": K.numpy(energy_density_history[0]),
-        "final_energy_density": K.numpy(energy_density_history[-1]),
         "final_a": K.numpy(params["a"]),
         "final_b": K.numpy(params["b"]),
         "energy_density_history": K.numpy(K.stack(energy_density_history)),
