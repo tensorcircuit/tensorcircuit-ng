@@ -122,7 +122,8 @@ def run_solution(config):
         signs,
     )
     params = initial_parameters(config)
-    optimizer = K.optimizer(optax.adam(config["learning_rate"]))
+    optimizer = optax.adam(config["learning_rate"])
+    opt_state = optimizer.init(params)
 
     def loss_fn(p):
         return loss_and_observables(p, true_target, config, signs)
@@ -135,7 +136,8 @@ def run_solution(config):
         (loss, aux), grads = value_and_grad(params)
         final_p01, final_p10, fitted_expectations = aux
         loss_history.append(loss)
-        params = optimizer.update(grads, params)
+        updates, opt_state = optimizer.update(grads, opt_state, params)
+        params = optax.apply_updates(params, updates)
 
     return {
         "initial_p01": K.numpy(initial_p01),

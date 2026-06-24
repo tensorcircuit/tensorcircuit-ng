@@ -281,6 +281,28 @@ def test_omeco_optimizer_autowrap(contractor_setup):
     assert isinstance(tc.contractor.keywords["optimizer"], cons.OMEOptimizer)
 
 
+def test_omeco_contractor_shortcut():
+    pytest.importorskip("omeco")
+
+    with tc.runtime_contractor("omeco"):
+        opt = tc.contractor.keywords["optimizer"]
+        score = opt.optimizer.score
+        assert isinstance(opt, cons.OMEOptimizer)
+        assert opt.optimizer.ntrials == 16
+        assert opt.optimizer.niters == 32
+        assert score.tc_weight == 1.0
+        assert score.sc_weight == 0.0
+        assert score.rw_weight == 64.0
+        assert score.sc_target == 20.0
+        assert tc.contractor.keywords["preprocessing"] is True
+
+    with tc.runtime_contractor("omeco-2-3"):
+        opt = tc.contractor.keywords["optimizer"]
+        assert isinstance(opt, cons.OMEOptimizer)
+        assert opt.optimizer.ntrials == 2
+        assert opt.optimizer.niters == 3
+
+
 def test_custom_callable_optimizer_does_not_import_omeco(monkeypatch):
     original_import = builtins.__import__
 

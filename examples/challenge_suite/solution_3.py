@@ -145,7 +145,8 @@ def run_solution(config):
     params = initial_parameters(config)
     input_state = initial_state(config)
     hamiltonian_mvp = build_tfim_mvp(config)
-    optimizer = K.optimizer(optax.adam(config["learning_rate"]))
+    optimizer = optax.adam(config["learning_rate"])
+    opt_state = optimizer.init(params)
 
     def loss_fn(p):
         return observables(p, input_state, hamiltonian_mvp, config)
@@ -164,7 +165,8 @@ def run_solution(config):
         success_probability_history.append(success_probability)
         mean_log_probability_history.append(mean_log_probability)
         loss_history.append(loss)
-        params = optimizer.update(grads, params)
+        updates, opt_state = optimizer.update(grads, opt_state, params)
+        params = optax.apply_updates(params, updates)
 
     return {
         "initial_energy_density": K.numpy(energy_density_history[0]),

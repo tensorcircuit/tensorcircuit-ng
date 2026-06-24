@@ -104,7 +104,8 @@ def energy(params, config, ps_list, coefficients):
 def run_solution(config):
     ps_list, coefficients = hamiltonian_terms(config)
     params = initial_parameters(config)
-    optimizer = K.optimizer(optax.adam(config["learning_rate"]))
+    optimizer = optax.adam(config["learning_rate"])
+    opt_state = optimizer.init(params)
 
     def loss_fn(p):
         return energy(p, config, ps_list, coefficients)
@@ -115,7 +116,8 @@ def run_solution(config):
     for _ in range(config["max_steps"]):
         value, grads = value_and_grad(params)
         energy_history.append(value)
-        params = optimizer.update(grads, params)
+        updates, opt_state = optimizer.update(grads, opt_state, params)
+        params = optax.apply_updates(params, updates)
 
     return {
         "initial_energy": K.numpy(energy_history[0]),

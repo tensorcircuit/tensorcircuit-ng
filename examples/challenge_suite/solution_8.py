@@ -6,25 +6,12 @@ without constructing the 2^49 statevector.
 """
 
 import numpy as np
-import omeco
 
 import tensorcircuit as tc
 
 K = tc.set_backend("jax")
 tc.set_dtype("complex64")
-
-OMECO_SCORE = omeco.ScoreFunction(
-    tc_weight=1.0,
-    sc_weight=0.0,
-    rw_weight=64.0,
-    sc_target=20.0,
-)
-OMECO_OPTIMIZER = omeco.TreeSA(
-    ntrials=32,
-    niters=32,
-    score=OMECO_SCORE,
-)
-tc.set_contractor("custom", optimizer=OMECO_OPTIMIZER, preprocessing=True)
+tc.set_contractor("omeco-32-32")
 
 
 def grid_sublayers(config):

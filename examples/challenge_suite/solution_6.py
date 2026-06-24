@@ -126,7 +126,8 @@ def run_solution(config):
     Hxy_mvp, Hfield_mvp, Htarget_mvp = build_hamiltonians(config)
     psi0 = initial_state(config)
     params = initial_parameters(config)
-    optimizer = K.optimizer(optax.adam(config["learning_rate"]))
+    optimizer = optax.adam(config["learning_rate"])
+    opt_state = optimizer.init(params)
 
     def loss_fn(p):
         return forward(p, psi0, Hxy_mvp, Hfield_mvp, Htarget_mvp, config)
@@ -137,7 +138,8 @@ def run_solution(config):
     for _ in range(config["max_steps"]):
         energy_density, grads = value_and_grad(params)
         energy_density_history.append(energy_density)
-        params = optimizer.update(grads, params)
+        updates, opt_state = optimizer.update(grads, opt_state, params)
+        params = optax.apply_updates(params, updates)
 
     t_min = config["t_min"]
     t_max = config["t_max"]

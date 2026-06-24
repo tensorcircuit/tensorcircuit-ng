@@ -1148,7 +1148,9 @@ def set_contractor(
     To set runtime contractor of the tensornetwork for a better contraction path.
     For more information on the usage of contractor, please refer to independent tutorial.
 
-    :param method: "auto", "greedy", "branch", "plain", "tng", "custom", "custom_stateful". defaults to None ("auto")
+    :param method: "auto", "greedy", "branch", "plain", "tng", "custom",
+        "custom_stateful". Also supports shortcuts like "cotengra",
+        "cotengra-30-64", "omeco", and "omeco-16-32". defaults to None ("auto")
     :type method: Optional[str], optional
     :param optimizer: Valid for "custom" or "custom_stateful" as method, defaults to None
     :type optimizer: Optional[Any], optional
@@ -1192,6 +1194,35 @@ def set_contractor(
                 max_repeats=int(mr),
                 progbar=True,
             )
+    if method.startswith("omeco"):
+        # OMECO TreeSA shortcut, analogous to "cotengra-30-64".
+        import omeco
+
+        ntrials = 16
+        niters = 32
+        if method != "omeco":
+            try:
+                _, ntrials_str, niters_str = method.split("-")
+                ntrials = int(ntrials_str)
+                niters = int(niters_str)
+            except ValueError as err:
+                raise ValueError(
+                    "OMECO contractor shortcut must be 'omeco' or "
+                    "'omeco-<ntrials>-<niters>'."
+                ) from err
+        method = "custom"
+        score = omeco.ScoreFunction(
+            tc_weight=1.0,
+            sc_weight=0.0,
+            rw_weight=64.0,
+            sc_target=20.0,
+        )
+        optimizer = omeco.TreeSA(
+            ntrials=ntrials,
+            niters=niters,
+            score=score,
+        )
+        kws.setdefault("preprocessing", True)
 
     if method == "plain":
         cf = plain_contractor

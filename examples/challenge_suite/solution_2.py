@@ -138,7 +138,8 @@ def run_solution(config):
     target_entropies = K.convert_to_tensor(
         np.asarray(config["target_entropies"], dtype=np.float32)
     )
-    optimizer = K.optimizer(optax.adam(config["learning_rate"]))
+    optimizer = optax.adam(config["learning_rate"])
+    opt_state = optimizer.init(params)
 
     def loss_fn(p):
         return observables(p, input_state, hamiltonian_mvp, config, target_entropies)
@@ -156,7 +157,8 @@ def run_solution(config):
         loss_history.append(loss)
         entropy_mse_history.append(entropy_mse)
         entropy_history.append(entropies)
-        params = optimizer.update(grads, params)
+        updates, opt_state = optimizer.update(grads, opt_state, params)
+        params = optax.apply_updates(params, updates)
 
     return {
         "initial_energy_density": K.numpy(energy_density_history[0]),

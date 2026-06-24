@@ -474,6 +474,12 @@ For the code implementation on the work of demonstrating plasticity in quantum c
 
 Reference paper: https://arxiv.org/abs/2511.17228 (published in PRX Quantum).
 
+### Quantum Subliminal Learning
+
+For the code implementation on the work of quantum subliminal learning, see the [project repo](https://github.com/sxzgroup/quantum-subliminal-learning).
+
+Reference paper: https://arxiv.org/abs/2605.29557.
+
 ### More works
 
 <details>

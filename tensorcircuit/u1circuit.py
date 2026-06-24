@@ -149,6 +149,9 @@ class U1Operator:
                 valid = target_idx_arr != -1
                 target_idx_safe = np.where(valid, target_idx_arr, 0)
 
+                # Keep numpy-based cache in high precision (complex128) to avoid precision loss during
+                # pre-computation. The cache is dtype-agnostic and will be cast to the backend's active
+                # `dtypestr` dynamically at run-time in `expectation_pss`.
                 phase = np.ones(dim, dtype=np.complex128)
                 if len(z_indices) > 0:
                     phase = phase * np.prod(1.0 - 2.0 * occupied[:, z_indices], axis=1)

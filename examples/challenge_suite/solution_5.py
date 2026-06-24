@@ -88,7 +88,8 @@ def run_solution(config):
     params = initial_parameters(config)
     input_state = initial_state(config)
     hamiltonian_mvp = build_tfim_mvp(config)
-    optimizer = K.optimizer(optax.adam(config["learning_rate"]))
+    optimizer = optax.adam(config["learning_rate"])
+    opt_state = optimizer.init(params)
 
     def loss_fn(p):
         return energy_density(p, input_state, hamiltonian_mvp, config)
@@ -99,7 +100,8 @@ def run_solution(config):
     for _ in range(config["max_steps"]):
         energy, grads = value_and_grad(params)
         energy_density_history.append(energy)
-        params = optimizer.update(grads, params)
+        updates, opt_state = optimizer.update(grads, opt_state, params)
+        params = optax.apply_updates(params, updates)
 
     return {
         "initial_energy_density": K.numpy(energy_density_history[0]),

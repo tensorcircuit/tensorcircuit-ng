@@ -6,7 +6,6 @@ returns NumPy values only; external validation lives in evaluate_1.py.
 """
 
 import numpy as np
-import omeco
 import optax
 import quimb.tensor as qtn
 
@@ -15,19 +14,7 @@ from tensorcircuit.templates.measurements import parameterized_measurements
 
 K = tc.set_backend("jax")
 tc.set_dtype("complex64")
-
-OMECO_SCORE = omeco.ScoreFunction(
-    tc_weight=1.0,
-    sc_weight=0.0,
-    rw_weight=64.0,
-    sc_target=20.0,
-)
-OMECO_OPTIMIZER = omeco.TreeSA(
-    ntrials=16,
-    niters=32,
-    score=OMECO_SCORE,
-)
-tc.set_contractor("custom", optimizer=OMECO_OPTIMIZER, preprocessing=True)
+tc.set_contractor("omeco")
 
 
 def build_tfim_mpo(config):
@@ -112,7 +99,8 @@ def run_solution(config):
     mps_input, dmrg_energy = dmrg_initial_state(config)
     params = initial_parameters(config)
     patterns, weights = tfim_measurement_data(config)
-    optimizer = K.optimizer(optax.adam(config["learning_rate"]))
+    optimizer = optax.adam(config["learning_rate"])
+    opt_state = optimizer.init(params)
     energy_fn = lambda p, m: circuit_energy(p, m, config, patterns, weights)
     value_and_grad = K.jit(K.value_and_grad(energy_fn), static_argnums=(1,))
 
@@ -124,7 +112,8 @@ def run_solution(config):
     for step in range(config["max_steps"]):
         energy_history.append(energy)
         grad_norm_history.append(grad_norm)
-        params = optimizer.update(grads, params)
+        updates, opt_state = optimizer.update(grads, opt_state, params)
+        params = optax.apply_updates(params, updates)
         if step + 1 < config["max_steps"]:
             energy, grads = value_and_grad(params, mps_input)
             grad_norm = K.norm(grads)

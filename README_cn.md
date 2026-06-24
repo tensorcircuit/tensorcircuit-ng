@@ -226,6 +226,12 @@ VQEX 在 MBL 相位识别上的应用见 [教程](/docs/source/tutorials/vqex_mb
 
 参考论文: https://arxiv.org/abs/2411.18921 (PRR).
 
+### 量子潜意识学习
+
+关于量子神经网络中潜意识学习（信息隐藏与传递）的模拟和分析代码，见 [项目](https://github.com/sxzgroup/quantum-subliminal-learning)。
+
+参考论文: https://arxiv.org/abs/2605.29557。
+
 ## 用户
 
 我们的用户，开发者和合作伙伴：
