@@ -6,6 +6,8 @@
 
 - Add efficient `expectation_pss` method for `U1Circuit`.
 
+- Support MVP mode for timeevol methods.
+
 ### Fixed
 
 - Fix the nonjit path for sampling when status is provided.

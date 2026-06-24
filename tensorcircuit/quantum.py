@@ -54,6 +54,103 @@ logger = logging.getLogger(__name__)
 # For the reason of adoption instead of direct import: see https://github.com/google/TensorNetwork/issues/950
 
 
+class LinearOperator:
+    """
+    Lightweight linear-operator wrapper for matrix-free matrix-vector products.
+
+    :param shape: Operator shape.
+    :type shape: Sequence[int]
+    :param matvec: Function implementing ``A @ v``.
+    :type matvec: Callable[[Tensor], Tensor]
+    :param dtype: Optional operator dtype.
+    :type dtype: Any, optional
+    """
+
+    def __init__(
+        self,
+        shape: Sequence[int],
+        matvec: Callable[[Tensor], Tensor],
+        dtype: Any = None,
+    ):
+        self.shape = tuple(shape)
+        self.dtype = dtype
+        self._matvec = matvec
+
+    def matvec(self, vector: Tensor) -> Tensor:
+        """
+        Apply the operator to one vector.
+
+        :param vector: Input vector.
+        :type vector: Tensor
+        :return: Matrix-vector product.
+        :rtype: Tensor
+        """
+        return self._matvec(vector)
+
+    def __matmul__(self, vector: Tensor) -> Tensor:
+        return self.matvec(vector)
+
+    def __call__(self, vector: Tensor) -> Tensor:
+        return self.matvec(vector)
+
+
+def aslinearoperator(
+    operator: Any, shape: Optional[Sequence[int]] = None, dtype: Any = None
+) -> LinearOperator:
+    """
+    Convert a dense matrix, sparse matrix, or MVP callable to a linear operator.
+
+    MVP callables must implement ``matvec(vector) -> A @ vector``. When a bare
+    callable is supplied, ``shape`` must be provided because callables do not
+    carry matrix metadata.
+
+    :param operator: Dense matrix, sparse matrix, existing ``LinearOperator``, or MVP callable.
+    :type operator: Any
+    :param shape: Optional operator shape. Required for bare callables.
+    :type shape: Sequence[int], optional
+    :param dtype: Optional operator dtype.
+    :type dtype: Any, optional
+    :return: Linear operator.
+    :rtype: LinearOperator
+    """
+    if isinstance(operator, LinearOperator):
+        return operator
+
+    if hasattr(operator, "matvec"):
+        operator_shape = shape if shape is not None else operator.shape
+        operator_dtype = (
+            dtype if dtype is not None else getattr(operator, "dtype", None)
+        )
+        return LinearOperator(operator_shape, operator.matvec, dtype=operator_dtype)
+
+    if callable(operator):
+        operator_shape = (
+            shape if shape is not None else getattr(operator, "shape", None)
+        )
+        if operator_shape is None:
+            raise ValueError("shape is required when converting an MVP callable.")
+        operator_dtype = (
+            dtype if dtype is not None else getattr(operator, "dtype", None)
+        )
+        return LinearOperator(operator_shape, operator, dtype=operator_dtype)
+
+    operator_shape = shape if shape is not None else operator.shape
+    operator_dtype = dtype if dtype is not None else getattr(operator, "dtype", None)
+
+    if backend.is_sparse(operator):
+        sparse_operator = backend.sparse_csr_from_coo(operator)
+
+        def sparse_matvec(vector: Tensor) -> Tensor:
+            return backend.sparse_dense_matmul(sparse_operator, vector)
+
+        return LinearOperator(operator_shape, sparse_matvec, dtype=operator_dtype)
+
+    def dense_matvec(vector: Tensor) -> Tensor:
+        return backend.matvec(operator, vector)
+
+    return LinearOperator(operator_shape, dense_matvec, dtype=operator_dtype)
+
+
 def get_all_nodes(edges: Iterable[Edge]) -> List[Node]:
     """Return the set of nodes connected to edges."""
     nodes = []

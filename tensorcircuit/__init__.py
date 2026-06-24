@@ -59,7 +59,14 @@ from . import interfaces
 from . import templates
 from . import results
 from . import quantum
-from .quantum import QuOperator, QuVector, QuAdjointVector, QuScalar
+from .quantum import (
+    LinearOperator,
+    QuOperator,
+    QuVector,
+    QuAdjointVector,
+    QuScalar,
+    aslinearoperator,
+)
 from . import compiler
 from . import cloud
 from . import fgs

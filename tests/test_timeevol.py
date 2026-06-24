@@ -203,6 +203,44 @@ def test_ode_evol_global(highp, jaxb):
     print(objective_function(tc.backend.ones(4)))
 
 
+def test_ode_evol_global_raw_mode(highp, jaxb):
+    try:
+        import diffrax  # pylint: disable=unused-import
+    except ImportError:
+        pytest.skip("diffrax not installed, skipping test")
+
+    x_gate = tc.gates.x().tensor
+
+    def hamiltonian_func(t, omega):
+        return omega * x_gate
+
+    def raw_func(state, t, omega):
+        return -1.0j * omega * tc.backend.matvec(x_gate, state)
+
+    psi0 = tc.backend.convert_to_tensor([1.0 + 0.0j, 0.0 + 0.0j])
+    times = tc.backend.convert_to_tensor([0.0, 0.5])
+    omega = tc.backend.convert_to_tensor(0.3)
+
+    states_hamiltonian = tc.timeevol.ode_evol_global(
+        hamiltonian_func,
+        psi0,
+        times,
+        None,
+        omega,
+        ode_backend="diffrax",
+    )
+    states_raw = tc.timeevol.ode_evol_global(
+        raw_func,
+        psi0,
+        times,
+        None,
+        omega,
+        mode="raw",
+        ode_backend="diffrax",
+    )
+    np.testing.assert_allclose(states_raw, states_hamiltonian, atol=1e-6)
+
+
 def test_ode_evol_jit_grad(highp, jaxb):
     try:
         import diffrax  # pylint: disable=unused-import
@@ -538,6 +576,22 @@ def test_krylov_evol_heisenberg_8_sites(backend):
     np.testing.assert_allclose(results[0], 0.0, atol=1e-5)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_krylov_evol_mvp(backend):
+    """Test krylov_evol with a matrix-free MVP callable."""
+    h = tc.backend.cast(tc.gates.x().tensor, tc.dtypestr)
+
+    def mvp(state):
+        return tc.backend.matvec(h, state)
+
+    psi0 = tc.backend.convert_to_tensor([1.0 + 0.0j, 0.0 + 0.0j])
+    times = tc.backend.convert_to_tensor([0.0, 0.3])
+
+    states_matrix = tc.timeevol.krylov_evol(h, psi0, times, subspace_dimension=2)
+    states_mvp = tc.timeevol.krylov_evol(mvp, psi0, times, subspace_dimension=2)
+    np.testing.assert_allclose(states_mvp, states_matrix, atol=1e-6)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_krylov_evol_subspace_accuracy(backend):
     """Test accuracy of krylov_evol with different subspace dimensions"""
@@ -695,6 +749,27 @@ def test_chebyshev_evol_basic(backend, highp, sparse):
     # States should be close (up to global phase)
     fidelity = np.abs(np.vdot(np.asarray(psi_exact), np.asarray(psi_chebyshev))) ** 2
     assert fidelity > 0.95  # Should be close, but not exact due to approximations
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_chebyshev_evol_mvp(backend, highp):
+    """Test chebyshev_evol and spectral-bound estimation with an MVP callable."""
+    h = tc.backend.cast(tc.gates.z().tensor, tc.dtypestr)
+
+    def mvp(state):
+        return tc.backend.matvec(h, state)
+
+    psi0 = tc.backend.convert_to_tensor([1.0 + 0.0j, 1.0 + 0.0j])
+    psi0 = psi0 / tc.backend.norm(psi0)
+    e_max, e_min = tc.timeevol.estimate_spectral_bounds(mvp, n_iter=2, psi0=psi0)
+
+    t = 0.4
+    k = 30
+    m = 60
+    bounds = (float(e_max) + 0.1, float(e_min) - 0.1)
+    state_matrix = tc.timeevol.chebyshev_evol(h, psi0, t, bounds, k, m)
+    state_mvp = tc.timeevol.chebyshev_evol(mvp, psi0, t, bounds, k, m)
+    np.testing.assert_allclose(state_mvp, state_matrix, atol=1e-6)
 
 
 def test_chebyshev_evol_vmap_on_t(jaxb, highp):

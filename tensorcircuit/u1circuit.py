@@ -157,7 +157,7 @@ class U1Operator:
                         1j * (1.0 - 2.0 * occupied[target_idx_safe][:, y_indices]),
                         axis=1,
                     )
-                phase = np.where(valid, phase, 0.0).astype(np.complex128)  # type: ignore
+                phase = np.where(valid, phase, 0.0)  # type: ignore
 
                 off_diagonal_indices.append(term_idx)
                 off_diagonal_targets.append(target_idx_safe)
