@@ -125,7 +125,7 @@ def evaluate(solution_module, config):
 
     print("Challenge 10 evaluation")
     print(f"Solution module: {solution_module}")
-    print(f"Solution time: {solution_elapsed:.2f}s")
+    print(f"End-to-end solution time: {solution_elapsed:.2f}s")
     print(f"Exact reference time: {exact_elapsed:.2f}s")
     print(f"Qubits: {config['n_qubits']}")
     print(f"Selected CMZ qubits: {len(config['selected_qubits'])}")

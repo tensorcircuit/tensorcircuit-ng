@@ -34,7 +34,7 @@ Here `p01` is the probability for `0 -> 1` and `p10` is the probability for `1 -
 
 Use four fixed 12-qubit inputs and the same noisy probe circuit for every input. The four inputs are a GHZ state `(|0...0> + |1...1>) / sqrt(2)`, Bell-like pair states `(|01> + |10>) / sqrt(2)` on pairs `(0,1), (2,3), ..., (10,11)`, `|0>^12`, and `|+>^12`.
 
-The shared probe circuit is one even-bond brickwork entangler layer. On every bond `(0,1), (2,3), ..., (10,11)`, apply `RXX(0.31)` with convention `RXX(theta) = exp(-i theta X_i X_j / 2)`, and then apply the asymmetric bit-flip channel independently to the two qubits in that bond.
+The shared probe circuit has two brickwork entangler sublayers. First apply one even-bond layer on bonds `(0,1), (2,3), ..., (10,11)`, where each bond receives `RXX(0.31)` with convention `RXX(theta) = exp(-i theta X_i X_j / 2)` followed by the asymmetric bit-flip channel independently on both qubits in that bond. Then apply one offset odd-bond layer on bonds `(1,2), (3,4), ..., (9,10)` with the same `RXX(0.31)` entangler and the same per-qubit asymmetric bit-flip channel after each odd-bond entangler.
 
 All probes therefore have identical noisy entangler structure and differ only in the initial state.
 
@@ -99,15 +99,15 @@ The TensorCircuit-NG solution in `solution_4.py` can be evaluated with:
 python evaluate_4.py --solution solution_4
 ```
 
-Observed TensorCircuit-NG/JAX baseline in the current validation environment with the entangled-probe default configuration:
+Observed TensorCircuit-NG/JAX baseline in the current validation environment with the two-sublayer entangled-probe default configuration:
 
-- End-to-end solution time: `47.45s`.
-- Initial loss: `6.70448504e-03`.
-- Final loss: `3.09971142e-08`.
-- Fitted `p01`: `0.03398004`.
-- Fitted `p10`: `0.01109863`.
+- End-to-end solution time: `32.91s`.
+- Initial loss: `7.07078446e-03`.
+- Final loss: `2.54623540e-08`.
+- Fitted `p01`: `0.03403885`.
+- Fitted `p10`: `0.01104033`.
 - Trace-preserving error: `1.11022302e-16`.
 
 ## Implementation Hint
 
-For a TensorCircuit-NG/JAX baseline, use `DMCircuit` with `apply_general_kraus` to insert the custom one-qubit channel after each entangling operation. The probes share one noisy entangler structure and differ only in their initial states, keeping the benchmark focused on the trainable channel. Keep the Kraus operators as differentiable tensor algebra, enforce positivity with sigmoid-parameterized probabilities, and verify trace preservation by contracting `sum_a K_a^\dagger K_a`.
+For a TensorCircuit-NG/JAX baseline, use `DMCircuit` with `apply_general_kraus` to insert the custom one-qubit channel after each entangling operation in both the even-bond and odd-bond sublayers. The probes share one noisy entangler structure and differ only in their initial states, keeping the benchmark focused on the trainable channel. Keep the Kraus operators as differentiable tensor algebra, enforce positivity with sigmoid-parameterized probabilities, and verify trace preservation by contracting `sum_a K_a^\dagger K_a`.

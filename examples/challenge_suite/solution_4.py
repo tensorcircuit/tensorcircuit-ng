@@ -71,9 +71,10 @@ def apply_channel(circuit, kraus, qubits):
 
 
 def apply_noisy_entangler_layer(circuit, kraus, config):
-    for i in range(0, config["n_qubits"] - 1, 2):
-        circuit.rxx(i, i + 1, theta=config["entangler_angle"])
-        apply_channel(circuit, kraus, (i, i + 1))
+    for start in (0, 1):
+        for i in range(start, config["n_qubits"] - 1, 2):
+            circuit.rxx(i, i + 1, theta=config["entangler_angle"])
+            apply_channel(circuit, kraus, (i, i + 1))
 
 
 def prepare_initial_state(circuit, probe_index, config):
