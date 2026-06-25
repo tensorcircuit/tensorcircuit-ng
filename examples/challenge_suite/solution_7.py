@@ -1,8 +1,9 @@
 """
-Challenge Suite Problem 7: 50-qubit two-excitation VQE.
+Challenge Suite Problem 7: 16-qubit measurement-feedback VQE.
 
-The variational state is evolved with U1Circuit in the compressed two-particle
-sector. The solution returns only NumPy values consumed by evaluate_7.py.
+The TensorCircuit-NG baseline uses cond_measure for ancilla measurements and
+batches 128 fixed trajectories with vmap for deterministic trajectory-averaged
+energy optimization.
 """
 
 import numpy as np
@@ -11,104 +12,99 @@ import optax
 import tensorcircuit as tc
 
 K = tc.set_backend("jax")
-tc.set_dtype("complex128")
+tc.set_dtype("complex64")
+tc.set_contractor("omeco-32-32")
 
-
-def hamiltonian_terms(config):
-    n_qubits = config["n_qubits"]
-    sites = np.arange(n_qubits)
-    chemical = 0.25 * np.cos(2.0 * np.pi * sites / n_qubits) + 0.10 * ((-1.0) ** sites)
-    interaction = config["interaction"]
-
-    ps_list = [{}]
-    coefficients = [0.5 * np.sum(chemical) + 0.25 * interaction * (n_qubits - 1)]
-
-    z_coefficients = -0.5 * chemical
-    z_coefficients[0] -= 0.25 * interaction
-    z_coefficients[-1] -= 0.25 * interaction
-    z_coefficients[1:-1] -= 0.5 * interaction
-    for i, coefficient in enumerate(z_coefficients):
-        ps_list.append({"z": [i]})
-        coefficients.append(coefficient)
-
-    for i in range(n_qubits - 1):
-        ps_list.extend(
-            [
-                {"x": [i, i + 1]},
-                {"y": [i, i + 1]},
-                {"z": [i, i + 1]},
-            ]
-        )
-        coefficients.extend([-0.5, -0.5, 0.25 * interaction])
-
-    return ps_list, K.convert_to_tensor(np.asarray(coefficients))
+PARAMS_PER_LAYER = 48
 
 
 def initial_parameters(config):
-    rng = np.random.default_rng(2031)
-    n_blocks = config["n_layers"] // 2
-    n_even = len(range(0, config["n_qubits"] - 1, 2))
-    n_odd = len(range(1, config["n_qubits"] - 1, 2))
-    scale = config["initial_parameter_scale"]
-
-    def normal(shape):
-        return K.convert_to_tensor(rng.normal(scale=scale, size=shape))
-
-    return {
-        "even": {
-            "mix": normal((n_blocks, n_even)),
-            "left": normal((n_blocks, n_even)),
-            "right": normal((n_blocks, n_even)),
-        },
-        "odd": {
-            "mix": normal((n_blocks, n_odd)),
-            "left": normal((n_blocks, n_odd)),
-            "right": normal((n_blocks, n_odd)),
-        },
-    }
+    rng = np.random.default_rng(config["seed"])
+    return K.convert_to_tensor(
+        rng.normal(
+            scale=config["initial_parameter_scale"],
+            size=(config["n_layers"] * PARAMS_PER_LAYER,),
+        ).astype(np.float32)
+    )
 
 
-def apply_bond_layer(circuit, layer_params, bonds):
-    for bond_index, i in enumerate(bonds):
-        circuit.iswap(i, i + 1, theta=layer_params["mix"][bond_index])
-        circuit.rz(i, theta=layer_params["left"][bond_index])
-        circuit.rz(i + 1, theta=layer_params["right"][bond_index])
-
-
-def build_state(params, config):
-    even = list(range(0, config["n_qubits"] - 1, 2))
-    odd = list(range(1, config["n_qubits"] - 1, 2))
-    input_state = tc.U1Circuit(
-        config["n_qubits"],
-        k=config["n_particles"],
-        filled=config["initial_occupied"],
-    ).state()
-
-    def block_step(state, block_params):
-        circuit = tc.U1Circuit(
-            config["n_qubits"], k=config["n_particles"], inputs=state
+def trajectory_status(config):
+    rng = np.random.default_rng(config["seed"] + 1)
+    return K.convert_to_tensor(
+        rng.random(
+            (config["n_trajectories"], config["n_layers"] * config["n_ancilla_qubits"]),
+            dtype=np.float32,
         )
-        apply_bond_layer(circuit, block_params["even"], even)
-        apply_bond_layer(circuit, block_params["odd"], odd)
-        return circuit.state()
-
-    return K.scan(block_step, params, input_state)
+    )
 
 
-def energy(params, config, ps_list, coefficients):
-    state = build_state(params, config)
-    circuit = tc.U1Circuit(config["n_qubits"], k=config["n_particles"], inputs=state)
-    return circuit.expectation_pss(ps_list, coefficients)
+def make_one_trajectory(config):
+    n_data = config["n_data_qubits"]
+    n_anc = config["n_ancilla_qubits"]
+    n_qubits = config["n_qubits"]
+    n_layers = config["n_layers"]
+    transverse_field = config["transverse_field"]
+
+    def energy_of_data(c):
+        e = 0.0
+        for i in range(n_data - 1):
+            e = e - K.real(c.expectation_ps(z=[i, i + 1]))
+        for i in range(n_data):
+            e = e - transverse_field * K.real(c.expectation_ps(x=[i]))
+        return e
+
+    def one_trajectory(params, status):
+        c = tc.Circuit(n_qubits)
+        pidx = 0
+        sidx = 0
+
+        for _ in range(n_layers):
+            for q in range(n_data):
+                c.ry(q, theta=params[pidx + q])
+            pidx += n_data
+
+            for a in range(n_anc):
+                c.ry(n_data + a, theta=params[pidx + a])
+            pidx += n_anc
+
+            for a in range(n_anc):
+                c.rzz(n_data + a, a, theta=params[pidx + a])
+            pidx += n_anc
+
+            theta0 = params[pidx : pidx + n_anc]
+            pidx += n_anc
+            theta1 = params[pidx : pidx + n_anc]
+            pidx += n_anc
+
+            for a in range(n_anc):
+                anc = n_data + a
+                bit = c.cond_measure(anc, status=status[sidx])
+                c.conditional_gate(
+                    bit,
+                    [tc.gates.rzz(theta=theta0[a]), tc.gates.rzz(theta=theta1[a])],
+                    anc,
+                    a,
+                )
+                sidx += 1
+
+            for q in range(n_data):
+                c.rz(q, theta=params[pidx + q])
+            pidx += n_data
+
+        return energy_of_data(c)
+
+    return one_trajectory
 
 
 def run_solution(config):
-    ps_list, coefficients = hamiltonian_terms(config)
     params = initial_parameters(config)
+    status = trajectory_status(config)
+    one_trajectory = make_one_trajectory(config)
+    batched_trajectories = K.jit(K.vmap(one_trajectory, vectorized_argnums=1))
     optimizer = optax.adam(config["learning_rate"])
-    opt_state = optimizer.init(params)
 
     def loss_fn(p):
-        return energy(p, config, ps_list, coefficients)
+        return K.mean(batched_trajectories(p, status))
 
     def train_step(p, state):
         value, grads = K.value_and_grad(loss_fn)(p)
@@ -117,12 +113,14 @@ def run_solution(config):
         return p, state, value
 
     train_step = K.jit(train_step)
-
+    opt_state = optimizer.init(params)
     energy_history = []
     for _ in range(config["max_steps"]):
         params, opt_state, value = train_step(params, opt_state)
         energy_history.append(value)
 
+    final_trajectory_energies = batched_trajectories(params, status)
     return {
         "energy_history": K.numpy(K.stack(energy_history)),
+        "final_trajectory_energies": K.numpy(final_trajectory_energies),
     }
