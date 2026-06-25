@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
     "initial_filter_strength": 0.01,
     "max_steps": 600,
     "learning_rate": 0.02,
+    "maximum_energy_density_gap": 0.5,
 }
 
 
@@ -77,6 +78,8 @@ def evaluate(solution_module, config):
         "energy density improves": final_energy_density < float(energy_history[0]),
         "energy respects exact lower bound": final_energy_density
         >= exact_energy_density - 1e-8,
+        "loose exact energy-density upper bound": final_energy_density
+        <= exact_energy_density + config["maximum_energy_density_gap"],
     }
 
     print("Challenge 5 evaluation")

@@ -50,7 +50,6 @@ The solution should not print progress. It should perform the core computation a
 Required result keys:
 
 - `energy_history`: NumPy array with length `config["max_steps"]`.
-- `grad_norm_history`: NumPy array with length `config["max_steps"]`.
 
 Each history records one value per optimizer update, evaluated immediately before applying that update. The evaluator derives the initial and final variational energies from the first and last entries of `energy_history`. The solution may use any quantum software framework, but it must consume only the evaluator-provided configuration, including the supplied `dmrg_state`, and return only this NumPy-format dictionary. The solution should not run DMRG internally.
 
@@ -77,7 +76,7 @@ The evaluator computes the DMRG-MPS input before timing, passes that quimb MPS i
 
 A run is considered functionally successful when all of the following hold for the default 500-step configuration:
 
-- `len(energy_history) == 500` and `len(grad_norm_history) == 500`.
+- `len(energy_history) == 500`.
 - `final_energy < initial_energy`, showing the circuit refinement improves the DMRG-MPS input circuit ansatz from its small-random initialization.
 - $E_{\mathrm{final}} < E_{\mathrm{DMRG}}$, showing the circuit refinement improves on the input DMRG-MPS energy.
 - $E_{\mathrm{final}} - E_{\mathrm{exact}} \le 1.5 \times 10^{-3}$.
@@ -94,14 +93,14 @@ The TensorCircuit-NG solution in `solution_1.py` can be evaluated with:
 python evaluate_1.py --solution solution_1
 ```
 
-Observed TensorCircuit-NG baseline on a MacBook Pro:
+Observed TensorCircuit-NG/JAX baseline in the current validation environment after the jitted optimizer-step rewrite:
 
-- End-to-end solution time: `28.98s`.
-- Exact sparse energy: `-25.82210541`.
-- DMRG energy error: `1.23596250e-04`.
-- Initial variational error: `1.10626221e-04`.
+- End-to-end solution time: `10.51s`.
+- Exact sparse energy: `-25.82210922`.
+- DMRG energy error: `1.23977661e-04`.
+- Initial variational error: `1.22070312e-04`.
 - Final variational error: `7.24792480e-05`.
-- Energy improvement from circuit refinement: `3.81469727e-05`.
+- Energy improvement from circuit refinement: `4.95910645e-05`.
 
 This baseline includes first compilation/path setup, all 500 optimizer updates, and result materialization into NumPy arrays. It excludes evaluator-side DMRG state generation.
 

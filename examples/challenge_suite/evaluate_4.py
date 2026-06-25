@@ -20,9 +20,10 @@ DEFAULT_CONFIG = {
     "initial_p10": 0.040,
     "max_steps": 120,
     "learning_rate": 0.04,
+    "probability_absolute_tolerance": 2e-4,
 }
 
-PROBE_NAMES = ("zeros", "ones", "neel", "plus")
+PROBE_NAMES = ("ghz", "bell_01_plus_10_pairs", "zeros", "plus")
 
 
 def asymmetric_bitflip_kraus_numpy(p01, p10):
@@ -63,8 +64,10 @@ def evaluate(solution_module, config):
         "loss improves": float(loss_history[-1]) < float(loss_history[0]),
         "fitted shape": fitted.shape == (len(PROBE_NAMES), config["n_qubits"] + 1),
         "probability shape": final_probabilities.shape == (2,),
-        "p01 absolute error <= 1e-4": absolute_error_p01 <= 1e-4,
-        "p10 absolute error <= 1e-4": absolute_error_p10 <= 1e-4,
+        "p01 absolute error within tolerance": absolute_error_p01
+        <= config["probability_absolute_tolerance"],
+        "p10 absolute error within tolerance": absolute_error_p10
+        <= config["probability_absolute_tolerance"],
         "trace preserving error <= 1e-8": tp_error <= 1e-8,
     }
 

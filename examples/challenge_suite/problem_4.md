@@ -18,6 +18,7 @@ The evaluator defines and passes the following configuration dictionary into `ru
     "initial_p10": 0.040,
     "max_steps": 120,
     "learning_rate": 0.04,
+    "probability_absolute_tolerance": 2e-4,
 }
 ```
 
@@ -31,11 +32,11 @@ Here `p01` is the probability for `0 -> 1` and `p10` is the probability for `1 -
 
 ### Probe Circuits
 
-Use four fixed 12-qubit product-state inputs and the same noisy probe circuit for every input. The four inputs are `|0>^12`, `|1>^12`, `|010101010101>`, and `|+>^12`.
+Use four fixed 12-qubit inputs and the same noisy probe circuit for every input. The four inputs are a GHZ state `(|0...0> + |1...1>) / sqrt(2)`, Bell-like pair states `(|01> + |10>) / sqrt(2)` on pairs `(0,1), (2,3), ..., (10,11)`, `|0>^12`, and `|+>^12`.
 
 The shared probe circuit is one even-bond brickwork entangler layer. On every bond `(0,1), (2,3), ..., (10,11)`, apply `RXX(0.31)` with convention `RXX(theta) = exp(-i theta X_i X_j / 2)`, and then apply the asymmetric bit-flip channel independently to the two qubits in that bond.
 
-All probes therefore have identical circuit structure and differ only in the initial state.
+All probes therefore have identical noisy entangler structure and differ only in the initial state.
 
 ### Observables And Loss
 
@@ -84,7 +85,7 @@ A run is considered functionally successful when all of the following hold for t
 - `len(loss_history) == 120`.
 - `final_probabilities.shape == (2,)` and `fitted_expectations.shape == (4, 13)`.
 - The final loss is lower than the initial loss, derived from `loss_history`.
-- The absolute errors of both fitted probabilities are at most `1e-4`.
+- The absolute errors of both fitted probabilities are at most `probability_absolute_tolerance`.
 - The fitted Kraus operators satisfy `max(abs(sum_a K_a^\dagger K_a - I)) <= 1e-8`.
 - All returned values are NumPy arrays or NumPy-compatible scalars.
 
@@ -98,15 +99,15 @@ The TensorCircuit-NG solution in `solution_4.py` can be evaluated with:
 python evaluate_4.py --solution solution_4
 ```
 
-Observed TensorCircuit-NG baseline with the default 120-step configuration:
+Observed TensorCircuit-NG/JAX baseline in the current validation environment with the entangled-probe default configuration:
 
-- End-to-end solution time: `24.68s`.
-- Initial loss: `9.15254187e-03`.
-- Final loss: `1.92410443e-09`.
-- Fitted `p01`: `0.03398204`.
-- Fitted `p10`: `0.01099501`.
-- Trace-preserving error: `0.00000000e+00`.
+- End-to-end solution time: `47.45s`.
+- Initial loss: `6.70448504e-03`.
+- Final loss: `3.09971142e-08`.
+- Fitted `p01`: `0.03398004`.
+- Fitted `p10`: `0.01109863`.
+- Trace-preserving error: `1.11022302e-16`.
 
 ## Implementation Hint
 
-For a TensorCircuit-NG/JAX baseline, use `DMCircuit` with `apply_general_kraus` to insert the custom one-qubit channel after each entangling operation. The probes share one circuit structure and differ only in their initial product states, keeping the benchmark focused on the trainable channel. Keep the Kraus operators as differentiable tensor algebra, enforce positivity with sigmoid-parameterized probabilities, and verify trace preservation by contracting `sum_a K_a^\dagger K_a`.
+For a TensorCircuit-NG/JAX baseline, use `DMCircuit` with `apply_general_kraus` to insert the custom one-qubit channel after each entangling operation. The probes share one noisy entangler structure and differ only in their initial states, keeping the benchmark focused on the trainable channel. Keep the Kraus operators as differentiable tensor algebra, enforce positivity with sigmoid-parameterized probabilities, and verify trace preservation by contracting `sum_a K_a^\dagger K_a`.

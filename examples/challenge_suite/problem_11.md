@@ -75,7 +75,6 @@ Required result keys:
 - `readout_penalty_history`: NumPy array with shape `(max_steps,)`.
 - `final_response_matrix`: NumPy array with shape `(n_qubits, n_field_params)`.
 - `final_zero_field_readouts`: NumPy array with shape `(n_qubits,)`.
-- `final_grad_norm`: scalar float.
 
 Each history records one value per optimizer update, evaluated immediately before applying that update. The evaluator recomputes final response MSE, final readout penalty, and final total loss from the returned arrays.
 
@@ -87,7 +86,7 @@ The evaluator file is `evaluate_11.py`. It dynamically imports a solution module
 python evaluate_11.py --solution solution_11
 ```
 
-The evaluator consumes only the returned result dictionary. It prints the end-to-end solution time, initial and final response-matrix MSE, final zero-field readout penalty, final total loss, final gradient norm, trainable parameter count, response dimensions, returned keys, and pass/fail criteria. It does not save files or create plots by default.
+The evaluator consumes only the returned result dictionary. It prints the end-to-end solution time, initial and final response-matrix MSE, final zero-field readout penalty, final total loss, trainable parameter count, response dimensions, returned keys, and pass/fail criteria. It does not save files or create plots by default.
 
 ## Passing Criteria
 
@@ -99,7 +98,6 @@ A run is considered functionally successful when all of the following hold for t
 - The final response-matrix MSE is lower than the initial response-matrix MSE.
 - The final response-matrix MSE is at most `1e-9`.
 - The final loss is lower than the initial loss.
-- The final gradient norm is finite.
 - All returned arrays contain finite values.
 
 ## TC-NG Baseline
@@ -110,8 +108,8 @@ The TensorCircuit-NG solution in `solution_11.py` can be evaluated with:
 python evaluate_11.py --solution solution_11
 ```
 
-A verified TensorCircuit-NG/JAX baseline run with the default configuration performed `300` optimizer updates and produced response matrix shape `(20, 2)`, initial response MSE `6.85145557e-01`, final response MSE `7.06921946e-12`, final zero-field readout penalty `4.91542769e-09`, initial total loss `6.85256898e-01`, final total loss `2.52840604e-10`, final gradient norm `2.40408826e-06`, and overall `PASS`. The evaluator-measured `run_solution(config)` time for that run was `48.55s`; this time is a reference measurement only and is not a passing criterion.
+A verified TensorCircuit-NG/JAX baseline run in the current validation environment with the default configuration performed `300` optimizer updates and produced response matrix shape `(20, 2)`, initial response MSE `6.84671402e-01`, final response MSE `1.26759933e-13`, final zero-field readout penalty `7.11734802e-12`, initial total loss `6.84766173e-01`, final total loss `4.82627334e-13`, and overall `PASS`. The evaluator-measured `run_solution(config)` time for that run was `30.99s`; this time is a reference measurement only and is not a passing criterion.
 
 ## Implementation Hint
 
-Compute the two columns of `R` by forward-mode derivatives with respect to the two physical field parameters, then differentiate the scalar response-matching loss by reverse mode with respect to the much larger set of trainable circuit parameters. In TensorCircuit-NG/JAX, one efficient implementation configures an OMECo contraction path searcher, scans over even/odd layer pairs while constructing the probe state, computes all local `X_i` readouts from the resulting state via local coherences, applies `tc.backend.jacfwd` only to the two-parameter sensing map, and wraps the outer scalar loss in `tc.backend.value_and_grad`.
+Compute the two columns of `R` by forward-mode derivatives with respect to the two physical field parameters, then differentiate the scalar response-matching loss by reverse mode with respect to the much larger set of trainable circuit parameters. In TensorCircuit-NG/JAX, one efficient implementation configures an OMECo contraction path searcher, scans over even/odd layer pairs while constructing the probe state, computes all local `X_i` readouts from the resulting state via local coherences, applies `tc.backend.jacfwd` only to the two-parameter sensing map, and JIT-compiles the full optimizer step.

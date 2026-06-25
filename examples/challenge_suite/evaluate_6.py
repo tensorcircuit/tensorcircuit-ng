@@ -25,6 +25,7 @@ DEFAULT_CONFIG = {
     "ode_max_steps": 16,
     "max_steps": 100,
     "learning_rate": 0.12,
+    "maximum_energy_density_gap": 1.0,
 }
 
 
@@ -87,6 +88,8 @@ def evaluate(solution_module, config):
         "energy density improves": final_energy_density < float(energy_history[0]),
         "energy respects exact lower bound": final_energy_density
         >= exact_energy_density - 1e-6,
+        "loose exact energy-density upper bound": final_energy_density
+        <= exact_energy_density + config["maximum_energy_density_gap"],
     }
 
     print("Challenge 6 evaluation")

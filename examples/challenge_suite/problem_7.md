@@ -84,6 +84,7 @@ A run is considered functionally successful when all of the following hold for t
 - `len(energy_history) == 500`.
 - The final VQE energy is lower than the initial energy.
 - The final VQE energy is no lower than the exact sparse ground-state energy beyond numerical tolerance.
+- The final VQE energy is at most `1.0` above the exact sparse ground-state energy.
 - The final excitation-number expectation equals `2` to numerical tolerance `1e-12`.
 - All returned values are NumPy arrays or NumPy-compatible scalars.
 
@@ -99,9 +100,9 @@ python evaluate_7.py --solution solution_7
 
 Observed TensorCircuit-NG baseline with the default 500-step configuration:
 
-- End-to-end solution time: `182.03s`.
+- End-to-end solution time: `104.33s`.
 - Initial energy: `-0.2424087254`.
-- Final VQE energy: `-4.3166061360`.
+- Final VQE energy: `-4.3166020347`.
 - Exact subspace ground energy: `-4.3306100384`.
 - Energy history length: `500`.
 

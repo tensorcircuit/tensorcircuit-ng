@@ -83,7 +83,6 @@ def evaluate(solution_module, config):
     final_fidelity = float(fidelity_history[-1])
     final_loss = float(loss_history[-1])
     final_phase = float(results["final_overlap_phase"])
-    final_grad_norm = float(results["final_grad_norm"])
 
     finite_arrays = [loss_history, fidelity_history, final_parameters]
     criteria = {
@@ -95,8 +94,7 @@ def evaluate(solution_module, config):
         "final values finite": all(np.all(np.isfinite(a)) for a in finite_arrays)
         and np.isfinite(final_fidelity)
         and np.isfinite(final_loss)
-        and np.isfinite(final_phase)
-        and np.isfinite(final_grad_norm),
+        and np.isfinite(final_phase),
         "fidelity improves": final_fidelity > float(fidelity_history[0]),
         "loss improves": final_loss < float(loss_history[0]),
         "final fidelity reaches threshold": final_fidelity
@@ -122,7 +120,6 @@ def evaluate(solution_module, config):
     print(f"Initial loss: {float(loss_history[0]):.8e}")
     print(f"Final loss: {final_loss:.8e}")
     print(f"Final overlap phase: {final_phase:.8e}")
-    print(f"Final gradient norm: {final_grad_norm:.8e}")
     print(f"Fidelity history shape: {fidelity_history.shape}")
     print(f"Returned NumPy keys: {sorted(results)}")
     print("Passing criteria:")

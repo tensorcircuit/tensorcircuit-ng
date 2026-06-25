@@ -25,6 +25,7 @@ DEFAULT_CONFIG = {
     "entropy_weight": 0.25,
     "max_steps": 500,
     "learning_rate": 0.015,
+    "maximum_energy_density_gap": 1.0,
 }
 
 
@@ -89,6 +90,8 @@ def evaluate(solution_module, config):
         == (config["max_steps"], len(config["target_entropies"])),
         "loss improves": float(loss_history[-1]) < float(loss_history[0]),
         "energy density improves": float(energy_history[-1]) < float(energy_history[0]),
+        "loose exact energy-density upper bound": float(energy_history[-1])
+        <= exact_energy_density + config["maximum_energy_density_gap"],
         "reported entropy mse matches": np.isclose(
             recomputed_entropy_mse, reported_entropy_mse, rtol=1e-5, atol=1e-7
         ),

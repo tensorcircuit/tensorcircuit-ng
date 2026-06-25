@@ -66,7 +66,6 @@ Required result keys:
 - `fidelity_history`: NumPy array with shape `(max_steps,)`.
 - `final_parameters`: NumPy array with shape `(parameter_count,)`.
 - `final_overlap_phase`: scalar float.
-- `final_grad_norm`: scalar float.
 
 Each history records one value per optimizer update, evaluated immediately before applying that update. The evaluator recomputes parameter count, derives final fidelity and final loss from the histories, and checks all shapes and scalar quantities from the returned arrays.
 
@@ -78,7 +77,7 @@ The evaluator file is `evaluate_12.py`. It dynamically imports a solution module
 python evaluate_12.py --solution solution_12
 ```
 
-The evaluator computes the DMRG-MPS target before timing, passes that quimb MPS into the solution through `config["dmrg_state"]`, and then consumes only the returned result dictionary. It prints the end-to-end solution time excluding evaluator-side DMRG preparation, initial and final fidelity, final overlap phase, final gradient norm, target MPS bond dimension, history shape, returned keys, and pass/fail criteria. It does not save files or create plots by default.
+The evaluator computes the DMRG-MPS target before timing, passes that quimb MPS into the solution through `config["dmrg_state"]`, and then consumes only the returned result dictionary. It prints the end-to-end solution time excluding evaluator-side DMRG preparation, initial and final fidelity, final overlap phase, target MPS bond dimension, history shape, returned keys, and pass/fail criteria. It does not save files or create plots by default.
 
 ## Passing Criteria
 
@@ -101,8 +100,8 @@ The TensorCircuit-NG solution in `solution_12.py` can be evaluated with:
 python evaluate_12.py --solution solution_12
 ```
 
-A verified TensorCircuit-NG/JAX baseline run with the default configuration performed `5000` optimizer updates and produced fidelity history shape `(5000,)`, initial fidelity `1.92078686e-09`, final fidelity `8.70016992e-01`, initial loss `1.00000000e+00`, final loss `1.29983008e-01`, final overlap phase `2.27205586e+00`, final gradient norm `4.97358255e-02`, target MPS maximum bond dimension `8`, and overall `PASS` with the `0.85` fidelity threshold. The evaluator-measured `run_solution(config)` time for that run was `14.21s` with `XLA_FLAGS=--xla_disable_hlo_passes=fusion`; this time is a reference measurement only and is not a passing criterion.
+A verified TensorCircuit-NG/JAX baseline run in the current validation environment with the default configuration performed `5000` optimizer updates and produced fidelity history shape `(5000,)`, initial fidelity `1.92078264e-09`, final fidelity `8.70132089e-01`, initial loss `1.00000000e+00`, final loss `1.29867911e-01`, final overlap phase `1.93978786e+00`, target MPS maximum bond dimension `8`, and overall `PASS` with the `0.85` fidelity threshold. The evaluator-measured `run_solution(config)` time for that run was `6.12s`; this time is a reference measurement only and is not a passing criterion.
 
 ## Implementation Hint
 
-Contract the target MPS bra directly with the variational circuit ket as one tensor network, e.g. convert the evaluator-provided quimb MPS with `tc.quantum.quimb2qop(config["dmrg_state"])` and evaluate `target_mps.adjoint() @ circuit.quvector()`. Apply TensorCircuit's built-in `circuit.su4(i, i + 1, theta=theta_15)` on each active bond, where `theta_15` is a length-15 parameter slice. The target MPS does not need to be compiled into a gate-preparation circuit, and the circuit ket does not need to be converted into a dense target vector. In TensorCircuit-NG/JAX, an efficient baseline configures an OMECo contraction path searcher once, JIT-compiles the overlap value-and-gradient function once, and then reuses the compiled executable across the 5000 Adam updates. For this SU4-heavy contraction workload, disabling XLA's HLO fusion pass can substantially reduce first-call compile time while preserving the required fidelity threshold.
+Contract the target MPS bra directly with the variational circuit ket as one tensor network, e.g. convert the evaluator-provided quimb MPS with `tc.quantum.quimb2qop(config["dmrg_state"])` and evaluate `target_mps.adjoint() @ circuit.quvector()`. Apply TensorCircuit's built-in `circuit.su4(i, i + 1, theta=theta_15)` on each active bond, where `theta_15` is a length-15 parameter slice. The target MPS does not need to be compiled into a gate-preparation circuit, and the circuit ket does not need to be converted into a dense target vector. In TensorCircuit-NG/JAX, an efficient baseline configures an OMECo contraction path searcher once, JIT-compiles the full optimizer step once, and then reuses the compiled executable across the 5000 Adam updates.

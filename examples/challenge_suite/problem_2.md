@@ -119,6 +119,7 @@ A run is considered functionally successful when all of the following hold for t
 - `entropy_history.shape == (500, 3)`.
 - The final loss is lower than the initial loss, derived from `loss_history`.
 - The final energy density is lower than the initial energy density, derived from `energy_density_history`.
+- The final energy density is at most `1.0` above the exact sparse ground-state energy density. This is intentionally loose and catches incorrect Hamiltonian/sign conventions without making the benchmark a high-precision ground-state solver.
 - The final entropy-profile MSE matches the MSE recomputed from the last row of `entropy_history` and `target_entropies`.
 - All returned values are NumPy arrays or NumPy-compatible scalars.
 
@@ -134,16 +135,16 @@ python evaluate_2.py --solution solution_2
 
 Observed TensorCircuit-NG baseline with the default 500-step configuration:
 
-- End-to-end solution time: `5.62s`.
-- Exact sparse ground energy density: `-2.00037162`.
+- End-to-end solution time: `2.87s`.
+- Exact sparse ground energy density: `-2.00037122`.
 - Initial energy density: `-0.74485052`.
-- Final energy density: `-1.99162102`.
-- Final block entropies: `[0.295546, 0.586851, 0.266978]`.
+- Final energy density: `-1.99161851`.
+- Final block entropies: `[0.295464, 0.586903, 0.266979]`.
 - Target entropies: `[0.30, 0.60, 0.80]`.
-- Entropy-profile MSE: `9.47683677e-02`.
-- Entropy-profile RMSE: `3.07844716e-01`.
+- Entropy-profile MSE: `9.47676525e-02`.
+- Entropy-profile RMSE: `3.07843571e-01`.
 - Initial loss: `-0.65404928`.
-- Final loss: `-1.96792901`.
+- Final loss: `-1.96792662`.
 
 The MSE is the mean of the three squared entropy deviations. In the baseline above, the third entropy deviation is about `-0.534`, whose square is about `0.285`; after averaging over three checkpoints this contributes about `0.095` to the MSE. The RMSE is printed because it is on the same scale as the entropy deviations and makes this mismatch more visible.
 

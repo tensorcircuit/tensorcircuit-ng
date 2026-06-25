@@ -99,6 +99,7 @@ A run is considered functionally successful when all of the following hold for t
 - `final_analog_detunings.shape == (n_blocks,)` with all values in `(-1, 1)`.
 - The final energy density is lower than the initial energy density.
 - The final energy density is no lower than the exact sparse ground-state energy density beyond numerical tolerance `1e-6`.
+- The final energy density is at most `1.0` above the exact sparse ground-state energy density.
 - All returned values are NumPy arrays or NumPy-compatible scalars.
 
 ## TC-NG Baseline
@@ -111,10 +112,10 @@ python evaluate_6.py --solution solution_6
 
 Observed TensorCircuit-NG baseline with the default 100-step configuration:
 
-- End-to-end solution time: `58.12s`.
-- Exact sparse ground energy density: `-1.6025545938`.
-- Initial energy density: `-0.5182262063`.
-- Final energy density: `-1.5754228830`.
+- End-to-end solution time: `26.83s`.
+- Exact sparse ground energy density: `-1.6025540829`.
+- Initial energy density: `-0.5182266235`.
+- Final energy density: `-1.5754302740`.
 
 ## Implementation Hint
 

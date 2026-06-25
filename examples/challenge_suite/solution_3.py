@@ -147,7 +147,13 @@ def run_solution(config):
     def loss_fn(p):
         return observables(p, input_state, hamiltonian_mvp, config)
 
-    value_and_grad = K.jit(K.value_and_grad(loss_fn, has_aux=True))
+    def train_step(p, state):
+        (loss, aux), grads = K.value_and_grad(loss_fn, has_aux=True)(p)
+        updates, state = optimizer.update(grads, state, p)
+        p = optax.apply_updates(p, updates)
+        return p, state, loss, aux
+
+    train_step = K.jit(train_step)
 
     energy_density_history = []
     success_probability_history = []
@@ -155,14 +161,12 @@ def run_solution(config):
     loss_history = []
 
     for _ in range(config["max_steps"]):
-        (loss, aux), grads = value_and_grad(params)
+        params, opt_state, loss, aux = train_step(params, opt_state)
         energy_density, success_probability, mean_log_probability = aux
         energy_density_history.append(energy_density)
         success_probability_history.append(success_probability)
         mean_log_probability_history.append(mean_log_probability)
         loss_history.append(loss)
-        updates, opt_state = optimizer.update(grads, opt_state, params)
-        params = optax.apply_updates(params, updates)
 
     return {
         "energy_density_history": K.numpy(K.stack(energy_density_history)),

@@ -6,6 +6,9 @@ The `performance-optimize` skill is designed to analyze and refactor TensorCircu
 ## Optimization Checklist
 - **Vectorization**: Replaces manual loops with `tc.backend.vmap` (JAX `vmap`).
 - **JIT Compilation**: Wraps performance-critical code in `tc.backend.jit` with a focus on outermost loop placement.
+- **Step-Level JIT**: Prefers jitting the full optimizer step over returning raw gradients from `jit(value_and_grad)`.
+- **Structured Parameters**: Keeps gate/layer parameters as PyTrees or block-shaped arrays when possible, avoiding unnecessary long flat vectors with many offset slices.
+- **XLA Fusion Diagnostics**: Checks for pathological root fusions, especially live-out gradient assembly; uses `JAX_LOG_COMPILES`, HLO dumps, and `--xla_disable_hlo_passes=fusion` as diagnostics when first-call compile time is anomalously high.
 - **Scan for Depth**: Replaces deep repetitive structures with `tc.backend.scan` (JAX `lax.scan`) to reduce compilation time.
 - **Memory Management**: Nests `jax.checkpoint` within `scan` loops for deep-circuit gradient computation when memory is the bottleneck.
 - **Advanced Contractions**: Configures the `cotengra` contractor for optimal tensor network paths.

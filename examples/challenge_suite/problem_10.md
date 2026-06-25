@@ -63,10 +63,9 @@ The solution should not print progress. It should perform the core computation a
 Required result keys:
 
 - `energy_history`: NumPy array with shape `(max_steps,)`.
-- `grad_norm_history`: NumPy array with shape `(max_steps,)`.
 - `final_parameters`: final rotation tensor with shape `(n_layers, n_qubits, 3)`.
 
-Each history records one value per optimizer update, evaluated immediately before applying that update. The evaluator derives initial/final energy density and final gradient norm from the first/last entries of the histories. The largest gate size and requested step count are fixed by the evaluator configuration and are not returned by the solution.
+Each history records one value per optimizer update, evaluated immediately before applying that update. The evaluator derives initial/final energy density from the first/last entries of `energy_history`. The largest gate size and requested step count are fixed by the evaluator configuration and are not returned by the solution.
 
 ## Evaluation Interface
 
@@ -76,18 +75,17 @@ The evaluator file is `evaluate_10.py`. It dynamically imports a solution module
 python evaluate_10.py --solution solution_10
 ```
 
-The evaluator consumes only the returned result dictionary. It prints solution time, exact-reference time, initial and final energy densities, exact ground-state energy density, VQE gap, final gradient norm, energy-history length, largest gate size, returned keys, and pass/fail criteria. It does not save files or create plots by default.
+The evaluator consumes only the returned result dictionary. It prints solution time, exact-reference time, initial and final energy densities, exact ground-state energy density, VQE gap, energy-history length, largest gate size, returned keys, and pass/fail criteria. It does not save files or create plots by default.
 
 ## Passing Criteria
 
 A run is considered functionally successful when all of the following hold for the default configuration:
 
 - `energy_history.shape == (max_steps,)`.
-- `grad_norm_history.shape == (max_steps,)`.
 - `final_parameters.shape == (n_layers, n_qubits, 3)`.
 - The evaluator-computed largest ansatz gate size is `18`.
 - The final energy density is at least `minimum_energy_improvement` lower than the initial energy density.
-- The final gradient norm and all returned histories are finite.
+- The returned history is finite.
 - The final energy density is not below the exact ground-state energy density beyond `exact_lower_bound_tolerance`.
 - The final energy-density gap relative to the exact reference is at most `maximum_energy_density_gap`. This threshold is intentionally loose because the benchmark is about expressing and optimizing through the large `CMZ` hyperedge, not about solving the TFIM ground state to high precision.
 
@@ -99,16 +97,15 @@ The TensorCircuit-NG solution in `solution_10.py` can be evaluated with:
 python evaluate_10.py --solution solution_10
 ```
 
-Observed TensorCircuit-NG baseline with the default 200-step configuration:
+Observed TensorCircuit-NG/JAX baseline in the current validation environment with the default 200-step configuration:
 
-- Solution time: `63.25s`.
-- Exact reference time: `35.31s`.
-- Initial energy density: `0.9718782306`.
-- Final energy density: `-1.1766338348`.
+- Solution time: `66.30s`.
+- Exact reference time: `30.69s`.
+- Initial energy density: `0.9718770385`.
+- Final energy density: `-1.1766326427`.
 - Exact ground energy density: `-1.2925285569`.
-- VQE energy-density gap: `0.1158947221`.
-- Energy improvement: `2.1485120654`.
-- Final gradient norm: `9.47781300e-05`.
+- VQE energy-density gap: `0.1158959142`.
+- Energy improvement: `2.1485096812`.
 
 ## Implementation Hint
 

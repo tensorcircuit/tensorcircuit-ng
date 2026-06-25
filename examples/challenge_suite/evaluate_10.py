@@ -98,10 +98,8 @@ def evaluate(solution_module, config):
 
     exact_density = exact_energy / config["n_qubits"]
     energy_history = np.asarray(results["energy_history"], dtype=float)
-    grad_history = np.asarray(results["grad_norm_history"], dtype=float)
     initial_energy = float(energy_history[0])
     final_energy = float(energy_history[-1])
-    final_grad_norm = float(grad_history[-1])
     final_parameters = np.asarray(results["final_parameters"], dtype=float)
     largest_gate_qubits = len(config["selected_qubits"])
     improvement = initial_energy - final_energy
@@ -117,13 +115,9 @@ def evaluate(solution_module, config):
         == len(config["selected_qubits"])
         == 18,
         "history length matches steps": energy_history.shape == (config["max_steps"],),
-        "gradient-history length matches steps": grad_history.shape
-        == (config["max_steps"],),
         "parameter shape": final_parameters.shape == expected_param_shape,
         "energy improves": improvement >= config["minimum_energy_improvement"],
-        "histories finite": np.all(np.isfinite(energy_history))
-        and np.all(np.isfinite(grad_history)),
-        "final gradient finite": np.isfinite(final_grad_norm),
+        "history finite": np.all(np.isfinite(energy_history)),
         "above exact ground energy": final_energy
         >= exact_density - config["exact_lower_bound_tolerance"],
         "loose VQE gap threshold": vqe_gap <= config["maximum_energy_density_gap"],
@@ -143,9 +137,7 @@ def evaluate(solution_module, config):
     print(f"Exact ground energy density: {exact_density:.10f}")
     print(f"VQE energy-density gap: {vqe_gap:.10f}")
     print(f"Energy improvement: {improvement:.10f}")
-    print(f"Final gradient norm: {final_grad_norm:.8e}")
     print(f"Energy history length: {len(energy_history)}")
-    print(f"Gradient history length: {len(grad_history)}")
     print(f"Final parameter shape: {final_parameters.shape}")
     print(f"Returned NumPy keys: {sorted(results)}")
     print("Passing criteria:")

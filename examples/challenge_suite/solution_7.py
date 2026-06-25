@@ -110,14 +110,18 @@ def run_solution(config):
     def loss_fn(p):
         return energy(p, config, ps_list, coefficients)
 
-    value_and_grad = K.jit(K.value_and_grad(loss_fn))
+    def train_step(p, state):
+        value, grads = K.value_and_grad(loss_fn)(p)
+        updates, state = optimizer.update(grads, state, p)
+        p = optax.apply_updates(p, updates)
+        return p, state, value
+
+    train_step = K.jit(train_step)
 
     energy_history = []
     for _ in range(config["max_steps"]):
-        value, grads = value_and_grad(params)
+        params, opt_state, value = train_step(params, opt_state)
         energy_history.append(value)
-        updates, opt_state = optimizer.update(grads, opt_state, params)
-        params = optax.apply_updates(params, updates)
 
     return {
         "energy_history": K.numpy(K.stack(energy_history)),

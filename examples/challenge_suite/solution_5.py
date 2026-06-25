@@ -94,14 +94,18 @@ def run_solution(config):
     def loss_fn(p):
         return energy_density(p, input_state, hamiltonian_mvp, config)
 
-    value_and_grad = K.jit(K.value_and_grad(loss_fn))
+    def train_step(p, state):
+        energy, grads = K.value_and_grad(loss_fn)(p)
+        updates, state = optimizer.update(grads, state, p)
+        p = optax.apply_updates(p, updates)
+        return p, state, energy
+
+    train_step = K.jit(train_step)
 
     energy_density_history = []
     for _ in range(config["max_steps"]):
-        energy, grads = value_and_grad(params)
+        params, opt_state, energy = train_step(params, opt_state)
         energy_density_history.append(energy)
-        updates, opt_state = optimizer.update(grads, opt_state, params)
-        params = optax.apply_updates(params, updates)
 
     return {
         "final_a": K.numpy(params["a"]),

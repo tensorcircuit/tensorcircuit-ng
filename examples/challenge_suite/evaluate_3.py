@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
     "log_probability_weight": 0.05,
     "max_steps": 300,
     "learning_rate": 0.01,
+    "maximum_energy_density_gap": 1.0,
 }
 
 
@@ -77,6 +78,8 @@ def evaluate(solution_module, config):
         "loss history length": len(loss_history) == config["max_steps"],
         "loss improves": float(loss_history[-1]) < float(loss_history[0]),
         "energy density improves": float(energy_history[-1]) < float(energy_history[0]),
+        "loose exact energy-density upper bound": float(energy_history[-1])
+        <= exact_energy_density + config["maximum_energy_density_gap"],
         "success probability is valid": 0.0 < success_probability <= 1.0,
         "success matches mean log probability": np.isclose(
             success_probability, recomputed_success, rtol=1e-4, atol=1e-30

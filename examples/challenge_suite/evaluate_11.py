@@ -57,7 +57,6 @@ def evaluate(solution_module, config):
     response = np.asarray(results["final_response_matrix"], dtype=float)
     exact_target = target_response_matrix(config)
     zero_readouts = np.asarray(results["final_zero_field_readouts"], dtype=float)
-    final_grad_norm = float(results["final_grad_norm"])
 
     final_response_mse = float(np.mean((response - exact_target) ** 2))
     final_readout_penalty = float(np.mean(zero_readouts**2))
@@ -85,7 +84,6 @@ def evaluate(solution_module, config):
         "final response mse <= tolerance": final_response_mse
         <= config["final_response_mse_tolerance"],
         "loss improves": final_loss < float(loss_history[0]),
-        "final grad norm finite": np.isfinite(final_grad_norm),
         "returned arrays finite": all(np.all(np.isfinite(a)) for a in finite_arrays),
     }
 
@@ -102,7 +100,6 @@ def evaluate(solution_module, config):
     print(f"Final zero-field readout penalty: {final_readout_penalty:.8e}")
     print(f"Initial total loss: {float(loss_history[0]):.8e}")
     print(f"Final total loss: {final_loss:.8e}")
-    print(f"Final gradient norm: {final_grad_norm:.8e}")
     print(f"Loss history shape: {loss_history.shape}")
     print(f"Final response matrix shape: {response.shape}")
     print(f"Returned NumPy keys: {sorted(results)}")

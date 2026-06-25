@@ -93,6 +93,7 @@ A run is considered functionally successful when all of the following hold for t
 - `len(energy_density_history) == 300`, `len(success_probability_history) == 300`, `len(mean_log_probability_history) == 300`, and `len(loss_history) == 300`.
 - The final loss is lower than the initial loss, derived from `loss_history`.
 - The final energy density is lower than the initial energy density, derived from `energy_density_history`.
+- The final energy density is at most `1.0` above the exact sparse ground-state energy density. This is intentionally loose and catches incorrect Hamiltonian/sign conventions without making the benchmark a high-precision cooling solver.
 - The final success probability derived from `success_probability_history` is in `(0, 1]`.
 - The final success probability matches `exp(60 * final_mean_log_probability)`, where both values are derived from their histories.
 - All returned values are NumPy arrays or NumPy-compatible scalars.
@@ -109,14 +110,14 @@ python evaluate_3.py --solution solution_3
 
 Observed TensorCircuit-NG baseline with the default 300-step configuration:
 
-- End-to-end solution time: `4.01s`.
-- Exact sparse ground energy density: `-1.17548577`.
+- End-to-end solution time: `2.46s`.
+- Exact sparse ground energy density: `-1.17548668`.
 - Initial energy density: `-0.44931078`.
-- Final energy density: `-1.02593350`.
-- Final success probability: `1.55889951e-02`.
-- Final mean log event probability: `-6.93531707e-02`.
+- Final energy density: `-1.02593327`.
+- Final success probability: `1.55883860e-02`.
+- Final mean log event probability: `-6.93538189e-02`.
 - Initial loss: `-0.44583517`.
-- Final loss: `-1.02246583`.
+- Final loss: `-1.02246559`.
 
 ## Implementation Hint
 

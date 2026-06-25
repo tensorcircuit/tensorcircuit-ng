@@ -25,6 +25,7 @@ DEFAULT_CONFIG = {
     "initial_parameter_scale": 0.01,
     "max_steps": 500,
     "learning_rate": 0.01,
+    "maximum_energy_gap": 1.0,
 }
 
 
@@ -92,6 +93,8 @@ def evaluate(solution_module, config):
         "history length matches steps": len(energy_history) == config["max_steps"],
         "energy improves": final_energy < initial_energy,
         "energy respects exact lower bound": final_energy >= exact_energy - 1e-8,
+        "loose exact energy upper bound": final_energy
+        <= exact_energy + config["maximum_energy_gap"],
         "excitation number equals 2": np.isclose(
             excitation_number, config["n_particles"], rtol=0.0, atol=1e-12
         ),

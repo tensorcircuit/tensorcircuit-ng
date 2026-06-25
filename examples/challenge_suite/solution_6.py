@@ -132,14 +132,18 @@ def run_solution(config):
     def loss_fn(p):
         return forward(p, psi0, Hxy_mvp, Hfield_mvp, Htarget_mvp, config)
 
-    value_and_grad = K.jit(K.value_and_grad(loss_fn))
+    def train_step(p, state):
+        energy_density, grads = K.value_and_grad(loss_fn)(p)
+        updates, state = optimizer.update(grads, state, p)
+        p = optax.apply_updates(p, updates)
+        return p, state, energy_density
+
+    train_step = K.jit(train_step)
 
     energy_density_history = []
     for _ in range(config["max_steps"]):
-        energy_density, grads = value_and_grad(params)
+        params, opt_state, energy_density = train_step(params, opt_state)
         energy_density_history.append(energy_density)
-        updates, opt_state = optimizer.update(grads, opt_state, params)
-        params = optax.apply_updates(params, updates)
 
     t_min = config["t_min"]
     t_max = config["t_max"]

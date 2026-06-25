@@ -87,23 +87,20 @@ def run_solution(config):
     optimizer = optax.adam(config["learning_rate"])
     opt_state = optimizer.init(params)
     energy_fn = lambda p, m: circuit_energy(p, m, config, patterns, weights)
-    value_and_grad = K.jit(K.value_and_grad(energy_fn), static_argnums=(1,))
 
-    energy, grads = value_and_grad(params, mps_input)
-    grad_norm = K.norm(grads)
+    def train_step(p, state, m):
+        energy, grads = K.value_and_grad(energy_fn)(p, m)
+        updates, state = optimizer.update(grads, state, p)
+        p = optax.apply_updates(p, updates)
+        return p, state, energy
+
+    train_step = K.jit(train_step, static_argnums=(2,))
 
     energy_history = []
-    grad_norm_history = []
-    for step in range(config["max_steps"]):
+    for _ in range(config["max_steps"]):
+        params, opt_state, energy = train_step(params, opt_state, mps_input)
         energy_history.append(energy)
-        grad_norm_history.append(grad_norm)
-        updates, opt_state = optimizer.update(grads, opt_state, params)
-        params = optax.apply_updates(params, updates)
-        if step + 1 < config["max_steps"]:
-            energy, grads = value_and_grad(params, mps_input)
-            grad_norm = K.norm(grads)
 
     return {
         "energy_history": K.numpy(K.stack(energy_history)),
-        "grad_norm_history": K.numpy(K.stack(grad_norm_history)),
     }

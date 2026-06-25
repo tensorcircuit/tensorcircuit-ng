@@ -82,7 +82,6 @@ def evaluate(solution_module, config):
     exact_energy = eigsh(hamiltonian, k=1, which="SA", return_eigenvectors=False)[0]
 
     energy_history = np.asarray(results["energy_history"], dtype=float)
-    grad_norm_history = np.asarray(results["grad_norm_history"], dtype=float)
     initial_energy = float(energy_history[0])
     final_energy = float(energy_history[-1])
     dmrg_error = float(dmrg_energy - exact_energy)
@@ -91,9 +90,7 @@ def evaluate(solution_module, config):
     energy_gain = initial_energy - final_energy
     criteria = {
         "energy history length": len(energy_history) == config["max_steps"],
-        "gradient history length": len(grad_norm_history) == config["max_steps"],
-        "histories finite": np.all(np.isfinite(energy_history))
-        and np.all(np.isfinite(grad_norm_history)),
+        "history finite": np.all(np.isfinite(energy_history)),
         "refinement improves energy": energy_gain > 0.0,
         "refinement beats dmrg": final_error < dmrg_error,
         "final error <= 1.5e-3": final_error <= 1.5e-3,

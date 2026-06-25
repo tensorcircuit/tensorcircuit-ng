@@ -82,12 +82,6 @@ def probe_state(params, config):
     return K.scan(apply_pair, params, initial_state)
 
 
-def pytree_norm(tree):
-    leaves, _ = K.tree_flatten(tree)
-    squared_norms = [K.norm(leaf) ** 2 for leaf in leaves]
-    return K.sum(K.stack(squared_norms)) ** 0.5
-
-
 def x_readouts_after_sensing(state, fields, config, x_sites):
     n_qubits = config["n_qubits"]
     psi = K.reshape(state, [2] * n_qubits)
@@ -137,19 +131,23 @@ def run_solution(config):
     def objective(p):
         return loss_and_metrics(p, config, x_sites, target)
 
-    value_and_grad = K.jit(K.value_and_grad(objective, has_aux=True))
+    def train_step(p, state):
+        (loss, aux), grads = K.value_and_grad(objective, has_aux=True)(p)
+        updates, state = optimizer.update(grads, state, p)
+        p = optax.apply_updates(p, updates)
+        return p, state, loss, aux
+
+    train_step = K.jit(train_step)
 
     loss_history = []
     response_mse_history = []
     readout_penalty_history = []
     for _ in range(config["max_steps"]):
-        (loss, aux), grads = value_and_grad(params)
+        params, opt_state, loss, aux = train_step(params, opt_state)
         response_mse, readout_penalty, response, zero_readouts = aux
         loss_history.append(loss)
         response_mse_history.append(response_mse)
         readout_penalty_history.append(readout_penalty)
-        updates, opt_state = optimizer.update(grads, opt_state, params)
-        params = optax.apply_updates(params, updates)
 
     return {
         "loss_history": K.numpy(K.stack(loss_history)),
@@ -157,5 +155,4 @@ def run_solution(config):
         "readout_penalty_history": K.numpy(K.stack(readout_penalty_history)),
         "final_response_matrix": K.numpy(response),
         "final_zero_field_readouts": K.numpy(zero_readouts),
-        "final_grad_norm": K.numpy(pytree_norm(grads)),
     }
