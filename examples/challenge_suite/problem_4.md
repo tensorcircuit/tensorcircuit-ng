@@ -101,11 +101,11 @@ python evaluate_4.py --solution solution_4
 
 Observed TensorCircuit-NG/JAX baseline in the current validation environment with the two-sublayer entangled-probe default configuration:
 
-- End-to-end solution time: `32.91s`.
-- Initial loss: `7.07078446e-03`.
-- Final loss: `2.54623540e-08`.
-- Fitted `p01`: `0.03403885`.
-- Fitted `p10`: `0.01104033`.
+- End-to-end solution time: `11.83s`.
+- Initial loss: `7.07077933e-03`.
+- Final loss: `2.54027874e-08`.
+- Fitted `p01`: `0.03403887`.
+- Fitted `p10`: `0.01104028`.
 - Trace-preserving error: `1.11022302e-16`.
 
 ## Implementation Hint

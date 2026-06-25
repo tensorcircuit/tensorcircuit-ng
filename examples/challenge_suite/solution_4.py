@@ -32,16 +32,6 @@ def initial_parameters(config):
     )
 
 
-def observable_signs(config):
-    basis = np.arange(2 ** config["n_qubits"], dtype=np.uint32)
-    signs = []
-    for q in range(config["n_qubits"]):
-        bits = (basis >> (config["n_qubits"] - 1 - q)) & 1
-        signs.append(1.0 - 2.0 * bits.astype(np.float32))
-    signs.append(np.prod(np.stack(signs), axis=0))
-    return K.convert_to_tensor(np.stack(signs))
-
-
 def asymmetric_bitflip_kraus(p01, p10):
     zero = K.cast(K.convert_to_tensor(0.0), "complex64")
     k0 = K.stack(
@@ -92,45 +82,48 @@ def prepare_initial_state(circuit, probe_index, config):
             circuit.h(i)
 
 
-def probe_observables(probe_index, p01, p10, config, signs):
+def probe_observables(probe_index, p01, p10, config):
     circuit = tc.DMCircuit(config["n_qubits"])
     kraus = asymmetric_bitflip_kraus(p01, p10)
     prepare_initial_state(circuit, probe_index, config)
     apply_noisy_entangler_layer(circuit, kraus, config)
-    probabilities = circuit.probability()
-    return K.real(K.tensordot(signs, probabilities, 1))
+    values = [
+        K.real(circuit.expectation((tc.gates.z(), [i]), reuse=False))
+        for i in range(config["n_qubits"])
+    ]
+    parity_ops = [(tc.gates.z(), [i]) for i in range(config["n_qubits"])]
+    values.append(K.real(circuit.expectation(*parity_ops, reuse=False)))
+    return K.stack(values)
 
 
-def observable_table(p01, p10, config, signs):
+def observable_table(p01, p10, config):
     return K.stack(
         [
-            probe_observables(probe_index, p01, p10, config, signs)
+            probe_observables(probe_index, p01, p10, config)
             for probe_index in range(PROBE_COUNT)
         ]
     )
 
 
-def loss_and_observables(raw_params, target_expectations, config, signs):
+def loss_and_observables(raw_params, target_expectations, config):
     p01, p10 = probabilities(raw_params)
-    fitted_expectations = observable_table(p01, p10, config, signs)
+    fitted_expectations = observable_table(p01, p10, config)
     loss = K.mean((fitted_expectations - target_expectations) ** 2)
     return loss, (p01, p10, fitted_expectations)
 
 
 def run_solution(config):
-    signs = observable_signs(config)
     true_target = observable_table(
         K.convert_to_tensor(config["true_p01"]),
         K.convert_to_tensor(config["true_p10"]),
         config,
-        signs,
     )
     params = initial_parameters(config)
     optimizer = optax.adam(config["learning_rate"])
     opt_state = optimizer.init(params)
 
     def loss_fn(p):
-        return loss_and_observables(p, true_target, config, signs)
+        return loss_and_observables(p, true_target, config)
 
     def train_step(p, state):
         (loss, aux), grads = K.value_and_grad(loss_fn, has_aux=True)(p)
