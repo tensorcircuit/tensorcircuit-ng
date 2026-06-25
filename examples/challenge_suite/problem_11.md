@@ -1,8 +1,8 @@
-# Problem 11: Mixed-Mode Differentiable Quantum Sensor Training
+# Problem 11: Spin-1 Haldane-Chain VQE With String-Order Verification
 
 ## Goal
 
-Train a variational quantum sensor whose learned object is a full local response matrix, not a single expectation value. The task combines forward-mode differentiation with respect to two physical field parameters and reverse-mode differentiation with respect to hundreds of trainable circuit parameters.
+Find a low-energy variational state for an open spin-1 chain in the Haldane phase and verify that the optimized state reproduces the expected nonlocal string order. The task is not only to lower the energy, but to produce a physically consistent final state whose hidden antiferromagnetic order can be checked from fixed string correlators.
 
 ## Fixed Problem Configuration
 
@@ -10,51 +10,120 @@ The evaluator defines and passes the following configuration dictionary into `ru
 
 ```python
 {
-    "n_qubits": 20,
-    "n_field_params": 2,
-    "n_layers": 6,
-    "max_steps": 300,
-    "learning_rate": 0.01,
-    "initial_parameter_scale": 0.02,
-    "readout_penalty_weight": 0.05,
-    "seed": 2037,
-    "final_response_mse_tolerance": 1e-9,
+    "n_sites": 12,
+    "n_layers": 5,
+    "beta": 0.20,
+    "single_ion_anisotropy": 0.15,
+    "max_steps": 500,
+    "learning_rate": 0.03,
+    "initial_parameter_scale": 0.05,
+    "seed": 2041,
+    "minimum_energy_improvement": 5e-3,
+    "maximum_energy_density_gap": 0.12,
+    "maximum_string_order_mae": 0.12,
 }
 ```
 
-Use 20 qubits arranged on an open chain. Prepare a trainable probe state from `|0>^20` using six brickwork layers. Each layer applies trainable `RZ-RY` rotations on every qubit, followed by trainable nearest-neighbor `RZZ` gates on alternating bonds. Even layers use bonds `(0,1), (2,3), ...`; odd layers use bonds `(1,2), (3,4), ...`. The `RZZ` convention is `RZZ(theta) = exp(-i theta Z_i Z_j / 2)`.
-
-Encode a two-parameter weak field `lambda = (lambda_0, lambda_1)` by applying
+Use an open-boundary spin-1 chain with local basis ordered as `|+1>`, `|0>`, `|-1>`. The local spin operators are
 
 ```text
-U(lambda) = exp[-i sum_i (lambda_0 + lambda_1 x_i) Z_i],
+Sx = (1 / sqrt(2)) [[0, 1, 0], [1, 0, 1], [0, 1, 0]]
+Sy = (1 / sqrt(2)) [[0, -i, 0], [i, 0, -i], [0, i, 0]]
+Sz = [[1, 0, 0], [0, 0, 0], [0, 0, -1]].
 ```
 
-where `x_i = 2 i / 19 - 1`. Define the 20-dimensional readout vector
+The Hamiltonian is
 
 ```text
-f_i(theta, lambda) = <X_i>
+H = sum_{i=0}^{n_sites-2} [Si · S{i+1} + beta (Si · S{i+1})^2]
+    + single_ion_anisotropy sum_{i=0}^{n_sites-1} (Sz_i)^2,
 ```
 
-after sensing. At `lambda = (0, 0)`, compute the response matrix
+where
 
 ```text
-R_{i,a}(theta) = partial f_i(theta, lambda) / partial lambda_a
+Si · Sj = Sx_i Sx_j + Sy_i Sy_j + Sz_i Sz_j.
 ```
 
-for all sites `i = 0, ..., 19` and physical field parameters `a = 0, 1`. Use the target response matrix
+For the default configuration this is an `n_sites = 12` spin-1 chain with `beta = 0.20` and `single_ion_anisotropy = 0.15`.
+
+## Variational Ansatz
+
+Start from the fixed Neel product state
 
 ```text
-T_{i,0} = 1,    T_{i,1} = x_i.
+|+1, -1, +1, -1, +1, -1, +1, -1, +1, -1, +1, -1>.
 ```
 
-Train the objective
+Use `n_layers = 5` repeated brickwork layers. In layer `l`, apply the following operations in order.
+
+### 1. Single-Site Rotation Block
+
+For every site `i = 0, ..., n_sites - 1`, apply
 
 ```text
-loss = mean((R - T)^2) + 0.05 * mean(f_i(theta, 0)^2)
+Rz(alpha_{l,i}) Ry(beta_{l,i}) Rz(gamma_{l,i}),
 ```
 
-with Adam at learning rate `0.01` for exactly 300 optimizer updates. Do not use early stopping.
+with
+
+```text
+Rz(phi) = exp(-i phi Sz),
+Ry(theta) = exp(-i theta Sy).
+```
+
+### 2. Even-Bond Entangling Block
+
+For every even bond `(0,1), (2,3), ..., (n_sites - 2, n_sites - 1)`, apply
+
+```text
+U_even(theta_{l,b}, phi_{l,b})
+  = exp[-i theta_{l,b} (Sx⊗Sx + Sy⊗Sy)
+        - i phi_{l,b} (Sz⊗Sz)
+        - i beta (Si · S{i+1})^2].
+```
+
+### 3. Odd-Bond Entangling Block
+
+For every odd bond `(1,2), (3,4), ..., (n_sites - 3, n_sites - 2)`, apply an independently parameterized gate of the same form,
+
+```text
+U_odd(theta'_{l,b}, phi'_{l,b})
+  = exp[-i theta'_{l,b} (Sx⊗Sx + Sy⊗Sy)
+        - i phi'_{l,b} (Sz⊗Sz)
+        - i beta (Si · S{i+1})^2].
+```
+
+Each layer therefore has
+
+```text
+3 * n_sites + 2 * (n_sites - 1)
+```
+
+real parameters. For the default `n_sites = 12` configuration, each layer has `58` parameters and the full ansatz has `290` parameters.
+
+Initialize every trainable parameter independently from a Gaussian distribution with mean `0` and standard deviation `initial_parameter_scale`, using the configured seed. Optimize all parameters with Adam at learning rate `learning_rate` for exactly `max_steps = 500` updates. Do not use early stopping.
+
+## String-Order Diagnostics
+
+In addition to the final energy, verify the Haldane-phase string correlators
+
+```text
+O_string^z(i, j)
+  = < Sz_i [prod_{k=i+1}^{j-1} exp(i pi Sz_k)] Sz_j >.
+```
+
+The evaluator checks the three fixed strings
+
+```text
+(i, j) in {(0, 11), (1, 10), (2, 9)}.
+```
+
+For spin-1, the middle factor is
+
+```text
+exp(i pi Sz) = diag(-1, 1, -1).
+```
 
 ## Solution Interface
 
@@ -66,17 +135,15 @@ def run_solution(config):
     return results
 ```
 
-The solution should not print progress. It should perform the core computation and return only NumPy-format quantities that the evaluator checks or reports.
+The solution should not print progress. It should perform only the optimization and return only the NumPy-format quantities that the evaluator checks or reports.
 
 Required result keys:
 
-- `loss_history`: NumPy array with shape `(max_steps,)`.
-- `response_mse_history`: NumPy array with shape `(max_steps,)`.
-- `readout_penalty_history`: NumPy array with shape `(max_steps,)`.
-- `final_response_matrix`: NumPy array with shape `(n_qubits, n_field_params)`.
-- `final_zero_field_readouts`: NumPy array with shape `(n_qubits,)`.
+- `energy_density_history`: NumPy array with shape `(max_steps,)`.
+- `final_energy_density`: scalar energy density evaluated after the last optimizer update.
+- `final_string_orders`: NumPy array with shape `(3,)`, ordered as `[(0, 11), (1, 10), (2, 9)]`.
 
-Each history records one value per optimizer update, evaluated immediately before applying that update. The evaluator recomputes final response MSE, final readout penalty, and final total loss from the returned arrays.
+Each energy-history entry records the energy density evaluated immediately before the corresponding optimizer update.
 
 ## Evaluation Interface
 
@@ -86,19 +153,32 @@ The evaluator file is `evaluate_11.py`. It dynamically imports a solution module
 python evaluate_11.py --solution solution_11
 ```
 
-The evaluator consumes only the returned result dictionary. It prints the end-to-end solution time, initial and final response-matrix MSE, final zero-field readout penalty, final total loss, trainable parameter count, response dimensions, returned keys, and pass/fail criteria. It does not save files or create plots by default.
+The evaluator consumes only the returned result dictionary. Outside the timed `run_solution(config)` call, it independently computes the exact ground-state energy density and exact string correlators for the fixed Hamiltonian, then compares those exact quantities against the final energy density and final string correlators reported by the solution.
+
+It prints:
+
+- solution module name,
+- end-to-end solution time,
+- exact-reference time,
+- initial and final variational energy density,
+- exact ground-state energy density,
+- final energy-density gap,
+- the three final and exact string correlators,
+- string-order mean absolute error,
+- returned array shapes and keys.
+
+The evaluator does not save files or create plots by default.
 
 ## Passing Criteria
 
 A run is considered functionally successful when all of the following hold for the default configuration:
 
-- `loss_history.shape == response_mse_history.shape == readout_penalty_history.shape == (300,)`.
-- `final_response_matrix.shape == (20, 2)`.
-- `final_zero_field_readouts.shape == (20,)`.
-- The final response-matrix MSE is lower than the initial response-matrix MSE.
-- The final response-matrix MSE is at most `1e-9`.
-- The final loss is lower than the initial loss.
-- All returned arrays contain finite values.
+- `energy_density_history.shape == (max_steps,)`.
+- `final_string_orders.shape == (3,)`.
+- The final energy density is at least `minimum_energy_improvement` lower than the initial energy density.
+- The returned arrays contain finite values.
+- The final energy density is no more than `maximum_energy_density_gap` above the exact ground-state density.
+- The mean absolute error of the three checked string correlators is at most `maximum_string_order_mae = 0.12`.
 
 ## TC-NG Baseline
 
@@ -108,8 +188,8 @@ The TensorCircuit-NG solution in `solution_11.py` can be evaluated with:
 python evaluate_11.py --solution solution_11
 ```
 
-A verified TensorCircuit-NG/JAX baseline run in the current validation environment with the default configuration performed `300` optimizer updates and produced response matrix shape `(20, 2)`, initial response MSE `6.84671402e-01`, final response MSE `1.26759933e-13`, final zero-field readout penalty `7.11734802e-12`, initial total loss `6.84766173e-01`, final total loss `4.82627334e-13`, and overall `PASS`. The evaluator-measured `run_solution(config)` time for that run was `30.99s`; this time is a reference measurement only and is not a passing criterion.
+A verified TensorCircuit-NG/JAX baseline run in the current validation environment with the default configuration produced end-to-end solution time `68.08s`, exact-reference time `4.63s`, initial energy density `-0.0546756685`, final energy density `-0.7045351863`, exact ground-state energy density `-0.7736449389`, energy-density gap `0.0691097526`, string correlators `(-0.3860595226, -0.3445219994, -0.4002564847)`, string-order mean absolute error `0.0551720974`, and overall `PASS`. The evaluator-measured `run_solution(config)` time is a reference measurement only and is not a passing criterion.
 
 ## Implementation Hint
 
-Compute the two columns of `R` by forward-mode derivatives with respect to the two physical field parameters, then differentiate the scalar response-matching loss by reverse mode with respect to the much larger set of trainable circuit parameters. In TensorCircuit-NG/JAX, one efficient implementation configures an OMECo contraction path searcher, scans over even/odd layer pairs while constructing the probe state, computes all local `X_i` readouts from the resulting state via local coherences, applies `tc.backend.jacfwd` only to the two-parameter sensing map, and JIT-compiles the full optimizer step.
+Because every layer has the same fixed structure, it is often advantageous to stage one layer as a repeated tensor-program body over depth rather than tracing four separate copies of the layer into the compiled program. The energy and the checked string correlators are both sums of short-range or fixed-support observables, so they can be evaluated directly from the final variational state without introducing auxiliary sampling.
