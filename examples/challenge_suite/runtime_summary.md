@@ -4,7 +4,7 @@ Evaluator-reported `End-to-end solution time` for the current 12 problems.
 
 | Problem | Runtime |
 | --- | ---: |
-| 1 | 10.51s |
+| 1 | 27.22s |
 | 2 | 2.87s |
 | 3 | 2.46s |
 | 4 | 47.45s |
