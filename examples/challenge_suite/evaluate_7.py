@@ -13,7 +13,7 @@ DEFAULT_CONFIG = {
     "n_ancilla_qubits": 8,
     "n_qubits": 16,
     "n_layers": 2,
-    "n_trajectories": 128,
+    "n_trajectories": 64,
     "initial_parameter_scale": 0.1,
     "max_steps": 100,
     "learning_rate": 0.02,

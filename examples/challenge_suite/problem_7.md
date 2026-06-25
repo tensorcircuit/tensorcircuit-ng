@@ -21,7 +21,7 @@ The evaluator defines and passes the following configuration dictionary into `ru
     "n_ancilla_qubits": 8,
     "n_qubits": 16,
     "n_layers": 2,
-    "n_trajectories": 128,
+    "n_trajectories": 64,
     "initial_parameter_scale": 0.1,
     "max_steps": 100,
     "learning_rate": 0.02,
@@ -68,6 +68,14 @@ For each pair `(data_i, ancilla_i)`, apply a trainable two-qubit entangler
 RZZ(theta_ent[layer, i]) on qubits (8 + i, i).
 ```
 
+Then apply a fixed nearest-neighbor ancilla ladder of CNOT gates
+
+```text
+CNOT(8, 9), CNOT(9, 10), ..., CNOT(14, 15).
+```
+
+This ancilla ladder is part of every layer and is not trainable.
+
 ### 4. Mid-Circuit Ancilla Measurement
 
 Measure each ancilla qubit `8 + i` in the computational basis, obtaining trajectory bit
@@ -76,7 +84,7 @@ Measure each ancilla qubit `8 + i` in the computational basis, obtaining traject
 m[layer, i] in {0, 1}.
 ```
 
-Use exactly `n_trajectories = 128` trajectories per objective evaluation, and keep the per-trajectory measurement randomness fixed across optimizer updates so the objective is a reproducible trajectory average rather than an optimizer-side resampling procedure.
+Use exactly `n_trajectories = 64` trajectories per objective evaluation, and keep the per-trajectory measurement randomness fixed across optimizer updates so the objective is a reproducible trajectory average rather than an optimizer-side resampling procedure.
 
 ### 5. Conditional Feedback Layer
 
@@ -89,6 +97,16 @@ These two feedback angles are independent trainable parameters.
 
 ### 6. Data Post-Processing Layer
 
+After all conditional feedback gates in the layer, apply a fixed nearest-neighbor data ladder of CNOT gates
+
+```text
+CNOT(0, 1), CNOT(1, 2), ..., CNOT(6, 7).
+```
+
+This data ladder is part of every layer and is not trainable.
+
+### 7. Data Post-Processing Layer
+
 Apply trainable `RZ` rotations on all data qubits:
 
 ```text
@@ -97,7 +115,7 @@ RZ(theta_post[layer, i]) on data qubit i,  i = 0,...,7.
 
 ## Objective Function
 
-For a fixed parameter vector and a fixed batch of `128` trajectory uniforms, the protocol produces `128` measurement-conditioned trajectories. Let `E_t` be the data-Hamiltonian expectation value on trajectory `t`. The objective is the trajectory-averaged energy
+For a fixed parameter vector and a fixed batch of `64` trajectory uniforms, the protocol produces `64` measurement-conditioned trajectories. Let `E_t` be the data-Hamiltonian expectation value on trajectory `t`. The objective is the trajectory-averaged energy
 
 $$
 E_{\mathrm{avg}} = \frac{1}{128} \sum_{t=1}^{128} E_t.
@@ -126,7 +144,7 @@ Required result keys:
 
 `energy_history[t]` records the trajectory-averaged energy evaluated immediately before optimizer update `t`.
 
-`final_trajectory_energies[k]` records the final per-trajectory data-Hamiltonian energy for the same fixed batch of `128` trajectory uniforms used by the objective.
+`final_trajectory_energies[k]` records the final per-trajectory data-Hamiltonian energy for the same fixed batch of `64` trajectory uniforms used by the objective.
 
 ## Evaluation Interface
 
@@ -154,7 +172,7 @@ It does not save files or create plots by default.
 A run is considered functionally successful when all of the following hold for the default configuration:
 
 - `len(energy_history) == 100`
-- `final_trajectory_energies.shape == (128,)`
+- `final_trajectory_energies.shape == (64,)`
 - the final trajectory-averaged energy is lower than the initial trajectory-averaged energy
 - the total energy improvement is at least `minimum_improvement = 0.3`
 - the final trajectory-averaged energy is at most `target_final_energy = -8.3`
@@ -172,11 +190,11 @@ python evaluate_7.py --solution solution_7
 
 Observed TensorCircuit-NG/JAX baseline in the current validation environment with the default 100-step configuration:
 
-- End-to-end solution time: `46.62s`.
-- Initial trajectory-averaged energy: `-6.9331135750`.
-- Final trajectory-averaged energy: `-9.6408786774`.
-- Energy improvement: `2.7077651024`.
-- Final trajectory energy mean/std: `-9.6408815384 / 0.0000018564`.
+- End-to-end solution time: `63.84s`.
+- Initial trajectory-averaged energy: `-6.8462667465`.
+- Final trajectory-averaged energy: `-10.0266914368`.
+- Energy improvement: `3.1804246902`.
+- Final trajectory energy mean/std: `-10.0323581696 / 0.0036470860`.
 - Energy history length: `100`.
 - Overall: `PASS`.
 
@@ -184,4 +202,4 @@ This time is a reference measurement only and is not a passing criterion.
 
 ## Implementation Hint
 
-For a TensorCircuit-NG/JAX baseline, use `cond_measure` for ancilla measurements, batch the `128` fixed trajectories with `vmap`, and JIT-compile the full optimizer step rather than only `value_and_grad`, so each update reuses one compiled trajectory-averaged objective-and-update path.
+For a TensorCircuit-NG/JAX baseline, use `cond_measure` for ancilla measurements, batch the fixed trajectories with `vmap`, and JIT-compile the full optimizer step rather than only `value_and_grad`, so each update reuses one compiled trajectory-averaged objective-and-update path.

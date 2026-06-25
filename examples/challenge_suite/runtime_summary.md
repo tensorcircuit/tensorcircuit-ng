@@ -1,6 +1,6 @@
 # Challenge Suite Runtime Summary
 
-Evaluator-reported `End-to-end solution time` for the current 12 problems.
+Evaluator-reported `End-to-end solution time` for the current 12 problems on MacBook Pro with Apple M4 Pro CPU.
 
 | Problem | Runtime |
 | --- | ---: |
@@ -10,7 +10,7 @@ Evaluator-reported `End-to-end solution time` for the current 12 problems.
 | 4 | 47.45s |
 | 5 | 45.50s |
 | 6 | 26.83s |
-| 7 | 46.62s |
+| 7 | 63.84s |
 | 8 | 119.10s |
 | 9 | 13.74s |
 | 10 | 66.30s |

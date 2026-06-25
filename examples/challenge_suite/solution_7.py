@@ -2,7 +2,7 @@
 Challenge Suite Problem 7: 16-qubit measurement-feedback VQE.
 
 The TensorCircuit-NG baseline uses cond_measure for ancilla measurements and
-batches 128 fixed trajectories with vmap for deterministic trajectory-averaged
+batches fixed trajectories with vmap for deterministic trajectory-averaged
 energy optimization.
 """
 
@@ -71,6 +71,9 @@ def make_one_trajectory(config):
                 c.rzz(n_data + a, a, theta=params[pidx + a])
             pidx += n_anc
 
+            for a in range(n_anc - 1):
+                c.cnot(n_data + a, n_data + a + 1)
+
             theta0 = params[pidx : pidx + n_anc]
             pidx += n_anc
             theta1 = params[pidx : pidx + n_anc]
@@ -86,6 +89,9 @@ def make_one_trajectory(config):
                     a,
                 )
                 sidx += 1
+
+            for q in range(n_data - 1):
+                c.cnot(q, q + 1)
 
             for q in range(n_data):
                 c.rz(q, theta=params[pidx + q])
