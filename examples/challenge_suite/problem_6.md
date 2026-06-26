@@ -42,6 +42,13 @@ $$t_l = t_{\min} + (t_{\max} - t_{\min}) \cdot \sigma(s_l), \quad J_l = \tanh(j_
 
 with $\sigma(x) = 1/(1+e^{-x})$ and unconstrained trainable scalars $s_l, j_l, d_l$. This bounds the evolution time in $(t_{\min}, t_{\max})$ and bounds the couplings in $(-1, 1)$.
 
+The analog evolution in each block is intended to be implemented as a continuous-time ODE/Schrödinger evolution, not as a Trotterized gate sequence. The presence of `ode_rtol`, `ode_atol`, and `ode_max_steps` in the config is part of the specification:
+
+- Use an actual ODE solver or framework-native differential-equation integrator for the analog block.
+- Respect `ode_rtol` and `ode_atol` as numerical tolerances.
+- Treat `ode_max_steps` as an ODE/integrator step-control bound, not as a product-formula or Trotter slice count.
+- Do not replace the analog block with Lie-Trotter, Suzuki-Trotter, operator splitting, or any other sliced digital approximation of the requested continuous-time evolution.
+
 2. **Digital rotations**: apply trainable $RZ(\alpha_{l,k})\,RY(\beta_{l,k})\,RZ(\gamma_{l,k})$ on every qubit $k$.
 
 ### Initialization
