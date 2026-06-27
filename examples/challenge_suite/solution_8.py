@@ -11,7 +11,7 @@ import tensorcircuit as tc
 
 K = tc.set_backend("jax")
 tc.set_dtype("complex64")
-tc.set_contractor("omeco-32-32")
+tc.set_contractor("omeco-4-4")
 
 
 def ry_angle(row, col, config):
@@ -58,7 +58,7 @@ def rx_angle(row, col, config):
     )
 
 
-def run_solution(config):
+def build_circuit(config):
     n_side = config["grid_side"]
     circuit = tc.Circuit(config["n_qubits"])
 
@@ -88,14 +88,21 @@ def run_solution(config):
             qubit = row * n_side + col
             circuit.rx(qubit, theta=rx_angle(row, col, config))
 
+    return circuit
+
+
+def run_solution(config):
+    circuit = build_circuit(config)
+
     rng = np.random.default_rng(2033)
     status = K.convert_to_tensor(
         rng.random((config["n_samples"], config["n_qubits"]), dtype=np.float32)
     )
-    samples = circuit.sample(
-        batch=config["n_samples"],
-        allow_state=False,
-        format="sample_bin",
-        status=status,
-    )
-    return {"samples": K.numpy(samples)}
+
+    def sample_one(seed):
+        sample, _ = circuit.perfect_sampling(seed)
+        return sample
+
+    sample_batch = K.jit(K.vmap(sample_one))
+    samples = sample_batch(status)
+    return {"samples": np.asarray(K.numpy(samples), dtype=np.int32)}

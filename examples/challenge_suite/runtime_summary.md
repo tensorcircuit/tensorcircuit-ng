@@ -11,7 +11,7 @@ Evaluator-reported `End-to-end solution time` for the current 12 problems on Mac
 | 5 | 45.50s |
 | 6 | 26.83s |
 | 7 | 63.84s |
-| 8 | 119.10s |
+| 8 | 25.05s |
 | 9 | 13.74s |
 | 10 | 66.30s |
 | 11 | 68.08s |

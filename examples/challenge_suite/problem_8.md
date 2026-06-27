@@ -132,8 +132,8 @@ The TensorCircuit-NG solution in `solution_8.py` can be evaluated with:
 python evaluate_8.py --solution solution_8
 ```
 
-A correct baseline should pass the observable checks with ordinary finite-sample fluctuations at the default 8192-shot configuration. In the current validation environment, the TensorCircuit-NG/JAX baseline produced sample shape `(8192, 49)`, checked `44` hidden observables, had maximum single-site `Z` absolute error `0.0046486279`, maximum hidden `Z`-string absolute error `0.0188068181`, mean hidden `Z`-string absolute error `0.0039698657`, and evaluator-measured `run_solution(config)` time `119.10s`. This time is a reference measurement only and is not a passing criterion.
+A correct baseline should pass the observable checks with ordinary finite-sample fluctuations at the default 8192-shot configuration. In the current validation environment, the TensorCircuit-NG/JAX baseline produced sample shape `(8192, 49)`, checked `44` hidden observables, had maximum single-site `Z` absolute error `0.0046486279`, maximum hidden `Z`-string absolute error `0.0188068181`, mean hidden `Z`-string absolute error `0.0039643170`, and evaluator-measured `run_solution(config)` time `25.05s`. This time is a reference measurement only and is not a passing criterion.
 
 ## Implementation Hint
 
-Use `tc.Circuit` to build the circuit directly on the 49-qubit grid, apply the parameterized single-qubit and entangling layers in the required order, and call `Circuit.sample(allow_state=False, format="sample_bin")` or an equivalent tensor-network sampling path.
+Use `tc.Circuit` to build the circuit directly on the 49-qubit grid and apply the parameterized single-qubit and entangling layers in the required order. For a TensorCircuit-NG/JAX baseline, use a moderate OMECO contraction-path budget and batch the fixed per-shot `status` array with `tc.backend.jit(tc.backend.vmap(lambda seed: circuit.perfect_sampling(seed)[0]))`, so the 8192-shot perfect-sampling path is traced and dispatched as one batched tensor program rather than as a Python loop over single-shot `Circuit.sample` calls.

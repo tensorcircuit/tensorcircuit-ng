@@ -28,6 +28,7 @@ Use this file for backend-wrapper behavior, JIT/vmap issues, and contraction per
 - For layered VQE circuits, scanning over layers can cut JAX compile time by keeping the traced program small, but it can also increase steady-state runtime versus an unrolled circuit. Treat `scan` as a fast-compile mode, not automatically as peak-runtime mode.
 - When reporting VQE performance, it can be useful to present two TensorCircuit-NG modes explicitly: a scan-based fast-compile mode for low first-call cost, and an unrolled peak-runtime mode for maximum post-compilation throughput. Do not mix the two in a single speedup claim.
 - For repeated VQE workloads, compute break-even in total value-and-gradient calls using `warmup + (N - 1) * run`. This is often more informative than reporting compile time and runtime independently.
+- For large explicit-status perfect-sampling workloads, `Circuit.sample(batch=..., allow_state=False)` JITs a single-shot sampler and dispatches it once per shot. If many shots share a fixed circuit, benchmark `backend.jit(backend.vmap(lambda seed: circuit.perfect_sampling(seed)[0]))` over the status batch or fixed-size chunks; this can cut both first-call and end-to-end time by avoiding per-shot Python dispatch. Pair this with contractor-budget sweeps, because high OMECO budgets can dominate tracing without improving the batched sampler enough to justify them.
 
 ## Hamiltonian MVPs and ODE hot paths
 
