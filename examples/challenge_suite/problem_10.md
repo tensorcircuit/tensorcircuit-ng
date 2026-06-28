@@ -105,13 +105,13 @@ python evaluate_10.py --solution solution_10
 
 Observed TensorCircuit-NG/JAX baseline in the current validation environment with the default 200-step configuration:
 
-- End-to-end solution time: `66.30s`.
-- Exact reference time: `30.69s`.
-- Initial energy density: `0.9718770385`.
-- Final energy density: `-1.1766326427`.
+- End-to-end solution time: `12.44s`.
+- Exact reference time: `28.08s`.
+- Initial energy density: `0.9718863964`.
+- Final energy density: `-1.1781761646`.
 - Exact ground energy density: `-1.2925285569`.
-- VQE energy-density gap: `0.1158959142`.
-- Energy improvement: `2.1485096812`.
+- VQE energy-density gap: `0.1143523923`.
+- Energy improvement: `2.1500625610`.
 
 ## Implementation Hint
 

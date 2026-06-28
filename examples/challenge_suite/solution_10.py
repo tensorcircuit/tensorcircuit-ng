@@ -2,15 +2,17 @@
 Challenge Suite Problem 10: VQE with an 18-qubit CMZ hyperedge.
 
 The ansatz uses TensorCircuit-NG's built-in cmz gate on non-adjacent selected
-qubits. The Hamiltonian is an ordinary transverse-field Ising model evaluated
-with TensorCircuit's PauliStringSum2MVP.
+qubits. The Hamiltonian is evaluated as an MPO expectation so the optimization
+step can be JIT-compiled into a highly efficient fixed graph.
 """
 
 import numpy as np
 import optax
+import quimb.tensor as qtn
 
 import tensorcircuit as tc
-from tensorcircuit.quantum import PauliStringSum2MVP
+from tensorcircuit.quantum import quimb2qop
+from tensorcircuit.templates.measurements import mpo_expectation
 
 K = tc.set_backend("jax")
 tc.set_dtype("complex64")
@@ -27,25 +29,12 @@ def initial_parameters(config):
     return K.convert_to_tensor(params)
 
 
-def build_tfim_mvp(config):
-    structures = []
-    weights = []
-    n_qubits = config["n_qubits"]
-
-    for q in range(n_qubits - 1):
-        term = [0] * n_qubits
-        term[q] = 3
-        term[q + 1] = 3
-        structures.append(term)
-        weights.append(-config["zz_strength"])
-
-    for q in range(n_qubits):
-        term = [0] * n_qubits
-        term[q] = 1
-        structures.append(term)
-        weights.append(-config["x_strength"])
-
-    return PauliStringSum2MVP(structures, weights)
+def build_tfim_mpo(config):
+    n_qubits = int(config["n_qubits"])
+    zz = float(config["zz_strength"])
+    xs = float(config["x_strength"])
+    mpo_q = qtn.MPO_ham_ising(n_qubits, j=-4.0 * zz, bx=2.0 * xs, cyclic=False)
+    return quimb2qop(mpo_q)
 
 
 def apply_rotation_block(circuit, block, n_qubits):
@@ -55,38 +44,24 @@ def apply_rotation_block(circuit, block, n_qubits):
         circuit.ry(q, theta=block[q, 2])
 
 
-def build_state(params, input_state, config):
-    def layer_step(state, layer_params):
-        circuit = tc.Circuit(config["n_qubits"], inputs=state)
-        apply_rotation_block(circuit, layer_params, config["n_qubits"])
+def energy_density(params, mpo, config):
+    circuit = tc.Circuit(config["n_qubits"])
+    for q in config["initial_ones"]:
+        circuit.x(q)
+    for layer in range(config["n_layers"]):
+        apply_rotation_block(circuit, params[layer], config["n_qubits"])
         circuit.cmz(*config["selected_qubits"])
-        return circuit.state()
-
-    return K.scan(layer_step, params, input_state)
-
-
-def state_energy(state, hamiltonian_mvp):
-    h_state = hamiltonian_mvp(state)
-    return K.real(K.tensordot(K.conj(state), h_state, 1))
-
-
-def energy_density(params, input_state, hamiltonian_mvp, config):
-    state = build_state(params, input_state, config)
-    return state_energy(state, hamiltonian_mvp) / config["n_qubits"]
+    return mpo_expectation(circuit, mpo) / config["n_qubits"]
 
 
 def run_solution(config):
     params = initial_parameters(config)
-    circuit = tc.Circuit(config["n_qubits"])
-    for q in config["initial_ones"]:
-        circuit.x(q)
-    input_state = circuit.state()
-    hamiltonian_mvp = build_tfim_mvp(config)
+    mpo = build_tfim_mpo(config)
     optimizer = optax.adam(config["learning_rate"])
     opt_state = optimizer.init(params)
 
     def loss_fn(p):
-        return energy_density(p, input_state, hamiltonian_mvp, config)
+        return energy_density(p, mpo, config)
 
     def train_step(p, state):
         value, grads = K.value_and_grad(loss_fn)(p)
