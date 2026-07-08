@@ -711,9 +711,16 @@ def _algebraic_base_contraction(
 
     raw_tensors, input_sets, output_set, size_dict = _extract_topology(nodes)
     # Use the backend of the first node
-    be = nodes[0].backend
+    if len(nodes) > 0:
+        be = nodes[0].backend
+    else:
+        be = get_backend(get_default_backend())
 
-    if len(raw_tensors) == 1:
+    if len(raw_tensors) == 0:
+        # Avoid cotengra bug for empty contraction paths
+        final_raw_tensor = be.ones([])
+        exponent = 0.0
+    elif len(raw_tensors) == 1:
         # Avoid cotengra bug for empty contraction paths
         final_raw_tensor = be.einsum(input_sets[0] + "->" + output_set, *raw_tensors)
         exponent = 0.0
