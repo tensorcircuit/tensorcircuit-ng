@@ -13,7 +13,6 @@ Use this file for complex gradients, backend AD differences, and noisy-gradient 
 - Reduce the problem to a minimal library API call first.
 - Then build a pure-backend reproduction of the same primitive chain.
 - If the backend-only reproduction fails while the higher-level TensorFlow path is correct, the bug is usually in the backend VJP/JVP implementation rather than the model code.
-- For large contraction benchmarks, verify memory failures with a fresh-process single-variant `value_and_grad` run before blaming compilation caches or earlier variants. If the isolated run still fails, treat it as a real graph-size memory wall.
 
 ## Stochastic gradients
 

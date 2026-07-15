@@ -145,14 +145,20 @@ Abort cotengra integrated reslice early if sliced indices jump to dozens on a la
 6. For small/medium networks, compare cotengra fixed post-slice and integrated `reslice`.
 7. Repeat promising configurations several times. OMECO and cotengra searches can have large stochastic variation even with identical hyperparameters, and a repeated run can find a much better slice set. Report best and median metrics rather than a single run when the budget permits.
 8. If the user's goal is to actually run the contraction later, persist the best path or sliced tree immediately. Do not rely on rerunning stochastic search to reproduce it.
-9. Rank by `(target violation, combo_log2, log10_flops, log2_write, nslices, time)`.
-10. Preserve the exact topology, seed config, slicer config, target, repeat count, and version info in the report.
+9. For actual JAX execution tuning, freeze each candidate path before timing and report compile+first-run time, post-compile runtime, and measured peak GPU memory. XLA memory can exceed the largest logical intermediate by a large factor.
+10. On GPU, A/B test default XLA GPU autotune against `XLA_FLAGS=--xla_gpu_autotune_level=0` with `XLA_PYTHON_CLIENT_PREALLOCATE=false`; this can remove a large first-device memory tax in contraction workloads and should be reported as an execution flag, not as part of path quality.
+11. Rank by `(target violation, measured runtime, measured peak memory, combo_log2, log10_flops, log2_write, nslices, search time)`.
+12. Preserve the exact topology, seed config, slicer config, target, repeat count, version info, and environment flags in the report.
 
 ## Rules of Thumb
 
 - OMECO seed plus OMECO slicer is a robust default for large/deep 1D amplitude networks.
 - cotengra integrated `reslice` often wins on small/medium 2D grid-like networks where it does not over-slice.
 - More slicer iterations are not monotonic. `2x32` can beat `2x24`, but can also be worse. Always compare the actual metrics.
+- For unsliced OMECO paths that will be executed by JAX/XLA, sweep `rw_weight` around moderate values such as `8`, `16`, `32`, and `64`. `rw_weight=0` can find paths that look acceptable by FLOPs but run much slower or OOM because of high write/width; very large `rw_weight` can also slow execution by increasing FLOPs or forcing a worse tree.
+- Do not treat OMECO `sc_weight` as an automatic runtime improvement knob for unsliced JAX execution. It can be useful for hard memory targets, but in runtime sweeps it can also worsen FLOPs and steady-state time; compare it against simply using a stronger TreeSA seed search.
+- For forward-only amplitude contractions, use `log2(max intermediate size)` as the first proxy for peak GPU memory and `log2(total write)` as a strong proxy for steady runtime. For forward-plus-reverse gradient contractions, total write can be the stronger proxy for peak memory because reverse-mode keeps or rematerializes more contraction intermediates.
+- For complex64 forward-only amplitude planning, use `peak_gib ~= 9 * 2**(log2_size - 27)` as a calibrated starting estimate and `11 * 2**(log2_size - 27)` as a conservative safety check. For complex64 forward-plus-reverse planning, use `peak_gib ~= 2-3 * 2**(log2_write - 27)` and `4 * 2**(log2_write - 27)` as a conservative first-pass check.
 - Repeating the same configuration is itself a useful tuning axis. If a single configuration sometimes returns 2 slices and sometimes 16 slices, run it multiple times and keep the best valid result; also report the variation so the user knows the robustness.
 - When a good stochastic result is found, save the actual path/tree and sliced labels, not just the hyperparameters. Hyperparameters describe a distribution, while the saved path is the reproducible artifact.
 - If target is only 1-3 width bits below a good seed, slicing is usually tractable.

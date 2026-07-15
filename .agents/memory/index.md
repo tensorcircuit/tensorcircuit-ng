@@ -10,8 +10,9 @@ This directory stores short, durable notes for future development. Read this ind
 
 ## Memory map
 
-- `workflow_and_quality.md`: Coding defaults, public-module changes, tests, docs/examples, and generic tooling or sandbox notes.
-- `backend_and_performance.md`: `tc.backend` wrapper behavior, JIT/vmap/scan rules, contraction patterns, and contraction-benchmark protocol.
+- `workflow_and_quality.md`: Runtime-state invariants, public-feature integration, example design, and high-signal validation guidance.
+- `backend_and_performance.md`: `tc.backend` wrapper behavior, JIT/vmap/scan rules, XLA execution, hot-path design, and dtype pitfalls.
+- `contraction_and_benchmarking.md`: Algebraic contraction invariants, path search and slicing semantics, and contraction benchmark interpretation.
 - `autodiff_and_stochastic.md`: Complex AD conventions, gradient debugging workflow, stochastic-gradient rules, and real-loss requirements.
 - `circuit_models_and_api.md`: Circuit hierarchy, inverse semantics, analog evolution inversion, and QIR reconstruction rules.
 - `simulation_patterns.md`: U(1) subspace work, qudit/sparse-model guidance, and Heisenberg-style operator evolution.
