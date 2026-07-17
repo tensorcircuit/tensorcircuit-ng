@@ -181,10 +181,10 @@ pip install tensorcircuit-ng
 We recommend you install this package with tensorflow or jax also installed as:
 
 ```python
-pip install "tensorcircuit-ng[tensorflow]"
+pip install "tensorcircuit-ng[jax]"
 ```
 
-Other optional dependencies include `[torch]`, `[jax]`, `[qiskit]` and `[cloud]`.
+Other optional dependencies include `[torch]`, `[tensorflow]`, `[qiskit]` and `[cloud]`.
 
 Try nightly build for the newest features:
 
@@ -205,7 +205,7 @@ pip install tensorcircuit-nightly
 - Efficiency
   - Time: 10 to 10^6+ times acceleration compared to TensorFlow Quantum, Pennylane, CuQuantum, TorchQuantum or Qiskit
 
-  - Space: 600+ qubits 1D VQE workflow (converged energy inaccuracy: < 1%)
+  - Space: [1000+ qubits 1D VQE workflow](https://re-ra.xyz/%E5%9F%BA%E4%BA%8E-TensorCircuit-NG-%E7%9A%84%E5%8D%83%E6%AF%94%E7%89%B9%E4%B8%87%E5%8F%82%E6%95%B0%E5%85%A8%E6%A2%AF%E5%BA%A6%E9%87%8F%E5%AD%90%E7%AE%97%E6%B3%95%E8%AE%AD%E7%BB%83/) (converged energy inaccuracy: < 0.5%)
 
 - Elegance
   - Flexibility: customized contraction, multiple ML backend/interface choices, multiple dtype precisions, multiple QPU providers
@@ -479,6 +479,12 @@ Reference paper: https://arxiv.org/abs/2511.17228 (published in PRX Quantum).
 For the code implementation on the work of quantum subliminal learning, see the [project repo](https://github.com/sxzgroup/quantum-subliminal-learning).
 
 Reference paper: https://arxiv.org/abs/2605.29557.
+
+### ORBIT-Q
+
+For the benchmark framework and datasets of dual-axis evaluation on quantum software frameworks and agents, see the [project repo](https://github.com/sxzgroup/ORBIT-Q).
+
+Reference paper: https://arxiv.org/abs/2607.03105.
 
 ### More works
 

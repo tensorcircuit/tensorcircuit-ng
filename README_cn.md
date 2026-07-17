@@ -111,13 +111,13 @@ print(g(theta))
 pip install tensorcircuit-ng
 ```
 
-我们推荐安装时同时安装 TensorFlow，这可以通过以下安装可选项实现：
+我们推荐安装时同时安装 JAX，这可以通过以下安装可选项实现：
 
 ```python
-pip install tensorcircuit-ng[tensorflow]
+pip install tensorcircuit-ng[jax]
 ```
 
-其他安装选项包括： `[torch]`, `[jax]`, `[qiskit]` 和 `[cloud]`。
+其他安装选项包括： `[torch]`, `[tensorflow]`, `[qiskit]` 和 `[cloud]`。
 
 此外我们有每日发布的最新版本 pip package，可以尝鲜开发的最新功能，请通过以下方式安装:
 
@@ -139,7 +139,7 @@ pip install tensorcircuit-nightly
 - 效率
   - 时间：与 TFQ, Pennylane, CuQuantum, TorchQuantum 或 Qiskit 相比，加速 10 到 10^6+ 倍
 
-  - 空间：600+ qubits 1D VQE 工作流（收敛能量误差：< 1%）
+  - 空间：[1000+ qubits 1D VQE 工作流](https://re-ra.xyz/%E5%9F%BA%E4%BA%8E-TensorCircuit-NG-%E7%9A%84%E5%8D%83%E6%AF%94%E7%89%B9%E4%B8%87%E5%8F%82%E6%95%B0%E5%85%A8%E6%A2%AF%E5%BA%A6%E9%87%8F%E5%AD%90%E7%AE%97%E6%B3%95%E8%AE%AD%E7%BB%83/)（收敛能量误差：< 0.5%）
 
 - 优雅
   - 灵活性：自定义张量收缩、多种 ML 后端/接口选择、多种数值精度、多种量子硬件
@@ -231,6 +231,12 @@ VQEX 在 MBL 相位识别上的应用见 [教程](/docs/source/tutorials/vqex_mb
 关于量子神经网络中潜意识学习（信息隐藏与传递）的模拟和分析代码，见 [项目](https://github.com/sxzgroup/quantum-subliminal-learning)。
 
 参考论文: https://arxiv.org/abs/2605.29557。
+
+### ORBIT-Q
+
+关于量子计算软件与智能体的双轴基准测试框架，见 [项目](https://github.com/sxzgroup/ORBIT-Q)。
+
+参考论文: https://arxiv.org/abs/2607.03105。
 
 ## 用户
 
