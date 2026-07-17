@@ -598,49 +598,87 @@ def _normalize_omeco_topology(
 
 
 def _omeco_tree_to_path(tree: Dict[str, Any], ntensors: int) -> List[Tuple[int, int]]:
-    leaf_indices: List[int] = []
+    if ntensors < 1:
+        raise ValueError("OMECO contraction trees require at least one tensor")
 
-    def collect(node: Dict[str, Any]) -> None:
+    leaf_indices: List[int] = []
+    postorder: List[Dict[str, Any]] = []
+    stack = [(tree, False)]
+    while stack:
+        node, expanded = stack.pop()
         if "tensor_index" in node:
             leaf_indices.append(int(node["tensor_index"]))
-            return
+            postorder.append(node)
+            continue
         if "tensorindex" in node:
             leaf_indices.append(int(node["tensorindex"]))
-            return
-        for child in node["args"]:
-            collect(child)
+            postorder.append(node)
+            continue
 
-    collect(tree)
-    offset = 1 if sorted(leaf_indices) == list(range(1, ntensors + 1)) else 0
-    queue = list(range(ntensors))
+        children = node["args"]
+        if len(children) != 2:
+            raise ValueError("omeco returned a non-binary contraction tree")
+        if expanded:
+            postorder.append(node)
+        else:
+            stack.append((node, True))
+            stack.append((children[1], False))
+            stack.append((children[0], False))
+
+    sorted_leaf_indices = sorted(leaf_indices)
+    if sorted_leaf_indices == list(range(ntensors)):
+        offset = 0
+    elif sorted_leaf_indices == list(range(1, ntensors + 1)):
+        offset = 1
+    else:
+        raise ValueError("omeco returned invalid tensor indices")
+    fenwick = [0] * (2 * ntensors)
+
+    def update(index: int, delta: int) -> None:
+        index += 1
+        while index < len(fenwick):
+            fenwick[index] += delta
+            index += index & -index
+
+    def rank(index: int) -> int:
+        total = 0
+        index += 1
+        while index:
+            total += fenwick[index]
+            index -= index & -index
+        return total - 1
+
+    for tensor_index in range(ntensors):
+        update(tensor_index, 1)
+
     path: List[Tuple[int, int]] = []
     next_index = ntensors
-
-    def visit(node: Dict[str, Any]) -> int:
-        nonlocal next_index
+    results: Dict[int, int] = {}
+    for node in postorder:
         if "tensor_index" in node:
-            return int(node["tensor_index"]) - offset
+            result = int(node["tensor_index"]) - offset
+            results[id(node)] = result
+            continue
         if "tensorindex" in node:
-            return int(node["tensorindex"]) - offset
-        if len(node["args"]) != 2:
-            raise ValueError("omeco returned a non-binary contraction tree")
+            result = int(node["tensorindex"]) - offset
+            results[id(node)] = result
+            continue
 
-        left = visit(node["args"][0])
-        right = visit(node["args"][1])
-        left_index = queue.index(left)
-        right_index = queue.index(right)
+        left = results[id(node["args"][0])]
+        right = results[id(node["args"][1])]
+        left_index = rank(left)
+        right_index = rank(right)
         if left_index > right_index:
             pair = (left_index, right_index)
         else:
             pair = (right_index, left_index)
-        queue.pop(pair[0])
-        queue.pop(pair[1])
-        queue.append(next_index)
+        update(left, -1)
+        update(right, -1)
+        update(next_index, 1)
         path.append(pair)
+        results[id(node)] = next_index
         next_index += 1
-        return next_index - 1
 
-    visit(tree)
     return path
 
 

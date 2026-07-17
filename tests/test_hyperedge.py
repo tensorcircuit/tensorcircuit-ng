@@ -281,6 +281,49 @@ def test_omeco_optimizer_autowrap(contractor_setup):
     assert isinstance(tc.contractor.keywords["optimizer"], cons.OMEOptimizer)
 
 
+@pytest.mark.parametrize(
+    ("tree", "expected"),
+    [
+        (
+            {
+                "args": [
+                    {"args": [{"tensor_index": 0}, {"tensor_index": 1}]},
+                    {"args": [{"tensor_index": 2}, {"tensor_index": 3}]},
+                ]
+            },
+            [(1, 0), (1, 0), (1, 0)],
+        ),
+        (
+            {
+                "args": [
+                    {"tensorindex": 1},
+                    {
+                        "args": [
+                            {"tensorindex": 2},
+                            {
+                                "args": [
+                                    {"tensorindex": 3},
+                                    {"tensorindex": 4},
+                                ]
+                            },
+                        ]
+                    },
+                ]
+            },
+            [(3, 2), (2, 1), (1, 0)],
+        ),
+    ],
+)
+def test_omeco_tree_to_path(tree, expected):
+    assert cons._omeco_tree_to_path(tree, 4) == expected
+
+
+def test_omeco_tree_to_path_invalid_leaves():
+    tree = {"args": [{"tensor_index": 0}, {"tensor_index": 2}]}
+    with pytest.raises(ValueError, match="invalid tensor indices"):
+        cons._omeco_tree_to_path(tree, 2)
+
+
 def test_omeco_contractor_shortcut():
     pytest.importorskip("omeco")
 

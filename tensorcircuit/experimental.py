@@ -991,7 +991,9 @@ class DistributedContractor:
             tree: ctg.ContractionTree, params: Tensor, slice_idx: int
         ) -> Tensor:
             nodes = self.nodes_fn(params)
-            _, standardized_nodes = get_tn_info(nodes)
+            standardized_nodes = sorted(
+                nodes, key=lambda node: getattr(node, "_stable_id_", -1)
+            )
             input_arrays = [node.tensor for node in standardized_nodes]
             sliced_arrays = tree.slice_arrays(input_arrays, slice_idx)
             result = tree.contract_core(sliced_arrays, backend=self._backend)
