@@ -52,6 +52,7 @@ filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore:Explicitly requested dtype*:UserWarning",
 ]
+pythonpath = ["."]
 
 
 [tool.mypy]

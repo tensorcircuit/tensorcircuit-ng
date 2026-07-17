@@ -4,6 +4,7 @@ Constants and setups
 
 # pylint: disable=invalid-name
 
+import functools
 import logging
 import sys
 import time
@@ -137,6 +138,43 @@ def set_tensornetwork_backend(
 set_backend = set_tensornetwork_backend
 
 set_tensornetwork_backend()
+
+# --- ContractionAlgebra state (mirrors dtypestr/set_dtype pattern) ---
+from .contraction_algebra import StandardAlgebra as _StandardAlgebra
+from .contraction_algebra.base import (
+    ContractionAlgebra as _ContractionAlgebra,
+)
+
+_contraction_algebra: _ContractionAlgebra = _StandardAlgebra()
+
+
+def get_contraction_algebra() -> _ContractionAlgebra:
+    return _contraction_algebra
+
+
+def set_contraction_algebra(alg: _ContractionAlgebra) -> None:
+    global _contraction_algebra
+    _contraction_algebra = alg
+
+
+# Aux output side-channel for multi-output (non-standard) algebras. Cleared and
+# refilled on each non-standard contraction by ``_stash_aux_outputs``; the
+# primary tensor is returned through the normal contraction return value, while
+# aux (e.g. counting degeneracy, sharing the primary's physical axis order) is
+# stashed here for the caller to read via ``_aux_outputs``.
+_aux_outputs_store: Dict[str, Any] = {}
+
+
+def _stash_aux_outputs(aux: Dict[str, Any]) -> None:
+    """Stash the most recent contraction's aux outputs (side channel for
+    multi-output algebras, e.g. counting degeneracy). Cleared per contraction."""
+    _aux_outputs_store.clear()
+    _aux_outputs_store.update(aux)
+
+
+def _aux_outputs() -> Dict[str, Any]:
+    """Test/accessor: snapshot of the stashed aux outputs."""
+    return dict(_aux_outputs_store)
 
 
 def set_function_backend(backend: Optional[str] = None) -> Callable[..., Any]:
@@ -297,6 +335,12 @@ def _sizen(node: tn.Node, is_log: bool = False) -> int:
 def _merge_single_gates(
     nodes: List[Any], total_size: Optional[int] = None
 ) -> Tuple[List[Any], int]:
+    if not isinstance(_contraction_algebra, _StandardAlgebra):
+        # _merge_single_gates contracts via tn.contract_parallel (native sum-product),
+        # bypassing the algebra kernel — skip it under a non-standard algebra.
+        if total_size is None:
+            total_size = sum([_sizen(t) for t in nodes])
+        return nodes, total_size
     # TODO(@refraction-ray): investigate whether too much copy here so that staging is slow for large circuit
     nodes = list(nodes)
     if total_size is None:
@@ -697,6 +741,84 @@ def _wrap_omeco_optimizer(optimizer: Any) -> Any:
     return optimizer
 
 
+def _stash_permuted_aux(
+    aux: Any, output_edge_order: Any, dangling_edges: Any, kbe: Any
+) -> None:
+    """Apply the output_edge_order permutation to aux (count co-indexed with energy)."""
+    order = output_edge_order if output_edge_order is not None else dangling_edges
+    perm = [dangling_edges.index(e) for e in order]
+    _stash_aux_outputs({k: kbe.transpose(v, tuple(perm)) for k, v in aux.items()})
+
+
+def _run_contraction(
+    raw_tensors: Any,
+    input_sets: Any,
+    output_set: Any,
+    size_dict: Any,
+    algorithm: Any,
+    ns: bool,
+    alg: Any,
+    kbe: Any,
+    be: Any,
+    strip_exponent: bool,
+    ctg: Any,
+) -> Any:
+    """Run the (possibly single-tensor) contraction, returning (final, exponent)."""
+    exponent = 0.0
+    if len(raw_tensors) == 1:
+        # Avoid cotengra bug for empty contraction paths
+        eq = input_sets[0] + "->" + output_set
+        final = alg.einsum(kbe, eq, *raw_tensors) if ns else be.einsum(eq, *raw_tensors)
+    else:
+        path = algorithm(input_sets, output_set, size_dict)
+        logger.info("the contraction path is given as %s" % str(path))
+        tree = ctg.ContractionTree.from_path(
+            input_sets, output_set, size_dict, path=path
+        )
+        if ns:
+            alg.on_contractor_ready(tree)
+            impl = (
+                functools.partial(alg.einsum, kbe),
+                functools.partial(alg.tensordot, kbe),
+            )
+            contractor = ctg.core.make_contractor(
+                tree, implementation=impl, prefer_einsum=alg.prefer_einsum
+            )
+            final = contractor(*raw_tensors)
+        elif not strip_exponent:
+            # autoray keeps AD and JIT support across backends
+            contractor = ctg.core.make_contractor(tree, implementation="autoray")
+            final = contractor(*raw_tensors)
+        else:
+            final, exponent = tree.contract(raw_tensors, strip_exponent=True)
+    return final, exponent
+
+
+def _decode_aux(ns: bool, rep: Any, kbe: Any, final: Any, output_set: Any) -> Any:
+    """Decode the contraction output under a non-standard algebra; else no aux."""
+    if not ns:
+        return final, {}
+    primary, aux = rep.decode(kbe, final)
+    assert primary.ndim == len(output_set), (
+        "representation.decode primary rank %d != len(output_set) %d; "
+        "decode must strip non-physical storage axes before tn.Node wraps it"
+        % (primary.ndim, len(output_set))
+    )
+    return primary, aux
+
+
+def _rewire_dangling_edges(final_node: Any, dangling_edges: Any, nodes: Any) -> None:
+    """Point every dangling edge at final_node, preserving topology order."""
+    for i, edge in enumerate(dangling_edges):
+        if edge.node1 in nodes:
+            edge.node1 = final_node
+            edge.axis1 = i
+        else:
+            edge.node2 = final_node
+            edge.axis2 = i
+    final_node.edges = list(dangling_edges)
+
+
 def _algebraic_base_contraction(
     nodes: List[tn.Node],
     algorithm: Any,
@@ -710,50 +832,59 @@ def _algebraic_base_contraction(
     import cotengra as ctg
 
     raw_tensors, input_sets, output_set, size_dict = _extract_topology(nodes)
-    # Use the backend of the first node
-    be = nodes[0].backend
+    be = nodes[0].backend  # tn backend: standard native ops + tn.Node wrap
 
-    if len(raw_tensors) == 1:
-        # Avoid cotengra bug for empty contraction paths
-        final_raw_tensor = be.einsum(input_sets[0] + "->" + output_set, *raw_tensors)
-        exponent = 0.0
-    else:
-        path = algorithm(input_sets, output_set, size_dict)
-        logger.info("the contraction path is given as %s" % str(path))
+    alg = get_contraction_algebra()
+    rep = alg.representation
+    ns = not isinstance(alg, _StandardAlgebra)
+    kbe = backend if ns else be  # algebra kernels need the tc backend (max/argmax/...)
 
-        tree = ctg.ContractionTree.from_path(
-            input_sets, output_set, size_dict, path=path
-        )
+    # Unconditional clear: every contraction (standard or non-standard) wipes the
+    # aux side-channel so a subsequent ``degeneracy()`` cannot read a stale count
+    # left by an earlier counting contraction. Non-standard decodes then refill it.
+    _stash_aux_outputs({})
+    if ns:
+        if kws.get("strip_exponent", False):
+            raise ValueError(
+                "strip_exponent is incompatible with a non-standard ContractionAlgebra"
+            )
+        alg.on_contraction_start(nodes)
+        raw_tensors = rep.encode(kbe, raw_tensors)
 
-        # Use autoray to keep AD and JIT support across backends
-        # Note: cotengra's make_contractor handles the orchestration
-        if not kws.get("strip_exponent", False):
-            contractor = ctg.core.make_contractor(tree, implementation="autoray")
-            final_raw_tensor = contractor(*raw_tensors)
-        else:
-            final_raw_tensor, exponent = tree.contract(raw_tensors, strip_exponent=True)
+    final, exponent = _run_contraction(
+        raw_tensors,
+        input_sets,
+        output_set,
+        size_dict,
+        algorithm,
+        ns,
+        alg,
+        kbe,
+        be,
+        kws.get("strip_exponent", False),
+        ctg,
+    )
 
-    final_node = tn.Node(final_raw_tensor, backend=be)
+    final, aux = _decode_aux(ns, rep, kbe, final, output_set)
+
+    final_node = tn.Node(final, backend=be)
 
     # Resolve dangling edges in the same order as in _extract_topology
     dangling_edges = sorted_edges(tn.get_subgraph_dangling(nodes))
 
     # Update the edges to point to the new final_node
-    for i, edge in enumerate(dangling_edges):
-        if edge.node1 in nodes:
-            edge.node1 = final_node
-            edge.axis1 = i
-        else:
-            edge.node2 = final_node
-            edge.axis2 = i
-    final_node.edges = list(dangling_edges)
+    _rewire_dangling_edges(final_node, dangling_edges, nodes)
 
     if not ignore_edge_order:
         if output_edge_order is None:
             output_edge_order = dangling_edges
         final_node.reorder_edges(list(output_edge_order))
 
-    if kws.get("strip_exponent", False):
+    # Apply the same output_edge_order permutation to aux (count co-indexed with energy)
+    if ns and aux:
+        _stash_permuted_aux(aux, output_edge_order, dangling_edges, kbe)
+
+    if kws.get("strip_exponent", False) and not ns:
         return final_node, exponent
 
     return final_node
@@ -902,7 +1033,8 @@ def _base(
     # 1. Resolve topology and check for hyperedges
     has_hyperedges = any(isinstance(n, tn.CopyNode) for n in nodes)
 
-    if use_primitives is True or (use_primitives is None and has_hyperedges):
+    _ns_alg = not isinstance(_contraction_algebra, _StandardAlgebra)
+    if use_primitives is True or _ns_alg or (use_primitives is None and has_hyperedges):
         # ==========================================
         # NEW ALGEBRAIC EXECUTION PATH (Opt-in)
         # ==========================================
@@ -1142,6 +1274,7 @@ def set_contractor(
     contraction_info: bool = False,
     debug_level: int = 0,
     use_primitives: Optional[bool] = None,
+    algebra: Optional[_ContractionAlgebra] = None,
     **kws: Any,
 ) -> Callable[..., Any]:
     """
@@ -1162,6 +1295,20 @@ def set_contractor(
     :return: The new tensornetwork with its contractor set.
     :rtype: tn.Node
     """
+    if algebra is not None:
+        if not isinstance(algebra, _StandardAlgebra):
+            use_primitives = True
+            if kws.get("preprocessing", False):
+                raise ValueError(
+                    "preprocessing is incompatible with a non-standard "
+                    "ContractionAlgebra (it contracts via native sum-product)"
+                )
+            if kws.get("strip_exponent", False):
+                raise ValueError(
+                    "strip_exponent is incompatible with a non-standard "
+                    "ContractionAlgebra (its log-scaling assumes sum-product)"
+                )
+        set_contraction_algebra(algebra)
     if not method:
         method = "greedy"
         # auto for small size fallbacks to dp, which has bug for now
@@ -1291,11 +1438,13 @@ def set_function_contractor(*confargs: Any, **confkws: Any) -> Callable[..., Any
         @wraps(f)
         def newf(*args: Any, **kws: Any) -> Any:
             old_contractor = getattr(thismodule, "contractor")
+            old_algebra = get_contraction_algebra()
             set_contractor(*confargs, **confkws)
             try:
                 return f(*args, **kws)
             finally:
                 _set_global_contractor(old_contractor)
+                set_contraction_algebra(old_algebra)
 
         return newf
 
@@ -1311,11 +1460,13 @@ def runtime_contractor(*confargs: Any, **confkws: Any) -> Iterator[Any]:
     :rtype: Iterator[Any]
     """
     old_contractor = getattr(thismodule, "contractor")
+    old_algebra = get_contraction_algebra()
     nc = set_contractor(*confargs, **confkws)
     try:
         yield nc
     finally:
         _set_global_contractor(old_contractor)
+        set_contraction_algebra(old_algebra)
 
 
 def split_rules(

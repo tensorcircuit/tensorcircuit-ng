@@ -4,6 +4,10 @@
 
 ### Added
 
+- add unified ContractionAlgebra interface (`set_contractor(algebra=...)` + boundary
+  encode/decode) with tropical (max-plus) and complex<bfloat16> pair-algebra
+  reference applications.
+
 - Add efficient `expectation_pss` method for `U1Circuit`.
 
 - Support MVP mode for timeevol methods.
