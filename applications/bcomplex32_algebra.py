@@ -9,6 +9,8 @@ keep the pair axis off tn.Node (dodges the axis==edge wall).
 from typing import Any, Dict, Iterator, List, Tuple
 import contextlib
 
+import numpy as np
+
 import tensorcircuit.cons as cons
 from tensorcircuit.contraction_algebra import ContractionAlgebra, Representation
 
@@ -46,6 +48,39 @@ def _pair_tensordot(be: Backend, a: Tensor, b: Tensor, axes: Any) -> Tensor:
     return be.stack([cr, ci], axis=-1)
 
 
+def _einsum_single_operand_half(
+    be: Backend, x: Tensor, lhs: str, out_subs: str
+) -> Tensor:
+    """Apply a 1-operand einsum to one bf16 half (decomposed into diagonal + sum
+    + transpose), staying in bf16 end-to-end.  Handles reductions, transposes,
+    diagonals, and traces without float32 upcast.
+    """
+    x_subs = list(lhs)  # mutable subscript list we update in place
+
+    # Step 1 — diagonalise every repeated index.
+    while True:
+        dup = next((c for c in set(x_subs) if x_subs.count(c) > 1), None)
+        if dup is None:
+            break
+        pos = [i for i, c in enumerate(x_subs) if c == dup]
+        x = np.diagonal(x, axis1=pos[0], axis2=pos[-1])
+        x_subs = [c for i, c in enumerate(x_subs) if i != pos[-1]] + [dup]
+
+    # Step 2 — sum over indices NOT wanted in the output.
+    out_set = set(out_subs)
+    sum_indices = [c for c in x_subs if c not in out_set]
+    if sum_indices:
+        x = be.sum(x, axis=tuple(x_subs.index(c) for c in sum_indices))
+        x_subs = [c for c in x_subs if c in out_set]
+
+    # Step 3 — transpose remaining indices into the requested output order.
+    if x_subs != list(out_subs):
+        perm = tuple(x_subs.index(c) for c in out_subs)
+        x = be.transpose(x, perm)
+
+    return x
+
+
 def _pair_einsum(be: Backend, eq: str, *operands: Tensor) -> Tensor:
     """Complex einsum = 4 real bf16 einsums (4M for 2 operands, 2 for 1).
 
@@ -78,38 +113,11 @@ def _pair_einsum(be: Backend, eq: str, *operands: Tensor) -> Tensor:
             return a
 
         lhs, out_subs = eq.split("->")
-
-        def _single_op(x: Tensor) -> Tensor:
-            """Apply a 1-operand einsum to one bf16 half, staying in bf16."""
-            x_subs = list(lhs)  # mutable subscript list we update in place
-
-            # Step 1 — diagonalise every repeated index.
-            # ``np.diagonal(x, axis1=p0, axis2=p1)`` removes axis-p1, then
-            # appends the diagonal (size = common dim) at the end.
-            while True:
-                dup = next((c for c in set(x_subs) if x_subs.count(c) > 1), None)
-                if dup is None:
-                    break
-                pos = [i for i, c in enumerate(x_subs) if c == dup]
-                x = np.diagonal(x, axis1=pos[0], axis2=pos[-1])
-                x_subs = [c for i, c in enumerate(x_subs) if i != pos[-1]] + [dup]
-
-            # Step 2 — sum over indices NOT wanted in the output.
-            out_set = set(out_subs)
-            sum_indices = [c for c in x_subs if c not in out_set]
-            if sum_indices:
-                x = be.sum(x, axis=tuple(x_subs.index(c) for c in sum_indices))
-                x_subs = [c for c in x_subs if c in out_set]
-
-            # Step 3 — transpose remaining indices into the requested output order.
-            if x_subs != list(out_subs):
-                perm = tuple(x_subs.index(c) for c in out_subs)
-                x = be.transpose(x, perm)
-
-            return x
-
         return be.stack(
-            [_single_op(a[..., 0]), _single_op(a[..., 1])],
+            [
+                _einsum_single_operand_half(be, a[..., 0], lhs, out_subs),
+                _einsum_single_operand_half(be, a[..., 1], lhs, out_subs),
+            ],
             axis=-1,
         )
 
@@ -121,7 +129,7 @@ def _pair_einsum(be: Backend, eq: str, *operands: Tensor) -> Tensor:
     # Parse the einsum equation once
     if "->" not in eq:
         raise ValueError(
-            f"implicit-mode einsum {eq!r} not supported for bf16; " f"use explicit '->'"
+            f"implicit-mode einsum {eq!r} not supported for bf16; use explicit '->'"
         )
     lhs, out_subs = eq.split("->")
     a_subs, b_subs = lhs.split(",")
