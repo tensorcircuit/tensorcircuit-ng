@@ -88,3 +88,42 @@ def test_bf16_wall_avoidance_canary():
     c2.H(0)
     c2.cnot(0, 1)  # subsequent native contraction
     assert np.asarray(c2.state()).shape == (4,)  # algebra restored, no leak
+
+
+def test_pair_einsum_keeps_bfloat16_dtype():
+    """T1: _pair_einsum must compute in bf16, not upcast to float32.
+
+    numpy's np.einsum rejects bf16; the old _pair_einsum worked around it by
+    upcasting to float32 (so its output pair was float32, not bf16). The rewrite
+    uses manual tensordot decomposition, which stays bf16. This test locks that.
+    """
+    import ml_dtypes
+
+    bf = ml_dtypes.bfloat16
+    a = np.array([[1.0 + 2.0j, 3.0j], [-1.0j, 2.0 - 1.0j]], dtype=np.complex64)
+    b = np.array([[0.5 + 0.5j, 1.0j], [2.0j, -1.0 + 1.0j]], dtype=np.complex64)
+    pa = _complex_to_pair(be, a)  # bf16 pair, shape (2, 2, 2)
+    pb = _complex_to_pair(be, b)
+    out = np.asarray(_pair_einsum(be, "ij,jk->ik", pa, pb))
+    assert out.dtype == bf, f"_pair_einsum upcast to {out.dtype}; expected bfloat16"
+
+
+def test_bf16_ghz8_runs_and_matches_native():
+    """T3: the 8-qubit GHZ that previously crashed (cotengra autoray transpose on
+    a pair result) now runs under bcomplex32 and matches native within bf16
+    tolerance. prefer_einsum=True avoids the transpose path; the genuine-bf16
+    kernel keeps intermediates bf16 end-to-end.
+    """
+
+    def ghz(n):
+        c = tc.Circuit(n)
+        c.H(0)
+        for i in range(n - 1):
+            c.cnot(i, i + 1)
+        return np.asarray(c.state())
+
+    ref = ghz(8)
+    with bcomplex32():
+        got = ghz(8)
+    assert got.shape == ref.shape
+    assert np.allclose(got, ref, rtol=5e-2), f"max abs diff = {np.abs(got - ref).max()}"
