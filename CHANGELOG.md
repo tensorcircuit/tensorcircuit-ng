@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.8.0
+
 ### Added
 
 - Add efficient `expectation_pss` method for `U1Circuit`.
