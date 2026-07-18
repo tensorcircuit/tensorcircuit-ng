@@ -1274,12 +1274,16 @@ def set_contractor(
     contraction_info: bool = False,
     debug_level: int = 0,
     use_primitives: Optional[bool] = None,
-    algebra: Optional[_ContractionAlgebra] = None,
     **kws: Any,
 ) -> Callable[..., Any]:
     """
     To set runtime contractor of the tensornetwork for a better contraction path.
     For more information on the usage of contractor, please refer to independent tutorial.
+
+    To change the contraction algebra, use ``cons.set_contraction_algebra(alg)``
+    separately (the algebra is orthogonal to the contractor configuration).  The
+    ``tropical()`` / ``bcomplex32()`` / ``counting_tropical()`` context managers
+    are the recommended way to switch algebras for a block of code.
 
     :param method: "auto", "greedy", "branch", "plain", "tng", "custom",
         "custom_stateful". Also supports shortcuts like "cotengra",
@@ -1295,20 +1299,6 @@ def set_contractor(
     :return: The new tensornetwork with its contractor set.
     :rtype: tn.Node
     """
-    if algebra is not None:
-        if not isinstance(algebra, _StandardAlgebra):
-            use_primitives = True
-            if kws.get("preprocessing", False):
-                raise ValueError(
-                    "preprocessing is incompatible with a non-standard "
-                    "ContractionAlgebra (it contracts via native sum-product)"
-                )
-            if kws.get("strip_exponent", False):
-                raise ValueError(
-                    "strip_exponent is incompatible with a non-standard "
-                    "ContractionAlgebra (its log-scaling assumes sum-product)"
-                )
-        set_contraction_algebra(algebra)
     if not method:
         method = "greedy"
         # auto for small size fallbacks to dp, which has bug for now

@@ -41,7 +41,7 @@ def test_public_api_surface():
     from tensorcircuit import contraction_algebra as tca
 
     # After Task 14 the package exports only the 4 base names; activation lives
-    # in-source via cons.set_contraction_algebra / set_contractor(algebra=...).
+    # in-source via cons.set_contraction_algebra.
     for name in [
         "ContractionAlgebra",
         "StandardAlgebra",
@@ -222,7 +222,7 @@ def test_contraction_algebra_representation_default_is_identity():
     assert isinstance(BareAlgebra().representation, IdentityRepresentation)
 
 
-# --- Task 2: cons.py algebra state + set_contractor(algebra=) ---
+# --- Task 2: cons.py algebra state (set_contraction_algebra) ---
 
 
 class _NS(ContractionAlgebra):  # non-standard stub for constraint tests
@@ -236,48 +236,43 @@ class _NS(ContractionAlgebra):  # non-standard stub for constraint tests
         return be.einsum(eq, *ops)
 
 
-def test_set_contractor_accepts_algebra_kwarg():
+def test_set_contraction_algebra():
     prev = cons.get_contraction_algebra()
     try:
-        cons.set_contractor("greedy", algebra=_NS())
+        cons.set_contraction_algebra(_NS())
         assert isinstance(cons.get_contraction_algebra(), _NS)
     finally:
         cons.set_contraction_algebra(prev)
 
 
-def test_set_contractor_rejects_preprocessing_with_nonstandard_algebra():
-    import pytest
-
-    ns_algebra = _NS()
-    with pytest.raises(ValueError):
-        cons.set_contractor("greedy", algebra=ns_algebra, preprocessing=True)
-
-
-def test_set_contractor_rejects_strip_exponent_with_nonstandard_algebra():
-    import pytest
-
-    ns_algebra = _NS()
-    with pytest.raises(ValueError):
-        cons.set_contractor("greedy", algebra=ns_algebra, strip_exponent=True)
-
-
 def test_runtime_contractor_restores_algebra():
     prev = cons.get_contraction_algebra()
-    with cons.runtime_contractor("greedy", algebra=_NS()):
+    cons.set_contraction_algebra(_NS())
+    try:
+        with cons.runtime_contractor("greedy"):
+            assert isinstance(cons.get_contraction_algebra(), _NS)
+        # runtime_contractor saves/restores algebra independently of the contractor,
+        # so algebra set before entering survives unchanged.
         assert isinstance(cons.get_contraction_algebra(), _NS)
-    assert cons.get_contraction_algebra() is prev
+    finally:
+        cons.set_contraction_algebra(prev)
 
 
 def test_set_function_contractor_restores_algebra():
     prev = cons.get_contraction_algebra()
+    cons.set_contraction_algebra(_NS())
+    try:
 
-    @cons.set_function_contractor("greedy", algebra=_NS())
-    def f():
-        return cons.get_contraction_algebra()
+        @cons.set_function_contractor("greedy")
+        def f():
+            return cons.get_contraction_algebra()
 
-    inside = f()
-    assert isinstance(inside, _NS)  # algebra active during the call
-    assert cons.get_contraction_algebra() is prev  # restored after
+        inside = f()
+        assert isinstance(inside, _NS)  # algebra active during the call
+        # after the call, algebra survives unchanged (it was not set by the decorator)
+        assert isinstance(cons.get_contraction_algebra(), _NS)
+    finally:
+        cons.set_contraction_algebra(prev)
 
 
 # --- Task 3: cons.py guards (_merge_single_gates skip + _base routing) ---

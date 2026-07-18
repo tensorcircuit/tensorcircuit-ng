@@ -2,8 +2,8 @@
 boundary representation, consulted by ``cons._algebraic_base_contraction``.
 
 Implement ``ContractionAlgebra`` (with a ``Representation``) and activate via
-``cons.set_contraction_algebra(...)`` (or ``cons.set_contractor(algebra=...)``,
-``cons.runtime_contractor(..., algebra=...)``). The in-source ``cons._base``
+``cons.set_contraction_algebra(...)`` -- the single entry-point for switching
+contraction algebras. The in-source ``cons._base``
 routes any non-standard algebra to ``_algebraic_base_contraction``, which runs
 encode -> algebra kernels -> decode; no monkey-patching is required.
 

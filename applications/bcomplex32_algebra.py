@@ -1,7 +1,7 @@
 """complex<bfloat16> pair-algebra — a reference APPLICATION of ContractionAlgebra.
 
 Pair repr: complex tensor = stack([re, im], axis=-1) of bf16. Contraction = 4 real
-bf16 matmuls (4M). Activated via ``set_contractor(algebra=ComplexPairAlgebra())`` or
+bf16 matmuls (4M). Activated via ``cons.set_contraction_algebra(ComplexPairAlgebra())`` or
 the ``bcomplex32()`` CM. encode/decode at the ``_algebraic_base_contraction`` boundary
 keep the pair axis off tn.Node (dodges the axis==edge wall).
 """

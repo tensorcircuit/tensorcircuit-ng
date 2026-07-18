@@ -4,7 +4,7 @@
 The feature is ``tensorcircuit.contraction_algebra`` -- the ``ContractionAlgebra`` and
 ``Representation`` ABCs -- wired in-source into ``cons._base``, which routes any
 non-standard algebra through ``cons._algebraic_base_contraction`` (no monkey-patching).
-A custom algebra is activated either via ``tc.set_contractor(algebra=...)`` or by the
+A custom algebra is activated via ``tc.set_contraction_algebra(alg)`` or by the
 ``tropical()`` / ``counting_tropical()`` context managers below. This file is one
 complete algebra built on top of the ABCs -- an importable reference module, not a
 runnable demo (for that, see ``examples/tropical_ising.py``). Kept under
