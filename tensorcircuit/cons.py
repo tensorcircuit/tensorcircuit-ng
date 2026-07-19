@@ -22,6 +22,10 @@ from networkx.utils import UnionFind
 from .backends.numpy_backend import NumpyBackend
 from .backends import get_backend
 from .simplify import _multi_remove
+from .contraction_algebra import (
+    ContractionAlgebra as _ContractionAlgebra,
+    StandardAlgebra as _StandardAlgebra,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -140,10 +144,6 @@ set_backend = set_tensornetwork_backend
 set_tensornetwork_backend()
 
 # --- ContractionAlgebra state (mirrors dtypestr/set_dtype pattern) ---
-from .contraction_algebra import (
-    ContractionAlgebra as _ContractionAlgebra,
-    StandardAlgebra as _StandardAlgebra,
-)
 
 _contraction_algebra: _ContractionAlgebra = _StandardAlgebra()
 
