@@ -33,10 +33,10 @@ def _complex_to_pair(be: Backend, t: Tensor) -> Tensor:
 
 
 def _pair_to_complex(be: Backend, pair: Tensor) -> Tensor:
-    """pair of bf16 -> complex64 tensor (recombine; no copy risk via cast)."""
-    re = be.cast(pair[..., 0], "float32")
-    im = be.cast(pair[..., 1], "float32")
-    return be.cast(re + 1j * im, "complex64")
+    """pair of bf16 -> complex tensor (recombine; no copy risk via cast)."""
+    re = be.cast(pair[..., 0], cons.rdtypestr)
+    im = be.cast(pair[..., 1], cons.rdtypestr)
+    return be.cast(re + 1j * im, cons.dtypestr)
 
 
 def _pair_tensordot(be: Backend, a: Tensor, b: Tensor, axes: Any) -> Tensor:
@@ -175,7 +175,9 @@ class PairBf16Representation(Representation):
 class ComplexPairAlgebra(ContractionAlgebra):
     name = "bcomplex32_pair"
     representation = PairBf16Representation()
-    prefer_einsum = True  # pair operands carry a trailing storage axis
+
+    def get_contractor_kwargs(self) -> dict:
+        return {"prefer_einsum": True}
 
     def tensordot(self, be: Backend, a: Tensor, b: Tensor, axes: Any) -> Tensor:
         return _pair_tensordot(be, a, b, axes)

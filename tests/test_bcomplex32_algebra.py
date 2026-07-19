@@ -111,7 +111,7 @@ def test_pair_einsum_keeps_bfloat16_dtype():
 def test_bf16_ghz8_runs_and_matches_native():
     """T3: the 8-qubit GHZ that previously crashed (cotengra autoray transpose on
     a pair result) now runs under bcomplex32 and matches native within bf16
-    tolerance. prefer_einsum=True avoids the transpose path; the genuine-bf16
+    tolerance. get_contractor_kwargs returns prefer_einsum=True, which avoids the transpose path; the genuine-bf16
     kernel keeps intermediates bf16 end-to-end.
     """
 

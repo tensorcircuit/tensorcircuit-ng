@@ -782,7 +782,7 @@ def _run_contraction(
                 functools.partial(alg.tensordot, kbe),
             )
             contractor = ctg.core.make_contractor(
-                tree, implementation=impl, prefer_einsum=alg.prefer_einsum
+                tree, implementation=impl, **alg.get_contractor_kwargs()
             )
             final = contractor(*raw_tensors)
         elif not strip_exponent:

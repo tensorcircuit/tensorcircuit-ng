@@ -1,6 +1,4 @@
 """Tropical (max-plus) Ising ground-state energy via TensorCircuit-NG contraction.
-
-Run: PYTHONPATH=<repo> python examples/tropical_ising.py
 """
 
 import itertools

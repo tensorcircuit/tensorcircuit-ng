@@ -402,3 +402,9 @@ def test_aux_stash_handles_ignore_edge_order_with_none_order(monkeypatch):
         assert "count" in cons._aux_outputs()  # aux stashed without crashing
     finally:
         cons.set_contraction_algebra(prev)
+
+
+def test_get_contractor_kwargs_default():
+    assert StandardAlgebra().get_contractor_kwargs() == {}
+    # Concrete algebra without override inherits the default
+    assert _NS().get_contractor_kwargs() == {}

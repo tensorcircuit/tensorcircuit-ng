@@ -59,14 +59,22 @@ class ContractionAlgebra(ABC):
 
     name: str = "abstract"
     representation: Representation = IdentityRepresentation()
-    # When operands carry a trailing non-physical storage axis (e.g. the
-    # complex<bf16> pair), cotengra's tensordot mode post-transposes results via
-    # autoray and mishandles that extra axis (ValueError: axes don't match array)
-    # -- set True to force einsum-only execution, which forwards operands verbatim
-    # to ``einsum`` and skips the autoray transpose. Default False keeps tensordot
-    # mode: tropical config-recovery backtracking depends on the tensordot
-    # intermediate layout and would break under forced einsum.
-    prefer_einsum: bool = False
+
+    def get_contractor_kwargs(self) -> dict:
+        """Extra kwargs forwarded to cotengra's ``make_contractor``.
+
+        Override to return ``{'prefer_einsum': True}`` when your algebra's
+        ``tensordot`` kernel carries non-physical storage axes (e.g. the
+        complex<bf16> pair axis) that cotengra's post-tensordot autoray
+        transpose would mishandle (ValueError: axes don't match array).
+        ``prefer_einsum=True`` forces einsum-only execution, which skips
+        the transpose entirely.
+
+        Default ``{}`` keeps the standard tensordot+einsum mix — required
+        by tropical config-recovery backtracking, which depends on the
+        tensordot intermediate layout.
+        """
+        return {}
 
     @abstractmethod
     def tensordot(self, be: Backend, a: Tensor, b: Tensor, axes: Any) -> Tensor:
