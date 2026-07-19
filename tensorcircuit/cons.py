@@ -24,7 +24,7 @@ from .backends import get_backend
 from .simplify import _multi_remove
 from .contraction_algebra import (
     ContractionAlgebra as _ContractionAlgebra,
-    StandardAlgebra as _StandardAlgebra,
+    IdentityRepresentation,
 )
 
 logger = logging.getLogger(__name__)
@@ -841,14 +841,16 @@ def _algebraic_base_contraction(
     be = nodes[0].backend  # tn backend: standard native ops + tn.Node wrap
 
     alg = get_contraction_algebra()
-    rep = alg.representation
-    ns = not isinstance(alg, _StandardAlgebra)
-    kbe = backend if ns else be  # algebra kernels need the tc backend (max/argmax/...)
+    ns = alg is not None
+
+    if ns:
+        rep = alg.representation
+        kbe = backend  # algebra kernels need the tc backend (max/argmax/...)
+    else:
+        rep = IdentityRepresentation()  # no-op; _decode_aux skips it when ns=False
+        kbe = be
     # be and backend are normally the same object: tn.set_default_backend syncs them.
 
-    # Unconditional clear: every contraction (standard or non-standard) wipes the
-    # aux side-channel so a subsequent ``degeneracy()`` cannot read a stale count
-    # left by an earlier counting contraction. Non-standard decodes then refill it.
     _stash_aux_outputs({})
     if ns:
         if kws.get("strip_exponent", False):
