@@ -345,7 +345,7 @@ def test_standard_algebra_contraction_matches_native():
     b = tn.Node(rng.standard_normal((3, 4)).astype(np.complex64))
     tn.connect(a[1], b[0])
     prev = cons.get_contraction_algebra()
-    assert prev is None  # default is None, not StandardAlgebra
+    assert prev is None
     cons.set_contraction_algebra(StandardAlgebra())
     try:
         import opt_einsum
