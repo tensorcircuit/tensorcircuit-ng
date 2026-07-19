@@ -279,6 +279,7 @@ def test_set_function_contractor_restores_algebra():
 
 
 def test_merge_single_gates_skipped_under_nonstandard_algebra(monkeypatch):
+    import numpy as np
     import tensornetwork as tn
 
     prev = cons.get_contraction_algebra()
@@ -291,10 +292,9 @@ def test_merge_single_gates_skipped_under_nonstandard_algebra(monkeypatch):
             )
 
         monkeypatch.setattr(tn, "contract_parallel", boom)
-        out = cons._merge_single_gates(
-            ["fake_node"], 7
-        )  # guard fires before any node access
-        assert out == (["fake_node"], 7)
+        node = tn.Node(np.zeros(2))
+        out = cons._merge_single_gates([node], 7)
+        assert out[0] == [node] and out[1] == 7
     finally:
         cons.set_contraction_algebra(prev)
 

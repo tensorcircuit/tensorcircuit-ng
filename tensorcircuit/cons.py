@@ -162,6 +162,12 @@ def set_contraction_algebra(alg: _ContractionAlgebra) -> None:
 # primary tensor is returned through the normal contraction return value, while
 # aux (e.g. counting degeneracy, sharing the primary's physical axis order) is
 # stashed here for the caller to read via ``_aux_outputs``.
+#
+# Thread-safety: this global, along with ``_trace`` and ``_ctx`` in
+# ``applications/tropical_algebra.py``, is module-level mutable state cleared
+# per contraction. Concurrent contractions will corrupt each other. Acceptable
+# for the single-threaded research use case; see also
+# ``docs/superpowers/plans/2026-07-19-L3-bf16-backend-generic.md``.
 _aux_outputs_store: Dict[str, Any] = {}
 
 
@@ -838,6 +844,7 @@ def _algebraic_base_contraction(
     rep = alg.representation
     ns = not isinstance(alg, _StandardAlgebra)
     kbe = backend if ns else be  # algebra kernels need the tc backend (max/argmax/...)
+    # be and backend are normally the same object: tn.set_default_backend syncs them.
 
     # Unconditional clear: every contraction (standard or non-standard) wipes the
     # aux side-channel so a subsequent ``degeneracy()`` cannot read a stale count
@@ -1036,7 +1043,7 @@ def _base(
     _ns_alg = not isinstance(_contraction_algebra, _StandardAlgebra)
     if use_primitives is True or _ns_alg or (use_primitives is None and has_hyperedges):
         # ==========================================
-        # NEW ALGEBRAIC EXECUTION PATH (Opt-in)
+        # ALGEBRAIC EXECUTION PATH
         # ==========================================
         return _algebraic_base_contraction(
             nodes, algorithm, output_edge_order, ignore_edge_order, **kws
@@ -1045,6 +1052,8 @@ def _base(
     # ==========================================
     # ORIGINAL EXECUTION PATH (100% Backward Compatible)
     # ==========================================
+
+    _stash_aux_outputs({})  # clear stale aux from prior non-standard contraction
 
     for edge in edges:
         if not edge.is_disabled:  # if its disabled we already contracted it

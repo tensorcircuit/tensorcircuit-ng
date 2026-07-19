@@ -4,7 +4,7 @@
 
 ### Added
 
-- add unified ContractionAlgebra interface (`set_contractor(algebra=...)` + boundary
+- add unified ContractionAlgebra interface (`set_contraction_algebra(...)` + boundary
   encode/decode) with tropical (max-plus) and complex<bfloat16> pair-algebra
   reference applications.
 

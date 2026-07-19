@@ -229,6 +229,9 @@ def _resolve_repeats(
     """
     if len(set(idxs)) != len(idxs):
         resolved = "".join(dict.fromkeys(idxs))
+        # Diagonal extraction: exactly one element contributes per output position,
+        # so the standard (sum, multiply) einsum is equivalent to max — both
+        # reduce to identity for a singleton set of values.
         e = be.einsum("".join(idxs) + "->" + resolved, pair[..., 0])
         n = be.einsum("".join(idxs) + "->" + resolved, pair[..., 1])
         return e, n, list(resolved)
@@ -484,7 +487,9 @@ def _tracking_einsum(be: Backend, eq: str, *operands: Tensor) -> Tensor:
         contract_labels = [c for c in all_idx if c not in out_labels]
 
         # Full-layout pair sum (same construction as _tropical_einsum).
-        s = _expand_to_layout_pair(be, a, b, ia, ib, all_idx)
+        s = _expand_to_layout(be, a, ia, all_idx) + _expand_to_layout(
+            be, b, ib, all_idx
+        )
 
         if not contract_labels:
             # Pure outer product (hyperedge with no contraction): no argmax to take.
@@ -520,24 +525,6 @@ def _tracking_einsum(be: Backend, eq: str, *operands: Tensor) -> Tensor:
                 }
             )
     return _tropical_einsum(be, eq, *operands)
-
-
-def _expand_to_layout_pair(
-    be: Backend,
-    a: Tensor,
-    b: Tensor,
-    ia: Sequence[str],
-    ib: Sequence[str],
-    all_idx: Sequence[str],
-) -> Tensor:
-    """Build the full-layout pair-sum ``a + b`` broadcast over ``all_idx``.
-
-    Mirrors the pair-sum construction inside ``_tropical_einsum`` (factors
-    ``_expand_to_layout`` for both operands). Kept local so this module does not
-    reach into a private helper whose signature may change.
-    """
-
-    return _expand_to_layout(be, a, ia, all_idx) + _expand_to_layout(be, b, ib, all_idx)
 
 
 class MaxPlusTrackingAlgebra(MaxPlusAlgebra):

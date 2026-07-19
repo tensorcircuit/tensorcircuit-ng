@@ -126,4 +126,6 @@ def test_bf16_ghz8_runs_and_matches_native():
     with bcomplex32():
         got = ghz(8)
     assert got.shape == ref.shape
-    assert np.allclose(got, ref, rtol=5e-2), f"max abs diff = {np.abs(got - ref).max()}"
+    assert np.allclose(
+        got, ref, rtol=1.5e-2
+    ), f"max abs diff = {np.abs(got - ref).max()}"
