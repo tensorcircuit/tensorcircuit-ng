@@ -152,7 +152,7 @@ def get_contraction_algebra() -> Optional[_ContractionAlgebra]:
     return _contraction_algebra
 
 
-def set_contraction_algebra(alg: _ContractionAlgebra) -> None:
+def set_contraction_algebra(alg: Optional[_ContractionAlgebra]) -> None:
     global _contraction_algebra
     _contraction_algebra = alg
 
@@ -841,9 +841,8 @@ def _algebraic_base_contraction(
     be = nodes[0].backend  # tn backend: standard native ops + tn.Node wrap
 
     alg = get_contraction_algebra()
-    ns = alg is not None
 
-    if ns:
+    if alg is not None:
         rep = alg.representation
         kbe = backend  # algebra kernels need the tc backend (max/argmax/...)
     else:
@@ -852,7 +851,7 @@ def _algebraic_base_contraction(
     # be and backend are normally the same object: tn.set_default_backend syncs them.
 
     _stash_aux_outputs({})
-    if ns:
+    if alg is not None:
         if kws.get("strip_exponent", False):
             raise ValueError(
                 "strip_exponent is incompatible with a non-standard ContractionAlgebra"
@@ -866,7 +865,7 @@ def _algebraic_base_contraction(
         output_set,
         size_dict,
         algorithm,
-        ns,
+        alg is not None,
         alg,
         kbe,
         be,
@@ -874,7 +873,7 @@ def _algebraic_base_contraction(
         ctg,
     )
 
-    final, aux = _decode_aux(ns, rep, kbe, final, output_set)
+    final, aux = _decode_aux(alg is not None, rep, kbe, final, output_set)
 
     final_node = tn.Node(final, backend=be)
 
@@ -890,10 +889,10 @@ def _algebraic_base_contraction(
         final_node.reorder_edges(list(output_edge_order))
 
     # Apply the same output_edge_order permutation to aux (count co-indexed with energy)
-    if ns and aux:
+    if alg is not None and aux:
         _stash_permuted_aux(aux, output_edge_order, dangling_edges, kbe)
 
-    if kws.get("strip_exponent", False) and not ns:
+    if kws.get("strip_exponent", False) and alg is None:
         return final_node, exponent
 
     return final_node
