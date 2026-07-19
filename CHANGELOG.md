@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Fixed
+
+- Fix pytorch backend `softmax` and align `axis=None` to global normalization.
+
+- Fix numpy backend `popc` to use `np.bitwise_count` on NumPy 2.0+.
+
+- Fix cupy backend `reshape` int32 overflow for large dims (n>=31) by passing a python tuple.
+
+- Cache the `tf.function` in tensorflow backend `to_dense` so repeated calls reuse the same traced graph.
+
+- Allocate `zeros`/`ones`/`eye` directly in the target dtype for numpy/jax/tf backends, avoiding the default-dtype + cast round trip.
+
+- Avoid unnecessary copy in numpy backend `cast` via `astype(copy=False)`.
+
+- Fix `sqrtmh` dtype mismatch on pytorch backend for complex inputs by casting eigenvalues to the eigenvector dtype.
+
+
 ## v1.8.0
 
 ### Added

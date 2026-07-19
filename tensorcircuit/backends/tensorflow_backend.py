@@ -427,6 +427,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         tf = tensorflow
         tf.sparse.SparseTensor.__add__ = tf.sparse.add
         tf.SparseTensor.__matmul__ = sparse_tensor_matmul
+        self._densify_fn = None  # lazily built tf.function, cached for reuse
 
         self.minor = int(tf.__version__.split(".")[1])
         self.name = "tensorflow"
@@ -439,32 +440,29 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     ) -> Tensor:
         if dtype is None:
             dtype = dtypestr
-        r = tf.eye(num_rows=N, num_columns=M)
-        return self.cast(r, dtype)
+        # tf accepts dtype strings directly; passing it here avoids the
+        # default-dtype allocation + cast round trip.
+        return tf.eye(num_rows=N, num_columns=M, dtype=dtype)
 
     def ones(self, shape: Tuple[int, ...], dtype: Optional[str] = None) -> Tensor:
         if dtype is None:
             dtype = dtypestr
-        r = tf.ones(shape=shape)
-        return self.cast(r, dtype)
+        return tf.ones(shape=shape, dtype=dtype)
 
     def zeros(self, shape: Tuple[int, ...], dtype: Optional[str] = None) -> Tensor:
         if dtype is None:
             dtype = dtypestr
-        r = tf.zeros(shape=shape)
-        return self.cast(r, dtype)
+        return tf.zeros(shape=shape, dtype=dtype)
 
     def zeros_like(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
         if dtype is None:
-            dtype = self.dtype(a)
-        r = tf.zeros_like(a)
-        return self.cast(r, dtype)
+            return tf.zeros_like(a)
+        return tf.zeros_like(a, dtype=dtype)
 
     def ones_like(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
         if dtype is None:
-            dtype = self.dtype(a)
-        r = tf.ones_like(a)
-        return self.cast(r, dtype)
+            return tf.ones_like(a)
+        return tf.ones_like(a, dtype=dtype)
 
     def copy(self, a: Tensor) -> Tensor:
         return tf.identity(a)
@@ -859,11 +857,17 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         return r
 
     def _densify(self) -> Tensor:
-        @partial(self.jit, jit_compile=True)
-        def densify(sp_a: Tensor) -> Tensor:
-            return tf.sparse.to_dense(sp_a)
+        # Build the ``tf.function`` once and cache it on the instance so that
+        # repeated ``to_dense`` calls reuse the same (already traced/compiled)
+        # concrete function instead of retracing XLA on every call.
+        if self._densify_fn is None:
 
-        return densify
+            @partial(self.jit, jit_compile=True)
+            def densify(sp_a: Tensor) -> Tensor:
+                return tf.sparse.to_dense(sp_a)
+
+            self._densify_fn = densify
+        return self._densify_fn
 
     def to_dense(self, sp_a: Tensor) -> Tensor:
         return self._densify()(sp_a)

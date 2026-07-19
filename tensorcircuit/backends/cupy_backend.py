@@ -94,7 +94,9 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
         return cp.transpose(tensor, perm)
 
     def reshape(self, tensor: Tensor, shape: Tensor) -> Tensor:
-        return cp.reshape(tensor, np.asarray(shape).astype(np.int32))
+        # Pass a python tuple of ints so that large dims (e.g. 2**n for n>=31)
+        # are not truncated by an int32 cast.
+        return cp.reshape(tensor, tuple(int(s) for s in shape))
 
     def eye(
         self, N: int, dtype: Optional[str] = None, M: Optional[int] = None

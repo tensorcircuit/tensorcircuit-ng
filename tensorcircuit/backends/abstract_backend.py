@@ -350,6 +350,10 @@ class ExtendedBackend:
         if psd:
             e = self.relu(e)
         e = self.sqrt(e)
+        # ``eigh`` returns real eigenvalues; cast them to the (possibly complex)
+        # eigenvector dtype so that ``diagflat(e)`` matches ``v`` for backends
+        # that do not auto-promote mixed-dtype matmuls (e.g. pytorch).
+        e = self.cast(e, self.dtype(v))
         return v @ self.diagflat(e) @ self.adjoint(v)
 
     def eigvalsh(self: Any, a: Tensor) -> Tensor:

@@ -561,8 +561,12 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def relu(self, a: Tensor) -> Tensor:
         return torchlib.relu(a)
 
-    def softmax(self, a: Sequence[Tensor], axis: Optional[int] = None) -> Tensor:
-        return torchlib.nn.Softmax(a, dim=axis)
+    def softmax(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
+        if axis is None:
+            shape = a.shape
+            r = torchlib.nn.functional.softmax(a.reshape([-1]), dim=0)
+            return r.reshape(shape)
+        return torchlib.nn.functional.softmax(a, dim=axis)
 
     def onehot(self, a: Tensor, num: int) -> Tensor:
         a = a.long()

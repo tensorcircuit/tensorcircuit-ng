@@ -329,7 +329,7 @@ def test_backend_scatter(backend):
     )
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_methods(backend):
     # TODO(@refraction-ray): add more methods
     np.testing.assert_allclose(
@@ -359,7 +359,9 @@ def test_backend_methods(backend):
     np.testing.assert_allclose(ansp @ ansp, ans @ ans, atol=1e-4)
     singularm = np.array([[4.0, 0], [0, -1e-3]])
     np.testing.assert_allclose(
-        tc.backend.sqrtmh(singularm, psd=True), np.array([[2.0, 0], [0, 0]]), atol=1e-5
+        tc.backend.sqrtmh(tc.array_to_tensor(singularm, dtype="float32"), psd=True),
+        np.array([[2.0, 0], [0, 0]]),
+        atol=1e-5,
     )
 
     np.testing.assert_allclose(
@@ -368,7 +370,11 @@ def test_backend_methods(backend):
 
     indices = np.array([[1, 2], [0, 1]])
     ans = np.array([[[0, 1, 0], [0, 0, 1]], [[1, 0, 0], [0, 1, 0]]])
-    np.testing.assert_allclose(tc.backend.one_hot(indices, 3), ans, atol=1e-4)
+    np.testing.assert_allclose(
+        tc.backend.one_hot(tc.array_to_tensor(indices, dtype="int32"), 3),
+        ans,
+        atol=1e-4,
+    )
 
     a = tc.array_to_tensor(np.array([1, 1, 3, 2, 2, 1]), dtype="int32")
     np.testing.assert_allclose(tc.backend.unique_with_counts(a)[0].shape[0], 3)

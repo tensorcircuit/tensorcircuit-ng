@@ -62,32 +62,27 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     ) -> Tensor:
         if dtype is None:
             dtype = dtypestr
-        r = np.eye(N, M=M)
-        return self.cast(r, dtype)
+        return np.eye(N, M=M, dtype=dtype)
 
     def ones(self, shape: Sequence[int], dtype: Optional[str] = None) -> Tensor:
         if dtype is None:
             dtype = dtypestr
-        r = np.ones(shape)
-        return self.cast(r, dtype)
+        return np.ones(shape, dtype=dtype)
 
     def zeros(self, shape: Sequence[int], dtype: Optional[str] = None) -> Tensor:
         if dtype is None:
             dtype = dtypestr
-        r = np.zeros(shape)
-        return self.cast(r, dtype)
+        return np.zeros(shape, dtype=dtype)
 
     def zeros_like(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
         if dtype is None:
-            dtype = self.dtype(a)
-        r = np.zeros_like(a)
-        return self.cast(r, dtype)
+            return np.zeros_like(a)
+        return np.zeros_like(a, dtype=dtype)
 
     def ones_like(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
         if dtype is None:
-            dtype = self.dtype(a)
-        r = np.ones_like(a)
-        return self.cast(r, dtype)
+            return np.ones_like(a)
+        return np.ones_like(a, dtype=dtype)
 
     def copy(self, a: Tensor) -> Tensor:
         return a.copy()
@@ -249,8 +244,10 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         return np.repeat(a, repeats, axis=axis)
 
     def popc(self, a: Any) -> Any:
-        if hasattr(np, "bitcount"):  # NumPy 1.25+
+        if hasattr(np, "bitcount"):
             return np.bitcount(a)
+        if hasattr(np, "bitwise_count"):  # NumPy 2.0+
+            return np.bitwise_count(a)
         # Fallback for older numpy
         return np.vectorize(lambda x: bin(x).count("1"))(a)
 
@@ -296,7 +293,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         a = np.asarray(a)
         if np.iscomplexobj(a) and not np.issubdtype(np_dtype, np.complexfloating):
             a = np.real(a)
-        return a.astype(np_dtype)
+        # ``copy=False`` returns the original buffer when it is already the
+        # target dtype, avoiding a full-array copy on every defensive cast.
+        return a.astype(np_dtype, copy=False)
 
     def arange(self, start: int, stop: Optional[int] = None, step: int = 1) -> Tensor:
         if stop is None:
