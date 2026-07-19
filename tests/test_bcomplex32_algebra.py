@@ -79,11 +79,10 @@ def test_bf16_wall_avoidance_canary():
         st = np.asarray(c.state())
     assert st.shape == (16,)  # ran cleanly, no axis==edge crash
     import tensorcircuit.cons as cons
-    from tensorcircuit.contraction_algebra import StandardAlgebra
 
-    assert isinstance(
-        cons.get_contraction_algebra(), StandardAlgebra
-    )  # CM restored algebra, no leak
+    assert (
+        cons.get_contraction_algebra() is None
+    )  # CM restored algebra to default (None), no leak
     c2 = tc.Circuit(2)
     c2.H(0)
     c2.cnot(0, 1)  # subsequent native contraction

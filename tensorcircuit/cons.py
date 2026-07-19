@@ -145,14 +145,15 @@ set_tensornetwork_backend()
 
 # --- ContractionAlgebra state (mirrors dtypestr/set_dtype pattern) ---
 
-_contraction_algebra: _ContractionAlgebra = _StandardAlgebra()
+_contraction_algebra: Optional[_ContractionAlgebra] = None
+_standard = _StandardAlgebra()  # singleton fallback for primitives/hyperedge path
 
 
-def get_contraction_algebra() -> _ContractionAlgebra:
+def get_contraction_algebra() -> Optional[_ContractionAlgebra]:
     return _contraction_algebra
 
 
-def set_contraction_algebra(alg: _ContractionAlgebra) -> None:
+def set_contraction_algebra(alg: Optional[_ContractionAlgebra]) -> None:
     global _contraction_algebra
     _contraction_algebra = alg
 
@@ -341,7 +342,7 @@ def _sizen(node: tn.Node, is_log: bool = False) -> int:
 def _merge_single_gates(
     nodes: List[Any], total_size: Optional[int] = None
 ) -> Tuple[List[Any], int]:
-    if not isinstance(_contraction_algebra, _StandardAlgebra):
+    if _contraction_algebra is not None:
         # _merge_single_gates contracts via tn.contract_parallel (native sum-product),
         # bypassing the algebra kernel — skip it under a non-standard algebra.
         if total_size is None:
@@ -840,9 +841,9 @@ def _algebraic_base_contraction(
     raw_tensors, input_sets, output_set, size_dict = _extract_topology(nodes)
     be = nodes[0].backend  # tn backend: standard native ops + tn.Node wrap
 
-    alg = get_contraction_algebra()
+    alg = get_contraction_algebra() or _standard  # fall back to standard when None
     rep = alg.representation
-    ns = not isinstance(alg, _StandardAlgebra)
+    ns = alg is not _standard
     kbe = backend if ns else be  # algebra kernels need the tc backend (max/argmax/...)
     # be and backend are normally the same object: tn.set_default_backend syncs them.
 
@@ -1040,7 +1041,7 @@ def _base(
     # 1. Resolve topology and check for hyperedges
     has_hyperedges = any(isinstance(n, tn.CopyNode) for n in nodes)
 
-    _ns_alg = not isinstance(_contraction_algebra, _StandardAlgebra)
+    _ns_alg = _contraction_algebra is not None
     if use_primitives is True or _ns_alg or (use_primitives is None and has_hyperedges):
         # ==========================================
         # ALGEBRAIC EXECUTION PATH
