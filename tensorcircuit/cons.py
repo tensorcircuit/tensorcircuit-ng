@@ -146,14 +146,13 @@ set_tensornetwork_backend()
 # --- ContractionAlgebra state (mirrors dtypestr/set_dtype pattern) ---
 
 _contraction_algebra: Optional[_ContractionAlgebra] = None
-_standard = _StandardAlgebra()  # singleton fallback for primitives/hyperedge path
 
 
 def get_contraction_algebra() -> Optional[_ContractionAlgebra]:
     return _contraction_algebra
 
 
-def set_contraction_algebra(alg: Optional[_ContractionAlgebra]) -> None:
+def set_contraction_algebra(alg: _ContractionAlgebra) -> None:
     global _contraction_algebra
     _contraction_algebra = alg
 
@@ -841,9 +840,9 @@ def _algebraic_base_contraction(
     raw_tensors, input_sets, output_set, size_dict = _extract_topology(nodes)
     be = nodes[0].backend  # tn backend: standard native ops + tn.Node wrap
 
-    alg = get_contraction_algebra() or _standard  # fall back to standard when None
+    alg = get_contraction_algebra()
     rep = alg.representation
-    ns = alg is not _standard
+    ns = not isinstance(alg, _StandardAlgebra)
     kbe = backend if ns else be  # algebra kernels need the tc backend (max/argmax/...)
     # be and backend are normally the same object: tn.set_default_backend syncs them.
 
@@ -1041,11 +1040,11 @@ def _base(
     # 1. Resolve topology and check for hyperedges
     has_hyperedges = any(isinstance(n, tn.CopyNode) for n in nodes)
 
-    _ns_alg = _contraction_algebra is not None
-    if use_primitives is True or _ns_alg or (use_primitives is None and has_hyperedges):
-        # ==========================================
-        # ALGEBRAIC EXECUTION PATH
-        # ==========================================
+    if _contraction_algebra is not None:
+        return _algebraic_base_contraction(
+            nodes, algorithm, output_edge_order, ignore_edge_order, **kws
+        )
+    if use_primitives is True or (use_primitives is None and has_hyperedges):
         return _algebraic_base_contraction(
             nodes, algorithm, output_edge_order, ignore_edge_order, **kws
         )
