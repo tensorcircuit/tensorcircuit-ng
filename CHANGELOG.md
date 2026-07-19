@@ -18,6 +18,8 @@
 
 - Fix `sqrtmh` dtype mismatch on pytorch backend for complex inputs by casting eigenvalues to the eigenvector dtype.
 
+- Fix interaction between random state and jit in `Circuit.sample` (`allow_state=False`, `batch` given) path.
+
 
 ## v1.8.0
 

@@ -1455,27 +1455,22 @@ class BaseCircuit(AbstractCircuit):
                 r = [r]  # type: ignore
             else:
                 r = []  # type: ignore
-                if status is not None:
+                if status is None:
+                    # materialize the randomness as explicit `status` tensors
+                    # so that the per-shot call stays jit-safe (no host-side
+                    # random state mutation / tracer leakage inside jit).
+                    status = backend.stateful_randu(
+                        random_generator, shape=[batch, self._nqubits]
+                    )
+                else:
                     assert backend.shape_tuple(status)[0] == batch
 
-                    @backend.jit
-                    def perfect_sampling(seed: Tensor) -> Any:
-                        return self.perfect_sampling(seed)
+                @backend.jit
+                def perfect_sampling(seed: Tensor) -> Any:
+                    return self.perfect_sampling(seed)
 
-                    for seed in status:
-                        r.append(perfect_sampling(seed))  # type: ignore
-
-                else:
-
-                    @backend.jit
-                    def perfect_sampling(key: Any) -> Any:
-                        backend.set_random_state(key)
-                        return self.perfect_sampling()
-
-                    subkey = random_generator
-                    for _ in range(batch):
-                        key, subkey = backend.random_split(subkey)
-                        r.append(perfect_sampling(key))  # type: ignore
+                for seed in status:
+                    r.append(perfect_sampling(seed))  # type: ignore
 
             if format is None:
                 return r
