@@ -1,5 +1,4 @@
-"""Tropical (max-plus) Ising ground-state energy via TensorCircuit-NG contraction.
-"""
+"""Tropical (max-plus) Ising ground-state energy via TensorCircuit-NG contraction."""
 
 import itertools
 import numpy as np

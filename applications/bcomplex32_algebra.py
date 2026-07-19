@@ -176,7 +176,7 @@ class ComplexPairAlgebra(ContractionAlgebra):
     name = "bcomplex32_pair"
     representation = PairBf16Representation()
 
-    def get_contractor_kwargs(self) -> dict:
+    def get_contractor_kwargs(self) -> Dict[str, Any]:
         return {"prefer_einsum": True}
 
     def tensordot(self, be: Backend, a: Tensor, b: Tensor, axes: Any) -> Tensor:

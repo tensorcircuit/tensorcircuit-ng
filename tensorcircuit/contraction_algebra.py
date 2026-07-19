@@ -60,7 +60,7 @@ class ContractionAlgebra(ABC):
     name: str = "abstract"
     representation: Representation = IdentityRepresentation()
 
-    def get_contractor_kwargs(self) -> dict:
+    def get_contractor_kwargs(self) -> Dict[str, Any]:
         """Extra kwargs forwarded to cotengra's ``make_contractor``.
 
         Override to return ``{'prefer_einsum': True}`` when your algebra's
