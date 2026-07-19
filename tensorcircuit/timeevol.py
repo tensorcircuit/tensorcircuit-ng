@@ -534,7 +534,7 @@ def ode_evol_local(
         - The ``solver`` parameter accepts one of {'Tsit5' (default), 'Dopri5', 'Dopri8', 'Kvaerno5'}
           and only works when ``ode_backend='diffrax'``.
 
-        - ``t0`` (default: 0.01) specifies the initial step size and only works when ``ode_backend='diffrax'``.
+        - ``dt0`` (default: 0.01) specifies the initial step size and only works when ``ode_backend='diffrax'``.
 
         - ``max_steps`` (default: 4096)  The maximum number of steps to take before quitting the computation
           unconditionally and only works when ``ode_backend='diffrax'``.
@@ -617,7 +617,7 @@ def ode_evol_global(
         - The ``solver`` parameter accepts one of {'Tsit5' (default), 'Dopri5', 'Dopri8', 'Kvaerno5'}
           and only works when ``ode_backend='diffrax'``.
 
-        - ``t0`` (default: 0.01) specifies the initial step size and only works when ``ode_backend='diffrax'``.
+        - ``dt0`` (default: 0.01) specifies the initial step size and only works when ``ode_backend='diffrax'``.
 
         - ``max_steps`` (default: 4096)  The maximum number of steps to take before quitting the computation
           unconditionally and only works when ``ode_backend='diffrax'``.
@@ -731,8 +731,8 @@ def chebyshev_evol(
     :type hamiltonian: Any
     :param initial_state: Initial state vector
     :type initial_state: Tensor
-    :param time: Time to evolve
-    :type time: float
+    :param t: Time to evolve
+    :type t: float
     :param spectral_bounds: Spectral bounds for the Hamiltonian (Emax, Emin)
     :type spectral_bounds: Tuple[float, float]
     :param k: Number of Chebyshev coefficients, a good estimate is k > t*(Emax-Emin)/2

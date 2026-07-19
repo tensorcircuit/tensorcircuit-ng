@@ -899,7 +899,7 @@ def _base(
 
     :param nodes: A collection of connected nodes.
     :type nodes: List[tn.Node]
-    :pram algorithm: `opt_einsum` contraction method to use.
+    :param algorithm: `opt_einsum` contraction method to use.
     :type algorithm: Any
     :param output_edge_order: An optional list of edges. Edges of the
         final node in `nodes_set` are reordered into `output_edge_order`;
@@ -1319,9 +1319,14 @@ get_contractor = partial(set_contractor, set_global=False)
 
 def set_function_contractor(*confargs: Any, **confkws: Any) -> Callable[..., Any]:
     """
-    Function decorate to change function-level contractor
+    Function decorator to set function-level contractor.
 
-    :return: _description_
+    :param confargs: Positional arguments forwarded to ``set_contractor``.
+    :type confargs: Any
+    :param confkws: Keyword arguments forwarded to ``set_contractor``.
+    :type confkws: Any
+    :return: A decorator that wraps ``f`` so it runs under the configured
+        contractor and restores the previous contractor on exit.
     :rtype: Callable[..., Any]
     """
 
@@ -1343,9 +1348,13 @@ def set_function_contractor(*confargs: Any, **confkws: Any) -> Callable[..., Any
 @contextmanager
 def runtime_contractor(*confargs: Any, **confkws: Any) -> Iterator[Any]:
     """
-    Context manager to change with-levek contractor
+    Context manager to set a with-level contractor.
 
-    :yield: _description_
+    :param confargs: Positional arguments forwarded to ``set_contractor``.
+    :type confargs: Any
+    :param confkws: Keyword arguments forwarded to ``set_contractor``.
+    :type confkws: Any
+    :yield: The new contractor callable.
     :rtype: Iterator[Any]
     """
     old_contractor = getattr(thismodule, "contractor")
@@ -1362,7 +1371,7 @@ def split_rules(
     relative: bool = False,
 ) -> Any:
     """
-    Obtain the direcionary of truncation rules
+    Obtain the dictionary of truncation rules
 
     :param max_singular_values: The maximum number of singular values to keep.
     :type max_singular_values: int, optional
@@ -1375,7 +1384,7 @@ def split_rules(
     if max_singular_values is not None:
         rules["max_singular_values"] = max_singular_values
     if max_truncation_err is not None:
-        rules["max_truncattion_err"] = max_truncation_err
+        rules["max_truncation_err"] = max_truncation_err
     if relative is not None:
         rules["relative"] = relative
     return rules

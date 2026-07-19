@@ -33,13 +33,15 @@ def infer_new_shape(a: tn.Node, b: tn.Node, include_old: bool = True) -> Any:
 
     :Example:
 
-    >>> a = tn.Node(np.ones([2, 3, 5]))
-    >>> b = tn.Node(np.ones([3, 5, 7]))
-    >>> a[1] ^ b[0]
-    >>> a[2] ^ b[1]
-    >>> tc.simplify.infer_new_shape(a, b)
-    >>> ((2, 7), (2, 3, 5), (3, 5, 7))
-    >>> # (shape of a, shape of b, new shape)
+    .. code-block:: python
+
+        a = tn.Node(np.ones([2, 3, 5]))
+        b = tn.Node(np.ones([3, 5, 7]))
+        a[1] ^ b[0]
+        a[2] ^ b[1]
+        tc.simplify.infer_new_shape(a, b)
+        # ((2, 7), (2, 3, 5), (3, 5, 7))
+        # return order: (new_shape, shape_of_a, shape_of_b)
 
     :param a: node one
     :type a: tn.Node
@@ -282,7 +284,7 @@ def _light_cone_cancel(nodes: List[Any]) -> Tuple[List[Any], bool]:
 
 def _full_light_cone_cancel(nodes: List[Any]) -> List[Any]:
     """
-    Simplify the list of tc.Nodes using casual lightcone structure.
+    Simplify the list of tc.Nodes using causal lightcone structure.
 
     :param nodes: List of nodes representing the tensor network.
     :type nodes: List[Any]

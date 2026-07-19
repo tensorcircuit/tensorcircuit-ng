@@ -112,6 +112,12 @@ def _merge_extra_qir(
     return nqir
 
 
+# TODO(@erertertet):
+#   add default theta to iswap gate
+#   add more cirq built-in gate instead of customized
+#   add unitary test with tolerance
+#   add support of cirq built-in ControlledGate for multiple control
+#   support more elements in qir, e.g. barrier, measure...
 def qir2cirq(
     qir: List[Dict[str, Any]], n: int, extra_qir: Optional[List[Dict[str, Any]]] = None
 ) -> Any:
@@ -135,15 +141,8 @@ def qir2cirq(
     :param extra_qir: The extra quantum IR of tc circuit including measure and reset on hardware,
         defaults to None
     :type extra_qir: Optional[List[Dict[str, Any]]]
-    :return: qiskit cirq object
+    :return: A ``cirq.Circuit`` object.
     :rtype: Any
-
-    #TODO(@erertertet):
-    add default theta to iswap gate
-    add more cirq built-in gate instead of customized
-    add unitary test with tolerance
-    add support of cirq built-in ControlledGate for multiplecontroll
-    support more element in qir, e.g. barrier, measure...
     """
 
     class CustomizedCirqGate(cirq.Gate):  # type: ignore
@@ -462,7 +461,7 @@ def qiskit2tc(
     :param inputs: Input state of the circuit. Default is None.
     :type inputs: Optional[List[float]]
     :param circuit_constructor: ``Circuit``, ``DMCircuit`` or ``MPSCircuit``
-    :type circuit_contructor: Any
+    :type circuit_constructor: Any
     :param circuit_params: kwargs given in Circuit.__init__ construction function, default to None.
     :type circuit_params: Optional[Dict[str, Any]]
     :param binding_params: (variational) parameters for the circuit.

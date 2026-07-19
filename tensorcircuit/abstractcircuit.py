@@ -107,7 +107,7 @@ class AbstractCircuit:
         ir_dict: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
-        An implementation of this method should also append gate directionary to self._qir
+        An implementation of this method should also append gate dictionary to self._qir
         """
         raise NotImplementedError
 
@@ -611,7 +611,7 @@ class AbstractCircuit:
         self, qir: List[Dict[str, Any]], allow_channel: bool = False
     ) -> None:
         """
-        Apply the ciurict in form of quantum intermediate representation after the current cirucit.
+        Apply the circuit in form of quantum intermediate representation after the current circuit.
 
         :Example:
 
@@ -1413,7 +1413,7 @@ class AbstractCircuit:
 
             In terms of ``DMCircuit``, this method returns nothing and the density
             matrix after this method is kept in mixed state without knowing the
-            measuremet resuslts
+            measurement results
 
 
 

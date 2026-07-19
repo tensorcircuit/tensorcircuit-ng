@@ -415,6 +415,7 @@ Some setup cases:
     # by preprocessing set as True, tensorcircuit will automatically merge all single-qubit gates into entangling gates
 
     # 2.  RandomGreedy contractor
+    import opt_einsum as oem
     tc.set_contractor("custom_stateful", optimizer=oem.RandomGreedy, max_time=60, max_repeats=128, minimize="size")
 
     # 3. OMECO simulated annealing contraction optimizer (Rust-accelerated)
@@ -664,7 +665,7 @@ As we have mentioned in the backend section, the PyTorch backend may lack advanc
         c = tc.Circuit(1)
         c.rx(0, theta=params[0])
         c.ry(0, theta=params[1])
-        return c.expectation([tc.gates.z(), [0]])
+        return tc.backend.real(c.expectation([tc.gates.z(), [0]]))
 
 
     f_torch = torch_interface(f, jit=True)
@@ -702,6 +703,7 @@ For ``TorchLayer``, ``use_interface=True`` is by default, which natively allow t
 
     n = 3
     p = 0.1
+    tc.set_backend("jax")
     K = tc.backend
     torchb = tc.get_backend("pytorch")
 
@@ -804,7 +806,7 @@ Some advanced features:
     # Specify output shape and dtype
     jax_circuit = tc.interfaces.jax_interface(circuit,
                                             jit=True,
-                                            output_shape=(1,),
+                                            output_shape=(),
                                             output_dtype=jnp.float32)
 
 3. Multiple outputs support:

@@ -537,13 +537,13 @@ def u_gate(theta: float = 0.0, phi: float = 0.0, lbd: float = 0.0) -> Gate:
         \cos(\theta/2) & -e^{i\lambda}\sin(\theta/2) \\
         e^{i\phi}\sin(\theta/2) & e^{i(\phi+\lambda)}\cos(\theta/2) \end{array}\right).\end{split}
 
-    :param theta: _description_, defaults to 0
+    :param theta: Rotation angle in radians, defaults to 0.
     :type theta: float, optional
-    :param phi: _description_, defaults to 0
+    :param phi: Phase angle in radians, defaults to 0.
     :type phi: float, optional
-    :param lbd: _description_, defaults to 0
+    :param lbd: Lambda angle in radians, defaults to 0.
     :type lbd: float, optional
-    :return: _description_
+    :return: The U gate as a `Gate`.
     :rtype: Gate
     """
     theta, phi, lbd = array_to_tensor(theta, phi, lbd)
@@ -1023,7 +1023,7 @@ def rzm_gate(theta: float, n: int, dim: int = 2, name: str = "rzm") -> Operator:
     """
     Multi-qubit Z rotation gate `R_zz...z(theta)`.
     Decomposed as an MPS of diagonal coefficients connected via CopyNode hyperedges (`chi=2`).
-    Only for memory effciency and large qubit counts, the gain is negative for small qubit count.
+    Only for memory efficiency and large qubit counts, the gain is negative for small qubit count.
 
     :param theta: Rotation angle.
     :type theta: float
@@ -1082,7 +1082,7 @@ def cmz_gate(n: int, dim: int = 2, name: str = "cmz") -> Operator:
     """
     Multi-qubit CCC...Z gate.
     Decomposed as an MPS of diagonal coefficients connected via CopyNode hyperedges (`chi=2`).
-    Only for memory effciency and large qubit counts, the gain is negative for small qubit count.
+    Only for memory efficiency and large qubit counts, the gain is negative for small qubit count.
 
     :param n: The number of qubits the gate applies to.
     :type n: int

@@ -426,9 +426,11 @@ Callback functions can be used to compute observables during evolution without s
 
 .. code-block:: python
 
+    import math
+
     def compute_total_magnetization(state):
         # Compute total magnetization ⟨∑Zᵢ⟩
-        n = int(tc.backend.log2(tc.backend.shape_tuple(state)[0]))
+        n = int(math.log2(tc.backend.shape_tuple(state)[0]))
         circuit = tc.Circuit(n, inputs=state)
         total_mz = sum(circuit.expectation_ps(z=[i]) for i in range(n))
         return tc.backend.real(total_mz)

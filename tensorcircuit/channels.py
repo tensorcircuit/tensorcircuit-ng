@@ -162,7 +162,7 @@ def generaldepolarizingchannel(
 
     .. math::
 
-        \mathcal{E}(\rho) = (1 - \sum_i p_i) \rho + p_1 X\rho X + p_2 Y\rho Y + p_3 \rho Z
+        \mathcal{E}(\rho) = (1 - \sum_i p_i) \rho + p_1 X\rho X + p_2 Y\rho Y + p_3 Z\rho Z
 
     The logic for two-qubit or more-qubit channel follows similarly.
 
@@ -230,7 +230,7 @@ def generaldepolarizingchannel(
 def amplitudedampingchannel(gamma: float, p: float) -> Sequence[Gate]:
     r"""
     Return an amplitude damping channel.
-    Notice: Amplitude damping corrspondings to p = 1.
+    Notice: Amplitude damping corresponds to p = 1.
 
     .. math::
         \sqrt{p}
@@ -363,9 +363,9 @@ def thermalrelaxationchannel(
     :param method: method to express error (default: "ByChoi"). When :math:`T1>T2`, choose method "ByKraus"
         or "ByChoi" for jit. When :math:`T1<T2`,choose method "ByChoi" for jit. Users can also set method
         as "AUTO" and never mind the relative magnitude of :math:`T1,T2`, which is not jitable.
-    :type time: str
+    :type method: str, optional
     :param excitedstatepopulation: the population of  state :math:`|1\rangle` at equilibrium (default: 0)
-    :type excited_state_population: float, optional
+    :type excitedstatepopulation: float, optional
     :return: A thermal_relaxation_channel
     :rtype: Sequence[Gate]
     """
@@ -727,10 +727,10 @@ def choi_to_kraus(
             kraus.append(k)
 
     else:
-        if truncation_rules.get("max_truncattion_err", None) is None:
+        if truncation_rules.get("max_truncation_err", None) is None:
             atol = 1e-5
         else:
-            atol = truncation_rules["max_truncattion_err"]
+            atol = truncation_rules["max_truncation_err"]
 
         for i in range(dim[0]):
             if e[-(i + 1)] > atol:
@@ -806,16 +806,16 @@ def super_to_kraus(superop: Matrix) -> Matrix:
 )
 def is_hermitian_matrix(mat: Matrix, rtol: float = 1e-8, atol: float = 1e-5):
     """
-    Test if an array is a Hermitian matrix
+    Test if an array is a Hermitian matrix.
 
-    :param mat: Matrix
+    :param mat: Matrix to test.
     :type mat: Matrix
-    :param rtol: _description_, defaults to 1e-8
+    :param rtol: Relative tolerance for the comparison, defaults to 1e-8.
     :type rtol: float, optional
-    :param atol: _description_, defaults to 1e-5
+    :param atol: Absolute tolerance for the comparison, defaults to 1e-5.
     :type atol: float, optional
-    :return: _description_
-    :rtype: _type_
+    :return: True if `mat` is a 2D Hermitian matrix within tolerance.
+    :rtype: bool
     """
 
     if len(backend.shape_tuple(mat)) != 2:
@@ -987,13 +987,13 @@ def check_rep_transformation(
 
 def composedkraus(kraus1: KrausList, kraus2: KrausList) -> KrausList:
     """
-    Compose the noise channels
+    Compose two Kraus channels into a single noise channel.
 
     :param kraus1: One noise channel
     :type kraus1: KrausList
     :param kraus2: Another noise channel
     :type kraus2: KrausList
-    :return: Composed nosie channel
+    :return: Composed noise channel
     :rtype: KrausList
     """
     new_kraus = []

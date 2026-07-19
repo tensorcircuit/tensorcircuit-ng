@@ -38,6 +38,28 @@ def test_basics(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("cpb")])
+def test_u8_gate(backend):
+    c = tc.QuditCircuit(1, dim=3)
+    c.u8(0)
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.wavefunction()),
+        np.array([1.0, 0.0, 0.0], dtype=np.complex64),
+        atol=1e-5,
+    )
+
+    c = tc.QuditCircuit(1, dim=3)
+    c.x(0)
+    c.u8(0)
+    psi = tc.backend.numpy(c.wavefunction())
+    # on |1> the default U8 applies a non-trivial phase, so |1> amplitude
+    # is non-real and |0>/<2> stay zero
+    assert abs(psi[0]) < 1e-5
+    assert abs(psi[2]) < 1e-5
+    assert abs(abs(psi[1]) - 1.0) < 1e-5
+    assert abs(psi[1].imag) > 1e-3
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("cpb")])
 def test_measure(backend):
     c = tc.QuditCircuit(2, 3)
     c.h(0)

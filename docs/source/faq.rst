@@ -311,9 +311,10 @@ Try the following:
 
     c = tc.Circuit(4)
     # omit circuit construction
+    s = c.state()
 
     rho = tc.quantum.reduced_density_matrix(s, cut=[0, 1, 2])
-    # get the redueced density matrix, where cut list is the index to be traced out
+    # get the reduced density matrix, where cut list is the index to be traced out
 
     rho.shape
     # (2, 2)

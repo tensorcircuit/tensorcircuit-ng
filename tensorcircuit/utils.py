@@ -120,12 +120,14 @@ def is_m1mac() -> bool:
 
 
 def is_sequence(x: Any) -> bool:
+    """Return True if ``x`` is a list or tuple."""
     if isinstance(x, list) or isinstance(x, tuple):
         return True
     return False
 
 
 def is_number(x: Any) -> bool:
+    """Return True if ``x`` is an int, float, or complex."""
     if isinstance(x, int) or isinstance(x, float) or isinstance(x, complex):
         return True
     return False
@@ -139,9 +141,10 @@ def arg_alias(
     """
     function argument alias decorator with new docstring
 
-    :param f: _description_
+    :param f: The function whose argument aliases are being defined.
     :type f: Callable[..., Any]
-    :param alias_dict: _description_
+    :param alias_dict: Mapping from canonical argument name to a single alias string
+        or a sequence of alias strings.
     :type alias_dict: Dict[str, Union[str, Sequence[str]]]
     :param fix_doc: whether to add doc for these new alias arguments, defaults True
     :type fix_doc: bool
@@ -223,13 +226,15 @@ def benchmark(
     """
     benchmark jittable function with staging time and running time
 
-    :param f: _description_
+    :param f: The jittable callable to benchmark.
     :type f: Any
-    :param tries: _description_, defaults to 5
+    :param args: Positional arguments forwarded to ``f``.
+    :type args: Any
+    :param tries: Number of timed runs after the warm-up staging run, defaults to 5.
     :type tries: int, optional
-    :param verbose: _description_, defaults to True
+    :param verbose: If True, print staging and per-run running time, defaults to True.
     :type verbose: bool, optional
-    :return: _description_
+    :return: Tuple of (final result, staging time in seconds, mean running time in seconds).
     :rtype: Tuple[Any, float, float]
     """
     time0 = time.time()

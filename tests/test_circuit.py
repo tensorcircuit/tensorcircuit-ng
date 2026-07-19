@@ -807,6 +807,29 @@ def test_gate_split(backend):
     np.testing.assert_allclose(s1, s3, atol=1e-5)
 
 
+def test_split_rules_truncation_key(npb):
+    # Regression: ``cons.split_rules`` used to emit the misspelled key
+    # ``"max_truncattion_err"`` (extra ``t``), which did not match the
+    # ``max_truncation_err`` parameter consumed downstream by
+    # ``_split_two_qubit_gate`` / ``choi_to_kraus``. The truncation setting
+    # was therefore silently dropped whenever a split config was built via
+    # ``split_rules``.
+    a = tn.Node(np.ones([2, 2, 2, 2], dtype=tc.dtypestr))
+
+    rules = tc.cons.split_rules(max_truncation_err=1e-10)
+    assert "max_truncation_err" in rules
+
+    full = tc.simplify._split_two_qubit_gate(a, fixed_choice=1)
+    truncated = tc.simplify._split_two_qubit_gate(
+        a, fixed_choice=1, max_truncation_err=1e-10
+    )
+
+    full_bond = full[0].tensor.shape[-1]
+    trunc_bond = truncated[0].tensor.shape[-1]
+    assert full_bond == 4
+    assert trunc_bond == 1
+
+
 def test_toqir():
     split = {
         "max_singular_values": 2,

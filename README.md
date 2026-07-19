@@ -174,13 +174,13 @@ print(tc.quantum.log_negativity(dm, [0]))
 
 The package is written in pure Python and can be obtained via pip as:
 
-```python
+```bash
 pip install tensorcircuit-ng
 ```
 
 We recommend you install this package with tensorflow or jax also installed as:
 
-```python
+```bash
 pip install "tensorcircuit-ng[jax]"
 ```
 
@@ -188,7 +188,7 @@ Other optional dependencies include `[torch]`, `[tensorflow]`, `[qiskit]` and `[
 
 Try nightly build for the newest features:
 
-```python
+```bash
 pip install tensorcircuit-nightly
 ```
 

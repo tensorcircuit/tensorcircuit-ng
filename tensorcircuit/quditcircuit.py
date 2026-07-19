@@ -227,7 +227,7 @@ class QuditCircuit:
         :param eps: Gate parameter `eps`.
         :type eps: float
         """
-        self._apply_gate(index, name="U8", extra=(gamma, z, eps))
+        self._apply_gate(index, name="U8", gamma=gamma, z=z, eps=eps)
 
     U8 = u8
 

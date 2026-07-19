@@ -1059,25 +1059,32 @@ class ExtendedBackend:
         """
         Return coordinate matrices from coordinate vectors.
 
+        Backend-agnostic wrapper around the backend's ``meshgrid``
+        implementation (NumPy, JAX, TensorFlow, PyTorch, CuPy). Semantics
+        follow NumPy: pass ``indexing='ij'`` for matrix indexing or
+        ``indexing='xy'`` for Cartesian indexing (default).
+
         :param args: coordinate vectors
         :type args: Any
-        :param kwargs: keyword arguments for meshgrid, typically includes 'indexing'
-           which can be 'ij' (matrix indexing) or 'xy' (Cartesian indexing).
-           - 'ij': matrix indexing, first dimension corresponds to rows (default)
-           - 'xy': Cartesian indexing, first dimension corresponds to columns
-           Example:
-              >>> x, y = backend.meshgrid([0, 1], [0, 2], indexing='xy')
-              Shapes:
-              - x.shape == (2, 2)  # rows correspond to y vector length
-              - y.shape == (2, 2)
-              Values:
-              x = [[0, 1],
-                  [0, 1]]
-              y = [[0, 0],
-                  [2, 2]]
+        :param kwargs: keyword arguments forwarded to the backend ``meshgrid``,
+            typically ``indexing`` ('ij' or 'xy')
         :type kwargs: Any
         :return: list of coordinate matrices
         :rtype: Any
+
+        :Example:
+
+        With ``indexing='xy'`` (Cartesian, the default) the first output
+        varies along columns and the second along rows:
+
+        .. code-block:: python
+
+            x, y = backend.meshgrid([0, 1], [0, 2], indexing='xy')
+            # x.shape == (2, 2), y.shape == (2, 2)
+            # x = [[0, 1],
+            #      [0, 1]]
+            # y = [[0, 0],
+            #      [2, 2]]
         """
         raise NotImplementedError(
             "Backend '{}' has not implemented `meshgrid`.".format(self.name)
@@ -2221,18 +2228,21 @@ class ExtendedBackend:
 
         :Example:
 
-        >>> f = lambda x,y: x**2+2*y
-        >>> g = tc.backend.grad(f)
-        >>> g(tc.num_to_tensor(1),tc.num_to_tensor(2))
-        2
-        >>> g = tc.backend.grad(f, argnums=(0,1))
-        >>> g(tc.num_to_tensor(1),tc.num_to_tensor(2))
-        [2, 2]
+        .. code-block:: python
+
+            f = lambda x, y: x**2 + 2*y
+            g = tc.backend.grad(f)
+            g(tc.num_to_tensor(1), tc.num_to_tensor(2))  # 2
+            g = tc.backend.grad(f, argnums=(0, 1))
+            g(tc.num_to_tensor(1), tc.num_to_tensor(2))  # (2, 2)
 
         :param f: the function to be differentiated
         :type f: Callable[..., Any]
         :param argnums: the position of args in ``f`` that are to be differentiated, defaults to be 0
         :type argnums: Union[int, Sequence[int]], optional
+        :param has_aux: whether ``f`` returns a ``(value, aux)`` pair with the
+            auxiliary data carried through differentiation, defaults to False
+        :type has_aux: bool, optional
         :return: the grad function of ``f`` with the same set of arguments as ``f``
         :rtype: Callable[..., Any]
         """
@@ -2244,25 +2254,28 @@ class ExtendedBackend:
         self: Any,
         f: Callable[..., Any],
         argnums: Union[int, Sequence[int]] = 0,
-        hax_aux: bool = False,
+        has_aux: bool = False,
     ) -> Callable[..., Tuple[Any, Any]]:
         """
         Return the function which returns the value and grad of ``f``.
 
         :Example:
 
-        >>> f = lambda x,y: x**2+2*y
-        >>> g = tc.backend.value_and_grad(f)
-        >>> g(tc.num_to_tensor(1),tc.num_to_tensor(2))
-        5, 2
-        >>> g = tc.backend.value_and_grad(f, argnums=(0,1))
-        >>> g(tc.num_to_tensor(1),tc.num_to_tensor(2))
-        5, [2, 2]
+        .. code-block:: python
+
+            f = lambda x, y: x**2 + 2*y
+            g = tc.backend.value_and_grad(f)
+            g(tc.num_to_tensor(1), tc.num_to_tensor(2))  # (5, 2)
+            g = tc.backend.value_and_grad(f, argnums=(0, 1))
+            g(tc.num_to_tensor(1), tc.num_to_tensor(2))  # (5, (2, 2))
 
         :param f: the function to be differentiated
         :type f: Callable[..., Any]
         :param argnums: the position of args in ``f`` that are to be differentiated, defaults to be 0
         :type argnums: Union[int, Sequence[int]], optional
+        :param has_aux: whether ``f`` returns a ``(value, aux)`` pair with the
+            auxiliary data carried through differentiation, defaults to False
+        :type has_aux: bool, optional
         :return: the value and grad function of ``f`` with the same set of arguments as ``f``
         :rtype: Callable[..., Tuple[Any, Any]]
         """

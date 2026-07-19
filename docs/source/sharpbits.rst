@@ -240,4 +240,4 @@ A related issue is the different behavior for ``K.grad(K.vmap(f))`` on different
 
 However, for Jax backend, the function simply raise error as only scalar output function can be differentiated, no implicit sum of the vectorized ``f`` is assumed. For non-scalar output, one should use `jacrev` or `jacfwd` to get the gradient information.
 
-Specifically, ``K.grad(K.vmap(f))`` on TensorFlow backend is equilvalent to ``K.grad(K.append(K.vamp(f), K.sum))`` on Jax backend.
+Specifically, ``K.grad(K.vmap(f))`` on TensorFlow backend is equivalent to ``K.grad(K.append(K.vmap(f), K.sum))`` on Jax backend.

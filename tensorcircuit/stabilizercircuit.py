@@ -104,12 +104,9 @@ class StabilizerCircuit(AbstractCircuit):
         # Map TensorCircuit gates to Stim gates
 
         if name.lower() in self.gate_map:
-            # self._stim_circuit.append(gate_map[name.lower()], list(index))
             gn = self.gate_map[name.lower()]
             instruction = f"{gn} {' '.join(map(str, index))}"
             self._stim_circuit.append_from_stim_program_text(instruction)
-            # append is much slower
-            # self.current_sim.do(stim.Circuit(instruction))
             getattr(self.current_sim, gn.lower())(*index)
         else:
             raise ValueError(f"Gate {name} is not supported in stabilizer simulation")
@@ -169,13 +166,11 @@ class StabilizerCircuit(AbstractCircuit):
             If `with_prob` is True, a tuple containing the results and the probability is returned.
         :rtype: Tensor
         """
-        # Convert negative indices
-
+        # Drop negative indices (not supported in stabilizer measurement)
         index = tuple([i for i in index if i >= 0])
 
-        # Add measurement instructions
+        # Copy the simulator so measurement does not collapse the live state
         s1 = self.current_simulator().copy()
-        # Sample once from the circuit using sampler
 
         if with_prob:
             num_random_measurements = 0
@@ -198,13 +193,8 @@ class StabilizerCircuit(AbstractCircuit):
         :return: The measurement result (0 or 1).
         :rtype: Tensor
         """
-        # Convert negative indices
-
-        # Add measurement instructions
         self._stim_circuit.append_from_stim_program_text("M " + str(index))
-        # self.current_sim = None
         m = self.current_simulator().measure(index)
-        # Sample once from the circuit using sampler
 
         return m
 
@@ -219,15 +209,10 @@ class StabilizerCircuit(AbstractCircuit):
         :return: A tensor containing the measurement results.
         :rtype: Tensor
         """
-        # Convert negative indices
-
-        # Add measurement instructions
         self._stim_circuit.append_from_stim_program_text(
             "M " + " ".join(map(str, index))
         )
-        # self.current_sim = None
         m = self.current_simulator().measure_many(*index)
-        # Sample once from the circuit using sampler
 
         return m
 
@@ -428,18 +413,6 @@ class StabilizerCircuit(AbstractCircuit):
         # Get stabilizer tableau
         tableau = self.current_tableau()
         N = len(tableau)
-
-        # Pre-allocate binary matrix with proper dtype
-        # binary_matrix = np.zeros((N, 2 * N), dtype=np.int8)
-
-        # Vectorized conversion of stabilizers to binary matrix
-        # z_outputs = np.array([tableau.z_output(k) for k in range(N)])
-        # x_part = z_outputs == 1  # X
-        # z_part = z_outputs == 3  # Z
-        # y_part = z_outputs == 2  # Y
-
-        # binary_matrix[:, :N] = x_part | y_part
-        # binary_matrix[:, N:] = z_part | y_part
 
         _, _, z2x, z2z, _, _ = tableau.to_numpy()
         binary_matrix = np.concatenate([z2x, z2z], axis=1)

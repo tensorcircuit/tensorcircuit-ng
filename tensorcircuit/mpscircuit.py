@@ -186,17 +186,18 @@ class MPSCircuit(AbstractCircuit):
         self._extra_qir: List[Dict[str, Any]] = []
 
     # `MPSCircuit` does not has `replace_inputs` like `Circuit`
-    # because the gates are immediately absorted into the MPS when applied,
+    # because the gates are immediately absorbed into the MPS when applied,
     # so it is impossible to remember the initial structure
 
-    def get_bond_dimensions(self) -> Tensor:
+    def get_bond_dimensions(self) -> List[int]:
         """
-        Get the MPS bond dimensions
+        Get the MPS bond dimensions.
 
-        :return: MPS tensors
-        :rtype: Tensor
+        :return: A list of bond dimensions along the MPS chain
+            (length ``nqubits + 1``, including the two boundary bonds of size 1).
+        :rtype: List[int]
         """
-        return self._mps.bond_dimensions
+        return self._mps.bond_dimensions  # type: ignore[no-any-return]
 
     def get_tensors(self) -> List[Tensor]:
         """
@@ -275,7 +276,7 @@ class MPSCircuit(AbstractCircuit):
 
         if split is None:
             split = self.split
-        # The center position of MPS must be either `index1` for `index2` before applying a double gate
+        # The center position of MPS must be either `index1` or `index2` before applying a double gate
         # Choose the one closer to the current center
         assert index2 - index1 == 1
         diff1 = abs(index1 - self._mps.center_position)  # type: ignore
@@ -377,7 +378,6 @@ class MPSCircuit(AbstractCircuit):
         gate: Union[Gate, Tensor],
         *index: int,
     ) -> Tuple[Sequence[Tensor], int]:
-        # should I put this function here?
         """
         Convert gate to MPO form with identities at empty sites
         """
@@ -862,9 +862,9 @@ class MPSCircuit(AbstractCircuit):
 
     def get_norm(self) -> Tensor:
         """
-        Get the normalized Center Position.
+        Get the L2 norm of the MPS tensor at the current orthogonality center.
 
-        :return: Normalized Center Position.
+        :return: Scalar tensor holding ``||A_center||_2``.
         :rtype: Tensor
         """
         return backend.norm(self._mps.tensors[self._mps.center_position])
@@ -967,8 +967,8 @@ class MPSCircuit(AbstractCircuit):
         :type other: MPSCircuit, optional
         :param conj: Whether to conjugate the bra state
         :type conj: bool, defaults to be True
-        :param normalize: Whether to normalize the MPS
-        :type normalize: bool, defaults to be True
+        :param normalize: Whether to normalize the result by the MPS norm.
+        :type normalize: bool, defaults to be False
         :param split: Truncation split
         :type split: Any
         :return: The expectation of corresponding operators
@@ -1053,16 +1053,6 @@ class MPSCircuit(AbstractCircuit):
         :type status: Optional[Tensor]
         :return: The sample output and probability (optional) of the quantum line.
         :rtype: Tuple[Tensor, Tensor]
-        """
-        """
-        is_sorted = np.all(np.sort(index) == np.array(index))
-        if not is_sorted:
-            order = backend.convert_to_tensor(np.argsort(index).tolist())
-            sample, p = self.measure(
-                *np.sort(index), with_prob=with_prob, status=status
-            )
-            return backend.convert_to_tensor([sample[i] for i in order]), p
-        # set the center to the left side, then gradually move to the right and do measurement at sites
         """
         mps = self.copy()
 
