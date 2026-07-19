@@ -1,15 +1,15 @@
-"""ContractionAlgebra: generic interface for swapping contraction primitives +
+"""ContractionAlgebra: a generic interface for swapping contraction primitives +
 boundary representation, consulted by ``cons._algebraic_base_contraction``.
 
-Two ABCs:
-- ``ContractionAlgebra``: the arithmetic (tensordot/einsum kernels) + observation
-  hooks. Carries a ``Representation`` (boundary codec), default identity.
-- ``Representation``: boundary encode (leaves -> physical storage) / decode
-  (final -> primary tensor + aux). Covers storage-split (complex<->pair) and
-  precision cast (f64<->bf16). Default identity.
+Implement ``ContractionAlgebra`` (with a ``Representation``) and activate via
+``cons.set_contraction_algebra(...)`` -- the single entry-point for switching
+contraction algebras. The in-source ``cons._base``
+routes any non-standard algebra to ``_algebraic_base_contraction``, which runs
+encode -> algebra kernels -> decode; no monkey-patching is required.
 
-kernel must be closed over whatever its Representation produces (author's
-contract; Representation is bundled in the algebra so users cannot mis-pair).
+Reference applications: ``applications/tropical_algebra.py``
+(max-plus / counting / tracking) and ``applications/bcomplex32_algebra.py``
+(bf16 pair).
 """
 
 from abc import ABC, abstractmethod
@@ -101,3 +101,11 @@ class StandardAlgebra(ContractionAlgebra):
 
     def einsum(self, be: Backend, eq: str, *operands: Tensor) -> Tensor:
         return be.einsum(eq, *operands)
+
+
+__all__ = [
+    "ContractionAlgebra",
+    "StandardAlgebra",
+    "Representation",
+    "IdentityRepresentation",
+]

@@ -1,7 +1,7 @@
 import numpy as np
 import tensorcircuit as tc
 import tensorcircuit.cons as cons
-from tensorcircuit.contraction_algebra.base import ContractionAlgebra, StandardAlgebra
+from tensorcircuit.contraction_algebra import ContractionAlgebra, StandardAlgebra
 
 
 def test_standard_tensordot_matches_backend():

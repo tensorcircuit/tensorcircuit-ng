@@ -140,9 +140,9 @@ set_backend = set_tensornetwork_backend
 set_tensornetwork_backend()
 
 # --- ContractionAlgebra state (mirrors dtypestr/set_dtype pattern) ---
-from .contraction_algebra import StandardAlgebra as _StandardAlgebra
-from .contraction_algebra.base import (
+from .contraction_algebra import (
     ContractionAlgebra as _ContractionAlgebra,
+    StandardAlgebra as _StandardAlgebra,
 )
 
 _contraction_algebra: _ContractionAlgebra = _StandardAlgebra()
