@@ -3,6 +3,7 @@
 For each (backend, circuit, n): report bf16 vs complex64 peak-mem ratio, speedup,
 and bf16 accuracy. For micro rows: report wall-time per backend.
 """
+
 import argparse
 import csv
 from collections import defaultdict

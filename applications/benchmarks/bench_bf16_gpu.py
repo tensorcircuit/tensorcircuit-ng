@@ -5,6 +5,7 @@ complex-bf16 matmul (4 bf16 GEMMs) -> K3 native-GEMM evidence. One subprocess pe
 trial for clean peak-memory attribution (nvidia-smi polling as the cross-backend
 common truth; backend API as fine-grained cross-check).
 """
+
 import argparse
 import csv
 import json
@@ -263,7 +264,9 @@ def _build_matrix(args: argparse.Namespace) -> List[tuple]:
         return rows
     for backend in backends:
         for circuit in circuits:
-            ns = args.mem_ns.split(",") if circuit == "ghz" else args.speed_ns.split(",")
+            ns = (
+                args.mem_ns.split(",") if circuit == "ghz" else args.speed_ns.split(",")
+            )
             for dtype in ("complex64", "bf16"):
                 for n in ns:
                     rows.append((backend, dtype, circuit, int(n)))

@@ -1,6 +1,7 @@
 """GPU smoke tests for complex<bf16> pair-algebra across tc GPU backends.
 Skipped unless the backend + a CUDA GPU are available. CI runs numpy only; these
 run author-side on the supercomputer. Mirrors the numpy bf16 tests."""
+
 import numpy as np
 import pytest
 
@@ -38,7 +39,10 @@ def _backend_available(name: str) -> bool:
             return False
         tc.set_backend(name)
         be = tc.backend
-        t = be.cast(be.convert_to_tensor(np.array([1.0 + 2.0j], dtype=np.complex64)), "complex64")
+        t = be.cast(
+            be.convert_to_tensor(np.array([1.0 + 2.0j], dtype=np.complex64)),
+            "complex64",
+        )
         from applications.bcomplex32_algebra import _complex_to_pair, _pair_to_complex
 
         back = _pair_to_complex(be, _complex_to_pair(be, t))
@@ -88,10 +92,13 @@ def test_pair_einsum_keeps_bfloat16_dtype_gpu(backend):
     b = np.array([[0.5 + 0.5j, 1.0j], [2.0j, -1.0 + 1.0j]], dtype=np.complex64)
     a = be.cast(be.convert_to_tensor(a), "complex64")
     b = be.cast(be.convert_to_tensor(b), "complex64")
-    result = _pair_einsum(be, "ij,jk->ik", _complex_to_pair(be, a), _complex_to_pair(be, b))
+    result = _pair_einsum(
+        be, "ij,jk->ik", _complex_to_pair(be, a), _complex_to_pair(be, b)
+    )
     re, _ = result.unpack()
-    assert str(be.dtype(re)).endswith("bfloat16"), \
-        f"_pair_einsum upcast on {backend}: {be.dtype(re)}"
+    assert str(be.dtype(re)).endswith(
+        "bfloat16"
+    ), f"_pair_einsum upcast on {backend}: {be.dtype(re)}"
 
 
 @pytest.mark.parametrize("backend", GPU_BACKENDS)
@@ -114,10 +121,14 @@ def test_einsum_single_operand_native_gpu(backend):
     half, _ = _complex_to_pair(be, a).unpack()  # bf16 real half
 
     out_diag = _einsum_single_operand_half(be, half, "ii", "i")  # diagonal
-    out_red = _einsum_single_operand_half(be, half, "ab", "a")  # reduction (numpy rejects)
+    out_red = _einsum_single_operand_half(
+        be, half, "ab", "a"
+    )  # reduction (numpy rejects)
     a_real_ref = np.array([[1.0, 3.0], [0.5, -2.0]], dtype=np.float32)
     np.testing.assert_allclose(
-        be.numpy(be.cast(out_diag, "float32")), np.einsum("ii->i", a_real_ref), rtol=2e-2
+        be.numpy(be.cast(out_diag, "float32")),
+        np.einsum("ii->i", a_real_ref),
+        rtol=2e-2,
     )
     np.testing.assert_allclose(
         be.numpy(be.cast(out_red, "float32")), np.einsum("ab->a", a_real_ref), rtol=2e-2
