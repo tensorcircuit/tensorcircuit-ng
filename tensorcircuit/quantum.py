@@ -1280,9 +1280,9 @@ def ps2xyz(ps: List[int]) -> Dict[str, List[int]]:
 
     # ps2xyz([1, 2, 2, 0]) = {"x": [0], "y": [1, 2], "z": []}
 
-    :param ps: _description_
+    :param ps: Pauli string as a list of ints (0=I, 1=X, 2=Y, 3=Z) per qubit
     :type ps: List[int]
-    :return: _description_
+    :return: dict with keys ``"x"``/``"y"``/``"z"`` listing the qubit indices where each Pauli acts
     :rtype: Dict[str, List[int]]
     """
     xyz: Dict[str, List[int]] = {"x": [], "y": [], "z": []}
@@ -1300,11 +1300,11 @@ def xyz2ps(xyz: Dict[str, List[int]], n: Optional[int] = None) -> List[int]:
     """
     xyz dict to pauli string list
 
-    :param xyz: _description_
+    :param xyz: dict with keys ``"x"``/``"y"``/``"z"`` listing qubit indices for each Pauli
     :type xyz: Dict[str, List[int]]
-    :param n: _description_, defaults to None
+    :param n: total number of qubits, defaults to None (inferred from the max index + 1)
     :type n: Optional[int], optional
-    :return: _description_
+    :return: Pauli string as a list of ints (0=I, 1=X, 2=Y, 3=Z) per qubit
     :rtype: List[int]
     """
     if n is None:
@@ -1876,7 +1876,7 @@ def u1_mask(n: int, m: int) -> Tensor:
     :type n: int
     :param m: number of down spins (1 in 0, 1)
     :type m: int
-    :return: _description_
+    :return: boolean/0-1 mask of length ``2**n`` selecting configurations with ``m`` down spins
     :rtype: Tensor
     """
     inds = u1_inds(n, m)
@@ -1935,7 +1935,7 @@ def heisenberg_hamiltonian(
 ) -> Tensor:
     """
     Generate Heisenberg Hamiltonian with possible external fields.
-    Currently requires tensorflow installed
+    Works with any backend; set ``numpy=True`` to obtain a ``numpy``/``scipy`` matrix.
 
     :Example:
 
@@ -1956,9 +1956,9 @@ def heisenberg_hamiltonian(
     :type hyy: float
     :param hz: External field on z direction, default is 0.0
     :type hz: float
-    :param hx: External field on y direction, default is 0.0
+    :param hx: External field on x direction, default is 0.0
     :type hx: float
-    :param hy: External field on x direction, default is 0.0
+    :param hy: External field on y direction, default is 0.0
     :type hy: float
     :param sparse: Whether to return sparse Hamiltonian operator, default is True.
     :type sparse: bool, defalts True
@@ -2143,7 +2143,7 @@ def PauliStringSum2Dense(
 ) -> Tensor:
     """
     Generate dense matrix from Pauli string sum.
-    Currently requires tensorflow installed.
+    Works with any backend; set ``numpy=True`` to obtain a ``numpy`` matrix.
 
 
     :param ls: 2D Tensor, each row is for a Pauli string,
@@ -2190,7 +2190,7 @@ def PauliStringSum2COO(
 ) -> Tensor:
     """
     Generate sparse tensor from Pauli string sum.
-    Currently requires tensorflow installed
+    Works with any backend; set ``numpy=True`` to obtain a ``scipy`` sparse matrix.
 
     :param ls: 2D Tensor, each row is for a Pauli string,
         e.g. [1, 0, 0, 3, 2] is for :math:`X_0Z_3Y_4`
@@ -2500,6 +2500,17 @@ def trace_product(*o: Union[Tensor, QuOperator]) -> Tensor:
 
 @op2tensor
 def entanglement_entropy(state: Tensor, cut: Union[int, List[int]]) -> Tensor:
+    """
+    Compute the von Neumann entanglement entropy of ``state`` across the bipartition
+    defined by ``cut``.
+
+    :param state: wavefunction or density matrix of the full system
+    :type state: Tensor
+    :param cut: site index (or list of indices) defining the subsystem to trace out
+    :type cut: Union[int, List[int]]
+    :return: the von Neumann entanglement entropy :math:`S = -\\mathrm{Tr}(\\rho \\log\\rho)`
+    :rtype: Tensor
+    """
     rho = reduced_density_matrix(state, cut)
     return entropy(rho)
 
@@ -2515,13 +2526,13 @@ def reduced_wavefunction(
     The fixed measure result is guaranteed by users,
     otherwise final normalization may required in the return
 
-    :param state: _description_
+    :param state: wavefunction of the full system
     :type state: Tensor
     :param cut: the list of position for qubit to be reduced
     :type cut: List[int]
     :param measure: the fixed results of given qubits in the same shape list as ``cut``
     :type measure: List[int]
-    :return: _description_
+    :return: the (unnormalized) reduced wavefunction on the remaining sites
     :rtype: Tensor
     :param dim: dimension of qudit system
     :type dim: int
@@ -2770,7 +2781,7 @@ def partial_transpose(
     rho: Tensor, transposed_sites: List[int], dim: Optional[int] = None
 ) -> Tensor:
     """
-    _summary_
+    Compute the partial transpose of a density matrix on the given sites.
 
     :param rho: density matrix
     :type rho: Tensor
@@ -2778,7 +2789,7 @@ def partial_transpose(
     :type transposed_sites: List[int]
     :param dim: dimension of qudit system
     :type dim: int
-    :return: _description_
+    :return: the partially transposed density matrix
     :rtype: Tensor
     """
     dim = 2 if dim is None else dim
@@ -2804,15 +2815,16 @@ def entanglement_negativity(
     rho: Tensor, transposed_sites: List[int], dim: Optional[int] = None
 ) -> Tensor:
     """
-    _summary_
+    Compute the entanglement negativity of ``rho`` across the bipartition
+    defined by ``transposed_sites``.
 
-    :param rho: _description_
+    :param rho: density matrix of the bipartite system
     :type rho: Tensor
-    :param transposed_sites: _description_
+    :param transposed_sites: sites to transpose when forming the partial transpose
     :type transposed_sites: List[int]
     :param dim: dimension of qudit system
     :type dim: int
-    :return: _description_
+    :return: the entanglement negativity :math:`(\\lVert\\rho^{T_A}\\rVert_1 - 1)/2`
     :rtype: Tensor
     """
     rhot = partial_transpose(rho, transposed_sites, dim=dim)
@@ -2826,17 +2838,18 @@ def log_negativity(
     rho: Tensor, transposed_sites: List[int], base: str = "e", dim: Optional[int] = None
 ) -> Tensor:
     """
-    _summary_
+    Compute the logarithmic negativity of ``rho``, i.e. the log of
+    :math:`\\lVert\\rho^{T_A}\\rVert_1`.
 
-    :param rho: _description_
+    :param rho: density matrix of the bipartite system
     :type rho: Tensor
-    :param transposed_sites: _description_
+    :param transposed_sites: sites to transpose when forming the partial transpose
     :type transposed_sites: List[int]
     :param base: whether use 2 based log or e based log, defaults to "e"
     :type base: str, optional
     :param dim: dimension of qudit system
     :type dim: int
-    :return: _description_
+    :return: the logarithmic negativity
     :rtype: Tensor
     """
     dim = 2 if dim is None else dim
@@ -2852,7 +2865,7 @@ def log_negativity(
 @partial(op2tensor, op_argnums=(0, 1))
 def trace_distance(rho: Tensor, rho0: Tensor, eps: float = 1e-12) -> Tensor:
     """
-    Compute the trace distance between two density matrix ``rho`` and ``rho2``.
+    Compute the trace distance between two density matrix ``rho`` and ``rho0``.
 
     :param rho: The density matrix in form of Tensor.
     :type rho: Tensor
@@ -2883,7 +2896,7 @@ def fidelity(rho: Tensor, rho0: Tensor) -> Tensor:
     :type rho: Tensor
     :param rho0: The density matrix in form of Tensor.
     :type rho0: Tensor
-    :return: The sqrtm of a Hermitian matrix ``a``.
+    :return: The fidelity scalar between ``rho`` and ``rho0``.
     :rtype: Tensor
     """
     rhosqrt = backend.sqrtmh(rho)
@@ -3301,7 +3314,7 @@ def sample2all(
     :type sample: Tensor
     :param n: number of sites
     :type n: int
-    :param format: see :py:meth:`tensorcircuit.quantum.measurement_results`, defaults to "count_vector"
+    :param format: see :py:func:`tensorcircuit.quantum.measurement_results`, defaults to "count_vector"
     :type format: str, optional
     :param jittable: only applicable to count transformation in jax backend, defaults to False
     :type jittable: bool, optional
@@ -3408,8 +3421,8 @@ def correlation_from_samples(index: Sequence[int], results: Tensor, n: int) -> T
 def correlation_from_counts(index: Sequence[int], results: Tensor) -> Tensor:
     r"""
     Compute :math:`\prod_{i\in \\text{index}} s_i`,
-    where the probability for each bitstring is given as a vector ``results``.
-    Results is in the format of "count_vector"
+    where the (unnormalized) counts for each bitstring are given as a vector ``results``.
+    ``results`` is in the format of "count_vector" and is normalized internally.
 
     :Example:
 
@@ -3421,7 +3434,7 @@ def correlation_from_counts(index: Sequence[int], results: Tensor) -> Tensor:
 
     :param index: list of int, indicating the position in the bitstring
     :type index: Sequence[int]
-    :param results: probability vector of shape 2^n
+    :param results: count vector of shape 2^n (normalized internally to a probability vector)
     :type results: Tensor
     :return: Correlation expectation from measurement shots.
     :rtype: Tensor

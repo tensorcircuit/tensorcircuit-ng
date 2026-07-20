@@ -39,8 +39,8 @@ class QuantumLayer(Layer):  # type: ignore
         :type initializer: Union[Text, Sequence[Text]], optional
         :param constraint: [description], defaults to None
         :type constraint: Optional[Union[Text, Sequence[Text]]], optional
-        :param initializer: The regularizer of the weights, defaults to None
-        :type initializer: Union[Text, Sequence[Text]], optional
+        :param regularizer: The regularizer of the weights, defaults to None
+        :type regularizer: Union[Text, Sequence[Text]], optional
         """
 
         super().__init__(**kwargs)

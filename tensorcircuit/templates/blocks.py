@@ -1,5 +1,6 @@
 """
-Shortcuts for measurement patterns on circuit
+Shortcut building blocks that compose common circuit structures (Bell pairs,
+grid entangling layers, QAOA layers, QFT, etc.) on a given circuit.
 """
 
 # circuit in, circuit out
@@ -71,6 +72,21 @@ def Bell_pair_block(
 def Grid2D_entangling(
     c: Circuit, coord: Grid2DCoord, unitary: Tensor, params: Tensor, **kws: Any
 ) -> Circuit:
+    """
+    Apply a parametrized two-qubit entangling gate (``exp1``) along every row
+    and column edge of the 2D grid ``coord``.
+
+    :param c: circuit to append gates onto
+    :type c: Circuit
+    :param coord: 2D grid coordinate object defining the row/column edges
+    :type coord: Grid2DCoord
+    :param unitary: two-qubit unitary generator used by ``exp1``
+    :type unitary: Tensor
+    :param params: 1D tensor of rotation angles, ordered row-edges then column-edges
+    :type params: Tensor
+    :return: the same circuit with entangling layers appended
+    :rtype: Circuit
+    """
     i = 0
     for a, b in coord.all_rows():
         c.exp1(a, b, unitary=unitary, theta=params[i], **kws)
@@ -84,6 +100,24 @@ def Grid2D_entangling(
 def QAOA_block(
     c: Circuit, g: Graph, paramzz: Tensor, paramx: Tensor, **kws: Any
 ) -> Circuit:
+    """
+    Append one QAOA layer (cost + mixer) onto ``c`` for the graph ``g``.
+
+    The cost layer applies ``exp1(..., _zz_matrix, paramzz)`` on each edge
+    (scaled by the edge weight if ``paramzz`` is scalar), and the mixer layer
+    applies ``rx(paramx)`` on each node.
+
+    :param c: circuit to append the QAOA layer onto
+    :type c: Circuit
+    :param g: problem graph whose edges/nodes define the cost and mixer terms
+    :type g: Graph
+    :param paramzz: ZZ rotation angle(s); scalar (broadcast) or per-edge vector
+    :type paramzz: Tensor
+    :param paramx: RX rotation angle(s); scalar (broadcast) or per-node vector
+    :type paramx: Tensor
+    :return: the same circuit with the QAOA layer appended
+    :rtype: Circuit
+    """
     if backend.sizen(paramzz) == 1:
         for e1, e2 in g.edges:
             c.exp1(

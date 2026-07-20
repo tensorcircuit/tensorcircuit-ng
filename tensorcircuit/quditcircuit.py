@@ -522,13 +522,14 @@ class QuditCircuit:
         :type allow_state: bool
         :param readout_error: Optional readout error model.
         :type readout_error: Optional[Sequence[Any]]
-        :param format: Output format. See :py:meth:`tensorcircuit.quantum.measurement_results`.
+        :param format: Output format. See :py:func:`tensorcircuit.quantum.measurement_results`.
                        Supported formats for qudits include:
-
-                "count_vector": # np.array([2, 0, 0, 0])
 
                 "count_dict_bin": # {"00": 2, "01": 0, "10": 0, "11": 0}
                     for cases :math:`d\in [11, 36]`, use 0-9A-Z digits (e.g., 'A' -> 10, ..., 'Z' -> 35);
+
+            Note: integer-based formats (``sample_int``, ``count_tuple``,
+            ``count_dict_int``, ``count_vector``) are not supported for qudits.
 
         :type format: Optional[str]
         :param random_generator: random generator,  defaults to None

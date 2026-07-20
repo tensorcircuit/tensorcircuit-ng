@@ -241,9 +241,9 @@ def plot_histogram(data: Any, **kws: Any) -> Any:
 
     interesting kw options include: ``number_to_keep`` (int)
 
-    :param data: _description_
+    :param data: counts dict (bitstring -> count) or list of such dicts
     :type data: Any
-    :return: _description_
+    :return: the qiskit figure object (e.g. a matplotlib ``Figure``)
     :rtype: Any
     """
     from qiskit.visualization import plot_histogram

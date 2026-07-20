@@ -21,11 +21,11 @@ def Line1D(
     """
     1D chain with ``n`` sites
 
-    :param n: [description]
+    :param n: number of sites in the chain
     :type n: int
-    :param pbc: [description], defaults to True
+    :param pbc: whether to use periodic boundary conditions (close the chain into a ring), defaults to True
     :type pbc: bool, optional
-    :return: [description]
+    :return: the 1D chain as a networkx graph
     :rtype: Graph
     """
 
@@ -128,7 +128,7 @@ class Grid2DCoord:
         :param pbc: whether to include pbc edges (periodic boundary condition),
             defaults to True
         :type pbc: bool, optional
-        :return: _description_
+        :return: the 2D grid lattice as a networkx graph
         :rtype: Graph
         """
         g = nx.Graph()

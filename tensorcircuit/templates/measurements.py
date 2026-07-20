@@ -241,19 +241,19 @@ def heisenberg_measurements(
     :type c: Circuit
     :param g: Lattice graph defining Heisenberg Hamiltonian
     :type g: Graph
-    :param hzz: [description], defaults to 1.0
+    :param hzz: ZZ coupling strength, defaults to 1.0
     :type hzz: float, optional
-    :param hxx: [description], defaults to 1.0
+    :param hxx: XX coupling strength, defaults to 1.0
     :type hxx: float, optional
-    :param hyy: [description], defaults to 1.0
+    :param hyy: YY coupling strength, defaults to 1.0
     :type hyy: float, optional
-    :param hz: [description], defaults to 0.0
+    :param hz: external field on z direction, defaults to 0.0
     :type hz: float, optional
-    :param hx: [description], defaults to 0.0
+    :param hx: external field on x direction, defaults to 0.0
     :type hx: float, optional
-    :param hy: [description], defaults to 0.0
+    :param hy: external field on y direction, defaults to 0.0
     :type hy: float, optional
-    :param reuse: [description], defaults to True
+    :param reuse: whether to reuse the contracted tensor cache, defaults to True
     :type reuse: bool, optional
     :return: Value of Heisenberg energy
     :rtype: Tensor

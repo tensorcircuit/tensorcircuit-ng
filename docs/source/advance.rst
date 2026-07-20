@@ -103,7 +103,7 @@ The simulation is still differentiable and jittable. Only jax backend is support
 
 This utility is super helpful for optimizing quantum control or investigating digital-analog hybrid variational quantum schemes.
 
-We support two modes of analog simulation, where :py:meth:`tensorcircuit.experimental.evol_global` evolve the state via a Hamiltonian define on the whole system, and :py:meth:`tensorcircuit.experimental.evol_local` evolve the state via a Hamiltonian define on a local subsystem.
+We support two modes of analog simulation, where :py:func:`tensorcircuit.experimental.evol_global` evolve the state via a Hamiltonian define on the whole system, and :py:func:`tensorcircuit.experimental.evol_local` evolve the state via a Hamiltonian define on a local subsystem.
 
 .. Note::
 
@@ -157,8 +157,8 @@ These methods are essential for studying quantum dynamics, particularly in many-
 
 **Exact Diagonalization:**
 
-For small systems where full diagonalization is feasible, the :py:meth:`tensorcircuit.timeevol.ed_evol` method provides exact time evolution by directly computing matrix exponentials
-(alias :py:meth:`tensorcircuit.timeevol.hamiltonian_evol`):
+For small systems where full diagonalization is feasible, the :py:func:`tensorcircuit.timeevol.ed_evol` method provides exact time evolution by directly computing matrix exponentials
+(alias :py:func:`tensorcircuit.timeevol.hamiltonian_evol`):
 
 .. code-block:: python
 
@@ -204,7 +204,7 @@ It provides exact results but is limited to small systems (typically <16 qubits)
 **Krylov Subspace Methods:**
 
 For larger systems where exact diagonalization becomes intractable, the Krylov subspace method provides an efficient approximation. 
-The :py:meth:`tensorcircuit.timeevol.krylov_evol` function implements this approach:
+The :py:func:`tensorcircuit.timeevol.krylov_evol` function implements this approach:
 
 .. code-block:: python
 
@@ -258,7 +258,7 @@ These methods solve the time-dependent Schrödinger equation directly by integra
 
 TensorCircuit provides two ODE-based evolution methods depending on whether the Hamiltonian acts on the entire system or just a local subsystem:
 
-1. **Global Evolution** (:py:meth:`tensorcircuit.timeevol.ode_evol_global`): For time-dependent Hamiltonians acting on the entire system. The Hamiltonian should be provided in sparse matrix format for efficiency.
+1. **Global Evolution** (:py:func:`tensorcircuit.timeevol.ode_evol_global`): For time-dependent Hamiltonians acting on the entire system. The Hamiltonian should be provided in sparse matrix format for efficiency.
 
 .. code-block:: python
 
@@ -341,7 +341,7 @@ TensorCircuit provides two ODE-based evolution methods depending on whether the 
     
 
 
-2. **Local Evolution** (:py:meth:`tensorcircuit.timeevol.ode_evol_local`): For time-dependent Hamiltonians acting on a subsystem of qubits. The Hamiltonian should be provided in dense matrix format.
+2. **Local Evolution** (:py:func:`tensorcircuit.timeevol.ode_evol_local`): For time-dependent Hamiltonians acting on a subsystem of qubits. The Hamiltonian should be provided in dense matrix format.
 
 .. code-block:: python
 
@@ -448,7 +448,7 @@ Jitted Function Save/Load
 
 To reuse the jitted function, we can save it on the disk via support from the TensorFlow `SavedModel <https://www.tensorflow.org/guide/saved_model>`_. That is to say, only jitted quantum function on the TensorFlow backend can be saved on the disk. 
 
-We wrap the tf-backend ``SavedModel`` as very easy-to-use function :py:meth:`tensorcircuit.keras.save_func` and :py:meth:`tensorcircuit.keras.load_func`.
+We wrap the tf-backend ``SavedModel`` as very easy-to-use function :py:func:`tensorcircuit.keras.save_func` and :py:func:`tensorcircuit.keras.load_func`.
 
 For the JAX-backend quantum function, one can first transform them into the tf-backend function via JAX experimental support: `jax2tf <https://github.com/google/jax/tree/main/jax/experimental/jax2tf>`_.
 
@@ -482,7 +482,7 @@ Parameterized Measurements
 
 For plain measurements API on a ``tc.Circuit``, eg. ``c = tc.Circuit(3)``, if we want to evaluate the expectation :math:`<Z_1Z_2>`, we need to call the API as ``c.expectation((tc.gates.z(), [1]), (tc.gates.z(), [2]))``. 
 
-In some cases, we may want to tell the software what to measure but in a tensor fashion. For example, if we want to get the above expectation, we can use the following API: :py:meth:`tensorcircuit.templates.measurements.parameterized_measurements`.
+In some cases, we may want to tell the software what to measure but in a tensor fashion. For example, if we want to get the above expectation, we can use the following API: :py:func:`tensorcircuit.templates.measurements.parameterized_measurements`.
 
 .. code-block:: python
 
@@ -510,7 +510,7 @@ We support COO format sparse matrix as most backends only support this format, a
             sparse_test()
 
 The sparse matrix is specifically useful to evaluate Hamiltonian expectation on the circuit, where sparse matrix representation has a good tradeoff between space and time.
-Please refer to :py:meth:`tensorcircuit.templates.measurements.sparse_expectation` for more detail.
+Please refer to :py:func:`tensorcircuit.templates.measurements.sparse_expectation` for more detail.
 
 For different representations to evaluate Hamiltonian expectation in tensorcircuit, please refer to :doc:`tutorials/tfim_vqe_diffreph`.
 
@@ -547,7 +547,7 @@ The most flexible way to build Hamiltonians is through Pauli strings:
 
 **Matrix-Free Hamiltonian Representation (MVP):**
 
-For large-scale quantum systems where constructing or storing the full Hamiltonian matrix is memory-prohibitive, TensorCircuit-NG provides a matrix-free Matrix-Vector Product (MVP) representation via :py:meth:`tensorcircuit.quantum.PauliStringSum2MVP`. This API returns a function that directly computes :math:`H|\psi\rangle` using backend-agnostic slicing and broadcasting operations, avoiding explicit matrix construction:
+For large-scale quantum systems where constructing or storing the full Hamiltonian matrix is memory-prohibitive, TensorCircuit-NG provides a matrix-free Matrix-Vector Product (MVP) representation via :py:func:`tensorcircuit.quantum.PauliStringSum2MVP`. This API returns a function that directly computes :math:`H|\psi\rangle` using backend-agnostic slicing and broadcasting operations, avoiding explicit matrix construction:
 
 .. code-block:: python
 

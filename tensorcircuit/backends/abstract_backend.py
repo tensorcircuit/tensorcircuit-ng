@@ -309,9 +309,9 @@ class ExtendedBackend:
 
     def copy(self: Any, a: Tensor) -> Tensor:
         """
-        Return the copy of ``a``, matrix exponential.
+        Return the copy of ``a``.
 
-        :param a: tensor in matrix form
+        :param a: tensor to copy
         :type a: Tensor
         :return: the copy tensor of ``a``
         :rtype: Tensor
@@ -475,7 +475,7 @@ class ExtendedBackend:
 
     def asin(self: Any, a: Tensor) -> Tensor:
         """
-        Return the acos of a tensor ``a``.
+        Return the arcsine of a tensor ``a``.
 
         :param a: tensor in matrix form
         :type a: Tensor
@@ -514,11 +514,13 @@ class ExtendedBackend:
 
     def atan2(self: Any, y: Tensor, x: Tensor) -> Tensor:
         """
-        Return the atan of a tensor ``y``/``x``.
+        Return the arctangent of ``y``/``x``.
 
-        :param a: tensor in matrix form
-        :type a: Tensor
-        :return: atan2 of ``a``
+        :param y: y-coordinate tensor
+        :type y: Tensor
+        :param x: x-coordinate tensor
+        :type x: Tensor
+        :return: atan2 of ``y``/``x``
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -741,11 +743,13 @@ class ExtendedBackend:
         """
         Compute Schur decomposition of a matrix.
 
-        :param a: _description_
+        :param a: square matrix to decompose
         :type a: Tensor
-        :param output: _description_, defaults to "real"
+        :param output: ``"real"`` for real Schur form, ``"complex"`` for complex Schur form,
+            defaults to ``"real"``
         :type output: str, optional
-        :return: T, Z so that ZTZ^H = a
+        :return: ``(T, Z)`` such that ``A = Z T Z^H``, where ``T`` is (quasi-)upper triangular
+            and ``Z`` is unitary/orthogonal
         :rtype: Tuple[Tensor, Tensor]
         """
         raise NotImplementedError(
@@ -848,9 +852,9 @@ class ExtendedBackend:
         """
         Join a sequence of arrays along an existing axis.
 
-        :param a: [description]
+        :param a: sequence of tensors to join
         :type a: Sequence[Tensor]
-        :param axis: [description], defaults to 0
+        :param axis: axis along which to join, defaults to 0
         :type axis: int, optional
         """
         raise NotImplementedError(
@@ -861,11 +865,11 @@ class ExtendedBackend:
         """
         Constructs a tensor by tiling a given tensor.
 
-        :param a: [description]
+        :param a: tensor to repeat (tile)
         :type a: Tensor
         :param rep: 1d tensor with length the same as the rank of ``a``
         :type rep: Tensor
-        :return: [description]
+        :return: the tiled tensor
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -885,9 +889,9 @@ class ExtendedBackend:
         :type a: Tensor
         :param axis: the axis to take mean, defaults to None indicating sum over flatten array
         :type axis: Optional[Sequence[int]], optional
-        :param keepdims: _description_, defaults to False
+        :param keepdims: whether the reduced axes are kept as size-1 dimensions, defaults to False
         :type keepdims: bool, optional
-        :return: _description_
+        :return: the mean of ``a`` along ``axis``
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -903,7 +907,7 @@ class ExtendedBackend:
         """
         Compute the standard deviation along the specified axis.
 
-        :param a: _description_
+        :param a: tensor to compute standard deviation on
         :type a: Tensor
         :param axis: Axis or axes along which the standard deviation is computed,
             defaults to None, implying all axis
@@ -912,7 +916,7 @@ class ExtendedBackend:
             the axes which are reduced are left in the result as dimensions with size one,
             defaults to False
         :type keepdims: bool, optional
-        :return: _description_
+        :return: the standard deviation of ``a`` along ``axis``
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -923,11 +927,11 @@ class ExtendedBackend:
         """
         Return the minimum of an array or minimum along an axis.
 
-        :param a: [description]
+        :param a: tensor to reduce
         :type a: Tensor
-        :param axis: [description], defaults to None
+        :param axis: axis along which to take the minimum, defaults to None (over all axes)
         :type axis: Optional[int], optional
-        :return: [description]
+        :return: the minimum value(s) of ``a``
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -938,11 +942,11 @@ class ExtendedBackend:
         """
         Return the maximum of an array or maximum along an axis.
 
-        :param a: [description]
+        :param a: tensor to reduce
         :type a: Tensor
-        :param axis: [description], defaults to None
+        :param axis: axis along which to take the maximum, defaults to None (over all axes)
         :type axis: Optional[int], optional
-        :return: [description]
+        :return: the maximum value(s) of ``a``
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -953,11 +957,11 @@ class ExtendedBackend:
         """
         Return the index of maximum of an array an axis.
 
-        :param a: [description]
+        :param a: tensor to reduce
         :type a: Tensor
-        :param axis: [description], defaults to 0, different behavior from numpy defaults!
+        :param axis: axis along which to find the maximum index, defaults to 0, different behavior from numpy defaults!
         :type axis: int
-        :return: [description]
+        :return: the indices of the maximum values along ``axis``
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -968,11 +972,11 @@ class ExtendedBackend:
         """
         Return the index of minimum of an array an axis.
 
-        :param a: [description]
+        :param a: tensor to reduce
         :type a: Tensor
-        :param axis: [description], defaults to 0, different behavior from numpy defaults!
+        :param axis: axis along which to find the minimum index, defaults to 0, different behavior from numpy defaults!
         :type axis: int
-        :return: [description]
+        :return: the indices of the minimum values along ``axis``
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -998,11 +1002,11 @@ class ExtendedBackend:
         """
         Sort a tensor along the given axis.
 
-        :param a: [description]
+        :param a: tensor to sort
         :type a: Tensor
-        :param axis: [description], defaults to -1
+        :param axis: axis along which to sort, defaults to -1
         :type axis: int, optional
-        :return: [description]
+        :return: the sorted tensor along ``axis``
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -1111,7 +1115,7 @@ class ExtendedBackend:
         """
         Find the unique elements and their corresponding counts of the given tensor ``a``.
 
-        :param a: [description]
+        :param a: tensor of values to deduplicate
         :type a: Tensor
         :return: Unique elements, corresponding counts
         :rtype: Tuple[Tensor, Tensor]
@@ -1124,9 +1128,9 @@ class ExtendedBackend:
         """
         Compute sigmoid of input ``a``
 
-        :param a: [description]
+        :param a: input tensor
         :type a: Tensor
-        :return: [description]
+        :return: elementwise sigmoid of ``a``
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -1201,12 +1205,12 @@ class ExtendedBackend:
         """
         Return the cumulative sum of the elements along a given axis.
 
-        :param a: [description]
+        :param a: tensor to cumulatively sum
         :type a: Tensor
         :param axis: The default behavior is the same as numpy, different from tf/torch
             as cumsum of the flatten 1D array, defaults to None
         :type axis: Optional[int], optional
-        :return: [description]
+        :return: the cumulative sum of ``a`` along ``axis``
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -1461,7 +1465,7 @@ class ExtendedBackend:
         :type stop: Optional[int], optional
         :param step: steps, defaults to 1
         :type step: Optional[int], optional
-        :return: _description_
+        :return: 1D tensor of evenly spaced values in ``[start, stop)``
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -1583,9 +1587,9 @@ class ExtendedBackend:
         """
         Transform the tensor ``a`` as a dlpack capsule
 
-        :param a: _description_
+        :param a: tensor to export
         :type a: Tensor
-        :return: _description_
+        :return: dlpack capsule sharing ``a``'s storage
         :rtype: Any
         """
         raise NotImplementedError(
@@ -1598,7 +1602,7 @@ class ExtendedBackend:
 
         :param a: the dlpack capsule
         :type a: Any
-        :return: _description_
+        :return: tensor sharing the capsule's storage
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -1910,7 +1914,7 @@ class ExtendedBackend:
         :type values: Tensor
         :param shape: Tuple[int, ...]
         :type shape: Tensor
-        :return: [description]
+        :return: the COO sparse matrix
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -2090,13 +2094,13 @@ class ExtendedBackend:
         """
         The native cond for XLA compiling, wrapper for ``tf.cond`` and limited functionality of ``jax.lax.cond``.
 
-        :param pred: [description]
+        :param pred: boolean predicate selecting which branch to run
         :type pred: bool
-        :param true_fun: [description]
+        :param true_fun: zero-argument callable executed when ``pred`` is True
         :type true_fun: Callable[[], Tensor]
-        :param false_fun: [description]
+        :param false_fun: zero-argument callable executed when ``pred`` is False
         :type false_fun: Callable[[], Tensor]
-        :return: [description]
+        :return: the tensor returned by the selected branch
         :rtype: Tensor
         """
         # possibly the most weird thing introduced in the backend :(
@@ -2132,11 +2136,11 @@ class ExtendedBackend:
         """
         ``branches[index]()``
 
-        :param index: [description]
+        :param index: scalar integer index selecting the branch
         :type index: Tensor
-        :param branches: [description]
+        :param branches: sequence of zero-argument callables, one of which is invoked
         :type branches: Sequence[Callable[[], Tensor]]
-        :return: [description]
+        :return: the tensor returned by ``branches[index]()``
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -2151,13 +2155,13 @@ class ExtendedBackend:
         This API follows ``tf.scan`` covention,
         i.e. no ys supported as jax
 
-        :param f: _description_
+        :param f: scan step function mapping ``(carry, x)`` to the new carry (no ``y`` output, unlike jax)
         :type f: Callable[Tuple[Tensor, Tensor], Tensor]
-        :param xs: _description_
+        :param xs: values scanned over along the leading axis
         :type xs: Tensor
-        :param init: _description_
+        :param init: initial carry value
         :type init: Tensor
-        :return: _description_
+        :return: the final carry after scanning over ``xs``
         :rtype: Tensor
         """
         carry = init
@@ -2179,15 +2183,17 @@ class ExtendedBackend:
         """
         This API follows jax scan style. TF use plain for loop
 
-        :param f: _description_
-        :type f: Callable[[Tensor, Tensor], Tensor]
-        :param init: _description_
+        :param f: step function mapping ``(carry, x)`` to ``(new_carry, y)``
+        :type f: Callable[[Tensor, Tensor], Tuple[Tensor, Tensor]]
+        :param init: initial carry value
         :type init: Tensor
-        :param xs: _description_
+        :param xs: scanned-over values along the leading axis; may be a single array or a
+            tuple/list of arrays scanned in lockstep
         :type xs: Tensor
-        :raises ValueError: _description_
-        :return: _description_
-        :rtype: Tensor
+        :raises ValueError: if ``xs`` is None
+        :return: ``(final_carry, stacked_outputs)`` where ``stacked_outputs`` stacks the ``y``
+            from each step
+        :rtype: Tuple[Tensor, Tensor]
         """
         if xs is None:
             raise ValueError("Either xs or length must be provided.")
@@ -2208,9 +2214,9 @@ class ExtendedBackend:
         """
         Stop backpropagation from ``a``.
 
-        :param a: [description]
+        :param a: tensor whose gradient flow is to be blocked
         :type a: Tensor
-        :return: [description]
+        :return: a tensor equal to ``a`` in value but detached from the autodiff graph
         :rtype: Tensor
         """
         raise NotImplementedError(
@@ -2565,14 +2571,14 @@ class ExtendedBackend:
         , which is suitable for quantum machine learning scenarios, where ``f`` is the loss function,
         args[0] corresponds to the input data and args[1] corresponds to the weights in the QML model.
 
-        :param f: [description]
+        :param f: the scalar function to differentiate
         :type f: Callable[..., Any]
-        :param argnums: [description], defaults to 0
+        :param argnums: index/indices of arguments to differentiate with respect to, defaults to 0
         :type argnums: Union[int, Sequence[int]], optional
         :param vectorized_argnums: the args to be vectorized, these arguments should share the same batch shape
             in the fist dimension
         :type vectorized_argnums: Union[int, Sequence[int]], defaults to 0
-        :return: [description]
+        :return: a vectorized function returning ``(value, grad)`` tuples over the batch
         :rtype: Callable[..., Tuple[Any, Any]]
         """
         raise NotImplementedError(

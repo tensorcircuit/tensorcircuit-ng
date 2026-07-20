@@ -35,7 +35,7 @@ thismodule = sys.modules[__name__]
 
 
 default_provider = Provider.from_name("tencent")
-avail_providers = ["tencent", "local"]
+avail_providers = ["tencent", "local", "quafu"]
 
 
 def list_providers() -> List[Provider]:
@@ -414,7 +414,7 @@ def submit_task(
 
     .. seealso::
 
-        :py:meth:`tensorcircuit.cloud.tencent.submit_task`
+        :py:func:`tensorcircuit.cloud.tencent.submit_task`
 
     :param provider: _description_, defaults to None
     :type provider: Optional[Union[str, Provider]], optional
@@ -424,9 +424,9 @@ def submit_task(
     :type token: Optional[str], optional
     :param task_kws: all necessary keywords arguments for task submission,
         see detailed API in each provider backend:
-        1. tencent - :py:meth:`tensorcircuit.cloud.tencent.submit_task`
+        1. tencent - :py:func:`tensorcircuit.cloud.tencent.submit_task`
     :type task_kws: Any
-    :return: The task object
+    :return: Task object or list of Task for batch submission
     :rtype: List[Task]
     """
     provider, device = _preprocess(provider, device)

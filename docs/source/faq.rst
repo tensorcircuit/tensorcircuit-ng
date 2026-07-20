@@ -106,7 +106,7 @@ Which ML framework backend should I use?
 
 Since the Numpy backend has no support for AD, if you want to evaluate the circuit gradient, you must set the backend as one of the ML frameworks beyond Numpy.
 
-While PyTorch is widely used, its native simulation performance is often limited due to the lack of mature vectorization and JIT support for quantum kernels. If you prefer the PyTorch ecosystem, we recommend using the **JAX backend for fast simulation** and wrapping the results with function level :py:meth:`tensorcircuit.interfaces.torch_interface` or object level :py:class:`tensorcircuit.torchnn.TorchLayer`.
+While PyTorch is widely used, its native simulation performance is often limited due to the lack of mature vectorization and JIT support for quantum kernels. If you prefer the PyTorch ecosystem, we recommend using the **JAX backend for fast simulation** and wrapping the results with function level :py:func:`tensorcircuit.interfaces.torch_interface` or object level :py:class:`tensorcircuit.torchnn.TorchLayer`.
 
 In terms of the choice between TensorFlow and Jax backend, the better one may depend on the use cases and one may want to benchmark both to pick the better one. There is no one-for-all recommendation and this is why we maintain the backend agnostic form of our software.
 
@@ -128,7 +128,7 @@ What is the counterpart of ``QuantumLayer`` for PyTorch and Jax backend?
 
 While TensorFlow's ``QuantumLayer`` is a powerful tool for hybrid tasks, TensorCircuit-NG offers robust solutions for other frameworks as well.
 
-For **PyTorch** users, we provide :py:class:`tensorcircuit.torchnn.TorchLayer`. We highly recommend using the **JAX backend** to power the underlying simulation, as this combination provides the best of both worlds: the familiar PyTorch ecosystem for classical layers and JAX's high-performance simulation for quantum kernels. This is handled seamlessly via the :py:meth:`tensorcircuit.interfaces.torch_interface`.
+For **PyTorch** users, we provide :py:class:`tensorcircuit.torchnn.TorchLayer`. We highly recommend using the **JAX backend** to power the underlying simulation, as this combination provides the best of both worlds: the familiar PyTorch ecosystem for classical layers and JAX's high-performance simulation for quantum kernels. This is handled seamlessly via the :py:func:`tensorcircuit.interfaces.torch_interface`.
 
 For the **JAX** ecosystem, quantum circuits can be naturally integrated into functional ML libraries like **Flax**. For a concrete implementation of a hybrid model, see our example: `examples/flax_mnist_hybrid.py <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/flax_mnist_hybrid.py>`_.
 
@@ -167,9 +167,9 @@ How to efficiently evaluate expectations for large systems?
 For large-scale quantum systems or complex observables, the standard ``expectation`` API may be slow or memory-intensive. We first need to switch off the `reuse=False` option in ``expectation`` API to avoid directly compute the wavefunction.
 TensorCircuit-NG provides several specialized alternatives:
 
-*   **Sparse Expectation**: Use :py:meth:`tensorcircuit.templates.measurements.sparse_expectation` when the Hamiltonian is given in a sparse matrix form.
-*   **MPO Expectation**: Use :py:meth:`tensorcircuit.templates.measurements.mpo_expectation` for systems where the operator is represented as a Matrix Product Operator (MPO).
-*   **MVP (Matrix-Vector Product)**: For even larger systems where the Hamiltonian cannot be explicitly stored, use Matrix-Vector Product functions like :py:meth:`tensorcircuit.quantum.PauliStringSum2MVP` to evaluate expectations without constructing the full matrix.
+*   **Sparse Expectation**: Use :py:func:`tensorcircuit.templates.measurements.sparse_expectation` when the Hamiltonian is given in a sparse matrix form.
+*   **MPO Expectation**: Use :py:func:`tensorcircuit.templates.measurements.mpo_expectation` for systems where the operator is represented as a Matrix Product Operator (MPO).
+*   **MVP (Matrix-Vector Product)**: For even larger systems where the Hamiltonian cannot be explicitly stored, use Matrix-Vector Product functions like :py:func:`tensorcircuit.quantum.PauliStringSum2MVP` to evaluate expectations without constructing the full matrix.
 
 Can I apply quantum operation based on previous classical measurement results?
 ----------------------------------------------------------------------------------------------------
