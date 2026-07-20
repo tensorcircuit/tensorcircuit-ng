@@ -1,0 +1,156 @@
+"""ContractionAlgebra: a generic interface for swapping contraction primitives +
+boundary representation, consulted by ``cons._algebraic_base_contraction``.
+
+Implement ``ContractionAlgebra`` (with a ``Representation``) and activate via
+``cons.set_contraction_algebra(...)`` -- the single entry-point for switching
+contraction algebras. The in-source ``cons._base``
+routes any non-standard algebra to ``_algebraic_base_contraction``, which runs
+encode -> algebra kernels -> decode; no monkey-patching is required.
+
+Reference applications: ``applications/tropical_algebra.py``
+(max-plus / counting / tracking) and ``applications/bcomplex32_algebra.py``
+(bf16 pair).
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Tuple
+
+Tensor = Any
+Backend = Any
+
+
+class Representation(ABC):
+    """Boundary codec between logical elements and physical storage."""
+
+    name: str = "abstract"
+
+    @abstractmethod
+    def encode(self, be: Backend, tensors: List[Tensor]) -> List[Tensor]:
+        """Transform the leaf raw_tensors (one pass, per-tensor, topology-agnostic)."""
+
+    @abstractmethod
+    def decode(self, be: Backend, tensor: Tensor) -> Tuple[Tensor, Dict[str, Tensor]]:
+        """Transform the final contracted tensor into ``(primary, aux)``.
+        ``primary`` must have rank == len(output_set) so ``tn.Node`` wraps it
+        consistently. ``aux`` carries side outputs (e.g., degeneracy), sharing
+        the primary's physical axis order (sliced from the same tensor)."""
+
+
+class IdentityRepresentation(Representation):
+    """No-op codec: standard storage (real/complex scalars), no aux."""
+
+    name = "identity"
+
+    def encode(self, be: Backend, tensors: List[Tensor]) -> List[Tensor]:
+        return tensors
+
+    def decode(self, be: Backend, tensor: Tensor) -> Tuple[Tensor, Dict[str, Tensor]]:
+        return tensor, {}
+
+
+class ContractionAlgebra(ABC):
+    """How to perform the two atomic ops of a contraction, plus observation hooks.
+
+    cotengra decomposes any contraction into pairwise steps; each is a
+    ``tensordot`` (ordinary pair) or ``einsum`` (hyperedge / copy-node). An
+    algebra supplies both. The kernel must be closed over the layout its
+    ``representation`` produces.
+    """
+
+    name: str = "abstract"
+    representation: Representation = IdentityRepresentation()
+
+    def get_contractor_kwargs(self) -> Dict[str, Any]:
+        """Extra kwargs forwarded to cotengra's ``make_contractor``.
+
+        Override to return ``{'prefer_einsum': True}`` when your algebra's
+        ``tensordot`` kernel carries non-physical storage axes (e.g. the
+        complex<bf16> pair axis) that cotengra's post-tensordot autoray
+        transpose would mishandle (ValueError: axes don't match array).
+        ``prefer_einsum=True`` forces einsum-only execution, which skips
+        the transpose entirely.
+
+        Default ``{}`` keeps the standard tensordot+einsum mix — required
+        by tropical config-recovery backtracking, which depends on the
+        tensordot intermediate layout.
+        """
+        return {}
+
+    @abstractmethod
+    def tensordot(self, be: Backend, a: Tensor, b: Tensor, axes: Any) -> Tensor:
+        """Pairwise contraction over ``axes`` (np.tensordot convention)."""
+
+    @abstractmethod
+    def einsum(self, be: Backend, eq: str, *operands: Tensor) -> Tensor:
+        """Pairwise einsum (cotengra may also call with 1 operand)."""
+
+    def on_contraction_start(self, nodes: Any) -> None:
+        """Called before each non-standard contraction (default no-op)."""
+
+    def on_contractor_ready(self, tree: Any) -> None:
+        """Called when the cotengra tree is built (default no-op)."""
+
+
+class StandardAlgebra(ContractionAlgebra):
+    """The usual (sum, product) ring — identical to native backend behaviour."""
+
+    name = "standard"
+
+    def tensordot(self, be: Backend, a: Tensor, b: Tensor, axes: Any) -> Tensor:
+        return be.tensordot(a, b, axes)
+
+    def einsum(self, be: Backend, eq: str, *operands: Tensor) -> Tensor:
+        return be.einsum(eq, *operands)
+
+
+class PairTensor:
+    """Virtual tensor wrapping two halves (e.g., re/im, energy/count).
+
+    Algebra kernels unpack via ``.unpack()`` and operate on the halves
+    directly, then return new ``PairTensor`` results. ``encode()`` and
+    ``decode()`` are the only places that create / consume the pair
+    representation. The pair axis is kept off ``tn.Node`` (cotengra sees only
+    the primary half's topology via the symbolic tree), so no ``.shape`` /
+    ``.ndim`` array-protocol is exposed.
+    """
+
+    __slots__ = ("_p", "_s")
+
+    def __init__(self, primary: Tensor, secondary: Tensor):
+        self._p = primary
+        self._s = secondary
+
+    def unpack(self) -> Tuple[Tensor, Tensor]:
+        return self._p, self._s
+
+    @staticmethod
+    def unpack_pair(pair: "PairTensor | Tensor") -> Tuple[Tensor, Tensor]:
+        """Unpack a PairTensor or legacy stack [..., 2] — backward compatible."""
+        if isinstance(pair, PairTensor):
+            return pair.unpack()
+        return pair[..., 0], pair[..., 1]
+
+    @staticmethod
+    def pack_result(
+        be: Any, primary: Tensor, secondary: Tensor, legacy: bool
+    ) -> "PairTensor | Tensor":
+        """Return PairTensor or legacy stack matching input format."""
+        # Kernels intentionally accept both PairTensor and legacy stacked
+        # [..., 2] operands and echo the input format on output, so direct
+        # callers and the counting tests that build be.stack([..., -1]) keep
+        # working. The contraction flow itself is PairTensor end-to-end (encode
+        # wraps every leaf); only direct kernel entry points see the legacy form.
+        if legacy:
+            return be.stack([primary, secondary], axis=-1)
+        return PairTensor(primary, secondary)
+
+
+__all__ = [
+    "ContractionAlgebra",
+    "StandardAlgebra",
+    "Representation",
+    "IdentityRepresentation",
+    "PairTensor",
+]
