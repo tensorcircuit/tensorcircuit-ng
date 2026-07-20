@@ -99,10 +99,11 @@ def test_pair_einsum_keeps_bfloat16_dtype():
     bf = ml_dtypes.bfloat16
     a = np.array([[1.0 + 2.0j, 3.0j], [-1.0j, 2.0 - 1.0j]], dtype=np.complex64)
     b = np.array([[0.5 + 0.5j, 1.0j], [2.0j, -1.0 + 1.0j]], dtype=np.complex64)
-    pa = _complex_to_pair(be, a)  # bf16 pair, shape (2, 2, 2)
+    pa = _complex_to_pair(be, a)
     pb = _complex_to_pair(be, b)
-    out = np.asarray(_pair_einsum(be, "ij,jk->ik", pa, pb))
-    assert out.dtype == bf, f"_pair_einsum upcast to {out.dtype}; expected bfloat16"
+    result = _pair_einsum(be, "ij,jk->ik", pa, pb)
+    re, _ = result.unpack()
+    assert re.dtype == bf, f"_pair_einsum upcast to {re.dtype}; expected bfloat16"
 
 
 def test_bf16_ghz8_runs_and_matches_native():

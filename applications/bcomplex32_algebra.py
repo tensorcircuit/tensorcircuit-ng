@@ -1,9 +1,8 @@
 """complex<bfloat16> pair-algebra — a reference APPLICATION of ContractionAlgebra.
 
-Pair repr: complex tensor = stack([re, im], axis=-1) of bf16. Contraction = 4 real
+Pair repr: complex tensor split into PairTensor(re, im) of bf16. Contraction = 4 real
 bf16 matmuls (4M). Activated via ``cons.set_contraction_algebra(ComplexPairAlgebra())`` or
-the ``bcomplex32()`` CM. encode/decode at the ``_algebraic_base_contraction`` boundary
-keep the pair axis off tn.Node (dodges the axis==edge wall).
+the ``bcomplex32()`` CM. PairTensor keeps the pair axis off tn.Node (dodges the axis==edge wall).
 """
 
 from typing import Any, Dict, Iterator, List, Tuple
@@ -12,7 +11,11 @@ import contextlib
 import numpy as np
 
 import tensorcircuit.cons as cons
-from tensorcircuit.contraction_algebra import ContractionAlgebra, Representation
+from tensorcircuit.contraction_algebra import (
+    ContractionAlgebra,
+    PairTensor,
+    Representation,
+)
 
 Tensor = Any
 Backend = Any
@@ -24,30 +27,39 @@ def _bf16_dtype() -> Any:
     return ml_dtypes.bfloat16
 
 
-def _complex_to_pair(be: Backend, t: Tensor) -> Tensor:
-    """complex tensor -> stack([re, im], axis=-1) of bf16."""
+def _complex_to_pair(be: Backend, t: Tensor) -> PairTensor:
+    """complex tensor -> PairTensor(re, im) of bf16."""
     bf = _bf16_dtype()
     re = be.cast(be.real(t), bf)
     im = be.cast(be.imag(t), bf)
-    return be.stack([re, im], axis=-1)
+    return PairTensor(re, im)
 
 
-def _pair_to_complex(be: Backend, pair: Tensor) -> Tensor:
-    """pair of bf16 -> complex tensor (recombine; no copy risk via cast)."""
-    re = be.cast(pair[..., 0], cons.rdtypestr)
-    im = be.cast(pair[..., 1], cons.rdtypestr)
+def _pair_to_complex(be: Backend, pair: PairTensor) -> Tensor:
+    """PairTensor of bf16 -> complex tensor (recombine; no copy risk via cast)."""
+    re, im = pair.unpack()
+    re = be.cast(re, cons.rdtypestr)
+    im = be.cast(im, cons.rdtypestr)
     return be.cast(re + 1j * im, cons.dtypestr)
 
 
 def _pair_tensordot(be: Backend, a: Tensor, b: Tensor, axes: Any) -> Tensor:
     """Complex tensordot = 4 real bf16 tensordots (4M). Uses be.tensordot (never patched)."""
-    ar, ai = a[..., 0], a[..., 1]
-    br, bi = b[..., 0], b[..., 1]
+    ar, ai = PairTensor.unpack_pair(a)
+    br, bi = PairTensor.unpack_pair(b)
     cr = be.tensordot(ar, br, axes) - be.tensordot(ai, bi, axes)
     ci = be.tensordot(ar, bi, axes) + be.tensordot(ai, br, axes)
-    return be.stack([cr, ci], axis=-1)
+    return PairTensor.pack_result(be, cr, ci, not isinstance(a, PairTensor))
 
 
+# Strategy note: bf16 single-operand einsum manually decomposes into diagonal →
+# sum → transpose (staying in bf16 end-to-end) because numpy's ``np.einsum``
+# rejects bfloat16 dtypes. This is different from the tropical algebra's
+# ``_tropical_einsum`` single-operand path, which delegates to ``be.einsum``
+# for repeated-index resolution — the tropical backend (float64) has no such
+# dtype restriction. Both produce equivalent results under their respective
+# semirings, but the implementation strategy is dictated by dtype constraints
+# rather than algebraic differences.
 def _einsum_single_operand_half(
     be: Backend, x: Tensor, lhs: str, out_subs: str
 ) -> Tensor:
@@ -81,52 +93,23 @@ def _einsum_single_operand_half(
     return x
 
 
-def _pair_einsum(be: Backend, eq: str, *operands: Tensor) -> Tensor:
-    """Complex einsum = 4 real bf16 einsums (4M for 2 operands, 2 for 1).
-
-    **Two-operand (genuine bf16):** manually decomposed into ``be.tensordot`` +
-    ``be.transpose``, because numpy's C ``einsum`` rejects ``ml_dtypes.bfloat16``
-    (it is a standalone C routine with a hardcoded dtype allowlist, not a
-    ufunc). ``np.tensordot`` accepts bf16 because it dispatches through ufunc
-    loops, so the compute is genuine bf16 end-to-end — no float32 upcast.
-    The decomposition parses the einsum subscript equation to find contracted
-    axes, then uses ``tensordot`` for the contraction and ``transpose`` to
-    match the output subscript order.
-
-    **Single-operand (genuine bf16):** decomposed into ``np.diagonal`` +
-    ``be.sum`` + ``be.transpose``, all bf16-safe. Handles reductions,
-    transposes, diagonals, and traces — the full einsum single-operand
-    semantics without any float32 upcast.
-
-    ``_pair_tensordot`` needs no such routing because ``np.tensordot`` already
-    preserves bf16 (verified: it accumulates in bf16, not float32).
-    cotengra feeds only 1-2-operand equations here (it decomposes hyperedges
-    itself), all of which are pairwise contractions that map cleanly to
-    tensordot.
-    """
+def _pair_einsum(be: Backend, eq: str, *operands: Tensor) -> PairTensor:
+    """Complex einsum = 4 real bf16 einsums (4M for 2 operands, 2 for 1)."""
     if len(operands) == 1:
-        # ── Single-operand: pure bf16 (decompose into sum + transpose + diagonal) ──
         a = operands[0]
-
-        # Implicit mode (no ``->``) is an identity / no-op at the einsum level.
         if "->" not in eq:
             return a
-
         lhs, out_subs = eq.split("->")
-        return be.stack(
-            [
-                _einsum_single_operand_half(be, a[..., 0], lhs, out_subs),
-                _einsum_single_operand_half(be, a[..., 1], lhs, out_subs),
-            ],
-            axis=-1,
+        ar, ai = PairTensor.unpack_pair(a)
+        return PairTensor(
+            _einsum_single_operand_half(be, ar, lhs, out_subs),
+            _einsum_single_operand_half(be, ai, lhs, out_subs),
         )
 
-    # ── 2-operand: bf16-safe tensordot decomposition ──────────────────
     a, b = operands
-    ar, ai = a[..., 0], a[..., 1]
-    br, bi = b[..., 0], b[..., 1]
+    ar, ai = PairTensor.unpack_pair(a)
+    br, bi = PairTensor.unpack_pair(b)
 
-    # Parse the einsum equation once
     if "->" not in eq:
         raise ValueError(
             f"implicit-mode einsum {eq!r} not supported for bf16; use explicit '->'"
@@ -143,14 +126,12 @@ def _pair_einsum(be: Backend, eq: str, *operands: Tensor) -> Tensor:
     out_order = list(out_subs)
 
     def _contract(x: Tensor, y: Tensor) -> Tensor:
-        """Pairwise bf16-safe einsum → tensordot + optional transpose."""
         if contracted:
             a_axes = [a_subs.index(c) for c in contracted]
             b_axes = [b_subs.index(c) for c in contracted]
             result = be.tensordot(x, y, axes=(a_axes, b_axes))
         else:
             result = be.tensordot(x, y, axes=0)
-
         free_order = a_free + b_free
         if free_order != out_order:
             perm = [free_order.index(c) for c in out_order]
@@ -159,7 +140,7 @@ def _pair_einsum(be: Backend, eq: str, *operands: Tensor) -> Tensor:
 
     cr = _contract(ar, br) - _contract(ai, bi)
     ci = _contract(ar, bi) + _contract(ai, br)
-    return be.stack([cr, ci], axis=-1)
+    return PairTensor.pack_result(be, cr, ci, not isinstance(a, PairTensor))
 
 
 class PairBf16Representation(Representation):
@@ -188,9 +169,5 @@ class ComplexPairAlgebra(ContractionAlgebra):
 
 @contextlib.contextmanager
 def bcomplex32() -> Iterator[None]:
-    prev = cons.get_contraction_algebra()
-    cons.set_contraction_algebra(ComplexPairAlgebra())
-    try:
+    with cons.runtime_contraction_algebra(ComplexPairAlgebra()):
         yield
-    finally:
-        cons.set_contraction_algebra(prev)

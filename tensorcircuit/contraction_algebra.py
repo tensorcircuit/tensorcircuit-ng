@@ -12,6 +12,8 @@ Reference applications: ``applications/tropical_algebra.py``
 (bf16 pair).
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Tuple
 
@@ -103,9 +105,52 @@ class StandardAlgebra(ContractionAlgebra):
         return be.einsum(eq, *operands)
 
 
+class PairTensor:
+    """Virtual tensor wrapping two halves (e.g., re/im, energy/count).
+
+    Algebra kernels unpack via ``.unpack()`` and operate on the halves
+    directly, then return new ``PairTensor`` results. ``encode()`` and
+    ``decode()`` are the only places that create / consume the pair
+    representation. The pair axis is kept off ``tn.Node`` (cotengra sees only
+    the primary half's topology via the symbolic tree), so no ``.shape`` /
+    ``.ndim`` array-protocol is exposed.
+    """
+
+    __slots__ = ("_p", "_s")
+
+    def __init__(self, primary: Tensor, secondary: Tensor):
+        self._p = primary
+        self._s = secondary
+
+    def unpack(self) -> Tuple[Tensor, Tensor]:
+        return self._p, self._s
+
+    @staticmethod
+    def unpack_pair(pair: "PairTensor | Tensor") -> Tuple[Tensor, Tensor]:
+        """Unpack a PairTensor or legacy stack [..., 2] — backward compatible."""
+        if isinstance(pair, PairTensor):
+            return pair.unpack()
+        return pair[..., 0], pair[..., 1]
+
+    @staticmethod
+    def pack_result(
+        be: Any, primary: Tensor, secondary: Tensor, legacy: bool
+    ) -> "PairTensor | Tensor":
+        """Return PairTensor or legacy stack matching input format."""
+        # Kernels intentionally accept both PairTensor and legacy stacked
+        # [..., 2] operands and echo the input format on output, so direct
+        # callers and the counting tests that build be.stack([..., -1]) keep
+        # working. The contraction flow itself is PairTensor end-to-end (encode
+        # wraps every leaf); only direct kernel entry points see the legacy form.
+        if legacy:
+            return be.stack([primary, secondary], axis=-1)
+        return PairTensor(primary, secondary)
+
+
 __all__ = [
     "ContractionAlgebra",
     "StandardAlgebra",
     "Representation",
     "IdentityRepresentation",
+    "PairTensor",
 ]

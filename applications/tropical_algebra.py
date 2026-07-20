@@ -34,7 +34,11 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 import numpy as np
 
 import tensorcircuit.cons as cons
-from tensorcircuit.contraction_algebra import ContractionAlgebra, Representation
+from tensorcircuit.contraction_algebra import (
+    ContractionAlgebra,
+    PairTensor,
+    Representation,
+)
 
 Tensor = Any
 Backend = Any
@@ -99,6 +103,11 @@ def _expand_to_layout(
     return be.reshape(tt, newshape)
 
 
+# Strategy note: single-operand tropical einsum uses ``be.einsum`` for
+# repeated-index resolution (diagonal gather). This is safe because tropical
+# tensors are float64, which numpy's einsum accepts natively. For bf16
+# (which numpy rejects), see ``_einsum_single_operand_half`` in
+# ``applications/bcomplex32_algebra.py`` for the manual decomposition approach.
 def _tropical_einsum(be: Backend, eq: str, *operands: Tensor) -> Tensor:
     """max-plus einsum: product -> +, sum -> max. Handles 1- or 2-operand forms."""
     if len(operands) == 1:
@@ -163,37 +172,24 @@ def split_energy_count(stacked: Tensor) -> "tuple[Tensor, Tensor]":
     return arr[..., 0], arr[..., 1]
 
 
-def _stack_last(be: Backend, x: Tensor, n: Tensor) -> Tensor:
-    """Stack two same-shape tensors along a new trailing axis (portable).
-
-    All tc-ng concrete backends (numpy, jax, torch, tensorflow, cupy) implement
-    ``be.stack`` via ``tensorcircuit.backends.abstract_backend``, so the portable
-    path is used directly. ``be.stack`` takes a Python sequence and inserts a new
-    axis; ``axis=-1`` puts it last to match the ``[..., 2]`` convention.
-    """
-    return be.stack([x, n], axis=-1)
-
-
-def _counting_tensordot(be: Backend, a: Tensor, b: Tensor, axes: Any) -> Tensor:
+def _counting_tensordot(be: Backend, a: Tensor, b: Tensor, axes: Any) -> PairTensor:
     """(max-plus energy, degeneracy count) pairwise contraction.
 
-    ``a`` and ``b`` are stacked ``[..., 2]`` tensors (``[..., 0]`` = energy,
-    ``[..., 1]`` = count). The energy stream follows max-plus; the count stream
-    sums ``a_count * b_count`` over the contracted positions that achieve the
-    energy max (within ``_EPS``), so each max-tie contributes its multiplicity.
+    ``a`` and ``b`` are ``PairTensor`` (energy, count) or legacy stacked tensors.
     """
-    a3x, b3x, out_shape = _pair_layout(be, a[..., 0], b[..., 0], axes)
+    ae, an = PairTensor.unpack_pair(a)
+    b_e, b_n = PairTensor.unpack_pair(b)
+    a3x, b3x, out_shape = _pair_layout(be, ae, b_e, axes)
     s = a3x + b3x  # (m, k, n) energy pair sums
     y = be.max(s, axis=1)  # (m, n) max energy per output slot
-    # abs(s - y) < _EPS, broadcast across the contracted axis k: reshape y to (m, 1, n)
     m_n = tuple(int(d) for d in be.shape_tuple(y))
     y_b = be.reshape(y, (m_n[0], 1, m_n[1]))
     mask = be.abs(s - y_b) < _EPS
-    a3n, b3n, _ = _pair_layout(be, a[..., 1], b[..., 1], axes)
+    a3n, b3n, _ = _pair_layout(be, an, b_n, axes)
     pn = a3n * b3n  # (m, k, n) pairwise count products
     cy = be.reshape(be.sum(pn * mask, axis=1), out_shape)
     y_shaped = be.reshape(y, out_shape)
-    return _stack_last(be, y_shaped, cy)
+    return PairTensor.pack_result(be, y_shaped, cy, not isinstance(a, PairTensor))
 
 
 def _insert_axis_of(
@@ -217,25 +213,21 @@ def _resolve_repeats(
     """Resolve intra-operand repeated indices via per-stream diagonal gather.
 
     Pure per-stream indexing -- the energy and count streams are gathered
-    independently (``pair[..., 0]`` and ``pair[..., 1]``) so the trailing
-    ``[..., 2]`` stack axis is never treated as an index by ``be.einsum``. The
-    max/tie degeneracy logic lives entirely in the later reduction; this helper
-    only rewrites each stream's index layout.
+    independently via ``.unpack()``; the trailing pair axis stays invisible to
+    ``be.einsum``.  The max/tie degeneracy logic lives entirely in the later
+    reduction; this helper only rewrites each stream's index layout.
 
     Returns ``(energy, count, resolved_idxs)`` where ``resolved_idxs`` has no
-    repeats. If ``idxs`` has no repeats, the streams are sliced out unchanged
-    and ``idxs`` is returned as-is (passthrough -- 2-operand behavior is
-    identical to the pre-helper code path).
+    repeats. If ``idxs`` has no repeats, the streams are returned unchanged
+    and ``idxs`` is returned as-is.
     """
     if len(set(idxs)) != len(idxs):
         resolved = "".join(dict.fromkeys(idxs))
-        # Diagonal extraction: exactly one element contributes per output position,
-        # so the standard (sum, multiply) einsum is equivalent to max — both
-        # reduce to identity for a singleton set of values.
-        e = be.einsum("".join(idxs) + "->" + resolved, pair[..., 0])
-        n = be.einsum("".join(idxs) + "->" + resolved, pair[..., 1])
+        e, n = PairTensor.unpack_pair(pair)
+        e = be.einsum("".join(idxs) + "->" + resolved, e)
+        n = be.einsum("".join(idxs) + "->" + resolved, n)
         return e, n, list(resolved)
-    return pair[..., 0], pair[..., 1], list(idxs)
+    return PairTensor.unpack_pair(pair) + (list(idxs),)
 
 
 def _counting_einsum(be: Backend, eq: str, *operands: Tensor) -> Tensor:
@@ -271,7 +263,9 @@ def _counting_einsum(be: Backend, eq: str, *operands: Tensor) -> Tensor:
         remaining = [c for c in idxs if c not in contract]
         out_e = be.transpose(e, tuple(remaining.index(c) for c in rhs))
         out_n = be.transpose(n, tuple(remaining.index(c) for c in rhs))
-        return _stack_last(be, out_e, out_n)
+        return PairTensor.pack_result(
+            be, out_e, out_n, not isinstance(operands[0], PairTensor)
+        )
     a, b = operands
     lhs, rhs = eq.split("->")
     ia_s, ib_s = lhs.split(",")
@@ -298,18 +292,13 @@ def _counting_einsum(be: Backend, eq: str, *operands: Tensor) -> Tensor:
     remaining = [c for c in all_idx if c not in contract]
     out_x = be.transpose(sx, tuple(remaining.index(c) for c in out_idx))
     out_n = be.transpose(pn, tuple(remaining.index(c) for c in out_idx))
-    return _stack_last(be, out_x, out_n)
+    return PairTensor.pack_result(be, out_x, out_n, not isinstance(a, PairTensor))
 
 
 class CountingRepresentation(Representation):
     """Attach count=1 (the counting-semiring multiplicative identity) to each
-    leaf; decode splits the final stacked ``[..., 2]`` tensor into energy
-    (primary) + count (aux).
-
-    encode: ``t -> stack([t, ones_like(t, float64)], axis=-1)``. Per-tensor,
-    topology-agnostic, run once on the leaves before any pairwise contraction.
-    decode: ``tensor[..., 0]`` is the energy (primary, rank == len(output_set));
-    ``tensor[..., 1]`` is the degeneracy count (aux, co-indexed with energy).
+    leaf via ``PairTensor(t, ones)``.  Decode unpacks into energy (primary) +
+    count (aux, stashed in ``_last_aux`` for ``degeneracy()``).
     """
 
     name = "counting"
@@ -318,11 +307,13 @@ class CountingRepresentation(Representation):
         out = []
         for t in tensors:
             ones = be.ones_like(t, dtype="float64")
-            out.append(be.stack([t, ones], axis=-1))
+            out.append(PairTensor(t, ones))
         return out
 
     def decode(self, be: Backend, tensor: Tensor) -> Tuple[Tensor, Dict[str, Tensor]]:
-        return tensor[..., 0], {"count": tensor[..., 1]}
+        e, n = PairTensor.unpack_pair(tensor)
+        self._last_aux = {"count": n}
+        return e, {}
 
 
 class CountingTropicalAlgebra(ContractionAlgebra):
@@ -330,10 +321,7 @@ class CountingTropicalAlgebra(ContractionAlgebra):
 
     Carries ``CountingRepresentation``: encode attaches count=1 to each leaf;
     decode splits the final pair into energy (primary) + count (aux, stashed
-    via ``cons._stash_aux_outputs`` for ``degeneracy()`` to read). No
-    ``on_contraction_start`` hook is needed: the unconditional aux clear in
-    ``cons._algebraic_base_contraction`` already wipes stale state per
-    contraction (standard or non-standard).
+    in ``CountingRepresentation._last_aux`` for ``degeneracy()`` to read).
     """
 
     name = "counting_maxplus"
@@ -348,23 +336,15 @@ class CountingTropicalAlgebra(ContractionAlgebra):
 
 def degeneracy() -> Optional[Any]:
     """Degeneracy (number of optimal configs) of the most recent counting
-    contraction.
-
-    Call inside the ``counting_tropical()`` block (like
-    ``recover_configuration``) after a contraction has run. Returns the count
-    tensor (same shape as the primary energy) stashed by
-    ``CountingRepresentation.decode``; returns ``None`` if no counting decode
-    has stashed a count for the current contraction.
-
-    The aux side-channel is cleared at the start of every contraction that
-    routes through ``cons._algebraic_base_contraction`` (the unconditional
-    ``_stash_aux_outputs({})`` at the top of that function), so a counting
-    contraction followed by another algebraic contraction wipes stale state.
-    Note that ``cons._base`` only routes to ``_algebraic_base_contraction``
-    for non-standard algebras, hyperedge inputs, or ``use_primitives=True``;
-    a standard contraction on the original ``_base`` path does NOT clear aux.
-    """
-    return cons._aux_outputs().get("count")
+    contraction. Call inside ``counting_tropical()`` after a contraction has run.
+    Returns ``None`` if no counting algebra is active."""
+    alg = cons.get_contraction_algebra()
+    if alg is None:
+        return None
+    rep = alg.representation
+    if hasattr(rep, "_last_aux"):
+        return rep._last_aux.get("count")
+    return None
 
 
 # ===== Section 3: tracking + configuration recovery =====
@@ -768,31 +748,19 @@ def recover_configuration() -> Dict[Any, int]:
 def tropical(track: bool = False) -> Iterator[None]:
     """Contract under the max-plus (tropical) algebra within the block.
 
-    Swaps ``cons._contraction_algebra`` directly (no monkey-patch activation):
-    the in-source ``cons._base`` routes to ``_algebraic_base_contraction`` for
-    any non-standard algebra, so this is sufficient.
-
     ``track=True`` switches to ``MaxPlusTrackingAlgebra`` so
     ``recover_configuration()`` can recover the optimal configuration after the
     contraction. Off by default -> zero behaviour change relative to plain
     max-plus.
     """
     algebra = MaxPlusTrackingAlgebra() if track else MaxPlusAlgebra()
-    prev = cons.get_contraction_algebra()
-    cons.set_contraction_algebra(algebra)
-    try:
+    with cons.runtime_contraction_algebra(algebra):
         yield
-    finally:
-        cons.set_contraction_algebra(prev)
 
 
 @contextlib.contextmanager
 def counting_tropical() -> Iterator[None]:
     """Contract under the counting (energy, degeneracy) max-plus algebra within
     the block."""
-    prev = cons.get_contraction_algebra()
-    cons.set_contraction_algebra(CountingTropicalAlgebra())
-    try:
+    with cons.runtime_contraction_algebra(CountingTropicalAlgebra()):
         yield
-    finally:
-        cons.set_contraction_algebra(prev)

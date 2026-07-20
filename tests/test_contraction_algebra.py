@@ -175,7 +175,7 @@ def test_decode_wrong_rank_raises_loudly():
     prev = cons.get_contraction_algebra()
     cons.set_contraction_algebra(BadAlg())
     try:
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             cons._algebraic_base_contraction(
                 [a, b],
                 algorithm=opt_einsum.paths.dynamic_programming,
@@ -185,11 +185,15 @@ def test_decode_wrong_rank_raises_loudly():
         cons.set_contraction_algebra(prev)
 
 
-def test_aux_outputs_stashed_and_reordered():
-    # The full aux-reorder test is Task 8 (counting). Here we only confirm the
-    # side-channel store API exists and round-trips a value.
-    cons._stash_aux_outputs({"count": 5})
-    assert cons._aux_outputs()["count"] == 5
+def test_counting_representation_stashes_aux():
+    import numpy as np
+    from applications.tropical_algebra import CountingRepresentation
+
+    rep = CountingRepresentation()
+    t = np.array([[3.0, 7.0], [1.0, 4.0]])
+    primary, _ = rep.decode(None, t)
+    assert np.array_equal(primary, np.array([3.0, 1.0]))
+    assert np.array_equal(rep._last_aux["count"], np.array([7.0, 4.0]))
 
 
 def test_representation_identity_roundtrip():
@@ -369,11 +373,15 @@ def test_aux_stash_handles_ignore_edge_order_with_none_order(monkeypatch):
     import opt_einsum
 
     class AuxRep(Representation):
+        name = "aux"
+        _last_aux = {}
+
         def encode(self, be, tensors):
             return tensors
 
         def decode(self, be, tensor):
-            return tensor, {"count": np.ones_like(tensor)}  # non-empty aux
+            self._last_aux = {"count": np.ones_like(tensor)}
+            return tensor, {}
 
     class AuxAlg(ContractionAlgebra):
         name = "aux"
@@ -399,7 +407,7 @@ def test_aux_stash_handles_ignore_edge_order_with_none_order(monkeypatch):
             output_edge_order=None,
             ignore_edge_order=True,
         )
-        assert "count" in cons._aux_outputs()  # aux stashed without crashing
+        assert "count" in cons.get_contraction_algebra().representation._last_aux
     finally:
         cons.set_contraction_algebra(prev)
 
@@ -408,3 +416,55 @@ def test_get_contractor_kwargs_default():
     assert StandardAlgebra().get_contractor_kwargs() == {}
     # Concrete algebra without override inherits the default
     assert _NS().get_contractor_kwargs() == {}
+
+
+# --- Coverage: single-tensor path + the strip_exponent x algebra guard.
+# Both hit lines in cons._algebraic_base_contraction / _run_contraction that no
+# other test exercises (len(raw_tensors)==1 cotengra empty-path workaround, and
+# the strip_exponent incompatibility guard).
+
+
+def test_single_tensor_contraction_uses_algebra_einsum():
+    # A one-node contraction takes the len(raw_tensors)==1 branch, bypassing
+    # cotengra; it must still dispatch through algebra.einsum under a
+    # non-standard algebra (here StandardAlgebra), not just be.einsum.
+    import tensornetwork as tn
+    import opt_einsum
+
+    t = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    a = tn.Node(t)
+    prev = cons.get_contraction_algebra()
+    cons.set_contraction_algebra(StandardAlgebra())
+    try:
+        node = cons._algebraic_base_contraction(
+            [a],
+            algorithm=opt_einsum.paths.dynamic_programming,
+            output_edge_order=[a[0], a[1]],
+        )
+        # "ab->ab" identity contraction: the result equals the leaf tensor.
+        np.testing.assert_allclose(np.array(node.tensor), t)
+    finally:
+        cons.set_contraction_algebra(prev)
+
+
+def test_strip_exponent_incompatible_with_algebra_raises():
+    # strip_exponent=True under any non-standard algebra is rejected up front.
+    import tensornetwork as tn
+    import opt_einsum
+    import pytest
+
+    a = tn.Node(np.array([1.0, 2.0]))
+    b = tn.Node(np.array([3.0, 4.0]))
+    tn.connect(a[0], b[0])
+    prev = cons.get_contraction_algebra()
+    cons.set_contraction_algebra(StandardAlgebra())
+    try:
+        with pytest.raises(ValueError, match="strip_exponent is incompatible"):
+            cons._algebraic_base_contraction(
+                [a, b],
+                algorithm=opt_einsum.paths.dynamic_programming,
+                output_edge_order=[],
+                strip_exponent=True,
+            )
+    finally:
+        cons.set_contraction_algebra(prev)
