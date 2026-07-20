@@ -6,7 +6,9 @@ trial for clean peak-memory attribution (nvidia-smi polling as the cross-backend
 common truth; backend API as fine-grained cross-check).
 """
 import argparse
+import csv
 import json
+import os
 import statistics
 import subprocess
 import sys
@@ -15,6 +17,21 @@ import time
 from typing import Any, List, Optional
 
 MICRO_M_DEFAULT = 4096
+
+
+def _disable_prealloc(name: str) -> None:
+    """Disable jax/tf GPU memory preallocation so nvidia-smi peak reflects real usage
+    (jax preallocates ~75% by default, which masks the bf16 memory benefit)."""
+    if name == "jax":
+        os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+    elif name == "tensorflow":
+        try:
+            import tensorflow as tf
+
+            for _d in tf.config.list_physical_devices("GPU"):
+                tf.config.experimental.set_memory_growth(_d, True)
+        except Exception:
+            pass
 
 
 def build_circuit(circuit: str, n: int) -> Any:
@@ -130,13 +147,11 @@ def backend_alloc_peak(backend: str) -> Optional[int]:
 
 def worker(args: argparse.Namespace) -> None:
     """Run one (backend, dtype, circuit, n) end-to-end trial; print JSON to stdout."""
+    _disable_prealloc(args.backend)
     import numpy as np
     import tensorcircuit as tc
 
     tc.set_backend(args.backend)
-    ref = None
-    if args.dtype == "bf16":
-        ref = np.asarray(contract(args.circuit, args.n, bf16=False))
     reset_backend_mem(args.backend)
     with GpuSmiPoller(gpu=args.gpu) as poller:
         res = contract(args.circuit, args.n, bf16=(args.dtype == "bf16"))
@@ -153,8 +168,12 @@ def worker(args: argparse.Namespace) -> None:
     wall = statistics.median(walls)
 
     max_abs = rel = None
-    if args.dtype == "bf16" and ref is not None:
-        got = np.asarray(contract(args.circuit, args.n, bf16=True))
+    if args.dtype == "bf16":
+        # Accuracy block runs AFTER the peak-mem window so the complex64 reference's
+        # compiled XLA workspace doesn't persist and bias bf16's peak high. Reuse the
+        # last `res` (already a bf16 contraction) instead of a redundant contraction.
+        ref = np.asarray(contract(args.circuit, args.n, bf16=False))
+        got = np.asarray(res)
         diff = np.abs(got - ref)
         max_abs = float(diff.max())
         rel = float(diff.max() / (np.abs(ref).max() + 1e-12))
@@ -180,6 +199,7 @@ def worker(args: argparse.Namespace) -> None:
 
 def micro_worker(args: argparse.Namespace) -> None:
     """Single big complex-bf16 matmul (4 bf16 GEMMs), K trials median. K3 evidence."""
+    _disable_prealloc(args.backend)
     import numpy as np
     import tensorcircuit as tc
     from applications.bcomplex32_algebra import (
@@ -222,10 +242,6 @@ def micro_worker(args: argparse.Namespace) -> None:
             }
         )
     )
-
-
-import csv
-import os
 
 
 def _env_with_repo(repo: str) -> dict:

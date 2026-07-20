@@ -92,3 +92,35 @@ def test_pair_einsum_keeps_bfloat16_dtype_gpu(backend):
     re, _ = result.unpack()
     assert str(be.dtype(re)).endswith("bfloat16"), \
         f"_pair_einsum upcast on {backend}: {be.dtype(re)}"
+
+
+@pytest.mark.parametrize("backend", GPU_BACKENDS)
+def test_einsum_single_operand_native_gpu(backend):
+    """K2: _einsum_single_operand_half routes to native be.einsum on GPU backends.
+    Exercises the diagonal and reduction sub-cases directly (not via _pair_einsum)."""
+    if not _backend_available(backend):
+        pytest.skip(f"backend {backend} or GPU unavailable")
+    tc.set_backend(backend)
+    be = tc.backend
+    from applications.bcomplex32_algebra import (
+        _complex_to_pair,
+        _einsum_single_operand_half,
+    )
+
+    a = np.array(
+        [[1.0 + 2.0j, 3.0 - 1.0j], [0.5 + 0.5j, -2.0 + 1.0j]], dtype=np.complex64
+    )
+    a = be.cast(be.convert_to_tensor(a), "complex64")
+    half, _ = _complex_to_pair(be, a).unpack()  # bf16 real half
+
+    out_diag = _einsum_single_operand_half(be, half, "ii", "i")  # diagonal
+    out_red = _einsum_single_operand_half(be, half, "ab", "a")  # reduction (numpy rejects)
+    a_real_ref = np.array([[1.0, 3.0], [0.5, -2.0]], dtype=np.float32)
+    np.testing.assert_allclose(
+        be.numpy(be.cast(out_diag, "float32")), np.einsum("ii->i", a_real_ref), rtol=2e-2
+    )
+    np.testing.assert_allclose(
+        be.numpy(be.cast(out_red, "float32")), np.einsum("ab->a", a_real_ref), rtol=2e-2
+    )
+    assert str(be.dtype(out_diag)).endswith("bfloat16")
+    assert str(be.dtype(out_red)).endswith("bfloat16")
