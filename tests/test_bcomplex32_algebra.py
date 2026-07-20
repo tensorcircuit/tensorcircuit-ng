@@ -127,3 +127,21 @@ def test_bf16_ghz8_runs_and_matches_native():
     assert np.allclose(
         got, ref, rtol=1.5e-2
     ), f"max abs diff = {np.abs(got - ref).max()}"
+
+
+def test_bf16_dtype_dispatch_numpy():
+    from applications.bcomplex32_algebra import _bf16_dtype
+    import ml_dtypes
+    assert _bf16_dtype(be) is ml_dtypes.bfloat16  # be = NumpyBackend(), 模块顶部已定义
+
+
+def test_einsum_single_operand_unchanged_on_numpy():
+    # numpy 走手工分解 fallback；GPU 后端走 be.einsum。值语义一致。
+    import numpy as np
+    from applications.bcomplex32_algebra import _einsum_single_operand_half, _complex_to_pair
+
+    a = np.arange(16, dtype=np.complex64).reshape(4, 4)
+    half = _complex_to_pair(be, a).unpack()[0]
+    out = _einsum_single_operand_half(be, half, "ab", "ba")  # transpose
+    ref = np.einsum("ab->ba", np.arange(16, dtype=np.float32).reshape(4, 4))
+    np.testing.assert_allclose(np.asarray(out).astype(np.float32), ref, rtol=0, atol=0)

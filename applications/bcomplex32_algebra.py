@@ -21,15 +21,36 @@ Tensor = Any
 Backend = Any
 
 
-def _bf16_dtype() -> Any:
-    import ml_dtypes
+def _bf16_dtype(be: Backend) -> Any:
+    """Backend-native bf16 dtype. numpy needs ml_dtypes; GPU backends use native bf16
+    (their cast rejects ml_dtypes.bfloat16 — see pytorch_backend.cast)."""
+    name = getattr(be, "name", None)
+    if name == "numpy":
+        import ml_dtypes
 
-    return ml_dtypes.bfloat16
+        return ml_dtypes.bfloat16
+    if name == "jax":
+        import jax.numpy as jnp
+
+        return jnp.bfloat16
+    if name == "pytorch":
+        import torch
+
+        return torch.bfloat16
+    if name == "tensorflow":
+        import tensorflow as tf
+
+        return tf.bfloat16
+    if name == "cupy":
+        import cupy
+
+        return cupy.bfloat16
+    raise NotImplementedError(f"bf16 dtype unknown for backend {name!r}")
 
 
 def _complex_to_pair(be: Backend, t: Tensor) -> PairTensor:
     """complex tensor -> PairTensor(re, im) of bf16."""
-    bf = _bf16_dtype()
+    bf = _bf16_dtype(be)
     re = be.cast(be.real(t), bf)
     im = be.cast(be.imag(t), bf)
     return PairTensor(re, im)
@@ -52,24 +73,21 @@ def _pair_tensordot(be: Backend, a: Tensor, b: Tensor, axes: Any) -> Tensor:
     return PairTensor.pack_result(be, cr, ci, not isinstance(a, PairTensor))
 
 
-# Strategy note: bf16 single-operand einsum manually decomposes into diagonal →
-# sum → transpose (staying in bf16 end-to-end) because numpy's ``np.einsum``
-# rejects bfloat16 dtypes. This is different from the tropical algebra's
-# ``_tropical_einsum`` single-operand path, which delegates to ``be.einsum``
-# for repeated-index resolution — the tropical backend (float64) has no such
-# dtype restriction. Both produce equivalent results under their respective
-# semirings, but the implementation strategy is dictated by dtype constraints
-# rather than algebraic differences.
-def _einsum_single_operand_half(
+# Strategy note: on numpy, bf16 single-operand einsum manually decomposes into
+# diagonal → sum → transpose (staying in bf16 end-to-end) because numpy's
+# ``np.einsum`` rejects bfloat16 dtypes. GPU backends (jax/torch/tf/cupy) accept
+# bf16 natively and take ``be.einsum`` directly — see ``_einsum_single_operand_half``.
+# This is different from the tropical algebra's ``_tropical_einsum`` single-operand
+# path, which delegates to ``be.einsum`` for repeated-index resolution — the tropical
+# backend (float64) has no such dtype restriction. Both produce equivalent results
+# under their respective semirings, but the implementation strategy is dictated by
+# dtype constraints rather than algebraic differences.
+def _einsum_single_operand_half_numpy(
     be: Backend, x: Tensor, lhs: str, out_subs: str
 ) -> Tensor:
-    """Apply a 1-operand einsum to one bf16 half (decomposed into diagonal + sum
-    + transpose), staying in bf16 end-to-end.  Handles reductions, transposes,
-    diagonals, and traces without float32 upcast.
-    """
-    x_subs = list(lhs)  # mutable subscript list we update in place
-
-    # Step 1 — diagonalise every repeated index.
+    """numpy-only fallback: decompose 1-operand einsum into diagonal + sum + transpose
+    because numpy's einsum rejects bf16. Stays bf16 end-to-end."""
+    x_subs = list(lhs)
     while True:
         dup = next((c for c in set(x_subs) if x_subs.count(c) > 1), None)
         if dup is None:
@@ -77,20 +95,26 @@ def _einsum_single_operand_half(
         pos = [i for i, c in enumerate(x_subs) if c == dup]
         x = np.diagonal(x, axis1=pos[0], axis2=pos[-1])
         x_subs = [c for i, c in enumerate(x_subs) if i != pos[-1]] + [dup]
-
-    # Step 2 — sum over indices NOT wanted in the output.
     out_set = set(out_subs)
     sum_indices = [c for c in x_subs if c not in out_set]
     if sum_indices:
         x = be.sum(x, axis=tuple(x_subs.index(c) for c in sum_indices))
         x_subs = [c for c in x_subs if c in out_set]
-
-    # Step 3 — transpose remaining indices into the requested output order.
     if x_subs != list(out_subs):
         perm = tuple(x_subs.index(c) for c in out_subs)
         x = be.transpose(x, perm)
-
     return x
+
+
+def _einsum_single_operand_half(
+    be: Backend, x: Tensor, lhs: str, out_subs: str
+) -> Tensor:
+    """Apply a 1-operand einsum to one bf16 half. GPU backends (jax/torch/tf/cupy)
+    take native ``be.einsum`` (XLA/cuBLAS-fused, accepts bf16). numpy rejects bf16,
+    so it falls back to the manual decomposition. ``np.diagonal`` never runs on GPU."""
+    if getattr(be, "name", None) == "numpy":
+        return _einsum_single_operand_half_numpy(be, x, lhs, out_subs)
+    return be.einsum(f"{lhs}->{out_subs}", x)
 
 
 def _pair_einsum(be: Backend, eq: str, *operands: Tensor) -> PairTensor:
