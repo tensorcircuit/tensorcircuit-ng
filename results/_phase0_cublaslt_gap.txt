@@ -1,0 +1,25 @@
+/mnt/e/Study/.Ashare/OneDrive/OneDriveSync/session/tc/tensorcircuit-ng/results/_phase0_cublaslt_gap.py:26: UserWarning: ComplexHalf support is experimental and many operators don't support it yet. (Triggered internally at /pytorch/aten/src/ATen/EmptyTensor.cpp:54.)
+  torch.zeros(2, dtype=torch.complex32)  # 这是 complex-half(fp16)，不是 bf16
+/mnt/e/Study/.Ashare/OneDrive/OneDriveSync/session/tc/tensorcircuit-ng/results/_phase0_cublaslt_gap.py:29: UserWarning: Casting complex values to real discards the imaginary part (Triggered internally at /pytorch/aten/src/ATen/native/Copy.cpp:308.)
+  torch.zeros(2, dtype=torch.complex64).to(
+# Probe 1 (deferred): cuBLASLt gap + reachable proxy
+
+## 缺口确认
+backend  capability          status
+-------  ------------------  ------
+pytorch  complex-bf16 dtype  ABSENT
+jax      complex-bf16 dtype  ABSENT
+
+HLO: bf16 dot in HLO: True (single real GEMM; complex needs 4 of these)
+
+## 可达代理：SM120 bf16 Tensor Core 上限（4-real-GEMM，TF32 off）
+M=N=K  bf16_TFLOPS         fp32_TFLOPS         fp32/bf16
+-----  ------------------  ------------------  ---------
+2048   42.703529814214015  0.9031214545905152  0.02     
+4096   52.67884687949795   13.604693214605607  0.26     
+8192   41.34125462909787   11.82778567080206   0.29     
+
+# 结论：planar-complex cuBLASLt on SM120 = UNTESTED；
+#       需 libcublasLt 绑定（推迟到 go/no-go 之后）。
+#       上表给若 planar-complex 存在的 Tensor Core 上限参考。
+=== phase0_cublaslt_gap done ===
