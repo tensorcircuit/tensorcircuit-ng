@@ -1,0 +1,32 @@
+/home/ubuntu/miniconda3/envs/tcng/lib/python3.10/site-packages/torch/profiler/profiler.py:224: UserWarning: Warning: Profiler clears events at the end of each cycle.Only events from the current cycle will be reported.To keep events across cycles, set acc_events=True.
+  _warn_once(
+=== matmul 8192x8192 (2*m^3 = 1,099,511,627,776 FLOPs) ===
+bf16 wall   22.76 ms  ->    48.3 TFLOPS
+fp32 wall   92.36 ms  ->    11.9 TFLOPS  (TF32 disabled)
+bf16 speedup vs fp32: 4.06x   | bf16/fp32 TFLOPS ratio: 4.06x
+
+=== torch.profiler CUDA kernels for one bf16 matmul ===
+----------------------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                                  Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  
+----------------------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16...         0.00%       0.000us         0.00%       0.000us       0.000us      19.840ms       100.00%      19.840ms      19.840ms             1  
+                                               Activity Buffer Request        10.57%       2.589ms        10.57%       2.589ms       2.589ms       0.000us         0.00%       0.000us       0.000us             1  
+                                                 cudaStreamIsCapturing         0.03%       6.345us         0.03%       6.345us       6.345us       0.000us         0.00%       0.000us       0.000us             1  
+                                                            cudaMalloc         3.29%     805.664us         3.29%     805.664us     805.664us       0.000us         0.00%       0.000us       0.000us             1  
+                                                cudaDeviceGetAttribute         0.01%       1.287us         0.01%       1.287us       1.287us       0.000us         0.00%       0.000us       0.000us             1  
+                                                        cuLaunchKernel         0.14%      34.187us         0.14%      34.187us      34.187us       0.000us         0.00%       0.000us       0.000us             1  
+                                                 cudaDeviceSynchronize        85.96%      21.043ms        85.96%      21.043ms      10.521ms       0.000us         0.00%       0.000us       0.000us             2  
+----------------------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 24.479ms
+Self CUDA time total: 19.840ms
+
+=== kernel-name cues ===
+  [bf16] (1 kernel(s)) e.g. void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_nn_align8
+  [gemm] (1 kernel(s)) e.g. void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_nn_align8
+  [tensor] (1 kernel(s)) e.g. void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_nn_align8
+  [cutlass] (1 kernel(s)) e.g. void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_nn_align8
+
+=== device ===
+NVIDIA GeForce RTX 5070 Ti Laptop GPU cap (12, 0)
+allow_tf32 = False
+=== K3 probe done ===
