@@ -1,0 +1,2 @@
+backend,circuit,dtype,mode,n,trials,wall_s
+jax,micro-matmul,bf16,micro,4096,5,0.05204735000000049

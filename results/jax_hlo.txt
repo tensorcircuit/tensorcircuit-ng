@@ -1,0 +1,12 @@
+HLO length: 1288 chars
+'bf16' occurrences: 22
+'%dot' (dot op) occurrences: 0  (4 = one per real GEMM in the 4M complex mult)
+  DOT: %0 = stablehlo.dot_general %arg0, %arg2, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : (tensor<1024x1024xbf16>, tensor<1024x1024xbf16
+  DOT: %1 = stablehlo.dot_general %arg1, %arg3, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : (tensor<1024x1024xbf16>, tensor<1024x1024xbf16
+  DOT: %3 = stablehlo.dot_general %arg0, %arg3, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : (tensor<1024x1024xbf16>, tensor<1024x1024xbf16
+  DOT: %4 = stablehlo.dot_general %arg1, %arg2, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : (tensor<1024x1024xbf16>, tensor<1024x1024xbf16
+--- raw HLO (first 400 chars) ---
+module @jit_complex_matmul attributes {mhlo.num_partitions = 1 : i32, mhlo.num_replicas = 1 : i32} {
+  func.func public @main(%arg0: tensor<1024x1024xbf16>, %arg1: tensor<1024x1024xbf16>, %arg2: tensor<1024x1024xbf16>, %arg3: tensor<1024x1024xbf16>) -> (tensor<1024x1024xbf16> {jax.result_info = "result[0]"}, tensor<1024x1024xbf16> {jax.result_info = "result[1]"}) {
+    %0 = stablehlo.dot_general %
+=== HLO probe done ===
