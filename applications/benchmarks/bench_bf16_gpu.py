@@ -35,6 +35,25 @@ def _disable_prealloc(name: str) -> None:
             pass
 
 
+def _setup_gpu_device(name: str, gpu: int) -> None:
+    """Place tc backend tensors on the GPU.
+
+    tc-ng's pytorch backend creates tensors with no ``device=`` argument
+    (``convert_to_tensor`` -> ``torch.tensor(...)``), so it defaults to CPU and the
+    "GPU" benchmark silently runs on CPU. ``torch.set_default_device`` routes all
+    tensor creation to CUDA with zero tc code changes. jax/tensorflow/cupy reach the
+    GPU without help (jax via XLA devices, tf via the visible GPU + memory growth set
+    in ``_disable_prealloc``, cupy arrays are GPU-native), so they are no-ops here.
+    """
+    if name == "pytorch":
+        try:
+            import torch
+
+            torch.set_default_device(f"cuda:{gpu}")
+        except Exception:
+            pass
+
+
 def build_circuit(circuit: str, n: int) -> Any:
     import tensorcircuit as tc
 
@@ -70,13 +89,16 @@ def build_circuit(circuit: str, n: int) -> Any:
 
 def contract(circuit: str, n: int, bf16: bool) -> Any:
     import numpy as np
+    import tensorcircuit as tc
     from applications.bcomplex32_algebra import bcomplex32
 
     c = build_circuit(circuit, n)
+    # be.numpy() moves the result to host (GPU backends: cpu().numpy()); np.asarray
+    # alone fails on a CUDA tensor ("can't convert cuda:0 ... to numpy").
     if bf16:
         with bcomplex32():
-            return np.asarray(c.state())
-    return np.asarray(c.state())
+            return np.asarray(tc.backend.numpy(c.state()))
+    return np.asarray(tc.backend.numpy(c.state()))
 
 
 class GpuSmiPoller:
@@ -153,6 +175,7 @@ def worker(args: argparse.Namespace) -> None:
     import tensorcircuit as tc
 
     tc.set_backend(args.backend)
+    _setup_gpu_device(args.backend, args.gpu)
     reset_backend_mem(args.backend)
     with GpuSmiPoller(gpu=args.gpu) as poller:
         res = contract(args.circuit, args.n, bf16=(args.dtype == "bf16"))
@@ -210,6 +233,7 @@ def micro_worker(args: argparse.Namespace) -> None:
     )
 
     tc.set_backend(args.backend)
+    _setup_gpu_device(args.backend, args.gpu)
     be = tc.backend
     m = args.micro_m
     a = be.cast(
@@ -223,12 +247,12 @@ def micro_worker(args: argparse.Namespace) -> None:
     pa, pb = _complex_to_pair(be, a), _complex_to_pair(be, b)
     axes = ([1], [0])
     out = _pair_to_complex(be, _pair_tensordot(be, pa, pb, axes=axes))
-    _ = np.asarray(out)  # warmup
+    _ = np.asarray(be.numpy(out))  # warmup (be.numpy syncs GPU -> host)
     walls: List[float] = []
     for _ in range(args.trials):
         t0 = time.perf_counter()
         out = _pair_to_complex(be, _pair_tensordot(be, pa, pb, axes=axes))
-        _ = np.asarray(out)
+        _ = np.asarray(be.numpy(out))
         walls.append(time.perf_counter() - t0)
     print(
         json.dumps(
