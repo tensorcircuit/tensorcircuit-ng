@@ -22,3 +22,5 @@
     tutorials/dqas_cn.ipynb
     tutorials/barren_plateaus_cn.ipynb
     tutorials/sklearn_svc_cn.ipynb
+    tutorials/tianyan_cloud_cn.ipynb
+    tutorials/tianyan_cloud_reference_cn.md
