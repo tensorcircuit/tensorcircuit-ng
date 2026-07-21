@@ -1,0 +1,12 @@
+# targeted fusion A/B (expectation): 12 worker runs (A/B pairs at 6 sizes)
+n   depth  peak_default_B  peak_nofusion_B  nofus/default  classification          
+--  -----  --------------  ---------------  -------------  ------------------------
+22  10     123648          125952           1.02           materialized-unavoidable
+22  16     189184          191744           1.01           materialized-unavoidable
+24  10     1107432704      1107432704       1.00           materialized-unavoidable
+24  16     1107508992      1107508992       1.00           materialized-unavoidable
+26  10     4328670464      4328670464       1.00           materialized-unavoidable
+26  16     4328755712      4328755712       1.00           materialized-unavoidable
+
+# materialized-unavoidable = bf16-window candidate; fused-away = no window.
+=== phase0_targeted_fusion done ===

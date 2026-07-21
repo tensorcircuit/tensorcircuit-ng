@@ -1,0 +1,20 @@
+# targeted frontier: 12 configs (brickwork, jax)
+n   depth  output       outcome  peak_alloc_B  peak/state  ms   
+--  -----  -----------  -------  ------------  ----------  -----
+22  10     state        run      970935808     28.94       114.5
+22  10     expectation  run      480753664     14.33       2.4  
+22  16     state        run      881872128     26.28       224.1
+22  16     expectation  run      550023168     16.39       2.3  
+24  10     state        run      4112220160    30.64       219.9
+24  10     expectation  run      2832598528    21.10       4.2  
+24  16     state        run      4810542592    35.84       358.6
+24  16     expectation  run      3326905344    24.79       3.6  
+26  10     state        oom      -             -           -    
+26  10     expectation  oom      -             -           -    
+26  16     state        oom      -             -           -    
+26  16     expectation  oom      -             -           -    
+
+# boundary (output, backend) -> max_run_n / min_fail_n:
+  expectation    jax    max_run_n=24  min_fail_n=26
+  state          jax    max_run_n=24  min_fail_n=26
+=== phase0_targeted done ===
