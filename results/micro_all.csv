@@ -1,0 +1,5 @@
+backend,circuit,dtype,mode,n,trials,wall_s
+pytorch,micro-matmul,bf16,micro,4096,5,0.057494958999996015
+jax,micro-matmul,bf16,micro,4096,5,0.05204735000000049
+tensorflow,micro-matmul,bf16,micro,4096,5,0.045478008000003456
+cupy,micro-matmul,bf16,micro,4096,5,0.036669582999991235
