@@ -20,6 +20,12 @@
 
 - Fix interaction between random state and jit in `Circuit.sample` (`allow_state=False`, `batch` given) path.
 
+- Improve the efficiency of `merge_single_gates`
+
+### Removed
+
+- remove the `tng` contractor which is deprecated long ago
+
 
 ## v1.8.0
 

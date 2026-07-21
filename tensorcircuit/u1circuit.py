@@ -742,18 +742,17 @@ class U1Circuit(AbstractCircuit):
 
         if format is None:
             # Return list of (binary_config, probability) tuples
-            # Convert full_indices to binary configurations (TC ordering)
-            results = []
-            for i in range(nbatch):
-                idx = full_indices[i]
-                # Convert integer to binary representation (reversed ordering)
-                binary = []
-                for q in range(self._nqubits):
-                    bp = self._bit_position(q)
-                    bit = backend.bitwise_and(backend.right_shift(idx, bp), 1)
-                    binary.append(backend.cast(bit, rdtypestr))
-                binary_tensor = backend.stack(binary)
-                results.append((binary_tensor, -1.0))
+            # Convert full_indices to binary configurations (TC ordering).
+            # Vectorize over the batch axis: each qubit step operates on the
+            # whole [nbatch] tensor, so backend dispatches are O(nqubits)
+            # rather than O(nbatch * nqubits).
+            bits = []
+            for q in range(self._nqubits):
+                bp = self._bit_position(q)
+                bit = backend.bitwise_and(backend.right_shift(full_indices, bp), 1)
+                bits.append(backend.cast(bit, rdtypestr))
+            binary_all = backend.stack(bits, axis=1)  # [nbatch, nqubits]
+            results = [(binary_all[i], -1.0) for i in range(nbatch)]
             if batch is None:
                 return results[0]
             return results
