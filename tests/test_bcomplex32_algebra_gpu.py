@@ -72,7 +72,9 @@ def test_bf16_end_to_end_matches_complex64_gpu(backend):
         c.H(0)
         for i in range(3):
             c.cnot(i, i + 1)
-        return np.asarray(c.state())
+        # be.numpy() hosts the result (cupy needs explicit .get(); jax/tf/pytorch
+        # tolerate np.asarray but be.numpy is uniform). np.asarray alone fails on cupy.
+        return np.asarray(tc.backend.numpy(c.state()))
 
     ref = build()
     with bcomplex32():

@@ -42,9 +42,11 @@ def _bf16_dtype(be: Backend) -> Any:
 
         return tf.bfloat16
     if name == "cupy":
-        import cupy
+        # cupy has no ``cupy.bfloat16``; it accepts ml_dtypes.bfloat16 as a native
+        # dtype (astype + cuBLAS bf16 GEMM both work). Same resolution as numpy.
+        import ml_dtypes
 
-        return cupy.bfloat16
+        return ml_dtypes.bfloat16
     raise NotImplementedError(f"bf16 dtype unknown for backend {name!r}")
 
 
@@ -116,8 +118,15 @@ def _einsum_single_operand_half(
     """Apply a 1-operand einsum to one bf16 half. GPU backends (jax/torch/tf/cupy)
     take native ``be.einsum`` (XLA/cuBLAS-fused, accepts bf16). numpy rejects bf16,
     so it falls back to the manual decomposition. ``np.diagonal`` never runs on GPU."""
-    if getattr(be, "name", None) == "numpy":
+    name = getattr(be, "name", None)
+    if name == "numpy":
         return _einsum_single_operand_half_numpy(be, x, lhs, out_subs)
+    if name == "cupy":
+        # tensornetwork's cupy backend has not implemented einsum (NotImplementedError),
+        # but cupy.einsum itself exists and runs bf16 on cuBLAS. Call it directly.
+        import cupy
+
+        return cupy.einsum(f"{lhs}->{out_subs}", x)
     return be.einsum(f"{lhs}->{out_subs}", x)
 
 
