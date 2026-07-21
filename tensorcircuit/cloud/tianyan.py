@@ -140,7 +140,7 @@ def _get_device_topology(
     pf: "TianYanPlatform", device_name: str
 ) -> tuple[dict[int, set[int]], set[int]]:
     """Get topology graph and available qubits from device config."""
-    config = pf.download_config(machine=device_name)
+    config = pf.download_config(machine=device_name) or {}
     overview = config.get("overview", {})
 
     # Build adjacency graph from coupler map
