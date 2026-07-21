@@ -61,7 +61,11 @@ def _pair_to_complex(be: Backend, pair: PairTensor) -> Tensor:
     re, im = pair.unpack()
     re = be.cast(re, cons.rdtypestr)
     im = be.cast(im, cons.rdtypestr)
-    return be.cast(re + 1j * im, cons.dtypestr)
+    # be.i() returns 1j as a backend tensor. tensorflow's eager mode cannot build a
+    # complex tensor from a Python ``1j`` applied to a float tensor (TypeError:
+    # "Cannot convert 1j to EagerTensor of dtype float"), unlike numpy/jax/torch/cupy.
+    # Found during L3 GPU testing on TF.
+    return be.cast(re, cons.dtypestr) + be.i(cons.dtypestr) * be.cast(im, cons.dtypestr)
 
 
 def _pair_tensordot(be: Backend, a: Tensor, b: Tensor, axes: Any) -> Tensor:
