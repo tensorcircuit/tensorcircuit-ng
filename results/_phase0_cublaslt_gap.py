@@ -5,7 +5,7 @@
 """
 
 from __future__ import annotations
-import sys
+import warnings
 
 from results._phase0_common import fmt_table
 
@@ -23,20 +23,24 @@ def has_complex_bf16_dtype(backend: str) -> bool:
         if backend == "pytorch":
             import torch
 
-            torch.zeros(2, dtype=torch.complex32)  # 这是 complex-half(fp16)，不是 bf16
-            # torch 无 complex-bf16；尝试构造会失败
-            try:
-                torch.zeros(2, dtype=torch.complex64).to(
-                    torch.bfloat16
-                )  # 实数化，非复数 bf16
-            except Exception:
-                pass
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                torch.zeros(2, dtype=torch.complex32)  # complex-half(fp16)，非 bf16
+                # torch 无 complex-bf16；尝试构造会失败
+                try:
+                    torch.zeros(2, dtype=torch.complex64).to(
+                        torch.bfloat16
+                    )  # 实数化，非复数 bf16
+                except Exception:
+                    pass
             return False  # torch 无 complex-bf16 dtype
         if backend == "jax":
             import jax.numpy as jnp
 
-            # jnp.complex64 是最小复数；无 complex-bf16
-            _ = jnp.zeros(2, dtype=jnp.complex64)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                # jnp.complex64 是最小复数；无 complex-bf16
+                _ = jnp.zeros(2, dtype=jnp.complex64)
             return False
     except Exception:
         return False
@@ -91,6 +95,10 @@ def _proxy_ceiling():
             c = a_bf @ b_bf
         torch.cuda.synchronize()
         bf_s = (time.perf_counter() - t0) / 5
+        for _ in range(2):  # warmup：分摊 cuBLAS fp32 kernel autotuning
+            torch.cuda.synchronize()
+            _ = a_f32 @ b_f32
+        torch.cuda.synchronize()
         t0 = time.perf_counter()
         for _ in range(5):
             c = a_f32 @ b_f32
