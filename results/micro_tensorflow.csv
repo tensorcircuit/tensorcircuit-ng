@@ -1,0 +1,2 @@
+backend,circuit,dtype,mode,n,trials,wall_s
+tensorflow,micro-matmul,bf16,micro,4096,5,0.045478008000003456
