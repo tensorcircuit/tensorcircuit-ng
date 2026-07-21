@@ -621,9 +621,9 @@ def _standardize_properties(properties: Dict[str, Any]) -> None:
 
     # Fallback: if bits is empty, gather qubit IDs from links
     if not bits:
-        for qubit_1, qubit_2 in coupler_map.values():
-            bits.setdefault(int(qubit_1[1:]), {})
-            bits.setdefault(int(qubit_2[1:]), {})
+        for q1, q2 in links.keys():
+            bits.setdefault(q1, {})
+            bits.setdefault(q2, {})
 
     properties["bits"] = bits
 
