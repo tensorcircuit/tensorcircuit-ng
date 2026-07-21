@@ -85,7 +85,7 @@ def sample_expectation_ps(
     **kws: Any,
 ) -> float:
     """
-    Deprecated, please use :py:meth:`tensorcircuit.cloud.wrapper.batch_expectation_ps`.
+    Deprecated, please use :py:func:`tensorcircuit.cloud.wrapper.batch_expectation_ps`.
     """
     logger.warning("This method is deprecated and not maintained, \
         please use `tensorcircuit.cloud.wrapper.batch_expectation_ps` instead")

@@ -693,7 +693,7 @@ There is also a more flexible torch interface that support static non-tensor inp
     f_torch(torch.ones([2]), i=3)
 
 
-We also provider wrapper of quantum function for torch module as :py:meth:`tensorcircuit.TorchLayer` alias to :py:meth:`tensorcircuit.torchnn.QuantumNet`.
+We also provider wrapper of quantum function for torch module as :py:class:`tensorcircuit.TorchLayer` alias to :py:class:`tensorcircuit.torchnn.QuantumNet`.
 
 For ``TorchLayer``, ``use_interface=True`` is by default, which natively allow the quantum function defined on other tensorcircuit backends, such as jax or tf for speed consideration.
 
@@ -729,12 +729,12 @@ For ``TorchLayer``, ``use_interface=True`` is by default, which natively allow t
 **TensorFlow interfaces:**
 
 Similar rules apply similar as torch interface. The interface can even be used within jit environment outside.
-See :py:meth:`tensorcircuit.interfaces.tensorflow.tensorflow_interface`.
+See :py:func:`tensorcircuit.interfaces.tensorflow.tensorflow_interface`.
 
 We also provider ``enable_dlpack=True`` option in torch and tf interfaces, which allow the tensor transformation happen without memory transfer via dlpack,
 higher version of tf or torch package required.
 
-We also provider wrapper of quantum function for keras layer as :py:meth:`tensorcircuit.KerasLayer` alias to :py:meth:`tensorcircuit.keras.KerasLayer`.
+We also provider wrapper of quantum function for keras layer as :py:class:`tensorcircuit.KerasLayer` alias to :py:class:`tensorcircuit.keras.KerasLayer`.
 
 ``KerasLayer`` can process multiple input arguments with the input as a dict, following the common keras practice, see example below.
 
@@ -865,11 +865,11 @@ Templates as Shortcuts
 
 * Ising type Hamiltonian defined on a general graph
 
-See :py:meth:`tensorcircuit.templates.measurements.spin_glass_measurements`
+See :py:func:`tensorcircuit.templates.measurements.spin_glass_measurements`
 
 * Heisenberg Hamiltonian on a general graph with possible external fields
 
-See :py:meth:`tensorcircuit.templates.measurements.heisenberg_measurements`
+See :py:func:`tensorcircuit.templates.measurements.heisenberg_measurements`
 
 **Circuit Blocks:**
 

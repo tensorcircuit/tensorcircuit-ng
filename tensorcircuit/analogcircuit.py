@@ -120,9 +120,9 @@ class AnalogCircuit:
 
         This finalizes the current digital block and prepares a new one for subsequent gates.
 
-        :param hamiltonian_func: A function H(t) that takes a time `t` (from 0 to `time`)
-                                 and returns the Hamiltonian matrix at that instant.
-        :type hamiltonian_func: Callable[[float], np.ndarray]
+        :param hamiltonian: A function H(t) that takes a time `t` (from 0 to `time`)
+                            and returns the Hamiltonian matrix at that instant.
+        :type hamiltonian: Callable[[float], np.ndarray]
         :param time: The total evolution time 'T'.
         :type time: float
         :param index: The indices of the qubits to apply the analog evolution to. Defaults None for
@@ -458,7 +458,7 @@ class AnalogCircuit:
         :type allow_state: bool
         :param readout_error: Optional readout error model.
         :type readout_error: Optional[Sequence[Any]]
-        :param format: Output format. See :py:meth:`tensorcircuit.quantum.measurement_results`.
+        :param format: Output format. See :py:func:`tensorcircuit.quantum.measurement_results`.
         :type format: Optional[str]
         :param random_generator: random generator,  defaults to None
         :type random_generator: Optional[Any], optional

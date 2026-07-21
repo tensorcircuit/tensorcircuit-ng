@@ -195,9 +195,9 @@ From lower level to higher level, a view of API layers invoking QPU calls
 
 - Object oriented abstraction for Provider/Device/Task in :py:mod:`tensorcircuit.cloud.abstraction`
 
-- Unified batch submission interface as standarized in :py:meth:`tensorcircuit.cloud.wrapper.batch_submit_template`
+- Unified batch submission interface as standarized in :py:func:`tensorcircuit.cloud.wrapper.batch_submit_template`
 
-- Numerical and experimental unified all-in-one interface as :py:meth:`tensorcircuit.cloud.wrapper.batch_expectation_ps`
+- Numerical and experimental unified all-in-one interface as :py:func:`tensorcircuit.cloud.wrapper.batch_expectation_ps`
 
 - Application level code with QPU calls built directly on ``batch_expectation_ps`` or more fancy algorithms can be built on ``batch_submit_func`` so that these algorithms can be reused as long as one function ``batch_submit_func`` is defined for a given vendor (cheaper than defining a new provider from lower level).
 

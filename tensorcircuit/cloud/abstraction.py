@@ -396,8 +396,8 @@ class Task:
 
         :param format: unsupported now, defaults to None, which is "count_dict_bin"
         :type format: Optional[str], optional
-        :param blocked: whether blocked to wait until the result is returned, defaults to False,
-            which raise error when the task is unfinished
+        :param blocked: whether blocked to wait until the result is returned, defaults to True,
+            which raises error when the task is unfinished
         :type blocked: bool, optional
         :param mitigated: whether enable readout error mitigation, defaults to False
         :type mitigated: bool, optional

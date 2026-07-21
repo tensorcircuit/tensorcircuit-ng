@@ -643,12 +643,12 @@ def qir2json(
     """
     transform qir to json compatible list of dict where array is replaced by real and imaginary list
 
-    :param qir: _description_
+    :param qir: the quantum intermediate representation of a circuit
     :type qir: List[Dict[str, Any]]
     :param simplified: If False, keep all info for each gate, defaults to be False.
         If True, suitable for IO since less information is required
     :type simplified: bool
-    :return: _description_
+    :return: json-compatible list of dicts (complex arrays split into real/imaginary lists)
     :rtype: List[Dict[str, Any]]
     """
     logger.warning(
@@ -734,13 +734,13 @@ def eqasm2tc(
     """
     Translation qexe/eqasm instruction to tensorcircuit Circuit object
 
-    :param eqasm: _description_
+    :param eqasm: qexe/eqasm instruction string
     :type eqasm: str
-    :param nqubits: _description_, defaults to None
+    :param nqubits: number of qubits, defaults to None (parsed from the eqasm header)
     :type nqubits: Optional[int], optional
     :param headers: lines of ignored code at the head and the tail, defaults to (6, 1)
     :type headers: Tuple[int, int], optional
-    :return: _description_
+    :return: the converted tensorcircuit ``Circuit``
     :rtype: Circuit
     """
     eqasm_list = eqasm.split("\n")
@@ -818,11 +818,12 @@ def stim2tc(
     :type n: Optional[int], optional
     :param is_dm: whether to use DMCircuit, defaults to False
     :type is_dm: bool, optional
-    :param circuit_constructor: _description_, defaults to None
+    :param circuit_constructor: circuit class to construct (e.g. ``Circuit`` or ``DMCircuit``),
+        defaults to None (inferred from ``is_dm``)
     :type circuit_constructor: Any, optional
-    :param circuit_params: _description_, defaults to None
+    :param circuit_params: keyword arguments passed to the circuit constructor, defaults to None
     :type circuit_params: Optional[Dict[str, Any]], optional
-    :return: _description|
+    :return: the converted tensorcircuit circuit
     :rtype: Any
     """
     if circuit_constructor is not None:
@@ -1031,11 +1032,12 @@ def cirq2tc(
     :type inputs: Optional[List[float]], optional
     :param is_dm: whether to use DMCircuit, defaults to False
     :type is_dm: bool, optional
-    :param circuit_constructor: _description_, defaults to None
+    :param circuit_constructor: circuit class to construct (e.g. ``Circuit`` or ``DMCircuit``),
+        defaults to None (inferred from ``is_dm``)
     :type circuit_constructor: Any, optional
-    :param circuit_params: _description_, defaults to None
+    :param circuit_params: keyword arguments passed to the circuit constructor, defaults to None
     :type circuit_params: Optional[Dict[str, Any]], optional
-    :return: _description_
+    :return: the converted tensorcircuit circuit
     :rtype: Any
     """
 

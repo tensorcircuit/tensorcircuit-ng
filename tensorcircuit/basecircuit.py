@@ -1410,7 +1410,7 @@ class BaseCircuit(AbstractCircuit):
         :param readout_error: readout_error, defaults to None
         :type readout_error: Optional[Sequence[Any]]. Tensor, List, Tuple
         :param format: sample format, defaults to None as backward compatibility
-            check the doc in :py:meth:`tensorcircuit.quantum.measurement_results`
+            check the doc in :py:func:`tensorcircuit.quantum.measurement_results`
             Six formats of measurement counts results:
 
                 "sample_int": # np.array([0, 0])

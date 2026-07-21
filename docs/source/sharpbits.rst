@@ -159,7 +159,7 @@ Inspect the backend, dtype, shape and device using the following codes.
             print("tensor shape:", tc.backend.shape_tuple(a))
             print("tensor device:", tc.backend.device(a))
 
-If the backend is inconsistent, one can convert the tensor backend via :py:meth:`tensorcircuit.interfaces.tensortrans.general_args_to_backend`.
+If the backend is inconsistent, one can convert the tensor backend via :py:func:`tensorcircuit.interfaces.tensortrans.general_args_to_backend`.
 
 .. code-block:: python
 
