@@ -777,8 +777,9 @@ def _algebraic_base_contraction(
     dangling_edges = sorted_edges(tn.get_subgraph_dangling(nodes))
 
     # Update the edges to point to the new final_node
+    nodes_set = set(nodes)
     for i, edge in enumerate(dangling_edges):
-        if edge.node1 in nodes:
+        if edge.node1 in nodes_set:
             edge.node1 = final_node
             edge.axis1 = i
         else:
@@ -1185,6 +1186,13 @@ def set_contractor(
     """
     To set runtime contractor of the tensornetwork for a better contraction path.
     For more information on the usage of contractor, please refer to independent tutorial.
+
+    For large tensor networks, the default ``greedy`` contractor may yield
+    expensive or even intractable contraction orders. In that case it is
+    strongly recommended to switch to a dedicated contraction pathfinder such
+    as ``cotengra`` (``method="cotengra"``) or ``omeco``
+    (``method="omeco"``). ``omeco`` is preferred when available, as it is
+    generally faster at finding high-quality paths.
 
     :param method: "auto", "greedy", "branch", "plain", "tng", "custom",
         "custom_stateful". Also supports shortcuts like "cotengra",

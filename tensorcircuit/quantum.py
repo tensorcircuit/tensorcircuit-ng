@@ -1310,13 +1310,12 @@ def xyz2ps(xyz: Dict[str, List[int]], n: Optional[int] = None) -> List[int]:
     if n is None:
         n = max(xyz.get("x", []) + xyz.get("y", []) + xyz.get("z", [])) + 1
     ps = [0] * n
-    for i in range(n):
-        if i in xyz.get("x", []):
-            ps[i] = 1
-        elif i in xyz.get("y", []):
-            ps[i] = 2
-        elif i in xyz.get("z", []):
-            ps[i] = 3
+    for i in xyz.get("x", []):
+        ps[i] = 1
+    for i in xyz.get("y", []):
+        ps[i] = 2
+    for i in xyz.get("z", []):
+        ps[i] = 3
     return ps
 
 

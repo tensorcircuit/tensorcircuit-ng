@@ -985,24 +985,67 @@ def check_rep_transformation(
     np.testing.assert_allclose(density_matrix1, density_matrix3, atol=1e-5)
 
 
-def composedkraus(kraus1: KrausList, kraus2: KrausList) -> KrausList:
-    """
-    Compose two Kraus channels into a single noise channel.
+def composedkraus(*kraus_lists: KrausList) -> KrausList:
+    r"""
+    Compose two or more Kraus channels into a single noise channel.
 
-    :param kraus1: One noise channel
-    :type kraus1: KrausList
-    :param kraus2: Another noise channel
-    :type kraus2: KrausList
+    .. note::
+
+        **Application order.** The channels are composed so that the first
+        argument is the *outermost* operator and the last argument is applied
+        *first* to the state. Equivalently, on a density matrix
+        :math:`\rho`, ``composedkraus(c0, c1, ..., c_{m-1})`` acts as
+
+        .. math::
+
+            \rho \mapsto (c_0 \circ c_1 \circ \cdots \circ c_{m-1})(\rho),
+
+        i.e. :math:`c_{m-1}` is applied to :math:`\rho` first, then
+        :math:`c_{m-2}`, and so on, with :math:`c_0` applied last. For two
+        channels this is the direct pairwise product
+        :math:`\{K_i^{(0)} K_j^{(1)}\}` where :math:`K^{(0)}` is the outer
+        operator, so ``composedkraus(c0, c1)`` applies ``c1`` first and then
+        ``c0``. This convention is preserved across the two-channel and
+        multi-channel code paths.
+
+    For two channels the Kraus operators are combined directly as
+    :math:`\{K_i L_j\}`, which has the lowest constant overhead.
+    For three or more channels, the channels are first converted to the
+    superoperator representation :math:`\varepsilon = \sum_k K_k^* \otimes K_k`,
+    multiplied as matrices, and converted back to Kraus operators once.
+    This avoids the exponential growth of Kraus operators
+    (:math:`4^m` for ``m`` channels with four Kraus operators each) that the
+    direct pairwise composition would incur when chained: the output operator
+    count is bounded by :math:`D^2` regardless of ``m``.
+
+    :param kraus_lists: Two or more noise channels to compose. The first
+        argument is the outermost channel (applied last to the state); the last
+        argument is applied first.
+    :type kraus_lists: KrausList
     :return: Composed noise channel
     :rtype: KrausList
     """
-    new_kraus = []
-    for i in kraus1:
-        for j in kraus2:
-            k = Gate(backend.reshapem(i.tensor) @ backend.reshapem(j.tensor))
-            new_kraus.append(k)
+    if len(kraus_lists) < 2:
+        raise ValueError("composedkraus requires at least two channels")
+
+    name = "_".join(k.name for k in kraus_lists)
+    is_unitary = all(k.is_unitary for k in kraus_lists)
+
+    if len(kraus_lists) == 2:
+        kraus1, kraus2 = kraus_lists
+        new_kraus = []
+        for i in kraus1:
+            for j in kraus2:
+                k = Gate(backend.reshapem(i.tensor) @ backend.reshapem(j.tensor))
+                new_kraus.append(k)
+        return KrausList(new_kraus, name=name, is_unitary=is_unitary)
+
+    # m>=3: superoperator round-trip avoids exponential Kraus-operator growth.
+    superop = kraus_to_super(kraus_lists[0])
+    for kl in kraus_lists[1:]:
+        superop = superop @ kraus_to_super(kl)
     return KrausList(
-        new_kraus,
-        name=kraus1.name + "_" + kraus2.name,
-        is_unitary=kraus1.is_unitary and kraus2.is_unitary,
+        krausmatrix_to_krausgate(super_to_kraus(superop)),
+        name=name,
+        is_unitary=is_unitary,
     )
