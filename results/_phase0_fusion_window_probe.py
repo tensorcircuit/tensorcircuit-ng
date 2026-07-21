@@ -1,7 +1,7 @@
 """Probe 3: XLA 融合窗口定位。
 假设：真实 tc-ng 收缩里，XLA 在某些子图融不掉（被迫物化）；若这些子图 single-consumer/tile-mappable，
       spec §8.1 region fusion 可覆盖 → bf16 窗口可达。
-方法：lens1 静态 HLO（dot/fusion 计数）；lens2 融合禁用 A/B（决定性 peak 比）；lens3 nsys 时间线。
+方法：lens1 静态 stablehlo（dot_general 计数；fusion 不可测，见 parse_hlo_counts 注）；lens2 融合禁用 A/B（决定性 peak 比）；lens3 nsys 时间线。
 用法：MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' wsl.exe bash .wsl_run.sh python results/_phase0_fusion_window_probe.py --matrix smoke
 注：XLA_FLAGS 是进程级，每配置独立子进程（XLA_FLAGS 由 worker 内 os.environ 设）。
 """
@@ -17,8 +17,10 @@ from results._phase0_common import orchestrate, worker_emit, fmt_table, median_w
 
 def classify_materialization(peak_default: int, peak_no_fusion: int) -> str:
     """据 '关融合/默认' peak 比分类。peak_no_fusion/peak_default ≈1 → 物化不可避免（窗口存在）；
-    大 → 原被融掉（无窗口）。"""
+    大 → 原被融掉（无窗口）。任一臂 peak<=0（测量失败/未编译）→ unknown，避免假信号。"""
     if peak_default <= 0:
+        return "unknown"
+    if peak_no_fusion <= 0:
         return "unknown"
     ratio = peak_no_fusion / peak_default
     if ratio < 1.10:
@@ -28,11 +30,16 @@ def classify_materialization(peak_default: int, peak_no_fusion: int) -> str:
     return "materialized-avoidable"
 
 
-def parse_hlo_counts(hlo_text: str) -> dict:
-    """数 HLO 文本里的 dot / fusion 指令（定性信号）。"""
-    dots = len(re.findall(r"%dot(?:_general)?\.", hlo_text))
-    fusions = len(re.findall(r"%fusion\.", hlo_text))
-    return {"dot": dots, "fusion": fusions}
+def parse_hlo_counts(stablehlo_text: str) -> dict:
+    """数 stablehlo 文本里的 dot_general 指令（定性收缩信号）。
+
+    注：fusion 是 XLA *优化* 阶段产物，不在 pre-opt stablehlo 里出现。本探针的电路无运行时输入，
+    XLA 会常量折叠整图 → optimized HLO 里 fusion 恒为 0（实测 smoke n=18,d=10：stablehlo 385 个
+    dot_general，optimized HLO 0 个 fusion）。故 fusion 计数对本 lens-1 既不可得也无意义；
+    融合的决定性测量由 lens-2（融合禁用 A/B peak 比）给出，不由本函数计。
+    """
+    dots = len(re.findall(r"\bdot_general\b", stablehlo_text))
+    return {"dot": dots}
 
 
 def _build_deep(n, depth):
@@ -98,7 +105,7 @@ def worker_main(argv):
     peak = int(dev.memory_stats().get("peak_bytes_in_use", 0))
     ms = median_wall_ms(jf, warmup=1, iters=5, sync=lambda r: jax.block_until_ready(r))
 
-    hlo_counts = {"dot": 0, "fusion": 0}
+    hlo_counts = {"dot": 0}
     try:
         hlo_text = str(jf.lower().compiler_ir(dialect="stablehlo"))
         hlo_counts = parse_hlo_counts(hlo_text)
@@ -112,7 +119,6 @@ def worker_main(argv):
             "peak_B": peak,
             "ms": ms,
             "hlo_dot": hlo_counts["dot"],
-            "hlo_fusion": hlo_counts["fusion"],
         }
     )
 
@@ -149,8 +155,6 @@ def _configs(matrix):
 
 def _calibrate_flag():
     """在已知可融合小 case 上验证 --xla_disable_hlo_passes=fusion 有效（peak 应变化）。返回 bool。"""
-    import subprocess, sys as _sys
-
     # 用一个显然可融合的元素wise 链：默认应大量融合，关融合后 peak 应涨
     calib = [
         {"n": 10, "depth": 3, "output": "norm", "disable_fusion": 0},
@@ -158,7 +162,8 @@ def _calibrate_flag():
     ]
     rows = orchestrate(calib, build_worker_argv, os.path.abspath(__file__), timeout=300)
     peaks = [r["result"]["peak_B"] for r in rows if r["ok"]]
-    if len(peaks) == 2 and peaks[1] != peaks[0]:
+    # 关融合应使 peak 上升；方向反或相等都判 invalid（拒绝错误方向或无信号）
+    if len(peaks) == 2 and peaks[1] > peaks[0]:
         print(
             f"# calibration: fusion flag changes peak ({peaks[0]} -> {peaks[1]}); lens2 VALID"
         )
@@ -204,7 +209,7 @@ def main():
             if lens2_valid
             else "lens2-invalid"
         )
-        # single-consumer 启发：fusion 计数高 + dot 少 → 多为可融合链；具体子图判断留给 nsys
+        # single-consumer 启发：dot 计数高 → 收缩链密集；具体子图融合判断留给 lens-2 A/B + nsys
         table_rows.append(
             [
                 k[0],
@@ -212,7 +217,6 @@ def main():
                 k[2],
                 dflt.get("peak_B", 0),
                 nofus.get("peak_B", 0),
-                dflt.get("hlo_fusion", 0),
                 dflt.get("hlo_dot", 0),
                 cls,
             ]
@@ -226,7 +230,6 @@ def main():
                 "output",
                 "peak_default",
                 "peak_nofusion",
-                "hlo_fusion",
                 "hlo_dot",
                 "classification",
             ],
