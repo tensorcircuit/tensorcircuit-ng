@@ -153,12 +153,12 @@ def worker_main(argv):
     fn = lambda: _compute_output(c, a.output)[0]
     sync = _sync_for(a.backend)
 
-    # warmup（不计入 peak）
-    try:
-        median_wall_ms(fn, warmup=1, iters=1, sync=sync)
-    except Exception as e:
-        worker_emit({"outcome": "crash", "error": repr(e)[:300]})
-        return
+    # warmup（不计入 peak）。故意不 try/except：若 warmup 抛出（如 jax
+    # ``RESOURCE_EXHAUSTED`` / pytorch ``CUDA out of memory``），让异常向上传播，
+    # Python 打印 traceback 到 stderr 并以非零码退出 —— 这样 ``orchestrate``
+    # 走 ``returncode != 0`` 分支并用 ``classify_stderr`` 分类为 ``oom`` 等结局，
+    # 而不是被这里吞掉后又被 ``orchestrate`` 误覆盖成成功的 ``run``。
+    median_wall_ms(fn, warmup=1, iters=1, sync=sync)
 
     if a.backend == "pytorch":
         reset_backend_mem(a.backend)
