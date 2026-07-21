@@ -81,7 +81,11 @@ def worker_main(argv):
 
     def run():
         if a.output == "expectation":
-            return c.expectation(("z", [0]))
+            # tc-ng API: 每个 op 为 ``(tc.gates.X(), [qubit])``，见
+            # ``tensorcircuit/circuit.py`` 中 ``Circuit.expectation`` 签名
+            # ``*ops: Tuple[tn.Node, List[int]]``（与 Probe 2 ``_compute_output`` 对齐）。
+            # ``tc`` 由外层 ``worker_main`` 的 ``import tensorcircuit as tc`` 提供闭包。
+            return c.expectation((tc.gates.z(), [0]))
         if a.output == "norm":
             st = c.state()
             return tc.backend.sum(tc.backend.abs(st) ** 2)
@@ -138,7 +142,12 @@ def build_worker_argv(cfg):
 
 def _configs(matrix):
     if matrix == "smoke":
-        base = [{"n": 18, "depth": 10, "output": "state"}]
+        # 同时覆盖 state 与 expectation：后者走 ``Circuit.expectation`` 路径，
+        # 防 API 漂移（如 ``("z", [0])`` 字符串形式）静默回归。
+        base = [
+            {"n": 18, "depth": 10, "output": "state"},
+            {"n": 18, "depth": 10, "output": "expectation"},
+        ]
     else:
         base = [
             {"n": n, "depth": d, "output": o}

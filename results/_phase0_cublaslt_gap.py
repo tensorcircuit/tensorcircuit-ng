@@ -109,7 +109,7 @@ def _proxy_ceiling():
                 m,
                 tflops(m, m, m, bf_s),
                 tflops(m, m, m, f32_s),
-                f"{tflops(m, m, m, f32_s) / tflops(m, m, m, bf_s) if bf_s else 0:.2f}",
+                f"{tflops(m, m, m, bf_s) / tflops(m, m, m, f32_s) if f32_s else 0:.2f}",
             ]
         )
     return rows
@@ -124,7 +124,7 @@ def main():
     print("\n## 可达代理：SM120 bf16 Tensor Core 上限（4-real-GEMM，TF32 off）")
     print(
         fmt_table(
-            ["M=N=K", "bf16_TFLOPS", "fp32_TFLOPS", "fp32/bf16"], _proxy_ceiling()
+            ["M=N=K", "bf16_TFLOPS", "fp32_TFLOPS", "bf16/fp32"], _proxy_ceiling()
         )
     )
     print("\n# 结论：planar-complex cuBLASLt on SM120 = UNTESTED；")
