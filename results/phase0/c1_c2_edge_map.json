@@ -1,22 +1,185 @@
 {
-  "cases": {
-    "n24_d10": {
-      "producer_hlo_value_id": "%custom-call.497",
-      "producer_M": 4096,
-      "producer_N": 16384,
-      "producer_K": 1024,
-      "producer_output_bytes": 536870912,
-      "passthrough_hlo_ids": [
-        "get-tuple-element.246.0",
-        "loop_transpose_fusion.2",
-        "bitcast.1317.0"
-      ],
-      "terminal_consumer_hlo_value_id": "%custom-call.498",
-      "consumer_count": 1,
-      "consumer_M": 64,
-      "consumer_N": 1048576,
-      "consumer_K": 64,
-      "consumer_output_bytes": 536870912
-    }
+  "schema_version": "c1-c2-edge-v2",
+  "producer": {
+    "hlo_value_id": "%custom-call.497",
+    "result_index": 0,
+    "dtype": "c64",
+    "shape": [
+      4096,
+      16384
+    ],
+    "layout": [
+      1,
+      0
+    ],
+    "M": 4096,
+    "N": 16384,
+    "K": 1024,
+    "bytes": 536870912
+  },
+  "transform": {
+    "hlo_ids": [
+      "get-tuple-element.246.0",
+      "loop_transpose_fusion.2",
+      "bitcast.1317.0"
+    ],
+    "steps": [
+      {
+        "op": "bitcast",
+        "shape_in": [
+          4096,
+          16384
+        ],
+        "layout_in": [
+          1,
+          0
+        ],
+        "shape_out": [
+          2,
+          2,
+          4,
+          256,
+          2,
+          2,
+          2,
+          2048
+        ],
+        "layout_out": [
+          7,
+          6,
+          5,
+          4,
+          3,
+          2,
+          1,
+          0
+        ]
+      },
+      {
+        "op": "transpose",
+        "dimensions": [
+          2,
+          1,
+          0,
+          4,
+          6,
+          3,
+          5,
+          7
+        ],
+        "shape_in": [
+          2,
+          2,
+          4,
+          256,
+          2,
+          2,
+          2,
+          2048
+        ],
+        "layout_in": [
+          7,
+          6,
+          5,
+          4,
+          3,
+          2,
+          1,
+          0
+        ],
+        "shape_out": [
+          4,
+          2,
+          2,
+          2,
+          2,
+          256,
+          2,
+          2048
+        ],
+        "layout_out": [
+          7,
+          6,
+          5,
+          4,
+          3,
+          2,
+          1,
+          0
+        ]
+      },
+      {
+        "op": "bitcast",
+        "shape_in": [
+          4,
+          2,
+          2,
+          2,
+          2,
+          256,
+          2,
+          2048
+        ],
+        "layout_in": [
+          7,
+          6,
+          5,
+          4,
+          3,
+          2,
+          1,
+          0
+        ],
+        "shape_out": [
+          64,
+          1048576
+        ],
+        "layout_out": [
+          1,
+          0
+        ]
+      }
+    ],
+    "forward_index_map": "[4096, 16384]{1,0} --bitcast--> [2, 2, 4, 256, 2, 2, 2, 2048]{7,6,5,4,3,2,1,0} | [2, 2, 4, 256, 2, 2, 2, 2048]{7,6,5,4,3,2,1,0} --transpose{dimensions=[2, 1, 0, 4, 6, 3, 5, 7]}--> [4, 2, 2, 2, 2, 256, 2, 2048]{7,6,5,4,3,2,1,0} | [4, 2, 2, 2, 2, 256, 2, 2048]{7,6,5,4,3,2,1,0} --bitcast--> [64, 1048576]{1,0}",
+    "inverse_index_map": "[64, 1048576]{1,0} --bitcast--> [4, 2, 2, 2, 2, 256, 2, 2048]{7,6,5,4,3,2,1,0} | [4, 2, 2, 2, 2, 256, 2, 2048]{7,6,5,4,3,2,1,0} --transpose{dimensions=[2, 1, 0, 4, 6, 3, 5, 7]}--> [2, 2, 4, 256, 2, 2, 2, 2048]{7,6,5,4,3,2,1,0} | [2, 2, 4, 256, 2, 2, 2, 2048]{7,6,5,4,3,2,1,0} --bitcast--> [4096, 16384]{1,0}",
+    "output_shape": [
+      64,
+      1048576
+    ],
+    "output_layout": [
+      1,
+      0
+    ]
+  },
+  "consumer": {
+    "hlo_value_id": "%custom-call.498",
+    "result_index": 0,
+    "dtype": "c64",
+    "shape": [
+      64,
+      1048576
+    ],
+    "layout": [
+      1,
+      0
+    ],
+    "M": 64,
+    "N": 1048576,
+    "K": 64,
+    "bytes": 536870912
+  },
+  "consumer_count": 1,
+  "trace_status": "EXACT",
+  "source_hlo": {
+    "path": "results/phase0/c1_optimized_hlo/n24_d10_exp_default.hlo",
+    "sha256": "a2dba7afeae3a3bfe16dc645d44c0b1b2da4eb2623e5ac65ca5c9042fe9849be"
+  },
+  "case_id": "n24_d10_default",
+  "n": 24,
+  "depth": 10,
+  "fusion": "default",
+  "allocation_audit": {
+    "path": "results/phase0/c1_buffer_assignment/n24_d10_default.json",
+    "sha256": "29004fd786ff1302ba00399602ac9e2145229898a4eba61bb70ef993997a35a2"
   }
 }

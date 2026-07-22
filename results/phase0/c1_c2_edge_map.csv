@@ -1,2 +1,2 @@
-n,depth,fusion,producer_hlo_value_id,producer_M,producer_N,producer_K,producer_output_bytes,passthrough_hlo_ids,terminal_consumer_hlo_value_id,consumer_count,consumer_M,consumer_N,consumer_K,consumer_output_bytes,note
-24,10,default,%custom-call.497,4096,16384,1024,536870912,get-tuple-element.246.0;loop_transpose_fusion.2;bitcast.1317.0,%custom-call.498,1,64,1048576,64,536870912,
+n,depth,fusion,producer_hlo_value_id,producer_M,producer_N,producer_K,producer_output_bytes,passthrough_hlo_ids,terminal_consumer_hlo_value_id,consumer_count,consumer_M,consumer_N,consumer_K,consumer_output_bytes,trace_status,note
+24,10,default,%custom-call.497,4096,16384,1024,536870912,get-tuple-element.246.0;loop_transpose_fusion.2;bitcast.1317.0,%custom-call.498,1,64,1048576,64,536870912,EXACT,
