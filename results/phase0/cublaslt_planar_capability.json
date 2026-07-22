@@ -1,0 +1,18 @@
+{
+  "capability": {
+    "status": "NOT_SUPPORTED",
+    "reason": "no speedup vs c64 (perf_ratio=0.76 < 1.3)"
+  },
+  "best_perf_ratio_vs_c64_gpu": 0.7640139972009525,
+  "best_perf_ratio_vs_c64_full": 4.303023945134286,
+  "worst_max_rel_err": 0.00451676594093442,
+  "worst_max_abs_err": 0.99810791015625,
+  "max_algo_count": 3,
+  "max_workspace_bytes": 0,
+  "shapes_tested": 8,
+  "shapes_ok": 8,
+  "c64_kernel_baseline": "torch.complex64 GPU kernel (warmup+median of 5)",
+  "c64_full_baseline": "torch.complex64 H2D+kernel+D2H (matched scope, median of 5)",
+  "planar_timing": "BF16-output full call, warmup+median of 5",
+  "gate_note": "perf gate uses kernel-only c64 ratio (conservative: planar call includes H2D+D2H the c64 kernel baseline does not); best_perf_ratio_vs_c64_full is the scope-matched diagnostic"
+}

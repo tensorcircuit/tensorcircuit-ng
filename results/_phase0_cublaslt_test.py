@@ -95,6 +95,66 @@ def test_judge_capability_accuracy_gate_is_max_rel():
     assert "max_rel_err" in j_bad["reason"]
 
 
+def test_load_c1_c2_shapes_filters_by_bytes(tmp_path):
+    """load_c1_c2_shapes must keep only rows with bytes >= min_bytes and
+    surface M/N/K/bytes/node_id as ints (node_id kept as string)."""
+    from results._phase0_cublaslt import load_c1_c2_shapes
+
+    csv = tmp_path / "shapes.csv"
+    header = "n,depth,output,node_id,M,N,K,bytes\n"
+    rows = [
+        "22,10,expectation,0,2,2,2,32\n",  # 32 B  -> below 64 MiB
+        "22,10,expectation,1,2048,2048,2048,134217728\n",  # 128 MiB -> kept
+        "22,10,expectation,2,16384,1024,1024,134217728\n",  # 128 MiB -> kept
+    ]
+    csv.write_text(header + "".join(rows))
+    out = load_c1_c2_shapes(str(csv), min_bytes=64 << 20)
+    assert len(out) == 2
+    assert out[0] == {
+        "M": 2048,
+        "N": 2048,
+        "K": 2048,
+        "bytes": 134217728,
+        "node_id": "1",
+    }
+    assert out[1]["M"] == 16384 and out[1]["node_id"] == "2"
+
+
+def test_load_c1_c2_shapes_skips_malformed_rows(tmp_path):
+    """Rows with missing/non-int fields must be skipped, not crash."""
+    from results._phase0_cublaslt import load_c1_c2_shapes
+
+    csv = tmp_path / "shapes.csv"
+    header = "n,depth,node_id,M,N,K,bytes\n"
+    rows = [
+        "22,10,0,2048,2048,2048,134217728\n",  # good
+        "22,10,1,,,,\n",  # empty fields -> ValueError, skipped
+        "22,10,2,4,4,4,notanumber\n",  # bytes not int -> skipped
+        "22,10,3,8,8,8,256\n",  # below threshold -> skipped
+    ]
+    csv.write_text(header + "".join(rows))
+    out = load_c1_c2_shapes(str(csv), min_bytes=64 << 20)
+    assert len(out) == 1
+    assert out[0]["M"] == 2048
+
+
+def test_write_csv_roundtrip(tmp_path):
+    from results._phase0_cublaslt import _write_csv
+    import csv
+
+    path = tmp_path / "out.csv"
+    _write_csv(
+        str(path),
+        ["M", "N", "status"],
+        [[256, 256, "ok"], [2048, 2048, "no-algo"]],
+    )
+    with open(path) as f:
+        rows = list(csv.reader(f))
+    assert rows[0] == ["M", "N", "status"]
+    assert rows[1] == ["256", "256", "ok"]
+    assert rows[2] == ["2048", "2048", "no-algo"]
+
+
 if __name__ == "__main__":
     import sys
     import pytest
