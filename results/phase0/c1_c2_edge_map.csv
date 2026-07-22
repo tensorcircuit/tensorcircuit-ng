@@ -1,0 +1,2 @@
+n,depth,fusion,hlo_value_id,M,N,K,buffer_bytes,producer_op,consumer_ops,traced_through,consumer_count,note
+24,10,default,%custom-call.497,4096,16384,1024,536870912,__cublas$gemm,loop_transpose_fusion.2,get-tuple-element.246.0,1,
