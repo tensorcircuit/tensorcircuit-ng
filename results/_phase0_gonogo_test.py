@@ -28,6 +28,20 @@ def test_unknown_is_inconclusive():
     assert aggregate("UNKNOWN", "PASS", "NOT_RUN", 2.7)["verdict"] == "INCONCLUSIVE"
 
 
+def test_c3_planar_from_capability_json(tmp_path):
+    import json, os
+    from results._phase0_gonogo import _c3_planar_from_capability
+
+    p = tmp_path / "cublaslt_planar_capability.json"
+    p.write_text(json.dumps({"capability": {"status": "SUPPORTED", "reason": "ok"}}))
+    assert _c3_planar_from_capability(str(p)) == "PASS"
+    p.write_text(
+        json.dumps({"capability": {"status": "NOT_SUPPORTED", "reason": "slow"}})
+    )
+    assert _c3_planar_from_capability(str(p)) == "FAIL"
+    assert _c3_planar_from_capability(str(tmp_path / "missing.json")) == "NOT_RUN"
+
+
 if __name__ == "__main__":
     import sys, pytest
 

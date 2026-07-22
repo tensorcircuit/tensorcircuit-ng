@@ -59,11 +59,38 @@ def aggregate(c1, c2, c3_planar, c3_real_ceiling_ratio=None):
         v = "INCONCLUSIVE"
     else:
         v = "INCONCLUSIVE"
+    note = _verdict_note(v, c1, c2, c3)
     return {
         "verdict": v,
         "criteria": criteria,
-        "note": "C3_planar=NOT_RUN until Plan B (libcublasLt) completes => INCONCLUSIVE, not GO",
+        "note": note,
     }
+
+
+def _verdict_note(verdict, c1, c2, c3):
+    """Human-readable explanation of why the truth table produced `verdict`.
+
+    Kept in sync with the §9 truth table so gonogo.{json,md} never contradict
+    the verdict (the prior static note asserted C3_planar=NOT_RUN regardless
+    of the actual C3_planar status, which became stale once Plan B wired the
+    cublasLt capability artifact into main()).
+    """
+    if verdict == "GO_TO_PHASE1":
+        return "C1 PASS + C2 PASS + C3_planar PASS (cublasLt planar-complex SUPPORTED)"
+    if verdict == "NO_GO_KERNEL":
+        return "C3_planar FAIL (cublasLt planar-complex NOT_SUPPORTED) — kernel path infeasible"
+    if verdict == "NO_GO_NOT_COVERABLE":
+        return (
+            "C1 PASS but C2 FAIL (large buffers not tile-coverable with net byte gain)"
+        )
+    if verdict == "NO_GO_NO_WINDOW":
+        return "C1 FAIL (no BF16 materialization window found)"
+    # INCONCLUSIVE: a criterion is UNKNOWN or (C3_planar) NOT_RUN without any hard FAIL.
+    if c3 == _NOT_RUN and c1 == _OK and c2 == _OK:
+        return (
+            "C3_planar=NOT_RUN (cublasLt capability artifact absent) — pending Plan B"
+        )
+    return "A criterion is UNKNOWN or NOT_RUN; pending a definitive PASS/FAIL"
 
 
 def _roll_up_statuses(statuses):
@@ -109,6 +136,30 @@ def _c2_status_from_judgment(data):
         else:
             statuses.append(_UNKNOWN)
     return _roll_up_statuses(statuses)
+
+
+def _c3_planar_from_capability(path):
+    """Read the cublasLt planar-complex capability artifact (Plan B Task 2).
+
+    Artifact shape: {"capability": {"status": "SUPPORTED"|"NOT_SUPPORTED", ...}}.
+    Returns PASS for SUPPORTED, FAIL for NOT_SUPPORTED, NOT_RUN if the artifact
+    is absent (Plan B not yet run). Any unparseable / malformed artifact is
+    treated as UNKNOWN-deferred (NOT_RUN) so the gonogo falls back to
+    INCONCLUSIVE rather than masking a hard C1/C2 FAIL.
+    """
+    if not os.path.exists(path):
+        return _NOT_RUN
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return _NOT_RUN
+    status = (data.get("capability") or {}).get("status")
+    if status == "SUPPORTED":
+        return _OK
+    if status == "NOT_SUPPORTED":
+        return _BAD
+    return _UNKNOWN
 
 
 def _parse_c3_real_ceiling_ratio(path):
@@ -241,8 +292,12 @@ def main():
         with open(c2j) as f:
             c2 = _c2_status_from_judgment(json.load(f))
 
-    # C3 planar: NOT_RUN in Plan A (libcublasLt binding is Plan B).
-    c3_planar = _NOT_RUN
+    # C3 planar (authoritative): read the cublasLt planar-complex capability
+    # artifact produced by Plan B Task 2 (PASS=SUPPORTED / FAIL=NOT_SUPPORTED /
+    # NOT_RUN=artifact absent). Keys the §9 truth table; no longer hard NOT_RUN.
+    c3_planar = _c3_planar_from_capability(
+        os.path.join(base, "cublaslt_planar_capability.json")
+    )
 
     # C3 real ceiling (auxiliary): parse the cublaslt_gap txt proxy.
     c3_real = _parse_c3_real_ceiling_ratio("results/_phase0_cublaslt_gap.txt")
@@ -253,13 +308,14 @@ def main():
         json.dump(agg, f, indent=2)
 
     md = [
-        "# Phase 0 Go/No-Go (Plan A, four-state)",
+        "# Phase 0 Go/No-Go (four-state, §9 truth table)",
         "",
         f"**Verdict: {agg['verdict']}**",
         "",
         "**Note:** " + agg["note"],
         "",
-        "C3_planar is NOT_RUN — Plan B (libcublasLt) required before GO_TO_PHASE1 is possible.",
+        "C3_planar is read from `cublaslt_planar_capability.json` (Plan B Task 2): "
+        "PASS = SUPPORTED, FAIL = NOT_SUPPORTED, NOT_RUN = artifact absent.",
         "",
         "## Criteria",
         "```json",
@@ -287,6 +343,7 @@ def main():
             for f in (
                 "c1_judgment.json",
                 "c2_judgment.json",
+                "cublaslt_planar_capability.json",
                 "contraction_shapes.csv",
                 "c2_tileability.csv",
                 "c1_default_vs_nofusion.csv",

@@ -1,10 +1,10 @@
 {
-  "verdict": "INCONCLUSIVE",
+  "verdict": "GO_TO_PHASE1",
   "criteria": {
     "C1": "PASS",
     "C2": "PASS",
-    "C3_planar": "NOT_RUN",
+    "C3_planar": "PASS",
     "C3_real_ceiling_ratio": 3.62
   },
-  "note": "C3_planar=NOT_RUN until Plan B (libcublasLt) completes => INCONCLUSIVE, not GO"
+  "note": "C1 PASS + C2 PASS + C3_planar PASS (cublasLt planar-complex SUPPORTED)"
 }
