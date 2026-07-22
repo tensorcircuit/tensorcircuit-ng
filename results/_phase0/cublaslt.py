@@ -254,7 +254,7 @@ def run_matrix(shapes, out_dir="results/phase0"):
 
     os.makedirs(out_dir, exist_ok=True)
     ext = load_ext()
-    bench_rows, acc_rows = [], []
+    bench_rows, acc_rows, per_shape = [], [], []
     perf_ratios, ko_ratios, fair_ratios, max_rels, max_abss, algo_counts, workspaces = (
         [],
         [],
@@ -280,6 +280,7 @@ def run_matrix(shapes, out_dir="results/phase0"):
         bf16_bytes = (m * k + k * n) * 2 * 2 + m * n * 2 * 2
         if c64_bytes > oom_bytes or bf16_bytes > oom_bytes:
             bench_rows.append([m, n, k, "oom", f"alloc>{oom_bytes >> 30}GB", *dash8])
+            per_shape.append({"M": m, "N": n, "K": k, "algo_count": 0, "status": "oom"})
             continue
 
         info = ext.probe_planar_capability(m, n, k)
@@ -287,6 +288,9 @@ def run_matrix(shapes, out_dir="results/phase0"):
         workspaces.append(info.get("workspace_bytes", 0))
         if info.get("algo_count", 0) == 0:
             bench_rows.append([m, n, k, "no-algo", *dash8])
+            per_shape.append(
+                {"M": m, "N": n, "K": k, "algo_count": 0, "status": "no-algo"}
+            )
             continue
 
         rng = np.random.default_rng(1)
@@ -315,6 +319,15 @@ def run_matrix(shapes, out_dir="results/phase0"):
             bf_ms = float(np.median(times))
         except Exception as e:  # noqa: BLE001  (record exec-fail, keep going)
             bench_rows.append([m, n, k, "exec-fail", str(e)[:60], *dash8])
+            per_shape.append(
+                {
+                    "M": m,
+                    "N": n,
+                    "K": k,
+                    "algo_count": int(info.get("algo_count", 0)),
+                    "status": "exec-fail",
+                }
+            )
             continue
 
         cr_ref, ci_ref = reference_complex_matmul(ar_f, ai_f, br_f, bi_f)
@@ -365,6 +378,20 @@ def run_matrix(shapes, out_dir="results/phase0"):
             ]
         )
         acc_rows.append([m, n, k, f"{max_abs:.2e}", f"{max_rel:.2e}"])
+        per_shape.append(
+            {
+                "M": m,
+                "N": n,
+                "K": k,
+                "algo_count": int(info.get("algo_count", 0)),
+                "max_rel_err": max_rel,
+                "max_abs_err": max_abs,
+                "ko_ratio": ko_ratio,
+                "workspace_bytes": int(info.get("workspace_bytes", 0)),
+                "output_bytes": m * n * 2,
+                "status": "ok",
+            }
+        )
 
     best_ratio = max(perf_ratios) if perf_ratios else 0.0  # unfair-to-planar (old gate)
     best_ko_ratio = max(ko_ratios) if ko_ratios else 0.0  # FAIR §7.5 gate
@@ -441,6 +468,7 @@ def run_matrix(shapes, out_dir="results/phase0"):
         "best_fair_ratio": best_fair_ratio,
         "worst_rel": worst_rel,
         "worst_abs": worst_abs,
+        "per_shape": per_shape,
     }
 
 
@@ -451,10 +479,226 @@ def _write_csv(path, header, rows):
         w.writerows(rows)
 
 
+# --------------------------------------------------------------------------- #
+# Task 6: C3 planar FULL MATRIX (actual-large policy aggregation, spec §3.6).
+# The Plan B single-shape gate (best ratio over shapes) is NOT enough: the canonical
+# C3 capability must hold on the real-gemm actual-large shapes, not a cherry-picked
+# small/skinny one. Below: the full-matrix CSV writer, the per-cell probe forwarder,
+# and the actual-large policy aggregator (all GPU-free / unit-testable; the live
+# extension + matrix run is run_full_matrix).
+# --------------------------------------------------------------------------- #
+_FULL_MATRIX_HEADER = [
+    "M",
+    "N",
+    "K",
+    "out_dtype",
+    "ws_cap",
+    "op",
+    "aligned",
+    "algo_count",
+    "first_algo_id",
+    "workspace_bytes",
+    "status",
+]
+
+
+def write_full_matrix_csv(path, rows):
+    """Write the full-matrix enumeration rows (one per shape x out_dtype x ws_cap x op cell)."""
+    _write_csv(
+        path,
+        _FULL_MATRIX_HEADER,
+        [[r.get(h, "") for h in _FULL_MATRIX_HEADER] for r in rows],
+    )
+
+
+def probe_config(ext, m, n, k, *, out_dtype="bf16", ws_cap_bytes=64 << 20, op="N"):
+    """Enumerate cublasLt algorithms for one (shape, out_dtype, workspace cap, op) cell of
+    the full matrix, WITHOUT executing. ``op`` in {"N","T"} maps to (transa, transb); "T"
+    transposes the A operand (the other layout variant of the complex GEMM). Forwards the
+    new params to the parametrized extension probe."""
+    transa, transb = ("T", "N") if op == "T" else ("N", "N")
+    return ext.probe_planar_capability(
+        m,
+        n,
+        k,
+        out_dtype=out_dtype,
+        ws_limit_bytes=ws_cap_bytes,
+        transa=transa,
+        transb=transb,
+    )
+
+
+def aggregate_capability_full(shape_results, min_dim_floor=16, quorum=1.0):
+    """Actual-large policy aggregation (spec §3.6). Recomputes the §7.5 gate per shape and
+    classifies each as real-gemm (``min(M,N,K) >= min_dim_floor``) or skinny (diagnostic).
+    SUPPORTED iff the fraction of real-gemm shapes passing the gate is ``>= quorum``
+    (default 1.0 = all). A single small/skinny shape passing never triggers SUPPORTED
+    (the anti-cherry-pick rule the spec requires).
+
+    Each ``shape_results`` entry needs: M, N, K, algo_count, max_rel_err, ko_ratio
+    (c64-kernel-only / planar-kernel-only), workspace_bytes, output_bytes; optional
+    has_four_real_temps, max_abs_err.
+    """
+    per_shape = {}
+    real_pass = 0
+    real_total = 0
+    for r in shape_results:
+        m, n, k = r["M"], r["N"], r["K"]
+        gate = judge_capability(
+            max_rel_err=r.get("max_rel_err", 1e9),
+            perf_ratio_vs_c64=r.get("ko_ratio", 0.0),
+            algo_count=r.get("algo_count", 0),
+            workspace_bytes=r.get("workspace_bytes", 0),
+            output_bytes=r.get("output_bytes", 0),
+            has_four_real_temps=r.get("has_four_real_temps", False),
+            max_abs_err=r.get("max_abs_err", 0.0),
+        )
+        is_real = min(m, n, k) >= min_dim_floor
+        per_shape[(m, n, k)] = {
+            "gate": gate["status"],
+            "is_real_gemm": is_real,
+            "min_dim": min(m, n, k),
+            "ko_ratio": r.get("ko_ratio"),
+        }
+        if is_real:
+            real_total += 1
+            if gate["status"] == "SUPPORTED":
+                real_pass += 1
+    policy = {
+        "min_dim_floor": min_dim_floor,
+        "quorum": quorum,
+        "real_gemm_pass": real_pass,
+        "real_gemm_total": real_total,
+    }
+    if real_total == 0:
+        return {
+            "status": "NOT_SUPPORTED",
+            "reason": (
+                "no real-gemm actual-large shapes evaluated; small/skinny shapes do not "
+                "trigger SUPPORTED"
+            ),
+            "per_shape": per_shape,
+            "policy": policy,
+        }
+    frac = real_pass / real_total
+    if frac >= quorum:
+        return {
+            "status": "SUPPORTED",
+            "reason": (
+                f"{real_pass}/{real_total} real-gemm actual-large shapes pass the 7.5 gate "
+                f"(quorum {quorum})"
+            ),
+            "per_shape": per_shape,
+            "policy": policy,
+        }
+    return {
+        "status": "NOT_SUPPORTED",
+        "reason": (
+            f"only {real_pass}/{real_total} real-gemm actual-large shapes pass; "
+            f"small/skinny shapes do not trigger SUPPORTED (quorum {quorum})"
+        ),
+        "per_shape": per_shape,
+        "policy": policy,
+    }
+
+
+def run_full_matrix(shapes, out_dir="results/phase0"):
+    """Task 6: C3 planar FULL MATRIX (spec §3.6). Two stages:
+
+    1. Full-grid enumeration (no execution): shapes x {bf16, fp32} x {0, 1MiB, 16MiB, max}
+       x {OP_N, OP_T} -> per-cell algo_count/algo_id/workspace/status ->
+       ``cublaslt_full_matrix.csv``.
+    2. Per-shape timed perf on the actual-large shapes (reuses ``run_matrix``) +
+       actual-large policy aggregation (``aggregate_capability_full``) ->
+       ``cublaslt_planar_capability.json`` (overwrites the Plan B single-shape verdict).
+
+    The canonical C3 capability holds on the real-gemm actual-large shapes, not a single
+    small/skinny one (the anti-cherry-pick rule). Returns {capability, aggregation, ...}.
+    """
+    import torch  # noqa: F401  availability guard; run_matrix imports it too
+
+    os.makedirs(out_dir, exist_ok=True)
+    ext = load_ext()
+    ws_caps = [("0", 0), ("1MiB", 1 << 20), ("16MiB", 16 << 20), ("max", 1 << 30)]
+    out_dtypes = ["bf16", "fp32"]
+    ops = ["N", "T"]
+
+    matrix_rows = []
+    for s in shapes:
+        m, n, k = s["M"], s["N"], s["K"]
+        aligned = int(m % 16 == 0 and n % 16 == 0 and k % 16 == 0)
+        for od in out_dtypes:
+            for cap_name, cap_bytes in ws_caps:
+                for op in ops:
+                    info = probe_config(
+                        ext, m, n, k, out_dtype=od, ws_cap_bytes=cap_bytes, op=op
+                    )
+                    ac = int(info.get("algo_count", 0))
+                    matrix_rows.append(
+                        {
+                            "M": m,
+                            "N": n,
+                            "K": k,
+                            "out_dtype": od,
+                            "ws_cap": cap_name,
+                            "op": op,
+                            "aligned": aligned,
+                            "algo_count": ac,
+                            "first_algo_id": int(info.get("first_algo_id", -1)),
+                            "workspace_bytes": int(info.get("workspace_bytes", 0)),
+                            "status": "ok" if ac > 0 else "no-algo",
+                        }
+                    )
+    write_full_matrix_csv(
+        os.path.join(out_dir, "cublaslt_full_matrix.csv"), matrix_rows
+    )
+
+    # Per-shape timed perf (kernel-only planar vs c64) on the actual-large shapes.
+    # run_matrix also writes bench/accuracy CSVs and (briefly) the Plan B capability JSON,
+    # which the full-matrix aggregation below overwrites with the canonical verdict.
+    timing = run_matrix(shapes, out_dir=out_dir)
+    agg = aggregate_capability_full(timing["per_shape"])
+    agg_json = {
+        "schema_version": "c3-planar-full-matrix-v1",
+        "capability": {"status": agg["status"], "reason": agg["reason"]},
+        "policy": agg["policy"],
+        "per_shape": {f"{m}x{n}x{k}": v for (m, n, k), v in agg["per_shape"].items()},
+        "matrix_grid": {
+            "shapes": len(shapes),
+            "out_dtypes": out_dtypes,
+            "ws_caps": [c[0] for c in ws_caps],
+            "ops": ops,
+            "cells": len(matrix_rows),
+            "cells_ok": sum(1 for r in matrix_rows if r["status"] == "ok"),
+        },
+        "timing_summary": {
+            "best_ko_ratio": timing["best_ko_ratio"],
+            "worst_max_rel_err": timing["worst_rel"],
+            "shapes_ok": sum(1 for r in timing["per_shape"] if r.get("status") == "ok"),
+            "shapes_total": len(timing["per_shape"]),
+        },
+        "note": (
+            "Full-matrix canonical C3 (spec 3.6): capability aggregated over real-gemm "
+            "actual-large shapes (min dim >= 16 floor) passing the 7.5 gate; small/skinny "
+            "shapes are diagnostic and cannot trigger SUPPORTED. The enumeration grid "
+            "covers out_dtype x workspace cap x OP_N/T (algo/workspace coverage); perf is "
+            "keyed on bf16-out kernel-only vs c64 kernel-only. cublasLt returns 0 workspace "
+            "for these planar configs across all caps."
+        ),
+    }
+    with open(os.path.join(out_dir, "cublaslt_planar_capability.json"), "w") as f:
+        json.dump(agg_json, f, indent=2)
+    return {
+        "capability": agg["status"],
+        "aggregation": agg,
+        "matrix_grid": agg_json["matrix_grid"],
+    }
+
+
 if __name__ == "__main__":
-    # Square sanity (known-answer) + distinct real contraction shapes. Dedup by
-    # (M,N,K): the CSV repeats identical shapes across many node_ids and running
-    # duplicates only burns time without adding signal.
+    # Distinct actual-large (>=64 MiB) contraction shapes. Dedup by (M,N,K): the CSV
+    # repeats identical shapes across many node_ids. These ARE the C1 actual-large
+    # shapes the spec 3.6 matrix must cover (no synthetic sanity shapes mixed in).
     raw = load_c1_c2_shapes()
     seen, real_shapes = set(), []
     for s in raw:
@@ -462,10 +706,5 @@ if __name__ == "__main__":
         if key not in seen:
             seen.add(key)
             real_shapes.append(s)
-    real_shapes = real_shapes[:6]  # cap to bound runtime
-    shapes = [
-        {"M": 256, "N": 256, "K": 256},
-        {"M": 2048, "N": 2048, "K": 2048},
-    ] + real_shapes
-    result = run_matrix(shapes)
-    print(result)
+    result = run_full_matrix(real_shapes)
+    print(result["capability"], result["aggregation"]["policy"])

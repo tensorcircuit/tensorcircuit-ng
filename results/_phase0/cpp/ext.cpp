@@ -262,18 +262,25 @@ static py::tuple planar_complex_matmul_bf16(
     return py::make_tuple(cr_arr, ci_arr);
 }
 
-// Enumerate algorithms for the spec-compliant planar-complex BF16-in / BF16-out
-// + COMPUTE_32F config WITHOUT executing. The heuristic's C/D dtype
-// (CUDA_C_16BF) matches the cublasLtMatmulAlgoGetIds C/D query (CUDA_C_16BF),
-// so algo_count + first_algo_id are consistent for the BF16-output path — the
-// config that matters for C3_planar. Returns {algo_count, first_algo_id,
-// workspace_bytes, heuristic_status, status}.
-static py::dict probe_planar_capability(int m, int n, int k) {
+// Enumerate algorithms for the planar-complex BF16-in config WITHOUT executing,
+// parametrized by output dtype / workspace cap / operand transpose (Task 6 full matrix).
+//   out_dtype: "bf16" -> CUDA_C_16BF out (spec-compliant), "fp32" -> CUDA_C_32F out
+//   ws_limit_bytes: preference max workspace (Task 6 sweeps 0 / 1MiB / 16MiB / max)
+//   transa/transb: "N" or "T" (the OP_N/OP_T layout axis)
+// A/B inputs are CUDA_C_16BF; COMPUTE_32F accumulates in FP32. Returns {algo_count,
+// first_algo_id, workspace_bytes, heuristic_status, out_dtype, status}.
+static py::dict probe_planar_capability(int m, int n, int k,
+    std::string out_dtype, long ws_limit_bytes,
+    std::string transa, std::string transb)
+{
     py::dict d;
+    bool bf16_out = (out_dtype == "bf16");
+    cudaDataType_t out_cdtype = bf16_out ? CUDA_C_16BF : CUDA_C_32F;
     constexpr size_t bf16_elem = 2;
-    size_t bytesA = (size_t)m * k * bf16_elem;  // BF16 in
-    size_t bytesB = (size_t)k * n * bf16_elem;  // BF16 in
-    size_t bytesC = (size_t)m * n * bf16_elem;   // BF16 out (spec-compliant; matches AlgoGetIds C/D=CUDA_C_16BF)
+    size_t out_elem = bf16_out ? bf16_elem : 4;  // FP32 element when fp32 out
+    size_t bytesA = (size_t)m * k * bf16_elem;   // BF16 in
+    size_t bytesB = (size_t)k * n * bf16_elem;   // BF16 in
+    size_t bytesC = (size_t)m * n * out_elem;    // out dtype
     size_t off_A = align256(bytesB);
     size_t off_B = align256(bytesA);
     size_t off_C = align256(bytesC);
@@ -285,6 +292,7 @@ static py::dict probe_planar_capability(int m, int n, int k) {
         d["first_algo_id"] = -1;
         d["workspace_bytes"] = (long)0;
         d["heuristic_status"] = cublaslt_status_str(s);
+        d["out_dtype"] = out_dtype;
         d["status"] = std::string("cublasLtCreate failed: ") + cublaslt_status_str(s);
         return d;
     }
@@ -292,14 +300,18 @@ static py::dict probe_planar_capability(int m, int n, int k) {
     cublasLtMatrixLayout_t Adesc = nullptr, Bdesc = nullptr, Cdesc = nullptr;
     make_planar_layout(&Adesc, CUDA_C_16BF, n, k, n, off_A);
     make_planar_layout(&Bdesc, CUDA_C_16BF, k, m, k, off_B);
-    make_planar_layout(&Cdesc, CUDA_C_16BF, n, m, n, off_C);
+    make_planar_layout(&Cdesc, out_cdtype, n, m, n, off_C);
 
     cublasLtMatmulDesc_t desc = nullptr;
     cublasLtMatmulDescCreate(&desc, CUBLAS_COMPUTE_32F, CUDA_C_32F);
+    cublasOperation_t op_a = (transa == "T") ? CUBLAS_OP_T : CUBLAS_OP_N;
+    cublasOperation_t op_b = (transb == "T") ? CUBLAS_OP_T : CUBLAS_OP_N;
+    cublasLtMatmulDescSetAttribute(desc, CUBLASLT_MATMUL_DESC_TRANSA, &op_a, sizeof(op_a));
+    cublasLtMatmulDescSetAttribute(desc, CUBLASLT_MATMUL_DESC_TRANSB, &op_b, sizeof(op_b));
 
     cublasLtMatmulPreference_t pref = nullptr;
     cublasLtMatmulPreferenceCreate(&pref);
-    size_t ws_limit = 64ull * 1024 * 1024;
+    size_t ws_limit = (ws_limit_bytes > 0) ? (size_t)ws_limit_bytes : 0;
     cublasLtMatmulPreferenceSetAttribute(pref,
         CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &ws_limit, sizeof(ws_limit));
 
@@ -311,25 +323,26 @@ static py::dict probe_planar_capability(int m, int n, int k) {
 
     d["algo_count"] = returned;
     d["heuristic_status"] = cublaslt_status_str(hs);
+    d["out_dtype"] = out_dtype;
     int first_id = -1;
     long first_ws = 0;
     if (returned > 0) {
         first_ws = (long)heur[0].workspaceSize;
-        // cublasLt has no public "algo_t -> id" getter; enumerate IDs for this
-        // configuration and report the first as a representative identifier.
+        // cublasLt has no public algo->id getter; enumerate IDs for this config and
+        // report the first as a representative identifier (C/D dtype = out_cdtype).
         int ids[8] = {0};
         int nb_ids = 0;
         cublasLtMatmulAlgoGetIds(h, CUBLAS_COMPUTE_32F, CUDA_C_32F,
-            CUDA_C_16BF, CUDA_C_16BF, CUDA_C_16BF, CUDA_C_16BF,
+            CUDA_C_16BF, CUDA_C_16BF, out_cdtype, out_cdtype,
             8, ids, &nb_ids);
         if (nb_ids > 0) first_id = ids[0];
     }
     d["first_algo_id"] = first_id;
     d["workspace_bytes"] = first_ws;
     if (hs == CUBLAS_STATUS_SUCCESS && returned > 0) {
-        d["status"] = "OK";
+        d["status"] = "ok";
     } else {
-        d["status"] = std::string("no algo: ") + cublaslt_status_str(hs);
+        d["status"] = std::string("no-algo: ") + cublaslt_status_str(hs);
     }
 
     cublasLtMatmulPreferenceDestroy(pref);
@@ -545,7 +558,11 @@ PYBIND11_MODULE(_phase0_cublaslt_ext, m) {
           py::arg("m"), py::arg("n"), py::arg("k"),
           py::arg("out_dtype") = std::string("bf16"));
     m.def("probe_planar_capability", &probe_planar_capability,
-          py::arg("m"), py::arg("n"), py::arg("k"));
+          py::arg("m"), py::arg("n"), py::arg("k"),
+          py::arg("out_dtype") = std::string("bf16"),
+          py::arg("ws_limit_bytes") = (long)(64ll * 1024 * 1024),
+          py::arg("transa") = std::string("N"),
+          py::arg("transb") = std::string("N"));
     m.def("planar_complex_matmul_bf16_kernelonly_timing",
           &planar_complex_matmul_bf16_kernelonly_timing,
           py::arg("ar_u16"), py::arg("ai_u16"),

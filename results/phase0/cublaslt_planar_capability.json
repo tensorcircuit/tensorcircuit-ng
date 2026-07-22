@@ -1,21 +1,89 @@
 {
+  "schema_version": "c3-planar-full-matrix-v1",
   "capability": {
     "status": "SUPPORTED",
-    "reason": "usable algo + correct + >=1.3x vs c64 + compression net positive"
+    "reason": "4/4 real-gemm actual-large shapes pass the 7.5 gate (quorum 1.0)"
   },
-  "best_perf_ratio_kernelonly": 8.206422675222791,
-  "best_perf_ratio_unfair": 0.8624167383422757,
-  "best_perf_ratio_vs_c64_full": 3.4948869375139218,
-  "worst_max_rel_err": 0.00451676594093442,
-  "worst_max_abs_err": 0.99810791015625,
-  "max_algo_count": 3,
-  "max_workspace_bytes": 0,
-  "shapes_tested": 8,
-  "shapes_ok": 8,
-  "fair_gate": "c64-kernel-only / planar-kernel-only (both resident; >=1.3x on >=1 shape -> SUPPORTED)",
-  "c64_kernel_baseline": "torch.complex64 GPU kernel (warmup+median of 5)",
-  "c64_full_baseline": "torch.complex64 H2D+kernel+D2H (warmup+median of 5)",
-  "planar_kernelonly_timing": "cublasLtMatmul only; setup+H2D amortized once (cudaEvent median of 5, warmup 3)",
-  "planar_full_timing": "BF16-output full call (H2D+kernel+D2H), warmup+median of 5 \u2014 diagnostic, unfair-to-planar",
-  "gate_note": "FAIR gate = c64-kernel-only / planar-kernel-only (best_perf_ratio_kernelonly). best_perf_ratio_unfair (c64-kernel / planar-FULL) is the prior unfair-to-planar measurement, kept as a diagnostic; best_perf_ratio_vs_c64_full is the scope-matched full-round-trip diagnostic."
+  "policy": {
+    "min_dim_floor": 16,
+    "quorum": 1.0,
+    "real_gemm_pass": 4,
+    "real_gemm_total": 4
+  },
+  "per_shape": {
+    "262144x64x4": {
+      "gate": "SUPPORTED",
+      "is_real_gemm": false,
+      "min_dim": 4,
+      "ko_ratio": 6.612348444629367
+    },
+    "8388608x2x2": {
+      "gate": "NOT_SUPPORTED",
+      "is_real_gemm": false,
+      "min_dim": 2,
+      "ko_ratio": 0.7898028405087703
+    },
+    "4194304x4x4": {
+      "gate": "NOT_SUPPORTED",
+      "is_real_gemm": false,
+      "min_dim": 4,
+      "ko_ratio": 0.909172964234639
+    },
+    "16384x1024x1024": {
+      "gate": "SUPPORTED",
+      "is_real_gemm": true,
+      "min_dim": 1024,
+      "ko_ratio": 7.766571325562284
+    },
+    "2097152x8x8": {
+      "gate": "SUPPORTED",
+      "is_real_gemm": false,
+      "min_dim": 8,
+      "ko_ratio": 1.7467240195505815
+    },
+    "524288x32x32": {
+      "gate": "SUPPORTED",
+      "is_real_gemm": true,
+      "min_dim": 32,
+      "ko_ratio": 4.749102589570885
+    },
+    "262144x64x64": {
+      "gate": "SUPPORTED",
+      "is_real_gemm": true,
+      "min_dim": 64,
+      "ko_ratio": 4.60376234575294
+    },
+    "1048576x16x16": {
+      "gate": "SUPPORTED",
+      "is_real_gemm": true,
+      "min_dim": 16,
+      "ko_ratio": 3.3099506899467626
+    }
+  },
+  "matrix_grid": {
+    "shapes": 8,
+    "out_dtypes": [
+      "bf16",
+      "fp32"
+    ],
+    "ws_caps": [
+      "0",
+      "1MiB",
+      "16MiB",
+      "max"
+    ],
+    "ops": [
+      "N",
+      "T"
+    ],
+    "cells": 128,
+    "cells_ok": 120
+  },
+  "timing_summary": {
+    "best_ko_ratio": 7.766571325562284,
+    "worst_max_rel_err": 0.0041563259437680244,
+    "shapes_ok": 8,
+    "shapes_total": 8
+  },
+  "note": "Full-matrix canonical C3 (spec 3.6): capability aggregated over real-gemm actual-large shapes (min dim >= 16 floor) passing the 7.5 gate; small/skinny shapes are diagnostic and cannot trigger SUPPORTED. The enumeration grid covers out_dtype x workspace cap x OP_N/T (algo/workspace coverage); perf is keyed on bf16-out kernel-only vs c64 kernel-only. cublasLt returns 0 workspace for these planar configs across all caps."
 }
