@@ -1,0 +1,17 @@
+{
+  "c1": "PASS",
+  "c2": "PASS",
+  "c3_planar": "NOT_RUN",
+  "c3_real_ceiling_ratio": 3.62,
+  "verdict": "INCONCLUSIVE",
+  "artifacts": {
+    "c1_judgment.json": "ab13cb21204755d1",
+    "c2_judgment.json": "8384e6c3c29c0f9d",
+    "contraction_shapes.csv": "784d01823009139d",
+    "c2_tileability.csv": "689b602f8e64e907",
+    "c1_default_vs_nofusion.csv": "78eb57f8e5ce1717",
+    "gonogo.json": "c1bca5c427514ddd",
+    "gonogo.md": "fda3009c51005530",
+    "environment.json": "6f8357e80254e963"
+  }
+}

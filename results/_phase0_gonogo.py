@@ -1,124 +1,305 @@
-"""Phase 0 go/no-go 聚合。
-假设：套 spec §7 三门槛，由三探针产出判定是否值得投入后续大工程（含 libcublasLt 绑定）。
-方法：pure 评估函数 evaluate_criteria(...)；main() 交互式（或读笔记）收集三项输入，出判定写 verdict.md。
-用法：MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' wsl.exe bash .wsl_run.sh python results/_phase0_gonogo.py
+"""Four-state Phase 0 aggregator (review §9).
+
+Reads structured artifacts (c1_judgment.json, c2_judgment.json, _phase0_cublaslt_gap.txt)
+and emits gonogo.json / gonogo.md / manifest.json / environment.json under results/phase0/.
+md is generated FROM json, never hand-overwritten.
+
+用法: MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' wsl.exe bash .wsl_run.sh python results/_phase0_gonogo.py
 """
 
 from __future__ import annotations
-import argparse
-import sys
 
-VERDICT_GO = "GO"
-VERDICT_NOGO = "NO-GO"
+import hashlib
+import json
+import os
+import re
 
-_CEILING_RATIO_THRESHOLD = 1.3
+VERDICTS = (
+    "GO_TO_PHASE1",
+    "NO_GO_NO_WINDOW",
+    "NO_GO_NOT_COVERABLE",
+    "NO_GO_KERNEL",
+    "INCONCLUSIVE",
+)
+
+# Status tokens shared across the truth table.
+_OK = "PASS"
+_BAD = "FAIL"
+_UNKNOWN = "UNKNOWN"
+_NOT_RUN = "NOT_RUN"
 
 
-def evaluate_criteria(
-    has_unavoidable_materialization: bool,
-    materialization_single_consumer_mappable: bool,
-    bf16_ceiling_ratio: float,
-) -> dict:
-    """套 spec §7。返回 {verdict, reason, criteria}。"""
+def aggregate(c1, c2, c3_planar, c3_real_ceiling_ratio=None):
+    """§9 four-state truth table.
+
+    c3_planar is authoritative for criterion 3; c3_real_ceiling_ratio is auxiliary
+    (a real-BF16 GEMM ceiling proxy only — it cannot stand in for the planar-complex
+    libcublasLt probe, which is Plan B).
+
+    A definitive FAIL on C1 or C2 short-circuits to a NO_GO even if C3_planar is
+    still NOT_RUN (a hard fail is not masked by an unprobed later criterion). Only
+    UNKNOWN, or NOT_RUN with no upstream FAIL, defers to INCONCLUSIVE.
+    """
+    c3 = c3_planar
     criteria = {
-        "1_window_exists": has_unavoidable_materialization,
-        "2_coverable": materialization_single_consumer_mappable,
-        "3_ceiling_real": bf16_ceiling_ratio >= _CEILING_RATIO_THRESHOLD,
+        "C1": c1,
+        "C2": c2,
+        "C3_planar": c3,
+        "C3_real_ceiling_ratio": c3_real_ceiling_ratio,
     }
-    if not criteria["1_window_exists"]:
-        return {
-            "verdict": VERDICT_NOGO,
-            "reason": "no unavoidable-materialization window found — bf16 has nothing to halve",
-            "criteria": criteria,
-        }
-    if not criteria["2_coverable"]:
-        return {
-            "verdict": VERDICT_NOGO,
-            "reason": "window exists but NOT single-consumer/tile-mappable — region fusion (spec §8.1) cannot cover it; open problem",
-            "criteria": criteria,
-        }
-    if not criteria["3_ceiling_real"]:
-        return {
-            "verdict": VERDICT_NOGO,
-            "reason": f"bf16 Tensor Core ceiling not real on SM120 (ratio {bf16_ceiling_ratio:.2f} < {_CEILING_RATIO_THRESHOLD})",
-            "criteria": criteria,
-        }
-    return {
-        "verdict": VERDICT_GO,
-        "reason": "window exists, coverable, ceiling real — proceed to libcublasLt binding (deferred Probe 1)",
-        "criteria": criteria,
-    }
-
-
-def _collect_from_user():
-    """交互收集三项（也可改为解析探针输出文件；此处人读笔记驱动）。"""
-    print("# 依据三探针产出填写（参考 results/_phase0_*.txt）：")
-    has = (
-        input("Probe 3 是否存在 materialized-unavoidable 区？(y/n): ").strip().lower()
-        == "y"
-    )
-    cov = (
-        input("该区是否 single-consumer/tile-mappable（nsys/HLO 人工判断）？(y/n): ")
-        .strip()
-        .lower()
-        == "y"
-    )
-    ratio = float(
-        input("Probe 1 代理 bf16/fp32 TFLOPS 比的最大值（如 4.5）: ").strip() or "0"
-    )
-    return has, cov, ratio
-
-
-def _parse_cli_args(argv):
-    """解析 CLI args；三项都给齐返回 (has, cov, ratio)，否则返回 None。"""
-    p = argparse.ArgumentParser(
-        description="Phase 0 go/no-go aggregator (spec §7 three criteria)"
-    )
-    p.add_argument(
-        "--has",
-        choices=["y", "n"],
-        help="criterion 1: unavoidable-materialization window exists (y/n)",
-    )
-    p.add_argument(
-        "--coverable",
-        choices=["y", "n"],
-        help="criterion 2: window is single-consumer/tile-mappable (y/n)",
-    )
-    p.add_argument(
-        "--ratio",
-        type=float,
-        help="criterion 3: bf16/fp32 TFLOPS ceiling ratio (e.g. 2.7)",
-    )
-    args = p.parse_args(argv)
-    if args.has is not None and args.coverable is not None and args.ratio is not None:
-        return (args.has == "y", args.coverable == "y", float(args.ratio))
-    return None
-
-
-def main(argv=None):
-    """argv=None 走 sys.argv[1:]；三项 CLI 齐则非交互，否则交互收集。"""
-    cli = _parse_cli_args(sys.argv[1:] if argv is None else argv)
-    if cli is not None:
-        has, cov, ratio = cli
+    if c1 == _BAD:
+        v = "NO_GO_NO_WINDOW"
+    elif c1 == _OK and c2 == _BAD:
+        v = "NO_GO_NOT_COVERABLE"
+    elif c1 == _OK and c2 == _OK and c3 == _BAD:
+        v = "NO_GO_KERNEL"
+    elif c1 == _OK and c2 == _OK and c3 == _OK:
+        v = "GO_TO_PHASE1"
+    elif c1 == _UNKNOWN or c2 == _UNKNOWN or c3 == _UNKNOWN or c3 == _NOT_RUN:
+        v = "INCONCLUSIVE"
     else:
-        has, cov, ratio = _collect_from_user()
-    res = evaluate_criteria(has, cov, ratio)
-    lines = [
-        "# Phase 0 Go/No-Go Verdict",
+        v = "INCONCLUSIVE"
+    return {
+        "verdict": v,
+        "criteria": criteria,
+        "note": "C3_planar=NOT_RUN until Plan B (libcublasLt) completes => INCONCLUSIVE, not GO",
+    }
+
+
+def _roll_up_statuses(statuses):
+    """Combine per-case statuses into one criterion status.
+
+    Any FAIL  -> FAIL; else any UNKNOWN -> UNKNOWN; else any NOT_RUN -> NOT_RUN;
+    else all PASS -> PASS; empty -> NOT_RUN.
+    """
+    if not statuses:
+        return _NOT_RUN
+    if any(s == _BAD for s in statuses):
+        return _BAD
+    if any(s == _UNKNOWN for s in statuses):
+        return _UNKNOWN
+    if any(s == _NOT_RUN for s in statuses):
+        return _NOT_RUN
+    if all(s == _OK for s in statuses):
+        return _OK
+    return _UNKNOWN
+
+
+def _c1_status_from_judgment(data):
+    """c1_judgment.json is {case_key: {..., "judgment": {"status": ...}}}."""
+    if not isinstance(data, dict) or not data:
+        return _NOT_RUN
+    statuses = []
+    for case in data.values():
+        if isinstance(case, dict):
+            statuses.append(case.get("judgment", {}).get("status", _UNKNOWN))
+        else:
+            statuses.append(_UNKNOWN)
+    return _roll_up_statuses(statuses)
+
+
+def _c2_status_from_judgment(data):
+    """c2_judgment.json is {case_key: {..., "status": ...}} (Task 7 integration verdict)."""
+    if not isinstance(data, dict) or not data:
+        return _NOT_RUN
+    statuses = []
+    for case in data.values():
+        if isinstance(case, dict):
+            statuses.append(case.get("status", _UNKNOWN))
+        else:
+            statuses.append(_UNKNOWN)
+    return _roll_up_statuses(statuses)
+
+
+def _parse_c3_real_ceiling_ratio(path):
+    """Max bf16/fp32 TFLOPS ratio from the cublaslt_gap txt table; None if missing/unparseable.
+
+    Lines look like: '2048   41.35...  15.63...  2.65'
+    """
+    if not os.path.exists(path):
+        return None
+    try:
+        ratios = []
+        with open(path) as f:
+            for ln in f:
+                parts = ln.split()
+                # row of interest: first token is an int M=N=K, last token is the ratio float
+                if len(parts) >= 4 and re.fullmatch(r"\d+", parts[0]):
+                    try:
+                        ratios.append(float(parts[-1]))
+                    except ValueError:
+                        continue
+        return max(ratios) if ratios else None
+    except OSError:
+        return None
+
+
+def _file_hash(p):
+    return (
+        hashlib.sha1(open(p, "rb").read()).hexdigest()[:16]
+        if os.path.exists(p)
+        else None
+    )
+
+
+def _collect_environment():
+    """Snapshot GPU/SM/driver/CUDA/library versions + TF32 state + theta seeds.
+
+    Best-effort: missing fields are recorded as null rather than raising, so a
+    partial env doesn't abort the gonogo emission. GPU queries require a CUDA
+    runtime (torch.cuda); pure-CPU runs leave the GPU fields null.
+    """
+    env = {
+        "gpu_name": None,
+        "gpu_uuid": None,
+        "sm_compute_capability": None,
+        "multiprocessor_count": None,
+        "total_vram_GB": None,
+        "driver_version": None,
+        "cuda_version": None,
+        "torch_version": None,
+        "jax_version": None,
+        "cotengra_version": None,
+        "tensorcircuit_version": None,
+        "tf32_matmul_allowed": None,
+        "theta_seeds": None,
+    }
+    try:
+        import torch
+
+        env["torch_version"] = torch.__version__
+        env["tf32_matmul_allowed"] = bool(torch.backends.cuda.matmul.allow_tf32)
+        if torch.version.cuda:
+            env["cuda_version"] = torch.version.cuda
+        try:
+            p = torch.cuda.get_device_properties(0)
+            env["gpu_name"] = p.name
+            env["sm_compute_capability"] = f"{p.major}.{p.minor}"
+            env["multiprocessor_count"] = p.multi_processor_count
+            env["total_vram_GB"] = round(p.total_memory / 1e9, 4)
+            env["gpu_uuid"] = str(getattr(p, "uuid", "") or "")
+        except Exception:
+            pass
+    except Exception:
+        pass
+    try:
+        import jax
+
+        env["jax_version"] = jax.__version__
+    except Exception:
+        pass
+    try:
+        import importlib.metadata as md
+
+        for pkg in ("cotengra", "tensorcircuit-ng"):
+            try:
+                if pkg == "tensorcircuit-ng":
+                    env["tensorcircuit_version"] = md.version(pkg)
+                else:
+                    env["cotengra_version"] = md.version(pkg)
+            except md.PackageNotFoundError:
+                pass
+    except Exception:
+        pass
+    try:
+        import subprocess
+
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=driver_version,uuid", "--format=csv,noheader"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        if out:
+            parts = out.split(",")
+            if len(parts) >= 1 and parts[0]:
+                env["driver_version"] = parts[0].strip()
+            if len(parts) >= 2 and parts[1].strip():
+                env["gpu_uuid"] = parts[1].strip()
+    except Exception:
+        pass
+    # theta-seed values used by the C1/C2 contraction probes (results/_phase0_c1.py).
+    env["theta_seeds"] = [0.7, 0.8, 0.9]
+    return env
+
+
+def main():
+    base = "results/phase0"
+    os.makedirs(base, exist_ok=True)
+
+    # C1: roll the per-case judgment statuses up into one criterion status.
+    c1 = _NOT_RUN
+    cj = os.path.join(base, "c1_judgment.json")
+    if os.path.exists(cj):
+        with open(cj) as f:
+            c1 = _c1_status_from_judgment(json.load(f))
+
+    # C2: consume the already-judged c2_judgment.json from the Task 7 integration
+    # (it has the C1-large pre-filter applied; do NOT re-run judge_c2 on raw shapes).
+    c2 = _NOT_RUN
+    c2j = os.path.join(base, "c2_judgment.json")
+    if os.path.exists(c2j):
+        with open(c2j) as f:
+            c2 = _c2_status_from_judgment(json.load(f))
+
+    # C3 planar: NOT_RUN in Plan A (libcublasLt binding is Plan B).
+    c3_planar = _NOT_RUN
+
+    # C3 real ceiling (auxiliary): parse the cublaslt_gap txt proxy.
+    c3_real = _parse_c3_real_ceiling_ratio("results/_phase0_cublaslt_gap.txt")
+
+    agg = aggregate(c1, c2, c3_planar, c3_real)
+
+    with open(os.path.join(base, "gonogo.json"), "w") as f:
+        json.dump(agg, f, indent=2)
+
+    md = [
+        "# Phase 0 Go/No-Go (Plan A, four-state)",
         "",
-        f"**Verdict: {res['verdict']}**",
+        f"**Verdict: {agg['verdict']}**",
         "",
-        f"Reason: {res['reason']}",
+        "**Note:** " + agg["note"],
         "",
-        "Criteria:",
+        "C3_planar is NOT_RUN — Plan B (libcublasLt) required before GO_TO_PHASE1 is possible.",
+        "",
+        "## Criteria",
+        "```json",
+        json.dumps(agg["criteria"], indent=2),
+        "```",
     ]
-    for k, v in res["criteria"].items():
-        lines.append(f"- {k}: {v}")
-    text = "\n".join(lines) + "\n"
-    print(text)
-    with open("results/_phase0_gonogo_verdict.md", "w") as f:
-        f.write(text)
-    print("=== phase0_gonogo done === (written to results/_phase0_gonogo_verdict.md)")
+    with open(os.path.join(base, "gonogo.md"), "w") as f:
+        f.write("\n".join(md) + "\n")
+
+    # environment snapshot (GPU/SM/driver/CUDA/library versions, TF32=off, theta seeds)
+    env_snapshot = _collect_environment()
+    with open(os.path.join(base, "environment.json"), "w") as f:
+        json.dump(env_snapshot, f, indent=2)
+
+    # manifest: per-case status + artifact hashes. Written last so it can hash the
+    # other emitted files; the manifest does not hash itself (self-reference).
+    manifest = {
+        "c1": c1,
+        "c2": c2,
+        "c3_planar": c3_planar,
+        "c3_real_ceiling_ratio": c3_real,
+        "verdict": agg["verdict"],
+        "artifacts": {
+            f: _file_hash(os.path.join(base, f))
+            for f in (
+                "c1_judgment.json",
+                "c2_judgment.json",
+                "contraction_shapes.csv",
+                "c2_tileability.csv",
+                "c1_default_vs_nofusion.csv",
+                "gonogo.json",
+                "gonogo.md",
+                "environment.json",
+            )
+        },
+    }
+    with open(os.path.join(base, "manifest.json"), "w") as f:
+        json.dump(manifest, f, indent=2)
+
+    print(json.dumps(agg, indent=2))
 
 
 if __name__ == "__main__":

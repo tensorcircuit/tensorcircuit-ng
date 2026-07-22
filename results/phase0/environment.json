@@ -1,0 +1,19 @@
+{
+  "gpu_name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+  "gpu_uuid": "GPU-e6f2b9d7-2778-cb8e-5321-2a2c3ce96188",
+  "sm_compute_capability": "12.0",
+  "multiprocessor_count": 46,
+  "total_vram_GB": 12.8205,
+  "driver_version": "592.47",
+  "cuda_version": "12.8",
+  "torch_version": "2.11.0+cu128",
+  "jax_version": "0.6.2",
+  "cotengra_version": "0.8.2",
+  "tensorcircuit_version": "1.7.0",
+  "tf32_matmul_allowed": false,
+  "theta_seeds": [
+    0.7,
+    0.8,
+    0.9
+  ]
+}

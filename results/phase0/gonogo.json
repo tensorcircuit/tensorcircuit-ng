@@ -1,0 +1,10 @@
+{
+  "verdict": "INCONCLUSIVE",
+  "criteria": {
+    "C1": "PASS",
+    "C2": "PASS",
+    "C3_planar": "NOT_RUN",
+    "C3_real_ceiling_ratio": 3.62
+  },
+  "note": "C3_planar=NOT_RUN until Plan B (libcublasLt) completes => INCONCLUSIVE, not GO"
+}

@@ -1,45 +1,31 @@
-"""Unit tests for go/no-go criterion evaluation. Run: pytest results/_phase0_gonogo_test.py -v"""
+"""Unit tests for the four-state Phase 0 aggregator (review §9 truth table).
 
-from results._phase0_gonogo import evaluate_criteria, VERDICT_GO, VERDICT_NOGO
+Run: MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' wsl.exe bash .wsl_run.sh python results/_phase0_gonogo_test.py
+"""
 
-
-def test_all_yes_is_go():
-    res = evaluate_criteria(
-        has_unavoidable_materialization=True,
-        materialization_single_consumer_mappable=True,
-        bf16_ceiling_ratio=2.5,
-    )
-    assert res["verdict"] == VERDICT_GO
+from results._phase0_gonogo import aggregate
 
 
-def test_no_window_is_nogo():
-    res = evaluate_criteria(
-        has_unavoidable_materialization=False,
-        materialization_single_consumer_mappable=True,
-        bf16_ceiling_ratio=2.5,
-    )
-    assert res["verdict"] == VERDICT_NOGO
-    assert "window" in res["reason"].lower()
+def test_all_pass_is_go_to_phase1():
+    assert aggregate("PASS", "PASS", "PASS", 2.7)["verdict"] == "GO_TO_PHASE1"
 
 
-def test_window_but_not_coverable_is_open():
-    # 窗口存在但不可覆盖 → 非 go，记开放问题
-    res = evaluate_criteria(
-        has_unavoidable_materialization=True,
-        materialization_single_consumer_mappable=False,
-        bf16_ceiling_ratio=2.5,
-    )
-    assert res["verdict"] == VERDICT_NOGO
-    assert "cover" in res["reason"].lower() or "region" in res["reason"].lower()
+def test_c1_fail_is_no_window():
+    assert aggregate("FAIL", "PASS", "NOT_RUN", 2.7)["verdict"] == "NO_GO_NO_WINDOW"
 
 
-def test_low_ceiling_is_nogo():
-    res = evaluate_criteria(
-        has_unavoidable_materialization=True,
-        materialization_single_consumer_mappable=True,
-        bf16_ceiling_ratio=1.1,
-    )
-    assert res["verdict"] == VERDICT_NOGO
+def test_c2_fail_is_not_coverable():
+    assert aggregate("PASS", "FAIL", "NOT_RUN", 2.7)["verdict"] == "NO_GO_NOT_COVERABLE"
+
+
+def test_c3_real_only_does_not_make_planar_pass():
+    # C3 planar is NOT_RUN (Plan B); real ceiling is auxiliary only
+    a = aggregate("PASS", "PASS", "NOT_RUN", 2.7)
+    assert a["verdict"] == "INCONCLUSIVE"  # planar not probed
+
+
+def test_unknown_is_inconclusive():
+    assert aggregate("UNKNOWN", "PASS", "NOT_RUN", 2.7)["verdict"] == "INCONCLUSIVE"
 
 
 if __name__ == "__main__":
