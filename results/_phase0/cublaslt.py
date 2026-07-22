@@ -695,6 +695,447 @@ def run_full_matrix(shapes, out_dir="results/phase0"):
     }
 
 
+# --------------------------------------------------------------------------- #
+# Task 7: C3 grouped/batched planar-complex probe (spec §3.6 grouped route).
+#
+# Toolchain reality on this box (cuBLAS 12.8.4): cublasLt exposes the strided
+# BATCHED path (MATRIX_LAYOUT_BATCH_COUNT + STRIDED_BATCH_OFFSET + PLANE_OFFSET)
+# but has NO grouped-3GEMM descriptor API; legacy cublasGemmGroupedBatchedEx
+# exists but lacks the planar-complex PLANE_OFFSET layout (complex would need
+# 4-real grouped calls, losing the planar fusion leverage). So:
+#   * batched = a REAL execute/time/correctness probe (homogeneous-shape batches)
+#   * grouped = a REAL compile-time availability probe (ext #ifdef evidence)
+#     -> NOT_SUPPORTED + CUTLASS/persistent handoff
+# The contraction's GEMM set is heterogeneous, so the canonical grouped verdict
+# keys off the grouped route; batched is recorded as a homogeneous-only partial.
+# Pure units (aggregation / verdict / CSV / JSON) are GPU-free + unit-tested; the
+# live ext calls are exercised by run_grouped on the GPU (as in Task 6).
+# --------------------------------------------------------------------------- #
+_GROUPED_CSV_HEADER = [
+    "mode",
+    "M",
+    "N",
+    "K",
+    "batch",
+    "out_dtype",
+    "ws_cap",
+    "algo_count",
+    "first_algo_id",
+    "workspace_bytes",
+    "status",
+]
+
+
+def write_grouped_csv(path, rows):
+    """Write cublaslt_grouped.csv rows. The ``mode`` column distinguishes the
+    batched cells (real cublasLt BATCH_COUNT probe) from the single grouped row
+    (availability verdict). One file holds both routes per spec §10."""
+    _write_csv(
+        path,
+        _GROUPED_CSV_HEADER,
+        [[r.get(h, "") for h in _GROUPED_CSV_HEADER] for r in rows],
+    )
+
+
+def probe_batched_config(
+    ext, m, n, k, *, batch, out_dtype="bf16", ws_cap_bytes=64 << 20
+):
+    """Enumerate cublasLt algorithms for the BATCHED planar-complex config
+    (BATCH_COUNT + STRIDED_BATCH_OFFSET + PLANE_OFFSET) WITHOUT executing, for one
+    (shape, batch, out_dtype, workspace cap) cell. Forwards to the extension's
+    ``probe_batched_capability`` (the real cublasLt batched call)."""
+    return ext.probe_batched_capability(
+        m,
+        n,
+        k,
+        batch=batch,
+        out_dtype=out_dtype,
+        ws_limit_bytes=ws_cap_bytes,
+    )
+
+
+def grouped_route_verdict(grouped_availability):
+    """Interpret the extension's grouped-API availability probe (compile-time
+    #ifdef evidence against the actual cublasLt.h) into a grouped-route verdict.
+
+    cublasLt grouped-3GEMM absent (this toolchain) OR legacy grouped lacking
+    planar -> ``NOT_SUPPORTED`` with a CUTLASS/persistent handoff. Only a present
+    grouped-3GEMM descriptor could in principle be algo-probed; absent it, the
+    heterogeneous-grouped route is conclusively not callable.
+    """
+    g3 = grouped_availability.get("cublaslt_grouped3gemm", False)
+    if g3:
+        return {
+            "status": "UNKNOWN",
+            "reason": (
+                "cublasLt grouped-3GEMM descriptor present; algo not probed on this "
+                "path (would need a real grouped matmul probe)"
+            ),
+            "handoff": None,
+        }
+    return {
+        "status": "NOT_SUPPORTED",
+        "reason": grouped_availability.get("reason")
+        or "cublasLt grouped-3GEMM API absent; legacy grouped lacks planar",
+        "handoff": "CUTLASS group GEMM / persistent kernel",
+    }
+
+
+def aggregate_capability_grouped(
+    batched_shape_results, grouped_availability, *, min_dim_floor=16, quorum=1.0
+):
+    """Canonical C3 grouped capability (spec §3.6, §10).
+
+    Two routes:
+      * batched_route — actual-large policy over the BATCHED planar-complex results
+        (anti-cherry-pick like aggregate_capability_full): SUPPORTED iff the quorum
+        fraction of real-gemm (min dim >= floor) batched shapes pass the §7.5 gate.
+      * grouped_route — the heterogeneous-grouped availability verdict
+        (grouped_route_verdict).
+
+    ``overall`` keys off the grouped route: the contraction's GEMM set is
+    heterogeneous, so even a fully-SUPPORTED batched route (homogeneous, repeated
+    same-shape GEMMs) does not make the grouped capability SUPPORTED when the
+    heterogeneous-grouped API is absent. The batched SUPPORTED result is preserved
+    as a homogeneous-only partial diagnostic + the CUTLASS handoff.
+    """
+    per_shape = {}
+    real_pass = 0
+    real_total = 0
+    for r in batched_shape_results:
+        m, n, k = r["M"], r["N"], r["K"]
+        gate = judge_capability(
+            max_rel_err=r.get("max_rel_err", 1e9),
+            perf_ratio_vs_c64=r.get("ko_ratio", 0.0),
+            algo_count=r.get("algo_count", 0),
+            workspace_bytes=r.get("workspace_bytes", 0),
+            output_bytes=r.get("output_bytes", 0),
+            has_four_real_temps=r.get("has_four_real_temps", False),
+            max_abs_err=r.get("max_abs_err", 0.0),
+        )
+        is_real = min(m, n, k) >= min_dim_floor
+        per_shape[(m, n, k)] = {
+            "gate": gate["status"],
+            "is_real_gemm": is_real,
+            "min_dim": min(m, n, k),
+            "batch": r.get("batch"),
+            "ko_ratio": r.get("ko_ratio"),
+        }
+        if is_real:
+            real_total += 1
+            if gate["status"] == "SUPPORTED":
+                real_pass += 1
+
+    if real_total == 0:
+        batched_status = "NOT_SUPPORTED"
+        batched_reason = (
+            "no real-gemm actual-large batched shapes evaluated; small/skinny "
+            "batches do not trigger SUPPORTED"
+        )
+    else:
+        frac = real_pass / real_total
+        if frac >= quorum:
+            batched_status = "SUPPORTED"
+            batched_reason = (
+                f"{real_pass}/{real_total} real-gemm batched shapes pass the 7.5 "
+                f"gate (quorum {quorum})"
+            )
+        else:
+            batched_status = "NOT_SUPPORTED"
+            batched_reason = (
+                f"only {real_pass}/{real_total} real-gemm batched shapes pass "
+                f"(quorum {quorum})"
+            )
+
+    grouped = grouped_route_verdict(grouped_availability)
+    overall_status = grouped["status"]
+    overall_reason = (
+        f"batched_route={batched_status} (homogeneous, repeated same-shape GEMMs); "
+        f"grouped_route={grouped['status']} (heterogeneous, needed for the "
+        f"contraction's variable-shape GEMM set). "
+    )
+    if grouped["status"] != "SUPPORTED":
+        overall_reason += (
+            f"Heterogeneous grouped not available -> handoff {grouped['handoff']}."
+        )
+
+    return {
+        "overall": {"status": overall_status, "reason": overall_reason},
+        "batched_route": {
+            "status": batched_status,
+            "reason": batched_reason,
+            "policy": {
+                "min_dim_floor": min_dim_floor,
+                "quorum": quorum,
+                "real_gemm_pass": real_pass,
+                "real_gemm_total": real_total,
+            },
+            "per_shape": per_shape,
+        },
+        "grouped_route": grouped,
+    }
+
+
+def build_grouped_capability_json(
+    agg, grouped_availability, *, matrix_grid=None, timing_summary=None
+):
+    """Assemble the canonical c3-grouped-v1 JSON from the aggregation + the raw
+    grouped-API probe evidence. Pure (GPU-free) so the schema is unit-testable;
+    run_grouped calls this after the live ext probes."""
+    return {
+        "schema_version": "c3-grouped-v1",
+        "capability": agg["overall"],
+        "batched_route": {
+            "status": agg["batched_route"]["status"],
+            "reason": agg["batched_route"]["reason"],
+            "policy": agg["batched_route"]["policy"],
+            "per_shape": {
+                f"{m}x{n}x{k}": v
+                for (m, n, k), v in agg["batched_route"]["per_shape"].items()
+            },
+        },
+        "grouped_route": agg["grouped_route"],
+        "grouped_api_probe": grouped_availability,
+        "matrix_grid": matrix_grid or {},
+        "timing_summary": timing_summary or {},
+        "note": (
+            "Task 7 grouped/batched probe (spec 3.6/10). batched_route = real "
+            "cublasLt planar-complex via BATCH_COUNT + STRIDED_BATCH_OFFSET "
+            "(homogeneous-shape batches); grouped_route = heterogeneous grouped "
+            "(cublasLt grouped-3GEMM / legacy grouped planar). On this toolchain "
+            "(see grouped_api_probe) the heterogeneous-grouped API is absent, so "
+            "overall keys off grouped_route and the batched SUPPORTED result (if "
+            "any) is a homogeneous-only partial; CUTLASS group GEMM / persistent "
+            "kernel is the handoff for the contraction's variable-shape GEMM set."
+        ),
+    }
+
+
+def _time_c64_batched_gpu_matmul(ar, ai, br, bi, batch, n_time=5):
+    """§7.3 batched complex64 baseline: GPU torch BATCHED complex64 matmul kernel
+    time. A/B are (batch,m,k)/(batch,k,n) complex64 on cuda; times ``A @ B`` over
+    the batch (warmup + median of ``n_time``). This is the apples-to-apples c64
+    counterpart of the batched planar probe (both do ``batch`` complex matmuls in
+    one kernel launch), unlike batch x single-matmul which would over-credit the
+    batched planar path with launch-amortization the c64 batched path also has.
+    """
+    import torch
+
+    A = torch.complex(
+        torch.from_numpy(ar).cuda(), torch.from_numpy(ai).cuda()
+    )  # (batch,m,k)
+    B = torch.complex(
+        torch.from_numpy(br).cuda(), torch.from_numpy(bi).cuda()
+    )  # (batch,k,n)
+    _ = A @ B
+    torch.cuda.synchronize()
+    times = []
+    for _ in range(n_time):
+        torch.cuda.synchronize()
+        t0 = time.perf_counter()
+        _ = A @ B
+        torch.cuda.synchronize()
+        times.append((time.perf_counter() - t0) * 1e3)
+    c64_ms = float(np.median(times))
+    del A, B
+    torch.cuda.empty_cache()
+    return c64_ms
+
+
+def _run_batched_timing(ext, shapes, *, batch, n_time=5, ko_warmup=3):
+    """Per real-gemm shape: probe the batched planar-complex capability; if an algo
+    exists, run the batched planar matmul (correctness vs per-batch numpy reference)
+    + fair kernel-only timing (batched planar vs batched c64) -> ko_ratio. No-algo
+    shapes are recorded with ko_ratio=0. Returns the per-shape result list consumed
+    by aggregate_capability_grouped."""
+    per_shape = []
+    oom_bytes = 8 << 30
+    signal_floor = 0.5
+    for s in shapes:
+        m, n, k = s["M"], s["N"], s["K"]
+        info = probe_batched_config(
+            ext, m, n, k, batch=batch, out_dtype="bf16", ws_cap_bytes=1 << 30
+        )
+        algo_count = int(info.get("algo_count", 0))
+        rec = {
+            "M": m,
+            "N": n,
+            "K": k,
+            "batch": batch,
+            "algo_count": algo_count,
+            "max_rel_err": 0.0,
+            "max_abs_err": 0.0,
+            "ko_ratio": 0.0,
+            "workspace_bytes": int(info.get("workspace_bytes", 0)),
+            "output_bytes": m * n * 2 * batch,
+            "status": "ok" if algo_count > 0 else "no-algo",
+        }
+        # OOM guard (batched c64 = batch x single-shape c64 footprint).
+        c64_bytes = batch * (m * k + k * n + m * n) * 8
+        bf16_bytes = batch * ((m * k + k * n) * 2 * 2 + m * n * 2 * 2)
+        if c64_bytes > oom_bytes or bf16_bytes > oom_bytes:
+            rec["status"] = "oom"
+            per_shape.append(rec)
+            continue
+        if algo_count == 0:
+            per_shape.append(rec)
+            continue
+        # BF16-rounded inputs for `batch` independent GEMMs of shape (m,k)x(k,n).
+        rng = np.random.default_rng(1)
+        ar = rng.standard_normal((batch, m, k)).astype(np.float32)
+        ai = rng.standard_normal((batch, m, k)).astype(np.float32)
+        br = rng.standard_normal((batch, k, n)).astype(np.float32)
+        bi = rng.standard_normal((batch, k, n)).astype(np.float32)
+        ar_bf, ar_f = _f32_to_bf16_bits_and_upcast(ar)
+        ai_bf, ai_f = _f32_to_bf16_bits_and_upcast(ai)
+        br_bf, br_f = _f32_to_bf16_bits_and_upcast(br)
+        bi_bf, bi_f = _f32_to_bf16_bits_and_upcast(bi)
+        try:
+            cr_u16, ci_u16 = ext.planar_complex_matmul_bf16_batched(
+                ar_bf, ai_bf, br_bf, bi_bf, m, n, k, batch, out_dtype="bf16"
+            )
+            ko = ext.planar_complex_matmul_bf16_batched_kernelonly_timing(
+                ar_bf,
+                ai_bf,
+                br_bf,
+                bi_bf,
+                m,
+                n,
+                k,
+                batch,
+                iters=n_time,
+                warmup=ko_warmup,
+            )
+            planar_ko_ms = float(ko["median_ms"]) if ko.get("median_ms", 0) > 0 else 0.0
+            # correctness vs per-batch numpy reference on BF16-rounded inputs.
+            max_abs = 0.0
+            max_rel = 0.0
+            for b in range(batch):
+                cr_ref, ci_ref = reference_complex_matmul(
+                    ar_f[b], ai_f[b], br_f[b], bi_f[b]
+                )
+                cr = _bf16_bits_to_f32(cr_u16[b])
+                ci = _bf16_bits_to_f32(ci_u16[b])
+                er = np.abs(cr - cr_ref)
+                ei = np.abs(ci - ci_ref)
+                max_abs = max(max_abs, float(np.max(er)), float(np.max(ei)))
+                dr = np.maximum(np.abs(cr_ref), signal_floor)
+                di = np.maximum(np.abs(ci_ref), signal_floor)
+                max_rel = max(max_rel, float(np.max(er / dr)), float(np.max(ei / di)))
+            # c64 baseline inside the try: a torch OOM on the largest shape records
+            # exec-fail instead of aborting the whole matrix (artifacts are written
+            # only after this loop returns).
+            c64_ms = _time_c64_batched_gpu_matmul(ar, ai, br, bi, batch, n_time=n_time)
+        except Exception as e:  # noqa: BLE001  (record exec-fail/OOM, keep going)
+            rec["status"] = "exec-fail:" + str(e)[:48]
+            per_shape.append(rec)
+            continue
+        rec["max_abs_err"] = max_abs
+        rec["max_rel_err"] = max_rel
+        rec["ko_ratio"] = c64_ms / planar_ko_ms if planar_ko_ms > 0 else 0.0
+        per_shape.append(rec)
+    return per_shape
+
+
+def run_grouped(shapes, out_dir="results/phase0", *, batch=4):
+    """Task 7 live runner: real cublasLt grouped/batched planar-complex probe.
+
+    1. Batched enumeration grid (no execute): shapes x {bf16,fp32} x ws caps ->
+       per-cell algo_count/algo_id/workspace/status via probe_batched_config.
+    2. Grouped availability probe (ext #ifdef against cublasLt.h) -> grouped_route.
+    3. Per real-gemm shape: batched planar matmul + correctness + fair kernel-only
+       timing (batched planar vs batched c64) -> ko_ratio.
+    Writes cublaslt_grouped.csv (batched cells + the single grouped row) and
+    cublaslt_grouped_capability.json (schema c3-grouped-v1). Returns the verdict.
+    """
+    import torch  # noqa: F401  availability guard; timing helpers import it too
+
+    os.makedirs(out_dir, exist_ok=True)
+    ext = load_ext()
+    ws_caps = [("0", 0), ("1MiB", 1 << 20), ("16MiB", 16 << 20), ("max", 1 << 30)]
+    out_dtypes = ["bf16", "fp32"]
+
+    matrix_rows = []
+    for s in shapes:
+        m, n, k = s["M"], s["N"], s["K"]
+        for od in out_dtypes:
+            for cap_name, cap_bytes in ws_caps:
+                info = probe_batched_config(
+                    ext, m, n, k, batch=batch, out_dtype=od, ws_cap_bytes=cap_bytes
+                )
+                ac = int(info.get("algo_count", 0))
+                matrix_rows.append(
+                    {
+                        "mode": "batched",
+                        "M": m,
+                        "N": n,
+                        "K": k,
+                        "batch": batch,
+                        "out_dtype": od,
+                        "ws_cap": cap_name,
+                        "algo_count": ac,
+                        "first_algo_id": int(info.get("first_algo_id", -1)),
+                        "workspace_bytes": int(info.get("workspace_bytes", 0)),
+                        "status": "ok" if ac > 0 else "no-algo",
+                    }
+                )
+
+    g_avail = ext.grouped_api_probe()
+    matrix_rows.append(
+        {
+            "mode": "grouped",
+            "M": "",
+            "N": "",
+            "K": "",
+            "batch": "",
+            "out_dtype": "",
+            "ws_cap": "",
+            "algo_count": 0,
+            "first_algo_id": -1,
+            "workspace_bytes": 0,
+            "status": grouped_route_verdict(g_avail)["status"],
+        }
+    )
+    write_grouped_csv(os.path.join(out_dir, "cublaslt_grouped.csv"), matrix_rows)
+
+    batched_shape_results = _run_batched_timing(ext, shapes, batch=batch)
+    agg = aggregate_capability_grouped(batched_shape_results, g_avail)
+    js = build_grouped_capability_json(
+        agg,
+        g_avail,
+        matrix_grid={
+            "shapes": len(shapes),
+            "batch": batch,
+            "out_dtypes": out_dtypes,
+            "ws_caps": [c[0] for c in ws_caps],
+            "batched_cells": sum(1 for r in matrix_rows if r["mode"] == "batched"),
+            "batched_ok": sum(
+                1 for r in matrix_rows if r["mode"] == "batched" and r["status"] == "ok"
+            ),
+            "grouped_cells": 1,
+        },
+        timing_summary={
+            "best_ko_ratio": max(
+                (r.get("ko_ratio", 0.0) for r in batched_shape_results), default=0.0
+            ),
+            "worst_max_rel_err": max(
+                (r.get("max_rel_err", 0.0) for r in batched_shape_results), default=0.0
+            ),
+            "shapes_ok": sum(
+                1 for r in batched_shape_results if r.get("status") == "ok"
+            ),
+            "shapes_total": len(batched_shape_results),
+        },
+    )
+    with open(os.path.join(out_dir, "cublaslt_grouped_capability.json"), "w") as f:
+        json.dump(js, f, indent=2)
+    return {
+        "capability": agg["overall"]["status"],
+        "aggregation": agg,
+        "matrix_grid": js["matrix_grid"],
+    }
+
+
 if __name__ == "__main__":
     # Distinct actual-large (>=64 MiB) contraction shapes. Dedup by (M,N,K): the CSV
     # repeats identical shapes across many node_ids. These ARE the C1 actual-large

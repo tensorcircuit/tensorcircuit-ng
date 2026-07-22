@@ -341,6 +341,223 @@ def test_probe_config_forwards_params_to_ext():
     assert seen["transa"] == "T"
 
 
+# ---------------------------------------------------------------------------
+# Task 7: C3 grouped/batched planar-complex probe (spec §3.6 grouped route).
+#
+# Toolchain reality (cuBLAS 12.8.4 on this box): cublasLt exposes the strided
+# BATCHED path (MATRIX_LAYOUT_BATCH_COUNT + STRIDED_BATCH_OFFSET + PLANE_OFFSET)
+# but has NO grouped-3GEMM descriptor API; legacy cublasGemmGroupedBatchedEx
+# exists but lacks the planar-complex PLANE_OFFSET layout. So:
+#   batched = a real execute/time/correctness probe (homogeneous-shape batches)
+#   grouped = a real compile-time availability probe -> NOT_SUPPORTED + CUTLASS
+# All units below are GPU-free (stub ext / pure functions); the live ext calls
+# are exercised by the GPU run, matching how Task 6 treats probe_planar_capability.
+# ---------------------------------------------------------------------------
+
+from results._phase0.cublaslt import (  # noqa: E402
+    aggregate_capability_grouped,
+    build_grouped_capability_json,
+    grouped_route_verdict,
+    probe_batched_config,
+    write_grouped_csv,
+)
+
+# The contraction's heterogeneous real-gemm shapes (from cublaslt_planar_capability.json).
+_REAL_GEMM_BATCHED = (16384, 1024, 1024)
+
+
+def _batched_shape_result(
+    mnk, *, batch=4, algo=3, rel=1e-3, ko=2.0, ws=0, out_bytes=1 << 28
+):
+    m, n, k = mnk
+    return {
+        "M": m,
+        "N": n,
+        "K": k,
+        "batch": batch,
+        "algo_count": algo,
+        "max_rel_err": rel,
+        "ko_ratio": ko,
+        "workspace_bytes": ws,
+        "output_bytes": out_bytes,
+    }
+
+
+# Toolchain finding the ext's grouped_api_probe() returns on this box (cublasLt
+# 12.8.4 has no grouped-3GEMM; legacy grouped has no planar layout).
+_GROUPED_ABSENT = {
+    "cublas_version": "12.8.4",
+    "cublaslt_grouped3gemm": False,
+    "legacy_grouped_batched_ex": True,
+    "legacy_grouped_planar": False,
+    "reason": (
+        "cublasLt grouped-3GEMM descriptor API absent in cublasLt.h (CUBLAS 12.8.4); "
+        "legacy cublasGemmGroupedBatchedEx present but has no planar-complex "
+        "(PLANE_OFFSET) layout -> complex needs 4-real grouped calls, losing the "
+        "planar fusion leverage"
+    ),
+}
+
+
+def test_grouped_csv_schema_has_mode_and_batch(tmp_path):
+    """cublaslt_grouped.csv must carry a `mode` column (batched/grouped) plus the
+    batch count, so both routes are distinguishable in one file."""
+    import csv
+
+    path = tmp_path / "g.csv"
+    rows = [
+        {
+            "mode": "batched",
+            "M": 16384,
+            "N": 1024,
+            "K": 1024,
+            "batch": 4,
+            "out_dtype": "bf16",
+            "ws_cap": "max",
+            "algo_count": 2,
+            "first_algo_id": 21,
+            "workspace_bytes": 0,
+            "status": "ok",
+        },
+        {
+            "mode": "grouped",
+            "M": "",
+            "N": "",
+            "K": "",
+            "batch": "",
+            "out_dtype": "",
+            "ws_cap": "",
+            "algo_count": 0,
+            "first_algo_id": -1,
+            "workspace_bytes": 0,
+            "status": "NOT_SUPPORTED",
+        },
+    ]
+    write_grouped_csv(str(path), rows)
+    with open(path) as f:
+        out = list(csv.reader(f))
+    assert out[0][0] == "mode"
+    assert "batch" in out[0]
+    assert out[0][-1] == "status"
+    assert out[1][0] == "batched" and out[2][0] == "grouped"
+    assert out[2][-1] == "NOT_SUPPORTED"
+
+
+def test_probe_batched_config_forwards_params_to_ext():
+    """probe_batched_config forwards batch/out_dtype/ws_limit to the extension's
+    batched capability probe. GPU-free stub locks the contract; the live
+    (algo_count>0) check is the GPU run."""
+    seen = {}
+
+    class _StubExt:
+        def probe_batched_capability(self, m, n, k, **kw):
+            seen.update(kw)
+            return {
+                "algo_count": 2,
+                "first_algo_id": 21,
+                "workspace_bytes": 0,
+                "status": "ok",
+            }
+
+    ext = _StubExt()
+    r = probe_batched_config(
+        ext, 1024, 1024, 1024, batch=4, out_dtype="bf16", ws_cap_bytes=1 << 20
+    )
+    assert r["algo_count"] == 2
+    assert seen["batch"] == 4
+    assert seen["out_dtype"] == "bf16"
+    assert seen["ws_limit_bytes"] == 1 << 20
+
+
+def test_grouped_route_verdict_not_supported_when_api_absent():
+    """cublasLt grouped-3GEMM absent + legacy lacks planar -> NOT_SUPPORTED with a
+    CUTLASS/persistent handoff. This is the legitimate Task-7 negative result."""
+    v = grouped_route_verdict(_GROUPED_ABSENT)
+    assert v["status"] == "NOT_SUPPORTED"
+    assert v["handoff"] is not None
+    assert "CUTLASS" in v["handoff"].upper() or "PERSISTENT" in v["handoff"].upper()
+
+
+def test_aggregate_grouped_overall_not_supported_when_grouped_absent():
+    """KEY HONESTY POINT: even if every real-gemm BATCHED shape passes the gate,
+    the canonical grouped capability is NOT_SUPPORTED because the contraction's
+    GEMM set is heterogeneous and the heterogeneous-grouped API is absent. The
+    batched route is recorded as a SUPPORTED partial; overall keys off grouped."""
+    res = aggregate_capability_grouped(
+        [
+            _batched_shape_result(_REAL_GEMM_BATCHED, ko=7.0),
+            _batched_shape_result((524288, 32, 32), ko=4.0),
+        ],
+        _GROUPED_ABSENT,
+    )
+    assert res["overall"]["status"] == "NOT_SUPPORTED", res["overall"]
+    assert res["batched_route"]["status"] == "SUPPORTED", res["batched_route"]
+    assert res["grouped_route"]["status"] == "NOT_SUPPORTED"
+    assert "heterogeneous" in res["overall"]["reason"].lower()
+
+
+def test_aggregate_grouped_batched_anti_cherrypick():
+    """Anti-cherry-pick (spec 3.6): only skinny batched shapes passing must NOT
+    make the batched route SUPPORTED, even though grouped is already NOT_SUPPORTED."""
+    res = aggregate_capability_grouped(
+        [
+            _batched_shape_result((8388608, 2, 2), ko=5.0),  # skinny, fast
+            _batched_shape_result((262144, 64, 4), ko=4.0),  # skinny, fast
+        ],
+        _GROUPED_ABSENT,
+    )
+    assert res["batched_route"]["status"] == "NOT_SUPPORTED", res["batched_route"]
+    assert res["overall"]["status"] == "NOT_SUPPORTED"
+
+
+def test_aggregate_grouped_no_real_gemm_batched():
+    """No real-gemm batched shapes evaluated -> batched route NOT_SUPPORTED."""
+    res = aggregate_capability_grouped(
+        [_batched_shape_result((8388608, 2, 2), ko=5.0)],
+        _GROUPED_ABSENT,
+    )
+    assert res["batched_route"]["status"] == "NOT_SUPPORTED"
+    assert res["batched_route"]["policy"]["real_gemm_total"] == 0
+
+
+def test_aggregate_grouped_records_batched_per_shape():
+    """Each real-gemm batched shape is recorded with its gate + batch count, even
+    when the overall verdict is NOT_SUPPORTED (full evidence preserved). Raw
+    aggregation uses tuple keys (matches aggregate_capability_full); the JSON
+    builder stringifies them."""
+    res = aggregate_capability_grouped(
+        [_batched_shape_result(_REAL_GEMM_BATCHED, batch=8, ko=7.0)],
+        _GROUPED_ABSENT,
+    )
+    ps = res["batched_route"]["per_shape"]
+    assert _REAL_GEMM_BATCHED in ps
+    assert ps[_REAL_GEMM_BATCHED]["batch"] == 8
+    assert ps[_REAL_GEMM_BATCHED]["is_real_gemm"] is True
+    assert ps[_REAL_GEMM_BATCHED]["gate"] == "SUPPORTED"
+
+
+def test_build_grouped_capability_json_schema():
+    """The canonical JSON carries schema_version c3-grouped-v1, the overall
+    capability, both route verdicts, and the raw grouped-API probe evidence."""
+    agg = aggregate_capability_grouped(
+        [_batched_shape_result(_REAL_GEMM_BATCHED, ko=7.0)],
+        _GROUPED_ABSENT,
+    )
+    js = build_grouped_capability_json(
+        agg,
+        _GROUPED_ABSENT,
+        matrix_grid={"batched_cells": 8, "grouped_cells": 1},
+        timing_summary={"best_ko_ratio": 7.0},
+    )
+    assert js["schema_version"] == "c3-grouped-v1"
+    assert js["capability"]["status"] == "NOT_SUPPORTED"
+    assert js["batched_route"]["status"] in {"SUPPORTED", "NOT_SUPPORTED"}
+    assert js["grouped_route"]["status"] == "NOT_SUPPORTED"
+    # raw header evidence echoed for reproducibility
+    assert js["grouped_api_probe"]["cublaslt_grouped3gemm"] is False
+    assert js["matrix_grid"]["batched_cells"] == 8
+
+
 if __name__ == "__main__":
     import sys
     import pytest

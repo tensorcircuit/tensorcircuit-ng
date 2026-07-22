@@ -3,6 +3,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <cublasLt.h>
+#include <cublas_api.h>
 #include <cuda_runtime.h>
 #include <algorithm>
 #include <cstdint>
@@ -549,6 +550,494 @@ static py::dict planar_complex_matmul_bf16_kernelonly_timing(
     return out;
 }
 
+// ============================================================================
+// Task 7: BATCHED planar-complex BF16 (cublasLt BATCH_COUNT + STRIDED_BATCH_OFFSET
+// + PLANE_OFFSET). This is the REAL cublasLt batched API (one cublasLtMatmul call
+// over `batch` homogeneous-shape complex matmuls), NOT a Python loop.
+//
+// Batched planar layout: one device buffer per operand holding `batch` matrices
+// laid out as [b0_real | b0_imag | b1_real | b1_imag | ...] with a constant
+// PLANE_OFFSET (real->imag within a slot) and a 256-aligned STRIDED_BATCH_OFFSET
+// (slot->slot). Column-major swap convention is unchanged from the single case:
+//   A_cublas = B_h^T (rows=n, cols=k, ld=n)  data <- br/bi
+//   B_cublas = A_h^T (rows=k, cols=m, ld=k)  data <- ar/ai
+//   D_cublas = C_h^T (rows=n, cols=m, ld=n)  data -> cr/ci
+// ============================================================================
+
+// Planar plane byte sizes + offsets for the batched column-major swap layout.
+// planeA/B are BF16 in; planeC is the out-dtype element. off_* is PLANE_OFFSET
+// (256-aligned); stride_* is STRIDED_BATCH_OFFSET (real+imag slot, 256-aligned).
+static inline void batched_planar_geom(int m, int n, int k, bool bf16_out,
+    size_t& planeA, size_t& planeB, size_t& planeC,
+    size_t& off_A, size_t& off_B, size_t& off_C,
+    size_t& strideA, size_t& strideB, size_t& strideC)
+{
+    constexpr size_t bf16_elem = 2;
+    size_t out_elem = bf16_out ? bf16_elem : 4;
+    planeA = (size_t)n * k * bf16_elem;   // A_cublas = B_h^T (n,k) BF16
+    planeB = (size_t)k * m * bf16_elem;   // B_cublas = A_h^T (k,m) BF16
+    planeC = (size_t)n * m * out_elem;    // D_cublas = C_h^T (n,m) out
+    off_A = align256(planeA);
+    off_B = align256(planeB);
+    off_C = align256(planeC);
+    strideA = align256(off_A + planeA);
+    strideB = align256(off_B + planeB);
+    strideC = align256(off_C + planeC);
+}
+
+// Set BATCH_COUNT + STRIDED_BATCH_OFFSET on a planar layout (batched extension
+// of make_planar_layout). BATCH_COUNT is int32. CRUCIALLY, STRIDED_BATCH_OFFSET
+// is in ELEMENTS, not bytes — "real valued sub-elements" for planar-complex per
+// cublasLt.h:1125 (a byte offset X is a stride of X/2 for CUDA_C_16BF). Callers
+// pass the byte stride + the operand's real-element byte size (2 for BF16 in/out,
+// 4 for FP32-out C); we convert to elements here. (PLANE_OFFSET, in contrast, IS
+// in bytes — two attributes, two units.)
+static void set_batch_attrs(cublasLtMatrixLayout_t layout, int batch,
+    size_t stride_bytes, size_t elem_bytes)
+{
+    int32_t bcount = batch;
+    cublasLtMatrixLayoutSetAttribute(layout, CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT,
+        &bcount, sizeof(bcount));
+    int64_t stride_elems = (int64_t)(stride_bytes / elem_bytes);
+    cublasLtMatrixLayoutSetAttribute(layout,
+        CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET,
+        &stride_elems, sizeof(stride_elems));
+}
+
+// Enumerate algorithms for the BATCHED planar-complex config WITHOUT executing.
+// Same param surface as probe_planar_capability plus `batch`. Returns
+// {algo_count, first_algo_id, workspace_bytes, heuristic_status, out_dtype,
+// batch, status}.
+static py::dict probe_batched_capability(int m, int n, int k, int batch,
+    std::string out_dtype, long ws_limit_bytes)
+{
+    py::dict d;
+    if (batch < 1) batch = 1;
+    bool bf16_out = (out_dtype == "bf16");
+    cudaDataType_t out_cdtype = bf16_out ? CUDA_C_16BF : CUDA_C_32F;
+    size_t planeA, planeB, planeC, off_A, off_B, off_C, strideA, strideB, strideC;
+    batched_planar_geom(m, n, k, bf16_out, planeA, planeB, planeC,
+        off_A, off_B, off_C, strideA, strideB, strideC);
+
+    cublasLtHandle_t h = nullptr;
+    cublasStatus_t s = cublasLtCreate(&h);
+    if (s != CUBLAS_STATUS_SUCCESS) {
+        d["algo_count"] = 0;
+        d["first_algo_id"] = -1;
+        d["workspace_bytes"] = (long)0;
+        d["heuristic_status"] = cublaslt_status_str(s);
+        d["out_dtype"] = out_dtype;
+        d["batch"] = batch;
+        d["status"] = std::string("cublasLtCreate failed: ") + cublaslt_status_str(s);
+        return d;
+    }
+
+    cublasLtMatrixLayout_t Adesc = nullptr, Bdesc = nullptr, Cdesc = nullptr;
+    make_planar_layout(&Adesc, CUDA_C_16BF, n, k, n, off_A);
+    make_planar_layout(&Bdesc, CUDA_C_16BF, k, m, k, off_B);
+    make_planar_layout(&Cdesc, out_cdtype, n, m, n, off_C);
+    set_batch_attrs(Adesc, batch, strideA, 2);
+    set_batch_attrs(Bdesc, batch, strideB, 2);
+    set_batch_attrs(Cdesc, batch, strideC, bf16_out ? 2 : 4);
+
+    cublasLtMatmulDesc_t desc = nullptr;
+    cublasLtMatmulDescCreate(&desc, CUBLAS_COMPUTE_32F, CUDA_C_32F);
+
+    cublasLtMatmulPreference_t pref = nullptr;
+    cublasLtMatmulPreferenceCreate(&pref);
+    size_t ws_limit = (ws_limit_bytes > 0) ? (size_t)ws_limit_bytes : 0;
+    cublasLtMatmulPreferenceSetAttribute(pref,
+        CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &ws_limit, sizeof(ws_limit));
+
+    cublasLtMatmulHeuristicResult_t heur[8];
+    std::memset(heur, 0, sizeof(heur));
+    int returned = 0;
+    cublasStatus_t hs = cublasLtMatmulAlgoGetHeuristic(h, desc,
+        Adesc, Bdesc, Cdesc, Cdesc, pref, 8, heur, &returned);
+
+    d["algo_count"] = returned;
+    d["heuristic_status"] = cublaslt_status_str(hs);
+    d["out_dtype"] = out_dtype;
+    d["batch"] = batch;
+    int first_id = -1;
+    long first_ws = 0;
+    if (returned > 0) {
+        first_ws = (long)heur[0].workspaceSize;
+        int ids[8] = {0};
+        int nb_ids = 0;
+        cublasLtMatmulAlgoGetIds(h, CUBLAS_COMPUTE_32F, CUDA_C_32F,
+            CUDA_C_16BF, CUDA_C_16BF, out_cdtype, out_cdtype, 8, ids, &nb_ids);
+        if (nb_ids > 0) first_id = ids[0];
+    }
+    d["first_algo_id"] = first_id;
+    d["workspace_bytes"] = first_ws;
+    d["status"] = (hs == CUBLAS_STATUS_SUCCESS && returned > 0)
+        ? std::string("ok")
+        : (std::string("no-algo: ") + cublaslt_status_str(hs));
+
+    cublasLtMatmulPreferenceDestroy(pref);
+    cublasLtMatmulDescDestroy(desc);
+    cublasLtMatrixLayoutDestroy(Adesc);
+    cublasLtMatrixLayoutDestroy(Bdesc);
+    cublasLtMatrixLayoutDestroy(Cdesc);
+    cublasLtDestroy(h);
+    return d;
+}
+
+// Batched planar-complex BF16 matmul: one cublasLtMatmul call over `batch`
+// homogeneous-shape complex matmuls (BATCH_COUNT + STRIDED_BATCH_OFFSET carries
+// the batch). Host inputs: ar/ai (batch,m,k), br/bi (batch,k,n) raw uint16 BF16
+// views. Returns (cr, ci) as (batch,m,n): uint16 BF16 views when out_dtype=bf16,
+// float32 when out_dtype=fp32. Correctness is checked host-side by the driver.
+static py::tuple planar_complex_matmul_bf16_batched(
+    py::array_t<uint16_t, py::array::c_style> ar_u16,
+    py::array_t<uint16_t, py::array::c_style> ai_u16,
+    py::array_t<uint16_t, py::array::c_style> br_u16,
+    py::array_t<uint16_t, py::array::c_style> bi_u16,
+    int m, int n, int k, int batch,
+    std::string out_dtype)
+{
+    if (batch < 1) batch = 1;
+    bool bf16_out = (out_dtype == "bf16");
+    cudaDataType_t out_cdtype = bf16_out ? CUDA_C_16BF : CUDA_C_32F;
+    size_t planeA, planeB, planeC, off_A, off_B, off_C, strideA, strideB, strideC;
+    batched_planar_geom(m, n, k, bf16_out, planeA, planeB, planeC,
+        off_A, off_B, off_C, strideA, strideB, strideC);
+
+    auto check_cuda = [&](cudaError_t e, const char* what) {
+        if (e != cudaSuccess) {
+            throw std::runtime_error(std::string(what) + ": cudaError "
+                + std::to_string((int)e));
+        }
+    };
+    auto check_cublas = [&](cublasStatus_t e, const char* what) {
+        if (e != CUBLAS_STATUS_SUCCESS) {
+            throw std::runtime_error(std::string(what) + ": cublasStatus "
+                + cublaslt_status_str(e));
+        }
+    };
+
+    // 1. Allocate batched planar device buffers (batch slots each).
+    void *d_A = nullptr, *d_B = nullptr, *d_C = nullptr;
+    check_cuda(cudaMalloc(&d_A, (size_t)batch * strideA), "cudaMalloc d_A");
+    check_cuda(cudaMalloc(&d_B, (size_t)batch * strideB), "cudaMalloc d_B");
+    check_cuda(cudaMalloc(&d_C, (size_t)batch * strideC), "cudaMalloc d_C");
+
+    // 2. Pack host->device per batch. A_cublas batch i: real<-br[i], imag<-bi[i];
+    //    B_cublas batch i: real<-ar[i], imag<-ai[i] (column-major swap convention).
+    for (int i = 0; i < batch; ++i) {
+        const uint16_t* br_i = br_u16.data() + (size_t)i * (k * n);
+        const uint16_t* bi_i = bi_u16.data() + (size_t)i * (k * n);
+        char* bA = (char*)d_A + (size_t)i * strideA;
+        check_cuda(cudaMemcpy(bA, br_i, planeA, cudaMemcpyHostToDevice), "H2D br");
+        check_cuda(cudaMemcpy(bA + off_A, bi_i, planeA, cudaMemcpyHostToDevice), "H2D bi");
+        const uint16_t* ar_i = ar_u16.data() + (size_t)i * (m * k);
+        const uint16_t* ai_i = ai_u16.data() + (size_t)i * (m * k);
+        char* bB = (char*)d_B + (size_t)i * strideB;
+        check_cuda(cudaMemcpy(bB, ar_i, planeB, cudaMemcpyHostToDevice), "H2D ar");
+        check_cuda(cudaMemcpy(bB + off_B, ai_i, planeB, cudaMemcpyHostToDevice), "H2D ai");
+    }
+
+    // 3. handle + batched planar layouts + desc + preference + heuristic.
+    cublasLtHandle_t h = nullptr;
+    check_cublas(cublasLtCreate(&h), "cublasLtCreate");
+    cublasLtMatrixLayout_t Adesc = nullptr, Bdesc = nullptr, Cdesc = nullptr;
+    make_planar_layout(&Adesc, CUDA_C_16BF, n, k, n, off_A);
+    make_planar_layout(&Bdesc, CUDA_C_16BF, k, m, k, off_B);
+    make_planar_layout(&Cdesc, out_cdtype, n, m, n, off_C);
+    set_batch_attrs(Adesc, batch, strideA, 2);
+    set_batch_attrs(Bdesc, batch, strideB, 2);
+    set_batch_attrs(Cdesc, batch, strideC, bf16_out ? 2 : 4);
+
+    cublasLtMatmulDesc_t desc = nullptr;
+    check_cublas(cublasLtMatmulDescCreate(&desc, CUBLAS_COMPUTE_32F, CUDA_C_32F),
+                 "MatmulDescCreate");
+
+    cublasLtMatmulPreference_t pref = nullptr;
+    check_cublas(cublasLtMatmulPreferenceCreate(&pref), "PreferenceCreate");
+    size_t ws_limit = 64ull * 1024 * 1024;
+    check_cublas(cublasLtMatmulPreferenceSetAttribute(pref,
+        CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &ws_limit, sizeof(ws_limit)),
+        "PreferenceSetAttribute(max_workspace)");
+
+    cublasLtMatmulHeuristicResult_t heur[8];
+    std::memset(heur, 0, sizeof(heur));
+    int returned = 0;
+    cublasStatus_t hs = cublasLtMatmulAlgoGetHeuristic(h, desc,
+        Adesc, Bdesc, Cdesc, Cdesc, pref, 8, heur, &returned);
+    if (hs != CUBLAS_STATUS_SUCCESS || returned == 0) {
+        cublasLtMatmulPreferenceDestroy(pref);
+        cublasLtMatmulDescDestroy(desc);
+        cublasLtMatrixLayoutDestroy(Adesc);
+        cublasLtMatrixLayoutDestroy(Bdesc);
+        cublasLtMatrixLayoutDestroy(Cdesc);
+        cublasLtDestroy(h);
+        cudaFree(d_A); cudaFree(d_B); cudaFree(d_C);
+        char buf[160];
+        std::snprintf(buf, sizeof(buf),
+            "batched cublasLtMatmulAlgoGetHeuristic no algo (status=%s, count=%d)",
+            cublaslt_status_str(hs), returned);
+        throw std::runtime_error(buf);
+    }
+
+    void* workspace = nullptr;
+    size_t ws_size = heur[0].workspaceSize;
+    if (ws_size > 0) check_cuda(cudaMalloc(&workspace, ws_size), "cudaMalloc workspace");
+
+    // 4. Execute one batched matmul (batch carried by the layouts).
+    float alpha[2] = {1.0f, 0.0f};
+    float beta[2] = {0.0f, 0.0f};
+    cublasStatus_t es = cublasLtMatmul(h, desc, alpha,
+        d_A, Adesc, d_B, Bdesc, beta,
+        d_C, Cdesc, d_C, Cdesc,
+        &heur[0].algo, workspace, ws_size, 0 /* default stream */);
+    cudaError_t sync_e = cudaDeviceSynchronize();
+
+    // 5. Download per-batch real/imag planes.
+    py::object cr_arr, ci_arr;
+    if (bf16_out) {
+        py::array_t<uint16_t> cr_u16({batch, m, n}), ci_u16({batch, m, n});
+        for (int i = 0; i < batch; ++i) {
+            char* bC = (char*)d_C + (size_t)i * strideC;
+            uint16_t* cr_i = cr_u16.mutable_data() + (size_t)i * (m * n);
+            uint16_t* ci_i = ci_u16.mutable_data() + (size_t)i * (m * n);
+            cudaMemcpy(cr_i, bC, planeC, cudaMemcpyDeviceToHost);
+            cudaMemcpy(ci_i, bC + off_C, planeC, cudaMemcpyDeviceToHost);
+        }
+        cr_arr = cr_u16;
+        ci_arr = ci_u16;
+    } else {
+        py::array_t<float> cr_f({batch, m, n}), ci_f({batch, m, n});
+        for (int i = 0; i < batch; ++i) {
+            char* bC = (char*)d_C + (size_t)i * strideC;
+            float* cr_i = cr_f.mutable_data() + (size_t)i * (m * n);
+            float* ci_i = ci_f.mutable_data() + (size_t)i * (m * n);
+            cudaMemcpy(cr_i, bC, planeC, cudaMemcpyDeviceToHost);
+            cudaMemcpy(ci_i, bC + off_C, planeC, cudaMemcpyDeviceToHost);
+        }
+        cr_arr = cr_f;
+        ci_arr = ci_f;
+    }
+
+    if (workspace) cudaFree(workspace);
+    cublasLtMatmulPreferenceDestroy(pref);
+    cublasLtMatmulDescDestroy(desc);
+    cublasLtMatrixLayoutDestroy(Adesc);
+    cublasLtMatrixLayoutDestroy(Bdesc);
+    cublasLtMatrixLayoutDestroy(Cdesc);
+    cublasLtDestroy(h);
+    cudaFree(d_A); cudaFree(d_B); cudaFree(d_C);
+
+    check_cublas(es, "cublasLtMatmul");
+    check_cuda(sync_e, "cudaDeviceSynchronize");
+    return py::make_tuple(cr_arr, ci_arr);
+}
+
+// Kernel-only timing for the BATCHED planar-complex BF16 path (Task 7 fair gate).
+// Same amortize-all-setup-once, time-only-cublasLtMatmul+sync discipline as the
+// single-shape kernelonly_timing, extended to batched: alloc batch*stride, pack
+// per batch once, batch attrs on layouts. The timed matmul is ONE call over the
+// whole batch (the fair counterpart of the batched c64 baseline in the driver).
+// Returns {median_ms, algo_id, workspace_bytes, iters, warmup, status}.
+static py::dict planar_complex_matmul_bf16_batched_kernelonly_timing(
+    py::array_t<uint16_t, py::array::c_style> ar_u16,
+    py::array_t<uint16_t, py::array::c_style> ai_u16,
+    py::array_t<uint16_t, py::array::c_style> br_u16,
+    py::array_t<uint16_t, py::array::c_style> bi_u16,
+    int m, int n, int k, int batch,
+    int iters,
+    int warmup)
+{
+    py::dict out;
+    if (batch < 1) batch = 1;
+    if (iters < 1) iters = 1;
+    if (warmup < 0) warmup = 0;
+    bool bf16_out = true;  // timing path is the spec-compliant BF16-out one
+    size_t planeA, planeB, planeC, off_A, off_B, off_C, strideA, strideB, strideC;
+    batched_planar_geom(m, n, k, bf16_out, planeA, planeB, planeC,
+        off_A, off_B, off_C, strideA, strideB, strideC);
+
+    auto check_cuda = [&](cudaError_t e, const char* what) {
+        if (e != cudaSuccess) {
+            throw std::runtime_error(std::string(what) + ": cudaError "
+                + std::to_string((int)e));
+        }
+    };
+    auto check_cublas = [&](cublasStatus_t e, const char* what) {
+        if (e != CUBLAS_STATUS_SUCCESS) {
+            throw std::runtime_error(std::string(what) + ": cublasStatus "
+                + cublaslt_status_str(e));
+        }
+    };
+
+    void *d_A = nullptr, *d_B = nullptr, *d_C = nullptr, *workspace = nullptr;
+    cublasLtHandle_t h = nullptr;
+    cublasLtMatrixLayout_t Adesc = nullptr, Bdesc = nullptr, Cdesc = nullptr;
+    cublasLtMatmulDesc_t desc = nullptr;
+    cublasLtMatmulPreference_t pref = nullptr;
+    cudaEvent_t ev_start = nullptr, ev_stop = nullptr;
+
+    auto teardown = [&]() {
+        if (ev_start) cudaEventDestroy(ev_start);
+        if (ev_stop) cudaEventDestroy(ev_stop);
+        if (pref) cublasLtMatmulPreferenceDestroy(pref);
+        if (desc) cublasLtMatmulDescDestroy(desc);
+        if (Adesc) cublasLtMatrixLayoutDestroy(Adesc);
+        if (Bdesc) cublasLtMatrixLayoutDestroy(Bdesc);
+        if (Cdesc) cublasLtMatrixLayoutDestroy(Cdesc);
+        if (h) cublasLtDestroy(h);
+        if (workspace) cudaFree(workspace);
+        if (d_A) cudaFree(d_A);
+        if (d_B) cudaFree(d_B);
+        if (d_C) cudaFree(d_C);
+    };
+
+    // 1. Allocate + upload BF16 inputs ONCE (batched planar, outside timing).
+    check_cuda(cudaMalloc(&d_A, (size_t)batch * strideA), "cudaMalloc d_A");
+    check_cuda(cudaMalloc(&d_B, (size_t)batch * strideB), "cudaMalloc d_B");
+    check_cuda(cudaMalloc(&d_C, (size_t)batch * strideC), "cudaMalloc d_C");
+    for (int i = 0; i < batch; ++i) {
+        check_cuda(cudaMemcpy((char*)d_A + (size_t)i * strideA,
+            br_u16.data() + (size_t)i * (k * n), planeA, cudaMemcpyHostToDevice), "H2D br");
+        check_cuda(cudaMemcpy((char*)d_A + (size_t)i * strideA + off_A,
+            bi_u16.data() + (size_t)i * (k * n), planeA, cudaMemcpyHostToDevice), "H2D bi");
+        check_cuda(cudaMemcpy((char*)d_B + (size_t)i * strideB,
+            ar_u16.data() + (size_t)i * (m * k), planeB, cudaMemcpyHostToDevice), "H2D ar");
+        check_cuda(cudaMemcpy((char*)d_B + (size_t)i * strideB + off_B,
+            ai_u16.data() + (size_t)i * (m * k), planeB, cudaMemcpyHostToDevice), "H2D ai");
+    }
+
+    // 2-5. handle + batched layouts + desc + preference + ONE heuristic ONCE.
+    check_cublas(cublasLtCreate(&h), "cublasLtCreate");
+    make_planar_layout(&Adesc, CUDA_C_16BF, n, k, n, off_A);
+    make_planar_layout(&Bdesc, CUDA_C_16BF, k, m, k, off_B);
+    make_planar_layout(&Cdesc, CUDA_C_16BF, n, m, n, off_C);
+    set_batch_attrs(Adesc, batch, strideA, 2);
+    set_batch_attrs(Bdesc, batch, strideB, 2);
+    set_batch_attrs(Cdesc, batch, strideC, bf16_out ? 2 : 4);
+    check_cublas(cublasLtMatmulDescCreate(&desc, CUBLAS_COMPUTE_32F, CUDA_C_32F), "MatmulDescCreate");
+    check_cublas(cublasLtMatmulPreferenceCreate(&pref), "PreferenceCreate");
+    size_t ws_limit = 64ull * 1024 * 1024;
+    check_cublas(cublasLtMatmulPreferenceSetAttribute(pref,
+        CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &ws_limit, sizeof(ws_limit)),
+        "PreferenceSetAttribute(max_workspace)");
+
+    cublasLtMatmulHeuristicResult_t heur[8];
+    std::memset(heur, 0, sizeof(heur));
+    int returned = 0;
+    cublasStatus_t hs = cublasLtMatmulAlgoGetHeuristic(h, desc,
+        Adesc, Bdesc, Cdesc, Cdesc, pref, 8, heur, &returned);
+    if (hs != CUBLAS_STATUS_SUCCESS || returned == 0) {
+        teardown();
+        out["status"] = std::string("no algo: ") + cublaslt_status_str(hs);
+        out["median_ms"] = 0.0;
+        out["algo_id"] = -1;
+        out["workspace_bytes"] = (long)0;
+        out["iters"] = iters;
+        out["warmup"] = warmup;
+        out["batch"] = batch;
+        return out;
+    }
+
+    size_t ws_size = heur[0].workspaceSize;
+    if (ws_size > 0) check_cuda(cudaMalloc(&workspace, ws_size), "cudaMalloc workspace");
+
+    int first_id = -1;
+    {
+        int ids[8] = {0};
+        int nb_ids = 0;
+        cublasLtMatmulAlgoGetIds(h, CUBLAS_COMPUTE_32F, CUDA_C_32F,
+            CUDA_C_16BF, CUDA_C_16BF, CUDA_C_16BF, CUDA_C_16BF, 8, ids, &nb_ids);
+        if (nb_ids > 0) first_id = ids[0];
+    }
+
+    check_cuda(cudaEventCreate(&ev_start), "cudaEventCreate start");
+    check_cuda(cudaEventCreate(&ev_stop), "cudaEventCreate stop");
+
+    float alpha[2] = {1.0f, 0.0f};
+    float beta[2] = {0.0f, 0.0f};
+
+    // Warmup: one batched matmul + sync per iteration.
+    for (int i = 0; i < warmup; ++i) {
+        cublasStatus_t es = cublasLtMatmul(h, desc, alpha,
+            d_A, Adesc, d_B, Bdesc, beta,
+            d_C, Cdesc, d_C, Cdesc,
+            &heur[0].algo, workspace, ws_size, 0);
+        if (es != CUBLAS_STATUS_SUCCESS) {
+            teardown();
+            throw std::runtime_error(std::string("batched cublasLtMatmul warmup: ")
+                + cublaslt_status_str(es));
+        }
+    }
+    check_cuda(cudaStreamSynchronize(0), "warmup sync");
+
+    // Timed loop: record -> batched matmul -> record -> sync. Median of iters.
+    std::vector<float> times;
+    times.reserve((size_t)iters);
+    for (int i = 0; i < iters; ++i) {
+        check_cuda(cudaEventRecord(ev_start, 0), "record start");
+        cublasStatus_t es = cublasLtMatmul(h, desc, alpha,
+            d_A, Adesc, d_B, Bdesc, beta,
+            d_C, Cdesc, d_C, Cdesc,
+            &heur[0].algo, workspace, ws_size, 0);
+        check_cuda(cudaEventRecord(ev_stop, 0), "record stop");
+        check_cuda(cudaEventSynchronize(ev_stop), "event sync");
+        if (es != CUBLAS_STATUS_SUCCESS) {
+            teardown();
+            throw std::runtime_error(std::string("batched cublasLtMatmul timed: ")
+                + cublaslt_status_str(es));
+        }
+        float ms = 0.0f;
+        check_cuda(cudaEventElapsedTime(&ms, ev_start, ev_stop), "elapsed");
+        times.push_back(ms);
+    }
+
+    std::sort(times.begin(), times.end());
+    float median_ms = times[times.size() / 2];
+
+    teardown();
+
+    out["median_ms"] = (double)median_ms;
+    out["algo_id"] = first_id;
+    out["workspace_bytes"] = (long)ws_size;
+    out["iters"] = iters;
+    out["warmup"] = warmup;
+    out["batch"] = batch;
+    out["status"] = std::string("OK");
+    return out;
+}
+
+// Grouped-API availability probe: a REAL compile-time check (#ifdef) against the
+// cublasLt.h this extension was built with, plus the legacy-grouped observation.
+// On this toolchain (cuBLAS 12.8.4) cublasLt has NO grouped-3GEMM descriptor API
+// (grep "roup|3gemm" in cublasLt.h returns only "32-column group" doc comments);
+// the only grouped API is legacy cublasGemmGroupedBatchedEx, which has no planar
+// PLANE_OFFSET layout. So heterogeneous grouped planar-complex is not callable ->
+// the grouped route is NOT_SUPPORTED with a CUTLASS/persistent handoff (Task 8).
+static py::dict grouped_api_probe() {
+    py::dict d;
+    d["cublas_version"] = std::to_string(CUBLAS_VER_MAJOR) + "."
+                        + std::to_string(CUBLAS_VER_MINOR) + "."
+                        + std::to_string(CUBLAS_VER_PATCH);
+#ifdef CUBLASLT_MATMUL_DESC_GROUPED3GEMM
+    d["cublaslt_grouped3gemm"] = true;
+#else
+    d["cublaslt_grouped3gemm"] = false;
+#endif
+    // cublasGemmGroupedBatchedEx is declared in cublas_api.h (real-only grouped);
+    // the legacy cublas API has no CUBLASLT_MATRIX_LAYOUT_PLANE_OFFSET, so a
+    // complex grouped matmul would need 4 real grouped calls, losing the planar
+    // fusion that is the whole BF16 leverage under test.
+    d["legacy_grouped_batched_ex"] = true;
+    d["legacy_grouped_planar"] = false;
+    d["reason"] = "cublasLt grouped-3GEMM descriptor API absent in cublasLt.h "
+                  "(see cublas_version; verified by header grep); legacy "
+                  "cublasGemmGroupedBatchedEx present but has no planar-complex "
+                  "(PLANE_OFFSET) layout -> complex needs 4-real grouped calls, "
+                  "losing the planar fusion leverage";
+    return d;
+}
+
 PYBIND11_MODULE(_phase0_cublaslt_ext, m) {
     m.def("smoke_add", &smoke_add);
     m.def("cublaslt_info", &cublaslt_info);
@@ -563,6 +1052,23 @@ PYBIND11_MODULE(_phase0_cublaslt_ext, m) {
           py::arg("ws_limit_bytes") = (long)(64ll * 1024 * 1024),
           py::arg("transa") = std::string("N"),
           py::arg("transb") = std::string("N"));
+    m.def("probe_batched_capability", &probe_batched_capability,
+          py::arg("m"), py::arg("n"), py::arg("k"), py::arg("batch"),
+          py::arg("out_dtype") = std::string("bf16"),
+          py::arg("ws_limit_bytes") = (long)(64ll * 1024 * 1024));
+    m.def("planar_complex_matmul_bf16_batched", &planar_complex_matmul_bf16_batched,
+          py::arg("ar_u16"), py::arg("ai_u16"),
+          py::arg("br_u16"), py::arg("bi_u16"),
+          py::arg("m"), py::arg("n"), py::arg("k"), py::arg("batch"),
+          py::arg("out_dtype") = std::string("bf16"));
+    m.def("planar_complex_matmul_bf16_batched_kernelonly_timing",
+          &planar_complex_matmul_bf16_batched_kernelonly_timing,
+          py::arg("ar_u16"), py::arg("ai_u16"),
+          py::arg("br_u16"), py::arg("bi_u16"),
+          py::arg("m"), py::arg("n"), py::arg("k"), py::arg("batch"),
+          py::arg("iters") = 5,
+          py::arg("warmup") = 3);
+    m.def("grouped_api_probe", &grouped_api_probe);
     m.def("planar_complex_matmul_bf16_kernelonly_timing",
           &planar_complex_matmul_bf16_kernelonly_timing,
           py::arg("ar_u16"), py::arg("ai_u16"),
