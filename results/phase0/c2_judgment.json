@@ -2,17 +2,32 @@
   "n24_d10": {
     "n": 24,
     "depth": 10,
-    "full_state_bytes": 134217728,
-    "c1_large_threshold_bytes": 67108864.0,
-    "state_step_count": 517,
-    "c1_large_count": 45,
-    "c1_large_class_counts": {
-      "tileable-with-pack": 32,
-      "direct-gemm-tileable": 13
+    "fusion": "default",
+    "basis": "hlo_use_def",
+    "edge": {
+      "hlo_value_id": "%custom-call.497",
+      "M": 4096,
+      "N": 16384,
+      "K": 1024,
+      "buffer_bytes": 536870912,
+      "producer_op": "__cublas$gemm",
+      "consumer_ops": "loop_transpose_fusion.2",
+      "traced_through": "get-tuple-element.246.0",
+      "consumer_count": 1
     },
-    "c1_large_tileable_count": 45,
+    "prototype_verdict": "TILE_FUSION_FEASIBLE",
+    "prototype_net_gain_bytes": 536870912,
+    "prototype_occupancy_pct": 100.0,
+    "prototype_latency_ratio_tiled_over_c64": 1.196518686191509,
     "status": "PASS",
-    "reason": ">=1 large buffer tile-fusable with net byte gain",
-    "tile_csv_path": "results/phase0/c2_tileability.csv"
+    "reason": "real HLO edge + prototype TILE_FUSION_FEASIBLE (net gain, correct, no remat, latency/policy)",
+    "conditions": {
+      "1_real_hlo_edge": true,
+      "2_prototype_feasible": true,
+      "3_net_gain": true,
+      "4_correct": true,
+      "5_no_rematerialization": true,
+      "6_latency_or_policy": true
+    }
   }
 }

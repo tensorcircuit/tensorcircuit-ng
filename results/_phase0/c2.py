@@ -1,10 +1,19 @@
-"""C2 tile-mappability classification (review §6.2, Plan A Task 7).
+"""C2 coverage verdict (rereview §5.3, canonical-completion Task 4).
 
-Classifies each materialized contraction edge's tile-mappability so the gonogo
-aggregator (Task 8) can render a C2 verdict. A contraction step is "tile-mappable"
-when its output buffer can be kept on-chip (fused into the consuming GEMM's epilogue
-or recomputed) instead of round-tripping through HBM — the prerequisite for bf16
-Tensor Core engagement via region/tile fusion (spec §8.1).
+TWO paths:
+- CANONICAL (``basis="hlo_use_def"``): ``judge_c2_canonical`` / ``run_c2_canonical`` --
+  the real producer->consumer edge from the production HLO use-def (Task 2) + the region
+  prototype (Task 3). The SOLE writer of ``c2_judgment.json`` consumed by gonogo.
+- INFORMATIONAL (``basis="cotengra_state_heuristic"``, DEMOTED): ``classify_tileability`` /
+  ``judge_c2`` / ``run_c2_integration`` -- the cotengra-state tile-mappability heuristic.
+  NON-FAITHFUL (cotengra is a different contractor than production; see the plan's Global
+  Constraints "contraction contractor"); writes ``c2_cotengra_informational.json`` and is
+  NOT consumed by gonogo.
+
+The classes/heuristic below belong to the INFORMATIONAL path. A contraction step is
+"tile-mappable" when its output buffer can be kept on-chip (fused into the consuming
+GEMM's epilogue or recomputed) instead of round-tripping through HBM -- the prerequisite
+for bf16 Tensor Core engagement via region/tile fusion (spec §8.1).
 
 Five classes (review §6.2):
 - ``direct-gemm-tileable``: single-consumer + GEMM-shaped + all dims 16-aligned
@@ -67,6 +76,11 @@ OUT_DIR = "results/phase0"
 SHAPES_CSV_PATH = f"{OUT_DIR}/contraction_shapes.csv"
 TILE_CSV_PATH = f"{OUT_DIR}/c2_tileability.csv"
 JUDGMENT_JSON_PATH = f"{OUT_DIR}/c2_judgment.json"
+# cotengra-state pipeline demoted to INFORMATIONAL (non-faithful: different contractor than
+# production -- see plan Global Constraints "contraction contractor"). NOT consumed by gonogo.
+COTENGRA_INFO_JSON_PATH = f"{OUT_DIR}/c2_cotengra_informational.json"
+EDGE_MAP_CSV_PATH = f"{OUT_DIR}/c1_c2_edge_map.csv"
+REGION_PROTOTYPE_JSON_PATH = f"{OUT_DIR}/region_prototype.json"
 
 # Tile-fusable classes (review §6.2): a buffer in any of these eliminates its
 # global HBM write/read when fused into the consuming GEMM's tile epilogue.
@@ -247,8 +261,10 @@ def run_c2_integration(n: int = 24, depth: int = 10) -> dict[str, Any]:
     Reads ``results/phase0/contraction_shapes.csv`` (Task 6), filters to ``state``
     rows for ``n``, classifies every state row -> ``results/phase0/c2_tileability.csv``,
     then restricts to C1-large buffers (``bytes >= 0.5 * full_state_bytes``) and
-    writes the C2 judgment to ``results/phase0/c2_judgment.json`` keyed by
-    ``n{n}_d{depth}``.
+    writes the INFORMATIONAL cotengra-state baseline to
+    ``results/phase0/c2_cotengra_informational.json`` (``basis="cotengra_state_heuristic"``;
+    NON-FAITHFUL -- a different contractor than production, so NOT canonical and NOT consumed
+    by gonogo). The canonical C2 verdict is ``run_c2_canonical`` -> ``c2_judgment.json``.
 
     Returns the judgment payload (also written to disk).
     """
@@ -281,6 +297,7 @@ def run_c2_integration(n: int = 24, depth: int = 10) -> dict[str, Any]:
     payload = {
         "n": n,
         "depth": depth,
+        "basis": "cotengra_state_heuristic",  # INFORMATIONAL: non-faithful (different contractor)
         "full_state_bytes": full_state_bytes,
         "c1_large_threshold_bytes": c1_large_threshold,
         "state_step_count": len(state_rows),
@@ -291,7 +308,7 @@ def run_c2_integration(n: int = 24, depth: int = 10) -> dict[str, Any]:
         "reason": judgment["reason"],
         "tile_csv_path": TILE_CSV_PATH,
     }
-    _update_judgment_json(JUDGMENT_JSON_PATH, f"n{n}_d{depth}", payload)
+    _update_judgment_json(COTENGRA_INFO_JSON_PATH, f"n{n}_d{depth}", payload)
     return payload
 
 
@@ -335,6 +352,126 @@ def _update_judgment_json(path: str, key: str, payload: dict[str, Any]) -> None:
     existing[key] = payload
     with open(path, "w") as fh:
         json.dump(existing, fh, indent=2)
+
+
+def _load_edge_map_row(n, depth, fusion):
+    """Read Task 2's c1_c2_edge_map.csv -> the row for (n, depth, fusion), or a
+    consumer_count=0 placeholder if absent (deterministic UNKNOWN driver)."""
+    if not os.path.exists(EDGE_MAP_CSV_PATH):
+        return {
+            "consumer_count": 0,
+            "buffer_bytes": 0,
+            "hlo_value_id": "",
+            "note": "edge_map.csv missing",
+        }
+    with open(EDGE_MAP_CSV_PATH, newline="") as fh:
+        for r in csv.DictReader(fh):
+            if int(r["n"]) == n and int(r["depth"]) == depth and r["fusion"] == fusion:
+                return {
+                    "hlo_value_id": r.get("hlo_value_id", ""),
+                    "M": int(r.get("M", 0)),
+                    "N": int(r.get("N", 0)),
+                    "K": int(r.get("K", 0)),
+                    "buffer_bytes": int(r.get("buffer_bytes", 0)),
+                    "producer_op": r.get("producer_op", ""),
+                    "consumer_ops": r.get("consumer_ops", ""),
+                    "traced_through": r.get("traced_through", ""),
+                    "consumer_count": int(r.get("consumer_count", 0)),
+                }
+    return {
+        "consumer_count": 0,
+        "buffer_bytes": 0,
+        "hlo_value_id": "",
+        "note": "no edge row for case",
+    }
+
+
+def _load_json(path):
+    if not os.path.exists(path):
+        return {}
+    with open(path) as fh:
+        return json.load(fh)
+
+
+_FEASIBLE_VERDICTS = (
+    "TILE_FUSION_FEASIBLE",
+    "TILE_FUSION_MEMORY_FEASIBLE",
+    "FEASIBLE_WITH_RECOMPUTE",
+)
+
+
+def judge_c2_canonical(edge_map_row, prototype):
+    """Canonical C2 verdict from the HLO use-def edge (Task 2) + the region prototype
+    (Task 3), per rereview §5.3. ``basis="hlo_use_def"``. PASS iff a real C1-large anchor
+    maps to a real HLO consumer edge AND the prototype is FEASIBLE with net byte gain, no
+    re-materialized workspace, and the §5.3 #5 latency-or-memory-policy clause holds.
+
+    UNKNOWN when no real edge (or conditions incomplete); FAIL when the prototype is
+    NOT_FEASIBLE. The SOLE source of the canonical ``c2_judgment.json`` verdict.
+    """
+    conds = {
+        "1_real_hlo_edge": int(edge_map_row.get("consumer_count", 0)) >= 1
+        and int(edge_map_row.get("buffer_bytes", 0)) > 0,
+        "2_prototype_feasible": prototype.get("verdict") in _FEASIBLE_VERDICTS,
+        "3_net_gain": bool(prototype.get("net_gain_positive", False)),
+        "4_correct": bool(prototype.get("correct", False)),
+        "5_no_rematerialization": bool(
+            prototype.get("no_full_c_materialized", False)
+            and prototype.get("memory_feasible", False)
+        ),
+    }
+    latency_ratio = float(prototype.get("latency_ratio_tiled_over_c64", 1.0) or 1.0)
+    conds["6_latency_or_policy"] = bool(
+        prototype.get("memory_policy_met", False) or latency_ratio <= 1.0
+    )
+    base = {"basis": "hlo_use_def", "conditions": conds}
+    if not conds["1_real_hlo_edge"]:
+        return {
+            **base,
+            "status": "UNKNOWN",
+            "reason": "no real HLO producer->consumer edge for the C1 anchor",
+        }
+    if prototype.get("verdict") == "NOT_FEASIBLE":
+        return {**base, "status": "FAIL", "reason": "region prototype NOT_FEASIBLE"}
+    if not all(conds.values()):
+        return {
+            **base,
+            "status": "UNKNOWN",
+            "reason": "prototype feasible but conditions incomplete",
+        }
+    return {
+        **base,
+        "status": "PASS",
+        "reason": "real HLO edge + prototype TILE_FUSION_FEASIBLE (net gain, correct, "
+        "no remat, latency/policy)",
+    }
+
+
+def run_c2_canonical(n, depth, fusion="default"):
+    """Canonical C2 verdict from Task 2's HLO edge map + Task 3's region prototype.
+    Writes results/phase0/c2_judgment.json (basis=hlo_use_def) -- the SOLE canonical writer.
+    """
+    edge = _load_edge_map_row(n, depth, fusion)
+    prototype = _load_json(REGION_PROTOTYPE_JSON_PATH)
+    judgment = judge_c2_canonical(edge, prototype)
+    payload = {
+        "n": n,
+        "depth": depth,
+        "fusion": fusion,
+        "basis": judgment["basis"],
+        "edge": edge,
+        "prototype_verdict": prototype.get("verdict"),
+        "prototype_net_gain_bytes": prototype.get("net_gain_bytes"),
+        "prototype_occupancy_pct": prototype.get("occupancy_pct"),
+        "prototype_latency_ratio_tiled_over_c64": prototype.get(
+            "latency_ratio_tiled_over_c64"
+        ),
+        "status": judgment["status"],
+        "reason": judgment["reason"],
+        "conditions": judgment["conditions"],
+    }
+    _update_judgment_json(JUDGMENT_JSON_PATH, f"n{n}_d{depth}", payload)
+    return payload
 
 
 def main() -> None:
