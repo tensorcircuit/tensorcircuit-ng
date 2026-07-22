@@ -2,10 +2,12 @@
   "n": 24,
   "depth": 10,
   "disable_fusion": false,
+  "backend": "gpu",
   "compile_peak_B": 1107477504,
   "compile_peak_before_B": 1024,
-  "runtime_peak_B": 1024,
-  "runtime_peaks_B": [
+  "runtime_peak_B": 1107476216,
+  "post_exec_resident_B": 1024,
+  "post_exec_resident_B_samples": [
     1024,
     1024,
     1024

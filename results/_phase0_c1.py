@@ -79,8 +79,15 @@ def measure_case(n, depth, theta_seed=0.7, disable_fusion=False, repeats=3):
     because jax is already imported by the time this function runs. The worker entry sets the flag before
     ``import jax`` for the no-fusion arm.
 
-    Returns a dict with ``compile_peak_B`` (peak_bytes_in_use after first compile+exec, with compile
-    artifacts resident) and ``runtime_peak_B`` (max bytes_in_use across ``repeats`` steady-state execs).
+    Returns a dict with:
+    - ``compile_peak_B``: ``peak_bytes_in_use`` read after ``.compile()`` + first exec. CUMULATIVE — it
+      includes the first-exec runtime temp — so it is NOT a clean compile-only figure.
+    - ``runtime_peak_B``: the steady-state per-exec runtime materialization peak, taken as
+      ``compiled.memory_analysis().temp_size_in_bytes`` (the XLA-computed max temp the compiled program
+      allocates EVERY execution). This is the meaningful, attributable runtime metric.
+    - ``post_exec_resident_B`` (diagnostic, NOT the peak): max ``bytes_in_use`` sampled before/after each
+      exec. Both samples land when execution is NOT running, so this is the resident arg/output bucket
+      left AFTER the in-exec temp is freed.
     """
     import jax  # lazy: lets worker_main set XLA_FLAGS before jax import in no-fusion arm
     import jax.numpy as jnp
@@ -89,6 +96,7 @@ def measure_case(n, depth, theta_seed=0.7, disable_fusion=False, repeats=3):
     from results._phase0_circuits import expectation_fn
 
     tc.set_backend("jax")
+    backend = jax.default_backend()
     theta = jnp.full(depth * n, theta_seed, dtype=jnp.float32)
     f = expectation_fn(n, depth)
     lowered = f.lower(theta)
@@ -99,19 +107,30 @@ def measure_case(n, depth, theta_seed=0.7, disable_fusion=False, repeats=3):
     compiled = lowered.compile()
     # first exec compiles + leaves compile artifacts resident
     jax.block_until_ready(compiled(theta))
+    # CUMULATIVE peak_bytes_in_use: includes the first-exec runtime temp, so NOT a clean compile-only figure.
     compile_peak = int(dev.memory_stats().get("peak_bytes_in_use", 0))
 
     ma = _record_memory_analysis(compiled)
 
-    # steady-state runtime peak: exec `repeats` times; jax has no per-window reset, so report the
-    # delta-driven peak by comparing bytes_in_use before/after a tight exec loop.
-    runtime_peaks = []
+    # Steady-state runtime peak = XLA-computed max temp the compiled program allocates EVERY execution
+    # (the contraction scratch). This is the attributable per-exec runtime materialization peak. The prior
+    # approach sampled bytes_in_use before/after block_until_ready, but both samples land when execution is
+    # NOT running, so the transient in-exec temp was already freed -> it missed the runtime peak entirely
+    # (review §5.2 sampling artifact).
+    if isinstance(ma, dict) and "temp_size_in_bytes" in ma:
+        runtime_peak = int(ma["temp_size_in_bytes"])
+    else:  # pragma: no cover - defensive (memory_analysis unavailable)
+        runtime_peak = 0
+
+    # Diagnostic only: resident bytes after each exec (NOT the runtime peak). Both samples are taken when
+    # execution is NOT running, so this reports the post-exec resident bucket, not the in-exec temp.
+    post_exec_resident_samples = []
     for _ in range(repeats):
         b0 = int(dev.memory_stats().get("bytes_in_use", 0))
         jax.block_until_ready(compiled(theta))
         b1 = int(dev.memory_stats().get("bytes_in_use", 0))
-        runtime_peaks.append(max(b0, b1))
-    runtime_peak = max(runtime_peaks)
+        post_exec_resident_samples.append(max(b0, b1))
+    post_exec_resident_B = max(post_exec_resident_samples)
 
     fm = "nofusion" if disable_fusion else "default"
     hlo_path = f"{OUT_DIR}/c1_optimized_hlo/n{n}_d{depth}_exp_{fm}.hlo"
@@ -147,10 +166,12 @@ def measure_case(n, depth, theta_seed=0.7, disable_fusion=False, repeats=3):
         "n": n,
         "depth": depth,
         "disable_fusion": bool(disable_fusion),
+        "backend": backend,
         "compile_peak_B": compile_peak,
         "compile_peak_before_B": compile_peak_before,
         "runtime_peak_B": runtime_peak,
-        "runtime_peaks_B": runtime_peaks,
+        "post_exec_resident_B": post_exec_resident_B,
+        "post_exec_resident_B_samples": post_exec_resident_samples,
         "memory_analysis": ma,
         "hlo_path": hlo_path,
         "buffer_assignment_path": ba_path,
