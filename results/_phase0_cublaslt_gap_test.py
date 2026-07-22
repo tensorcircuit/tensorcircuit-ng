@@ -15,9 +15,21 @@ def test_tflops_zero_seconds_safe():
     assert tflops(4096, 4096, 4096, 0.0) == 0.0  # 防除零
 
 
-def test_has_complex_bf16_dtype_returns_bool():
-    assert isinstance(has_complex_bf16_dtype("jax"), bool)
-    assert isinstance(has_complex_bf16_dtype("pytorch"), bool)
+def test_has_complex_bf16_dtype_absent_with_evidence():
+    from results._phase0_cublaslt_gap import has_complex_bf16_dtype
+
+    for be in ("jax", "pytorch"):
+        r = has_complex_bf16_dtype(be)
+        assert r["present"] is False, f"{be}: {r}"
+        assert r["evidence"]  # non-empty reason
+
+
+def test_pair_complex_matmul_hlo_has_four_real_dots():
+    from results._phase0_cublaslt_gap import pair_complex_matmul_hlo
+
+    r = pair_complex_matmul_hlo(m=64)
+    # a complex matmul via the 4-M pair path lowers to 4 real dot_general ops
+    assert r["dot_count"] >= 4, r
 
 
 if __name__ == "__main__":
