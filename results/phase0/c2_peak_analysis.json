@@ -1,0 +1,106 @@
+{
+  "n": 24,
+  "depth": 10,
+  "fusion": "default",
+  "buffer_assignment_path": "results/phase0/c1_xla_dump/n24_d10_default/module_0005.jit_f.sm_12.0_gpu_after_optimizations-buffer-assignment.txt",
+  "arena_allocation_id": 11,
+  "arena_allocation_size": 1107476216,
+  "arena_peak_live_bytes": 1107389712,
+  "arena_peak_t": 1514,
+  "arena_top_live_at_peak": [
+    {
+      "name": "loop_transpose_fusion.2",
+      "si": "",
+      "bytes": 536870912
+    },
+    {
+      "name": "custom-call.498",
+      "si": "0",
+      "bytes": 536870912
+    },
+    {
+      "name": "custom-call.498",
+      "si": "1",
+      "bytes": 33554432
+    },
+    {
+      "name": "loop_transpose_fusion.63",
+      "si": "",
+      "bytes": 32768
+    },
+    {
+      "name": "custom-call.310",
+      "si": "0",
+      "bytes": 24576
+    },
+    {
+      "name": "custom-call.351",
+      "si": "0",
+      "bytes": 18944
+    },
+    {
+      "name": "custom-call.254",
+      "si": "0",
+      "bytes": 13824
+    },
+    {
+      "name": "wrapped_convert",
+      "si": "",
+      "bytes": 1920
+    }
+  ],
+  "P_in_peak_live_set": false,
+  "T_in_peak_live_set": true,
+  "peak_reduction_if_P_eliminated": 0,
+  "peak_reduction_if_T_eliminated": 32128,
+  "peak_reduction_if_P_and_T_eliminated": 32128,
+  "peak_after_full_PTE_fusion": 1107357584,
+  "verdict_hint": "PTE_FUSION_NO_CLEAR_MEMORY_BENEFIT",
+  "all_allocations": {
+    "0": {
+      "size": 960,
+      "kind": "parameter 0, shape |f32[240]| at ShapeIndex {}",
+      "peak_live": 960
+    },
+    "4": {
+      "size": 128,
+      "kind": "constant",
+      "peak_live": 128
+    },
+    "5": {
+      "size": 128,
+      "kind": "constant",
+      "peak_live": 128
+    },
+    "6": {
+      "size": 128,
+      "kind": "constant",
+      "peak_live": 128
+    },
+    "7": {
+      "size": 128,
+      "kind": "constant",
+      "peak_live": 128
+    },
+    "8": {
+      "size": 8,
+      "kind": "output shape is |c64[]|, maybe-live-out",
+      "peak_live": 8
+    },
+    "9": {
+      "size": 32,
+      "kind": "constant",
+      "peak_live": 32
+    },
+    "10": {
+      "size": 32,
+      "kind": "constant",
+      "peak_live": 32
+    },
+    "11": {
+      "size": 1107476216,
+      "kind": "preallocated-temp",
+      "peak_live": 1107389712
+    }
+  }
+}
