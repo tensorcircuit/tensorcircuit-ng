@@ -32,6 +32,8 @@ import json
 import os
 import re
 import sys
+import threading
+import time
 
 # NOTE: jax is NOT imported at module top so the worker can set XLA_FLAGS first. ``measure_case`` does a
 # lazy ``import jax`` / ``import tensorcircuit`` inside the function body.
@@ -87,9 +89,11 @@ def measure_case(n, depth, theta_seed=0.7, disable_fusion=False, repeats=3):
     Returns a dict with:
     - ``compile_peak_B``: ``peak_bytes_in_use`` read after ``.compile()`` + first exec. CUMULATIVE — it
       includes the first-exec runtime temp — so it is NOT a clean compile-only figure.
-    - ``runtime_peak_B``: the steady-state per-exec runtime materialization peak, taken as
-      ``compiled.memory_analysis().temp_size_in_bytes`` (the XLA-computed max temp the compiled program
-      allocates EVERY execution). This is the meaningful, attributable runtime metric.
+    - ``planned_temp_bytes``: the XLA-computed max temp the compiled program allocates EVERY execution
+      (``compiled.memory_analysis().temp_size_in_bytes``). STATIC planned figure, NOT a runtime measurement
+      (rereview §4.2 — three identical values here do not evidence runtime stability).
+    - ``runtime_peak_sampled_bytes``: BEST-EFFORT dynamic peak — ``bytes_in_use`` polled on a background
+      thread DURING exec (labeled a sample; may undercount the in-exec apex).
     - ``post_exec_resident_B`` (diagnostic, NOT the peak): max ``bytes_in_use`` sampled before/after each
       exec. Both samples land when execution is NOT running, so this is the resident arg/output bucket
       left AFTER the in-exec temp is freed.
@@ -117,25 +121,48 @@ def measure_case(n, depth, theta_seed=0.7, disable_fusion=False, repeats=3):
 
     ma = _record_memory_analysis(compiled)
 
-    # Steady-state runtime peak = XLA-computed max temp the compiled program allocates EVERY execution
-    # (the contraction scratch). This is the attributable per-exec runtime materialization peak. The prior
-    # approach sampled bytes_in_use before/after block_until_ready, but both samples land when execution is
-    # NOT running, so the transient in-exec temp was already freed -> it missed the runtime peak entirely
-    # (review §5.2 sampling artifact).
+    # planned_temp_bytes = XLA-computed max temp the compiled program allocates EVERY execution
+    # (temp_size_in_bytes). RENAMED from runtime_peak_B (rereview §4.2): this is the STATIC planned
+    # figure, NOT a runtime measurement -- three identical values here do NOT evidence 3-run runtime
+    # stability. The dynamic sample below (runtime_peak_sampled_bytes) is the actual runtime read.
     if isinstance(ma, dict) and "temp_size_in_bytes" in ma:
-        runtime_peak = int(ma["temp_size_in_bytes"])
+        planned_temp = int(ma["temp_size_in_bytes"])
     else:  # pragma: no cover - defensive (memory_analysis unavailable)
-        runtime_peak = 0
+        planned_temp = 0
 
-    # Diagnostic only: resident bytes after each exec (NOT the runtime peak). Both samples are taken when
-    # execution is NOT running, so this reports the post-exec resident bucket, not the in-exec temp.
+    # runtime_peak_sampled_bytes: BEST-EFFORT dynamic peak -- poll bytes_in_use on a background
+    # thread DURING exec (catches the in-exec temp that before/after sampling misses). Labeled a
+    # SAMPLE (may undercount if polling misses the apex). post_exec_resident_B stays as the
+    # between-exec diagnostic. (rereview §4.2 split of planned vs runtime.)
+    runtime_peak_samples: list[int] = []
+    _stop = threading.Event()
+
+    def _poll_inuse() -> None:
+        while not _stop.is_set():
+            try:
+                runtime_peak_samples.append(
+                    int(dev.memory_stats().get("bytes_in_use", 0))
+                )
+            except Exception:  # pragma: no cover - defensive: concurrent device query
+                pass
+            time.sleep(0.0005)
+
+    _thr = threading.Thread(target=_poll_inuse, daemon=True)
+    _thr.start()
     post_exec_resident_samples = []
-    for _ in range(repeats):
-        b0 = int(dev.memory_stats().get("bytes_in_use", 0))
-        jax.block_until_ready(compiled(theta))
-        b1 = int(dev.memory_stats().get("bytes_in_use", 0))
-        post_exec_resident_samples.append(max(b0, b1))
+    try:
+        for _ in range(repeats):
+            b0 = int(dev.memory_stats().get("bytes_in_use", 0))
+            jax.block_until_ready(compiled(theta))
+            b1 = int(dev.memory_stats().get("bytes_in_use", 0))
+            post_exec_resident_samples.append(max(b0, b1))
+    finally:
+        _stop.set()
+        _thr.join(timeout=2.0)
     post_exec_resident_B = max(post_exec_resident_samples)
+    runtime_peak_sampled_bytes = (
+        max(runtime_peak_samples) if runtime_peak_samples else post_exec_resident_B
+    )
 
     fm = "nofusion" if disable_fusion else "default"
     hlo_path = f"{OUT_DIR}/c1_optimized_hlo/n{n}_d{depth}_exp_{fm}.hlo"
@@ -174,7 +201,8 @@ def measure_case(n, depth, theta_seed=0.7, disable_fusion=False, repeats=3):
         "backend": backend,
         "compile_peak_B": compile_peak,
         "compile_peak_before_B": compile_peak_before,
-        "runtime_peak_B": runtime_peak,
+        "planned_temp_bytes": planned_temp,
+        "runtime_peak_sampled_bytes": runtime_peak_sampled_bytes,
         "post_exec_resident_B": post_exec_resident_B,
         "post_exec_resident_B_samples": post_exec_resident_samples,
         "memory_analysis": ma,
@@ -250,13 +278,13 @@ def judge_c1(
         materialized_buffer_bytes >= 0.5 * state_bytes
     )
     # 4 NOT XLA-eliminated: default-arm peak retains >= half of no-fusion peak (see docstring)
-    pd = default_result.get("runtime_peak_B", 0)
-    pn = nofusion_result.get("runtime_peak_B", 0)
+    pd = default_result.get("planned_temp_bytes", 0)
+    pn = nofusion_result.get("planned_temp_bytes", 0)
     conds["4_not_xla_eliminated"] = (pd > 0) and (pd >= 0.5 * pn)
     # 5 executable (caller ensures not crash/OOM); mark UNKNOWN if peak is 0
     conds["5_executable"] = pd > 0
     # 6 3x stable: runtime_peak consistent within 5% across the repeats arm
-    peaks = [r.get("runtime_peak_B", 0) for r in repeats_results]
+    peaks = [r.get("planned_temp_bytes", 0) for r in repeats_results]
     if peaks:
         conds["6_repeat_stable"] = min(peaks) >= 0.95 * max(peaks)
     else:
@@ -301,7 +329,7 @@ def judge_c1(
 
 
 def _median_run(runs):
-    """Pick the run whose ``runtime_peak_B`` is the median of the 3. Falls back to the first run.
+    """Pick the run whose ``planned_temp_bytes`` is the median of the 3. Falls back to the first run.
 
     ``runs`` may be either a list of result dicts or a list of ``(config, result)`` pairs (the
     orchestrator pairs configs with results positionally; the pair form preserves ``theta_seed``).
@@ -315,7 +343,7 @@ def _median_run(runs):
         results = list(runs)
     if len(results) == 1:
         return results[0]
-    peak_sorted = sorted(results, key=lambda r: r.get("runtime_peak_B", 0))
+    peak_sorted = sorted(results, key=lambda r: r.get("planned_temp_bytes", 0))
     return peak_sorted[len(peak_sorted) // 2]
 
 
@@ -329,7 +357,7 @@ def _median_theta_seed(runs):
         return None
     if len(pairs) == 1:
         return pairs[0][0].get("theta_seed")
-    peak_sorted = sorted(pairs, key=lambda pr: pr[1].get("runtime_peak_B", 0))
+    peak_sorted = sorted(pairs, key=lambda pr: pr[1].get("planned_temp_bytes", 0))
     return peak_sorted[len(peak_sorted) // 2][0].get("theta_seed")
 
 
@@ -355,6 +383,36 @@ def _append_csv_row(path, header, row):
         if new:
             w.writerow(header)
         w.writerow(row)
+
+
+def upsert_csv_row(path, row, columns, key_cols=None):
+    """UPSERT ``row`` (a dict) into the CSV at ``path`` keyed by ``key_cols``.
+
+    If a row whose ``key_cols`` values already match, it is REPLACED in place; otherwise
+    the row is appended. The whole file is rewritten with ``columns`` as the header
+    (rereview §4.3: rerun must never append a duplicate case row). ``key_cols`` defaults
+    to ``columns[:-1]`` (the case identity; the last column is the measured value).
+    """
+    if key_cols is None:
+        key_cols = columns[:-1]
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    existing: list[dict] = []
+    if os.path.exists(path) and os.path.getsize(path) > 0:
+        with open(path, newline="") as fh:
+            existing = list(csv.DictReader(fh))
+    replaced = False
+    for i, e in enumerate(existing):
+        if all(str(e.get(k)) == str(row.get(k, "")) for k in key_cols):
+            existing[i] = {c: row.get(c, e.get(c, "")) for c in columns}
+            replaced = True
+            break
+    if not replaced:
+        existing.append({c: row.get(c, "") for c in columns})
+    with open(path, "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=columns)
+        w.writeheader()
+        for e in existing:
+            w.writerow({c: e.get(c, "") for c in columns})
 
 
 def _update_judgment_json(path, key, payload):
@@ -451,7 +509,7 @@ def run_c1_ab(n, depth, theta_seeds=(0.7, 0.8, 0.9)):
 
     Each arm is a fresh subprocess (XLA_FLAGS set in ``worker_main`` BEFORE ``import jax`` for the
     no-fusion arm), orchestrated via ``results._phase0.common.orchestrate``. The median run (by
-    ``runtime_peak_B``) of each arm is fed to ``judge_c1``; the 3 default runs become
+    ``planned_temp_bytes``) of each arm is fed to ``judge_c1``; the 3 default runs become
     ``repeats_results`` for the 3x-stable check (condition 6).
 
     Writes one row per (n, depth) to ``results/phase0/c1_default_vs_nofusion.csv`` and merges the
@@ -487,8 +545,8 @@ def run_c1_ab(n, depth, theta_seeds=(0.7, 0.8, 0.9)):
     nofusion_median_theta = _median_theta_seed(nofusion_pairs)
 
     full_state_bytes = (2**n) * 8
-    pd_peak = int(default_median.get("runtime_peak_B", 0))
-    pn_peak = int(nofusion_median.get("runtime_peak_B", 0))
+    pd_peak = int(default_median.get("planned_temp_bytes", 0))
+    pn_peak = int(nofusion_median.get("planned_temp_bytes", 0))
     materialized_buffer_bytes = pd_peak
 
     # Condition-2 evidence (review §5.4): parse the DEFAULT arm's optimized HLO text for the
@@ -541,7 +599,9 @@ def run_c1_ab(n, depth, theta_seeds=(0.7, 0.8, 0.9)):
         full_state_bytes,
         judgment["status"],
     ]
-    _append_csv_row(AB_CSV_PATH, csv_header, csv_row)
+    upsert_csv_row(
+        AB_CSV_PATH, dict(zip(csv_header, csv_row)), csv_header, key_cols=["n", "depth"]
+    )
 
     payload = {
         "n": n,
@@ -551,9 +611,11 @@ def run_c1_ab(n, depth, theta_seeds=(0.7, 0.8, 0.9)):
         "ratio_nofusion_default": ratio,
         "full_state_bytes": full_state_bytes,
         "largest_materialized_hlo_bytes": largest_materialized_hlo_bytes,
-        "default_run_peaks_B": [int(r.get("runtime_peak_B", 0)) for r in default_runs],
+        "default_run_peaks_B": [
+            int(r.get("planned_temp_bytes", 0)) for r in default_runs
+        ],
         "nofusion_run_peaks_B": [
-            int(r.get("runtime_peak_B", 0)) for r in nofusion_runs
+            int(r.get("planned_temp_bytes", 0)) for r in nofusion_runs
         ],
         "default_failed": [
             {"config": r.get("config"), "outcome": r.get("outcome")}

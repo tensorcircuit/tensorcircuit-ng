@@ -4,7 +4,7 @@ from results._phase0.c1 import judge_c1
 
 
 def test_c1_pass_when_all_conditions_met():
-    r = {"runtime_peak_B": 2**24 * 8, "full_state_bytes": 2**24 * 8}  # 1.0x state
+    r = {"planned_temp_bytes": 2**24 * 8, "full_state_bytes": 2**24 * 8}  # 1.0x state
     j = judge_c1(
         default_result=r,
         nofusion_result=r,
@@ -16,7 +16,7 @@ def test_c1_pass_when_all_conditions_met():
 
 
 def test_c1_fail_when_buffer_below_half_state():
-    r = {"runtime_peak_B": 1000, "full_state_bytes": 2**24 * 8}
+    r = {"planned_temp_bytes": 1000, "full_state_bytes": 2**24 * 8}
     j = judge_c1(
         default_result=r,
         nofusion_result=r,
@@ -29,11 +29,11 @@ def test_c1_fail_when_buffer_below_half_state():
 
 
 def test_c1_unknown_when_repeats_unstable():
-    r = {"runtime_peak_B": 2**24 * 8, "full_state_bytes": 2**24 * 8}
+    r = {"planned_temp_bytes": 2**24 * 8, "full_state_bytes": 2**24 * 8}
     unstable = [
-        {"runtime_peak_B": 2**24 * 8},
-        {"runtime_peak_B": 1000},
-        {"runtime_peak_B": 2**24 * 8},
+        {"planned_temp_bytes": 2**24 * 8},
+        {"planned_temp_bytes": 1000},
+        {"planned_temp_bytes": 2**24 * 8},
     ]
     j = judge_c1(
         default_result=r,
@@ -43,6 +43,48 @@ def test_c1_unknown_when_repeats_unstable():
         optimized_hlo_has_materialized=True,
     )
     assert j["status"] == "UNKNOWN"
+
+
+def test_audit_finds_anchor_buffer():
+    """GPU integration: the optimized HLO must expose the 512 MiB anchor buffer."""
+    from results._phase0.c1_buffer_audit import audit_buffer_assignment
+
+    a = audit_buffer_assignment(24, 10, "default")
+    anchor = [b for b in a["buffers"] if b["is_anchor"]]
+    assert len(anchor) == 1, a
+    assert anchor[0]["buffer_bytes"] == 4096 * 16384 * 8  # 512 MiB
+    assert anchor[0]["shape"] == [4096, 16384]
+
+
+def test_measure_case_splits_planned_and_runtime_peak():
+    """GPU integration: measure_case must split the static planned temp from a
+    sampled runtime peak (rereview §4.2 — the static figure is NOT 3-run stability)."""
+    from results._phase0.c1 import measure_case
+
+    r = measure_case(24, 10, disable_fusion=False)
+    assert "planned_temp_bytes" in r and "runtime_peak_sampled_bytes" in r
+    assert r["planned_temp_bytes"] == 1107476216  # the known static figure
+    assert r["runtime_peak_sampled_bytes"] > 0
+
+
+def test_c1_csv_upsert_no_duplicate(tmp_path):
+    """upsert_csv_row must UPSERT on the key columns, never append a duplicate case."""
+    from results._phase0.c1 import upsert_csv_row
+    import csv
+
+    p = str(tmp_path / "x.csv")
+    upsert_csv_row(
+        p,
+        {"n": 24, "depth": 10, "fusion": "default", "peak": 1},
+        ["n", "depth", "fusion", "peak"],
+    )
+    upsert_csv_row(
+        p,
+        {"n": 24, "depth": 10, "fusion": "default", "peak": 2},
+        ["n", "depth", "fusion", "peak"],
+    )
+    rows = list(csv.DictReader(open(p)))
+    assert len(rows) == 1 and int(rows[0]["peak"]) == 2  # upsert, not append
 
 
 if __name__ == "__main__":
