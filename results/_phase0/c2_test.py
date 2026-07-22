@@ -99,19 +99,15 @@ def test_judge_c2_canonical_fail_not_feasible():
     assert j["status"] == "FAIL", j
 
 
-def test_run_c2_canonical_integration_pass():
-    """File-based: reads Task 2 edge_map.csv + Task 3 region_prototype.json -> canonical PASS."""
-    import json
-
+def test_run_c2_canonical_currently_unknown_pending_real_prototype():
+    """C2 is UNKNOWN until Task C (real two-stage prototype) + Task D (bound, fail-closed
+    gate) land. The Task B edge-map schema separates producer/consumer buffers, so the
+    not-yet-rewritten gate fail-closes (no producer buffer bytes on the edge row)."""
     from results._phase0.c2 import run_c2_canonical
 
     j = run_c2_canonical(24, 10, "default")
     assert j["basis"] == "hlo_use_def", j
-    assert j["status"] == "PASS", j
-    with open("results/phase0/c2_judgment.json") as fh:
-        d = json.load(fh)
-    assert d["n24_d10"]["basis"] == "hlo_use_def"
-    assert d["n24_d10"]["status"] == "PASS"
+    assert j["status"] == "UNKNOWN", j
 
 
 if __name__ == "__main__":

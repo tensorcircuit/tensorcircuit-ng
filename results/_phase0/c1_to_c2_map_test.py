@@ -1,51 +1,101 @@
-"""Tests for the C1 anchor -> HLO SSA producer/consumer edge map (rereview §5.2)."""
+"""Tests for the C1 anchor -> real contraction consumer edge map (correction-plan Task B).
 
-SYNTH_HLO = """
-%p.a = c64[4096,1024]{1,0} parameter(0)
-%p.b = c64[1024,16384]{1,0} parameter(1)
-%custom-call.497 = (c64[4096,16384]{1,0}, s8[33554432]{0}) custom-call(%p.a, %p.b), custom_call_target="__cublas$gemm", api=3
-%get-tuple-element.5 = c64[4096,16384]{1,0} get-tuple-element(%custom-call.497), index=0
-%bitcast.5337 = c64[2,2,4,256,2,2,2,2048]{7,6,5,4,3,2,1,0} bitcast(%get-tuple-element.5)
-ROOT %fused_transpose.2 = c64[4,2,2,2,2,256,2,2048]{7,6,5,4,3,2,1,0} fusion(%bitcast.5337), kind=kLoop, calls=%fused_transpose.2
+The production region is a TWO-STAGE GEMM; the mapper must PIERCE layout-only fusions
+(bitcast/transpose/reshape bodies) to reach the true terminal contraction consumer, not
+stop at the first fusion.
+"""
+
+# --- synthetic fixtures for fusion classification ---
+
+# Layout-only fusion body (parameter + transpose) -> the fusion is a passthrough.
+SYNTH_LAYOUT_FUSION = """
+%p = c64[4,4] parameter(0)
+%cc = (c64[4,4]{1,0}, s8[1]{0}) custom-call(%p, %p), custom_call_target="__cublas$gemm"
+%gte = c64[4,4] get-tuple-element(%cc), index=0
+%lf = c64[4,4] fusion(%gte), kind=kLoop, calls=%layout_comp
+%bc = c64[4,4] bitcast(%lf)
+ROOT %sink = c64[4,4] add(%bc, %bc)
+%layout_comp (x: c64[4,4]) -> c64[4,4] {
+  %x = c64[4,4] parameter(0)
+  ROOT %t = c64[4,4] transpose(%x), dimensions={1,0}
+}
+"""
+
+# Compute fusion body (add) -> the fusion is a terminal compute consumer.
+SYNTH_COMPUTE_FUSION = """
+%p = c64[4,4] parameter(0)
+%cc = (c64[4,4]{1,0}, s8[1]{0}) custom-call(%p, %p), custom_call_target="__cublas$gemm"
+%gte = c64[4,4] get-tuple-element(%cc), index=0
+%cf = c64[4,4] fusion(%gte), kind=kLoop, calls=%compute_comp
+ROOT %sink = c64[4,4] add(%cf, %cf)
+%compute_comp (x: c64[4,4]) -> c64[4,4] {
+  %x = c64[4,4] parameter(0)
+  ROOT %t = c64[4,4] add(%x, %x)
+}
 """
 
 
-def test_mnk_from_operands():
-    """K is derived from the custom-call operand shapes (A=[M,K], B=[K,N])."""
-    from results._phase0.c1_to_c2_map import _mnk_from_custom_call
+def test_classify_layout_fusion_is_passthrough():
+    from results._phase0.c1_to_c2_map import _build_computation_bodies, _classify_fusion
 
-    M, N, K = _mnk_from_custom_call(SYNTH_HLO, "%custom-call.497")
-    assert (M, N, K) == (4096, 16384, 1024)
+    bodies = _build_computation_bodies(SYNTH_LAYOUT_FUSION)
+    assert _classify_fusion("%layout_comp", bodies) == "layout_passthrough"
 
 
-def test_build_edge_map_finds_anchor_consumer():
-    """The anchor's real consumer is recovered by tracing SSA use-def through
-    passthrough ops (get-tuple-element, bitcast) to a terminal consumer (fusion)."""
+def test_classify_compute_fusion_is_terminal():
+    from results._phase0.c1_to_c2_map import _build_computation_bodies, _classify_fusion
+
+    bodies = _build_computation_bodies(SYNTH_COMPUTE_FUSION)
+    assert _classify_fusion("%compute_comp", bodies) == "compute_consumer"
+
+
+def test_layout_fusion_is_pierced():
     from results._phase0.c1_to_c2_map import build_c1_edge_map
 
-    edges = build_c1_edge_map(SYNTH_HLO, "%custom-call.497")
-    assert len(edges) == 1, edges
-    e = edges[0]
-    assert e["hlo_value_id"] == "%custom-call.497"
-    assert (e["M"], e["N"], e["K"]) == (4096, 16384, 1024)
-    assert e["buffer_bytes"] == 4096 * 16384 * 8  # 512 MiB
-    assert e["consumer_count"] == 1
-    assert any("fused_transpose.2" in c for c in e["consumer_ops"])
-    assert "get-tuple-element.5" in e["traced_through"]
-    assert "bitcast.5337" in e["traced_through"]
+    rec = build_c1_edge_map(SYNTH_LAYOUT_FUSION, "%cc")[0]
+    # pierces the layout fusion + bitcast; terminal is the add sink
+    assert "gte" in rec["passthrough_hlo_ids"]
+    assert "lf" in rec["passthrough_hlo_ids"]
+    assert "bc" in rec["passthrough_hlo_ids"]
+    assert rec["terminal_consumer_hlo_value_id"] == "%sink"
 
 
-def test_map_anchor_for_case_real_hlo():
-    """Integration over the real n=24/d=10/default HLO + Task 1 audit JSON.
-    File-based (no GPU): the production anchor %custom-call.497 must map to >=1 consumer.
+def test_compute_fusion_is_terminal():
+    from results._phase0.c1_to_c2_map import build_c1_edge_map
+
+    rec = build_c1_edge_map(SYNTH_COMPUTE_FUSION, "%cc")[0]
+    # compute fusion stops the trace; it IS the terminal consumer
+    assert "gte" in rec["passthrough_hlo_ids"]
+    assert rec["terminal_consumer_hlo_value_id"] == "%cf"
+
+
+def test_map_anchor_for_case_real_hlo_two_stage_region():
+    """Real n=24 HLO: the anchor's true terminal consumer is the second GEMM .498,
+    reached by piercing the layout fusion (loop_transpose_fusion.2 -> fused_transpose.2).
     """
     from results._phase0.c1_to_c2_map import map_anchor_for_case
 
-    e = map_anchor_for_case(24, 10, "default")
-    assert e["hlo_value_id"] == "%custom-call.497", e
-    assert (e["M"], e["N"]) == (4096, 16384), e
-    assert e["buffer_bytes"] == 4096 * 16384 * 8, e
-    assert e["consumer_count"] >= 1, e
+    rec = map_anchor_for_case(24, 10, "default")
+    assert rec["producer_hlo_value_id"] == "%custom-call.497", rec
+    assert (rec["producer_M"], rec["producer_N"], rec["producer_K"]) == (
+        4096,
+        16384,
+        1024,
+    ), rec
+    # the layout fusion + its operands are PIERCED (passthrough), not terminal
+    pt = rec["passthrough_hlo_ids"]
+    assert "get-tuple-element.246.0" in pt, pt
+    assert "loop_transpose_fusion.2" in pt, pt
+    assert "bitcast.1317.0" in pt, pt
+    # the TRUE terminal consumer is the second GEMM .498, not the layout fusion
+    assert rec["terminal_consumer_hlo_value_id"] == "%custom-call.498", rec
+    # E = D[64,64] @ T[64,1048576] -> c64[64,1048576] (another 512 MiB output)
+    assert (rec["consumer_M"], rec["consumer_N"], rec["consumer_K"]) == (
+        64,
+        1048576,
+        64,
+    ), rec
+    assert rec["consumer_output_bytes"] == 64 * 1048576 * 8, rec
 
 
 if __name__ == "__main__":

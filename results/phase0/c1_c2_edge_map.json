@@ -1,0 +1,22 @@
+{
+  "cases": {
+    "n24_d10": {
+      "producer_hlo_value_id": "%custom-call.497",
+      "producer_M": 4096,
+      "producer_N": 16384,
+      "producer_K": 1024,
+      "producer_output_bytes": 536870912,
+      "passthrough_hlo_ids": [
+        "get-tuple-element.246.0",
+        "loop_transpose_fusion.2",
+        "bitcast.1317.0"
+      ],
+      "terminal_consumer_hlo_value_id": "%custom-call.498",
+      "consumer_count": 1,
+      "consumer_M": 64,
+      "consumer_N": 1048576,
+      "consumer_K": 64,
+      "consumer_output_bytes": 536870912
+    }
+  }
+}
