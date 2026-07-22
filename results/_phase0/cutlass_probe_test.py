@@ -192,3 +192,34 @@ def test_single_4m_sm80_has_resource_and_latency():
     assert r["latency"]["kernelonly_median_us"] > 0
     assert r["latency"]["c64_baseline_us"] > 0
     assert r["latency"]["ko_ratio_vs_c64"] > 0  # c64_us / 4m_us (fair kernel-only both)
+
+
+def test_load_grouped_shapes_filters_real_gemm(monkeypatch, tmp_path):
+    """GPU-free: load_grouped_shapes picks the real-gemm (min dim>=16), distinct,
+    heterogeneous subset from the contraction CSV. Skinny shapes (e.g. 2x2x2) are
+    dropped; duplicates collapse; coverage (subset/total) is recorded by
+    run_grouped, not here."""
+    import cutlass_probe
+
+    csv = tmp_path / "contraction_shapes.csv"
+    csv.write_text("M,N,K\n2,2,2\n1024,1024,1024\n16384,1024,1024\n64,64,64\n")
+    monkeypatch.setattr(cutlass_probe, "_CONTRACTION_SHAPES_CSV", str(csv))
+    shapes = cutlass_probe.load_grouped_shapes()
+    ms = [(s["M"], s["N"], s["K"]) for s in shapes]
+    assert all(min(m) >= 16 for m in ms)  # real-gemm floor
+    assert len(set(ms)) == len(ms)  # distinct (heterogeneous)
+    assert (2, 2, 2) not in ms  # skinny dropped
+
+
+@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + nvcc_spike + CUTLASS_ROOT")
+def test_run_grouped_returns_valid_status():
+    """Grouped GEMM either runs+passes correctness, or returns a clean
+    NOT_SUPPORTED/BLOCKED — all three are legitimate verdicts per spec §9."""
+    import cutlass_probe
+
+    shapes = cutlass_probe.load_grouped_shapes()
+    g = cutlass_probe.run_grouped(shapes)
+    assert g["status"] in ("SUPPORTED", "NOT_SUPPORTED", "BLOCKED"), g
+    assert "coverage" in g and g["coverage"]["shapes_total"] == len(shapes)
+    if g["status"] == "SUPPORTED":
+        assert g["correctness"]["gate_pass"] is True

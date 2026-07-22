@@ -369,11 +369,244 @@ std::tuple<at::Tensor, at::Tensor> cutlass_4m_sm120(
 #define HAS_CUTLASS_4M_SM120 0
 #endif  // CUTLASS_ENABLE_SM120_4M
 
+// ============================================================================
+// Task 5 (final-remediation): CUTLASS 2.x GemmGrouped over a heterogeneous
+// shape set — the Task 7 cuBLAS-gap handoff. cuBLAS LtMatmul had no grouped
+// planar-complex path for heterogeneous shapes; this probe wires the CUTLASS
+// 2.x device::GemmGrouped (arch::Sm80 — the only BF16-viable grouped path on
+// sm_120, since 3.x Sm100/Sm120 grouped either won't instantiate at __CUDA_ARCH__
+// ==1200 or hard-gate to F8F6F4) to run the 4-real-GEMM complex decomposition
+// (ReC=ReA.ReB-ImA.ImB ; ImC=ReA.ImB+ImA.ReB) over G groups of distinct
+// (M,K,N) per group. Built only when -DCUTLASS_ENABLE_GROUPED_4M=1 is passed.
+// If this fails to compile or instantiate for sm_120, build_extension raises
+// and run_grouped returns status=BLOCKED (legitimate verdict per spec §9).
+// ============================================================================
+#if defined(CUTLASS_ENABLE_GROUPED_4M)
+#include <cstring>
+#include <vector>
+#include "cutlass/gemm/kernel/default_gemm_grouped.h"
+#include "cutlass/gemm/kernel/gemm_grouped.h"
+#include "cutlass/gemm/device/gemm_grouped.h"
+
+// 2.x GemmGrouped configuration: BF16 A/B, FP32 accumulate + FP32 output,
+// RowMajor throughout (matches the proven single-4m cutlass_4m_sm80 layout).
+// Alignment 8 for BF16 inputs, 4 for FP32 output (128/sizeof_bits).
+constexpr int kGroupedAlignA = 128 / cutlass::sizeof_bits<cutlass::bfloat16_t>::value;  // 8
+constexpr int kGroupedAlignB = 128 / cutlass::sizeof_bits<cutlass::bfloat16_t>::value;  // 8
+constexpr int kGroupedAlignC = 128 / cutlass::sizeof_bits<float>::value;                 // 4
+
+using GroupedEpilogue = cutlass::epilogue::thread::LinearCombination<
+    float, kGroupedAlignC, float, float>;
+
+using GroupedGemmKernel = typename cutlass::gemm::kernel::DefaultGemmGrouped<
+    cutlass::bfloat16_t, cutlass::layout::RowMajor,
+    cutlass::ComplexTransform::kNone, kGroupedAlignA,
+    cutlass::bfloat16_t, cutlass::layout::RowMajor,
+    cutlass::ComplexTransform::kNone, kGroupedAlignB,
+    float, cutlass::layout::RowMajor,
+    float,
+    cutlass::arch::OpClassTensorOp, cutlass::arch::Sm80,
+    cutlass::gemm::GemmShape<128, 128, 32>,
+    cutlass::gemm::GemmShape<64, 64, 32>,
+    cutlass::gemm::GemmShape<16, 8, 16>,
+    GroupedEpilogue,
+    cutlass::gemm::threadblock::GemmBatchedIdentityThreadblockSwizzle,
+    4>::GemmKernel;
+
+using GroupedGemm = cutlass::gemm::device::GemmGrouped<GroupedGemmKernel>;
+
+// Local status-name helper (cutlass_status_name in the Sm100 block is not
+// visible unless CUTLASS_ENABLE_SM100_4M is also defined — this keeps the
+// grouped block self-contained).
+static const char* grouped_status_name(cutlass::Status s) {
+  switch (s) {
+    case cutlass::Status::kSuccess:                return "kSuccess";
+    case cutlass::Status::kErrorMisalignedOperand: return "kErrorMisalignedOperand";
+    case cutlass::Status::kErrorInvalidDataType:   return "kErrorInvalidDataType";
+    case cutlass::Status::kErrorInvalidLayout:     return "kErrorInvalidLayout";
+    case cutlass::Status::kErrorInvalidProblem:    return "kErrorInvalidProblem";
+    case cutlass::Status::kErrorNotSupported:      return "kErrorNotSupported";
+    case cutlass::Status::kErrorWorkspaceNull:     return "kErrorWorkspaceNull";
+    case cutlass::Status::kErrorInternal:          return "kErrorInternal";
+    case cutlass::Status::kErrorArchMismatch:      return "kErrorArchMismatch";
+    case cutlass::Status::kErrorMemoryAllocation:  return "kErrorMemoryAllocation";
+    default:                                       return "kInvalid";
+  }
+}
+
+// Copy a host int64 vector to a device int64 tensor (for ptr arrays + lda/ldb/ldc/ldd).
+static at::Tensor _grouped_int64_to_device(const std::vector<int64_t>& host) {
+  auto cpu = at::empty({(int64_t)host.size()},
+                       at::TensorOptions().dtype(at::kLong).device(at::kCPU));
+  std::memcpy(cpu.data_ptr<int64_t>(), host.data(), host.size() * sizeof(int64_t));
+  return cpu.to(at::kCUDA, /*non_blocking=*/false);
+}
+
+// Build the device-side pointer-to-pointer array from a list of device tensors.
+// Each int64 holds a device pointer; on the device this re-interprets as Element**.
+static at::Tensor _grouped_ptrs_to_device(const std::vector<at::Tensor>& ts) {
+  std::vector<int64_t> p(ts.size());
+  for (size_t i = 0; i < ts.size(); ++i) p[i] = (int64_t)ts[i].data_ptr();
+  return _grouped_int64_to_device(p);
+}
+
+// One real GemmGrouped pass: out = alpha * (A_pass . B_pass) + beta * out, across all G groups.
+// ptr_A / ptr_B select the input list; ptr_C and ptr_D point at the same output buffer
+// (in-place accumulate). alpha/beta are uniform across groups.
+static cutlass::Status _grouped_pass(
+    int G, int threadblock_count,
+    cutlass::gemm::GemmCoord* problem_sizes_device,
+    cutlass::gemm::GemmCoord* problem_sizes_host,
+    const at::Tensor& ptr_A_dev, const at::Tensor& ptr_B_dev,
+    const at::Tensor& ptr_C_dev,
+    const at::Tensor& lda_dev, const at::Tensor& ldb_dev,
+    const at::Tensor& ldc_dev, const at::Tensor& ldd_dev,
+    float alpha, float beta, void* workspace, cudaStream_t stream) {
+  GroupedGemm op;
+  typename GroupedGemm::EpilogueOutputOp::Params epilogue_op{alpha, beta};
+  typename GroupedGemm::Arguments args(
+      problem_sizes_device, G, threadblock_count, epilogue_op,
+      reinterpret_cast<cutlass::bfloat16_t**>(ptr_A_dev.data_ptr<int64_t>()),
+      reinterpret_cast<cutlass::bfloat16_t**>(ptr_B_dev.data_ptr<int64_t>()),
+      reinterpret_cast<float**>(ptr_C_dev.data_ptr<int64_t>()),
+      reinterpret_cast<float**>(ptr_C_dev.data_ptr<int64_t>()),
+      lda_dev.data_ptr<int64_t>(), ldb_dev.data_ptr<int64_t>(),
+      ldc_dev.data_ptr<int64_t>(), ldd_dev.data_ptr<int64_t>(),
+      problem_sizes_host);
+  cutlass::Status st = op.initialize(args, workspace, stream);
+  if (st != cutlass::Status::kSuccess) return st;
+  return op.run(stream);
+}
+
+// Grouped 4M complex matmul over G heterogeneous groups. Per group g:
+//   ReC_g = +ReA_g.ReB_g - ImA_g.ImB_g ; ImC_g = +ReA_g.ImB_g + ImA_g.ReB_g
+// Implemented as 4 real GemmGrouped passes over all G groups; passes 2/4
+// accumulate (beta=+1) into the ReC/ImC buffers filled by passes 1/3.
+// Returns (ReC_list, ImC_list) — per-group FP32 CUDA tensors of shape (M_g, N_g).
+std::tuple<std::vector<at::Tensor>, std::vector<at::Tensor>>
+cutlass_grouped_4m(
+    const std::vector<at::Tensor>& ReA_list,
+    const std::vector<at::Tensor>& ImA_list,
+    const std::vector<at::Tensor>& ReB_list,
+    const std::vector<at::Tensor>& ImB_list) {
+  TORCH_CHECK(!ReA_list.empty(), "cutlass_grouped_4m: empty ReA_list");
+  int G = (int)ReA_list.size();
+  TORCH_CHECK((int)ImA_list.size() == G && (int)ReB_list.size() == G &&
+              (int)ImB_list.size() == G,
+              "cutlass_grouped_4m: all four input lists must have the same length");
+  for (int g = 0; g < G; ++g) {
+    TORCH_CHECK(ReA_list[g].is_cuda() && ReA_list[g].dtype() == at::kBFloat16,
+                "cutlass_grouped_4m: ReA[", g, "] must be CUDA BF16");
+  }
+  cudaStream_t stream = c10::cuda::getCurrentCUDAStream().stream();
+
+  // Per-group problem sizes + leading dims + output buffers.
+  std::vector<cutlass::gemm::GemmCoord> problem_sizes_host(G);
+  std::vector<int64_t> lda_h(G), ldb_h(G), ldc_h(G), ldd_h(G);
+  std::vector<at::Tensor> ReC_list(G), ImC_list(G);
+  for (int g = 0; g < G; ++g) {
+    int M = (int)ReA_list[g].size(0), K = (int)ReA_list[g].size(1);
+    int N = (int)ReB_list[g].size(1);
+    TORCH_CHECK((int)ImA_list[g].size(0) == M && (int)ImA_list[g].size(1) == K,
+                "cutlass_grouped_4m: ImA[", g, "] shape must match ReA");
+    TORCH_CHECK((int)ReB_list[g].size(0) == K, "cutlass_grouped_4m: ReB[", g, "] rows must equal K");
+    TORCH_CHECK((int)ImB_list[g].size(0) == K && (int)ImB_list[g].size(1) == N,
+                "cutlass_grouped_4m: ImB[", g, "] shape must match ReB");
+    problem_sizes_host[g] = cutlass::gemm::GemmCoord(M, N, K);
+    lda_h[g] = K;  // RowMajor A stride
+    ldb_h[g] = N;  // RowMajor B stride
+    ldc_h[g] = N;  // RowMajor C stride
+    ldd_h[g] = N;
+    ReC_list[g] = at::empty({M, N}, at::dtype(at::kFloat).device(at::kCUDA));
+    ImC_list[g] = at::empty({M, N}, at::dtype(at::kFloat).device(at::kCUDA));
+  }
+
+  // SM occupancy check — returns 0 if the kernel can't run on this device.
+  int threadblock_count = GroupedGemm::sufficient(problem_sizes_host.data(), G);
+  TORCH_CHECK(threadblock_count > 0,
+              "cutlass_grouped_4m: GroupedGemm::sufficient returned 0 "
+              "(SM occupancy / hw constraint on this device)");
+
+  // Copy problem_sizes to device (GemmCoord is trivially copyable, 12 bytes).
+  auto ps_cpu = at::empty({(int64_t)(G * sizeof(cutlass::gemm::GemmCoord))},
+                          at::TensorOptions().dtype(at::kByte).device(at::kCPU));
+  std::memcpy(ps_cpu.data_ptr(), problem_sizes_host.data(),
+              G * sizeof(cutlass::gemm::GemmCoord));
+  at::Tensor ps_dev = ps_cpu.to(at::kCUDA);
+  cutlass::gemm::GemmCoord* problem_sizes_device =
+      reinterpret_cast<cutlass::gemm::GemmCoord*>(ps_dev.data_ptr());
+
+  at::Tensor lda_dev = _grouped_int64_to_device(lda_h);
+  at::Tensor ldb_dev = _grouped_int64_to_device(ldb_h);
+  at::Tensor ldc_dev = _grouped_int64_to_device(ldc_h);
+  at::Tensor ldd_dev = _grouped_int64_to_device(ldd_h);
+
+  at::Tensor ptr_ReA = _grouped_ptrs_to_device(ReA_list);
+  at::Tensor ptr_ImA = _grouped_ptrs_to_device(ImA_list);
+  at::Tensor ptr_ReB = _grouped_ptrs_to_device(ReB_list);
+  at::Tensor ptr_ImB = _grouped_ptrs_to_device(ImB_list);
+  at::Tensor ptr_ReC = _grouped_ptrs_to_device(ReC_list);
+  at::Tensor ptr_ImC = _grouped_ptrs_to_device(ImC_list);
+
+  // Workspace: same shapes across all 4 passes, so size once with a probe Arguments.
+  typename GroupedGemm::EpilogueOutputOp::Params probe_epilogue{1.0f, 0.0f};
+  typename GroupedGemm::Arguments probe_args(
+      problem_sizes_device, G, threadblock_count, probe_epilogue,
+      reinterpret_cast<cutlass::bfloat16_t**>(ptr_ReA.data_ptr<int64_t>()),
+      reinterpret_cast<cutlass::bfloat16_t**>(ptr_ReB.data_ptr<int64_t>()),
+      reinterpret_cast<float**>(ptr_ReC.data_ptr<int64_t>()),
+      reinterpret_cast<float**>(ptr_ReC.data_ptr<int64_t>()),
+      lda_dev.data_ptr<int64_t>(), ldb_dev.data_ptr<int64_t>(),
+      ldc_dev.data_ptr<int64_t>(), ldd_dev.data_ptr<int64_t>(),
+      problem_sizes_host.data());
+  size_t ws_bytes = GroupedGemm::get_workspace_size(probe_args);
+  at::Tensor workspace = at::empty({(int64_t)ws_bytes},
+                                   at::TensorOptions().dtype(at::kByte).device(at::kCUDA));
+  void* ws_ptr = ws_bytes ? workspace.data_ptr() : nullptr;
+
+  // Pass 1: ReC = +1*(ReA.ReB) + 0*ReC
+  cutlass::Status st = _grouped_pass(
+      G, threadblock_count, problem_sizes_device, problem_sizes_host.data(),
+      ptr_ReA, ptr_ReB, ptr_ReC, lda_dev, ldb_dev, ldc_dev, ldd_dev,
+      +1.0f, 0.0f, ws_ptr, stream);
+  TORCH_CHECK(st == cutlass::Status::kSuccess,
+              "cutlass_grouped_4m pass 1 (ReC=ReA.ReB) failed: ", grouped_status_name(st));
+  // Pass 2: ReC = -1*(ImA.ImB) + 1*ReC
+  st = _grouped_pass(
+      G, threadblock_count, problem_sizes_device, problem_sizes_host.data(),
+      ptr_ImA, ptr_ImB, ptr_ReC, lda_dev, ldb_dev, ldc_dev, ldd_dev,
+      -1.0f, +1.0f, ws_ptr, stream);
+  TORCH_CHECK(st == cutlass::Status::kSuccess,
+              "cutlass_grouped_4m pass 2 (ReC-=ImA.ImB) failed: ", grouped_status_name(st));
+  // Pass 3: ImC = +1*(ReA.ImB) + 0*ImC
+  st = _grouped_pass(
+      G, threadblock_count, problem_sizes_device, problem_sizes_host.data(),
+      ptr_ReA, ptr_ImB, ptr_ImC, lda_dev, ldb_dev, ldc_dev, ldd_dev,
+      +1.0f, 0.0f, ws_ptr, stream);
+  TORCH_CHECK(st == cutlass::Status::kSuccess,
+              "cutlass_grouped_4m pass 3 (ImC=ReA.ImB) failed: ", grouped_status_name(st));
+  // Pass 4: ImC = +1*(ImA.ReB) + 1*ImC
+  st = _grouped_pass(
+      G, threadblock_count, problem_sizes_device, problem_sizes_host.data(),
+      ptr_ImA, ptr_ReB, ptr_ImC, lda_dev, ldb_dev, ldc_dev, ldd_dev,
+      +1.0f, +1.0f, ws_ptr, stream);
+  TORCH_CHECK(st == cutlass::Status::kSuccess,
+              "cutlass_grouped_4m pass 4 (ImC+=ImA.ReB) failed: ", grouped_status_name(st));
+
+  return {ReC_list, ImC_list};
+}
+
+#define HAS_CUTLASS_GROUPED_4M 1
+#else
+#define HAS_CUTLASS_GROUPED_4M 0
+#endif  // CUTLASS_ENABLE_GROUPED_4M
+
 // Exposed to Python so _attempt_sm100_then_sm80 can distinguish "build
 // succeeded but the Sm100 path was compiled out" (guard never set) from a
 // real Sm100 kernel being present.
 bool has_sm100() { return HAS_CUTLASS_4M_SM100; }
 bool has_sm120() { return HAS_CUTLASS_4M_SM120; }
+bool has_grouped_4m() { return HAS_CUTLASS_GROUPED_4M; }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("probe", &probe, "CUTLASS build smoke");
@@ -383,6 +616,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
           "whether the 3.x Sm100 4M kernel compiled into this build");
     m.def("has_sm120", &has_sm120,
           "whether the native 3.x Sm120 4M kernel compiled into this build");
+    m.def("has_grouped_4m", &has_grouped_4m,
+          "whether the 2.x GemmGrouped 4M kernel compiled into this build");
     m.def("cutlass_4m_sm100",
           [](at::Tensor a, at::Tensor b, at::Tensor c, at::Tensor d)
               -> std::tuple<at::Tensor, at::Tensor> {
@@ -403,4 +638,15 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 #endif
           },
           "3.x Sm120 planar-complex 4M GEMM (compile-guarded, consumer Blackwell)");
+    m.def("cutlass_grouped_4m",
+          [](std::vector<at::Tensor> ReA, std::vector<at::Tensor> ImA,
+             std::vector<at::Tensor> ReB, std::vector<at::Tensor> ImB)
+              -> std::tuple<std::vector<at::Tensor>, std::vector<at::Tensor>> {
+#if HAS_CUTLASS_GROUPED_4M
+              return cutlass_grouped_4m(ReA, ImA, ReB, ImB);
+#else
+              TORCH_CHECK(false, "grouped 4M not enabled in this build");
+#endif
+          },
+          "2.x GemmGrouped planar-complex 4M over heterogeneous shapes (Task 5)");
 }
