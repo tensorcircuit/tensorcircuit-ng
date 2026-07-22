@@ -6,8 +6,9 @@ from typing import Any, Tuple, List
 
 import numpy as np
 
+from .. import gates
+
 Tensor = Any
-Array = Any
 
 
 def get_ps(qo: Any, n: int) -> Tuple[Tensor, Tensor]:
@@ -22,7 +23,7 @@ def get_ps(qo: Any, n: int) -> Tuple[Tensor, Tensor]:
     :return: Pauli String array and weights array
     :rtype: Tuple[Tensor, Tensor]
     """
-    value = {"X": 1, "Y": 2, "Z": 3}
+    value = gates.PAULI_CHAR_TO_INDEX
     terms = qo.terms
     res = []
     wts = []

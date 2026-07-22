@@ -771,17 +771,6 @@ def _algebraic_base_contraction(
     return final_node
 
 
-def _get_path(
-    nodes: List[tn.Node], algorithm: Any
-) -> Tuple[List[Tuple[int, int]], List[tn.Node]]:
-    nodes = list(nodes)
-    input_sets = [set([id(e) for e in node.edges]) for node in nodes]
-    output_set = set([id(e) for e in tn.get_subgraph_dangling(nodes)])
-    size_dict = {id(edge): edge.dimension for edge in tn.get_all_edges(nodes)}
-
-    return algorithm(input_sets, output_set, size_dict), nodes
-
-
 def _identity(*args: Any, **kws: Any) -> Any:
     return args
 

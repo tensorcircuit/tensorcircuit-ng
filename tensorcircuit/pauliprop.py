@@ -511,7 +511,7 @@ def pauli_propagation(
         and len(observable) > 0
         and isinstance(observable[0], tuple)
     ):
-        map_char = {"I": 0, "X": 1, "Y": 2, "Z": 3}
+        map_char = gates.PAULI_CHAR_TO_INDEX
         num_terms = len(observable)
         structures = np.zeros((num_terms, N), dtype=int)
         weights_arr = np.zeros(num_terms, dtype=np.complex64)
