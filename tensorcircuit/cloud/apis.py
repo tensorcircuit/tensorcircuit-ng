@@ -188,6 +188,13 @@ def _write_auth_file(path: str, tokens: Dict[str, str]) -> None:
             pass
 
 
+# Process-local session token overrides (key -> token), where key is
+# ``"<provider>::"`` or ``"<provider>::<device>"``. This is the session layer
+# on top of the disk-backed auth file: it holds only tokens explicitly set via
+# ``set_token`` in this process (including ``cached=False`` writes), never a
+# mirror of disk. Readers must not rebind this global; ``get_token`` falls back
+# to disk when a key is absent here, so in-place mutations (e.g. ``patch.dict``
+# in tests) survive across ``get_token`` calls.
 saved_token: Dict[str, Any] = {}
 
 
@@ -257,15 +264,15 @@ def set_token(
                 logger.warning("token file removal failure: %s", e)
         return saved_token
     if token is None:
-        # pure read path: refresh in-memory cache from disk, never write back.
-        # writing back on import / get_token is what used to truncate the auth
-        # file under multiprocessing (each worker re-dumped a stale snapshot).
+        # pure read: return the merged view of disk + session overrides.
+        # Never write back to disk here: writing back on import / get_token is
+        # what used to truncate the auth file under multiprocessing (each
+        # worker re-dumped a stale snapshot).
         file_token = _read_auth_file(authpath)
         file_token.update(saved_token)
-        saved_token = file_token
-        return saved_token
-    # with token: merge the single new entry into the freshest on-disk state
-    # and persist atomically, so concurrent processes can't clobber each other.
+        return file_token
+    # with token: write the session override layer first (so get_token can read
+    # it even when cached=False), then optionally persist to disk.
     if isinstance(provider, str):
         provider = Provider.from_name(provider)
     if device is None:
@@ -279,11 +286,13 @@ def set_token(
         if provider is None:
             provider = default_provider
         key = provider.name + sep + device.name  # type: ignore
-    file_token = _read_auth_file(authpath)
-    file_token[key] = token
-    saved_token = file_token
+    saved_token[key] = token
     if cached:
-        _write_auth_file(authpath, saved_token)
+        # merge the new entry into the freshest on-disk state and persist
+        # atomically, so concurrent processes can't clobber each other.
+        file_token = _read_auth_file(authpath)
+        file_token[key] = token
+        _write_auth_file(authpath, file_token)
     return saved_token
 
 
@@ -315,18 +324,23 @@ def get_token(
     if device is not None:
         device = Device.from_name(device, provider)
         target = target + device.name
-    # env var override (not persisted): single token, or per-provider token
+    # 1. env var override (process-scoped, never persisted): single token,
+    #    or per-provider token.
     env_token = os.environ.get("TC_TOKEN")
     if env_token is None:
         env_token = os.environ.get("TC_TOKEN_" + provider.name.upper())
     if env_token is not None:
         return env_token
-    # ensure in-memory cache is fresh with whatever is on disk right now
-    global saved_token
-    saved_token = _read_auth_file(_auth_path())
-    for k, v in saved_token.items():
-        if k == target:
-            return v  # type: ignore
+    # 2. session override (in-memory, process-scoped, set via set_token).
+    #    Read-only here: never rebind the global, so in-place mutations
+    #    (e.g. patch.dict in tests) survive across get_token calls, and
+    #    cached=False writes remain visible to readers.
+    if target in saved_token:
+        return saved_token[target]  # type: ignore
+    # 3. disk (persistent, shared across processes); read-only.
+    file_token = _read_auth_file(_auth_path())
+    if target in file_token:
+        return file_token[target]  # type: ignore
     return None
 
 
