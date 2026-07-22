@@ -11,6 +11,7 @@ from types import ModuleType, SimpleNamespace
 from typing import Any, Dict, List, Optional
 from unittest.mock import patch
 
+import numpy as np
 import pytest
 
 import tensorcircuit as tc
@@ -165,6 +166,44 @@ def test_unsupported_qir_gate_fails_without_fallback() -> None:
 
     with pytest.raises(ValueError, match="Unsupported gate"):
         tianyan._tc_qir_to_qcis(circuit)
+
+
+@requires_cqlib
+def test_aliased_and_decomposed_gates_convert() -> None:
+    # QIR emits the canonical names toffoli/fredkin rather than ccx/cswap
+    circuit = tc.Circuit(3)
+    circuit.ccx(0, 1, 2)
+    circuit.cy(0, 1)
+    circuit.iswap(1, 2)
+    circuit.cswap(0, 1, 2)
+    circuit.measure_instruction(0, 1, 2)
+
+    source = tianyan._tc_qir_to_qcis(circuit)
+
+    assert "Unsupported" not in source
+    assert source.splitlines()[-1].startswith("M ")
+
+
+@requires_cqlib
+def test_gate_decompositions_match_tc_simulation() -> None:
+    def unitary(build: Any, n: int) -> Any:
+        cols = []
+        for i in range(2**n):
+            c = tc.Circuit(n)
+            for q in range(n):
+                if (i >> (n - 1 - q)) & 1:
+                    c.x(q)
+            build(c)
+            cols.append(tc.backend.numpy(c.state()))
+        return np.array(cols).T
+
+    iswap_ref = unitary(lambda c: c.iswap(0, 1), 2)
+    iswap_dec = unitary(lambda c: (c.cz(0, 1), c.s(0), c.s(1), c.swap(0, 1)), 2)
+    np.testing.assert_allclose(iswap_ref, iswap_dec, atol=1e-5)
+
+    fredkin_ref = unitary(lambda c: c.fredkin(0, 1, 2), 3)
+    fredkin_dec = unitary(lambda c: (c.cx(2, 1), c.ccx(0, 1, 2), c.cx(2, 1)), 3)
+    np.testing.assert_allclose(fredkin_ref, fredkin_dec, atol=1e-5)
 
 
 def test_get_task_details_queries_once_and_returns_pending() -> None:

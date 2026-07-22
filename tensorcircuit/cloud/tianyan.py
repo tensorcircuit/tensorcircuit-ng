@@ -242,8 +242,21 @@ def _tc_qir_to_qcis(circuit: AbstractCircuit) -> str:
             cqlib_circuit.cz(index[0], index[1])
         elif name == "swap":
             cqlib_circuit.swap(index[0], index[1])
-        elif name == "ccx":
+        elif name == "cy":
+            cqlib_circuit.cy(index[0], index[1])
+        elif name == "iswap":
+            # iswap = swap * (s (x) s) * cz
+            cqlib_circuit.cz(index[0], index[1])
+            cqlib_circuit.s(index[0])
+            cqlib_circuit.s(index[1])
+            cqlib_circuit.swap(index[0], index[1])
+        elif name in ("toffoli", "ccx"):
             cqlib_circuit.ccx(index[0], index[1], index[2])
+        elif name in ("fredkin", "cswap"):
+            # cswap(a, b, c) = cx(c, b); ccx(a, b, c); cx(c, b)
+            cqlib_circuit.cx(index[2], index[1])
+            cqlib_circuit.ccx(index[0], index[1], index[2])
+            cqlib_circuit.cx(index[2], index[1])
         else:
             raise ValueError("Unsupported gate for cqlib.Circuit: %s" % name)
 
@@ -438,7 +451,7 @@ def list_properties(device: Device, token: Optional[str] = None) -> Dict[str, An
     # (compatible with tencent provider format)
     _standardize_properties(properties)
 
-    # Native gates supported by the TensorCircuit-to-QCIS conversion path;
+    # Gates supported by the TensorCircuit-to-QCIS conversion path;
     # QCIS sources supplied directly may use the full cqlib gate set
     properties["native_gates"] = [
         "h",
@@ -449,9 +462,12 @@ def list_properties(device: Device, token: Optional[str] = None) -> Dict[str, An
         "ry",
         "rz",
         "cx",
+        "cy",
         "cz",
         "swap",
+        "iswap",
         "ccx",
+        "cswap",
         "s",
         "sd",
         "t",
