@@ -1,0 +1,26 @@
+{
+  "shape": [
+    4096,
+    16384,
+    1024
+  ],
+  "correctness_shape": [
+    128,
+    128,
+    32
+  ],
+  "materialized_peak_bytes": 704643072,
+  "fused_peak_bytes": 169869312,
+  "c_buffer_bytes": 536870912,
+  "delta_bytes": 534773760,
+  "fused_sum": 2061348.25,
+  "materialized_sum": 2061348.0,
+  "torch_ref_sum": 2061348.25,
+  "rel_diff_fused_vs_ref": 0.0,
+  "rel_diff_materialized_vs_ref": 1.2127984681870227e-07,
+  "memory_feasible": true,
+  "correct": true,
+  "verdict": "TILE_FUSION_MEMORY_FEASIBLE",
+  "basis": "hlo_use_def_anchor_shape",
+  "note": "minimal viable subset: naive per-element fused complex-GEMM kernel; peak via raw allocation accounting on the real shape; correctness on a small shape. Deferred: tiled/shared-mem realization, occupancy, pack/recompute/conversion bytes, latency vs c64."
+}
