@@ -18,10 +18,12 @@ try:
     from cqlib import TianYanPlatform
     from cqlib.quantum_platform import QuantumLanguage
     from cqlib.utils import QasmToQcis
+    from cqlib.circuits import Circuit as CqlibCircuit
 except ImportError:
     TianYanPlatform = None  # type: ignore
     QuantumLanguage = None  # type: ignore
     QasmToQcis = None  # type: ignore
+    CqlibCircuit = None  # type: ignore
 
 _SIMULATOR_DEVICES = {"tianyan_sw", "tianyan_s", "tianyan_tn"}
 _REQUIRED_PLATFORM_ATTRIBUTES = (
@@ -179,7 +181,6 @@ def _tc_qir_to_qcis(circuit: AbstractCircuit) -> str:
     measure_instructions.sort(key=lambda inst: inst.get("record_index", 0))
 
     _assert_cqlib()
-    from cqlib.circuits import Circuit as CqlibCircuit
 
     # Collect all logical qubits used
     all_logical_qubits = set()
@@ -193,7 +194,7 @@ def _tc_qir_to_qcis(circuit: AbstractCircuit) -> str:
 
     sorted_logical = sorted(all_logical_qubits)
 
-    cqlib_circuit = CqlibCircuit(qubits=sorted_logical)
+    cqlib_circuit = CqlibCircuit(qubits=sorted_logical)  # type: ignore
 
     for inst in qir:
         name = inst.get("name", "").lower()

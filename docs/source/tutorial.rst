@@ -35,4 +35,3 @@ Jupyter Tutorials
     tutorials/distributed_simulation.ipynb
     tutorials/qcloud_sdk_demo.ipynb
     tutorials/tianyan_cloud.ipynb
-    tutorials/tianyan_cloud_reference.md

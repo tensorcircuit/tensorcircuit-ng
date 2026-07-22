@@ -3,9 +3,10 @@
 Install TensorCircuit-NG and ``cqlib>=1.3.10,<1.4``, then set the
 ``TC_TOKEN_TIANYAN`` environment variable before running this script (the
 cloud token system picks it up automatically). The simulator examples run by
-default. Set ``TIANYAN_RUN_HARDWARE=1`` to opt into the real-device example.
+default; pass ``--hardware`` to also opt into the real-device example.
 """
 
+import argparse
 import os
 
 import tensorcircuit as tc
@@ -24,9 +25,16 @@ def _bell_circuit() -> tc.Circuit:
 
 def main() -> None:
     """Run simulator workflows and optionally submit to real hardware."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--hardware",
+        action="store_true",
+        help="also submit a task to the real device",
+    )
+    args = parser.parse_args()
+
     if not os.getenv("TC_TOKEN_TIANYAN"):
         raise RuntimeError("Set TC_TOKEN_TIANYAN before running this example")
-    run_hardware = os.getenv("TIANYAN_RUN_HARDWARE") == "1"
 
     tc.cloud.apis.set_provider("tianyan")
 
@@ -56,11 +64,8 @@ def main() -> None:
     qcis_task = tc.cloud.apis.submit_task(source=qcis, device=simulator, shots=100)
     print(f"\nDirect QCIS result: {qcis_task.results(blocked=True)}")
 
-    if not run_hardware:
-        print(
-            "\nReal-device submission skipped. "
-            "Set TIANYAN_RUN_HARDWARE=1 to enable it."
-        )
+    if not args.hardware:
+        print("\nReal-device submission skipped. Pass --hardware to enable it.")
         return
 
     real_device = tc.cloud.apis.get_device(f"tianyan::{REAL_DEVICE}")

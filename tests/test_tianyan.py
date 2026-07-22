@@ -26,6 +26,7 @@ CLOUD_TESTS_ENABLED = (
 HARDWARE_TESTS_ENABLED = (
     CLOUD_TESTS_ENABLED and os.getenv("TC_CLOUD_HARDWARE_TEST") == "1"
 )
+# stand-in for cqlib's QuantumLanguage enum, used to patch it in offline tests
 FAKE_QUANTUM_LANGUAGE = SimpleNamespace(QCIS="QCIS")
 
 SIMULATOR = "tianyan_sw"  # full-amplitude simulator, no topology constraints
