@@ -99,15 +99,49 @@ def _bf16_cuda(t):
 def run_single_4m(kernel_path: str, shapes, seeds=(0, 1, 2)) -> dict:
     """Run CUTLASS single 4M GEMM on `shapes` x `seeds`, compare to c64 reference.
 
-    kernel_path in {"sm80_fallback", "sm100_native"}. For "sm100_native" the
-    3.x Blackwell Sm100 GEMM is attempted via a separate build (extra define
-    CUTLASS_ENABLE_SM100_4M=1); on any failure it transparently falls back to
-    the proven 2.x Sm80 path and records `sm100_blocker`. Returns correctness
-    plus resource and latency measured on the largest shape (Task 3).
+    kernel_path in {"sm80_fallback", "sm100_native", "sm120_native"}.
+      * "sm120_native" — native consumer-Blackwell (arch::Sm120) attempt; falls
+        back to sm80 on any failure (records `sm120_blocker`).
+      * "sm100_native" — datacenter-Blackwell (arch::Sm100) attempt; falls back
+        to sm80 on any failure (records `sm100_blocker`).
+      * "sm80_fallback" — proven 2.x Ampere-era MMA path (ko_ratio ~2.71x at
+        1024^3).
+
+    Returns correctness plus resource and latency measured on the largest shape
+    (Task 3).
     """
+    if kernel_path == "sm120_native":
+        return _attempt_sm120_then_sm80(shapes, seeds)
     if kernel_path == "sm100_native":
         return _attempt_sm100_then_sm80(shapes, seeds)
     return _run_sm80(shapes, seeds)
+
+
+def _attempt_sm120_then_sm80(shapes, seeds) -> dict:
+    """Genuine attempt at the native Sm120 (consumer Blackwell, RTX 5070 Ti)
+    4M path; fall back to Sm80 on any failure.
+
+    CUTLASS_ARCH_MMA_SM120_ENABLED fires at __CUDA_ARCH__==1200 (our GPU), so
+    unlike Sm100 this is the *correct* native arch tag. However CUTLASS 3.x's
+    Sm120 collective builder is documented F8F6F4-only (FP8/FP6/FP4); a BF16
+    instantiation typically fails to compile — recorded verbatim as
+    sm120_blocker. Built under a SEPARATE torch extension name so failure
+    cannot poison the cached sm80 build.
+    """
+    try:
+        mod = build_extension(
+            name="cutlass_4m_sm120",
+            extra_defines=["-DCUTLASS_ENABLE_SM120_4M=1"],
+        )
+        if not hasattr(mod, "has_sm120") or not mod.has_sm120():
+            raise RuntimeError(
+                "HAS_CUTLASS_4M_SM120=0 after build "
+                "(CUTLASS_ARCH_MMA_SM120_SUPPORTED undefined)"
+            )
+        return _run_with_module(mod, "sm120_native", shapes, seeds)
+    except Exception as exc:
+        # Transparent fallback — record the verbatim compile/run error.
+        return _run_sm80(shapes, seeds, sm120_blocker=str(exc))
 
 
 def _attempt_sm100_then_sm80(shapes, seeds) -> dict:
@@ -138,30 +172,34 @@ def _attempt_sm100_then_sm80(shapes, seeds) -> dict:
         return _run_sm80(shapes, seeds, sm100_blocker=str(exc))
 
 
-def _run_sm80(shapes, seeds, sm100_blocker=None) -> dict:
-    """Task 2/3 2.x Sm80 path. Optionally records an sm100_blocker so the
-    artifact can explain why a fallback happened (rather than sm80 being the
-    requested path)."""
+def _run_sm80(shapes, seeds, sm100_blocker=None, sm120_blocker=None) -> dict:
+    """Task 2/3 2.x Sm80 path. Optionally records blockers so the artifact can
+    explain why a fallback happened (rather than sm80 being the requested
+    path)."""
     mod = build_extension()  # default name=cutlass_4m, no extra_defines
     r = _run_with_module(mod, "sm80_fallback", shapes, seeds)
     if sm100_blocker is not None:
         r["sm100_blocker"] = sm100_blocker
+    if sm120_blocker is not None:
+        r["sm120_blocker"] = sm120_blocker
     return r
 
 
 def _run_with_module(mod, kernel_path: str, shapes, seeds) -> dict:
-    """Shared correctness + resource + latency runner for both kernel paths.
+    """Shared correctness + resource + latency runner for all kernel paths.
 
-    Picks mod.cutlass_4m_sm80 (sm80_fallback) or mod.cutlass_4m_sm100
-    (sm100_native) based on kernel_path; everything else is identical.
+    Picks mod.cutlass_4m_sm80 / _sm100 / _sm120 based on kernel_path;
+    everything else is identical.
     """
     import numpy as np
     import torch  # noqa: F401  (ensures torch CUDA tensors are usable below)
 
-    assert kernel_path in ("sm80_fallback", "sm100_native")
-    gemm_fn = (
-        mod.cutlass_4m_sm100 if kernel_path == "sm100_native" else mod.cutlass_4m_sm80
-    )
+    assert kernel_path in ("sm80_fallback", "sm100_native", "sm120_native")
+    gemm_fn = {
+        "sm80_fallback": mod.cutlass_4m_sm80,
+        "sm100_native": mod.cutlass_4m_sm100,
+        "sm120_native": mod.cutlass_4m_sm120,
+    }[kernel_path]
     r = {
         "kernel_path": kernel_path,
         "compiles": True,

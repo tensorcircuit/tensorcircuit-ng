@@ -129,6 +129,53 @@ def test_sm100_attempt_runs_or_falls_back():
     assert r["correctness"]["gate_pass"] is True
 
 
+def test_sm120_compile_failure_falls_back(monkeypatch):
+    """GPU-free: if the native Sm120 build fails (CUTLASS's Sm120 collective is
+    F8F6F4-only, so BF16 instantiation refuses to compile), the dispatcher
+    records the verbatim blocker and falls back to sm80."""
+    import cutlass_probe
+
+    calls = {"n": 0}
+
+    def fake_build(name="cutlass_4m", extra_defines=None):
+        calls["n"] += 1
+        if extra_defines and "-DCUTLASS_ENABLE_SM120_4M=1" in extra_defines:
+            raise RuntimeError(
+                "nvcc: static_assert SM120 TmaWarpSpecialized builder "
+                "currently only supports F8F6F4 MMA"
+            )
+        return object()  # non-GPU stub; _run_sm80 is mocked below
+
+    monkeypatch.setattr(cutlass_probe, "build_extension", fake_build)
+    monkeypatch.setattr(
+        cutlass_probe,
+        "_run_sm80",
+        lambda shapes, seeds, **kw: {
+            "kernel_path": "sm80_fallback",
+            "runs": True,
+            "correctness": {"gate_pass": True},
+            **kw,
+        },
+    )
+    r = cutlass_probe._attempt_sm120_then_sm80(shapes=[(64, 64, 64)], seeds=(0,))
+    assert r["kernel_path"] == "sm80_fallback"
+    # the recorded blocker must be present so the artifact can explain the fallback
+    assert "sm120_blocker" in r and r["sm120_blocker"]
+    # the sm120 build attempt must have actually happened (then _run_sm80 is mocked)
+    assert calls["n"] == 1
+
+
+@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + nvcc_spike + CUTLASS_ROOT")
+def test_sm120_attempt_runs_or_falls_back():
+    import cutlass_probe
+
+    r = cutlass_probe.run_single_4m(
+        "sm120_native", shapes=[(128, 128, 128)], seeds=(0,)
+    )
+    assert r["kernel_path"] in ("sm120_native", "sm80_fallback")
+    assert r["correctness"]["gate_pass"] is True
+
+
 @pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + nvcc_spike + CUTLASS_ROOT")
 def test_single_4m_sm80_has_resource_and_latency():
     import cutlass_probe
