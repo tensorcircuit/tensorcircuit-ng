@@ -1,57 +1,50 @@
 {
-  "shape": [
-    4096,
-    16384,
-    1024
-  ],
-  "correctness_shape": [
-    128,
-    128,
-    32
-  ],
-  "basis": "hlo_use_def_anchor_shape",
-  "materialized_peak_bytes": 704643072,
-  "fused_peak_bytes": 169869312,
-  "c_buffer_bytes": 536870912,
-  "delta_bytes": 534773760,
-  "memory_feasible": true,
-  "no_full_c_materialized": true,
-  "global_bytes_eliminated": 536870912,
-  "pack_bytes": 0,
-  "recompute_bytes": 0,
-  "conversion_bytes": 0,
-  "net_gain_bytes": 536870912,
-  "net_gain_positive": true,
-  "cost_model_note": "c64 direct tile-fusion: pack/recompute/conversion are 0 (anchor is single-consumer per Task 2; no BF16-planar repack, no dtype conversion). pack_bytes is nonzero only for a BF16-planar fused variant (not this prototype).",
+  "schema_version": "region-prototype-v2",
+  "case_id": "n24_d10_default",
+  "region": {
+    "producer": [
+      4096,
+      16384,
+      1024
+    ],
+    "consumer": [
+      64,
+      1048576,
+      64
+    ],
+    "dtype": "c64"
+  },
+  "math": "E = D @ transform(A@B); transform = reshape->transpose->reshape (Task 2)",
+  "no_full_P_materialized": true,
+  "no_full_T_materialized": true,
+  "correctness_contract": {
+    "PM": 2,
+    "PN": 16,
+    "K1": 4,
+    "TM": 4,
+    "TN": 8
+  },
+  "n_seeds": 3,
+  "relative_l2": 1.3549268373935774e-07,
+  "max_rel": 2.39476690921947e-07,
+  "correct": true,
   "device": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
   "num_sm": 46,
   "threads_per_block": 256,
-  "shared_mem_per_block_bytes": 3072,
-  "registers_per_thread": 20,
-  "register_source": "analytical estimate",
+  "registers_per_thread": 40,
   "occupancy_blocks_per_sm": 6,
   "occupancy_pct": 100.0,
-  "occupancy_limits": {
-    "by_warps": 6,
-    "by_regs": 12,
-    "by_shared": 33
-  },
-  "tiled_sum": 2061348.25,
-  "fused_sum": 2061348.0,
-  "materialized_sum": 2061348.25,
-  "torch_ref_sum": 2061348.25,
-  "rel_diff_tiled_vs_ref": 0.0,
-  "correct": true,
-  "latency_shape": [
-    4096,
-    16384,
-    1024
-  ],
-  "tiled_latency_ms": 136.01792299999715,
-  "c64_baseline_latency_ms": 113.67805999999803,
-  "latency_ratio_tiled_over_c64": 1.196518686191509,
-  "latency_branch": "memory_policy",
+  "materialized_peak_bytes": 1778384896,
+  "fused_peak_bytes": 704643072,
+  "peak_saved_bytes": 1073741824,
+  "p_buffer_bytes": 536870912,
+  "t_buffer_bytes": 536870912,
+  "producer_recompute_factor": 64,
+  "producer_recompute_flops": 8796093022208,
+  "materialized_latency_ms": 161.6343459999996,
+  "fused_full_anchor_run": false,
+  "fused_latency_note": "fused kernel at the full anchor is compute-bound by producer recompute (factor ~TM=64) and is not timed here; the memory benefit stands in per the memory-policy branch (final-review section 7.5)",
   "memory_policy_met": true,
-  "verdict": "TILE_FUSION_FEASIBLE",
-  "note": "full \u00a75.3 prototype: tiled shared-mem fused producer->consumer kernel (16x16x8 tiles), cost model, occupancy, latency vs c64 cuBLAS. Hand-rolled tiled kernel is slower than mature cuBLAS c64 (expected); per \u00a75.3 #5 OR-clause the ~512MiB memory benefit meets policy. registers_per_thread is an analytical estimate (nvrtc --res-usage log held no ptxas register line on this build); occupancy is warp-limited (~100%, robust to the exact reg count since by_regs/by_shared >> by_warps)."
+  "verdict": "FEASIBLE_WITH_RECOMPUTE",
+  "note": "real two-stage P->T->E prototype: fused producer-recompute kernel (nvrtc sm_120) computes E = D @ transform(A@B) without writing full P/T. Correctness fused == materialized on the small 8-D contract over multiple seeds. The kernel recomputes each producer element ~TM times (FEASIBLE_WITH_RECOMPUTE); a tiled/streaming variant could cut that. Peak leverage itself is structural (Task 3): single-patch ~0."
 }

@@ -1,129 +1,73 @@
-// Minimal region/tile-fusion prototype KERNELS (nvrtc-compiled via cupy.RawKernel;
-// see results/_phase0/region_proto.py). No host/runtime-API code here -- nvrtc only.
+// Real P->T->E two-stage region KERNELS (Task 4; nvrtc-compiled via cupy.RawKernel;
+// see results/_phase0/region_proto.py). Replaces the rejected GEMM->norm reduce kernels.
 //
-// Proves the 512 MiB C1 anchor producer output C = A@B (c64[4096,16384], from
-// A=c64[4096,1024] x B=c64[1024,16384]) need NOT materialize: the fused kernel computes
-// c = A@B per element in registers and reduces |c|^2 on-chip (no full C); the
-// materialized kernel writes the full C then reduces it. Same compute, different
-// materialization -- isolates the 512 MiB global buffer.
+// Computes E = D @ transform(A @ B) on the C1 anchor region WITHOUT materializing the full
+// P (A@B, c64[4096,16384]) or T (transform(P), c64[64,1048576]). For each output E[i,j] the
+// kernel gathers the producer column T[:,j] = transform(P)[:,j] (k=0..TM-1), computing each
+// needed P[m,n] = A[m,:] @ B[:,n] on the fly (producer recompute -> FEASIBLE_WITH_RECOMPUTE).
 //
-// Minimal viable subset (per checkpoint): naive per-element complex GEMM. Deferred to
-// full Task 3: tiled/shared-memory realization, occupancy, pack/recompute/conversion
-// bytes, latency vs c64 baseline.
+// The transform is the fixed 8-D reshape->transpose->reshape from Task 2's edge map. Its
+// inverse index math (T-linear -> P-linear) is computed inline from the reshape dims rd[8],
+// transpose perm tp[8], and their C-order strides -- no large permutation buffer. Layouts in
+// the real HLO are all row-major (== numpy/cupy C-order), so C-order flatten/unflatten matches
+// the HLO bitcast exactly (validated in region_proto_test against Task 2's permutation).
 
-struct c64 {  // complex64 = (real, imag), matches numpy/torch complex64 memory layout
+struct c64 {  // complex64 = (real, imag), matches numpy/torch/cupy complex64 memory layout
     float x, y;
 };
 
-// acc = sum_k A[i,k] * B[k,j]  (complex). Row-major A[M,K], B[K,N].
-__device__ inline void gemm_elem(const c64* A, const c64* B, int M, int N, int K,
-                                 int i, int j, float* ox, float* oy) {
+// Inverse transform: T-linear index -> P-linear index.
+//   forward: P --reshape(rd)--> i8[8] --transpose(tp)--> o8[8] --reshape(outdim)--> T   (C-order)
+//   inverse: unflatten t to o8 via outdim; i8[tp[b]] = o8[b]; flatten i8 via rd.
+// outdim[b] = rd[tp[b]]; rd_stride[a] = prod(rd[a+1:]); out_stride[b] = prod(outdim[b+1:]).
+__device__ __forceinline__ long long inv_transform(int t_lin, const int* outdim,
+                                                   const int* out_stride, const int* rd_stride,
+                                                   const int* tp) {
+    int o8[8];
+    int tt = t_lin;
+    #pragma unroll
+    for (int b = 0; b < 8; ++b) {
+        o8[b] = tt / out_stride[b];
+        tt -= o8[b] * out_stride[b];
+    }
+    int i8[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    #pragma unroll
+    for (int b = 0; b < 8; ++b) i8[tp[b]] = o8[b];
+    long long p = 0;
+    #pragma unroll
+    for (int a = 0; a < 8; ++a) p += (long long)i8[a] * rd_stride[a];
+    return p;
+}
+
+// E[i,j] = sum_{k=0}^{TM-1} D[i,k] * T[k,j],  T[k,j] = P[m,n] = sum_l A[m,l]*B[l,n],
+// where (m,n) = divmod(inv_transform(k*TN + j), PN). P and T are never written to global.
+extern "C" __global__ void __launch_bounds__(256) fused_pte_kernel(
+    const c64* A, const c64* B, const c64* D, c64* E,
+    int PM, int PN, int K1, int TM, int TN,
+    const int* outdim, const int* out_stride, const int* rd_stride, const int* tp) {
+    int j = blockIdx.x * blockDim.x + threadIdx.x;  // output column in [0, TN)
+    int i = blockIdx.y * blockDim.y + threadIdx.y;  // output row    in [0, TM)
+    if (i >= TM || j >= TN) return;
+    const c64* drow = D + (long long)i * TM;
     float accx = 0.f, accy = 0.f;
-    const c64* arow = A + (long)i * K;
-    for (int k = 0; k < K; ++k) {
-        const c64& a = arow[k];
-        const c64& b = B[(long)k * N + j];
-        accx += a.x * b.x - a.y * b.y;
-        accy += a.x * b.y + a.y * b.x;
-    }
-    *ox = accx;
-    *oy = accy;
-}
-
-// FUSED: per element compute c=A@B in registers, block-reduce |c|^2, one atomicAdd/block.
-extern "C" __global__ void gemm_reduce_kernel(const c64* A, const c64* B, float* scalar,
-                                              int M, int N, int K, int MN) {
-    extern __shared__ float sh[];
-    int t = blockIdx.x * blockDim.x + threadIdx.x;
-    float v = 0.f;
-    if (t < MN) {
-        int i = t / N, j = t % N;
-        float cx, cy;
-        gemm_elem(A, B, M, N, K, i, j, &cx, &cy);
-        v = cx * cx + cy * cy;
-    }
-    sh[threadIdx.x] = v;
-    __syncthreads();
-    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (threadIdx.x < s) sh[threadIdx.x] += sh[threadIdx.x + s];
-        __syncthreads();
-    }
-    if (threadIdx.x == 0) atomicAdd(scalar, sh[0]);
-}
-
-// ============================================================================
-// TILED fused producer->consumer kernel (full Task 3 realization).
-// 16x16 output tile per block, BK=8 K-tile, 256 threads (16x16), one C element
-// per thread, A/B tiles staged in shared memory (cooperative load) and reused
-// across the BK inner loop. The C tile is consumed on-chip (reduce |c|^2) -- the
-// full C is never written to global. __launch_bounds__ caps registers for a real
-// occupancy estimate (reported by the driver).
-// ============================================================================
-extern "C" __global__ void __launch_bounds__(256, 4)
-gemm_reduce_tiled_kernel(const c64* A, const c64* B, float* scalar, int M, int N, int K) {
-    __shared__ c64 sA[16][8];
-    __shared__ c64 sB[8][16];
-    __shared__ float sh[256];
-    int bx = blockIdx.x, by = blockIdx.y;
-    int tx = threadIdx.x & 15;  // tile column 0..15
-    int ty = threadIdx.x >> 4;  // tile row 0..15
-    // this thread computes C[bx*16+ty, by*16+tx]
-    float accx = 0.f, accy = 0.f;
-    int numK = (K + 7) >> 3;
-    for (int kb = 0; kb < numK; ++kb) {
-        int li = threadIdx.x;  // cooperative tile load: 256 threads -> 128 sA + 128 sB
-        if (li < 128) {
-            int r = li >> 3, c = li & 7;       // sA[r][c], r in [0,16), c in [0,8)
-            int kk = (kb << 3) + c;
-            sA[r][c] = (kk < K && bx * 16 + r < M) ? A[(bx * 16 + r) * K + kk]
-                                                   : c64{0.f, 0.f};
-        } else {
-            int li2 = li - 128;
-            int r = li2 >> 4, c = li2 & 15;    // sB[r][c], r in [0,8), c in [0,16)
-            int kk = (kb << 3) + r;
-            sB[r][c] = (kk < K && by * 16 + c < N) ? B[kk * N + (by * 16 + c)]
-                                                   : c64{0.f, 0.f};
+    for (int k = 0; k < TM; ++k) {
+        int t_lin = k * TN + j;
+        long long p = inv_transform(t_lin, outdim, out_stride, rd_stride, tp);
+        int m = (int)(p / PN);
+        int n = (int)(p % PN);
+        const c64* arow = A + (long long)m * K1;
+        float px = 0.f, py = 0.f;
+        for (int l = 0; l < K1; ++l) {
+            const c64& a = arow[l];
+            const c64& b = B[(long long)l * PN + n];
+            px += a.x * b.x - a.y * b.y;
+            py += a.x * b.y + a.y * b.x;
         }
-        __syncthreads();
-        #pragma unroll
-        for (int c = 0; c < 8; ++c) {
-            float ar = sA[ty][c].x, ai = sA[ty][c].y;
-            float br = sB[c][tx].x, bi = sB[c][tx].y;
-            accx += ar * br - ai * bi;
-            accy += ar * bi + ai * br;
-        }
-        __syncthreads();
+        const c64& d = drow[k];
+        accx += d.x * px - d.y * py;
+        accy += d.x * py + d.y * px;
     }
-    float v = (bx * 16 + ty < M && by * 16 + tx < N) ? (accx * accx + accy * accy) : 0.f;
-    sh[threadIdx.x] = v;
-    __syncthreads();
-    for (int s = 128; s > 0; s >>= 1) {
-        if (threadIdx.x < s) sh[threadIdx.x] += sh[threadIdx.x + s];
-        __syncthreads();
-    }
-    if (threadIdx.x == 0) atomicAdd(scalar, sh[0]);
-}
-extern "C" __global__ void gemm_write_kernel(const c64* A, const c64* B, c64* C,
-                                             int M, int N, int K, int MN) {
-    int t = blockIdx.x * blockDim.x + threadIdx.x;
-    if (t >= MN) return;
-    int i = t / N, j = t % N;
-    float cx, cy;
-    gemm_elem(A, B, M, N, K, i, j, &cx, &cy);
-    C[t].x = cx;
-    C[t].y = cy;
-}
-
-// MATERIALIZED step 2: reduce |C|^2 over the full buffer.
-extern "C" __global__ void reduce_sqsum_kernel(const c64* C, float* scalar, int MN) {
-    extern __shared__ float sh[];
-    int t = blockIdx.x * blockDim.x + threadIdx.x;
-    float v = (t < MN) ? (C[t].x * C[t].x + C[t].y * C[t].y) : 0.f;
-    sh[threadIdx.x] = v;
-    __syncthreads();
-    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (threadIdx.x < s) sh[threadIdx.x] += sh[threadIdx.x + s];
-        __syncthreads();
-    }
-    if (threadIdx.x == 0) atomicAdd(scalar, sh[0]);
+    long long eidx = (long long)i * TN + j;
+    E[eidx].x = accx;
+    E[eidx].y = accy;
 }
