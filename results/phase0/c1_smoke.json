@@ -1,0 +1,30 @@
+{
+  "n": 24,
+  "depth": 10,
+  "disable_fusion": false,
+  "compile_peak_B": 1107477504,
+  "compile_peak_before_B": 1024,
+  "runtime_peak_B": 1024,
+  "runtime_peaks_B": [
+    1024,
+    1024,
+    1024
+  ],
+  "memory_analysis": {
+    "alias_size_in_bytes": 0,
+    "argument_size_in_bytes": 960,
+    "generated_code_size_in_bytes": 2447544,
+    "output_size_in_bytes": 8,
+    "temp_size_in_bytes": 1107476216,
+    "host_alias_size_in_bytes": 0,
+    "host_argument_size_in_bytes": 0,
+    "host_generated_code_size_in_bytes": 0,
+    "host_output_size_in_bytes": 0,
+    "host_temp_size_in_bytes": 0,
+    "serialized_buffer_assignment_proto_len": 0
+  },
+  "hlo_path": "results/phase0/c1_optimized_hlo/n24_d10_exp_default.hlo",
+  "buffer_assignment_path": "results/phase0/c1_buffer_assignment/n24_d10_exp_default.txt",
+  "full_state_bytes": 134217728,
+  "outcome": "run"
+}
