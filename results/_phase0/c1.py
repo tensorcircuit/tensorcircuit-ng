@@ -283,10 +283,12 @@ def judge_c1(
     conds["4_not_xla_eliminated"] = (pd > 0) and (pd >= 0.5 * pn)
     # 5 executable (caller ensures not crash/OOM); mark UNKNOWN if peak is 0
     conds["5_executable"] = pd > 0
-    # 6 3x stable: runtime_peak consistent within 5% across the repeats arm
-    peaks = [r.get("planned_temp_bytes", 0) for r in repeats_results]
-    if peaks:
-        conds["6_repeat_stable"] = min(peaks) >= 0.95 * max(peaks)
+    # 6 3x stable: DYNAMIC runtime peak consistent within 5% across the repeats arm
+    # (rereview §4.4: three identical STATIC planned values must not satisfy stability on
+    # their own). Dynamic sample unavailable -> cannot establish stability -> UNKNOWN.
+    dpeaks = [r.get("runtime_peak_sampled_bytes", 0) for r in repeats_results]
+    if dpeaks and all(p > 0 for p in dpeaks):
+        conds["6_repeat_stable"] = min(dpeaks) >= 0.95 * max(dpeaks)
     else:
         conds["6_repeat_stable"] = False
     if not conds["6_repeat_stable"]:
@@ -400,18 +402,18 @@ def upsert_csv_row(path, row, columns, key_cols=None):
     if os.path.exists(path) and os.path.getsize(path) > 0:
         with open(path, newline="") as fh:
             existing = list(csv.DictReader(fh))
-    replaced = False
-    for i, e in enumerate(existing):
-        if all(str(e.get(k)) == str(row.get(k, "")) for k in key_cols):
-            existing[i] = {c: row.get(c, e.get(c, "")) for c in columns}
-            replaced = True
-            break
-    if not replaced:
-        existing.append({c: row.get(c, "") for c in columns})
+    # rerun idempotency: remove ALL rows matching the key (historical duplicates included),
+    # then append exactly one new row (rereview §4.5).
+    kept = [
+        e
+        for e in existing
+        if not all(str(e.get(k)) == str(row.get(k, "")) for k in key_cols)
+    ]
+    kept.append({c: row.get(c, "") for c in columns})
     with open(path, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=columns)
         w.writeheader()
-        for e in existing:
+        for e in kept:
             w.writerow({c: e.get(c, "") for c in columns})
 
 

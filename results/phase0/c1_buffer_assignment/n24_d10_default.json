@@ -3,2623 +3,4779 @@
   "depth": 10,
   "fusion": "default",
   "hlo_path": "results/phase0/c1_optimized_hlo/n24_d10_exp_default.hlo",
-  "allocation_source": "hlo_shape_only",
-  "live_range_source": "hlo_shape_only",
+  "allocation_source": "unknown",
+  "live_range_source": "unknown",
   "buffer_count": 251,
   "anchor_count": 1,
   "buffers": [
     {
       "hlo_value_id": "%custom-call.253",
-      "dtype": "s8",
-      "shape": [
-        192
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        10,
+        2
       ],
-      "buffer_bytes": 192,
+      "data_output_bytes": 160,
+      "workspace_result_index": 1,
+      "workspace_bytes": 192,
       "is_anchor": false,
-      "allocation_id": "%custom-call.253"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.254",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         8,
         216
       ],
-      "buffer_bytes": 13824,
+      "data_output_bytes": 13824,
+      "workspace_result_index": 1,
+      "workspace_bytes": 3584,
       "is_anchor": false,
-      "allocation_id": "%custom-call.254"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.262",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.262"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.263",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.263"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.264",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.264"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.265",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.265"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.266",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.266"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.267",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.267"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.268",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.268"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.269",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.269"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.270",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.270"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.271",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.271"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.272",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.272"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.273",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.273"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.274",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.274"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.275",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.275"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.276",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.276"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.277",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.277"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.278",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.278"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.279",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.279"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.280",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.280"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.281",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.281"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.282",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.282"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.283",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.283"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.284",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.284"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.285",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.285"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.286",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.286"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.287",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.287"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.288",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.288"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.289",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.289"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.290",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.290"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.291",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.291"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.292",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.292"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.293",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.293"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.294",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.294"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.295",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.295"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.296",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.296"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.297",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.297"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.298",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.298"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.299",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.299"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.300",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.300"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.301",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.301"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.302",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.302"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.303",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.303"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.304",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.304"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.305",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.305"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.306",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.306"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.307",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.307"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.308",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.308"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.309",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.309"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.310",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         8,
         384
       ],
-      "buffer_bytes": 24576,
+      "data_output_bytes": 24576,
+      "workspace_result_index": 1,
+      "workspace_bytes": 6272,
       "is_anchor": false,
-      "allocation_id": "%custom-call.310"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.314",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.314"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.315",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.315"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.316",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.316"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.317",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.317"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.318",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.318"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.319",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.319"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.320",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.320"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.321",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.321"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.322",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.322"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.323",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.323"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.324",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.324"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.325",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.325"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.326",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.326"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.327",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.327"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.328",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.328"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.329",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.329"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.330",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.330"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.331",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.331"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.332",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.332"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.333",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.333"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.334",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.334"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.335",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.335"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.336",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.336"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.337",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.337"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.338",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.338"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.339",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.339"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.340",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.340"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.341",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.341"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.342",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.342"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.343",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.343"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.344",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.344"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.345",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.345"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.346",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.346"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.347",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.347"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.348",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.348"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.349",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.349"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.350",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.350"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.351",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         8,
         296
       ],
-      "buffer_bytes": 18944,
+      "data_output_bytes": 18944,
+      "workspace_result_index": 1,
+      "workspace_bytes": 4864,
       "is_anchor": false,
-      "allocation_id": "%custom-call.351"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.470",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.470"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.468",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.468"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.469",
-      "dtype": "s8",
-      "shape": [
-        256
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        4,
+        4
       ],
-      "buffer_bytes": 256,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 256,
       "is_anchor": false,
-      "allocation_id": "%custom-call.469"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.471",
-      "dtype": "s8",
-      "shape": [
-        2176
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        4,
+        64
       ],
-      "buffer_bytes": 2176,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2176,
       "is_anchor": false,
-      "allocation_id": "%custom-call.471"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.466",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.466"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.467",
-      "dtype": "s8",
-      "shape": [
-        640
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        4,
+        16
       ],
-      "buffer_bytes": 640,
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 640,
       "is_anchor": false,
-      "allocation_id": "%custom-call.467"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.472",
-      "dtype": "s8",
-      "shape": [
-        2560
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        32
       ],
-      "buffer_bytes": 2560,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2560,
       "is_anchor": false,
-      "allocation_id": "%custom-call.472"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.434",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.434"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.435",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.435"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.436",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.436"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.437",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.437"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.438",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         8,
         8
       ],
-      "buffer_bytes": 512,
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 256,
       "is_anchor": false,
-      "allocation_id": "%custom-call.438"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.439",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.439"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.464",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.464"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.465",
-      "dtype": "s8",
-      "shape": [
-        2176
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        4,
+        64
       ],
-      "buffer_bytes": 2176,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2176,
       "is_anchor": false,
-      "allocation_id": "%custom-call.465"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.473",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         32,
         32
       ],
-      "buffer_bytes": 8192,
+      "data_output_bytes": 8192,
+      "workspace_result_index": 1,
+      "workspace_bytes": 4096,
       "is_anchor": false,
-      "allocation_id": "%custom-call.473"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.463",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.463"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.474",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         32,
         128
       ],
-      "buffer_bytes": 32768,
+      "data_output_bytes": 32768,
+      "workspace_result_index": 1,
+      "workspace_bytes": 10240,
       "is_anchor": false,
-      "allocation_id": "%custom-call.474"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.461",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.461"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.459",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.459"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.460",
-      "dtype": "s8",
-      "shape": [
-        640
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        4,
+        16
       ],
-      "buffer_bytes": 640,
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 640,
       "is_anchor": false,
-      "allocation_id": "%custom-call.460"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.462",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         64
       ],
-      "buffer_bytes": 8192,
+      "data_output_bytes": 8192,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2560,
       "is_anchor": false,
-      "allocation_id": "%custom-call.462"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.475",
-      "dtype": "s8",
-      "shape": [
-        40960
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        32,
+        128
       ],
-      "buffer_bytes": 40960,
+      "data_output_bytes": 32768,
+      "workspace_result_index": 1,
+      "workspace_bytes": 40960,
       "is_anchor": false,
-      "allocation_id": "%custom-call.475"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.476",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.476"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.477",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.477"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.478",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         64,
         64
       ],
-      "buffer_bytes": 32768,
+      "data_output_bytes": 32768,
+      "workspace_result_index": 1,
+      "workspace_bytes": 4096,
       "is_anchor": false,
-      "allocation_id": "%custom-call.478"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.479",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         128,
         128
       ],
-      "buffer_bytes": 131072,
+      "data_output_bytes": 131072,
+      "workspace_result_index": 1,
+      "workspace_bytes": 65536,
       "is_anchor": false,
-      "allocation_id": "%custom-call.479"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.458",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.458"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.480",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         32,
         2048
       ],
-      "buffer_bytes": 524288,
+      "data_output_bytes": 524288,
+      "workspace_result_index": 1,
+      "workspace_bytes": 133120,
       "is_anchor": false,
-      "allocation_id": "%custom-call.480"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.457",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.457"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.481",
-      "dtype": "s8",
-      "shape": [
-        526336
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        4096
       ],
-      "buffer_bytes": 526336,
+      "data_output_bytes": 524288,
+      "workspace_result_index": 1,
+      "workspace_bytes": 526336,
       "is_anchor": false,
-      "allocation_id": "%custom-call.481"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.456",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.456"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.482",
-      "dtype": "s8",
-      "shape": [
-        526336
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        4096
       ],
-      "buffer_bytes": 526336,
+      "data_output_bytes": 524288,
+      "workspace_result_index": 1,
+      "workspace_bytes": 526336,
       "is_anchor": false,
-      "allocation_id": "%custom-call.482"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.453",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.453"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.454",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.454"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.455",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         64,
         64
       ],
-      "buffer_bytes": 32768,
+      "data_output_bytes": 32768,
+      "workspace_result_index": 1,
+      "workspace_bytes": 4096,
       "is_anchor": false,
-      "allocation_id": "%custom-call.455"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.483",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         128,
         2048
       ],
-      "buffer_bytes": 2097152,
+      "data_output_bytes": 2097152,
+      "workspace_result_index": 1,
+      "workspace_bytes": 557056,
       "is_anchor": false,
-      "allocation_id": "%custom-call.483"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.452",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.452"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.484",
-      "dtype": "s8",
-      "shape": [
-        2099200
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16384
       ],
-      "buffer_bytes": 2099200,
+      "data_output_bytes": 2097152,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2099200,
       "is_anchor": false,
-      "allocation_id": "%custom-call.484"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.451",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.451"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.485",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         32,
         32768
       ],
-      "buffer_bytes": 8388608,
+      "data_output_bytes": 8388608,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2099200,
       "is_anchor": false,
-      "allocation_id": "%custom-call.485"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.450",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.450"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.486",
-      "dtype": "s8",
-      "shape": [
-        8390656
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        65536
       ],
-      "buffer_bytes": 8390656,
+      "data_output_bytes": 8388608,
+      "workspace_result_index": 1,
+      "workspace_bytes": 8390656,
       "is_anchor": false,
-      "allocation_id": "%custom-call.486"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.449",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.449"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.487",
-      "dtype": "s8",
-      "shape": [
-        8390656
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        65536
       ],
-      "buffer_bytes": 8390656,
+      "data_output_bytes": 8388608,
+      "workspace_result_index": 1,
+      "workspace_bytes": 8390656,
       "is_anchor": false,
-      "allocation_id": "%custom-call.487"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.448",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.448"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.488",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         64,
         262144
       ],
-      "buffer_bytes": 134217728,
+      "data_output_bytes": 134217728,
+      "workspace_result_index": 1,
+      "workspace_bytes": 8390656,
       "is_anchor": false,
-      "allocation_id": "%custom-call.488"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.441",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.441"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.442",
-      "dtype": "s8",
-      "shape": [
-        256
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        4,
+        4
       ],
-      "buffer_bytes": 256,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 256,
       "is_anchor": false,
-      "allocation_id": "%custom-call.442"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.443",
-      "dtype": "s8",
-      "shape": [
-        640
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        4,
+        16
       ],
-      "buffer_bytes": 640,
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 640,
       "is_anchor": false,
-      "allocation_id": "%custom-call.443"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.440",
-      "dtype": "s8",
-      "shape": [
-        160
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
       ],
-      "buffer_bytes": 160,
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
       "is_anchor": false,
-      "allocation_id": "%custom-call.440"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.444",
-      "dtype": "s8",
-      "shape": [
-        640
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        4,
+        16
       ],
-      "buffer_bytes": 640,
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 640,
       "is_anchor": false,
-      "allocation_id": "%custom-call.444"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.445",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         16
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
       "is_anchor": false,
-      "allocation_id": "%custom-call.445"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.446",
-      "dtype": "s8",
-      "shape": [
-        2560
-      ],
-      "buffer_bytes": 2560,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.446"
-    },
-    {
-      "hlo_value_id": "%custom-call.447",
-      "dtype": "s8",
-      "shape": [
-        2560
-      ],
-      "buffer_bytes": 2560,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.447"
-    },
-    {
-      "hlo_value_id": "%custom-call.489",
-      "dtype": "c64",
-      "shape": [
-        32,
-        2097152
-      ],
-      "buffer_bytes": 536870912,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.489"
-    },
-    {
-      "hlo_value_id": "%custom-call.433",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.433"
-    },
-    {
-      "hlo_value_id": "%custom-call.490",
-      "dtype": "c64",
-      "shape": [
-        16,
-        4194304
-      ],
-      "buffer_bytes": 536870912,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.490"
-    },
-    {
-      "hlo_value_id": "%custom-call.432",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.432"
-    },
-    {
-      "hlo_value_id": "%custom-call.491",
-      "dtype": "c64",
-      "shape": [
-        16,
-        4194304
-      ],
-      "buffer_bytes": 536870912,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.491"
-    },
-    {
-      "hlo_value_id": "%custom-call.423",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.423"
-    },
-    {
-      "hlo_value_id": "%custom-call.424",
-      "dtype": "c64",
-      "shape": [
-        16,
-        64
-      ],
-      "buffer_bytes": 8192,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.424"
-    },
-    {
-      "hlo_value_id": "%custom-call.425",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.425"
-    },
-    {
-      "hlo_value_id": "%custom-call.426",
-      "dtype": "c64",
-      "shape": [
-        16,
-        64
-      ],
-      "buffer_bytes": 8192,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.426"
-    },
-    {
-      "hlo_value_id": "%custom-call.427",
-      "dtype": "c64",
-      "shape": [
-        128,
-        128
-      ],
-      "buffer_bytes": 131072,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.427"
-    },
-    {
-      "hlo_value_id": "%custom-call.421",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.421"
-    },
-    {
-      "hlo_value_id": "%custom-call.422",
-      "dtype": "c64",
-      "shape": [
-        16,
-        64
-      ],
-      "buffer_bytes": 8192,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.422"
-    },
-    {
-      "hlo_value_id": "%custom-call.428",
-      "dtype": "c64",
-      "shape": [
-        128,
-        2048
-      ],
-      "buffer_bytes": 2097152,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.428"
-    },
-    {
-      "hlo_value_id": "%custom-call.420",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.420"
-    },
-    {
-      "hlo_value_id": "%custom-call.429",
-      "dtype": "c64",
-      "shape": [
-        64,
-        65536
-      ],
-      "buffer_bytes": 33554432,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.429"
-    },
-    {
-      "hlo_value_id": "%custom-call.419",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.419"
-    },
-    {
-      "hlo_value_id": "%custom-call.430",
-      "dtype": "c64",
-      "shape": [
-        16,
-        262144
-      ],
-      "buffer_bytes": 33554432,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.430"
-    },
-    {
-      "hlo_value_id": "%custom-call.418",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.418"
-    },
-    {
-      "hlo_value_id": "%custom-call.431",
-      "dtype": "c64",
-      "shape": [
-        16,
-        262144
-      ],
-      "buffer_bytes": 33554432,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.431"
-    },
-    {
-      "hlo_value_id": "%custom-call.492",
-      "dtype": "c64",
-      "shape": [
-        1024,
-        16384
-      ],
-      "buffer_bytes": 134217728,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.492"
-    },
-    {
-      "hlo_value_id": "%custom-call.394",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.394"
-    },
-    {
-      "hlo_value_id": "%custom-call.395",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.395"
-    },
-    {
-      "hlo_value_id": "%custom-call.396",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.396"
-    },
-    {
-      "hlo_value_id": "%custom-call.397",
-      "dtype": "c64",
-      "shape": [
-        8,
-        24
-      ],
-      "buffer_bytes": 1536,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.397"
-    },
-    {
-      "hlo_value_id": "%custom-call.410",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.410"
-    },
-    {
-      "hlo_value_id": "%custom-call.411",
-      "dtype": "s8",
-      "shape": [
-        640
-      ],
-      "buffer_bytes": 640,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.411"
-    },
-    {
-      "hlo_value_id": "%custom-call.412",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.412"
-    },
-    {
-      "hlo_value_id": "%custom-call.413",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.413"
-    },
-    {
-      "hlo_value_id": "%custom-call.414",
-      "dtype": "c64",
-      "shape": [
-        64,
-        64
-      ],
-      "buffer_bytes": 32768,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.414"
-    },
-    {
-      "hlo_value_id": "%custom-call.403",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.403"
-    },
-    {
-      "hlo_value_id": "%custom-call.404",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.404"
-    },
-    {
-      "hlo_value_id": "%custom-call.405",
-      "dtype": "s8",
-      "shape": [
-        640
-      ],
-      "buffer_bytes": 640,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.405"
-    },
-    {
-      "hlo_value_id": "%custom-call.406",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.406"
-    },
-    {
-      "hlo_value_id": "%custom-call.251",
-      "dtype": "c64",
-      "shape": [
-        22,
-        8
-      ],
-      "buffer_bytes": 1408,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.251"
-    },
-    {
-      "hlo_value_id": "%custom-call.407",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.407"
-    },
-    {
-      "hlo_value_id": "%custom-call.408",
-      "dtype": "c64",
-      "shape": [
-        8,
-        8
-      ],
-      "buffer_bytes": 512,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.408"
-    },
-    {
-      "hlo_value_id": "%custom-call.409",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.409"
-    },
-    {
-      "hlo_value_id": "%custom-call.415",
-      "dtype": "s8",
-      "shape": [
-        34816
-      ],
-      "buffer_bytes": 34816,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.415"
-    },
-    {
-      "hlo_value_id": "%custom-call.400",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.400"
-    },
-    {
-      "hlo_value_id": "%custom-call.401",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.401"
-    },
-    {
-      "hlo_value_id": "%custom-call.402",
-      "dtype": "c64",
-      "shape": [
-        64,
-        64
-      ],
-      "buffer_bytes": 32768,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.402"
-    },
-    {
-      "hlo_value_id": "%custom-call.416",
-      "dtype": "c64",
-      "shape": [
-        256,
-        256
-      ],
-      "buffer_bytes": 524288,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.416"
-    },
-    {
-      "hlo_value_id": "%custom-call.393",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.393"
-    },
-    {
-      "hlo_value_id": "%custom-call.398",
-      "dtype": "s8",
-      "shape": [
-        640
-      ],
-      "buffer_bytes": 640,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.398"
-    },
-    {
-      "hlo_value_id": "%custom-call.399",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.399"
-    },
-    {
-      "hlo_value_id": "%custom-call.417",
-      "dtype": "s8",
-      "shape": [
-        526336
-      ],
-      "buffer_bytes": 526336,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.417"
-    },
-    {
-      "hlo_value_id": "%custom-call.493",
-      "dtype": "c64",
-      "shape": [
-        256,
-        65536
-      ],
-      "buffer_bytes": 134217728,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.493"
-    },
-    {
-      "hlo_value_id": "%custom-call.392",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.392"
-    },
-    {
-      "hlo_value_id": "%custom-call.494",
-      "dtype": "c64",
-      "shape": [
-        16,
-        1048576
-      ],
-      "buffer_bytes": 134217728,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.494"
-    },
-    {
-      "hlo_value_id": "%custom-call.391",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.391"
-    },
-    {
-      "hlo_value_id": "%custom-call.495",
-      "dtype": "c64",
-      "shape": [
-        16,
-        1048576
-      ],
-      "buffer_bytes": 134217728,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.495"
-    },
-    {
-      "hlo_value_id": "%custom-call.390",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.390"
-    },
-    {
-      "hlo_value_id": "%custom-call.496",
-      "dtype": "c64",
-      "shape": [
-        16,
-        1048576
-      ],
-      "buffer_bytes": 134217728,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.496"
-    },
-    {
-      "hlo_value_id": "%custom-call.383",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.383"
-    },
-    {
-      "hlo_value_id": "%custom-call.380",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.380"
-    },
-    {
-      "hlo_value_id": "%custom-call.381",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.381"
-    },
-    {
-      "hlo_value_id": "%custom-call.382",
-      "dtype": "c64",
-      "shape": [
-        8,
-        8
-      ],
-      "buffer_bytes": 512,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.382"
-    },
-    {
-      "hlo_value_id": "%custom-call.384",
-      "dtype": "c64",
-      "shape": [
-        16,
-        64
-      ],
-      "buffer_bytes": 8192,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.384"
-    },
-    {
-      "hlo_value_id": "%custom-call.379",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.379"
-    },
-    {
-      "hlo_value_id": "%custom-call.385",
-      "dtype": "c64",
-      "shape": [
-        8,
-        512
-      ],
-      "buffer_bytes": 32768,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.385"
-    },
-    {
-      "hlo_value_id": "%custom-call.378",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.378"
-    },
-    {
-      "hlo_value_id": "%custom-call.386",
-      "dtype": "c64",
-      "shape": [
-        64,
-        1024
-      ],
-      "buffer_bytes": 524288,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.386"
-    },
-    {
-      "hlo_value_id": "%custom-call.376",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.376"
-    },
-    {
-      "hlo_value_id": "%custom-call.373",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.373"
-    },
-    {
-      "hlo_value_id": "%custom-call.374",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.374"
-    },
-    {
-      "hlo_value_id": "%custom-call.375",
-      "dtype": "c64",
-      "shape": [
-        8,
-        8
-      ],
-      "buffer_bytes": 512,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.375"
-    },
-    {
-      "hlo_value_id": "%custom-call.377",
-      "dtype": "c64",
-      "shape": [
-        16,
-        64
-      ],
-      "buffer_bytes": 8192,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.377"
-    },
-    {
-      "hlo_value_id": "%custom-call.387",
-      "dtype": "c64",
-      "shape": [
-        64,
-        4096
-      ],
-      "buffer_bytes": 2097152,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.387"
-    },
-    {
-      "hlo_value_id": "%custom-call.372",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.372"
-    },
-    {
-      "hlo_value_id": "%custom-call.388",
-      "dtype": "c64",
-      "shape": [
-        64,
-        65536
-      ],
-      "buffer_bytes": 33554432,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.388"
-    },
-    {
-      "hlo_value_id": "%custom-call.371",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.371"
-    },
-    {
-      "hlo_value_id": "%custom-call.389",
-      "dtype": "c64",
-      "shape": [
-        16,
-        262144
-      ],
-      "buffer_bytes": 33554432,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.389"
-    },
-    {
-      "hlo_value_id": "%custom-call.497",
-      "dtype": "c64",
-      "shape": [
-        4096,
-        16384
-      ],
-      "buffer_bytes": 536870912,
-      "is_anchor": true,
-      "allocation_id": "%custom-call.497"
-    },
-    {
-      "hlo_value_id": "%custom-call.368",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.368"
-    },
-    {
-      "hlo_value_id": "%custom-call.365",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.365"
-    },
-    {
-      "hlo_value_id": "%custom-call.366",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.366"
-    },
-    {
-      "hlo_value_id": "%custom-call.367",
-      "dtype": "c64",
-      "shape": [
-        8,
-        8
-      ],
-      "buffer_bytes": 512,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.367"
-    },
-    {
-      "hlo_value_id": "%custom-call.369",
-      "dtype": "c64",
-      "shape": [
-        16,
-        64
-      ],
-      "buffer_bytes": 8192,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.369"
-    },
-    {
-      "hlo_value_id": "%custom-call.364",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.364"
-    },
-    {
-      "hlo_value_id": "%custom-call.370",
-      "dtype": "c64",
-      "shape": [
-        8,
-        512
-      ],
-      "buffer_bytes": 32768,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.370"
-    },
-    {
-      "hlo_value_id": "%custom-call.498",
-      "dtype": "c64",
-      "shape": [
-        64,
-        1048576
-      ],
-      "buffer_bytes": 536870912,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.498"
-    },
-    {
-      "hlo_value_id": "%custom-call.352",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.352"
-    },
-    {
-      "hlo_value_id": "%custom-call.312",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.312"
-    },
-    {
-      "hlo_value_id": "%custom-call.313",
-      "dtype": "s8",
-      "shape": [
-        640
-      ],
-      "buffer_bytes": 640,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.313"
-    },
-    {
-      "hlo_value_id": "%custom-call.353",
-      "dtype": "c64",
-      "shape": [
-        16,
-        64
-      ],
-      "buffer_bytes": 8192,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.353"
-    },
-    {
-      "hlo_value_id": "%custom-call.260",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.260"
-    },
-    {
-      "hlo_value_id": "%custom-call.261",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.261"
-    },
-    {
-      "hlo_value_id": "%custom-call.311",
-      "dtype": "s8",
-      "shape": [
-        640
-      ],
-      "buffer_bytes": 640,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.311"
-    },
-    {
-      "hlo_value_id": "%custom-call.354",
-      "dtype": "s8",
-      "shape": [
-        8704
-      ],
-      "buffer_bytes": 8704,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.354"
-    },
-    {
-      "hlo_value_id": "%custom-call.259",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.259"
-    },
-    {
-      "hlo_value_id": "%custom-call.355",
-      "dtype": "c64",
-      "shape": [
-        8,
-        512
-      ],
-      "buffer_bytes": 32768,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.355"
-    },
-    {
-      "hlo_value_id": "%custom-call.360",
-      "dtype": "c64",
-      "shape": [
-        16,
-        16
-      ],
-      "buffer_bytes": 2048,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.360"
-    },
-    {
-      "hlo_value_id": "%custom-call.357",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.357"
-    },
-    {
-      "hlo_value_id": "%custom-call.358",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.358"
-    },
-    {
-      "hlo_value_id": "%custom-call.359",
-      "dtype": "c64",
-      "shape": [
-        8,
-        8
-      ],
-      "buffer_bytes": 512,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.359"
-    },
-    {
-      "hlo_value_id": "%custom-call.361",
-      "dtype": "c64",
-      "shape": [
-        16,
-        64
-      ],
-      "buffer_bytes": 8192,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.361"
-    },
-    {
-      "hlo_value_id": "%custom-call.356",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.356"
-    },
-    {
-      "hlo_value_id": "%custom-call.362",
-      "dtype": "c64",
-      "shape": [
-        8,
-        512
-      ],
-      "buffer_bytes": 32768,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.362"
-    },
-    {
-      "hlo_value_id": "%custom-call.363",
-      "dtype": "c64",
-      "shape": [
-        256,
-        256
-      ],
-      "buffer_bytes": 524288,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.363"
-    },
-    {
-      "hlo_value_id": "%custom-call.499",
-      "dtype": "c64",
-      "shape": [
-        128,
-        131072
-      ],
-      "buffer_bytes": 134217728,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.499"
-    },
-    {
-      "hlo_value_id": "%custom-call.255",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.255"
-    },
-    {
-      "hlo_value_id": "%custom-call.256",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.256"
-    },
-    {
-      "hlo_value_id": "%custom-call.257",
-      "dtype": "c64",
-      "shape": [
-        8,
-        8
-      ],
-      "buffer_bytes": 512,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.257"
-    },
-    {
-      "hlo_value_id": "%custom-call.252",
-      "dtype": "s8",
-      "shape": [
-        160
-      ],
-      "buffer_bytes": 160,
-      "is_anchor": false,
-      "allocation_id": "%custom-call.252"
-    },
-    {
-      "hlo_value_id": "%custom-call.258",
-      "dtype": "c64",
-      "shape": [
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         8,
         32
       ],
-      "buffer_bytes": 2048,
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2560,
       "is_anchor": false,
-      "allocation_id": "%custom-call.258"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
-      "hlo_value_id": "%custom-call.500",
-      "dtype": "c64",
-      "shape": [
+      "hlo_value_id": "%custom-call.447",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        32
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2560,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.489",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        32,
+        2097152
+      ],
+      "data_output_bytes": 536870912,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.433",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.490",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        4194304
+      ],
+      "data_output_bytes": 536870912,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.432",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.491",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        4194304
+      ],
+      "data_output_bytes": 536870912,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.423",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.424",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        64
+      ],
+      "data_output_bytes": 8192,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2560,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.425",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.426",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        64
+      ],
+      "data_output_bytes": 8192,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2560,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.427",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        128,
+        128
+      ],
+      "data_output_bytes": 131072,
+      "workspace_result_index": 1,
+      "workspace_bytes": 16384,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.421",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.422",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        64
+      ],
+      "data_output_bytes": 8192,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2560,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.428",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        128,
+        2048
+      ],
+      "data_output_bytes": 2097152,
+      "workspace_result_index": 1,
+      "workspace_bytes": 139264,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.420",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.429",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        64,
+        65536
+      ],
+      "data_output_bytes": 33554432,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2099200,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.419",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.430",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        262144
+      ],
+      "data_output_bytes": 33554432,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.418",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.431",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        262144
+      ],
+      "data_output_bytes": 33554432,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.492",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        1024,
+        16384
+      ],
+      "data_output_bytes": 134217728,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.394",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.395",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.396",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.397",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        24
+      ],
+      "data_output_bytes": 1536,
+      "workspace_result_index": 1,
+      "workspace_bytes": 512,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.410",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.411",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        4,
+        16
+      ],
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 640,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.412",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.413",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.414",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        64,
+        64
+      ],
+      "data_output_bytes": 32768,
+      "workspace_result_index": 1,
+      "workspace_bytes": 4096,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.403",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.404",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        2,
+        8
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.405",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        4,
+        16
+      ],
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 640,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.406",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.251",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        22,
+        8
+      ],
+      "data_output_bytes": 1408,
+      "workspace_result_index": 1,
+      "workspace_bytes": 480,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.407",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        2,
+        8
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.408",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        8
+      ],
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 256,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.409",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.415",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        256
+      ],
+      "data_output_bytes": 32768,
+      "workspace_result_index": 1,
+      "workspace_bytes": 34816,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.400",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.401",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.402",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        64,
+        64
+      ],
+      "data_output_bytes": 32768,
+      "workspace_result_index": 1,
+      "workspace_bytes": 4096,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.416",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        256,
+        256
+      ],
+      "data_output_bytes": 524288,
+      "workspace_result_index": 1,
+      "workspace_bytes": 65536,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.393",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.398",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        4,
+        16
+      ],
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 640,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.399",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.417",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        4096
+      ],
+      "data_output_bytes": 524288,
+      "workspace_result_index": 1,
+      "workspace_bytes": 526336,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.493",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        256,
+        65536
+      ],
+      "data_output_bytes": 134217728,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.392",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.494",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
         16,
         1048576
       ],
-      "buffer_bytes": 134217728,
+      "data_output_bytes": 134217728,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
       "is_anchor": false,
-      "allocation_id": "%custom-call.500"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.391",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.495",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        1048576
+      ],
+      "data_output_bytes": 134217728,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.390",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.496",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        1048576
+      ],
+      "data_output_bytes": 134217728,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.383",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.380",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.381",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        2,
+        8
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.382",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        8
+      ],
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 256,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.384",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        64
+      ],
+      "data_output_bytes": 8192,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2560,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.379",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        2,
+        8
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.385",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        512
+      ],
+      "data_output_bytes": 32768,
+      "workspace_result_index": 1,
+      "workspace_bytes": 8320,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.378",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.386",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        64,
+        1024
+      ],
+      "data_output_bytes": 524288,
+      "workspace_result_index": 1,
+      "workspace_bytes": 34816,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.376",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.373",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.374",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        2,
+        8
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.375",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        8
+      ],
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 256,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.377",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        64
+      ],
+      "data_output_bytes": 8192,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2560,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.387",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        64,
+        4096
+      ],
+      "data_output_bytes": 2097152,
+      "workspace_result_index": 1,
+      "workspace_bytes": 532480,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.372",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.388",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        64,
+        65536
+      ],
+      "data_output_bytes": 33554432,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2099200,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.371",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.389",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        262144
+      ],
+      "data_output_bytes": 33554432,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.497",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        4096,
+        16384
+      ],
+      "data_output_bytes": 536870912,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
+      "is_anchor": true,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.368",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.365",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.366",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        2,
+        8
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.367",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        8
+      ],
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 256,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.369",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        64
+      ],
+      "data_output_bytes": 8192,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2560,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.364",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        2,
+        8
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.370",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        512
+      ],
+      "data_output_bytes": 32768,
+      "workspace_result_index": 1,
+      "workspace_bytes": 8320,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.498",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        64,
+        1048576
+      ],
+      "data_output_bytes": 536870912,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.352",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.312",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.313",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        4,
+        16
+      ],
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 640,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.353",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        64
+      ],
+      "data_output_bytes": 8192,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2560,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.260",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.261",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        2,
+        8
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.311",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        4,
+        16
+      ],
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 640,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.354",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        128
+      ],
+      "data_output_bytes": 8192,
+      "workspace_result_index": 1,
+      "workspace_bytes": 8704,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.259",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        2,
+        8
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.355",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        512
+      ],
+      "data_output_bytes": 32768,
+      "workspace_result_index": 1,
+      "workspace_bytes": 8320,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.360",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        16
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 1024,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.357",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.358",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        2,
+        8
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.359",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        8
+      ],
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 256,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.361",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        64
+      ],
+      "data_output_bytes": 8192,
+      "workspace_result_index": 1,
+      "workspace_bytes": 2560,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.356",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        2,
+        8
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.362",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        512
+      ],
+      "data_output_bytes": 32768,
+      "workspace_result_index": 1,
+      "workspace_bytes": 8320,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.363",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        256,
+        256
+      ],
+      "data_output_bytes": 524288,
+      "workspace_result_index": 1,
+      "workspace_bytes": 65536,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.499",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        128,
+        131072
+      ],
+      "data_output_bytes": 134217728,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.255",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        2
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.256",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        2,
+        8
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.257",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        8
+      ],
+      "data_output_bytes": 512,
+      "workspace_result_index": 1,
+      "workspace_bytes": 256,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.252",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        2,
+        8
+      ],
+      "data_output_bytes": 128,
+      "workspace_result_index": 1,
+      "workspace_bytes": 160,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.258",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        8,
+        32
+      ],
+      "data_output_bytes": 2048,
+      "workspace_result_index": 1,
+      "workspace_bytes": 640,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
+    },
+    {
+      "hlo_value_id": "%custom-call.500",
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        16,
+        1048576
+      ],
+      "data_output_bytes": 134217728,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
+      "is_anchor": false,
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     },
     {
       "hlo_value_id": "%custom-call.501",
-      "dtype": "s8",
-      "shape": [
-        33554432
+      "data_result_index": 0,
+      "data_dtype": "c64",
+      "data_shape": [
+        2,
+        2
       ],
-      "buffer_bytes": 33554432,
+      "data_output_bytes": 32,
+      "workspace_result_index": 1,
+      "workspace_bytes": 33554432,
       "is_anchor": false,
-      "allocation_id": "%custom-call.501"
+      "allocation_id": null,
+      "allocation_size": null,
+      "offset": null,
+      "aliases": null,
+      "birth": null,
+      "death": null
     }
   ]
 }

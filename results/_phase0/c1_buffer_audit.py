@@ -1,22 +1,17 @@
-"""C1 buffer-assignment audit (rereview §4.2/§4.3).
+"""C1 buffer-assignment audit (rereview §4.2/4.3, correction-plan Task A).
 
-Parses the PRODUCTION expectation executable's optimized HLO for every materialized
-contraction buffer — the ``__cublas$gemm`` custom-call output tuples — and assigns a
-stable ``hlo_value_id`` (the SSA name, e.g. ``%custom-call.497``), shape, byte size and
-an ``is_anchor`` flag for the 512 MiB ``c64[4096,16384]`` buffer. This is the C1
-buffer audit + the anchor identity that Task 2 (HLO use-def edge map) consumes.
+Parses the PRODUCTION expectation executable's optimized HLO for every ``__cublas$gemm``
+custom-call, splitting the output tuple into DATA output and cuBLAS WORKSPACE by result
+index + dtype (NOT by max bytes -- on small GEMMs the s8 workspace can exceed the data
+output, e.g. ``(c64[10,2]=160B, s8[192]=192B)``), assigning a stable ``hlo_value_id`` (SSA
+name), and flagging the 512 MiB ``c64[4096,16384]`` anchor.
+
+allocation_id / offset / aliases / birth / death come ONLY from a real XLA buffer-assignment
+dump (the ``xla_dump`` worker, Task A2). Until that dump yields parseable data they are
+recorded as ``unknown``/``None`` -- NEVER fabricated from the HLO SSA name (rereview §4.1:
+an HLO value id is not an XLA allocation id).
 
 Pure text parsing over the HLO artifact saved by ``c1.measure_case`` (no GPU/compile).
-``allocation_id`` / live-range are best-effort: on jax 0.6.2 GPU
-``compiled.memory_analysis().serialized_buffer_assignment_proto`` is empty (len 0), so
-``allocation_source``/``live_range_source`` default to ``"hlo_shape_only"`` and Step 3b's
-``--xla_dump_to`` enrichment (``dump_buffer_assignment_via_xla``) upgrades them only when
-the dump actually yields parseable allocation/liveness data.
-
-Validated against the real n=24/d=10/default HLO: the anchor is
-``%custom-call.497 = (c64[4096,16384]{1,0}, s8[33554432]{0}) custom-call(... __cublas$gemm)``
-with operands ``c64[4096,1024] x c64[1024,16384]`` (M=4096,K=1024,N=16384), consumed by
-``%get-tuple-element.246.0``.
 """
 
 from __future__ import annotations
@@ -48,7 +43,6 @@ _HLO_DTYPE_BYTES = {
 }
 
 # Match `%ssa-name = (tuple-body) custom-call` on lines carrying __cublas$gemm.
-# SSA names contain `-`/`.` (e.g. %custom-call.497, %get-tuple-element.5).
 _CUBLAS_CALL_DEF_RE = re.compile(r"(%[a-zA-Z0-9_.\-]+)\s*=\s*\(([^)]*)\)\s+custom-call")
 # One typed tuple element: TYPE[dims]{layout}
 _TYPED_ELEM_RE = re.compile(r"\b([a-z0-9_]+)\[([0-9]+(?:,[0-9]+)*)\]\{[^}]*\}")
@@ -69,11 +63,14 @@ def _elem_bytes(dtype: str, dims_csv: str) -> int:
 
 
 def parse_materialized_buffers(hlo_text: str) -> list[dict]:
-    """All ``__cublas$gemm`` custom-call RESULT buffers in the HLO.
+    """All ``__cublas$gemm`` custom-call result buffers, with DATA output and cuBLAS
+    WORKSPACE separated by result index + dtype.
 
-    The result buffer is the largest typed element of the output tuple (excludes the
-    ``s8`` cuBLAS scratch). Returns one dict per custom-call:
-    ``{hlo_value_id, dtype, shape, buffer_bytes}``.
+    The data output is the non-``s8`` typed element; the workspace is the ``s8`` element.
+    Selection is by dtype/index, NOT by max bytes (on small GEMMs the s8 workspace can be
+    larger than the data output). Returns one dict per custom-call:
+    ``{hlo_value_id, data_result_index, data_dtype, data_shape, data_output_bytes,
+    workspace_result_index, workspace_bytes}``.
     """
     buffers: list[dict] = []
     for line in hlo_text.splitlines():
@@ -84,20 +81,31 @@ def parse_materialized_buffers(hlo_text: str) -> list[dict]:
             continue
         ssa = m.group(1)
         tuple_body = m.group(2)
-        best = None  # (dtype, shape_list, bytes)
-        for elem in _TYPED_ELEM_RE.finditer(tuple_body):
-            dtype, dims = elem.group(1), elem.group(2)
-            b = _elem_bytes(dtype, dims)
-            if best is None or b > best[2]:
-                best = (dtype, [int(x) for x in dims.split(",")], b)
-        if best is None:
+        data = None  # (dtype, dims, bytes)
+        ws = None
+        data_idx = None
+        ws_idx = None
+        for idx, elem in enumerate(_TYPED_ELEM_RE.finditer(tuple_body)):
+            dtype, dims_csv = elem.group(1), elem.group(2)
+            dims = [int(x) for x in dims_csv.split(",")]
+            b = _elem_bytes(dtype, dims_csv)
+            if dtype == "s8":
+                ws = (dtype, dims, b)
+                ws_idx = idx
+            else:
+                data = (dtype, dims, b)
+                data_idx = idx
+        if data is None:
             continue
         buffers.append(
             {
                 "hlo_value_id": ssa,
-                "dtype": best[0],
-                "shape": best[1],
-                "buffer_bytes": best[2],
+                "data_result_index": data_idx,
+                "data_dtype": data[0],
+                "data_shape": data[1],
+                "data_output_bytes": data[2],
+                "workspace_result_index": ws_idx,
+                "workspace_bytes": ws[2] if ws else 0,
             }
         )
     return buffers
@@ -107,9 +115,10 @@ def audit_buffer_assignment(n: int, depth: int, fusion: str = "default") -> dict
     """Build the buffer-assignment audit for one C1 case and write it as JSON.
 
     Reads ``results/phase0/c1_optimized_hlo/n{n}_d{depth}_exp_{fusion}.hlo`` (written by
-    ``c1.measure_case``), parses every ``__cublas$gemm`` result buffer, flags the
-    512 MiB ``c64[4096,16384]`` anchor, and writes
-    ``results/phase0/c1_buffer_assignment/n{n}_d{depth}_{fusion}.json``.
+    ``c1.measure_case``), parses every ``__cublas$gemm`` tuple (data vs workspace), flags
+    the 512 MiB ``c64[4096,16384]`` anchor, and writes
+    ``results/phase0/c1_buffer_assignment/n{n}_d{depth}_{fusion}.json``. allocation/liveness
+    fields are ``unknown``/``None`` until the XLA dump worker (Task A2) enriches them.
     """
     hlo_path = f"{HLO_DIR}/n{n}_d{depth}_exp_{fusion}.hlo"
     if not os.path.exists(hlo_path):
@@ -123,19 +132,29 @@ def audit_buffer_assignment(n: int, depth: int, fusion: str = "default") -> dict
     buffers = []
     anchor_count = 0
     for b in raw:
-        is_anchor = tuple(b["shape"]) == ANCHOR_SHAPE and b["dtype"] == ANCHOR_DTYPE
+        is_anchor = (
+            tuple(b["data_shape"]) == ANCHOR_SHAPE and b["data_dtype"] == ANCHOR_DTYPE
+        )
         if is_anchor:
             anchor_count += 1
         buffers.append(
             {
                 "hlo_value_id": b["hlo_value_id"],
-                "dtype": b["dtype"],
-                "shape": b["shape"],
-                "buffer_bytes": b["buffer_bytes"],
+                "data_result_index": b["data_result_index"],
+                "data_dtype": b["data_dtype"],
+                "data_shape": b["data_shape"],
+                "data_output_bytes": b["data_output_bytes"],
+                "workspace_result_index": b["workspace_result_index"],
+                "workspace_bytes": b["workspace_bytes"],
                 "is_anchor": is_anchor,
-                # Real allocation_id needs XLA --xla_dump_to (Step 3b); the in-process
-                # memory_analysis exposes none on GPU (proto len 0).
-                "allocation_id": b["hlo_value_id"],
+                # Real allocation/liveness needs the XLA --xla_dump_to worker (Task A2).
+                # Until then honestly unknown -- never fake an allocation_id from the SSA name.
+                "allocation_id": None,
+                "allocation_size": None,
+                "offset": None,
+                "aliases": None,
+                "birth": None,
+                "death": None,
             }
         )
 
@@ -144,8 +163,8 @@ def audit_buffer_assignment(n: int, depth: int, fusion: str = "default") -> dict
         "depth": depth,
         "fusion": fusion,
         "hlo_path": hlo_path,
-        "allocation_source": "hlo_shape_only",
-        "live_range_source": "hlo_shape_only",
+        "allocation_source": "unknown",
+        "live_range_source": "unknown",
         "buffer_count": len(buffers),
         "anchor_count": anchor_count,
         "buffers": buffers,
