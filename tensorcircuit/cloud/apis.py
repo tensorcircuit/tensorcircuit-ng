@@ -8,6 +8,7 @@ from functools import partial
 import json
 import os
 import sys
+import tempfile
 import logging
 
 from .abstraction import Provider, Device, Task, sep, sep2
@@ -143,6 +144,55 @@ def b64decode_s(s: str) -> str:
     return b64decode(s.encode("utf-8")).decode("utf-8")
 
 
+def _auth_path() -> str:
+    env = os.environ.get("TC_AUTH_PATH")
+    if env:
+        return env
+    return os.path.join(os.path.expanduser("~"), ".tc.auth.json")
+
+
+def _read_auth_file(path: str) -> Dict[str, str]:
+    # atomic-ish read: readers either see the old file or the new one,
+    # never a half-written one (writes go through tempfile + os.replace).
+    # a missing or corrupt file simply yields an empty dict; we must never
+    # raise here, since this runs on module import.
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r") as f:
+            file_token = json.load(f)
+        return {k: b64decode_s(v) for k, v in file_token.items()}
+    except (json.JSONDecodeError, OSError, ValueError) as e:
+        logger.warning("token file loading failure, treat as empty: %s", e)
+        return {}
+
+
+def _write_auth_file(path: str, tokens: Dict[str, str]) -> None:
+    # atomic write via tempfile + os.replace, so a crash or a concurrent
+    # reader can never observe a truncated/empty file. mkstemp creates the
+    # temp file with mode 0600 (ignoring umask), which is the right
+    # permission for a credential file on POSIX; on Windows the temp file
+    # inherits owner-only ACL from its home directory.
+    directory = os.path.dirname(path) or "."
+    try:
+        os.makedirs(directory, exist_ok=True)
+    except OSError:
+        logger.warning("token directory creation failure: %s", directory)
+        return
+    payload = {k: b64encode_s(v) for k, v in tokens.items()}
+    fd, tmp = tempfile.mkstemp(prefix=".tc.auth.", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(payload, f)
+        os.replace(tmp, path)
+    except OSError as e:
+        logger.warning("token file writing failure, skip cache saving: %s", e)
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
 saved_token: Dict[str, Any] = {}
 
 
@@ -202,51 +252,43 @@ def set_token(
     :rtype: Dict[str, Any]
     """
     global saved_token
-    homedir = os.path.expanduser("~")
-    authpath = os.environ.get("TC_AUTH_PATH")
-    if not authpath:
-        authpath = os.path.join(homedir, ".tc.auth.json")
+    authpath = _auth_path()
     if clear is True:
         saved_token = {}
-    if token is None:
         if cached and os.path.exists(authpath):
             try:
-                with open(authpath, "r") as f:
-                    file_token = json.load(f)
-                    file_token = {k: b64decode_s(v) for k, v in file_token.items()}
-            except json.JSONDecodeError:
-                logger.warning("token file loading failure, set empty token instead")
-                # TODO(@refraction-ray): better conflict solve with multiprocessing
-                file_token = {}
-        else:
-            file_token = {}
+                os.remove(authpath)
+            except OSError as e:
+                logger.warning("token file removal failure: %s", e)
+        return saved_token
+    if token is None:
+        # pure read path: refresh in-memory cache from disk, never write back.
+        # writing back on import / get_token is what used to truncate the auth
+        # file under multiprocessing (each worker re-dumped a stale snapshot).
+        file_token = _read_auth_file(authpath)
         file_token.update(saved_token)
         saved_token = file_token
-    else:  # with token
-        if isinstance(provider, str):
-            provider = Provider.from_name(provider)
-        if device is None:
-            if provider is None:
-                provider = default_provider
-            added_token = {provider.name + sep: token}
-        else:
-            device = Device.from_name(device)
-            if provider is None:
-                provider = device.provider  # type: ignore
-            if provider is None:
-                provider = default_provider
-            added_token = {provider.name + sep + device.name: token}  # type: ignore
-        saved_token.update(added_token)
-
+        return saved_token
+    # with token: merge the single new entry into the freshest on-disk state
+    # and persist atomically, so concurrent processes can't clobber each other.
+    if isinstance(provider, str):
+        provider = Provider.from_name(provider)
+    if device is None:
+        if provider is None:
+            provider = default_provider
+        key = provider.name + sep
+    else:
+        device = Device.from_name(device)
+        if provider is None:
+            provider = device.provider  # type: ignore
+        if provider is None:
+            provider = default_provider
+        key = provider.name + sep + device.name  # type: ignore
+    file_token = _read_auth_file(authpath)
+    file_token[key] = token
+    saved_token = file_token
     if cached:
-        file_token = {k: b64encode_s(v) for k, v in saved_token.items()}
-        if file_token:
-            try:
-                with open(authpath, "w") as f:
-                    json.dump(file_token, f)
-            except OSError:
-                logger.warning("token file writing failure, skip cache saving")
-
+        _write_auth_file(authpath, saved_token)
     return saved_token
 
 
@@ -259,7 +301,10 @@ def get_token(
 ) -> Optional[str]:
     """
     Get API token setted for given provider or device,
-    if no device token saved, the corresponding provider tken is returned
+    if no device token saved, the corresponding provider tken is returned.
+    Environment variables take precedence and are never persisted: a single
+    token can be supplied via ``TC_TOKEN``, or a per-provider token via
+    ``TC_TOKEN_<PROVIDER_NAME>`` (uppercased), e.g. ``TC_TOKEN_TENCENT``.
 
     :param provider: _description_, defaults to None
     :type provider: Optional[Union[str, Provider]], optional
@@ -275,6 +320,15 @@ def get_token(
     if device is not None:
         device = Device.from_name(device, provider)
         target = target + device.name
+    # env var override (not persisted): single token, or per-provider token
+    env_token = os.environ.get("TC_TOKEN")
+    if env_token is None:
+        env_token = os.environ.get("TC_TOKEN_" + provider.name.upper())
+    if env_token is not None:
+        return env_token
+    # ensure in-memory cache is fresh with whatever is on disk right now
+    global saved_token
+    saved_token = _read_auth_file(_auth_path())
     for k, v in saved_token.items():
         if k == target:
             return v  # type: ignore

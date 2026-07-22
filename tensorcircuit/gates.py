@@ -46,6 +46,9 @@ _i_matrix = np.array([[1.0, 0.0], [0.0, 1.0]])
 _x_matrix = np.array([[0.0, 1.0], [1.0, 0.0]])
 _y_matrix = np.array([[0.0, -1j], [1j, 0.0]])
 _z_matrix = np.array([[1.0, 0.0], [0.0, -1.0]])
+
+# Index of each Pauli char in ``pauli_gates`` (``[i, x, y, z]``).
+PAULI_CHAR_TO_INDEX = {"I": 0, "X": 1, "Y": 2, "Z": 3}
 _s_matrix = np.array([[1.0, 0.0], [0.0, 1j]])
 _t_matrix = np.array([[1.0, 0.0], [0.0, np.exp(np.pi / 4 * 1j)]])
 _wroot_matrix = (
@@ -249,13 +252,6 @@ def num_to_tensor(*num: Union[float, Tensor], dtype: Optional[str] = None) -> An
 array_to_tensor = num_to_tensor
 
 
-def gate_wrapper(m: Tensor, n: Optional[str] = None) -> Gate:
-    if n is None:
-        n = "unknowngate"
-    m = m.astype(npdtype)
-    return Gate(deepcopy(m), name=n)
-
-
 def _cast_registered_gate(m: Tensor) -> Tensor:
     if isinstance(m, np.ndarray):
         return np.asarray(m, dtype=npdtype)
@@ -402,8 +398,6 @@ def meta_gate() -> None:
             m = _cast_registered_gate(m)
             # m = m.astype(npdtype)
             # not enough for new mechanism: register method on class instead of instance
-            # temp = partial(gate_wrapper, m, n)
-            # temp.__name__ = n
             temp = GateF(m, n)
             setattr(thismodule, n + "gate", temp)
             setattr(thismodule, n + "_gate", temp)

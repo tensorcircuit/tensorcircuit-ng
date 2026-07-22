@@ -284,8 +284,9 @@ class FGSSimulator:
         """
         if subsystems_to_trace_out is None:
             subsystems_to_trace_out = []
-        keep = [i for i in range(self.L) if i not in subsystems_to_trace_out]
-        keep += [i + self.L for i in range(self.L) if i not in subsystems_to_trace_out]
+        trace_set = set(subsystems_to_trace_out)
+        keep = [i for i in range(self.L) if i not in trace_set]
+        keep += [i + self.L for i in range(self.L) if i not in trace_set]
         if len(keep) == 0:
             raise ValueError("the full system is traced out, no subsystems to keep")
         keep = backend.convert_to_tensor(keep)
@@ -999,6 +1000,15 @@ class FGSTestSimulator:
     """
     Never use, only for correctness testing
     stick to numpy backend and no jit/ad/vmap is available
+
+    This is a brute-force reference implementation that materializes the full
+    ``2^L x 2^L`` density matrix and uses ``openfermion``/``numpy`` directly
+    (intentionally bypassing ``tc.backend``). Methods such as ``get_cmatrix``
+    and ``get_ot_cmatrix`` scale as ``O(L^2 * 2^{3L})`` in time and
+    ``O(2^{2L})`` in memory. It exists solely as a ground truth for
+    cross-checking :class:`FGSSimulator` and is not differentiable, not
+    JIT-compatible, and not intended for production use or for ``L`` larger
+    than roughly 8. Performance is explicitly out of scope.
     """
 
     def __init__(

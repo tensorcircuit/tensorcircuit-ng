@@ -358,12 +358,25 @@ def renyi_entropy_2(snapshots: Tensor, sub: Optional[Sequence[int]] = None) -> T
                 count[s] = np.zeros(ns)
             count[s][i] += 1
 
-    tr = 0.0
-    for x in count:
-        for y in count:
-            h = np.sum((np.asarray(x) + np.asarray(y)) % 2)
-            pp_mean = np.mean(count[x] * count[y]) / repeat / repeat
-            tr += pp_mean * (-2.0) ** (-h)
+    # Vectorized evaluation of tr = sum_{x,y} pp_mean(x,y) * (-2)^(-h(x,y)).
+    # `keys` and `values` share dict insertion order, so row m of `bits` and
+    # `counts` correspond to the same bitstring.
+    keys = list(count.keys())
+    bits = np.asarray(keys, dtype=np.uint8)  # (M, nq)
+    counts = np.asarray(list(count.values()), dtype=np.float64)  # (M, ns)
+
+    # Hamming distance matrix H (M, M) via packed-bit XOR + popcount lookup,
+    # removing the per-pair nq Python factor.
+    packed = np.packbits(bits, axis=1)  # (M, nbytes) uint8, nbytes = ceil(nq/8)
+    _popcount_table = np.array([bin(i).count("1") for i in range(256)], dtype=np.uint8)
+    h = np.zeros((packed.shape[0], packed.shape[0]), dtype=np.int32)
+    for b in range(packed.shape[1]):
+        h += _popcount_table[packed[:, None, b] ^ packed[None, :, b]]
+
+    # pp_mean(x, y) = mean_i(count[x, i] * count[y, i]) / repeat^2
+    #               = (counts @ counts^T)[x, y] / (ns * repeat^2)
+    pp = (counts @ counts.T) / (ns * repeat * repeat)
+    tr = np.sum(pp * (-2.0) ** (-h))
     return -np.log(tr * 2**nq)
 
 

@@ -2170,3 +2170,38 @@ def test_custom_stateful_strip_exponent(backend, reset_contractor):
     res_node, exponent = result
     np.testing.assert_allclose(tc.backend.numpy(res_node.tensor), 1.0, atol=1e-5)
     np.testing.assert_allclose(exponent, 6.0, atol=1e-5)
+
+
+def _build_merge_circuit(n=6, depth=4):
+    # alternating 1q gates (rank-2 nodes that ``_merge_single_gates`` fuses)
+    # and entangling 2q gates; the repeated 1q stacks on the same qubit also
+    # exercise the rank->2 re-merge and trace-edge branches.
+    c = tc.Circuit(n)
+    for d in range(depth):
+        for i in range(n):
+            c.h(i)
+            c.rz(i, theta=0.3 * (i + 1))
+            c.rx(i, theta=0.2 * (d + 1))
+        for i in range(n - 1):
+            c.cnot(i, i + 1)
+    return c
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_merge_single_gates_via_preprocessing(backend):
+    # ``preprocessing=True`` routes through ``_base`` -> ``_merge_single_gates``
+    # for any optimizer; reference uses the default greedy path without merging.
+    expected = _build_merge_circuit().state()
+    with tc.runtime_contractor("greedy", preprocessing=True):
+        got = _build_merge_circuit().state()
+    np.testing.assert_allclose(got, expected, rtol=1e-5, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_merge_single_gates_via_plain_experimental(backend):
+    # ``plain-experimental`` calls ``experimental_contractor`` which invokes
+    # ``_merge_single_gates`` directly for ``len(nodes) > 5``.
+    expected = _build_merge_circuit().state()
+    with tc.runtime_contractor("plain-experimental", local_steps=3):
+        got = _build_merge_circuit().state()
+    np.testing.assert_allclose(got, expected, rtol=1e-5, atol=1e-5)

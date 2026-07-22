@@ -29,24 +29,6 @@ logger = logging.getLogger(__name__)
 # To be added once pytorch backend is ready
 
 
-class torch_jit_func:
-    """
-    Delay the tracing of torch jit to the first run time:
-    consistent with tf and jax mechanism
-    """
-
-    def __init__(self, f: Callable[..., Any]):
-        self.compiled = False
-        self.f = f
-
-    def __call__(self, *args: Any, **kws: Any) -> Any:
-        if self.compiled is False:
-            self.f = torchlib.jit.trace(self.f, example_inputs=args)
-            self.compiled = True
-
-        return self.f(*args, **kws)
-
-
 class torch_optimizer:
     def __init__(self, optimizer: Any) -> None:
         self.optimizer = optimizer

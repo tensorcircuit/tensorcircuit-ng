@@ -1,5 +1,6 @@
 from typing import Any, List, Tuple, Union
 from ..cons import dtypestr, backend
+from .. import gates
 from ..quantum import PauliStringSum2COO
 from .lattice import AbstractLattice
 
@@ -62,7 +63,7 @@ def heisenberg_hamiltonian(
     if num_sites == 0:
         raise ValueError("Cannot generate a Hamiltonian for a lattice with zero sites.")
 
-    pauli_map = {"X": 1, "Y": 2, "Z": 3}
+    pauli_map = gates.PAULI_CHAR_TO_INDEX
 
     ls: List[List[int]] = []
     weights: List[float] = []
@@ -120,7 +121,7 @@ def rydberg_hamiltonian(
     if num_sites == 0:
         raise ValueError("Cannot generate a Hamiltonian for a lattice with zero sites.")
 
-    pauli_map = {"X": 1, "Y": 2, "Z": 3}
+    pauli_map = gates.PAULI_CHAR_TO_INDEX
     ls: List[List[int]] = []
     weights: List[float] = []
 

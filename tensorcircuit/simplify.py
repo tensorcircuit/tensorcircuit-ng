@@ -11,20 +11,7 @@ Tensornetwork Simplification
 
 from typing import Any, List, Optional, Tuple
 
-import numpy as np
 import tensornetwork as tn
-
-
-def infer_new_size(a: tn.Node, b: tn.Node, include_old: bool = True) -> Any:
-    shared_edges = tn.get_shared_edges(a, b)
-    a_dim = np.prod([e.dimension for e in a])
-    b_dim = np.prod([e.dimension for e in b])
-    new_dim = np.prod([e.dimension for e in a if e not in shared_edges]) * np.prod(
-        [e.dimension for e in b if e not in shared_edges]
-    )
-    if include_old is True:
-        return new_dim, a_dim, b_dim
-    return new_dim
 
 
 def infer_new_shape(a: tn.Node, b: tn.Node, include_old: bool = True) -> Any:

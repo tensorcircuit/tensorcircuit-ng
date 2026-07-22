@@ -37,6 +37,12 @@ Use this file for algebraic contraction invariants, cotengra/OMECO path search a
 - In cotengra 0.8.x `SliceFinder`, a trial can stop when either `target_size` or `target_slices` is reached while final selection requires both. Supplying both targets at once can therefore yield no valid candidate; apply the size target first, then add slices in a second call when a minimum task count is still needed.
 - Track per-slice write as `total_write / nslices` for sequential slice-gradient execution. A width-compliant plan can multiply total FLOPs/write yet barely reduce per-slice write, so it may solve forward peak memory without solving reverse-mode memory.
 
+## Built-in contractor methods
+
+- `set_contractor` dispatches TC's own contractors (`plain`, `plain-experimental`) plus the `opt_einsum`/cotengra/omeco family via `_base`. `plain` is a fixed-order reverse linear contraction (naive state-vector path); `plain-experimental` runs `_merge_single_gates` + dq-fusion preprocessing then the same reverse linear tail. Both bypass path search entirely.
+- The `"tng"` method and its helpers (`tn_greedy_contractor`, `nodes_to_adj`, `d2s`, the `has_ps`/`_ps` tensornetwork `custom_path_solvers` probe) were removed: the path was deprecated, gated on a tensornetwork internals feature (`has_ps`), and empirically worse than `plain`. Unknown method names now fall through to the generic `opt_einsum.paths` lookup and raise `AttributeError`, which is the intended fail-fast behavior (do not reintroduce a dedicated branch).
+- `_merge_single_gates` has two entry points: `experimental_contractor` (always, for >5 nodes) and `_base` (only when `preprocessing=True` and no hyperedges). Tests must exercise both; the default `greedy` contractor without `preprocessing` does not call it.
+
 ## Benchmark interpretation and tuning
 
 - If cotengra imports fail because `autoray.get_namespace` is unavailable, diagnose the cotengra/autoray dependency mismatch before TensorCircuit contraction code. Process-pool failures during hyper-optimization can also be execution-environment artifacts rather than search bugs.

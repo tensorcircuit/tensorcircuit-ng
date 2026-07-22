@@ -65,10 +65,6 @@ def numpy_to_tensor(t: Array, backend: Any) -> Tensor:
     return backend.convert_to_tensor(t)
 
 
-def tensor_to_dtype(t: Tensor) -> str:
-    return which_backend(t).dtype(t)  # type: ignore
-
-
 def tensor_to_dlpack(t: Tensor) -> Any:
     return which_backend(t).to_dlpack(t)
 

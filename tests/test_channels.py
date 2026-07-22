@@ -15,6 +15,7 @@ from tensorcircuit.channels import (
     amplitudedampingchannel,
     phasedampingchannel,
     resetchannel,
+    composedkraus,
 )
 
 
@@ -409,3 +410,64 @@ def test_non_square_matrices():
     ]
     with pytest.raises(ValueError):
         tc.DMCircuit.check_kraus(invalid_kraus)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_composedkraus(backend):
+    # requires at least two channels
+    a = tc.channels.generaldepolarizingchannel(0.1, 1)
+    with pytest.raises(ValueError):
+        composedkraus(a)
+    with pytest.raises(ValueError):
+        composedkraus()
+
+    b = tc.channels.phasedampingchannel(0.3)
+    c = tc.channels.amplitudedampingchannel(0.2, 0.4)
+
+    # m=2 path: direct pairwise Kraus multiplication, operators identical
+    comp2 = composedkraus(a, b)
+    ref2 = []
+    for i in a:
+        for j in b:
+            ref2.append(tc.backend.reshapem(i.tensor) @ tc.backend.reshapem(j.tensor))
+    comp2_m = [tc.backend.reshapem(g.tensor) for g in comp2]
+    np.testing.assert_allclose(comp2_m, ref2, atol=1e-12)
+    assert len(comp2) == len(a) * len(b)
+
+    # m>=3 path: superoperator round-trip, channel-equivalent (not operator-identical)
+    channels = [a, b, c]
+    comp3 = composedkraus(*channels)
+    # operator count bounded by D^2 = (2^1)^2 = 4
+    assert len(comp3) <= 4
+
+    super_composed = tc.channels.kraus_to_super(comp3)
+    super_seq = tc.channels.kraus_to_super(channels[0])
+    for ch in channels[1:]:
+        super_seq = super_seq @ tc.channels.kraus_to_super(ch)
+    np.testing.assert_allclose(super_composed, super_seq, atol=1e-6)
+
+    # longer chain (m=6) must stay bounded and remain channel-equivalent
+    chain = [a, b, c, a, b, c]
+    comp6 = composedkraus(*chain)
+    assert len(comp6) <= 4
+    super_composed6 = tc.channels.kraus_to_super(comp6)
+    super_seq6 = tc.channels.kraus_to_super(chain[0])
+    for ch in chain[1:]:
+        super_seq6 = super_seq6 @ tc.channels.kraus_to_super(ch)
+    np.testing.assert_allclose(super_composed6, super_seq6, atol=1e-6)
+
+    # channel action on a density matrix matches sequential application.
+    # composedkraus(k0, k1, ..., k_{m-1}) composes with k0 outermost, i.e. the
+    # rightmost channel is applied first to the state (matches the m=2 pairwise
+    # {K_i L_j} semantics where kraus1 is the outer operator).
+    rho = np.array([[0.7, 0.3 + 0.1j], [0.3 - 0.1j, 0.3]])
+    rho_from_composed = tc.channels.evol_kraus(rho, comp6)
+    rho_seq = rho
+    for ch in reversed(chain):
+        rho_seq = tc.channels.evol_kraus(rho_seq, ch)
+    np.testing.assert_allclose(rho_from_composed, rho_seq, atol=1e-6)
+
+    # cross-check m=2 and m=3 produce the same channel action on a state
+    rho_m2 = tc.channels.evol_kraus(rho, composedkraus(a, b))
+    rho_m2_seq = tc.channels.evol_kraus(tc.channels.evol_kraus(rho, b), a)
+    np.testing.assert_allclose(rho_m2, rho_m2_seq, atol=1e-6)

@@ -7,10 +7,11 @@ Constants and setups
 import logging
 import sys
 import time
+from collections import deque
 from contextlib import contextmanager
 from functools import partial, reduce, wraps, lru_cache
 from operator import mul
-from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
 import opt_einsum
@@ -297,46 +298,79 @@ def _sizen(node: tn.Node, is_log: bool = False) -> int:
 def _merge_single_gates(
     nodes: List[Any], total_size: Optional[int] = None
 ) -> Tuple[List[Any], int]:
-    # TODO(@refraction-ray): investigate whether too much copy here so that staging is slow for large circuit
+    # O(n) rewrite of the original (O(n^2)) implementation:
+    #   * ``nodes`` is mutated in place via tombstones; ``node_pos`` maps
+    #     ``id(node) -> slot index`` so endpoint lookup is O(1) instead of an
+    #     ``enumerate`` scan, and removal is a tombstone instead of an O(n)
+    #     ``_multi_remove`` rebuild. Slot indices never shift, which preserves
+    #     the exact relative order of the original compacted list (a single
+    #     tombstone-compaction pass runs at the end).
+    #   * ``queue`` is a deque with lazy deletion (``in_queue`` alive set):
+    #     push-front / pop-front are O(1), and endpoint removal just marks the
+    #     id dead, skipping it when it next reaches the front. Each id is added
+    #     at most once, so total deque churn is O(n).
     nodes = list(nodes)
     if total_size is None:
         total_size = sum([_sizen(t) for t in nodes])
-    queue = [n for n in nodes if len(n.tensor.shape) <= 2]
+    node_pos: Dict[int, int] = {id(n): i for i, n in enumerate(nodes)}
+    queue = deque(n for n in nodes if len(n.tensor.shape) <= 2)
+    in_queue: Set[int] = {id(n) for n in queue}
     while queue:
+        # pop stale front entries left behind by lazy endpoint removal
+        while queue and id(queue[0]) not in in_queue:
+            queue.popleft()
+        if not queue:
+            break
         n0 = queue[0]
+        # n0 is consumed this iteration regardless of the branch taken below
+        in_queue.discard(id(n0))
         try:
             n0[0]
         except IndexError:
-            queue = _multi_remove(queue, [0])
             continue
         if n0[0].is_dangling():
             try:
                 e0 = n0[1]
-                if e0.is_dangling():
-                    queue = _multi_remove(queue, [0])
-                    continue
             except IndexError:
-                queue = _multi_remove(queue, [0])
+                continue
+            if e0.is_dangling():
                 continue
         else:
             e0 = n0[0]
-        njs = [i for i, n in enumerate(nodes) if id(n) in [id(e0.node1), id(e0.node2)]]
-        qjs = [i for i, n in enumerate(queue) if id(n) in [id(e0.node1), id(e0.node2)]]
+        # capture endpoint ids / positions before ``contract_parallel``,
+        # which disables ``e0`` and makes ``e0.node1``/``e0.node2`` inaccessible
+        ep1, ep2 = e0.node1, e0.node2
+        id1, id2 = id(ep1), id(ep2)
+        i1 = node_pos[id1]
+        i2 = node_pos[id2]
         new_node = tn.contract_parallel(e0)
         total_size += _sizen(new_node)
 
         logger.debug(
             _sizen(new_node, is_log=True),
         )
-        queue = _multi_remove(queue, qjs)
-        if len(njs) > 1:
-            nodes[njs[1]] = new_node
-            nodes = _multi_remove(nodes, [njs[0]])
-        else:  # trace edge?
-            nodes[njs[0]] = new_node
+        # drop both endpoints from the queue (n0 already discarded above)
+        in_queue.discard(id1)
+        in_queue.discard(id2)
+        if i1 != i2:
+            # two distinct endpoints: tombstone the earlier slot, place
+            # new_node at the later slot (matches the original which removed
+            # njs[0] and reused njs[1] for new_node)
+            early, late = (i1, i2) if i1 < i2 else (i2, i1)
+            del node_pos[id1]
+            del node_pos[id2]
+            nodes[early] = None  # tombstone
+            nodes[late] = new_node
+            node_pos[id(new_node)] = late
+        else:  # trace edge: ep1 is ep2
+            del node_pos[id1]
+            nodes[i1] = new_node
+            node_pos[id(new_node)] = i1
         if len(new_node.tensor.shape) <= 2:
-            # queue.append(new_node)
-            queue.insert(0, new_node)
+            queue.appendleft(new_node)
+            in_queue.add(id(new_node))
+    # single compaction pass: drop tombstones, preserving relative order
+    nodes = [n for n in nodes if n is not None]
     return nodes, total_size
 
 
@@ -432,67 +466,6 @@ def plain_contractor(
 
 
 # TODO(@refraction-ray): consistent logger system for different contractors.
-
-
-def nodes_to_adj(ns: List[Any]) -> Any:
-    ind = {id(n): i for i, n in enumerate(ns)}
-    adj = np.zeros([len(ns), len(ns)])
-    for node in ns:
-        for e in node:
-            if not e.is_dangling():
-                if id(e.node1) == id(node):
-                    onode = e.node2
-                else:
-                    onode = e.node1
-                adj[ind[id(node)], ind[id(onode)]] += np.log10(e.dimension)
-    return adj
-
-
-try:
-    _ps = tn.contractors.custom_path_solvers.pathsolvers
-    has_ps = True
-except AttributeError:
-    has_ps = False
-
-
-def d2s(n: int, dl: List[Any]) -> List[Any]:
-    # dynamic to static list
-    nums = [i for i in range(n)]
-    i = n
-    sl = []
-    for a, b in dl:
-        sl.append([nums[a], nums[b]])
-        nums = _multi_remove(nums, [a, b])
-        nums.insert(a, i)
-        i += 1
-    return sl
-
-
-# seems worse than plain contraction in most cases
-def tn_greedy_contractor(
-    nodes: List[Any],
-    output_edge_order: Optional[List[Any]] = None,
-    ignore_edge_order: bool = False,
-    max_branch: int = 1,
-) -> Any:
-    nodes = list(nodes)
-    adj = nodes_to_adj(nodes)
-    path = _ps.full_solve_complete(adj, max_branch=max_branch)[0]
-    dl = []
-    for i in range(path.shape[1]):
-        a, b = path[:, i]
-        dl.append([a, b])
-    sl = d2s(len(nodes), dl)
-    for a, b in sl:
-        new_node = tn.contract_between(nodes[a], nodes[b], allow_outer_product=True)
-        nodes.append(new_node)
-        # new_node = tn.contract_between(nodes[a], nodes[b], allow_outer_product=True)
-        # nodes = _multi_remove(nodes, [a, b])
-        # nodes.insert(a, new_node)
-    final_node = nodes[-1]
-    if output_edge_order is not None:
-        final_node.reorder_edges(output_edge_order)
-    return final_node
 
 
 # base = tn.contractors.opt_einsum_paths.path_contractors.base
@@ -777,8 +750,9 @@ def _algebraic_base_contraction(
     dangling_edges = sorted_edges(tn.get_subgraph_dangling(nodes))
 
     # Update the edges to point to the new final_node
+    nodes_set = set(nodes)
     for i, edge in enumerate(dangling_edges):
-        if edge.node1 in nodes:
+        if edge.node1 in nodes_set:
             edge.node1 = final_node
             edge.axis1 = i
         else:
@@ -795,17 +769,6 @@ def _algebraic_base_contraction(
         return final_node, exponent
 
     return final_node
-
-
-def _get_path(
-    nodes: List[tn.Node], algorithm: Any
-) -> Tuple[List[Tuple[int, int]], List[tn.Node]]:
-    nodes = list(nodes)
-    input_sets = [set([id(e) for e in node.edges]) for node in nodes]
-    output_set = set([id(e) for e in tn.get_subgraph_dangling(nodes)])
-    size_dict = {id(edge): edge.dimension for edge in tn.get_all_edges(nodes)}
-
-    return algorithm(input_sets, output_set, size_dict), nodes
 
 
 def _identity(*args: Any, **kws: Any) -> Any:
@@ -1186,7 +1149,14 @@ def set_contractor(
     To set runtime contractor of the tensornetwork for a better contraction path.
     For more information on the usage of contractor, please refer to independent tutorial.
 
-    :param method: "auto", "greedy", "branch", "plain", "tng", "custom",
+    For large tensor networks, the default ``greedy`` contractor may yield
+    expensive or even intractable contraction orders. In that case it is
+    strongly recommended to switch to a dedicated contraction pathfinder such
+    as ``cotengra`` (``method="cotengra"``) or ``omeco``
+    (``method="omeco"``). ``omeco`` is preferred when available, as it is
+    generally faster at finding high-quality paths.
+
+    :param method: "auto", "greedy", "branch", "plain", "custom",
         "custom_stateful". Also supports shortcuts like "cotengra",
         "cotengra-30-64", "omeco", and "omeco-16-32". defaults to None ("auto")
     :type method: Optional[str], optional
@@ -1266,13 +1236,6 @@ def set_contractor(
         cf = plain_contractor
     elif method == "plain-experimental":
         cf = partial(experimental_contractor, local_steps=kws.get("local_steps", 2))
-    elif method == "tng":  # don't use, deprecated, no guarantee
-        if has_ps:
-            cf = tn_greedy_contractor
-        else:
-            raise Exception(
-                "current version of tensornetwork doesn't support tng contraction"
-            )
     elif method == "custom_stateful":
         cf = custom_stateful  # type: ignore
         cf = partial(  # type: ignore
