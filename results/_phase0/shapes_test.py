@@ -3,7 +3,7 @@
 Run: pytest results/_phase0_shapes_test.py -v
 """
 
-from results._phase0_shapes import export_shapes_from_eq
+from results._phase0.shapes import export_shapes_from_eq
 
 
 def test_export_shapes_two_node_einsum():

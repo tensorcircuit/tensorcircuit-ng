@@ -3,7 +3,7 @@
 Run: MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' wsl.exe bash .wsl_run.sh python results/_phase0_gonogo_test.py
 """
 
-from results._phase0_gonogo import aggregate
+from results._phase0.gonogo import aggregate
 
 
 def test_all_pass_is_go_to_phase1():
@@ -30,7 +30,7 @@ def test_unknown_is_inconclusive():
 
 def test_c3_planar_from_capability_json(tmp_path):
     import json, os
-    from results._phase0_gonogo import _c3_planar_from_capability
+    from results._phase0.gonogo import _c3_planar_from_capability
 
     p = tmp_path / "cublaslt_planar_capability.json"
     p.write_text(json.dumps({"capability": {"status": "SUPPORTED", "reason": "ok"}}))

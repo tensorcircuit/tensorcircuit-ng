@@ -73,7 +73,7 @@ def judge_capability(
 
 def load_ext():
     """Load (and cache) the pybind11 extension built by _phase0_cublaslt_build."""
-    from results._phase0_cublaslt_build import load_ext as _le
+    from results._phase0.cublaslt_build import load_ext as _le
 
     return _le()
 

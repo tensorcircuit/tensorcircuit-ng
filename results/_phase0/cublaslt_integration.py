@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from results._phase0_cublaslt import load_ext, reference_complex_matmul
+from results._phase0.cublaslt import load_ext, reference_complex_matmul
 
 
 def _rel_err(val, ref, floor):

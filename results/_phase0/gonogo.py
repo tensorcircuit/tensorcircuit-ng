@@ -300,7 +300,7 @@ def main():
     )
 
     # C3 real ceiling (auxiliary): parse the cublaslt_gap txt proxy.
-    c3_real = _parse_c3_real_ceiling_ratio("results/_phase0_cublaslt_gap.txt")
+    c3_real = _parse_c3_real_ceiling_ratio("results/phase0/cublaslt_gap.txt")
 
     agg = aggregate(c1, c2, c3_planar, c3_real)
 

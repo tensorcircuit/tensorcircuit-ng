@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from results._phase0_common import fmt_table
+from results._phase0.common import fmt_table
 
 
 def tflops(m: int, k: int, n: int, seconds: float) -> float:

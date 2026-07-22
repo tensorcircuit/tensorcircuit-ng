@@ -273,7 +273,7 @@ def _capture_tcng_topology(n, depth, output="expectation"):
 
     cons._extract_topology = wrapped
     try:
-        from results._phase0_circuits import build_parameterized_circuit
+        from results._phase0.circuits import build_parameterized_circuit
 
         c = build_parameterized_circuit([0.7] * (depth * n), n, depth)
         with cons.runtime_contraction_algebra(StandardAlgebra()):

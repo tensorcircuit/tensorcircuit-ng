@@ -20,7 +20,7 @@ CUDA_NVCC_INC = os.path.join(SP, "nvidia", "cuda_nvcc", "include")
 # no nvidia wheel here ships it (nvidia-cuda-cccl-cu12 not installed). Fall back to the
 # canonical libcu++/CCCL headers vendored by cupy (NVIDIA, Apache-2.0 + LLVM exception).
 CCCL_INC = os.path.join(SP, "cupy", "_core", "include", "cupy", "_cccl", "libcudacxx")
-EXT_DIR = os.path.join(os.path.dirname(__file__), "_phase0_cublaslt")
+EXT_DIR = os.path.join(os.path.dirname(__file__), "cpp")
 
 
 def load_ext():

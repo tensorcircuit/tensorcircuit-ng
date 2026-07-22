@@ -1,6 +1,6 @@
 """Unit tests for Probe 1-deferred pure logic. Run: pytest results/_phase0_cublaslt_gap_test.py -v"""
 
-from results._phase0_cublaslt_gap import tflops, has_complex_bf16_dtype
+from results._phase0.cublaslt_gap import tflops, has_complex_bf16_dtype
 
 
 def test_tflops_standard():
@@ -16,7 +16,7 @@ def test_tflops_zero_seconds_safe():
 
 
 def test_has_complex_bf16_dtype_absent_with_evidence():
-    from results._phase0_cublaslt_gap import has_complex_bf16_dtype
+    from results._phase0.cublaslt_gap import has_complex_bf16_dtype
 
     for be in ("jax", "pytorch"):
         r = has_complex_bf16_dtype(be)
@@ -25,7 +25,7 @@ def test_has_complex_bf16_dtype_absent_with_evidence():
 
 
 def test_pair_complex_matmul_hlo_has_four_real_dots():
-    from results._phase0_cublaslt_gap import pair_complex_matmul_hlo
+    from results._phase0.cublaslt_gap import pair_complex_matmul_hlo
 
     r = pair_complex_matmul_hlo(m=64)
     # a complex matmul via the 4-M pair path lowers to 4 real dot_general ops

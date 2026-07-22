@@ -4,7 +4,7 @@ import numpy as np
 
 
 def test_reference_complex_matmul_matches_numpy():
-    from results._phase0_cublaslt import reference_complex_matmul
+    from results._phase0.cublaslt import reference_complex_matmul
 
     m = k = n = 32
     rng = np.random.default_rng(0)
@@ -21,7 +21,7 @@ def test_reference_complex_matmul_matches_numpy():
 
 
 def test_judge_capability_supported_when_all_pass():
-    from results._phase0_cublaslt import judge_capability
+    from results._phase0.cublaslt import judge_capability
 
     j = judge_capability(
         max_rel_err=1e-3,
@@ -35,7 +35,7 @@ def test_judge_capability_supported_when_all_pass():
 
 
 def test_judge_capability_not_supported_when_slow():
-    from results._phase0_cublaslt import judge_capability
+    from results._phase0.cublaslt import judge_capability
 
     j = judge_capability(
         max_rel_err=1e-3,
@@ -50,7 +50,7 @@ def test_judge_capability_not_supported_when_slow():
 
 
 def test_judge_capability_not_supported_when_no_algo():
-    from results._phase0_cublaslt import judge_capability
+    from results._phase0.cublaslt import judge_capability
 
     j = judge_capability(
         max_rel_err=1e-3,
@@ -67,7 +67,7 @@ def test_judge_capability_accuracy_gate_is_max_rel():
     """BF16 output has ~0.4% relative error: a passing rel error (4e-3) must
     NOT be flagged, while a failing rel error (2e-2) must — even though the
     absolute error would look large in BF16-magnitude terms."""
-    from results._phase0_cublaslt import judge_capability
+    from results._phase0.cublaslt import judge_capability
 
     # 0.4% rel error, large abs (BF16-output tail) -> SUPPORTED.
     j_ok = judge_capability(
@@ -98,7 +98,7 @@ def test_judge_capability_accuracy_gate_is_max_rel():
 def test_load_c1_c2_shapes_filters_by_bytes(tmp_path):
     """load_c1_c2_shapes must keep only rows with bytes >= min_bytes and
     surface M/N/K/bytes/node_id as ints (node_id kept as string)."""
-    from results._phase0_cublaslt import load_c1_c2_shapes
+    from results._phase0.cublaslt import load_c1_c2_shapes
 
     csv = tmp_path / "shapes.csv"
     header = "n,depth,output,node_id,M,N,K,bytes\n"
@@ -122,7 +122,7 @@ def test_load_c1_c2_shapes_filters_by_bytes(tmp_path):
 
 def test_load_c1_c2_shapes_skips_malformed_rows(tmp_path):
     """Rows with missing/non-int fields must be skipped, not crash."""
-    from results._phase0_cublaslt import load_c1_c2_shapes
+    from results._phase0.cublaslt import load_c1_c2_shapes
 
     csv = tmp_path / "shapes.csv"
     header = "n,depth,node_id,M,N,K,bytes\n"
@@ -143,7 +143,7 @@ def test_time_planar_kernelonly_extracts_median_ms():
     returns its median_ms as a float, forwarding iters/warmup. Verified GPU-free
     with a stub ext so the contract is locked without a compiled extension / GPU;
     the live (positive-ms) check is the run_matrix integration run."""
-    from results._phase0_cublaslt import _time_planar_kernelonly
+    from results._phase0.cublaslt import _time_planar_kernelonly
 
     class _StubExt:
         def __init__(self):
@@ -173,7 +173,7 @@ def test_time_planar_kernelonly_extracts_median_ms():
 
 
 def test_write_csv_roundtrip(tmp_path):
-    from results._phase0_cublaslt import _write_csv
+    from results._phase0.cublaslt import _write_csv
     import csv
 
     path = tmp_path / "out.csv"

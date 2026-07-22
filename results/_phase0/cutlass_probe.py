@@ -28,7 +28,7 @@ NVCC = glob.glob(os.path.join(SP, "nvidia", "cuda_nvcc", "**", "nvcc"), recursiv
 CUDA_INC = os.path.join(SP, "nvidia", "cuda_runtime", "include")
 NVRTC_INC = os.path.join(SP, "nvidia", "cuda_nvcc", "include")
 SRC = os.path.join(
-    os.path.dirname(__file__), "_phase0_cublaslt", "minimal_cutlass_sm120.cu"
+    os.path.dirname(__file__), "cpp", "minimal_cutlass_sm120.cu"
 )
 
 TARGET_ARCH = 120  # compute_120 / sm_120 (Blackwell)

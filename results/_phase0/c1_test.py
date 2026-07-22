@@ -1,6 +1,6 @@
 """Unit tests for C1 four-condition judgment (review §5.4). Run: pytest results/_phase0_c1_test.py -v"""
 
-from results._phase0_c1 import judge_c1
+from results._phase0.c1 import judge_c1
 
 
 def test_c1_pass_when_all_conditions_met():

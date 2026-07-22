@@ -1,6 +1,6 @@
 """Unit tests for Probe 2 pure logic. Run: pytest results/_phase0_frontier_probe_test.py -v"""
 
-from results._phase0_frontier_probe import (
+from results._phase0.frontier_probe import (
     build_configs,
     summarize_frontier,
     run_output_kind,

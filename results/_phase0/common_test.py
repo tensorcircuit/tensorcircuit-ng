@@ -1,7 +1,7 @@
 """Unit tests for _phase0_common pure logic. Run: pytest results/_phase0_common_test.py -v
 or: python results/_phase0_common_test.py"""
 
-from results._phase0_common import (
+from results._phase0.common import (
     worker_emit,
     parse_last_json,
     classify_stderr,
@@ -70,7 +70,7 @@ def test_median_wall_ms_returns_positive():
 
 def test_orchestrate_respects_worker_crash_outcome(tmp_path):
     """A worker that exits 0 but emits {"outcome":"crash"} must be ok=False (review §4.1)."""
-    from results._phase0_common import orchestrate
+    from results._phase0.common import orchestrate
 
     script = tmp_path / "w.py"
     script.write_text(
@@ -85,7 +85,7 @@ def test_orchestrate_respects_worker_crash_outcome(tmp_path):
 
 def test_orchestrate_respects_worker_oom_outcome(tmp_path):
     """Same fix must cover other worker-reported outcomes (e.g. oom), not just 'crash'."""
-    from results._phase0_common import orchestrate
+    from results._phase0.common import orchestrate
 
     script = tmp_path / "w.py"
     script.write_text(
@@ -100,7 +100,7 @@ def test_orchestrate_respects_worker_oom_outcome(tmp_path):
 
 def test_orchestrate_run_outcome_still_ok(tmp_path):
     """A genuine {'outcome':'run',...} with exit 0 must still map to ok=True."""
-    from results._phase0_common import orchestrate
+    from results._phase0.common import orchestrate
 
     script = tmp_path / "w.py"
     script.write_text(

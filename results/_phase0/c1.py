@@ -98,7 +98,7 @@ def measure_case(n, depth, theta_seed=0.7, disable_fusion=False, repeats=3):
     import jax.numpy as jnp
     import tensorcircuit as tc  # noqa: F401  (tc.set_backend in expectation_fn's module)
 
-    from results._phase0_circuits import expectation_fn
+    from results._phase0.circuits import expectation_fn
 
     tc.set_backend("jax")
     backend = jax.default_backend()
@@ -204,8 +204,8 @@ def worker_main(argv):
         os.environ["XLA_FLAGS"] = (prev + " --xla_disable_hlo_passes=fusion").strip()
 
     # late imports so the XLA_FLAGS set above is honored at jax init
-    from results._phase0_common import worker_emit
-    from results._phase0_c1 import measure_case
+    from results._phase0.common import worker_emit
+    from results._phase0.c1 import measure_case
 
     try:
         result = measure_case(
@@ -450,14 +450,14 @@ def run_c1_ab(n, depth, theta_seeds=(0.7, 0.8, 0.9)):
     """Run default + no-fusion arms (3× per arm, one per theta seed), then judge C1.
 
     Each arm is a fresh subprocess (XLA_FLAGS set in ``worker_main`` BEFORE ``import jax`` for the
-    no-fusion arm), orchestrated via ``results._phase0_common.orchestrate``. The median run (by
+    no-fusion arm), orchestrated via ``results._phase0.common.orchestrate``. The median run (by
     ``runtime_peak_B``) of each arm is fed to ``judge_c1``; the 3 default runs become
     ``repeats_results`` for the 3x-stable check (condition 6).
 
     Writes one row per (n, depth) to ``results/phase0/c1_default_vs_nofusion.csv`` and merges the
     judgment under key ``n{n}_d{depth}`` into ``results/phase0/c1_judgment.json``.
     """
-    from results._phase0_common import orchestrate
+    from results._phase0.common import orchestrate
 
     script_path = os.path.abspath(__file__)
     default_configs = [

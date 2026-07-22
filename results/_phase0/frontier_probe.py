@@ -15,7 +15,7 @@ from applications.benchmarks.bench_bf16_gpu import (
     _setup_gpu_device,
     reset_backend_mem,
 )
-from results._phase0_common import (
+from results._phase0.common import (
     orchestrate,
     worker_emit,
     fmt_table,

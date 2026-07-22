@@ -1,6 +1,6 @@
 """Unit tests for Probe 3 pure logic. Run: pytest results/_phase0_fusion_window_probe_test.py -v"""
 
-from results._phase0_fusion_window_probe import (
+from results._phase0.fusion_window_probe import (
     classify_materialization,
     parse_hlo_counts,
 )

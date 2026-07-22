@@ -4,7 +4,7 @@ Run: MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' wsl.exe bash .wsl_run.sh \
 python -m pytest results/_phase0_c2_test.py -v
 """
 
-from results._phase0_c2 import classify_tileability, judge_c2
+from results._phase0.c2 import classify_tileability, judge_c2
 
 
 def test_large_regular_gemm_is_direct_tileable():
