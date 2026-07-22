@@ -1,14 +1,16 @@
 """C2 coverage verdict (rereview §5.3, canonical-completion Task 4).
 
 TWO paths:
-- CANONICAL (``basis="hlo_use_def"``): ``judge_c2_canonical`` / ``run_c2_canonical`` --
-  the real producer->consumer edge from the production HLO use-def (Task 2) + the region
-  prototype (Task 3). The SOLE writer of ``c2_judgment.json`` consumed by gonogo.
+- CANONICAL (``basis="hlo_use_def"``): ``judge_c2_canonical`` / ``run_c2_canonical`` -- the
+  real producer->terminal-consumer edge from the production HLO use-def (Task B) + the
+  aliasing-aware peak analysis (Task C 6.5/6.6) + the allocation audit (Task A). FAIL-CLOSED:
+  recomputes the peak reduction from RAW bytes and returns FAIL/NOT_FEASIBLE when region
+  fusion of the anchor pair cannot reduce the executable peak, UNKNOWN when artifacts are
+  incomplete. The SOLE writer of ``c2_judgment.json`` (+ ``c2_checkpoint_manifest.json``).
 - INFORMATIONAL (``basis="cotengra_state_heuristic"``, DEMOTED): ``classify_tileability`` /
   ``judge_c2`` / ``run_c2_integration`` -- the cotengra-state tile-mappability heuristic.
-  NON-FAITHFUL (cotengra is a different contractor than production; see the plan's Global
-  Constraints "contraction contractor"); writes ``c2_cotengra_informational.json`` and is
-  NOT consumed by gonogo.
+  NON-FAITHFUL (cotengra is a different contractor than production); writes
+  ``c2_cotengra_informational.json`` and is NOT consumed by gonogo.
 
 The classes/heuristic below belong to the INFORMATIONAL path. A contraction step is
 "tile-mappable" when its output buffer can be kept on-chip (fused into the consuming
@@ -67,6 +69,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import sys
@@ -81,6 +84,11 @@ JUDGMENT_JSON_PATH = f"{OUT_DIR}/c2_judgment.json"
 COTENGRA_INFO_JSON_PATH = f"{OUT_DIR}/c2_cotengra_informational.json"
 EDGE_MAP_CSV_PATH = f"{OUT_DIR}/c1_c2_edge_map.csv"
 REGION_PROTOTYPE_JSON_PATH = f"{OUT_DIR}/region_prototype.json"
+PEAK_ANALYSIS_JSON_PATH = f"{OUT_DIR}/c2_peak_analysis.json"
+AUDIT_DIR = f"{OUT_DIR}/c1_buffer_assignment"
+CHECKPOINT_MANIFEST_PATH = f"{OUT_DIR}/c2_checkpoint_manifest.json"
+# A region fusion worth its complexity must reduce the executable peak by at least this.
+C2_MEMORY_THRESHOLD = 256 * 1024 * 1024
 
 # Tile-fusable classes (review §6.2): a buffer in any of these eliminates its
 # global HBM write/read when fused into the consuming GEMM's tile epilogue.
@@ -355,35 +363,77 @@ def _update_judgment_json(path: str, key: str, payload: dict[str, Any]) -> None:
 
 
 def _load_edge_map_row(n, depth, fusion):
-    """Read Task 2's c1_c2_edge_map.csv -> the row for (n, depth, fusion), or a
-    consumer_count=0 placeholder if absent (deterministic UNKNOWN driver)."""
+    """Read Task B's c1_c2_edge_map.csv -> the row for (n, depth, fusion), or a fail-closed
+    placeholder (drives UNKNOWN) if absent. Uses the post-Task-B schema (producer/terminal).
+    """
+    case_id = f"n{n}_d{depth}"
+    placeholder = {
+        "case_id": case_id,
+        "producer_hlo_value_id": "",
+        "terminal_consumer_hlo_value_id": "",
+        "producer_M": 0,
+        "producer_N": 0,
+        "producer_K": 0,
+    }
     if not os.path.exists(EDGE_MAP_CSV_PATH):
-        return {
-            "consumer_count": 0,
-            "buffer_bytes": 0,
-            "hlo_value_id": "",
-            "note": "edge_map.csv missing",
-        }
+        return {**placeholder, "note": "edge_map.csv missing"}
     with open(EDGE_MAP_CSV_PATH, newline="") as fh:
         for r in csv.DictReader(fh):
             if int(r["n"]) == n and int(r["depth"]) == depth and r["fusion"] == fusion:
                 return {
-                    "hlo_value_id": r.get("hlo_value_id", ""),
-                    "M": int(r.get("M", 0)),
-                    "N": int(r.get("N", 0)),
-                    "K": int(r.get("K", 0)),
-                    "buffer_bytes": int(r.get("buffer_bytes", 0)),
-                    "producer_op": r.get("producer_op", ""),
-                    "consumer_ops": r.get("consumer_ops", ""),
-                    "traced_through": r.get("traced_through", ""),
-                    "consumer_count": int(r.get("consumer_count", 0)),
+                    "case_id": case_id,
+                    "producer_hlo_value_id": r.get("producer_hlo_value_id", ""),
+                    "producer_M": int(r.get("producer_M", 0)),
+                    "producer_N": int(r.get("producer_N", 0)),
+                    "producer_K": int(r.get("producer_K", 0)),
+                    "terminal_consumer_hlo_value_id": r.get(
+                        "terminal_consumer_hlo_value_id", ""
+                    ),
+                    "consumer_M": int(r.get("consumer_M", 0)),
+                    "consumer_N": int(r.get("consumer_N", 0)),
+                    "consumer_K": int(r.get("consumer_K", 0)),
+                    "consumer_output_bytes": int(r.get("consumer_output_bytes", 0)),
                 }
-    return {
-        "consumer_count": 0,
-        "buffer_bytes": 0,
-        "hlo_value_id": "",
-        "note": "no edge row for case",
+    return {**placeholder, "note": "no edge row for case"}
+
+
+def _audit_json_path(n, depth, fusion):
+    return os.path.join(AUDIT_DIR, f"n{n}_d{depth}_{fusion}.json")
+
+
+def _sha256_file(path):
+    if not path or not os.path.exists(path):
+        return None
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _write_checkpoint_manifest(case_id, payload, hashes):
+    """Task D5: provenance manifest (source/allocation/edge/prototype/judgment hashes +
+    case status). Does NOT replace the final Task 10 manifest; guarantees Task 1-4 reproducibility.
+    """
+    import time as _time
+
+    manifest = {
+        "schema_version": "task1-4-checkpoint-v1",
+        "case_id": case_id,
+        "generated_at_epoch": int(_time.time()),
+        "case_status": payload["status"],
+        "prototype_verdict": payload.get("prototype_verdict"),
+        "artifact_hashes": hashes,
+        "commands": {
+            "edge_map": "python results/_phase0/c1_to_c2_map.py (or map_anchor_for_case)",
+            "peak_analysis": "python results/_phase0/c2_peak_analysis.py",
+            "audit": "audit_buffer_assignment + xla_dump.py",
+            "gate": "python results/_phase0/c2.py --n <n> --depth <d>",
+        },
     }
+    os.makedirs(os.path.dirname(CHECKPOINT_MANIFEST_PATH), exist_ok=True)
+    with open(CHECKPOINT_MANIFEST_PATH, "w") as fh:
+        json.dump(manifest, fh, indent=2)
 
 
 def _load_json(path):
@@ -393,95 +443,121 @@ def _load_json(path):
         return json.load(fh)
 
 
-_FEASIBLE_VERDICTS = (
-    "TILE_FUSION_FEASIBLE",
-    "TILE_FUSION_MEMORY_FEASIBLE",
-    "FEASIBLE_WITH_RECOMPUTE",
-)
+def judge_c2_canonical(edge, peak, audit, case_id=""):
+    """Fail-closed canonical C2 verdict from the HLO edge (Task B) + aliasing-aware peak
+    analysis (Task C 6.5/6.6) + allocation audit (Task A). ``basis="hlo_use_def"``.
 
-
-def judge_c2_canonical(edge_map_row, prototype):
-    """Canonical C2 verdict from the HLO use-def edge (Task 2) + the region prototype
-    (Task 3), per rereview §5.3. ``basis="hlo_use_def"``. PASS iff a real C1-large anchor
-    maps to a real HLO consumer edge AND the prototype is FEASIBLE with net byte gain, no
-    re-materialized workspace, and the §5.3 #5 latency-or-memory-policy clause holds.
-
-    UNKNOWN when no real edge (or conditions incomplete); FAIL when the prototype is
-    NOT_FEASIBLE. The SOLE source of the canonical ``c2_judgment.json`` verdict.
+    Recomputes the memory benefit from RAW peak bytes (never trusts precomputed booleans).
+    FAIL/NOT_FEASIBLE when region fusion of the anchor pair cannot reduce the executable
+    peak (the binding peak is structural -- the contraction chain of GEMM+transpose pairs).
+    UNKNOWN when artifacts or case-binding are incomplete. PASS would require a real peak
+    reduction >= C2_MEMORY_THRESHOLD (not the case on n=24/d=10/default).
     """
-    conds = {
-        "1_real_hlo_edge": int(edge_map_row.get("consumer_count", 0)) >= 1
-        and int(edge_map_row.get("buffer_bytes", 0)) > 0,
-        "2_prototype_feasible": prototype.get("verdict") in _FEASIBLE_VERDICTS,
-        "3_net_gain": bool(prototype.get("net_gain_positive", False)),
-        "4_correct": bool(prototype.get("correct", False)),
-        "5_no_rematerialization": bool(
-            prototype.get("no_full_c_materialized", False)
-            and prototype.get("memory_feasible", False)
-        ),
-    }
-    latency_ratio = float(prototype.get("latency_ratio_tiled_over_c64", 1.0) or 1.0)
-    conds["6_latency_or_policy"] = bool(
-        prototype.get("memory_policy_met", False) or latency_ratio <= 1.0
+    problems = []
+    conds = {}
+    conds["edge_reaches_real_consumer_498"] = (
+        edge.get("terminal_consumer_hlo_value_id") == "%custom-call.498"
     )
-    base = {"basis": "hlo_use_def", "conditions": conds}
-    if not conds["1_real_hlo_edge"]:
+    if not conds["edge_reaches_real_consumer_498"]:
+        problems.append("edge does not reach terminal consumer %custom-call.498")
+    # recompute memory benefit from RAW peak bytes (do NOT trust a precomputed boolean)
+    peak_with = peak.get("arena_peak_live_bytes")
+    peak_after = peak.get("peak_after_full_PTE_fusion")
+    if peak_with is None or peak_after is None:
+        problems.append(
+            "peak analysis missing arena_peak_live_bytes/peak_after_full_PTE_fusion"
+        )
+        peak_reduction = None
+        conds["peak_reduction_bytes"] = None
+        conds["memory_benefit_meets_threshold"] = False
+    else:
+        peak_reduction = int(peak_with) - int(peak_after)
+        conds["peak_reduction_bytes"] = peak_reduction
+        conds["memory_benefit_meets_threshold"] = peak_reduction >= C2_MEMORY_THRESHOLD
+    conds["allocation_is_real"] = (
+        audit.get("allocation_source") == "xla_buffer_assignment"
+    )
+    if not conds["allocation_is_real"]:
+        problems.append("allocation audit not from XLA buffer-assignment")
+    base = {"basis": "hlo_use_def", "conditions": conds, "case_id": case_id}
+    if problems:
+        return {"status": "UNKNOWN", "reason": "; ".join(problems), **base}
+    if peak_reduction < C2_MEMORY_THRESHOLD:
         return {
+            "status": "FAIL",
+            "prototype_verdict": "NOT_FEASIBLE",
+            "reason": (
+                f"region fusion of the anchor pair (P->T->E) reduces the executable peak by only "
+                f"{peak_reduction} B << {C2_MEMORY_THRESHOLD} B threshold; the ~{peak_with} B peak "
+                f"is structural (contraction chain of GEMM+transpose pairs), so fusing one pair "
+                f"cannot reduce it"
+            ),
             **base,
-            "status": "UNKNOWN",
-            "reason": "no real HLO producer->consumer edge for the C1 anchor",
-        }
-    if prototype.get("verdict") == "NOT_FEASIBLE":
-        return {**base, "status": "FAIL", "reason": "region prototype NOT_FEASIBLE"}
-    if not all(conds.values()):
-        return {
-            **base,
-            "status": "UNKNOWN",
-            "reason": "prototype feasible but conditions incomplete",
         }
     return {
+        "status": "UNKNOWN",
+        "prototype_verdict": "PENDING_REAL_PROTOTYPE",
+        "reason": "peak reduction meets threshold but the real P->T->E prototype has not been run",
         **base,
-        "status": "PASS",
-        "reason": "real HLO edge + prototype TILE_FUSION_FEASIBLE (net gain, correct, "
-        "no remat, latency/policy)",
     }
 
 
 def run_c2_canonical(n, depth, fusion="default"):
-    """Canonical C2 verdict from Task 2's HLO edge map + Task 3's region prototype.
-    Writes results/phase0/c2_judgment.json (basis=hlo_use_def) -- the SOLE canonical writer.
-    """
+    """Canonical C2 verdict from the HLO edge map + peak analysis + allocation audit.
+    Writes results/phase0/c2_judgment.json (basis=hlo_use_def) + c2_checkpoint_manifest.json.
+    The SOLE canonical writer."""
+    case_id = f"n{n}_d{depth}"
     edge = _load_edge_map_row(n, depth, fusion)
-    prototype = _load_json(REGION_PROTOTYPE_JSON_PATH)
-    judgment = judge_c2_canonical(edge, prototype)
+    peak = _load_json(PEAK_ANALYSIS_JSON_PATH)
+    audit = _load_json(_audit_json_path(n, depth, fusion))
+    judgment = judge_c2_canonical(edge, peak, audit, case_id=case_id)
+    audit_path = _audit_json_path(n, depth, fusion)
+    hlo_path = f"{OUT_DIR}/c1_optimized_hlo/n{n}_d{depth}_exp_{fusion}.hlo"
+    hashes = {
+        "source_hlo": _sha256_file(hlo_path),
+        "allocation_audit": _sha256_file(audit_path),
+        "edge_map_csv": _sha256_file(EDGE_MAP_CSV_PATH),
+        "peak_analysis": _sha256_file(PEAK_ANALYSIS_JSON_PATH),
+    }
     payload = {
         "n": n,
         "depth": depth,
         "fusion": fusion,
+        "case_id": case_id,
         "basis": judgment["basis"],
         "edge": edge,
-        "prototype_verdict": prototype.get("verdict"),
-        "prototype_net_gain_bytes": prototype.get("net_gain_bytes"),
-        "prototype_occupancy_pct": prototype.get("occupancy_pct"),
-        "prototype_latency_ratio_tiled_over_c64": prototype.get(
-            "latency_ratio_tiled_over_c64"
-        ),
+        "peak_analysis_verdict_hint": peak.get("verdict_hint"),
+        "peak_reduction_bytes": judgment["conditions"].get("peak_reduction_bytes"),
+        "memory_threshold_bytes": C2_MEMORY_THRESHOLD,
+        "allocation_source": audit.get("allocation_source"),
         "status": judgment["status"],
+        "prototype_verdict": judgment.get("prototype_verdict"),
         "reason": judgment["reason"],
         "conditions": judgment["conditions"],
+        "artifact_hashes": hashes,
     }
-    _update_judgment_json(JUDGMENT_JSON_PATH, f"n{n}_d{depth}", payload)
+    _update_judgment_json(JUDGMENT_JSON_PATH, case_id, payload)
+    _write_checkpoint_manifest(case_id, payload, hashes)
     return payload
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="C2 tile-mappability classification (review §6.2, Task 7)."
+        description="C2 canonical gate (default) or informational cotengra-state baseline."
     )
     ap.add_argument("--n", type=int, default=24)
     ap.add_argument("--depth", type=int, default=10)
+    ap.add_argument("--fusion", default="default")
+    ap.add_argument(
+        "--informational-cotengra",
+        action="store_true",
+        help="run the (non-faithful) cotengra-state baseline instead of the canonical gate",
+    )
     a = ap.parse_args()
-    payload = run_c2_integration(a.n, a.depth)
+    if a.informational_cotengra:
+        payload = run_c2_integration(a.n, a.depth)
+    else:
+        payload = run_c2_canonical(a.n, a.depth, a.fusion)
     print(json.dumps(payload, indent=2))
 
 

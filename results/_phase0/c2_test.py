@@ -55,59 +55,60 @@ def test_judge_c2_unknown_when_all_unknown():
     assert judge_c2(shapes)["status"] == "UNKNOWN"
 
 
-def test_judge_c2_canonical_pass():
+def test_judge_c2_canonical_fail_not_feasible():
+    """Region fusion that cannot reduce the executable peak (raw recomputed reduction <<
+    threshold) -> canonical FAIL / prototype NOT_FEASIBLE."""
     from results._phase0.c2 import judge_c2_canonical
 
-    edge = {
-        "consumer_count": 1,
-        "buffer_bytes": 4096 * 16384 * 8,
-        "hlo_value_id": "%custom-call.497",
+    edge = {"terminal_consumer_hlo_value_id": "%custom-call.498"}
+    peak = {
+        "arena_peak_live_bytes": 1107389712,
+        "peak_after_full_PTE_fusion": 1107357584,
     }
-    proto = {
-        "verdict": "TILE_FUSION_FEASIBLE",
-        "net_gain_positive": True,
-        "correct": True,
-        "no_full_c_materialized": True,
-        "memory_feasible": True,
-        "memory_policy_met": True,
-    }
-    j = judge_c2_canonical(edge, proto)
-    assert j["status"] == "PASS", j
+    audit = {"allocation_source": "xla_buffer_assignment"}
+    j = judge_c2_canonical(edge, peak, audit, case_id="n24_d10")
+    assert j["status"] == "FAIL", j
+    assert j["prototype_verdict"] == "NOT_FEASIBLE", j
     assert j["basis"] == "hlo_use_def"
 
 
-def test_judge_c2_canonical_unknown_no_edge():
+def test_judge_c2_canonical_unknown_missing_peak():
+    """Fail-closed: missing peak-analysis fields -> UNKNOWN (never default a verdict)."""
     from results._phase0.c2 import judge_c2_canonical
 
-    proto = {
-        "verdict": "TILE_FUSION_FEASIBLE",
-        "net_gain_positive": True,
-        "correct": True,
-        "no_full_c_materialized": True,
-        "memory_feasible": True,
-        "memory_policy_met": True,
-    }
-    j = judge_c2_canonical({"consumer_count": 0, "buffer_bytes": 0}, proto)
+    edge = {"terminal_consumer_hlo_value_id": "%custom-call.498"}
+    j = judge_c2_canonical(
+        edge, {}, {"allocation_source": "xla_buffer_assignment"}, case_id="x"
+    )
     assert j["status"] == "UNKNOWN", j
 
 
-def test_judge_c2_canonical_fail_not_feasible():
+def test_judge_c2_canonical_unknown_no_edge():
+    """Fail-closed: edge does not reach the real terminal consumer -> UNKNOWN."""
     from results._phase0.c2 import judge_c2_canonical
 
-    edge = {"consumer_count": 1, "buffer_bytes": 4096 * 16384 * 8}
-    j = judge_c2_canonical(edge, {"verdict": "NOT_FEASIBLE"})
-    assert j["status"] == "FAIL", j
+    edge = {"terminal_consumer_hlo_value_id": ""}  # does not reach %custom-call.498
+    peak = {"arena_peak_live_bytes": 1000, "peak_after_full_PTE_fusion": 500}
+    j = judge_c2_canonical(
+        edge, peak, {"allocation_source": "xla_buffer_assignment"}, case_id="x"
+    )
+    assert j["status"] == "UNKNOWN", j
 
 
-def test_run_c2_canonical_currently_unknown_pending_real_prototype():
-    """C2 is UNKNOWN until Task C (real two-stage prototype) + Task D (bound, fail-closed
-    gate) land. The Task B edge-map schema separates producer/consumer buffers, so the
-    not-yet-rewritten gate fail-closes (no producer buffer bytes on the edge row)."""
+def test_run_c2_canonical_fail_not_feasible():
+    """Integration: the real edge map + peak analysis + allocation audit -> canonical
+    FAIL/NOT_FEASIBLE (region fusion of the anchor pair cannot reduce the structural peak).
+    """
     from results._phase0.c2 import run_c2_canonical
 
     j = run_c2_canonical(24, 10, "default")
     assert j["basis"] == "hlo_use_def", j
-    assert j["status"] == "UNKNOWN", j
+    assert j["status"] == "FAIL", j
+    assert j["prototype_verdict"] == "NOT_FEASIBLE", j
+    assert (
+        j["peak_reduction_bytes"] is not None
+        and j["peak_reduction_bytes"] < 256 * 1024 * 1024
+    ), j
 
 
 if __name__ == "__main__":

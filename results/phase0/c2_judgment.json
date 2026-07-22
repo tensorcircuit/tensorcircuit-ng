@@ -3,31 +3,38 @@
     "n": 24,
     "depth": 10,
     "fusion": "default",
+    "case_id": "n24_d10",
     "basis": "hlo_use_def",
     "edge": {
-      "hlo_value_id": "",
-      "M": 0,
-      "N": 0,
-      "K": 0,
-      "buffer_bytes": 0,
-      "producer_op": "",
-      "consumer_ops": "",
-      "traced_through": "",
-      "consumer_count": 1
+      "case_id": "n24_d10",
+      "producer_hlo_value_id": "%custom-call.497",
+      "producer_M": 4096,
+      "producer_N": 16384,
+      "producer_K": 1024,
+      "terminal_consumer_hlo_value_id": "%custom-call.498",
+      "consumer_M": 64,
+      "consumer_N": 1048576,
+      "consumer_K": 64,
+      "consumer_output_bytes": 536870912
     },
-    "prototype_verdict": "TILE_FUSION_FEASIBLE",
-    "prototype_net_gain_bytes": 536870912,
-    "prototype_occupancy_pct": 100.0,
-    "prototype_latency_ratio_tiled_over_c64": 1.1739811760358958,
-    "status": "UNKNOWN",
-    "reason": "no real HLO producer->consumer edge for the C1 anchor",
+    "peak_analysis_verdict_hint": "PTE_FUSION_NO_CLEAR_MEMORY_BENEFIT",
+    "peak_reduction_bytes": 32128,
+    "memory_threshold_bytes": 268435456,
+    "allocation_source": "xla_buffer_assignment",
+    "status": "FAIL",
+    "prototype_verdict": "NOT_FEASIBLE",
+    "reason": "region fusion of the anchor pair (P->T->E) reduces the executable peak by only 32128 B << 268435456 B threshold; the ~1107389712 B peak is structural (contraction chain of GEMM+transpose pairs), so fusing one pair cannot reduce it",
     "conditions": {
-      "1_real_hlo_edge": false,
-      "2_prototype_feasible": true,
-      "3_net_gain": true,
-      "4_correct": true,
-      "5_no_rematerialization": true,
-      "6_latency_or_policy": true
+      "edge_reaches_real_consumer_498": true,
+      "peak_reduction_bytes": 32128,
+      "memory_benefit_meets_threshold": false,
+      "allocation_is_real": true
+    },
+    "artifact_hashes": {
+      "source_hlo": "a2dba7afeae3a3bfe16dc645d44c0b1b2da4eb2623e5ac65ca5c9042fe9849be",
+      "allocation_audit": "1c87afd48922b3a68c1ba7f3c238d5a61f968d480dd5606606a7a75667db9cb5",
+      "edge_map_csv": "feee12aa59d36a4fb7e5b82e54ced90c4f6e38f9a8c1aba41927e6f0d401aec3",
+      "peak_analysis": "14bb79810b7a1a461a3f211529ecb2409d7463be0222c4e2da3f06534330da59"
     }
   }
 }

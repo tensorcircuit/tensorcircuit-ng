@@ -1,0 +1,19 @@
+{
+  "schema_version": "task1-4-checkpoint-v1",
+  "case_id": "n24_d10",
+  "generated_at_epoch": 1784729333,
+  "case_status": "FAIL",
+  "prototype_verdict": "NOT_FEASIBLE",
+  "artifact_hashes": {
+    "source_hlo": "a2dba7afeae3a3bfe16dc645d44c0b1b2da4eb2623e5ac65ca5c9042fe9849be",
+    "allocation_audit": "1c87afd48922b3a68c1ba7f3c238d5a61f968d480dd5606606a7a75667db9cb5",
+    "edge_map_csv": "feee12aa59d36a4fb7e5b82e54ced90c4f6e38f9a8c1aba41927e6f0d401aec3",
+    "peak_analysis": "14bb79810b7a1a461a3f211529ecb2409d7463be0222c4e2da3f06534330da59"
+  },
+  "commands": {
+    "edge_map": "python results/_phase0/c1_to_c2_map.py (or map_anchor_for_case)",
+    "peak_analysis": "python results/_phase0/c2_peak_analysis.py",
+    "audit": "audit_buffer_assignment + xla_dump.py",
+    "gate": "python results/_phase0/c2.py --n <n> --depth <d>"
+  }
+}
