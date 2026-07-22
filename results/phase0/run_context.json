@@ -1,0 +1,30 @@
+{
+  "schema_version": "run-context-v1",
+  "source_commit": "ba83506a211a57ea039e2f7f43b82f70e258dd21",
+  "dirty_worktree": true,
+  "dirty_file_count": 65,
+  "package_versions": {
+    "jax": "0.6.2",
+    "jaxlib": "0.6.2",
+    "cupy-cuda12x": "14.1.1",
+    "torch": "2.11.0+cu128",
+    "numpy": "2.2.6",
+    "cotengra": "0.8.2",
+    "tensorcircuit-ng": "1.7.0",
+    "nvidia-cublas-cu12": "12.8.4.1",
+    "nvidia-cuda-nvcc-cu12": "12.9.86",
+    "nvidia-cuda-runtime-cu12": "12.8.90",
+    "nvidia-cuda-nvrtc-cu12": "12.8.93"
+  },
+  "command_templates": {
+    "xla_dump": "python results/_phase0/xla_dump.py",
+    "c1_ab": "python results/_phase0/c1.py --ab --n {n} --depth {depth}",
+    "edge_map": "python results/_phase0/c1_to_c2_map.py",
+    "peak_frontier": "python results/_phase0/c2_peak_analysis.py",
+    "region_proto": "python results/_phase0/region_proto.py",
+    "c2_gate": "python results/_phase0/c2.py --n {n} --depth {depth}",
+    "gonogo": "python results/_phase0/gonogo.py",
+    "manifest": "python results/_phase0/manifest.py"
+  },
+  "runner_note": "All commands run via the project WSL harness in the project conda env. The env name, usernames, and absolute host paths are omitted by policy; package versions + source commit are the reproducibility fingerprint."
+}
