@@ -26,11 +26,11 @@ The verified `cqlib` range requires Python 3.10 or later and NumPy 2.1.2 or late
 
 Register at the [TianYan quantum cloud platform](https://qc.zdxlz.com) and obtain an SDK login key. Do not put the key in source files, notebooks, logs, or version control.
 
-On Windows PowerShell, store it in the active Conda environment:
+The cloud token system reads per-provider tokens from environment variables automatically: set `TC_TOKEN_TIANYAN` and no explicit `set_token` call is needed. On Windows PowerShell, store it in the active Conda environment:
 
 ```powershell
 conda activate <env>
-conda env config vars set TIANYAN_LOGIN_KEY="your_login_key"
+conda env config vars set TC_TOKEN_TIANYAN="your_login_key"
 conda deactivate
 conda activate <env>
 ```
@@ -40,16 +40,10 @@ There must be no spaces around `=`. Reactivate the environment before using the 
 ### 3. Configure the provider and submit a task
 
 ```python
-import os
-
 import tensorcircuit as tc
 
-login_key = os.getenv("TIANYAN_LOGIN_KEY")
-if not login_key:
-    raise RuntimeError("Set TIANYAN_LOGIN_KEY before using TianYan")
-
 tc.cloud.apis.set_provider("tianyan")
-tc.cloud.apis.set_token(login_key, provider="tianyan", cached=False)
+# the token is picked up automatically from the TC_TOKEN_TIANYAN env var
 
 devices = tc.cloud.apis.list_devices(provider="tianyan")
 print(devices)
@@ -71,7 +65,7 @@ print(task.results(blocked=True))
 | API | Description |
 |---|---|
 | `tc.cloud.apis.set_provider("tianyan")` | Select the TianYan provider |
-| `tc.cloud.apis.set_token(key, provider="tianyan")` | Set the login key |
+| `TC_TOKEN_TIANYAN` env var | Provide the login key (read automatically) |
 | `tc.cloud.apis.list_devices()` | List devices returned by the platform |
 | `tc.cloud.apis.get_device("tianyan::DEVICE_NAME")` | Construct a device object |
 | `device.list_properties()` | Read topology and calibration properties |
@@ -204,7 +198,7 @@ pip install "cqlib>=1.3.10,<1.4"
 
 ### Invalid login key
 
-Check that `TIANYAN_LOGIN_KEY` is visible in the active environment and obtain a fresh key from the [TianYan platform](https://qc.zdxlz.com) if needed.
+Check that `TC_TOKEN_TIANYAN` is visible in the active environment and obtain a fresh key from the [TianYan platform](https://qc.zdxlz.com) if needed.
 
 ### Topology validation fails
 

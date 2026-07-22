@@ -1,8 +1,9 @@
 """End-to-end TianYan cloud example using the public TensorCircuit API.
 
-Install TensorCircuit-NG and ``cqlib>=1.3.10,<1.4``, then set ``TIANYAN_LOGIN_KEY``
-before running this script. The simulator examples run by default. Set
-``TIANYAN_RUN_HARDWARE=1`` to opt into the real-device example.
+Install TensorCircuit-NG and ``cqlib>=1.3.10,<1.4``, then set the
+``TC_TOKEN_TIANYAN`` environment variable before running this script (the
+cloud token system picks it up automatically). The simulator examples run by
+default. Set ``TIANYAN_RUN_HARDWARE=1`` to opt into the real-device example.
 """
 
 import os
@@ -11,13 +12,6 @@ import tensorcircuit as tc
 
 SIMULATOR = "tianyan_sw"
 REAL_DEVICE = "tianyan176"
-
-
-def _get_login_key() -> str:
-    login_key = os.getenv("TIANYAN_LOGIN_KEY")
-    if not login_key:
-        raise RuntimeError("Set TIANYAN_LOGIN_KEY before running this example")
-    return login_key
 
 
 def _bell_circuit() -> tc.Circuit:
@@ -30,11 +24,11 @@ def _bell_circuit() -> tc.Circuit:
 
 def main() -> None:
     """Run simulator workflows and optionally submit to real hardware."""
-    login_key = _get_login_key()
+    if not os.getenv("TC_TOKEN_TIANYAN"):
+        raise RuntimeError("Set TC_TOKEN_TIANYAN before running this example")
     run_hardware = os.getenv("TIANYAN_RUN_HARDWARE") == "1"
 
     tc.cloud.apis.set_provider("tianyan")
-    tc.cloud.apis.set_token(login_key, provider="tianyan", cached=False)
 
     devices = tc.cloud.apis.list_devices(provider="tianyan")
     print(f"Available TianYan devices ({len(devices)}):")

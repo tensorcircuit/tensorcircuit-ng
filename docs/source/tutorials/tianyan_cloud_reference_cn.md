@@ -31,30 +31,24 @@ pip install "cqlib>=1.3.10,<1.4"
 
 访问[天衍量子计算云平台](https://qc.zdxlz.com)注册账号并获取 SDK 登录密钥。不要把密钥写入脚本、Notebook、日志或版本控制。
 
-Windows PowerShell 下可以把密钥保存到当前 Conda 环境：
+云 SDK 的 token 系统会自动读取按 provider 命名的环境变量：设置 `TC_TOKEN_TIANYAN` 后无需再显式调用 `set_token`。Windows PowerShell 下可以把密钥保存到当前 Conda 环境：
 
 ```powershell
 conda activate <env>
-conda env config vars set TIANYAN_LOGIN_KEY="your_login_key"
+conda env config vars set TC_TOKEN_TIANYAN="your_login_key"
 conda deactivate
 conda activate <env>
 ```
 
-`set`、`TIANYAN_LOGIN_KEY` 和 `=` 之间不要添加空格。重新激活环境后变量才会生效。
+`set`、`TC_TOKEN_TIANYAN` 和 `=` 之间不要添加空格。重新激活环境后变量才会生效。
 
 ### 3. 基本使用
 
 ```python
-import os
-
 import tensorcircuit as tc
 
-login_key = os.getenv("TIANYAN_LOGIN_KEY")
-if not login_key:
-    raise RuntimeError("请先设置 TIANYAN_LOGIN_KEY 环境变量")
-
 tc.cloud.apis.set_provider("tianyan")
-tc.cloud.apis.set_token(login_key, provider="tianyan", cached=False)
+# token 会从 TC_TOKEN_TIANYAN 环境变量自动读取
 
 # 列出设备
 devices = tc.cloud.apis.list_devices()
@@ -84,7 +78,7 @@ print(counts)
 | API | 说明 |
 |-----|------|
 | `tc.cloud.apis.set_provider("tianyan")` | 设置当前 provider |
-| `tc.cloud.apis.set_token(key, provider="tianyan")` | 设置登录密钥 |
+| `TC_TOKEN_TIANYAN` 环境变量 | 提供登录密钥（自动读取） |
 | `tc.cloud.apis.list_devices()` | 列出所有可用设备 |
 | `tc.cloud.apis.get_device("tianyan::DEVICE_NAME")` | 获取特定设备 |
 | `device.list_properties()` | 获取设备属性（拓扑、校准数据） |

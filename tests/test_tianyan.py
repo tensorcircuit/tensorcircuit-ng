@@ -1,6 +1,6 @@
 """Tests for the TianYan cloud provider.
 
-Offline tests run by default. Set ``TC_CLOUD_TEST=1`` and ``TIANYAN_LOGIN_KEY``
+Offline tests run by default. Set ``TC_CLOUD_TEST=1`` and ``TC_TOKEN_TIANYAN``
 to run online simulator tests. Real-device tests additionally require
 ``TC_CLOUD_HARDWARE_TEST=1``.
 """
@@ -17,7 +17,8 @@ import tensorcircuit as tc
 from tensorcircuit.cloud import apis, tianyan
 from tensorcircuit.cloud.abstraction import Device, Task
 
-LOGIN_KEY = os.getenv("TIANYAN_LOGIN_KEY")
+# token is picked up automatically by the cloud env token system
+LOGIN_KEY = os.getenv("TC_TOKEN_TIANYAN")
 HAS_CQLIB = tianyan.TianYanPlatform is not None
 CLOUD_TESTS_ENABLED = (
     HAS_CQLIB and bool(LOGIN_KEY) and os.getenv("TC_CLOUD_TEST") == "1"
@@ -37,7 +38,7 @@ TEST_SHOTS_REAL = 100
 requires_cqlib = pytest.mark.skipif(not HAS_CQLIB, reason="cqlib is not installed")
 requires_cloud = pytest.mark.skipif(
     not CLOUD_TESTS_ENABLED,
-    reason="set TIANYAN_LOGIN_KEY and TC_CLOUD_TEST=1 to run cloud tests",
+    reason="set TC_TOKEN_TIANYAN and TC_CLOUD_TEST=1 to run cloud tests",
 )
 requires_hardware = pytest.mark.skipif(
     not HARDWARE_TESTS_ENABLED,
@@ -75,13 +76,6 @@ class _FakePlatform:
         self.submitted = True
         self.last_submission = kwargs
         return self.batch_query_ids
-
-
-@pytest.fixture
-def tianyan_token() -> Any:
-    assert LOGIN_KEY is not None
-    with patch.dict(apis.saved_token, {"tianyan::": LOGIN_KEY}):
-        yield
 
 
 def assert_is_counts(counts: Any) -> None:
@@ -465,9 +459,9 @@ def test_cloud_get_device() -> None:
 
 
 @requires_cloud
-def test_cloud_list_properties_simulator(tianyan_token: Any) -> None:
+def test_cloud_list_properties_simulator() -> None:
     device = apis.get_device(f"tianyan::{SIMULATOR}")
-    props = apis.list_properties(device, token=LOGIN_KEY)
+    props = apis.list_properties(device)
 
     assert "native_gates" in props
     assert isinstance(props["links"], dict)
@@ -483,7 +477,7 @@ def test_cloud_list_properties_simulator(tianyan_token: Any) -> None:
 
 
 @requires_cloud
-def test_cloud_native_gates(tianyan_token: Any) -> None:
+def test_cloud_native_gates() -> None:
     device = apis.get_device(f"tianyan::{SIMULATOR}")
     gates = device.native_gates()
     assert "h" in gates
@@ -491,9 +485,9 @@ def test_cloud_native_gates(tianyan_token: Any) -> None:
 
 
 @requires_hardware
-def test_cloud_list_properties_real_device(tianyan_token: Any) -> None:
+def test_cloud_list_properties_real_device() -> None:
     device = apis.get_device(f"tianyan::{REAL_DEVICE}")
-    props = apis.list_properties(device, token=LOGIN_KEY)
+    props = apis.list_properties(device)
 
     assert len(props["links"]) > 0
     assert len(props["bits"]) > 0
@@ -502,7 +496,7 @@ def test_cloud_list_properties_real_device(tianyan_token: Any) -> None:
 
 
 @requires_hardware
-def test_cloud_topology_real_device(tianyan_token: Any) -> None:
+def test_cloud_topology_real_device() -> None:
     device = apis.get_device(f"tianyan::{REAL_DEVICE}")
     topo = device.topology()
     assert len(topo) > 0
@@ -513,7 +507,7 @@ def test_cloud_topology_real_device(tianyan_token: Any) -> None:
 
 
 @requires_cloud
-def test_cloud_submit_and_query_bell_task(tianyan_token: Any) -> None:
+def test_cloud_submit_and_query_bell_task() -> None:
     device = apis.get_device(f"tianyan::{SIMULATOR}")
 
     c = tc.Circuit(2)
@@ -539,7 +533,7 @@ def test_cloud_submit_and_query_bell_task(tianyan_token: Any) -> None:
 
 
 @requires_cloud
-def test_cloud_asymmetric_state_bit_ordering(tianyan_token: Any) -> None:
+def test_cloud_asymmetric_state_bit_ordering() -> None:
     """An X on qubit 0 must yield {"10": shots}, matching the tc bit ordering.
 
     Guards against silent bit-reversal regressions in result parsing; the
@@ -558,7 +552,7 @@ def test_cloud_asymmetric_state_bit_ordering(tianyan_token: Any) -> None:
 
 
 @requires_cloud
-def test_cloud_batch_submit(tianyan_token: Any) -> None:
+def test_cloud_batch_submit() -> None:
     device = apis.get_device(f"tianyan::{SIMULATOR}")
 
     circuits = []
@@ -578,14 +572,14 @@ def test_cloud_batch_submit(tianyan_token: Any) -> None:
 
 
 @requires_cloud
-def test_cloud_no_circuit_no_source_raises(tianyan_token: Any) -> None:
+def test_cloud_no_circuit_no_source_raises() -> None:
     device = apis.get_device(f"tianyan::{SIMULATOR}")
     with pytest.raises(ValueError):
         apis.submit_task(device=device, shots=100)
 
 
 @requires_cloud
-def test_cloud_direct_qcis_source(tianyan_token: Any) -> None:
+def test_cloud_direct_qcis_source() -> None:
     device = apis.get_device(f"tianyan::{SIMULATOR}")
     qcis = "H Q0\nX Q1\nCZ Q0 Q1\nM Q0\nM Q1"
 
@@ -594,7 +588,7 @@ def test_cloud_direct_qcis_source(tianyan_token: Any) -> None:
 
 
 @requires_cloud
-def test_cloud_single_qubit_circuit(tianyan_token: Any) -> None:
+def test_cloud_single_qubit_circuit() -> None:
     device = apis.get_device(f"tianyan::{SIMULATOR}")
 
     c = tc.Circuit(1)
@@ -606,7 +600,7 @@ def test_cloud_single_qubit_circuit(tianyan_token: Any) -> None:
 
 
 @requires_hardware
-def test_hardware_submit_on_connected_physical_qubits(tianyan_token: Any) -> None:
+def test_hardware_submit_on_connected_physical_qubits() -> None:
     device = apis.get_device(f"tianyan::{REAL_DEVICE}")
     q1, q2 = sorted(device.topology()[0])
 
@@ -625,7 +619,7 @@ def test_hardware_submit_on_connected_physical_qubits(tianyan_token: Any) -> Non
 
 
 @requires_hardware
-def test_hardware_incompatible_circuit_raises(tianyan_token: Any) -> None:
+def test_hardware_incompatible_circuit_raises() -> None:
     device = apis.get_device(f"tianyan::{REAL_DEVICE}")
     edges = {tuple(sorted(e)) for e in device.topology()}
     nqubits = max(max(e) for e in edges) + 1
