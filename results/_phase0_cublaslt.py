@@ -20,22 +20,33 @@ def reference_complex_matmul(ar, ai, br, bi):
 
 
 def judge_capability(
-    max_abs_err,
+    max_rel_err,
     perf_ratio_vs_c64,
     algo_count,
     workspace_bytes,
     output_bytes,
     has_four_real_temps,
+    max_abs_err=0.0,
 ):
-    """§7.5 capability judgment for the planar-complex BF16 planar probe."""
+    """§7.5 capability judgment for the planar-complex BF16 planar probe.
+
+    The accuracy gate keys on max-RELATIVE-error: BF16 output inherently rounds
+    to ~8 mantissa bits (~0.4% relative error on standard-normal inputs), so an
+    absolute-error gate mis-flags the spec-compliant BF16-output path. The
+    absolute error is carried as a diagnostic via ``max_abs_err`` (reported in
+    the failure reason only).
+    """
     reasons = []
     if algo_count == 0:
         return {
             "status": "NOT_SUPPORTED",
             "reason": "SM120 returned no algorithm for planar C16BF",
         }
-    if max_abs_err > 1e-2:
-        reasons.append(f"accuracy fail (max_abs_err={max_abs_err:.2e})")
+    if max_rel_err > 1e-2:
+        reasons.append(
+            f"accuracy fail (max_rel_err={max_rel_err:.2e}, "
+            f"max_abs_err={max_abs_err:.2e})"
+        )
     if perf_ratio_vs_c64 < 1.3:
         reasons.append(f"no speedup vs c64 (perf_ratio={perf_ratio_vs_c64:.2f} < 1.3)")
     if has_four_real_temps:

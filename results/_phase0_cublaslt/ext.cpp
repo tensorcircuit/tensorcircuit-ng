@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <vector>
 
 namespace py = pybind11;
@@ -88,24 +89,32 @@ static cublasStatus_t make_planar_layout(
 }
 
 // Planar complex BF16 matmul: C = A . B  (complex).
-// Mixed precision: A/B are BF16 (input compression — the leverage under test);
-// C/D are FP32 (output preserved at full precision so the BF16 input
-// quantization is the ONLY error source vs the FP32 reference, making the
-// 1e-2 correctness gate meaningful). COMPUTE_32F accumulates in FP32.
+// A/B are BF16 (input compression — the leverage under test); COMPUTE_32F
+// accumulates in FP32. The output dtype is selected by out_dtype:
+//   "bf16" (default): C/D = CUDA_C_16BF — spec-compliant end-to-end BF16
+//     (output compression is half the leverage). Returns (cr, ci) as raw
+//     uint16 BF16 views shaped (m,n); the driver upcasts to float32 for
+//     comparison. BF16 output inherently rounds to ~8 mantissa bits, so the
+//     correctness gate for this path is max-RELATIVE-error (< 1e-2).
+//   "fp32": C/D = CUDA_C_32F — mixed-precision cross-check. Returns (cr, ci)
+//     as float32 host arrays; max-abs < 1e-2 (expected ~2e-4).
 // Host inputs: ar/ai (m,k), br/bi (k,n) as raw uint16 BF16 views.
-// Returns (cr, ci) as float32 host arrays shaped (m,n).
 static py::tuple planar_complex_matmul_bf16(
     py::array_t<uint16_t, py::array::c_style> ar_u16,
     py::array_t<uint16_t, py::array::c_style> ai_u16,
     py::array_t<uint16_t, py::array::c_style> br_u16,
     py::array_t<uint16_t, py::array::c_style> bi_u16,
-    int m, int n, int k)
+    int m, int n, int k,
+    std::string out_dtype)
 {
-    constexpr size_t bf16_elem = 2;   // BF16 = 2 bytes  (A, B planes)
-    constexpr size_t f32_elem  = 4;   // FP32 = 4 bytes  (C, D planes)
+    constexpr size_t bf16_elem = 2;   // BF16 = 2 bytes  (A, B planes; and C/D when bf16 out)
+    constexpr size_t f32_elem  = 4;   // FP32 = 4 bytes  (C, D planes when fp32 out)
+    bool bf16_out = (out_dtype == "bf16");
+    size_t out_elem = bf16_out ? bf16_elem : f32_elem;
+    cudaDataType_t out_cdtype = bf16_out ? CUDA_C_16BF : CUDA_C_32F;
     size_t bytesA = (size_t)m * k * bf16_elem;  // A_h real/imag plane bytes
     size_t bytesB = (size_t)k * n * bf16_elem;  // B_h real/imag plane bytes
-    size_t bytesC = (size_t)m * n * f32_elem;   // C_h real/imag plane bytes (FP32 out)
+    size_t bytesC = (size_t)m * n * out_elem;   // C_h real/imag plane bytes (out dtype)
 
     // Plane offsets (256-B aligned). With the colmajor-swap convention:
     //   A_cublas = B_h^T (BF16 planar) -> plane size = bytesB
@@ -151,17 +160,17 @@ static py::tuple planar_complex_matmul_bf16(
     check_cublas(cublasLtCreate(&h), "cublasLtCreate");
 
     // 3. Planar layouts. Column-major dimensions per the swap convention.
-    //    A/B inputs are BF16; C/D output is FP32 (mixed precision).
+    //    A/B inputs are BF16; C/D output dtype is out_cdtype (bf16 or fp32).
     cublasLtMatrixLayout_t Adesc = nullptr, Bdesc = nullptr, Cdesc = nullptr;
     check_cublas(make_planar_layout(&Adesc, CUDA_C_16BF, /*rows=*/n, /*cols=*/k, /*ld=*/n, off_A),
                  "Adesc create/set");
     check_cublas(make_planar_layout(&Bdesc, CUDA_C_16BF, /*rows=*/k, /*cols=*/m, /*ld=*/k, off_B),
                  "Bdesc create/set");
-    check_cublas(make_planar_layout(&Cdesc, CUDA_C_32F,  /*rows=*/n, /*cols=*/m, /*ld=*/n, off_C),
+    check_cublas(make_planar_layout(&Cdesc, out_cdtype, /*rows=*/n, /*cols=*/m, /*ld=*/n, off_C),
                  "Cdesc create/set");
 
-    // 4. Matmul descriptor: COMPUTE_32F (FP32 accumulate) + scaleType CUDA_C_32F.
-    //    A/B=CUDA_C_16BF, C/D=CUDA_C_32F (declared via the layout dtypes).
+    // 4. Matmul descriptor: COMPUTE_32F (FP32 accumulate) + scaleType CUDA_C_32F
+    //    (complex FP32 alpha/beta). A/B=CUDA_C_16BF; C/D=out_cdtype (layout dtypes).
     //    TRANSA/TRANSB default to CUBLAS_OP_N (no transpose).
     cublasLtMatmulDesc_t desc = nullptr;
     check_cublas(cublasLtMatmulDescCreate(&desc, CUBLAS_COMPUTE_32F, CUDA_C_32F),
@@ -218,11 +227,23 @@ static py::tuple planar_complex_matmul_bf16(
     // Sync before download so results are visible.
     cudaError_t sync_e = cudaDeviceSynchronize();
 
-    // Download C real/imag planes (each m*n FP32 values, laid out as col-major
-    // n rows x m cols ld=n — byte-identical to row-major (m,n) C_h, see header).
-    py::array_t<float> cr_f({m, n}), ci_f({m, n});
-    cudaMemcpy(cr_f.mutable_data(), d_C, bytesC, cudaMemcpyDeviceToHost);
-    cudaMemcpy(ci_f.mutable_data(), (char*)d_C + off_C, bytesC, cudaMemcpyDeviceToHost);
+    // Download C real/imag planes (each m*n elements of out_elem bytes, laid out
+    // as col-major n rows x m cols ld=n — byte-identical to row-major (m,n) C_h,
+    // see header). For bf16 output, return raw uint16 BF16 views; for fp32, float32.
+    py::object cr_arr, ci_arr;
+    if (bf16_out) {
+        py::array_t<uint16_t> cr_u16({m, n}), ci_u16({m, n});
+        cudaMemcpy(cr_u16.mutable_data(), d_C, bytesC, cudaMemcpyDeviceToHost);
+        cudaMemcpy(ci_u16.mutable_data(), (char*)d_C + off_C, bytesC, cudaMemcpyDeviceToHost);
+        cr_arr = cr_u16;
+        ci_arr = ci_u16;
+    } else {
+        py::array_t<float> cr_f({m, n}), ci_f({m, n});
+        cudaMemcpy(cr_f.mutable_data(), d_C, bytesC, cudaMemcpyDeviceToHost);
+        cudaMemcpy(ci_f.mutable_data(), (char*)d_C + off_C, bytesC, cudaMemcpyDeviceToHost);
+        cr_arr = cr_f;
+        ci_arr = ci_f;
+    }
 
     // Cleanup all GPU/handle resources.
     if (workspace) cudaFree(workspace);
@@ -237,21 +258,21 @@ static py::tuple planar_complex_matmul_bf16(
     check_cublas(es, "cublasLtMatmul");
     check_cuda(sync_e, "cudaDeviceSynchronize");
 
-    return py::make_tuple(cr_f, ci_f);
+    return py::make_tuple(cr_arr, ci_arr);
 }
 
-// Enumerate algorithms for planar complex BF16-in / FP32-out + COMPUTE_32F
-// WITHOUT executing. Tests the SAME mixed-precision configuration as
-// planar_complex_matmul_bf16 so the algo_count reflects what the matmul path
-// can actually use. Returns {algo_count, first_algo_id, workspace_bytes,
-// heuristic_status, status}.
+// Enumerate algorithms for the spec-compliant planar-complex BF16-in / BF16-out
+// + COMPUTE_32F config WITHOUT executing. The heuristic's C/D dtype
+// (CUDA_C_16BF) matches the cublasLtMatmulAlgoGetIds C/D query (CUDA_C_16BF),
+// so algo_count + first_algo_id are consistent for the BF16-output path — the
+// config that matters for C3_planar. Returns {algo_count, first_algo_id,
+// workspace_bytes, heuristic_status, status}.
 static py::dict probe_planar_capability(int m, int n, int k) {
     py::dict d;
     constexpr size_t bf16_elem = 2;
-    constexpr size_t f32_elem  = 4;
     size_t bytesA = (size_t)m * k * bf16_elem;  // BF16 in
     size_t bytesB = (size_t)k * n * bf16_elem;  // BF16 in
-    size_t bytesC = (size_t)m * n * f32_elem;   // FP32 out
+    size_t bytesC = (size_t)m * n * bf16_elem;   // BF16 out (spec-compliant; matches AlgoGetIds C/D=CUDA_C_16BF)
     size_t off_A = align256(bytesB);
     size_t off_B = align256(bytesA);
     size_t off_C = align256(bytesC);
@@ -270,7 +291,7 @@ static py::dict probe_planar_capability(int m, int n, int k) {
     cublasLtMatrixLayout_t Adesc = nullptr, Bdesc = nullptr, Cdesc = nullptr;
     make_planar_layout(&Adesc, CUDA_C_16BF, n, k, n, off_A);
     make_planar_layout(&Bdesc, CUDA_C_16BF, k, m, k, off_B);
-    make_planar_layout(&Cdesc, CUDA_C_32F,  n, m, n, off_C);
+    make_planar_layout(&Cdesc, CUDA_C_16BF, n, m, n, off_C);
 
     cublasLtMatmulDesc_t desc = nullptr;
     cublasLtMatmulDescCreate(&desc, CUBLAS_COMPUTE_32F, CUDA_C_32F);
@@ -325,7 +346,8 @@ PYBIND11_MODULE(_phase0_cublaslt_ext, m) {
     m.def("planar_complex_matmul_bf16", &planar_complex_matmul_bf16,
           py::arg("ar_u16"), py::arg("ai_u16"),
           py::arg("br_u16"), py::arg("bi_u16"),
-          py::arg("m"), py::arg("n"), py::arg("k"));
+          py::arg("m"), py::arg("n"), py::arg("k"),
+          py::arg("out_dtype") = std::string("bf16"));
     m.def("probe_planar_capability", &probe_planar_capability,
           py::arg("m"), py::arg("n"), py::arg("k"));
 }
