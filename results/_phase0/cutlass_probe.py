@@ -699,24 +699,49 @@ def aggregate_capability(single_4m: dict, grouped: dict, toolchain: dict) -> dic
     }
 
 
+def _sanitize_verdict_text(text: str) -> str:
+    """Redact real usernames / absolute paths from the serialized verdict so the
+    tracked artifact obeys spec §8 / plan Global Constraints (no real usernames,
+    env-names, or absolute paths in tracked files).
+
+    Replaces the current user's home dir -> ``$HOME`` and the repo absolute path
+    (derived from this script's location: ``tensorcircuit-ng/``) -> ``$REPO``.
+    Both are derived at runtime (``os.path.expanduser('~')`` / script dir) — no
+    hardcoded ``/home/...`` literals. Applied to the whole serialized string, so
+    both ``toolchain.cuda_home_source`` and the verbatim ``sm120_blocker`` nvcc
+    log are redacted. The decisive blocker content (F8F6F4 ``static_assert``
+    strings, ``__CUDA_ARCH__==1000``, ``kErrorInternal``) survives intact.
+    """
+    home = os.path.expanduser("~")
+    if home and home not in ("~", "/"):
+        text = text.replace(home, "$HOME")
+    repo = os.path.dirname(os.path.dirname(_HERE))  # .../tensorcircuit-ng
+    if repo:
+        text = text.replace(repo, "$REPO")
+    return text
+
+
 def write_artifacts(verdict: dict, out_dir: str) -> None:
     """Write the cutlass-sm120-4m-v1 verdict as `.json` + `.md` (with the
     toolkit reproduction recipe) into `out_dir`.
 
     The `.md` wraps the JSON in a fenced block and prepends a short recipe so
     anyone landing on the artifact can reproduce the toolchain from scratch.
+    Both files are run through `_sanitize_verdict_text` so no real username or
+    absolute path (home dir, repo path) leaks into the tracked artifact.
     """
     import json
 
     os.makedirs(out_dir, exist_ok=True)
+    text = _sanitize_verdict_text(json.dumps(verdict, indent=2))
     with open(os.path.join(out_dir, "cutlass_sm120_4m.json"), "w") as fh:
-        json.dump(verdict, fh, indent=2)
+        fh.write(text)
     with open(os.path.join(out_dir, "cutlass_sm120_4m.md"), "w") as fh:
         fh.write(
             "# CUTLASS/CuTe SM120 4M capability (Task 8)\n\n"
             f"**overall:** `{verdict['overall']}`  |  "
             f"**schema:** `{verdict['schema_version']}`\n\n"
-            "```\n" + json.dumps(verdict, indent=2) + "\n```\n\n"
+            "```\n" + text + "\n```\n\n"
             "## Toolkit recipe (reproduce)\n"
             "1. `conda create -n nvcc_spike -c nvidia cuda-nvcc=12.8`\n"
             "2. `conda install -n nvcc_spike -c nvidia "

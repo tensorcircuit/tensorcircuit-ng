@@ -43,6 +43,26 @@ static cutlass::Status real_gemm(at::Tensor A, at::Tensor B, at::Tensor D,
     return op(args, ws_ptr, stream);
 }
 
+// cutlass::Status -> name helper. Hoisted to true file scope (unguarded) so the
+// Sm80 path (cutlass_4m_sm80 below) AND the Sm100/Sm120 compile-guarded blocks
+// can all name it. CUTLASS's Status enum is always available via cutlass.h.
+static const char* cutlass_status_name(cutlass::Status s) {
+    switch (s) {
+        case cutlass::Status::kSuccess:              return "kSuccess";
+        case cutlass::Status::kErrorMisalignedOperand: return "kErrorMisalignedOperand";
+        case cutlass::Status::kErrorInvalidDataType: return "kErrorInvalidDataType";
+        case cutlass::Status::kErrorInvalidLayout:   return "kErrorInvalidLayout";
+        case cutlass::Status::kErrorInvalidProblem:  return "kErrorInvalidProblem";
+        case cutlass::Status::kErrorNotSupported:    return "kErrorNotSupported";
+        case cutlass::Status::kErrorWorkspaceNull:   return "kErrorWorkspaceNull";
+        case cutlass::Status::kErrorInternal:        return "kErrorInternal";
+        case cutlass::Status::kErrorArchMismatch:    return "kErrorArchMismatch";
+        case cutlass::Status::kErrorInsufficientDriver: return "kErrorInsufficientDriver";
+        case cutlass::Status::kErrorMemoryAllocation: return "kErrorMemoryAllocation";
+        default: return "kInvalid";
+    }
+}
+
 // 4M complex matmul: ReC=ReA.ReB-ImA.ImB ; ImC=ReA.ImB+ImA.ReB (4 real GEMMs via alpha/beta).
 std::tuple<at::Tensor, at::Tensor> cutlass_4m_sm80(
         at::Tensor ReA, at::Tensor ImA, at::Tensor ReB, at::Tensor ImB) {
@@ -51,10 +71,19 @@ std::tuple<at::Tensor, at::Tensor> cutlass_4m_sm80(
     auto ReC = at::empty({M, N}, at::dtype(at::kFloat).device(at::kCUDA));
     auto ImC = at::empty({M, N}, at::dtype(at::kFloat).device(at::kCUDA));
     cudaStream_t s = c10::cuda::getCurrentCUDAStream().stream();
-    real_gemm(ReA, ReB, ReC, 1.0f, 0.0f, s);   // ReC = ReA.ReB
-    real_gemm(ImA, ImB, ReC, -1.0f, 1.0f, s);  // ReC -= ImA.ImB
-    real_gemm(ReA, ImB, ImC, 1.0f, 0.0f, s);   // ImC = ReA.ImB
-    real_gemm(ImA, ReB, ImC, 1.0f, 1.0f, s);   // ImC += ImA.ReB
+    cutlass::Status st;
+    st = real_gemm(ReA, ReB, ReC, 1.0f, 0.0f, s);   // ReC = ReA.ReB
+    TORCH_CHECK(st == cutlass::Status::kSuccess,
+                "real_gemm failed: ", cutlass_status_name(st));
+    st = real_gemm(ImA, ImB, ReC, -1.0f, 1.0f, s);  // ReC -= ImA.ImB
+    TORCH_CHECK(st == cutlass::Status::kSuccess,
+                "real_gemm failed: ", cutlass_status_name(st));
+    st = real_gemm(ReA, ImB, ImC, 1.0f, 0.0f, s);   // ImC = ReA.ImB
+    TORCH_CHECK(st == cutlass::Status::kSuccess,
+                "real_gemm failed: ", cutlass_status_name(st));
+    st = real_gemm(ImA, ReB, ImC, 1.0f, 1.0f, s);   // ImC += ImA.ReB
+    TORCH_CHECK(st == cutlass::Status::kSuccess,
+                "real_gemm failed: ", cutlass_status_name(st));
     return {ReC, ImC};
 }
 
@@ -145,30 +174,6 @@ using Sm100GemmKernel = cutlass::gemm::kernel::GemmUniversal<
     void>;  // default CLC tile scheduler
 
 using Sm100Gemm = cutlass::gemm::device::GemmUniversalAdapter<Sm100GemmKernel>;
-
-// Single real GEMM via the 3.x universal adapter. alpha*A*B + beta*D (D is
-// both source C and destination — beta accumulates into the existing buffer).
-// Throws on any non-success status so _attempt_sm100_then_sm80 records the
-// verbatim blocker and falls back to the 2.x Sm80 path.
-//
-// Hoisted to file scope (unguarded) so both the Sm100 and Sm120 compile-guarded
-// blocks can name it. CUTLASS's Status enum is always available via cutlass.h.
-static const char* cutlass_status_name(cutlass::Status s) {
-    switch (s) {
-        case cutlass::Status::kSuccess:              return "kSuccess";
-        case cutlass::Status::kErrorMisalignedOperand: return "kErrorMisalignedOperand";
-        case cutlass::Status::kErrorInvalidDataType: return "kErrorInvalidDataType";
-        case cutlass::Status::kErrorInvalidLayout:   return "kErrorInvalidLayout";
-        case cutlass::Status::kErrorInvalidProblem:  return "kErrorInvalidProblem";
-        case cutlass::Status::kErrorNotSupported:    return "kErrorNotSupported";
-        case cutlass::Status::kErrorWorkspaceNull:   return "kErrorWorkspaceNull";
-        case cutlass::Status::kErrorInternal:        return "kErrorInternal";
-        case cutlass::Status::kErrorArchMismatch:    return "kErrorArchMismatch";
-        case cutlass::Status::kErrorInsufficientDriver: return "kErrorInsufficientDriver";
-        case cutlass::Status::kErrorMemoryAllocation: return "kErrorMemoryAllocation";
-        default: return "kInvalid";
-    }
-}
 
 // Single real GEMM via the 3.x Sm100 universal adapter. Used by cutlass_4m_sm100.
 static cutlass::Status real_gemm_sm100(at::Tensor A, at::Tensor B, at::Tensor D,
