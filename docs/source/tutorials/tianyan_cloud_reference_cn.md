@@ -115,30 +115,27 @@ print(counts)
 
 ## 特色功能
 
-### 自动拓扑映射
+### 拓扑校验
 
-提交到真实量子机时，TensorCircuit 会自动：
+Provider 不会自动重映射比特。提交到真实量子机的电路必须已经满足设备拓扑约束：
+请先使用 `tensorcircuit.compiler` 等工具完成编译和映射。对于 TensorCircuit 电路，
+provider 会在提交前校验拓扑兼容性，若某个门作用在不可用比特或不连通的物理比特对上，
+会抛出 `ValueError`，且不会提交任何任务。对于 qiskit 电路和直接提供的
+QCIS/OpenQASM 源码，拓扑兼容性由用户自行保证。
 
-1. 下载设备拓扑信息
-2. 找到连通的物理比特
-3. 将逻辑比特映射到物理比特
-4. 生成对应的 QCIS 代码
-
-示例：
+一个简单做法是直接在 `device.topology()` 返回的连通物理比特对上构建电路：
 
 ```python
-# 逻辑电路使用 0, 1 比特
-c = tc.Circuit(2)
-c.h(0)
-c.cx(0, 1)
-
 run_hardware = os.getenv("TIANYAN_RUN_HARDWARE") == "1"
 if run_hardware:
     device = tc.cloud.apis.get_device("tianyan::tianyan176")
+    q1, q2 = sorted(device.topology()[0])
+    c = tc.Circuit(q2 + 1)
+    c.h(q1)
+    c.cx(q1, q2)
+    c.measure_instruction(q1, q2)
     task = tc.cloud.apis.submit_task(circuit=c, device=device, shots=100)
-    details = task.details()
-    print(details["mapping"])
-    print(details["source"])
+    print(task.details()["source"])
 else:
     print("已跳过真实设备提交")
 ```
@@ -148,7 +145,6 @@ else:
 任务详情包含：
 
 - `source`: 提交的 QCIS 源码
-- `mapping`: 逻辑->物理比特映射
 - `state`: 任务状态
 - `shots`: 测量次数
 - `results`: 测量结果 counts
@@ -185,7 +181,7 @@ task = tc.cloud.apis.submit_task(source=qcis, device=device, shots=100)
 ## 注意事项
 
 1. **仿真器 vs 真实量子机**: 仿真器无拓扑限制，结果接近理想；真实量子机有拓扑限制和噪声
-2. **拓扑映射**: 仅对真实量子机自动启用，仿真器跳过
+2. **拓扑校验**: 仅对真实量子机启用，仿真器跳过；不兼容的 TensorCircuit 电路会在提交前抛出 `ValueError`
 3. **单比特线路**: 部分真实量子机可能不支持单比特线路
 4. **Shots**: 真实量子机不宜设置过大，避免额度消耗
 5. **硬件开关**: 示例和 Notebook 默认不提交真实设备；显式设置 `TIANYAN_RUN_HARDWARE=1` 后才会运行硬件部分
@@ -211,11 +207,11 @@ pip install "cqlib>=1.3.10,<1.4"
 
 检查环境变量是否生效以及密钥是否正确，或访问[天衍量子计算云平台](https://qc.zdxlz.com)重新获取。
 
-### 拓扑映射失败
+### 拓扑校验失败
 
-- 检查设备是否有足够连通的可用比特
-- 查看 `device.list_properties()["links"]` 了解拓扑
-- 简化电路，减少多比特门数量
+- 先使用 `tensorcircuit.compiler` 等工具将电路编译并映射到设备拓扑
+- 查看 `device.list_properties()["links"]` 了解可用耦合关系
+- 直接在 `device.topology()` 返回的连通物理比特上构建电路
 
 ### 任务运行失败
 

@@ -51,7 +51,6 @@ def main() -> None:
     print(f"Counts: {counts}")
     print(f"State: {details['state']}")
     print(f"QCIS:\n{details['source']}")
-    print(f"Mapping: {details.get('mapping')}")
 
     circuits = [_bell_circuit() for _ in range(3)]
     tasks = tc.cloud.apis.submit_task(circuit=circuits, device=simulator, shots=100)
@@ -71,14 +70,21 @@ def main() -> None:
         return
 
     real_device = tc.cloud.apis.get_device(f"tianyan::{REAL_DEVICE}")
+    # real hardware requires a circuit that already respects the device topology;
+    # build a Bell circuit directly on a connected physical pair
+    q1, q2 = sorted(real_device.topology()[0])
+    hardware_circuit = tc.Circuit(q2 + 1)
+    hardware_circuit.h(q1)
+    hardware_circuit.cx(q1, q2)
+    hardware_circuit.measure_instruction(q1, q2)
     real_task = tc.cloud.apis.submit_task(
-        circuit=_bell_circuit(), device=real_device, shots=100
+        circuit=hardware_circuit, device=real_device, shots=100
     )
     real_counts = real_task.results(blocked=True)
     real_details = real_task.details()
     print(f"\nReal-device task: {real_task.id_}")
+    print(f"Physical qubits: {q1}, {q2}")
     print(f"Counts: {real_counts}")
-    print(f"Mapping: {real_details.get('mapping')}")
     print(f"QCIS:\n{real_details['source']}")
 
 

@@ -54,11 +54,8 @@ def _get_platform(token: str, machine_name: Optional[str] = None) -> "TianYanPla
     return TianYanPlatform(login_key=token, machine_name=machine_name)  # type: ignore
 
 
-def _circuit_to_qcis(circuit: Any, mapping: Optional[dict[int, int]] = None) -> str:
-    """
-    Convert a TensorCircuit or qiskit circuit to QCIS string.
-    If mapping is provided, logical qubits are mapped to physical qubits.
-    """
+def _circuit_to_qcis(circuit: Any) -> str:
+    """Convert a TensorCircuit or qiskit circuit to QCIS string."""
     if isinstance(circuit, str):
         return circuit
 
@@ -75,7 +72,7 @@ def _circuit_to_qcis(circuit: Any, mapping: Optional[dict[int, int]] = None) -> 
 
     # Try AbstractCircuit / TensorCircuit
     if isinstance(circuit, AbstractCircuit):
-        return _tc_qir_to_qcis(circuit, mapping)
+        return _tc_qir_to_qcis(circuit)
 
     to_openqasm = getattr(circuit, "to_openqasm", None)
     if callable(to_openqasm):
@@ -108,39 +105,40 @@ def _source_to_qcis(
     raise ValueError(f"Unsupported TianYan source language: {lang}")
 
 
-def _get_logical_qubits(circuit: AbstractCircuit) -> set[int]:
-    """Extract all logical qubit indices used in a circuit."""
-    qir = circuit.to_qir()
-    extra_qir = circuit._extra_qir
-    qubits = set()
-    for inst in qir:
-        for idx in inst.get("index", ()):
-            qubits.add(idx)
-    for inst in extra_qir:
-        if inst.get("name") == "measure":
-            idx = inst.get("index", [None])[0]
-            if idx is not None:
-                qubits.add(idx)
-    return qubits
-
-
-def _get_circuit_interactions(circuit: AbstractCircuit) -> set[tuple[int, int]]:
-    """Extract pairwise qubit constraints from multi-qubit circuit gates."""
-    interactions = set()
+def _validate_circuit_topology(
+    circuit: AbstractCircuit,
+    graph: dict[int, set[int]],
+    available_qubits: set[int],
+) -> None:
+    """
+    Raise ValueError if the circuit is incompatible with the device topology,
+    i.e. it uses unavailable qubits or multi-qubit gates on unconnected pairs.
+    """
     for inst in circuit.to_qir():
         indices = tuple(inst.get("index", ()))
+        for idx in indices:
+            if idx not in available_qubits:
+                raise ValueError(
+                    "Gate %s acts on qubit %s, which is unavailable on this "
+                    "device; compile the circuit for the device first, "
+                    "e.g. via tensorcircuit.compiler" % (inst.get("name"), idx)
+                )
         for i, q1 in enumerate(indices):
             for q2 in indices[i + 1 :]:
-                if q1 != q2:
-                    interactions.add((min(q1, q2), max(q1, q2)))
-    return interactions
+                if q1 != q2 and q2 not in graph.get(q1, set()):
+                    raise ValueError(
+                        "Gate %s acts on unconnected physical qubits (%s, %s) "
+                        "for this device; compile and map the circuit to the "
+                        "device topology first, e.g. via tensorcircuit.compiler"
+                        % (inst.get("name"), q1, q2)
+                    )
 
 
 def _get_device_topology(
     pf: "TianYanPlatform", device_name: str
 ) -> tuple[dict[int, set[int]], set[int]]:
     """Get topology graph and available qubits from device config."""
-    config = pf.download_config(machine=device_name)
+    config = pf.download_config(machine=device_name) or {}
     overview = config.get("overview", {})
 
     # Build adjacency graph from coupler map
@@ -169,80 +167,9 @@ def _get_device_topology(
     return graph, all_qubits
 
 
-def _find_qubit_mapping(
-    logical_qubits: set[int],
-    interactions: set[tuple[int, int]],
-    graph: dict[int, set[int]],
-    available_qubits: set[int],
-) -> dict[int, int]:
-    """Map logical qubits while satisfying every circuit interaction edge."""
-    if not logical_qubits:
-        return {}
-
-    if len(logical_qubits) > len(available_qubits):
-        raise ValueError(
-            f"Circuit requires {len(logical_qubits)} qubits, but only "
-            f"{len(available_qubits)} are available"
-        )
-
-    interaction_qubits = {qubit for edge in interactions for qubit in edge}
-    if not interaction_qubits.issubset(logical_qubits):
-        raise ValueError("Circuit interactions reference unknown logical qubits")
-
-    adjacency: dict[int, set[int]] = {qubit: set() for qubit in logical_qubits}
-    for q1, q2 in interactions:
-        adjacency[q1].add(q2)
-        adjacency[q2].add(q1)
-
-    logical_order = sorted(
-        logical_qubits, key=lambda qubit: (-len(adjacency[qubit]), qubit)
-    )
-    physical_order = sorted(available_qubits)
-    mapping: dict[int, int] = {}
-    used_physical: set[int] = set()
-
-    def search(position: int) -> bool:
-        if position == len(logical_order):
-            return True
-
-        logical = logical_order[position]
-        mapped_neighbors = {
-            neighbor: mapping[neighbor]
-            for neighbor in adjacency[logical]
-            if neighbor in mapping
-        }
-        for physical in physical_order:
-            if physical in used_physical:
-                continue
-            physical_neighbors = graph.get(physical, set())
-            if len(physical_neighbors & available_qubits) < len(adjacency[logical]):
-                continue
-            if any(
-                mapped_physical not in physical_neighbors
-                for mapped_physical in mapped_neighbors.values()
-            ):
-                continue
-
-            mapping[logical] = physical
-            used_physical.add(physical)
-            if search(position + 1):
-                return True
-            used_physical.remove(physical)
-            del mapping[logical]
-        return False
-
-    if search(0):
-        return mapping
-    raise ValueError("Cannot map all circuit interactions to connected physical qubits")
-
-
-def _tc_qir_to_qcis(
-    circuit: AbstractCircuit, mapping: Optional[dict[int, int]] = None
-) -> str:
+def _tc_qir_to_qcis(circuit: AbstractCircuit) -> str:
     """
     Convert TensorCircuit QIR to QCIS string using cqlib.Circuit.
-    If mapping is provided, logical qubits are mapped to physical qubits
-    so that multi-qubit gates act on connected physical qubits.
     Measurements are always emitted as terminal measurements in record
     order; mid-circuit measurement semantics are not preserved.
     """
@@ -266,22 +193,12 @@ def _tc_qir_to_qcis(
 
     sorted_logical = sorted(all_logical_qubits)
 
-    if mapping is not None:
-        physical_qubits = [mapping[logical] for logical in sorted_logical]
-    else:
-        physical_qubits = sorted_logical
-
-    cqlib_circuit = CqlibCircuit(qubits=physical_qubits)
+    cqlib_circuit = CqlibCircuit(qubits=sorted_logical)
 
     for inst in qir:
         name = inst.get("name", "").lower()
         index = inst.get("index", ())
         parameters = inst.get("parameters", {})
-
-        if mapping is not None:
-            mapped_index = tuple(mapping[i] for i in index)
-        else:
-            mapped_index = index
 
         resolved_params = {}
         for key, value in parameters.items():
@@ -297,42 +214,40 @@ def _tc_qir_to_qcis(
                 resolved_params[key] = value
 
         if name == "h":
-            cqlib_circuit.h(mapped_index[0])
+            cqlib_circuit.h(index[0])
         elif name == "x":
-            cqlib_circuit.x(mapped_index[0])
+            cqlib_circuit.x(index[0])
         elif name == "y":
-            cqlib_circuit.y(mapped_index[0])
+            cqlib_circuit.y(index[0])
         elif name == "z":
-            cqlib_circuit.z(mapped_index[0])
+            cqlib_circuit.z(index[0])
         elif name == "s":
-            cqlib_circuit.s(mapped_index[0])
+            cqlib_circuit.s(index[0])
         elif name == "sd":
-            cqlib_circuit.sd(mapped_index[0])
+            cqlib_circuit.sd(index[0])
         elif name == "t":
-            cqlib_circuit.t(mapped_index[0])
+            cqlib_circuit.t(index[0])
         elif name == "td":
-            cqlib_circuit.td(mapped_index[0])
+            cqlib_circuit.td(index[0])
         elif name == "rx":
-            cqlib_circuit.rx(mapped_index[0], resolved_params.get("theta", 0))
+            cqlib_circuit.rx(index[0], resolved_params.get("theta", 0))
         elif name == "ry":
-            cqlib_circuit.ry(mapped_index[0], resolved_params.get("theta", 0))
+            cqlib_circuit.ry(index[0], resolved_params.get("theta", 0))
         elif name == "rz":
-            cqlib_circuit.rz(mapped_index[0], resolved_params.get("theta", 0))
+            cqlib_circuit.rz(index[0], resolved_params.get("theta", 0))
         elif name in ("cnot", "cx"):
-            cqlib_circuit.cx(mapped_index[0], mapped_index[1])
+            cqlib_circuit.cx(index[0], index[1])
         elif name == "cz":
-            cqlib_circuit.cz(mapped_index[0], mapped_index[1])
+            cqlib_circuit.cz(index[0], index[1])
         elif name == "swap":
-            cqlib_circuit.swap(mapped_index[0], mapped_index[1])
+            cqlib_circuit.swap(index[0], index[1])
         elif name == "ccx":
-            cqlib_circuit.ccx(mapped_index[0], mapped_index[1], mapped_index[2])
+            cqlib_circuit.ccx(index[0], index[1], index[2])
         else:
             raise ValueError("Unsupported gate for cqlib.Circuit: %s" % name)
 
     measure_qubits = [inst.get("index", [None])[0] for inst in measure_instructions]
     measure_qubits = [idx for idx in measure_qubits if idx is not None]
-    if mapping is not None:
-        measure_qubits = [mapping[idx] for idx in measure_qubits]
     if measure_qubits:
         cqlib_circuit.measure(measure_qubits)
 
@@ -621,9 +536,9 @@ def _standardize_properties(properties: Dict[str, Any]) -> None:
 
     # Fallback: if bits is empty, gather qubit IDs from links
     if not bits:
-        for qubit_1, qubit_2 in coupler_map.values():
-            bits.setdefault(int(qubit_1[1:]), {})
-            bits.setdefault(int(qubit_2[1:]), {})
+        for qubit_1, qubit_2 in links.keys():
+            bits.setdefault(qubit_1, {})
+            bits.setdefault(qubit_2, {})
 
     properties["bits"] = bits
 
@@ -670,6 +585,13 @@ def submit_task(
     Measurements are always submitted as terminal measurements in their
     recorded order; mid-circuit measurement semantics are not preserved.
 
+    Circuits submitted to real hardware must already respect the device
+    topology: compile and map the circuit for the device first, e.g. via
+    :py:mod:`tensorcircuit.compiler`. A ``ValueError`` is raised when a
+    TensorCircuit circuit is incompatible with the device topology.
+    Topology validation only applies to TensorCircuit circuits; for qiskit
+    circuits and direct sources, compatibility is the user's responsibility.
+
     :param device: Target device
     :param token: Login key for TianYan platform
     :param lang: Language of an explicitly supplied source, ``QCIS`` or ``OPENQASM``
@@ -684,8 +606,6 @@ def submit_task(
         source = _source_to_qcis(source, lang)
 
     pf = _get_platform(token, machine_name=device.name)
-    mapping = None
-    mappings: Optional[List[Optional[dict[int, int]]]] = None
 
     # If source is not provided, convert circuit to QCIS
     if source is None:
@@ -696,35 +616,20 @@ def submit_task(
         if device.name not in _SIMULATOR_DEVICES:
             topology = _get_device_topology(pf, device.name)
 
-        def get_mapping(c: AbstractCircuit) -> Optional[dict[int, int]]:
-            if topology is None:
-                return None
-            if not isinstance(c, AbstractCircuit):
-                raise ValueError(
-                    "Automatic TianYan topology mapping only supports "
-                    "TensorCircuit circuits"
-                )
-            graph, available_qubits = topology
-            return _find_qubit_mapping(
-                _get_logical_qubits(c),
-                _get_circuit_interactions(c),
-                graph,
-                available_qubits,
-            )
+        def validate(c: Any) -> None:
+            if topology is not None and isinstance(c, AbstractCircuit):
+                graph, available_qubits = topology
+                _validate_circuit_topology(c, graph, available_qubits)
 
         if is_sequence(circuit):
-            # Batch - per-circuit topology mapping
             sources = []
-            mappings = []
             for c in cast(Sequence[AbstractCircuit], circuit):
-                mapping = get_mapping(c)
-                sources.append(_circuit_to_qcis(c, mapping))
-                mappings.append(mapping)
+                validate(c)
+                sources.append(_circuit_to_qcis(c))
             source = sources
         else:
-            # Single circuit - topology mapping for real hardware
-            mapping = get_mapping(cast(AbstractCircuit, circuit))
-            source = _circuit_to_qcis(circuit, mapping)
+            validate(circuit)
+            source = _circuit_to_qcis(circuit)
 
     # Ensure exp_name has a default
     if exp_name is None:
@@ -734,8 +639,6 @@ def submit_task(
     if is_sequence(source):
         sources = list(source)
         num_shots = _normalize_shots(shots, len(sources))
-        if mappings is None:
-            mappings = [None] * len(sources)
         query_ids = pf.submit_experiment(
             circuit=sources,
             language=QuantumLanguage.QCIS,  # type: ignore
@@ -751,11 +654,11 @@ def submit_task(
                 f"{len(sources)} submitted circuits"
             )
         tasks = []
-        for qid, src, task_mapping in zip(query_ids, sources, mappings):
+        for qid, src in zip(query_ids, sources):
             if not isinstance(qid, str) or not qid:
                 raise ValueError("TianYan returned an invalid task ID")
             task = Task(id_=qid, device=device)
-            task.add_details(source=src, mapping=task_mapping)
+            task.add_details(source=src)
             tasks.append(task)
         return tasks
     else:
@@ -774,7 +677,7 @@ def submit_task(
         if not isinstance(query_id, str) or not query_id:
             raise ValueError("TianYan submission did not return a valid task ID")
         task = Task(id_=query_id, device=device)
-        task.add_details(source=source, mapping=mapping)
+        task.add_details(source=source)
         return task
 
 
@@ -826,15 +729,13 @@ def get_task_details(
             "shots": 0,
             "device": str(device),
             "source": task.more_details.get("source", ""),
-            "mapping": task.more_details.get("mapping", None),
         }
 
     # result is a list of dicts, one per submitted circuit
     parsed = _parse_result(result[0], device)
 
-    # Include frontend source code and logical-physical mapping if available
+    # Include frontend source code if available
     parsed["source"] = task.more_details.get("source", "")
-    parsed["mapping"] = task.more_details.get("mapping", None)
 
     if prettify:
         # Make datetime more readable if present

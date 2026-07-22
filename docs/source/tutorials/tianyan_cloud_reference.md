@@ -2,7 +2,7 @@
 
 ## Overview
 
-TensorCircuit-NG integrates with the China Telecom TianYan quantum computing platform through the official `cqlib` SDK. The provider uses the shared `tc.cloud.apis` interface and supports simulator jobs, QCIS/OpenQASM submission, task inspection, batch submission, and automatic topology mapping for real devices.
+TensorCircuit-NG integrates with the China Telecom TianYan quantum computing platform through the official `cqlib` SDK. The provider uses the shared `tc.cloud.apis` interface and supports simulator jobs, QCIS/OpenQASM submission, task inspection, batch submission, and topology validation for real devices.
 
 ## Platform features
 
@@ -92,7 +92,7 @@ print(task.results(blocked=True))
 | API | Description |
 |---|---|
 | `task.results(blocked=True)` | Wait for and return measurement counts |
-| `task.details()` | Return state, source, mapping, shots, and results |
+| `task.details()` | Return state, source, shots, and results |
 | `task.state()` | Query the normalized task state |
 | `task.resubmit()` | Submit the task again |
 | `tc.cloud.apis.get_task(task_id, device=device)` | Reconstruct a task object by ID |
@@ -141,29 +141,34 @@ task = tc.cloud.apis.submit_task(
 )
 ```
 
-## Compilation and topology mapping
+## Compilation and topology validation
 
-When a TensorCircuit circuit is submitted to real hardware, TianYan automatically:
+The provider does **not** remap qubits. Circuits submitted to real hardware
+must already respect the device topology: compile and map the circuit for the
+device first, e.g. via `tensorcircuit.compiler`. For TensorCircuit circuits
+the provider validates the device topology before submission and raises a
+`ValueError` when a gate uses an unavailable qubit or an unconnected physical
+pair; nothing is submitted in that case. For qiskit circuits and direct
+QCIS/OpenQASM sources, compatibility is the user's responsibility.
 
-1. Queries the device topology.
-2. Finds physical qubits that satisfy the circuit interactions.
-3. Maps logical qubits to physical qubits.
-4. Produces the corresponding QCIS source.
-
-The mapping and generated source are available in `task.details()`:
+A simple way to run on hardware is to build the circuit directly on a
+connected physical pair from `device.topology()`:
 
 ```python
 run_hardware = os.getenv("TIANYAN_RUN_HARDWARE") == "1"
 if run_hardware:
     hardware_device = tc.cloud.apis.get_device("tianyan::tianyan176")
+    q1, q2 = sorted(hardware_device.topology()[0])
+    hardware_circuit = tc.Circuit(q2 + 1)
+    hardware_circuit.h(q1)
+    hardware_circuit.cx(q1, q2)
+    hardware_circuit.measure_instruction(q1, q2)
     hardware_task = tc.cloud.apis.submit_task(
-        circuit=circuit,
+        circuit=hardware_circuit,
         device=hardware_device,
         shots=100,
     )
-    details = hardware_task.details()
-    print(details["mapping"])
-    print(details["source"])
+    print(hardware_task.details()["source"])
 else:
     print("Real-device submission skipped")
 ```
@@ -183,7 +188,7 @@ The following names are examples only; use `list_devices()` for the live list an
 ## Caveats
 
 1. Simulators are not subject to hardware coupling constraints; real devices have connectivity limits and noise.
-2. Automatic topology mapping is enabled for real devices only.
+2. Topology validation applies to real devices only; incompatible TensorCircuit circuits raise a `ValueError` before submission.
 3. Some hardware backends may reject circuits that use unsupported single-qubit paths or gates.
 4. Keep hardware shots small to avoid unnecessary resource consumption.
 5. The example and notebook skip hardware by default. Set `TIANYAN_RUN_HARDWARE=1` explicitly to enable it.
@@ -201,11 +206,11 @@ pip install "cqlib>=1.3.10,<1.4"
 
 Check that `LOGIN_KEY` is visible in the active environment and obtain a fresh key from the [TianYan platform](https://qc.zdxlz.com) if needed.
 
-### Topology mapping fails
+### Topology validation fails
 
-- Check that the device has enough connected available qubits.
-- Inspect `device.list_properties()["links"]`.
-- Simplify the circuit and reduce multi-qubit gate interactions.
+- Compile and map the circuit for the device first, e.g. via `tensorcircuit.compiler`.
+- Inspect `device.list_properties()["links"]` for the available couplings.
+- Build the circuit directly on connected physical qubits from `device.topology()`.
 
 ### Task execution fails
 

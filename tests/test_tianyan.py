@@ -52,7 +52,7 @@ measure q[0] -> c[0];
 
 
 class TestOfflineProvider(unittest.TestCase):
-    """Offline tests for status queries and topology mapping."""
+    """Offline tests for status queries and topology validation."""
 
     def test_incompatible_cqlib_fails_fast(self) -> None:
         class IncompatiblePlatform:
@@ -62,24 +62,28 @@ class TestOfflineProvider(unittest.TestCase):
             with self.assertRaisesRegex(ImportError, "_send_request"):
                 tianyan._assert_cqlib()
 
-    def test_sparse_logical_qubits_and_interactions_are_mapped(self) -> None:
+    def test_topology_validation_accepts_connected_circuit(self) -> None:
         graph = {0: {1}, 1: {0, 2}, 2: {1}}
-        interactions = {(1, 3), (1, 5)}
+        circuit = tc.Circuit(2)
+        circuit.cx(0, 1)
 
-        mapping = tianyan._find_qubit_mapping(
-            {1, 3, 5}, interactions, graph, set(graph)
-        )
+        tianyan._validate_circuit_topology(circuit, graph, set(graph))
 
-        self.assertEqual(set(mapping), {1, 3, 5})
-        for logical_1, logical_2 in interactions:
-            self.assertIn(mapping[logical_2], graph[mapping[logical_1]])
+    def test_topology_validation_rejects_unconnected_pair(self) -> None:
+        graph = {0: {2}, 1: set(), 2: {0}}
+        circuit = tc.Circuit(2)
+        circuit.cx(0, 1)
 
-    def test_unmappable_interactions_raise(self) -> None:
-        graph = {0: {1}, 1: {0, 2}, 2: {1}}
-        interactions = {(0, 1), (0, 2), (1, 2)}
+        with self.assertRaisesRegex(ValueError, "unconnected physical qubits"):
+            tianyan._validate_circuit_topology(circuit, graph, set(graph))
 
-        with self.assertRaisesRegex(ValueError, "Cannot map all circuit interactions"):
-            tianyan._find_qubit_mapping({0, 1, 2}, interactions, graph, set(graph))
+    def test_topology_validation_rejects_unavailable_qubit(self) -> None:
+        graph = {0: {1}, 1: {0}}
+        circuit = tc.Circuit(2)
+        circuit.cx(0, 1)
+
+        with self.assertRaisesRegex(ValueError, "unavailable on this device"):
+            tianyan._validate_circuit_topology(circuit, graph, {0})
 
     @unittest.skipUnless(HAS_CQLIB, "cqlib is required for QCIS conversion")
     def test_partial_measurement_preserves_qubits_and_order(self) -> None:
@@ -106,7 +110,7 @@ class TestOfflineProvider(unittest.TestCase):
         platform = _FakePlatform({"data": {"experimentResultModelList": []}})
         device = Device.from_name("tianyan::offline-status")
         task = Task("pending-task", device=device)
-        task.add_details(source="H Q0", mapping={0: 4})
+        task.add_details(source="H Q0")
 
         with (
             patch.object(tianyan, "_assert_cqlib"),
@@ -116,7 +120,6 @@ class TestOfflineProvider(unittest.TestCase):
 
         self.assertEqual(details["state"], "pending")
         self.assertEqual(details["source"], "H Q0")
-        self.assertEqual(details["mapping"], {0: 4})
         self.assertEqual(len(platform.calls), 1)
 
     def test_get_task_details_maps_failure_state(self) -> None:
@@ -171,13 +174,12 @@ class TestOfflineProvider(unittest.TestCase):
 
         self.assertFalse(platform.submitted)
 
-    def test_mapping_failure_stops_before_submission(self) -> None:
+    def test_incompatible_circuit_stops_before_submission(self) -> None:
         platform = _FakePlatform({})
-        device = Device.from_name("tianyan::hardware-unmappable")
+        device = Device.from_name("tianyan::hardware-incompatible")
         circuit = tc.Circuit(3)
         circuit.cx(0, 1)
         circuit.cx(0, 2)
-        circuit.cx(1, 2)
         graph = {0: {1}, 1: {0, 2}, 2: {1}}
 
         with (
@@ -187,21 +189,19 @@ class TestOfflineProvider(unittest.TestCase):
                 tianyan, "_get_device_topology", return_value=(graph, set(graph))
             ),
         ):
-            with self.assertRaisesRegex(
-                ValueError, "Cannot map all circuit interactions"
-            ):
+            with self.assertRaisesRegex(ValueError, "unconnected physical qubits"):
                 tianyan.submit_task(device, "token", circuit=circuit)
 
         self.assertFalse(platform.submitted)
 
-    def test_batch_submission_preserves_mappings(self) -> None:
+    def test_batch_submission_on_hardware_validates_each_circuit(self) -> None:
         platform = _FakePlatform({}, batch_query_ids=["task-1", "task-2"])
         device = Device.from_name("tianyan::hardware-batch")
-        circuit_1 = tc.Circuit(4)
-        circuit_1.cx(1, 3)
+        circuit_1 = tc.Circuit(2)
+        circuit_1.cx(0, 1)
         circuit_2 = tc.Circuit(3)
-        circuit_2.cx(0, 2)
-        graph = {0: {1}, 1: {0, 2}, 2: {1, 3}, 3: {2}}
+        circuit_2.cx(1, 2)
+        graph = {0: {1}, 1: {0, 2}, 2: {1}}
 
         with (
             patch.object(tianyan, "_assert_cqlib"),
@@ -217,8 +217,6 @@ class TestOfflineProvider(unittest.TestCase):
             )
 
         self.assertEqual(len(tasks), 2)
-        self.assertEqual(set(tasks[0].more_details["mapping"]), {1, 3})
-        self.assertEqual(set(tasks[1].more_details["mapping"]), {0, 2})
         self.assertEqual(platform.last_submission["num_shots"], 100)
 
     def test_batch_submission_rejects_different_shots(self) -> None:
@@ -557,7 +555,6 @@ class TestTaskSubmissionSimulator(TianYanTestBase):
         self.assertIn(
             "source", details, "details should contain the submitted QCIS source"
         )
-        self.assertIn("mapping", details, "details should contain the qubit mapping")
         self.assertTrue(details["source"])
         self.assertEqual(details["state"], "completed")
         self.assertIsCounts(counts)
@@ -587,33 +584,44 @@ class TestTaskSubmissionSimulator(TianYanTestBase):
     "Set TC_CLOUD_HARDWARE_TEST=1 to run TianYan hardware tests",
 )
 class TestTaskSubmissionRealDevice(TianYanTestBase):
-    """Test task submission on real hardware with topology mapping and noise."""
+    """Test task submission on real hardware with topology validation and noise."""
 
-    def test_21_submit_with_auto_mapping(self) -> None:
-        """Verify automatic mapping and result query on real hardware."""
+    def test_21_submit_on_connected_physical_qubits(self) -> None:
+        """Build a circuit directly on a connected physical pair and submit it."""
         device = apis.get_device(f"tianyan::{REAL_DEVICE}")
+        q1, q2 = sorted(device.topology()[0])
 
-        c = tc.Circuit(2)
-        c.h(0)
-        c.cx(0, 1)
-        c.measure_instruction(0, 1)
+        c = tc.Circuit(max(q1, q2) + 1)
+        c.h(q1)
+        c.cx(q1, q2)
+        c.measure_instruction(q1, q2)
 
         task = apis.submit_task(circuit=c, device=device, shots=TEST_SHOTS_REAL)
         self.assertIsInstance(task, Task)
         self.assertTrue(task.id_)
 
-        details = task.details()
-        mapping = details.get("mapping")
-        self.assertIsNotNone(mapping, "hardware submission should include a mapping")
-        self.assertEqual(
-            len(mapping), 2, "a 2-qubit circuit should have 2 mapped qubits"
-        )
-        phys_qubits = list(mapping.values())
-        self.assertNotEqual(phys_qubits[0], phys_qubits[1])
-
         counts = task.results(blocked=True)
         self.assertIsCounts(counts)
         self.assertEqual(sum(counts.values()), TEST_SHOTS_REAL)
+
+    def test_22_incompatible_circuit_raises_on_hardware(self) -> None:
+        """A circuit violating the device topology must raise before submission."""
+        device = apis.get_device(f"tianyan::{REAL_DEVICE}")
+        edges = {tuple(sorted(e)) for e in device.topology()}
+        nqubits = max(max(e) for e in edges) + 1
+        pair = next(
+            (q1, q2)
+            for q1 in range(nqubits)
+            for q2 in range(q1 + 1, nqubits)
+            if (q1, q2) not in edges
+        )
+
+        c = tc.Circuit(pair[1] + 1)
+        c.cx(*pair)
+        c.measure_instruction(*pair)
+
+        with self.assertRaisesRegex(ValueError, "unconnected physical qubits"):
+            apis.submit_task(circuit=c, device=device, shots=TEST_SHOTS_REAL)
 
 
 class TestBatchSubmission(TianYanTestBase):
@@ -660,7 +668,7 @@ class TestEdgeCases(TianYanTestBase):
         self.assertIsCounts(counts)
 
     def test_43_single_qubit_circuit(self) -> None:
-        """A single-qubit circuit needs no topology mapping; use the simulator."""
+        """A single-qubit circuit needs no topology validation; use the simulator."""
         device = apis.get_device(f"tianyan::{SIMULATOR}")
 
         c = tc.Circuit(1)
