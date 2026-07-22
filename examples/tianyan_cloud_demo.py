@@ -1,6 +1,6 @@
 """End-to-end TianYan cloud example using the public TensorCircuit API.
 
-Install TensorCircuit-NG and ``cqlib>=1.3.10,<1.4``, then set ``LOGIN_KEY``
+Install TensorCircuit-NG and ``cqlib>=1.3.10,<1.4``, then set ``TIANYAN_LOGIN_KEY``
 before running this script. The simulator examples run by default. Set
 ``TIANYAN_RUN_HARDWARE=1`` to opt into the real-device example.
 """
@@ -14,9 +14,9 @@ REAL_DEVICE = "tianyan176"
 
 
 def _get_login_key() -> str:
-    login_key = os.getenv("LOGIN_KEY")
+    login_key = os.getenv("TIANYAN_LOGIN_KEY")
     if not login_key:
-        raise RuntimeError("Set LOGIN_KEY before running this example")
+        raise RuntimeError("Set TIANYAN_LOGIN_KEY before running this example")
     return login_key
 
 

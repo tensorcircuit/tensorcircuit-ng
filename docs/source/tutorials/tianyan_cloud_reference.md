@@ -30,7 +30,7 @@ On Windows PowerShell, store it in the active Conda environment:
 
 ```powershell
 conda activate <env>
-conda env config vars set LOGIN_KEY="your_login_key"
+conda env config vars set TIANYAN_LOGIN_KEY="your_login_key"
 conda deactivate
 conda activate <env>
 ```
@@ -44,9 +44,9 @@ import os
 
 import tensorcircuit as tc
 
-login_key = os.getenv("LOGIN_KEY")
+login_key = os.getenv("TIANYAN_LOGIN_KEY")
 if not login_key:
-    raise RuntimeError("Set LOGIN_KEY before using TianYan")
+    raise RuntimeError("Set TIANYAN_LOGIN_KEY before using TianYan")
 
 tc.cloud.apis.set_provider("tianyan")
 tc.cloud.apis.set_token(login_key, provider="tianyan", cached=False)
@@ -204,7 +204,7 @@ pip install "cqlib>=1.3.10,<1.4"
 
 ### Invalid login key
 
-Check that `LOGIN_KEY` is visible in the active environment and obtain a fresh key from the [TianYan platform](https://qc.zdxlz.com) if needed.
+Check that `TIANYAN_LOGIN_KEY` is visible in the active environment and obtain a fresh key from the [TianYan platform](https://qc.zdxlz.com) if needed.
 
 ### Topology validation fails
 

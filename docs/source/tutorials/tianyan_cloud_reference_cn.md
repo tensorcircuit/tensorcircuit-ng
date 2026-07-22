@@ -35,12 +35,12 @@ Windows PowerShell 下可以把密钥保存到当前 Conda 环境：
 
 ```powershell
 conda activate <env>
-conda env config vars set LOGIN_KEY="your_login_key"
+conda env config vars set TIANYAN_LOGIN_KEY="your_login_key"
 conda deactivate
 conda activate <env>
 ```
 
-`set`、`LOGIN_KEY` 和 `=` 之间不要添加空格。重新激活环境后变量才会生效。
+`set`、`TIANYAN_LOGIN_KEY` 和 `=` 之间不要添加空格。重新激活环境后变量才会生效。
 
 ### 3. 基本使用
 
@@ -49,9 +49,9 @@ import os
 
 import tensorcircuit as tc
 
-login_key = os.getenv("LOGIN_KEY")
+login_key = os.getenv("TIANYAN_LOGIN_KEY")
 if not login_key:
-    raise RuntimeError("请先设置 LOGIN_KEY 环境变量")
+    raise RuntimeError("请先设置 TIANYAN_LOGIN_KEY 环境变量")
 
 tc.cloud.apis.set_provider("tianyan")
 tc.cloud.apis.set_token(login_key, provider="tianyan", cached=False)
