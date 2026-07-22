@@ -1,0 +1,251 @@
+{
+  "schema_version": "c2-peak-frontier-v1",
+  "case_id": "n24_d10_default",
+  "n": 24,
+  "depth": 10,
+  "fusion": "default",
+  "source_hlo_sha256": "a2dba7afeae3a3bfe16dc645d44c0b1b2da4eb2623e5ac65ca5c9042fe9849be",
+  "edge_map_sha256": "9dc930781a3e5074eb2ee6b4d8c9329ee9d5a58f96c174e36122735054414e78",
+  "buffer_assignment_path": "results/phase0/c1_xla_dump/n24_d10_default/module_0005.jit_f.sm_12.0_gpu_after_optimizations-buffer-assignment.txt",
+  "base_peak_bytes": 1107390736,
+  "base_peak_t": 1514,
+  "window_count": 5,
+  "windows": [
+    {
+      "window_id": "W144",
+      "producer_id": "%custom-call.489",
+      "producer_allocation_id": 11,
+      "producer_offset": 536956416,
+      "producer_bytes": 536870912,
+      "producer_birth": 1014,
+      "producer_death": 1016,
+      "transform_ids": [
+        "get-tuple-element.238.0",
+        "loop_transpose_fusion.10",
+        "bitcast.1301.0"
+      ],
+      "consumer_id": "%custom-call.490",
+      "consumer_mnk": [
+        16,
+        4194304,
+        16
+      ],
+      "eliminable_keys": [
+        [
+          "custom-call.489",
+          "0"
+        ],
+        [
+          "loop_transpose_fusion.10",
+          ""
+        ]
+      ],
+      "had_unpierced_fusion": false,
+      "peak_after_single_elimination": 1107390736,
+      "single_reduction_bytes": 0
+    },
+    {
+      "window_id": "W146",
+      "producer_id": "%custom-call.490",
+      "producer_allocation_id": 11,
+      "producer_offset": 536956416,
+      "producer_bytes": 536870912,
+      "producer_birth": 1027,
+      "producer_death": 1029,
+      "transform_ids": [
+        "get-tuple-element.239.0",
+        "loop_transpose_fusion.9",
+        "bitcast.1303.0"
+      ],
+      "consumer_id": "%custom-call.491",
+      "consumer_mnk": [
+        16,
+        4194304,
+        16
+      ],
+      "eliminable_keys": [
+        [
+          "custom-call.490",
+          "0"
+        ],
+        [
+          "loop_transpose_fusion.9",
+          ""
+        ]
+      ],
+      "had_unpierced_fusion": false,
+      "peak_after_single_elimination": 1107390736,
+      "single_reduction_bytes": 0
+    },
+    {
+      "window_id": "W148",
+      "producer_id": "%custom-call.491",
+      "producer_allocation_id": 11,
+      "producer_offset": 536956416,
+      "producer_bytes": 536870912,
+      "producer_birth": 1040,
+      "producer_death": 1042,
+      "transform_ids": [
+        "get-tuple-element.240.0",
+        "loop_transpose_fusion.8",
+        "bitcast.1305.0"
+      ],
+      "consumer_id": "%custom-call.492",
+      "consumer_mnk": [
+        1024,
+        16384,
+        4096
+      ],
+      "eliminable_keys": [
+        [
+          "custom-call.491",
+          "0"
+        ],
+        [
+          "loop_transpose_fusion.8",
+          ""
+        ]
+      ],
+      "had_unpierced_fusion": false,
+      "peak_after_single_elimination": 1107390736,
+      "single_reduction_bytes": 0
+    },
+    {
+      "window_id": "W216",
+      "producer_id": "%custom-call.497",
+      "producer_allocation_id": 11,
+      "producer_offset": 536956416,
+      "producer_bytes": 536870912,
+      "producer_birth": 1468,
+      "producer_death": 1470,
+      "transform_ids": [
+        "get-tuple-element.246.0",
+        "loop_transpose_fusion.2",
+        "bitcast.1317.0"
+      ],
+      "consumer_id": "%custom-call.498",
+      "consumer_mnk": [
+        64,
+        1048576,
+        64
+      ],
+      "eliminable_keys": [
+        [
+          "custom-call.497",
+          "0"
+        ],
+        [
+          "loop_transpose_fusion.2",
+          ""
+        ]
+      ],
+      "had_unpierced_fusion": false,
+      "peak_after_single_elimination": 1107358864,
+      "single_reduction_bytes": 31872
+    },
+    {
+      "window_id": "W224",
+      "producer_id": "%custom-call.498",
+      "producer_allocation_id": 11,
+      "producer_offset": 536956416,
+      "producer_bytes": 536870912,
+      "producer_birth": 1514,
+      "producer_death": 1516,
+      "transform_ids": [
+        "get-tuple-element.247.0",
+        "loop_transpose_fusion.1",
+        "bitcast.1319.0"
+      ],
+      "consumer_id": "%custom-call.499",
+      "consumer_mnk": [
+        128,
+        131072,
+        512
+      ],
+      "eliminable_keys": [
+        [
+          "custom-call.498",
+          "0"
+        ],
+        [
+          "loop_transpose_fusion.1",
+          ""
+        ]
+      ],
+      "had_unpierced_fusion": false,
+      "peak_after_single_elimination": 1107358864,
+      "single_reduction_bytes": 31872
+    }
+  ],
+  "anchor_window": {
+    "window_id": "W216",
+    "producer_id": "%custom-call.497",
+    "producer_allocation_id": 11,
+    "producer_offset": 536956416,
+    "producer_bytes": 536870912,
+    "producer_birth": 1468,
+    "producer_death": 1470,
+    "transform_ids": [
+      "get-tuple-element.246.0",
+      "loop_transpose_fusion.2",
+      "bitcast.1317.0"
+    ],
+    "consumer_id": "%custom-call.498",
+    "consumer_mnk": [
+      64,
+      1048576,
+      64
+    ],
+    "eliminable_keys": [
+      [
+        "custom-call.497",
+        "0"
+      ],
+      [
+        "loop_transpose_fusion.2",
+        ""
+      ]
+    ],
+    "had_unpierced_fusion": false,
+    "peak_after_single_elimination": 1107358864,
+    "single_reduction_bytes": 31872
+  },
+  "joint_model": {
+    "max_joint_reduction_bytes": 704736544,
+    "min_cover_by_target": {
+      "268435456": {
+        "window_ids": [
+          "W144",
+          "W146",
+          "W148",
+          "W216",
+          "W224"
+        ],
+        "joint_reduction_bytes": 704736544
+      },
+      "536870912": {
+        "window_ids": [
+          "W144",
+          "W146",
+          "W148",
+          "W216",
+          "W224"
+        ],
+        "joint_reduction_bytes": 704736544
+      }
+    }
+  },
+  "diagnostics": {
+    "single_anchor_patch_status": "peak_reduction_below_threshold",
+    "single_anchor_reduction_bytes": 31872,
+    "joint_model_status": "joint_reduction_meets_threshold",
+    "max_joint_reduction_bytes": 704736544,
+    "kernel_feasibility_status": "UNKNOWN"
+  },
+  "model_assumptions": [
+    "counterfactual: only the named intermediates are removed; the rest of the executable schedule is held unchanged",
+    "fused-kernel workspace is NOT counted (could raise the peak)",
+    "producer tile recompute cost and HBM traffic are NOT counted",
+    "physical live bytes use the XLA buffer-assignment (allocation_id, offset, size) union, so aliased/in-place ranges count once"
+  ]
+}

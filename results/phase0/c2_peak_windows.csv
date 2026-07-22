@@ -1,0 +1,6 @@
+window_id,producer_id,consumer_id,producer_allocation_id,producer_bytes,single_reduction_bytes,peak_after_single_elimination,eliminable_keys,transform_ids
+W144,%custom-call.489,%custom-call.490,11,536870912,0,1107390736,custom-call.489{0};loop_transpose_fusion.10{},get-tuple-element.238.0;loop_transpose_fusion.10;bitcast.1301.0
+W146,%custom-call.490,%custom-call.491,11,536870912,0,1107390736,custom-call.490{0};loop_transpose_fusion.9{},get-tuple-element.239.0;loop_transpose_fusion.9;bitcast.1303.0
+W148,%custom-call.491,%custom-call.492,11,536870912,0,1107390736,custom-call.491{0};loop_transpose_fusion.8{},get-tuple-element.240.0;loop_transpose_fusion.8;bitcast.1305.0
+W216,%custom-call.497,%custom-call.498,11,536870912,31872,1107358864,custom-call.497{0};loop_transpose_fusion.2{},get-tuple-element.246.0;loop_transpose_fusion.2;bitcast.1317.0
+W224,%custom-call.498,%custom-call.499,11,536870912,31872,1107358864,custom-call.498{0};loop_transpose_fusion.1{},get-tuple-element.247.0;loop_transpose_fusion.1;bitcast.1319.0
