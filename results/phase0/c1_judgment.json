@@ -6,6 +6,7 @@
     "nofusion_peak_B": 1107734776,
     "ratio_nofusion_default": 1.000233467767763,
     "full_state_bytes": 134217728,
+    "largest_materialized_hlo_bytes": 536870912,
     "default_run_peaks_B": [
       1107476216,
       1107476216,
@@ -38,6 +39,7 @@
     "nofusion_peak_B": 268760056,
     "ratio_nofusion_default": 1.0008866313422333,
     "full_state_bytes": 33554432,
+    "largest_materialized_hlo_bytes": 134217728,
     "default_run_peaks_B": [
       268521976,
       268521976,

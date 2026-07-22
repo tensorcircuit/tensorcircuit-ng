@@ -30,6 +30,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 
 # NOTE: jax is NOT imported at module top so the worker can set XLA_FLAGS first. ``measure_case`` does a
@@ -373,6 +374,78 @@ def _update_judgment_json(path, key, payload):
         json.dump(existing, fh, indent=2)
 
 
+# --- Condition-2 HLO evidence (review §5.4): an INDEPENDENT source of truth ---
+# Condition 2 must NOT reuse the memory metric (``materialized_buffer_bytes``), otherwise
+# the six-condition gate collapses to five. Instead we parse ``compiled.as_text()`` for the
+# largest materialized contraction buffer — the largest typed output shape of a
+# ``__cublas$gemm`` custom-call or a raw ``dot_general`` op — convert element-count x
+# bytes-per-element, and compare to 0.5 x full state. This reads only the optimized HLO text
+# that ``measure_case`` already saves to ``results/phase0/c1_optimized_hlo/...hlo``.
+_HLO_DTYPE_BYTES = {
+    "f32": 4,
+    "f64": 8,
+    "bf16": 2,
+    "f16": 2,
+    "c64": 8,
+    "c128": 16,
+    "s8": 1,
+    "s16": 2,
+    "s32": 4,
+    "s64": 8,
+    "u8": 1,
+    "u16": 2,
+    "u32": 4,
+    "u64": 8,
+    "pred": 1,
+}
+# Match the OUTPUT tuple of a ``__cublas$gemm`` custom-call, e.g.
+#   %x = (c64[4096,4096]{1,0}, s8[33554432]{0}) custom-call(...)
+# Captures the tuple body (no nested parens occur inside it).
+_CUBLAS_TUPLE_RE = re.compile(r"=\s*\(([^)]*)\)\s+custom-call")
+# Match a raw ``dot_general`` op with a single typed output, e.g.
+#   %x = c64[4096,4096]{1,0} dot_general(...)
+# Covers non-cuBLAS backends where the contraction is not lowered to a custom-call.
+_DOT_GENERAL_SINGLE_RE = re.compile(
+    r"=\s+([a-z0-9_]+)\[([0-9]+(?:,[0-9]+)*)\]\{[^}]*\}\s+dot_general\b"
+)
+# Match one typed tuple element: TYPE[dims]{layout}
+_TYPED_ELEM_RE = re.compile(r"\b([a-z0-9_]+)\[([0-9]+(?:,[0-9]+)*)\]\{[^}]*\}")
+
+
+def _elem_bytes(dtype, dims_csv):
+    """Element-count x bytes-per-element for an HLO shape. Returns 0 for unknown dtypes."""
+    bytes_per = _HLO_DTYPE_BYTES.get(dtype)
+    if not bytes_per:
+        return 0
+    count = 1
+    for d in dims_csv.split(","):
+        count *= int(d)
+    return count * bytes_per
+
+
+def largest_materialized_tensor_bytes_from_hlo(hlo_text):
+    """Largest materialized contraction-buffer byte size found in optimized HLO text.
+
+    Scans outputs of ``__cublas$gemm`` custom-calls (GPU) and raw ``dot_general`` ops
+    (other backends), taking the max typed-output byte size. Returns 0 if no contraction
+    op is found. This is the condition-2 evidence — INDEPENDENT of the runtime memory metric.
+    """
+    largest = 0
+    for line in hlo_text.splitlines():
+        if "__cublas$gemm" in line:
+            m = _CUBLAS_TUPLE_RE.search(line)
+            if not m:
+                continue
+            for elem in _TYPED_ELEM_RE.finditer(m.group(1)):
+                largest = max(largest, _elem_bytes(elem.group(1), elem.group(2)))
+        elif "dot_general" in line:
+            m = _DOT_GENERAL_SINGLE_RE.search(line)
+            if not m:
+                continue
+            largest = max(largest, _elem_bytes(m.group(1), m.group(2)))
+    return largest
+
+
 def run_c1_ab(n, depth, theta_seeds=(0.7, 0.8, 0.9)):
     """Run default + no-fusion arms (3× per arm, one per theta seed), then judge C1.
 
@@ -417,7 +490,24 @@ def run_c1_ab(n, depth, theta_seeds=(0.7, 0.8, 0.9)):
     pd_peak = int(default_median.get("runtime_peak_B", 0))
     pn_peak = int(nofusion_median.get("runtime_peak_B", 0))
     materialized_buffer_bytes = pd_peak
-    optimized_hlo_has_materialized = materialized_buffer_bytes > 0.5 * full_state_bytes
+
+    # Condition-2 evidence (review §5.4): parse the DEFAULT arm's optimized HLO text for the
+    # largest materialized contraction buffer — INDEPENDENT of the memory metric above.
+    # ``measure_case`` already wrote ``compiled.as_text()`` to default_median["hlo_path"].
+    largest_materialized_hlo_bytes = 0
+    hlo_path = default_median.get("hlo_path")
+    if hlo_path and os.path.exists(hlo_path):
+        try:
+            with open(hlo_path) as fh:
+                hlo_text = fh.read()
+            largest_materialized_hlo_bytes = largest_materialized_tensor_bytes_from_hlo(
+                hlo_text
+            )
+        except OSError:  # pragma: no cover - defensive
+            largest_materialized_hlo_bytes = 0
+    optimized_hlo_has_materialized = (
+        largest_materialized_hlo_bytes >= 0.5 * full_state_bytes
+    )
 
     judgment = judge_c1(
         default_result=default_median,
@@ -460,6 +550,7 @@ def run_c1_ab(n, depth, theta_seeds=(0.7, 0.8, 0.9)):
         "nofusion_peak_B": pn_peak,
         "ratio_nofusion_default": ratio,
         "full_state_bytes": full_state_bytes,
+        "largest_materialized_hlo_bytes": largest_materialized_hlo_bytes,
         "default_run_peaks_B": [int(r.get("runtime_peak_B", 0)) for r in default_runs],
         "nofusion_run_peaks_B": [
             int(r.get("runtime_peak_B", 0)) for r in nofusion_runs
