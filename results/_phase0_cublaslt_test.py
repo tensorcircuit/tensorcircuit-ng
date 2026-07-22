@@ -138,6 +138,40 @@ def test_load_c1_c2_shapes_skips_malformed_rows(tmp_path):
     assert out[0]["M"] == 2048
 
 
+def test_time_planar_kernelonly_extracts_median_ms():
+    """_time_planar_kernelonly delegates to the ext kernel-only timing call and
+    returns its median_ms as a float, forwarding iters/warmup. Verified GPU-free
+    with a stub ext so the contract is locked without a compiled extension / GPU;
+    the live (positive-ms) check is the run_matrix integration run."""
+    from results._phase0_cublaslt import _time_planar_kernelonly
+
+    class _StubExt:
+        def __init__(self):
+            self.last_kwargs = None
+
+        def planar_complex_matmul_bf16_kernelonly_timing(self, *args, **kwargs):
+            self.last_kwargs = kwargs
+            return {
+                "median_ms": 1.25,
+                "algo_id": 0,
+                "workspace_bytes": 0,
+                "iters": kwargs.get("iters", 5),
+                "warmup": kwargs.get("warmup", 3),
+                "status": "OK",
+            }
+
+    ext = _StubExt()
+    ms = _time_planar_kernelonly(
+        ext, None, None, None, None, 256, 256, 256, iters=7, warmup=2
+    )
+    assert ms == 1.25
+    assert isinstance(ms, float)
+    assert ext.last_kwargs == {
+        "iters": 7,
+        "warmup": 2,
+    }
+
+
 def test_write_csv_roundtrip(tmp_path):
     from results._phase0_cublaslt import _write_csv
     import csv

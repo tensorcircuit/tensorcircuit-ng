@@ -174,8 +174,26 @@ def _time_c64_full_roundtrip(ar, ai, br, bi, n_time=5):
     bandwidth-bound shapes even though the kernel-only c64 baseline in
     ``_time_c64_gpu_matmul`` is always faster). Reported as a diagnostic; the
     capability gate uses the kernel-only ratio per the controller's §7.3 spec.
+
+    A warmup iteration (matching ``_time_c64_gpu_matmul``) precedes the timed
+    loop so the first iteration's lazy CUDA init / autotuning does not inflate
+    the median (fixes the prior warmup asymmetry between the two c64 baselines).
     """
     import torch
+
+    # Warmup (1 iter, untimed) so the timed median is not biased by first-call
+    # CUDA init / kernel autotuning.
+    _Ar = torch.from_numpy(ar).cuda()
+    _Ai = torch.from_numpy(ai).cuda()
+    _Br = torch.from_numpy(br).cuda()
+    _Bi = torch.from_numpy(bi).cuda()
+    _A = torch.complex(_Ar, _Ai)
+    _B = torch.complex(_Br, _Bi)
+    _C = _A @ _B
+    torch.cuda.synchronize()
+    _ = _C.cpu().numpy()
+    del _A, _B, _C, _Ar, _Ai, _Br, _Bi
+    torch.cuda.empty_cache()
 
     times = []
     for _ in range(n_time):
@@ -194,6 +212,27 @@ def _time_c64_full_roundtrip(ar, ai, br, bi, n_time=5):
     del A, B, C, Ar, Ai, Br, Bi
     torch.cuda.empty_cache()
     return full_ms
+
+
+def _time_planar_kernelonly(
+    ext, ar_bf, ai_bf, br_bf, bi_bf, m, n, k, iters=5, warmup=3
+):
+    """§7.5 fair gate: planar-complex BF16 cublasLtMatmul KERNEL-ONLY time.
+
+    Delegates to the extension's kernel-only timing path, which amortizes ALL
+    setup (handle/layouts/desc/preference/algo/workspace) and all H2D up front
+    and times ONLY cublasLtMatmul + event sync (no create/destroy, no D2H in the
+    loop) — the apples-to-apples counterpart of the c64 kernel-only baseline
+    (``_time_c64_gpu_matmul``, resident-data ``A @ B``). Returns the median ms
+    over ``iters`` iterations after ``warmup`` warmup iterations, or 0.0 if no
+    algo was available. This is what the capability gate keys on: the prior
+    ``c64gpu_over_bf16`` ratio timed the c64 kernel against a planar FULL call
+    (H2D+kernel+D2H) and was structurally unfair to planar.
+    """
+    r = ext.planar_complex_matmul_bf16_kernelonly_timing(
+        ar_bf, ai_bf, br_bf, bi_bf, m, n, k, iters=iters, warmup=warmup
+    )
+    return float(r["median_ms"])
 
 
 def run_matrix(shapes, out_dir="results/phase0"):
@@ -216,7 +255,8 @@ def run_matrix(shapes, out_dir="results/phase0"):
     os.makedirs(out_dir, exist_ok=True)
     ext = load_ext()
     bench_rows, acc_rows = [], []
-    perf_ratios, fair_ratios, max_rels, max_abss, algo_counts, workspaces = (
+    perf_ratios, ko_ratios, fair_ratios, max_rels, max_abss, algo_counts, workspaces = (
+        [],
         [],
         [],
         [],
@@ -226,8 +266,11 @@ def run_matrix(shapes, out_dir="results/phase0"):
     )
     oom_bytes = 8 << 30
     n_time = 5
+    ko_warmup = (
+        3  # kernel-only planar warmup (c64 baseline does 1; 3 stabilizes cublasLt)
+    )
     signal_floor = 0.5  # well below |C|~sqrt(K); only stops near-zero ref inflation
-    dash6 = ["-"] * 6  # padding for non-ok bench rows (6 numeric cols after status)
+    dash8 = ["-"] * 8  # padding for non-ok bench rows (8 numeric cols after status)
 
     for s in shapes:
         m, n, k = s["M"], s["N"], s["K"]
@@ -236,14 +279,14 @@ def run_matrix(shapes, out_dir="results/phase0"):
         c64_bytes = (m * k + k * n + m * n) * 8
         bf16_bytes = (m * k + k * n) * 2 * 2 + m * n * 2 * 2
         if c64_bytes > oom_bytes or bf16_bytes > oom_bytes:
-            bench_rows.append([m, n, k, "oom", f"alloc>{oom_bytes >> 30}GB", *dash6])
+            bench_rows.append([m, n, k, "oom", f"alloc>{oom_bytes >> 30}GB", *dash8])
             continue
 
         info = ext.probe_planar_capability(m, n, k)
         algo_counts.append(info.get("algo_count", 0))
         workspaces.append(info.get("workspace_bytes", 0))
         if info.get("algo_count", 0) == 0:
-            bench_rows.append([m, n, k, "no-algo", *dash6])
+            bench_rows.append([m, n, k, "no-algo", *dash8])
             continue
 
         rng = np.random.default_rng(1)
@@ -271,7 +314,7 @@ def run_matrix(shapes, out_dir="results/phase0"):
                 times.append((time.perf_counter() - t0) * 1e3)
             bf_ms = float(np.median(times))
         except Exception as e:  # noqa: BLE001  (record exec-fail, keep going)
-            bench_rows.append([m, n, k, "exec-fail", str(e)[:60], *dash6])
+            bench_rows.append([m, n, k, "exec-fail", str(e)[:60], *dash8])
             continue
 
         cr_ref, ci_ref = reference_complex_matmul(ar_f, ai_f, br_f, bi_f)
@@ -291,9 +334,19 @@ def run_matrix(shapes, out_dir="results/phase0"):
         c64_gpu_ms = _time_c64_gpu_matmul(ar, ai, br, bi, n_time=n_time)
         # Diagnostic: c64 full round-trip matched to the planar probe's scope.
         c64_full_ms = _time_c64_full_roundtrip(ar, ai, br, bi, n_time=n_time)
-        ratio = c64_gpu_ms / bf_ms if bf_ms > 0 else 0.0
+        # §7.5 fair gate: planar kernel-only (amortized setup; matches c64 scope).
+        planar_ko_ms = _time_planar_kernelonly(
+            ext, ar_bf, ai_bf, br_bf, bi_bf, m, n, k, iters=n_time, warmup=ko_warmup
+        )
+
+        # bf_ms is the FULL planar call (H2D+kernel+D2H), so ratios vs it are
+        # unfair-to-planar and kept only as diagnostics. The FAIR capability gate
+        # is c64-kernel-only / planar-kernel-only (both resident, kernel-only).
+        ratio_unfair = c64_gpu_ms / bf_ms if bf_ms > 0 else 0.0
+        ko_ratio = c64_gpu_ms / planar_ko_ms if planar_ko_ms > 0 else 0.0
         fair_ratio = c64_full_ms / bf_ms if bf_ms > 0 else 0.0
-        perf_ratios.append(ratio)
+        perf_ratios.append(ratio_unfair)
+        ko_ratios.append(ko_ratio)
         fair_ratios.append(fair_ratio)
         bench_rows.append(
             [
@@ -301,26 +354,32 @@ def run_matrix(shapes, out_dir="results/phase0"):
                 n,
                 k,
                 "ok",
-                f"{bf_ms:.3f}",
-                f"{c64_gpu_ms:.3f}",
-                f"{c64_full_ms:.3f}",
-                f"{ratio:.3f}",
-                f"{fair_ratio:.3f}",
+                f"{bf_ms:.3f}",  # planar FULL call (H2D+kernel+D2H) — unfair-to-planar
+                f"{planar_ko_ms:.3f}",  # planar kernel-only — FAIR gate counterpart
+                f"{c64_gpu_ms:.3f}",  # c64 kernel-only baseline
+                f"{c64_full_ms:.3f}",  # c64 full round-trip (matched scope)
+                f"{ratio_unfair:.3f}",  # c64kernel/planarFull — UNFAIR (was the old gate)
+                f"{ko_ratio:.3f}",  # c64kernel/planarKernel — FAIR §7.5 gate
+                f"{fair_ratio:.3f}",  # c64full/planarFull — scope-matched diagnostic
                 info.get("algo_count", 0),
             ]
         )
         acc_rows.append([m, n, k, f"{max_abs:.2e}", f"{max_rel:.2e}"])
 
-    best_ratio = max(perf_ratios) if perf_ratios else 0.0
+    best_ratio = max(perf_ratios) if perf_ratios else 0.0  # unfair-to-planar (old gate)
+    best_ko_ratio = max(ko_ratios) if ko_ratios else 0.0  # FAIR §7.5 gate
     best_fair_ratio = max(fair_ratios) if fair_ratios else 0.0
     worst_rel = max(max_rels) if max_rels else 1e9
     worst_abs = max(max_abss) if max_abss else 0.0
     max_algo = max(algo_counts) if algo_counts else 0
     max_ws = max(workspaces) if workspaces else 0
-    # Capability gate keys on the controller's kernel-only c64 ratio (§7.3 spec).
+    # FAIR §7.5 capability gate: kernel-only c64 vs kernel-only planar (both
+    # resident, both kernel-only). The old c64-kernel/planar-full ratio was an
+    # artifact — the planar call paid per-call setup + H2D/D2H the c64 baseline
+    # did not — so it is demoted to a diagnostic (best_perf_ratio_unfair).
     cap = judge_capability(
         max_rel_err=worst_rel,
-        perf_ratio_vs_c64=best_ratio,
+        perf_ratio_vs_c64=best_ko_ratio,
         algo_count=max_algo,
         workspace_bytes=max_ws,
         output_bytes=max((s.get("bytes", 0) for s in shapes), default=0),
@@ -329,7 +388,8 @@ def run_matrix(shapes, out_dir="results/phase0"):
     )
     summary = {
         "capability": cap,
-        "best_perf_ratio_vs_c64_gpu": best_ratio,
+        "best_perf_ratio_kernelonly": best_ko_ratio,
+        "best_perf_ratio_unfair": best_ratio,
         "best_perf_ratio_vs_c64_full": best_fair_ratio,
         "worst_max_rel_err": worst_rel,
         "worst_max_abs_err": worst_abs,
@@ -337,13 +397,16 @@ def run_matrix(shapes, out_dir="results/phase0"):
         "max_workspace_bytes": max_ws,
         "shapes_tested": len(shapes),
         "shapes_ok": sum(1 for r in bench_rows if r[3] == "ok"),
+        "fair_gate": "c64-kernel-only / planar-kernel-only (both resident; >=1.3x on >=1 shape -> SUPPORTED)",
         "c64_kernel_baseline": "torch.complex64 GPU kernel (warmup+median of 5)",
-        "c64_full_baseline": "torch.complex64 H2D+kernel+D2H (matched scope, median of 5)",
-        "planar_timing": "BF16-output full call, warmup+median of 5",
+        "c64_full_baseline": "torch.complex64 H2D+kernel+D2H (warmup+median of 5)",
+        "planar_kernelonly_timing": "cublasLtMatmul only; setup+H2D amortized once (cudaEvent median of 5, warmup 3)",
+        "planar_full_timing": "BF16-output full call (H2D+kernel+D2H), warmup+median of 5 — diagnostic, unfair-to-planar",
         "gate_note": (
-            "perf gate uses kernel-only c64 ratio (conservative: planar call "
-            "includes H2D+D2H the c64 kernel baseline does not); "
-            "best_perf_ratio_vs_c64_full is the scope-matched diagnostic"
+            "FAIR gate = c64-kernel-only / planar-kernel-only (best_perf_ratio_kernelonly). "
+            "best_perf_ratio_unfair (c64-kernel / planar-FULL) is the prior unfair-to-planar "
+            "measurement, kept as a diagnostic; best_perf_ratio_vs_c64_full is the "
+            "scope-matched full-round-trip diagnostic."
         ),
     }
     with open(os.path.join(out_dir, "cublaslt_planar_capability.json"), "w") as f:
@@ -356,9 +419,11 @@ def run_matrix(shapes, out_dir="results/phase0"):
             "K",
             "status",
             "bf16_ms",
+            "planar_ko_ms",
             "c64_gpu_ms",
             "c64_full_ms",
-            "c64gpu_over_bf16",
+            "c64gpu_over_bf16_unfair",
+            "c64gpu_over_planar_ko_fair",
             "c64full_over_bf16",
             "algo_count",
         ],
@@ -372,6 +437,7 @@ def run_matrix(shapes, out_dir="results/phase0"):
     return {
         "capability": cap,
         "best_ratio": best_ratio,
+        "best_ko_ratio": best_ko_ratio,
         "best_fair_ratio": best_fair_ratio,
         "worst_rel": worst_rel,
         "worst_abs": worst_abs,

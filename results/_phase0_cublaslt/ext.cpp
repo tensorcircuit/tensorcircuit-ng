@@ -4,6 +4,7 @@
 #include <pybind11/numpy.h>
 #include <cublasLt.h>
 #include <cuda_runtime.h>
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -340,6 +341,201 @@ static py::dict probe_planar_capability(int m, int n, int k) {
     return d;
 }
 
+// ============================================================================
+// Kernel-only timing for the spec-compliant planar-complex BF16 path.
+//
+// The host API ``planar_complex_matmul_bf16`` recreates+destroys the handle,
+// layouts, matmul desc, preference, workspace AND device buffers on every call,
+// and does H2D(x4)+D2H(x2) per call — so timing it against the c64 kernel-only
+// baseline (resident tensors, torch's cached handle) is unfair to planar. This
+// function measures ONLY the cublasLtMatmul kernel: all handle/layout/desc/
+// preference/algo/workspace setup happens ONCE up front, device buffers are
+// allocated ONCE, BF16 inputs are uploaded ONCE (outside timing), and teardown
+// happens ONCE at the end. The timed loop is cublasLtMatmul + event sync only.
+//
+// This is the fair §7.5 "production c64" gate: planar-kernel-only vs
+// c64-kernel-only. BF16-output (C/D=C16BF, COMPUTE_32F) is the path timed.
+//
+// Returns dict {median_ms, algo_id, workspace_bytes, iters, warmup, status}.
+// On no-algo, status describes the failure and median_ms=0 (driver records it).
+// ============================================================================
+static py::dict planar_complex_matmul_bf16_kernelonly_timing(
+    py::array_t<uint16_t, py::array::c_style> ar_u16,
+    py::array_t<uint16_t, py::array::c_style> ai_u16,
+    py::array_t<uint16_t, py::array::c_style> br_u16,
+    py::array_t<uint16_t, py::array::c_style> bi_u16,
+    int m, int n, int k,
+    int iters,
+    int warmup)
+{
+    py::dict out;
+    if (iters < 1) iters = 1;
+    if (warmup < 0) warmup = 0;
+
+    constexpr size_t bf16_elem = 2;
+    size_t bytesA = (size_t)m * k * bf16_elem;  // A_h real/imag plane bytes
+    size_t bytesB = (size_t)k * n * bf16_elem;  // B_h real/imag plane bytes
+    size_t bytesC = (size_t)m * n * bf16_elem;  // BF16 out (spec-compliant)
+    size_t off_A = align256(bytesB);
+    size_t off_B = align256(bytesA);
+    size_t off_C = align256(bytesC);
+
+    auto check_cuda = [&](cudaError_t e, const char* what) {
+        if (e != cudaSuccess) {
+            throw std::runtime_error(std::string(what) + ": cudaError "
+                + std::to_string((int)e));
+        }
+    };
+    auto check_cublas = [&](cublasStatus_t e, const char* what) {
+        if (e != CUBLAS_STATUS_SUCCESS) {
+            throw std::runtime_error(std::string(what) + ": cublasStatus "
+                + cublaslt_status_str(e));
+        }
+    };
+
+    // RAII-ish teardown: called on every exit path after setup begins. Uses a
+    // flag set once each resource exists so double-free / free-null is impossible.
+    void *d_A = nullptr, *d_B = nullptr, *d_C = nullptr, *workspace = nullptr;
+    cublasLtHandle_t h = nullptr;
+    cublasLtMatrixLayout_t Adesc = nullptr, Bdesc = nullptr, Cdesc = nullptr;
+    cublasLtMatmulDesc_t desc = nullptr;
+    cublasLtMatmulPreference_t pref = nullptr;
+    cudaEvent_t ev_start = nullptr, ev_stop = nullptr;
+
+    auto teardown = [&]() {
+        if (ev_start) cudaEventDestroy(ev_start);
+        if (ev_stop) cudaEventDestroy(ev_stop);
+        if (pref) cublasLtMatmulPreferenceDestroy(pref);
+        if (desc) cublasLtMatmulDescDestroy(desc);
+        if (Adesc) cublasLtMatrixLayoutDestroy(Adesc);
+        if (Bdesc) cublasLtMatrixLayoutDestroy(Bdesc);
+        if (Cdesc) cublasLtMatrixLayoutDestroy(Cdesc);
+        if (h) cublasLtDestroy(h);
+        if (workspace) cudaFree(workspace);
+        if (d_A) cudaFree(d_A);
+        if (d_B) cudaFree(d_B);
+        if (d_C) cudaFree(d_C);
+    };
+
+    // 1. Allocate planar device buffers + upload BF16 inputs ONCE (outside timing).
+    check_cuda(cudaMalloc(&d_A, off_A + bytesB), "cudaMalloc d_A");
+    check_cuda(cudaMalloc(&d_B, off_B + bytesA), "cudaMalloc d_B");
+    check_cuda(cudaMalloc(&d_C, off_C + bytesC), "cudaMalloc d_C");
+    // A_cublas = B_h^T: real <- br, imag <- bi ; B_cublas = A_h^T: real <- ar, imag <- ai.
+    check_cuda(cudaMemcpy(d_A, br_u16.data(), bytesB, cudaMemcpyHostToDevice), "H2D br");
+    check_cuda(cudaMemcpy((char*)d_A + off_A, bi_u16.data(), bytesB, cudaMemcpyHostToDevice), "H2D bi");
+    check_cuda(cudaMemcpy(d_B, ar_u16.data(), bytesA, cudaMemcpyHostToDevice), "H2D ar");
+    check_cuda(cudaMemcpy((char*)d_B + off_B, ai_u16.data(), bytesA, cudaMemcpyHostToDevice), "H2D ai");
+
+    // 2. cublasLt handle ONCE.
+    check_cublas(cublasLtCreate(&h), "cublasLtCreate");
+
+    // 3. Planar layouts ONCE (column-major swap convention; BF16 in + BF16 out).
+    check_cublas(make_planar_layout(&Adesc, CUDA_C_16BF, /*rows=*/n, /*cols=*/k, /*ld=*/n, off_A), "Adesc");
+    check_cublas(make_planar_layout(&Bdesc, CUDA_C_16BF, /*rows=*/k, /*cols=*/m, /*ld=*/k, off_B), "Bdesc");
+    check_cublas(make_planar_layout(&Cdesc, CUDA_C_16BF, /*rows=*/n, /*cols=*/m, /*ld=*/n, off_C), "Cdesc");
+
+    // 4. Matmul desc ONCE: COMPUTE_32F (FP32 accumulate) + scaleType CUDA_C_32F.
+    check_cublas(cublasLtMatmulDescCreate(&desc, CUBLAS_COMPUTE_32F, CUDA_C_32F), "MatmulDescCreate");
+
+    // 5. Preference + enumerate ONE algorithm ONCE.
+    check_cublas(cublasLtMatmulPreferenceCreate(&pref), "PreferenceCreate");
+    size_t ws_limit = 64ull * 1024 * 1024;
+    check_cublas(cublasLtMatmulPreferenceSetAttribute(pref,
+        CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &ws_limit, sizeof(ws_limit)),
+        "PreferenceSetAttribute(max_workspace)");
+
+    cublasLtMatmulHeuristicResult_t heur[8];
+    std::memset(heur, 0, sizeof(heur));
+    int returned = 0;
+    cublasStatus_t hs = cublasLtMatmulAlgoGetHeuristic(h, desc,
+        Adesc, Bdesc, Cdesc, Cdesc, pref, 8, heur, &returned);
+    if (hs != CUBLAS_STATUS_SUCCESS || returned == 0) {
+        teardown();
+        out["status"] = std::string("no algo: ") + cublaslt_status_str(hs);
+        out["median_ms"] = 0.0;
+        out["algo_id"] = -1;
+        out["workspace_bytes"] = (long)0;
+        out["iters"] = iters;
+        out["warmup"] = warmup;
+        return out;
+    }
+
+    // 6. Workspace ONCE, sized to the chosen algo's requirement.
+    size_t ws_size = heur[0].workspaceSize;
+    if (ws_size > 0) check_cuda(cudaMalloc(&workspace, ws_size), "cudaMalloc workspace");
+
+    // Representative algo id (no public algo->id getter; enumerate ids for the
+    // BF16-out config and report the first — same identifier probe_planar_capability uses).
+    int first_id = -1;
+    {
+        int ids[8] = {0};
+        int nb_ids = 0;
+        cublasLtMatmulAlgoGetIds(h, CUBLAS_COMPUTE_32F, CUDA_C_32F,
+            CUDA_C_16BF, CUDA_C_16BF, CUDA_C_16BF, CUDA_C_16BF,
+            8, ids, &nb_ids);
+        if (nb_ids > 0) first_id = ids[0];
+    }
+
+    // 7. Events for per-iteration GPU timing (default stream; matches the host
+    //    API's matmul stream and torch's resident-data c64 baseline).
+    check_cuda(cudaEventCreate(&ev_start), "cudaEventCreate start");
+    check_cuda(cudaEventCreate(&ev_stop), "cudaEventCreate stop");
+
+    float alpha[2] = {1.0f, 0.0f};
+    float beta[2] = {0.0f, 0.0f};
+
+    // 8. Warmup: kernel + sync only (first call may init algo-internal state).
+    for (int i = 0; i < warmup; ++i) {
+        cublasStatus_t es = cublasLtMatmul(h, desc, alpha,
+            d_A, Adesc, d_B, Bdesc, beta,
+            d_C, Cdesc, d_C, Cdesc,
+            &heur[0].algo, workspace, ws_size, 0 /* default stream */);
+        if (es != CUBLAS_STATUS_SUCCESS) {
+            teardown();
+            throw std::runtime_error(std::string("cublasLtMatmul warmup: ")
+                + cublaslt_status_str(es));
+        }
+    }
+    check_cuda(cudaStreamSynchronize(0), "warmup sync");
+
+    // 9. Timed loop: record(start) -> cublasLtMatmul -> record(stop) -> sync.
+    //    NO H2D/D2H, NO create/destroy in the loop. Collect per-iter ms, median.
+    std::vector<float> times;
+    times.reserve((size_t)iters);
+    for (int i = 0; i < iters; ++i) {
+        check_cuda(cudaEventRecord(ev_start, 0), "record start");
+        cublasStatus_t es = cublasLtMatmul(h, desc, alpha,
+            d_A, Adesc, d_B, Bdesc, beta,
+            d_C, Cdesc, d_C, Cdesc,
+            &heur[0].algo, workspace, ws_size, 0);
+        check_cuda(cudaEventRecord(ev_stop, 0), "record stop");
+        check_cuda(cudaEventSynchronize(ev_stop), "event sync");
+        if (es != CUBLAS_STATUS_SUCCESS) {
+            teardown();
+            throw std::runtime_error(std::string("cublasLtMatmul timed: ")
+                + cublaslt_status_str(es));
+        }
+        float ms = 0.0f;
+        check_cuda(cudaEventElapsedTime(&ms, ev_start, ev_stop), "elapsed");
+        times.push_back(ms);
+    }
+
+    std::sort(times.begin(), times.end());
+    float median_ms = times[times.size() / 2];
+
+    // 10. Teardown ONCE.
+    teardown();
+
+    out["median_ms"] = (double)median_ms;
+    out["algo_id"] = first_id;
+    out["workspace_bytes"] = (long)ws_size;
+    out["iters"] = iters;
+    out["warmup"] = warmup;
+    out["status"] = std::string("OK");
+    return out;
+}
+
 PYBIND11_MODULE(_phase0_cublaslt_ext, m) {
     m.def("smoke_add", &smoke_add);
     m.def("cublaslt_info", &cublaslt_info);
@@ -350,4 +546,11 @@ PYBIND11_MODULE(_phase0_cublaslt_ext, m) {
           py::arg("out_dtype") = std::string("bf16"));
     m.def("probe_planar_capability", &probe_planar_capability,
           py::arg("m"), py::arg("n"), py::arg("k"));
+    m.def("planar_complex_matmul_bf16_kernelonly_timing",
+          &planar_complex_matmul_bf16_kernelonly_timing,
+          py::arg("ar_u16"), py::arg("ai_u16"),
+          py::arg("br_u16"), py::arg("bi_u16"),
+          py::arg("m"), py::arg("n"), py::arg("k"),
+          py::arg("iters") = 5,
+          py::arg("warmup") = 3);
 }

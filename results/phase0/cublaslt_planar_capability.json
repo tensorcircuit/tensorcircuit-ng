@@ -1,18 +1,21 @@
 {
   "capability": {
-    "status": "NOT_SUPPORTED",
-    "reason": "no speedup vs c64 (perf_ratio=0.76 < 1.3)"
+    "status": "SUPPORTED",
+    "reason": "usable algo + correct + >=1.3x vs c64 + compression net positive"
   },
-  "best_perf_ratio_vs_c64_gpu": 0.7640139972009525,
-  "best_perf_ratio_vs_c64_full": 4.303023945134286,
+  "best_perf_ratio_kernelonly": 8.206422675222791,
+  "best_perf_ratio_unfair": 0.8624167383422757,
+  "best_perf_ratio_vs_c64_full": 3.4948869375139218,
   "worst_max_rel_err": 0.00451676594093442,
   "worst_max_abs_err": 0.99810791015625,
   "max_algo_count": 3,
   "max_workspace_bytes": 0,
   "shapes_tested": 8,
   "shapes_ok": 8,
+  "fair_gate": "c64-kernel-only / planar-kernel-only (both resident; >=1.3x on >=1 shape -> SUPPORTED)",
   "c64_kernel_baseline": "torch.complex64 GPU kernel (warmup+median of 5)",
-  "c64_full_baseline": "torch.complex64 H2D+kernel+D2H (matched scope, median of 5)",
-  "planar_timing": "BF16-output full call, warmup+median of 5",
-  "gate_note": "perf gate uses kernel-only c64 ratio (conservative: planar call includes H2D+D2H the c64 kernel baseline does not); best_perf_ratio_vs_c64_full is the scope-matched diagnostic"
+  "c64_full_baseline": "torch.complex64 H2D+kernel+D2H (warmup+median of 5)",
+  "planar_kernelonly_timing": "cublasLtMatmul only; setup+H2D amortized once (cudaEvent median of 5, warmup 3)",
+  "planar_full_timing": "BF16-output full call (H2D+kernel+D2H), warmup+median of 5 \u2014 diagnostic, unfair-to-planar",
+  "gate_note": "FAIR gate = c64-kernel-only / planar-kernel-only (best_perf_ratio_kernelonly). best_perf_ratio_unfair (c64-kernel / planar-FULL) is the prior unfair-to-planar measurement, kept as a diagnostic; best_perf_ratio_vs_c64_full is the scope-matched full-round-trip diagnostic."
 }
