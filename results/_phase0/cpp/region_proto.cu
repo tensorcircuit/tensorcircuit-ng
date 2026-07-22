@@ -51,7 +51,58 @@ extern "C" __global__ void gemm_reduce_kernel(const c64* A, const c64* B, float*
     if (threadIdx.x == 0) atomicAdd(scalar, sh[0]);
 }
 
-// MATERIALIZED step 1: write the full C to global.
+// ============================================================================
+// TILED fused producer->consumer kernel (full Task 3 realization).
+// 16x16 output tile per block, BK=8 K-tile, 256 threads (16x16), one C element
+// per thread, A/B tiles staged in shared memory (cooperative load) and reused
+// across the BK inner loop. The C tile is consumed on-chip (reduce |c|^2) -- the
+// full C is never written to global. __launch_bounds__ caps registers for a real
+// occupancy estimate (reported by the driver).
+// ============================================================================
+extern "C" __global__ void __launch_bounds__(256, 4)
+gemm_reduce_tiled_kernel(const c64* A, const c64* B, float* scalar, int M, int N, int K) {
+    __shared__ c64 sA[16][8];
+    __shared__ c64 sB[8][16];
+    __shared__ float sh[256];
+    int bx = blockIdx.x, by = blockIdx.y;
+    int tx = threadIdx.x & 15;  // tile column 0..15
+    int ty = threadIdx.x >> 4;  // tile row 0..15
+    // this thread computes C[bx*16+ty, by*16+tx]
+    float accx = 0.f, accy = 0.f;
+    int numK = (K + 7) >> 3;
+    for (int kb = 0; kb < numK; ++kb) {
+        int li = threadIdx.x;  // cooperative tile load: 256 threads -> 128 sA + 128 sB
+        if (li < 128) {
+            int r = li >> 3, c = li & 7;       // sA[r][c], r in [0,16), c in [0,8)
+            int kk = (kb << 3) + c;
+            sA[r][c] = (kk < K && bx * 16 + r < M) ? A[(bx * 16 + r) * K + kk]
+                                                   : c64{0.f, 0.f};
+        } else {
+            int li2 = li - 128;
+            int r = li2 >> 4, c = li2 & 15;    // sB[r][c], r in [0,8), c in [0,16)
+            int kk = (kb << 3) + r;
+            sB[r][c] = (kk < K && by * 16 + c < N) ? B[kk * N + (by * 16 + c)]
+                                                   : c64{0.f, 0.f};
+        }
+        __syncthreads();
+        #pragma unroll
+        for (int c = 0; c < 8; ++c) {
+            float ar = sA[ty][c].x, ai = sA[ty][c].y;
+            float br = sB[c][tx].x, bi = sB[c][tx].y;
+            accx += ar * br - ai * bi;
+            accy += ar * bi + ai * br;
+        }
+        __syncthreads();
+    }
+    float v = (bx * 16 + ty < M && by * 16 + tx < N) ? (accx * accx + accy * accy) : 0.f;
+    sh[threadIdx.x] = v;
+    __syncthreads();
+    for (int s = 128; s > 0; s >>= 1) {
+        if (threadIdx.x < s) sh[threadIdx.x] += sh[threadIdx.x + s];
+        __syncthreads();
+    }
+    if (threadIdx.x == 0) atomicAdd(scalar, sh[0]);
+}
 extern "C" __global__ void gemm_write_kernel(const c64* A, const c64* B, c64* C,
                                              int M, int N, int K, int MN) {
     int t = blockIdx.x * blockDim.x + threadIdx.x;
