@@ -68,6 +68,52 @@ def test_median_wall_ms_returns_positive():
     assert calls["n"] == 4  # 1 warmup + 3 iters
 
 
+def test_orchestrate_respects_worker_crash_outcome(tmp_path):
+    """A worker that exits 0 but emits {"outcome":"crash"} must be ok=False (review §4.1)."""
+    from results._phase0_common import orchestrate
+
+    script = tmp_path / "w.py"
+    script.write_text(
+        "import sys,json\n"
+        "sys.stdout.write(json.dumps({'outcome':'crash','error':'boom'})+'\\n')\n"
+        "sys.stdout.flush()\n"
+    )
+    rows = orchestrate([{"id": 1}], lambda c: [], str(script), timeout=30)
+    assert rows[0]["ok"] is False
+    assert rows[0]["outcome"] == "crash"
+
+
+def test_orchestrate_respects_worker_oom_outcome(tmp_path):
+    """Same fix must cover other worker-reported outcomes (e.g. oom), not just 'crash'."""
+    from results._phase0_common import orchestrate
+
+    script = tmp_path / "w.py"
+    script.write_text(
+        "import sys,json\n"
+        "sys.stdout.write(json.dumps({'outcome':'oom','error':'cuda oom'})+'\\n')\n"
+        "sys.stdout.flush()\n"
+    )
+    rows = orchestrate([{"id": 1}], lambda c: [], str(script), timeout=30)
+    assert rows[0]["ok"] is False
+    assert rows[0]["outcome"] == "oom"
+
+
+def test_orchestrate_run_outcome_still_ok(tmp_path):
+    """A genuine {'outcome':'run',...} with exit 0 must still map to ok=True."""
+    from results._phase0_common import orchestrate
+
+    script = tmp_path / "w.py"
+    script.write_text(
+        "import sys,json\n"
+        "sys.stdout.write(json.dumps({'outcome':'run','peak_B':123})+'\\n')\n"
+        "sys.stdout.flush()\n"
+    )
+    rows = orchestrate([{"id": 1}], lambda c: [], str(script), timeout=30)
+    assert rows[0]["ok"] is True
+    assert rows[0]["outcome"] == "run"
+    assert rows[0]["result"]["peak_B"] == 123
+
+
 if __name__ == "__main__":
     import pytest
 

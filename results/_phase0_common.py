@@ -87,6 +87,18 @@ def orchestrate(
                 }
             )
             continue
+        woutcome = obj.get("outcome")
+        if woutcome not in ("run", "ok", None):
+            results.append(
+                {
+                    "config": cfg,
+                    "ok": False,
+                    "outcome": woutcome,
+                    "stderr_tail": "[worker-reported] "
+                    + str(obj.get("error", ""))[:300],
+                }
+            )
+            continue
         results.append({"config": cfg, "ok": True, "outcome": "run", "result": obj})
     return results
 
