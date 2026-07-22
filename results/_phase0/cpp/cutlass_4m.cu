@@ -58,7 +58,18 @@ std::tuple<at::Tensor, at::Tensor> cutlass_4m_sm80(
     return {ReC, ImC};
 }
 
+// Workspace bytes the RealGemm kernel needs for an (M,N,K) problem. Used by the
+// probe to report `resource.workspace_bytes` without allocating the kernel's I/O.
+int64_t real_gemm_workspace_bytes(int M, int N, int K) {
+    RealGemm op;
+    typename RealGemm::Arguments args(
+        {M, N, K},
+        {nullptr, K}, {nullptr, N}, {nullptr, N}, {nullptr, N}, {1.0f, 0.0f}, 1);
+    return (int64_t)op.get_workspace_size(args);
+}
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("probe", &probe, "CUTLASS build smoke");
     m.def("cutlass_4m_sm80", &cutlass_4m_sm80, "2.x Sm80 planar-complex 4M GEMM");
+    m.def("real_gemm_workspace_bytes", &real_gemm_workspace_bytes, "");
 }

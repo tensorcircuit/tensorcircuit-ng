@@ -86,13 +86,19 @@ def _bf16_cuda(t):
 def run_single_4m(kernel_path: str, shapes, seeds=(0, 1, 2)) -> dict:
     """Run CUTLASS single 4M GEMM on `shapes` x `seeds`, compare to c64 reference.
 
-    kernel_path in {"sm80_fallback", "sm100_native"}. Returns correctness fields.
+    kernel_path in {"sm80_fallback", "sm100_native"}. Returns correctness plus
+    resource and latency measured on the largest shape (Task 3).
     """
     import numpy as np
     import torch  # noqa: F401  (ensures torch CUDA tensors are usable below)
 
     assert kernel_path == "sm80_fallback"  # Task 2: only sm80; Task 4 adds sm100
     mod = build_extension()
+    r = {
+        "kernel_path": kernel_path,
+        "compiles": True,
+        "runs": True,
+    }
     worst = {"max_rel": 0.0, "max_abs": 0.0, "nan_inf": False}
     for M, K, N in shapes:
         for sd in seeds:
@@ -141,9 +147,51 @@ def run_single_4m(kernel_path: str, shapes, seeds=(0, 1, 2)) -> dict:
             )
     worst["gate_pass"] = (worst["max_rel"] < 1e-2) and not worst["nan_inf"]
     worst["seeds"] = list(seeds)
-    return {
-        "kernel_path": kernel_path,
-        "compiles": True,
-        "runs": True,
-        "correctness": worst,
+    r["correctness"] = worst
+
+    # resource + latency on the largest shape (Task 3).
+    # shapes elements are (M, K, N); use the actual K — NOT N as a stand-in
+    # (the brief's `N if len(shapes[0]) == 2 else N` was always-N and wrong).
+    M, K, N = max(shapes)
+    ws = int(mod.real_gemm_workspace_bytes(M, N, K))
+    # registers/occupancy: best-effort via nvcc --res-usage compile log (would be
+    # captured by build_extension when extra_cuda_cflags includes "--res-usage");
+    # None if not parsed. Acceptable per Task 3 spec.
+    regs = getattr(mod, "_res_usage_registers", None)
+    r["resource"] = {
+        "registers": regs,
+        "occupancy": None,
+        "workspace_bytes": ws,
     }
+
+    def _ko_us(fn, *args):
+        # Kernel-only: 3 warmups, then median-of-5 cudaEvent timings. Handles,
+        # workspace, device buffers are all reused; H2D / construction is outside
+        # the timed region (per §7.3 fair kernel-only convention).
+        for _ in range(3):
+            fn(*args)
+        ev0 = torch.cuda.Event(enable_timing=True)
+        ev1 = torch.cuda.Event(enable_timing=True)
+        ts = []
+        for _ in range(5):
+            ev0.record()
+            fn(*args)
+            ev1.record()
+            torch.cuda.synchronize()
+            ts.append(ev0.elapsed_time(ev1))
+        return float(sorted(ts)[2]) * 1e3  # median us
+
+    ReA = torch.randn(M, K, device="cuda", dtype=torch.bfloat16)
+    ImA = torch.randn(M, K, device="cuda", dtype=torch.bfloat16)
+    ReB = torch.randn(K, N, device="cuda", dtype=torch.bfloat16)
+    ImB = torch.randn(K, N, device="cuda", dtype=torch.bfloat16)
+    four_us = _ko_us(mod.cutlass_4m_sm80, ReA, ImA, ReB, ImB)
+    cA = (ReA.float() + 1j * ImA.float()).to(torch.complex64)
+    cB = (ReB.float() + 1j * ImB.float()).to(torch.complex64)
+    c64_us = _ko_us(lambda a, b: a @ b, cA, cB)
+    r["latency"] = {
+        "kernelonly_median_us": four_us,
+        "c64_baseline_us": c64_us,
+        "ko_ratio_vs_c64": (c64_us / four_us) if four_us > 0 else 0.0,
+    }
+    return r

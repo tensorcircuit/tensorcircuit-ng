@@ -85,3 +85,21 @@ def test_single_4m_sm80_correctness_real_gemm():
     )
     assert r["correctness"]["gate_pass"] is True, r["correctness"]
     assert r["correctness"]["max_rel"] < 1e-2
+
+
+@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + nvcc_spike + CUTLASS_ROOT")
+def test_single_4m_sm80_has_resource_and_latency():
+    import cutlass_probe
+
+    r = cutlass_probe.run_single_4m(
+        "sm80_fallback", shapes=[(1024, 1024, 1024)], seeds=(0,)
+    )
+    assert "resource" in r and "latency" in r
+    assert (
+        r["resource"]["workspace_bytes"] >= 0
+    )  # always available (get_workspace_size)
+    # registers/occupancy are best-effort via nvcc --res-usage log; None allowed
+    assert r["resource"]["registers"] is None or r["resource"]["registers"] > 0
+    assert r["latency"]["kernelonly_median_us"] > 0
+    assert r["latency"]["c64_baseline_us"] > 0
+    assert r["latency"]["ko_ratio_vs_c64"] > 0  # c64_us / 4m_us (fair kernel-only both)
