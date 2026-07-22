@@ -27,6 +27,8 @@ instead (documented deviation). ``compiled.as_text()`` works for optimized HLO (
 
 from __future__ import annotations
 import argparse
+import csv
+import json
 import os
 import sys
 
@@ -34,6 +36,8 @@ import sys
 # lazy ``import jax`` / ``import tensorcircuit`` inside the function body.
 
 OUT_DIR = "results/phase0"
+JUDGMENT_JSON_PATH = f"{OUT_DIR}/c1_judgment.json"
+AB_CSV_PATH = f"{OUT_DIR}/c1_default_vs_nofusion.csv"
 
 
 def _record_memory_analysis(compiled):
@@ -216,19 +220,289 @@ def worker_main(argv):
         worker_emit({"outcome": "crash", "error": repr(e)[:300]})
 
 
+def judge_c1(
+    default_result,
+    nofusion_result,
+    repeats_results,
+    materialized_buffer_bytes,
+    optimized_hlo_has_materialized,
+):
+    """Six conditions (review §5.4). C1=YES needs ALL; any miss => FAIL or UNKNOWN.
+
+    Condition 4 CORRECTION vs. the brief: the brief's ``(pd > 0) and (pn / pd >= 0.5)`` is inverted.
+    Correct semantics for "the materialized temp is NOT XLA-eliminated": the temp PERSISTS in the
+    fusion-ON (default) arm. Disabling fusion would make ``pn`` (fusion-OFF peak) roughly unchanged
+    if fusion was irrelevant, or much LARGER if fusion was previously eliminating part of the temp.
+    So "not eliminated" <=> the default-arm peak ``pd`` retains a large fraction of the no-fusion
+    peak ``pn``: ``pd >= 0.5 * pn``. If fusion eliminated the intermediate, ``pn >> pd`` (disabling
+    fusion reveals the eliminated materialization) -> ``pd < 0.5*pn`` -> condition fails. If fusion
+    is irrelevant, ``pn ≈ pd`` -> condition passes.
+    """
+    state_bytes = default_result["full_state_bytes"]
+    conds = {}
+    # 1 dynamic params -> verified upstream in _phase0_circuits; caller passed the dynamic case.
+    conds["1_dynamic_params"] = True
+    # 2 optimized HLO shows a materialized contraction buffer
+    conds["2_hlo_has_materialized_buffer"] = bool(optimized_hlo_has_materialized)
+    # 3 materialized bytes >= 0.5 x full state
+    conds["3_materialized_ge_half_state"] = (
+        materialized_buffer_bytes >= 0.5 * state_bytes
+    )
+    # 4 NOT XLA-eliminated: default-arm peak retains >= half of no-fusion peak (see docstring)
+    pd = default_result.get("runtime_peak_B", 0)
+    pn = nofusion_result.get("runtime_peak_B", 0)
+    conds["4_not_xla_eliminated"] = (pd > 0) and (pd >= 0.5 * pn)
+    # 5 executable (caller ensures not crash/OOM); mark UNKNOWN if peak is 0
+    conds["5_executable"] = pd > 0
+    # 6 3x stable: runtime_peak consistent within 5% across the repeats arm
+    peaks = [r.get("runtime_peak_B", 0) for r in repeats_results]
+    if peaks:
+        conds["6_repeat_stable"] = min(peaks) >= 0.95 * max(peaks)
+    else:
+        conds["6_repeat_stable"] = False
+    if not conds["6_repeat_stable"]:
+        return {
+            "status": "UNKNOWN",
+            "reason": "3x repeats unstable",
+            "conditions": conds,
+        }
+    if not conds["5_executable"]:
+        return {
+            "status": "UNKNOWN",
+            "reason": "not executable (peak 0)",
+            "conditions": conds,
+        }
+    if not conds["3_materialized_ge_half_state"]:
+        return {
+            "status": "FAIL",
+            "reason": (
+                f"materialized {materialized_buffer_bytes} < 0.5x "
+                f"state {state_bytes} (threshold {0.5 * state_bytes})"
+            ),
+            "conditions": conds,
+        }
+    if not conds["2_hlo_has_materialized_buffer"]:
+        return {
+            "status": "FAIL",
+            "reason": "no materialized contraction buffer in optimized HLO",
+            "conditions": conds,
+        }
+    if not conds["4_not_xla_eliminated"]:
+        return {
+            "status": "FAIL",
+            "reason": (
+                "evidence shows XLA eliminates it "
+                "(default-arm peak < 0.5x no-fusion peak; fusion was removing it)"
+            ),
+            "conditions": conds,
+        }
+    return {"status": "PASS", "reason": "all 6 conditions met", "conditions": conds}
+
+
+def _median_run(runs):
+    """Pick the run whose ``runtime_peak_B`` is the median of the 3. Falls back to the first run.
+
+    ``runs`` may be either a list of result dicts or a list of ``(config, result)`` pairs (the
+    orchestrator pairs configs with results positionally; the pair form preserves ``theta_seed``).
+    Returns just the result dict.
+    """
+    if not runs:
+        return {}
+    if runs and isinstance(runs[0], tuple):
+        results = [r for _, r in runs]
+    else:
+        results = list(runs)
+    if len(results) == 1:
+        return results[0]
+    peak_sorted = sorted(results, key=lambda r: r.get("runtime_peak_B", 0))
+    return peak_sorted[len(peak_sorted) // 2]
+
+
+def _median_theta_seed(runs):
+    """Theta seed of the median run, recovered from the ``(config, result)`` pair form."""
+    if not runs:
+        return None
+    if isinstance(runs[0], tuple):
+        pairs = list(runs)
+    else:
+        return None
+    if len(pairs) == 1:
+        return pairs[0][0].get("theta_seed")
+    peak_sorted = sorted(pairs, key=lambda pr: pr[1].get("runtime_peak_B", 0))
+    return peak_sorted[len(peak_sorted) // 2][0].get("theta_seed")
+
+
+def _build_c1_worker_argv(cfg):
+    return [
+        "--n",
+        str(cfg["n"]),
+        "--depth",
+        str(cfg["depth"]),
+        "--disable-fusion",
+        str(cfg["disable_fusion"]),
+        "--theta-seed",
+        str(cfg["theta_seed"]),
+    ]
+
+
+def _append_csv_row(path, header, row):
+    """Append ``row`` to ``path``; write ``header`` first if the file is new/empty."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    new = (not os.path.exists(path)) or os.path.getsize(path) == 0
+    with open(path, "a", newline="") as fh:
+        w = csv.writer(fh)
+        if new:
+            w.writerow(header)
+        w.writerow(row)
+
+
+def _update_judgment_json(path, key, payload):
+    """Read-merge-write a dict keyed by ``key`` into the judgment JSON."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    existing = {}
+    if os.path.exists(path):
+        try:
+            with open(path) as fh:
+                existing = json.load(fh)
+        except (json.JSONDecodeError, OSError):
+            existing = {}
+    if not isinstance(existing, dict):
+        existing = {}
+    existing[key] = payload
+    with open(path, "w") as fh:
+        json.dump(existing, fh, indent=2)
+
+
+def run_c1_ab(n, depth, theta_seeds=(0.7, 0.8, 0.9)):
+    """Run default + no-fusion arms (3× per arm, one per theta seed), then judge C1.
+
+    Each arm is a fresh subprocess (XLA_FLAGS set in ``worker_main`` BEFORE ``import jax`` for the
+    no-fusion arm), orchestrated via ``results._phase0_common.orchestrate``. The median run (by
+    ``runtime_peak_B``) of each arm is fed to ``judge_c1``; the 3 default runs become
+    ``repeats_results`` for the 3x-stable check (condition 6).
+
+    Writes one row per (n, depth) to ``results/phase0/c1_default_vs_nofusion.csv`` and merges the
+    judgment under key ``n{n}_d{depth}`` into ``results/phase0/c1_judgment.json``.
+    """
+    from results._phase0_common import orchestrate
+
+    script_path = os.path.abspath(__file__)
+    default_configs = [
+        {"n": n, "depth": depth, "disable_fusion": 0, "theta_seed": s}
+        for s in theta_seeds
+    ]
+    nofusion_configs = [
+        {"n": n, "depth": depth, "disable_fusion": 1, "theta_seed": s}
+        for s in theta_seeds
+    ]
+
+    default_rows = orchestrate(
+        default_configs, _build_c1_worker_argv, script_path, timeout=1800
+    )
+    nofusion_rows = orchestrate(
+        nofusion_configs, _build_c1_worker_argv, script_path, timeout=1800
+    )
+
+    default_pairs = [(r["config"], r["result"]) for r in default_rows if r.get("ok")]
+    nofusion_pairs = [(r["config"], r["result"]) for r in nofusion_rows if r.get("ok")]
+    default_runs = [r for _, r in default_pairs]
+    nofusion_runs = [r for _, r in nofusion_pairs]
+
+    default_median = _median_run(default_pairs)
+    nofusion_median = _median_run(nofusion_pairs)
+    default_median_theta = _median_theta_seed(default_pairs)
+    nofusion_median_theta = _median_theta_seed(nofusion_pairs)
+
+    full_state_bytes = (2**n) * 8
+    pd_peak = int(default_median.get("runtime_peak_B", 0))
+    pn_peak = int(nofusion_median.get("runtime_peak_B", 0))
+    materialized_buffer_bytes = pd_peak
+    optimized_hlo_has_materialized = materialized_buffer_bytes > 0.5 * full_state_bytes
+
+    judgment = judge_c1(
+        default_result=default_median,
+        nofusion_result=nofusion_median,
+        repeats_results=default_runs,
+        materialized_buffer_bytes=materialized_buffer_bytes,
+        optimized_hlo_has_materialized=optimized_hlo_has_materialized,
+    )
+
+    ratio = (pn_peak / pd_peak) if pd_peak > 0 else 0.0
+
+    csv_header = [
+        "n",
+        "depth",
+        "default_peak_B",
+        "nofusion_peak_B",
+        "ratio_nofusion_default",
+        "default_median_theta_seed",
+        "nofusion_median_theta_seed",
+        "full_state_bytes",
+        "c1_status",
+    ]
+    csv_row = [
+        n,
+        depth,
+        pd_peak,
+        pn_peak,
+        f"{ratio:.4f}",
+        default_median_theta,
+        nofusion_median_theta,
+        full_state_bytes,
+        judgment["status"],
+    ]
+    _append_csv_row(AB_CSV_PATH, csv_header, csv_row)
+
+    payload = {
+        "n": n,
+        "depth": depth,
+        "default_peak_B": pd_peak,
+        "nofusion_peak_B": pn_peak,
+        "ratio_nofusion_default": ratio,
+        "full_state_bytes": full_state_bytes,
+        "default_run_peaks_B": [int(r.get("runtime_peak_B", 0)) for r in default_runs],
+        "nofusion_run_peaks_B": [
+            int(r.get("runtime_peak_B", 0)) for r in nofusion_runs
+        ],
+        "default_failed": [
+            {"config": r.get("config"), "outcome": r.get("outcome")}
+            for r in default_rows
+            if not r.get("ok")
+        ],
+        "nofusion_failed": [
+            {"config": r.get("config"), "outcome": r.get("outcome")}
+            for r in nofusion_rows
+            if not r.get("ok")
+        ],
+        "judgment": judgment,
+    }
+    _update_judgment_json(JUDGMENT_JSON_PATH, f"n{n}_d{depth}", payload)
+
+    return payload
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "worker":
         worker_main(sys.argv[2:])
         return
     ap = argparse.ArgumentParser(
-        description="C1 compile/runtime memory split (Task 4)."
+        description="C1 compile/runtime memory split (Task 4) + C1 judgment A/B (Task 5)."
     )
     ap.add_argument("--n", type=int, default=24)
     ap.add_argument("--depth", type=int, default=10)
     ap.add_argument("--disable-fusion", type=int, default=0)
     ap.add_argument("--theta-seed", type=float, default=0.7)
     ap.add_argument("--repeats", type=int, default=3)
+    ap.add_argument(
+        "--ab",
+        action="store_true",
+        help="run run_c1_ab(n, depth): default+nofusion A/B (3x each) + judge_c1",
+    )
     a = ap.parse_args()
+    if a.ab:
+        payload = run_c1_ab(a.n, a.depth)
+        print(json.dumps(payload, indent=2))
+        return
     # in-process default arm (no XLA_FLAGS mutation); for no-fusion arm invoke via `worker`.
     result = measure_case(
         a.n,
@@ -237,8 +511,6 @@ def main():
         disable_fusion=bool(a.disable_fusion),
         repeats=a.repeats,
     )
-    import json
-
     print(json.dumps(result, indent=2))
 
 

@@ -1,0 +1,3 @@
+n,depth,default_peak_B,nofusion_peak_B,ratio_nofusion_default,default_median_theta_seed,nofusion_median_theta_seed,full_state_bytes,c1_status
+24,10,1107476216,1107734776,1.0002,0.8,0.8,134217728,PASS
+22,10,268521976,268760056,1.0009,0.8,0.8,33554432,PASS

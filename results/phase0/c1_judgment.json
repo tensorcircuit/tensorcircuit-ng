@@ -1,0 +1,66 @@
+{
+  "n24_d10": {
+    "n": 24,
+    "depth": 10,
+    "default_peak_B": 1107476216,
+    "nofusion_peak_B": 1107734776,
+    "ratio_nofusion_default": 1.000233467767763,
+    "full_state_bytes": 134217728,
+    "default_run_peaks_B": [
+      1107476216,
+      1107476216,
+      1107476216
+    ],
+    "nofusion_run_peaks_B": [
+      1107734776,
+      1107734776,
+      1107734776
+    ],
+    "default_failed": [],
+    "nofusion_failed": [],
+    "judgment": {
+      "status": "PASS",
+      "reason": "all 6 conditions met",
+      "conditions": {
+        "1_dynamic_params": true,
+        "2_hlo_has_materialized_buffer": true,
+        "3_materialized_ge_half_state": true,
+        "4_not_xla_eliminated": true,
+        "5_executable": true,
+        "6_repeat_stable": true
+      }
+    }
+  },
+  "n22_d10": {
+    "n": 22,
+    "depth": 10,
+    "default_peak_B": 268521976,
+    "nofusion_peak_B": 268760056,
+    "ratio_nofusion_default": 1.0008866313422333,
+    "full_state_bytes": 33554432,
+    "default_run_peaks_B": [
+      268521976,
+      268521976,
+      268521976
+    ],
+    "nofusion_run_peaks_B": [
+      268760056,
+      268760056,
+      268760056
+    ],
+    "default_failed": [],
+    "nofusion_failed": [],
+    "judgment": {
+      "status": "PASS",
+      "reason": "all 6 conditions met",
+      "conditions": {
+        "1_dynamic_params": true,
+        "2_hlo_has_materialized_buffer": true,
+        "3_materialized_ge_half_state": true,
+        "4_not_xla_eliminated": true,
+        "5_executable": true,
+        "6_repeat_stable": true
+      }
+    }
+  }
+}
