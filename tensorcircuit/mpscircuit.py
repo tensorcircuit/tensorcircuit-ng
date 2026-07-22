@@ -912,8 +912,8 @@ class MPSCircuit(AbstractCircuit):
             ket_A, ket_B = ket._mps.tensors[-2:]
             proj_B = backend.einsum("kbm,lbm->kl", bra_B, ket_B)
             new_kA = backend.einsum("jal,kl->jak", ket_A, proj_B)
-            bra._mps.tensors = bra._mps.tensors[:-1]
-            ket._mps.tensors = ket._mps.tensors[:-1]
+            bra._mps.tensors.pop()
+            ket._mps.tensors.pop()
             ket._mps.tensors[-1] = new_kA
             # n -= 1
         bra_A = bra._mps.tensors[0]

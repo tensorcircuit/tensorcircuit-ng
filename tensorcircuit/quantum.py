@@ -1414,17 +1414,19 @@ def extract_tensors_from_qop(qop: QuOperator) -> Tuple[List[Node], bool, int]:
 
     # Sort nodes along the chain
     sorted_nodes: list[Node] = []
+    sorted_set = set()
     if endpoint_nodes and len(endpoint_nodes) >= 1:
         current = next(iter(endpoint_nodes))
         while current and len(sorted_nodes) < nwires:
             sorted_nodes.append(current)
+            sorted_set.add(current)
             current = next(
                 (
                     e.node2 if e.node1 is current else e.node1
                     for e in current.edges
                     if not e.is_dangling()
                     and e not in physical_edges
-                    and (e.node2 if e.node1 is current else e.node1) not in sorted_nodes
+                    and (e.node2 if e.node1 is current else e.node1) not in sorted_set
                 ),
                 None,
             )
@@ -1707,19 +1709,22 @@ def qop2quimb(qop: QuOperator) -> Any:
 
     quimb_tensors = []
     node_map = {node: i for i, node in enumerate(sorted_nodes)}
+    out_idx = {e: i for i, e in enumerate(qop.out_edges)}
+    in_idx = {e: i for i, e in enumerate(qop.in_edges)}
+    ignore_set = set(qop.ignore_edges)
 
     for i, node in enumerate(sorted_nodes):
         tensor_data = node.tensor
         inds: List[str] = []
 
         for axis, edge in enumerate(node.edges):
-            if edge in qop.out_edges:
-                site_index = qop.out_edges.index(edge)
+            if edge in out_idx:
+                site_index = out_idx[edge]
                 inds.append(f"k{site_index}")
-            elif edge in qop.in_edges and not is_mps:
-                site_index = qop.in_edges.index(edge)
+            elif not is_mps and edge in in_idx:
+                site_index = in_idx[edge]
                 inds.append(f"b{site_index}")
-            elif edge in qop.ignore_edges:
+            elif edge in ignore_set:
                 if i == 0:
                     inds.append("_left_dangling")
                 elif i == len(sorted_nodes) - 1:
@@ -2082,7 +2087,19 @@ def PauliStringSum2MVP(
         term_mask_indices.append(mask_indices)
         term_weights.append(phase_c)
 
-    z_base_np = np.array([1.0, -1.0])
+    # Pre-fuse per-axis Z masks into a single broadcastable mask per term.
+    # Built once at setup (amortized over many mvp calls); stored as backend
+    # tensors so the call path only needs a dtype-aligned broadcast multiply.
+    term_fused_masks: List[Optional[Tensor]] = []
+    for mask_indices in term_mask_indices:
+        if not mask_indices:
+            term_fused_masks.append(None)
+            continue
+        m = np.ones([1] * n, dtype=np.float64)
+        for a in mask_indices:
+            z_k = np.array([1.0, -1.0]).reshape([1] * a + [2] + [1] * (n - a - 1))
+            m = m * z_k
+        term_fused_masks.append(backend.convert_to_tensor(m))
 
     def mvp(psi: Tensor) -> Tensor:
         psi_shape = backend.shape_tuple(psi)
@@ -2094,19 +2111,16 @@ def PauliStringSum2MVP(
             psi_tensor = psi
 
         dtype = backend.dtype(psi_tensor)
-        z_base = backend.cast(backend.convert_to_tensor(z_base_np), dtype)
 
         total_res = backend.zeros_like(psi_tensor)
 
         for i in range(len(term_weights)):
             term_psi = psi_tensor
 
-            # 1. Apply Z masks via broadcasting
-            for k in term_mask_indices[i]:
-                shape = [1] * n
-                shape[k] = 2
-                z_k = backend.reshape(z_base, shape)
-                term_psi = term_psi * z_k
+            # 1. Apply fused Z mask via a single broadcast multiply
+            fused = term_fused_masks[i]
+            if fused is not None:
+                term_psi = term_psi * backend.cast(fused, dtype)
 
             # 2. Apply flips via slicing
             flip_slice = term_flip_slices[i]

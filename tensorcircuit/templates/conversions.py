@@ -31,10 +31,7 @@ def get_ps(qo: Any, n: int) -> Tuple[Tensor, Tensor]:
         for i in range(len(key)):
             bit[key[i][0]] = value[key[i][1]]
         w = terms[key]
-        res_t = tuple()  # type: ignore
-        for i in range(n):
-            res_t = res_t + (bit[i],)
-        res.append(res_t)
+        res.append(tuple(bit))
         wts.append(w)
     return np.array(res), np.array(wts)
 
