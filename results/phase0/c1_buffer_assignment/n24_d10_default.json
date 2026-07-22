@@ -1,11 +1,17 @@
 {
+  "schema_version": "c1-buffer-audit-v2",
+  "case_id": "n24_d10_default",
   "n": 24,
   "depth": 10,
   "fusion": "default",
   "hlo_path": "results/phase0/c1_optimized_hlo/n24_d10_exp_default.hlo",
+  "source_hlo_sha256": "a2dba7afeae3a3bfe16dc645d44c0b1b2da4eb2623e5ac65ca5c9042fe9849be",
   "buffer_assignment_path": "results/phase0/c1_xla_dump/n24_d10_default/module_0005.jit_f.sm_12.0_gpu_after_optimizations-buffer-assignment.txt",
+  "buffer_assignment_sha256": "035d52a92f49cb540a3762edab9632a723dc4fde1d720d0194f2ef6c3e78a79a",
   "allocation_source": "xla_buffer_assignment",
   "live_range_source": "xla_buffer_assignment",
+  "audit_status": "COMPLETE",
+  "missing_fields": [],
   "buffer_count": 251,
   "anchor_count": 1,
   "buffers": [

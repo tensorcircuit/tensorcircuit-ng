@@ -145,6 +145,36 @@ def test_audit_anchor_has_real_allocation_liveness_and_aliasing():
     assert anc["birth"] == 1468 and anc["death"] == 1470
     # P (.497) aliases E (.498) at the same physical offset -> temporal reuse
     assert "custom-call.498{0}" in anc["aliases"], anc["aliases"]
+    # v2 provenance (final-remediation Task 1)
+    assert a["schema_version"] == "c1-buffer-audit-v2", a
+    assert a["case_id"] == "n24_d10_default", a
+    assert (
+        isinstance(a["source_hlo_sha256"], str) and len(a["source_hlo_sha256"]) == 64
+    ), a
+    assert isinstance(a["buffer_assignment_sha256"], str), a
+    assert a["audit_status"] == "COMPLETE", a
+    assert a["missing_fields"] == [], a
+
+
+def test_upsert_csv_case_order_independent(tmp_path):
+    """Case-order independence (final-remediation Task 1): two DISTINCT cases written in
+    either order yield the same final row set (one row per case key)."""
+    import csv
+
+    def run(order, tag):
+        p = str(tmp_path / f"o{tag}.csv")
+        for n, peak in order:
+            upsert_csv_row(
+                p,
+                {"n": n, "depth": 10, "fusion": "default", "peak": peak},
+                ["n", "depth", "fusion", "peak"],
+                key_cols=["n", "depth", "fusion"],
+            )
+        return {(int(r["n"]), int(r["peak"])) for r in csv.DictReader(open(p))}
+
+    a = run([(22, 1), (24, 2)], "a")
+    b = run([(24, 2), (22, 1)], "b")
+    assert a == b == {(22, 1), (24, 2)}, (a, b)
 
 
 def test_measure_case_splits_planned_and_runtime_peak():

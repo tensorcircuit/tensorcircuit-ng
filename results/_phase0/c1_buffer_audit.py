@@ -17,6 +17,7 @@ Pure text parsing over the HLO artifact saved by ``c1.measure_case`` (no GPU/com
 from __future__ import annotations
 
 import glob
+import hashlib
 import json
 import os
 import re
@@ -139,6 +140,16 @@ def _find_buffer_assignment(n: int, depth: int, fusion: str):
     )
     matches = glob.glob(pattern)
     return matches[0] if matches else None
+
+
+def _sha256_file(path):
+    if not path or not os.path.exists(path):
+        return None
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def parse_materialized_buffers(hlo_text: str) -> list[dict]:
@@ -266,20 +277,42 @@ def audit_buffer_assignment(n: int, depth: int, fusion: str = "default") -> dict
             if bd:
                 b["birth"] = bd[0]
                 b["death"] = bd[1]
-        allocation_source = "xla_buffer_assignment"
-        live_range_source = "xla_buffer_assignment"
-    else:
-        allocation_source = "unknown"
-        live_range_source = "unknown"
+    # allocation_source is xla_buffer_assignment ONLY if the anchor was actually enriched
+    # (final-remediation Task 1: a present dump that fails to match the anchor is "unknown",
+    # never a silent PASS).
+    anchor = next((b for b in buffers if b.get("is_anchor")), None)
+    _required = [
+        "allocation_id",
+        "allocation_size",
+        "offset",
+        "aliases",
+        "birth",
+        "death",
+    ]
+    missing_fields = (
+        [f for f in _required if anchor is None or anchor.get(f) in (None, [])]
+        if anchor is not None
+        else _required
+    )
+    anchor_enriched = anchor is not None and not missing_fields
+    allocation_source = "xla_buffer_assignment" if anchor_enriched else "unknown"
+    live_range_source = "xla_buffer_assignment" if anchor_enriched else "unknown"
+    audit_status = "COMPLETE" if anchor_enriched else "UNKNOWN"
 
     out = {
+        "schema_version": "c1-buffer-audit-v2",
+        "case_id": f"n{n}_d{depth}_{fusion}",
         "n": n,
         "depth": depth,
         "fusion": fusion,
         "hlo_path": hlo_path,
+        "source_hlo_sha256": _sha256_file(hlo_path),
         "buffer_assignment_path": ba_path,
+        "buffer_assignment_sha256": _sha256_file(ba_path) if ba_path else None,
         "allocation_source": allocation_source,
         "live_range_source": live_range_source,
+        "audit_status": audit_status,
+        "missing_fields": missing_fields,
         "buffer_count": len(buffers),
         "anchor_count": anchor_count,
         "buffers": buffers,
