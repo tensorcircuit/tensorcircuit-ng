@@ -87,6 +87,48 @@ def test_single_4m_sm80_correctness_real_gemm():
     assert r["correctness"]["max_rel"] < 1e-2
 
 
+def test_sm100_compile_failure_falls_back(monkeypatch):
+    import cutlass_probe
+
+    calls = {"n": 0}
+
+    def fake_build(name="cutlass_4m", extra_defines=None):
+        calls["n"] += 1
+        if extra_defines and "-DCUTLASS_ENABLE_SM100_4M=1" in extra_defines:
+            raise RuntimeError("nvcc: sm100 instantiation failed")
+        return object()  # non-GPU stub; the sm80 path is mocked below
+
+    # mock _run_sm80 so no real GPU build/run happens — keeps this test GPU-free
+    monkeypatch.setattr(cutlass_probe, "build_extension", fake_build)
+    monkeypatch.setattr(
+        cutlass_probe,
+        "_run_sm80",
+        lambda shapes, seeds, **kw: {
+            "kernel_path": "sm80_fallback",
+            "runs": True,
+            "correctness": {"gate_pass": True},
+            **kw,
+        },
+    )
+    r = cutlass_probe._attempt_sm100_then_sm80(shapes=[(64, 64, 64)], seeds=(0,))
+    assert r["kernel_path"] == "sm80_fallback"
+    # the recorded blocker must be present so the artifact can explain the fallback
+    assert "sm100_blocker" in r and r["sm100_blocker"]
+    # the sm100 build attempt must have actually happened (then _run_sm80 is mocked)
+    assert calls["n"] == 1
+
+
+@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + nvcc_spike + CUTLASS_ROOT")
+def test_sm100_attempt_runs_or_falls_back():
+    import cutlass_probe
+
+    r = cutlass_probe.run_single_4m(
+        "sm100_native", shapes=[(128, 128, 128)], seeds=(0,)
+    )
+    assert r["kernel_path"] in ("sm100_native", "sm80_fallback")
+    assert r["correctness"]["gate_pass"] is True
+
+
 @pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + nvcc_spike + CUTLASS_ROOT")
 def test_single_4m_sm80_has_resource_and_latency():
     import cutlass_probe

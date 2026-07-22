@@ -27,14 +27,24 @@ def discover_paths() -> dict:
     if not nvcc:
         cands = [os.path.join(cuda_home, "bin", "nvcc")]
         nvcc = next((c for c in cands if os.path.exists(c)), "")
-    return {"cutlass_root": cutlass_root, "cuda_home": cuda_home, "nvcc": nvcc}
+    # CUTLASS splits headers: core in <root>/include, util helpers (packed_stride,
+    # reference/device/gemm, host_tensor, ...) in <root>/tools/util/include. The
+    # Sm100 path uses cutlass::make_cute_packed_stride from the latter.
+    cutlass_util_include = os.path.join(cutlass_root, "tools", "util", "include")
+    return {
+        "cutlass_root": cutlass_root,
+        "cutlass_util_include": cutlass_util_include,
+        "cuda_home": cuda_home,
+        "nvcc": nvcc,
+    }
 
 
 def build_extension(name: str = "cutlass_4m", extra_defines: list[str] | None = None):
     """Compile cpp/cutlass_4m.cu via torch.utils.cpp_extension (ext.cpp build style).
 
     CUDA_HOME must point at a toolkit whose nvcc targets sm_120 (nvcc_spike env).
-    Returns the loadable module.
+    Returns the loadable module. `name` separates the cached sm100 build from
+    the sm80 build so a sm100 compile failure never poisons the sm80 cache.
     """
     import torch  # noqa: F401  (ensures torch + its bundled cuda runtime present)
     from torch.utils.cpp_extension import load
@@ -48,10 +58,13 @@ def build_extension(name: str = "cutlass_4m", extra_defines: list[str] | None = 
     cflags = ["-std=c++17", "-O2"]
     if extra_defines:
         cflags += extra_defines
+    include_paths = [os.path.join(p["cutlass_root"], "include")]
+    if os.path.isdir(p["cutlass_util_include"]):
+        include_paths.append(p["cutlass_util_include"])
     return load(
         name=name,
         sources=[SRC],
-        extra_include_paths=[os.path.join(p["cutlass_root"], "include")],
+        extra_include_paths=include_paths,
         extra_cuda_cflags=cflags,
         verbose=False,
     )
@@ -86,14 +99,69 @@ def _bf16_cuda(t):
 def run_single_4m(kernel_path: str, shapes, seeds=(0, 1, 2)) -> dict:
     """Run CUTLASS single 4M GEMM on `shapes` x `seeds`, compare to c64 reference.
 
-    kernel_path in {"sm80_fallback", "sm100_native"}. Returns correctness plus
-    resource and latency measured on the largest shape (Task 3).
+    kernel_path in {"sm80_fallback", "sm100_native"}. For "sm100_native" the
+    3.x Blackwell Sm100 GEMM is attempted via a separate build (extra define
+    CUTLASS_ENABLE_SM100_4M=1); on any failure it transparently falls back to
+    the proven 2.x Sm80 path and records `sm100_blocker`. Returns correctness
+    plus resource and latency measured on the largest shape (Task 3).
+    """
+    if kernel_path == "sm100_native":
+        return _attempt_sm100_then_sm80(shapes, seeds)
+    return _run_sm80(shapes, seeds)
+
+
+def _attempt_sm100_then_sm80(shapes, seeds) -> dict:
+    """Genuine attempt at the 3.x Sm100 4M path; fall back to Sm80 on any failure.
+
+    Builds the kernel under a SEPARATE torch extension name
+    (cutlass_4m_sm100) so a compile failure does not poison the cached 2.x
+    Sm80 build. Any exception (compile error, link error, runtime failure,
+    has_sm100()==False) is caught and recorded verbatim as sm100_blocker.
+    """
+    try:
+        mod = build_extension(
+            name="cutlass_4m_sm100",
+            extra_defines=["-DCUTLASS_ENABLE_SM100_4M=1"],
+        )
+        if not hasattr(mod, "has_sm100") or not mod.has_sm100():
+            # Compiled with the guard set, but the inner
+            # CUTLASS_ARCH_MMA_SM100_SUPPORTED branch did not fire — Sm100
+            # path not actually present in this build.
+            raise RuntimeError(
+                "HAS_CUTLASS_4M_SM100=0 after build "
+                "(CUTLASS_ARCH_MMA_SM100_SUPPORTED undefined)"
+            )
+        return _run_with_module(mod, "sm100_native", shapes, seeds)
+    except Exception as exc:
+        # Transparent fallback — 3.x Sm100 does not instantiate/run on this
+        # toolchain. Record the verbatim error for the artifact.
+        return _run_sm80(shapes, seeds, sm100_blocker=str(exc))
+
+
+def _run_sm80(shapes, seeds, sm100_blocker=None) -> dict:
+    """Task 2/3 2.x Sm80 path. Optionally records an sm100_blocker so the
+    artifact can explain why a fallback happened (rather than sm80 being the
+    requested path)."""
+    mod = build_extension()  # default name=cutlass_4m, no extra_defines
+    r = _run_with_module(mod, "sm80_fallback", shapes, seeds)
+    if sm100_blocker is not None:
+        r["sm100_blocker"] = sm100_blocker
+    return r
+
+
+def _run_with_module(mod, kernel_path: str, shapes, seeds) -> dict:
+    """Shared correctness + resource + latency runner for both kernel paths.
+
+    Picks mod.cutlass_4m_sm80 (sm80_fallback) or mod.cutlass_4m_sm100
+    (sm100_native) based on kernel_path; everything else is identical.
     """
     import numpy as np
     import torch  # noqa: F401  (ensures torch CUDA tensors are usable below)
 
-    assert kernel_path == "sm80_fallback"  # Task 2: only sm80; Task 4 adds sm100
-    mod = build_extension()
+    assert kernel_path in ("sm80_fallback", "sm100_native")
+    gemm_fn = (
+        mod.cutlass_4m_sm100 if kernel_path == "sm100_native" else mod.cutlass_4m_sm80
+    )
     r = {
         "kernel_path": kernel_path,
         "compiles": True,
@@ -122,7 +190,7 @@ def run_single_4m(kernel_path: str, shapes, seeds=(0, 1, 2)) -> dict:
                 ReB_bf.float().cpu().numpy(),
                 ImB_bf.float().cpu().numpy(),
             )
-            ReC, ImC = mod.cutlass_4m_sm80(ReA_bf, ImA_bf, ReB_bf, ImB_bf)
+            ReC, ImC = gemm_fn(ReA_bf, ImA_bf, ReB_bf, ImB_bf)
             gotRe = ReC.cpu().numpy()
             gotIm = ImC.cpu().numpy()
             # signal-floored rel-err (per §7, matching Task 6 cublaslt convention):
@@ -162,6 +230,9 @@ def run_single_4m(kernel_path: str, shapes, seeds=(0, 1, 2)) -> dict:
         "registers": regs,
         "occupancy": None,
         "workspace_bytes": ws,
+        # NOTE for sm100_native: workspace_bytes is reported via the 2.x
+        # RealGemm helper (always compiled). If the sm100 path ever actually
+        # runs this slightly under-reports; not load-bearing for the verdict.
     }
 
     def _ko_us(fn, *args):
@@ -185,7 +256,7 @@ def run_single_4m(kernel_path: str, shapes, seeds=(0, 1, 2)) -> dict:
     ImA = torch.randn(M, K, device="cuda", dtype=torch.bfloat16)
     ReB = torch.randn(K, N, device="cuda", dtype=torch.bfloat16)
     ImB = torch.randn(K, N, device="cuda", dtype=torch.bfloat16)
-    four_us = _ko_us(mod.cutlass_4m_sm80, ReA, ImA, ReB, ImB)
+    four_us = _ko_us(gemm_fn, ReA, ImA, ReB, ImB)
     cA = (ReA.float() + 1j * ImA.float()).to(torch.complex64)
     cB = (ReB.float() + 1j * ImB.float()).to(torch.complex64)
     c64_us = _ko_us(lambda a, b: a @ b, cA, cB)
