@@ -2,11 +2,15 @@
 
 TWO paths:
 - CANONICAL (``basis="hlo_use_def"``): ``judge_c2_canonical`` / ``run_c2_canonical`` -- the
-  real producer->terminal-consumer edge from the production HLO use-def (Task B) + the
-  aliasing-aware peak analysis (Task C 6.5/6.6) + the allocation audit (Task A). FAIL-CLOSED:
-  recomputes the peak reduction from RAW bytes and returns FAIL/NOT_FEASIBLE when region
-  fusion of the anchor pair cannot reduce the executable peak, UNKNOWN when artifacts are
-  incomplete. The SOLE writer of ``c2_judgment.json`` (+ ``c2_checkpoint_manifest.json``).
+  fail-closed C2 v2 gate (final-remediation Task 5, spec §5.4/§8). Consumes the Task 2 edge
+  map + Task 3 peak frontier + Task 4 region prototype + Task 1 allocation audit, binds
+  case + cross-artifact + on-disk hashes, and SELF-RECOMPUTES accuracy/resource/peak/traffic/
+  recompute/workspace/latency from raw fields (self-reported booleans are diagnostic only).
+  Emits THREE layers -- ``C2_REGION_KERNEL_FEASIBILITY``,
+  ``C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK``, ``C2_JOINT_EXECUTABLE_LEVERAGE`` -- composed into
+  ``C2_CANONICAL`` per spec §5.4. Any case/hash/schema mismatch or incomplete evidence ->
+  UNKNOWN (a single-pair peak FAIL never alone yields canonical FAIL). The SOLE writer of
+  ``c2_judgment.json`` (+ ``c2_checkpoint_manifest.json``).
 - INFORMATIONAL (``basis="cotengra_state_heuristic"``, DEMOTED): ``classify_tileability`` /
   ``judge_c2`` / ``run_c2_integration`` -- the cotengra-state tile-mappability heuristic.
   NON-FAITHFUL (cotengra is a different contractor than production); writes
@@ -72,7 +76,9 @@ import csv
 import hashlib
 import json
 import os
+import subprocess
 import sys
+import time
 from typing import Any
 
 OUT_DIR = "results/phase0"
@@ -82,13 +88,34 @@ JUDGMENT_JSON_PATH = f"{OUT_DIR}/c2_judgment.json"
 # cotengra-state pipeline demoted to INFORMATIONAL (non-faithful: different contractor than
 # production -- see plan Global Constraints "contraction contractor"). NOT consumed by gonogo.
 COTENGRA_INFO_JSON_PATH = f"{OUT_DIR}/c2_cotengra_informational.json"
-EDGE_MAP_CSV_PATH = f"{OUT_DIR}/c1_c2_edge_map.csv"
+EDGE_MAP_JSON_PATH = f"{OUT_DIR}/c1_c2_edge_map.json"
+PEAK_FRONTIER_JSON_PATH = f"{OUT_DIR}/c2_peak_frontier.json"
 REGION_PROTOTYPE_JSON_PATH = f"{OUT_DIR}/region_prototype.json"
-PEAK_ANALYSIS_JSON_PATH = f"{OUT_DIR}/c2_peak_analysis.json"
 AUDIT_DIR = f"{OUT_DIR}/c1_buffer_assignment"
 CHECKPOINT_MANIFEST_PATH = f"{OUT_DIR}/c2_checkpoint_manifest.json"
 # A region fusion worth its complexity must reduce the executable peak by at least this.
 C2_MEMORY_THRESHOLD = 256 * 1024 * 1024
+
+# Canonical artifact schema versions the v2 gate binds (spec §6/§8).
+EDGE_SCHEMA = "c1-c2-edge-v2"
+PEAK_SCHEMA = "c2-peak-frontier-v1"
+PROTO_SCHEMA = "region-prototype-v2"
+AUDIT_SCHEMA = "c1-buffer-audit-v2"
+C2_JUDGMENT_SCHEMA = "c2-judgment-v2"
+CHECKPOINT_MANIFEST_SCHEMA = "c2-checkpoint-manifest-v2"
+# Self-recompute policies (spec §5.2; mirror the prototype's own contracts).
+ACCURACY_REL_L2 = 1e-4
+ACCURACY_MAX_REL = 1e-3
+RESOURCE_MIN_OCCUPANCY_PCT = 25.0
+# A real P->T->E consumer outputs a full E tensor (>= this), not a scalar/reduction.
+FULL_E_MIN_BYTES = 1 * 1024 * 1024
+_FEASIBLE_VERDICTS = ("FEASIBLE_WITH_RECOMPUTE", "TILE_FUSION_FEASIBLE")
+_LAYER_KEYS = (
+    "C2_REGION_KERNEL_FEASIBILITY",
+    "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK",
+    "C2_JOINT_EXECUTABLE_LEVERAGE",
+    "C2_CANONICAL",
+)
 
 # Tile-fusable classes (review §6.2): a buffer in any of these eliminates its
 # global HBM write/read when fused into the consuming GEMM's tile epilogue.
@@ -362,41 +389,6 @@ def _update_judgment_json(path: str, key: str, payload: dict[str, Any]) -> None:
         json.dump(existing, fh, indent=2)
 
 
-def _load_edge_map_row(n, depth, fusion):
-    """Read Task B's c1_c2_edge_map.csv -> the row for (n, depth, fusion), or a fail-closed
-    placeholder (drives UNKNOWN) if absent. Uses the post-Task-B schema (producer/terminal).
-    """
-    case_id = f"n{n}_d{depth}"
-    placeholder = {
-        "case_id": case_id,
-        "producer_hlo_value_id": "",
-        "terminal_consumer_hlo_value_id": "",
-        "producer_M": 0,
-        "producer_N": 0,
-        "producer_K": 0,
-    }
-    if not os.path.exists(EDGE_MAP_CSV_PATH):
-        return {**placeholder, "note": "edge_map.csv missing"}
-    with open(EDGE_MAP_CSV_PATH, newline="") as fh:
-        for r in csv.DictReader(fh):
-            if int(r["n"]) == n and int(r["depth"]) == depth and r["fusion"] == fusion:
-                return {
-                    "case_id": case_id,
-                    "producer_hlo_value_id": r.get("producer_hlo_value_id", ""),
-                    "producer_M": int(r.get("producer_M", 0)),
-                    "producer_N": int(r.get("producer_N", 0)),
-                    "producer_K": int(r.get("producer_K", 0)),
-                    "terminal_consumer_hlo_value_id": r.get(
-                        "terminal_consumer_hlo_value_id", ""
-                    ),
-                    "consumer_M": int(r.get("consumer_M", 0)),
-                    "consumer_N": int(r.get("consumer_N", 0)),
-                    "consumer_K": int(r.get("consumer_K", 0)),
-                    "consumer_output_bytes": int(r.get("consumer_output_bytes", 0)),
-                }
-    return {**placeholder, "note": "no edge row for case"}
-
-
 def _audit_json_path(n, depth, fusion):
     return os.path.join(AUDIT_DIR, f"n{n}_d{depth}_{fusion}.json")
 
@@ -411,31 +403,6 @@ def _sha256_file(path):
     return h.hexdigest()
 
 
-def _write_checkpoint_manifest(case_id, payload, hashes):
-    """Task D5: provenance manifest (source/allocation/edge/prototype/judgment hashes +
-    case status). Does NOT replace the final Task 10 manifest; guarantees Task 1-4 reproducibility.
-    """
-    import time as _time
-
-    manifest = {
-        "schema_version": "task1-4-checkpoint-v1",
-        "case_id": case_id,
-        "generated_at_epoch": int(_time.time()),
-        "case_status": payload["status"],
-        "prototype_verdict": payload.get("prototype_verdict"),
-        "artifact_hashes": hashes,
-        "commands": {
-            "edge_map": "python results/_phase0/c1_to_c2_map.py (or map_anchor_for_case)",
-            "peak_analysis": "python results/_phase0/c2_peak_analysis.py",
-            "audit": "audit_buffer_assignment + xla_dump.py",
-            "gate": "python results/_phase0/c2.py --n <n> --depth <d>",
-        },
-    }
-    os.makedirs(os.path.dirname(CHECKPOINT_MANIFEST_PATH), exist_ok=True)
-    with open(CHECKPOINT_MANIFEST_PATH, "w") as fh:
-        json.dump(manifest, fh, indent=2)
-
-
 def _load_json(path):
     if not os.path.exists(path):
         return {}
@@ -443,101 +410,427 @@ def _load_json(path):
         return json.load(fh)
 
 
-def judge_c2_canonical(edge, peak, audit, case_id=""):
-    """Fail-closed canonical C2 verdict from the HLO edge (Task B) + aliasing-aware peak
-    analysis (Task C 6.5/6.6) + allocation audit (Task A). ``basis="hlo_use_def"``.
+def _case_field_mismatch(d, case):
+    """True if any case field (``case_id`` / ``n`` / ``depth`` / ``fusion``) that ``d``
+    declares disagrees with the judged case. Artifacts that carry only ``case_id`` (e.g. the
+    prototype) are bound on that alone."""
+    if d.get("case_id") is not None and d.get("case_id") != case.get("case_id"):
+        return True
+    for k in ("n", "depth", "fusion"):
+        if k in d and d[k] != case.get(k):
+            return True
+    return False
 
-    Recomputes the memory benefit from RAW peak bytes (never trusts precomputed booleans).
-    FAIL/NOT_FEASIBLE when region fusion of the anchor pair cannot reduce the executable
-    peak (the binding peak is structural -- the contraction chain of GEMM+transpose pairs).
-    UNKNOWN when artifacts or case-binding are incomplete. PASS would require a real peak
-    reduction >= C2_MEMORY_THRESHOLD (not the case on n=24/d=10/default).
+
+_REDUCTION_MARKERS = ("norm", "reduce", "reduction", "sum(")
+
+
+def _is_real_pte_prototype(proto, edge):
+    """A genuine two-stage ``P=A@B -> T=transform(P) -> E=D@T`` prototype, not the rejected
+    GEMM->norm/reduction artifact (final-review §3.2/§7.1). Requires a schema-correct record,
+    a full-E GEMM consumer, no full P/T materialization, non-reduction math, and producer/
+    consumer MNK matching the edge region being judged."""
+    if not isinstance(proto, dict) or not proto:
+        return False
+    if proto.get("schema_version") != PROTO_SCHEMA:
+        return False
+    region = proto.get("region") or {}
+    prod = region.get("producer")
+    cons = region.get("consumer")
+    if not (
+        isinstance(prod, list) and len(prod) == 3 and all(int(x) > 0 for x in prod)
+    ):
+        return False
+    if not (
+        isinstance(cons, list) and len(cons) == 3 and all(int(x) > 0 for x in cons)
+    ):
+        return False
+    if (
+        cons[0] * cons[1] * 8 < FULL_E_MIN_BYTES
+    ):  # full E tensor, not a scalar/reduction
+        return False
+    if not (
+        proto.get("no_full_P_materialized") and proto.get("no_full_T_materialized")
+    ):
+        return False
+    if any(m in str(proto.get("math", "")).lower() for m in _REDUCTION_MARKERS):
+        return False
+    ep, ec = edge.get("producer", {}), edge.get("consumer", {})
+    if [ep.get("M"), ep.get("N"), ep.get("K")] != [int(x) for x in prod]:
+        return False
+    if [ec.get("M"), ec.get("N"), ec.get("K")] != [int(x) for x in cons]:
+        return False
+    return True
+
+
+def _recompute_conditions(proto, peak):
+    """§5.2 self-recompute from RAW fields. Self-reported booleans are diagnostic only.
+    ``None`` means the field is absent -> that sub-condition is UNKNOWN (cannot confirm).
     """
-    problems = []
-    conds = {}
-    conds["edge_reaches_real_consumer_498"] = (
-        edge.get("terminal_consumer_hlo_value_id") == "%custom-call.498"
-    )
-    if not conds["edge_reaches_real_consumer_498"]:
-        problems.append("edge does not reach terminal consumer %custom-call.498")
-    # recompute memory benefit from RAW peak bytes (do NOT trust a precomputed boolean)
-    peak_with = peak.get("arena_peak_live_bytes")
-    peak_after = peak.get("peak_after_full_PTE_fusion")
-    if peak_with is None or peak_after is None:
-        problems.append(
-            "peak analysis missing arena_peak_live_bytes/peak_after_full_PTE_fusion"
+    rc: dict[str, Any] = {}
+    rel_l2 = proto.get("relative_l2")
+    max_rel = proto.get("max_rel")
+    if isinstance(rel_l2, (int, float)) and isinstance(max_rel, (int, float)):
+        rc["accuracy_pass"] = bool(
+            rel_l2 < ACCURACY_REL_L2 and max_rel < ACCURACY_MAX_REL
         )
-        peak_reduction = None
-        conds["peak_reduction_bytes"] = None
-        conds["memory_benefit_meets_threshold"] = False
     else:
-        peak_reduction = int(peak_with) - int(peak_after)
-        conds["peak_reduction_bytes"] = peak_reduction
-        conds["memory_benefit_meets_threshold"] = peak_reduction >= C2_MEMORY_THRESHOLD
-    conds["allocation_is_real"] = (
-        audit.get("allocation_source") == "xla_buffer_assignment"
+        rc["accuracy_pass"] = None
+    regs = proto.get("registers_per_thread")
+    occ = proto.get("occupancy_pct")
+    if isinstance(regs, (int, float)) and isinstance(occ, (int, float)):
+        rc["resource_pass"] = bool(regs > 0 and occ >= RESOURCE_MIN_OCCUPANCY_PCT)
+    else:
+        rc["resource_pass"] = None
+    mp = proto.get("materialized_peak_bytes")
+    fp = proto.get("fused_peak_bytes")
+    rc["region_peak_gain_bytes"] = (
+        int(mp) - int(fp)
+        if isinstance(mp, (int, float)) and isinstance(fp, (int, float))
+        else None
     )
-    if not conds["allocation_is_real"]:
-        problems.append("allocation audit not from XLA buffer-assignment")
-    base = {"basis": "hlo_use_def", "conditions": conds, "case_id": case_id}
-    if problems:
-        return {"status": "UNKNOWN", "reason": "; ".join(problems), **base}
-    if peak_reduction < C2_MEMORY_THRESHOLD:
-        return {
-            "status": "FAIL",
-            "prototype_verdict": "NOT_FEASIBLE",
-            "reason": (
-                f"region fusion of the anchor pair (P->T->E) reduces the executable peak by only "
-                f"{peak_reduction} B << {C2_MEMORY_THRESHOLD} B threshold; the ~{peak_with} B peak "
-                f"is structural (contraction chain of GEMM+transpose pairs), so fusing one pair "
-                f"cannot reduce it"
-            ),
-            **base,
-        }
-    return {
-        "status": "UNKNOWN",
-        "prototype_verdict": "PENDING_REAL_PROTOTYPE",
-        "reason": "peak reduction meets threshold but the real P->T->E prototype has not been run",
-        **base,
+    base = peak.get("base_peak_bytes")
+    after = (peak.get("anchor_window") or {}).get("peak_after_single_elimination")
+    rc["single_reduction_bytes"] = (
+        int(base) - int(after)
+        if isinstance(base, (int, float)) and isinstance(after, (int, float))
+        else None
+    )
+    # traffic/workspace are not split out in the prototype -> UNKNOWN. The measured allocator
+    # peak already accounts for workspace, so this can never inflate a claimed gain.
+    rc["traffic_gain"] = "UNKNOWN"
+    rc["workspace_cost"] = "UNKNOWN"
+    rcf = proto.get("producer_recompute_factor")
+    rcflops = proto.get("producer_recompute_flops")
+    rc["recompute_cost"] = (
+        {"factor": int(rcf), "flops": int(rcflops)}
+        if isinstance(rcf, (int, float)) and isinstance(rcflops, (int, float))
+        else None
+    )
+    # latency policy needs the fused full-anchor run; otherwise UNKNOWN (not measured).
+    rc["latency_policy_pass"] = (
+        True if proto.get("fused_full_anchor_run") is True else None
+    )
+    return rc
+
+
+def _binding_problems(edge, peak, proto, audit, case, file_hashes):
+    """Cross-cutting case/hash/schema/contract problems. Any -> the artifacts are
+    untrustworthy, so every layer is forced UNKNOWN (fail-closed, spec §8 step 1-2)."""
+    probs = []
+    for name, d in (("edge", edge), ("peak", peak), ("audit", audit)):
+        if not isinstance(d, dict) or not d:
+            probs.append(f"{name} artifact missing")
+            continue
+        if _case_field_mismatch(d, case):
+            probs.append(
+                f"{name} case fields disagree with judged {case.get('case_id')}"
+            )
+    if isinstance(proto, dict) and proto and _case_field_mismatch(proto, case):
+        probs.append(
+            f"prototype case fields disagree with judged {case.get('case_id')}"
+        )
+    # source-HLO hash triangle: edge / peak / audit must agree
+    h_edge = (edge.get("source_hlo") or {}).get("sha256")
+    hlo_hashes = {
+        h
+        for h in (h_edge, peak.get("source_hlo_sha256"), audit.get("source_hlo_sha256"))
+        if h
     }
+    if len(hlo_hashes) > 1:
+        probs.append("source HLO hash mismatch across edge/peak/audit")
+    # edge contract: exact trace with a closed inverse mapping
+    if edge.get("trace_status") != "EXACT":
+        probs.append(f"edge trace_status={edge.get('trace_status')} (not EXACT)")
+    t = edge.get("transform") or {}
+    if not t.get("inverse_index_map") or not t.get("steps"):
+        probs.append("edge transform missing steps/inverse_index_map")
+    if audit.get("allocation_source") != "xla_buffer_assignment":
+        probs.append(
+            f"audit allocation_source={audit.get('allocation_source')} (not real)"
+        )
+    # on-disk hashes (when provided by the run layer)
+    if file_hashes:
+        checks = (
+            ("source_hlo", h_edge),
+            ("allocation_audit", (edge.get("allocation_audit") or {}).get("sha256")),
+            ("edge_map", peak.get("edge_map_sha256")),
+            ("buffer_assignment", audit.get("buffer_assignment_sha256")),
+        )
+        for key, recorded in checks:
+            on_disk = file_hashes.get(key)
+            if on_disk and recorded and on_disk != recorded:
+                probs.append(f"on-disk {key} hash != recorded")
+        for key in ("peak_frontier", "prototype"):
+            if not file_hashes.get(key):
+                probs.append(f"on-disk {key} hash missing")
+    return probs
+
+
+def _region_layer(proto, edge, rc):
+    """C2_REGION_KERNEL_FEASIBILITY: can the real P->T->E region be computed without
+    materializing full P/T (spec §5.1)? Only a real prototype or a definitive blocker
+    gives PASS/FAIL; everything else is UNKNOWN."""
+    if not _is_real_pte_prototype(proto, edge):
+        return (
+            "UNKNOWN",
+            "no real P->T->E prototype (missing / GEMM->norm / MNK mismatch)",
+        )
+    verdict = proto.get("verdict")
+    if verdict in _FEASIBLE_VERDICTS:
+        acc, res = rc["accuracy_pass"], rc["resource_pass"]
+        if acc is None or res is None:
+            return (
+                "UNKNOWN",
+                "prototype feasible but accuracy/resource not confirmable",
+            )
+        if acc and res:
+            scope = (
+                ""
+                if proto.get("fused_full_anchor_run")
+                else (
+                    " (fused full-anchor latency not measured; feasibility from compile + "
+                    "representative-contract correctness)"
+                )
+            )
+            return ("PASS", f"real kernel feasible{scope}")
+        return (
+            "FAIL",
+            "prototype claims feasible but recomputed accuracy/resource fail",
+        )
+    if verdict == "NOT_FEASIBLE":
+        return ("FAIL", "real P->T->E prototype definitively NOT_FEASIBLE")
+    return ("UNKNOWN", f"prototype verdict {verdict} is not a definitive kernel result")
+
+
+def _single_layer(rc):
+    """C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK: replacing only the anchor pair, holding the
+    rest of the program fixed. A legitimate route-local negative (spec §5.2)."""
+    sr = rc["single_reduction_bytes"]
+    if sr is None:
+        return ("UNKNOWN", "single-anchor peak counterfactual unavailable")
+    if sr >= C2_MEMORY_THRESHOLD:
+        return ("PASS", f"single-anchor patch reduces peak by {sr} B >= threshold")
+    return (
+        "FAIL",
+        f"single-anchor patch reduces peak by only {sr} B < threshold "
+        f"(unchanged-rest-of-program counterfactual; the peak is structural)",
+    )
+
+
+def _joint_layer(peak):
+    """C2_JOINT_EXECUTABLE_LEVERAGE (spec §5.3). The frontier joint_model is a COUNTERFACTUAL
+    (workspace/recompute uncounted) -> an OPTIMISTIC UPPER BOUND on the reduction:
+      * upper bound < threshold  -> genuinely infeasible -> FAIL
+      * upper bound >= threshold, no executable joint impl -> UNKNOWN (workspace may eat it)
+      * recognized executable joint PASS + model meets threshold -> PASS."""
+    max_red = (peak.get("joint_model") or {}).get("max_joint_reduction_bytes")
+    diag = peak.get("diagnostics") or {}
+    if not isinstance(max_red, (int, float)):
+        return ("UNKNOWN", "joint model max reduction unavailable")
+    if diag.get("joint_executable_status") == "PASS" and max_red >= C2_MEMORY_THRESHOLD:
+        return ("PASS", "executable joint implementation meets threshold")
+    if max_red < C2_MEMORY_THRESHOLD:
+        return ("FAIL", "joint model upper-bound reduction < threshold (infeasible)")
+    return (
+        "UNKNOWN",
+        "joint model meets threshold but no executable joint implementation",
+    )
+
+
+def _compose_canonical(region, joint):
+    """Canonical C2 composition (spec §5.4). A single-pair peak FAIL never becomes a
+    canonical FAIL on its own -- only a definitive region-kernel blocker or a proven joint
+    verdict can."""
+    if region == "FAIL":
+        return "FAIL"
+    if region == "UNKNOWN":
+        return "UNKNOWN"
+    if joint == "PASS":
+        return "PASS"
+    if joint == "FAIL":
+        return "FAIL"
+    return "UNKNOWN"
+
+
+def judge_c2_canonical(edge, peak, prototype, audit, *, case=None, file_hashes=None):
+    """Fail-closed canonical C2 v2 gate (spec §5.4 / §8 / plan §5).
+
+    Consumes the Task 2 edge map (``c1-c2-edge-v2``) + Task 3 peak frontier
+    (``c2-peak-frontier-v1``) + Task 4 region prototype (``region-prototype-v2``) + Task 1
+    allocation audit (``c1-buffer-audit-v2``). Processing order (spec §8):
+      1. schema/case/hash binding -> any problem forces every layer UNKNOWN;
+      2. self-recompute correctness/resource/cost/peak conditions from raw fields (§5.2);
+      3. the three independent layers (region kernel / single-patch / joint leverage);
+      4. canonical composition (§5.4).
+    Returns a dict with ``status`` (== ``layers["C2_CANONICAL"]``), ``layers``,
+    ``recomputed``, ``binding``, ``diagnostic_self_reported``, and ``reason``.
+    """
+    case = case or {}
+    file_hashes = file_hashes or {}
+    problems = _binding_problems(edge, peak, prototype, audit, case, file_hashes)
+    rc = _recompute_conditions(prototype if isinstance(prototype, dict) else {}, peak)
+    diag = peak.get("diagnostics") or {}
+    diagnostic_self_reported = {
+        "prototype_verdict": (
+            prototype.get("verdict") if isinstance(prototype, dict) else None
+        ),
+        "prototype_correct": (
+            prototype.get("correct") if isinstance(prototype, dict) else None
+        ),
+        "prototype_memory_policy_met": (
+            prototype.get("memory_policy_met") if isinstance(prototype, dict) else None
+        ),
+        "fused_full_anchor_run": (
+            prototype.get("fused_full_anchor_run")
+            if isinstance(prototype, dict)
+            else None
+        ),
+        "frontier_single_anchor_patch_status": diag.get("single_anchor_patch_status"),
+        "frontier_joint_model_status": diag.get("joint_model_status"),
+    }
+    if problems:
+        layers = {k: "UNKNOWN" for k in _LAYER_KEYS}
+        reason = "fail-closed UNKNOWN: " + "; ".join(problems)
+    else:
+        r = _region_layer(prototype, edge, rc)
+        s = _single_layer(rc)
+        jo = _joint_layer(peak)
+        layers = {
+            "C2_REGION_KERNEL_FEASIBILITY": r[0],
+            "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK": s[0],
+            "C2_JOINT_EXECUTABLE_LEVERAGE": jo[0],
+        }
+        layers["C2_CANONICAL"] = _compose_canonical(
+            layers["C2_REGION_KERNEL_FEASIBILITY"],
+            layers["C2_JOINT_EXECUTABLE_LEVERAGE"],
+        )
+        reason = (
+            f"region={r[0]} ({r[1]}) | single={s[0]} ({s[1]}) | joint={jo[0]} ({jo[1]}) "
+            f"-> canonical={layers['C2_CANONICAL']}"
+        )
+    return {
+        "schema_version": C2_JUDGMENT_SCHEMA,
+        "basis": "hlo_use_def",
+        "case_id": case.get("case_id", ""),
+        "status": layers["C2_CANONICAL"],
+        "layers": layers,
+        "recomputed": rc,
+        "binding": {
+            "case": case,
+            "binding_ok": not problems,
+            "problems": problems,
+            "file_hashes": file_hashes,
+        },
+        "diagnostic_self_reported": diagnostic_self_reported,
+        "memory_threshold_bytes": C2_MEMORY_THRESHOLD,
+        "reason": reason,
+    }
+
+
+def _write_checkpoint_manifest_v2(case_id, payload, file_hashes):
+    """Task 5 §5.3 provenance manifest: all input + judgment hashes, the command set, an
+    environment fingerprint, per-layer case statuses, and the dirty-worktree flag. Does NOT
+    replace the final Task 11 manifest; it guarantees the Task 1-5 evidence chain."""
+    from results._phase0.run_context import _versions
+
+    versions = _versions()
+    env_hash = hashlib.sha256(json.dumps(versions, sort_keys=True).encode()).hexdigest()
+    try:
+        porcelain = subprocess.run(
+            ["git", "status", "--porcelain"], capture_output=True, text=True
+        ).stdout
+        dirty = bool(porcelain.strip())
+    except Exception:
+        dirty = None
+    layers = payload.get("layers", {})
+    manifest = {
+        "schema_version": CHECKPOINT_MANIFEST_SCHEMA,
+        "case_id": case_id,
+        "generated_at_epoch": int(time.time()),
+        "case_statuses": {
+            case_id: {
+                "C2_CANONICAL": payload.get("status"),
+                "C2_REGION_KERNEL_FEASIBILITY": layers.get(
+                    "C2_REGION_KERNEL_FEASIBILITY"
+                ),
+                "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK": layers.get(
+                    "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK"
+                ),
+                "C2_JOINT_EXECUTABLE_LEVERAGE": layers.get(
+                    "C2_JOINT_EXECUTABLE_LEVERAGE"
+                ),
+            }
+        },
+        "artifact_hashes": {
+            "source_hlo": file_hashes.get("source_hlo"),
+            "buffer_assignment": file_hashes.get("buffer_assignment"),
+            "allocation_audit": file_hashes.get("allocation_audit"),
+            "edge_map": file_hashes.get("edge_map"),
+            "peak_frontier": file_hashes.get("peak_frontier"),
+            "prototype": file_hashes.get("prototype"),
+            "c2_judgment": _sha256_file(JUDGMENT_JSON_PATH),
+        },
+        "environment_hash": env_hash,
+        "package_versions": versions,
+        "dirty_worktree": dirty,
+        "commands": {
+            "edge_map": "python results/_phase0/c1_to_c2_map.py",
+            "peak_frontier": "python results/_phase0/c2_peak_analysis.py",
+            "region_proto": "python results/_phase0/region_proto.py",
+            "c2_gate": "python results/_phase0/c2.py --n <n> --depth <depth>",
+        },
+    }
+    os.makedirs(os.path.dirname(CHECKPOINT_MANIFEST_PATH), exist_ok=True)
+    with open(CHECKPOINT_MANIFEST_PATH, "w") as fh:
+        json.dump(manifest, fh, indent=2)
 
 
 def run_c2_canonical(n, depth, fusion="default"):
-    """Canonical C2 verdict from the HLO edge map + peak analysis + allocation audit.
-    Writes results/phase0/c2_judgment.json (basis=hlo_use_def) + c2_checkpoint_manifest.json.
-    The SOLE canonical writer."""
-    case_id = f"n{n}_d{depth}"
-    edge = _load_edge_map_row(n, depth, fusion)
-    peak = _load_json(PEAK_ANALYSIS_JSON_PATH)
-    audit = _load_json(_audit_json_path(n, depth, fusion))
-    judgment = judge_c2_canonical(edge, peak, audit, case_id=case_id)
+    """Canonical C2 v2 verdict from the on-disk Task 1-4 artifacts. Computes the on-disk
+    hashes the gate binds against, writes ``c2_judgment.json`` (fresh, single-case) and
+    ``c2_checkpoint_manifest.json``. The SOLE canonical writer."""
+    case_id = f"n{n}_d{depth}_{fusion}"
+    case = {"n": n, "depth": depth, "fusion": fusion, "case_id": case_id}
+    edge = _load_json(EDGE_MAP_JSON_PATH)
+    peak = _load_json(PEAK_FRONTIER_JSON_PATH)
+    proto = _load_json(REGION_PROTOTYPE_JSON_PATH)
     audit_path = _audit_json_path(n, depth, fusion)
-    hlo_path = f"{OUT_DIR}/c1_optimized_hlo/n{n}_d{depth}_exp_{fusion}.hlo"
-    hashes = {
+    audit = _load_json(audit_path)
+    hlo_path = (edge.get("source_hlo") or {}).get("path") or (
+        f"{OUT_DIR}/c1_optimized_hlo/n{n}_d{depth}_exp_{fusion}.hlo"
+    )
+    ba_path = audit.get("buffer_assignment_path") or peak.get("buffer_assignment_path")
+    file_hashes = {
         "source_hlo": _sha256_file(hlo_path),
         "allocation_audit": _sha256_file(audit_path),
-        "edge_map_csv": _sha256_file(EDGE_MAP_CSV_PATH),
-        "peak_analysis": _sha256_file(PEAK_ANALYSIS_JSON_PATH),
+        "edge_map": _sha256_file(EDGE_MAP_JSON_PATH),
+        "peak_frontier": _sha256_file(PEAK_FRONTIER_JSON_PATH),
+        "prototype": _sha256_file(REGION_PROTOTYPE_JSON_PATH),
+        "buffer_assignment": _sha256_file(ba_path),
     }
+    judgment = judge_c2_canonical(
+        edge, peak, proto, audit, case=case, file_hashes=file_hashes
+    )
     payload = {
+        **judgment,
         "n": n,
         "depth": depth,
         "fusion": fusion,
-        "case_id": case_id,
-        "basis": judgment["basis"],
-        "edge": edge,
-        "peak_analysis_verdict_hint": peak.get("verdict_hint"),
-        "peak_reduction_bytes": judgment["conditions"].get("peak_reduction_bytes"),
-        "memory_threshold_bytes": C2_MEMORY_THRESHOLD,
-        "allocation_source": audit.get("allocation_source"),
-        "status": judgment["status"],
-        "prototype_verdict": judgment.get("prototype_verdict"),
-        "reason": judgment["reason"],
-        "conditions": judgment["conditions"],
-        "artifact_hashes": hashes,
+        "edge_producer": (edge.get("producer") or {}).get("hlo_value_id"),
+        "edge_consumer": (edge.get("consumer") or {}).get("hlo_value_id"),
+        "artifact_paths": {
+            "edge_map": EDGE_MAP_JSON_PATH,
+            "peak_frontier": PEAK_FRONTIER_JSON_PATH,
+            "prototype": REGION_PROTOTYPE_JSON_PATH,
+            "audit": audit_path,
+            "source_hlo": hlo_path,
+            "buffer_assignment": ba_path,
+        },
     }
-    _update_judgment_json(JUDGMENT_JSON_PATH, case_id, payload)
-    _write_checkpoint_manifest(case_id, payload, hashes)
+    with open(JUDGMENT_JSON_PATH, "w") as fh:
+        json.dump({case_id: payload}, fh, indent=2)
+    _write_checkpoint_manifest_v2(case_id, payload, file_hashes)
     return payload
 
 

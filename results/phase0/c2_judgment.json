@@ -1,40 +1,68 @@
 {
-  "n24_d10": {
+  "n24_d10_default": {
+    "schema_version": "c2-judgment-v2",
+    "basis": "hlo_use_def",
+    "case_id": "n24_d10_default",
+    "status": "UNKNOWN",
+    "layers": {
+      "C2_REGION_KERNEL_FEASIBILITY": "PASS",
+      "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK": "FAIL",
+      "C2_JOINT_EXECUTABLE_LEVERAGE": "UNKNOWN",
+      "C2_CANONICAL": "UNKNOWN"
+    },
+    "recomputed": {
+      "accuracy_pass": true,
+      "resource_pass": true,
+      "region_peak_gain_bytes": 1073741824,
+      "single_reduction_bytes": 31872,
+      "traffic_gain": "UNKNOWN",
+      "workspace_cost": "UNKNOWN",
+      "recompute_cost": {
+        "factor": 64,
+        "flops": 8796093022208
+      },
+      "latency_policy_pass": null
+    },
+    "binding": {
+      "case": {
+        "n": 24,
+        "depth": 10,
+        "fusion": "default",
+        "case_id": "n24_d10_default"
+      },
+      "binding_ok": true,
+      "problems": [],
+      "file_hashes": {
+        "source_hlo": "a2dba7afeae3a3bfe16dc645d44c0b1b2da4eb2623e5ac65ca5c9042fe9849be",
+        "allocation_audit": "29004fd786ff1302ba00399602ac9e2145229898a4eba61bb70ef993997a35a2",
+        "edge_map": "9dc930781a3e5074eb2ee6b4d8c9329ee9d5a58f96c174e36122735054414e78",
+        "peak_frontier": "0a17bc36b8438a538bd01c87604a956590e40983a252f9ccf989f6ab829c53f3",
+        "prototype": "df550309b1dcd36661e5aaa73fbdd58fc2c0233c57eb597041e10c4b2534aec6",
+        "buffer_assignment": "035d52a92f49cb540a3762edab9632a723dc4fde1d720d0194f2ef6c3e78a79a"
+      }
+    },
+    "diagnostic_self_reported": {
+      "prototype_verdict": "FEASIBLE_WITH_RECOMPUTE",
+      "prototype_correct": true,
+      "prototype_memory_policy_met": true,
+      "fused_full_anchor_run": false,
+      "frontier_single_anchor_patch_status": "peak_reduction_below_threshold",
+      "frontier_joint_model_status": "joint_reduction_meets_threshold"
+    },
+    "memory_threshold_bytes": 268435456,
+    "reason": "region=PASS (real kernel feasible (fused full-anchor latency not measured; feasibility from compile + representative-contract correctness)) | single=FAIL (single-anchor patch reduces peak by only 31872 B < threshold (unchanged-rest-of-program counterfactual; the peak is structural)) | joint=UNKNOWN (joint model meets threshold but no executable joint implementation) -> canonical=UNKNOWN",
     "n": 24,
     "depth": 10,
     "fusion": "default",
-    "case_id": "n24_d10",
-    "basis": "hlo_use_def",
-    "edge": {
-      "case_id": "n24_d10",
-      "producer_hlo_value_id": "%custom-call.497",
-      "producer_M": 4096,
-      "producer_N": 16384,
-      "producer_K": 1024,
-      "terminal_consumer_hlo_value_id": "%custom-call.498",
-      "consumer_M": 64,
-      "consumer_N": 1048576,
-      "consumer_K": 64,
-      "consumer_output_bytes": 536870912
-    },
-    "peak_analysis_verdict_hint": "PTE_FUSION_NO_CLEAR_MEMORY_BENEFIT",
-    "peak_reduction_bytes": 32128,
-    "memory_threshold_bytes": 268435456,
-    "allocation_source": "xla_buffer_assignment",
-    "status": "FAIL",
-    "prototype_verdict": "NOT_FEASIBLE",
-    "reason": "region fusion of the anchor pair (P->T->E) reduces the executable peak by only 32128 B << 268435456 B threshold; the ~1107389712 B peak is structural (contraction chain of GEMM+transpose pairs), so fusing one pair cannot reduce it",
-    "conditions": {
-      "edge_reaches_real_consumer_498": true,
-      "peak_reduction_bytes": 32128,
-      "memory_benefit_meets_threshold": false,
-      "allocation_is_real": true
-    },
-    "artifact_hashes": {
-      "source_hlo": "a2dba7afeae3a3bfe16dc645d44c0b1b2da4eb2623e5ac65ca5c9042fe9849be",
-      "allocation_audit": "1c87afd48922b3a68c1ba7f3c238d5a61f968d480dd5606606a7a75667db9cb5",
-      "edge_map_csv": "feee12aa59d36a4fb7e5b82e54ced90c4f6e38f9a8c1aba41927e6f0d401aec3",
-      "peak_analysis": "14bb79810b7a1a461a3f211529ecb2409d7463be0222c4e2da3f06534330da59"
+    "edge_producer": "%custom-call.497",
+    "edge_consumer": "%custom-call.498",
+    "artifact_paths": {
+      "edge_map": "results/phase0/c1_c2_edge_map.json",
+      "peak_frontier": "results/phase0/c2_peak_frontier.json",
+      "prototype": "results/phase0/region_prototype.json",
+      "audit": "results/phase0/c1_buffer_assignment/n24_d10_default.json",
+      "source_hlo": "results/phase0/c1_optimized_hlo/n24_d10_exp_default.hlo",
+      "buffer_assignment": "results/phase0/c1_xla_dump/n24_d10_default/module_0005.jit_f.sm_12.0_gpu_after_optimizations-buffer-assignment.txt"
     }
   }
 }
