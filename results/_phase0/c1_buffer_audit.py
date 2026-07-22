@@ -16,6 +16,7 @@ Pure text parsing over the HLO artifact saved by ``c1.measure_case`` (no GPU/com
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 import re
@@ -60,6 +61,84 @@ def _elem_bytes(dtype: str, dims_csv: str) -> int:
     for d in dims_csv.split(","):
         n *= int(d)
     return n * bpb
+
+
+# --- XLA buffer-assignment dump parser (correction Task A2/A4) ---------------------------
+# Format (module_*.jit_f.*-buffer-assignment.txt):
+#   allocation N: size S, <kind>:
+#    value: <id name{shapeidx} @pos> (size=X,offset=Y): type[dims]{layout}
+#   ... and a liveness section at the end:  name{shapeidx}:birth-death
+_BA_ALLOC_RE = re.compile(r"^allocation (\d+):\s*size (\d+),\s*([^:]*):")
+_BA_VAL_RE = re.compile(
+    r"value:\s*<(\d+)\s+(.+?)\s+@(\d+)>\s*\(size=(\d+),offset=(\d+)\)"
+)
+_BA_LIVE_RE = re.compile(r"^([^\s:]+?\{[^}]*\}):(\d+)-(\d+)\s*$")
+_BA_NAMEIDX_RE = re.compile(r"^(.+)\{(\d*)\}$")
+
+
+def parse_buffer_assignment(ba_text: str):
+    """Parse an XLA buffer-assignment dump into allocation/liveness/alias records.
+
+    Returns ``(records, by_key, liveness, by_physical)``:
+    - records: one dict per value ``{op_name, shape_index, buffer_id, value_size, offset,
+      allocation_id, allocation_size, allocation_kind}``.
+    - by_key: ``{(op_name, shape_index_str) -> record}``.
+    - liveness: ``{(op_name, shape_index_str) -> (birth, death)}`` (instruction-seq indices).
+    - by_physical: ``{(allocation_id, offset) -> [records]}`` -- same physical bytes = true
+      buffer reuse (aliasing), e.g. the 512 MiB P (.497) and E (.498) at offset 536956416.
+    """
+    records: list[dict] = []
+    cur = None  # (alloc_id, alloc_size, kind)
+    for line in ba_text.splitlines():
+        s = line.strip()
+        ma = _BA_ALLOC_RE.match(s)
+        if ma:
+            cur = (int(ma.group(1)), int(ma.group(2)), ma.group(3).strip())
+            continue
+        mv = _BA_VAL_RE.search(s)
+        if mv and cur is not None:
+            nameidx = mv.group(2)
+            mn = _BA_NAMEIDX_RE.match(nameidx)
+            if mn:
+                op_name, sidx = mn.group(1), mn.group(2)
+            else:
+                op_name, sidx = nameidx, ""
+            records.append(
+                {
+                    "op_name": op_name,
+                    "shape_index": sidx,
+                    "buffer_id": int(mv.group(1)),
+                    "value_size": int(mv.group(4)),
+                    "offset": int(mv.group(5)),
+                    "allocation_id": cur[0],
+                    "allocation_size": cur[1],
+                    "allocation_kind": cur[2],
+                }
+            )
+    liveness: dict = {}
+    for line in ba_text.splitlines():
+        ml = _BA_LIVE_RE.match(line.strip())
+        if ml:
+            mn = _BA_NAMEIDX_RE.match(ml.group(1))
+            key = (mn.group(1), mn.group(2)) if mn else (ml.group(1), "")
+            liveness[key] = (int(ml.group(2)), int(ml.group(3)))
+    by_key = {(r["op_name"], r["shape_index"]): r for r in records}
+    by_physical: dict = {}
+    for r in records:
+        by_physical.setdefault((r["allocation_id"], r["offset"]), []).append(r)
+    return records, by_key, liveness, by_physical
+
+
+def _find_buffer_assignment(n: int, depth: int, fusion: str):
+    """Locate the main (jit_f) buffer-assignment dump for a case, or None."""
+    pattern = os.path.join(
+        OUT_DIR,
+        "c1_xla_dump",
+        f"n{n}_d{depth}_{fusion}",
+        "*jit_f*buffer-assignment.txt",
+    )
+    matches = glob.glob(pattern)
+    return matches[0] if matches else None
 
 
 def parse_materialized_buffers(hlo_text: str) -> list[dict]:
@@ -158,13 +237,49 @@ def audit_buffer_assignment(n: int, depth: int, fusion: str = "default") -> dict
             }
         )
 
+    # Enrich with REAL XLA allocation/liveness/aliasing from the buffer-assignment dump
+    # (Task A2/A4). Falls back to unknown/None if the dump is absent.
+    ba_path = _find_buffer_assignment(n, depth, fusion)
+    if ba_path:
+        with open(ba_path) as fh:
+            _, by_key, liveness, by_physical = parse_buffer_assignment(fh.read())
+        for b in buffers:
+            op_name = b["hlo_value_id"].lstrip("%")
+            sidx = str(b["data_result_index"])
+            rec = by_key.get((op_name, sidx))
+            if not rec:
+                continue
+            b["allocation_id"] = rec["allocation_id"]
+            b["allocation_size"] = rec["allocation_size"]
+            b["allocation_kind"] = rec["allocation_kind"]
+            b["offset"] = rec["offset"]
+            b["value_size"] = rec["value_size"]
+            # true aliasing = same physical bytes (allocation_id, offset): the sequential
+            # GEMM outputs (.489/.490/.491/.497/.498) reuse one 512 MiB slot temporally.
+            mates = by_physical.get((rec["allocation_id"], rec["offset"]), [])
+            b["aliases"] = sorted(
+                f"{m['op_name']}{{{m['shape_index']}}}"
+                for m in mates
+                if not (m["op_name"] == op_name and m["shape_index"] == sidx)
+            )
+            bd = liveness.get((op_name, sidx))
+            if bd:
+                b["birth"] = bd[0]
+                b["death"] = bd[1]
+        allocation_source = "xla_buffer_assignment"
+        live_range_source = "xla_buffer_assignment"
+    else:
+        allocation_source = "unknown"
+        live_range_source = "unknown"
+
     out = {
         "n": n,
         "depth": depth,
         "fusion": fusion,
         "hlo_path": hlo_path,
-        "allocation_source": "unknown",
-        "live_range_source": "unknown",
+        "buffer_assignment_path": ba_path,
+        "allocation_source": allocation_source,
+        "live_range_source": live_range_source,
         "buffer_count": len(buffers),
         "anchor_count": anchor_count,
         "buffers": buffers,

@@ -5,6 +5,34 @@ Run: pytest results/_phase0/c1_test.py -v
 
 from results._phase0.c1 import judge_c1, upsert_csv_row
 
+# Synthetic XLA buffer-assignment dump fragment for the parser unit test (Task A4).
+SYNTH_BA = """BufferAssignment:
+allocation 5: size 1048576, preallocated-temp:
+ value: <100 anchor.1{0} @0> (size=160,offset=0): c64[10,2]
+ value: <101 reuse{0} @0> (size=160,offset=0): c64[10,2]
+ value: <102 other{0} @0> (size=192,offset=512): s8[192]
+anchor.1{0}:10-20
+reuse{0}:30-40
+other{0}:5-6
+"""
+
+
+def test_parse_buffer_assignment_extracts_alloc_liveness_aliases():
+    """Synthetic buffer-assignment text -> allocation_id/size/offset, liveness, aliasing."""
+    from results._phase0.c1_buffer_audit import parse_buffer_assignment
+
+    records, by_key, liveness, by_physical = parse_buffer_assignment(SYNTH_BA)
+    a = by_key[("anchor.1", "0")]
+    assert a["allocation_id"] == 5
+    assert a["allocation_size"] == 1048576
+    assert a["offset"] == 0
+    assert a["value_size"] == 160
+    assert a["allocation_kind"] == "preallocated-temp"
+    assert liveness[("anchor.1", "0")] == (10, 20)
+    # aliasing: anchor.1{0} and reuse{0} share the same physical bytes (alloc 5, offset 0)
+    assert len(by_physical[(5, 0)]) == 2
+    assert {r["op_name"] for r in by_physical[(5, 0)]} == {"anchor.1", "reuse"}
+
 
 def test_c1_pass_when_all_conditions_met():
     r = {
@@ -96,21 +124,27 @@ def test_parse_tuple_separates_data_and_workspace():
     assert b["workspace_result_index"] == 1
 
 
-def test_audit_anchor_separates_data_workspace_and_unknown_allocation():
-    """GPU/file integration: the anchor's data output is 512 MiB c64[4096,16384], distinct
-    from its workspace; allocation is UNKNOWN until the XLA dump worker (Task A2) runs.
+def test_audit_anchor_has_real_allocation_liveness_and_aliasing():
+    """File integration (Task A2/A4): the audit is enriched from the XLA buffer-assignment
+    dump with real allocation_id/size/offset, liveness (birth/death), and aliasing.
     """
     from results._phase0.c1_buffer_audit import audit_buffer_assignment
 
     a = audit_buffer_assignment(24, 10, "default")
-    assert a["allocation_source"] == "unknown"  # not hlo_shape_only pretending
+    assert a["allocation_source"] == "xla_buffer_assignment", a
     anchor = [b for b in a["buffers"] if b["is_anchor"]]
     assert len(anchor) == 1, a
-    assert anchor[0]["data_dtype"] == "c64"
-    assert anchor[0]["data_shape"] == [4096, 16384]
-    assert anchor[0]["data_output_bytes"] == 4096 * 16384 * 8  # 512 MiB
-    assert anchor[0]["workspace_bytes"] > 0  # distinct from the data output
-    assert anchor[0]["allocation_id"] is None  # not fabricated from the SSA name
+    anc = anchor[0]
+    assert anc["data_dtype"] == "c64"
+    assert anc["data_shape"] == [4096, 16384]
+    assert anc["data_output_bytes"] == 4096 * 16384 * 8  # 512 MiB
+    assert anc["workspace_bytes"] > 0  # distinct from the data output
+    # real allocation/liveness from the dump (not fabricated from the SSA name)
+    assert anc["allocation_id"] == 11
+    assert anc["offset"] == 536956416
+    assert anc["birth"] == 1468 and anc["death"] == 1470
+    # P (.497) aliases E (.498) at the same physical offset -> temporal reuse
+    assert "custom-call.498{0}" in anc["aliases"], anc["aliases"]
 
 
 def test_measure_case_splits_planned_and_runtime_peak():
