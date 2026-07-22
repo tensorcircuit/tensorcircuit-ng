@@ -760,3 +760,7 @@ def main(out_dir: str | None = None) -> dict:
     write_artifacts(verdict, out_dir)
     print(json.dumps(verdict, indent=2))
     return verdict
+
+
+if __name__ == "__main__":
+    main()

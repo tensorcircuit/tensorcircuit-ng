@@ -23,6 +23,7 @@ def _free_gpu_pool():
     cp.get_default_memory_pool().free_all_blocks()
     cp.cuda.Device(0).synchronize()
 
+
 # A small 8-D contract (mirrors the real transform's reshape->transpose->reshape structure)
 # for fused-kernel correctness: P[2,16] -> [1,1,1,2,2,2,2,2] -> transpose -> [4,8] = T.
 SMALL_STEPS = [
