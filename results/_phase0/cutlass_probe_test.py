@@ -223,3 +223,124 @@ def test_run_grouped_returns_valid_status():
     assert "coverage" in g and g["coverage"]["shapes_total"] == len(shapes)
     if g["status"] == "SUPPORTED":
         assert g["correctness"]["gate_pass"] is True
+
+
+# --- Task 6 truth table (GPU-free) -----------------------------------------
+
+
+def test_aggregate_feasible():
+    import cutlass_probe
+
+    s = {
+        "runs": True,
+        "correctness": {"gate_pass": True},
+        "kernel_path": "sm100_native",
+    }
+    g = {"status": "SUPPORTED"}
+    v = cutlass_probe.aggregate_capability(s, g, {"nvcc_version": "12.8.93"})
+    assert v["overall"] == "FEASIBLE"
+    assert v["schema_version"] == "cutlass-sm120-4m-v1"
+
+
+def test_aggregate_sm80_fallback():
+    import cutlass_probe
+
+    s = {
+        "runs": True,
+        "correctness": {"gate_pass": True},
+        "kernel_path": "sm80_fallback",
+    }
+    g = {"status": "SUPPORTED"}
+    assert (
+        cutlass_probe.aggregate_capability(s, g, {})["overall"]
+        == "FEASIBLE_WITH_SM80_FALLBACK"
+    )
+
+
+def test_aggregate_grouped_not_supported_blocks_feasible():
+    import cutlass_probe
+
+    s = {
+        "runs": True,
+        "correctness": {"gate_pass": True},
+        "kernel_path": "sm100_native",
+    }
+    g = {"status": "NOT_SUPPORTED"}
+    assert cutlass_probe.aggregate_capability(s, g, {})["overall"] == "NOT_FEASIBLE"
+
+
+def test_aggregate_single_compile_fail_is_not_feasible():
+    import cutlass_probe
+
+    s = {"runs": False, "kernel_path": "COMPILE_FAIL", "correctness": {}}
+    g = {"status": "BLOCKED"}
+    assert cutlass_probe.aggregate_capability(s, g, {})["overall"] in (
+        "NOT_FEASIBLE",
+        "BLOCKED",
+    )
+
+
+def test_aggregate_blocked_requires_blocker():
+    import cutlass_probe
+
+    s = {"runs": False, "kernel_path": "COMPILE_FAIL", "correctness": {}}
+    g = {"status": "BLOCKED", "blocker": "no nvcc"}
+    v = cutlass_probe.aggregate_capability(s, g, {})
+    assert v["overall"] == "BLOCKED" and v.get("blocker")
+
+
+def test_aggregate_propagates_toolchain_single_grouped_blocks():
+    """The full cutlass-sm120-4m-v1 object echoes toolchain/single_4m/grouped
+    so the artifact self-documents the inputs behind the verdict."""
+    import cutlass_probe
+
+    s = {
+        "runs": True,
+        "correctness": {"gate_pass": True},
+        "kernel_path": "sm80_fallback",
+    }
+    g = {"status": "SUPPORTED", "coverage": {"shapes_run": 8, "shapes_total": 8}}
+    tc = {"nvcc_version": "12.8.93", "cutlass_head": "abc1234"}
+    v = cutlass_probe.aggregate_capability(s, g, tc)
+    assert v["toolchain"] is tc
+    assert v["single_4m"] is s
+    assert v["grouped"] is g
+    assert v["blocker"] is None
+
+
+def test_full_native_hierarchy_captures_both_blockers(monkeypatch):
+    """GPU-free: driving the full native hierarchy (sm120 -> sm100 -> sm80)
+    records BOTH the sm120 and sm100 blockers verbatim in the resulting
+    single_4m block, landing on kernel_path=sm80_fallback. This is the
+    guarantee main() relies on to honestly document that both native paths
+    were attempted before settling on the sm80 fallback."""
+    import cutlass_probe
+
+    def fake_build(name="cutlass_4m", extra_defines=None):
+        if extra_defines and "-DCUTLASS_ENABLE_SM120_4M=1" in extra_defines:
+            raise RuntimeError(
+                "sm120: TmaWarpSpecialized collective builder is F8F6F4-only"
+            )
+        if extra_defines and "-DCUTLASS_ENABLE_SM100_4M=1" in extra_defines:
+            raise RuntimeError(
+                "sm100: __CUDA_ARCH__==1000 guard excludes sm_120 target"
+            )
+        return object()  # sm80 stub; _run_sm80 is mocked below
+
+    monkeypatch.setattr(cutlass_probe, "build_extension", fake_build)
+    monkeypatch.setattr(
+        cutlass_probe,
+        "_run_sm80",
+        lambda shapes, seeds, **kw: {
+            "kernel_path": "sm80_fallback",
+            "runs": True,
+            "correctness": {"gate_pass": True},
+            **kw,
+        },
+    )
+    r = cutlass_probe._attempt_full_native_hierarchy(shapes=[(64, 64, 64)], seeds=(0,))
+    assert r["kernel_path"] == "sm80_fallback"
+    assert r.get("sm120_blocker"), "sm120_blocker must be recorded verbatim"
+    assert r.get("sm100_blocker"), "sm100_blocker must be recorded verbatim"
+    assert "F8F6F4" in r["sm120_blocker"]
+    assert "1000" in r["sm100_blocker"]

@@ -42,6 +42,62 @@ def discover_paths() -> dict:
     }
 
 
+def _nvcc_version(paths: dict) -> str:
+    """Run `<nvcc> --version` and parse the build token (e.g. ``V12.8.93``).
+
+    Returns ``""`` on any failure (missing nvcc, subprocess error, no parse
+    match) — the toolchain block is still recorded; a missing version is a
+    soft signal, not a hard error.
+    """
+    import re
+    import subprocess
+
+    nvcc = paths.get("nvcc", "")
+    if not nvcc or not os.path.exists(nvcc):
+        return ""
+    try:
+        out = subprocess.run(
+            [nvcc, "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    except Exception:
+        return ""
+    text = (out.stdout or "") + (out.stderr or "")
+    # Prefer the full build token ("V12.8.93"); fall back to release ("12.8").
+    full = re.search(r"\bV(\d+\.\d+\.\d+)\b", text)
+    if full:
+        return full.group(1)
+    rel = re.search(r"release\s+(\d+\.\d+(?:\.\d+)?)", text)
+    return rel.group(1) if rel else ""
+
+
+def _cutlass_head(paths: dict) -> str:
+    """``git -C <cutlass_root> rev-parse --short HEAD``.
+
+    Returns ``""`` if the root isn't a git checkout or git fails (e.g. a
+    tarball extract) — recorded as a soft signal in the toolchain block.
+    """
+    import subprocess
+
+    root = paths.get("cutlass_root", "")
+    if not root or not os.path.isdir(root):
+        return ""
+    try:
+        out = subprocess.run(
+            ["git", "-C", root, "rev-parse", "--short", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    except Exception:
+        return ""
+    return (out.stdout or "").strip()
+
+
 def build_extension(name: str = "cutlass_4m", extra_defines: list[str] | None = None):
     """Compile cpp/cutlass_4m.cu via torch.utils.cpp_extension (ext.cpp build style).
 
@@ -102,7 +158,12 @@ def _bf16_cuda(t):
 def run_single_4m(kernel_path: str, shapes, seeds=(0, 1, 2)) -> dict:
     """Run CUTLASS single 4M GEMM on `shapes` x `seeds`, compare to c64 reference.
 
-    kernel_path in {"sm80_fallback", "sm100_native", "sm120_native"}.
+    kernel_path in {"full_native", "sm80_fallback", "sm100_native", "sm120_native"}.
+      * "full_native" — drives the entire native hierarchy in order: try sm120
+        -> try sm100 -> settle sm80. Lands on the first path that actually
+        compiles+runs, attaching BOTH blockers verbatim if it falls through
+        to sm80. Use this for the artifact so a single_4m block honestly
+        documents that both native paths were attempted.
       * "sm120_native" — native consumer-Blackwell (arch::Sm120) attempt; falls
         back to sm80 on any failure (records `sm120_blocker`).
       * "sm100_native" — datacenter-Blackwell (arch::Sm100) attempt; falls back
@@ -113,11 +174,72 @@ def run_single_4m(kernel_path: str, shapes, seeds=(0, 1, 2)) -> dict:
     Returns correctness plus resource and latency measured on the largest shape
     (Task 3).
     """
+    if kernel_path == "full_native":
+        return _attempt_full_native_hierarchy(shapes, seeds)
     if kernel_path == "sm120_native":
         return _attempt_sm120_then_sm80(shapes, seeds)
     if kernel_path == "sm100_native":
         return _attempt_sm100_then_sm80(shapes, seeds)
     return _run_sm80(shapes, seeds)
+
+
+def _attempt_full_native_hierarchy(shapes, seeds) -> dict:
+    """Drive the entire native hierarchy: try sm120 -> try sm100 -> settle sm80.
+
+    Captures BOTH the sm120 and sm100 blockers verbatim so the artifact's
+    single_4m block honestly documents that both native paths were attempted
+    before falling back to sm80. The first native path that actually compiles
+    and runs wins; if sm120 succeeds, sm100 is not retried (the verdict would
+    be FEASIBLE, not FEASIBLE_WITH_SM80_FALLBACK). If both fail, lands on
+    kernel_path=sm80_fallback with sm120_blocker AND sm100_blocker attached.
+
+    Runs sm80 at most once (no redundant fallback work).
+    """
+    sm120_blocker = None
+    sm100_blocker = None
+
+    # Stage 1: Sm120 native (consumer Blackwell, arch::Sm120). The arch tag
+    # matches our GPU (__CUDA_ARCH__==1200), but CUTLASS 3.x's Sm120 collective
+    # builder is documented F8F6F4-only, so BF16 instantiation typically fails.
+    try:
+        mod = build_extension(
+            name="cutlass_4m_sm120",
+            extra_defines=["-DCUTLASS_ENABLE_SM120_4M=1"],
+        )
+        if not hasattr(mod, "has_sm120") or not mod.has_sm120():
+            raise RuntimeError(
+                "HAS_CUTLASS_4M_SM120=0 after build "
+                "(CUTLASS_ARCH_MMA_SM120_SUPPORTED undefined)"
+            )
+        return _run_with_module(mod, "sm120_native", shapes, seeds)
+    except Exception as exc:
+        sm120_blocker = str(exc)
+
+    # Stage 2: Sm100 native (datacenter Blackwell, arch::Sm100). Even though
+    # __CUDA_ARCH__==1000 excludes our sm_120 target, run the genuine attempt
+    # so the artifact can cite the verbatim arch-gate failure.
+    try:
+        mod = build_extension(
+            name="cutlass_4m_sm100",
+            extra_defines=["-DCUTLASS_ENABLE_SM100_4M=1"],
+        )
+        if not hasattr(mod, "has_sm100") or not mod.has_sm100():
+            raise RuntimeError(
+                "HAS_CUTLASS_4M_SM100=0 after build "
+                "(CUTLASS_ARCH_MMA_SM100_SUPPORTED undefined)"
+            )
+        result = _run_with_module(mod, "sm100_native", shapes, seeds)
+        if sm120_blocker is not None:
+            result["sm120_blocker"] = sm120_blocker
+        return result
+    except Exception as exc:
+        sm100_blocker = str(exc)
+
+    # Stage 3: Sm80 fallback (proven 2.x Ampere-era MMA path). Both blockers
+    # attached so the artifact can explain the fallback honestly.
+    return _run_sm80(
+        shapes, seeds, sm100_blocker=sm100_blocker, sm120_blocker=sm120_blocker
+    )
 
 
 def _attempt_sm120_then_sm80(shapes, seeds) -> dict:
@@ -525,3 +647,116 @@ def run_grouped(shapes: list[dict], seeds=(0,)) -> dict:
             "ko_ratio_vs_c64": (c64_us / grouped_us) if grouped_us > 0 else 0.0,
         },
     }
+
+
+# --- Task 6: verdict aggregator + artifact writers + CLI --------------------
+
+
+def aggregate_capability(single_4m: dict, grouped: dict, toolchain: dict) -> dict:
+    """Apply the cutlass-sm120-4m-v1 truth table to produce `overall`.
+
+    Truth table (single_4m.runs x grouped.status -> overall):
+      * BLOCKED         — single didn't run AND grouped is BLOCKED (toolchain
+                          failure). `blocker` is surfaced from grouped.
+      * FEASIBLE        — single runs + correctness passes AND grouped is
+                          SUPPORTED, on a non-sm80 kernel_path.
+      * FEASIBLE_WITH_SM80_FALLBACK
+                      — same as FEASIBLE but the working single path is the
+                          sm80 fallback (native Sm100/Sm120 didn't land).
+      * NOT_FEASIBLE    — single runs but grouped is not SUPPORTED (the
+                          grouped handoff is the entire point of the probe),
+                          OR single failed but grouped is not hard-blocked.
+
+    The artifact always carries the full single_4m, grouped, and toolchain
+    blocks so a reader can audit the inputs behind the verdict.
+    """
+    runs_ok = bool(
+        single_4m.get("runs") and single_4m.get("correctness", {}).get("gate_pass")
+    )
+    grouped_ok = grouped.get("status") == "SUPPORTED"
+    blocked = (not single_4m.get("runs", False)) and grouped.get("status") == "BLOCKED"
+    if blocked:
+        overall = "BLOCKED"
+    elif runs_ok and grouped_ok:
+        overall = (
+            "FEASIBLE_WITH_SM80_FALLBACK"
+            if single_4m.get("kernel_path") == "sm80_fallback"
+            else "FEASIBLE"
+        )
+    elif runs_ok and not grouped_ok:
+        # single works but the grouped handoff (the entire point) does not
+        overall = "NOT_FEASIBLE"
+    else:
+        overall = "NOT_FEASIBLE"
+    blocker = grouped.get("blocker") if overall == "BLOCKED" else None
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "toolchain": toolchain,
+        "single_4m": single_4m,
+        "grouped": grouped,
+        "overall": overall,
+        "blocker": blocker,
+    }
+
+
+def write_artifacts(verdict: dict, out_dir: str) -> None:
+    """Write the cutlass-sm120-4m-v1 verdict as `.json` + `.md` (with the
+    toolkit reproduction recipe) into `out_dir`.
+
+    The `.md` wraps the JSON in a fenced block and prepends a short recipe so
+    anyone landing on the artifact can reproduce the toolchain from scratch.
+    """
+    import json
+
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, "cutlass_sm120_4m.json"), "w") as fh:
+        json.dump(verdict, fh, indent=2)
+    with open(os.path.join(out_dir, "cutlass_sm120_4m.md"), "w") as fh:
+        fh.write(
+            "# CUTLASS/CuTe SM120 4M capability (Task 8)\n\n"
+            f"**overall:** `{verdict['overall']}`  |  "
+            f"**schema:** `{verdict['schema_version']}`\n\n"
+            "```\n" + json.dumps(verdict, indent=2) + "\n```\n\n"
+            "## Toolkit recipe (reproduce)\n"
+            "1. `conda create -n nvcc_spike -c nvidia cuda-nvcc=12.8`\n"
+            "2. `conda install -n nvcc_spike -c nvidia "
+            "cuda-cudart-dev=12.8 cuda-cccl=12.8`\n"
+            "3. `git clone --depth 1 https://github.com/NVIDIA/cutlass.git "
+            "~/cutlass_spike`\n"
+            "4. `CUDA_HOME=<nvcc_spike> TORCH_CUDA_ARCH_LIST=12.0 "
+            "CUTLASS_ROOT=~/cutlass_spike`\n"
+        )
+
+
+def main(out_dir: str | None = None) -> dict:
+    """End-to-end: assemble toolchain, drive the full native hierarchy for
+    single_4m, run grouped, aggregate the verdict, write artifacts.
+
+    `out_dir` defaults to `results/_phase0/../phase0` (i.e. ``results/phase0``)
+    matching the run_context convention. Returns the full verdict dict and
+    prints it as indented JSON.
+    """
+    import json
+    import torch  # noqa: F401  (cuda runtime + cuda_home source for toolchain)
+
+    out_dir = out_dir or os.path.join(os.path.dirname(_HERE), "phase0")
+    p = discover_paths()
+    toolchain = {
+        "nvcc_version": _nvcc_version(p),
+        "cutlass_head": _cutlass_head(p),
+        "target_arch": "sm_120",
+        "compile_path": "torch.utils.cpp_extension",
+        "cuda_runtime": torch.version.cuda,
+        "cuda_home_source": p["cuda_home"],
+    }
+    # full_native drives sm120 -> sm100 -> sm80 so the single_4m block records
+    # BOTH native blockers verbatim when landing on sm80_fallback.
+    single_4m = run_single_4m(
+        "full_native",
+        shapes=[(16384, 1024, 1024), (1024, 1024, 1024), (128, 128, 128)],
+    )
+    grouped = run_grouped(load_grouped_shapes())
+    verdict = aggregate_capability(single_4m, grouped, toolchain)
+    write_artifacts(verdict, out_dir)
+    print(json.dumps(verdict, indent=2))
+    return verdict
