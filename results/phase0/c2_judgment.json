@@ -1,0 +1,18 @@
+{
+  "n24_d10": {
+    "n": 24,
+    "depth": 10,
+    "full_state_bytes": 134217728,
+    "c1_large_threshold_bytes": 67108864.0,
+    "state_step_count": 517,
+    "c1_large_count": 45,
+    "c1_large_class_counts": {
+      "tileable-with-pack": 32,
+      "direct-gemm-tileable": 13
+    },
+    "c1_large_tileable_count": 45,
+    "status": "PASS",
+    "reason": ">=1 large buffer tile-fusable with net byte gain",
+    "tile_csv_path": "results/phase0/c2_tileability.csv"
+  }
+}
