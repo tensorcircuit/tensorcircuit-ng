@@ -71,6 +71,32 @@ def test_resolve_under_base_strips_phase0_prefix():
     )
 
 
+def test_presence_check_all_present_inherits(tmp_path):
+    from results._phase0.manifest import _presence_check, REQUIRED_ARTIFACTS
+
+    # create every required file so nothing is missing
+    for paths in REQUIRED_ARTIFACTS.values():
+        for rel in paths:
+            p = tmp_path / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("x")
+    criteria = {c: "PASS" for c in REQUIRED_ARTIFACTS}
+    out = _presence_check(criteria, str(tmp_path))
+    assert out == criteria  # nothing downgraded
+
+
+def test_presence_check_missing_forces_not_run(tmp_path):
+    from results._phase0.manifest import _presence_check
+
+    criteria = {"C1": "PASS", "C2": "UNKNOWN", "NUMERICAL": "FAIL"}
+    # only c1_judgment.json exists; c1_default_vs_nofusion.csv + c2/numerical missing
+    (tmp_path / "c1_judgment.json").write_text("x")
+    out = _presence_check(criteria, str(tmp_path))
+    assert out["C1"] == "NOT_RUN"  # c1_default_vs_nofusion.csv missing
+    assert out["C2"] == "NOT_RUN"  # c2 artifacts missing
+    assert out["NUMERICAL"] == "NOT_RUN"
+
+
 if __name__ == "__main__":
     import sys, pytest
 

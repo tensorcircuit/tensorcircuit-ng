@@ -111,3 +111,16 @@ def _resolve_under_base(base, path):
             path = path[len(pfx) :]
             break
     return os.path.join(base, path)
+
+
+def _presence_check(gonogo_criteria, base):
+    """Fail-closed presence validation. For each criterion in REQUIRED_ARTIFACTS,
+    if ANY required artifact is missing under base, force the criterion to NOT_RUN
+    (no evidence) regardless of what gonogo.json claimed. Never defaults to PASS."""
+    validated = dict(gonogo_criteria)
+    for criterion, required in REQUIRED_ARTIFACTS.items():
+        if criterion not in validated:
+            continue
+        if any(not os.path.exists(os.path.join(base, r)) for r in required):
+            validated[criterion] = "NOT_RUN"
+    return validated
