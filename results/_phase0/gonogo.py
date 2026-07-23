@@ -160,19 +160,25 @@ def _build_reasons(criteria, route_verdict_map, completion):
     """Human-readable explanation lines, kept in sync with the verdict."""
     reasons = []
     if completion == "INCONCLUSIVE":
-        undetermined = [c for c in REQUIRED_CRITERIA
-                        if _normalize(criteria.get(c)) == _TRI_UNDETERMINED]
+        undetermined = [
+            c
+            for c in REQUIRED_CRITERIA
+            if _normalize(criteria.get(c)) == _TRI_UNDETERMINED
+        ]
         if undetermined:
             reasons.append(
                 "canonical criteria undetermined -> phase0_completion INCONCLUSIVE: "
-                + ", ".join(undetermined))
+                + ", ".join(undetermined)
+            )
     for r, rv in route_verdict_map.items():
         if rv["status"] == "NOT_VIABLE":
             reasons.append(
-                f"{r} NOT_VIABLE: capability={rv['capability']} numerical={rv['numerical']}")
+                f"{r} NOT_VIABLE: capability={rv['capability']} numerical={rv['numerical']}"
+            )
         elif rv["status"] == "UNKNOWN":
             reasons.append(
-                f"{r} UNKNOWN: capability={rv['capability']} numerical={rv['numerical']}")
+                f"{r} UNKNOWN: capability={rv['capability']} numerical={rv['numerical']}"
+            )
     return reasons
 
 
@@ -215,8 +221,15 @@ def _render_md(agg):
     ]
     for r, rv in agg["route_verdict"].items():
         lines.append(
-            f"- `{r}`: **{rv['status']}** (capability={rv['capability']}, numerical={rv['numerical']})")
-    lines += ["", "## Criteria", "```json", json.dumps(agg["criteria"], indent=2), "```"]
+            f"- `{r}`: **{rv['status']}** (capability={rv['capability']}, numerical={rv['numerical']})"
+        )
+    lines += [
+        "",
+        "## Criteria",
+        "```json",
+        json.dumps(agg["criteria"], indent=2),
+        "```",
+    ]
     if agg["reasons"]:
         lines += ["", "## Reasons"]
         lines += [f"- {x}" for x in agg["reasons"]]
@@ -435,7 +448,11 @@ def _cutlass_status(path):
     kernel_path = s4.get("kernel_path")
     gate_pass = (s4.get("correctness") or {}).get("gate_pass")
     if s4.get("compiles") and s4.get("runs") and gate_pass:
-        return "FEASIBLE_WITH_SM80_FALLBACK" if kernel_path == "sm80_fallback" else "FEASIBLE"
+        return (
+            "FEASIBLE_WITH_SM80_FALLBACK"
+            if kernel_path == "sm80_fallback"
+            else "FEASIBLE"
+        )
     if kernel_path:
         return _BAD  # attempted a path but it did not pass
     return _UNKNOWN
@@ -451,8 +468,12 @@ def _region_proto_status(path):
     except (OSError, ValueError):
         return _UNKNOWN
     verdict = data.get("verdict") if isinstance(data, dict) else None
-    if verdict in ("TILE_FUSION_FEASIBLE", "FEASIBLE_WITH_RECOMPUTE",
-                   "NOT_FEASIBLE", "BLOCKED"):
+    if verdict in (
+        "TILE_FUSION_FEASIBLE",
+        "FEASIBLE_WITH_RECOMPUTE",
+        "NOT_FEASIBLE",
+        "BLOCKED",
+    ):
         return verdict
     return _UNKNOWN
 
@@ -634,17 +655,23 @@ def main(stage_dir=None):
         "C2": _c2_status_from_judgment(c2_j),
         "C2_REGION_KERNEL": _c2_layer_status(c2_j, "C2_REGION_KERNEL_FEASIBILITY"),
         "C3_PLANAR_CORE": _c3_planar_from_capability(
-            os.path.join(base, "cublaslt_planar_capability.json")),
+            os.path.join(base, "cublaslt_planar_capability.json")
+        ),
         "C3_PLANAR_FULL_MATRIX": _c3_planar_full_matrix_status(
-            os.path.join(base, "cublaslt_full_matrix.csv")),
+            os.path.join(base, "cublaslt_full_matrix.csv")
+        ),
         "C3_GROUPED": _c3_grouped_status(
-            os.path.join(base, "cublaslt_grouped_capability.json")),
+            os.path.join(base, "cublaslt_grouped_capability.json")
+        ),
         "CUTLASS_SM120_4M": _cutlass_status(
-            os.path.join(base, "cutlass_sm120_4m.json")),
+            os.path.join(base, "cutlass_sm120_4m.json")
+        ),
         "REGION_PROTOTYPE": _region_proto_status(
-            os.path.join(base, "region_prototype.json")),
+            os.path.join(base, "region_prototype.json")
+        ),
         "NUMERICAL": _numerical_overall_status(
-            os.path.join(base, "numerical_validation.json")),
+            os.path.join(base, "numerical_validation.json")
+        ),
     }
 
     cap_tri = capability_layer(criteria)
@@ -676,11 +703,17 @@ def main(stage_dir=None):
         "artifacts": {
             f: _file_hash(os.path.join(base, f))
             for f in (
-                "c1_judgment.json", "c2_judgment.json",
-                "cublaslt_planar_capability.json", "cublaslt_grouped_capability.json",
-                "cublaslt_full_matrix.csv", "cutlass_sm120_4m.json",
-                "region_prototype.json", "numerical_validation.json",
-                "gonogo.json", "gonogo.md", "environment.json",
+                "c1_judgment.json",
+                "c2_judgment.json",
+                "cublaslt_planar_capability.json",
+                "cublaslt_grouped_capability.json",
+                "cublaslt_full_matrix.csv",
+                "cutlass_sm120_4m.json",
+                "region_prototype.json",
+                "numerical_validation.json",
+                "gonogo.json",
+                "gonogo.md",
+                "environment.json",
             )
         },
     }
