@@ -22,6 +22,12 @@
 
 - Improve the efficiency of `merge_single_gates`
 
+- Fix `s` and `t` gate inverse.
+
+- More stable entropy in fgs.py within grad and jit.
+
+- Fix `StabilizerCircuit.measure` when `with_prob=True`.
+
 ### Removed
 
 - remove the `tng` contractor which is deprecated long ago

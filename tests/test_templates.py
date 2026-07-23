@@ -118,6 +118,27 @@ def test_qaoa_template(backend):
     np.testing.assert_allclose(gr[1].shape, [6])
 
 
+def test_heisenberg_measurements_noncontiguous_graph():
+    import networkx as nx
+
+    g = nx.Graph()
+    g.add_nodes_from([0, 2, 4])
+    for n in g.nodes:
+        g.nodes[n]["weight"] = 1.0
+    g.add_edge(0, 2, weight=1.0)
+    g.add_edge(2, 4, weight=1.0)
+
+    c = tc.Circuit(5)
+    c.X(0)
+    c.X(2)
+    c.X(4)
+
+    energy = tc.templates.measurements.heisenberg_measurements(
+        c, g, hzz=0.0, hxx=0.0, hyy=0.0, hz=1.0
+    )
+    np.testing.assert_allclose(tc.backend.numpy(energy), -3.0, atol=1e-5)
+
+
 def test_state_wrapper():
     Bell_pair_block_state = tc.templates.blocks.state_centric(
         tc.templates.blocks.Bell_pair_block

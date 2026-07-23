@@ -50,7 +50,11 @@ def adaptive_vmap(
 
     def wrapper(*args: Any, **kws: Any) -> Tensor:
         # only support `f` outputs a tensor
-        s1, s2 = divmod(args[vectorized_argnums[0]].shape[0], chunk_size)  # type: ignore
+        batch = args[vectorized_argnums[0]].shape[0]  # type: ignore
+        # clamp to batch so a chunk_size larger than the batch degenerates to
+        # a single full chunk instead of crashing on an empty concat
+        cs = min(chunk_size, batch)
+        s1, s2 = divmod(batch, cs)
         # repetition, rest
         reshape_args = []
         rest_args = []
@@ -61,7 +65,7 @@ def adaptive_vmap(
                     arg = arg[:-s2]
                 arg = backend.reshape(
                     arg,
-                    [s1, chunk_size] + list(backend.shape_tuple(arg))[1:],
+                    [s1, cs] + list(backend.shape_tuple(arg))[1:],
                 )
 
             else:

@@ -226,7 +226,7 @@ def _merge(
                         "gatef": getattr(gates, nn),
                         "name": nn,
                         "mpo": False,
-                        "split": False,
+                        "split": None,
                         "parameters": param,
                         "index": qir[i]["index"],
                     }

@@ -173,11 +173,18 @@ class StabilizerCircuit(AbstractCircuit):
         s1 = self.current_simulator().copy()
 
         if with_prob:
-            num_random_measurements = 0
+            # A qubit with peek_z == 0 is 50/50 on its own, but entangled qubits
+            # share randomness: measuring one collapses the others. Count only
+            # *independent* random bits by collapsing sequentially, so correlated
+            # qubits (peek_z becomes +/-1 after a partner is measured) are not
+            # double-counted. (0.5) ** (independent random bits) is the true joint
+            # probability of the observed outcome.
+            num_independent_random = 0
             for i in index:
                 if s1.peek_z(i) == 0:
-                    num_random_measurements += 1
-            probability = (0.5) ** num_random_measurements
+                    num_independent_random += 1
+                s1.measure(i)
+            probability = (0.5) ** num_independent_random
 
         m = s1.measure_many(*index)
         if with_prob:

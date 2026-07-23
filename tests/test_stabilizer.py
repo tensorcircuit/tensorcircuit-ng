@@ -224,3 +224,46 @@ def test_measure_with_prob():
     m, p = c.measure(0, 2, with_prob=True)
     np.testing.assert_allclose(p, 0.5, atol=1e-6)
     print(m)
+
+
+def test_measure_with_prob_correlated():
+    # The reported probability must be the true JOINT probability of the outcome.
+    # For entangled qubits, peek_z==0 on every qubit does NOT imply independent
+    # randomness: correlated outcomes share a single random bit. The pre-fix
+    # heuristic (0.5 ** (#peek_z==0 qubits)) returned 0.25/0.125 here instead of 0.5.
+
+    # Bell pair: measuring both qubits yields only (0,0) or (1,1), each with prob 0.5.
+    for _ in range(50):
+        c = tc.StabilizerCircuit(2)
+        c.h(0)
+        c.cnot(0, 1)
+        m, p = c.measure(0, 1, with_prob=True)
+        np.testing.assert_allclose(p, 0.5, atol=1e-6)
+        assert tuple(int(x) for x in np.atleast_1d(np.array(m))) in [(0, 0), (1, 1)]
+
+    # GHZ on 3 qubits: only (0,0,0) or (1,1,1), each with prob 0.5 (was 0.125 pre-fix).
+    for _ in range(50):
+        c = tc.StabilizerCircuit(3)
+        c.h(0)
+        c.cnot(0, 1)
+        c.cnot(1, 2)
+        m, p = c.measure(0, 1, 2, with_prob=True)
+        np.testing.assert_allclose(p, 0.5, atol=1e-6)
+        assert tuple(int(x) for x in np.atleast_1d(np.array(m))) in [
+            (0, 0, 0),
+            (1, 1, 1),
+        ]
+
+    # Two genuinely independent random qubits: 4 equiprobable outcomes, each 0.25.
+    # Guards against over-correcting (the independent case must stay 0.25).
+    for _ in range(50):
+        c = tc.StabilizerCircuit(2)
+        c.h(0)
+        c.h(1)
+        _, p = c.measure(0, 1, with_prob=True)
+        np.testing.assert_allclose(p, 0.25, atol=1e-6)
+
+    # Deterministic product state: prob 1.0.
+    c = tc.StabilizerCircuit(3)
+    _, p = c.measure(0, 1, 2, with_prob=True)
+    np.testing.assert_allclose(p, 1.0, atol=1e-6)

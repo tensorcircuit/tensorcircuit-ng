@@ -163,3 +163,16 @@ def test_merge_same_axis_rotation():
     assert len(merged) == 1
     assert merged[0]["name"] == "cry"
     np.testing.assert_allclose(merged[0]["parameters"]["theta"], 0.7, atol=1e-7)
+
+
+def test_merge_two_qubit_rotation():
+    for g in ["rxx", "rzz", "ryy"]:
+        c = tc.Circuit(2)
+        getattr(c, g)(0, 1, theta=0.3)
+        getattr(c, g)(0, 1, theta=0.4)
+        c1 = tc.compiler.simple_compiler.merge(c)
+        assert c1.gate_count() == 1
+        ref = tc.Circuit(2)
+        getattr(ref, g)(0, 1, theta=0.7)
+        np.testing.assert_allclose(c.matrix(), c1.matrix(), atol=1e-7)
+        np.testing.assert_allclose(c.matrix(), ref.matrix(), atol=1e-7)

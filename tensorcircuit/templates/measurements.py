@@ -276,14 +276,14 @@ def heisenberg_measurements(
             * c.expectation((G.x(), [e[0]]), (G.x(), [e[1]]), reuse=reuse)  # type: ignore
         )
     if hx != 0:
-        for i in range(len(g.nodes)):
-            loss += hx * c.expectation((G.x(), [i]), reuse=reuse)  # type: ignore
+        for n in g.nodes:
+            loss += hx * c.expectation((G.x(), [n]), reuse=reuse)  # type: ignore
     if hy != 0:
-        for i in range(len(g.nodes)):
-            loss += hy * c.expectation((G.y(), [i]), reuse=reuse)  # type: ignore
+        for n in g.nodes:
+            loss += hy * c.expectation((G.y(), [n]), reuse=reuse)  # type: ignore
     if hz != 0:
-        for i in range(len(g.nodes)):
-            loss += hz * c.expectation((G.z(), [i]), reuse=reuse)  # type: ignore
+        for n in g.nodes:
+            loss += hz * c.expectation((G.z(), [n]), reuse=reuse)  # type: ignore
     return backend.real(loss)
 
 

@@ -730,6 +730,18 @@ class Circuit(BaseCircuit):
         """
         Get the unitary matrix for the circuit irrespective with the circuit input state.
 
+        .. note::
+
+            This is the circuit-unitary extractor: it returns the unitary
+            implemented by the whole circuit as a dense matrix. It is *not* a gate
+            and takes no qubit ``index``. Do not confuse it with the
+            :py:meth:`unitary <AbstractCircuit.unitary>` / :py:meth:`any` gate
+            (alias ``unitary`` of ``any``), which applies a user-supplied custom
+            unitary matrix onto the circuit and therefore requires an ``index``.
+            Calling ``c.unitary()`` with no arguments applies the ``any`` gate with
+            an empty index and raises, rather than returning the circuit unitary —
+            use ``c.matrix()`` to extract the unitary.
+
         :return: The circuit unitary matrix
         :rtype: Tensor
         """

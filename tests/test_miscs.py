@@ -101,6 +101,13 @@ def test_adaptive_vmap(backend):
     vf3_jit = tc.backend.jit(vf3)
     np.testing.assert_allclose(vf3_jit(x), 2 * tc.backend.ones([30]), atol=1e-5)
 
+    # chunk_size >= batch_size must degenerate to a single full chunk
+    # rather than crashing on an empty concat
+    vf4 = experimental.adaptive_vmap(f, chunk_size=64)
+    np.testing.assert_allclose(vf4(x), tc.backend.ones([30, 2]), atol=1e-5)
+    vf5 = experimental.adaptive_vmap(f, chunk_size=30)
+    np.testing.assert_allclose(vf5(x), tc.backend.ones([30, 2]), atol=1e-5)
+
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
 def test_adaptive_vmap_mul_io(backend):
