@@ -1,0 +1,35 @@
+{
+  "schema_version": "numerical-validation-v1",
+  "case_binding": {
+    "edge_map_hash": "9dc930781a3e5074",
+    "prototype_hash": "df550309b1dcd366",
+    "contraction_shapes_hash": "f4e1d41f8edc858c"
+  },
+  "per_route": [
+    {
+      "route": "planar",
+      "criterion": "FAIL",
+      "n_cells": 144
+    },
+    {
+      "route": "grouped",
+      "criterion": "FAIL",
+      "n_cells": 144
+    },
+    {
+      "route": "region_fused",
+      "criterion": "PASS",
+      "n_cells": 9
+    },
+    {
+      "route": "cutlass_4m_single",
+      "criterion": "UNKNOWN",
+      "n_cells": 9
+    }
+  ],
+  "overall_numerical_status": "INCONCLUSIVE",
+  "fail_closed_reasons": [
+    "region_fused:actual-large-fused:compute-bound (spec \u00a77.2; correctness proven on small contract)",
+    "cutlass_4m_single:adversarial-level:toolchain-injection-unavailable (baseline reused from Task 8)"
+  ]
+}

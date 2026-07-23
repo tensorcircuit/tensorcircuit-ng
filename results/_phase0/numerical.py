@@ -111,7 +111,11 @@ POLICIES = {
     ("grouped", "C16BF"): {"relative_l2": 5e-3, "max_abs": None, "max_rel": 5e-3},
     ("grouped", "C32F"): {"relative_l2": 1e-4, "max_abs": 1e-2, "max_rel": 1e-3},
     ("region_fused", "c64"): {"relative_l2": 1e-4, "max_abs": None, "max_rel": 1e-3},
-    ("cutlass_4m_single", "C16BF"): {"relative_l2": 5e-3, "max_abs": None, "max_rel": 5e-3},
+    ("cutlass_4m_single", "C16BF"): {
+        "relative_l2": 5e-3,
+        "max_abs": None,
+        "max_rel": 5e-3,
+    },
 }
 
 
@@ -187,13 +191,17 @@ def aggregate(rows, expected_counts, case_hashes, legit_not_run):
         else:
             criterion = "PASS"
         statuses.append(criterion)
-        per_route.append({"route": route, "criterion": criterion, "n_cells": len(route_cells)})
+        per_route.append(
+            {"route": route, "criterion": criterion, "n_cells": len(route_cells)}
+        )
 
     if hash_mismatch or any(s == "UNKNOWN" for s in statuses):
         overall = "INCONCLUSIVE"
     elif any(s == "FAIL" for s in statuses):
         overall = "FAIL"
-    elif all(s in ("PASS", "NOT_RUN") for s in statuses) and any(s == "PASS" for s in statuses):
+    elif all(s in ("PASS", "NOT_RUN") for s in statuses) and any(
+        s == "PASS" for s in statuses
+    ):
         overall = "PASS"
     else:
         overall = "INCONCLUSIVE"  # all NOT_RUN, nothing proven
@@ -225,7 +233,12 @@ SHAPES = [
     (1048576, 16, 16),
 ]
 # real-gemm actual-large = aligned=1 subset (spec §2): M,N,K all 16-aligned.
-REAL_GEMM_SHAPES = [(16384, 1024, 1024), (524288, 32, 32), (262144, 64, 64), (1048576, 16, 16)]
+REAL_GEMM_SHAPES = [
+    (16384, 1024, 1024),
+    (524288, 32, 32),
+    (262144, 64, 64),
+    (1048576, 16, 16),
+]
 LEVELS = ("baseline", "mixed_scale", "cancellation")
 SEEDS = (0, 1, 2)
 DTYPES_BY_ROUTE = {
@@ -236,9 +249,21 @@ DTYPES_BY_ROUTE = {
 }
 
 _CSV_COLUMNS = [
-    "route", "M", "N", "K", "out_dtype", "dynamic_range_level", "seed",
-    "relative_l2", "max_abs", "max_rel", "nan_inf", "n_elems",
-    "policy_pass", "reference_dtype", "source_hash",
+    "route",
+    "M",
+    "N",
+    "K",
+    "out_dtype",
+    "dynamic_range_level",
+    "seed",
+    "relative_l2",
+    "max_abs",
+    "max_rel",
+    "nan_inf",
+    "n_elems",
+    "policy_pass",
+    "reference_dtype",
+    "source_hash",
 ]
 
 
@@ -257,9 +282,11 @@ def write_csv(path, rows):
         w.writerow(_CSV_COLUMNS)
         for r in rows:
             shape = r.get("shape")
-            if shape is not None:
+            if isinstance(shape, (tuple, list)) and len(shape) == 3:
                 M, N, K = shape
             else:
+                # region_fused rows carry shape="small_contract" (a label, not a
+                # tuple); fall back to explicit M/N/K fields or zeros.
                 M = r.get("M", 0)
                 N = r.get("N", 0)
                 K = r.get("K", 0)
@@ -273,17 +300,25 @@ def write_csv(path, rows):
             sh = r.get("source_hash")
             if not sh:
                 sh = source_hash(route, dtype, shape or (), level, seed)
-            w.writerow([
-                route, M, N, K, dtype, level, seed,
-                f"{rel_l2:.6e}" if rel_l2 is not None else "",
-                f"{max_abs:.6e}" if max_abs is not None else "",
-                f"{max_rel:.6e}" if max_rel is not None else "",
-                int(bool(r.get("nan_inf", False))),
-                r.get("n_elems", 0),
-                int(r.get("policy_pass", 0)),
-                r.get("reference_dtype", "c64"),
-                sh,
-            ])
+            w.writerow(
+                [
+                    route,
+                    M,
+                    N,
+                    K,
+                    dtype,
+                    level,
+                    seed,
+                    f"{rel_l2:.6e}" if rel_l2 is not None else "",
+                    f"{max_abs:.6e}" if max_abs is not None else "",
+                    f"{max_rel:.6e}" if max_rel is not None else "",
+                    int(bool(r.get("nan_inf", False))),
+                    r.get("n_elems", 0),
+                    int(r.get("policy_pass", 0)),
+                    r.get("reference_dtype", "c64"),
+                    sh,
+                ]
+            )
 
 
 def write_json(path, payload):
@@ -295,6 +330,7 @@ def write_json(path, payload):
 # ---------------------------------------------------------------------------
 # Task 6: planar route numerical collector (GPU; spec §3)
 # ---------------------------------------------------------------------------
+
 
 def collect_planar(shape, dtype, level, seed):
     """Planar-complex BF16 (C16BF) or FP32-output (C32F) GEMM accuracy vs c64
@@ -314,12 +350,16 @@ def collect_planar(shape, dtype, level, seed):
     float32 output (corruption); both are fixed here.
     """
     from results._phase0.cublaslt import (
-        load_ext, _f32_to_bf16_bits_and_upcast, _bf16_bits_to_f32,
+        load_ext,
+        _f32_to_bf16_bits_and_upcast,
+        _bf16_bits_to_f32,
         reference_complex_matmul,
     )
 
     if dtype not in ("C16BF", "C32F"):
-        raise ValueError(f"collect_planar unsupported dtype {dtype!r}; expected C16BF or C32F")
+        raise ValueError(
+            f"collect_planar unsupported dtype {dtype!r}; expected C16BF or C32F"
+        )
 
     M, N, K = shape
     A, B = make_inputs(level, shape, seed)  # A=(M,K), B=(K,N)
@@ -331,7 +371,9 @@ def collect_planar(shape, dtype, level, seed):
         ai_bf, ai_f = _f32_to_bf16_bits_and_upcast(ai)
         br_bf, br_f = _f32_to_bf16_bits_and_upcast(br)
         bi_bf, bi_f = _f32_to_bf16_bits_and_upcast(bi)
-        cr_u16, ci_u16 = ext.planar_complex_matmul_bf16(ar_bf, ai_bf, br_bf, bi_bf, M, N, K, out_dtype="bf16")
+        cr_u16, ci_u16 = ext.planar_complex_matmul_bf16(
+            ar_bf, ai_bf, br_bf, bi_bf, M, N, K, out_dtype="bf16"
+        )
         cr = _bf16_bits_to_f32(cr_u16)
         ci = _bf16_bits_to_f32(ci_u16)
         cr_ref, ci_ref = reference_complex_matmul(ar_f, ai_f, br_f, bi_f)
@@ -342,20 +384,31 @@ def collect_planar(shape, dtype, level, seed):
         ai_bf, ai_f = _f32_to_bf16_bits_and_upcast(ai)
         br_bf, br_f = _f32_to_bf16_bits_and_upcast(br)
         bi_bf, bi_f = _f32_to_bf16_bits_and_upcast(bi)
-        cr, ci = ext.planar_complex_matmul_bf16(ar_bf, ai_bf, br_bf, bi_bf, M, N, K, out_dtype="fp32")
+        cr, ci = ext.planar_complex_matmul_bf16(
+            ar_bf, ai_bf, br_bf, bi_bf, M, N, K, out_dtype="fp32"
+        )
         cr_ref, ci_ref = reference_complex_matmul(ar_f, ai_f, br_f, bi_f)
         out = (cr + 1j * ci).astype(np.complex64)
         ref = (cr_ref + 1j * ci_ref).astype(np.complex64)
     metrics = compute_metrics(out, ref)
     verdict, _ = apply_policy("planar", dtype, metrics)
-    row = {"route": "planar", "dtype": dtype, "shape": shape, "level": level, "seed": seed,
-           "reference_dtype": "c64", **metrics, "policy_pass": int(verdict == "PASS")}
+    row = {
+        "route": "planar",
+        "dtype": dtype,
+        "shape": shape,
+        "level": level,
+        "seed": seed,
+        "reference_dtype": "c64",
+        **metrics,
+        "policy_pass": int(verdict == "PASS"),
+    }
     return row
 
 
 # ---------------------------------------------------------------------------
 # Task 7: grouped (batched) route numerical collector (GPU; spec §3)
 # ---------------------------------------------------------------------------
+
 
 def collect_grouped(shape, dtype, level, seed, batch=4):
     """Batched planar-complex GEMM accuracy (cublasLt batched route, Task 7) vs c64.
@@ -364,14 +417,18 @@ def collect_grouped(shape, dtype, level, seed, batch=4):
     (consistent with cublaslt._run_batched_timing aggregation). C32F uses fp32 output.
     """
     from results._phase0.cublaslt import (
-        load_ext, _f32_to_bf16_bits_and_upcast, _bf16_bits_to_f32,
+        load_ext,
+        _f32_to_bf16_bits_and_upcast,
+        _bf16_bits_to_f32,
         reference_complex_matmul,
     )
 
     M, N, K = shape
     # one independent (A,B) per batch element, derived from seed+batch_idx
-    ar = np.empty((batch, M, K), np.float32); ai = np.empty_like(ar)
-    br = np.empty((batch, K, N), np.float32); bi = np.empty_like(br)
+    ar = np.empty((batch, M, K), np.float32)
+    ai = np.empty_like(ar)
+    br = np.empty((batch, K, N), np.float32)
+    bi = np.empty_like(br)
     refs = []
     for b in range(batch):
         A, B = make_inputs(level, shape, seed * 1000 + b)
@@ -388,27 +445,48 @@ def collect_grouped(shape, dtype, level, seed, batch=4):
     ai_bf, ai_f = _f32_to_bf16_bits_and_upcast(ai)
     br_bf, br_f = _f32_to_bf16_bits_and_upcast(br)
     bi_bf, bi_f = _f32_to_bf16_bits_and_upcast(bi)
-    cr_u16, ci_u16 = ext.planar_complex_matmul_bf16_batched(ar_bf, ai_bf, br_bf, bi_bf, M, N, K, batch, out_dtype=out_dtype)
-    worst = {"relative_l2": 0.0, "max_abs": 0.0, "max_rel": 0.0, "nan_inf": False, "n_elems": 0}
+    cr_u16, ci_u16 = ext.planar_complex_matmul_bf16_batched(
+        ar_bf, ai_bf, br_bf, bi_bf, M, N, K, batch, out_dtype=out_dtype
+    )
+    worst = {
+        "relative_l2": 0.0,
+        "max_abs": 0.0,
+        "max_rel": 0.0,
+        "nan_inf": False,
+        "n_elems": 0,
+    }
     for b in range(batch):
         if dtype == "C16BF":
-            cr = _bf16_bits_to_f32(cr_u16[b]); ci = _bf16_bits_to_f32(ci_u16[b])
+            cr = _bf16_bits_to_f32(cr_u16[b])
+            ci = _bf16_bits_to_f32(ci_u16[b])
         else:  # C32F: ext returns fp32 directly, no decode
             cr, ci = cr_u16[b], ci_u16[b]
         cr_ref, ci_ref = reference_complex_matmul(ar_f[b], ai_f[b], br_f[b], bi_f[b])
-        m = compute_metrics((cr + 1j * ci).astype(np.complex64), (cr_ref + 1j * ci_ref).astype(np.complex64))
+        m = compute_metrics(
+            (cr + 1j * ci).astype(np.complex64),
+            (cr_ref + 1j * ci_ref).astype(np.complex64),
+        )
         for kk in ("relative_l2", "max_abs", "max_rel"):
             worst[kk] = max(worst[kk], m[kk])
         worst["nan_inf"] = worst["nan_inf"] or m["nan_inf"]
         worst["n_elems"] += m["n_elems"]
     verdict, _ = apply_policy("grouped", dtype, worst)
-    return {"route": "grouped", "dtype": dtype, "shape": shape, "level": level, "seed": seed,
-            "reference_dtype": "c64", **worst, "policy_pass": int(verdict == "PASS")}
+    return {
+        "route": "grouped",
+        "dtype": dtype,
+        "shape": shape,
+        "level": level,
+        "seed": seed,
+        "reference_dtype": "c64",
+        **worst,
+        "policy_pass": int(verdict == "PASS"),
+    }
 
 
 # ---------------------------------------------------------------------------
 # Task 8: region_fused small-contract correctness collector (GPU; spec §3, §7.2)
 # ---------------------------------------------------------------------------
+
 
 def collect_region_fused(level, seed):
     """region_fused correctness on the small 8-D contract (spec §3, §7.2).
@@ -422,20 +500,36 @@ def collect_region_fused(level, seed):
 
     s = rp.SMALL_SHAPES
     # derive A/B/D from make_inputs at the small shape; D from the same generator
-    A, B = make_inputs(level, (s["PM"], s["PN"], s["K1"]), seed)  # (M,N,K); A=(PM,K1), B=(K1,PN)
-    D = make_inputs(level, (s["TM"], s["TM"], s["TM"]), seed + 7000)[0]  # (TM,TM) consumer matrix
-    E_mat, _, _ = rp.materialized_reference(cp.asarray(A), cp.asarray(B), cp.asarray(D), rp.SMALL_STEPS)
-    E_fus = rp.fused_reference(cp.asarray(A), cp.asarray(B), cp.asarray(D), rp.SMALL_STEPS, s)
+    A, B = make_inputs(
+        level, (s["PM"], s["PN"], s["K1"]), seed
+    )  # (M,N,K); A=(PM,K1), B=(K1,PN)
+    D = make_inputs(level, (s["TM"], s["TM"], s["TM"]), seed + 7000)[
+        0
+    ]  # (TM,TM) consumer matrix
+    E_mat, _, _ = rp.materialized_reference(
+        cp.asarray(A), cp.asarray(B), cp.asarray(D), rp.SMALL_STEPS
+    )
+    E_fus = rp.fused_reference(
+        cp.asarray(A), cp.asarray(B), cp.asarray(D), rp.SMALL_STEPS, s
+    )
     metrics = compute_metrics(cp.asnumpy(E_fus), cp.asnumpy(E_mat))
     verdict, _ = apply_policy("region_fused", "c64", metrics)
-    return {"route": "region_fused", "dtype": "c64", "shape": "small_contract",
-            "level": level, "seed": seed, "reference_dtype": "c64",
-            **metrics, "policy_pass": int(verdict == "PASS")}
+    return {
+        "route": "region_fused",
+        "dtype": "c64",
+        "shape": "small_contract",
+        "level": level,
+        "seed": seed,
+        "reference_dtype": "c64",
+        **metrics,
+        "policy_pass": int(verdict == "PASS"),
+    }
 
 
 # ---------------------------------------------------------------------------
 # Task 9: cutlass_4m_single numerical collector (spec §3, §12)
 # ---------------------------------------------------------------------------
+
 
 def _cutlass_injection_available():
     """Probe whether cutlass_probe can accept external input data for adversarial
@@ -457,22 +551,115 @@ def collect_cutlass(level, seed):
             data = json.load(fh)
         c = data["single_4m"]["correctness"]
         metrics = {
-            "relative_l2": c.get("max_rel", 1e9),  # approx: bf16 MMA, use max_rel as proxy
+            "relative_l2": c.get(
+                "max_rel", 1e9
+            ),  # approx: bf16 MMA, use max_rel as proxy
             "max_abs": c.get("max_abs", 0.0),
             "max_rel": c.get("max_rel", 1e9),
             "nan_inf": bool(c.get("nan_inf", True)),
             "n_elems": 16384 * 1024,
         }
         verdict, _ = apply_policy("cutlass_4m_single", "C16BF", metrics)
-        return {"route": "cutlass_4m_single", "dtype": "C16BF", "shape": (16384, 1024, 1024),
-                "level": level, "seed": seed, "reference_dtype": "c64", "source": "task8_reuse",
-                **metrics, "policy_pass": int(verdict == "PASS")}
+        return {
+            "route": "cutlass_4m_single",
+            "dtype": "C16BF",
+            "shape": (16384, 1024, 1024),
+            "level": level,
+            "seed": seed,
+            "reference_dtype": "c64",
+            "source": "task8_reuse",
+            **metrics,
+            "policy_pass": int(verdict == "PASS"),
+        }
     # adversarial level
     if _cutlass_injection_available():
         # Future: re-run cutlass kernel with make_inputs(level) injected.
         raise NotImplementedError("cutlass adversarial injection not wired yet")
-    return {"route": "cutlass_4m_single", "dtype": "C16BF", "shape": (16384, 1024, 1024),
-            "level": level, "seed": seed, "reference_dtype": "c64",
-            "source": "not_run:toolchain-injection-unavailable",
-            "relative_l2": None, "max_abs": None, "max_rel": None, "nan_inf": False,
-            "n_elems": 0, "policy_pass": 0}
+    return {
+        "route": "cutlass_4m_single",
+        "dtype": "C16BF",
+        "shape": (16384, 1024, 1024),
+        "level": level,
+        "seed": seed,
+        "reference_dtype": "c64",
+        "source": "not_run:toolchain-injection-unavailable",
+        "relative_l2": None,
+        "max_abs": None,
+        "max_rel": None,
+        "nan_inf": False,
+        "n_elems": 0,
+        "policy_pass": 0,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Task 10: main() integration — full matrix + artifact generation (spec §6, §10)
+# ---------------------------------------------------------------------------
+
+
+def _case_hashes():
+    """Read existing artifact hashes for case binding (spec §6.2). Missing files -> empty."""
+    hashes = {}
+    for name, fname in [
+        ("edge_map_hash", "c1_c2_edge_map.json"),
+        ("prototype_hash", "region_prototype.json"),
+        ("contraction_shapes_hash", "contraction_shapes.csv"),
+    ]:
+        p = os.path.join(OUT_DIR, fname)
+        if os.path.exists(p):
+            import hashlib as _hl
+
+            with open(p, "rb") as _fh:
+                hashes[name] = _hl.sha256(_fh.read()).hexdigest()[:16]
+        else:
+            hashes[name] = ""
+    return hashes
+
+
+def main(run_gpu: bool = True):
+    """Run the full numerical matrix and write numerical_validation.{csv,json}.
+
+    run_gpu=False: use whatever collect_* resolve to (test harness monkeypatches them).
+    """
+    rows = []
+    expected = {}
+    legit_not_run = [
+        "region_fused:actual-large-fused:compute-bound (spec §7.2; correctness proven on small contract)",
+    ]
+    if not _cutlass_injection_available():
+        legit_not_run.append(
+            "cutlass_4m_single:adversarial-level:toolchain-injection-unavailable (baseline reused from Task 8)"
+        )
+
+    # planar + grouped: 8 shapes x {C16BF,C32F} x 3 levels x 3 seeds
+    for shape in SHAPES:
+        for dtype in DTYPES_BY_ROUTE["planar"]:
+            for level in LEVELS:
+                for seed in SEEDS:
+                    rows.append(collect_planar(shape, dtype, level, seed))
+                    rows.append(collect_grouped(shape, dtype, level, seed))
+                    expected[("planar", dtype)] = expected.get(("planar", dtype), 0) + 1
+                    expected[("grouped", dtype)] = (
+                        expected.get(("grouped", dtype), 0) + 1
+                    )
+    # region_fused: small contract x 3 levels x 3 seeds
+    for level in LEVELS:
+        for seed in SEEDS:
+            rows.append(collect_region_fused(level, seed))
+    expected[("region_fused", "c64")] = len(LEVELS) * len(SEEDS)
+    # cutlass_4m_single: anchor x 3 levels x 3 seeds (baseline reuses, adversarial NOT_RUN)
+    for level in LEVELS:
+        for seed in SEEDS:
+            rows.append(collect_cutlass(level, seed))
+    expected[("cutlass_4m_single", "C16BF")] = len(LEVELS) * len(SEEDS)
+
+    payload = aggregate(rows, expected, _case_hashes(), legit_not_run)
+    write_csv(os.path.join(OUT_DIR, "numerical_validation.csv"), rows)
+    write_json(os.path.join(OUT_DIR, "numerical_validation.json"), payload)
+    return payload
+
+
+if __name__ == "__main__":
+    import json as _json
+
+    print(_json.dumps(main(), indent=2))

@@ -10,9 +10,9 @@ def test_compute_metrics_basic():
     m = compute_metrics(out, ref)
     assert m["nan_inf"] is False
     assert m["n_elems"] == 16
-    assert m["max_abs"] == pytest.approx(1e-3, rel=0.02)        # |out-ref| = 1e-3
-    assert m["max_rel"] == pytest.approx(1e-3, rel=0.02)        # denom=max(|ref|,0.5)=1.0
-    assert m["relative_l2"] == pytest.approx(1e-3, rel=0.02)    # ||diff||/max(1,||ref||)
+    assert m["max_abs"] == pytest.approx(1e-3, rel=0.02)  # |out-ref| = 1e-3
+    assert m["max_rel"] == pytest.approx(1e-3, rel=0.02)  # denom=max(|ref|,0.5)=1.0
+    assert m["relative_l2"] == pytest.approx(1e-3, rel=0.02)  # ||diff||/max(1,||ref||)
 
 
 def test_compute_metrics_detects_nan():
@@ -28,7 +28,7 @@ def test_make_inputs_baseline_stats():
     from results._phase0.numerical import make_inputs
 
     A, B = make_inputs("baseline", (1024, 1024, 64), seed=0)  # (M,N,K)
-    assert A.shape == (1024, 64) and B.shape == (64, 1024)    # A=(M,K), B=(K,N)
+    assert A.shape == (1024, 64) and B.shape == (64, 1024)  # A=(M,K), B=(K,N)
     assert A.dtype == np.complex64
     # real & imag ~ N(0,1): mean ~0, std ~1
     assert abs(A.real.mean()) < 0.1 and abs(A.real.std() - 1.0) < 0.1
@@ -100,21 +100,42 @@ def test_apply_policy_missing_metric_returns_none():
     from results._phase0.numerical import apply_policy
 
     # region_fused/cutlass omit max_abs policy; absent metric -> not FAIL, verdict stays PASS-able
-    verdict, _ = apply_policy("region_fused", "c64", {"relative_l2": 1e-5, "max_rel": 1e-4, "nan_inf": False})
+    verdict, _ = apply_policy(
+        "region_fused", "c64", {"relative_l2": 1e-5, "max_rel": 1e-4, "nan_inf": False}
+    )
     assert verdict == "PASS"
 
 
 def _row(route, dtype, shape, level, seed, rel_l2, max_abs, max_rel, nan):
     return {
-        "route": route, "dtype": dtype, "shape": shape, "level": level, "seed": seed,
-        "relative_l2": rel_l2, "max_abs": max_abs, "max_rel": max_rel, "nan_inf": nan,
+        "route": route,
+        "dtype": dtype,
+        "shape": shape,
+        "level": level,
+        "seed": seed,
+        "relative_l2": rel_l2,
+        "max_abs": max_abs,
+        "max_rel": max_rel,
+        "nan_inf": nan,
     }
 
 
 def test_aggregate_pass_when_all_cells_pass():
     from results._phase0.numerical import aggregate
 
-    rows = [_row("planar", "C16BF", (16384,1024,1024), "baseline", 0, 1e-4, 1e-2, 1e-3, False)]
+    rows = [
+        _row(
+            "planar",
+            "C16BF",
+            (16384, 1024, 1024),
+            "baseline",
+            0,
+            1e-4,
+            1e-2,
+            1e-3,
+            False,
+        )
+    ]
     expected = {("planar", "C16BF"): 1}
     out = aggregate(rows, expected, case_hashes={}, legit_not_run=[])
     planar = [r for r in out["per_route"] if r["route"] == "planar"][0]
@@ -126,7 +147,9 @@ def test_aggregate_unknown_when_missing_rows():
     from results._phase0.numerical import aggregate
 
     rows = []  # expected 1 but present 0
-    out = aggregate(rows, expected_counts={("planar", "C16BF"): 1}, case_hashes={}, legit_not_run=[])
+    out = aggregate(
+        rows, expected_counts={("planar", "C16BF"): 1}, case_hashes={}, legit_not_run=[]
+    )
     planar = [r for r in out["per_route"] if r["route"] == "planar"][0]
     assert planar["criterion"] in ("UNKNOWN", "NOT_RUN")
 
@@ -134,7 +157,9 @@ def test_aggregate_unknown_when_missing_rows():
 def test_aggregate_fail_on_nan():
     from results._phase0.numerical import aggregate
 
-    rows = [_row("planar", "C16BF", (16384,1024,1024), "baseline", 0, 0.0, 0.0, 0.0, True)]
+    rows = [
+        _row("planar", "C16BF", (16384, 1024, 1024), "baseline", 0, 0.0, 0.0, 0.0, True)
+    ]
     out = aggregate(rows, {("planar", "C16BF"): 1}, {}, [])
     assert out["overall_numerical_status"] == "FAIL"
 
@@ -143,8 +168,25 @@ def test_aggregate_legit_not_run_does_not_sink_overall():
     from results._phase0.numerical import aggregate
 
     # region_fused actual-large fused is legit NOT_RUN (compute-bound, spec §7.2)
-    rows = [_row("region_fused", "c64", "small_contract", "baseline", 0, 1e-7, 0.0, 1e-7, False)]
-    out = aggregate(rows, {("region_fused", "c64"): 1}, {}, legit_not_run=["region_fused:actual-large-fused:compute-bound"])
+    rows = [
+        _row(
+            "region_fused",
+            "c64",
+            "small_contract",
+            "baseline",
+            0,
+            1e-7,
+            0.0,
+            1e-7,
+            False,
+        )
+    ]
+    out = aggregate(
+        rows,
+        {("region_fused", "c64"): 1},
+        {},
+        legit_not_run=["region_fused:actual-large-fused:compute-bound"],
+    )
     assert out["overall_numerical_status"] == "PASS"
     assert any("compute-bound" in r for r in out["fail_closed_reasons"])
 
@@ -152,8 +194,25 @@ def test_aggregate_legit_not_run_does_not_sink_overall():
 def test_aggregate_hash_mismatch_forces_unknown():
     from results._phase0.numerical import aggregate
 
-    rows = [_row("planar", "C16BF", (16384,1024,1024), "baseline", 0, 1e-4, 1e-2, 1e-3, False)]
-    out = aggregate(rows, {("planar", "C16BF"): 1}, case_hashes={"edge_map_hash": "MISMATCH"}, legit_not_run=[])
+    rows = [
+        _row(
+            "planar",
+            "C16BF",
+            (16384, 1024, 1024),
+            "baseline",
+            0,
+            1e-4,
+            1e-2,
+            1e-3,
+            False,
+        )
+    ]
+    out = aggregate(
+        rows,
+        {("planar", "C16BF"): 1},
+        case_hashes={"edge_map_hash": "MISMATCH"},
+        legit_not_run=[],
+    )
     assert out["overall_numerical_status"] == "INCONCLUSIVE"
 
 
@@ -168,7 +227,9 @@ def test_write_csv_header_and_rows(tmp_path):
     p = tmp_path / "nv.csv"
     write_csv(str(p), [{"route": "planar", "M": 8, "relative_l2": 1e-4}])
     text = p.read_text()
-    assert text.startswith("route,M,N,K,out_dtype,dynamic_range_level,seed,relative_l2,max_abs,max_rel,nan_inf,n_elems,policy_pass,reference_dtype,source_hash")
+    assert text.startswith(
+        "route,M,N,K,out_dtype,dynamic_range_level,seed,relative_l2,max_abs,max_rel,nan_inf,n_elems,policy_pass,reference_dtype,source_hash"
+    )
     assert "planar" in text
 
 
@@ -176,7 +237,10 @@ def test_write_json_roundtrip(tmp_path):
     from results._phase0.numerical import write_json
 
     p = tmp_path / "nv.json"
-    payload = {"schema_version": "numerical-validation-v1", "overall_numerical_status": "PASS"}
+    payload = {
+        "schema_version": "numerical-validation-v1",
+        "overall_numerical_status": "PASS",
+    }
     write_json(str(p), payload)
     assert json.loads(p.read_text())["overall_numerical_status"] == "PASS"
 
@@ -186,7 +250,12 @@ def test_shape_constants():
 
     assert len(SHAPES) == 8
     assert (16384, 1024, 1024) in SHAPES
-    assert set(REAL_GEMM_SHAPES) == {(16384,1024,1024),(524288,32,32),(262144,64,64),(1048576,16,16)}
+    assert set(REAL_GEMM_SHAPES) == {
+        (16384, 1024, 1024),
+        (524288, 32, 32),
+        (262144, 64, 64),
+        (1048576, 16, 16),
+    }
     assert LEVELS == ("baseline", "mixed_scale", "cancellation")
     assert SEEDS == (0, 1, 2)
 
@@ -248,3 +317,54 @@ def test_collect_cutlass_adversarial_records_not_run_when_unavailable(monkeypatc
     monkeypatch.setattr(numerical, "_cutlass_injection_available", lambda: False)
     row = numerical.collect_cutlass("mixed_scale", seed=0)
     assert row.get("source", "").startswith("not_run")
+
+
+def test_main_writes_artifacts_with_mocked_collectors(tmp_path, monkeypatch):
+    from results._phase0 import numerical
+
+    def fake_row(route, dtype, shape, level, seed):
+        return {
+            "route": route,
+            "dtype": dtype,
+            "shape": shape,
+            "level": level,
+            "seed": seed,
+            "reference_dtype": "c64",
+            "relative_l2": 1e-5,
+            "max_abs": 1e-3,
+            "max_rel": 1e-4,
+            "nan_inf": False,
+            "n_elems": 64,
+            "policy_pass": 1,
+        }
+
+    monkeypatch.setattr(numerical, "OUT_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        numerical,
+        "collect_planar",
+        lambda *a, **k: fake_row("planar", "C16BF", a[0], a[1], a[2]),
+    )
+    monkeypatch.setattr(
+        numerical,
+        "collect_grouped",
+        lambda *a, **k: fake_row("grouped", "C16BF", a[0], a[1], a[2]),
+    )
+    monkeypatch.setattr(
+        numerical,
+        "collect_region_fused",
+        lambda *a, **k: fake_row("region_fused", "c64", "small_contract", a[0], a[1]),
+    )
+    monkeypatch.setattr(
+        numerical,
+        "collect_cutlass",
+        lambda *a, **k: fake_row(
+            "cutlass_4m_single", "C16BF", (16384, 1024, 1024), a[0], a[1]
+        ),
+    )
+
+    payload = numerical.main(run_gpu=False)
+    assert (tmp_path / "numerical_validation.csv").exists()
+    assert (tmp_path / "numerical_validation.json").exists()
+    assert payload["schema_version"] == "numerical-validation-v1"
+    routes = {r["route"] for r in payload["per_route"]}
+    assert routes == {"planar", "grouped", "region_fused", "cutlass_4m_single"}
