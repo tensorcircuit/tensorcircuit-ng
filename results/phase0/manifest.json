@@ -1,35 +1,274 @@
 {
-  "schema_version": "manifest-v0-minimal",
+  "cases": {
+    "n22_d10": {
+      "artifacts": [
+        "c1_buffer_assignment/n22_d10_exp_default.txt",
+        "c1_buffer_assignment/n22_d10_exp_nofusion.txt",
+        "c1_optimized_hlo/n22_d10_exp_default.hlo",
+        "c1_optimized_hlo/n22_d10_exp_nofusion.hlo"
+      ],
+      "config": {
+        "depth": 10,
+        "n": 22
+      },
+      "status": {
+        "C1": "PASS"
+      }
+    },
+    "n24_d10": {
+      "artifacts": [
+        "c1_buffer_assignment/n24_d10_default.json",
+        "c1_buffer_assignment/n24_d10_exp_default.txt",
+        "c1_buffer_assignment/n24_d10_exp_nofusion.txt",
+        "c1_optimized_hlo/n24_d10_exp_default.hlo",
+        "c1_optimized_hlo/n24_d10_exp_nofusion.hlo",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.after_spmd_partitioner.txt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.autotune_results.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.before_optimizations.txt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.config.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.debug_options",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.gpu_target_config.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.ir-no-opt.ll",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.ir-with-opt.ll",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.ptx",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.sm_12.0_gpu_after_optimizations-buffer-assignment.txt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.sm_12.0_gpu_after_optimizations-memory-usage-report.txt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.sm_12.0_gpu_after_optimizations.txt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.thunk_sequence.txt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.after_spmd_partitioner.txt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.autotune_results.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.before_optimizations.txt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.config.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.debug_options",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.gpu_target_config.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.ir-no-opt.ll",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.ir-with-opt.ll",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.ptx",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.sm_12.0_gpu_after_optimizations-buffer-assignment.txt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.sm_12.0_gpu_after_optimizations-memory-usage-report.txt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.sm_12.0_gpu_after_optimizations.txt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.thunk_sequence.txt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.after_spmd_partitioner.txt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.autotune_results.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.before_optimizations.txt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.config.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.debug_options",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.gpu_target_config.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.ir-no-opt.ll",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.ir-with-opt.ll",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.ptx",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.sm_12.0_gpu_after_optimizations-buffer-assignment.txt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.sm_12.0_gpu_after_optimizations-memory-usage-report.txt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.sm_12.0_gpu_after_optimizations.txt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.thunk_sequence.txt",
+        "c1_xla_dump/n24_d10_default_summary.json"
+      ],
+      "config": {
+        "depth": 10,
+        "n": 24
+      },
+      "status": {
+        "C1": "PASS"
+      }
+    },
+    "n24_d10_default": {
+      "artifacts": [
+        "c1_buffer_assignment/n24_d10_default.json",
+        "c1_buffer_assignment/n24_d10_exp_default.txt",
+        "c1_buffer_assignment/n24_d10_exp_nofusion.txt",
+        "c1_optimized_hlo/n24_d10_exp_default.hlo",
+        "c1_optimized_hlo/n24_d10_exp_nofusion.hlo",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.after_spmd_partitioner.txt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.autotune_results.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.before_optimizations.txt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.config.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.debug_options",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.gpu_target_config.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.ir-no-opt.ll",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.ir-with-opt.ll",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.ptx",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.sm_12.0_gpu_after_optimizations-buffer-assignment.txt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.sm_12.0_gpu_after_optimizations-memory-usage-report.txt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.sm_12.0_gpu_after_optimizations.txt",
+        "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.thunk_sequence.txt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.after_spmd_partitioner.txt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.autotune_results.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.before_optimizations.txt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.config.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.debug_options",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.gpu_target_config.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.ir-no-opt.ll",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.ir-with-opt.ll",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.ptx",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.sm_12.0_gpu_after_optimizations-buffer-assignment.txt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.sm_12.0_gpu_after_optimizations-memory-usage-report.txt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.sm_12.0_gpu_after_optimizations.txt",
+        "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.thunk_sequence.txt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.after_spmd_partitioner.txt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.autotune_results.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.before_optimizations.txt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.config.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.debug_options",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.gpu_target_config.pbtxt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.ir-no-opt.ll",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.ir-with-opt.ll",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.ptx",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.sm_12.0_gpu_after_optimizations-buffer-assignment.txt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.sm_12.0_gpu_after_optimizations-memory-usage-report.txt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.sm_12.0_gpu_after_optimizations.txt",
+        "c1_xla_dump/n24_d10_default/module_0005.jit_f.thunk_sequence.txt",
+        "c1_xla_dump/n24_d10_default_summary.json"
+      ],
+      "config": {
+        "depth": 10,
+        "fusion": "default",
+        "n": 24
+      },
+      "status": {
+        "C2": "UNKNOWN",
+        "C2_layers": {
+          "C2_CANONICAL": "UNKNOWN",
+          "C2_JOINT_EXECUTABLE_LEVERAGE": "UNKNOWN",
+          "C2_REGION_KERNEL_FEASIBILITY": "PASS",
+          "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK": "FAIL"
+        }
+      }
+    }
+  },
+  "commands": {
+    "c1_ab": "python results/_phase0/c1.py --ab --n {n} --depth {depth}",
+    "c2_gate": "python results/_phase0/c2.py --n {n} --depth {depth}",
+    "edge_map": "python results/_phase0/c1_to_c2_map.py",
+    "gonogo": "python results/_phase0/gonogo.py",
+    "manifest": "python results/_phase0/manifest.py",
+    "peak_frontier": "python results/_phase0/c2_peak_analysis.py",
+    "region_proto": "python results/_phase0/region_proto.py",
+    "xla_dump": "python results/_phase0/xla_dump.py"
+  },
   "criteria": {
     "C1": "PASS",
     "C2": "UNKNOWN",
     "C2_REGION_KERNEL": "PASS",
+    "C3_GROUPED": "NOT_SUPPORTED",
     "C3_PLANAR_CORE": "PASS",
     "C3_PLANAR_FULL_MATRIX": "PASS",
-    "C3_GROUPED": "NOT_SUPPORTED",
     "CUTLASS_SM120_4M": "FEASIBLE_WITH_SM80_FALLBACK",
-    "REGION_PROTOTYPE": "FEASIBLE_WITH_RECOMPUTE",
-    "NUMERICAL": "FAIL"
+    "NUMERICAL": "FAIL",
+    "REGION_PROTOTYPE": "FEASIBLE_WITH_RECOMPUTE"
   },
-  "route_verdict": {
-    "planar": "NOT_VIABLE",
-    "grouped": "NOT_VIABLE",
-    "region_fused": "VIABLE",
-    "cutlass_4m_single": "VIABLE"
+  "dirty_file_count": 65,
+  "dirty_worktree": true,
+  "environment_hash": "07a3371b7b27007d",
+  "generated_at": "2026-07-23T06:15:55Z",
+  "inputs": {
+    "c1_buffer_assignment/n22_d10_exp_default.txt": "30cd18ad9941c041",
+    "c1_buffer_assignment/n22_d10_exp_nofusion.txt": "b34b02bd6306f6bc",
+    "c1_buffer_assignment/n24_d10_default.json": "29004fd786ff1302",
+    "c1_buffer_assignment/n24_d10_exp_default.txt": "3e5bb4d8ec495f99",
+    "c1_buffer_assignment/n24_d10_exp_nofusion.txt": "9f6978e2b73179a8",
+    "c1_c2_edge_map.json": "9dc930781a3e5074",
+    "c1_default_vs_nofusion.csv": "6a5d84baaee08ea0",
+    "c1_judgment.json": "97adf70ada7b1986",
+    "c1_optimized_hlo/n22_d10_exp_default.hlo": "fc9372a3d0fd57e3",
+    "c1_optimized_hlo/n22_d10_exp_nofusion.hlo": "33753ff4a5a461fa",
+    "c1_optimized_hlo/n24_d10_exp_default.hlo": "a2dba7afeae3a3bf",
+    "c1_optimized_hlo/n24_d10_exp_nofusion.hlo": "f95b1c5b9eb27378",
+    "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.after_spmd_partitioner.txt": "d7a7a968af79d507",
+    "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.autotune_results.pbtxt": "7b02700a93eb8af7",
+    "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.before_optimizations.txt": "d7a7a968af79d507",
+    "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.config.pbtxt": "812c5e3743be81bd",
+    "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.debug_options": "b8efccf1c0c39dee",
+    "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.gpu_target_config.pbtxt": "c280c9359ec4fe6f",
+    "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.ir-no-opt.ll": "5c2186ee3e6e5bfe",
+    "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.ir-with-opt.ll": "5c2186ee3e6e5bfe",
+    "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.ptx": "e3b0c44298fc1c14",
+    "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.sm_12.0_gpu_after_optimizations-buffer-assignment.txt": "458368de76abb76d",
+    "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.sm_12.0_gpu_after_optimizations-memory-usage-report.txt": "4d424029c93c7b7e",
+    "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.sm_12.0_gpu_after_optimizations.txt": "203d25761c42059f",
+    "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.thunk_sequence.txt": "d92521acea44a244",
+    "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.after_spmd_partitioner.txt": "1091572e4efe3a5b",
+    "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.autotune_results.pbtxt": "7b02700a93eb8af7",
+    "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.before_optimizations.txt": "1091572e4efe3a5b",
+    "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.config.pbtxt": "54ed1c30368476ed",
+    "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.debug_options": "b8efccf1c0c39dee",
+    "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.gpu_target_config.pbtxt": "c280c9359ec4fe6f",
+    "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.ir-no-opt.ll": "1fd3ddceb1fc001c",
+    "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.ir-with-opt.ll": "c56ff7cf23917918",
+    "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.ptx": "c2c167f4c193ddbd",
+    "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.sm_12.0_gpu_after_optimizations-buffer-assignment.txt": "461389c70add8aac",
+    "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.sm_12.0_gpu_after_optimizations-memory-usage-report.txt": "973c582796a146d2",
+    "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.sm_12.0_gpu_after_optimizations.txt": "05f081e61c769ff4",
+    "c1_xla_dump/n24_d10_default/module_0003.jit_broadcast_in_dim.thunk_sequence.txt": "a4ac5cd3cad902ac",
+    "c1_xla_dump/n24_d10_default/module_0005.jit_f.after_spmd_partitioner.txt": "71bb598f29395953",
+    "c1_xla_dump/n24_d10_default/module_0005.jit_f.autotune_results.pbtxt": "7b02700a93eb8af7",
+    "c1_xla_dump/n24_d10_default/module_0005.jit_f.before_optimizations.txt": "71bb598f29395953",
+    "c1_xla_dump/n24_d10_default/module_0005.jit_f.config.pbtxt": "e3da73d62f2ca45f",
+    "c1_xla_dump/n24_d10_default/module_0005.jit_f.debug_options": "2e5c2d3a844f80c0",
+    "c1_xla_dump/n24_d10_default/module_0005.jit_f.gpu_target_config.pbtxt": "c280c9359ec4fe6f",
+    "c1_xla_dump/n24_d10_default/module_0005.jit_f.ir-no-opt.ll": "d7825308ef950770",
+    "c1_xla_dump/n24_d10_default/module_0005.jit_f.ir-with-opt.ll": "ed0d479f06815848",
+    "c1_xla_dump/n24_d10_default/module_0005.jit_f.ptx": "852467d1607c4e9b",
+    "c1_xla_dump/n24_d10_default/module_0005.jit_f.sm_12.0_gpu_after_optimizations-buffer-assignment.txt": "035d52a92f49cb54",
+    "c1_xla_dump/n24_d10_default/module_0005.jit_f.sm_12.0_gpu_after_optimizations-memory-usage-report.txt": "3c44569d5a810e4b",
+    "c1_xla_dump/n24_d10_default/module_0005.jit_f.sm_12.0_gpu_after_optimizations.txt": "a2dba7afeae3a3bf",
+    "c1_xla_dump/n24_d10_default/module_0005.jit_f.thunk_sequence.txt": "477ecb8fa9f4053a",
+    "c1_xla_dump/n24_d10_default_summary.json": "14e78f5832ba8571",
+    "c2_checkpoint_manifest.json": "c774ae195b8e18ce",
+    "c2_judgment.json": "27692ac7587ee094",
+    "c2_peak_frontier.json": "0a17bc36b8438a53",
+    "c2_tileability.csv": "618a8739a12e05e9",
+    "contraction_shapes.csv": "f4e1d41f8edc858c",
+    "cublaslt_full_matrix.csv": "efe6ea65c4059cab",
+    "cublaslt_grouped.csv": "bb76568cb88ef632",
+    "cublaslt_grouped_capability.json": "9af341d56eab8aa0",
+    "cublaslt_planar_capability.json": "fe729f8d7df8cf7f",
+    "cutlass_sm120_4m.json": "83c25cbf091f505b",
+    "numerical_validation.csv": "4391ee004c0fc887",
+    "numerical_validation.json": "b9a5edeacc5cf10a",
+    "region_prototype.json": "df550309b1dcd366",
+    "run_context.json": "857c242caaed5446"
+  },
+  "outputs": {
+    "environment.json": "07a3371b7b27007d",
+    "gonogo.json": "42a3b34223ce3c1e",
+    "gonogo.md": "342ded9b72eb6ca2"
   },
   "phase0_completion": "INCONCLUSIVE",
   "phase1_authorization": "NOT_AUTHORIZED",
-  "artifacts": {
-    "c1_judgment.json": "ab13cb21204755d1",
-    "c2_judgment.json": "a38a32818a71e6ad",
-    "cublaslt_planar_capability.json": "c51e20a2a1959bb5",
-    "cublaslt_grouped_capability.json": "78bd7a6226108962",
-    "cublaslt_full_matrix.csv": "44d8544d02c8fc9e",
-    "cutlass_sm120_4m.json": "ea1bc26488e26c51",
-    "region_prototype.json": "39ddbddd04f8b940",
-    "numerical_validation.json": "37d6c719f1e1ed6e",
-    "gonogo.json": "0acfc42789fb0123",
-    "gonogo.md": "5c5d669fe377e0ca",
-    "environment.json": "6f8357e80254e963"
-  }
+  "required_artifacts": {
+    "C1": [
+      "c1_judgment.json",
+      "c1_default_vs_nofusion.csv"
+    ],
+    "C2": [
+      "c2_judgment.json",
+      "c2_checkpoint_manifest.json"
+    ],
+    "C3_GROUPED": [
+      "cublaslt_grouped_capability.json"
+    ],
+    "C3_PLANAR_CORE": [
+      "cublaslt_planar_capability.json"
+    ],
+    "C3_PLANAR_FULL_MATRIX": [
+      "cublaslt_full_matrix.csv"
+    ],
+    "CUTLASS_SM120_4M": [
+      "cutlass_sm120_4m.json"
+    ],
+    "NUMERICAL": [
+      "numerical_validation.json"
+    ],
+    "REGION_PROTOTYPE": [
+      "region_prototype.json"
+    ]
+  },
+  "route_verdict": {
+    "cutlass_4m_single": "VIABLE",
+    "grouped": "NOT_VIABLE",
+    "planar": "NOT_VIABLE",
+    "region_fused": "VIABLE"
+  },
+  "schema_version": "manifest-v1",
+  "source_commit": "ba83506a211a57ea039e2f7f43b82f70e258dd21"
 }
