@@ -521,10 +521,35 @@ def test_main_emits_consistent_gonogo_v2(tmp_path, monkeypatch):
     # rule 7: MD rendered from same object
     md = (stage / "gonogo.md").read_text()
     assert agg["phase0_completion"] in md and agg["phase1_authorization"] in md
-    # minimal manifest is consistent with the new verdict (no stale GO_TO_PHASE1)
-    manifest = json.load(open(stage / "manifest.json"))
-    assert manifest["phase0_completion"] == agg["phase0_completion"]
-    assert manifest["phase1_authorization"] == agg["phase1_authorization"]
+    # Task 11 handoff: gonogo.main() no longer writes manifest.json (manifest.py owns it)
+    assert not (stage / "manifest.json").exists()
+
+
+def test_gonogo_main_does_not_write_manifest(tmp_path, monkeypatch):
+    import os, shutil
+    from results._phase0 import gonogo as G
+
+    src = "results/phase0"
+    stage = tmp_path / "phase0"
+    stage.mkdir()
+    for name in (
+        "c1_judgment.json",
+        "c2_judgment.json",
+        "cublaslt_planar_capability.json",
+        "cublaslt_grouped_capability.json",
+        "cublaslt_full_matrix.csv",
+        "cutlass_sm120_4m.json",
+        "region_prototype.json",
+        "numerical_validation.json",
+    ):
+        s = os.path.join(src, name)
+        if os.path.exists(s):
+            shutil.copy(s, stage / name)
+    monkeypatch.setattr(G, "_collect_environment", lambda: {"_stub": True})
+    G.main(stage_dir=str(stage))
+    assert not (stage / "manifest.json").exists()  # handoff to manifest.py
+    assert (stage / "gonogo.json").exists()  # gonogo still writes these
+    assert (stage / "environment.json").exists()
 
 
 def test_capability_layer_region_kernel_fail_sinks_region():

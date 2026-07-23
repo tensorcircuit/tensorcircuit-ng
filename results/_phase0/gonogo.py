@@ -2,8 +2,8 @@
 
 route_verdict (per-route capability AND numerical) + phase0_completion (all
 canonical criteria determined) -> phase1_authorization. Emits gonogo.json /
-gonogo.md / environment.json / minimal manifest.json under results/phase0/.
-md is generated FROM the json object, never hand-overwritten.
+gonogo.md / environment.json under results/phase0/. md is generated FROM the
+json object, never hand-overwritten.
 """
 
 from __future__ import annotations
@@ -606,9 +606,9 @@ def main(stage_dir=None):
     """Two-layer Phase 0 aggregator entry point.
 
     Reads every capability + numerical artifact, runs the two-layer pipeline,
-    and writes gonogo.json / gonogo.md / environment.json / a minimal manifest
-    that stays consistent with the new verdict (Task 11 will replace the
-    manifest with a full manifest.py). stage_dir defaults to results/phase0.
+    and writes gonogo.json / gonogo.md / environment.json (manifest.json is
+    owned by manifest.py — Task 11 handoff). stage_dir defaults to
+    results/phase0.
     """
     base = stage_dir or "results/phase0"
     os.makedirs(base, exist_ok=True)
@@ -666,35 +666,6 @@ def main(stage_dir=None):
     # environment snapshot (kept; Task 11 manifest references it)
     with open(os.path.join(base, "environment.json"), "w") as f:
         json.dump(_collect_environment(), f, indent=2)
-
-    # Minimal consistent manifest (criteria + verdict + artifact hashes).
-    # Task 11 replaces this with a full manifest.py (schema_version/commands/
-    # inputs/outputs/cases). Kept here so gonogo and manifest never contradict.
-    manifest = {
-        "schema_version": "manifest-v0-minimal",
-        "criteria": dict(criteria),
-        "route_verdict": {r: v["status"] for r, v in rv.items()},
-        "phase0_completion": completion,
-        "phase1_authorization": authorization,
-        "artifacts": {
-            f: _file_hash(os.path.join(base, f))
-            for f in (
-                "c1_judgment.json",
-                "c2_judgment.json",
-                "cublaslt_planar_capability.json",
-                "cublaslt_grouped_capability.json",
-                "cublaslt_full_matrix.csv",
-                "cutlass_sm120_4m.json",
-                "region_prototype.json",
-                "numerical_validation.json",
-                "gonogo.json",
-                "gonogo.md",
-                "environment.json",
-            )
-        },
-    }
-    with open(os.path.join(base, "manifest.json"), "w") as f:
-        json.dump(manifest, f, indent=2)
 
     print(json.dumps(agg, indent=2))
 
