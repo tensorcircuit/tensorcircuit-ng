@@ -11,7 +11,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 
 VERDICTS = (
     "GO_TO_PHASE1",
@@ -431,9 +430,9 @@ def _c3_grouped_status(path):
 def _cutlass_status(path):
     """CUTLASS SM120 4M feasibility (Task 8), derived from single_4m.
 
-    No top-level 'overall' key in the artifact, so derive: compiles+runs+gate_pass
-    -> FEASIBLE[_WITH_SM80_FALLBACK]; attempted-but-not-passing -> FAIL;
-    absent -> NOT_RUN; malformed -> UNKNOWN.
+    Derive from single_4m (compiles+runs+gate_pass); matches the artifact's
+    top-level `overall` field. absent -> NOT_RUN;
+    attempted-but-not-passing -> FAIL; malformed -> UNKNOWN.
     """
     if not os.path.exists(path):
         return _NOT_RUN
@@ -513,29 +512,6 @@ def _numerical_per_route(path):
             if route is not None:
                 per[route] = row["criterion"]
     return per
-
-
-def _parse_c3_real_ceiling_ratio(path):
-    """Max bf16/fp32 TFLOPS ratio from the cublaslt_gap txt table; None if missing/unparseable.
-
-    Lines look like: '2048   41.35...  15.63...  2.65'
-    """
-    if not os.path.exists(path):
-        return None
-    try:
-        ratios = []
-        with open(path) as f:
-            for ln in f:
-                parts = ln.split()
-                # row of interest: first token is an int M=N=K, last token is the ratio float
-                if len(parts) >= 4 and re.fullmatch(r"\d+", parts[0]):
-                    try:
-                        ratios.append(float(parts[-1]))
-                    except ValueError:
-                        continue
-        return max(ratios) if ratios else None
-    except OSError:
-        return None
 
 
 def _file_hash(p):

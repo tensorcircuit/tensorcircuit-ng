@@ -527,6 +527,23 @@ def test_main_emits_consistent_gonogo_v2(tmp_path, monkeypatch):
     assert manifest["phase1_authorization"] == agg["phase1_authorization"]
 
 
+def test_capability_layer_region_kernel_fail_sinks_region():
+    # truth-table rule 3, structurally: region_fused depends on C2_REGION_KERNEL;
+    # a FAIL there sinks region capability to NOT_OK even with a feasible prototype.
+    from results._phase0.gonogo import capability_layer
+
+    criteria = {
+        "C3_PLANAR_CORE": "SUPPORTED",
+        "C3_PLANAR_FULL_MATRIX": "PASS",
+        "C3_GROUPED": "NOT_SUPPORTED",
+        "REGION_PROTOTYPE": "FEASIBLE_WITH_RECOMPUTE",
+        "C2_REGION_KERNEL": "FAIL",
+        "CUTLASS_SM120_4M": "FEASIBLE_WITH_SM80_FALLBACK",
+    }
+    cap = capability_layer(criteria)
+    assert cap["region_fused"] == "NOT_OK"  # rule 3: region-kernel FAIL sinks region
+
+
 if __name__ == "__main__":
     import sys, pytest
 
