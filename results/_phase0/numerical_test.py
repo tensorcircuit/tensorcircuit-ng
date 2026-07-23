@@ -215,3 +215,16 @@ def test_collect_grouped_smoke_one_cell():
     assert row["dtype"] == "C16BF"
     assert "relative_l2" in row and "nan_inf" in row
     assert row["policy_pass"] == 1, row
+
+
+@pytest.mark.gpu
+def test_collect_region_fused_small_contract():
+    from results._phase0.numerical import collect_region_fused
+    from results._phase0.region_proto import SMALL_SHAPES
+
+    row = collect_region_fused("baseline", seed=0)
+    assert row["route"] == "region_fused"
+    assert row["dtype"] == "c64"
+    assert row["shape"] == "small_contract"
+    assert row["relative_l2"] < 1e-4  # fused == materialized at c64
+    assert row["policy_pass"] == 1, row

@@ -404,3 +404,30 @@ def collect_grouped(shape, dtype, level, seed, batch=4):
     verdict, _ = apply_policy("grouped", dtype, worst)
     return {"route": "grouped", "dtype": dtype, "shape": shape, "level": level, "seed": seed,
             "reference_dtype": "c64", **worst, "policy_pass": int(verdict == "PASS")}
+
+
+# ---------------------------------------------------------------------------
+# Task 8: region_fused small-contract correctness collector (GPU; spec §3, §7.2)
+# ---------------------------------------------------------------------------
+
+def collect_region_fused(level, seed):
+    """region_fused correctness on the small 8-D contract (spec §3, §7.2).
+
+    actual-large fused is compute-bound (producer recompute ~TM=64) and is NOT run;
+    that legitimate NOT_RUN is recorded by main() in legit_not_run. Here we prove
+    fused == materialized at c64 on the small contract, over the requested level/seed.
+    """
+    import cupy as cp
+    from results._phase0 import region_proto as rp
+
+    s = rp.SMALL_SHAPES
+    # derive A/B/D from make_inputs at the small shape; D from the same generator
+    A, B = make_inputs(level, (s["PM"], s["PN"], s["K1"]), seed)  # (M,N,K); A=(PM,K1), B=(K1,PN)
+    D = make_inputs(level, (s["TM"], s["TM"], s["TM"]), seed + 7000)[0]  # (TM,TM) consumer matrix
+    E_mat, _, _ = rp.materialized_reference(cp.asarray(A), cp.asarray(B), cp.asarray(D), rp.SMALL_STEPS)
+    E_fus = rp.fused_reference(cp.asarray(A), cp.asarray(B), cp.asarray(D), rp.SMALL_STEPS, s)
+    metrics = compute_metrics(cp.asnumpy(E_fus), cp.asnumpy(E_mat))
+    verdict, _ = apply_policy("region_fused", "c64", metrics)
+    return {"route": "region_fused", "dtype": "c64", "shape": "small_contract",
+            "level": level, "seed": seed, "reference_dtype": "c64",
+            **metrics, "policy_pass": int(verdict == "PASS")}
