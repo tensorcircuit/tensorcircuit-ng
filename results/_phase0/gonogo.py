@@ -34,6 +34,9 @@ _TRI_UNDETERMINED = "UNDETERMINED"
 
 # Canonical criteria whose determined-ness gates phase0_completion (truth-table
 # rules 1/5). NUMERICAL=FAIL is "determined" and does NOT sink completion.
+# CUTLASS_SM120_4M (native, NOT_SUPPORTED) and CUTLASS_SM80_FALLBACK_CAPABILITY
+# (fallback, PASS) are SPLIT into two independent criteria (plan §7 Task 4):
+# native failure and fallback success coexist without contradiction.
 REQUIRED_CRITERIA = (
     "C1",
     "C2",
@@ -41,6 +44,7 @@ REQUIRED_CRITERIA = (
     "C3_PLANAR_FULL_MATRIX",
     "C3_GROUPED",
     "CUTLASS_SM120_4M",
+    "CUTLASS_SM80_FALLBACK_CAPABILITY",
     "REGION_PROTOTYPE",
     "NUMERICAL",
 )
@@ -48,11 +52,18 @@ REQUIRED_CRITERIA = (
 # Which capability criteria each contraction route depends on (truth-table
 # rule 8 + rule 3). A route is VIABLE only if every listed capability criterion
 # normalizes to OK AND its numerical criterion normalizes to OK.
+#
+# ``cutlass_4m_single`` depends on the FALLBACK capability
+# (CUTLASS_SM80_FALLBACK_CAPABILITY), NOT on CUTLASS_SM120_4M: on consumer
+# Blackwell sm_120 the route's actual kernel is the 2.x Ampere fallback (the
+# native SM120 path is architecturally BLOCKED), so the route's capability
+# tracks the path that really runs. Native failure is recorded as a separate
+# CUTLASS_SM120_4M criterion but does NOT sink the route by itself.
 ROUTE_CAPABILITY_CRITERIA = {
     "planar": ("C3_PLANAR_CORE", "C3_PLANAR_FULL_MATRIX"),
     "grouped": ("C3_GROUPED",),
     "region_fused": ("REGION_PROTOTYPE", "C2_REGION_KERNEL"),
-    "cutlass_4m_single": ("CUTLASS_SM120_4M",),
+    "cutlass_4m_single": ("CUTLASS_SM80_FALLBACK_CAPABILITY",),
 }
 
 ROUTES = tuple(ROUTE_CAPABILITY_CRITERIA)
@@ -438,32 +449,95 @@ def _c3_grouped_status(path):
 
 
 def _cutlass_status(path):
-    """CUTLASS SM120 4M feasibility (Task 8), derived from single_4m.
+    """CUTLASS SM120 4M feasibility (Task 8), split into TWO independent
+    canonical criteria (plan §7 Task 4):
 
-    Derive from single_4m (compiles+runs+gate_pass); matches the artifact's
-    top-level `overall` field. absent -> NOT_RUN;
-    attempted-but-not-passing -> FAIL; malformed -> UNKNOWN.
+      * ``CUTLASS_SM120_4M`` — native consumer-Blackwell sm_120 BF16 4M
+        capability. NOT_SUPPORTED (CUTLASS 3.x Sm120 collective is
+        F8F6F4-only + Sm100 gated by __CUDA_ARCH__==1000), or PASS only if
+        a native sm120 path genuinely landed and passed (theoretical future).
+      * ``CUTLASS_SM80_FALLBACK_CAPABILITY`` — the 2.x Ampere Sm80 fallback
+        path that actually compiles+runs on sm_120. PASS iff the artifact
+        records the fallback running + passing the BF16 correctness gate.
+
+    Returns ``{"CUTLASS_SM120_4M": <token>, "CUTLASS_SM80_FALLBACK_CAPABILITY":
+    <token>}``. Native failure and fallback success are INDEPENDENT — one
+    does NOT derive from the other (plan §7 验收: native failure and fallback
+    success coexist without contradiction). Numerical is a SEPARATE Task 3
+    criterion (CUTLASS_SM80_FALLBACK_NUMERICAL) and is NOT touched here.
+
+    Absent artifact -> both NOT_RUN; malformed -> both UNKNOWN.
     """
     if not os.path.exists(path):
-        return _NOT_RUN
+        return {
+            "CUTLASS_SM120_4M": _NOT_RUN,
+            "CUTLASS_SM80_FALLBACK_CAPABILITY": _NOT_RUN,
+        }
     try:
         with open(path) as f:
             data = json.load(f)
     except (OSError, ValueError):
+        return {
+            "CUTLASS_SM120_4M": _UNKNOWN,
+            "CUTLASS_SM80_FALLBACK_CAPABILITY": _UNKNOWN,
+        }
+    return {
+        "CUTLASS_SM120_4M": _cutlass_native_sm120_criterion(data),
+        "CUTLASS_SM80_FALLBACK_CAPABILITY": _cutlass_sm80_fallback_criterion(data),
+    }
+
+
+def _cutlass_native_sm120_criterion(data):
+    """Read the native SM120 BF16 capability. Prefer the new two-section
+    ``native_sm120_bf16_4m.capability`` field; fall back to the legacy
+    ``single_4m`` block plus native-sm120 blocker keys so older artifacts
+    (and synths that record ``single_4m.native_sm120_blocker``) still load.
+    """
+    if not isinstance(data, dict):
         return _UNKNOWN
-    s4 = data.get("single_4m") if isinstance(data, dict) else None
-    if not isinstance(s4, dict):
+    sec = data.get("native_sm120_bf16_4m")
+    if isinstance(sec, dict):
+        cap = sec.get("capability")
+        if cap in ("PASS", "FAIL", "NOT_SUPPORTED", _UNKNOWN):
+            return cap
+    s4 = data.get("single_4m")
+    if isinstance(s4, dict):
+        blocker = s4.get("native_sm120_blocker") or s4.get("sm120_blocker")
+        kp = s4.get("kernel_path")
+        runs = bool(s4.get("runs"))
+        gate = bool((s4.get("correctness") or {}).get("gate_pass"))
+        # Theoretical future: native sm120 actually landed + passed.
+        if kp == "sm120_native" and runs and gate:
+            return _OK
+        # Real-world: blocker recorded, OR artifact documents landing on the
+        # sm80 fallback (no native path landed) -> NOT_SUPPORTED.
+        if blocker or kp == "sm80_fallback":
+            return "NOT_SUPPORTED"
+        if kp:
+            # Attempted but outcome unclear; fail-closed -> UNKNOWN.
+            return _UNKNOWN
+    return _UNKNOWN
+
+
+def _cutlass_sm80_fallback_criterion(data):
+    """Read the SM80 fallback capability. Prefer the new two-section
+    ``sm80_fallback_bf16_4m.capability`` field; fall back to the legacy
+    ``single_4m`` block. CAPABILITY only — numerical is Task 3's concern.
+    """
+    if not isinstance(data, dict):
         return _UNKNOWN
-    kernel_path = s4.get("kernel_path")
-    gate_pass = (s4.get("correctness") or {}).get("gate_pass")
-    if s4.get("compiles") and s4.get("runs") and gate_pass:
-        return (
-            "FEASIBLE_WITH_SM80_FALLBACK"
-            if kernel_path == "sm80_fallback"
-            else "FEASIBLE"
-        )
-    if kernel_path:
-        return _BAD  # attempted a path but it did not pass
+    sec = data.get("sm80_fallback_bf16_4m")
+    if isinstance(sec, dict):
+        cap = sec.get("capability")
+        if cap in ("PASS", "FAIL", "NOT_SUPPORTED", _UNKNOWN):
+            return cap
+    s4 = data.get("single_4m")
+    if isinstance(s4, dict):
+        kp = s4.get("kernel_path")
+        runs = bool(s4.get("runs"))
+        gate = bool((s4.get("correctness") or {}).get("gate_pass"))
+        if kp == "sm80_fallback":
+            return _OK if (runs and gate) else _BAD
     return _UNKNOWN
 
 
@@ -628,6 +702,11 @@ def main(stage_dir=None):
     c1_j = _load_json("c1_judgment.json")
     c2_j = _load_json("c2_judgment.json")
 
+    # plan §7 Task 4: _cutlass_status returns BOTH canonical cutlass criteria
+    # (native SM120 + SM80 fallback). They are split into independent keys so
+    # native failure and fallback success coexist without contradiction.
+    cutlass = _cutlass_status(os.path.join(base, "cutlass_sm120_4m.json"))
+
     criteria = {
         "C1": _c1_status_from_judgment(c1_j),
         "C2": _c2_status_from_judgment(c2_j),
@@ -641,9 +720,8 @@ def main(stage_dir=None):
         "C3_GROUPED": _c3_grouped_status(
             os.path.join(base, "cublaslt_grouped_capability.json")
         ),
-        "CUTLASS_SM120_4M": _cutlass_status(
-            os.path.join(base, "cutlass_sm120_4m.json")
-        ),
+        "CUTLASS_SM120_4M": cutlass["CUTLASS_SM120_4M"],
+        "CUTLASS_SM80_FALLBACK_CAPABILITY": cutlass["CUTLASS_SM80_FALLBACK_CAPABILITY"],
         "REGION_PROTOTYPE": _region_proto_status(
             os.path.join(base, "region_prototype.json")
         ),

@@ -139,11 +139,16 @@ def test_c3_grouped_status(tmp_path):
     assert _c3_grouped_status(str(tmp_path / "missing.json")) == "NOT_RUN"
 
 
-def test_cutlass_status_derives_from_single_4m(tmp_path):
+def test_cutlass_status_derives_two_independent_criteria(tmp_path):
+    """plan §7 Task 4: ``_cutlass_status`` returns TWO INDEPENDENT canonical
+    criteria (``CUTLASS_SM120_4M`` native + ``CUTLASS_SM80_FALLBACK_CAPABILITY``
+    fallback), never a single merged token. Native failure and fallback
+    success coexist without contradiction."""
     import json
     from results._phase0.gonogo import _cutlass_status
 
     p = tmp_path / "c.json"
+    # sm80 fallback works + native sm120 blocker recorded verbatim
     p.write_text(
         json.dumps(
             {
@@ -152,11 +157,18 @@ def test_cutlass_status_derives_from_single_4m(tmp_path):
                     "compiles": True,
                     "runs": True,
                     "correctness": {"gate_pass": True},
+                    "sm120_blocker": "F8F6F4 static_assert (BF16 blocked)",
                 }
             }
         )
     )
-    assert _cutlass_status(str(p)) == "FEASIBLE_WITH_SM80_FALLBACK"
+    c = _cutlass_status(str(p))
+    assert c["CUTLASS_SM120_4M"] == "NOT_SUPPORTED", c
+    assert c["CUTLASS_SM80_FALLBACK_CAPABILITY"] == "PASS", c
+    # The two criteria are INDEPENDENT — one is NOT_SUPPORTED, the other PASS.
+    assert c["CUTLASS_SM120_4M"] != c["CUTLASS_SM80_FALLBACK_CAPABILITY"], c
+
+    # Theoretical future: native sm120 path actually landed + passed (no fallback).
     p.write_text(
         json.dumps(
             {
@@ -169,7 +181,15 @@ def test_cutlass_status_derives_from_single_4m(tmp_path):
             }
         )
     )
-    assert _cutlass_status(str(p)) == "FEASIBLE"
+    c = _cutlass_status(str(p))
+    assert c["CUTLASS_SM120_4M"] == "PASS", c
+    # No sm80_fallback info -> fallback criterion is UNKNOWN (capability NOT
+    # derived from native success).
+    assert c["CUTLASS_SM80_FALLBACK_CAPABILITY"] == "UNKNOWN", c
+
+    # sm80 fallback that failed correctness -> fallback FAIL; native NOT_SUPPORTED
+    # (the artifact documents landing on the sm80 fallback, so native did not
+    # land — independent of whether the fallback itself later passed).
     p.write_text(
         json.dumps(
             {
@@ -182,8 +202,46 @@ def test_cutlass_status_derives_from_single_4m(tmp_path):
             }
         )
     )
-    assert _cutlass_status(str(p)) == "FAIL"
-    assert _cutlass_status(str(tmp_path / "missing.json")) == "NOT_RUN"
+    c = _cutlass_status(str(p))
+    assert c["CUTLASS_SM80_FALLBACK_CAPABILITY"] == "FAIL", c
+    assert c["CUTLASS_SM120_4M"] == "NOT_SUPPORTED", c
+
+    # Missing artifact -> both criteria NOT_RUN
+    c = _cutlass_status(str(tmp_path / "missing.json"))
+    assert c == {
+        "CUTLASS_SM120_4M": "NOT_RUN",
+        "CUTLASS_SM80_FALLBACK_CAPABILITY": "NOT_RUN",
+    }, c
+
+
+def test_cutlass_status_reads_new_two_section_structure(tmp_path):
+    """plan §7 Task 4: ``_cutlass_status`` reads the regenerated two-section
+    artifact (native_sm120_bf16_4m + sm80_fallback_bf16_4m) directly —
+    preferred over the legacy single_4m block."""
+    import json
+    from results._phase0.gonogo import _cutlass_status
+
+    p = tmp_path / "c.json"
+    p.write_text(
+        json.dumps(
+            {
+                "native_sm120_bf16_4m": {
+                    "capability": "NOT_SUPPORTED",
+                    "compile_status": "BLOCKED",
+                    "blocker": "F8F6F4 static_assert",
+                },
+                "sm80_fallback_bf16_4m": {
+                    "capability": "PASS",
+                    "correctness": {"gate_pass": True},
+                },
+            }
+        )
+    )
+    c = _cutlass_status(str(p))
+    assert c == {
+        "CUTLASS_SM120_4M": "NOT_SUPPORTED",
+        "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",
+    }, c
 
 
 def test_region_proto_status(tmp_path):
@@ -246,6 +304,8 @@ def test_capability_layer_combines_per_route():
     # Task 1 contract: criteria fed to capability_layer are canonical criterion
     # tokens (PASS / FAIL / NOT_SUPPORTED / UNKNOWN / NOT_RUN). Detail tokens
     # are fail-closed to UNDETERMINED by _normalize and must not be promoted.
+    # Task 4: cutlass_4m_single now depends on CUTLASS_SM80_FALLBACK_CAPABILITY
+    # (the path that actually runs), NOT on CUTLASS_SM120_4M (native, BLOCKED).
     from results._phase0.gonogo import capability_layer
 
     criteria = {
@@ -254,12 +314,16 @@ def test_capability_layer_combines_per_route():
         "C3_GROUPED": "NOT_SUPPORTED",
         "REGION_PROTOTYPE": "PASS",
         "C2_REGION_KERNEL": "PASS",
-        "CUTLASS_SM120_4M": "PASS",
+        "CUTLASS_SM120_4M": "NOT_SUPPORTED",  # native BLOCKED
+        "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",  # fallback runs
     }
     cap = capability_layer(criteria)
     assert cap["planar"] == "OK"  # core OK + full matrix OK
     assert cap["grouped"] == "NOT_OK"  # NOT_SUPPORTED
     assert cap["region_fused"] == "OK"  # region proto OK + region kernel OK
+    # cutlass_4m_single capability follows the FALLBACK (PASS), independent of
+    # CUTLASS_SM120_4M being NOT_SUPPORTED — native failure does not sink the
+    # route that actually runs.
     assert cap["cutlass_4m_single"] == "OK"
 
 
@@ -403,11 +467,13 @@ def test_completion_complete_when_all_determined_and_numerical_fail_ok():
             "C3_PLANAR_FULL_MATRIX",
             "C3_GROUPED",
             "CUTLASS_SM120_4M",
+            "CUTLASS_SM80_FALLBACK_CAPABILITY",
             "REGION_PROTOTYPE",
         )
     }
     criteria["NUMERICAL"] = "FAIL"
     criteria["C3_GROUPED"] = "NOT_SUPPORTED"  # determined, not UNKNOWN
+    criteria["CUTLASS_SM120_4M"] = "NOT_SUPPORTED"  # determined, not UNKNOWN
     assert evaluate_completion(criteria) == "COMPLETE"
 
 

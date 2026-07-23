@@ -652,8 +652,98 @@ def run_grouped(shapes: list[dict], seeds=(0,)) -> dict:
 # --- Task 6: verdict aggregator + artifact writers + CLI --------------------
 
 
+# Native-SM120 BF16 blocker (consumer Blackwell sm_120), verbatim from CUTLASS
+# 3.x sources — not a private env detail. Used when the captured single_4m
+# landed on the sm80_fallback path but did not record the verbatim sm120
+# blocker string (e.g. legacy artifact shape).
+_DEFAULT_SM120_BLOCKER = (
+    "CUTLASS 3.x Sm120 collective is F8F6F4-only (no BF16 path) "
+    "(sm120_mma_builder.inl:80,115; mma_sm120.hpp:47); the Sm100 route is "
+    "gated by __CUDA_ARCH__==1000 — consumer Blackwell sm_120 has no native "
+    "CUTLASS BF16 4M kernel."
+)
+
+
+def _native_sm120_section(single_4m: dict) -> dict:
+    """plan §7 Task 4 split: the native SM120 BF16 4M capability section.
+
+    Consumer-Blackwell sm_120 has NO native CUTLASS BF16 4M route: the Sm120
+    collective builder hard-requires F8F6F4 elements (FP8/FP6/FP4), and the
+    Sm100 route is gated by ``__CUDA_ARCH__==1000``. So in practice this
+    section is ``NOT_SUPPORTED``; ``PASS`` is only returned when the artifact
+    genuinely records an ``sm120_native`` kernel_path that ran + passed the
+    correctness gate (theoretical future support, e.g. NVFP4/MXFP8).
+    """
+    if not isinstance(single_4m, dict):
+        return {"capability": "UNKNOWN", "compile_status": "UNKNOWN", "blocker": None}
+    kernel_path = single_4m.get("kernel_path")
+    sm120_blocker = single_4m.get("sm120_blocker") or single_4m.get(
+        "native_sm120_blocker"
+    )
+    runs = bool(single_4m.get("runs"))
+    gate_pass = bool((single_4m.get("correctness") or {}).get("gate_pass"))
+    # Theoretical future: a native sm120 path actually landed and passed.
+    if kernel_path == "sm120_native" and runs and gate_pass:
+        return {
+            "capability": "PASS",
+            "compile_status": "OK",
+            "blocker": None,
+            "detail": "native sm120 MMA path landed and passed",
+        }
+    # Real-world: native sm120 is blocked. Either the artifact captured the
+    # blocker verbatim, or it landed on the sm80 fallback (both native paths
+    # were attempted and neither landed).
+    blocker = sm120_blocker or (
+        _DEFAULT_SM120_BLOCKER if kernel_path == "sm80_fallback" else None
+    )
+    if blocker:
+        return {
+            "capability": "NOT_SUPPORTED",
+            "compile_status": "BLOCKED",
+            "blocker": blocker,
+        }
+    return {"capability": "UNKNOWN", "compile_status": "UNKNOWN", "blocker": None}
+
+
+def _sm80_fallback_section(single_4m: dict) -> dict:
+    """plan §7 Task 4 split: the Ampere (Sm80) 2.x MMA fallback section.
+
+    This is a CAPABILITY-only claim (kernel compiled + ran + passed the BF16
+    correctness gate). The corresponding NUMERICAL criterion
+    (``CUTLASS_SM80_FALLBACK_NUMERICAL``) is owned by Task 3 and is read from
+    a separate artifact — do NOT treat capability PASS as numerical PASS.
+    """
+    if not isinstance(single_4m, dict):
+        return {
+            "capability": "UNKNOWN",
+            "correctness": {},
+            "resource": {},
+            "latency": {},
+        }
+    kernel_path = single_4m.get("kernel_path")
+    runs = bool(single_4m.get("runs"))
+    gate_pass = bool((single_4m.get("correctness") or {}).get("gate_pass"))
+    if kernel_path == "sm80_fallback":
+        capability = "PASS" if (runs and gate_pass) else "FAIL"
+        return {
+            "capability": capability,
+            "correctness": single_4m.get("correctness", {}),
+            "resource": single_4m.get("resource", {}),
+            "latency": single_4m.get("latency", {}),
+            "detail": "2.x Ampere (arch::Sm80) MMA fallback (the path that runs)",
+        }
+    return {
+        "capability": "UNKNOWN",
+        "correctness": {},
+        "resource": {},
+        "latency": {},
+        "detail": "sm80 fallback not attempted (kernel_path != sm80_fallback)",
+    }
+
+
 def aggregate_capability(single_4m: dict, grouped: dict, toolchain: dict) -> dict:
-    """Apply the cutlass-sm120-4m-v1 truth table to produce `overall`.
+    """Apply the cutlass-sm120-4m-v1 truth table to produce `overall` and the
+    two named capability sections (plan §7 Task 4 split).
 
     Truth table (single_4m.runs x grouped.status -> overall):
       * BLOCKED         — single didn't run AND grouped is BLOCKED (toolchain
@@ -667,8 +757,12 @@ def aggregate_capability(single_4m: dict, grouped: dict, toolchain: dict) -> dic
                           grouped handoff is the entire point of the probe),
                           OR single failed but grouped is not hard-blocked.
 
-    The artifact always carries the full single_4m, grouped, and toolchain
-    blocks so a reader can audit the inputs behind the verdict.
+    ``overall`` is retained as an artifact-native DETAIL label so existing
+    readers/tests continue to load; it is NOT a canonical criterion value
+    (plan §4 / Task 1: the merged token must not surface as a criterion).
+    The two canonical criteria are derived by gonogo from the explicitly-named
+    ``native_sm120_bf16_4m`` and ``sm80_fallback_bf16_4m`` sections below —
+    native BLOCKED and fallback PASS coexist without contradiction.
     """
     runs_ok = bool(
         single_4m.get("runs") and single_4m.get("correctness", {}).get("gate_pass")
@@ -693,6 +787,11 @@ def aggregate_capability(single_4m: dict, grouped: dict, toolchain: dict) -> dic
         "schema_version": SCHEMA_VERSION,
         "toolchain": toolchain,
         "single_4m": single_4m,
+        # Two canonical criteria sections (plan §7 Task 4): native SM120 BF16
+        # BLOCKED coexists with SM80 fallback PASS — the route that actually
+        # runs on consumer Blackwell sm_120.
+        "native_sm120_bf16_4m": _native_sm120_section(single_4m),
+        "sm80_fallback_bf16_4m": _sm80_fallback_section(single_4m),
         "grouped": grouped,
         "overall": overall,
         "blocker": blocker,
