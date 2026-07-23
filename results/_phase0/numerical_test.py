@@ -102,3 +102,56 @@ def test_apply_policy_missing_metric_returns_none():
     # region_fused/cutlass omit max_abs policy; absent metric -> not FAIL, verdict stays PASS-able
     verdict, _ = apply_policy("region_fused", "c64", {"relative_l2": 1e-5, "max_rel": 1e-4, "nan_inf": False})
     assert verdict == "PASS"
+
+
+def _row(route, dtype, shape, level, seed, rel_l2, max_abs, max_rel, nan):
+    return {
+        "route": route, "dtype": dtype, "shape": shape, "level": level, "seed": seed,
+        "relative_l2": rel_l2, "max_abs": max_abs, "max_rel": max_rel, "nan_inf": nan,
+    }
+
+
+def test_aggregate_pass_when_all_cells_pass():
+    from results._phase0.numerical import aggregate
+
+    rows = [_row("planar", "C16BF", (16384,1024,1024), "baseline", 0, 1e-4, 1e-2, 1e-3, False)]
+    expected = {("planar", "C16BF"): 1}
+    out = aggregate(rows, expected, case_hashes={}, legit_not_run=[])
+    planar = [r for r in out["per_route"] if r["route"] == "planar"][0]
+    assert planar["criterion"] == "PASS"
+    assert out["overall_numerical_status"] == "PASS"
+
+
+def test_aggregate_unknown_when_missing_rows():
+    from results._phase0.numerical import aggregate
+
+    rows = []  # expected 1 but present 0
+    out = aggregate(rows, expected_counts={("planar", "C16BF"): 1}, case_hashes={}, legit_not_run=[])
+    planar = [r for r in out["per_route"] if r["route"] == "planar"][0]
+    assert planar["criterion"] in ("UNKNOWN", "NOT_RUN")
+
+
+def test_aggregate_fail_on_nan():
+    from results._phase0.numerical import aggregate
+
+    rows = [_row("planar", "C16BF", (16384,1024,1024), "baseline", 0, 0.0, 0.0, 0.0, True)]
+    out = aggregate(rows, {("planar", "C16BF"): 1}, {}, [])
+    assert out["overall_numerical_status"] == "FAIL"
+
+
+def test_aggregate_legit_not_run_does_not_sink_overall():
+    from results._phase0.numerical import aggregate
+
+    # region_fused actual-large fused is legit NOT_RUN (compute-bound, spec §7.2)
+    rows = [_row("region_fused", "c64", "small_contract", "baseline", 0, 1e-7, 0.0, 1e-7, False)]
+    out = aggregate(rows, {("region_fused", "c64"): 1}, {}, legit_not_run=["region_fused:actual-large-fused:compute-bound"])
+    assert out["overall_numerical_status"] == "PASS"
+    assert any("compute-bound" in r for r in out["fail_closed_reasons"])
+
+
+def test_aggregate_hash_mismatch_forces_unknown():
+    from results._phase0.numerical import aggregate
+
+    rows = [_row("planar", "C16BF", (16384,1024,1024), "baseline", 0, 1e-4, 1e-2, 1e-3, False)]
+    out = aggregate(rows, {("planar", "C16BF"): 1}, case_hashes={"edge_map_hash": "MISMATCH"}, legit_not_run=[])
+    assert out["overall_numerical_status"] == "INCONCLUSIVE"

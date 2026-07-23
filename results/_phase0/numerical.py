@@ -126,3 +126,69 @@ def apply_policy(route, dtype, metrics):
         if val >= thresh:
             return "FAIL", f"{field}={val:.2e} >= {thresh:.0e}"
     return "PASS", None
+
+
+_ROUTES = ("planar", "grouped", "region_fused", "cutlass_4m_single")
+
+
+def aggregate(rows, expected_counts, case_hashes, legit_not_run):
+    """Fail-closed aggregation -> numerical_validation.json payload (spec §7).
+
+    rows: list of cell dicts (route, dtype, shape, level, seed, + metrics).
+    expected_counts: {(route, dtype): N_expected_rows}.
+    case_hashes: {hash_name: value}; any value == "MISMATCH" -> INCONCLUSIVE.
+    legit_not_run: human-readable reasons for legitimate NOT_RUN (e.g. region_fused
+      actual-large fused compute-bound); listed in fail_closed_reasons but do NOT
+      sink overall to INCONCLUSIVE.
+    """
+    fail_closed_reasons = list(legit_not_run)
+
+    hash_mismatch = any(v == "MISMATCH" for v in case_hashes.values())
+    if hash_mismatch:
+        fail_closed_reasons.append("case-binding hash mismatch")
+
+    per_route = []
+    statuses = []
+    for route in _ROUTES:
+        # group rows by dtype for this route
+        dtypes_for_route = sorted({r["dtype"] for r in rows if r["route"] == route})
+        route_cells = [r for r in rows if r["route"] == route]
+        verdicts = []
+        for dtype in dtypes_for_route:
+            expected = expected_counts.get((route, dtype), 0)
+            present = sum(1 for r in route_cells if r["dtype"] == dtype)
+            if present < expected:
+                verdicts.append("UNKNOWN")
+                continue
+            for r in route_cells:
+                if r["dtype"] != dtype:
+                    continue
+                v, _ = apply_policy(route, dtype, r)
+                verdicts.append(v or "UNKNOWN")
+        if not verdicts:
+            criterion = "NOT_RUN"
+        elif any(v == "FAIL" for v in verdicts):
+            criterion = "FAIL"
+        elif any(v == "UNKNOWN" for v in verdicts):
+            criterion = "UNKNOWN"
+        else:
+            criterion = "PASS"
+        statuses.append(criterion)
+        per_route.append({"route": route, "criterion": criterion, "n_cells": len(route_cells)})
+
+    if hash_mismatch or any(s == "UNKNOWN" for s in statuses):
+        overall = "INCONCLUSIVE"
+    elif any(s == "FAIL" for s in statuses):
+        overall = "FAIL"
+    elif all(s in ("PASS", "NOT_RUN") for s in statuses) and any(s == "PASS" for s in statuses):
+        overall = "PASS"
+    else:
+        overall = "INCONCLUSIVE"  # all NOT_RUN, nothing proven
+
+    return {
+        "schema_version": "numerical-validation-v1",
+        "case_binding": case_hashes,
+        "per_route": per_route,
+        "overall_numerical_status": overall,
+        "fail_closed_reasons": fail_closed_reasons,
+    }
