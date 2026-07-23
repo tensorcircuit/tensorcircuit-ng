@@ -189,3 +189,71 @@ def _apply_checkpoint_validation(criteria, c2_status, num_status):
     if num_status == "MISMATCH" and "NUMERICAL" in out:
         out["NUMERICAL"] = "UNKNOWN"
     return out
+
+
+def _case_artifacts(case_id, base):
+    """Case-specific files under the INPUT_ARTIFACT_DIRS whose name or parent dir
+    matches the case_id prefix (e.g. 'n24_d10'). Best-effort provenance list."""
+    prefix = case_id.split("_")[0]  # e.g. 'n24' from 'n24_d10_default' -> too coarse;
+    # use the n_depth prefix (first two underscore tokens) instead
+    parts = case_id.split("_")
+    needle = "_".join(parts[:2]) if len(parts) >= 2 else case_id
+    found = []
+    for d in INPUT_ARTIFACT_DIRS:
+        full_dir = os.path.join(base, d)
+        if not os.path.isdir(full_dir):
+            continue
+        for root, _dirs, files in os.walk(full_dir):
+            for name in files:
+                rel = os.path.relpath(os.path.join(root, name), base).replace(
+                    os.sep, "/"
+                )
+                if (
+                    name.startswith(needle)
+                    or ("/" + needle + "_") in rel
+                    or name.startswith(case_id)
+                ):
+                    found.append(rel)
+    return sorted(set(found))
+
+
+def _build_cases(c1_judgment, c2_judgment, base):
+    """Merge c1/c2 judgment cases into {case_id: {status, config, artifacts}}."""
+    c1 = c1_judgment if isinstance(c1_judgment, dict) else {}
+    c2 = c2_judgment if isinstance(c2_judgment, dict) else {}
+    cases = {}
+    for case_id in sorted(set(c1) | set(c2)):
+        entry = {"status": {}, "config": {}, "artifacts": []}
+        c1c = c1.get(case_id) if isinstance(c1.get(case_id), dict) else {}
+        c2c = c2.get(case_id) if isinstance(c2.get(case_id), dict) else {}
+        if c1c:
+            entry["status"]["C1"] = (c1c.get("judgment") or {}).get("status")
+            entry["config"] = {k: c1c[k] for k in ("n", "depth", "fusion") if k in c1c}
+        if c2c:
+            entry["status"]["C2"] = c2c.get("status")
+            if isinstance(c2c.get("layers"), dict):
+                entry["status"]["C2_layers"] = c2c["layers"]
+            for k in ("n", "depth", "fusion"):
+                if k in c2c and k not in entry["config"]:
+                    entry["config"][k] = c2c[k]
+        entry["artifacts"] = _case_artifacts(case_id, base)
+        cases[case_id] = entry
+    return cases
+
+
+def _collect_inputs_outputs(base):
+    """Hash driving artifacts (inputs, incl. dirs) and generated verdicts (outputs).
+    manifest.json is never included. Missing files are omitted (no None entries)."""
+    inputs = {}
+    for rel in INPUT_ARTIFACT_FILES:
+        h = _hash_file(os.path.join(base, rel))
+        if h is not None:
+            inputs[rel] = h
+    for d in INPUT_ARTIFACT_DIRS:
+        inputs.update(_hash_dir(os.path.join(base, d)))
+    outputs = {}
+    for rel in OUTPUT_ARTIFACTS:
+        h = _hash_file(os.path.join(base, rel))
+        if h is not None:
+            outputs[rel] = h
+    return inputs, outputs

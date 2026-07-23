@@ -188,6 +188,53 @@ def test_apply_checkpoint_validation_downgrades_pass_only(tmp_path):
     assert out3 == criteria
 
 
+def test_build_cases_merges_c1_c2(tmp_path):
+    from results._phase0.manifest import _build_cases
+
+    c1 = {"n24_d10": {"judgment": {"status": "PASS"}, "n": 24, "depth": 10}}
+    c2 = {
+        "n24_d10_default": {
+            "status": "UNKNOWN",
+            "layers": {"C2_CANONICAL": "UNKNOWN"},
+            "n": 24,
+            "depth": 10,
+            "fusion": "default",
+        }
+    }
+    cases = _build_cases(c1, c2, str(tmp_path))
+    assert set(cases) == {"n24_d10", "n24_d10_default"}
+    assert cases["n24_d10"]["status"] == {"C1": "PASS"}
+    assert cases["n24_d10"]["config"]["n"] == 24
+    assert cases["n24_d10_default"]["status"]["C2"] == "UNKNOWN"
+    assert cases["n24_d10_default"]["config"]["fusion"] == "default"
+    assert isinstance(cases["n24_d10"]["artifacts"], list)
+
+
+def test_collect_inputs_outputs_excludes_manifest(tmp_path):
+    from results._phase0.manifest import _collect_inputs_outputs
+
+    (tmp_path / "c1_judgment.json").write_text("x")
+    (tmp_path / "gonogo.json").write_text("y")
+    (tmp_path / "environment.json").write_text("z")
+    (tmp_path / "manifest.json").write_text("self")
+    inputs, outputs = _collect_inputs_outputs(str(tmp_path))
+    assert "c1_judgment.json" in inputs and len(inputs["c1_judgment.json"]) == 16
+    assert outputs["gonogo.json"] and outputs["environment.json"]
+    assert "manifest.json" not in outputs and "manifest.json" not in inputs
+    # missing input files are simply omitted (not None entries)
+    assert "c2_judgment.json" not in inputs
+
+
+def test_collect_inputs_outputs_hashes_dirs(tmp_path):
+    from results._phase0.manifest import _collect_inputs_outputs
+
+    d = tmp_path / "c1_optimized_hlo"
+    d.mkdir()
+    (d / "n24.hlo").write_bytes(b"x")
+    inputs, _ = _collect_inputs_outputs(str(tmp_path))
+    assert "c1_optimized_hlo/n24.hlo" in inputs
+
+
 if __name__ == "__main__":
     import sys, pytest
 
