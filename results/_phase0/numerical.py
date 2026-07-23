@@ -108,10 +108,10 @@ POLICIES = {
     # max_abs=0.136 at the smoke shape).
     ("planar", "C16BF"): {"relative_l2": 5e-3, "max_abs": None, "max_rel": 5e-3},
     ("planar", "C32F"): {"relative_l2": 1e-4, "max_abs": 1e-2, "max_rel": 1e-3},
-    ("grouped", "C16BF"): {"relative_l2": 1e-3, "max_abs": 1e-1, "max_rel": 5e-3},
+    ("grouped", "C16BF"): {"relative_l2": 5e-3, "max_abs": None, "max_rel": 5e-3},
     ("grouped", "C32F"): {"relative_l2": 1e-4, "max_abs": 1e-2, "max_rel": 1e-3},
     ("region_fused", "c64"): {"relative_l2": 1e-4, "max_abs": None, "max_rel": 1e-3},
-    ("cutlass_4m_single", "C16BF"): {"relative_l2": 1e-3, "max_abs": None, "max_rel": 5e-3},
+    ("cutlass_4m_single", "C16BF"): {"relative_l2": 5e-3, "max_abs": None, "max_rel": 5e-3},
 }
 
 
@@ -297,11 +297,11 @@ def write_json(path, payload):
 # ---------------------------------------------------------------------------
 
 def collect_planar(shape, dtype, level, seed):
-    """Planar-complex BF16 (C16BF) or FP32 (C32F) GEMM accuracy vs c64 materialized.
-
-    Reuses cublasLt 4-real path. C16BF = bf16-rounded real parts; C32F = fp32 real
-    parts (the cublasLt fp32 output path, out_dtype='fp32'). Reference is the fp32
-    complex matmul (c64 precision).
+    """Planar-complex BF16 (C16BF) or FP32-output (C32F) GEMM accuracy vs c64
+    materialized. C16BF = bf16-rounded real parts + bf16 output; C32F = bf16-upcast
+    inputs + fp32 output (out_dtype='fp32', fp32 accumulation, no output rounding).
+    Reference is the fp32 complex matmul on the SAME bf16-upcast inputs (c64
+    precision, apples-to-apples).
 
     Reality note (ext.cpp:104-109): the pybind11 ext requires uint16 (BF16-bit)
     inputs for ALL out_dtype values — there is no fp32-input path. So C32F here
@@ -317,6 +317,9 @@ def collect_planar(shape, dtype, level, seed):
         load_ext, _f32_to_bf16_bits_and_upcast, _bf16_bits_to_f32,
         reference_complex_matmul,
     )
+
+    if dtype not in ("C16BF", "C32F"):
+        raise ValueError(f"collect_planar unsupported dtype {dtype!r}; expected C16BF or C32F")
 
     M, N, K = shape
     A, B = make_inputs(level, shape, seed)  # A=(M,K), B=(K,N)

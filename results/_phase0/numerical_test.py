@@ -83,7 +83,7 @@ def test_apply_policy_c32f_tighter_than_c16bf():
     from results._phase0.numerical import apply_policy
 
     m = {"relative_l2": 5e-4, "max_abs": 1e-2, "max_rel": 2e-3, "nan_inf": False}
-    # passes C16BF (rel_l2<1e-3) but fails C32F (rel_l2<1e-4)
+    # passes C16BF (rel_l2<5e-3) but fails C32F (rel_l2<1e-4)
     assert apply_policy("planar", "C16BF", m)[0] == "PASS"
     assert apply_policy("planar", "C32F", m)[0] == "FAIL"
 
