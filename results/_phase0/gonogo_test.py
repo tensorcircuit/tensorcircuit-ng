@@ -153,6 +153,19 @@ def test_numerical_status_reads_overall_and_per_route(tmp_path):
     assert _numerical_per_route(str(tmp_path / "missing.json")) == {}
 
 
+def test_numerical_per_route_skips_malformed_row(tmp_path):
+    import json
+    from results._phase0.gonogo import _numerical_per_route
+    p = tmp_path / "n.json"
+    # row with valid criterion but no route key must not raise; valid rows kept
+    p.write_text(json.dumps({"per_route": [
+        {"criterion": "PASS"},                       # malformed: no route
+        {"route": "planar", "criterion": "FAIL"},    # valid
+    ]}))
+    per = _numerical_per_route(str(p))
+    assert per == {"planar": "FAIL"}
+
+
 if __name__ == "__main__":
     import sys, pytest
 

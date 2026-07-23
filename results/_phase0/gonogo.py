@@ -242,7 +242,7 @@ def _c3_planar_full_matrix_status(path):
     try:
         with open(path) as f:
             rows = [ln for ln in f if ln.strip()]
-    except OSError:
+    except (OSError, ValueError):
         return _UNKNOWN
     # rows[0] is the header; need >=1 data row beyond it
     if len(rows) < 2:
@@ -338,7 +338,9 @@ def _numerical_per_route(path):
     per = {}
     for row in (data.get("per_route") or []) if isinstance(data, dict) else []:
         if isinstance(row, dict) and row.get("criterion") in ("PASS", "FAIL"):
-            per[row["route"]] = row["criterion"]
+            route = row.get("route")
+            if route is not None:
+                per[route] = row["criterion"]
     return per
 
 
