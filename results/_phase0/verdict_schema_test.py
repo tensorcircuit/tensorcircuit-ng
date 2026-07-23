@@ -17,8 +17,18 @@ from results._phase0.verdict_schema import (
     CRITERION_TOKENS,
     DETAIL_TOKENS,
     NUMERICAL_ROUTES,
+    REQUIRED_CRITERIA,
+    ROUTE_CAPABILITY_CRITERIA,
     ROUTE_TOKENS,
+    TRI_NOT_OK,
+    TRI_OK,
+    TRI_UNDETERMINED,
+    _combine_tri,
     normalize_criterion,
+    recompute_authorization,
+    recompute_completion,
+    recompute_route_verdict,
+    tri_normalize,
 )
 
 # --- canonical token sets are exactly the plan §4 set, no more, no less ---
@@ -73,25 +83,30 @@ def test_cutlass_criteria_split_native_and_fallback():
     assert "CUTLASS_SM120_4M" != "CUTLASS_SM80_FALLBACK_CAPABILITY"
 
 
-# --- numerical routes: canonical names, incl. cutlass_sm80_fallback ---
+# --- numerical routes: canonical route keys, incl. cutlass_4m_single ---
 
 
 def test_numerical_routes_match_plan_section4():
-    """The numerical route list uses ``cutlass_sm80_fallback`` (the route
-    actually measured by the numerical matrix), NOT ``cutlass_4m_single``
-    (the capability-route name). The two are deliberately distinct."""
+    """The numerical route list uses the canonical route KEY ``cutlass_4m_single``
+    (matching ``ROUTE_CAPABILITY_CRITERIA``), the route actually measured by the
+    numerical matrix. The real per_route data (numerical_validation.json) uses
+    ``cutlass_4m_single`` -- NOT a separate ``cutlass_sm80_fallback`` name."""
     assert set(NUMERICAL_ROUTES) == {
         "planar",
         "grouped",
         "region_fused",
-        "cutlass_sm80_fallback",
+        "cutlass_4m_single",
     }
-    assert "cutlass_4m_single" not in NUMERICAL_ROUTES
+    assert "cutlass_sm80_fallback" not in NUMERICAL_ROUTES
 
 
-def test_numerical_routes_distinct_from_cutlass_capability_name():
-    assert "cutlass_sm80_fallback" in NUMERICAL_ROUTES
-    assert "cutlass_sm80_fallback" not in CRITERIA_NAMES
+def test_numerical_routes_use_route_keys_not_criterion_names():
+    """Numerical routes are ROUTE KEYS (not criterion names). The cutlass route
+    key ``cutlass_4m_single`` is distinct from its capability CRITERION name
+    ``CUTLASS_SM80_FALLBACK_CAPABILITY``."""
+    assert "cutlass_4m_single" in NUMERICAL_ROUTES
+    assert "cutlass_4m_single" not in CRITERIA_NAMES
+    assert "CUTLASS_SM80_FALLBACK_CAPABILITY" in CRITERIA_NAMES
 
 
 # --- detail tokens are non-canonical (no leakage into criterion fields) ---
@@ -197,6 +212,166 @@ def test_normalize_criterion_never_returns_detail_token():
     for t in cases:
         out = normalize_criterion(t)
         assert out in CRITERION_TOKENS, (t, out)
+
+
+# --- §5 truth table: tri_normalize / _combine_tri (NON-tautological logic) ---
+
+
+def test_tri_normalize_pass_is_ok():
+    assert tri_normalize("PASS") == TRI_OK
+
+
+def test_tri_normalize_fail_and_not_supported_are_not_ok():
+    assert tri_normalize("FAIL") == TRI_NOT_OK
+    assert tri_normalize("NOT_SUPPORTED") == TRI_NOT_OK
+
+
+def test_tri_normalize_unknown_and_not_run_are_undetermined():
+    assert tri_normalize("UNKNOWN") == TRI_UNDETERMINED
+    assert tri_normalize("NOT_RUN") == TRI_UNDETERMINED
+
+
+def test_tri_normalize_blocked_feeds_undetermined():
+    """BLOCKED normalizes to UNKNOWN (plan §4), which feeds UNDETERMINED in the
+    truth table -- never OK (no startswith('FEASIBLE') promotion)."""
+    assert tri_normalize("BLOCKED") == TRI_UNDETERMINED
+
+
+def test_combine_tri_any_not_ok_is_not_ok():
+    assert _combine_tri([TRI_OK, TRI_NOT_OK, TRI_OK]) == TRI_NOT_OK
+
+
+def test_combine_tri_undetermined_when_no_not_ok_but_any_undetermined():
+    assert _combine_tri([TRI_OK, TRI_UNDETERMINED]) == TRI_UNDETERMINED
+
+
+def test_combine_tri_all_ok_is_ok():
+    assert _combine_tri([TRI_OK, TRI_OK]) == TRI_OK
+
+
+def test_combine_tri_empty_is_undetermined():
+    assert _combine_tri([]) == TRI_UNDETERMINED
+
+
+# --- §5 truth table: recompute_route_verdict (rule 3 + rule 8) ---
+
+
+def test_route_verdict_viable_when_capability_and_numerical_pass():
+    criteria = {"C3_PLANAR_CORE": "PASS", "C3_PLANAR_FULL_MATRIX": "PASS"}
+    rv = recompute_route_verdict(criteria, {"planar": "PASS"})
+    assert rv["planar"]["status"] == "VIABLE"
+    assert rv["planar"]["capability"] == TRI_OK
+    assert rv["planar"]["numerical"] == TRI_OK
+
+
+def test_route_verdict_not_viable_when_capability_fail():
+    criteria = {"C3_PLANAR_CORE": "FAIL", "C3_PLANAR_FULL_MATRIX": "PASS"}
+    rv = recompute_route_verdict(criteria, {"planar": "PASS"})
+    assert rv["planar"]["status"] == "NOT_VIABLE"
+
+
+def test_route_verdict_not_viable_when_capability_not_supported():
+    """NOT_SUPPORTED normalizes to NOT_OK (rule 3) -> NOT_VIABLE."""
+    criteria = {"C3_PLANAR_CORE": "NOT_SUPPORTED", "C3_PLANAR_FULL_MATRIX": "PASS"}
+    rv = recompute_route_verdict(criteria, {"planar": "PASS"})
+    assert rv["planar"]["status"] == "NOT_VIABLE"
+
+
+def test_route_verdict_not_viable_when_numerical_fail():
+    criteria = {"C3_PLANAR_CORE": "PASS", "C3_PLANAR_FULL_MATRIX": "PASS"}
+    rv = recompute_route_verdict(criteria, {"planar": "FAIL"})
+    assert rv["planar"]["status"] == "NOT_VIABLE"
+
+
+def test_route_verdict_unknown_when_capability_unknown():
+    criteria = {"C3_PLANAR_CORE": "UNKNOWN", "C3_PLANAR_FULL_MATRIX": "PASS"}
+    rv = recompute_route_verdict(criteria, {"planar": "PASS"})
+    assert rv["planar"]["status"] == "UNKNOWN"
+
+
+def test_route_verdict_unknown_when_numerical_absent_not_run():
+    """A route absent from per_route_numerical defaults to NOT_RUN ->
+    UNDETERMINED -> status UNKNOWN (fail-closed)."""
+    criteria = {"C3_PLANAR_CORE": "PASS", "C3_PLANAR_FULL_MATRIX": "PASS"}
+    rv = recompute_route_verdict(criteria, {})
+    assert rv["planar"]["status"] == "UNKNOWN"
+    assert rv["planar"]["numerical"] == TRI_UNDETERMINED
+
+
+def test_route_verdict_region_fused_viable_stale_key_catcher():
+    """CATCHES the Finding-1 stale-key bug. region_fused depends on
+    ``C2_REGION_KERNEL_FEASIBILITY`` (canonical, matching gonogo output at
+    gonogo.py:670). Before the fix ``ROUTE_CAPABILITY_CRITERIA["region_fused"]``
+    used the abbreviated ``C2_REGION_KERNEL``, so the lookup
+    ``criteria.get("C2_REGION_KERNEL")`` missed -> None -> UNDETERMINED ->
+    region_fused UNKNOWN even with both deps PASS. After the fix this SYNTHETIC
+    fixture (REGION_PROTOTYPE=PASS + C2_REGION_KERNEL_FEASIBILITY=PASS +
+    numerical PASS) -> region_fused VIABLE. This test FAILS before the fix and
+    PASSES after."""
+    criteria = {
+        "REGION_PROTOTYPE": "PASS",
+        "C2_REGION_KERNEL_FEASIBILITY": "PASS",
+    }
+    rv = recompute_route_verdict(criteria, {"region_fused": "PASS"})
+    assert rv["region_fused"]["status"] == "VIABLE", rv["region_fused"]
+    assert rv["region_fused"]["capability"] == TRI_OK, rv["region_fused"]
+    assert rv["region_fused"]["numerical"] == TRI_OK, rv["region_fused"]
+
+
+# --- §5 truth table: recompute_completion (rules 1/4/5) ---
+
+
+def _all_determined_criteria():
+    """Every REQUIRED_CRITERION + every route-capability dep set to PASS
+    (determined). Useful baseline for completion tests."""
+    criteria = {c: "PASS" for c in REQUIRED_CRITERIA}
+    for deps in ROUTE_CAPABILITY_CRITERIA.values():
+        for d in deps:
+            criteria[d] = "PASS"
+    return criteria
+
+
+def test_completion_complete_when_all_required_determined():
+    assert recompute_completion(_all_determined_criteria()) == "COMPLETE"
+
+
+def test_completion_inconclusive_when_any_unknown():
+    criteria = _all_determined_criteria()
+    criteria["C2"] = "UNKNOWN"
+    assert recompute_completion(criteria) == "INCONCLUSIVE"
+
+
+def test_completion_inconclusive_when_any_not_run():
+    criteria = _all_determined_criteria()
+    criteria["NUMERICAL"] = "NOT_RUN"
+    assert recompute_completion(criteria) == "INCONCLUSIVE"
+
+
+def test_completion_numerical_fail_does_not_sink():
+    """NUMERICAL=FAIL is determined (NOT_OK, not UNDETERMINED) -- it does NOT
+    alone make completion INCONCLUSIVE (§5 truth table rule 1/4: only
+    UNDETERMINED criteria sink completion)."""
+    criteria = _all_determined_criteria()
+    criteria["NUMERICAL"] = "FAIL"
+    assert recompute_completion(criteria) == "COMPLETE"
+
+
+# --- §5 truth table: recompute_authorization (rule 6) ---
+
+
+def test_authorization_not_authorized_when_inconclusive():
+    rv = {"planar": {"status": "VIABLE"}}
+    assert recompute_authorization("INCONCLUSIVE", rv) == "NOT_AUTHORIZED"
+
+
+def test_authorization_go_to_phase1_when_complete_and_any_viable():
+    rv = {"planar": {"status": "VIABLE"}, "grouped": {"status": "NOT_VIABLE"}}
+    assert recompute_authorization("COMPLETE", rv) == "GO_TO_PHASE1"
+
+
+def test_authorization_no_go_when_complete_and_none_viable():
+    rv = {"planar": {"status": "NOT_VIABLE"}, "grouped": {"status": "UNKNOWN"}}
+    assert recompute_authorization("COMPLETE", rv) == "NO_GO"
 
 
 if __name__ == "__main__":

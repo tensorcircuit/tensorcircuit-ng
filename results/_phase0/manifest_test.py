@@ -959,9 +959,9 @@ def test_build_manifest_c2_checkpoint_cascade_closes_region_fused_gap(tmp_path):
             {"source_commit": "abc", "dirty_worktree": False, "dirty_file_count": 0}
         )
     )
-    # gonogo claims C2_REGION_KERNEL=PASS + REGION_PROTOTYPE=PASS + NUMERICAL=PASS
-    # and region_fused VIABLE. The C2 checkpoint MISMATCH must cascade to
-    # C2_REGION_KERNEL, sinking region_fused.
+    # gonogo claims C2_REGION_KERNEL_FEASIBILITY=PASS + REGION_PROTOTYPE=PASS +
+    # NUMERICAL=PASS and region_fused VIABLE. The C2 checkpoint MISMATCH must
+    # cascade to C2_REGION_KERNEL_FEASIBILITY, sinking region_fused.
     (tmp_path / "gonogo.json").write_text(
         json.dumps(
             {
@@ -969,7 +969,7 @@ def test_build_manifest_c2_checkpoint_cascade_closes_region_fused_gap(tmp_path):
                 "criteria": {
                     "C1": "PASS",
                     "C2": "PASS",
-                    "C2_REGION_KERNEL": "PASS",
+                    "C2_REGION_KERNEL_FEASIBILITY": "PASS",
                     "C3_PLANAR_CORE": "PASS",
                     "C3_PLANAR_FULL_MATRIX": "PASS",
                     "C3_GROUPED": "PASS",
@@ -995,22 +995,22 @@ def test_build_manifest_c2_checkpoint_cascade_closes_region_fused_gap(tmp_path):
 
     m = build_manifest(str(tmp_path), generated_at="2026-07-23T00:00:00Z")
     # F1 cascade: C2 checkpoint MISMATCH downgrades the WHOLE C2 family, not just
-    # "C2". C2_REGION_KERNEL was PASS in gonogo; it must now be UNKNOWN.
+    # "C2". C2_REGION_KERNEL_FEASIBILITY was PASS in gonogo; it must now be UNKNOWN.
     assert m["criteria"]["C2"] == "UNKNOWN", m["criteria"]
-    assert m["criteria"]["C2_REGION_KERNEL"] == "UNKNOWN", m["criteria"]
+    assert m["criteria"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", m["criteria"]
     # Numerical binding is OK, so NUMERICAL is NOT downgraded (stays PASS) -- the
     # cascade is C2-only, proving the gap is closed by the C2 cascade and not by
     # an incidental numerical break.
     assert m["criteria"]["NUMERICAL"] == "PASS", m["criteria"]
-    # The gap (F1): with C2_REGION_KERNEL downgraded, region_fused capability is
-    # UNDETERMINED, so region_fused is UNKNOWN -- NOT VIABLE. Before the F1 fix
-    # C2_REGION_KERNEL stayed PASS and region_fused (capability OK + numerical OK
-    # from the trusted per-route PASS) was VIABLE despite C2=UNKNOWN: the
-    # fail-open this test closes.
+    # The gap (F1): with C2_REGION_KERNEL_FEASIBILITY downgraded, region_fused
+    # capability is UNDETERMINED, so region_fused is UNKNOWN -- NOT VIABLE. Before
+    # the F1 fix C2_REGION_KERNEL_FEASIBILITY stayed PASS and region_fused
+    # (capability OK + numerical OK from the trusted per-route PASS) was VIABLE
+    # despite C2=UNKNOWN: the fail-open this test closes.
     assert m["route_verdict"]["region_fused"]["status"] == "UNKNOWN", m["route_verdict"]
     assert m["route_verdict"]["region_fused"]["status"] != "VIABLE", m["route_verdict"]
-    # region_fused capability is UNDETERMINED (C2_REGION_KERNEL downgraded);
-    # numerical is OK (binding OK + per_route region_fused PASS).
+    # region_fused capability is UNDETERMINED (C2_REGION_KERNEL_FEASIBILITY
+    # downgraded); numerical is OK (binding OK + per_route region_fused PASS).
     assert m["route_verdict"]["region_fused"]["capability"] == "UNDETERMINED", m[
         "route_verdict"
     ]

@@ -8,8 +8,10 @@ json object, never hand-overwritten.
 Task 7: gonogo is the CRITERIA PRODUCER (reads gate artifacts -> native
 canonical criteria). The route/completion/authorization derivation goes through
 ``verdict_schema.recompute_derived_state`` -- the SINGLE SOURCE OF TRUTH for the
-§5 truth table -- so gonogo and manifest CANNOT diverge. JSON + Markdown render
-from one canonical gonogo-v2 object (no divergent code paths).
+§5 truth table -- so gonogo and manifest derivation cannot diverge (the
+derivation logic is shared; inputs/binding-validation differ -- gonogo trusts
+per_route directly while manifest fail-closes on binding break). JSON + Markdown
+render from one canonical gonogo-v2 object (no divergent code paths).
 """
 
 from __future__ import annotations
@@ -45,8 +47,10 @@ def aggregate_two_layer(criteria, per_route_numerical):
 
     Task 7: the route_verdict / phase0_completion / phase1_authorization /
     reasons / blocking_artifacts derivation goes through the shared helper so
-    gonogo and manifest CANNOT diverge. JSON + Markdown render from THIS object
-    (truth-table rule 7). ``per_route_numerical`` is {route: PASS|FAIL|...};
+    gonogo and manifest derivation cannot diverge (shared derivation logic;
+    inputs/binding-validation differ -- gonogo trusts per_route directly while
+    manifest fail-closes on binding break). JSON + Markdown render from THIS
+    object (truth-table rule 7). ``per_route_numerical`` is {route: PASS|FAIL|...};
     a route absent from it is UNDETERMINED (fail-closed).
     """
     derived = recompute_derived_state(criteria, per_route_numerical)
@@ -690,8 +694,9 @@ def main(stage_dir=None):
     }
 
     # Task 7: derivation goes through the shared §5 truth table
-    # (verdict_schema.recompute_derived_state) so gonogo and manifest CANNOT
-    # diverge. JSON + Markdown render from the single ``agg`` object below.
+    # (verdict_schema.recompute_derived_state) so gonogo and manifest derivation
+    # cannot diverge (shared derivation logic; inputs/binding-validation differ).
+    # JSON + Markdown render from the single ``agg`` object below.
     per_route_num = _numerical_per_route(
         os.path.join(base, "numerical_validation.json")
     )

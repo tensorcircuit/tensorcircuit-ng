@@ -93,15 +93,19 @@ CRITERIA_NAMES = (
 # Numerical routes (plan §4 numerical list)
 # ---------------------------------------------------------------------------
 
-#: Canonical numerical-route names. Note the cutlass numerical route is named
-#: ``cutlass_sm80_fallback`` (distinct from the capability-route names) because
-#: the numerical matrix measures the SM80-fallback kernel's BF16 output, not the
-#: native-SM120 kernel (which is BLOCKED for BF16 on consumer Blackwell).
+#: Canonical numerical-route names. These are ROUTE KEYS (matching
+#: ``ROUTE_CAPABILITY_CRITERIA`` keys), not criterion names. The numerical
+#: matrix measures BF16 output per route; the cutlass numerical route is keyed
+#: ``cutlass_4m_single`` (the same key as the capability route) -- the route's
+#: actual kernel on consumer Blackwell sm_120 is the 2.x Ampere (SM80) fallback
+#: (the native SM120 path is BLOCKED for BF16), but the route KEY is
+#: ``cutlass_4m_single`` to match the capability route, NOT a separate
+#: ``cutlass_sm80_fallback`` name.
 NUMERICAL_ROUTES = (
     "planar",
     "grouped",
     "region_fused",
-    "cutlass_sm80_fallback",
+    "cutlass_4m_single",
 )
 
 # ---------------------------------------------------------------------------
@@ -211,7 +215,7 @@ REQUIRED_CRITERIA = (
 ROUTE_CAPABILITY_CRITERIA = {
     "planar": ("C3_PLANAR_CORE", "C3_PLANAR_FULL_MATRIX"),
     "grouped": ("C3_GROUPED",),
-    "region_fused": ("REGION_PROTOTYPE", "C2_REGION_KERNEL"),
+    "region_fused": ("REGION_PROTOTYPE", "C2_REGION_KERNEL_FEASIBILITY"),
     "cutlass_4m_single": ("CUTLASS_SM80_FALLBACK_CAPABILITY",),
 }
 
