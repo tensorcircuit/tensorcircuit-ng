@@ -19,11 +19,13 @@ try:
     from cqlib.quantum_platform import QuantumLanguage
     from cqlib.utils import QasmToQcis
     from cqlib.circuits import Circuit as CqlibCircuit
+    from cqlib.exceptions import CqlibError
 except ImportError:
     TianYanPlatform = None  # type: ignore
     QuantumLanguage = None  # type: ignore
     QasmToQcis = None  # type: ignore
     CqlibCircuit = None  # type: ignore
+    CqlibError = None  # type: ignore
 
 _SIMULATOR_DEVICES = {"tianyan_sw", "tianyan_s", "tianyan_tn"}
 _REQUIRED_PLATFORM_ATTRIBUTES = (
@@ -538,6 +540,8 @@ def _standardize_properties(properties: Dict[str, Any]) -> None:
                         elif "|1> readout fidelity" in param_name:
                             bits[q_idx]["ReadoutF1Err"] = 1.0 - data["param_list"][idx]
                         elif "f01" in param_name:
+                            # "Freqency" spelling kept for compatibility with
+                            # the tencent provider properties format
                             bits[q_idx]["Freqency"] = data["param_list"][idx]
 
     # Extract from relatime (T1, T2)
@@ -656,6 +660,9 @@ def submit_task(
     if is_sequence(source):
         sources = list(source)
         num_shots = _normalize_shots(shots, len(sources))
+        # submit_experiment submits the circuits as one experiment (a job
+        # group under lab_name) and returns one query id per circuit;
+        # submit_job below is the single-circuit endpoint
         query_ids = pf.submit_experiment(
             circuit=sources,
             language=QuantumLanguage.QCIS,  # type: ignore
@@ -709,8 +716,8 @@ def resubmit_task(task: Task, token: str) -> Task:
         if isinstance(new_query_id, list):
             new_query_id = new_query_id[0]
         return Task(id_=new_query_id, device=task.device)
-    except Exception as e:
-        raise ValueError("Failed to resubmit task %s: %s" % (task.id_, e))
+    except CqlibError as e:  # type: ignore
+        raise ValueError("Failed to resubmit task %s: %s" % (task.id_, e)) from e
 
 
 def remove_task(task: Task, token: str) -> Any:
