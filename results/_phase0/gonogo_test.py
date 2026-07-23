@@ -42,24 +42,37 @@ def test_c3_planar_from_capability_json(tmp_path):
     assert _c3_planar_from_capability(str(tmp_path / "missing.json")) == "NOT_RUN"
 
 
-def test_normalize_pass_supported_feasible_are_ok():
+def test_normalize_only_canonical_pass_is_ok():
+    """plan §4 验收 (Task 1): ``_normalize`` no longer promotes artifact-native
+    detail tokens (SUPPORTED / FEASIBLE* / TILE_FUSION_FEASIBLE) to OK. Only the
+    canonical PASS token is "established good"; detail tokens fail closed to
+    UNDETERMINED via ``verdict_schema.normalize_criterion`` (the reader must
+    re-derive PASS from evidence upstream)."""
     from results._phase0.gonogo import _normalize
 
+    assert _normalize("PASS") == "OK"
+    # Detail tokens must NOT be auto-promoted to OK (Task 1 kill of
+    # startswith("FEASIBLE") and the SUPPORTED / TILE_FUSION_FEASIBLE shortcuts).
     for v in (
-        "PASS",
         "SUPPORTED",
         "FEASIBLE_WITH_SM80_FALLBACK",
         "FEASIBLE_WITH_RECOMPUTE",
+        "FEASIBLE",
         "TILE_FUSION_FEASIBLE",
     ):
-        assert _normalize(v) == "OK", v
+        assert _normalize(v) == "UNDETERMINED", v
 
 
-def test_normalize_fail_not_supported_are_not_ok():
+def test_normalize_only_canonical_fail_and_not_supported_are_not_ok():
+    """plan §4 验收 (Task 1): canonical FAIL / NOT_SUPPORTED are "established
+    bad". Artifact-native NOT_FEASIBLE is a detail token -> UNDETERMINED (the
+    reader must re-derive canonical FAIL/NOT_SUPPORTED from evidence upstream)."""
     from results._phase0.gonogo import _normalize
 
-    for v in ("FAIL", "NOT_SUPPORTED", "NOT_FEASIBLE"):
+    for v in ("FAIL", "NOT_SUPPORTED"):
         assert _normalize(v) == "NOT_OK", v
+    # NOT_FEASIBLE is a detail token; it must not be auto-promoted to NOT_OK.
+    assert _normalize("NOT_FEASIBLE") == "UNDETERMINED"
 
 
 def test_normalize_unknown_not_run_blocked_are_undetermined():
@@ -230,15 +243,18 @@ def test_numerical_per_route_skips_malformed_row(tmp_path):
 
 
 def test_capability_layer_combines_per_route():
+    # Task 1 contract: criteria fed to capability_layer are canonical criterion
+    # tokens (PASS / FAIL / NOT_SUPPORTED / UNKNOWN / NOT_RUN). Detail tokens
+    # are fail-closed to UNDETERMINED by _normalize and must not be promoted.
     from results._phase0.gonogo import capability_layer
 
     criteria = {
-        "C3_PLANAR_CORE": "SUPPORTED",
+        "C3_PLANAR_CORE": "PASS",
         "C3_PLANAR_FULL_MATRIX": "PASS",
         "C3_GROUPED": "NOT_SUPPORTED",
-        "REGION_PROTOTYPE": "FEASIBLE_WITH_RECOMPUTE",
+        "REGION_PROTOTYPE": "PASS",
         "C2_REGION_KERNEL": "PASS",
-        "CUTLASS_SM120_4M": "FEASIBLE_WITH_SM80_FALLBACK",
+        "CUTLASS_SM120_4M": "PASS",
     }
     cap = capability_layer(criteria)
     assert cap["planar"] == "OK"  # core OK + full matrix OK
@@ -248,10 +264,13 @@ def test_capability_layer_combines_per_route():
 
 
 def test_capability_layer_undetermined_if_any_dep_not_run():
+    # Task 1 contract: canonical tokens only (PASS for established-good caps,
+    # NOT_RUN for not-yet-run sub-criteria). Any UNDETERMINED dep -> route
+    # capability UNDETERMINED (no NOT_OK to sink it).
     from results._phase0.gonogo import capability_layer
 
     criteria = {
-        "C3_PLANAR_CORE": "SUPPORTED",
+        "C3_PLANAR_CORE": "PASS",
         "C3_PLANAR_FULL_MATRIX": "NOT_RUN",
         "C3_GROUPED": "NOT_SUPPORTED",
         "REGION_PROTOTYPE": "NOT_RUN",
@@ -515,8 +534,14 @@ def test_main_emits_consistent_gonogo_v2(tmp_path, monkeypatch):
     # Honest headline: C2 canonical is UNKNOWN -> INCONCLUSIVE, not GO.
     assert agg["phase0_completion"] == "INCONCLUSIVE"
     assert agg["phase1_authorization"] == "NOT_AUTHORIZED"
-    # per-route fail-closed: region_fused VIABLE, planar/grouped NOT_VIABLE
-    assert agg["route_verdict"]["region_fused"]["status"] == "VIABLE"
+    # Task 1 fail-closed: REGION_PROTOTYPE reads the canonical
+    # region_prototype.json verdict=FEASIBLE_WITH_RECOMPUTE (a DETAIL token, not
+    # canonical PASS) and CUTLASS_SM120_4M reads FEASIBLE_WITH_SM80_FALLBACK
+    # (also a detail token). With startswith("FEASIBLE") promotion killed in
+    # _normalize, region_fused capability -> UNDETERMINED -> route UNKNOWN
+    # (was previously VIABLE, the fail-open surface Task 1 closes; Tasks 2a/4
+    # will re-derive canonical PASS upstream at the reader level).
+    assert agg["route_verdict"]["region_fused"]["status"] == "UNKNOWN"
     assert agg["route_verdict"]["planar"]["status"] == "NOT_VIABLE"
     # rule 7: MD rendered from same object
     md = (stage / "gonogo.md").read_text()
@@ -554,16 +579,17 @@ def test_gonogo_main_does_not_write_manifest(tmp_path, monkeypatch):
 
 def test_capability_layer_region_kernel_fail_sinks_region():
     # truth-table rule 3, structurally: region_fused depends on C2_REGION_KERNEL;
-    # a FAIL there sinks region capability to NOT_OK even with a feasible prototype.
+    # a canonical FAIL there sinks region capability to NOT_OK even with a PASS
+    # region prototype. (Task 1: criteria fed in are canonical tokens.)
     from results._phase0.gonogo import capability_layer
 
     criteria = {
-        "C3_PLANAR_CORE": "SUPPORTED",
+        "C3_PLANAR_CORE": "PASS",
         "C3_PLANAR_FULL_MATRIX": "PASS",
         "C3_GROUPED": "NOT_SUPPORTED",
-        "REGION_PROTOTYPE": "FEASIBLE_WITH_RECOMPUTE",
+        "REGION_PROTOTYPE": "PASS",
         "C2_REGION_KERNEL": "FAIL",
-        "CUTLASS_SM120_4M": "FEASIBLE_WITH_SM80_FALLBACK",
+        "CUTLASS_SM120_4M": "PASS",
     }
     cap = capability_layer(criteria)
     assert cap["region_fused"] == "NOT_OK"  # rule 3: region-kernel FAIL sinks region

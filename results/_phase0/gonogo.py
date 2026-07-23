@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import os
 
+from results._phase0.verdict_schema import normalize_criterion
+
 VERDICTS = (
     "GO_TO_PHASE1",
     "NO_GO_NO_WINDOW",
@@ -59,16 +61,25 @@ ROUTES = tuple(ROUTE_CAPABILITY_CRITERIA)
 def _normalize(verdict):
     """Map an artifact-native verdict token to a gating tri-state.
 
-    OK          -> the capability/result is established as good
-                   (PASS, SUPPORTED, FEASIBLE*, TILE_FUSION_FEASIBLE)
-    NOT_OK      -> established as bad (FAIL, NOT_SUPPORTED, NOT_FEASIBLE)
-    UNDETERMINED-> not established (UNKNOWN, NOT_RUN, BLOCKED, unrecognized)
+    OK          -> the canonical criterion is PASS (the only "established good"
+                   token; plan §4 forbids promoting FEASIBLE* / SUPPORTED /
+                   TILE_FUSION_FEASIBLE detail tokens to OK)
+    NOT_OK      -> established as bad (canonical FAIL or NOT_SUPPORTED)
+    UNDETERMINED-> not established (UNKNOWN, NOT_RUN, BLOCKED, INCONCLUSIVE,
+                   any artifact-native detail token, unrecognized strings)
+
+    Plan §4 验收: no ``startswith('FEASIBLE')`` unconditional promotion. Every
+    incoming token is first scrubbed by ``verdict_schema.normalize_criterion``,
+    which fail-closes artifact-native detail tokens (FEASIBLE*, SUPPORTED,
+    TILE_FUSION_FEASIBLE, NOT_FEASIBLE, BLOCKED, INCONCLUSIVE) to canonical
+    UNKNOWN. The canonical criteria feeding this layer should already be
+    canonical tokens by the time they reach it; if a detail token leaks through
+    it fails closed to UNDETERMINED rather than being promoted to OK.
     """
-    if verdict in ("PASS", "SUPPORTED", "TILE_FUSION_FEASIBLE"):
+    canonical = normalize_criterion(verdict)
+    if canonical == "PASS":
         return _TRI_OK
-    if isinstance(verdict, str) and verdict.startswith("FEASIBLE"):
-        return _TRI_OK
-    if verdict in ("FAIL", "NOT_SUPPORTED", "NOT_FEASIBLE"):
+    if canonical in ("FAIL", "NOT_SUPPORTED"):
         return _TRI_NOT_OK
     return _TRI_UNDETERMINED
 
