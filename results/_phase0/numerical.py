@@ -98,7 +98,15 @@ def make_inputs(level, shape, seed, ref_dtype=np.complex64):
 # diagnostic only" (e.g. max_abs for region_fused/cutlass where output scale varies
 # with dynamic range). nan_inf is always enforced.
 POLICIES = {
-    ("planar", "C16BF"): {"relative_l2": 1e-3, "max_abs": 1e-1, "max_rel": 5e-3},
+    # C16BF = bf16-output path: relative_l2 is bounded by bf16 precision
+    # (~2^-8/sqrt(3) ~ 2.3e-3; measured ~1.66e-3), and max_abs scales with output
+    # magnitude (|C|_max * 2^-8; unbounded across shapes) so it is diagnostic-only
+    # (None), mirroring the cublaslt.py §7.5 gate which keys on max_rel for bf16
+    # output. max_rel is bounded by bf16 precision (~2^-8 ~ 3.9e-3; measured
+    # ~3.85e-3). Task 6 smoke test revealed the original rel_l2<1e-3 / max_abs<1e-1
+    # were structurally impossible for bf16 output (measured rel_l2=1.66e-3,
+    # max_abs=0.136 at the smoke shape).
+    ("planar", "C16BF"): {"relative_l2": 5e-3, "max_abs": None, "max_rel": 5e-3},
     ("planar", "C32F"): {"relative_l2": 1e-4, "max_abs": 1e-2, "max_rel": 1e-3},
     ("grouped", "C16BF"): {"relative_l2": 1e-3, "max_abs": 1e-1, "max_rel": 5e-3},
     ("grouped", "C32F"): {"relative_l2": 1e-4, "max_abs": 1e-2, "max_rel": 1e-3},
@@ -282,3 +290,61 @@ def write_json(path, payload):
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w") as fh:
         json.dump(payload, fh, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Task 6: planar route numerical collector (GPU; spec §3)
+# ---------------------------------------------------------------------------
+
+def collect_planar(shape, dtype, level, seed):
+    """Planar-complex BF16 (C16BF) or FP32 (C32F) GEMM accuracy vs c64 materialized.
+
+    Reuses cublasLt 4-real path. C16BF = bf16-rounded real parts; C32F = fp32 real
+    parts (the cublasLt fp32 output path, out_dtype='fp32'). Reference is the fp32
+    complex matmul (c64 precision).
+
+    Reality note (ext.cpp:104-109): the pybind11 ext requires uint16 (BF16-bit)
+    inputs for ALL out_dtype values — there is no fp32-input path. So C32F here
+    means bf16-input + fp32-output (fp32 accumulation, no output rounding), and
+    the reference uses the SAME bf16-upcast inputs (apples-to-apples per
+    reference_complex_matmul's contract). For out_dtype='fp32' the ext returns
+    already-decoded float32 host arrays (NOT uint16 bits), so _bf16_bits_to_f32
+    must not be called on them. The brief's original C32F path passed fp32 arrays
+    to the uint16-typed ext args (TypeError) and called _bf16_bits_to_f32 on the
+    float32 output (corruption); both are fixed here.
+    """
+    from results._phase0.cublaslt import (
+        load_ext, _f32_to_bf16_bits_and_upcast, _bf16_bits_to_f32,
+        reference_complex_matmul,
+    )
+
+    M, N, K = shape
+    A, B = make_inputs(level, shape, seed)  # A=(M,K), B=(K,N)
+    ar, ai = A.real.astype(np.float32), A.imag.astype(np.float32)
+    br, bi = B.real.astype(np.float32), B.imag.astype(np.float32)
+    ext = load_ext()
+    if dtype == "C16BF":
+        ar_bf, ar_f = _f32_to_bf16_bits_and_upcast(ar)
+        ai_bf, ai_f = _f32_to_bf16_bits_and_upcast(ai)
+        br_bf, br_f = _f32_to_bf16_bits_and_upcast(br)
+        bi_bf, bi_f = _f32_to_bf16_bits_and_upcast(bi)
+        cr_u16, ci_u16 = ext.planar_complex_matmul_bf16(ar_bf, ai_bf, br_bf, bi_bf, M, N, K, out_dtype="bf16")
+        cr = _bf16_bits_to_f32(cr_u16)
+        ci = _bf16_bits_to_f32(ci_u16)
+        cr_ref, ci_ref = reference_complex_matmul(ar_f, ai_f, br_f, bi_f)
+        out = (cr + 1j * ci).astype(np.complex64)
+        ref = (cr_ref + 1j * ci_ref).astype(np.complex64)
+    else:  # C32F — ext requires uint16 BF16-bit inputs even for fp32 output
+        ar_bf, ar_f = _f32_to_bf16_bits_and_upcast(ar)
+        ai_bf, ai_f = _f32_to_bf16_bits_and_upcast(ai)
+        br_bf, br_f = _f32_to_bf16_bits_and_upcast(br)
+        bi_bf, bi_f = _f32_to_bf16_bits_and_upcast(bi)
+        cr, ci = ext.planar_complex_matmul_bf16(ar_bf, ai_bf, br_bf, bi_bf, M, N, K, out_dtype="fp32")
+        cr_ref, ci_ref = reference_complex_matmul(ar_f, ai_f, br_f, bi_f)
+        out = (cr + 1j * ci).astype(np.complex64)
+        ref = (cr_ref + 1j * ci_ref).astype(np.complex64)
+    metrics = compute_metrics(out, ref)
+    verdict, _ = apply_policy("planar", dtype, metrics)
+    row = {"route": "planar", "dtype": dtype, "shape": shape, "level": level, "seed": seed,
+           "reference_dtype": "c64", **metrics, "policy_pass": int(verdict == "PASS")}
+    return row

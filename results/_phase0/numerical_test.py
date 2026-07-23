@@ -189,3 +189,18 @@ def test_shape_constants():
     assert set(REAL_GEMM_SHAPES) == {(16384,1024,1024),(524288,32,32),(262144,64,64),(1048576,16,16)}
     assert LEVELS == ("baseline", "mixed_scale", "cancellation")
     assert SEEDS == (0, 1, 2)
+
+
+@pytest.mark.gpu
+def test_collect_planar_smoke_one_cell(tmp_path):
+    from results._phase0.numerical import collect_planar
+
+    row = collect_planar((524288, 32, 32), "C16BF", "baseline", seed=0)
+    assert row["route"] == "planar"
+    assert row["dtype"] == "C16BF"
+    assert row["shape"] == (524288, 32, 32)
+    assert row["level"] == "baseline"
+    assert "relative_l2" in row and "max_rel" in row and "nan_inf" in row
+    assert row["policy_pass"] in (0, 1)
+    # C16BF baseline should pass its own policy (bf16 ~4e-3 max_rel on N(0,1))
+    assert row["policy_pass"] == 1, row
