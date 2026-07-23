@@ -115,16 +115,75 @@ def test_c2_layer_status_reads_sublayer():
 
 
 def test_c3_full_matrix_status(tmp_path):
-    import json
+    """Task 5 strict validator: the committed 128-cell artifact -> PASS;
+    missing artifact -> NOT_RUN; empty/header-only -> UNKNOWN.
+
+    The validator derives the expected 128-cell contract from
+    contraction_shapes.csv + the producer matrix grid, so the real artifact
+    (cublaslt_full_matrix.csv + contraction_shapes.csv) is the only honest
+    PASS fixture. Pure-function (no GPU); tests under this name do not load
+    the extension."""
+    import os
+
     from results._phase0.gonogo import _c3_planar_full_matrix_status
 
-    p = tmp_path / "fm.csv"
-    p.write_text("M,N,K,status\n1024,1024,1024,ok\n")
-    assert _c3_planar_full_matrix_status(str(p)) == "PASS"
+    real_csv = "results/phase0/cublaslt_full_matrix.csv"
+    if os.path.exists(real_csv):
+        # The committed 128-cell artifact (120 ok + 8 policy no-algo) -> PASS.
+        assert _c3_planar_full_matrix_status(real_csv) == "PASS"
+    # absent artifact -> NOT_RUN (Plan B / Task 6 not yet run)
     assert _c3_planar_full_matrix_status(str(tmp_path / "missing.csv")) == "NOT_RUN"
     empty = tmp_path / "empty.csv"
-    empty.write_text("M,N,K,status\n")
+    empty.write_text(
+        "M,N,K,out_dtype,ws_cap,op,aligned,algo_count,first_algo_id,workspace_bytes,status\n"
+    )
     assert _c3_planar_full_matrix_status(str(empty)) == "UNKNOWN"
+
+
+def test_c3_full_matrix_pass_on_synthetic_complete_matrix(tmp_path):
+    """Task 5: a synthetic COMPLETE matrix over a tiny shape set -> PASS.
+    Confirms the validator is a pure-function (no GPU, no real artifacts):
+    given a contraction_shapes.csv whose bytes>=64MiB rows yield N distinct
+    shapes, a full-matrix CSV covering all N*16 cells (with no-algo only on
+    the explicit policy shape) is PASS."""
+    import csv
+
+    from results._phase0.cublaslt import _FULL_MATRIX_HEADER, full_matrix_no_algo_policy
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+
+    # 2 distinct actual-large shapes (>=64 MiB). (262144,64,4) is the policy
+    # shape whose OP_T cells legitimately enumerate zero algos; (16384,16,16)
+    # is a fully-aligned real-gemm shape where every cell has an algo.
+    shapes_csv = tmp_path / "contraction_shapes.csv"
+    shapes_csv.write_text(
+        "n,depth,output,node_id,M,N,K,bytes\n"
+        "24,10,state,0,262144,64,4,134217728\n"
+        "24,10,state,1,16384,16,16,134217728\n"
+    )
+    policy = full_matrix_no_algo_policy()
+    rows = []
+    for m, n, k, od, ws, op in [
+        (262144, 64, 4, od, ws, op)
+        for od in ("bf16", "fp32")
+        for ws in ("0", "1MiB", "16MiB", "max")
+        for op in ("N", "T")
+    ] + [
+        (16384, 16, 16, od, ws, op)
+        for od in ("bf16", "fp32")
+        for ws in ("0", "1MiB", "16MiB", "max")
+        for op in ("N", "T")
+    ]:
+        key = (m, n, k, od, ws, op)
+        aligned = int(m % 16 == 0 and n % 16 == 0 and k % 16 == 0)
+        status = "no-algo" if key in policy else "ok"
+        rows.append([m, n, k, od, ws, op, aligned, 1, 21, 0, status])
+
+    fm = tmp_path / "fm.csv"
+    with open(fm, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(_FULL_MATRIX_HEADER)
+        w.writerows(rows)
+    assert _c3_planar_full_matrix_status(str(fm), str(shapes_csv)) == "PASS"
 
 
 def test_c3_grouped_status(tmp_path):
@@ -582,6 +641,7 @@ def test_main_emits_consistent_gonogo_v2(tmp_path, monkeypatch):
         "cublaslt_planar_capability.json",
         "cublaslt_grouped_capability.json",
         "cublaslt_full_matrix.csv",
+        "contraction_shapes.csv",
         "cutlass_sm120_4m.json",
         "region_prototype.json",
         "numerical_validation.json",
@@ -629,6 +689,7 @@ def test_gonogo_main_does_not_write_manifest(tmp_path, monkeypatch):
         "cublaslt_planar_capability.json",
         "cublaslt_grouped_capability.json",
         "cublaslt_full_matrix.csv",
+        "contraction_shapes.csv",
         "cutlass_sm120_4m.json",
         "region_prototype.json",
         "numerical_validation.json",
@@ -767,46 +828,121 @@ def test_main_emits_two_cutlass_criteria_for_native_blocker_plus_sm80_fallback(
     assert criteria["CUTLASS_SM80_FALLBACK_CAPABILITY"] == "PASS", criteria
 
 
+def _write_synthetic_shapes(tmp_path, shapes):
+    """Write a contraction_shapes.csv with the given (M,N,K) shapes all marked
+    bytes>=64MiB so load_c1_c2_shapes keeps them. Returns the path."""
+    shapes_csv = tmp_path / "contraction_shapes.csv"
+    lines = ["n,depth,output,node_id,M,N,K,bytes"]
+    for i, (m, n, k) in enumerate(shapes):
+        lines.append(f"24,10,state,{i},{m},{n},{k},134217728")
+    shapes_csv.write_text("\n".join(lines) + "\n")
+    return shapes_csv
+
+
+def _write_full_matrix(tmp_path, rows, name="fm.csv"):
+    """Write a full-matrix CSV with the canonical header + given rows."""
+    import csv
+    from results._phase0.cublaslt import _FULL_MATRIX_HEADER
+
+    p = tmp_path / name
+    with open(p, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(_FULL_MATRIX_HEADER)
+        w.writerows(rows)
+    return p
+
+
+def _synth_complete_rows(shapes):
+    """Build the canonical complete-matrix rows for the given (M,N,K) shape list,
+    with no-algo ONLY on the explicit-policy shape's OP_T cells."""
+    from results._phase0.cublaslt import full_matrix_no_algo_policy
+
+    policy = full_matrix_no_algo_policy()
+    rows = []
+    for m, n, k in shapes:
+        for od in ("bf16", "fp32"):
+            for ws in ("0", "1MiB", "16MiB", "max"):
+                for op in ("N", "T"):
+                    key = (m, n, k, od, ws, op)
+                    aligned = int(m % 16 == 0 and n % 16 == 0 and k % 16 == 0)
+                    status = "no-algo" if key in policy else "ok"
+                    rows.append([m, n, k, od, ws, op, aligned, 1, 21, 0, status])
+    return rows
+
+
 def test_c3_full_matrix_unknown_on_missing_expected_cell(tmp_path):
-    """plan §3 操作.2 bullet 9: a full-matrix CSV missing an expected cell ->
-    criterion UNKNOWN. Today ``_c3_planar_full_matrix_status`` only requires
-    '>=1 data row' (gonogo.py), so any non-empty CSV returns PASS regardless of
-    coverage. This test freezes the target: a CSV with only a subset of the
-    expected matrix cells yields UNKNOWN."""
+    """plan §3 操作.2 bullet 9: a full-matrix CSV with proper schema but only a
+    SUBSET of the expected cells -> UNKNOWN (missing coverage). The validator
+    derives the expected 128-cell contract per shape; a single row cannot cover
+    the full matrix."""
     from results._phase0.gonogo import _c3_planar_full_matrix_status
 
-    # A CSV with ONE data row for an unexpected shape -> does NOT cover the
-    # full matrix (which spans the canonical SHAPES, e.g. 16384x1024x1024 +
-    # 524288x32x32 + 262144x64x64 + 1048576x16x16 + ...). One subset row
-    # cannot be a complete matrix -> UNKNOWN.
-    p = tmp_path / "fm.csv"
-    p.write_text("M,N,K,status\n1024,1024,1024,ok\n")
-    assert _c3_planar_full_matrix_status(str(p)) == "UNKNOWN"
+    shapes = [(262144, 64, 4), (16384, 16, 16)]
+    shapes_csv = _write_synthetic_shapes(tmp_path, shapes)
+    # Build the complete matrix, then keep only ONE row -> missing coverage.
+    one_row = [_synth_complete_rows(shapes)[0]]
+    fm = _write_full_matrix(tmp_path, one_row)
+    assert _c3_planar_full_matrix_status(str(fm), str(shapes_csv)) == "UNKNOWN"
 
 
 def test_c3_full_matrix_unknown_on_duplicate_row(tmp_path):
-    """plan §3 操作.2 bullet 9: a full-matrix CSV with a duplicate row ->
-    UNKNOWN. Duplicates indicate a broken sweep / re-run contamination, not a
-    canonical PASS."""
+    """plan §3 操作.2 bullet 9: a full-matrix CSV with a duplicate cell key ->
+    UNKNOWN. Duplicates indicate a broken sweep / re-run contamination."""
     from results._phase0.gonogo import _c3_planar_full_matrix_status
 
-    p = tmp_path / "fm.csv"
-    # same shape row twice -> duplicate contamination
-    p.write_text("M,N,K,status\n1024,1024,1024,ok\n1024,1024,1024,ok\n")
-    assert _c3_planar_full_matrix_status(str(p)) == "UNKNOWN"
+    shapes = [(16384, 16, 16)]  # one shape: 16 expected cells
+    shapes_csv = _write_synthetic_shapes(tmp_path, shapes)
+    rows = _synth_complete_rows(shapes)
+    # Duplicate the first row -> 17 rows, one cell key appears twice.
+    rows.append(rows[0])
+    fm = _write_full_matrix(tmp_path, rows)
+    assert _c3_planar_full_matrix_status(str(fm), str(shapes_csv)) == "UNKNOWN"
 
 
 def test_c3_full_matrix_unknown_on_shape_drift(tmp_path):
-    """plan §3 操作.2 bullet 9: a full-matrix CSV with a row whose (M,N,K) is
-    OUTSIDE the expected matrix (shape drift) -> UNKNOWN. Today
-    ``_c3_planar_full_matrix_status`` accepts any non-empty CSV; the fix
-    validates that every row's shape is in the canonical matrix."""
+    """plan §3 操作.2 bullet 9: a full-matrix CSV containing a row whose (M,N,K)
+    is OUTSIDE the expected matrix (shape drift) -> UNKNOWN. The validator
+    binds every cell's shape to contraction_shapes.csv."""
     from results._phase0.gonogo import _c3_planar_full_matrix_status
 
-    p = tmp_path / "fm.csv"
-    # 9999x9999x9999 is not any canonical matrix shape -> drift
-    p.write_text("M,N,K,status\n1024,1024,1024,ok\n9999,9999,9999,drift\n")
-    assert _c3_planar_full_matrix_status(str(p)) == "UNKNOWN"
+    shapes = [(16384, 16, 16)]
+    shapes_csv = _write_synthetic_shapes(tmp_path, shapes)
+    rows = _synth_complete_rows(shapes)
+    # 9999x9999x9999 is not any canonical contraction shape -> drift.
+    rows.append([9999, 9999, 9999, "bf16", "0", "N", 0, 1, 21, 0, "ok"])
+    fm = _write_full_matrix(tmp_path, rows)
+    assert _c3_planar_full_matrix_status(str(fm), str(shapes_csv)) == "UNKNOWN"
+
+
+def test_c3_full_matrix_unknown_on_illegal_status_token(tmp_path):
+    """plan §3 操作.2 bullet 9: a full-matrix CSV with a status token outside
+    the producer's legal set ('ok'/'no-algo') -> UNKNOWN. An unknown status is
+    a sweep/parser regression, not a canonical PASS."""
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+
+    shapes = [(16384, 16, 16)]
+    shapes_csv = _write_synthetic_shapes(tmp_path, shapes)
+    rows = _synth_complete_rows(shapes)
+    # 'error' is not a producer status token -> illegal.
+    rows[0][10] = "error"
+    fm = _write_full_matrix(tmp_path, rows)
+    assert _c3_planar_full_matrix_status(str(fm), str(shapes_csv)) == "UNKNOWN"
+
+
+def test_c3_full_matrix_unknown_on_no_algo_outside_policy(tmp_path):
+    """Task 5 explicit no-algo policy: a no-algo cell OUTSIDE the 8-cell policy
+    set -> UNKNOWN. The 8 legitimate no-algo cells are all OP_T on shape
+    (262144,64,4); a no-algo on (16384,16,16) (a fully-aligned real-gemm shape)
+    is a real coverage gap, not a PASS."""
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+
+    shapes = [(16384, 16, 16)]  # not the policy shape
+    shapes_csv = _write_synthetic_shapes(tmp_path, shapes)
+    rows = _synth_complete_rows(shapes)
+    # Flip one (16384,16,16) cell to no-algo -> outside the policy -> UNKNOWN.
+    rows[0][10] = "no-algo"
+    fm = _write_full_matrix(tmp_path, rows)
+    assert _c3_planar_full_matrix_status(str(fm), str(shapes_csv)) == "UNKNOWN"
 
 
 if __name__ == "__main__":

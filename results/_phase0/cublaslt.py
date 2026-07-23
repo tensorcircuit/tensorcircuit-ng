@@ -487,6 +487,64 @@ def _write_csv(path, header, rows):
 # and the actual-large policy aggregator (all GPU-free / unit-testable; the live
 # extension + matrix run is run_full_matrix).
 # --------------------------------------------------------------------------- #
+
+# Matrix enumeration config (spec §3.6). Module-level so the PRODUCER
+# (run_full_matrix) and the READER (gonogo._c3_planar_full_matrix_status, Task 5)
+# share a single source of truth -- any drift between the cells the producer
+# writes and the cells the reader validates would silently loosen the gate.
+FULL_MATRIX_WS_CAPS = (
+    ("0", 0),
+    ("1MiB", 1 << 20),
+    ("16MiB", 16 << 20),
+    ("max", 1 << 30),
+)
+FULL_MATRIX_OUT_DTYPES = ("bf16", "fp32")
+FULL_MATRIX_OPS = ("N", "T")
+FULL_MATRIX_STATUS_TOKENS = ("ok", "no-algo")
+
+# Explicit no-algo policy (spec §3.5 / plan §8 Task 5): status="no-algo" is a
+# legitimate cuBLASLt enumeration result ONLY on the 8 cells the sweep genuinely
+# found zero algorithms for -- NEVER a swallowed error turned into PASS. All 8
+# are OP_T (transpose-A) on the skinniest-K actual-large shape (M=262144, N=64,
+# K=4), spanning every dtype x workspace cap (2 x 4 = 8 cells). OP_N on that
+# shape enumerated 1 algo (21) and OP_T on every other actual-large shape
+# enumerated >=1 algo, so any no-algo OUTSIDE this set is a real coverage gap
+# (a broken sweep / cuBLASLt regression) -> the reader must return UNKNOWN.
+_FULL_MATRIX_NO_ALGO_SHAPE = (262144, 64, 4)
+
+
+def full_matrix_no_algo_policy():
+    """The frozen set of (M,N,K,out_dtype,ws_cap,op) keys where status='no-algo'
+    is a legitimate cuBLASLt enumeration result, not a swallowed error.
+
+    Recomputable from FULL_MATRIX_OUT_DTYPES x FULL_MATRIX_WS_CAPS over the
+    single OP_T skinniest-K shape; verified against the committed 128-cell
+    artifact (exactly 8 no-algo cells, all in this set)."""
+    return frozenset(
+        (*_FULL_MATRIX_NO_ALGO_SHAPE, od, cap, "T")
+        for od in FULL_MATRIX_OUT_DTYPES
+        for cap, _ in FULL_MATRIX_WS_CAPS
+    )
+
+
+def full_matrix_expected_keys(shapes):
+    """Canonical (M,N,K,out_dtype,ws_cap,op) cell key set the full-matrix sweep
+    must produce for ``shapes`` (a sequence of {M,N,K,...} dicts) crossed with
+    the dtype/workspace/op grid. 16 cells per shape (2 dtypes x 4 caps x 2 ops).
+
+    Used by the Task 5 reader (gonogo._c3_planar_full_matrix_status) to derive
+    the expected-cell contract from contraction_shapes.csv + this grid, so the
+    producer and reader cannot drift."""
+    keys = []
+    for s in shapes:
+        m, n, k = s["M"], s["N"], s["K"]
+        for od in FULL_MATRIX_OUT_DTYPES:
+            for cap_name, _ in FULL_MATRIX_WS_CAPS:
+                for op in FULL_MATRIX_OPS:
+                    keys.append((m, n, k, od, cap_name, op))
+    return keys
+
+
 _FULL_MATRIX_HEADER = [
     "M",
     "N",
@@ -619,9 +677,9 @@ def run_full_matrix(shapes, out_dir="results/phase0"):
 
     os.makedirs(out_dir, exist_ok=True)
     ext = load_ext()
-    ws_caps = [("0", 0), ("1MiB", 1 << 20), ("16MiB", 16 << 20), ("max", 1 << 30)]
-    out_dtypes = ["bf16", "fp32"]
-    ops = ["N", "T"]
+    ws_caps = FULL_MATRIX_WS_CAPS
+    out_dtypes = FULL_MATRIX_OUT_DTYPES
+    ops = FULL_MATRIX_OPS
 
     matrix_rows = []
     for s in shapes:

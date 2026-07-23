@@ -313,6 +313,72 @@ def test_full_matrix_csv_schema(tmp_path):
     assert out[1][3] == "bf16" and out[1][-1] == "ok"
 
 
+def test_full_matrix_grid_constants_lock_producer_reader_contract():
+    """Task 5: the matrix grid constants are the single source of truth shared
+    by the producer (run_full_matrix) and the reader (gonogo). Lock the exact
+    token sets so a producer-side rename cannot silently loosen the gate."""
+    from results._phase0.cublaslt import (
+        FULL_MATRIX_WS_CAPS,
+        FULL_MATRIX_OUT_DTYPES,
+        FULL_MATRIX_OPS,
+        FULL_MATRIX_STATUS_TOKENS,
+    )
+
+    assert [c[0] for c in FULL_MATRIX_WS_CAPS] == ["0", "1MiB", "16MiB", "max"]
+    assert [c[1] for c in FULL_MATRIX_WS_CAPS] == [0, 1 << 20, 16 << 20, 1 << 30]
+    assert FULL_MATRIX_OUT_DTYPES == ("bf16", "fp32")
+    assert FULL_MATRIX_OPS == ("N", "T")
+    assert FULL_MATRIX_STATUS_TOKENS == ("ok", "no-algo")
+
+
+def test_full_matrix_expected_keys_is_shapes_x_dtype_x_ws_x_op():
+    """full_matrix_expected_keys produces 16 cells per shape (2 dtypes x 4 ws x
+    2 ops); each key is (M,N,K,out_dtype,ws_cap,op)."""
+    from results._phase0.cublaslt import (
+        full_matrix_expected_keys,
+        FULL_MATRIX_OUT_DTYPES,
+        FULL_MATRIX_WS_CAPS,
+        FULL_MATRIX_OPS,
+    )
+
+    shapes = [{"M": 16384, "N": 1024, "K": 1024}, {"M": 262144, "N": 64, "K": 4}]
+    keys = full_matrix_expected_keys(shapes)
+    # 2 shapes x 2 dtypes x 4 ws_caps x 2 ops = 32 cells, no duplicates.
+    assert len(keys) == 2 * 2 * 4 * 2
+    assert len(set(keys)) == len(keys)
+    # Every cell is the cross-product of one shape x one grid combo.
+    for m, n, k, od, ws, op in keys:
+        assert (m, n, k) in {(16384, 1024, 1024), (262144, 64, 4)}
+        assert od in FULL_MATRIX_OUT_DTYPES
+        assert ws in {c[0] for c in FULL_MATRIX_WS_CAPS}
+        assert op in FULL_MATRIX_OPS
+
+
+def test_full_matrix_no_algo_policy_is_8_cells_on_skinniest_shape_op_t():
+    """Task 5 explicit no-algo policy: exactly 8 cells, all OP_T on shape
+    (262144,64,4) across 2 dtypes x 4 workspace caps. This is the cuBLASLt
+    sweep's genuine zero-algorithm result; any no-algo outside this set is a
+    coverage gap the reader must reject."""
+    from results._phase0.cublaslt import (
+        full_matrix_no_algo_policy,
+        FULL_MATRIX_OUT_DTYPES,
+        FULL_MATRIX_WS_CAPS,
+    )
+
+    policy = full_matrix_no_algo_policy()
+    expected = {
+        (262144, 64, 4, od, cap, "T")
+        for od in FULL_MATRIX_OUT_DTYPES
+        for cap, _ in FULL_MATRIX_WS_CAPS
+    }
+    assert policy == expected
+    assert len(policy) == 2 * 4  # 2 dtypes x 4 ws caps, single (shape, op=T)
+    # OP_N is never in the policy; the policy is exclusively OP_T.
+    assert all(k[5] == "T" for k in policy)
+    # The policy shape is the single skinniest-K actual-large shape.
+    assert {k[:3] for k in policy} == {(262144, 64, 4)}
+
+
 def test_probe_config_forwards_params_to_ext():
     """probe_config maps op->transa/transb and forwards out_dtype/ws_limit to the extension.
     GPU-free stub locks the contract; the live (algo_count>0) check is the GPU run."""

@@ -8,6 +8,7 @@ json object, never hand-overwritten.
 
 from __future__ import annotations
 
+import csv
 import json
 import os
 
@@ -412,25 +413,127 @@ def _c2_layer_status(data, layer):
     return _roll_up_statuses(statuses)
 
 
-def _c3_planar_full_matrix_status(path):
-    """C3 planar full-matrix completeness (Task 6 sweep artifact).
+def _c3_planar_full_matrix_status(path, contraction_shapes_path=None):
+    """C3 planar full-matrix completeness (Task 6 sweep artifact) -- STRICT
+    128-cell validator (Task 5: plan §8 / spec §3.5).
 
-    PASS   -> cublaslt_full_matrix.csv exists with a header and >=1 data row
-              (the sweep produced output; Task 6 vetted its quality separately)
-    NOT_RUN-> artifact absent
-    UNKNOWN-> present but empty/unparseable
+    Derives the expected (M,N,K,out_dtype,ws_cap,op) cell key set from
+    contraction_shapes.csv + the producer's matrix grid
+    (cublaslt.FULL_MATRIX_*/full_matrix_expected_keys), then enforces the full
+    matrix contract:
+
+      * exact header (cublaslt._FULL_MATRIX_HEADER)
+      * no duplicate (M,N,K,out_dtype,ws_cap,op) cell key
+      * every expected cell present, no unexpected cell
+      * legal dtype / ws_cap / op / aligned / status tokens
+      * aligned matches the recomputed ``m%16==n%16==k%16==0`` invariant
+      * (M,N,K) bound to contraction_shapes.csv (no shape drift)
+      * status='no-algo' allowed ONLY on cublaslt.full_matrix_no_algo_policy()
+        cells (explicit 8-cell policy, not error-swallowing)
+
+    Any violation -> UNKNOWN (never PASS). NOT_RUN only when the artifact itself
+    is absent. Pure-function: no GPU, no extension load.
+
+    The 8 legitimate no-algo cells (OP_T on shape 262144x64x4 across 2 dtypes x
+    4 workspace caps) are the cuBLASLt sweep's genuine zero-algorithm results;
+    a no-algo anywhere else is a real coverage gap -> UNKNOWN.
     """
     if not os.path.exists(path):
         return _NOT_RUN
+    # Resolve the contraction-shapes source for expected-cell derivation. Both
+    # the producer (run_full_matrix) and the committed artifact live alongside
+    # contraction_shapes.csv under results/phase0/.
+    if contraction_shapes_path is None:
+        contraction_shapes_path = os.path.join(
+            os.path.dirname(path), "contraction_shapes.csv"
+        )
     try:
-        with open(path) as f:
-            rows = [ln for ln in f if ln.strip()]
+        from results._phase0 import cublaslt as _cublaslt
+    except Exception:
+        # Any import-time failure (missing module, missing numpy, etc.) is
+        # fail-closed: we cannot derive the expected-cell contract -> UNKNOWN.
+        return _UNKNOWN
+
+    # Derive the expected shape set with the SAME filter the producer uses
+    # (load_c1_c2_shapes: bytes >= 64 MiB), deduped by (M,N,K).
+    try:
+        raw_shapes = _cublaslt.load_c1_c2_shapes(contraction_shapes_path)
+    except (OSError, ValueError):
+        # contraction_shapes.csv absent/unreadable -> cannot derive the
+        # expected-cell contract -> fail-closed UNKNOWN.
+        return _UNKNOWN
+    if not raw_shapes:
+        return _UNKNOWN
+    seen, expected_shapes = set(), []
+    expected_shape_keys = set()
+    for s in raw_shapes:
+        key = (s["M"], s["N"], s["K"])
+        if key not in seen:
+            seen.add(key)
+            expected_shapes.append(s)
+            expected_shape_keys.add(key)
+    expected_keys = set(_cublaslt.full_matrix_expected_keys(expected_shapes))
+    no_algo_policy = _cublaslt.full_matrix_no_algo_policy()
+    header = list(_cublaslt._FULL_MATRIX_HEADER)
+    ws_cap_names = {c[0] for c in _cublaslt.FULL_MATRIX_WS_CAPS}
+
+    try:
+        with open(path, newline="") as f:
+            rows = list(csv.reader(f))
     except (OSError, ValueError):
         return _UNKNOWN
-    # rows[0] is the header; need >=1 data row beyond it
     if len(rows) < 2:
+        return _UNKNOWN  # header-only / empty
+    if rows[0] != header:
+        return _UNKNOWN  # schema / header drift
+
+    actual_keys = set()
+    for row in rows[1:]:
+        if len(row) != len(header):
+            return _UNKNOWN  # malformed row (wrong column count)
+        rec = dict(zip(header, row))
+        try:
+            m, n, k = int(rec["M"]), int(rec["N"]), int(rec["K"])
+        except ValueError:
+            return _UNKNOWN  # non-integer M/N/K
+        od, ws, op = rec["out_dtype"], rec["ws_cap"], rec["op"]
+        key = (m, n, k, od, ws, op)
+        # duplicate cell key -> broken sweep / re-run contamination
+        if key in actual_keys:
+            return _UNKNOWN
+        actual_keys.add(key)
+        # shape binding: (M,N,K) must be one of the expected contraction shapes
+        if (m, n, k) not in expected_shape_keys:
+            return _UNKNOWN  # shape drift
+        # dtype / workspace-cap / op token legality
+        if od not in _cublaslt.FULL_MATRIX_OUT_DTYPES:
+            return _UNKNOWN
+        if ws not in ws_cap_names:
+            return _UNKNOWN
+        if op not in _cublaslt.FULL_MATRIX_OPS:
+            return _UNKNOWN
+        # aligned must match the recomputed producer invariant
+        try:
+            aligned = int(rec["aligned"])
+        except ValueError:
+            return _UNKNOWN
+        if aligned not in (0, 1):
+            return _UNKNOWN
+        if aligned != int(m % 16 == 0 and n % 16 == 0 and k % 16 == 0):
+            return _UNKNOWN
+        # status token legality
+        status = rec["status"]
+        if status not in _cublaslt.FULL_MATRIX_STATUS_TOKENS:
+            return _UNKNOWN
+        # explicit no-algo policy: a no-algo OUTSIDE the policy set is a real
+        # coverage gap (broken sweep / cuBLASLt regression), not a PASS.
+        if status == "no-algo" and key not in no_algo_policy:
+            return _UNKNOWN
+
+    # expected keys == actual keys: every expected cell present, no extra cell.
+    if actual_keys != expected_keys:
         return _UNKNOWN
-    return "PASS"  # sweep produced output; Task 6 vetted its quality separately
+    return _OK
 
 
 def _c3_grouped_status(path):
