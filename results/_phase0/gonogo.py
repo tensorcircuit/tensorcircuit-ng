@@ -8,7 +8,6 @@ json object, never hand-overwritten.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 
@@ -512,14 +511,6 @@ def _numerical_per_route(path):
             if route is not None:
                 per[route] = row["criterion"]
     return per
-
-
-def _file_hash(p):
-    return (
-        hashlib.sha1(open(p, "rb").read()).hexdigest()[:16]
-        if os.path.exists(p)
-        else None
-    )
 
 
 def _collect_environment():

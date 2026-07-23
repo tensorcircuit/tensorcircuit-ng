@@ -196,8 +196,6 @@ def _apply_checkpoint_validation(criteria, c2_status, num_status):
 def _case_artifacts(case_id, base):
     """Case-specific files under the INPUT_ARTIFACT_DIRS whose name or parent dir
     matches the case_id prefix (e.g. 'n24_d10'). Best-effort provenance list."""
-    prefix = case_id.split("_")[0]  # e.g. 'n24' from 'n24_d10_default' -> too coarse;
-    # use the n_depth prefix (first two underscore tokens) instead
     parts = case_id.split("_")
     needle = "_".join(parts[:2]) if len(parts) >= 2 else case_id
     found = []
@@ -276,19 +274,18 @@ def build_manifest(base, generated_at=None):
     criteria + cases + inputs/outputs. Deterministic given fixed generated_at."""
     run_ctx = _load_json(os.path.join(base, "run_context.json"))
     gonogo = _load_json(os.path.join(base, "gonogo.json"))
+    gonogo = gonogo if isinstance(gonogo, dict) else {}
+    run_ctx = run_ctx if isinstance(run_ctx, dict) else {}
     c1_j = _load_json(os.path.join(base, "c1_judgment.json"))
     c2_j = _load_json(os.path.join(base, "c2_judgment.json"))
     c2_ckpt = _load_json(os.path.join(base, "c2_checkpoint_manifest.json"))
     numerical = _load_json(os.path.join(base, "numerical_validation.json"))
 
-    gonogo_criteria = gonogo.get("criteria", {}) if isinstance(gonogo, dict) else {}
+    gonogo_criteria = gonogo.get("criteria", {})
     criteria = _presence_check(gonogo_criteria, base)
     c2_status = _validate_c2_checkpoint(base, c2_j, c2_ckpt)
     num_status = _validate_numerical_binding(base, numerical)
     criteria = _apply_checkpoint_validation(criteria, c2_status, num_status)
-    # preserve criterion order from gonogo (dict preserves insertion order)
-    ordered = {k: criteria.get(k) for k in gonogo_criteria}
-    ordered.update({k: criteria[k] for k in criteria if k not in ordered})
 
     inputs, outputs = _collect_inputs_outputs(base)
     cases = _build_cases(c1_j, c2_j, base)
@@ -305,7 +302,7 @@ def build_manifest(base, generated_at=None):
         "dirty_file_count": run_ctx.get("dirty_file_count"),
         "commands": run_ctx.get("command_templates") or {},
         "environment_hash": _hash_file(os.path.join(base, "environment.json")),
-        "criteria": ordered,
+        "criteria": criteria,
         "route_verdict": {
             r: (v.get("status") if isinstance(v, dict) else v)
             for r, v in (gonogo.get("route_verdict") or {}).items()

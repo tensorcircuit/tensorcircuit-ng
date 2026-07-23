@@ -330,7 +330,7 @@ def test_build_manifest_schema_and_stability(tmp_path):
     assert {"n24_d10", "n24_d10_default"} <= set(m["cases"])
 
 
-def test_main_writes_manifest_v1(tmp_path, monkeypatch):
+def test_main_writes_manifest_v1(tmp_path):
     import json, os, shutil
     from results._phase0 import manifest as M
 
