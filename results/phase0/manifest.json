@@ -1,7 +1,6 @@
 {
   "blocking_artifacts": [
     "c2_judgment.json (C2_CANONICAL undetermined)",
-    "numerical_validation.json (overall=FAIL)",
     "cublaslt_grouped_capability.json (NOT_SUPPORTED)"
   ],
   "cases": {
@@ -153,18 +152,19 @@
   "criteria": {
     "C1": "PASS",
     "C2": "UNKNOWN",
-    "C2_REGION_KERNEL": "PASS",
+    "C2_REGION_KERNEL_FEASIBILITY": "UNKNOWN",
     "C3_GROUPED": "NOT_SUPPORTED",
     "C3_PLANAR_CORE": "PASS",
     "C3_PLANAR_FULL_MATRIX": "PASS",
-    "CUTLASS_SM120_4M": "FEASIBLE_WITH_SM80_FALLBACK",
-    "NUMERICAL": "FAIL",
-    "REGION_PROTOTYPE": "FEASIBLE_WITH_RECOMPUTE"
+    "CUTLASS_SM120_4M": "NOT_SUPPORTED",
+    "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",
+    "NUMERICAL": "UNKNOWN",
+    "REGION_PROTOTYPE": "UNKNOWN"
   },
   "dirty_file_count": 65,
   "dirty_worktree": true,
   "environment_hash": "07a3371b7b27007d",
-  "generated_at": "2026-07-23T16:28:59Z",
+  "generated_at": "2026-07-23T17:26:28Z",
   "inputs": {
     "c1_buffer_assignment/n22_d10_exp_default.txt": "30cd18ad9941c041",
     "c1_buffer_assignment/n22_d10_exp_nofusion.txt": "b34b02bd6306f6bc",
@@ -235,17 +235,17 @@
   },
   "outputs": {
     "environment.json": "07a3371b7b27007d",
-    "gonogo.json": "42a3b34223ce3c1e",
-    "gonogo.md": "342ded9b72eb6ca2"
+    "gonogo.json": "70b718e3da458743",
+    "gonogo.md": "746a8d13dbf8caa5"
   },
   "phase0_completion": "INCONCLUSIVE",
   "phase1_authorization": "NOT_AUTHORIZED",
   "reasons": [
-    "canonical criteria undetermined -> phase0_completion INCONCLUSIVE: C2, CUTLASS_SM120_4M, CUTLASS_SM80_FALLBACK_CAPABILITY, REGION_PROTOTYPE",
+    "canonical criteria undetermined -> phase0_completion INCONCLUSIVE: C2, REGION_PROTOTYPE, NUMERICAL",
     "planar NOT_VIABLE: capability=OK numerical=NOT_OK",
     "grouped NOT_VIABLE: capability=NOT_OK numerical=NOT_OK",
     "region_fused UNKNOWN: capability=UNDETERMINED numerical=UNDETERMINED",
-    "cutlass_4m_single UNKNOWN: capability=UNDETERMINED numerical=UNDETERMINED"
+    "cutlass_4m_single UNKNOWN: capability=OK numerical=UNDETERMINED"
   ],
   "required_artifacts": {
     "C1": [
@@ -277,7 +277,7 @@
   },
   "route_verdict": {
     "cutlass_4m_single": {
-      "capability": "UNDETERMINED",
+      "capability": "OK",
       "numerical": "UNDETERMINED",
       "status": "UNKNOWN"
     },

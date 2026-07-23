@@ -42,58 +42,14 @@ def test_c3_planar_from_capability_json(tmp_path):
     assert _c3_planar_from_capability(str(tmp_path / "missing.json")) == "NOT_RUN"
 
 
-def test_normalize_only_canonical_pass_is_ok():
-    """plan §4 验收 (Task 1): ``_normalize`` no longer promotes artifact-native
-    detail tokens (SUPPORTED / FEASIBLE* / TILE_FUSION_FEASIBLE) to OK. Only the
-    canonical PASS token is "established good"; detail tokens fail closed to
-    UNDETERMINED via ``verdict_schema.normalize_criterion`` (the reader must
-    re-derive PASS from evidence upstream)."""
-    from results._phase0.gonogo import _normalize
-
-    assert _normalize("PASS") == "OK"
-    # Detail tokens must NOT be auto-promoted to OK (Task 1 kill of
-    # startswith("FEASIBLE") and the SUPPORTED / TILE_FUSION_FEASIBLE shortcuts).
-    for v in (
-        "SUPPORTED",
-        "FEASIBLE_WITH_SM80_FALLBACK",
-        "FEASIBLE_WITH_RECOMPUTE",
-        "FEASIBLE",
-        "TILE_FUSION_FEASIBLE",
-    ):
-        assert _normalize(v) == "UNDETERMINED", v
-
-
-def test_normalize_only_canonical_fail_and_not_supported_are_not_ok():
-    """plan §4 验收 (Task 1): canonical FAIL / NOT_SUPPORTED are "established
-    bad". Artifact-native NOT_FEASIBLE is a detail token -> UNDETERMINED (the
-    reader must re-derive canonical FAIL/NOT_SUPPORTED from evidence upstream)."""
-    from results._phase0.gonogo import _normalize
-
-    for v in ("FAIL", "NOT_SUPPORTED"):
-        assert _normalize(v) == "NOT_OK", v
-    # NOT_FEASIBLE is a detail token; it must not be auto-promoted to NOT_OK.
-    assert _normalize("NOT_FEASIBLE") == "UNDETERMINED"
-
-
-def test_normalize_unknown_not_run_blocked_are_undetermined():
-    from results._phase0.gonogo import _normalize
-
-    for v in ("UNKNOWN", "NOT_RUN", "BLOCKED", "", "weird-token"):
-        assert _normalize(v) == "UNDETERMINED", v
-
-
-def test_constants_define_routes_and_required_criteria():
-    from results._phase0.gonogo import REQUIRED_CRITERIA, ROUTE_CAPABILITY_CRITERIA
-
-    assert set(ROUTE_CAPABILITY_CRITERIA) == {
-        "planar",
-        "grouped",
-        "region_fused",
-        "cutlass_4m_single",
-    }
-    assert "C2" in REQUIRED_CRITERIA and "NUMERICAL" in REQUIRED_CRITERIA
-    # region route depends on the region-kernel sub-criterion (truth-table rule 3)
-    assert "C2_REGION_KERNEL" in ROUTE_CAPABILITY_CRITERIA["region_fused"]
+# Task 7: the gonogo-local truth-table duplicate (_normalize, _combine_tri,
+# capability_layer, numerical_layer, route_verdict, evaluate_completion,
+# authorize_phase1, REQUIRED_CRITERIA, ROUTE_CAPABILITY_CRITERIA) has been
+# KILLED. The §5 truth table now lives solely in verdict_schema
+# (recompute_derived_state, tested by verdict_schema_test.py). gonogo is the
+# CRITERIA PRODUCER; derivation goes through the shared helper. The tests that
+# pinned the gonogo-local duplicate are removed; the shared helper's contract
+# is pinned in verdict_schema_test.py.
 
 
 def test_c2_layer_status_reads_sublayer():
@@ -362,264 +318,55 @@ def test_numerical_per_route_skips_malformed_row(tmp_path):
     assert per == {"planar": "FAIL"}
 
 
-def test_capability_layer_combines_per_route():
-    # Task 1 contract: criteria fed to capability_layer are canonical criterion
-    # tokens (PASS / FAIL / NOT_SUPPORTED / UNKNOWN / NOT_RUN). Detail tokens
-    # are fail-closed to UNDETERMINED by _normalize and must not be promoted.
-    # Task 4: cutlass_4m_single now depends on CUTLASS_SM80_FALLBACK_CAPABILITY
-    # (the path that actually runs), NOT on CUTLASS_SM120_4M (native, BLOCKED).
-    from results._phase0.gonogo import capability_layer
-
-    criteria = {
-        "C3_PLANAR_CORE": "PASS",
-        "C3_PLANAR_FULL_MATRIX": "PASS",
-        "C3_GROUPED": "NOT_SUPPORTED",
-        "REGION_PROTOTYPE": "PASS",
-        "C2_REGION_KERNEL": "PASS",
-        "CUTLASS_SM120_4M": "NOT_SUPPORTED",  # native BLOCKED
-        "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",  # fallback runs
-    }
-    cap = capability_layer(criteria)
-    assert cap["planar"] == "OK"  # core OK + full matrix OK
-    assert cap["grouped"] == "NOT_OK"  # NOT_SUPPORTED
-    assert cap["region_fused"] == "OK"  # region proto OK + region kernel OK
-    # cutlass_4m_single capability follows the FALLBACK (PASS), independent of
-    # CUTLASS_SM120_4M being NOT_SUPPORTED — native failure does not sink the
-    # route that actually runs.
-    assert cap["cutlass_4m_single"] == "OK"
-
-
-def test_capability_layer_undetermined_if_any_dep_not_run():
-    # Task 1 contract: canonical tokens only (PASS for established-good caps,
-    # NOT_RUN for not-yet-run sub-criteria). Any UNDETERMINED dep -> route
-    # capability UNDETERMINED (no NOT_OK to sink it).
-    from results._phase0.gonogo import capability_layer
-
-    criteria = {
-        "C3_PLANAR_CORE": "PASS",
-        "C3_PLANAR_FULL_MATRIX": "NOT_RUN",
-        "C3_GROUPED": "NOT_SUPPORTED",
-        "REGION_PROTOTYPE": "NOT_RUN",
-        "C2_REGION_KERNEL": "PASS",
-        "CUTLASS_SM120_4M": "NOT_RUN",
-    }
-    cap = capability_layer(criteria)
-    assert cap["planar"] == "UNDETERMINED"  # full matrix NOT_RUN, no NOT_OK
-    assert cap["region_fused"] == "UNDETERMINED"
-
-
-def test_numerical_layer_maps_per_route():
-    from results._phase0.gonogo import numerical_layer, ROUTES
-
-    per = {
-        "planar": "FAIL",
-        "grouped": "FAIL",
-        "region_fused": "PASS",
-        "cutlass_4m_single": "PASS",
-    }
-    num = numerical_layer(per, ROUTES)
-    assert num["planar"] == "NOT_OK"
-    assert num["region_fused"] == "OK"
-
-
-def test_numerical_layer_missing_route_is_undetermined():
-    from results._phase0.gonogo import numerical_layer, ROUTES
-
-    num = numerical_layer({"region_fused": "PASS"}, ROUTES)
-    assert num["planar"] == "UNDETERMINED"  # absent -> UNDETERMINED
-    assert num["region_fused"] == "OK"
-
-
-def test_route_verdict_viable_requires_both_ok():
-    from results._phase0.gonogo import route_verdict
-
-    rv = route_verdict(
-        {
-            "planar": "OK",
-            "grouped": "NOT_OK",
-            "region_fused": "OK",
-            "cutlass_4m_single": "OK",
-        },
-        {
-            "planar": "NOT_OK",
-            "grouped": "NOT_OK",
-            "region_fused": "OK",
-            "cutlass_4m_single": "OK",
-        },
-    )
-    assert rv["planar"]["status"] == "NOT_VIABLE"  # num NOT_OK
-    assert rv["planar"]["numerical"] == "NOT_OK"
-    assert rv["grouped"]["status"] == "NOT_VIABLE"  # both NOT_OK
-    assert rv["region_fused"]["status"] == "VIABLE"  # both OK
-    assert rv["cutlass_4m_single"]["status"] == "VIABLE"
-
-
-def test_route_verdict_unknown_when_undetermined_and_no_not_ok():
-    from results._phase0.gonogo import route_verdict
-
-    rv = route_verdict(
-        {
-            "planar": "OK",
-            "grouped": "UNDETERMINED",
-            "region_fused": "OK",
-            "cutlass_4m_single": "OK",
-        },
-        {
-            "planar": "UNDETERMINED",
-            "grouped": "NOT_OK",
-            "region_fused": "OK",
-            "cutlass_4m_single": "OK",
-        },
-    )
-    assert rv["planar"]["status"] == "UNKNOWN"  # num UNDETERMINED, no NOT_OK
-    assert rv["grouped"]["status"] == "NOT_VIABLE"  # grouped num NOT_OK
-
-
-def test_route_verdict_rule3_region_kernel_fail_sinks_region():
-    # rule 3 encoded structurally: region capability NOT_OK -> NOT_VIABLE
-    from results._phase0.gonogo import route_verdict
-
-    rv = route_verdict(
-        {
-            "planar": "OK",
-            "grouped": "OK",
-            "region_fused": "NOT_OK",
-            "cutlass_4m_single": "OK",
-        },
-        {
-            "planar": "OK",
-            "grouped": "OK",
-            "region_fused": "OK",
-            "cutlass_4m_single": "OK",
-        },
-    )
-    assert rv["region_fused"]["status"] == "NOT_VIABLE"
-
-
-def test_completion_inconclusive_if_any_required_unknown():
-    from results._phase0.gonogo import evaluate_completion
-
-    criteria = {
-        c: "PASS"
-        for c in (
-            "C1",
-            "C2",
-            "C3_PLANAR_CORE",
-            "C3_PLANAR_FULL_MATRIX",
-            "C3_GROUPED",
-            "CUTLASS_SM120_4M",
-            "REGION_PROTOTYPE",
-            "NUMERICAL",
-        )
-    }
-    criteria["C2"] = "UNKNOWN"  # the real binding constraint
-    assert evaluate_completion(criteria) == "INCONCLUSIVE"
-
-
-def test_completion_complete_when_all_determined_and_numerical_fail_ok():
-    # NUMERICAL=FAIL is "determined" -> does NOT sink completion (rule 5 edge)
-    from results._phase0.gonogo import evaluate_completion
-
-    criteria = {
-        c: "PASS"
-        for c in (
-            "C1",
-            "C2",
-            "C3_PLANAR_CORE",
-            "C3_PLANAR_FULL_MATRIX",
-            "C3_GROUPED",
-            "CUTLASS_SM120_4M",
-            "CUTLASS_SM80_FALLBACK_CAPABILITY",
-            "REGION_PROTOTYPE",
-        )
-    }
-    criteria["NUMERICAL"] = "FAIL"
-    criteria["C3_GROUPED"] = "NOT_SUPPORTED"  # determined, not UNKNOWN
-    criteria["CUTLASS_SM120_4M"] = "NOT_SUPPORTED"  # determined, not UNKNOWN
-    assert evaluate_completion(criteria) == "COMPLETE"
-
-
-def test_completion_inconclusive_if_c3_subordinate_not_run():
-    # rule 4: C3_PLANAR_CORE PASS but FULL_MATRIX NOT_RUN -> INCONCLUSIVE
-    from results._phase0.gonogo import evaluate_completion
-
-    criteria = {
-        c: "PASS"
-        for c in (
-            "C1",
-            "C2",
-            "C3_PLANAR_CORE",
-            "C3_PLANAR_FULL_MATRIX",
-            "C3_GROUPED",
-            "CUTLASS_SM120_4M",
-            "REGION_PROTOTYPE",
-            "NUMERICAL",
-        )
-    }
-    criteria["C3_PLANAR_FULL_MATRIX"] = "NOT_RUN"
-    assert evaluate_completion(criteria) == "INCONCLUSIVE"
-
-
-def test_authorize_phase1_truth_table():
-    from results._phase0.gonogo import authorize_phase1
-
-    viable = {"region_fused": {"status": "VIABLE"}}
-    none = {
-        "planar": {"status": "NOT_VIABLE"},
-        "grouped": {"status": "NOT_VIABLE"},
-        "region_fused": {"status": "NOT_VIABLE"},
-        "cutlass_4m_single": {"status": "NOT_VIABLE"},
-    }
-    assert authorize_phase1("COMPLETE", viable) == "GO_TO_PHASE1"
-    assert authorize_phase1("COMPLETE", none) == "NO_GO"
-    assert authorize_phase1("INCONCLUSIVE", viable) == "NOT_AUTHORIZED"
-
-
-def test_aggregate_two_layer_end_to_end():
+def test_aggregate_two_layer_uses_shared_helper():
+    """Task 7: aggregate_two_layer delegates to verdict_schema.recompute_derived_state
+    (the shared §5 truth table). The derived state (route_verdict / completion /
+    authorization / reasons / blocking) is RECOMPUTED, not passed in."""
     from results._phase0.gonogo import aggregate_two_layer
+    from results._phase0.verdict_schema import recompute_derived_state
 
     criteria = {
         "C1": "PASS",
         "C2": "UNKNOWN",
-        "C2_REGION_KERNEL": "PASS",
-        "C3_PLANAR_CORE": "SUPPORTED",
+        "C2_REGION_KERNEL_FEASIBILITY": "PASS",
+        "C3_PLANAR_CORE": "PASS",
         "C3_PLANAR_FULL_MATRIX": "PASS",
         "C3_GROUPED": "NOT_SUPPORTED",
-        "CUTLASS_SM120_4M": "FEASIBLE_WITH_SM80_FALLBACK",
-        "REGION_PROTOTYPE": "FEASIBLE_WITH_RECOMPUTE",
+        "CUTLASS_SM120_4M": "NOT_SUPPORTED",
+        "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",
+        "REGION_PROTOTYPE": "UNKNOWN",
         "NUMERICAL": "FAIL",
     }
-    rv = {
-        "planar": {"status": "NOT_VIABLE", "capability": "OK", "numerical": "NOT_OK"},
-        "grouped": {
-            "status": "NOT_VIABLE",
-            "capability": "NOT_OK",
-            "numerical": "NOT_OK",
-        },
-        "region_fused": {"status": "VIABLE", "capability": "OK", "numerical": "OK"},
-        "cutlass_4m_single": {
-            "status": "VIABLE",
-            "capability": "OK",
-            "numerical": "OK",
-        },
-    }
-    agg = aggregate_two_layer(criteria, rv, "INCONCLUSIVE", "NOT_AUTHORIZED")
+    per_route = {"planar": "FAIL", "grouped": "FAIL"}
+    agg = aggregate_two_layer(criteria, per_route)
+    # The derived state matches the shared helper exactly (no divergence).
+    expected = recompute_derived_state(criteria, per_route)
+    assert agg["route_verdict"] == expected["route_verdict"]
+    assert agg["phase0_completion"] == expected["phase0_completion"]
+    assert agg["phase1_authorization"] == expected["phase1_authorization"]
+    assert agg["reasons"] == expected["reasons"]
+    assert agg["blocking_artifacts"] == expected["blocking_artifacts"]
+    # Honest headline: C2 UNKNOWN -> INCONCLUSIVE -> NOT_AUTHORIZED.
     assert agg["schema_version"] == "gonogo-v2"
     assert agg["phase0_completion"] == "INCONCLUSIVE"
     assert agg["phase1_authorization"] == "NOT_AUTHORIZED"
     assert agg["criteria"]["C2"] == "UNKNOWN"
-    assert agg["route_verdict"]["region_fused"]["status"] == "VIABLE"
+    # planar: capability OK (C3 core+full PASS) but numerical FAIL -> NOT_VIABLE.
+    assert agg["route_verdict"]["planar"]["status"] == "NOT_VIABLE"
+    # region_fused: REGION_PROTOTYPE UNKNOWN -> capability UNDETERMINED -> UNKNOWN.
+    assert agg["route_verdict"]["region_fused"]["status"] == "UNKNOWN"
+    # reasons name the undetermined criterion.
     assert any("C2" in r for r in agg["reasons"])
     assert "c2_judgment.json" in " ".join(agg["blocking_artifacts"])
 
 
 def test_render_md_matches_json_object():
-    # truth-table rule 7: MD is generated from the same object -> no contradiction
+    """truth-table rule 7: MD is generated from the same object -> no contradiction.
+    Task 7: aggregate_two_layer uses the new (criteria, per_route_numerical) signature.
+    """
     from results._phase0.gonogo import aggregate_two_layer, _render_md
 
-    agg = aggregate_two_layer(
-        {"NUMERICAL": "FAIL"}, {}, "INCONCLUSIVE", "NOT_AUTHORIZED"
-    )
+    agg = aggregate_two_layer({"NUMERICAL": "FAIL"}, {})
     md = _render_md(agg)
     assert "INCONCLUSIVE" in md
     assert "NOT_AUTHORIZED" in md
@@ -663,15 +410,21 @@ def test_main_emits_consistent_gonogo_v2(tmp_path, monkeypatch):
     # Honest headline: C2 canonical is UNKNOWN -> INCONCLUSIVE, not GO.
     assert agg["phase0_completion"] == "INCONCLUSIVE"
     assert agg["phase1_authorization"] == "NOT_AUTHORIZED"
-    # Task 1 fail-closed: REGION_PROTOTYPE reads the canonical
-    # region_prototype.json verdict=FEASIBLE_WITH_RECOMPUTE (a DETAIL token, not
-    # canonical PASS) and CUTLASS_SM120_4M reads FEASIBLE_WITH_SM80_FALLBACK
-    # (also a detail token). With startswith("FEASIBLE") promotion killed in
-    # _normalize, region_fused capability -> UNDETERMINED -> route UNKNOWN
-    # (was previously VIABLE, the fail-open surface Task 1 closes; Tasks 2a/4
-    # will re-derive canonical PASS upstream at the reader level).
+    # Task 7: gonogo emits canonical CRITERIA_NAMES keys (NOT the abbreviated
+    # C2_REGION_KERNEL). The region prototype verdict=UNKNOWN (canonical, from
+    # region_prototype.json) and C2_REGION_KERNEL_FEASIBILITY=UNKNOWN (from
+    # c2_judgment layers) -> region_fused capability UNDETERMINED -> route
+    # UNKNOWN. CUTLASS_SM120_4M=NOT_SUPPORTED + CUTLASS_SM80_FALLBACK_CAPABILITY
+    # =PASS (split criteria, Task 4); cutlass_4m_single capability follows the
+    # fallback (PASS) but numerical UNKNOWN -> route UNKNOWN.
+    assert "C2_REGION_KERNEL_FEASIBILITY" in agg["criteria"]
+    assert "C2_REGION_KERNEL" not in agg["criteria"]
+    assert "CUTLASS_SM120_4M" in agg["criteria"]
+    assert "CUTLASS_SM80_FALLBACK_CAPABILITY" in agg["criteria"]
     assert agg["route_verdict"]["region_fused"]["status"] == "UNKNOWN"
     assert agg["route_verdict"]["planar"]["status"] == "NOT_VIABLE"
+    assert agg["route_verdict"]["grouped"]["status"] == "NOT_VIABLE"
+    assert agg["route_verdict"]["cutlass_4m_single"]["status"] == "UNKNOWN"
     # rule 7: MD rendered from same object
     md = (stage / "gonogo.md").read_text()
     assert agg["phase0_completion"] in md and agg["phase1_authorization"] in md
@@ -707,46 +460,17 @@ def test_gonogo_main_does_not_write_manifest(tmp_path, monkeypatch):
     assert (stage / "environment.json").exists()
 
 
-def test_capability_layer_region_kernel_fail_sinks_region():
-    # truth-table rule 3, structurally: region_fused depends on C2_REGION_KERNEL;
-    # a canonical FAIL there sinks region capability to NOT_OK even with a PASS
-    # region prototype. (Task 1: criteria fed in are canonical tokens.)
-    from results._phase0.gonogo import capability_layer
-
-    criteria = {
-        "C3_PLANAR_CORE": "PASS",
-        "C3_PLANAR_FULL_MATRIX": "PASS",
-        "C3_GROUPED": "NOT_SUPPORTED",
-        "REGION_PROTOTYPE": "PASS",
-        "C2_REGION_KERNEL": "FAIL",
-        "CUTLASS_SM120_4M": "PASS",
-    }
-    cap = capability_layer(criteria)
-    assert cap["region_fused"] == "NOT_OK"  # rule 3: region-kernel FAIL sinks region
-
-
-# ---------------------------------------------------------------------------
-# Task 0 (SDD plan §3 操作.2): fail-closed RED baseline. The tests below freeze
-# the target behavior the gonogo gate must adopt after Tasks 5/6/7 wire the
-# canonical verdict_schema in. They FAIL on the current implementation by clean
-# assertion (not import, not GPU).
-# ---------------------------------------------------------------------------
-
-
 def test_normalize_does_not_promote_feasible_detail_tokens_to_ok():
     """plan §4 验收: 不再使用 ``startswith('FEASIBLE')`` 无条件提升全部架构/route.
 
-    The current ``_normalize`` does ``verdict.startswith('FEASIBLE') -> OK``
-    (gonogo.py), which promotes any FEASIBLE* detail token to capability-OK in
-    the canonical criterion layer. Per the fail-closed model those tokens are
-    DETAIL tokens (verdict_schema.DETAIL_TOKENS): a canonical criterion field
-    carrying them must fail closed to UNKNOWN, not be promoted to OK. This test
-    freezes the target: FEASIBLE* / TILE_FUSION_FEASIBLE / SUPPORTED / BLOCKED
-    must NOT normalize to OK in the canonical-criterion pipeline."""
-    from results._phase0.gonogo import _normalize
+    Task 7: gonogo's local _normalize duplicate has been KILLED. The canonical
+    criterion scrubber (verdict_schema.normalize_criterion) is the single source
+    of truth. FEASIBLE* / TILE_FUSION_FEASIBLE / SUPPORTED / BLOCKED detail tokens
+    must fail closed to UNKNOWN (PASS must be re-derived from evidence), never
+    promoted to OK. The truth table (recompute_derived_state) consumes criteria
+    that have already been canonicalized by the criterion producers."""
     from results._phase0.verdict_schema import normalize_criterion
 
-    # The canonical criterion scrubber (verdict_schema) is the source of truth.
     for t in (
         "FEASIBLE",
         "FEASIBLE_WITH_RECOMPUTE",
@@ -758,17 +482,6 @@ def test_normalize_does_not_promote_feasible_detail_tokens_to_ok():
         # canonical-criterion-pipeline contract: detail tokens -> UNKNOWN (PASS
         # must be re-derived from evidence, not promoted from the detail prefix).
         assert normalize_criterion(t) == "UNKNOWN", t
-
-    # The gonogo route/capability layer (_normalize) currently promotes
-    # FEASIBLE* to OK. The canonical criteria feeding it must already be
-    # canonical tokens by the time they reach _normalize, so _normalize should
-    # never SEE a FEASIBLE* token. This asserts the contract: _normalize does
-    # not get to promote detail tokens; the input is canonicalized upstream.
-    # (Fails today: _normalize('FEASIBLE_WITH_RECOMPUTE') == 'OK'.)
-    for t in ("FEASIBLE_WITH_RECOMPUTE", "FEASIBLE_WITH_SM80_FALLBACK"):
-        assert (
-            _normalize(t) != "OK"
-        ), f"_normalize must not promote detail token {t!r} to OK"
 
 
 def test_main_emits_two_cutlass_criteria_for_native_blocker_plus_sm80_fallback(
@@ -1054,6 +767,206 @@ def test_c3_full_matrix_unknown_on_header_drift(tmp_path):
         w.writerow(drifted_header)
         w.writerows(rows)
     assert _c3_planar_full_matrix_status(str(p), str(shapes_csv)) == "UNKNOWN"
+
+
+# ---------------------------------------------------------------------------
+# Task 7: gonogo↔manifest alignment + canonical keys + honest state + JSON==MD.
+# These tests pin the Task 7 contract: gonogo reuses the shared §5 truth table
+# (recompute_derived_state), emits canonical CRITERIA_NAMES keys, and the
+# regenerated gonogo.json AGREES with manifest.json on route verdicts +
+# completion + authorization.
+# ---------------------------------------------------------------------------
+
+
+def test_gonogo_emits_canonical_criteria_keys(tmp_path, monkeypatch):
+    """Task 7: gonogo emits the verdict_schema.CRITERIA_NAMES keys -- in
+    particular C2_REGION_KERNEL_FEASIBILITY (NOT the abbreviated C2_REGION_KERNEL)
+    and BOTH cutlass criteria (CUTLASS_SM120_4M + CUTLASS_SM80_FALLBACK_CAPABILITY)."""
+    import json, os, shutil
+    from results._phase0 import gonogo as G
+    from results._phase0.verdict_schema import CRITERIA_NAMES
+
+    src = "results/phase0"
+    stage = tmp_path / "phase0"
+    stage.mkdir()
+    for name in (
+        "c1_judgment.json",
+        "c2_judgment.json",
+        "cublaslt_planar_capability.json",
+        "cublaslt_grouped_capability.json",
+        "cublaslt_full_matrix.csv",
+        "contraction_shapes.csv",
+        "cutlass_sm120_4m.json",
+        "region_prototype.json",
+        "numerical_validation.json",
+    ):
+        s = os.path.join(src, name)
+        if os.path.exists(s):
+            shutil.copy(s, stage / name)
+    monkeypatch.setattr(G, "_collect_environment", lambda: {"_stub": True})
+    G.main(stage_dir=str(stage))
+    agg = json.load(open(stage / "gonogo.json"))
+    criteria = agg["criteria"]
+    # The abbreviated key must NOT appear.
+    assert "C2_REGION_KERNEL" not in criteria, criteria
+    # The canonical key must appear.
+    assert "C2_REGION_KERNEL_FEASIBILITY" in criteria, criteria
+    # Both cutlass criteria must be present (Task 4 split).
+    assert "CUTLASS_SM120_4M" in criteria, criteria
+    assert "CUTLASS_SM80_FALLBACK_CAPABILITY" in criteria, criteria
+    # Every CRITERIA_NAMES key that gonogo is responsible for producing is
+    # present (C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK / C2_JOINT_EXECUTABLE_LEVERAGE
+    # / C2_CANONICAL are sub-layers consumed by the C2 roll-up, not top-level
+    # gonogo criteria; the top-level criteria are the ones main() emits).
+    for key in (
+        "C1",
+        "C2",
+        "C2_REGION_KERNEL_FEASIBILITY",
+        "C3_PLANAR_CORE",
+        "C3_PLANAR_FULL_MATRIX",
+        "C3_GROUPED",
+        "CUTLASS_SM120_4M",
+        "CUTLASS_SM80_FALLBACK_CAPABILITY",
+        "REGION_PROTOTYPE",
+        "NUMERICAL",
+    ):
+        assert key in criteria, f"missing canonical criterion key: {key}"
+    # Sanity: the canonical key set is a subset of CRITERIA_NAMES + the
+    # top-level roll-up keys (C2, C3_*, REGION_PROTOTYPE, NUMERICAL) that
+    # gonogo emits as criterion-producer outputs.
+    assert "C2_REGION_KERNEL_FEASIBILITY" in CRITERIA_NAMES
+
+
+def test_gonogo_json_matches_expected_honest_state(tmp_path, monkeypatch):
+    """Task 7 plan §10: the regenerated gonogo.json must match the expected
+    honest state (no pre-written PASS). region_fused / cutlass_4m_single are
+    UNKNOWN (not yet measured); planar / grouped are NOT_VIABLE; completion
+    INCONCLUSIVE; authorization NOT_AUTHORIZED."""
+    import json, os, shutil
+    from results._phase0 import gonogo as G
+
+    src = "results/phase0"
+    stage = tmp_path / "phase0"
+    stage.mkdir()
+    for name in (
+        "c1_judgment.json",
+        "c2_judgment.json",
+        "cublaslt_planar_capability.json",
+        "cublaslt_grouped_capability.json",
+        "cublaslt_full_matrix.csv",
+        "contraction_shapes.csv",
+        "cutlass_sm120_4m.json",
+        "region_prototype.json",
+        "numerical_validation.json",
+    ):
+        s = os.path.join(src, name)
+        if os.path.exists(s):
+            shutil.copy(s, stage / name)
+    monkeypatch.setattr(G, "_collect_environment", lambda: {"_stub": True})
+    G.main(stage_dir=str(stage))
+    agg = json.load(open(stage / "gonogo.json"))
+    rv = agg["route_verdict"]
+    assert rv["planar"]["status"] == "NOT_VIABLE", rv["planar"]
+    assert rv["grouped"]["status"] == "NOT_VIABLE", rv["grouped"]
+    assert rv["region_fused"]["status"] == "UNKNOWN", rv["region_fused"]
+    assert rv["cutlass_4m_single"]["status"] == "UNKNOWN", rv["cutlass_4m_single"]
+    assert agg["phase0_completion"] == "INCONCLUSIVE"
+    assert agg["phase1_authorization"] == "NOT_AUTHORIZED"
+    # No route is VIABLE (no pre-written PASS).
+    assert all(v["status"] != "VIABLE" for v in rv.values()), rv
+    # reasons precisely name the undetermined criteria.
+    assert any("C2" in r for r in agg["reasons"]), agg["reasons"]
+    # blocking_artifacts lists only real blockers.
+    assert all(isinstance(a, str) and a for a in agg["blocking_artifacts"])
+
+
+def test_gonogo_json_derived_state_matches_manifest(tmp_path, monkeypatch):
+    """Task 7: gonogo.json and manifest.json AGREE on route_verdict /
+    phase0_completion / phase1_authorization. Both use the same shared helper
+    (recompute_derived_state) on the same gate artifacts, so they CANNOT
+    diverge."""
+    import json, os, shutil
+    from results._phase0 import gonogo as G, manifest as M
+
+    src = "results/phase0"
+    stage = tmp_path / "phase0"
+    stage.mkdir()
+    for name in os.listdir(src):
+        s = os.path.join(src, name)
+        if os.path.isfile(s):
+            shutil.copy(s, os.path.join(stage, name))
+        elif os.path.isdir(s) and name in (
+            "c1_optimized_hlo",
+            "c1_buffer_assignment",
+            "c1_xla_dump",
+        ):
+            shutil.copytree(s, os.path.join(stage, name))
+    monkeypatch.setattr(G, "_collect_environment", lambda: {"_stub": True})
+    G.main(stage_dir=str(stage))
+    manifest = M.build_manifest(str(stage), generated_at="2026-07-23T00:00:00Z")
+    gonogo = json.load(open(stage / "gonogo.json"))
+    # Derived state must match.
+    assert gonogo["phase0_completion"] == manifest["phase0_completion"], (
+        gonogo["phase0_completion"],
+        manifest["phase0_completion"],
+    )
+    assert gonogo["phase1_authorization"] == manifest["phase1_authorization"], (
+        gonogo["phase1_authorization"],
+        manifest["phase1_authorization"],
+    )
+    assert gonogo["route_verdict"] == manifest["route_verdict"], (
+        gonogo["route_verdict"],
+        manifest["route_verdict"],
+    )
+    # reasons + blocking also match (both from the same shared helper).
+    assert gonogo["reasons"] == manifest["reasons"], (
+        gonogo["reasons"],
+        manifest["reasons"],
+    )
+    assert gonogo["blocking_artifacts"] == manifest["blocking_artifacts"], (
+        gonogo["blocking_artifacts"],
+        manifest["blocking_artifacts"],
+    )
+
+
+def test_json_and_md_render_from_same_object(tmp_path, monkeypatch):
+    """Task 7 plan §10 验收: JSON 与 Markdown 从同一对象生成. gonogo.md is
+    rendered FROM the gonogo.json object (via _render_md), so the two never
+    contradict each other on any phase-level field or route verdict."""
+    import json, os, shutil
+    from results._phase0 import gonogo as G
+
+    src = "results/phase0"
+    stage = tmp_path / "phase0"
+    stage.mkdir()
+    for name in (
+        "c1_judgment.json",
+        "c2_judgment.json",
+        "cublaslt_planar_capability.json",
+        "cublaslt_grouped_capability.json",
+        "cublaslt_full_matrix.csv",
+        "contraction_shapes.csv",
+        "cutlass_sm120_4m.json",
+        "region_prototype.json",
+        "numerical_validation.json",
+    ):
+        s = os.path.join(src, name)
+        if os.path.exists(s):
+            shutil.copy(s, stage / name)
+    monkeypatch.setattr(G, "_collect_environment", lambda: {"_stub": True})
+    G.main(stage_dir=str(stage))
+    agg = json.load(open(stage / "gonogo.json"))
+    md = (stage / "gonogo.md").read_text()
+    # Every phase-level field in the JSON appears in the MD.
+    for field in ("phase0_completion", "phase1_authorization"):
+        assert agg[field] in md, (field, agg[field])
+    # Every route verdict status in the JSON appears in the MD.
+    for route, rv in agg["route_verdict"].items():
+        assert rv["status"] in md, (route, rv["status"])
+        assert f"`{route}`" in md, route
+    # Every reason in the JSON appears in the MD.
+    for reason in agg["reasons"]:
+        assert reason in md, reason
 
 
 if __name__ == "__main__":

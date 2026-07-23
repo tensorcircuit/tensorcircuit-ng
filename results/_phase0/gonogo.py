@@ -4,6 +4,12 @@ route_verdict (per-route capability AND numerical) + phase0_completion (all
 canonical criteria determined) -> phase1_authorization. Emits gonogo.json /
 gonogo.md / environment.json under results/phase0/. md is generated FROM the
 json object, never hand-overwritten.
+
+Task 7: gonogo is the CRITERIA PRODUCER (reads gate artifacts -> native
+canonical criteria). The route/completion/authorization derivation goes through
+``verdict_schema.recompute_derived_state`` -- the SINGLE SOURCE OF TRUTH for the
+§5 truth table -- so gonogo and manifest CANNOT diverge. JSON + Markdown render
+from one canonical gonogo-v2 object (no divergent code paths).
 """
 
 from __future__ import annotations
@@ -12,7 +18,7 @@ import csv
 import json
 import os
 
-from results._phase0.verdict_schema import normalize_criterion
+from results._phase0.verdict_schema import recompute_derived_state
 
 VERDICTS = (
     "GO_TO_PHASE1",
@@ -22,210 +28,36 @@ VERDICTS = (
     "INCONCLUSIVE",
 )
 
-# Status tokens shared across the truth table.
+# Canonical criterion tokens used by the criterion producers (gate-artifact
+# readers). These are string aliases for the canonical CRITERION_TOKENS set
+# (verdict_schema.CRITERION_TOKENS); they are NOT truth-table logic (the truth
+# table lives in verdict_schema.recompute_derived_state, reused below).
 _OK = "PASS"
 _BAD = "FAIL"
 _UNKNOWN = "UNKNOWN"
 _NOT_RUN = "NOT_RUN"
 
-# Tri-state values used by the two-layer gating logic.
-_TRI_OK = "OK"
-_TRI_NOT_OK = "NOT_OK"
-_TRI_UNDETERMINED = "UNDETERMINED"
 
-# Canonical criteria whose determined-ness gates phase0_completion (truth-table
-# rules 1/5). NUMERICAL=FAIL is "determined" and does NOT sink completion.
-# CUTLASS_SM120_4M (native, NOT_SUPPORTED) and CUTLASS_SM80_FALLBACK_CAPABILITY
-# (fallback, PASS) are SPLIT into two independent criteria (plan §7 Task 4):
-# native failure and fallback success coexist without contradiction.
-REQUIRED_CRITERIA = (
-    "C1",
-    "C2",
-    "C3_PLANAR_CORE",
-    "C3_PLANAR_FULL_MATRIX",
-    "C3_GROUPED",
-    "CUTLASS_SM120_4M",
-    "CUTLASS_SM80_FALLBACK_CAPABILITY",
-    "REGION_PROTOTYPE",
-    "NUMERICAL",
-)
+def aggregate_two_layer(criteria, per_route_numerical):
+    """Compose the full gonogo-v2 verdict object from criteria + per-route
+    numerical via the shared §5 truth table
+    (``verdict_schema.recompute_derived_state``).
 
-# Which capability criteria each contraction route depends on (truth-table
-# rule 8 + rule 3). A route is VIABLE only if every listed capability criterion
-# normalizes to OK AND its numerical criterion normalizes to OK.
-#
-# ``cutlass_4m_single`` depends on the FALLBACK capability
-# (CUTLASS_SM80_FALLBACK_CAPABILITY), NOT on CUTLASS_SM120_4M: on consumer
-# Blackwell sm_120 the route's actual kernel is the 2.x Ampere fallback (the
-# native SM120 path is architecturally BLOCKED), so the route's capability
-# tracks the path that really runs. Native failure is recorded as a separate
-# CUTLASS_SM120_4M criterion but does NOT sink the route by itself.
-ROUTE_CAPABILITY_CRITERIA = {
-    "planar": ("C3_PLANAR_CORE", "C3_PLANAR_FULL_MATRIX"),
-    "grouped": ("C3_GROUPED",),
-    "region_fused": ("REGION_PROTOTYPE", "C2_REGION_KERNEL"),
-    "cutlass_4m_single": ("CUTLASS_SM80_FALLBACK_CAPABILITY",),
-}
-
-ROUTES = tuple(ROUTE_CAPABILITY_CRITERIA)
-
-
-def _normalize(verdict):
-    """Map an artifact-native verdict token to a gating tri-state.
-
-    OK          -> the canonical criterion is PASS (the only "established good"
-                   token; plan §4 forbids promoting FEASIBLE* / SUPPORTED /
-                   TILE_FUSION_FEASIBLE detail tokens to OK)
-    NOT_OK      -> established as bad (canonical FAIL or NOT_SUPPORTED)
-    UNDETERMINED-> not established (UNKNOWN, NOT_RUN, BLOCKED, INCONCLUSIVE,
-                   any artifact-native detail token, unrecognized strings)
-
-    Plan §4 验收: no ``startswith('FEASIBLE')`` unconditional promotion. Every
-    incoming token is first scrubbed by ``verdict_schema.normalize_criterion``,
-    which fail-closes artifact-native detail tokens (FEASIBLE*, SUPPORTED,
-    TILE_FUSION_FEASIBLE, NOT_FEASIBLE, BLOCKED, INCONCLUSIVE) to canonical
-    UNKNOWN. The canonical criteria feeding this layer should already be
-    canonical tokens by the time they reach it; if a detail token leaks through
-    it fails closed to UNDETERMINED rather than being promoted to OK.
+    Task 7: the route_verdict / phase0_completion / phase1_authorization /
+    reasons / blocking_artifacts derivation goes through the shared helper so
+    gonogo and manifest CANNOT diverge. JSON + Markdown render from THIS object
+    (truth-table rule 7). ``per_route_numerical`` is {route: PASS|FAIL|...};
+    a route absent from it is UNDETERMINED (fail-closed).
     """
-    canonical = normalize_criterion(verdict)
-    if canonical == "PASS":
-        return _TRI_OK
-    if canonical in ("FAIL", "NOT_SUPPORTED"):
-        return _TRI_NOT_OK
-    return _TRI_UNDETERMINED
-
-
-def _combine_tri(states):
-    """AND-combine tri-states: any NOT_OK -> NOT_OK; else any UNDETERMINED ->
-    UNDETERMINED; else OK. Empty -> UNDETERMINED."""
-    if not states:
-        return _TRI_UNDETERMINED
-    if any(s == _TRI_NOT_OK for s in states):
-        return _TRI_NOT_OK
-    if any(s == _TRI_UNDETERMINED for s in states):
-        return _TRI_UNDETERMINED
-    return _TRI_OK
-
-
-def capability_layer(criteria):
-    """Per-route capability tri-state from the canonical criteria dict.
-
-    A route's capability is the AND of its ROUTE_CAPABILITY_CRITERIA entries
-    (each normalized). rule 3 (region depends on C2_REGION_KERNEL) is encoded
-    by the route's criteria tuple.
-    """
-    out = {}
-    for route, deps in ROUTE_CAPABILITY_CRITERIA.items():
-        out[route] = _combine_tri([_normalize(criteria.get(c)) for c in deps])
-    return out
-
-
-def numerical_layer(per_route_num, routes):
-    """Per-route numerical tri-state from Task 9 per_route criterion map.
-
-    A route absent from per_route_num is UNDETERMINED (its numerical criterion
-    was not produced).
-    """
-    out = {}
-    for r in routes:
-        out[r] = _normalize(per_route_num.get(r, _NOT_RUN))
-    return out
-
-
-def _route_status(cap_tri, num_tri):
-    """Truth-table rule 8: VIABLE iff capability OK AND numerical OK;
-    NOT_VIABLE if either NOT_OK; else UNKNOWN."""
-    if _TRI_NOT_OK in (cap_tri, num_tri):
-        return "NOT_VIABLE"
-    if _TRI_UNDETERMINED in (cap_tri, num_tri):
-        return "UNKNOWN"
-    return "VIABLE"
-
-
-def route_verdict(cap_tri, num_tri):
-    """Per-route verdict map {route: {status, capability, numerical}}.
-
-    status is VIABLE / NOT_VIABLE / UNKNOWN per rule 8; capability and numerical
-    carry the raw tri-states for transparency.
-    """
-    out = {}
-    for r in ROUTES:
-        c, n = cap_tri.get(r, _TRI_UNDETERMINED), num_tri.get(r, _TRI_UNDETERMINED)
-        out[r] = {"status": _route_status(c, n), "capability": c, "numerical": n}
-    return out
-
-
-def evaluate_completion(criteria):
-    """Truth-table rules 1/4/5: COMPLETE iff every REQUIRED_CRITERION is
-    determined (normalizes to OK or NOT_OK). Any UNKNOWN/NOT_RUN (i.e.
-    UNDETERMINED) -> INCONCLUSIVE. NUMERICAL=FAIL is determined and does NOT
-    sink completion."""
-    for c in REQUIRED_CRITERIA:
-        if _normalize(criteria.get(c)) == _TRI_UNDETERMINED:
-            return "INCONCLUSIVE"
-    return "COMPLETE"
-
-
-def authorize_phase1(completion, route_verdict_map):
-    """Truth-table rule 6: GO_TO_PHASE1 iff COMPLETE and >=1 route VIABLE;
-    NO_GO if COMPLETE with no viable route; NOT_AUTHORIZED if INCONCLUSIVE."""
-    if completion != "COMPLETE":
-        return "NOT_AUTHORIZED"
-    if any(rv["status"] == "VIABLE" for rv in route_verdict_map.values()):
-        return "GO_TO_PHASE1"
-    return "NO_GO"
-
-
-def _build_reasons(criteria, route_verdict_map, completion):
-    """Human-readable explanation lines, kept in sync with the verdict."""
-    reasons = []
-    if completion == "INCONCLUSIVE":
-        undetermined = [
-            c
-            for c in REQUIRED_CRITERIA
-            if _normalize(criteria.get(c)) == _TRI_UNDETERMINED
-        ]
-        if undetermined:
-            reasons.append(
-                "canonical criteria undetermined -> phase0_completion INCONCLUSIVE: "
-                + ", ".join(undetermined)
-            )
-    for r, rv in route_verdict_map.items():
-        if rv["status"] == "NOT_VIABLE":
-            reasons.append(
-                f"{r} NOT_VIABLE: capability={rv['capability']} numerical={rv['numerical']}"
-            )
-        elif rv["status"] == "UNKNOWN":
-            reasons.append(
-                f"{r} UNKNOWN: capability={rv['capability']} numerical={rv['numerical']}"
-            )
-    return reasons
-
-
-def _build_blocking_artifacts(criteria, route_verdict_map):
-    """Artifact paths whose undetermined/failed state blocks a clean GO."""
-    blocking = []
-    if _normalize(criteria.get("C2")) == _TRI_UNDETERMINED:
-        blocking.append("c2_judgment.json (C2_CANONICAL undetermined)")
-    if _normalize(criteria.get("NUMERICAL")) == _TRI_NOT_OK:
-        blocking.append("numerical_validation.json (overall=FAIL)")
-    for r, rv in route_verdict_map.items():
-        if rv["capability"] == _TRI_NOT_OK and r == "grouped":
-            blocking.append("cublaslt_grouped_capability.json (NOT_SUPPORTED)")
-    return blocking
-
-
-def aggregate_two_layer(criteria, route_verdict_map, completion, authorization):
-    """Compose the full gonogo-v2 verdict object from the layered results."""
+    derived = recompute_derived_state(criteria, per_route_numerical)
     return {
         "schema_version": "gonogo-v2",
         "criteria": dict(criteria),
-        "route_verdict": {r: dict(v) for r, v in route_verdict_map.items()},
-        "phase0_completion": completion,
-        "phase1_authorization": authorization,
-        "reasons": _build_reasons(criteria, route_verdict_map, completion),
-        "blocking_artifacts": _build_blocking_artifacts(criteria, route_verdict_map),
+        "route_verdict": derived["route_verdict"],
+        "phase0_completion": derived["phase0_completion"],
+        "phase1_authorization": derived["phase1_authorization"],
+        "reasons": derived["reasons"],
+        "blocking_artifacts": derived["blocking_artifacts"],
     }
 
 
@@ -835,7 +667,9 @@ def main(stage_dir=None):
     criteria = {
         "C1": _c1_status_from_judgment(c1_j),
         "C2": _c2_status_from_judgment(c2_j),
-        "C2_REGION_KERNEL": _c2_layer_status(c2_j, "C2_REGION_KERNEL_FEASIBILITY"),
+        "C2_REGION_KERNEL_FEASIBILITY": _c2_layer_status(
+            c2_j, "C2_REGION_KERNEL_FEASIBILITY"
+        ),
         "C3_PLANAR_CORE": _c3_planar_from_capability(
             os.path.join(base, "cublaslt_planar_capability.json")
         ),
@@ -855,13 +689,13 @@ def main(stage_dir=None):
         ),
     }
 
-    cap_tri = capability_layer(criteria)
-    num_per = _numerical_per_route(os.path.join(base, "numerical_validation.json"))
-    num_tri = numerical_layer(num_per, ROUTES)
-    rv = route_verdict(cap_tri, num_tri)
-    completion = evaluate_completion(criteria)
-    authorization = authorize_phase1(completion, rv)
-    agg = aggregate_two_layer(criteria, rv, completion, authorization)
+    # Task 7: derivation goes through the shared §5 truth table
+    # (verdict_schema.recompute_derived_state) so gonogo and manifest CANNOT
+    # diverge. JSON + Markdown render from the single ``agg`` object below.
+    per_route_num = _numerical_per_route(
+        os.path.join(base, "numerical_validation.json")
+    )
+    agg = aggregate_two_layer(criteria, per_route_num)
 
     with open(os.path.join(base, "gonogo.json"), "w") as f:
         json.dump(agg, f, indent=2)

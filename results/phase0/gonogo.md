@@ -7,30 +7,32 @@
 
 - `planar`: **NOT_VIABLE** (capability=OK, numerical=NOT_OK)
 - `grouped`: **NOT_VIABLE** (capability=NOT_OK, numerical=NOT_OK)
-- `region_fused`: **VIABLE** (capability=OK, numerical=OK)
-- `cutlass_4m_single`: **VIABLE** (capability=OK, numerical=OK)
+- `region_fused`: **UNKNOWN** (capability=UNDETERMINED, numerical=UNDETERMINED)
+- `cutlass_4m_single`: **UNKNOWN** (capability=OK, numerical=UNDETERMINED)
 
 ## Criteria
 ```json
 {
   "C1": "PASS",
   "C2": "UNKNOWN",
-  "C2_REGION_KERNEL": "PASS",
+  "C2_REGION_KERNEL_FEASIBILITY": "UNKNOWN",
   "C3_PLANAR_CORE": "PASS",
   "C3_PLANAR_FULL_MATRIX": "PASS",
   "C3_GROUPED": "NOT_SUPPORTED",
-  "CUTLASS_SM120_4M": "FEASIBLE_WITH_SM80_FALLBACK",
-  "REGION_PROTOTYPE": "FEASIBLE_WITH_RECOMPUTE",
-  "NUMERICAL": "FAIL"
+  "CUTLASS_SM120_4M": "NOT_SUPPORTED",
+  "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",
+  "REGION_PROTOTYPE": "UNKNOWN",
+  "NUMERICAL": "UNKNOWN"
 }
 ```
 
 ## Reasons
-- canonical criteria undetermined -> phase0_completion INCONCLUSIVE: C2
+- canonical criteria undetermined -> phase0_completion INCONCLUSIVE: C2, REGION_PROTOTYPE, NUMERICAL
 - planar NOT_VIABLE: capability=OK numerical=NOT_OK
 - grouped NOT_VIABLE: capability=NOT_OK numerical=NOT_OK
+- region_fused UNKNOWN: capability=UNDETERMINED numerical=UNDETERMINED
+- cutlass_4m_single UNKNOWN: capability=OK numerical=UNDETERMINED
 
 ## Blocking artifacts
 - c2_judgment.json (C2_CANONICAL undetermined)
-- numerical_validation.json (overall=FAIL)
 - cublaslt_grouped_capability.json (NOT_SUPPORTED)
