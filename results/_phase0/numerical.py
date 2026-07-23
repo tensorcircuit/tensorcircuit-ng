@@ -426,6 +426,15 @@ _CSV_COLUMNS = [
     "policy_pass",
     "reference_dtype",
     "source_hash",
+    # ``source`` (spec §6 3.3) makes the CSV self-describing about each row's
+    # origin: a real measurement ("measured"), a diagnostic row
+    # ("diagnostic:small-contract"), a reused artifact ("task8_reuse"), or a
+    # NOT_RUN required cell ("not_run:<reason>"). NOT_RUN rows are KEPT in the
+    # CSV so a reader can see why a required cell was not measured without
+    # consulting the JSON fail_closed_reasons. The aggregate keys its not_run
+    # detection off this prefix (symmetric with the in-memory rows) in addition
+    # to ``relative_l2 is None``.
+    "source",
 ]
 
 
@@ -462,6 +471,9 @@ def write_csv(path, rows):
             sh = r.get("source_hash")
             if not sh:
                 sh = source_hash(route, dtype, shape or (), level, seed)
+            # source defaults to "measured" for real measured rows; NOT_RUN rows
+            # carry "not_run:<reason>"; diagnostic rows carry "diagnostic:*".
+            source = r.get("source") or "measured"
             w.writerow(
                 [
                     route,
@@ -479,6 +491,7 @@ def write_csv(path, rows):
                     int(r.get("policy_pass", 0)),
                     r.get("reference_dtype", "c64"),
                     sh,
+                    source,
                 ]
             )
 
@@ -683,6 +696,11 @@ def collect_region_fused(level, seed):
         "level": level,
         "seed": seed,
         "reference_dtype": "c64",
+        # diagnostic: this row is the small-contract correctness proof (spec §7.2),
+        # NOT the required full-anchor cell. It shows up as `extra` in the JSON
+        # accounting because its shape key ("small_contract") does not match the
+        # required REGION_FULL_ANCHOR_SHAPE tuple.
+        "source": "diagnostic:small-contract",
         **metrics,
         "policy_pass": int(verdict == "PASS"),
     }
@@ -814,6 +832,12 @@ def _read_csv_rows(csv_path):
     Region_fused small-contract rows (M=N=K=0) round-trip with shape="small_contract".
     Rows with empty relative_l2/max_abs/max_rel cells (cutlass adversarial NOT_RUN)
     round-trip with None metrics so the aggregate treats them as not-run.
+
+    The ``source`` column (Task 3a CSV NOT_RUN fix) round-trips verbatim so the
+    ``not_run:<reason>`` / ``diagnostic:small-contract`` / ``task8_reuse`` labels
+    survive write→read. Old CSVs lacking the column get a backward-compat default
+    (``"measured"`` for real rows, ``"diagnostic:small-contract"`` for region
+    small-contract rows) so the regen path stays idempotent across the schema bump.
     """
     rows = []
     with open(csv_path, newline="") as fh:
@@ -822,7 +846,8 @@ def _read_csv_rows(csv_path):
             M = int(raw["M"]) if raw["M"] else 0
             N = int(raw["N"]) if raw["N"] else 0
             K = int(raw["K"]) if raw["K"] else 0
-            if raw["route"] == "region_fused" and not (M or N or K):
+            is_region_small = raw["route"] == "region_fused" and not (M or N or K)
+            if is_region_small:
                 shape = "small_contract"
             else:
                 shape = (M, N, K)
@@ -830,6 +855,11 @@ def _read_csv_rows(csv_path):
             def _maybe_float(v):
                 return float(v) if v else None
 
+            # source: prefer the column value; fall back to a route-aware default
+            # for pre-schema-bump CSVs (no `source` column at all).
+            source = (raw.get("source") or "").strip()
+            if not source:
+                source = "diagnostic:small-contract" if is_region_small else "measured"
             rows.append(
                 {
                     "route": raw["route"],
@@ -846,9 +876,79 @@ def _read_csv_rows(csv_path):
                     "policy_pass": (
                         int(raw["policy_pass"]) if raw["policy_pass"] else 0
                     ),
+                    "source": source,
                 }
             )
     return rows
+
+
+def _not_run_reason_for(route):
+    """Short, stable reason slug for a NOT_RUN required cell on ``route``.
+
+    The slug is embedded in the CSV ``source`` column as ``not_run:<slug>`` so a
+    reader can see WHY a required cell was not measured. The long-form
+    human-readable reason also lives in ``_legit_not_run_reasons`` /
+    ``fail_closed_reasons``; this slug is the machine-friendly mirror.
+    """
+    if route == "region_fused":
+        return "compute-bound-actual-large-fused"
+    if route == "cutlass_4m_single":
+        return "toolchain-injection-unavailable"
+    return "not-measured"
+
+
+def _emit_not_run_rows(existing_rows, required_keys):
+    """Emit explicit NOT_RUN rows for required cells that have NO CSV row at all
+    (spec §6 3.3: "CSV 中保留 NOT_RUN row 及 reason").
+
+    A required cell counts as "has a row" if ANY row (measured, diagnostic, or
+    already-not_run) already carries its key. This avoids creating duplicate keys
+    for cells that already have a (possibly partial) row -- e.g. the 3 cutlass
+    baseline rows (source=task8_reuse, relative_l2=None) already represent their
+    cells, so no duplicate NOT_RUN row is emitted for them.
+
+    The absent cells (region_fused's 9 intended full-anchor cells until Task 3b)
+    get a NOT_RUN row carrying the full expected key with empty metrics and
+    ``source="not_run:<reason>"``. The aggregate's not_run detection keys off
+    that prefix symmetrically with in-memory rows, so the CSV is now
+    self-describing: a reader sees the NOT_RUN row + reason without consulting
+    the JSON.
+
+    Returned rows are appended to the measured rows BEFORE ``aggregate`` /
+    ``write_csv``. JSON accounting is unaffected: NOT_RUN rows never count as
+    ``actual``/measured (``actual`` counts only measured keys in the expected
+    set), so ``expected / actual / missing / extra`` are unchanged. Rows are
+    emitted in a deterministic (level, seed) order so the CSV byte-content is
+    reproducible across runs (the manifest hashes this file).
+    """
+    present_keys = {_cell_key(r) for r in existing_rows}
+    not_run_rows = []
+    for key in required_keys - present_keys:
+        route, dtype, shape, level, seed, ref_id = key
+        not_run_rows.append(
+            {
+                "route": route,
+                "dtype": dtype,
+                "shape": shape,
+                "level": level,
+                "seed": seed,
+                "reference_dtype": ref_id,
+                "source": f"not_run:{_not_run_reason_for(route)}",
+                "relative_l2": None,
+                "max_abs": None,
+                "max_rel": None,
+                "nan_inf": False,
+                "n_elems": 0,
+                "policy_pass": 0,
+            }
+        )
+    # Deterministic order: LEVELS order then seed (matches the measured-row
+    # emission order in main()), so repeated regen yields byte-identical CSV.
+    level_order = {lvl: i for i, lvl in enumerate(LEVELS)}
+    not_run_rows.sort(
+        key=lambda r: (r["route"], level_order.get(r["level"], 99), r["seed"])
+    )
+    return not_run_rows
 
 
 def main(run_gpu: bool = True, regen_no_gpu: bool = False):
@@ -868,9 +968,16 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
         # Drop any old cutlass rows and regenerate them via the (non-GPU) artifact
         # reader so the baseline rows carry relative_l2=None (no max_rel proxy).
         rows = [r for r in rows if r["route"] != "cutlass_4m_single"]
+        # Drop any stale emitted NOT_RUN rows so the idempotent re-emit below
+        # is the single source of truth for NOT_RUN rows (prevents duplicates on
+        # repeated regen).
+        rows = [r for r in rows if not str(r.get("source", "")).startswith("not_run:")]
         for level in LEVELS:
             for seed in SEEDS:
                 rows.append(collect_cutlass(level, seed))
+        # Emit explicit NOT_RUN rows for required cells with no CSV row at all
+        # (region_fused full-anchor; spec §6 3.3). Makes the CSV self-describing.
+        rows.extend(_emit_not_run_rows(rows, required_cell_keys()))
         payload = aggregate(rows, required_cell_keys(), _case_hashes(), legit_not_run)
         write_csv(os.path.join(OUT_DIR, "numerical_validation.csv"), rows)
         write_json(os.path.join(OUT_DIR, "numerical_validation.json"), payload)
@@ -893,6 +1000,9 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
     for level in LEVELS:
         for seed in SEEDS:
             rows.append(collect_cutlass(level, seed))
+    # Emit explicit NOT_RUN rows for required cells with no CSV row at all
+    # (region_fused full-anchor; spec §6 3.3). Makes the CSV self-describing.
+    rows.extend(_emit_not_run_rows(rows, required_cell_keys()))
 
     payload = aggregate(rows, required_cell_keys(), _case_hashes(), legit_not_run)
     write_csv(os.path.join(OUT_DIR, "numerical_validation.csv"), rows)

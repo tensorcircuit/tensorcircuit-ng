@@ -201,7 +201,7 @@ def test_write_csv_header_and_rows(tmp_path):
     write_csv(str(p), [{"route": "planar", "M": 8, "relative_l2": 1e-4}])
     text = p.read_text()
     assert text.startswith(
-        "route,M,N,K,out_dtype,dynamic_range_level,seed,relative_l2,max_abs,max_rel,nan_inf,n_elems,policy_pass,reference_dtype,source_hash"
+        "route,M,N,K,out_dtype,dynamic_range_level,seed,relative_l2,max_abs,max_rel,nan_inf,n_elems,policy_pass,reference_dtype,source_hash,source"
     )
     assert "planar" in text
 
@@ -640,6 +640,166 @@ def test_aggregate_duplicate_key_is_schema_error():
     assert any("duplicate" in r.lower() for r in out["fail_closed_reasons"]), out[
         "fail_closed_reasons"
     ]
+
+
+# ---------------------------------------------------------------------------
+# Task 3a CSV NOT_RUN fix (spec §6 3.3: "CSV 中保留 NOT_RUN row 及 reason").
+# The CSV must be self-describing: every required cell with no measured data is
+# represented by a NOT_RUN row carrying its reason in the ``source`` column, and
+# the aggregate recomputed purely from the CSV returns the same verdicts.
+# ---------------------------------------------------------------------------
+
+
+def test_write_csv_round_trip_preserves_not_run_source(tmp_path):
+    """The ``source`` column survives a write->read round trip so the
+    ``not_run:<reason>`` / ``diagnostic:small-contract`` labels are not stripped
+    (spec §6 3.3). Previously ``source`` lived only ephemerally on in-memory rows
+    because ``_CSV_COLUMNS`` lacked the column; write_csv silently dropped it."""
+    from results._phase0.numerical import _read_csv_rows, write_csv
+
+    rows = [
+        {
+            "route": "region_fused",
+            "dtype": "c64",
+            "shape": (4096, 16384, 1024),
+            "level": "baseline",
+            "seed": 0,
+            "reference_dtype": "c64",
+            "relative_l2": None,
+            "max_abs": None,
+            "max_rel": None,
+            "nan_inf": False,
+            "n_elems": 0,
+            "policy_pass": 0,
+            "source": "not_run:compute-bound-actual-large-fused",
+        },
+        {
+            "route": "region_fused",
+            "dtype": "c64",
+            "shape": "small_contract",
+            "level": "baseline",
+            "seed": 0,
+            "reference_dtype": "c64",
+            "relative_l2": 1e-7,
+            "max_abs": 1e-6,
+            "max_rel": 1e-7,
+            "nan_inf": False,
+            "n_elems": 32,
+            "policy_pass": 1,
+            "source": "diagnostic:small-contract",
+        },
+    ]
+    p = tmp_path / "nv.csv"
+    write_csv(str(p), rows)
+    read_back = _read_csv_rows(str(p))
+    by_key = {(r["route"], r["shape"], r["level"], r["seed"]): r for r in read_back}
+    not_run = by_key[("region_fused", (4096, 16384, 1024), "baseline", 0)]
+    diag = by_key[("region_fused", "small_contract", "baseline", 0)]
+    assert not_run["source"] == "not_run:compute-bound-actual-large-fused", not_run
+    assert not_run["relative_l2"] is None
+    assert diag["source"] == "diagnostic:small-contract", diag
+    assert diag["relative_l2"] == pytest.approx(1e-7)
+
+
+def test_regenerated_csv_contains_region_full_anchor_not_run_rows():
+    """The regenerated ``numerical_validation.csv`` (real artifact) MUST now list
+    the 9 region_fused intended-full-anchor cells as explicit NOT_RUN rows with a
+    ``not_run:<reason>`` source (spec §6 3.3). Previously these 9 required cells
+    existed only as JSON ``missing=9`` -- the CSV had zero rows for them."""
+    import csv
+    import os
+
+    from results._phase0.numerical import REGION_FULL_ANCHOR_SHAPE
+
+    csv_path = os.path.join("results", "phase0", "numerical_validation.csv")
+    with open(csv_path, newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    region_not_run = [
+        r
+        for r in rows
+        if r["route"] == "region_fused"
+        and r["source"].startswith("not_run:")
+        and (int(r["M"]), int(r["N"]), int(r["K"])) == REGION_FULL_ANCHOR_SHAPE
+    ]
+    # 3 levels x 3 seeds = 9 intended full-anchor NOT_RUN cells.
+    assert len(region_not_run) == 9, region_not_run
+    # every NOT_RUN row carries a non-empty reason after the ``not_run:`` prefix
+    for r in region_not_run:
+        assert r["source"] != "not_run:", r
+        assert r["relative_l2"] == "", r  # empty metrics
+    # levels x seeds coverage is complete
+    levels_seeds = {(r["dynamic_range_level"], int(r["seed"])) for r in region_not_run}
+    assert levels_seeds == {
+        (lvl, s)
+        for lvl in ("baseline", "mixed_scale", "cancellation")
+        for s in (0, 1, 2)
+    }
+
+
+def test_regenerated_csv_contains_cutlass_not_run_rows_with_reason():
+    """The regenerated ``numerical_validation.csv`` MUST preserve the cutlass
+    adversarial NOT_RUN reason (``not_run:toolchain-injection-unavailable``) in
+    the ``source`` column. Previously the reason was stripped because
+    ``_CSV_COLUMNS`` lacked ``source``; it lived only ephemerally on the
+    in-memory row from collect_cutlass."""
+    import csv
+    import os
+
+    csv_path = os.path.join("results", "phase0", "numerical_validation.csv")
+    with open(csv_path, newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    cutlass_not_run = [
+        r
+        for r in rows
+        if r["route"] == "cutlass_4m_single" and r["source"].startswith("not_run:")
+    ]
+    # 2 adversarial levels (mixed_scale, cancellation) x 3 seeds = 6 NOT_RUN cells.
+    assert len(cutlass_not_run) == 6, cutlass_not_run
+    for r in cutlass_not_run:
+        assert "toolchain-injection-unavailable" in r["source"], r
+        assert r["relative_l2"] == "", r
+
+
+def test_csv_is_self_describing_aggregate_matches_json_verdicts():
+    """Reading the regenerated CSV and recomputing the aggregate MUST yield the
+    same per-route verdicts as the committed JSON -- proving the CSV is now
+    self-describing (the NOT_RUN rows carry enough signal for the fail-closed
+    aggregate without consulting the JSON's fail_closed_reasons)."""
+    import json
+    import os
+
+    from results._phase0.numerical import (
+        _case_hashes,
+        _legit_not_run_reasons,
+        _read_csv_rows,
+        aggregate,
+        required_cell_keys,
+    )
+
+    csv_path = os.path.join("results", "phase0", "numerical_validation.csv")
+    json_path = os.path.join("results", "phase0", "numerical_validation.json")
+    rows = _read_csv_rows(csv_path)
+    payload = aggregate(
+        rows,
+        required_cell_keys(),
+        _case_hashes(),
+        _legit_not_run_reasons(),
+    )
+    with open(json_path) as fh:
+        committed = json.load(fh)
+    verdict_from_csv = {r["route"]: r["criterion"] for r in payload["per_route"]}
+    verdict_from_json = {r["route"]: r["criterion"] for r in committed["per_route"]}
+    # Verdicts UNCHANGED (planar/grouped FAIL; region_fused/cutlass UNKNOWN).
+    assert verdict_from_csv == verdict_from_json, (verdict_from_csv, verdict_from_json)
+    assert verdict_from_csv["region_fused"] == "UNKNOWN"
+    assert verdict_from_csv["cutlass_4m_single"] == "UNKNOWN"
+    assert payload["overall_numerical_status"] == "INCONCLUSIVE"
+    # expected/actual/missing/extra counts unchanged (NOT_RUN rows never count as
+    # measured): the CSV-derived accounting matches the committed JSON exactly.
+    for r_csv, r_json in zip(payload["per_route"], committed["per_route"]):
+        assert r_csv["route"] == r_json["route"]
+        for field in ("expected", "actual", "missing", "extra"):
+            assert r_csv[field] == r_json[field], (r_csv, r_json)
 
 
 if __name__ == "__main__":

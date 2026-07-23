@@ -27,7 +27,7 @@
     {
       "route": "region_fused",
       "criterion": "UNKNOWN",
-      "n_cells": 9,
+      "n_cells": 18,
       "expected": 9,
       "actual": 0,
       "missing": 9,
