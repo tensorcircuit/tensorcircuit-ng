@@ -1,10 +1,9 @@
-"""Four-state Phase 0 aggregator (review §9).
+"""Two-layer Phase 0 aggregator (review §10 / final-remediation plan §13).
 
-Reads structured artifacts (c1_judgment.json, c2_judgment.json, _phase0_cublaslt_gap.txt)
-and emits gonogo.json / gonogo.md / manifest.json / environment.json under results/phase0/.
-md is generated FROM json, never hand-overwritten.
-
-用法: MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' wsl.exe bash .wsl_run.sh python results/_phase0_gonogo.py
+route_verdict (per-route capability AND numerical) + phase0_completion (all
+canonical criteria determined) -> phase1_authorization. Emits gonogo.json /
+gonogo.md / environment.json / minimal manifest.json under results/phase0/.
+md is generated FROM the json object, never hand-overwritten.
 """
 
 from __future__ import annotations
@@ -606,83 +605,82 @@ def _collect_environment():
     return env
 
 
-def main():
-    base = "results/phase0"
+def main(stage_dir=None):
+    """Two-layer Phase 0 aggregator entry point.
+
+    Reads every capability + numerical artifact, runs the two-layer pipeline,
+    and writes gonogo.json / gonogo.md / environment.json / a minimal manifest
+    that stays consistent with the new verdict (Task 11 will replace the
+    manifest with a full manifest.py). stage_dir defaults to results/phase0.
+    """
+    base = stage_dir or "results/phase0"
     os.makedirs(base, exist_ok=True)
 
-    # C1: roll the per-case judgment statuses up into one criterion status.
-    c1 = _NOT_RUN
-    cj = os.path.join(base, "c1_judgment.json")
-    if os.path.exists(cj):
-        with open(cj) as f:
-            c1 = _c1_status_from_judgment(json.load(f))
+    def _load_json(name):
+        p = os.path.join(base, name)
+        if not os.path.exists(p):
+            return {}
+        try:
+            with open(p) as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
 
-    # C2: consume the already-judged c2_judgment.json from the Task 7 integration
-    # (it has the C1-large pre-filter applied; do NOT re-run judge_c2 on raw shapes).
-    c2 = _NOT_RUN
-    c2j = os.path.join(base, "c2_judgment.json")
-    if os.path.exists(c2j):
-        with open(c2j) as f:
-            c2 = _c2_status_from_judgment(json.load(f))
+    c1_j = _load_json("c1_judgment.json")
+    c2_j = _load_json("c2_judgment.json")
 
-    # C3 planar (authoritative): read the cublasLt planar-complex capability
-    # artifact produced by Plan B Task 2 (PASS=SUPPORTED / FAIL=NOT_SUPPORTED /
-    # NOT_RUN=artifact absent). Keys the §9 truth table; no longer hard NOT_RUN.
-    c3_planar = _c3_planar_from_capability(
-        os.path.join(base, "cublaslt_planar_capability.json")
-    )
+    criteria = {
+        "C1": _c1_status_from_judgment(c1_j),
+        "C2": _c2_status_from_judgment(c2_j),
+        "C2_REGION_KERNEL": _c2_layer_status(c2_j, "C2_REGION_KERNEL_FEASIBILITY"),
+        "C3_PLANAR_CORE": _c3_planar_from_capability(
+            os.path.join(base, "cublaslt_planar_capability.json")),
+        "C3_PLANAR_FULL_MATRIX": _c3_planar_full_matrix_status(
+            os.path.join(base, "cublaslt_full_matrix.csv")),
+        "C3_GROUPED": _c3_grouped_status(
+            os.path.join(base, "cublaslt_grouped_capability.json")),
+        "CUTLASS_SM120_4M": _cutlass_status(
+            os.path.join(base, "cutlass_sm120_4m.json")),
+        "REGION_PROTOTYPE": _region_proto_status(
+            os.path.join(base, "region_prototype.json")),
+        "NUMERICAL": _numerical_overall_status(
+            os.path.join(base, "numerical_validation.json")),
+    }
 
-    # C3 real ceiling (auxiliary): parse the cublaslt_gap txt proxy.
-    c3_real = _parse_c3_real_ceiling_ratio("results/phase0/cublaslt_gap.txt")
-
-    agg = aggregate(c1, c2, c3_planar, c3_real)
+    cap_tri = capability_layer(criteria)
+    num_per = _numerical_per_route(os.path.join(base, "numerical_validation.json"))
+    num_tri = numerical_layer(num_per, ROUTES)
+    rv = route_verdict(cap_tri, num_tri)
+    completion = evaluate_completion(criteria)
+    authorization = authorize_phase1(completion, rv)
+    agg = aggregate_two_layer(criteria, rv, completion, authorization)
 
     with open(os.path.join(base, "gonogo.json"), "w") as f:
         json.dump(agg, f, indent=2)
-
-    md = [
-        "# Phase 0 Go/No-Go (four-state, §9 truth table)",
-        "",
-        f"**Verdict: {agg['verdict']}**",
-        "",
-        "**Note:** " + agg["note"],
-        "",
-        "C3_planar is read from `cublaslt_planar_capability.json` (Plan B Task 2): "
-        "PASS = SUPPORTED, FAIL = NOT_SUPPORTED, NOT_RUN = artifact absent.",
-        "",
-        "## Criteria",
-        "```json",
-        json.dumps(agg["criteria"], indent=2),
-        "```",
-    ]
     with open(os.path.join(base, "gonogo.md"), "w") as f:
-        f.write("\n".join(md) + "\n")
+        f.write(_render_md(agg))
 
-    # environment snapshot (GPU/SM/driver/CUDA/library versions, TF32=off, theta seeds)
-    env_snapshot = _collect_environment()
+    # environment snapshot (kept; Task 11 manifest references it)
     with open(os.path.join(base, "environment.json"), "w") as f:
-        json.dump(env_snapshot, f, indent=2)
+        json.dump(_collect_environment(), f, indent=2)
 
-    # manifest: per-case status + artifact hashes. Written last so it can hash the
-    # other emitted files; the manifest does not hash itself (self-reference).
+    # Minimal consistent manifest (criteria + verdict + artifact hashes).
+    # Task 11 replaces this with a full manifest.py (schema_version/commands/
+    # inputs/outputs/cases). Kept here so gonogo and manifest never contradict.
     manifest = {
-        "c1": c1,
-        "c2": c2,
-        "c3_planar": c3_planar,
-        "c3_real_ceiling_ratio": c3_real,
-        "verdict": agg["verdict"],
+        "schema_version": "manifest-v0-minimal",
+        "criteria": dict(criteria),
+        "route_verdict": {r: v["status"] for r, v in rv.items()},
+        "phase0_completion": completion,
+        "phase1_authorization": authorization,
         "artifacts": {
             f: _file_hash(os.path.join(base, f))
             for f in (
-                "c1_judgment.json",
-                "c2_judgment.json",
-                "cublaslt_planar_capability.json",
-                "contraction_shapes.csv",
-                "c2_tileability.csv",
-                "c1_default_vs_nofusion.csv",
-                "gonogo.json",
-                "gonogo.md",
-                "environment.json",
+                "c1_judgment.json", "c2_judgment.json",
+                "cublaslt_planar_capability.json", "cublaslt_grouped_capability.json",
+                "cublaslt_full_matrix.csv", "cutlass_sm120_4m.json",
+                "region_prototype.json", "numerical_validation.json",
+                "gonogo.json", "gonogo.md", "environment.json",
             )
         },
     }

@@ -317,6 +317,46 @@ def test_render_md_matches_json_object():
         assert agg[field] in md
 
 
+def test_main_emits_consistent_gonogo_v2(tmp_path, monkeypatch):
+    # Drive main() against a staging dir with the real (current) phase0
+    # artifacts copied in, then assert the emitted gonogo is schema-valid,
+    # honest (INCONCLUSIVE while C2 is UNKNOWN), and JSON/MD agree.
+    import json, os, shutil
+    from results._phase0 import gonogo as G
+
+    src = "results/phase0"
+    stage = tmp_path / "phase0"
+    stage.mkdir()
+    for name in ("c1_judgment.json", "c2_judgment.json",
+                 "cublaslt_planar_capability.json", "cublaslt_grouped_capability.json",
+                 "cublaslt_full_matrix.csv", "cutlass_sm120_4m.json",
+                 "region_prototype.json", "numerical_validation.json",
+                 "cublaslt_gap.txt"):
+        s = os.path.join(src, name)
+        if os.path.exists(s):
+            shutil.copy(s, stage / name)
+
+    monkeypatch.setattr(G, "_collect_environment", lambda: {"_stub": True})
+
+    G.main(stage_dir=str(stage))
+
+    agg = json.load(open(stage / "gonogo.json"))
+    assert agg["schema_version"] == "gonogo-v2"
+    # Honest headline: C2 canonical is UNKNOWN -> INCONCLUSIVE, not GO.
+    assert agg["phase0_completion"] == "INCONCLUSIVE"
+    assert agg["phase1_authorization"] == "NOT_AUTHORIZED"
+    # per-route fail-closed: region_fused VIABLE, planar/grouped NOT_VIABLE
+    assert agg["route_verdict"]["region_fused"]["status"] == "VIABLE"
+    assert agg["route_verdict"]["planar"]["status"] == "NOT_VIABLE"
+    # rule 7: MD rendered from same object
+    md = (stage / "gonogo.md").read_text()
+    assert agg["phase0_completion"] in md and agg["phase1_authorization"] in md
+    # minimal manifest is consistent with the new verdict (no stale GO_TO_PHASE1)
+    manifest = json.load(open(stage / "manifest.json"))
+    assert manifest["phase0_completion"] == agg["phase0_completion"]
+    assert manifest["phase1_authorization"] == agg["phase1_authorization"]
+
+
 if __name__ == "__main__":
     import sys, pytest
 
