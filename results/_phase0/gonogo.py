@@ -428,6 +428,10 @@ def _c3_planar_full_matrix_status(path, contraction_shapes_path=None):
       * legal dtype / ws_cap / op / aligned / status tokens
       * aligned matches the recomputed ``m%16==n%16==k%16==0`` invariant
       * (M,N,K) bound to contraction_shapes.csv (no shape drift)
+      * algorithm-column legality: algo_count / first_algo_id /
+        workspace_bytes are integers, in range (algo_count>=0,
+        workspace_bytes>=0), and consistent with status (ok<->algo_count>=1;
+        no-algo<->algo_count==0 + first_algo_id==-1)
       * status='no-algo' allowed ONLY on cublaslt.full_matrix_no_algo_policy()
         cells (explicit 8-cell policy, not error-swallowing)
 
@@ -525,6 +529,24 @@ def _c3_planar_full_matrix_status(path, contraction_shapes_path=None):
         status = rec["status"]
         if status not in _cublaslt.FULL_MATRIX_STATUS_TOKENS:
             return _UNKNOWN
+        # algorithm-column legality (Task 5 algorithm-status check):
+        # algo_count / first_algo_id / workspace_bytes must be integers, in
+        # range, and consistent with the row's status. Any violation ->
+        # UNKNOWN (fail-closed, never PASS). The producer (run_full_matrix)
+        # writes ok<->algo_count>=1 and no-algo<->algo_count==0 +
+        # first_algo_id==-1; the reader enforces that contract here.
+        try:
+            algo_count = int(rec["algo_count"])
+            first_algo_id = int(rec["first_algo_id"])
+            workspace_bytes = int(rec["workspace_bytes"])
+        except ValueError:
+            return _UNKNOWN  # non-integer algorithm column
+        if algo_count < 0 or workspace_bytes < 0:
+            return _UNKNOWN  # out-of-range algorithm column
+        if status == "ok" and algo_count < 1:
+            return _UNKNOWN  # "ok" must have found >=1 algorithm
+        if status == "no-algo" and (algo_count != 0 or first_algo_id != -1):
+            return _UNKNOWN  # no-algo must be zero-algo with sentinel id
         # explicit no-algo policy: a no-algo OUTSIDE the policy set is a real
         # coverage gap (broken sweep / cuBLASLt regression), not a PASS.
         if status == "no-algo" and key not in no_algo_policy:

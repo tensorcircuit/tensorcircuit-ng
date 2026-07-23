@@ -175,8 +175,11 @@ def test_c3_full_matrix_pass_on_synthetic_complete_matrix(tmp_path):
     ]:
         key = (m, n, k, od, ws, op)
         aligned = int(m % 16 == 0 and n % 16 == 0 and k % 16 == 0)
-        status = "no-algo" if key in policy else "ok"
-        rows.append([m, n, k, od, ws, op, aligned, 1, 21, 0, status])
+        if key in policy:
+            # no-algo rows carry the producer's zero-algo sentinel values.
+            rows.append([m, n, k, od, ws, op, aligned, 0, -1, 0, "no-algo"])
+        else:
+            rows.append([m, n, k, od, ws, op, aligned, 1, 21, 0, "ok"])
 
     fm = tmp_path / "fm.csv"
     with open(fm, "w", newline="") as f:
@@ -854,7 +857,11 @@ def _write_full_matrix(tmp_path, rows, name="fm.csv"):
 
 def _synth_complete_rows(shapes):
     """Build the canonical complete-matrix rows for the given (M,N,K) shape list,
-    with no-algo ONLY on the explicit-policy shape's OP_T cells."""
+    with no-algo ONLY on the explicit-policy shape's OP_T cells.
+
+    Algorithm columns match the producer (cublaslt.run_full_matrix): ok rows
+    carry algo_count=1/first_algo_id=21/workspace_bytes=0, no-algo rows carry
+    algo_count=0/first_algo_id=-1/workspace_bytes=0."""
     from results._phase0.cublaslt import full_matrix_no_algo_policy
 
     policy = full_matrix_no_algo_policy()
@@ -865,8 +872,10 @@ def _synth_complete_rows(shapes):
                 for op in ("N", "T"):
                     key = (m, n, k, od, ws, op)
                     aligned = int(m % 16 == 0 and n % 16 == 0 and k % 16 == 0)
-                    status = "no-algo" if key in policy else "ok"
-                    rows.append([m, n, k, od, ws, op, aligned, 1, 21, 0, status])
+                    if key in policy:
+                        rows.append([m, n, k, od, ws, op, aligned, 0, -1, 0, "no-algo"])
+                    else:
+                        rows.append([m, n, k, od, ws, op, aligned, 1, 21, 0, "ok"])
     return rows
 
 
@@ -939,10 +948,112 @@ def test_c3_full_matrix_unknown_on_no_algo_outside_policy(tmp_path):
     shapes = [(16384, 16, 16)]  # not the policy shape
     shapes_csv = _write_synthetic_shapes(tmp_path, shapes)
     rows = _synth_complete_rows(shapes)
-    # Flip one (16384,16,16) cell to no-algo -> outside the policy -> UNKNOWN.
+    # Flip one (16384,16,16) cell to no-algo with producer-consistent algo
+    # columns (algo_count=0, first_algo_id=-1) so the row reaches the no-algo
+    # POLICY check rather than tripping the algo-consistency check first;
+    # (16384,16,16) is outside the 8-cell policy set -> UNKNOWN.
+    rows[0][7] = 0  # algo_count
+    rows[0][8] = -1  # first_algo_id
     rows[0][10] = "no-algo"
     fm = _write_full_matrix(tmp_path, rows)
     assert _c3_planar_full_matrix_status(str(fm), str(shapes_csv)) == "UNKNOWN"
+
+
+# ---------------------------------------------------------------------------
+# Task 5 algorithm-column legality (review Important): each test mutates
+# exactly ONE algorithm field on a valid-baseline CSV and asserts UNKNOWN.
+# algo_count / first_algo_id / workspace_bytes must be integers, in range, and
+# consistent with the row's status (ok<->algo_count>=1; no-algo<->algo_count==0
+# + first_algo_id==-1). Any violation is fail-closed -> UNKNOWN.
+# ---------------------------------------------------------------------------
+
+
+def test_c3_full_matrix_unknown_on_ok_with_zero_algo_count(tmp_path):
+    """status='ok' but algo_count=0 is contradictory ('ok' means >=1 algorithm
+    was found) -> UNKNOWN."""
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+
+    shapes = [(16384, 16, 16)]  # all-ok shape
+    shapes_csv = _write_synthetic_shapes(tmp_path, shapes)
+    rows = _synth_complete_rows(shapes)
+    rows[0][7] = 0  # algo_count=0 contradicts status="ok"
+    fm = _write_full_matrix(tmp_path, rows)
+    assert _c3_planar_full_matrix_status(str(fm), str(shapes_csv)) == "UNKNOWN"
+
+
+def test_c3_full_matrix_unknown_on_non_integer_algo_count(tmp_path):
+    """A non-integer algo_count ('x') fails to parse -> UNKNOWN."""
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+
+    shapes = [(16384, 16, 16)]
+    shapes_csv = _write_synthetic_shapes(tmp_path, shapes)
+    rows = _synth_complete_rows(shapes)
+    rows[0][7] = "x"  # non-integer algo_count
+    fm = _write_full_matrix(tmp_path, rows)
+    assert _c3_planar_full_matrix_status(str(fm), str(shapes_csv)) == "UNKNOWN"
+
+
+def test_c3_full_matrix_unknown_on_negative_algo_count(tmp_path):
+    """A negative algo_count is out of range -> UNKNOWN."""
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+
+    shapes = [(16384, 16, 16)]
+    shapes_csv = _write_synthetic_shapes(tmp_path, shapes)
+    rows = _synth_complete_rows(shapes)
+    rows[0][7] = -1  # negative algo_count
+    fm = _write_full_matrix(tmp_path, rows)
+    assert _c3_planar_full_matrix_status(str(fm), str(shapes_csv)) == "UNKNOWN"
+
+
+def test_c3_full_matrix_unknown_on_no_algo_with_nonzero_algo_count(tmp_path):
+    """status='no-algo' but algo_count=2 is contradictory (no-algo must be
+    zero-algo) -> UNKNOWN."""
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+
+    shapes = [(262144, 64, 4)]  # policy shape -> has legitimate no-algo cells
+    shapes_csv = _write_synthetic_shapes(tmp_path, shapes)
+    rows = _synth_complete_rows(shapes)
+    idx = next(i for i, r in enumerate(rows) if r[10] == "no-algo")
+    rows[idx][7] = 2  # algo_count=2 contradicts status="no-algo"
+    fm = _write_full_matrix(tmp_path, rows)
+    assert _c3_planar_full_matrix_status(str(fm), str(shapes_csv)) == "UNKNOWN"
+
+
+def test_c3_full_matrix_unknown_on_no_algo_with_non_sentinel_algo_id(tmp_path):
+    """status='no-algo' but first_algo_id=5 (not the -1 sentinel) is
+    contradictory -> UNKNOWN."""
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+
+    shapes = [(262144, 64, 4)]  # policy shape -> has legitimate no-algo cells
+    shapes_csv = _write_synthetic_shapes(tmp_path, shapes)
+    rows = _synth_complete_rows(shapes)
+    idx = next(i for i, r in enumerate(rows) if r[10] == "no-algo")
+    rows[idx][8] = 5  # first_algo_id=5 contradicts status="no-algo" (must be -1)
+    fm = _write_full_matrix(tmp_path, rows)
+    assert _c3_planar_full_matrix_status(str(fm), str(shapes_csv)) == "UNKNOWN"
+
+
+def test_c3_full_matrix_unknown_on_header_drift(tmp_path):
+    """Task 5 (review Minor): a CSV whose header row != the canonical
+    _FULL_MATRIX_HEADER -> UNKNOWN (schema/header drift). The check existed but
+    had no dedicated test."""
+    import csv
+
+    from results._phase0.cublaslt import _FULL_MATRIX_HEADER
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+
+    shapes = [(16384, 16, 16)]
+    shapes_csv = _write_synthetic_shapes(tmp_path, shapes)
+    rows = _synth_complete_rows(shapes)
+    # Tamper the header: rename 'algo_count' -> 'algo_cnt' (non-canonical).
+    drifted_header = list(_FULL_MATRIX_HEADER)
+    drifted_header[7] = "algo_cnt"
+    p = tmp_path / "fm.csv"
+    with open(p, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(drifted_header)
+        w.writerows(rows)
+    assert _c3_planar_full_matrix_status(str(p), str(shapes_csv)) == "UNKNOWN"
 
 
 if __name__ == "__main__":
