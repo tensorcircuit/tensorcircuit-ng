@@ -106,4 +106,4 @@
 1. `conda create -n <env> -c nvidia cuda-nvcc=12.8`
 2. `conda install -n <env> -c nvidia cuda-cudart-dev=12.8 cuda-cccl=12.8`
 3. `git clone --depth 1 https://github.com/NVIDIA/cutlass.git <home>/<toolchain>`
-4. `CUDA_HOME=<<env>> TORCH_CUDA_ARCH_LIST=12.0 CUTLASS_ROOT=<home>/<toolchain>`
+4. `CUDA_HOME=<env> TORCH_CUDA_ARCH_LIST=12.0 CUTLASS_ROOT=<home>/<toolchain>`

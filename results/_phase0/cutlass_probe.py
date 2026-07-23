@@ -845,7 +845,7 @@ def write_artifacts(verdict: dict, out_dir: str) -> None:
         "cuda-cudart-dev=12.8 cuda-cccl=12.8`\n"
         "3. `git clone --depth 1 https://github.com/NVIDIA/cutlass.git "
         "~/cutlass_spike`\n"
-        "4. `CUDA_HOME=<nvcc_spike> TORCH_CUDA_ARCH_LIST=12.0 "
+        "4. `CUDA_HOME=nvcc_spike TORCH_CUDA_ARCH_LIST=12.0 "
         "CUTLASS_ROOT=~/cutlass_spike`\n"
     )
     with open(os.path.join(out_dir, "cutlass_sm120_4m.md"), "w", newline="\n") as fh:

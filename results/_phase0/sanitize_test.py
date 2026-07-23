@@ -79,6 +79,84 @@ class TestSanitizeText:
         assert "<env>" in out
 
 
+# --- Placeholder double-wrap regression (Task 8 review fix) -----------------
+
+
+class TestPlaceholderDoubleWrapRegression:
+    """An already-angle-bracketed private token must NOT double-wrap.
+
+    Regression for the Task 8 review finding: the cutlass recipe string
+    ``CUDA_HOME=<nvcc_spike>`` was sanitized to ``CUDA_HOME=<<env>>`` because
+    the env-name substitution did a naive ``text.replace("nvcc_spike",
+    "<env>")`` on the ``nvcc_spike`` substring *inside* the existing angle
+    brackets, producing ``<`` + ``<env>`` + ``>`` = ``<<env>>``.
+
+    The fix replaces the already-bracketed form (``<nvcc_spike>``) before the
+    bare form so both ``nvcc_spike`` and ``<nvcc_spike>`` sanitize to exactly
+    ``<env>`` (same bracketed-first ordering for ``<cutlass_spike>`` ->
+    ``<toolchain>``). This is NOT a blanket ``<<``->``<`` collapse -- it only
+    touches the known private tokens, so legitimate C++ template/shift syntax
+    (``enable_if_t<<expression>``, ``device_kernel<Sm100GemmKernel>``) is
+    preserved.
+    """
+
+    def test_env_name_already_bracketed(self):
+        """sanitize_text('CUDA_HOME=<nvcc_spike>') -> 'CUDA_HOME=<env>'."""
+        out = sanitize_text("CUDA_HOME=<nvcc_spike>", home="/home/alice", repo="/repo")
+        assert out == "CUDA_HOME=<env>"
+        assert "<<" not in out
+        assert ">>" not in out
+
+    def test_env_name_bare_still_works(self):
+        """Bare nvcc_spike still sanitizes to <env> (no regression)."""
+        out = sanitize_text("CUDA_HOME=nvcc_spike", home="/home/alice", repo="/repo")
+        assert out == "CUDA_HOME=<env>"
+
+    def test_tcng_already_bracketed(self):
+        """<tcng> (the other env name) does not double-wrap."""
+        out = sanitize_text("env=<tcng>", home="/home/alice", repo="/repo")
+        assert out == "env=<env>"
+        assert "<<" not in out
+
+    def test_toolchain_already_bracketed(self):
+        """<cutlass_spike> does not double-wrap into <<toolchain>>."""
+        out = sanitize_text(
+            "CUTLASS_ROOT=<cutlass_spike>", home="/home/alice", repo="/repo"
+        )
+        assert out == "CUTLASS_ROOT=<toolchain>"
+        assert "<<" not in out
+
+    def test_bracketed_token_does_not_corrupt_cpp_templates(self):
+        """Hardening must not touch legitimate C++ template/shift syntax."""
+        raw = "device_kernel<Sm100GemmKernel> and std::enable_if_t<<expression>, void>"
+        out = sanitize_text(raw, home="/home/alice", repo="/repo")
+        # C++ template syntax survives byte-for-byte (no private tokens here).
+        assert "device_kernel<Sm100GemmKernel>" in out
+        assert "std::enable_if_t<<expression>, void>" in out
+        assert "<<" in out  # legitimate, must NOT be collapsed
+
+    def test_recipe_renders_without_double_brackets(self, tmp_path):
+        """The cutlass_sm120_4m recipe renders with a clean ``CUDA_HOME=<env>``
+        line and no ``<<`` double-bracket anywhere in the recipe (the original
+        defect was ``CUDA_HOME=<<env>>``)."""
+        from results._phase0.cutlass_probe import write_artifacts
+
+        # Minimal verdict: only the keys write_artifacts reads for the recipe
+        # header. The embedded JSON is intentionally blocker-free so the
+        # ``no <<`` assertion isolates the recipe line (real blocker text
+        # legitimately contains C++ ``enable_if_t<<expression>``).
+        verdict = {
+            "schema_version": "cutlass-sm120-4m-v1",
+            "overall": "FEASIBLE_WITH_SM80_FALLBACK",
+        }
+        write_artifacts(verdict, str(tmp_path))
+        md = (tmp_path / "cutlass_sm120_4m.md").read_text()
+        assert "CUDA_HOME=<env>" in md
+        assert "CUDA_HOME=<<env>>" not in md
+        assert "<<" not in md
+        assert ">>" not in md
+
+
 # --- Preserve-diagnostics guarantee ---------------------------------------
 
 

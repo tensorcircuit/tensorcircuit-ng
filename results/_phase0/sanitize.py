@@ -100,11 +100,18 @@ def sanitize_text(
     text = text.replace("~/", "<home>/")
     # 4. Legacy $REPO placeholder.
     text = text.replace("$REPO", "<repo>")
-    # 5. Toolchain clone dirs (e.g. cutlass_spike -> <toolchain>).
+    # 5. Toolchain clone dirs (e.g. cutlass_spike -> <toolchain>). Replace the
+    #    already-bracketed form (<cutlass_spike>) FIRST so a pre-wrapped token
+    #    does not double-wrap into <<toolchain>>; then the bare form.
     for tc in toolchain_dirs:
+        text = text.replace(f"<{tc}>", "<toolchain>")
         text = text.replace(tc, "<toolchain>")
-    # 6. Conda env names (e.g. tcng, nvcc_spike -> <env>).
+    # 6. Conda env names (e.g. tcng, nvcc_spike -> <env>). Same bracketed-first
+    #    ordering: <nvcc_spike> -> <env> (not <<env>>), then bare nvcc_spike.
+    #    This is NOT a blanket << -> < collapse -- only the known private
+    #    tokens are touched, so C++ template/shift syntax survives intact.
     for env in env_names:
+        text = text.replace(f"<{env}>", "<env>")
         text = text.replace(env, "<env>")
     return text
 
