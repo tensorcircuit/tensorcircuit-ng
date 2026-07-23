@@ -545,9 +545,7 @@ def _standardize_properties(properties: Dict[str, Any]) -> None:
                         elif "|1> readout fidelity" in param_name:
                             bits[q_idx]["ReadoutF1Err"] = 1.0 - data["param_list"][idx]
                         elif "f01" in param_name:
-                            # "Freqency" spelling kept for compatibility with
-                            # the tencent provider properties format
-                            bits[q_idx]["Freqency"] = data["param_list"][idx]
+                            bits[q_idx]["Frequency"] = data["param_list"][idx]
 
     # Extract from relatime (T1, T2)
     _extract_param(properties.get("relatime", {}))

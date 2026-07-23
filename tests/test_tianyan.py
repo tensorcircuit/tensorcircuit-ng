@@ -546,7 +546,7 @@ def test_cloud_list_properties_real_device() -> None:
     assert len(props["links"]) > 0
     assert len(props["bits"]) > 0
     sample_bit = next(iter(props["bits"].values()))
-    assert any(k in sample_bit for k in ["T1", "T2", "ReadoutError", "Freqency"])
+    assert any(k in sample_bit for k in ["T1", "T2", "ReadoutError", "Frequency"])
 
 
 @requires_hardware
