@@ -166,6 +166,47 @@ def test_numerical_per_route_skips_malformed_row(tmp_path):
     assert per == {"planar": "FAIL"}
 
 
+def test_capability_layer_combines_per_route():
+    from results._phase0.gonogo import capability_layer
+    criteria = {
+        "C3_PLANAR_CORE": "SUPPORTED", "C3_PLANAR_FULL_MATRIX": "PASS",
+        "C3_GROUPED": "NOT_SUPPORTED",
+        "REGION_PROTOTYPE": "FEASIBLE_WITH_RECOMPUTE", "C2_REGION_KERNEL": "PASS",
+        "CUTLASS_SM120_4M": "FEASIBLE_WITH_SM80_FALLBACK",
+    }
+    cap = capability_layer(criteria)
+    assert cap["planar"] == "OK"            # core OK + full matrix OK
+    assert cap["grouped"] == "NOT_OK"       # NOT_SUPPORTED
+    assert cap["region_fused"] == "OK"      # region proto OK + region kernel OK
+    assert cap["cutlass_4m_single"] == "OK"
+
+
+def test_capability_layer_undetermined_if_any_dep_not_run():
+    from results._phase0.gonogo import capability_layer
+    criteria = {"C3_PLANAR_CORE": "SUPPORTED", "C3_PLANAR_FULL_MATRIX": "NOT_RUN",
+                "C3_GROUPED": "NOT_SUPPORTED", "REGION_PROTOTYPE": "NOT_RUN",
+                "C2_REGION_KERNEL": "PASS", "CUTLASS_SM120_4M": "NOT_RUN"}
+    cap = capability_layer(criteria)
+    assert cap["planar"] == "UNDETERMINED"  # full matrix NOT_RUN, no NOT_OK
+    assert cap["region_fused"] == "UNDETERMINED"
+
+
+def test_numerical_layer_maps_per_route():
+    from results._phase0.gonogo import numerical_layer, ROUTES
+    per = {"planar": "FAIL", "grouped": "FAIL", "region_fused": "PASS",
+           "cutlass_4m_single": "PASS"}
+    num = numerical_layer(per, ROUTES)
+    assert num["planar"] == "NOT_OK"
+    assert num["region_fused"] == "OK"
+
+
+def test_numerical_layer_missing_route_is_undetermined():
+    from results._phase0.gonogo import numerical_layer, ROUTES
+    num = numerical_layer({"region_fused": "PASS"}, ROUTES)
+    assert num["planar"] == "UNDETERMINED"  # absent -> UNDETERMINED
+    assert num["region_fused"] == "OK"
+
+
 if __name__ == "__main__":
     import sys, pytest
 

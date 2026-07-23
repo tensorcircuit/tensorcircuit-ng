@@ -76,6 +76,43 @@ def _normalize(verdict):
     return _TRI_UNDETERMINED
 
 
+def _combine_tri(states):
+    """AND-combine tri-states: any NOT_OK -> NOT_OK; else any UNDETERMINED ->
+    UNDETERMINED; else OK. Empty -> UNDETERMINED."""
+    if not states:
+        return _TRI_UNDETERMINED
+    if any(s == _TRI_NOT_OK for s in states):
+        return _TRI_NOT_OK
+    if any(s == _TRI_UNDETERMINED for s in states):
+        return _TRI_UNDETERMINED
+    return _TRI_OK
+
+
+def capability_layer(criteria):
+    """Per-route capability tri-state from the canonical criteria dict.
+
+    A route's capability is the AND of its ROUTE_CAPABILITY_CRITERIA entries
+    (each normalized). rule 3 (region depends on C2_REGION_KERNEL) is encoded
+    by the route's criteria tuple.
+    """
+    out = {}
+    for route, deps in ROUTE_CAPABILITY_CRITERIA.items():
+        out[route] = _combine_tri([_normalize(criteria.get(c)) for c in deps])
+    return out
+
+
+def numerical_layer(per_route_num, routes):
+    """Per-route numerical tri-state from Task 9 per_route criterion map.
+
+    A route absent from per_route_num is UNDETERMINED (its numerical criterion
+    was not produced).
+    """
+    out = {}
+    for r in routes:
+        out[r] = _normalize(per_route_num.get(r, _NOT_RUN))
+    return out
+
+
 def aggregate(c1, c2, c3_planar, c3_real_ceiling_ratio=None):
     """§9 four-state truth table.
 
