@@ -113,6 +113,29 @@ def numerical_layer(per_route_num, routes):
     return out
 
 
+def _route_status(cap_tri, num_tri):
+    """Truth-table rule 8: VIABLE iff capability OK AND numerical OK;
+    NOT_VIABLE if either NOT_OK; else UNKNOWN."""
+    if _TRI_NOT_OK in (cap_tri, num_tri):
+        return "NOT_VIABLE"
+    if _TRI_UNDETERMINED in (cap_tri, num_tri):
+        return "UNKNOWN"
+    return "VIABLE"
+
+
+def route_verdict(cap_tri, num_tri):
+    """Per-route verdict map {route: {status, capability, numerical}}.
+
+    status is VIABLE / NOT_VIABLE / UNKNOWN per rule 8; capability and numerical
+    carry the raw tri-states for transparency.
+    """
+    out = {}
+    for r in ROUTES:
+        c, n = cap_tri.get(r, _TRI_UNDETERMINED), num_tri.get(r, _TRI_UNDETERMINED)
+        out[r] = {"status": _route_status(c, n), "capability": c, "numerical": n}
+    return out
+
+
 def aggregate(c1, c2, c3_planar, c3_real_ceiling_ratio=None):
     """§9 four-state truth table.
 

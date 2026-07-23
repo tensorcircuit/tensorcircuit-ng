@@ -207,6 +207,42 @@ def test_numerical_layer_missing_route_is_undetermined():
     assert num["region_fused"] == "OK"
 
 
+def test_route_verdict_viable_requires_both_ok():
+    from results._phase0.gonogo import route_verdict
+    rv = route_verdict(
+        {"planar": "OK", "grouped": "NOT_OK", "region_fused": "OK",
+         "cutlass_4m_single": "OK"},
+        {"planar": "NOT_OK", "grouped": "NOT_OK", "region_fused": "OK",
+         "cutlass_4m_single": "OK"})
+    assert rv["planar"]["status"] == "NOT_VIABLE"          # num NOT_OK
+    assert rv["planar"]["numerical"] == "NOT_OK"
+    assert rv["grouped"]["status"] == "NOT_VIABLE"         # both NOT_OK
+    assert rv["region_fused"]["status"] == "VIABLE"        # both OK
+    assert rv["cutlass_4m_single"]["status"] == "VIABLE"
+
+
+def test_route_verdict_unknown_when_undetermined_and_no_not_ok():
+    from results._phase0.gonogo import route_verdict
+    rv = route_verdict(
+        {"planar": "OK", "grouped": "UNDETERMINED", "region_fused": "OK",
+         "cutlass_4m_single": "OK"},
+        {"planar": "UNDETERMINED", "grouped": "NOT_OK", "region_fused": "OK",
+         "cutlass_4m_single": "OK"})
+    assert rv["planar"]["status"] == "UNKNOWN"   # num UNDETERMINED, no NOT_OK
+    assert rv["grouped"]["status"] == "NOT_VIABLE"  # grouped num NOT_OK
+
+
+def test_route_verdict_rule3_region_kernel_fail_sinks_region():
+    # rule 3 encoded structurally: region capability NOT_OK -> NOT_VIABLE
+    from results._phase0.gonogo import route_verdict
+    rv = route_verdict(
+        {"planar": "OK", "grouped": "OK", "region_fused": "NOT_OK",
+         "cutlass_4m_single": "OK"},
+        {"planar": "OK", "grouped": "OK", "region_fused": "OK",
+         "cutlass_4m_single": "OK"})
+    assert rv["region_fused"]["status"] == "NOT_VIABLE"
+
+
 if __name__ == "__main__":
     import sys, pytest
 
