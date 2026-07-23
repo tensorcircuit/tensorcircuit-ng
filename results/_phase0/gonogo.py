@@ -157,6 +157,76 @@ def authorize_phase1(completion, route_verdict_map):
     return "NO_GO"
 
 
+def _build_reasons(criteria, route_verdict_map, completion):
+    """Human-readable explanation lines, kept in sync with the verdict."""
+    reasons = []
+    if completion == "INCONCLUSIVE":
+        undetermined = [c for c in REQUIRED_CRITERIA
+                        if _normalize(criteria.get(c)) == _TRI_UNDETERMINED]
+        if undetermined:
+            reasons.append(
+                "canonical criteria undetermined -> phase0_completion INCONCLUSIVE: "
+                + ", ".join(undetermined))
+    for r, rv in route_verdict_map.items():
+        if rv["status"] == "NOT_VIABLE":
+            reasons.append(
+                f"{r} NOT_VIABLE: capability={rv['capability']} numerical={rv['numerical']}")
+        elif rv["status"] == "UNKNOWN":
+            reasons.append(
+                f"{r} UNKNOWN: capability={rv['capability']} numerical={rv['numerical']}")
+    return reasons
+
+
+def _build_blocking_artifacts(criteria, route_verdict_map):
+    """Artifact paths whose undetermined/failed state blocks a clean GO."""
+    blocking = []
+    if _normalize(criteria.get("C2")) == _TRI_UNDETERMINED:
+        blocking.append("c2_judgment.json (C2_CANONICAL undetermined)")
+    if _normalize(criteria.get("NUMERICAL")) == _TRI_NOT_OK:
+        blocking.append("numerical_validation.json (overall=FAIL)")
+    for r, rv in route_verdict_map.items():
+        if rv["capability"] == _TRI_NOT_OK and r == "grouped":
+            blocking.append("cublaslt_grouped_capability.json (NOT_SUPPORTED)")
+    return blocking
+
+
+def aggregate_two_layer(criteria, route_verdict_map, completion, authorization):
+    """Compose the full gonogo-v2 verdict object from the layered results."""
+    return {
+        "schema_version": "gonogo-v2",
+        "criteria": dict(criteria),
+        "route_verdict": {r: dict(v) for r, v in route_verdict_map.items()},
+        "phase0_completion": completion,
+        "phase1_authorization": authorization,
+        "reasons": _build_reasons(criteria, route_verdict_map, completion),
+        "blocking_artifacts": _build_blocking_artifacts(criteria, route_verdict_map),
+    }
+
+
+def _render_md(agg):
+    """Render gonogo.md FROM the same object as gonogo.json (truth-table rule 7)."""
+    lines = [
+        "# Phase 0 Go/No-Go (two-layer, §10 / plan §13)",
+        "",
+        f"**phase0_completion: {agg['phase0_completion']}**",
+        f"**phase1_authorization: {agg['phase1_authorization']}**",
+        "",
+        "## Route verdict",
+        "",
+    ]
+    for r, rv in agg["route_verdict"].items():
+        lines.append(
+            f"- `{r}`: **{rv['status']}** (capability={rv['capability']}, numerical={rv['numerical']})")
+    lines += ["", "## Criteria", "```json", json.dumps(agg["criteria"], indent=2), "```"]
+    if agg["reasons"]:
+        lines += ["", "## Reasons"]
+        lines += [f"- {x}" for x in agg["reasons"]]
+    if agg["blocking_artifacts"]:
+        lines += ["", "## Blocking artifacts"]
+        lines += [f"- {x}" for x in agg["blocking_artifacts"]]
+    return "\n".join(lines) + "\n"
+
+
 def aggregate(c1, c2, c3_planar, c3_real_ceiling_ratio=None):
     """§9 four-state truth table.
 

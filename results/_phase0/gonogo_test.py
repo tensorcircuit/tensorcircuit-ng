@@ -283,6 +283,40 @@ def test_authorize_phase1_truth_table():
     assert authorize_phase1("INCONCLUSIVE", viable) == "NOT_AUTHORIZED"
 
 
+def test_aggregate_two_layer_end_to_end():
+    from results._phase0.gonogo import aggregate_two_layer
+    criteria = {
+        "C1": "PASS", "C2": "UNKNOWN", "C2_REGION_KERNEL": "PASS",
+        "C3_PLANAR_CORE": "SUPPORTED", "C3_PLANAR_FULL_MATRIX": "PASS",
+        "C3_GROUPED": "NOT_SUPPORTED", "CUTLASS_SM120_4M": "FEASIBLE_WITH_SM80_FALLBACK",
+        "REGION_PROTOTYPE": "FEASIBLE_WITH_RECOMPUTE", "NUMERICAL": "FAIL"}
+    rv = {
+        "planar": {"status": "NOT_VIABLE", "capability": "OK", "numerical": "NOT_OK"},
+        "grouped": {"status": "NOT_VIABLE", "capability": "NOT_OK", "numerical": "NOT_OK"},
+        "region_fused": {"status": "VIABLE", "capability": "OK", "numerical": "OK"},
+        "cutlass_4m_single": {"status": "VIABLE", "capability": "OK", "numerical": "OK"}}
+    agg = aggregate_two_layer(criteria, rv, "INCONCLUSIVE", "NOT_AUTHORIZED")
+    assert agg["schema_version"] == "gonogo-v2"
+    assert agg["phase0_completion"] == "INCONCLUSIVE"
+    assert agg["phase1_authorization"] == "NOT_AUTHORIZED"
+    assert agg["criteria"]["C2"] == "UNKNOWN"
+    assert agg["route_verdict"]["region_fused"]["status"] == "VIABLE"
+    assert any("C2" in r for r in agg["reasons"])
+    assert "c2_judgment.json" in " ".join(agg["blocking_artifacts"])
+
+
+def test_render_md_matches_json_object():
+    # truth-table rule 7: MD is generated from the same object -> no contradiction
+    from results._phase0.gonogo import aggregate_two_layer, _render_md
+    agg = aggregate_two_layer({"NUMERICAL": "FAIL"}, {}, "INCONCLUSIVE", "NOT_AUTHORIZED")
+    md = _render_md(agg)
+    assert "INCONCLUSIVE" in md
+    assert "NOT_AUTHORIZED" in md
+    # the four phase-level fields appear and agree with the JSON object
+    for field in ("phase0_completion", "phase1_authorization"):
+        assert agg[field] in md
+
+
 if __name__ == "__main__":
     import sys, pytest
 
