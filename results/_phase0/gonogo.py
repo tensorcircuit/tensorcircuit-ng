@@ -28,6 +28,53 @@ _BAD = "FAIL"
 _UNKNOWN = "UNKNOWN"
 _NOT_RUN = "NOT_RUN"
 
+# Tri-state values used by the two-layer gating logic.
+_TRI_OK = "OK"
+_TRI_NOT_OK = "NOT_OK"
+_TRI_UNDETERMINED = "UNDETERMINED"
+
+# Canonical criteria whose determined-ness gates phase0_completion (truth-table
+# rules 1/5). NUMERICAL=FAIL is "determined" and does NOT sink completion.
+REQUIRED_CRITERIA = (
+    "C1",
+    "C2",
+    "C3_PLANAR_CORE",
+    "C3_PLANAR_FULL_MATRIX",
+    "C3_GROUPED",
+    "CUTLASS_SM120_4M",
+    "REGION_PROTOTYPE",
+    "NUMERICAL",
+)
+
+# Which capability criteria each contraction route depends on (truth-table
+# rule 8 + rule 3). A route is VIABLE only if every listed capability criterion
+# normalizes to OK AND its numerical criterion normalizes to OK.
+ROUTE_CAPABILITY_CRITERIA = {
+    "planar": ("C3_PLANAR_CORE", "C3_PLANAR_FULL_MATRIX"),
+    "grouped": ("C3_GROUPED",),
+    "region_fused": ("REGION_PROTOTYPE", "C2_REGION_KERNEL"),
+    "cutlass_4m_single": ("CUTLASS_SM120_4M",),
+}
+
+ROUTES = tuple(ROUTE_CAPABILITY_CRITERIA)
+
+
+def _normalize(verdict):
+    """Map an artifact-native verdict token to a gating tri-state.
+
+    OK          -> the capability/result is established as good
+                   (PASS, SUPPORTED, FEASIBLE*, TILE_FUSION_FEASIBLE)
+    NOT_OK      -> established as bad (FAIL, NOT_SUPPORTED, NOT_FEASIBLE)
+    UNDETERMINED-> not established (UNKNOWN, NOT_RUN, BLOCKED, unrecognized)
+    """
+    if verdict in ("PASS", "SUPPORTED", "TILE_FUSION_FEASIBLE"):
+        return _TRI_OK
+    if isinstance(verdict, str) and verdict.startswith("FEASIBLE"):
+        return _TRI_OK
+    if verdict in ("FAIL", "NOT_SUPPORTED", "NOT_FEASIBLE"):
+        return _TRI_NOT_OK
+    return _TRI_UNDETERMINED
+
 
 def aggregate(c1, c2, c3_planar, c3_real_ceiling_ratio=None):
     """§9 four-state truth table.

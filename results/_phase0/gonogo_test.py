@@ -42,6 +42,34 @@ def test_c3_planar_from_capability_json(tmp_path):
     assert _c3_planar_from_capability(str(tmp_path / "missing.json")) == "NOT_RUN"
 
 
+def test_normalize_pass_supported_feasible_are_ok():
+    from results._phase0.gonogo import _normalize
+    for v in ("PASS", "SUPPORTED", "FEASIBLE_WITH_SM80_FALLBACK",
+              "FEASIBLE_WITH_RECOMPUTE", "TILE_FUSION_FEASIBLE"):
+        assert _normalize(v) == "OK", v
+
+
+def test_normalize_fail_not_supported_are_not_ok():
+    from results._phase0.gonogo import _normalize
+    for v in ("FAIL", "NOT_SUPPORTED", "NOT_FEASIBLE"):
+        assert _normalize(v) == "NOT_OK", v
+
+
+def test_normalize_unknown_not_run_blocked_are_undetermined():
+    from results._phase0.gonogo import _normalize
+    for v in ("UNKNOWN", "NOT_RUN", "BLOCKED", "", "weird-token"):
+        assert _normalize(v) == "UNDETERMINED", v
+
+
+def test_constants_define_routes_and_required_criteria():
+    from results._phase0.gonogo import REQUIRED_CRITERIA, ROUTE_CAPABILITY_CRITERIA
+    assert set(ROUTE_CAPABILITY_CRITERIA) == {
+        "planar", "grouped", "region_fused", "cutlass_4m_single"}
+    assert "C2" in REQUIRED_CRITERIA and "NUMERICAL" in REQUIRED_CRITERIA
+    # region route depends on the region-kernel sub-criterion (truth-table rule 3)
+    assert "C2_REGION_KERNEL" in ROUTE_CAPABILITY_CRITERIA["region_fused"]
+
+
 if __name__ == "__main__":
     import sys, pytest
 
