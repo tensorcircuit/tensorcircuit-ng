@@ -243,6 +243,46 @@ def test_route_verdict_rule3_region_kernel_fail_sinks_region():
     assert rv["region_fused"]["status"] == "NOT_VIABLE"
 
 
+def test_completion_inconclusive_if_any_required_unknown():
+    from results._phase0.gonogo import evaluate_completion
+    criteria = {c: "PASS" for c in (
+        "C1", "C2", "C3_PLANAR_CORE", "C3_PLANAR_FULL_MATRIX", "C3_GROUPED",
+        "CUTLASS_SM120_4M", "REGION_PROTOTYPE", "NUMERICAL")}
+    criteria["C2"] = "UNKNOWN"  # the real binding constraint
+    assert evaluate_completion(criteria) == "INCONCLUSIVE"
+
+
+def test_completion_complete_when_all_determined_and_numerical_fail_ok():
+    # NUMERICAL=FAIL is "determined" -> does NOT sink completion (rule 5 edge)
+    from results._phase0.gonogo import evaluate_completion
+    criteria = {c: "PASS" for c in (
+        "C1", "C2", "C3_PLANAR_CORE", "C3_PLANAR_FULL_MATRIX", "C3_GROUPED",
+        "CUTLASS_SM120_4M", "REGION_PROTOTYPE")}
+    criteria["NUMERICAL"] = "FAIL"
+    criteria["C3_GROUPED"] = "NOT_SUPPORTED"  # determined, not UNKNOWN
+    assert evaluate_completion(criteria) == "COMPLETE"
+
+
+def test_completion_inconclusive_if_c3_subordinate_not_run():
+    # rule 4: C3_PLANAR_CORE PASS but FULL_MATRIX NOT_RUN -> INCONCLUSIVE
+    from results._phase0.gonogo import evaluate_completion
+    criteria = {c: "PASS" for c in (
+        "C1", "C2", "C3_PLANAR_CORE", "C3_PLANAR_FULL_MATRIX", "C3_GROUPED",
+        "CUTLASS_SM120_4M", "REGION_PROTOTYPE", "NUMERICAL")}
+    criteria["C3_PLANAR_FULL_MATRIX"] = "NOT_RUN"
+    assert evaluate_completion(criteria) == "INCONCLUSIVE"
+
+
+def test_authorize_phase1_truth_table():
+    from results._phase0.gonogo import authorize_phase1
+    viable = {"region_fused": {"status": "VIABLE"}}
+    none = {"planar": {"status": "NOT_VIABLE"}, "grouped": {"status": "NOT_VIABLE"},
+            "region_fused": {"status": "NOT_VIABLE"}, "cutlass_4m_single": {"status": "NOT_VIABLE"}}
+    assert authorize_phase1("COMPLETE", viable) == "GO_TO_PHASE1"
+    assert authorize_phase1("COMPLETE", none) == "NO_GO"
+    assert authorize_phase1("INCONCLUSIVE", viable) == "NOT_AUTHORIZED"
+
+
 if __name__ == "__main__":
     import sys, pytest
 

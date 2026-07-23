@@ -136,6 +136,27 @@ def route_verdict(cap_tri, num_tri):
     return out
 
 
+def evaluate_completion(criteria):
+    """Truth-table rules 1/4/5: COMPLETE iff every REQUIRED_CRITERION is
+    determined (normalizes to OK or NOT_OK). Any UNKNOWN/NOT_RUN (i.e.
+    UNDETERMINED) -> INCONCLUSIVE. NUMERICAL=FAIL is determined and does NOT
+    sink completion."""
+    for c in REQUIRED_CRITERIA:
+        if _normalize(criteria.get(c)) == _TRI_UNDETERMINED:
+            return "INCONCLUSIVE"
+    return "COMPLETE"
+
+
+def authorize_phase1(completion, route_verdict_map):
+    """Truth-table rule 6: GO_TO_PHASE1 iff COMPLETE and >=1 route VIABLE;
+    NO_GO if COMPLETE with no viable route; NOT_AUTHORIZED if INCONCLUSIVE."""
+    if completion != "COMPLETE":
+        return "NOT_AUTHORIZED"
+    if any(rv["status"] == "VIABLE" for rv in route_verdict_map.values()):
+        return "GO_TO_PHASE1"
+    return "NO_GO"
+
+
 def aggregate(c1, c2, c3_planar, c3_real_ceiling_ratio=None):
     """§9 four-state truth table.
 
