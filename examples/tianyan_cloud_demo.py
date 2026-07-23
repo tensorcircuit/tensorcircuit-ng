@@ -70,12 +70,9 @@ def main() -> None:
 
     real_device = tc.cloud.apis.get_device(f"tianyan::{REAL_DEVICE}")
     # real hardware requires a circuit that already respects the device topology;
-    # build a Bell circuit directly on a connected physical pair
+    # map the logical circuit onto a connected physical pair
     q1, q2 = sorted(real_device.topology()[0])
-    hardware_circuit = tc.Circuit(q2 + 1)
-    hardware_circuit.h(q1)
-    hardware_circuit.cx(q1, q2)
-    hardware_circuit.measure_instruction(q1, q2)
+    hardware_circuit = circuit.initial_mapping({0: q1, 1: q2}, n=q2 + 1)
     real_task = tc.cloud.apis.submit_task(
         circuit=hardware_circuit, device=real_device, shots=100
     )

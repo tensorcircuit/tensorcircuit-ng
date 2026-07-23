@@ -644,10 +644,11 @@ def test_hardware_submit_on_connected_physical_qubits() -> None:
     device = apis.get_device(f"tianyan::{REAL_DEVICE}")
     q1, q2 = sorted(device.topology()[0])
 
-    c = tc.Circuit(max(q1, q2) + 1)
-    c.h(q1)
-    c.cx(q1, q2)
-    c.measure_instruction(q1, q2)
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cx(0, 1)
+    c.measure_instruction(0, 1)
+    c = c.initial_mapping({0: q1, 1: q2}, n=q2 + 1)
 
     task = apis.submit_task(circuit=c, device=device, shots=TEST_SHOTS_REAL)
     assert isinstance(task, Task)
