@@ -129,10 +129,10 @@ def test_fused_matches_materialized_small_shape():
     assert E_fused.shape == E_mat.shape
 
 
-def test_run_verdict_and_no_full_PT():
+def test_run_verdict_and_no_full_PT(tmp_path):
     from results._phase0.region_proto import run
 
-    out = run()
+    out = run(out_dir=str(tmp_path))
     assert out["verdict"] in {
         "TILE_FUSION_FEASIBLE",
         "FEASIBLE_WITH_RECOMPUTE",
@@ -150,19 +150,35 @@ def test_run_verdict_and_no_full_PT():
     assert out["occupancy_pct"] > 0, out
 
 
-def test_run_artifacts():
+def test_run_artifacts(tmp_path):
+    """Task 12 regression guard: run() writes its four artifacts under out_dir
+    (tmp) and must NOT clobber the committed canonical results/phase0 files."""
+    import hashlib
     import os
 
     from results._phase0.region_proto import run
 
-    run()
-    for p in [
-        "results/phase0/region_prototype.json",
-        "results/phase0/region_prototype_accuracy.csv",
-        "results/phase0/region_prototype_memory.csv",
-        "results/phase0/region_prototype_bench.csv",
+    canonical = "results/phase0/region_prototype.json"
+    before = (
+        hashlib.sha256(open(canonical, "rb").read()).hexdigest()
+        if os.path.exists(canonical)
+        else ""
+    )
+    run(out_dir=str(tmp_path))
+    for name in [
+        "region_prototype.json",
+        "region_prototype_accuracy.csv",
+        "region_prototype_memory.csv",
+        "region_prototype_bench.csv",
     ]:
-        assert os.path.exists(p), p
+        assert (tmp_path / name).exists(), name
+    # canonical region_prototype.json must be byte-identical before/after (no clobber)
+    after = (
+        hashlib.sha256(open(canonical, "rb").read()).hexdigest()
+        if os.path.exists(canonical)
+        else ""
+    )
+    assert before == after, "run() clobbered canonical region_prototype.json"
 
 
 if __name__ == "__main__":

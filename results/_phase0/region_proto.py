@@ -279,8 +279,18 @@ SMALL_STEPS = [
 SMALL_SHAPES = {"PM": 2, "PN": 16, "K1": 4, "TM": 4, "TN": 8}
 
 
-def run(n: int = 24, depth: int = 10, fusion: str = "default", seeds=(0, 1, 2)) -> dict:
-    """Full Task 4 region-prototype verdict on the C1 anchor shape."""
+def run(
+    n: int = 24,
+    depth: int = 10,
+    fusion: str = "default",
+    seeds=(0, 1, 2),
+    out_dir: str | None = None,
+) -> dict:
+    """Full Task 4 region-prototype verdict on the C1 anchor shape.
+
+    Reads the edge map / contract from the canonical OUT_DIR; writes the four
+    region_prototype* artifacts to ``out_dir`` (default OUT_DIR). Tests pass a
+    tmp dir so they never clobber the committed canonical artifacts (Task 12)."""
     try:
         cp.get_default_memory_pool().free_all_blocks()
     except Exception:
@@ -402,23 +412,24 @@ def run(n: int = 24, depth: int = 10, fusion: str = "default", seeds=(0, 1, 2)) 
             "could cut that. Peak leverage itself is structural (Task 3): single-patch ~0."
         ),
     }
-    os.makedirs(OUT_DIR, exist_ok=True)
-    with open(f"{OUT_DIR}/region_prototype.json", "w") as fh:
+    out_dir = out_dir or OUT_DIR
+    os.makedirs(out_dir, exist_ok=True)
+    with open(f"{out_dir}/region_prototype.json", "w") as fh:
         json.dump(out, fh, indent=2)
     # accuracy / memory / bench CSVs
     import csv
 
-    with open(f"{OUT_DIR}/region_prototype_accuracy.csv", "w", newline="") as fh:
+    with open(f"{out_dir}/region_prototype_accuracy.csv", "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["seed", "relative_l2", "max_rel", "n_seeds"])
         w.writerow(["worst", worst_rel_l2, worst_max_rel, len(seeds)])
-    with open(f"{OUT_DIR}/region_prototype_memory.csv", "w", newline="") as fh:
+    with open(f"{out_dir}/region_prototype_memory.csv", "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(
             ["path", "materialized_peak_bytes", "fused_peak_bytes", "peak_saved_bytes"]
         )
         w.writerow(["anchor", materialized_peak, fused_peak, peak_saved])
-    with open(f"{OUT_DIR}/region_prototype_bench.csv", "w", newline="") as fh:
+    with open(f"{out_dir}/region_prototype_bench.csv", "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(
             ["path", "materialized_latency_ms", "registers_per_thread", "occupancy_pct"]

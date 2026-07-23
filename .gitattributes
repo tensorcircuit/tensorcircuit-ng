@@ -1,1 +1,14 @@
 * text=auto
+
+# Phase 0 reproducibility artifacts: force canonical LF everywhere under
+# results/phase0 so the raw-byte sha256 hashes recorded in manifest.json inputs,
+# the numerical_validation case_binding, and the c2_checkpoint_manifest
+# artifact_hashes stay stable across EVERY checkout (Task 12). Without this, a
+# fresh Windows checkout smudges text to CRLF and the re-hash mismatches ->
+# NUMERICAL/C2 demoted to UNKNOWN. gitattributes has NO {a,b} brace expansion ->
+# one line per extension. (** matches zero-or-more dirs -> top-level + subdirs.)
+results/phase0/**/*.csv eol=lf
+results/phase0/**/*.json eol=lf
+results/phase0/**/*.hlo eol=lf
+results/phase0/**/*.txt eol=lf
+results/phase0/**/*.md eol=lf
