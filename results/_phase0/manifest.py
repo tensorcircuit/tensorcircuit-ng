@@ -124,3 +124,68 @@ def _presence_check(gonogo_criteria, base):
         if any(not os.path.exists(os.path.join(base, r)) for r in required):
             validated[criterion] = "NOT_RUN"
     return validated
+
+
+def _c2_artifact_paths(c2_judgment):
+    """artifact_paths from the first case in c2_judgment.json (case-keyed dict)."""
+    if not isinstance(c2_judgment, dict) or not c2_judgment:
+        return {}
+    first = next(iter(c2_judgment.values()))
+    if isinstance(first, dict):
+        return first.get("artifact_paths") or {}
+    return {}
+
+
+def _validate_c2_checkpoint(base, c2_judgment, c2_checkpoint):
+    """Re-hash C2 binding source files; compare to c2_checkpoint_manifest hashes.
+
+    Returns OK if every resolvable binding matches, MISMATCH if any differs or its
+    source file is gone, UNAVAILABLE if the checkpoint artifact is absent/malformed.
+    """
+    if not isinstance(c2_checkpoint, dict) or not c2_checkpoint.get("artifact_hashes"):
+        return "UNAVAILABLE"
+    expected = c2_checkpoint["artifact_hashes"]
+    paths = _c2_artifact_paths(c2_judgment)
+    checked = 0
+    for key in C2_CHECKPOINT_KEYS:
+        exp_full = expected.get(key)
+        path_key = C2_PATH_KEY_ALIASES.get(key, key)
+        src = paths.get(path_key)
+        if not exp_full or not src:
+            continue
+        checked += 1
+        actual = _hash_file(_resolve_under_base(base, src))
+        if actual is None or actual != exp_full[:16]:
+            return "MISMATCH"
+    return "OK" if checked else "UNAVAILABLE"
+
+
+def _validate_numerical_binding(base, numerical_json):
+    """Re-hash numerical case_binding source files; compare to recorded sha[:16]."""
+    if not isinstance(numerical_json, dict):
+        return "UNAVAILABLE"
+    binding = numerical_json.get("case_binding")
+    if not isinstance(binding, dict) or not binding:
+        return "UNAVAILABLE"
+    checked = 0
+    for _name, (rel, hash_key) in NUMERICAL_BINDINGS.items():
+        exp = binding.get(hash_key)
+        if not exp:
+            continue
+        checked += 1
+        actual = _hash_file(os.path.join(base, rel))
+        if actual is None or actual != exp[:16]:
+            return "MISMATCH"
+    return "OK" if checked else "UNAVAILABLE"
+
+
+def _apply_checkpoint_validation(criteria, c2_status, num_status):
+    """A checkpoint MISMATCH breaks the binding -> the criterion cannot be trusted
+    -> force UNKNOWN (covers 'cannot retain PASS' and is fail-closed for FAIL too).
+    UNAVAILABLE -> no change (cannot validate, do not downgrade)."""
+    out = dict(criteria)
+    if c2_status == "MISMATCH" and "C2" in out:
+        out["C2"] = "UNKNOWN"
+    if num_status == "MISMATCH" and "NUMERICAL" in out:
+        out["NUMERICAL"] = "UNKNOWN"
+    return out

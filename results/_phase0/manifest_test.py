@@ -97,6 +97,97 @@ def test_presence_check_missing_forces_not_run(tmp_path):
     assert out["NUMERICAL"] == "NOT_RUN"
 
 
+def test_c2_artifact_paths_reads_first_case(tmp_path):
+    from results._phase0.manifest import _c2_artifact_paths
+
+    c2j = {
+        "n24_d10_default": {
+            "artifact_paths": {
+                "edge_map": "results/phase0/c1_c2_edge_map.json",
+                "audit": "results/phase0/c1_buffer_assignment/n24_d10_default.json",
+                "source_hlo": "results/phase0/c1_optimized_hlo/n24_d10_exp_default.hlo",
+            }
+        }
+    }
+    paths = _c2_artifact_paths(c2j)
+    assert paths["edge_map"].endswith("c1_c2_edge_map.json")
+    assert paths["audit"].endswith("n24_d10_default.json")
+    assert _c2_artifact_paths({}) == {}
+
+
+def test_validate_c2_checkpoint_ok_mismatch_unavailable(tmp_path):
+    import hashlib
+    from results._phase0.manifest import _validate_c2_checkpoint
+
+    # make a source file whose sha256[:16] matches the recorded hash
+    content = b"edge-data"
+    full = hashlib.sha256(content).hexdigest()
+    (tmp_path / "c1_c2_edge_map.json").write_bytes(content)
+    c2j = {
+        "n24_d10_default": {
+            "artifact_paths": {"edge_map": "results/phase0/c1_c2_edge_map.json"}
+        }
+    }
+    ok_ckpt = {"artifact_hashes": {"edge_map": full}}
+    assert _validate_c2_checkpoint(str(tmp_path), c2j, ok_ckpt) == "OK"
+    bad_ckpt = {"artifact_hashes": {"edge_map": "0" * 64}}
+    assert _validate_c2_checkpoint(str(tmp_path), c2j, bad_ckpt) == "MISMATCH"
+    assert _validate_c2_checkpoint(str(tmp_path), c2j, {}) == "UNAVAILABLE"
+
+
+def test_validate_c2_checkpoint_alias_allocation_audit(tmp_path):
+    import hashlib
+    from results._phase0.manifest import _validate_c2_checkpoint
+
+    content = b"audit-data"
+    full = hashlib.sha256(content).hexdigest()
+    # file placed where _resolve_under_base expects it (artifact_path is
+    # results/phase0/c1_buffer_assignment/n24_d10_default.json -> strips to
+    # c1_buffer_assignment/n24_d10_default.json under base)
+    sub = tmp_path / "c1_buffer_assignment"
+    sub.mkdir()
+    (sub / "n24_d10_default.json").write_bytes(content)
+    c2j = {
+        "n24_d10_default": {
+            "artifact_paths": {
+                "audit": "results/phase0/c1_buffer_assignment/n24_d10_default.json"
+            }
+        }
+    }
+    # checkpoint records under key 'allocation_audit' (alias -> 'audit' path)
+    ckpt = {"artifact_hashes": {"allocation_audit": full}}
+    assert _validate_c2_checkpoint(str(tmp_path), c2j, ckpt) == "OK"
+
+
+def test_validate_numerical_binding(tmp_path):
+    import hashlib
+    from results._phase0.manifest import _validate_numerical_binding
+
+    content = b"edge-data"
+    short = hashlib.sha256(content).hexdigest()[:16]
+    (tmp_path / "c1_c2_edge_map.json").write_bytes(content)
+    ok = {"case_binding": {"edge_map_hash": short}}
+    assert _validate_numerical_binding(str(tmp_path), ok) == "OK"
+    bad = {"case_binding": {"edge_map_hash": "deadbeef" * 2}}
+    assert _validate_numerical_binding(str(tmp_path), bad) == "MISMATCH"
+    assert _validate_numerical_binding(str(tmp_path), {}) == "UNAVAILABLE"
+
+
+def test_apply_checkpoint_validation_downgrades_pass_only(tmp_path):
+    from results._phase0.manifest import _apply_checkpoint_validation
+
+    criteria = {"C1": "PASS", "C2": "PASS", "NUMERICAL": "FAIL"}
+    # C2 mismatch -> C2 UNKNOWN; NUMERICAL mismatch -> NUMERICAL UNKNOWN too
+    out = _apply_checkpoint_validation(criteria, "MISMATCH", "OK")
+    assert out["C2"] == "UNKNOWN"
+    assert out["C1"] == "PASS"  # untouched
+    out2 = _apply_checkpoint_validation(criteria, "OK", "MISMATCH")
+    assert out2["NUMERICAL"] == "UNKNOWN"
+    # unavailable -> no change (can't validate, don't downgrade)
+    out3 = _apply_checkpoint_validation(criteria, "UNAVAILABLE", "UNAVAILABLE")
+    assert out3 == criteria
+
+
 if __name__ == "__main__":
     import sys, pytest
 
