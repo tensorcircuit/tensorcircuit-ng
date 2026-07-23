@@ -414,3 +414,114 @@ def test_aggregate_cutlass_not_run_adversarial_does_not_sink():
     assert (
         cutlass["criterion"] == "PASS"
     ), cutlass  # baseline PASS, adversarial not_run does not sink
+
+
+# ---------------------------------------------------------------------------
+# Task 0 (SDD plan §3 操作.2): fail-closed RED baseline. The tests below freeze
+# the target behavior the numerical reader must adopt after Task 3a wires the
+# canonical verdict_schema in. They FAIL on the current implementation by clean
+# assertion (not import, not GPU).
+# ---------------------------------------------------------------------------
+
+
+def test_aggregate_unknown_when_required_cell_not_run_is_undeclared():
+    """plan §3 操作.2 bullet 3: any REQUIRED numerical cell whose source is
+    ``not_run:*`` -- WITHOUT being declared in ``legit_not_run`` -- must force
+    the route criterion to UNKNOWN.
+
+    The current ``aggregate`` filters ``source=not_run:*`` rows out of
+    ``real_cells`` before counting them against ``expected_counts``. That filter
+    was added for the §7.2 cutlass-adversarial carve-out but it also masks any
+    UNDECLARED not_run cell: as long as the surviving real cells meet
+    ``expected_counts`` the route silently returns PASS. This test freezes the
+    target: an undeclared ``not_run:*`` cell on a required (route, dtype) yields
+    UNKNOWN, not PASS."""
+    from results._phase0.numerical import aggregate
+
+    rows = [
+        {
+            "route": "planar",
+            "dtype": "C16BF",
+            "shape": (16384, 1024, 1024),
+            "level": "baseline",
+            "seed": 0,
+            "relative_l2": 1e-5,
+            "max_abs": 1e-4,
+            "max_rel": 1e-5,
+            "nan_inf": False,
+            "policy_pass": 1,
+            # no source -> real measured cell
+        },
+        {
+            "route": "planar",
+            "dtype": "C16BF",
+            "shape": (16384, 1024, 1024),
+            "level": "mixed_scale",
+            "seed": 0,
+            "relative_l2": None,
+            "max_abs": None,
+            "max_rel": None,
+            "nan_inf": False,
+            "policy_pass": 0,
+            "source": "not_run:toolchain",  # NOT declared in legit_not_run
+        },
+    ]
+    out = aggregate(
+        rows,
+        expected_counts={("planar", "C16BF"): 1},  # baseline counted as 'expected'
+        case_hashes={},
+        legit_not_run=[],  # the not_run cell is NOT declared legit
+    )
+    planar = [r for r in out["per_route"] if r["route"] == "planar"][0]
+    assert planar["criterion"] == "UNKNOWN", planar
+    assert out["overall_numerical_status"] == "INCONCLUSIVE", out
+
+
+def test_collect_cutlass_does_not_substitute_max_rel_for_relative_l2(
+    tmp_path, monkeypatch
+):
+    """plan §3 操作.2 bullet 4: when ``relative_l2`` is missing from the cutlass
+    artifact's correctness block, ``collect_cutlass`` must NOT substitute
+    ``max_rel`` as a proxy for it. Cross-metric substitution hides the missing
+    evidence and lets apply_policy pass a cell that did not actually measure
+    relative_l2.
+
+    Today ``collect_cutlass`` baseline-path sets
+    ``relative_l2 = c.get('max_rel', 1e9)`` (numerical.py), which is exactly the
+    forbidden substitution. The fix emits ``relative_l2=None`` so apply_policy
+    flags the cell incomplete. This test uses a synthetic cutlass artifact with
+    NO ``relative_l2`` field and asserts the emitted row carries
+    ``relative_l2=None`` -- failing today because the row inherits max_rel."""
+    import json
+
+    from results._phase0 import numerical
+
+    # Synthetic cutlass_sm120_4m.json: correctness block has max_rel + max_abs
+    # but NO relative_l2 field -> collect_cutlass must not invent one.
+    (tmp_path / "cutlass_sm120_4m.json").write_text(
+        json.dumps(
+            {
+                "single_4m": {
+                    "correctness": {
+                        "max_rel": 6.5e-5,
+                        "max_abs": 1e-3,
+                        "nan_inf": False,
+                        # relative_l2 deliberately absent
+                    }
+                }
+            }
+        )
+    )
+    monkeypatch.setattr(numerical, "OUT_DIR", str(tmp_path))
+
+    row = numerical.collect_cutlass("baseline", seed=0)
+    # The row must carry relative_l2=None (missing), not the max_rel proxy.
+    assert row["relative_l2"] is None, row
+    # And it must never equal max_rel (the smoking gun for the substitution).
+    assert row["relative_l2"] != row["max_rel"], row
+
+
+if __name__ == "__main__":
+    import sys, pytest
+
+    sys.exit(pytest.main([__file__, "-v"]))

@@ -455,6 +455,56 @@ def test_canonical_self_recomputes_region_peak_gain_and_single_reduction():
     assert rc["single_reduction_bytes"] == 1107390736 - 1107358864, j
 
 
+# ---------------------------------------------------------------------------
+# Task 0 (SDD plan §3 操作.2): fail-closed RED baseline. The tests below
+# freeze the target behavior the v2 gate must adopt after Tasks 2a/3a wire the
+# canonical verdict_schema in. They FAIL on the current implementation by clean
+# assertion (not import, not GPU) — that is the point of the RED baseline.
+# ---------------------------------------------------------------------------
+
+
+def test_canonical_region_unknown_when_fused_full_anchor_run_false():
+    """plan §3 操作.2 bullet 1: ``fused_full_anchor_run=false`` -> the fused
+    kernel was NOT timed/measured at the full anchor. The fail-closed region
+    criterion must be UNKNOWN until the full-anchor run is actually executed.
+
+    The current gate returns PASS with a 'not measured' scope note (c2.py
+    ``_region_layer``), which leaks an unmeasured-evidence state into a canonical
+    PASS — exactly the fail-open pattern plan §3 操作.2 bullet 1 forbids. This
+    test freezes the target (UNKNOWN)."""
+    from results._phase0.verdict_schema import CRITERION_TOKENS
+
+    edge, peak, proto, audit, case, fh = _good()
+    # _good_prototype() carries fused_full_anchor_run=False (mirrors the
+    # committed canonical region_prototype.json)
+    assert proto["fused_full_anchor_run"] is False, proto
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    region = j["layers"]["C2_REGION_KERNEL_FEASIBILITY"]
+    assert (
+        region == "UNKNOWN"
+    ), f"fused_full_anchor_run=False must yield region UNKNOWN, got {region!r}"
+    assert region in CRITERION_TOKENS, region
+    assert j["layers"]["C2_CANONICAL"] == "UNKNOWN", j
+
+
+def test_canonical_region_unknown_when_actual_peak_missing():
+    """plan §3 操作.2 bullet 2: actual peak (``materialized_peak_bytes`` /
+    ``fused_peak_bytes``) missing -> region UNKNOWN. The gate self-recomputes
+    ``region_peak_gain_bytes`` from those raw fields; if either is absent the
+    peak benefit is unconfirmable, so the region criterion must fail closed to
+    UNKNOWN. The current ``_region_layer`` only checks accuracy/resource and
+    ignores a None ``region_peak_gain_bytes`` -> PASS leaks through."""
+    edge, peak, proto, audit, case, fh = _good()
+    # Isolate the peak-missing path: declare the full-anchor run done so bullet 1
+    # does not independently force UNKNOWN, then strip the actual-peak fields.
+    proto["fused_full_anchor_run"] = True
+    del proto["materialized_peak_bytes"]
+    del proto["fused_peak_bytes"]
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    assert j["recomputed"]["region_peak_gain_bytes"] is None, j
+    assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
+
+
 if __name__ == "__main__":
     import sys, pytest
 

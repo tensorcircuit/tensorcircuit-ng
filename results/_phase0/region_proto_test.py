@@ -181,6 +181,55 @@ def test_run_artifacts(tmp_path):
     assert before == after, "run() clobbered canonical region_prototype.json"
 
 
+# ---------------------------------------------------------------------------
+# Task 0 (SDD plan §3 操作.2): fail-closed RED baseline, producer-side.
+# GPU-free: inspects the committed canonical region_prototype.json so the test
+# never has to compile or run a GPU kernel. It freezes the producer contract
+# expected by Tasks 2a/3a: the verdict field the prototype emits must be a
+# CANONICAL criterion token (PASS/FAIL/UNKNOWN/NOT_RUN/NOT_SUPPORTED), and when
+# fused_full_anchor_run=False the canonical criterion is UNKNOWN (not the
+# artifact-native 'FEASIBLE_WITH_RECOMPUTE' detail token that the current
+# producer writes into the verdict field).
+# ---------------------------------------------------------------------------
+
+
+def test_region_prototype_verdict_field_is_canonical_when_full_anchor_not_run():
+    """plan §3 操作.2 bullets 1+2 (producer side): the canonical
+    region_prototype.json verdict must carry a canonical criterion token. Today
+    the producer (region_proto.run) writes ``FEASIBLE_WITH_RECOMPUTE`` into
+    ``verdict`` even though ``fused_full_anchor_run=false`` — that detail token
+    belongs in detail_status, and a canonical criterion field carrying it is the
+    fail-open surface that downstream gates (c2._region_layer) wrongly promote
+    to PASS.
+
+    The canonical criterion value when the full-anchor fused run was NOT
+    executed is UNKNOWN (the leverage was not measured at the full anchor). This
+    test reads the committed artifact and asserts the verdict field is in the
+    canonical criterion set; it FAILS today because the field still holds the
+    FEASIBLE_WITH_RECOMPUTE detail token."""
+    import json
+    import os
+
+    from results._phase0.verdict_schema import CRITERION_TOKENS, normalize_criterion
+
+    path = "results/phase0/region_prototype.json"
+    assert os.path.exists(path), "canonical region_prototype.json missing"
+    with open(path) as fh:
+        proto = json.load(fh)
+
+    # the committed canonical artifact records the full-anchor run as NOT done.
+    if proto.get("fused_full_anchor_run") is False:
+        # The verdict field must be a canonical criterion token. The canonical
+        # value is UNKNOWN (full-anchor leverage unmeasured); the detail token
+        # 'FEASIBLE_WITH_RECOMPUTE' must not appear in this canonical field.
+        verdict = proto.get("verdict")
+        assert verdict in CRITERION_TOKENS, (
+            f"region_prototype.verdict={verdict!r} is not a canonical criterion "
+            f"token; fused_full_anchor_run=False must yield criterion UNKNOWN "
+            f"(normalize_criterion maps {verdict!r} -> {normalize_criterion(verdict)!r})"
+        )
+
+
 if __name__ == "__main__":
     import sys, pytest
 

@@ -354,6 +354,227 @@ def test_main_writes_manifest_v1(tmp_path):
     assert m["source_commit"] and m["environment_hash"]
 
 
+# ---------------------------------------------------------------------------
+# Task 0 (SDD plan §3 操作.2): fail-closed RED baseline. The tests below freeze
+# the target behavior the manifest gate must adopt after Task 4 wires the
+# canonical verdict_schema in. They FAIL on the current implementation by clean
+# assertion (not import, not GPU).
+# ---------------------------------------------------------------------------
+
+
+def test_validate_c2_checkpoint_unavailable_when_any_required_binding_missing(
+    tmp_path,
+):
+    """plan §3 操作.2 bullet 5: if ANY required C2 binding key is missing from
+    the checkpoint manifest OR the judgment's ``artifact_paths``, the validation
+    result must be UNAVAILABLE (the binding chain cannot be confirmed).
+
+    Today ``_validate_c2_checkpoint`` ``continue``s past missing bindings and
+    returns ``OK`` as long as >=1 key was checked (manifest.py). That is the
+    fail-open surface: 1-of-6 keys present silently passes the whole checkpoint.
+    This test freezes the target: every required ``C2_CHECKPOINT_KEYS`` entry
+    must be present, else UNAVAILABLE."""
+    import hashlib
+
+    from results._phase0.manifest import (
+        C2_CHECKPOINT_KEYS,
+        _validate_c2_checkpoint,
+    )
+
+    # All required keys must be exercised; build a fixture that satisfies ONLY
+    # the edge_map key. The other 5 C2_CHECKPOINT_KEYS are absent from both the
+    # checkpoint's artifact_hashes and the judgment's artifact_paths.
+    content = b"edge-data"
+    full = hashlib.sha256(content).hexdigest()
+    (tmp_path / "c1_c2_edge_map.json").write_bytes(content)
+    c2j = {
+        "n24_d10_default": {
+            "artifact_paths": {"edge_map": "results/phase0/c1_c2_edge_map.json"}
+            # the other 5 path keys (source_hlo/buffer_assignment/audit/
+            # peak_frontier/prototype) deliberately absent
+        }
+    }
+    # only 1 of the 6 required C2_CHECKPOINT_KEYS provided
+    ckpt = {"artifact_hashes": {"edge_map": full}}
+
+    assert len(C2_CHECKPOINT_KEYS) >= 6, C2_CHECKPOINT_KEYS  # sanity
+    result = _validate_c2_checkpoint(str(tmp_path), c2j, ckpt)
+    # 1-of-N required bindings present -> the binding chain is UNAVAILABLE, not OK
+    assert result == "UNAVAILABLE", result
+
+
+def test_validate_numerical_binding_unavailable_when_any_required_binding_missing(
+    tmp_path,
+):
+    """plan §3 操作.2 bullet 5 (numerical side): if ANY required numerical case
+    binding is missing, validation must be UNAVAILABLE. Today
+    ``_validate_numerical_binding`` ``continue``s past missing bindings and
+    returns ``OK`` if >=1 was checked."""
+    import hashlib
+
+    from results._phase0.manifest import (
+        NUMERICAL_BINDINGS,
+        _validate_numerical_binding,
+    )
+
+    # Provide ONLY the edge_map binding; region_prototype.json +
+    # contraction_shapes.csv are absent (so their bindings cannot be validated).
+    content = b"edge-data"
+    short = hashlib.sha256(content).hexdigest()[:16]
+    (tmp_path / "c1_c2_edge_map.json").write_bytes(content)
+    numerical_json = {"case_binding": {"edge_map_hash": short}}
+
+    assert len(NUMERICAL_BINDINGS) >= 3, NUMERICAL_BINDINGS  # sanity
+    result = _validate_numerical_binding(str(tmp_path), numerical_json)
+    # 1-of-3 required bindings present -> UNAVAILABLE
+    assert result == "UNAVAILABLE", result
+
+
+def test_apply_checkpoint_validation_unavailable_downgrades_to_unknown():
+    """plan §3 操作.2 bullet 6: UNAVAILABLE must downgrade the dependent
+    criterion to UNKNOWN, exactly like MISMATCH. A binding chain that cannot be
+    confirmed is fail-closed UNKNOWN (the prior PASS may be stale).
+
+    Today ``_apply_checkpoint_validation`` only downgrades on ``MISMATCH`` and
+    explicitly treats ``UNAVAILABLE`` as 'no change' (manifest.py), preserving a
+    possibly-stale PASS. This test freezes the target: UNAVAILABLE also forces
+    the dependent criterion to UNKNOWN."""
+    from results._phase0.manifest import _apply_checkpoint_validation
+
+    criteria = {"C1": "PASS", "C2": "PASS", "NUMERICAL": "PASS"}
+
+    # C2 UNAVAILABLE -> C2 UNKNOWN (not preserved PASS)
+    out_c2 = _apply_checkpoint_validation(criteria, "UNAVAILABLE", "OK")
+    assert out_c2["C2"] == "UNKNOWN", out_c2
+    assert out_c2["C1"] == "PASS"  # untouched
+
+    # NUMERICAL UNAVAILABLE -> NUMERICAL UNKNOWN
+    out_num = _apply_checkpoint_validation(criteria, "OK", "UNAVAILABLE")
+    assert out_num["NUMERICAL"] == "UNKNOWN", out_num
+
+    # Both UNAVAILABLE -> both UNKNOWN
+    out_both = _apply_checkpoint_validation(criteria, "UNAVAILABLE", "UNAVAILABLE")
+    assert out_both["C2"] == "UNKNOWN" and out_both["NUMERICAL"] == "UNKNOWN", out_both
+
+
+def test_build_manifest_recomputes_routes_after_checkpoint_downgrade(tmp_path):
+    """plan §3 操作.2 bullet 7: after checkpoint validation downgrades a
+    criterion, route_verdict / phase0_completion / phase1_authorization must be
+    RECOMPUTED from the validated criteria, not propagated unchanged from
+    gonogo.json.
+
+    Scenario: the staged gonogo.json claims C2=PASS, region_fused VIABLE,
+    completion COMPLETE, authorization GO_TO_PHASE1. The C2 checkpoint manifest
+    records a hash that MISMATCHES the on-disk source file, so the manifest
+    downgrades C2 PASS -> UNKNOWN. With C2 UNKNOWN, gonogo's truth table yields
+    region_fused UNKNOWN (capability NOT_OK or UNDETERMINED), completion
+    INCONCLUSIVE, authorization NOT_AUTHORIZED. Today ``build_manifest`` keeps
+    the stale gonogo.json values verbatim, which is the fail-open bug."""
+    import json
+
+    from results._phase0.manifest import build_manifest
+
+    # Minimal stage with every required artifact present (so _presence_check
+    # does NOT independently force NOT_RUN) and a C2 checkpoint that MISMATCHES.
+    (tmp_path / "c1_judgment.json").write_text(
+        json.dumps({"n24_d10": {"judgment": {"status": "PASS"}, "n": 24, "depth": 10}})
+    )
+    (tmp_path / "c1_default_vs_nofusion.csv").write_text("x")
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {
+                "n24_d10_default": {
+                    "status": "PASS",  # claimed PASS; checkpoint will contradict
+                    "layers": {
+                        "C2_CANONICAL": "PASS",
+                        "C2_REGION_KERNEL_FEASIBILITY": "PASS",
+                    },
+                    "n": 24,
+                    "depth": 10,
+                    "fusion": "default",
+                    "artifact_paths": {
+                        "edge_map": "results/phase0/c1_c2_edge_map.json"
+                    },
+                }
+            }
+        )
+    )
+    # on-disk edge-map content
+    (tmp_path / "c1_c2_edge_map.json").write_text("real-edge-data")
+    # checkpoint records a MISMATCH (different content -> sha256 differs)
+    (tmp_path / "c2_checkpoint_manifest.json").write_text(
+        json.dumps({"artifact_hashes": {"edge_map": "0" * 64}})
+    )
+    (tmp_path / "cublaslt_planar_capability.json").write_text(
+        json.dumps({"capability": {"status": "SUPPORTED"}})
+    )
+    (tmp_path / "cublaslt_full_matrix.csv").write_text(
+        "M,N,K,status\n1024,1024,1024,ok\n"
+    )
+    (tmp_path / "cublaslt_grouped_capability.json").write_text(
+        json.dumps({"capability": {"status": "SUPPORTED"}})
+    )
+    (tmp_path / "cutlass_sm120_4m.json").write_text("{}")
+    (tmp_path / "region_prototype.json").write_text("{}")
+    (tmp_path / "numerical_validation.json").write_text(
+        json.dumps({"case_binding": {"edge_map_hash": "0" * 16}})
+    )
+    (tmp_path / "contraction_shapes.csv").write_text("s")
+    (tmp_path / "c2_tileability.csv").write_text("t")
+    (tmp_path / "run_context.json").write_text(
+        json.dumps(
+            {
+                "source_commit": "abc123",
+                "dirty_worktree": False,
+                "dirty_file_count": 0,
+                "command_templates": {"gonogo": "python results/_phase0/gonogo.py"},
+            }
+        )
+    )
+    # gonogo.json: claims an OVER-OPTIMISTIC GO (C2 PASS, region VIABLE, COMPLETE)
+    # that the manifest's checkpoint validation must overturn.
+    (tmp_path / "gonogo.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "gonogo-v2",
+                "criteria": {
+                    "C1": "PASS",
+                    "C2": "PASS",
+                    "C2_REGION_KERNEL": "PASS",
+                    "C3_PLANAR_CORE": "PASS",
+                    "C3_PLANAR_FULL_MATRIX": "PASS",
+                    "C3_GROUPED": "PASS",
+                    "CUTLASS_SM120_4M": "PASS",
+                    "REGION_PROTOTYPE": "PASS",
+                    "NUMERICAL": "PASS",
+                },
+                "route_verdict": {
+                    "region_fused": {
+                        "status": "VIABLE",
+                        "capability": "OK",
+                        "numerical": "OK",
+                    }
+                },
+                "phase0_completion": "COMPLETE",
+                "phase1_authorization": "GO_TO_PHASE1",
+            }
+        )
+    )
+    (tmp_path / "gonogo.md").write_text("# md")
+    (tmp_path / "environment.json").write_text("{}")
+
+    m = build_manifest(str(tmp_path), generated_at="2026-07-23T00:00:00Z")
+    # The checkpoint MISMATCH must downgrade C2 PASS -> UNKNOWN (bullet 6).
+    assert m["criteria"]["C2"] == "UNKNOWN", m["criteria"]
+    # Bullet 7: route / completion / authorization recomputed from the validated
+    # criteria. C2 UNKNOWN -> region_fused capability depends on C2_REGION_KERNEL
+    # but the canonical C2 criterion is now UNKNOWN, so completion must flip to
+    # INCONCLUSIVE and authorization to NOT_AUTHORIZED (a GO claim that rested on
+    # the stale C2 PASS cannot survive the downgrade).
+    assert m["phase0_completion"] == "INCONCLUSIVE", m["phase0_completion"]
+    assert m["phase1_authorization"] == "NOT_AUTHORIZED", m["phase1_authorization"]
+
+
 if __name__ == "__main__":
     import sys, pytest
 

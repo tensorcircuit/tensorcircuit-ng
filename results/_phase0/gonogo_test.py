@@ -569,6 +569,154 @@ def test_capability_layer_region_kernel_fail_sinks_region():
     assert cap["region_fused"] == "NOT_OK"  # rule 3: region-kernel FAIL sinks region
 
 
+# ---------------------------------------------------------------------------
+# Task 0 (SDD plan §3 操作.2): fail-closed RED baseline. The tests below freeze
+# the target behavior the gonogo gate must adopt after Tasks 5/6/7 wire the
+# canonical verdict_schema in. They FAIL on the current implementation by clean
+# assertion (not import, not GPU).
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_does_not_promote_feasible_detail_tokens_to_ok():
+    """plan §4 验收: 不再使用 ``startswith('FEASIBLE')`` 无条件提升全部架构/route.
+
+    The current ``_normalize`` does ``verdict.startswith('FEASIBLE') -> OK``
+    (gonogo.py), which promotes any FEASIBLE* detail token to capability-OK in
+    the canonical criterion layer. Per the fail-closed model those tokens are
+    DETAIL tokens (verdict_schema.DETAIL_TOKENS): a canonical criterion field
+    carrying them must fail closed to UNKNOWN, not be promoted to OK. This test
+    freezes the target: FEASIBLE* / TILE_FUSION_FEASIBLE / SUPPORTED / BLOCKED
+    must NOT normalize to OK in the canonical-criterion pipeline."""
+    from results._phase0.gonogo import _normalize
+    from results._phase0.verdict_schema import normalize_criterion
+
+    # The canonical criterion scrubber (verdict_schema) is the source of truth.
+    for t in (
+        "FEASIBLE",
+        "FEASIBLE_WITH_RECOMPUTE",
+        "FEASIBLE_WITH_SM80_FALLBACK",
+        "TILE_FUSION_FEASIBLE",
+        "SUPPORTED",
+        "BLOCKED",
+    ):
+        # canonical-criterion-pipeline contract: detail tokens -> UNKNOWN (PASS
+        # must be re-derived from evidence, not promoted from the detail prefix).
+        assert normalize_criterion(t) == "UNKNOWN", t
+
+    # The gonogo route/capability layer (_normalize) currently promotes
+    # FEASIBLE* to OK. The canonical criteria feeding it must already be
+    # canonical tokens by the time they reach _normalize, so _normalize should
+    # never SEE a FEASIBLE* token. This asserts the contract: _normalize does
+    # not get to promote detail tokens; the input is canonicalized upstream.
+    # (Fails today: _normalize('FEASIBLE_WITH_RECOMPUTE') == 'OK'.)
+    for t in ("FEASIBLE_WITH_RECOMPUTE", "FEASIBLE_WITH_SM80_FALLBACK"):
+        assert (
+            _normalize(t) != "OK"
+        ), f"_normalize must not promote detail token {t!r} to OK"
+
+
+def test_main_emits_two_cutlass_criteria_for_native_blocker_plus_sm80_fallback(
+    tmp_path, monkeypatch
+):
+    """plan §3 操作.2 bullet 8: a cutlass artifact recording BOTH a native SM120
+    blocker AND a working SM80 fallback must surface TWO DISTINCT criteria --
+    ``CUTLASS_SM120_4M`` (native SM120 -> FAIL / UNKNOWN, never PASS) and
+    ``CUTLASS_SM80_FALLBACK_CAPABILITY`` (fallback success -> PASS).
+
+    Today ``_cutlass_status`` merges both outcomes into one
+    ``FEASIBLE_WITH_SM80_FALLBACK`` criterion (gonogo.py), so the native SM120
+    blocker is invisible behind the fallback's success -- exactly the
+    information loss plan §3 操作.2 bullet 8 forbids. This test drives ``main``
+    against a synthetic cutlass artifact that records both outcomes and asserts
+    the emitted criteria dict carries BOTH canonical criterion keys."""
+    import json
+    from results._phase0 import gonogo as G
+
+    # Synthetic cutlass artifact: native SM120 blocked + SM80 fallback works.
+    (tmp_path / "cutlass_sm120_4m.json").write_text(
+        json.dumps(
+            {
+                "overall": "FEASIBLE_WITH_SM80_FALLBACK",
+                "single_4m": {
+                    "kernel_path": "sm80_fallback",
+                    "compiles": True,
+                    "runs": True,
+                    "correctness": {"gate_pass": True},
+                    "native_sm120_blocker": "F8F6F4 static_assert (BF16 blocked)",
+                },
+            }
+        )
+    )
+    # Minimal supporting artifacts so main() proceeds without raising.
+    (tmp_path / "c1_judgment.json").write_text(
+        json.dumps({"n24_d10": {"judgment": {"status": "PASS"}}})
+    )
+    (tmp_path / "c2_judgment.json").write_text("{}")
+    (tmp_path / "cublaslt_planar_capability.json").write_text("{}")
+    (tmp_path / "cublaslt_full_matrix.csv").write_text("h\n1\n")
+    (tmp_path / "cublaslt_grouped_capability.json").write_text("{}")
+    (tmp_path / "region_prototype.json").write_text("{}")
+    (tmp_path / "numerical_validation.json").write_text("{}")
+    monkeypatch.setattr(G, "_collect_environment", lambda: {"_stub": True})
+
+    G.main(stage_dir=str(tmp_path))
+    agg = json.load(open(tmp_path / "gonogo.json"))
+    criteria = agg["criteria"]
+
+    # BOTH canonical criteria must be present (today only CUTLASS_SM120_4M).
+    assert "CUTLASS_SM120_4M" in criteria, criteria
+    assert "CUTLASS_SM80_FALLBACK_CAPABILITY" in criteria, (
+        "native SM120 blocker + SM80 fallback success must surface as TWO "
+        "distinct criteria, not a single merged criterion; got: " + str(criteria)
+    )
+    # native SM120 is BLOCKED -> canonical criterion must NOT be PASS
+    assert criteria["CUTLASS_SM120_4M"] != "PASS", criteria
+    # SM80 fallback succeeds -> canonical criterion is PASS
+    assert criteria["CUTLASS_SM80_FALLBACK_CAPABILITY"] == "PASS", criteria
+
+
+def test_c3_full_matrix_unknown_on_missing_expected_cell(tmp_path):
+    """plan §3 操作.2 bullet 9: a full-matrix CSV missing an expected cell ->
+    criterion UNKNOWN. Today ``_c3_planar_full_matrix_status`` only requires
+    '>=1 data row' (gonogo.py), so any non-empty CSV returns PASS regardless of
+    coverage. This test freezes the target: a CSV with only a subset of the
+    expected matrix cells yields UNKNOWN."""
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+
+    # A CSV with ONE data row for an unexpected shape -> does NOT cover the
+    # full matrix (which spans the canonical SHAPES, e.g. 16384x1024x1024 +
+    # 524288x32x32 + 262144x64x64 + 1048576x16x16 + ...). One subset row
+    # cannot be a complete matrix -> UNKNOWN.
+    p = tmp_path / "fm.csv"
+    p.write_text("M,N,K,status\n1024,1024,1024,ok\n")
+    assert _c3_planar_full_matrix_status(str(p)) == "UNKNOWN"
+
+
+def test_c3_full_matrix_unknown_on_duplicate_row(tmp_path):
+    """plan §3 操作.2 bullet 9: a full-matrix CSV with a duplicate row ->
+    UNKNOWN. Duplicates indicate a broken sweep / re-run contamination, not a
+    canonical PASS."""
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+
+    p = tmp_path / "fm.csv"
+    # same shape row twice -> duplicate contamination
+    p.write_text("M,N,K,status\n1024,1024,1024,ok\n1024,1024,1024,ok\n")
+    assert _c3_planar_full_matrix_status(str(p)) == "UNKNOWN"
+
+
+def test_c3_full_matrix_unknown_on_shape_drift(tmp_path):
+    """plan §3 操作.2 bullet 9: a full-matrix CSV with a row whose (M,N,K) is
+    OUTSIDE the expected matrix (shape drift) -> UNKNOWN. Today
+    ``_c3_planar_full_matrix_status`` accepts any non-empty CSV; the fix
+    validates that every row's shape is in the canonical matrix."""
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+
+    p = tmp_path / "fm.csv"
+    # 9999x9999x9999 is not any canonical matrix shape -> drift
+    p.write_text("M,N,K,status\n1024,1024,1024,ok\n9999,9999,9999,drift\n")
+    assert _c3_planar_full_matrix_status(str(p)) == "UNKNOWN"
+
+
 if __name__ == "__main__":
     import sys, pytest
 
