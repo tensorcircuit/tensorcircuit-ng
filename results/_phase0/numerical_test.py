@@ -204,3 +204,14 @@ def test_collect_planar_smoke_one_cell(tmp_path):
     assert row["policy_pass"] in (0, 1)
     # C16BF baseline should pass its own policy (bf16 ~4e-3 max_rel on N(0,1))
     assert row["policy_pass"] == 1, row
+
+
+@pytest.mark.gpu
+def test_collect_grouped_smoke_one_cell():
+    from results._phase0.numerical import collect_grouped
+
+    row = collect_grouped((524288, 32, 32), "C16BF", "baseline", seed=0, batch=4)
+    assert row["route"] == "grouped"
+    assert row["dtype"] == "C16BF"
+    assert "relative_l2" in row and "nan_inf" in row
+    assert row["policy_pass"] == 1, row

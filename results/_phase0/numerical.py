@@ -351,3 +351,56 @@ def collect_planar(shape, dtype, level, seed):
     row = {"route": "planar", "dtype": dtype, "shape": shape, "level": level, "seed": seed,
            "reference_dtype": "c64", **metrics, "policy_pass": int(verdict == "PASS")}
     return row
+
+
+# ---------------------------------------------------------------------------
+# Task 7: grouped (batched) route numerical collector (GPU; spec §3)
+# ---------------------------------------------------------------------------
+
+def collect_grouped(shape, dtype, level, seed, batch=4):
+    """Batched planar-complex GEMM accuracy (cublasLt batched route, Task 7) vs c64.
+
+    Runs ``batch`` GEMMs of ``shape``; reports the WORST cell across the batch
+    (consistent with cublaslt._run_batched_timing aggregation). C32F uses fp32 output.
+    """
+    from results._phase0.cublaslt import (
+        load_ext, _f32_to_bf16_bits_and_upcast, _bf16_bits_to_f32,
+        reference_complex_matmul,
+    )
+
+    M, N, K = shape
+    # one independent (A,B) per batch element, derived from seed+batch_idx
+    ar = np.empty((batch, M, K), np.float32); ai = np.empty_like(ar)
+    br = np.empty((batch, K, N), np.float32); bi = np.empty_like(br)
+    refs = []
+    for b in range(batch):
+        A, B = make_inputs(level, shape, seed * 1000 + b)
+        ar[b], ai[b] = A.real.astype(np.float32), A.imag.astype(np.float32)
+        br[b], bi[b] = B.real.astype(np.float32), B.imag.astype(np.float32)
+        refs.append((ar[b], ai[b], br[b], bi[b]))
+    ext = load_ext()
+    if dtype not in ("C16BF", "C32F"):
+        raise ValueError(f"collect_grouped unsupported dtype {dtype!r}")
+    out_dtype = "bf16" if dtype == "C16BF" else "fp32"
+    # ext requires uint16 BF16-bit inputs for ALL out_dtype (ext.cpp:104-109);
+    # C32F = bf16-input + fp32-output (fp32 accumulation). See Task 6 reality note.
+    ar_bf, ar_f = _f32_to_bf16_bits_and_upcast(ar)
+    ai_bf, ai_f = _f32_to_bf16_bits_and_upcast(ai)
+    br_bf, br_f = _f32_to_bf16_bits_and_upcast(br)
+    bi_bf, bi_f = _f32_to_bf16_bits_and_upcast(bi)
+    cr_u16, ci_u16 = ext.planar_complex_matmul_bf16_batched(ar_bf, ai_bf, br_bf, bi_bf, M, N, K, batch, out_dtype=out_dtype)
+    worst = {"relative_l2": 0.0, "max_abs": 0.0, "max_rel": 0.0, "nan_inf": False, "n_elems": 0}
+    for b in range(batch):
+        if dtype == "C16BF":
+            cr = _bf16_bits_to_f32(cr_u16[b]); ci = _bf16_bits_to_f32(ci_u16[b])
+        else:  # C32F: ext returns fp32 directly, no decode
+            cr, ci = cr_u16[b], ci_u16[b]
+        cr_ref, ci_ref = reference_complex_matmul(ar_f[b], ai_f[b], br_f[b], bi_f[b])
+        m = compute_metrics((cr + 1j * ci).astype(np.complex64), (cr_ref + 1j * ci_ref).astype(np.complex64))
+        for kk in ("relative_l2", "max_abs", "max_rel"):
+            worst[kk] = max(worst[kk], m[kk])
+        worst["nan_inf"] = worst["nan_inf"] or m["nan_inf"]
+        worst["n_elems"] += m["n_elems"]
+    verdict, _ = apply_policy("grouped", dtype, worst)
+    return {"route": "grouped", "dtype": dtype, "shape": shape, "level": level, "seed": seed,
+            "reference_dtype": "c64", **worst, "policy_pass": int(verdict == "PASS")}
