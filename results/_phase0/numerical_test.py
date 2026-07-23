@@ -164,33 +164,6 @@ def test_aggregate_fail_on_nan():
     assert out["overall_numerical_status"] == "FAIL"
 
 
-def test_aggregate_legit_not_run_does_not_sink_overall():
-    from results._phase0.numerical import aggregate
-
-    # region_fused actual-large fused is legit NOT_RUN (compute-bound, spec §7.2)
-    rows = [
-        _row(
-            "region_fused",
-            "c64",
-            "small_contract",
-            "baseline",
-            0,
-            1e-7,
-            0.0,
-            1e-7,
-            False,
-        )
-    ]
-    out = aggregate(
-        rows,
-        {("region_fused", "c64"): 1},
-        {},
-        legit_not_run=["region_fused:actual-large-fused:compute-bound"],
-    )
-    assert out["overall_numerical_status"] == "PASS"
-    assert any("compute-bound" in r for r in out["fail_closed_reasons"])
-
-
 def test_aggregate_hash_mismatch_forces_unknown():
     from results._phase0.numerical import aggregate
 
@@ -300,14 +273,22 @@ def test_collect_region_fused_small_contract():
 
 
 def test_collect_cutlass_baseline_reads_task8_json():
+    """Task 3a: the cutlass artifact measures max_rel but NOT relative_l2. The
+    baseline row therefore carries relative_l2=None (never the max_rel proxy) and
+    policy_pass=0 (apply_policy flags the cell incomplete on the missing canonical
+    metric). The honest max_rel evidence is still recorded."""
     from results._phase0.numerical import collect_cutlass
 
     row = collect_cutlass("baseline", seed=0)
     assert row["route"] == "cutlass_4m_single"
     assert row["dtype"] == "C16BF"
-    # baseline reuses Task 8 (max_rel ~6.5e-5) -> passes C16BF policy
+    # max_rel evidence from Task 8 (~6.5e-5) still passes its own threshold
     assert row["max_rel"] < 5e-3
-    assert row["policy_pass"] == 1, row
+    # relative_l2 was NOT measured by the artifact -> None, never the max_rel proxy
+    assert row["relative_l2"] is None, row
+    assert row["relative_l2"] != row["max_rel"], row
+    # policy can't conclude PASS without relative_l2 -> cell incomplete
+    assert row["policy_pass"] == 0, row
 
 
 def test_collect_cutlass_adversarial_records_not_run_when_unavailable(monkeypatch):
@@ -368,52 +349,6 @@ def test_main_writes_artifacts_with_mocked_collectors(tmp_path, monkeypatch):
     assert payload["schema_version"] == "numerical-validation-v1"
     routes = {r["route"] for r in payload["per_route"]}
     assert routes == {"planar", "grouped", "region_fused", "cutlass_4m_single"}
-
-
-def test_aggregate_cutlass_not_run_adversarial_does_not_sink():
-    """Spec §7.2 contract: cutlass criterion == PASS when its baseline cells PASS
-    and adversarial rows carry source='not_run:...' — legit NOT_RUN must NOT sink
-    overall to INCONCLUSIVE."""
-    from results._phase0.numerical import aggregate
-
-    rows = [
-        {
-            "route": "cutlass_4m_single",
-            "dtype": "C16BF",
-            "shape": (16384, 1024, 1024),
-            "level": "baseline",
-            "seed": 0,
-            "relative_l2": 1e-5,
-            "max_abs": 1e-4,
-            "max_rel": 1e-5,
-            "nan_inf": False,
-            "policy_pass": 1,
-            "source": "task8_reuse",
-        },
-        {
-            "route": "cutlass_4m_single",
-            "dtype": "C16BF",
-            "shape": (16384, 1024, 1024),
-            "level": "mixed_scale",
-            "seed": 0,
-            "relative_l2": None,
-            "max_abs": None,
-            "max_rel": None,
-            "nan_inf": False,
-            "policy_pass": 0,
-            "source": "not_run:toolchain",
-        },
-    ]
-    out = aggregate(
-        rows,
-        expected_counts={("cutlass_4m_single", "C16BF"): 1},
-        case_hashes={},
-        legit_not_run=[],
-    )
-    cutlass = [r for r in out["per_route"] if r["route"] == "cutlass_4m_single"][0]
-    assert (
-        cutlass["criterion"] == "PASS"
-    ), cutlass  # baseline PASS, adversarial not_run does not sink
 
 
 # ---------------------------------------------------------------------------
@@ -519,6 +454,192 @@ def test_collect_cutlass_does_not_substitute_max_rel_for_relative_l2(
     assert row["relative_l2"] is None, row
     # And it must never equal max_rel (the smoking gun for the substitution).
     assert row["relative_l2"] != row["max_rel"], row
+
+
+# ---------------------------------------------------------------------------
+# Task 3a: required-cell schema generator + JSON accounting (plan §6 3.1 / 3.3).
+# These freeze the fail-closed behavior on the canonical schema so the per-route
+# criterion is independently recomputable from the CSV + module constants.
+# ---------------------------------------------------------------------------
+
+
+def test_required_cell_keys_covers_all_routes_and_levels():
+    """plan §6 3.1: the required-cell schema is the outer product of
+    route x dtype x shape x {baseline, mixed_scale, cancellation} x >=3 seeds
+    x c64 reference. Region uses the INTENDED full-anchor shape (P=A[4096,1024]
+    @B[1024,16384] -> T -> E=D[64,64]@T), NOT_RUN until Task 3b."""
+    from results._phase0.numerical import (
+        CUTLASS_ANCHOR_SHAPE,
+        DTYPES_BY_ROUTE,
+        LEVELS,
+        REGION_FULL_ANCHOR_SHAPE,
+        SEEDS,
+        SHAPES,
+        required_cell_keys,
+    )
+
+    keys = required_cell_keys()
+    # planar + grouped: 8 shapes x 2 dtypes x 3 levels x 3 seeds = 72 each (144 total)
+    planar = {k for k in keys if k[0] == "planar"}
+    grouped = {k for k in keys if k[0] == "grouped"}
+    assert len(planar) == len(SHAPES) * len(DTYPES_BY_ROUTE["planar"]) * len(
+        LEVELS
+    ) * len(SEEDS)
+    assert len(grouped) == len(SHAPES) * len(DTYPES_BY_ROUTE["grouped"]) * len(
+        LEVELS
+    ) * len(SEEDS)
+    # region_fused: intended full-anchor shape x c64 x 3 levels x 3 seeds
+    region = {k for k in keys if k[0] == "region_fused"}
+    assert len(region) == len(LEVELS) * len(SEEDS)
+    assert all(k[2] == REGION_FULL_ANCHOR_SHAPE for k in region)
+    # cutlass: anchor shape x C16BF x 3 levels x 3 seeds
+    cutlass = {k for k in keys if k[0] == "cutlass_4m_single"}
+    assert len(cutlass) == len(LEVELS) * len(SEEDS)
+    assert all(k[2] == CUTLASS_ANCHOR_SHAPE for k in cutlass)
+    # every key carries the c64 reference id
+    assert all(k[5] == "c64" for k in keys)
+
+
+def test_aggregate_region_unknown_when_only_small_contract_measured():
+    """plan §6 3.3: region_fused has 9 small-contract diagnostic rows (real
+    measured), but those keys do NOT match the required full-anchor shape.
+    The 9 intended full-anchor cells are missing -> route UNKNOWN, regardless of
+    how good the small-contract correctness is. NOT_RUN cells never let a route
+    PASS."""
+    from results._phase0.numerical import aggregate, required_cell_keys
+
+    # 9 small_contract diagnostic rows (real, very low error) -- these are NOT
+    # the required full-anchor cells.
+    rows = [
+        {
+            "route": "region_fused",
+            "dtype": "c64",
+            "shape": "small_contract",
+            "level": level,
+            "seed": seed,
+            "reference_dtype": "c64",
+            "relative_l2": 1e-7,
+            "max_abs": 1e-6,
+            "max_rel": 1e-7,
+            "nan_inf": False,
+        }
+        for level in ("baseline", "mixed_scale", "cancellation")
+        for seed in (0, 1, 2)
+    ]
+    out = aggregate(
+        rows,
+        required_cell_keys(),
+        case_hashes={},
+        legit_not_run=["region_fused:actual-large-fused:compute-bound (Task 3b)"],
+    )
+    region = [r for r in out["per_route"] if r["route"] == "region_fused"][0]
+    assert region["criterion"] == "UNKNOWN", region
+    # 9 expected full-anchor cells, 0 actual (small_contract keys don't match),
+    # 9 missing, 9 extra (the diagnostic small_contract rows).
+    assert region["expected"] == 9, region
+    assert region["actual"] == 0, region
+    assert region["missing"] == 9, region
+    assert region["extra"] == 9, region
+    assert out["overall_numerical_status"] == "INCONCLUSIVE", out
+
+
+def test_aggregate_cutlass_unknown_when_adversarial_not_run():
+    """plan §6 3.3: cutlass baseline cells (3) are measured but the 6 adversarial
+    cells are source=not_run:* -> route UNKNOWN. NOT_RUN rows never let a route
+    PASS, even when legit (toolchain-injection-unavailable)."""
+    from results._phase0.numerical import (
+        CUTLASS_ANCHOR_SHAPE,
+        aggregate,
+        required_cell_keys,
+    )
+
+    rows = [
+        {
+            "route": "cutlass_4m_single",
+            "dtype": "C16BF",
+            "shape": CUTLASS_ANCHOR_SHAPE,
+            "level": "baseline",
+            "seed": seed,
+            "reference_dtype": "c64",
+            "relative_l2": 1e-5,
+            "max_abs": 1e-4,
+            "max_rel": 1e-5,
+            "nan_inf": False,
+            "source": "task8_reuse",
+        }
+        for seed in (0, 1, 2)
+    ] + [
+        {
+            "route": "cutlass_4m_single",
+            "dtype": "C16BF",
+            "shape": CUTLASS_ANCHOR_SHAPE,
+            "level": level,
+            "seed": seed,
+            "reference_dtype": "c64",
+            "relative_l2": None,
+            "max_abs": None,
+            "max_rel": None,
+            "nan_inf": False,
+            "source": "not_run:toolchain-injection-unavailable",
+        }
+        for level in ("mixed_scale", "cancellation")
+        for seed in (0, 1, 2)
+    ]
+    out = aggregate(
+        rows,
+        required_cell_keys(),
+        case_hashes={},
+        legit_not_run=["cutlass_4m_single:adversarial:toolchain-injection-unavailable"],
+    )
+    cutlass = [r for r in out["per_route"] if r["route"] == "cutlass_4m_single"][0]
+    assert cutlass["criterion"] == "UNKNOWN", cutlass
+    # 9 expected (3 levels x 3 seeds); 3 baseline measured; 6 missing (adversarial).
+    assert cutlass["expected"] == 9, cutlass
+    assert cutlass["actual"] == 3, cutlass
+    assert cutlass["missing"] == 6, cutlass
+
+
+def test_aggregate_duplicate_key_is_schema_error():
+    """plan §6 3.1: a duplicate cell key is a schema error -- the producer must
+    not silently dedup. Overall -> INCONCLUSIVE with a fail_closed_reason."""
+    from results._phase0.numerical import aggregate
+
+    rows = [
+        {
+            "route": "planar",
+            "dtype": "C16BF",
+            "shape": (16384, 1024, 1024),
+            "level": "baseline",
+            "seed": 0,
+            "reference_dtype": "c64",
+            "relative_l2": 1e-5,
+            "max_abs": 1e-4,
+            "max_rel": 1e-5,
+            "nan_inf": False,
+        },
+        {
+            "route": "planar",
+            "dtype": "C16BF",
+            "shape": (16384, 1024, 1024),
+            "level": "baseline",
+            "seed": 0,
+            "reference_dtype": "c64",
+            "relative_l2": 2e-5,
+            "max_abs": 2e-4,
+            "max_rel": 2e-5,
+            "nan_inf": False,
+        },
+    ]
+    out = aggregate(
+        rows,
+        {("planar", "C16BF"): 1},
+        case_hashes={},
+        legit_not_run=[],
+    )
+    assert out["overall_numerical_status"] == "INCONCLUSIVE", out
+    assert any("duplicate" in r.lower() for r in out["fail_closed_reasons"]), out[
+        "fail_closed_reasons"
+    ]
 
 
 if __name__ == "__main__":

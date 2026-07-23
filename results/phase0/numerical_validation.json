@@ -2,34 +2,50 @@
   "schema_version": "numerical-validation-v1",
   "case_binding": {
     "edge_map_hash": "9dc930781a3e5074",
-    "prototype_hash": "df550309b1dcd366",
+    "prototype_hash": "1e97addf6aef0f1c",
     "contraction_shapes_hash": "8e15b9dec8018128"
   },
   "per_route": [
     {
       "route": "planar",
       "criterion": "FAIL",
-      "n_cells": 144
+      "n_cells": 144,
+      "expected": 144,
+      "actual": 144,
+      "missing": 0,
+      "extra": 0
     },
     {
       "route": "grouped",
       "criterion": "FAIL",
-      "n_cells": 144
+      "n_cells": 144,
+      "expected": 144,
+      "actual": 144,
+      "missing": 0,
+      "extra": 0
     },
     {
       "route": "region_fused",
-      "criterion": "PASS",
-      "n_cells": 9
+      "criterion": "UNKNOWN",
+      "n_cells": 9,
+      "expected": 9,
+      "actual": 0,
+      "missing": 9,
+      "extra": 9
     },
     {
       "route": "cutlass_4m_single",
-      "criterion": "PASS",
-      "n_cells": 9
+      "criterion": "UNKNOWN",
+      "n_cells": 9,
+      "expected": 9,
+      "actual": 0,
+      "missing": 9,
+      "extra": 0
     }
   ],
-  "overall_numerical_status": "FAIL",
+  "overall_numerical_status": "INCONCLUSIVE",
   "fail_closed_reasons": [
-    "region_fused:actual-large-fused:compute-bound (spec \u00a77.2; correctness proven on small contract)",
-    "cutlass_4m_single:adversarial-level:toolchain-injection-unavailable (baseline reused from Task 8)"
+    "region_fused:actual-large-fused:compute-bound (spec \u00a77.2; correctness proven on small contract only; intended full-anchor cells NOT_RUN until Task 3b)",
+    "cutlass_4m_single:adversarial-level:toolchain-injection-unavailable (baseline reused from Task 8; relative_l2 not measured by artifact)"
   ]
 }

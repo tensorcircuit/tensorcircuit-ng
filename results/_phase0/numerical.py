@@ -25,7 +25,9 @@ def compute_metrics(out, ref, signal_floor: float = 0.5) -> dict:
     """Numerical correctness of ``out`` vs c64 fp32 materialized ``ref``.
 
     Returns JSON-serializable scalars:
-    - relative_l2: ||out-ref||_2 / max(1, ||ref||_2)
+    - relative_l2: ||out-ref||_2 / max(||ref||_2, epsilon)  (epsilon = 1.0; spec §3.2.1).
+                   This is the canonical vector L2 error metric. It MUST be a real
+                   vector L2 -- never substitute max_rel for it (Task 3a, plan §6 3.2).
     - max_abs:     max |out-ref|
     - max_rel:     max |out-ref| / max(|ref|, signal_floor)   (signal_floor avoids div-by-0)
     - nan_inf:     any non-finite in out
@@ -36,7 +38,8 @@ def compute_metrics(out, ref, signal_floor: float = 0.5) -> dict:
     diff = out - ref
     nan_inf = bool(not np.all(np.isfinite(out)))
     denom = np.maximum(np.abs(ref), signal_floor)
-    rel_l2 = float(np.linalg.norm(diff) / max(1.0, float(np.linalg.norm(ref))))
+    epsilon = 1.0  # floor on ||ref||_2 to avoid div-by-zero (spec §3.2.1)
+    rel_l2 = float(np.linalg.norm(diff) / max(epsilon, float(np.linalg.norm(ref))))
     max_abs = float(np.max(np.abs(diff))) if diff.size else 0.0
     max_rel = float(np.max(np.abs(diff) / denom)) if diff.size else 0.0
     return {
@@ -154,63 +157,201 @@ def apply_policy(route, dtype, metrics):
 _ROUTES = ("planar", "grouped", "region_fused", "cutlass_4m_single")
 
 
-def aggregate(rows, expected_counts, case_hashes, legit_not_run):
-    """Fail-closed aggregation -> numerical_validation.json payload (spec §7).
+def _shape_key(shape):
+    """Normalize a row's ``shape`` field to a hashable schema-key component.
 
-    rows: list of cell dicts (route, dtype, shape, level, seed, + metrics).
-    expected_counts: {(route, dtype): N_expected_rows}.
-    case_hashes: {hash_name: value}; any value == "MISMATCH" -> INCONCLUSIVE.
-    legit_not_run: human-readable reasons for legitimate NOT_RUN (e.g. region_fused
-      actual-large fused compute-bound); listed in fail_closed_reasons but do NOT
-      sink overall to INCONCLUSIVE.
+    Tuple/list shapes (M,N,K) become tuples; label strings (e.g. ``"small_contract"``)
+    pass through unchanged so that diagnostic small-contract rows remain distinct
+    from the intended full-anchor shape in the key-set comparison.
     """
+    if isinstance(shape, (tuple, list)):
+        return tuple(shape)
+    return shape
+
+
+def _cell_key(row):
+    """Canonical required-cell schema key for a row (plan §6 3.1).
+
+    Key = (route, dtype, shape, level, seed, reference_id). ``reference_id`` is the
+    reference dtype (always ``"c64"`` for the c64 fp32 materialized reference).
+    """
+    return (
+        row["route"],
+        row["dtype"],
+        _shape_key(row.get("shape")),
+        row["level"],
+        row["seed"],
+        row.get("reference_dtype", "c64"),
+    )
+
+
+def required_cell_keys():
+    """Build the canonical EXPECTED set of numerical cell keys (plan §6 3.1).
+
+    The schema is the outer product of (route, dtype, shape, level, seed,
+    reference_id) where each route's shape set is fixed by its evidence contract:
+
+      - planar, grouped: 8 SHAPES (cublaslt full-matrix set) x {C16BF, C32F}
+      - region_fused: the INTENDED full-anchor P=A[4096,1024]@B[1024,16384] (plan
+        §5 2.2); these cells are NOT_RUN until Task 3b measures them.
+      - cutlass_4m_single: the anchor (16384,1024,1024)
+
+    All routes x 3 levels x >=3 seeds x c64 reference.
+    """
+    keys = set()
+    for shape in SHAPES:
+        for route in ("planar", "grouped"):
+            for dtype in DTYPES_BY_ROUTE[route]:
+                for level in LEVELS:
+                    for seed in SEEDS:
+                        keys.add((route, dtype, tuple(shape), level, seed, "c64"))
+    for level in LEVELS:
+        for seed in SEEDS:
+            keys.add(
+                ("region_fused", "c64", REGION_FULL_ANCHOR_SHAPE, level, seed, "c64")
+            )
+    for level in LEVELS:
+        for seed in SEEDS:
+            keys.add(
+                ("cutlass_4m_single", "C16BF", CUTLASS_ANCHOR_SHAPE, level, seed, "c64")
+            )
+    return keys
+
+
+def _as_expected_keys(expected_counts, rows):
+    """Normalize the ``expected_counts`` argument to a set of canonical cell keys.
+
+    Accepts either:
+      - a set/iterable of (route, dtype, shape, level, seed, reference_id) tuples
+        (preferred, used by ``required_cell_keys()``), OR
+      - a legacy dict ``{(route, dtype): N_count}`` for backward compatibility with
+        count-based tests. In that mode up to N keys per (route, dtype) are sampled
+        from the rows themselves in row order, preserving the old count semantics.
+    """
+    if isinstance(expected_counts, dict):
+        keys = set()
+        for (route, dtype), n in expected_counts.items():
+            taken = 0
+            for r in rows:
+                if taken >= n:
+                    break
+                if r["route"] == route and r["dtype"] == dtype:
+                    keys.add(_cell_key(r))
+                    taken += 1
+        return keys
+    return {_cell_key(k) if isinstance(k, dict) else k for k in expected_counts}
+
+
+def aggregate(rows, expected_counts, case_hashes, legit_not_run):
+    """Fail-closed aggregation -> numerical_validation.json payload (spec §6 3.3).
+
+    expected_counts: either a set of canonical cell keys (route, dtype, shape, level,
+      seed, reference_id) [preferred; see ``required_cell_keys()``], or a legacy
+      dict ``{(route, dtype): N_count}`` for backward compatibility.
+
+    Per-route criterion (plan §6 3.3)::
+
+        any required cell missing or not-run -> route numerical = UNKNOWN
+        all required cells measured, any policy failure    -> FAIL
+        all required cells measured and pass               -> PASS
+
+    A cell is **not-run** if its ``source`` starts with ``not_run:`` OR its
+    ``relative_l2`` is None (the canonical metric was not measured; spec §3.2.1).
+    NOT_RUN rows are KEPT in the CSV (diagnostic) but NEVER allow a route to PASS.
+    ``legit_not_run`` is informational only -- recorded as a fail_closed_reason but
+    does NOT change the verdict (a legit NOT_RUN is still an UNKNOWN cell).
+
+    JSON accounting per route: ``expected / actual / missing / extra`` cell counts
+    where ``actual`` = measured keys that are in the expected set, ``missing`` =
+    expected keys without a matching measured row, ``extra`` = measured keys not in
+    the expected set (e.g. region_fused small_contract diagnostic rows). A duplicate
+    cell key is a schema error (plan §6 3.1): overall -> INCONCLUSIVE.
+    """
+    expected_keys = _as_expected_keys(expected_counts, rows)
     fail_closed_reasons = list(legit_not_run)
 
     hash_mismatch = any(v == "MISMATCH" for v in case_hashes.values())
     if hash_mismatch:
         fail_closed_reasons.append("case-binding hash mismatch")
 
+    # duplicate detection (plan §6 3.1: duplicate key = schema error)
+    seen = set()
+    duplicate_count = 0
+    for r in rows:
+        k = _cell_key(r)
+        if k in seen:
+            duplicate_count += 1
+        seen.add(k)
+    if duplicate_count:
+        fail_closed_reasons.append(
+            f"duplicate cell keys (schema error): {duplicate_count}"
+        )
+
     per_route = []
     statuses = []
     for route in _ROUTES:
-        # group rows by dtype for this route
-        dtypes_for_route = sorted({r["dtype"] for r in rows if r["route"] == route})
-        route_cells = [r for r in rows if r["route"] == route]
-        verdicts = []
-        for dtype in dtypes_for_route:
-            expected = expected_counts.get((route, dtype), 0)
-            # Spec §7.2: cells whose source is "not_run:*" represent legitimate
-            # NOT_RUN (e.g. cutlass adversarial toolchain-bound). They must NOT
-            # count toward the criterion — only real (measured) cells decide it.
-            # They are still written to the CSV (diagnostic) and their route
-            # still appears in legit_not_run; they just don't become UNKNOWN
-            # verdict cells that would force overall INCONCLUSIVE.
-            real_cells = [
+        dtypes = sorted(
+            {r["dtype"] for r in rows if r["route"] == route}
+            | {k[1] for k in expected_keys if k[0] == route}
+        )
+        route_verdicts = []
+        route_counts = {"expected": 0, "actual": 0, "missing": 0, "extra": 0}
+        for dtype in dtypes:
+            exp = {k for k in expected_keys if k[0] == route and k[1] == dtype}
+            cells = [r for r in rows if r["route"] == route and r["dtype"] == dtype]
+            # measured = real source AND a real relative_l2 (the canonical metric)
+            measured_rows = [
                 r
-                for r in route_cells
-                if r["dtype"] == dtype
-                and not str(r.get("source", "")).startswith("not_run")
+                for r in cells
+                if not str(r.get("source", "")).startswith("not_run")
+                and r.get("relative_l2") is not None
             ]
-            if len(real_cells) < expected:
-                verdicts.append("UNKNOWN")
-                continue
-            for r in real_cells:
-                v, _ = apply_policy(route, dtype, r)
-                verdicts.append(v or "UNKNOWN")
-        if not verdicts:
+            not_run_rows = [
+                r
+                for r in cells
+                if str(r.get("source", "")).startswith("not_run")
+                or r.get("relative_l2") is None
+            ]
+            measured_keys = {_cell_key(r) for r in measured_rows}
+            missing = exp - measured_keys
+            extra = measured_keys - exp
+            route_counts["expected"] += len(exp)
+            route_counts["actual"] += len(measured_keys & exp)
+            route_counts["missing"] += len(missing)
+            route_counts["extra"] += len(extra)
+
+            if missing or not_run_rows:
+                route_verdicts.append("UNKNOWN")
+            else:
+                for r in measured_rows:
+                    if _cell_key(r) in exp:
+                        v, _ = apply_policy(route, dtype, r)
+                        route_verdicts.append(v or "UNKNOWN")
+
+        if not route_verdicts:
             criterion = "NOT_RUN"
-        elif any(v == "FAIL" for v in verdicts):
+        elif any(v == "FAIL" for v in route_verdicts):
             criterion = "FAIL"
-        elif any(v == "UNKNOWN" for v in verdicts):
+        elif any(v == "UNKNOWN" for v in route_verdicts):
             criterion = "UNKNOWN"
         else:
             criterion = "PASS"
         statuses.append(criterion)
         per_route.append(
-            {"route": route, "criterion": criterion, "n_cells": len(route_cells)}
+            {
+                "route": route,
+                "criterion": criterion,
+                "n_cells": sum(1 for r in rows if r["route"] == route),
+                "expected": route_counts["expected"],
+                "actual": route_counts["actual"],
+                "missing": route_counts["missing"],
+                "extra": route_counts["extra"],
+            }
         )
 
-    if hash_mismatch or any(s == "UNKNOWN" for s in statuses):
+    if duplicate_count:
+        overall = "INCONCLUSIVE"
+    elif hash_mismatch or any(s == "UNKNOWN" for s in statuses):
         overall = "INCONCLUSIVE"
     elif any(s == "FAIL" for s in statuses):
         overall = "FAIL"
@@ -219,7 +360,7 @@ def aggregate(rows, expected_counts, case_hashes, legit_not_run):
     ):
         overall = "PASS"
     else:
-        overall = "INCONCLUSIVE"  # all NOT_RUN, nothing proven
+        overall = "INCONCLUSIVE"  # all NOT_RUN or empty: nothing proven
 
     return {
         "schema_version": "numerical-validation-v1",
@@ -254,6 +395,12 @@ REAL_GEMM_SHAPES = [
     (262144, 64, 64),
     (1048576, 16, 16),
 ]
+# Intended full-anchor P->T->E contract for region_fused (plan §5 2.2):
+#   P = A[4096,1024] @ B[1024,16384] -> T -> E = D[64,64] @ T
+# These cells are NOT_RUN until Task 3b measures them; required-cell schema only.
+REGION_FULL_ANCHOR_SHAPE = (4096, 16384, 1024)
+# cutlass_4m_single anchor (matches cublaslt anchor + cutlass_sm120_4m.json).
+CUTLASS_ANCHOR_SHAPE = (16384, 1024, 1024)
 LEVELS = ("baseline", "mixed_scale", "cancellation")
 SEEDS = (0, 1, 2)
 DTYPES_BY_ROUTE = {
@@ -560,15 +707,23 @@ def collect_cutlass(level, seed):
 
     baseline: reuse results/phase0/cutlass_sm120_4m.json (Task 8 single, 3 seeds @
     anchor 16384x1024x1024). adversarial: attempt injection; else NOT_RUN row.
+
+    Task 3a reality correction (spec §3.2.1 / plan §6 3.2): the cutlass artifact
+    measures max_rel + max_abs but NOT relative_l2 (no vector L2 was computed). The
+    baseline row therefore carries ``relative_l2=None`` -- NEVER substituted by
+    max_rel. apply_policy then reports the cell incomplete (verdict None -> UNKNOWN
+    at the route layer) which is the honest state until Task 3b re-measures with a
+    real vector L2.
     """
     if level == "baseline":
         with open(os.path.join(OUT_DIR, "cutlass_sm120_4m.json")) as fh:
             data = json.load(fh)
         c = data["single_4m"]["correctness"]
         metrics = {
-            "relative_l2": c.get(
-                "max_rel", 1e9
-            ),  # approx: bf16 MMA, use max_rel as proxy
+            # NEVER substitute max_rel for relative_l2 (spec §3.2.1). If the
+            # artifact did not measure a real vector L2, the field stays None and
+            # apply_policy flags the cell incomplete.
+            "relative_l2": c.get("relative_l2"),
             "max_abs": c.get("max_abs", 0.0),
             "max_rel": c.get("max_rel", 1e9),
             "nan_inf": bool(c.get("nan_inf", True)),
@@ -578,7 +733,7 @@ def collect_cutlass(level, seed):
         return {
             "route": "cutlass_4m_single",
             "dtype": "C16BF",
-            "shape": (16384, 1024, 1024),
+            "shape": CUTLASS_ANCHOR_SHAPE,
             "level": level,
             "seed": seed,
             "reference_dtype": "c64",
@@ -593,7 +748,7 @@ def collect_cutlass(level, seed):
     return {
         "route": "cutlass_4m_single",
         "dtype": "C16BF",
-        "shape": (16384, 1024, 1024),
+        "shape": CUTLASS_ANCHOR_SHAPE,
         "level": level,
         "seed": seed,
         "reference_dtype": "c64",
@@ -631,21 +786,97 @@ def _case_hashes():
     return hashes
 
 
-def main(run_gpu: bool = True):
+def _legit_not_run_reasons():
+    """Human-readable reasons for legitimate NOT_RUN cells.
+
+    Informational only -- recorded in fail_closed_reasons but does NOT change the
+    verdict. A NOT_RUN cell still forces its route to UNKNOWN regardless of whether
+    it is "legit" (spec §3.2 / plan §6 3.3).
+    """
+    reasons = [
+        "region_fused:actual-large-fused:compute-bound (spec §7.2; correctness "
+        "proven on small contract only; intended full-anchor cells NOT_RUN until "
+        "Task 3b)",
+    ]
+    if not _cutlass_injection_available():
+        reasons.append(
+            "cutlass_4m_single:adversarial-level:toolchain-injection-unavailable "
+            "(baseline reused from Task 8; relative_l2 not measured by artifact)"
+        )
+    return reasons
+
+
+def _read_csv_rows(csv_path):
+    """Read a numerical_validation.csv back into row dicts (Task 3a JSON regen).
+
+    Preserves the existing measured rows (planar/grouped/region_fused small-contract)
+    so the JSON accounting can be recomputed WITHOUT new GPU measurement (plan §6 3a).
+    Region_fused small-contract rows (M=N=K=0) round-trip with shape="small_contract".
+    Rows with empty relative_l2/max_abs/max_rel cells (cutlass adversarial NOT_RUN)
+    round-trip with None metrics so the aggregate treats them as not-run.
+    """
+    rows = []
+    with open(csv_path, newline="") as fh:
+        rd = csv.DictReader(fh)
+        for raw in rd:
+            M = int(raw["M"]) if raw["M"] else 0
+            N = int(raw["N"]) if raw["N"] else 0
+            K = int(raw["K"]) if raw["K"] else 0
+            if raw["route"] == "region_fused" and not (M or N or K):
+                shape = "small_contract"
+            else:
+                shape = (M, N, K)
+
+            def _maybe_float(v):
+                return float(v) if v else None
+
+            rows.append(
+                {
+                    "route": raw["route"],
+                    "dtype": raw["out_dtype"],
+                    "shape": shape,
+                    "level": raw["dynamic_range_level"],
+                    "seed": int(raw["seed"]),
+                    "reference_dtype": raw.get("reference_dtype") or "c64",
+                    "relative_l2": _maybe_float(raw["relative_l2"]),
+                    "max_abs": _maybe_float(raw["max_abs"]),
+                    "max_rel": _maybe_float(raw["max_rel"]),
+                    "nan_inf": bool(int(raw["nan_inf"])) if raw["nan_inf"] else False,
+                    "n_elems": int(raw["n_elems"]) if raw["n_elems"] else 0,
+                    "policy_pass": (
+                        int(raw["policy_pass"]) if raw["policy_pass"] else 0
+                    ),
+                }
+            )
+    return rows
+
+
+def main(run_gpu: bool = True, regen_no_gpu: bool = False):
     """Run the full numerical matrix and write numerical_validation.{csv,json}.
 
     run_gpu=False: use whatever collect_* resolve to (test harness monkeypatches them).
+    regen_no_gpu=True (Task 3a): read existing CSV rows for planar/grouped/region_fused
+      (preserving real measured data), regenerate cutlass rows via the non-GPU
+      artifact reader (now emitting relative_l2=None instead of the max_rel proxy),
+      and recompute the fail-closed aggregate. NO GPU measurement.
     """
-    rows = []
-    expected = {}
-    legit_not_run = [
-        "region_fused:actual-large-fused:compute-bound (spec §7.2; correctness proven on small contract)",
-    ]
-    if not _cutlass_injection_available():
-        legit_not_run.append(
-            "cutlass_4m_single:adversarial-level:toolchain-injection-unavailable (baseline reused from Task 8)"
-        )
+    legit_not_run = _legit_not_run_reasons()
 
+    if regen_no_gpu:
+        existing_csv = os.path.join(OUT_DIR, "numerical_validation.csv")
+        rows = _read_csv_rows(existing_csv)
+        # Drop any old cutlass rows and regenerate them via the (non-GPU) artifact
+        # reader so the baseline rows carry relative_l2=None (no max_rel proxy).
+        rows = [r for r in rows if r["route"] != "cutlass_4m_single"]
+        for level in LEVELS:
+            for seed in SEEDS:
+                rows.append(collect_cutlass(level, seed))
+        payload = aggregate(rows, required_cell_keys(), _case_hashes(), legit_not_run)
+        write_csv(os.path.join(OUT_DIR, "numerical_validation.csv"), rows)
+        write_json(os.path.join(OUT_DIR, "numerical_validation.json"), payload)
+        return payload
+
+    rows = []
     # planar + grouped: 8 shapes x {C16BF,C32F} x 3 levels x 3 seeds
     for shape in SHAPES:
         for dtype in DTYPES_BY_ROUTE["planar"]:
@@ -653,25 +884,17 @@ def main(run_gpu: bool = True):
                 for seed in SEEDS:
                     rows.append(collect_planar(shape, dtype, level, seed))
                     rows.append(collect_grouped(shape, dtype, level, seed))
-                    expected[("planar", dtype)] = expected.get(("planar", dtype), 0) + 1
-                    expected[("grouped", dtype)] = (
-                        expected.get(("grouped", dtype), 0) + 1
-                    )
-    # region_fused: small contract x 3 levels x 3 seeds
+    # region_fused: small contract x 3 levels x 3 seeds (diagnostic; the required
+    # full-anchor cells are NOT_RUN until Task 3b and are tracked by the schema).
     for level in LEVELS:
         for seed in SEEDS:
             rows.append(collect_region_fused(level, seed))
-    expected[("region_fused", "c64")] = len(LEVELS) * len(SEEDS)
-    # cutlass_4m_single: anchor x 3 levels x 3 seeds (baseline reuses, adversarial NOT_RUN).
-    # Spec §7.2: the adversarial (mixed_scale/cancellation) rows are legit NOT_RUN
-    # (toolchain-injection-unavailable) and are excluded from the criterion in
-    # aggregate(); only the 3 baseline rows (= len(SEEDS)) count toward expected.
+    # cutlass_4m_single: anchor x 3 levels x 3 seeds (baseline real, adversarial NOT_RUN).
     for level in LEVELS:
         for seed in SEEDS:
             rows.append(collect_cutlass(level, seed))
-    expected[("cutlass_4m_single", "C16BF")] = len(SEEDS)
 
-    payload = aggregate(rows, expected, _case_hashes(), legit_not_run)
+    payload = aggregate(rows, required_cell_keys(), _case_hashes(), legit_not_run)
     write_csv(os.path.join(OUT_DIR, "numerical_validation.csv"), rows)
     write_json(os.path.join(OUT_DIR, "numerical_validation.json"), payload)
     return payload
