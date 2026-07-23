@@ -1,18 +1,35 @@
 {
-  "c1": "PASS",
-  "c2": "PASS",
-  "c3_planar": "PASS",
-  "c3_real_ceiling_ratio": 3.62,
-  "verdict": "GO_TO_PHASE1",
+  "schema_version": "manifest-v0-minimal",
+  "criteria": {
+    "C1": "PASS",
+    "C2": "UNKNOWN",
+    "C2_REGION_KERNEL": "PASS",
+    "C3_PLANAR_CORE": "PASS",
+    "C3_PLANAR_FULL_MATRIX": "PASS",
+    "C3_GROUPED": "NOT_SUPPORTED",
+    "CUTLASS_SM120_4M": "FEASIBLE_WITH_SM80_FALLBACK",
+    "REGION_PROTOTYPE": "FEASIBLE_WITH_RECOMPUTE",
+    "NUMERICAL": "FAIL"
+  },
+  "route_verdict": {
+    "planar": "NOT_VIABLE",
+    "grouped": "NOT_VIABLE",
+    "region_fused": "VIABLE",
+    "cutlass_4m_single": "VIABLE"
+  },
+  "phase0_completion": "INCONCLUSIVE",
+  "phase1_authorization": "NOT_AUTHORIZED",
   "artifacts": {
     "c1_judgment.json": "ab13cb21204755d1",
-    "c2_judgment.json": "8384e6c3c29c0f9d",
-    "cublaslt_planar_capability.json": "8b40b01dd6ed248a",
-    "contraction_shapes.csv": "784d01823009139d",
-    "c2_tileability.csv": "689b602f8e64e907",
-    "c1_default_vs_nofusion.csv": "78eb57f8e5ce1717",
-    "gonogo.json": "0c4d2ea4495f28d6",
-    "gonogo.md": "0dd5a002e09bca84",
+    "c2_judgment.json": "a38a32818a71e6ad",
+    "cublaslt_planar_capability.json": "c51e20a2a1959bb5",
+    "cublaslt_grouped_capability.json": "78bd7a6226108962",
+    "cublaslt_full_matrix.csv": "44d8544d02c8fc9e",
+    "cutlass_sm120_4m.json": "ea1bc26488e26c51",
+    "region_prototype.json": "39ddbddd04f8b940",
+    "numerical_validation.json": "37d6c719f1e1ed6e",
+    "gonogo.json": "0acfc42789fb0123",
+    "gonogo.md": "5c5d669fe377e0ca",
     "environment.json": "6f8357e80254e963"
   }
 }

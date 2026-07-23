@@ -1,17 +1,36 @@
-# Phase 0 Go/No-Go (four-state, §9 truth table)
+# Phase 0 Go/No-Go (two-layer, §10 / plan §13)
 
-**Verdict: GO_TO_PHASE1**
+**phase0_completion: INCONCLUSIVE**
+**phase1_authorization: NOT_AUTHORIZED**
 
-**Note:** C1 PASS + C2 PASS + C3_planar PASS (cublasLt planar-complex SUPPORTED)
+## Route verdict
 
-C3_planar is read from `cublaslt_planar_capability.json` (Plan B Task 2): PASS = SUPPORTED, FAIL = NOT_SUPPORTED, NOT_RUN = artifact absent.
+- `planar`: **NOT_VIABLE** (capability=OK, numerical=NOT_OK)
+- `grouped`: **NOT_VIABLE** (capability=NOT_OK, numerical=NOT_OK)
+- `region_fused`: **VIABLE** (capability=OK, numerical=OK)
+- `cutlass_4m_single`: **VIABLE** (capability=OK, numerical=OK)
 
 ## Criteria
 ```json
 {
   "C1": "PASS",
-  "C2": "PASS",
-  "C3_planar": "PASS",
-  "C3_real_ceiling_ratio": 3.62
+  "C2": "UNKNOWN",
+  "C2_REGION_KERNEL": "PASS",
+  "C3_PLANAR_CORE": "PASS",
+  "C3_PLANAR_FULL_MATRIX": "PASS",
+  "C3_GROUPED": "NOT_SUPPORTED",
+  "CUTLASS_SM120_4M": "FEASIBLE_WITH_SM80_FALLBACK",
+  "REGION_PROTOTYPE": "FEASIBLE_WITH_RECOMPUTE",
+  "NUMERICAL": "FAIL"
 }
 ```
+
+## Reasons
+- canonical criteria undetermined -> phase0_completion INCONCLUSIVE: C2
+- planar NOT_VIABLE: capability=OK numerical=NOT_OK
+- grouped NOT_VIABLE: capability=NOT_OK numerical=NOT_OK
+
+## Blocking artifacts
+- c2_judgment.json (C2_CANONICAL undetermined)
+- numerical_validation.json (overall=FAIL)
+- cublaslt_grouped_capability.json (NOT_SUPPORTED)
