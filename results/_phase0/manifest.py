@@ -15,6 +15,8 @@ import hashlib
 import json
 import os
 
+from results._phase0.verdict_schema import recompute_derived_state
+
 SCHEMA_VERSION = "manifest-v1"
 
 # criterion -> required artifacts (presence-gating; missing -> NOT_RUN)
@@ -54,9 +56,12 @@ INPUT_ARTIFACT_DIRS = ["c1_optimized_hlo", "c1_buffer_assignment", "c1_xla_dump"
 # generated verdicts hashed into outputs{} (manifest.json excluded — no self-hash)
 OUTPUT_ARTIFACTS = ["gonogo.json", "gonogo.md", "environment.json"]
 
-# C2 checkpoint binding keys to re-hash. c2_checkpoint_manifest.artifact_hashes
-# records full sha256 (truncate to [:16] for comparison). allocation_audit in the
+# C2 checkpoint binding keys to re-hash (plan §9 6.1 / spec §3.3.1). ALL must
+# be present and match for OK. c2_checkpoint_manifest.artifact_hashes records
+# full sha256 (truncate to [:16] for comparison). allocation_audit in the
 # checkpoint corresponds to the "audit" key in c2_judgment.artifact_paths.
+# c2_judgment hashes the c2_judgment.json file itself (fixed location, not in
+# artifact_paths).
 C2_CHECKPOINT_KEYS = [
     "source_hlo",
     "buffer_assignment",
@@ -64,15 +69,31 @@ C2_CHECKPOINT_KEYS = [
     "edge_map",
     "peak_frontier",
     "prototype",
+    "c2_judgment",
 ]
 C2_PATH_KEY_ALIASES = {"allocation_audit": "audit"}
+# Keys whose source file is a fixed artifact under base (not in artifact_paths).
+C2_FIXED_PATH_KEYS = {"c2_judgment": "c2_judgment.json"}
 
-# NUMERICAL case_binding hashes (sha[:16]): (file under base) -> binding key
+# NUMERICAL case_binding hashes (sha[:16]): (file under base) -> binding key.
+# ALL must be present (hash recorded) AND match for OK.
 NUMERICAL_BINDINGS = {
     "edge_map": ("c1_c2_edge_map.json", "edge_map_hash"),
     "prototype": ("region_prototype.json", "prototype_hash"),
     "contraction_shapes": ("contraction_shapes.csv", "contraction_shapes_hash"),
 }
+
+# Additional required numerical source files (plan §9 6.1: "route-specific
+# source artifacts" + "numerical CSV"). case_binding does NOT record hashes for
+# these, so they are presence-only checks. Missing any -> UNAVAILABLE.
+NUMERICAL_REQUIRED_FILES = [
+    "numerical_validation.csv",
+    "cublaslt_planar_capability.json",
+    "cublaslt_full_matrix.csv",
+    "cublaslt_grouped_capability.json",
+    "cublaslt_grouped.csv",
+    "cutlass_sm120_4m.json",
+]
 
 
 def _hash_file(path):
@@ -139,58 +160,126 @@ def _c2_artifact_paths(c2_judgment):
 
 
 def _validate_c2_checkpoint(base, c2_judgment, c2_checkpoint):
-    """Re-hash C2 binding source files; compare to c2_checkpoint_manifest hashes.
+    """Re-hash C2 binding source files; compare to c2_checkpoint_manifest hashes
+    (plan §9 6.1 / spec §3.3.1 -- full required binding, fail-closed).
 
-    Returns OK if every resolvable binding matches, MISMATCH if any differs or its
-    source file is gone, UNAVAILABLE if the checkpoint artifact is absent/malformed.
+    Returns:
+      OK          -- every required C2_CHECKPOINT_KEYS binding is present
+                     (hash recorded + source path/file resolvable) AND matches.
+      UNAVAILABLE -- any required binding is missing (hash not recorded, source
+                     path not in artifact_paths, or source file absent on disk).
+      MISMATCH    -- all required bindings are present but at least one hash
+                     differs from the on-disk source file.
+
+    No ``continue``-then-``OK``: every required key must be exercised. A single
+    missing binding makes the whole chain UNAVAILABLE (cannot confirm); a single
+    hash mismatch makes it MISMATCH (cannot trust).
     """
     if not isinstance(c2_checkpoint, dict) or not c2_checkpoint.get("artifact_hashes"):
         return "UNAVAILABLE"
     expected = c2_checkpoint["artifact_hashes"]
     paths = _c2_artifact_paths(c2_judgment)
-    checked = 0
     for key in C2_CHECKPOINT_KEYS:
         exp_full = expected.get(key)
-        path_key = C2_PATH_KEY_ALIASES.get(key, key)
-        src = paths.get(path_key)
-        if not exp_full or not src:
-            continue
-        checked += 1
+        if not exp_full:
+            return "UNAVAILABLE"  # missing required binding hash
+        if key in C2_FIXED_PATH_KEYS:
+            src = C2_FIXED_PATH_KEYS[key]
+        else:
+            path_key = C2_PATH_KEY_ALIASES.get(key, key)
+            src = paths.get(path_key)
+        if not src:
+            return "UNAVAILABLE"  # missing required binding source path
         actual = _hash_file(_resolve_under_base(base, src))
-        if actual is None or actual != exp_full[:16]:
-            return "MISMATCH"
-    return "OK" if checked else "UNAVAILABLE"
+        if actual is None:
+            return "UNAVAILABLE"  # source file absent on disk
+        if actual != exp_full[:16]:
+            return "MISMATCH"  # hash mismatch
+    return "OK"
 
 
 def _validate_numerical_binding(base, numerical_json):
-    """Re-hash numerical case_binding source files; compare to recorded sha[:16]."""
+    """Re-hash numerical case_binding source files; compare to recorded sha[:16]
+    (plan §9 6.1 / spec §3.3.1 -- full required binding, fail-closed).
+
+    Requires ALL of:
+      - case_binding hashes for edge_map / prototype / contraction_shapes
+        (present AND match)
+      - presence of route-specific source artifacts + numerical CSV
+        (NUMERICAL_REQUIRED_FILES; no hash recorded -> presence-only)
+
+    Returns:
+      OK          -- all required hashes present + match AND all required files
+                     present.
+      UNAVAILABLE -- any required hash missing from case_binding, any required
+                     file absent, or case_binding itself absent/malformed.
+      MISMATCH    -- all required hashes present but at least one differs from
+                     the on-disk source file.
+
+    No ``continue``-then-``OK``: every required binding must be exercised.
+    """
     if not isinstance(numerical_json, dict):
         return "UNAVAILABLE"
     binding = numerical_json.get("case_binding")
     if not isinstance(binding, dict) or not binding:
         return "UNAVAILABLE"
-    checked = 0
+    # Phase 1: every required hash must be recorded. Any missing -> UNAVAILABLE.
+    for _name, (_rel, hash_key) in NUMERICAL_BINDINGS.items():
+        if not binding.get(hash_key):
+            return "UNAVAILABLE"
+    # Phase 2: every required source file must exist. Any absent -> UNAVAILABLE.
+    for _name, (rel, _hash_key) in NUMERICAL_BINDINGS.items():
+        if _hash_file(os.path.join(base, rel)) is None:
+            return "UNAVAILABLE"
+    for rel in NUMERICAL_REQUIRED_FILES:
+        if not os.path.exists(os.path.join(base, rel)):
+            return "UNAVAILABLE"
+    # Phase 3: every recorded hash must match the on-disk file. Any diff -> MISMATCH.
     for _name, (rel, hash_key) in NUMERICAL_BINDINGS.items():
         exp = binding.get(hash_key)
-        if not exp:
-            continue
-        checked += 1
         actual = _hash_file(os.path.join(base, rel))
         if actual is None or actual != exp[:16]:
             return "MISMATCH"
-    return "OK" if checked else "UNAVAILABLE"
+    return "OK"
 
 
 def _apply_checkpoint_validation(criteria, c2_status, num_status):
-    """A checkpoint MISMATCH breaks the binding -> the criterion cannot be trusted
-    -> force UNKNOWN (covers 'cannot retain PASS' and is fail-closed for FAIL too).
-    UNAVAILABLE -> no change (cannot validate, do not downgrade)."""
+    """Apply checkpoint validation results to the criteria dict (plan §9 6.2 /
+    spec §3.3.1 -- fail-closed downgrade).
+
+    UNAVAILABLE or MISMATCH on a binding chain -> the dependent criterion
+    cannot be trusted -> force UNKNOWN (covers 'cannot retain PASS' and is
+    fail-closed for FAIL too: a FAIL resting on a broken binding chain is
+    also unconfirmable). This is the fail-closed fix for the Task 2a-deferred
+    'UNAVAILABLE preserves PASS' fail-open surface.
+
+    C1 is never affected (no checkpoint binding for C1).
+    """
     out = dict(criteria)
-    if c2_status == "MISMATCH" and "C2" in out:
+    if c2_status in ("MISMATCH", "UNAVAILABLE") and "C2" in out:
         out["C2"] = "UNKNOWN"
-    if num_status == "MISMATCH" and "NUMERICAL" in out:
+    if num_status in ("MISMATCH", "UNAVAILABLE") and "NUMERICAL" in out:
         out["NUMERICAL"] = "UNKNOWN"
     return out
+
+
+def _extract_per_route_numerical(numerical_json, num_status):
+    """Extract {route: PASS|FAIL|...} from numerical_validation.json's per_route
+    list. If the numerical binding chain is broken (num_status != OK), return
+    an empty dict so every route's numerical tri-state is UNDETERMINED
+    (fail-closed: cannot trust per-route data whose input binding is
+    unconfirmable)."""
+    if num_status != "OK":
+        return {}
+    if not isinstance(numerical_json, dict):
+        return {}
+    per = {}
+    for row in numerical_json.get("per_route") or []:
+        if isinstance(row, dict) and row.get("criterion") in ("PASS", "FAIL"):
+            route = row.get("route")
+            if route is not None:
+                per[route] = row["criterion"]
+    return per
 
 
 def _case_artifacts(case_id, base):
@@ -271,7 +360,23 @@ def _load_json(path):
 
 def build_manifest(base, generated_at=None):
     """Compose the manifest-v1 object from run_context + gonogo + validated
-    criteria + cases + inputs/outputs. Deterministic given fixed generated_at."""
+    criteria + cases + inputs/outputs. Deterministic given fixed generated_at.
+
+    Pipeline (plan §9 6.3):
+      load gonogo native criteria
+        -> presence validation
+        -> binding/hash validation
+        -> validated criteria/numerical
+        -> recompute routes / completion / authorization / reasons / blocking
+        -> render manifest
+
+    Derived state (route_verdict / phase0_completion / phase1_authorization /
+    reasons / blocking_artifacts) is RECOMPUTED from validated criteria via the
+    §5 truth table (verdict_schema.recompute_derived_state). It is NEVER copied
+    from gonogo.json -- the manifest must never present an internally-
+    contradictory state (criterion UNKNOWN + dependent route VIABLE, or
+    downgraded criteria + completion COMPLETE).
+    """
     run_ctx = _load_json(os.path.join(base, "run_context.json"))
     gonogo = _load_json(os.path.join(base, "gonogo.json"))
     gonogo = gonogo if isinstance(gonogo, dict) else {}
@@ -281,11 +386,20 @@ def build_manifest(base, generated_at=None):
     c2_ckpt = _load_json(os.path.join(base, "c2_checkpoint_manifest.json"))
     numerical = _load_json(os.path.join(base, "numerical_validation.json"))
 
+    # Stage 1: load gonogo native criteria.
     gonogo_criteria = gonogo.get("criteria", {})
+    # Stage 2: presence validation (missing artifacts -> NOT_RUN).
     criteria = _presence_check(gonogo_criteria, base)
+    # Stage 3: binding/hash validation.
     c2_status = _validate_c2_checkpoint(base, c2_j, c2_ckpt)
     num_status = _validate_numerical_binding(base, numerical)
+    # Stage 4: validated criteria (downgrade on UNAVAILABLE/MISMATCH).
     criteria = _apply_checkpoint_validation(criteria, c2_status, num_status)
+    # Stage 5: recompute derived state from validated criteria + per-route
+    # numerical. If the numerical binding is broken, per-route data is not
+    # trusted (empty dict -> all UNDETERMINED).
+    per_route_num = _extract_per_route_numerical(numerical, num_status)
+    derived = recompute_derived_state(criteria, per_route_num)
 
     inputs, outputs = _collect_inputs_outputs(base)
     cases = _build_cases(c1_j, c2_j, base)
@@ -303,12 +417,11 @@ def build_manifest(base, generated_at=None):
         "commands": run_ctx.get("command_templates") or {},
         "environment_hash": _hash_file(os.path.join(base, "environment.json")),
         "criteria": criteria,
-        "route_verdict": {
-            r: (v.get("status") if isinstance(v, dict) else v)
-            for r, v in (gonogo.get("route_verdict") or {}).items()
-        },
-        "phase0_completion": gonogo.get("phase0_completion"),
-        "phase1_authorization": gonogo.get("phase1_authorization"),
+        "route_verdict": derived["route_verdict"],
+        "phase0_completion": derived["phase0_completion"],
+        "phase1_authorization": derived["phase1_authorization"],
+        "reasons": derived["reasons"],
+        "blocking_artifacts": derived["blocking_artifacts"],
         "required_artifacts": {k: list(v) for k, v in REQUIRED_ARTIFACTS.items()},
         "inputs": dict(sorted(inputs.items())),
         "outputs": dict(sorted(outputs.items())),

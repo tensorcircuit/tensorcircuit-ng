@@ -1,4 +1,9 @@
 {
+  "blocking_artifacts": [
+    "c2_judgment.json (C2_CANONICAL undetermined)",
+    "numerical_validation.json (overall=FAIL)",
+    "cublaslt_grouped_capability.json (NOT_SUPPORTED)"
+  ],
   "cases": {
     "n22_d10": {
       "artifacts": [
@@ -129,7 +134,7 @@
         "C2_layers": {
           "C2_CANONICAL": "UNKNOWN",
           "C2_JOINT_EXECUTABLE_LEVERAGE": "UNKNOWN",
-          "C2_REGION_KERNEL_FEASIBILITY": "PASS",
+          "C2_REGION_KERNEL_FEASIBILITY": "UNKNOWN",
           "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK": "FAIL"
         }
       }
@@ -159,7 +164,7 @@
   "dirty_file_count": 65,
   "dirty_worktree": true,
   "environment_hash": "07a3371b7b27007d",
-  "generated_at": "2026-07-23T09:08:44Z",
+  "generated_at": "2026-07-23T16:28:59Z",
   "inputs": {
     "c1_buffer_assignment/n22_d10_exp_default.txt": "30cd18ad9941c041",
     "c1_buffer_assignment/n22_d10_exp_nofusion.txt": "b34b02bd6306f6bc",
@@ -171,7 +176,7 @@
     "c1_judgment.json": "97adf70ada7b1986",
     "c1_optimized_hlo/n22_d10_exp_default.hlo": "fc9372a3d0fd57e3",
     "c1_optimized_hlo/n22_d10_exp_nofusion.hlo": "33753ff4a5a461fa",
-    "c1_optimized_hlo/n24_d10_exp_default.hlo": "356049545d8502da",
+    "c1_optimized_hlo/n24_d10_exp_default.hlo": "a2dba7afeae3a3bf",
     "c1_optimized_hlo/n24_d10_exp_nofusion.hlo": "f95b1c5b9eb27378",
     "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.after_spmd_partitioner.txt": "d7a7a968af79d507",
     "c1_xla_dump/n24_d10_default/module_0001.jit_convert_element_type.autotune_results.pbtxt": "7b02700a93eb8af7",
@@ -213,8 +218,8 @@
     "c1_xla_dump/n24_d10_default/module_0005.jit_f.sm_12.0_gpu_after_optimizations.txt": "a2dba7afeae3a3bf",
     "c1_xla_dump/n24_d10_default/module_0005.jit_f.thunk_sequence.txt": "477ecb8fa9f4053a",
     "c1_xla_dump/n24_d10_default_summary.json": "14e78f5832ba8571",
-    "c2_checkpoint_manifest.json": "c774ae195b8e18ce",
-    "c2_judgment.json": "27692ac7587ee094",
+    "c2_checkpoint_manifest.json": "fc002dc32876191c",
+    "c2_judgment.json": "2976b8b59dab24f4",
     "c2_peak_frontier.json": "0a17bc36b8438a53",
     "c2_tileability.csv": "f2fb95e5de3e99c0",
     "contraction_shapes.csv": "8e15b9dec8018128",
@@ -222,10 +227,10 @@
     "cublaslt_grouped.csv": "0ce5d81e867597cf",
     "cublaslt_grouped_capability.json": "9af341d56eab8aa0",
     "cublaslt_planar_capability.json": "fe729f8d7df8cf7f",
-    "cutlass_sm120_4m.json": "83c25cbf091f505b",
-    "numerical_validation.csv": "cee2e5af09ef7374",
-    "numerical_validation.json": "172370519ebd1611",
-    "region_prototype.json": "df550309b1dcd366",
+    "cutlass_sm120_4m.json": "a2dc07251eb62967",
+    "numerical_validation.csv": "0d0d2b0791a9ef32",
+    "numerical_validation.json": "7d0ff701a327dd2b",
+    "region_prototype.json": "1e97addf6aef0f1c",
     "run_context.json": "857c242caaed5446"
   },
   "outputs": {
@@ -235,6 +240,13 @@
   },
   "phase0_completion": "INCONCLUSIVE",
   "phase1_authorization": "NOT_AUTHORIZED",
+  "reasons": [
+    "canonical criteria undetermined -> phase0_completion INCONCLUSIVE: C2, CUTLASS_SM120_4M, CUTLASS_SM80_FALLBACK_CAPABILITY, REGION_PROTOTYPE",
+    "planar NOT_VIABLE: capability=OK numerical=NOT_OK",
+    "grouped NOT_VIABLE: capability=NOT_OK numerical=NOT_OK",
+    "region_fused UNKNOWN: capability=UNDETERMINED numerical=UNDETERMINED",
+    "cutlass_4m_single UNKNOWN: capability=UNDETERMINED numerical=UNDETERMINED"
+  ],
   "required_artifacts": {
     "C1": [
       "c1_judgment.json",
@@ -264,10 +276,26 @@
     ]
   },
   "route_verdict": {
-    "cutlass_4m_single": "VIABLE",
-    "grouped": "NOT_VIABLE",
-    "planar": "NOT_VIABLE",
-    "region_fused": "VIABLE"
+    "cutlass_4m_single": {
+      "capability": "UNDETERMINED",
+      "numerical": "UNDETERMINED",
+      "status": "UNKNOWN"
+    },
+    "grouped": {
+      "capability": "NOT_OK",
+      "numerical": "NOT_OK",
+      "status": "NOT_VIABLE"
+    },
+    "planar": {
+      "capability": "OK",
+      "numerical": "NOT_OK",
+      "status": "NOT_VIABLE"
+    },
+    "region_fused": {
+      "capability": "UNDETERMINED",
+      "numerical": "UNDETERMINED",
+      "status": "UNKNOWN"
+    }
   },
   "schema_version": "manifest-v1",
   "source_commit": "ba83506a211a57ea039e2f7f43b82f70e258dd21"

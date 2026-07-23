@@ -170,6 +170,200 @@ def normalize_criterion(token):
     return "UNKNOWN"
 
 
+# ---------------------------------------------------------------------------
+# §5 truth table: route / completion / authorization recompute (plan §9 Task 6)
+# ---------------------------------------------------------------------------
+# SINGLE SOURCE OF TRUTH for the §5 truth table. manifest.py (Task 6) uses this
+# to recompute derived state from validated criteria instead of copying stale
+# gonogo.json values. gonogo.py (Task 7) will be refactored to reuse this too;
+# until then the gonogo-local copies are the temporary duplication (noted).
+
+_TRI_OK = "OK"
+_TRI_NOT_OK = "NOT_OK"
+_TRI_UNDETERMINED = "UNDETERMINED"
+
+#: Criteria whose determined-ness gates phase0_completion (§5 truth table).
+#: NUMERICAL=FAIL is "determined" (NOT_OK) and does NOT sink completion.
+#: CUTLASS_SM120_4M (native, NOT_SUPPORTED) and CUTLASS_SM80_FALLBACK_CAPABILITY
+#: (fallback, PASS) are SPLIT into two independent criteria (plan §7 Task 4).
+REQUIRED_CRITERIA = (
+    "C1",
+    "C2",
+    "C3_PLANAR_CORE",
+    "C3_PLANAR_FULL_MATRIX",
+    "C3_GROUPED",
+    "CUTLASS_SM120_4M",
+    "CUTLASS_SM80_FALLBACK_CAPABILITY",
+    "REGION_PROTOTYPE",
+    "NUMERICAL",
+)
+
+#: Route -> capability criteria dependencies (§5 truth table rule 8 + rule 3).
+#: A route is VIABLE only if every listed capability criterion normalizes to OK
+#: AND its numerical criterion normalizes to OK.
+#:
+#: ``cutlass_4m_single`` depends on the FALLBACK capability
+#: (CUTLASS_SM80_FALLBACK_CAPABILITY), NOT on CUTLASS_SM120_4M: on consumer
+#: Blackwell sm_120 the route's actual kernel is the 2.x Ampere fallback (the
+#: native SM120 path is architecturally BLOCKED), so the route's capability
+#: tracks the path that really runs. Native failure is recorded as a separate
+#: CUTLASS_SM120_4M criterion but does NOT sink the route by itself.
+ROUTE_CAPABILITY_CRITERIA = {
+    "planar": ("C3_PLANAR_CORE", "C3_PLANAR_FULL_MATRIX"),
+    "grouped": ("C3_GROUPED",),
+    "region_fused": ("REGION_PROTOTYPE", "C2_REGION_KERNEL"),
+    "cutlass_4m_single": ("CUTLASS_SM80_FALLBACK_CAPABILITY",),
+}
+
+#: Ordered route names (matches ROUTE_CAPABILITY_CRITERIA keys).
+RECOMPUTE_ROUTES = tuple(ROUTE_CAPABILITY_CRITERIA)
+
+
+def tri_normalize(verdict):
+    """Map a canonical criterion token to a gating tri-state (§5 truth table).
+
+    OK          -> the canonical criterion is PASS (the only "established good"
+                   token; plan §4 forbids promoting FEASIBLE* / SUPPORTED /
+                   TILE_FUSION_FEASIBLE detail tokens to OK)
+    NOT_OK      -> established as bad (canonical FAIL or NOT_SUPPORTED)
+    UNDETERMINED-> not established (UNKNOWN, NOT_RUN, BLOCKED, INCONCLUSIVE,
+                   any artifact-native detail token, unrecognized strings)
+
+    Plan §4 验收: no ``startswith('FEASIBLE')`` unconditional promotion. Every
+    incoming token is first scrubbed by ``normalize_criterion``, which
+    fail-closes artifact-native detail tokens to canonical UNKNOWN.
+    """
+    canonical = normalize_criterion(verdict)
+    if canonical == "PASS":
+        return _TRI_OK
+    if canonical in ("FAIL", "NOT_SUPPORTED"):
+        return _TRI_NOT_OK
+    return _TRI_UNDETERMINED
+
+
+def _combine_tri(states):
+    """AND-combine tri-states: any NOT_OK -> NOT_OK; else any UNDETERMINED ->
+    UNDETERMINED; else OK. Empty -> UNDETERMINED."""
+    if not states:
+        return _TRI_UNDETERMINED
+    if any(s == _TRI_NOT_OK for s in states):
+        return _TRI_NOT_OK
+    if any(s == _TRI_UNDETERMINED for s in states):
+        return _TRI_UNDETERMINED
+    return _TRI_OK
+
+
+def recompute_route_verdict(criteria, per_route_numerical):
+    """Per-route {route: {status, capability, numerical}} from validated
+    criteria + per-route numerical map (§5 truth table rule 8).
+
+    status is VIABLE / NOT_VIABLE / UNKNOWN; capability and numerical carry
+    the raw tri-states for transparency. A route absent from
+    per_route_numerical is UNDETERMINED (its numerical criterion was not
+    produced or cannot be trusted).
+    """
+    out = {}
+    for route, deps in ROUTE_CAPABILITY_CRITERIA.items():
+        cap = _combine_tri([tri_normalize(criteria.get(c)) for c in deps])
+        num = tri_normalize(per_route_numerical.get(route, "NOT_RUN"))
+        if _TRI_NOT_OK in (cap, num):
+            status = "NOT_VIABLE"
+        elif _TRI_UNDETERMINED in (cap, num):
+            status = "UNKNOWN"
+        else:
+            status = "VIABLE"
+        out[route] = {"status": status, "capability": cap, "numerical": num}
+    return out
+
+
+def recompute_completion(criteria):
+    """§5 truth table rules 1/4/5: COMPLETE iff every REQUIRED_CRITERION is
+    determined (normalizes to OK or NOT_OK). Any UNKNOWN/NOT_RUN (i.e.
+    UNDETERMINED) -> INCONCLUSIVE. NUMERICAL=FAIL is determined and does NOT
+    sink completion."""
+    for c in REQUIRED_CRITERIA:
+        if tri_normalize(criteria.get(c)) == _TRI_UNDETERMINED:
+            return "INCONCLUSIVE"
+    return "COMPLETE"
+
+
+def recompute_authorization(completion, route_verdict_map):
+    """§5 truth table rule 6: GO_TO_PHASE1 iff COMPLETE and >=1 route VIABLE;
+    NO_GO if COMPLETE with no viable route; NOT_AUTHORIZED if INCONCLUSIVE."""
+    if completion != "COMPLETE":
+        return "NOT_AUTHORIZED"
+    if any(rv["status"] == "VIABLE" for rv in route_verdict_map.values()):
+        return "GO_TO_PHASE1"
+    return "NO_GO"
+
+
+def _build_reasons(criteria, route_verdict_map, completion):
+    """Human-readable explanation lines, kept in sync with the verdict."""
+    reasons = []
+    if completion == "INCONCLUSIVE":
+        undetermined = [
+            c
+            for c in REQUIRED_CRITERIA
+            if tri_normalize(criteria.get(c)) == _TRI_UNDETERMINED
+        ]
+        if undetermined:
+            reasons.append(
+                "canonical criteria undetermined -> phase0_completion INCONCLUSIVE: "
+                + ", ".join(undetermined)
+            )
+    for r, rv in route_verdict_map.items():
+        if rv["status"] == "NOT_VIABLE":
+            reasons.append(
+                f"{r} NOT_VIABLE: capability={rv['capability']} numerical={rv['numerical']}"
+            )
+        elif rv["status"] == "UNKNOWN":
+            reasons.append(
+                f"{r} UNKNOWN: capability={rv['capability']} numerical={rv['numerical']}"
+            )
+    return reasons
+
+
+def _build_blocking_artifacts(criteria, route_verdict_map):
+    """Artifact paths whose undetermined/failed state blocks a clean GO."""
+    blocking = []
+    if tri_normalize(criteria.get("C2")) == _TRI_UNDETERMINED:
+        blocking.append("c2_judgment.json (C2_CANONICAL undetermined)")
+    if tri_normalize(criteria.get("NUMERICAL")) == _TRI_NOT_OK:
+        blocking.append("numerical_validation.json (overall=FAIL)")
+    for r, rv in route_verdict_map.items():
+        if rv["capability"] == _TRI_NOT_OK and r == "grouped":
+            blocking.append("cublaslt_grouped_capability.json (NOT_SUPPORTED)")
+    return blocking
+
+
+def recompute_derived_state(criteria, per_route_numerical):
+    """Recompute route_verdict / phase0_completion / phase1_authorization /
+    reasons / blocking_artifacts from validated criteria + per-route numerical
+    using the §5 truth table.
+
+    SINGLE SOURCE OF TRUTH for the truth table. manifest.py (Task 6) uses this
+    instead of copying stale gonogo.json derived state. gonogo.py (Task 7) will
+    be refactored to reuse this too.
+
+    ``per_route_numerical`` is {route: PASS|FAIL|...}. If the numerical binding
+    chain is broken, the caller should pass an empty dict so every route's
+    numerical tri-state is UNDETERMINED (fail-closed: cannot trust per-route
+    data whose input binding is unconfirmable).
+    """
+    rv = recompute_route_verdict(criteria, per_route_numerical)
+    completion = recompute_completion(criteria)
+    authorization = recompute_authorization(completion, rv)
+    reasons = _build_reasons(criteria, rv, completion)
+    blocking = _build_blocking_artifacts(criteria, rv)
+    return {
+        "route_verdict": rv,
+        "phase0_completion": completion,
+        "phase1_authorization": authorization,
+        "reasons": reasons,
+        "blocking_artifacts": blocking,
+    }
+
+
 __all__ = [
     "CRITERION_TOKENS",
     "ROUTE_TOKENS",
@@ -179,4 +373,22 @@ __all__ = [
     "NUMERICAL_ROUTES",
     "DETAIL_TOKENS",
     "normalize_criterion",
+    # §5 truth table (plan §9 Task 6)
+    "REQUIRED_CRITERIA",
+    "ROUTE_CAPABILITY_CRITERIA",
+    "RECOMPUTE_ROUTES",
+    "TRI_OK",
+    "TRI_NOT_OK",
+    "TRI_UNDETERMINED",
+    "tri_normalize",
+    "recompute_route_verdict",
+    "recompute_completion",
+    "recompute_authorization",
+    "recompute_derived_state",
 ]
+
+# Public tri-state token aliases (used by gonogo.py which will be refactored
+# in Task 7 to import these instead of defining its own).
+TRI_OK = _TRI_OK
+TRI_NOT_OK = _TRI_NOT_OK
+TRI_UNDETERMINED = _TRI_UNDETERMINED

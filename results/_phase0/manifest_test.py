@@ -14,7 +14,9 @@ from results._phase0.manifest import (
     OUTPUT_ARTIFACTS,
     C2_CHECKPOINT_KEYS,
     C2_PATH_KEY_ALIASES,
+    C2_FIXED_PATH_KEYS,
     NUMERICAL_BINDINGS,
+    NUMERICAL_REQUIRED_FILES,
     _hash_file,
     _hash_dir,
     _resolve_under_base,
@@ -40,6 +42,14 @@ def test_schema_constants_complete():
     assert "c1_optimized_hlo" in INPUT_ARTIFACT_DIRS
     assert "allocation_audit" in C2_PATH_KEY_ALIASES  # alias -> audit path key
     assert C2_PATH_KEY_ALIASES["allocation_audit"] == "audit"
+    # plan §9 6.1: ALL 7 C2 bindings required (no continue->OK on partial)
+    assert "c2_judgment" in C2_CHECKPOINT_KEYS, C2_CHECKPOINT_KEYS
+    assert len(C2_CHECKPOINT_KEYS) == 7, C2_CHECKPOINT_KEYS
+    assert C2_FIXED_PATH_KEYS["c2_judgment"] == "c2_judgment.json"
+    # numerical: 3 hashed bindings + presence-only required files
+    assert len(NUMERICAL_BINDINGS) == 3, NUMERICAL_BINDINGS
+    assert "numerical_validation.csv" in NUMERICAL_REQUIRED_FILES
+    assert "cutlass_sm120_4m.json" in NUMERICAL_REQUIRED_FILES
 
 
 def test_hash_file_sha256_16(tmp_path):
@@ -119,18 +129,53 @@ def test_validate_c2_checkpoint_ok_mismatch_unavailable(tmp_path):
     import hashlib
     from results._phase0.manifest import _validate_c2_checkpoint
 
-    # make a source file whose sha256[:16] matches the recorded hash
-    content = b"edge-data"
-    full = hashlib.sha256(content).hexdigest()
-    (tmp_path / "c1_c2_edge_map.json").write_bytes(content)
+    # Build a fixture satisfying ALL required C2_CHECKPOINT_KEYS (7 keys).
+    # Each key maps to a source file with known content + matching full sha256.
+    contents = {
+        "source_hlo": b"hlo-data",
+        "buffer_assignment": b"buf-data",
+        "audit": b"audit-data",
+        "edge_map": b"edge-data",
+        "peak_frontier": b"peak-data",
+        "prototype": b"proto-data",
+        "c2_judgment": b"judg-data",
+    }
+    (tmp_path / "source.hlo").write_bytes(contents["source_hlo"])
+    (tmp_path / "buffer.txt").write_bytes(contents["buffer_assignment"])
+    sub = tmp_path / "c1_buffer_assignment"
+    sub.mkdir()
+    (sub / "n24.json").write_bytes(contents["audit"])
+    (tmp_path / "c1_c2_edge_map.json").write_bytes(contents["edge_map"])
+    (tmp_path / "c2_peak_frontier.json").write_bytes(contents["peak_frontier"])
+    (tmp_path / "region_prototype.json").write_bytes(contents["prototype"])
+    (tmp_path / "c2_judgment.json").write_bytes(contents["c2_judgment"])
     c2j = {
         "n24_d10_default": {
-            "artifact_paths": {"edge_map": "results/phase0/c1_c2_edge_map.json"}
+            "artifact_paths": {
+                "source_hlo": "results/phase0/source.hlo",
+                "buffer_assignment": "results/phase0/buffer.txt",
+                "audit": "results/phase0/c1_buffer_assignment/n24.json",
+                "edge_map": "results/phase0/c1_c2_edge_map.json",
+                "peak_frontier": "results/phase0/c2_peak_frontier.json",
+                "prototype": "results/phase0/region_prototype.json",
+            }
         }
     }
-    ok_ckpt = {"artifact_hashes": {"edge_map": full}}
+    ok_ckpt = {
+        "artifact_hashes": {
+            "source_hlo": hashlib.sha256(contents["source_hlo"]).hexdigest(),
+            "buffer_assignment": hashlib.sha256(
+                contents["buffer_assignment"]
+            ).hexdigest(),
+            "allocation_audit": hashlib.sha256(contents["audit"]).hexdigest(),
+            "edge_map": hashlib.sha256(contents["edge_map"]).hexdigest(),
+            "peak_frontier": hashlib.sha256(contents["peak_frontier"]).hexdigest(),
+            "prototype": hashlib.sha256(contents["prototype"]).hexdigest(),
+            "c2_judgment": hashlib.sha256(contents["c2_judgment"]).hexdigest(),
+        }
+    }
     assert _validate_c2_checkpoint(str(tmp_path), c2j, ok_ckpt) == "OK"
-    bad_ckpt = {"artifact_hashes": {"edge_map": "0" * 64}}
+    bad_ckpt = {"artifact_hashes": {**ok_ckpt["artifact_hashes"], "edge_map": "0" * 64}}
     assert _validate_c2_checkpoint(str(tmp_path), c2j, bad_ckpt) == "MISMATCH"
     assert _validate_c2_checkpoint(str(tmp_path), c2j, {}) == "UNAVAILABLE"
 
@@ -139,23 +184,53 @@ def test_validate_c2_checkpoint_alias_allocation_audit(tmp_path):
     import hashlib
     from results._phase0.manifest import _validate_c2_checkpoint
 
-    content = b"audit-data"
-    full = hashlib.sha256(content).hexdigest()
-    # file placed where _resolve_under_base expects it (artifact_path is
-    # results/phase0/c1_buffer_assignment/n24_d10_default.json -> strips to
-    # c1_buffer_assignment/n24_d10_default.json under base)
+    # The allocation_audit checkpoint key aliases to the "audit" artifact_path.
+    # Build a fixture satisfying ALL 7 required C2_CHECKPOINT_KEYS so the OK
+    # case exercises the alias (allocation_audit -> audit path key).
+    contents = {
+        "source_hlo": b"hlo",
+        "buffer_assignment": b"buf",
+        "audit": b"audit-data",
+        "edge_map": b"edge",
+        "peak_frontier": b"peak",
+        "prototype": b"proto",
+        "c2_judgment": b"judg",
+    }
+    (tmp_path / "s.hlo").write_bytes(contents["source_hlo"])
+    (tmp_path / "b.txt").write_bytes(contents["buffer_assignment"])
     sub = tmp_path / "c1_buffer_assignment"
     sub.mkdir()
-    (sub / "n24_d10_default.json").write_bytes(content)
+    (sub / "n24_d10_default.json").write_bytes(contents["audit"])
+    (tmp_path / "c1_c2_edge_map.json").write_bytes(contents["edge_map"])
+    (tmp_path / "c2_peak_frontier.json").write_bytes(contents["peak_frontier"])
+    (tmp_path / "region_prototype.json").write_bytes(contents["prototype"])
+    (tmp_path / "c2_judgment.json").write_bytes(contents["c2_judgment"])
     c2j = {
         "n24_d10_default": {
             "artifact_paths": {
-                "audit": "results/phase0/c1_buffer_assignment/n24_d10_default.json"
+                "source_hlo": "results/phase0/s.hlo",
+                "buffer_assignment": "results/phase0/b.txt",
+                "audit": "results/phase0/c1_buffer_assignment/n24_d10_default.json",
+                "edge_map": "results/phase0/c1_c2_edge_map.json",
+                "peak_frontier": "results/phase0/c2_peak_frontier.json",
+                "prototype": "results/phase0/region_prototype.json",
             }
         }
     }
     # checkpoint records under key 'allocation_audit' (alias -> 'audit' path)
-    ckpt = {"artifact_hashes": {"allocation_audit": full}}
+    ckpt = {
+        "artifact_hashes": {
+            "source_hlo": hashlib.sha256(contents["source_hlo"]).hexdigest(),
+            "buffer_assignment": hashlib.sha256(
+                contents["buffer_assignment"]
+            ).hexdigest(),
+            "allocation_audit": hashlib.sha256(contents["audit"]).hexdigest(),
+            "edge_map": hashlib.sha256(contents["edge_map"]).hexdigest(),
+            "peak_frontier": hashlib.sha256(contents["peak_frontier"]).hexdigest(),
+            "prototype": hashlib.sha256(contents["prototype"]).hexdigest(),
+            "c2_judgment": hashlib.sha256(contents["c2_judgment"]).hexdigest(),
+        }
+    }
     assert _validate_c2_checkpoint(str(tmp_path), c2j, ckpt) == "OK"
 
 
@@ -163,12 +238,37 @@ def test_validate_numerical_binding(tmp_path):
     import hashlib
     from results._phase0.manifest import _validate_numerical_binding
 
-    content = b"edge-data"
-    short = hashlib.sha256(content).hexdigest()[:16]
-    (tmp_path / "c1_c2_edge_map.json").write_bytes(content)
-    ok = {"case_binding": {"edge_map_hash": short}}
+    # Build a fixture satisfying ALL required numerical bindings: 3 hashed
+    # bindings (edge_map / prototype / contraction_shapes) + 6 presence-only
+    # required files (numerical CSV + route source artifacts).
+    contents = {
+        "edge_map": b"edge-data",
+        "prototype": b"proto-data",
+        "contraction_shapes": b"shape-data",
+    }
+    (tmp_path / "c1_c2_edge_map.json").write_bytes(contents["edge_map"])
+    (tmp_path / "region_prototype.json").write_bytes(contents["prototype"])
+    (tmp_path / "contraction_shapes.csv").write_bytes(contents["contraction_shapes"])
+    for f in (
+        "numerical_validation.csv",
+        "cublaslt_planar_capability.json",
+        "cublaslt_full_matrix.csv",
+        "cublaslt_grouped_capability.json",
+        "cublaslt_grouped.csv",
+        "cutlass_sm120_4m.json",
+    ):
+        (tmp_path / f).write_text("x")
+    ok = {
+        "case_binding": {
+            "edge_map_hash": hashlib.sha256(contents["edge_map"]).hexdigest()[:16],
+            "prototype_hash": hashlib.sha256(contents["prototype"]).hexdigest()[:16],
+            "contraction_shapes_hash": hashlib.sha256(
+                contents["contraction_shapes"]
+            ).hexdigest()[:16],
+        }
+    }
     assert _validate_numerical_binding(str(tmp_path), ok) == "OK"
-    bad = {"case_binding": {"edge_map_hash": "deadbeef" * 2}}
+    bad = {"case_binding": {**ok["case_binding"], "edge_map_hash": "deadbeef" * 2}}
     assert _validate_numerical_binding(str(tmp_path), bad) == "MISMATCH"
     assert _validate_numerical_binding(str(tmp_path), {}) == "UNAVAILABLE"
 
@@ -317,10 +417,11 @@ def test_build_manifest_schema_and_stability(tmp_path):
     assert m["dirty_worktree"] is False
     assert m["phase0_completion"] == "INCONCLUSIVE"
     assert m["phase1_authorization"] == "NOT_AUTHORIZED"
-    # presence + checkpoint validation applied: C2 checkpoint mismatch -> C2 UNKNOWN (already);
-    # NUMERICAL binding mismatch -> NUMERICAL UNKNOWN (was FAIL)
+    # presence + checkpoint validation applied: C2 checkpoint UNAVAILABLE (6 of
+    # 7 required bindings missing) -> C2 UNKNOWN (already); NUMERICAL binding
+    # UNAVAILABLE (2 of 3 required hashes missing) -> NUMERICAL UNKNOWN (was FAIL)
     assert m["criteria"]["C2"] == "UNKNOWN"
-    assert m["criteria"]["NUMERICAL"] == "UNKNOWN"  # mismatch downgraded from FAIL
+    assert m["criteria"]["NUMERICAL"] == "UNKNOWN"  # unavailable downgraded from FAIL
     assert m["criteria"]["C1"] == "PASS"  # present, no checkpoint
     assert "gonogo.json" in m["outputs"]
     assert "manifest.json" not in m["outputs"]
@@ -504,7 +605,9 @@ def test_build_manifest_recomputes_routes_after_checkpoint_downgrade(tmp_path):
     )
     # on-disk edge-map content
     (tmp_path / "c1_c2_edge_map.json").write_text("real-edge-data")
-    # checkpoint records a MISMATCH (different content -> sha256 differs)
+    # checkpoint records only edge_map (1 of 7 required keys); the other 6 are
+    # missing -> UNAVAILABLE (not MISMATCH). Both UNAVAILABLE and MISMATCH
+    # downgrade C2 to UNKNOWN.
     (tmp_path / "c2_checkpoint_manifest.json").write_text(
         json.dumps({"artifact_hashes": {"edge_map": "0" * 64}})
     )
@@ -567,15 +670,179 @@ def test_build_manifest_recomputes_routes_after_checkpoint_downgrade(tmp_path):
     (tmp_path / "environment.json").write_text("{}")
 
     m = build_manifest(str(tmp_path), generated_at="2026-07-23T00:00:00Z")
-    # The checkpoint MISMATCH must downgrade C2 PASS -> UNKNOWN (bullet 6).
+    # The checkpoint UNAVAILABLE (6 of 7 keys missing) must downgrade C2 PASS ->
+    # UNKNOWN (bullet 6). Both UNAVAILABLE and MISMATCH force UNKNOWN.
     assert m["criteria"]["C2"] == "UNKNOWN", m["criteria"]
     # Bullet 7: route / completion / authorization recomputed from the validated
-    # criteria. C2 UNKNOWN -> region_fused capability depends on C2_REGION_KERNEL
-    # but the canonical C2 criterion is now UNKNOWN, so completion must flip to
-    # INCONCLUSIVE and authorization to NOT_AUTHORIZED (a GO claim that rested on
-    # the stale C2 PASS cannot survive the downgrade).
+    # criteria. C2 UNKNOWN -> completion INCONCLUSIVE and authorization
+    # NOT_AUTHORIZED (a GO claim that rested on the stale C2 PASS cannot survive
+    # the downgrade). CUTLASS_SM80_FALLBACK_CAPABILITY is also absent from the
+    # staged gonogo criteria -> undetermined -> INCONCLUSIVE regardless.
     assert m["phase0_completion"] == "INCONCLUSIVE", m["phase0_completion"]
     assert m["phase1_authorization"] == "NOT_AUTHORIZED", m["phase1_authorization"]
+    # Self-consistency invariant: no route may be VIABLE when its dependent
+    # criteria are downgraded. C2 was downgraded to UNKNOWN; the gonogo claimed
+    # region_fused VIABLE. After recompute, no route should be VIABLE (all
+    # depend on at least one undetermined criterion or have UNDETERMINED num).
+    assert all(rv["status"] != "VIABLE" for rv in m["route_verdict"].values()), m[
+        "route_verdict"
+    ]
+    # No criterion UNKNOWN + completion COMPLETE contradiction.
+    assert not (
+        m["criteria"]["C2"] == "UNKNOWN" and m["phase0_completion"] == "COMPLETE"
+    )
+
+
+def test_build_manifest_self_consistent_no_unknown_plus_viable(tmp_path):
+    """plan §9 验收: manifest 内部不可能出现 criterion UNKNOWN + dependent route
+    VIABLE, nor downgraded-criteria + completion COMPLETE. This test stages a
+    gonogo claiming all-PASS + all-VIABLE + COMPLETE + GO_TO_PHASE1, then breaks
+    BOTH the C2 and NUMERICAL binding chains. The manifest must recompute to
+    INCONCLUSIVE / NOT_AUTHORIZED with no VIABLE route surviving."""
+    import json
+
+    from results._phase0.manifest import build_manifest
+
+    (tmp_path / "c1_judgment.json").write_text(
+        json.dumps({"n24_d10": {"judgment": {"status": "PASS"}, "n": 24, "depth": 10}})
+    )
+    (tmp_path / "c1_default_vs_nofusion.csv").write_text("x")
+    # c2_judgment with all 6 artifact_paths (the 7th, c2_judgment, is a fixed
+    # path -- c2_judgment.json itself).
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {
+                "n24_d10_default": {
+                    "status": "PASS",
+                    "layers": {
+                        "C2_CANONICAL": "PASS",
+                        "C2_REGION_KERNEL_FEASIBILITY": "PASS",
+                    },
+                    "n": 24,
+                    "depth": 10,
+                    "fusion": "default",
+                    "artifact_paths": {
+                        "edge_map": "results/phase0/c1_c2_edge_map.json",
+                        "peak_frontier": "results/phase0/c2_peak_frontier.json",
+                        "prototype": "results/phase0/region_prototype.json",
+                        "audit": "results/phase0/c1_buffer_assignment/n24.json",
+                        "source_hlo": "results/phase0/source.hlo",
+                        "buffer_assignment": "results/phase0/buffer.txt",
+                    },
+                }
+            }
+        )
+    )
+    import hashlib
+
+    for f, c in [
+        ("c1_c2_edge_map.json", b"edge"),
+        ("c2_peak_frontier.json", b"peak"),
+        ("region_prototype.json", b"proto"),
+        ("source.hlo", b"hlo"),
+        ("buffer.txt", b"buf"),
+    ]:
+        (tmp_path / f).write_bytes(c)
+    sub = tmp_path / "c1_buffer_assignment"
+    sub.mkdir()
+    (sub / "n24.json").write_bytes(b"audit")
+    # checkpoint: all 7 hashes present, but edge_map hash is WRONG -> MISMATCH
+    (tmp_path / "c2_checkpoint_manifest.json").write_text(
+        json.dumps(
+            {
+                "artifact_hashes": {
+                    "source_hlo": hashlib.sha256(b"hlo").hexdigest(),
+                    "buffer_assignment": hashlib.sha256(b"buf").hexdigest(),
+                    "allocation_audit": hashlib.sha256(b"audit").hexdigest(),
+                    "edge_map": "0" * 64,  # MISMATCH (real content is "edge")
+                    "peak_frontier": hashlib.sha256(b"peak").hexdigest(),
+                    "prototype": hashlib.sha256(b"proto").hexdigest(),
+                    "c2_judgment": hashlib.sha256(
+                        (tmp_path / "c2_judgment.json").read_bytes()
+                    ).hexdigest(),
+                }
+            }
+        )
+    )
+    for f in (
+        "cublaslt_planar_capability.json",
+        "cublaslt_grouped_capability.json",
+        "cutlass_sm120_4m.json",
+        "cublaslt_grouped.csv",
+        "numerical_validation.csv",
+    ):
+        (tmp_path / f).write_text("x")
+    (tmp_path / "cublaslt_full_matrix.csv").write_text("h\n1\n")
+    # numerical binding: all 3 hashes present but edge_map_hash MISMATCHES -> MISMATCH
+    (tmp_path / "contraction_shapes.csv").write_bytes(b"shapes")
+    (tmp_path / "numerical_validation.json").write_text(
+        json.dumps(
+            {
+                "case_binding": {
+                    "edge_map_hash": "0" * 16,  # MISMATCH
+                    "prototype_hash": hashlib.sha256(b"proto").hexdigest()[:16],
+                    "contraction_shapes_hash": hashlib.sha256(b"shapes").hexdigest()[
+                        :16
+                    ],
+                },
+                "per_route": [
+                    {"route": "planar", "criterion": "PASS"},
+                    {"route": "grouped", "criterion": "PASS"},
+                    {"route": "region_fused", "criterion": "PASS"},
+                    {"route": "cutlass_4m_single", "criterion": "PASS"},
+                ],
+            }
+        )
+    )
+    (tmp_path / "run_context.json").write_text(
+        json.dumps(
+            {"source_commit": "abc", "dirty_worktree": False, "dirty_file_count": 0}
+        )
+    )
+    (tmp_path / "gonogo.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "gonogo-v2",
+                "criteria": {
+                    "C1": "PASS",
+                    "C2": "PASS",
+                    "C2_REGION_KERNEL": "PASS",
+                    "C3_PLANAR_CORE": "PASS",
+                    "C3_PLANAR_FULL_MATRIX": "PASS",
+                    "C3_GROUPED": "PASS",
+                    "CUTLASS_SM120_4M": "PASS",
+                    "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",
+                    "REGION_PROTOTYPE": "PASS",
+                    "NUMERICAL": "PASS",
+                },
+                "route_verdict": {
+                    r: {"status": "VIABLE", "capability": "OK", "numerical": "OK"}
+                    for r in ("planar", "grouped", "region_fused", "cutlass_4m_single")
+                },
+                "phase0_completion": "COMPLETE",
+                "phase1_authorization": "GO_TO_PHASE1",
+            }
+        )
+    )
+    (tmp_path / "gonogo.md").write_text("# md")
+    (tmp_path / "environment.json").write_text("{}")
+
+    m = build_manifest(str(tmp_path), generated_at="2026-07-23T00:00:00Z")
+    # C2 MISMATCH + NUMERICAL MISMATCH -> both UNKNOWN
+    assert m["criteria"]["C2"] == "UNKNOWN", m["criteria"]
+    assert m["criteria"]["NUMERICAL"] == "UNKNOWN", m["criteria"]
+    # Self-consistency: no UNKNOWN + VIABLE, no downgraded + COMPLETE
+    assert m["phase0_completion"] == "INCONCLUSIVE", m["phase0_completion"]
+    assert m["phase1_authorization"] == "NOT_AUTHORIZED", m["phase1_authorization"]
+    assert all(rv["status"] != "VIABLE" for rv in m["route_verdict"].values()), m[
+        "route_verdict"
+    ]
+    # Numerical binding MISMATCH -> per-route numerical not trusted -> all
+    # routes that depend on numerical get UNKNOWN (not VIABLE even though the
+    # staged per_route claims all PASS).
+    assert all(
+        rv["numerical"] == "UNDETERMINED" for rv in m["route_verdict"].values()
+    ), m["route_verdict"]
 
 
 if __name__ == "__main__":
