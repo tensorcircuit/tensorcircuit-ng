@@ -845,6 +845,182 @@ def test_build_manifest_self_consistent_no_unknown_plus_viable(tmp_path):
     ), m["route_verdict"]
 
 
+def test_build_manifest_c2_checkpoint_cascade_closes_region_fused_gap(tmp_path):
+    """F1: a broken C2 checkpoint binding must cascade to ALL C2-family criteria
+    (not just the top-level "C2"), because the C2 checkpoint validates the SHARED
+    C2 artifact chain that every C2 sub-criterion rests on. Without the cascade, a
+    broken C2 chain + numerical OK could leave region_fused VIABLE while C2=UNKNOWN
+    -- a fail-open on the spine.
+
+    This test breaks ONLY the C2 checkpoint binding (MISMATCH) while keeping the
+    numerical binding OK with per-route region_fused=PASS. gonogo native criteria
+    claim C2_REGION_KERNEL=PASS + REGION_PROTOTYPE=PASS. Before the F1 fix only "C2"
+    was downgraded, so region_fused stayed VIABLE (capability OK from
+    C2_REGION_KERNEL + REGION_PROTOTYPE, numerical OK from the trusted per-route
+    PASS). After the fix C2_REGION_KERNEL also downgrades to UNKNOWN -> region_fused
+    capability UNDETERMINED -> region_fused UNKNOWN (not VIABLE). The existing
+    self-consistency test breaks BOTH bindings (so its no-VIABLE assertion holds
+    for the wrong reason -- the numerical break alone sinks every route); this test
+    isolates the C2-only break to prove the cascade is what closes the gap."""
+    import hashlib, json
+
+    from results._phase0.manifest import build_manifest
+
+    (tmp_path / "c1_judgment.json").write_text(
+        json.dumps({"n24_d10": {"judgment": {"status": "PASS"}, "n": 24, "depth": 10}})
+    )
+    (tmp_path / "c1_default_vs_nofusion.csv").write_text("x")
+    # c2_judgment with all 6 artifact_paths (the 7th, c2_judgment, is the fixed
+    # path c2_judgment.json itself).
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {
+                "n24_d10_default": {
+                    "status": "PASS",
+                    "layers": {
+                        "C2_CANONICAL": "PASS",
+                        "C2_REGION_KERNEL_FEASIBILITY": "PASS",
+                    },
+                    "n": 24,
+                    "depth": 10,
+                    "fusion": "default",
+                    "artifact_paths": {
+                        "edge_map": "results/phase0/c1_c2_edge_map.json",
+                        "peak_frontier": "results/phase0/c2_peak_frontier.json",
+                        "prototype": "results/phase0/region_prototype.json",
+                        "audit": "results/phase0/c1_buffer_assignment/n24.json",
+                        "source_hlo": "results/phase0/source.hlo",
+                        "buffer_assignment": "results/phase0/buffer.txt",
+                    },
+                }
+            }
+        )
+    )
+    # on-disk C2 binding source files
+    for f, c in [
+        ("c1_c2_edge_map.json", b"edge"),
+        ("c2_peak_frontier.json", b"peak"),
+        ("region_prototype.json", b"proto"),
+        ("source.hlo", b"hlo"),
+        ("buffer.txt", b"buf"),
+    ]:
+        (tmp_path / f).write_bytes(c)
+    sub = tmp_path / "c1_buffer_assignment"
+    sub.mkdir()
+    (sub / "n24.json").write_bytes(b"audit")
+    # C2 checkpoint: all 7 hashes present but edge_map hash is WRONG -> MISMATCH
+    # (only the C2 binding chain is broken; numerical is OK below).
+    (tmp_path / "c2_checkpoint_manifest.json").write_text(
+        json.dumps(
+            {
+                "artifact_hashes": {
+                    "source_hlo": hashlib.sha256(b"hlo").hexdigest(),
+                    "buffer_assignment": hashlib.sha256(b"buf").hexdigest(),
+                    "allocation_audit": hashlib.sha256(b"audit").hexdigest(),
+                    "edge_map": "0" * 64,  # MISMATCH (real content is "edge")
+                    "peak_frontier": hashlib.sha256(b"peak").hexdigest(),
+                    "prototype": hashlib.sha256(b"proto").hexdigest(),
+                    "c2_judgment": hashlib.sha256(
+                        (tmp_path / "c2_judgment.json").read_bytes()
+                    ).hexdigest(),
+                }
+            }
+        )
+    )
+    for f in (
+        "cublaslt_planar_capability.json",
+        "cublaslt_grouped_capability.json",
+        "cutlass_sm120_4m.json",
+        "cublaslt_grouped.csv",
+        "numerical_validation.csv",
+    ):
+        (tmp_path / f).write_text("x")
+    (tmp_path / "cublaslt_full_matrix.csv").write_text("h\n1\n")
+    # numerical binding: all 3 hashes present AND MATCHING -> OK (only C2 broken).
+    (tmp_path / "contraction_shapes.csv").write_bytes(b"shapes")
+    (tmp_path / "numerical_validation.json").write_text(
+        json.dumps(
+            {
+                "case_binding": {
+                    "edge_map_hash": hashlib.sha256(b"edge").hexdigest()[:16],
+                    "prototype_hash": hashlib.sha256(b"proto").hexdigest()[:16],
+                    "contraction_shapes_hash": hashlib.sha256(b"shapes").hexdigest()[
+                        :16
+                    ],
+                },
+                "per_route": [
+                    {"route": "region_fused", "criterion": "PASS"},
+                ],
+            }
+        )
+    )
+    (tmp_path / "run_context.json").write_text(
+        json.dumps(
+            {"source_commit": "abc", "dirty_worktree": False, "dirty_file_count": 0}
+        )
+    )
+    # gonogo claims C2_REGION_KERNEL=PASS + REGION_PROTOTYPE=PASS + NUMERICAL=PASS
+    # and region_fused VIABLE. The C2 checkpoint MISMATCH must cascade to
+    # C2_REGION_KERNEL, sinking region_fused.
+    (tmp_path / "gonogo.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "gonogo-v2",
+                "criteria": {
+                    "C1": "PASS",
+                    "C2": "PASS",
+                    "C2_REGION_KERNEL": "PASS",
+                    "C3_PLANAR_CORE": "PASS",
+                    "C3_PLANAR_FULL_MATRIX": "PASS",
+                    "C3_GROUPED": "PASS",
+                    "CUTLASS_SM120_4M": "PASS",
+                    "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",
+                    "REGION_PROTOTYPE": "PASS",
+                    "NUMERICAL": "PASS",
+                },
+                "route_verdict": {
+                    "region_fused": {
+                        "status": "VIABLE",
+                        "capability": "OK",
+                        "numerical": "OK",
+                    }
+                },
+                "phase0_completion": "COMPLETE",
+                "phase1_authorization": "GO_TO_PHASE1",
+            }
+        )
+    )
+    (tmp_path / "gonogo.md").write_text("# md")
+    (tmp_path / "environment.json").write_text("{}")
+
+    m = build_manifest(str(tmp_path), generated_at="2026-07-23T00:00:00Z")
+    # F1 cascade: C2 checkpoint MISMATCH downgrades the WHOLE C2 family, not just
+    # "C2". C2_REGION_KERNEL was PASS in gonogo; it must now be UNKNOWN.
+    assert m["criteria"]["C2"] == "UNKNOWN", m["criteria"]
+    assert m["criteria"]["C2_REGION_KERNEL"] == "UNKNOWN", m["criteria"]
+    # Numerical binding is OK, so NUMERICAL is NOT downgraded (stays PASS) -- the
+    # cascade is C2-only, proving the gap is closed by the C2 cascade and not by
+    # an incidental numerical break.
+    assert m["criteria"]["NUMERICAL"] == "PASS", m["criteria"]
+    # The gap (F1): with C2_REGION_KERNEL downgraded, region_fused capability is
+    # UNDETERMINED, so region_fused is UNKNOWN -- NOT VIABLE. Before the F1 fix
+    # C2_REGION_KERNEL stayed PASS and region_fused (capability OK + numerical OK
+    # from the trusted per-route PASS) was VIABLE despite C2=UNKNOWN: the
+    # fail-open this test closes.
+    assert m["route_verdict"]["region_fused"]["status"] == "UNKNOWN", m["route_verdict"]
+    assert m["route_verdict"]["region_fused"]["status"] != "VIABLE", m["route_verdict"]
+    # region_fused capability is UNDETERMINED (C2_REGION_KERNEL downgraded);
+    # numerical is OK (binding OK + per_route region_fused PASS).
+    assert m["route_verdict"]["region_fused"]["capability"] == "UNDETERMINED", m[
+        "route_verdict"
+    ]
+    assert m["route_verdict"]["region_fused"]["numerical"] == "OK", m["route_verdict"]
+    # Self-consistency invariant: no UNKNOWN criterion + dependent route VIABLE.
+    assert all(rv["status"] != "VIABLE" for rv in m["route_verdict"].values()), m[
+        "route_verdict"
+    ]
+
+
 if __name__ == "__main__":
     import sys, pytest
 

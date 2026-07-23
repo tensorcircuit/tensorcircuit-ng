@@ -253,11 +253,33 @@ def _apply_checkpoint_validation(criteria, c2_status, num_status):
     also unconfirmable). This is the fail-closed fix for the Task 2a-deferred
     'UNAVAILABLE preserves PASS' fail-open surface.
 
+    C2 cascade (F1): the C2 checkpoint validates the SHARED C2 artifact chain
+    (C2_CHECKPOINT_KEYS: edge_map / peak_frontier / prototype / c2_judgment /
+    source_hlo / buffer_assignment / allocation_audit) that EVERY C2
+    sub-criterion rests on -- e.g. C2_REGION_KERNEL depends on the region
+    prototype + edge map + peak frontier, the same shared artifacts. So a
+    broken C2 binding downgrades the WHOLE C2 family to UNKNOWN, not just the
+    top-level "C2". Without this cascade a broken C2 chain + numerical OK
+    could leave region_fused VIABLE (its capability C2_REGION_KERNEL still
+    PASS) while C2=UNKNOWN -- a fail-open on the spine (spec §3.3.1).
+
+    The C2 family is identified by prefix (== "C2" or startswith "C2_")
+    applied to keys PRESENT in the criteria dict, so it survives the Task 7
+    criteria-key rename (C2_REGION_KERNEL -> C2_REGION_KERNEL_FEASIBILITY)
+    without an exact-name enumeration, and aligns with the C2_* members of
+    verdict_schema.CRITERIA_NAMES plus the top-level "C2". Absent C2-family
+    keys need no downgrade.
+
     C1 is never affected (no checkpoint binding for C1).
     """
     out = dict(criteria)
-    if c2_status in ("MISMATCH", "UNAVAILABLE") and "C2" in out:
-        out["C2"] = "UNKNOWN"
+    if c2_status in ("MISMATCH", "UNAVAILABLE"):
+        # Cascade to the whole C2 family (spec §3.3.1: UNAVAILABLE or MISMATCH
+        # -> dependent criterion UNKNOWN). The prefix test catches "C2" and
+        # every C2_* sub-criterion present, robust to the Task 7 rename.
+        for k in out:
+            if k == "C2" or k.startswith("C2_"):
+                out[k] = "UNKNOWN"
     if num_status in ("MISMATCH", "UNAVAILABLE") and "NUMERICAL" in out:
         out["NUMERICAL"] = "UNKNOWN"
     return out
