@@ -228,3 +228,23 @@ def test_collect_region_fused_small_contract():
     assert row["shape"] == "small_contract"
     assert row["relative_l2"] < 1e-4  # fused == materialized at c64
     assert row["policy_pass"] == 1, row
+
+
+def test_collect_cutlass_baseline_reads_task8_json():
+    from results._phase0.numerical import collect_cutlass
+
+    row = collect_cutlass("baseline", seed=0)
+    assert row["route"] == "cutlass_4m_single"
+    assert row["dtype"] == "C16BF"
+    # baseline reuses Task 8 (max_rel ~6.5e-5) -> passes C16BF policy
+    assert row["max_rel"] < 5e-3
+    assert row["policy_pass"] == 1, row
+
+
+def test_collect_cutlass_adversarial_records_not_run_when_unavailable(monkeypatch):
+    from results._phase0 import numerical
+
+    # force the injection probe to report unavailable
+    monkeypatch.setattr(numerical, "_cutlass_injection_available", lambda: False)
+    row = numerical.collect_cutlass("mixed_scale", seed=0)
+    assert row.get("source", "").startswith("not_run")

@@ -431,3 +431,48 @@ def collect_region_fused(level, seed):
     return {"route": "region_fused", "dtype": "c64", "shape": "small_contract",
             "level": level, "seed": seed, "reference_dtype": "c64",
             **metrics, "policy_pass": int(verdict == "PASS")}
+
+
+# ---------------------------------------------------------------------------
+# Task 9: cutlass_4m_single numerical collector (spec §3, §12)
+# ---------------------------------------------------------------------------
+
+def _cutlass_injection_available():
+    """Probe whether cutlass_probe can accept external input data for adversarial
+    levels. Returns True only if a re-run entry point is confirmed; default False
+    until Task 9 verifies the injection point (spec §12 risk). When False, adversarial
+    levels are recorded as legit NOT_RUN (toolchain-bound), baseline reuses Task 8.
+    """
+    return False
+
+
+def collect_cutlass(level, seed):
+    """cutlass_4m_single numerical row. C16BF only (CUTLASS GemmElement=bf16).
+
+    baseline: reuse results/phase0/cutlass_sm120_4m.json (Task 8 single, 3 seeds @
+    anchor 16384x1024x1024). adversarial: attempt injection; else NOT_RUN row.
+    """
+    if level == "baseline":
+        with open(os.path.join(OUT_DIR, "cutlass_sm120_4m.json")) as fh:
+            data = json.load(fh)
+        c = data["single_4m"]["correctness"]
+        metrics = {
+            "relative_l2": c.get("max_rel", 1e9),  # approx: bf16 MMA, use max_rel as proxy
+            "max_abs": c.get("max_abs", 0.0),
+            "max_rel": c.get("max_rel", 1e9),
+            "nan_inf": bool(c.get("nan_inf", True)),
+            "n_elems": 16384 * 1024,
+        }
+        verdict, _ = apply_policy("cutlass_4m_single", "C16BF", metrics)
+        return {"route": "cutlass_4m_single", "dtype": "C16BF", "shape": (16384, 1024, 1024),
+                "level": level, "seed": seed, "reference_dtype": "c64", "source": "task8_reuse",
+                **metrics, "policy_pass": int(verdict == "PASS")}
+    # adversarial level
+    if _cutlass_injection_available():
+        # Future: re-run cutlass kernel with make_inputs(level) injected.
+        raise NotImplementedError("cutlass adversarial injection not wired yet")
+    return {"route": "cutlass_4m_single", "dtype": "C16BF", "shape": (16384, 1024, 1024),
+            "level": level, "seed": seed, "reference_dtype": "c64",
+            "source": "not_run:toolchain-injection-unavailable",
+            "relative_l2": None, "max_abs": None, "max_rel": None, "nan_inf": False,
+            "n_elems": 0, "policy_pass": 0}
