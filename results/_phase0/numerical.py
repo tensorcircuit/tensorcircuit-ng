@@ -87,3 +87,42 @@ def make_inputs(level, shape, seed, ref_dtype=np.complex64):
         B[0::2] = half
         B[1::2] = -half
     return A, B
+
+
+# Per route x dtype policy (spec §5). A threshold of None means "not applicable /
+# diagnostic only" (e.g. max_abs for region_fused/cutlass where output scale varies
+# with dynamic range). nan_inf is always enforced.
+POLICIES = {
+    ("planar", "C16BF"): {"relative_l2": 1e-3, "max_abs": 1e-1, "max_rel": 5e-3},
+    ("planar", "C32F"): {"relative_l2": 1e-4, "max_abs": 1e-2, "max_rel": 1e-3},
+    ("grouped", "C16BF"): {"relative_l2": 1e-3, "max_abs": 1e-1, "max_rel": 5e-3},
+    ("grouped", "C32F"): {"relative_l2": 1e-4, "max_abs": 1e-2, "max_rel": 1e-3},
+    ("region_fused", "c64"): {"relative_l2": 1e-4, "max_abs": None, "max_rel": 1e-3},
+    ("cutlass_4m_single", "C16BF"): {"relative_l2": 1e-3, "max_abs": None, "max_rel": 5e-3},
+}
+
+
+def apply_policy(route, dtype, metrics):
+    """Apply the per route x dtype policy to a metrics dict.
+
+    Returns (verdict, reason). verdict in {"PASS","FAIL",None}: None means a required
+    metric was missing (cell incomplete). nan_inf=True forces FAIL regardless of values.
+    """
+    # nan_inf is enforced first, before the policy-key lookup, so that a non-finite
+    # output fails for *any* route/dtype cell (test_apply_policy_nan_inf_fails_any_route
+    # covers region_fused + C16BF, which has no policy row).
+    if metrics.get("nan_inf"):
+        return "FAIL", "nan_inf=True"
+    key = (route, dtype)
+    if key not in POLICIES:
+        return None, f"no policy for {(route, dtype)}"
+    pol = POLICIES[key]
+    for field, thresh in pol.items():
+        if thresh is None:
+            continue  # diagnostic-only field
+        val = metrics.get(field)
+        if val is None:
+            return None, f"missing metric {field}"
+        if val >= thresh:
+            return "FAIL", f"{field}={val:.2e} >= {thresh:.0e}"
+    return "PASS", None

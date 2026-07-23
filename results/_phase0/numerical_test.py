@@ -60,3 +60,45 @@ def test_make_inputs_deterministic_in_seed():
     a1, _ = make_inputs("baseline", (32, 8, 32), seed=5)
     a2, _ = make_inputs("baseline", (32, 8, 32), seed=5)
     assert np.array_equal(a1, a2)
+
+
+def test_apply_policy_planar_c16bf_pass_just_under_threshold():
+    from results._phase0.numerical import apply_policy
+
+    m = {"relative_l2": 9e-4, "max_abs": 9e-2, "max_rel": 4e-3, "nan_inf": False}
+    verdict, _ = apply_policy("planar", "C16BF", m)
+    assert verdict == "PASS"
+
+
+def test_apply_policy_planar_c16bf_fail_on_max_rel():
+    from results._phase0.numerical import apply_policy
+
+    m = {"relative_l2": 1e-4, "max_abs": 1e-2, "max_rel": 6e-3, "nan_inf": False}
+    verdict, reason = apply_policy("planar", "C16BF", m)
+    assert verdict == "FAIL"
+    assert "max_rel" in reason
+
+
+def test_apply_policy_c32f_tighter_than_c16bf():
+    from results._phase0.numerical import apply_policy
+
+    m = {"relative_l2": 5e-4, "max_abs": 1e-2, "max_rel": 2e-3, "nan_inf": False}
+    # passes C16BF (rel_l2<1e-3) but fails C32F (rel_l2<1e-4)
+    assert apply_policy("planar", "C16BF", m)[0] == "PASS"
+    assert apply_policy("planar", "C32F", m)[0] == "FAIL"
+
+
+def test_apply_policy_nan_inf_fails_any_route():
+    from results._phase0.numerical import apply_policy
+
+    m = {"relative_l2": 1e-9, "max_abs": 0.0, "max_rel": 0.0, "nan_inf": True}
+    for route in ("planar", "grouped", "region_fused", "cutlass_4m_single"):
+        assert apply_policy(route, "C16BF", m)[0] == "FAIL", route
+
+
+def test_apply_policy_missing_metric_returns_none():
+    from results._phase0.numerical import apply_policy
+
+    # region_fused/cutlass omit max_abs policy; absent metric -> not FAIL, verdict stays PASS-able
+    verdict, _ = apply_policy("region_fused", "c64", {"relative_l2": 1e-5, "max_rel": 1e-4, "nan_inf": False})
+    assert verdict == "PASS"
