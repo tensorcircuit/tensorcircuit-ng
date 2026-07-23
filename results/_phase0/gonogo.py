@@ -209,6 +209,139 @@ def _c3_planar_from_capability(path):
     return _UNKNOWN
 
 
+def _c2_layer_status(data, layer):
+    """Read one C2 sub-layer status from c2_judgment.json's nested cases.
+
+    Each case is {layers: {<LAYER>: "PASS"|"FAIL"|"UNKNOWN", ...}}. We roll up
+    across cases (any FAIL -> FAIL, any UNKNOWN -> UNKNOWN, else PASS) so the
+    region-kernel sub-criterion (rule 3) reflects the worst case. Empty or
+    malformed -> UNKNOWN (never default PASS).
+    """
+    if not isinstance(data, dict) or not data:
+        return _UNKNOWN
+    statuses = []
+    for case in data.values():
+        if isinstance(case, dict):
+            layers = case.get("layers") or {}
+            statuses.append(layers.get(layer, _UNKNOWN))
+        else:
+            statuses.append(_UNKNOWN)
+    return _roll_up_statuses(statuses)
+
+
+def _c3_planar_full_matrix_status(path):
+    """C3 planar full-matrix completeness (Task 6 sweep artifact).
+
+    PASS   -> cublaslt_full_matrix.csv exists with a header and >=1 data row
+              (the sweep produced output; Task 6 vetted its quality separately)
+    NOT_RUN-> artifact absent
+    UNKNOWN-> present but empty/unparseable
+    """
+    if not os.path.exists(path):
+        return _NOT_RUN
+    try:
+        with open(path) as f:
+            rows = [ln for ln in f if ln.strip()]
+    except OSError:
+        return _UNKNOWN
+    # rows[0] is the header; need >=1 data row beyond it
+    if len(rows) < 2:
+        return _UNKNOWN
+    return "PASS"  # sweep produced output; Task 6 vetted its quality separately
+
+
+def _c3_grouped_status(path):
+    """cublasLt grouped capability verdict (Task 7). NOT_RUN if absent."""
+    if not os.path.exists(path):
+        return _NOT_RUN
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return _UNKNOWN
+    status = (data.get("capability") or {}).get("status")
+    if status in ("SUPPORTED", "NOT_SUPPORTED"):
+        return status
+    return _UNKNOWN
+
+
+def _cutlass_status(path):
+    """CUTLASS SM120 4M feasibility (Task 8), derived from single_4m.
+
+    No top-level 'overall' key in the artifact, so derive: compiles+runs+gate_pass
+    -> FEASIBLE[_WITH_SM80_FALLBACK]; attempted-but-not-passing -> FAIL;
+    absent -> NOT_RUN; malformed -> UNKNOWN.
+    """
+    if not os.path.exists(path):
+        return _NOT_RUN
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return _UNKNOWN
+    s4 = data.get("single_4m") if isinstance(data, dict) else None
+    if not isinstance(s4, dict):
+        return _UNKNOWN
+    kernel_path = s4.get("kernel_path")
+    gate_pass = (s4.get("correctness") or {}).get("gate_pass")
+    if s4.get("compiles") and s4.get("runs") and gate_pass:
+        return "FEASIBLE_WITH_SM80_FALLBACK" if kernel_path == "sm80_fallback" else "FEASIBLE"
+    if kernel_path:
+        return _BAD  # attempted a path but it did not pass
+    return _UNKNOWN
+
+
+def _region_proto_status(path):
+    """Region P->T->E prototype verdict (Task 4). NOT_RUN if absent."""
+    if not os.path.exists(path):
+        return _NOT_RUN
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return _UNKNOWN
+    verdict = data.get("verdict") if isinstance(data, dict) else None
+    if verdict in ("TILE_FUSION_FEASIBLE", "FEASIBLE_WITH_RECOMPUTE",
+                   "NOT_FEASIBLE", "BLOCKED"):
+        return verdict
+    return _UNKNOWN
+
+
+def _numerical_overall_status(path):
+    """Overall numerical status (Task 9). NOT_RUN if absent."""
+    if not os.path.exists(path):
+        return _NOT_RUN
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return _UNKNOWN
+    overall = data.get("overall_numerical_status") if isinstance(data, dict) else None
+    if overall in ("PASS", "FAIL"):
+        return overall
+    return _UNKNOWN
+
+
+def _numerical_per_route(path):
+    """Per-route numerical criterion map {route: PASS|FAIL} from Task 9.
+
+    Routes absent from the artifact are omitted (callers treat omission as
+    UNDETERMINED). Empty dict if artifact absent/malformed.
+    """
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    per = {}
+    for row in (data.get("per_route") or []) if isinstance(data, dict) else []:
+        if isinstance(row, dict) and row.get("criterion") in ("PASS", "FAIL"):
+            per[row["route"]] = row["criterion"]
+    return per
+
+
 def _parse_c3_real_ceiling_ratio(path):
     """Max bf16/fp32 TFLOPS ratio from the cublaslt_gap txt table; None if missing/unparseable.
 

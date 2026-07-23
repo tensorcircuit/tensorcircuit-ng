@@ -70,6 +70,89 @@ def test_constants_define_routes_and_required_criteria():
     assert "C2_REGION_KERNEL" in ROUTE_CAPABILITY_CRITERIA["region_fused"]
 
 
+def test_c2_layer_status_reads_sublayer():
+    from results._phase0.gonogo import _c2_layer_status
+    data = {"n24": {"layers": {"C2_REGION_KERNEL_FEASIBILITY": "PASS",
+                               "C2_CANONICAL": "UNKNOWN"}}}
+    assert _c2_layer_status(data, "C2_REGION_KERNEL_FEASIBILITY") == "PASS"
+    assert _c2_layer_status(data, "C2_CANONICAL") == "UNKNOWN"
+    # missing layer or malformed -> UNKNOWN (never default PASS)
+    assert _c2_layer_status(data, "C2_NOPE") == "UNKNOWN"
+    assert _c2_layer_status({}, "C2_CANONICAL") == "UNKNOWN"
+
+
+def test_c3_full_matrix_status(tmp_path):
+    import json
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+    p = tmp_path / "fm.csv"
+    p.write_text("M,N,K,status\n1024,1024,1024,ok\n")
+    assert _c3_planar_full_matrix_status(str(p)) == "PASS"
+    assert _c3_planar_full_matrix_status(str(tmp_path / "missing.csv")) == "NOT_RUN"
+    empty = tmp_path / "empty.csv"
+    empty.write_text("M,N,K,status\n")
+    assert _c3_planar_full_matrix_status(str(empty)) == "UNKNOWN"
+
+
+def test_c3_grouped_status(tmp_path):
+    import json
+    from results._phase0.gonogo import _c3_grouped_status
+    p = tmp_path / "g.json"
+    p.write_text(json.dumps({"capability": {"status": "NOT_SUPPORTED"}}))
+    assert _c3_grouped_status(str(p)) == "NOT_SUPPORTED"
+    p.write_text(json.dumps({"capability": {"status": "SUPPORTED"}}))
+    assert _c3_grouped_status(str(p)) == "SUPPORTED"
+    assert _c3_grouped_status(str(tmp_path / "missing.json")) == "NOT_RUN"
+
+
+def test_cutlass_status_derives_from_single_4m(tmp_path):
+    import json
+    from results._phase0.gonogo import _cutlass_status
+    p = tmp_path / "c.json"
+    p.write_text(json.dumps({"single_4m": {
+        "kernel_path": "sm80_fallback", "compiles": True, "runs": True,
+        "correctness": {"gate_pass": True}}}))
+    assert _cutlass_status(str(p)) == "FEASIBLE_WITH_SM80_FALLBACK"
+    p.write_text(json.dumps({"single_4m": {
+        "kernel_path": "sm120_native", "compiles": True, "runs": True,
+        "correctness": {"gate_pass": True}}}))
+    assert _cutlass_status(str(p)) == "FEASIBLE"
+    p.write_text(json.dumps({"single_4m": {
+        "kernel_path": "sm80_fallback", "compiles": True, "runs": False,
+        "correctness": {"gate_pass": False}}}))
+    assert _cutlass_status(str(p)) == "FAIL"
+    assert _cutlass_status(str(tmp_path / "missing.json")) == "NOT_RUN"
+
+
+def test_region_proto_status(tmp_path):
+    import json
+    from results._phase0.gonogo import _region_proto_status
+    p = tmp_path / "r.json"
+    p.write_text(json.dumps({"verdict": "FEASIBLE_WITH_RECOMPUTE"}))
+    assert _region_proto_status(str(p)) == "FEASIBLE_WITH_RECOMPUTE"
+    p.write_text(json.dumps({"verdict": "NOT_FEASIBLE"}))
+    assert _region_proto_status(str(p)) == "NOT_FEASIBLE"
+    assert _region_proto_status(str(tmp_path / "missing.json")) == "NOT_RUN"
+
+
+def test_numerical_status_reads_overall_and_per_route(tmp_path):
+    import json
+    from results._phase0.gonogo import (
+        _numerical_overall_status, _numerical_per_route)
+    p = tmp_path / "n.json"
+    p.write_text(json.dumps({
+        "overall_numerical_status": "FAIL",
+        "per_route": [
+            {"route": "planar", "criterion": "FAIL", "n_cells": 144},
+            {"route": "region_fused", "criterion": "PASS", "n_cells": 9},
+        ]}))
+    assert _numerical_overall_status(str(p)) == "FAIL"
+    per = _numerical_per_route(str(p))
+    assert per["planar"] == "FAIL" and per["region_fused"] == "PASS"
+    # missing artifact -> overall NOT_RUN, empty per-route map
+    assert _numerical_overall_status(str(tmp_path / "missing.json")) == "NOT_RUN"
+    assert _numerical_per_route(str(tmp_path / "missing.json")) == {}
+
+
 if __name__ == "__main__":
     import sys, pytest
 
