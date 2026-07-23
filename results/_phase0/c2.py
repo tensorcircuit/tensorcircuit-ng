@@ -569,8 +569,17 @@ def _binding_problems(edge, peak, proto, audit, case, file_hashes):
 
 def _region_layer(proto, edge, rc):
     """C2_REGION_KERNEL_FEASIBILITY: can the real P->T->E region be computed without
-    materializing full P/T (spec §5.1)? Only a real prototype or a definitive blocker
-    gives PASS/FAIL; everything else is UNKNOWN."""
+    materializing full P/T (spec §5.1)? Only a real prototype run AT THE FULL ANCHOR
+    gives PASS/FAIL; everything else is UNKNOWN.
+
+    Plan §5 2.1 (Task 2a): small-contract compile/correctness only -> UNKNOWN (never
+    PASS). Plan §3 操作.2 bullet 2 (M1): region is UNKNOWN when ANY of four evidence
+    fields is missing --
+      1. registers        -> rc["resource_pass"] is None when registers_per_thread is absent
+      2. occupancy        -> rc["resource_pass"] is None when occupancy_pct is absent
+      3. actual peak      -> rc["region_peak_gain_bytes"] is None when raw peak fields absent
+      4. full-E correctness-> fused_full_anchor_run != True (full-anchor E not measured)
+    """
     if not _is_real_pte_prototype(proto, edge):
         return (
             "UNKNOWN",
@@ -579,21 +588,26 @@ def _region_layer(proto, edge, rc):
     verdict = proto.get("verdict")
     if verdict in _FEASIBLE_VERDICTS:
         acc, res = rc["accuracy_pass"], rc["resource_pass"]
-        if acc is None or res is None:
+        peak = rc["region_peak_gain_bytes"]
+        # M1 conditions 1/2/3 (registers / occupancy / actual peak): missing
+        # evidence -> UNKNOWN (the gate cannot confirm what was not measured).
+        if acc is None or res is None or peak is None:
             return (
                 "UNKNOWN",
-                "prototype feasible but accuracy/resource not confirmable",
+                "prototype claims feasible but accuracy/resource/peak not confirmable",
+            )
+        # M1 condition 4 (full-E correctness) + plan §5 2.1: the full-anchor fused
+        # run is the only way to measure E correctness on the real anchor shape.
+        # Without it the region criterion stays UNKNOWN -- small-contract evidence
+        # alone cannot promote to PASS. (This is the deleted "judge region PASS
+        # from small-contract accuracy/resource only" path.)
+        if proto.get("fused_full_anchor_run") is not True:
+            return (
+                "UNKNOWN",
+                "fused full-anchor run not executed; full-E correctness unmeasured",
             )
         if acc and res:
-            scope = (
-                ""
-                if proto.get("fused_full_anchor_run")
-                else (
-                    " (fused full-anchor latency not measured; feasibility from compile + "
-                    "representative-contract correctness)"
-                )
-            )
-            return ("PASS", f"real kernel feasible{scope}")
+            return ("PASS", "real kernel feasible (full-anchor run measured)")
         return (
             "FAIL",
             "prototype claims feasible but recomputed accuracy/resource fail",

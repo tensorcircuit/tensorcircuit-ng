@@ -131,23 +131,30 @@ def test_fused_matches_materialized_small_shape():
 
 def test_run_verdict_and_no_full_PT(tmp_path):
     from results._phase0.region_proto import run
+    from results._phase0.verdict_schema import CRITERION_TOKENS
 
     out = run(out_dir=str(tmp_path))
-    assert out["verdict"] in {
-        "TILE_FUSION_FEASIBLE",
-        "FEASIBLE_WITH_RECOMPUTE",
-        "NOT_FEASIBLE",
-        "BLOCKED",
-    }, out["verdict"]
+    # Task 2a (plan §5 2.1): full-anchor fused run NOT executed -> canonical
+    # verdict UNKNOWN (a canonical criterion token), NOT the artifact-native
+    # FEASIBLE_WITH_RECOMPUTE detail token that used to live in this field.
+    assert out["verdict"] in CRITERION_TOKENS, out["verdict"]
+    assert out["verdict"] == "UNKNOWN", out  # full-anchor run pending (Task 2b)
+    assert out["fused_full_anchor_run"] is False, out
     assert out["no_full_P_materialized"] is True, out
     assert out["no_full_T_materialized"] is True, out
     assert "relative_l2" in out and out["n_seeds"] >= 1, out
     assert out["relative_l2"] < 1e-4, out  # fused == materialized on the small contract
-    # resources reported (real kernel compiled for sm_120)
-    assert (
-        out["registers_per_thread"] is not None and out["registers_per_thread"] > 0
-    ), out
-    assert out["occupancy_pct"] > 0, out
+    # resources reported when nvrtc --res-usage retrieval succeeds; when it does not
+    # the fields are None (UNKNOWN, plan §5 2.1 -- the deleted behavior was a 40
+    # fallback). On the dev GPU retrieval typically succeeds.
+    if out["registers_per_thread"] is not None:
+        assert out["registers_per_thread"] > 0, out
+        assert out["occupancy_pct"] > 0, out
+    # Task 2a: raw allocation delta is reclassified MODEL_ONLY (analytical upper
+    # bound), not a runtime peak gain.
+    assert out["peak_evidence_class"] == "MODEL_ONLY", out
+    assert "analytical_or_allocation_upper_bound_bytes" in out, out
+    assert "peak_saved_bytes" not in out, out  # the misleading name is gone
 
 
 def test_run_artifacts(tmp_path):

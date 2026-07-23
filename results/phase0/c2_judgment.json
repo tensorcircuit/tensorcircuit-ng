@@ -5,14 +5,14 @@
     "case_id": "n24_d10_default",
     "status": "UNKNOWN",
     "layers": {
-      "C2_REGION_KERNEL_FEASIBILITY": "PASS",
+      "C2_REGION_KERNEL_FEASIBILITY": "UNKNOWN",
       "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK": "FAIL",
       "C2_JOINT_EXECUTABLE_LEVERAGE": "UNKNOWN",
       "C2_CANONICAL": "UNKNOWN"
     },
     "recomputed": {
       "accuracy_pass": true,
-      "resource_pass": true,
+      "resource_pass": null,
       "region_peak_gain_bytes": 1073741824,
       "single_reduction_bytes": 31872,
       "traffic_gain": "UNKNOWN",
@@ -37,12 +37,12 @@
         "allocation_audit": "29004fd786ff1302ba00399602ac9e2145229898a4eba61bb70ef993997a35a2",
         "edge_map": "9dc930781a3e5074eb2ee6b4d8c9329ee9d5a58f96c174e36122735054414e78",
         "peak_frontier": "0a17bc36b8438a538bd01c87604a956590e40983a252f9ccf989f6ab829c53f3",
-        "prototype": "df550309b1dcd36661e5aaa73fbdd58fc2c0233c57eb597041e10c4b2534aec6",
+        "prototype": "1e97addf6aef0f1c46f3814ea711202e9df71def11efaca637968614855d0135",
         "buffer_assignment": "035d52a92f49cb540a3762edab9632a723dc4fde1d720d0194f2ef6c3e78a79a"
       }
     },
     "diagnostic_self_reported": {
-      "prototype_verdict": "FEASIBLE_WITH_RECOMPUTE",
+      "prototype_verdict": "UNKNOWN",
       "prototype_correct": true,
       "prototype_memory_policy_met": true,
       "fused_full_anchor_run": false,
@@ -50,7 +50,7 @@
       "frontier_joint_model_status": "joint_reduction_meets_threshold"
     },
     "memory_threshold_bytes": 268435456,
-    "reason": "region=PASS (real kernel feasible (fused full-anchor latency not measured; feasibility from compile + representative-contract correctness)) | single=FAIL (single-anchor patch reduces peak by only 31872 B < threshold (unchanged-rest-of-program counterfactual; the peak is structural)) | joint=UNKNOWN (joint model meets threshold but no executable joint implementation) -> canonical=UNKNOWN",
+    "reason": "region=UNKNOWN (prototype verdict UNKNOWN is not a definitive kernel result) | single=FAIL (single-anchor patch reduces peak by only 31872 B < threshold (unchanged-rest-of-program counterfactual; the peak is structural)) | joint=UNKNOWN (joint model meets threshold but no executable joint implementation) -> canonical=UNKNOWN",
     "n": 24,
     "depth": 10,
     "fusion": "default",

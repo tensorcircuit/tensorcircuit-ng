@@ -428,8 +428,14 @@ def test_canonical_joint_fail_when_joint_model_below_threshold():
 
 
 def test_canonical_pass_when_all_layers_pass():
-    """canonical PASS requires region PASS + joint executable PASS (all hashes bound)."""
+    """canonical PASS requires region PASS + joint executable PASS (all hashes bound).
+
+    Task 2a: region PASS now requires fused_full_anchor_run=True (plan §5 2.1); the
+    good fixture's prototype carries fused_full_anchor_run=False (mirrors the
+    committed canonical artifact), so this test sets it True to exercise the
+    all-pass composition path."""
     edge, peak, proto, audit, case, fh = _good()
+    proto["fused_full_anchor_run"] = True  # exercise the full-anchor-measured PASS path
     # recognize an executable joint implementation (absent in the real frontier, which
     # stays UNKNOWN; this exercises the PASS composition path).
     peak["diagnostics"]["joint_executable_status"] = "PASS"
@@ -505,6 +511,68 @@ def test_canonical_region_unknown_when_actual_peak_missing():
     j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
     assert j["recomputed"]["region_peak_gain_bytes"] is None, j
     assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
+
+
+# ---------------------------------------------------------------------------
+# Task 2a (plan §3 操作.2 bullet 2 -- M1 fold-in): pin EACH of the four
+# missing-field conditions that must sink C2_REGION_KERNEL_FEASIBILITY to
+# UNKNOWN. Task 0 only pinned actual-peak (test above); the four tests below
+# pin registers / occupancy / actual-peak / full-E correctness explicitly and
+# in isolation. They are GPU-free (synthetic fixtures via _good()).
+# ---------------------------------------------------------------------------
+
+
+def test_canonical_region_unknown_m1_when_registers_missing():
+    """M1 condition 1/4: ``registers_per_thread`` missing -> resource_pass None ->
+    region UNKNOWN. The full-anchor run is declared done so the only UNKNOWN
+    driver is the missing register count."""
+    edge, peak, proto, audit, case, fh = _good()
+    proto["fused_full_anchor_run"] = True
+    del proto["registers_per_thread"]  # M1 #1: registers unmeasured
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    assert j["recomputed"]["resource_pass"] is None, j
+    assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
+
+
+def test_canonical_region_unknown_m1_when_occupancy_missing():
+    """M1 condition 2/4: ``occupancy_pct`` missing -> resource_pass None ->
+    region UNKNOWN."""
+    edge, peak, proto, audit, case, fh = _good()
+    proto["fused_full_anchor_run"] = True
+    del proto["occupancy_pct"]  # M1 #2: occupancy unmeasured
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    assert j["recomputed"]["resource_pass"] is None, j
+    assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
+
+
+def test_canonical_region_unknown_m1_when_actual_peak_missing():
+    """M1 condition 3/4: ``materialized_peak_bytes`` / ``fused_peak_bytes`` missing
+    -> region_peak_gain_bytes None -> region UNKNOWN. (Parallel to the Task 0
+    RED test above, named here to pin M1 condition 3 explicitly.)"""
+    edge, peak, proto, audit, case, fh = _good()
+    proto["fused_full_anchor_run"] = True
+    del proto["materialized_peak_bytes"]
+    del proto["fused_peak_bytes"]  # M1 #3: actual peak unmeasured
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    assert j["recomputed"]["region_peak_gain_bytes"] is None, j
+    assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
+
+
+def test_canonical_region_unknown_m1_when_full_E_correctness_missing():
+    """M1 condition 4/4: ``fused_full_anchor_run`` is False -> full-E correctness on
+    the real anchor shape was never measured -> region UNKNOWN. (Parallel to the
+    Task 0 RED test ``test_canonical_region_unknown_when_fused_full_anchor_run_false``,
+    named here to pin M1 condition 4 explicitly.)"""
+    from results._phase0.verdict_schema import CRITERION_TOKENS
+
+    edge, peak, proto, audit, case, fh = _good()
+    # _good_prototype() carries fused_full_anchor_run=False (the only honest value
+    # until Task 2b's full-anchor kernel runs).
+    assert proto["fused_full_anchor_run"] is False, proto
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    region = j["layers"]["C2_REGION_KERNEL_FEASIBILITY"]
+    assert region == "UNKNOWN", j
+    assert region in CRITERION_TOKENS, region
 
 
 if __name__ == "__main__":

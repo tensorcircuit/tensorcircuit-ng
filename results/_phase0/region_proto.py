@@ -11,7 +11,14 @@ materializing the full P (A@B) or T (transform(P)):
 The exact transform (Task 2's v2 edge map) is applied here with vectorized cupy reshape/
 transpose (all HLO layouts in this region are row-major == C-order, validated against Task 2's
 layout-aware permutation). The fused kernel (cpp/region_proto.cu, nvrtc sm_120) recomputes the
-producer elements on the fly and never writes full P or T -> FEASIBLE_WITH_RECOMPUTE.
+producer elements on the fly and never writes full P or T.
+
+Honest evidence classification (plan §5 2.1, wired in Task 2a): the fused kernel is compiled
+and its correctness is verified fused == materialized on the SMALL 8-D contract only; the
+full-anchor fused run is NOT executed here. The canonical ``verdict`` is therefore UNKNOWN
+(not the artifact-native ``FEASIBLE_WITH_RECOMPUTE`` detail token) until the full-anchor run
+is actually measured (Task 2b, GPU). The raw allocation-size delta is kept as a MODEL_ONLY
+analytical upper bound (``analytical_or_allocation_upper_bound_bytes``), not a runtime peak.
 """
 
 from __future__ import annotations
@@ -104,7 +111,9 @@ def _transform_index_arrays(steps):
 
 def fused_reference(A, B, D, steps, shapes) -> cp.ndarray:
     """E = D @ transform(A @ B) WITHOUT materializing full P or T. Producer elements are
-    recomputed on the fly inside the kernel (FEASIBLE_WITH_RECOMPUTE)."""
+    recomputed on the fly inside the kernel. Only the SMALL contract is run here; the
+    canonical region verdict stays UNKNOWN (plan §5 2.1) until the full-anchor fused run
+    is measured (Task 2b)."""
     s = shapes
     idx = _transform_index_arrays(steps)
     dA = cp.asarray(A, dtype=cp.complex64)
@@ -333,13 +342,18 @@ def run(
         worst_max_rel = max(worst_max_rel, max_rel)
     correct = worst_rel_l2 < 1e-4 and bool(cp.all(cp.isfinite(E_fus)))
 
-    # resources: compile the fused kernel for sm_120, read registers, occupancy
+    # resources: compile the fused kernel for sm_120, read registers, occupancy.
+    # plan §5 2.1 / Global Constraints: a missing measurement is UNKNOWN, never a
+    # constant fallback. If nvrtc --res-usage cannot return a register count the
+    # resource fields stay None (MODEL_ONLY) so no downstream gate can pretend the
+    # resource was measured (the deleted behavior was `regs = 40` fallback).
     props = _device_props()
     threads_per_block = 256  # 16x16 block
     regs = _registers_for_kernel("fused_pte_kernel")
-    if not regs:
-        regs = 40  # structural fallback
-    blocks_per_sm, occ_pct = _occupancy(props, threads_per_block, regs)
+    if regs is None:
+        blocks_per_sm, occ_pct = None, None
+    else:
+        blocks_per_sm, occ_pct = _occupancy(props, threads_per_block, regs)
 
     # memory: fused avoids the full P and T buffers the materialized path needs
     A_b = PM * K1 * 8
@@ -356,13 +370,20 @@ def run(
     # producer recompute and not run; the memory benefit stands in per the memory policy)
     mat_latency_ms = _materialized_latency_ms(contract)
 
-    # producer recompute factor: each P element is recomputed once per consumer-K use (~TM)
+    # producer_recompute factor: each P element is recomputed once per consumer-K use (~TM)
     producer_recompute_factor = TM
     recompute_flops = producer_recompute_factor * 2 * PM * PN * K1
     memory_policy_met = peak_saved >= 256 * 1024 * 1024
 
-    feasible = correct and (peak_saved > 0) and memory_policy_met
-    verdict = "FEASIBLE_WITH_RECOMPUTE" if feasible else "NOT_FEASIBLE"
+    # plan §5 2.1: full-anchor fused run NOT executed -> canonical verdict UNKNOWN
+    # (the leverage was not measured at the full anchor). Small-contract correctness
+    # and the raw-alloc upper bound are kept as diagnostic fields but cannot promote
+    # the canonical verdict past UNKNOWN. The old FEASIBLE_WITH_RECOMPUTE detail
+    # token lived in this canonical field and was the fail-open surface c2._region_layer
+    # wrongly promoted to PASS; it is now an honest UNKNOWN. The full-anchor kernel
+    # that could legitimately reach PASS (or FAIL) is Task 2b (GPU).
+    feasible = correct and (peak_saved > 0) and memory_policy_met  # diagnostic only
+    verdict = "UNKNOWN"
 
     out = {
         "schema_version": "region-prototype-v2",
@@ -383,11 +404,19 @@ def run(
         "threads_per_block": threads_per_block,
         "registers_per_thread": regs,
         "occupancy_blocks_per_sm": blocks_per_sm,
-        "occupancy_pct": round(occ_pct, 1),
-        # memory
+        "occupancy_pct": round(occ_pct, 1) if occ_pct is not None else None,
+        # memory: raw allocation-size deltas (malloc/free counter delta), NOT
+        # runtime path-execution peaks. plan §5 2.1 reclassifies the saved-bytes
+        # difference as `analytical_or_allocation_upper_bound_bytes` (MODEL_ONLY):
+        # it is an analytical upper bound on what fusion might save, not a
+        # measured allocator peak gain. The individual materialized/fused fields
+        # retain their measurement-input names; only the "gain"-like field is
+        # renamed so no downstream gate can mistake it for a runtime peak gain.
         "materialized_peak_bytes": materialized_peak,
         "fused_peak_bytes": fused_peak,
-        "peak_saved_bytes": peak_saved,
+        "analytical_or_allocation_upper_bound_bytes": peak_saved,
+        "peak_evidence_class": "MODEL_ONLY",
+        "peak_measurement_method": "raw_allocation_size_delta",
         "p_buffer_bytes": P_b,
         "t_buffer_bytes": T_b,
         # cost
@@ -398,18 +427,23 @@ def run(
         "fused_full_anchor_run": False,
         "fused_latency_note": (
             "fused kernel at the full anchor is compute-bound by producer recompute "
-            "(factor ~TM=64) and is not timed here; the memory benefit stands in per the "
-            "memory-policy branch (final-review section 7.5)"
+            "(factor ~TM=64) and is NOT timed here; per plan §5 2.1 the canonical "
+            "verdict is UNKNOWN until the full-anchor fused run is actually executed "
+            "(Task 2b). The analytical/allocation upper bound on peak savings is kept "
+            "as a MODEL_ONLY diagnostic (peak_evidence_class), not a measured gain."
         ),
         "memory_policy_met": memory_policy_met,
         # verdict
         "verdict": verdict,
         "note": (
-            "real two-stage P->T->E prototype: fused producer-recompute kernel (nvrtc sm_120) "
-            "computes E = D @ transform(A@B) without writing full P/T. Correctness fused == "
-            "materialized on the small 8-D contract over multiple seeds. The kernel recomputes "
-            "each producer element ~TM times (FEASIBLE_WITH_RECOMPUTE); a tiled/streaming variant "
-            "could cut that. Peak leverage itself is structural (Task 3): single-patch ~0."
+            "real two-stage P->T->E prototype: fused producer-recompute kernel (nvrtc "
+            "sm_120) computes E = D @ transform(A@B) without writing full P/T. "
+            "Correctness fused == materialized on the small 8-D contract over multiple "
+            "seeds (small-contract only). Per plan §5 2.1 the canonical verdict is "
+            "UNKNOWN until the full-anchor fused run is actually executed (Task 2b): "
+            "small-contract compile + the raw-alloc upper bound are diagnostic only and "
+            "cannot promote the region past UNKNOWN. Peak leverage itself is structural "
+            "(Task 3): single-patch ~0."
         ),
     }
     out_dir = out_dir or OUT_DIR
@@ -426,7 +460,12 @@ def run(
     with open(f"{out_dir}/region_prototype_memory.csv", "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(
-            ["path", "materialized_peak_bytes", "fused_peak_bytes", "peak_saved_bytes"]
+            [
+                "path",
+                "materialized_peak_bytes",
+                "fused_peak_bytes",
+                "analytical_or_allocation_upper_bound_bytes",
+            ]
         )
         w.writerow(["anchor", materialized_peak, fused_peak, peak_saved])
     with open(f"{out_dir}/region_prototype_bench.csv", "w", newline="") as fh:
@@ -434,7 +473,8 @@ def run(
         w.writerow(
             ["path", "materialized_latency_ms", "registers_per_thread", "occupancy_pct"]
         )
-        w.writerow(["anchor", mat_latency_ms, regs, round(occ_pct, 1)])
+        occ_csv = round(occ_pct, 1) if occ_pct is not None else None
+        w.writerow(["anchor", mat_latency_ms, regs, occ_csv])
     return out
 
 
