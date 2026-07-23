@@ -183,9 +183,12 @@ def test_apply_checkpoint_validation_downgrades_pass_only(tmp_path):
     assert out["C1"] == "PASS"  # untouched
     out2 = _apply_checkpoint_validation(criteria, "OK", "MISMATCH")
     assert out2["NUMERICAL"] == "UNKNOWN"
-    # unavailable -> no change (can't validate, don't downgrade)
+    # unavailable -> fail-closed UNKNOWN (binding chain unconfirmable; the prior
+    # value may be stale). C1 untouched (no checkpoint binding for C1).
     out3 = _apply_checkpoint_validation(criteria, "UNAVAILABLE", "UNAVAILABLE")
-    assert out3 == criteria
+    assert out3["C2"] == "UNKNOWN", out3
+    assert out3["NUMERICAL"] == "UNKNOWN", out3
+    assert out3["C1"] == "PASS", out3
 
 
 def test_build_cases_merges_c1_c2(tmp_path):

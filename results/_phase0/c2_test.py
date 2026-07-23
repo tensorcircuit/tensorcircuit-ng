@@ -264,13 +264,15 @@ def _good():
 
 
 def test_canonical_baseline_region_pass_single_fail_joint_unknown():
-    """The honest n24 verdict: kernel feasible (PASS), single-patch peak FAIL
-    (structural, route-local), joint UNKNOWN (model-only, no executable joint impl)
-    -> canonical UNKNOWN. Single-pair FAIL must NOT propagate to canonical FAIL."""
+    """The honest n24 verdict: region UNKNOWN (full-anchor fused run NOT executed,
+    so the kernel-feasibility leverage is unmeasured -> fail-closed UNKNOWN),
+    single-patch peak FAIL (structural, route-local), joint UNKNOWN (model-only,
+    no executable joint impl) -> canonical UNKNOWN. Single-pair FAIL must NOT
+    propagate to canonical FAIL."""
     edge, peak, proto, audit, case, fh = _good()
     j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
     L = j["layers"]
-    assert L["C2_REGION_KERNEL_FEASIBILITY"] == "PASS", j
+    assert L["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
     assert L["C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK"] == "FAIL", j
     assert L["C2_JOINT_EXECUTABLE_LEVERAGE"] == "UNKNOWN", j
     assert L["C2_CANONICAL"] == "UNKNOWN", j

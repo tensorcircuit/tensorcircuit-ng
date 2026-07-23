@@ -217,17 +217,18 @@ def test_region_prototype_verdict_field_is_canonical_when_full_anchor_not_run():
     with open(path) as fh:
         proto = json.load(fh)
 
-    # the committed canonical artifact records the full-anchor run as NOT done.
-    if proto.get("fused_full_anchor_run") is False:
-        # The verdict field must be a canonical criterion token. The canonical
-        # value is UNKNOWN (full-anchor leverage unmeasured); the detail token
-        # 'FEASIBLE_WITH_RECOMPUTE' must not appear in this canonical field.
-        verdict = proto.get("verdict")
-        assert verdict in CRITERION_TOKENS, (
-            f"region_prototype.verdict={verdict!r} is not a canonical criterion "
-            f"token; fused_full_anchor_run=False must yield criterion UNKNOWN "
-            f"(normalize_criterion maps {verdict!r} -> {normalize_criterion(verdict)!r})"
-        )
+    # the committed canonical artifact records the full-anchor run as NOT done;
+    # fail loudly if that precondition ever flips (no silent-skip green).
+    assert proto["fused_full_anchor_run"] is False, proto
+    # The verdict field must be a canonical criterion token. The canonical
+    # value is UNKNOWN (full-anchor leverage unmeasured); the detail token
+    # 'FEASIBLE_WITH_RECOMPUTE' must not appear in this canonical field.
+    verdict = proto.get("verdict")
+    assert verdict in CRITERION_TOKENS, (
+        f"region_prototype.verdict={verdict!r} is not a canonical criterion "
+        f"token; fused_full_anchor_run=False must yield criterion UNKNOWN "
+        f"(normalize_criterion maps {verdict!r} -> {normalize_criterion(verdict)!r})"
+    )
 
 
 if __name__ == "__main__":
