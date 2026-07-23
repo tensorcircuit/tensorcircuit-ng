@@ -20,6 +20,7 @@ Use this file for complex gradients, backend AD differences, and noisy-gradient 
 - Do not detect JAX PRNG keys with `try/except` around `random_split`; other backends may accept non-key tensors and silently do the wrong thing.
 - TensorFlow-style vectorization materializes a leading batch axis, so stochastic code should be rank-polymorphic rather than assuming single-example tensor ranks.
 - Validate stochastic gradients against an exact expectation-based gradient when one exists, and scale tolerances with shot noise instead of using a backend-independent hard threshold.
+- For importance-reweighted path gradients, the log-score identity ``weight * (dweight / weight)`` is invalid when a sampled path factor is zero. Do not merely regularize the denominator: retain a finite direct-derivative fallback for zero-factor paths, and test it with a deterministic path ensemble whose exact gradient is nonzero at the singular point.
 
 ## Loss shape requirements
 

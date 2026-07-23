@@ -1,4 +1,5 @@
 .tmp
+examples/challenge_suite/CHALLENGE_SUITE.md
 data
 .conda
 docker/Dockerfile-image
