@@ -66,6 +66,49 @@ def test_full_trace():
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_entropy_stability_and_ad(backend):
+    # entropy() must stay finite on the default complex64 backend: eigh can
+    # return eigenvalues slightly above 1, and the (1 - lbd) * log(1 - lbd + eps)
+    # term then hits log(negative)/log(0). The eps floor is also below float32
+    # machine epsilon, so under jit 0 * log(0) = NaN unless the 0*log(0)=0
+    # convention is applied explicitly. Verifies clip + where are AD/jit-safe.
+    N = 6
+    hc = (
+        tc.fgs.FGSSimulator.hopping(1.0, 0, 1, N)
+        + tc.fgs.FGSSimulator.hopping(1.0, 2, 3, N)
+        + tc.fgs.FGSSimulator.hopping(1.0, 4, 5, N)
+        + tc.fgs.FGSSimulator.sc_pairing(1.2, 0, 1, N)
+        + tc.fgs.FGSSimulator.sc_pairing(1.2, 2, 3, N)
+        + tc.fgs.FGSSimulator.chemical_potential(0.3, 0, N)
+        - tc.fgs.FGSSimulator.chemical_potential(0.3, 1, N)
+    )
+    c = tc.fgs.FGSSimulator(N, hc=hc)
+    s = c.entropy([0, 1, 2])
+    assert np.isfinite(s)
+    # ~ln(2): one bit of entanglement, sanity bound
+    assert 0.6 < float(np.real(s)) < 0.8
+
+    # pure-state (product) limit: eigenvalues hit 0/1 exactly -> entropy 0,
+    # must remain finite (the boundary that produced NaN under jit).
+    c0 = tc.fgs.FGSSimulator(N, filled=[0, 1])
+    s0 = c0.entropy([0, 1])
+    assert np.isfinite(s0)
+    assert abs(float(np.real(s0))) < 1e-5
+
+    # clip/where primitives must support jit and grad.
+    def entropy_of(t):
+        h = tc.fgs.FGSSimulator.hopping(t, 0, 1, N)
+        return tc.fgs.FGSSimulator(N, hc=h).entropy([0, 1])
+
+    if tc.backend.name != "numpy":
+        t0 = tc.backend.convert_to_tensor(0.5, "float32")
+        sjit = tc.backend.jit(entropy_of)(t0)
+        assert np.isfinite(sjit)
+        g = tc.backend.grad(entropy_of)(t0)
+        assert np.isfinite(g)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_otoc(backend, highp):
     c = tc.FGSSimulator(4, [0, 1])
     c1 = tc.fgs.FGSTestSimulator(4, [0, 1])

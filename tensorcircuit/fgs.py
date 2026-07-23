@@ -448,12 +448,20 @@ class FGSSimulator:
         m = self.get_reduced_cmatrix(subsystems_to_trace_out)  # type: ignore
         lbd, _ = backend.eigh(m)
         lbd = backend.real(lbd)
-        lbd = backend.relu(lbd)
-        #         lbd /= backend.sum(lbd)
-        eps = 1e-9
-        entropy = -backend.sum(
-            lbd * backend.log(lbd + eps) + (1 - lbd) * backend.log(1 - lbd + eps)
-        )
+        # eigh on the default complex64/float32 backend can return eigenvalues
+        # slightly above 1 (e.g. 1.0000001) for valid pure-state correlation
+        # matrices; clip to [0, 1] so the binary-entropy term stays finite.
+        lbd = backend.clip(lbd, 0.0, 1.0)
+
+        def xlogx(x: Tensor) -> Tensor:
+            # x * log(x) with the 0 * log(0) = 0 convention. The eps floor
+            # below keeps the gradient finite (d/dx[x log x] has an x/(x+eps)
+            # term that is 0/0 without it); `where` masks the 0 * -inf forward
+            # NaN that arises because eps is below float32 machine epsilon.
+            eps = 1e-9
+            return backend.where(x > 0, x * backend.log(x + eps), backend.zeros_like(x))
+
+        entropy = -backend.sum(xlogx(lbd) + xlogx(1 - lbd))
         return entropy / 2
 
     def evol_hamiltonian(self, h: Tensor) -> None:

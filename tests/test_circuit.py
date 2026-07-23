@@ -62,6 +62,36 @@ def test_measure(backend):
     assert c.measure(2)[0] in [0, 1]
 
 
+def test_measure_reference():
+    counts = {"00": 0, "11": 0}
+    for _ in range(300):
+        c = tc.Circuit(2)
+        c.H(0)
+        c.cnot(0, 1)
+        s, _ = c.measure_reference(0, 1)
+        counts[s] = counts.get(s, "other")
+        if s not in ("00", "11"):
+            counts["other"] = counts.get("other", 0) + 1
+        else:
+            counts[s] += 1
+    assert counts.get("other", 0) == 0
+
+    ps = []
+    for _ in range(500):
+        c = tc.Circuit(2)
+        c.H(0)
+        c.cnot(0, 1)
+        _, p = c.measure_reference(0, 1, with_prob=True)
+        ps.append(float(np.real(p)))
+    assert 0.45 < np.mean(ps) < 0.55
+
+    c = tc.Circuit(1)
+    c.h(0)
+    s, p = c.measure_reference(0, with_prob=True)
+    assert s in ("0", "1")
+    assert 0.4 < float(np.real(p)) < 0.6
+
+
 def test_gates_in_circuit():
     c = tc.Circuit(2, inputs=np.eye(2**2))
     c.iswap(0, 1)
@@ -1509,6 +1539,20 @@ def test_circuit_inverse(backend):
     c1 = c.inverse()
     c.append(c1)
     np.testing.assert_allclose(c.state(), inputs, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_circuit_inverse_phase_gates(backend):
+    # S and T are not self-inverse (S@S=Z, T@T=S); inverse() must route
+    # them to their named adjoints sd/td, not re-apply themselves.
+    rng = np.random.RandomState(0)
+    inputs = rng.uniform(size=[8]) + 1j * rng.uniform(size=[8])
+    inputs /= np.linalg.norm(inputs)
+    for name in ["s", "t", "sd", "td"]:
+        c = tc.Circuit(3, inputs=inputs)
+        getattr(c, name)(0)
+        c.append(c.inverse())
+        np.testing.assert_allclose(c.state(), inputs, atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])

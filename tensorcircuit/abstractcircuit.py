@@ -542,6 +542,8 @@ class AbstractCircuit:
                     "wroot",
                     "sd",
                     "td",
+                    "s",
+                    "t",
                 ]:
                     self.apply_general_gate_delayed(
                         d["gatef"], d["name"], mpo=d["mpo"]
@@ -549,6 +551,10 @@ class AbstractCircuit:
                 elif gate_n in ["sd", "td"]:
                     self.apply_general_gate_delayed(
                         getattr(gates, gate_n[:-1]), d["name"], mpo=d["mpo"]
+                    )(c, *d["index"], split=d["split"])
+                elif gate_n in ["s", "t"]:
+                    self.apply_general_gate_delayed(
+                        getattr(gates, gate_n + "d"), d["name"], mpo=d["mpo"]
                     )(c, *d["index"], split=d["split"])
                 else:
                     self.apply_general_gate_delayed(

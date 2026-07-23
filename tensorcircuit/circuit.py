@@ -790,11 +790,11 @@ class Circuit(BaseCircuit):
                 * contractor(nodes1, output_edge_order=[edge1[j], edge2[j]]).tensor
             )
             probs = backend.real(backend.diagonal(rho))
-            probs /= backend.sum(probs)
-            outcome = backend.implicit_randc(self._d, shape=1, p=probs)
+            probs = probs / backend.sum(probs)
+            outcome = backend.implicit_randc(self._d, shape=1, p=probs)[0]
 
-            sample += _ALPHABET[outcome]
-            p *= float(probs[outcome])
+            sample += _ALPHABET[int(outcome)]
+            p *= float(probs[int(outcome)])
 
         if with_prob:
             return sample, p

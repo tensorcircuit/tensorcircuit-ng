@@ -145,3 +145,21 @@ def test_default_compiler():
     c1, _ = tc.compiler.simple_compiler.simple_compile(c)
     print(c1.draw())
     assert c1.gate_count() == 3
+
+
+def test_merge_same_axis_rotation():
+    c = tc.Circuit(1)
+    c.ry(0, theta=0.3)
+    c.ry(0, theta=0.4)
+    c1 = tc.compiler.simple_compiler.merge(c)
+    assert c1.gate_count() == 1
+    np.testing.assert_allclose(c.matrix(), c1.matrix(), atol=1e-7)
+
+    c = tc.Circuit(2)
+    c.cry(0, 1, theta=0.3)
+    c.cry(0, 1, theta=0.4)
+    qir = tc.compiler.simple_compiler.merge(c.to_qir())
+    merged = [q for q in qir if q["name"].startswith("cr")]
+    assert len(merged) == 1
+    assert merged[0]["name"] == "cry"
+    np.testing.assert_allclose(merged[0]["parameters"]["theta"], 0.7, atol=1e-7)
