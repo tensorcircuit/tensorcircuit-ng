@@ -23,11 +23,11 @@
     },
     {
       "route": "cutlass_4m_single",
-      "criterion": "UNKNOWN",
+      "criterion": "PASS",
       "n_cells": 9
     }
   ],
-  "overall_numerical_status": "INCONCLUSIVE",
+  "overall_numerical_status": "FAIL",
   "fail_closed_reasons": [
     "region_fused:actual-large-fused:compute-bound (spec \u00a77.2; correctness proven on small contract)",
     "cutlass_4m_single:adversarial-level:toolchain-injection-unavailable (baseline reused from Task 8)"

@@ -368,3 +368,49 @@ def test_main_writes_artifacts_with_mocked_collectors(tmp_path, monkeypatch):
     assert payload["schema_version"] == "numerical-validation-v1"
     routes = {r["route"] for r in payload["per_route"]}
     assert routes == {"planar", "grouped", "region_fused", "cutlass_4m_single"}
+
+
+def test_aggregate_cutlass_not_run_adversarial_does_not_sink():
+    """Spec §7.2 contract: cutlass criterion == PASS when its baseline cells PASS
+    and adversarial rows carry source='not_run:...' — legit NOT_RUN must NOT sink
+    overall to INCONCLUSIVE."""
+    from results._phase0.numerical import aggregate
+
+    rows = [
+        {
+            "route": "cutlass_4m_single",
+            "dtype": "C16BF",
+            "shape": (16384, 1024, 1024),
+            "level": "baseline",
+            "seed": 0,
+            "relative_l2": 1e-5,
+            "max_abs": 1e-4,
+            "max_rel": 1e-5,
+            "nan_inf": False,
+            "policy_pass": 1,
+            "source": "task8_reuse",
+        },
+        {
+            "route": "cutlass_4m_single",
+            "dtype": "C16BF",
+            "shape": (16384, 1024, 1024),
+            "level": "mixed_scale",
+            "seed": 0,
+            "relative_l2": None,
+            "max_abs": None,
+            "max_rel": None,
+            "nan_inf": False,
+            "policy_pass": 0,
+            "source": "not_run:toolchain",
+        },
+    ]
+    out = aggregate(
+        rows,
+        expected_counts={("cutlass_4m_single", "C16BF"): 1},
+        case_hashes={},
+        legit_not_run=[],
+    )
+    cutlass = [r for r in out["per_route"] if r["route"] == "cutlass_4m_single"][0]
+    assert (
+        cutlass["criterion"] == "PASS"
+    ), cutlass  # baseline PASS, adversarial not_run does not sink
