@@ -13,6 +13,11 @@ cublaslt.py / region_proto.py (zero changes to those modules).
 
 from __future__ import annotations
 
+import csv
+import hashlib
+import json
+import os
+
 import numpy as np
 
 
@@ -192,3 +197,88 @@ def aggregate(rows, expected_counts, case_hashes, legit_not_run):
         "overall_numerical_status": overall,
         "fail_closed_reasons": fail_closed_reasons,
     }
+
+
+# ---------------------------------------------------------------------------
+# Task 5: matrix constants + CSV/JSON writers (spec §6, §2)
+# ---------------------------------------------------------------------------
+
+OUT_DIR = "results/phase0"
+
+SHAPES = [
+    # (M, N, K) order — matches cublaslt_full_matrix.csv / cublaslt_planar_accuracy.csv
+    (262144, 64, 4),
+    (8388608, 2, 2),
+    (4194304, 4, 4),
+    (16384, 1024, 1024),
+    (2097152, 8, 8),
+    (524288, 32, 32),
+    (262144, 64, 64),
+    (1048576, 16, 16),
+]
+# real-gemm actual-large = aligned=1 subset (spec §2): M,N,K all 16-aligned.
+REAL_GEMM_SHAPES = [(16384, 1024, 1024), (524288, 32, 32), (262144, 64, 64), (1048576, 16, 16)]
+LEVELS = ("baseline", "mixed_scale", "cancellation")
+SEEDS = (0, 1, 2)
+DTYPES_BY_ROUTE = {
+    "planar": ("C16BF", "C32F"),
+    "grouped": ("C16BF", "C32F"),
+    "region_fused": ("c64",),
+    "cutlass_4m_single": ("C16BF",),
+}
+
+_CSV_COLUMNS = [
+    "route", "M", "N", "K", "out_dtype", "dynamic_range_level", "seed",
+    "relative_l2", "max_abs", "max_rel", "nan_inf", "n_elems",
+    "policy_pass", "reference_dtype", "source_hash",
+]
+
+
+def source_hash(route, dtype, shape, level, seed):
+    key = f"{route}|{dtype}|{shape}|{level}|{seed}"
+    return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+def write_csv(path, rows):
+    # Tolerant to partial rows (e.g. minimal test rows that only carry a subset
+    # of fields); production collectors pass the full schema. Missing numeric
+    # fields render as empty CSV cells rather than raising KeyError.
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(_CSV_COLUMNS)
+        for r in rows:
+            shape = r.get("shape")
+            if shape is not None:
+                M, N, K = shape
+            else:
+                M = r.get("M", 0)
+                N = r.get("N", 0)
+                K = r.get("K", 0)
+            route = r.get("route", "")
+            dtype = r.get("dtype", "")
+            level = r.get("level", "")
+            seed = r.get("seed", "")
+            rel_l2 = r.get("relative_l2")
+            max_abs = r.get("max_abs")
+            max_rel = r.get("max_rel")
+            sh = r.get("source_hash")
+            if not sh:
+                sh = source_hash(route, dtype, shape or (), level, seed)
+            w.writerow([
+                route, M, N, K, dtype, level, seed,
+                f"{rel_l2:.6e}" if rel_l2 is not None else "",
+                f"{max_abs:.6e}" if max_abs is not None else "",
+                f"{max_rel:.6e}" if max_rel is not None else "",
+                int(bool(r.get("nan_inf", False))),
+                r.get("n_elems", 0),
+                int(r.get("policy_pass", 0)),
+                r.get("reference_dtype", "c64"),
+                sh,
+            ])
+
+
+def write_json(path, payload):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w") as fh:
+        json.dump(payload, fh, indent=2)

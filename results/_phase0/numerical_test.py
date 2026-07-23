@@ -155,3 +155,37 @@ def test_aggregate_hash_mismatch_forces_unknown():
     rows = [_row("planar", "C16BF", (16384,1024,1024), "baseline", 0, 1e-4, 1e-2, 1e-3, False)]
     out = aggregate(rows, {("planar", "C16BF"): 1}, case_hashes={"edge_map_hash": "MISMATCH"}, legit_not_run=[])
     assert out["overall_numerical_status"] == "INCONCLUSIVE"
+
+
+import json
+import os
+import tempfile
+
+
+def test_write_csv_header_and_rows(tmp_path):
+    from results._phase0.numerical import write_csv
+
+    p = tmp_path / "nv.csv"
+    write_csv(str(p), [{"route": "planar", "M": 8, "relative_l2": 1e-4}])
+    text = p.read_text()
+    assert text.startswith("route,M,N,K,out_dtype,dynamic_range_level,seed,relative_l2,max_abs,max_rel,nan_inf,n_elems,policy_pass,reference_dtype,source_hash")
+    assert "planar" in text
+
+
+def test_write_json_roundtrip(tmp_path):
+    from results._phase0.numerical import write_json
+
+    p = tmp_path / "nv.json"
+    payload = {"schema_version": "numerical-validation-v1", "overall_numerical_status": "PASS"}
+    write_json(str(p), payload)
+    assert json.loads(p.read_text())["overall_numerical_status"] == "PASS"
+
+
+def test_shape_constants():
+    from results._phase0.numerical import SHAPES, REAL_GEMM_SHAPES, LEVELS, SEEDS
+
+    assert len(SHAPES) == 8
+    assert (16384, 1024, 1024) in SHAPES
+    assert set(REAL_GEMM_SHAPES) == {(16384,1024,1024),(524288,32,32),(262144,64,64),(1048576,16,16)}
+    assert LEVELS == ("baseline", "mixed_scale", "cancellation")
+    assert SEEDS == (0, 1, 2)
