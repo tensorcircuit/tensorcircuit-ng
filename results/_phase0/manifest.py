@@ -10,7 +10,9 @@ writes manifest.json. gonogo.py no longer writes manifest.json (Task 11 handoff)
 
 from __future__ import annotations
 
+import datetime
 import hashlib
+import json
 import os
 
 SCHEMA_VERSION = "manifest-v1"
@@ -257,3 +259,86 @@ def _collect_inputs_outputs(base):
         if h is not None:
             outputs[rel] = h
     return inputs, outputs
+
+
+def _load_json(path):
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def build_manifest(base, generated_at=None):
+    """Compose the manifest-v1 object from run_context + gonogo + validated
+    criteria + cases + inputs/outputs. Deterministic given fixed generated_at."""
+    run_ctx = _load_json(os.path.join(base, "run_context.json"))
+    gonogo = _load_json(os.path.join(base, "gonogo.json"))
+    c1_j = _load_json(os.path.join(base, "c1_judgment.json"))
+    c2_j = _load_json(os.path.join(base, "c2_judgment.json"))
+    c2_ckpt = _load_json(os.path.join(base, "c2_checkpoint_manifest.json"))
+    numerical = _load_json(os.path.join(base, "numerical_validation.json"))
+
+    gonogo_criteria = gonogo.get("criteria", {}) if isinstance(gonogo, dict) else {}
+    criteria = _presence_check(gonogo_criteria, base)
+    c2_status = _validate_c2_checkpoint(base, c2_j, c2_ckpt)
+    num_status = _validate_numerical_binding(base, numerical)
+    criteria = _apply_checkpoint_validation(criteria, c2_status, num_status)
+    # preserve criterion order from gonogo (dict preserves insertion order)
+    ordered = {k: criteria.get(k) for k in gonogo_criteria}
+    ordered.update({k: criteria[k] for k in criteria if k not in ordered})
+
+    inputs, outputs = _collect_inputs_outputs(base)
+    cases = _build_cases(c1_j, c2_j, base)
+
+    if generated_at is None:
+        generated_at = datetime.datetime.now(datetime.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "source_commit": run_ctx.get("source_commit"),
+        "dirty_worktree": run_ctx.get("dirty_worktree"),
+        "dirty_file_count": run_ctx.get("dirty_file_count"),
+        "commands": run_ctx.get("command_templates") or {},
+        "environment_hash": _hash_file(os.path.join(base, "environment.json")),
+        "criteria": ordered,
+        "route_verdict": {
+            r: (v.get("status") if isinstance(v, dict) else v)
+            for r, v in (gonogo.get("route_verdict") or {}).items()
+        },
+        "phase0_completion": gonogo.get("phase0_completion"),
+        "phase1_authorization": gonogo.get("phase1_authorization"),
+        "required_artifacts": {k: list(v) for k, v in REQUIRED_ARTIFACTS.items()},
+        "inputs": dict(sorted(inputs.items())),
+        "outputs": dict(sorted(outputs.items())),
+        "cases": cases,
+        "generated_at": generated_at,
+    }
+
+
+def main(stage_dir=None):
+    """Write results/phase0/manifest.json (or under stage_dir)."""
+    base = stage_dir or "results/phase0"
+    os.makedirs(base, exist_ok=True)
+    manifest = build_manifest(base)
+    with open(os.path.join(base, "manifest.json"), "w") as f:
+        json.dump(manifest, f, indent=2, sort_keys=True)
+    print(
+        json.dumps(
+            {
+                "schema_version": manifest["schema_version"],
+                "phase0_completion": manifest["phase0_completion"],
+                "phase1_authorization": manifest["phase1_authorization"],
+                "criteria": manifest["criteria"],
+            },
+            indent=2,
+        )
+    )
+
+
+if __name__ == "__main__":
+    main()

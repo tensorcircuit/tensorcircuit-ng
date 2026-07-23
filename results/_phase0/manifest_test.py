@@ -235,6 +235,125 @@ def test_collect_inputs_outputs_hashes_dirs(tmp_path):
     assert "c1_optimized_hlo/n24.hlo" in inputs
 
 
+def test_build_manifest_schema_and_stability(tmp_path):
+    import json
+    from results._phase0.manifest import build_manifest, SCHEMA_VERSION
+
+    # minimal but complete stage: required artifacts present + a checkpoint match
+    (tmp_path / "c1_judgment.json").write_text(
+        json.dumps({"n24_d10": {"judgment": {"status": "PASS"}, "n": 24, "depth": 10}})
+    )
+    (tmp_path / "c1_default_vs_nofusion.csv").write_text("x")
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {
+                "n24_d10_default": {
+                    "status": "UNKNOWN",
+                    "layers": {"C2_CANONICAL": "UNKNOWN"},
+                    "n": 24,
+                    "depth": 10,
+                    "fusion": "default",
+                    "artifact_paths": {
+                        "edge_map": "results/phase0/c1_c2_edge_map.json"
+                    },
+                }
+            }
+        )
+    )
+    (tmp_path / "c1_c2_edge_map.json").write_text("e")
+    (tmp_path / "c2_checkpoint_manifest.json").write_text(
+        json.dumps({"artifact_hashes": {"edge_map": "0" * 64}})
+    )  # will MISMATCH (file is 'e')
+    (tmp_path / "cublaslt_planar_capability.json").write_text("{}")
+    (tmp_path / "cublaslt_full_matrix.csv").write_text("h\n1\n")
+    (tmp_path / "cublaslt_grouped_capability.json").write_text("{}")
+    (tmp_path / "cutlass_sm120_4m.json").write_text("{}")
+    (tmp_path / "region_prototype.json").write_text("{}")
+    (tmp_path / "numerical_validation.json").write_text(
+        json.dumps({"case_binding": {"edge_map_hash": "0" * 16}})
+    )
+    (tmp_path / "contraction_shapes.csv").write_text("s")
+    (tmp_path / "c2_tileability.csv").write_text("t")
+    (tmp_path / "run_context.json").write_text(
+        json.dumps(
+            {
+                "source_commit": "abc123",
+                "dirty_worktree": False,
+                "dirty_file_count": 0,
+                "command_templates": {"gonogo": "python results/_phase0/gonogo.py"},
+            }
+        )
+    )
+    (tmp_path / "gonogo.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "gonogo-v2",
+                "criteria": {
+                    "C1": "PASS",
+                    "C2": "UNKNOWN",
+                    "C2_REGION_KERNEL": "PASS",
+                    "C3_PLANAR_CORE": "PASS",
+                    "C3_PLANAR_FULL_MATRIX": "PASS",
+                    "C3_GROUPED": "NOT_SUPPORTED",
+                    "CUTLASS_SM120_4M": "FEASIBLE_WITH_SM80_FALLBACK",
+                    "REGION_PROTOTYPE": "FEASIBLE_WITH_RECOMPUTE",
+                    "NUMERICAL": "FAIL",
+                },
+                "route_verdict": {},
+                "phase0_completion": "INCONCLUSIVE",
+                "phase1_authorization": "NOT_AUTHORIZED",
+            }
+        )
+    )
+    (tmp_path / "gonogo.md").write_text("# md")
+    (tmp_path / "environment.json").write_text("{}")
+
+    m = build_manifest(str(tmp_path), generated_at="2026-07-23T00:00:00Z")
+    assert m["schema_version"] == SCHEMA_VERSION
+    assert m["source_commit"] == "abc123"
+    assert m["dirty_worktree"] is False
+    assert m["phase0_completion"] == "INCONCLUSIVE"
+    assert m["phase1_authorization"] == "NOT_AUTHORIZED"
+    # presence + checkpoint validation applied: C2 checkpoint mismatch -> C2 UNKNOWN (already);
+    # NUMERICAL binding mismatch -> NUMERICAL UNKNOWN (was FAIL)
+    assert m["criteria"]["C2"] == "UNKNOWN"
+    assert m["criteria"]["NUMERICAL"] == "UNKNOWN"  # mismatch downgraded from FAIL
+    assert m["criteria"]["C1"] == "PASS"  # present, no checkpoint
+    assert "gonogo.json" in m["outputs"]
+    assert "manifest.json" not in m["outputs"]
+    assert m["generated_at"] == "2026-07-23T00:00:00Z"
+    # stability: same generated_at -> byte-identical JSON
+    import json as _j
+
+    m2 = build_manifest(str(tmp_path), generated_at="2026-07-23T00:00:00Z")
+    assert _j.dumps(m, sort_keys=True) == _j.dumps(m2, sort_keys=True)
+    assert {"n24_d10", "n24_d10_default"} <= set(m["cases"])
+
+
+def test_main_writes_manifest_v1(tmp_path, monkeypatch):
+    import json, os, shutil
+    from results._phase0 import manifest as M
+
+    src = "results/phase0"
+    stage = tmp_path / "phase0"
+    stage.mkdir()
+    for name in os.listdir(src):
+        s = os.path.join(src, name)
+        if os.path.isfile(s):
+            shutil.copy(s, stage / name)
+    for d in ("c1_optimized_hlo", "c1_buffer_assignment", "c1_xla_dump"):
+        sd = os.path.join(src, d)
+        if os.path.isdir(sd):
+            shutil.copytree(sd, stage / d)
+    M.main(stage_dir=str(stage))
+    m = json.load(open(stage / "manifest.json"))
+    assert m["schema_version"] == "manifest-v1"
+    assert m["criteria"]["C1"] == "PASS"
+    assert m["phase0_completion"] == "INCONCLUSIVE"
+    assert "manifest.json" not in m["outputs"]
+    assert m["source_commit"] and m["environment_hash"]
+
+
 if __name__ == "__main__":
     import sys, pytest
 
