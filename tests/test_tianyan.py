@@ -257,6 +257,20 @@ def test_result_without_explicit_state_is_completed() -> None:
     assert details["results"] == {"0": 1, "1": 1}
 
 
+def test_parse_result_emits_bits_in_ascending_qubit_order() -> None:
+    # shot[i] is the bit of qubit measure_order[i]; the bitstring must be
+    # emitted in ascending qubit-index order regardless of measure_order
+    result = {
+        "experimentTaskId": "permuted-task",
+        "resultStatus": [[2, 0], [1, 0], [1, 1]],
+    }
+    details = tianyan._parse_result(
+        result, Device.from_name("tianyan::offline-permuted")
+    )
+
+    assert details["results"] == {"01": 1, "11": 1}
+
+
 def test_topology_failure_stops_before_submission() -> None:
     platform = _FakePlatform({})
     device = Device.from_name("tianyan::hardware")

@@ -6,7 +6,7 @@ https://qc.zdxlz.com
 from collections import Counter
 from datetime import datetime
 import logging
-from typing import Any, cast, Dict, List, Optional, Sequence, Union
+from typing import Any, cast, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from .abstraction import Device, sep, Task
 from ..abstractcircuit import AbstractCircuit
@@ -111,8 +111,8 @@ def _source_to_qcis(
 
 def _validate_circuit_topology(
     circuit: AbstractCircuit,
-    graph: dict[int, set[int]],
-    available_qubits: set[int],
+    graph: Dict[int, Set[int]],
+    available_qubits: Set[int],
 ) -> None:
     """
     Raise ValueError if the circuit is incompatible with the device topology,
@@ -140,14 +140,14 @@ def _validate_circuit_topology(
 
 def _get_device_topology(
     pf: "TianYanPlatform", device_name: str
-) -> tuple[dict[int, set[int]], set[int]]:
+) -> Tuple[Dict[int, Set[int]], Set[int]]:
     """Get topology graph and available qubits from device config."""
     config = pf.download_config(machine=device_name) or {}
     overview = config.get("overview", {})
 
     # Build adjacency graph from coupler map
     coupler_map = overview.get("coupler_map", {})
-    graph: dict[int, set[int]] = {}
+    graph: Dict[int, Set[int]] = {}
     for _coupler, qubits in coupler_map.items():
         q1 = int(qubits[0][1:])  # Remove 'Q' prefix
         q2 = int(qubits[1][1:])
@@ -370,18 +370,23 @@ def _parse_result(result_item: Dict[str, Any], device: Device) -> Dict[str, Any]
 
     # Parse counts
     # Bit ordering convention verified against the TianYan simulator (2026-07):
-    # shot bits are emitted left-to-right in measure_order, matching the tc
-    # simulation convention (qubit 0 is the most significant bit).
+    # shot bits are emitted in measure_order; we re-emit them in ascending
+    # qubit-index order (qubit 0 is the most significant bit), so the counts
+    # stay correct even if the platform changes the measure_order arrangement.
     if result_status and len(result_status) > 1:
         measure_order = result_status[0]  # e.g. [0, 1]
         shots_data = result_status[1:]  # each shot is a list of bits
         total_shots = len(shots_data)
 
-        # Convert to counts dict: bitstring -> count
-        # Bits are in the order of measure_order
+        # shot[i] is the bit of qubit measure_order[i]; emit bits for qubits
+        # in ascending index order to form the bitstring
+        permutation = sorted(range(len(measure_order)), key=lambda i: measure_order[i])
         counts: Counter[str] = Counter()
         for shot in shots_data:
-            bitstring = "".join(str(b) for b in shot)
+            if len(shot) != len(permutation):
+                bitstring = "".join(str(b) for b in shot)
+            else:
+                bitstring = "".join(str(shot[i]) for i in permutation)
             counts[bitstring] += 1
         counts_dict = dict(counts)
     else:
@@ -492,7 +497,7 @@ def _standardize_properties(properties: Dict[str, Any]) -> None:
     cz_err_qubits = cz_err.get("qubit_used", [])
 
     # Build links dict: {(q1, q2): {'CZErrRate': ...}, ...}
-    links: Dict[tuple[int, int], Dict[str, Any]] = {}
+    links: Dict[Tuple[int, int], Dict[str, Any]] = {}
     for g_name, qubits in coupler_map.items():
         if len(qubits) >= 2:
             q1 = int(qubits[0][1:])  # Remove 'Q' prefix
