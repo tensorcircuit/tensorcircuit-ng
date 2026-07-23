@@ -75,9 +75,11 @@ def build():
         "package_versions": _versions(),
         "command_templates": COMMAND_TEMPLATES,
         "runner_note": (
-            "All commands run via the project WSL harness in the project conda env. The env "
-            "name, usernames, and absolute host paths are omitted by policy; package versions "
-            "+ source commit are the reproducibility fingerprint."
+            "All commands run via the project WSL harness in the project conda "
+            "env. Machine-specific strings are sanitized in tracked artifacts "
+            "(spec §3.7): conda env names -> <env>, toolchain clone dirs -> "
+            "<toolchain>, home/repo absolute paths -> <home>/<repo>. Package "
+            "versions + source commit are the reproducibility fingerprint."
         ),
     }
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

@@ -416,7 +416,7 @@ def analyze_frontier(n=24, depth=10, fusion="default") -> dict:
     with open(PEAK_FRONTIER_JSON, "w") as fh:
         json.dump(out, fh, indent=2)
     with open(PEAK_WINDOWS_CSV, "w", newline="") as fh:
-        wr = csv.writer(fh)
+        wr = csv.writer(fh, lineterminator="\n")
         wr.writerow(
             [
                 "window_id",

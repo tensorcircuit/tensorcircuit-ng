@@ -12,3 +12,8 @@ results/phase0/**/*.json eol=lf
 results/phase0/**/*.hlo eol=lf
 results/phase0/**/*.txt eol=lf
 results/phase0/**/*.md eol=lf
+# Phase 0 producer scripts: pin LF so OneDrive sync on Windows never smudges
+# the working copy to CRLF (which would cause content-less M phantoms after a
+# suite run).  The csv/json/hlo/txt/md patterns above cover the artifacts; this
+# covers the .py generators that Black and the test suite read/write.
+results/_phase0/*.py eol=lf

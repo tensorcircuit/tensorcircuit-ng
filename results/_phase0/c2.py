@@ -265,7 +265,7 @@ def _write_tile_csv(rows_with_class: list[tuple[dict, dict]], path: str) -> None
         "c1_large",
     ]
     with open(path, "w", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerow(header)
         for s, c in rows_with_class:
             net = c["global_bytes_eliminated"] - c["pack_bytes"]
@@ -368,7 +368,7 @@ def _backfill_c1_large_column(csv_path: str, threshold: float) -> None:
         except (ValueError, IndexError):
             continue
     with open(csv_path, "w", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerows(rows)
 
 

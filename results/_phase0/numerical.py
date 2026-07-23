@@ -449,7 +449,7 @@ def write_csv(path, rows):
     # fields render as empty CSV cells rather than raising KeyError.
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerow(_CSV_COLUMNS)
         for r in rows:
             shape = r.get("shape")

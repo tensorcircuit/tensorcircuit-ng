@@ -172,7 +172,7 @@
   "trace_status": "EXACT",
   "source_hlo": {
     "path": "results/phase0/c1_optimized_hlo/n24_d10_exp_default.hlo",
-    "sha256": "a2dba7afeae3a3bfe16dc645d44c0b1b2da4eb2623e5ac65ca5c9042fe9849be"
+    "sha256": "5879b2b41a55ed2b5b198229715efbf610d1c307675bf4043e98081da9cbd1ef"
   },
   "case_id": "n24_d10_default",
   "n": 24,
@@ -180,6 +180,6 @@
   "fusion": "default",
   "allocation_audit": {
     "path": "results/phase0/c1_buffer_assignment/n24_d10_default.json",
-    "sha256": "29004fd786ff1302ba00399602ac9e2145229898a4eba61bb70ef993997a35a2"
+    "sha256": "6ee259c9a6ecd3215454f3da7c45e594e5653e12c723608c723dcfb96f8263b5"
   }
 }

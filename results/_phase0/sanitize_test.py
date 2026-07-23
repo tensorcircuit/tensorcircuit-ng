@@ -1,0 +1,454 @@
+"""Unit tests for the unified privacy sanitizer (Task 8, spec §3.7)."""
+
+from __future__ import annotations
+
+import os
+
+import pytest
+
+from results._phase0.sanitize import (
+    sanitize_text,
+    sanitize_file,
+    rehash_c2_checkpoint,
+    rehash_numerical_binding,
+)
+
+# --- Each substitution ----------------------------------------------------
+
+
+class TestSanitizeText:
+    """Each substitution rule in sanitize_text."""
+
+    def test_home_absolute_path(self):
+        """Absolute home dir -> <home>."""
+        text = "/home/alice/miniconda3/envs/tcng/bin/nvcc"
+        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        assert "/home/alice" not in out
+        assert "<home>" in out
+
+    def test_repo_absolute_path(self):
+        """Absolute repo dir -> <repo>."""
+        text = "/mnt/e/Study/tensorcircuit-ng/results/_phase0/cpp/cutlass_4m.cu"
+        out = sanitize_text(
+            text, home="/home/alice", repo="/mnt/e/Study/tensorcircuit-ng"
+        )
+        assert "/mnt/e/Study/tensorcircuit-ng" not in out
+        assert "<repo>" in out
+        assert "<repo>/results/_phase0/cpp/cutlass_4m.cu" == out
+
+    def test_dollar_home_placeholder(self):
+        """Legacy $HOME placeholder -> <home>."""
+        text = "$HOME/miniconda3/envs/tcng/bin/nvcc"
+        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        assert "$HOME" not in out
+        assert "<home>" in out
+
+    def test_dollar_repo_placeholder(self):
+        """Legacy $REPO placeholder -> <repo>."""
+        text = "$REPO/results/_phase0/cpp/cutlass_4m.cu"
+        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        assert "$REPO" not in out
+        assert "<repo>" in out
+
+    def test_tilde_slash(self):
+        """Shell ~/ shorthand -> <home>/."""
+        text = "~/cutlass_spike/include"
+        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        assert "~" not in out
+        assert "<home>/<toolchain>/include" == out
+
+    def test_toolchain_dir(self):
+        """cutlass_spike -> <toolchain>."""
+        text = "$HOME/cutlass_spike/include/cutlass/gemm"
+        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        assert "cutlass_spike" not in out
+        assert "<toolchain>" in out
+
+    def test_env_name_tcng(self):
+        """tcng -> <env>."""
+        text = "envs/tcng/bin/nvcc"
+        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        assert "tcng" not in out
+        assert "<env>" in out
+
+    def test_env_name_nvcc_spike(self):
+        """nvcc_spike -> <env>."""
+        text = "envs/nvcc_spike/bin/nvcc"
+        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        assert "nvcc_spike" not in out
+        assert "<env>" in out
+
+
+# --- Preserve-diagnostics guarantee ---------------------------------------
+
+
+class TestPreserveDiagnostics:
+    """The sanitizer MUST preserve diagnostic semantics."""
+
+    def test_cutlass_source_file_refs_preserved(self):
+        """CUTLASS source-file references (file:line) survive intact."""
+        text = (
+            "$HOME/cutlass_spike/include/cutlass/gemm/collective/builders/"
+            "sm120_mma_builder.inl(80): error: static assertion failed"
+        )
+        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        assert "sm120_mma_builder.inl(80)" in out
+        assert "error: static assertion failed" in out
+
+    def test_mma_sm120_ref_preserved(self):
+        """mma_sm120.hpp:47 reference survives."""
+        text = "$HOME/cutlass_spike/include/cute/arch/mma_sm120.hpp(47): error"
+        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        assert "mma_sm120.hpp(47)" in out
+        assert "error" in out
+
+    def test_f8f6f4_error_text_preserved(self):
+        """F8F6F4 collective limit error text survives."""
+        text = (
+            'static assertion failed with "SM120 TmaWarpSpecialized builder '
+            'currently only supports F8F6F4 MMA."'
+        )
+        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        assert "F8F6F4" in out
+        assert "SM120 TmaWarpSpecialized builder currently only supports" in out
+
+    def test_cuda_arch_gate_preserved(self):
+        """__CUDA_ARCH__==1000 gate text survives."""
+        text = "Sm100 device MMA gated by __CUDA_ARCH__==1000"
+        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        assert "__CUDA_ARCH__==1000" in out
+
+    def test_sm100_blocker_preserved(self):
+        """kErrorInternal + cudaFuncSetAttribute text survives."""
+        text = (
+            "Sm100 initialize failed: kErrorInternal -- cudaFuncSetAttribute on "
+            "device_kernel<Sm100GemmKernel> fails on sm_120"
+        )
+        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        assert "kErrorInternal" in out
+        assert "cudaFuncSetAttribute" in out
+        assert "Sm100GemmKernel" in out
+
+    def test_relative_paths_within_repo_preserved(self):
+        """Relative paths within the repo (after <repo>) survive."""
+        text = "$REPO/results/_phase0/cpp/cutlass_4m.cu"
+        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        assert "<repo>/results/_phase0/cpp/cutlass_4m.cu" == out
+
+    def test_line_numbers_preserved(self):
+        """Line numbers in compiler diagnostics survive."""
+        text = "$HOME/cutlass_spike/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning"
+        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        assert "sm100_static_tile_scheduler.hpp(53)" in out
+        assert "warning" in out
+
+    def test_full_blocker_string_round_trip(self):
+        """A realistic blocker string is sanitized without losing diagnostics."""
+        raw = (
+            "Error building extension 'cutlass_4m_sm120': [1/2] "
+            "$HOME/miniconda3/envs/tcng/bin/nvcc -MD -MF cutlass_4m.cuda.o.d "
+            "-I$HOME/cutlass_spike/include "
+            "-c $REPO/results/_phase0/cpp/cutlass_4m.cu -o cutlass_4m.cuda.o\n"
+            "$HOME/cutlass_spike/include/cutlass/gemm/collective/builders/"
+            "sm120_mma_builder.inl(80): error: static assertion failed with "
+            '"SM120 TmaWarpSpecialized builder currently only supports F8F6F4 MMA."\n'
+            "$HOME/cutlass_spike/include/cute/arch/mma_sm120.hpp(47): error: "
+            '"No MMA matches SM120_16x8x32_TN for given data types."\n'
+            "3 errors detected in the compilation of "
+            '"$REPO/results/_phase0/cpp/cutlass_4m.cu".'
+        )
+        out = sanitize_text(raw, home="/home/alice", repo="/repo")
+        # Private strings gone.
+        assert "tcng" not in out
+        assert "cutlass_spike" not in out
+        assert "nvcc_spike" not in out
+        assert "$HOME" not in out
+        assert "$REPO" not in out
+        assert "/home/alice" not in out
+        # Diagnostics preserved.
+        assert "sm120_mma_builder.inl(80)" in out
+        assert "mma_sm120.hpp(47)" in out
+        assert "F8F6F4" in out
+        assert "SM120_16x8x32_TN" in out
+        assert "3 errors detected" in out
+        assert "<repo>/results/_phase0/cpp/cutlass_4m.cu" in out
+
+
+# --- sanitize_file --------------------------------------------------------
+
+
+class TestSanitizeFile:
+    """sanitize_file in-place sanitization + CRLF normalization."""
+
+    def test_sanitize_file_removes_private_strings(self, tmp_path):
+        p = tmp_path / "test.txt"
+        p.write_text("$HOME/cutlass_spike/include\n", newline="")
+        assert sanitize_file(str(p)) is True
+        content = p.read_text()
+        assert "$HOME" not in content
+        assert "cutlass_spike" not in content
+        assert "<home>/<toolchain>/include" in content
+
+    def test_sanitize_file_noop_when_clean(self, tmp_path):
+        p = tmp_path / "clean.txt"
+        p.write_text("<home>/<toolchain>/include\nno private strings\n", newline="")
+        assert sanitize_file(str(p)) is False
+
+    def test_sanitize_file_normalizes_crlf(self, tmp_path):
+        p = tmp_path / "crlf.txt"
+        p.write_bytes(b"clean line\r\nanother\r\n")
+        assert sanitize_file(str(p)) is True
+        assert b"\r\n" not in p.read_bytes()
+        assert b"\n" in p.read_bytes()
+
+    def test_sanitize_file_preserves_diagnostics(self, tmp_path):
+        p = tmp_path / "diag.txt"
+        p.write_text(
+            "$HOME/cutlass_spike/include/cutlass/gemm/collective/builders/"
+            "sm120_mma_builder.inl(80): error: F8F6F4\n",
+            newline="",
+        )
+        sanitize_file(str(p))
+        content = p.read_text()
+        assert "sm120_mma_builder.inl(80)" in content
+        assert "F8F6F4" in content
+
+
+# --- rehash_c2_checkpoint -------------------------------------------------
+
+
+class TestRehashC2Checkpoint:
+    """rehash_c2_checkpoint updates hashes after sanitization."""
+
+    def test_rehash_updates_source_hlo_hash(self, tmp_path):
+        """After sanitizing the HLO file, the checkpoint hash is updated."""
+        import hashlib
+        import json
+
+        base = str(tmp_path)
+        # Create a sanitized HLO file.
+        hlo_content = "HLO with <repo>/tensorcircuit/backends/jax_backend.py\n"
+        hlo_path = os.path.join(base, "c1_optimized_hlo", "n24_d10_exp_default.hlo")
+        os.makedirs(os.path.dirname(hlo_path))
+        with open(hlo_path, "w") as fh:
+            fh.write(hlo_content)
+
+        # Create a buffer-assignment file.
+        ba_content = "buffer-assignment with <repo>/tensorcircuit\n"
+        ba_path = os.path.join(base, "c1_xla_dump", "n24_d10_default", "ba.txt")
+        os.makedirs(os.path.dirname(ba_path))
+        with open(ba_path, "w") as fh:
+            fh.write(ba_content)
+
+        # Create c2_judgment.json with artifact_paths.
+        c2j = {
+            "n24_d10_default": {
+                "artifact_paths": {
+                    "source_hlo": "results/phase0/c1_optimized_hlo/n24_d10_exp_default.hlo",
+                    "buffer_assignment": "results/phase0/c1_xla_dump/n24_d10_default/ba.txt",
+                }
+            }
+        }
+        with open(os.path.join(base, "c2_judgment.json"), "w") as fh:
+            json.dump(c2j, fh)
+
+        # Create c2_checkpoint_manifest.json with stale hashes.
+        ckpt = {
+            "artifact_hashes": {
+                "source_hlo": "stale_hash_0000",
+                "buffer_assignment": "stale_hash_0001",
+            }
+        }
+        with open(os.path.join(base, "c2_checkpoint_manifest.json"), "w") as fh:
+            json.dump(ckpt, fh)
+
+        # Rehash.
+        assert rehash_c2_checkpoint(base) is True
+
+        # Verify hashes updated.
+        with open(os.path.join(base, "c2_checkpoint_manifest.json")) as fh:
+            updated = json.load(fh)
+        expected_hlo = hashlib.sha256(hlo_content.encode()).hexdigest()
+        expected_ba = hashlib.sha256(ba_content.encode()).hexdigest()
+        assert updated["artifact_hashes"]["source_hlo"] == expected_hlo
+        assert updated["artifact_hashes"]["buffer_assignment"] == expected_ba
+
+    def test_rehash_noop_when_hashes_match(self, tmp_path):
+        """When ALL hashes already match, rehash returns False."""
+        import hashlib
+        import json
+
+        base = str(tmp_path)
+
+        # Create all C2 checkpoint source files with correct hashes.
+        files = {
+            "c1_optimized_hlo/n24_d10_exp_default.hlo": "clean HLO\n",
+            "c1_xla_dump/n24_d10_default/ba.txt": "clean BA\n",
+            "c1_buffer_assignment/n24_d10_default.json": "clean audit\n",
+            "c1_c2_edge_map.json": "clean edge\n",
+            "c2_peak_frontier.json": "clean frontier\n",
+            "region_prototype.json": "clean proto\n",
+            "c2_judgment.json": '{"n24_d10_default": {}}',
+        }
+        for rel, content in files.items():
+            full = os.path.join(base, rel)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w") as fh:
+                fh.write(content)
+
+        c2j = {
+            "n24_d10_default": {
+                "artifact_paths": {
+                    "source_hlo": "results/phase0/c1_optimized_hlo/n24_d10_exp_default.hlo",
+                    "buffer_assignment": "results/phase0/c1_xla_dump/n24_d10_default/ba.txt",
+                    "audit": "results/phase0/c1_buffer_assignment/n24_d10_default.json",
+                    "edge_map": "results/phase0/c1_c2_edge_map.json",
+                    "peak_frontier": "results/phase0/c2_peak_frontier.json",
+                    "prototype": "results/phase0/region_prototype.json",
+                }
+            }
+        }
+        with open(os.path.join(base, "c2_judgment.json"), "w") as fh:
+            json.dump(c2j, fh)
+
+        # Compute correct hashes for all keys.
+        correct_hashes = {}
+        for key, rel in [
+            ("source_hlo", "c1_optimized_hlo/n24_d10_exp_default.hlo"),
+            ("buffer_assignment", "c1_xla_dump/n24_d10_default/ba.txt"),
+            ("allocation_audit", "c1_buffer_assignment/n24_d10_default.json"),
+            ("edge_map", "c1_c2_edge_map.json"),
+            ("peak_frontier", "c2_peak_frontier.json"),
+            ("prototype", "region_prototype.json"),
+            ("c2_judgment", "c2_judgment.json"),
+        ]:
+            with open(os.path.join(base, rel), "rb") as fh:
+                correct_hashes[key] = hashlib.sha256(fh.read()).hexdigest()
+
+        ckpt = {"artifact_hashes": correct_hashes}
+        with open(os.path.join(base, "c2_checkpoint_manifest.json"), "w") as fh:
+            json.dump(ckpt, fh)
+
+        assert rehash_c2_checkpoint(base) is False
+
+
+# --- rehash_numerical_binding ---------------------------------------------
+
+
+class TestRehashNumericalBinding:
+    """rehash_numerical_binding updates case_binding hashes after sanitization."""
+
+    def test_rehash_updates_edge_map_hash(self, tmp_path):
+        """After c1_c2_edge_map.json is regenerated, the binding hash is updated."""
+        import hashlib
+        import json
+
+        base = str(tmp_path)
+        edge_content = '{"edge": "sanitized <repo>"}'
+        with open(os.path.join(base, "c1_c2_edge_map.json"), "w") as fh:
+            fh.write(edge_content)
+        with open(os.path.join(base, "region_prototype.json"), "w") as fh:
+            fh.write('{"proto": 1}')
+        with open(os.path.join(base, "contraction_shapes.csv"), "w") as fh:
+            fh.write("M,N,K\n16,16,16\n")
+
+        nv = {
+            "case_binding": {
+                "edge_map_hash": "stale_hash_0000",
+                "prototype_hash": hashlib.sha256(b'{"proto": 1}').hexdigest()[:16],
+                "contraction_shapes_hash": hashlib.sha256(
+                    b"M,N,K\n16,16,16\n"
+                ).hexdigest()[:16],
+            }
+        }
+        with open(os.path.join(base, "numerical_validation.json"), "w") as fh:
+            json.dump(nv, fh)
+
+        assert rehash_numerical_binding(base) is True
+
+        with open(os.path.join(base, "numerical_validation.json")) as fh:
+            updated = json.load(fh)
+        expected = hashlib.sha256(edge_content.encode()).hexdigest()[:16]
+        assert updated["case_binding"]["edge_map_hash"] == expected
+
+    def test_rehash_noop_when_hashes_match(self, tmp_path):
+        """When all case_binding hashes match, rehash returns False."""
+        import hashlib
+        import json
+
+        base = str(tmp_path)
+        edge_content = '{"edge": "clean"}'
+        proto_content = '{"proto": 1}'
+        shapes_content = "M,N,K\n16,16,16\n"
+        for rel, content in [
+            ("c1_c2_edge_map.json", edge_content),
+            ("region_prototype.json", proto_content),
+            ("contraction_shapes.csv", shapes_content),
+        ]:
+            with open(os.path.join(base, rel), "w") as fh:
+                fh.write(content)
+
+        nv = {
+            "case_binding": {
+                "edge_map_hash": hashlib.sha256(edge_content.encode()).hexdigest()[:16],
+                "prototype_hash": hashlib.sha256(proto_content.encode()).hexdigest()[
+                    :16
+                ],
+                "contraction_shapes_hash": hashlib.sha256(
+                    shapes_content.encode()
+                ).hexdigest()[:16],
+            }
+        }
+        with open(os.path.join(base, "numerical_validation.json"), "w") as fh:
+            json.dump(nv, fh)
+
+        assert rehash_numerical_binding(base) is False
+
+
+# --- LF pin regression (Task 8: kill OneDrive CRLF phantoms) ---------------
+
+
+_REPO_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+# The two CSVs that historically drifted to content-less M (CRLF) after every
+# non-GPU suite run (brief: "this has failed twice before, be rigorous").
+_PHANTOM_CSVS = (
+    "results/phase0/c1_c2_edge_map.csv",
+    "results/phase0/c2_peak_windows.csv",
+)
+
+
+class TestLFPinRegression:
+    """Lock in the LF pin so the OneDrive CRLF phantom stays dead.
+
+    Root fix (brief deliverable 5): ``.gitattributes`` pins ``eol=lf`` for
+    ``results/phase0/**/*.{csv,json,hlo,txt,md}`` (one line per extension --
+    gitattributes has no ``{a,b}`` brace expansion) AND every CSV generator
+    writes with ``lineterminator="\\n"`` / ``newline="\\n"`` so the working-copy
+    bytes are LF even before git normalizes.  These tests guard both halves.
+    """
+
+    def test_gitattributes_pins_lf_for_phantom_csvs(self):
+        """``git check-attr eol`` reports ``lf`` for both phantom CSVs."""
+        import subprocess
+
+        for rel in _PHANTOM_CSVS:
+            out = subprocess.check_output(
+                ["git", "check-attr", "eol", rel],
+                cwd=_REPO_ROOT,
+                text=True,
+            )
+            assert (
+                "eol: lf" in out
+            ), f"gitattributes does not pin eol=lf for {rel}:\n{out}"
+
+    def test_phantom_csvs_have_no_crlf_bytes(self):
+        """On-disk phantom CSVs carry no CRLF (generator writes LF)."""
+        for rel in _PHANTOM_CSVS:
+            full = os.path.join(_REPO_ROOT, *rel.split("/"))
+            with open(full, "rb") as fh:
+                content = fh.read()
+            assert (
+                b"\r\n" not in content
+            ), f"{rel} contains CRLF bytes (OneDrive phantom regressed)"

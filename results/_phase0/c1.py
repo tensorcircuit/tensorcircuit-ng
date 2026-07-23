@@ -176,8 +176,10 @@ def measure_case(n, depth, theta_seed=0.7, disable_fusion=False, repeats=3):
             + f"# as_text error: {repr(e)[:200]}\n"
             + str(compiled.compiler_ir(dialect="stablehlo"))
         )
-    with open(hlo_path, "w") as fh:
-        fh.write(hlo_text or "")
+    with open(hlo_path, "w", newline="\n") as fh:
+        from results._phase0.sanitize import sanitize_text
+
+        fh.write(sanitize_text(hlo_text or ""))
 
     ba_path = f"{OUT_DIR}/c1_buffer_assignment/n{n}_d{depth}_exp_{fm}.txt"
     os.makedirs(os.path.dirname(ba_path), exist_ok=True)
@@ -381,7 +383,7 @@ def _append_csv_row(path, header, row):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     new = (not os.path.exists(path)) or os.path.getsize(path) == 0
     with open(path, "a", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         if new:
             w.writerow(header)
         w.writerow(row)
@@ -411,7 +413,7 @@ def upsert_csv_row(path, row, columns, key_cols=None):
     ]
     kept.append({c: row.get(c, "") for c in columns})
     with open(path, "w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=columns)
+        w = csv.DictWriter(fh, fieldnames=columns, lineterminator="\n")
         w.writeheader()
         for e in kept:
             w.writerow({c: e.get(c, "") for c in columns})

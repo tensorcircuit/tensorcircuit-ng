@@ -474,7 +474,7 @@ def run_matrix(shapes, out_dir="results/phase0"):
 
 def _write_csv(path, header, rows):
     with open(path, "w", newline="") as f:
-        w = csv.writer(f)
+        w = csv.writer(f, lineterminator="\n")
         w.writerow(header)
         w.writerows(rows)
 

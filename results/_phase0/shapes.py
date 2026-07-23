@@ -336,7 +336,7 @@ def write_shapes_csv(rows, path=SHAPES_CSV_PATH):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     new = (not os.path.exists(path)) or os.path.getsize(path) == 0
     with open(path, "a", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         if new:
             w.writerow(CSV_COLUMNS)
         for r in rows:

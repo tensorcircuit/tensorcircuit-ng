@@ -454,11 +454,11 @@ def run(
     import csv
 
     with open(f"{out_dir}/region_prototype_accuracy.csv", "w", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerow(["seed", "relative_l2", "max_rel", "n_seeds"])
         w.writerow(["worst", worst_rel_l2, worst_max_rel, len(seeds)])
     with open(f"{out_dir}/region_prototype_memory.csv", "w", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerow(
             [
                 "path",
@@ -469,7 +469,7 @@ def run(
         )
         w.writerow(["anchor", materialized_peak, fused_peak, peak_saved])
     with open(f"{out_dir}/region_prototype_bench.csv", "w", newline="") as fh:
-        w = csv.writer(fh)
+        w = csv.writer(fh, lineterminator="\n")
         w.writerow(
             ["path", "materialized_latency_ms", "registers_per_thread", "occupancy_pct"]
         )

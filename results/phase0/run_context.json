@@ -1,8 +1,8 @@
 {
   "schema_version": "run-context-v1",
-  "source_commit": "ba83506a211a57ea039e2f7f43b82f70e258dd21",
+  "source_commit": "205899678c0de72e9ff180ab357a973bf7e1112e",
   "dirty_worktree": true,
-  "dirty_file_count": 65,
+  "dirty_file_count": 77,
   "package_versions": {
     "jax": "0.6.2",
     "jaxlib": "0.6.2",
@@ -26,5 +26,5 @@
     "gonogo": "python results/_phase0/gonogo.py",
     "manifest": "python results/_phase0/manifest.py"
   },
-  "runner_note": "All commands run via the project WSL harness in the project conda env. The env name, usernames, and absolute host paths are omitted by policy; package versions + source commit are the reproducibility fingerprint."
+  "runner_note": "All commands run via the project WSL harness in the project conda env. Machine-specific strings are sanitized in tracked artifacts (spec \u00a73.7): conda env names -> <env>, toolchain clone dirs -> <toolchain>, home/repo absolute paths -> <home>/<repo>. Package versions + source commit are the reproducibility fingerprint."
 }
