@@ -275,9 +275,9 @@ def _c3_planar_full_matrix_status(path, contraction_shapes_path=None):
       * aligned matches the recomputed ``m%16==n%16==k%16==0`` invariant
       * (M,N,K) bound to contraction_shapes.csv (no shape drift)
       * algorithm-column legality: algo_count / first_algo_id /
-        workspace_bytes are integers, in range (algo_count>=0,
-        workspace_bytes>=0), and consistent with status (ok<->algo_count>=1;
-        no-algo<->algo_count==0 + first_algo_id==-1)
+        workspace_bytes are integers, in range, and consistent with status
+        (ok: algo_count>=1 + first_algo_id>=0 + 0<=workspace_bytes<=cap;
+        no-algo: algo_count==0 + first_algo_id==-1 + workspace_bytes==0)
       * status='no-algo' allowed ONLY on cublaslt.full_matrix_no_algo_policy()
         cells (explicit 8-cell policy, not error-swallowing)
 
@@ -325,7 +325,7 @@ def _c3_planar_full_matrix_status(path, contraction_shapes_path=None):
     expected_keys = set(_cublaslt.full_matrix_expected_keys(expected_shapes))
     no_algo_policy = _cublaslt.full_matrix_no_algo_policy()
     header = list(_cublaslt._FULL_MATRIX_HEADER)
-    ws_cap_names = {c[0] for c in _cublaslt.FULL_MATRIX_WS_CAPS}
+    ws_cap_bytes = dict(_cublaslt.FULL_MATRIX_WS_CAPS)
 
     try:
         with open(path, newline="") as f:
@@ -358,7 +358,7 @@ def _c3_planar_full_matrix_status(path, contraction_shapes_path=None):
         # dtype / workspace-cap / op token legality
         if od not in _cublaslt.FULL_MATRIX_OUT_DTYPES:
             return _UNKNOWN
-        if ws not in ws_cap_names:
+        if ws not in ws_cap_bytes:
             return _UNKNOWN
         if op not in _cublaslt.FULL_MATRIX_OPS:
             return _UNKNOWN
@@ -375,12 +375,18 @@ def _c3_planar_full_matrix_status(path, contraction_shapes_path=None):
         status = rec["status"]
         if status not in _cublaslt.FULL_MATRIX_STATUS_TOKENS:
             return _UNKNOWN
-        # algorithm-column legality (Task 5 algorithm-status check):
-        # algo_count / first_algo_id / workspace_bytes must be integers, in
-        # range, and consistent with the row's status. Any violation ->
-        # UNKNOWN (fail-closed, never PASS). The producer (run_full_matrix)
-        # writes ok<->algo_count>=1 and no-algo<->algo_count==0 +
-        # first_algo_id==-1; the reader enforces that contract here.
+        # algorithm-column legality (Task 5 algorithm-status check +
+        # nongpu-rereview §3.8 residual checks): algo_count / first_algo_id /
+        # workspace_bytes must be integers, in range, and consistent with the
+        # row's status. Any violation -> UNKNOWN (fail-closed, never PASS).
+        # The producer (run_full_matrix) writes:
+        #   ok      -> algo_count>=1, first_algo_id>=0, 0<=workspace<=cap
+        #   no-algo -> algo_count==0, first_algo_id==-1, workspace==0
+        # The reader enforces that contract here, INCLUDING the three §3.8
+        # residual checks the prior reader missed: ok rows must carry a real
+        # (non-sentinel) first_algo_id and a workspace within the selected
+        # ws_cap; no-algo rows must carry workspace==0 (a no-algo cell with
+        # nonzero workspace is a forged/swallowed error, not a PASS).
         try:
             algo_count = int(rec["algo_count"])
             first_algo_id = int(rec["first_algo_id"])
@@ -389,10 +395,19 @@ def _c3_planar_full_matrix_status(path, contraction_shapes_path=None):
             return _UNKNOWN  # non-integer algorithm column
         if algo_count < 0 or workspace_bytes < 0:
             return _UNKNOWN  # out-of-range algorithm column
-        if status == "ok" and algo_count < 1:
-            return _UNKNOWN  # "ok" must have found >=1 algorithm
-        if status == "no-algo" and (algo_count != 0 or first_algo_id != -1):
-            return _UNKNOWN  # no-algo must be zero-algo with sentinel id
+        if status == "ok":
+            if algo_count < 1:
+                return _UNKNOWN  # "ok" must have found >=1 algorithm
+            if first_algo_id < 0:
+                return _UNKNOWN  # ok must carry a real algo id, not the -1 sentinel
+            # workspace must not exceed the selected ws_cap (§3.8)
+            if workspace_bytes > ws_cap_bytes[ws]:
+                return _UNKNOWN  # workspace exceeds the selected cap
+        elif status == "no-algo":
+            if algo_count != 0 or first_algo_id != -1:
+                return _UNKNOWN  # no-algo must be zero-algo with sentinel id
+            if workspace_bytes != 0:
+                return _UNKNOWN  # no-algo must report zero workspace
         # explicit no-algo policy: a no-algo OUTSIDE the policy set is a real
         # coverage gap (broken sweep / cuBLASLt regression), not a PASS.
         if status == "no-algo" and key not in no_algo_policy:
