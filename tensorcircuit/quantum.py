@@ -2470,7 +2470,7 @@ def entropy(rho: Union[Tensor, QuOperator], eps: Optional[float] = None) -> Tens
         eps = 1e-12
     elif eps is None and eps_env is not None:
         eps = 10 ** (-int(eps_env))
-    rho += eps * backend.cast(backend.eye(rho.shape[-1]), rho.dtype)  # type: ignore
+    rho = rho + eps * backend.cast(backend.eye(rho.shape[-1]), rho.dtype)  # type: ignore
     lbd = backend.real(backend.eigh(rho)[0])
     lbd = backend.relu(lbd)
     lbd /= backend.sum(lbd)
@@ -2899,17 +2899,22 @@ def trace_distance(rho: Tensor, rho0: Tensor, eps: float = 1e-12) -> Tensor:
 @partial(op2tensor, op_argnums=(0, 1))
 def fidelity(rho: Tensor, rho0: Tensor) -> Tensor:
     """
-    Return fidelity scalar between two states rho and rho0.
+    Return the squared fidelity scalar between two states rho and rho0.
 
     .. math::
 
-        \\operatorname{Tr}(\\sqrt{\\sqrt{rho} rho_0 \\sqrt{rho}})
+        \\left( \\operatorname{Tr}\\left[\\sqrt{\\sqrt{rho} rho_0 \\sqrt{rho}}\\right] \\right)^2
+
+    Note
+    ----
+    This returns the squared Uhlmann fidelity ``F**2``, not ``F`` itself.
+    For the unsquared fidelity, take ``backend.sqrt`` of the result.
 
     :param rho: The density matrix in form of Tensor.
     :type rho: Tensor
     :param rho0: The density matrix in form of Tensor.
     :type rho0: Tensor
-    :return: The fidelity scalar between ``rho`` and ``rho0``.
+    :return: The squared fidelity scalar between ``rho`` and ``rho0``.
     :rtype: Tensor
     """
     rhosqrt = backend.sqrtmh(rho)

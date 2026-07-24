@@ -545,6 +545,10 @@ def ode_evol_local(
     :rtype: Tensor
     """
 
+    # TODO(@refraction-ray): support qudits (d != 2). The site count below uses
+    # log2 and the body relies on `backend.reshape2` (hardcoded `[2]*n`), so
+    # this path is qubit-only.
+
     n = int(np.log2(backend.shape_tuple(initial_state)[-1]) + 1e-7)
     l = len(index)
 
@@ -680,6 +684,8 @@ def evol_local(
     :rtype: Circuit
     """
     s = c.state()
+    # TODO(@refraction-ray): qubit-only; see `ode_evol_local` for the qudit
+    # rework needed here (log2 site counting).
     n = int(np.log2(s.shape[-1]) + 1e-7)
     if isinstance(t, float):
         t = backend.stack([0.0, t])
@@ -761,10 +767,8 @@ def chebyshev_evol(
         return ((hamiltonian @ psi) - b * psi) / a
 
     # Handle edge case where no evolution is needed.
-    if k == 0:
-        # The phase factor still applies even for zero evolution of the series part.
-        phase = backend.exp(-1j * b * t)
-        return phase * backend.zeros_like(initial_state)
+    if k < 1:
+        raise ValueError("k (number of Chebyshev terms) must be >= 1.")
 
     # --- 2. Calculate Chebyshev Expansion Coefficients ---
     k_indices = backend.arange(k)

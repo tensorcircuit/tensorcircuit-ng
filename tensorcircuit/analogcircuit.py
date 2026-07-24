@@ -50,7 +50,9 @@ class AnalogCircuit:
 
         :param nqubits: The number of qubits in the circuit.
         :type nqubits: int
-        :param dim: The local Hilbert space dimension per site. Qudit is supported for 2 <= d <= 36.
+        :param dim: The local Hilbert space dimension per site. Currently only
+            ``dim=2`` (qubits) is supported; passing other values raises
+            ``ValueError``.
         :type dim: If None, the dimension of the circuit will be `2`, which is a qubit system.
         :param inputs: If not None, the initial state of the circuit is taken as ``inputs``
             instead of :math:`\vert 0 \rangle^n` qubits, defaults to None.
@@ -62,7 +64,20 @@ class AnalogCircuit:
         :type split: Optional[Dict[str, Any]]
         """
         self.num_qubits, self._nqubits = nqubits, nqubits
-        self.dim = 2**self.num_qubits
+        # TODO(@refraction-ray): support qudits (d != 2) in AnalogCircuit. The
+        # analog-block solvers in `tensorcircuit.timeevol` (`ode_evol_local`/
+        # `ode_evol_global`) and `backend.reshape2` are hardcoded to qubit
+        # dimension (log2 site counting, `[2]*n` reshapes), so a non-qubit `dim`
+        # crashes deep in `state()` rather than here.
+
+        if dim is not None and dim != 2:
+            raise ValueError(
+                "AnalogCircuit currently supports only qubits (dim=2); got "
+                f"dim={dim}. Qudit analog-digital hybrid evolution is not yet "
+                "implemented."
+            )
+        self._d = 2 if dim is None else dim
+        self.dim = self._d**self.num_qubits
         if inputs is None:
             self.inputs = np.zeros([self.dim])
             self.inputs[0] = 1.0

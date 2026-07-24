@@ -23,6 +23,17 @@ def test_analog_circuit_init(jaxb):
     print(ac.effective_circuit)
 
 
+def test_analog_circuit_qudit_rejected(jaxb):
+    # AnalogCircuit does not yet support qudits: the analog-block solvers in
+    # `timeevol` are qubit-only (log2 / reshape2). Construction with d != 2 must
+    # fail fast instead of crashing deep in state() later.
+    with pytest.raises(ValueError):
+        tc.AnalogCircuit(2, dim=3)
+    # qubit (d=2 and default) still constructs fine.
+    assert tc.AnalogCircuit(2).num_qubits == 2
+    assert tc.AnalogCircuit(2, dim=2).num_qubits == 2
+
+
 def test_analog_circuit_digital_gates(jaxb):
     # Test that digital gates can be applied to the analog circuit
     ac = tc.AnalogCircuit(2)

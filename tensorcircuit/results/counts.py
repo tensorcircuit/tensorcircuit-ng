@@ -176,6 +176,8 @@ def kl_divergence(c1: ct, c2: ct) -> float:
     c2 = normalized_count(c2)  # type: ignore
     kl = 0
     for k, v in c1.items():
+        if v == 0:
+            continue
         kl += v * (np.log(v) - np.log(c2.get(k, eps)))
     return kl
 

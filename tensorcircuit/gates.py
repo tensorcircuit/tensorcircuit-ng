@@ -432,6 +432,7 @@ def matrix_for_gate(gate: Gate, tol: float = 1e-6) -> Tensor:
     t = gate.tensor
     t = backend.reshapem(t)
     t = backend.numpy(t)
+    t = backend.copy(t)
     t.real[abs(t.real) < tol] = 0.0
     t.imag[abs(t.imag) < tol] = 0.0
     return t

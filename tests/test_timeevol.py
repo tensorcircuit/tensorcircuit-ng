@@ -752,6 +752,16 @@ def test_chebyshev_evol_basic(backend, highp, sparse):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_chebyshev_evol_k_zero_rejects(backend, highp):
+    # k=0 used to silently return the zero vector; it must now raise.
+    h = tc.gates._z_matrix * 0.0  # type: ignore
+    psi0 = tc.backend.convert_to_tensor(np.array([1.0, 0.0], dtype=complex))
+    bounds = (1.0, -1.0)
+    with pytest.raises(ValueError):
+        tc.timeevol.chebyshev_evol(h, psi0, 0.0, bounds, 0, 1)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
 def test_chebyshev_evol_mvp(backend, highp):
     """Test chebyshev_evol and spectral-bound estimation with an MVP callable."""
     h = tc.backend.cast(tc.gates.z().tensor, tc.dtypestr)

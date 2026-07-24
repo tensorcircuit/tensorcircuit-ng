@@ -87,6 +87,15 @@ def test_kl():
     assert counts.kl_divergence(a, a) == 0
 
 
+def test_kl_zero_key():
+    # a zero-probability key in c1 must contribute 0 (0*log(0/p)=0),
+    # not nan via 0*(-inf).
+    a = {"00": 0, "01": 2}
+    b = {"00": 1, "01": 1}
+    val = counts.kl_divergence(a, b)
+    assert np.isfinite(val)
+
+
 def test_expectation():
     assert counts.expectation(d, [0, 1]) == -5 / 9
     assert counts.expectation(d, None, [[1, -1], [1, 0], [1, 1]]) == -5 / 9
@@ -153,6 +162,14 @@ def test_readout_masks():
     )
 
 
+def test_readout_masks_missing_basis_raises():
+    # qubit 0 is always '0' across masks ['00','01'] -> cannot calibrate its
+    # '1' basis, must raise instead of silently producing NaN in the cal matrix.
+    mit = ReadoutMit(execute=run)
+    with pytest.raises(ValueError):
+        mit.cals_from_system([0, 1], shots=8192, method="local", masks=["00", "01"])
+
+
 def test_readout_expv():
     nqubit = 4
     c = tc.Circuit(nqubit)
@@ -210,6 +227,28 @@ def test_readout_expv():
     mit_value1 = mit.expectation(raw_count, z=list(range(nqubit)), method="inverse")
 
     np.testing.assert_allclose(idea_value, mit_value1, atol=1e-1)
+
+
+def test_readout_expv_diagonal_op_local():
+    # local=True + z=None + diagonal_op path used to raise TypeError at
+    # `range(diagonal_op)`; verify it now runs and matches the z= path.
+    nqubit = 2
+    c = tc.Circuit(nqubit)
+    c.H(0)
+    c.cnot(0, 1)
+
+    raw_count = run([c], 100000)[0]
+    cal_qubits = [0, 1]
+
+    mit = ReadoutMit(execute=run)
+    mit.cals_from_system(cal_qubits, shots=100000, method="local")
+    via_z = mit.expectation(raw_count, z=[0, 1], method="inverse")
+    via_op = mit.expectation(
+        raw_count,
+        diagonal_op=[[1, -1], [1, -1]],
+        method="inverse",
+    )
+    np.testing.assert_allclose(via_op, via_z, atol=1e-6)
 
 
 def test_M3():

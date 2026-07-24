@@ -344,6 +344,16 @@ def renyi_entropy_2(snapshots: Tensor, sub: Optional[Sequence[int]] = None) -> T
 
     :return second order Renyi entropy: shape = ()
     :rtype: Tensor
+
+    .. note::
+
+        The estimator ``tr = sum pp[x,y] * (-2)**(-h)`` is a signed sum that
+        only converges to a positive ``Tr(rho**2)`` with sufficient snapshots.
+        When ``ns``/``repeat`` is too small (or the subsystem is near-maximally
+        mixed, so the true value is ~= 0), finite-sample noise can drive ``tr``
+        to zero or negative, and this function returns ``NaN``/``+inf``. This
+        is the correct "estimate failed" signal — increase ``ns``/``repeat``
+        rather than interpreting such a return as a finite entropy.
     """
     if sub is not None:
         snapshots = slice_sub(snapshots, sub)

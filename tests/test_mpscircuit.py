@@ -390,6 +390,25 @@ def test_circuits(backend, dtype):
     do_test_mpo_explicit()
 
 
+def test_mps_quvector_fallback_qudit(highp, npb):
+    # A non-MPS QuVector over a qudit state hits the wavefunction_to_tensors
+    # fallback in MPSCircuit.__init__; that fallback must forward dim_phys=self._d
+    # so the qudit (d=3) is decomposed with the right local dimension.
+    d = 3
+    n = 2
+    rng = np.random.RandomState(0)
+    psi = rng.rand(d**n) + 0j
+    psi = psi / np.linalg.norm(psi)
+    psi_t = tc.backend.convert_to_tensor(psi)
+    qv = tc.quantum.QuVector.from_tensor(
+        tc.backend.reshape(psi_t, [d] * n), list(range(n))
+    )
+    mps = tc.MPSCircuit(n, dim=d, wavefunction=qv)
+    w = tc.backend.numpy(mps.wavefunction())
+    np.testing.assert_allclose(np.sort(w), np.sort(tc.backend.numpy(psi_t)), atol=1e-10)
+    assert len(mps.get_tensors()) == n
+
+
 @pytest.mark.parametrize(
     "backend, dtype", [(lf("tfb"), lf("highp")), (lf("jaxb"), lf("highp"))]
 )

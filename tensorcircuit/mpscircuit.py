@@ -147,7 +147,7 @@ class MPSCircuit(AbstractCircuit):
                     logger.warning(repr(e))
                     wavefunction = wavefunction.eval()
                     tensors = self.wavefunction_to_tensors(
-                        wavefunction, split=self.split
+                        wavefunction, dim_phys=self._d, split=self.split
                     )
             else:  # full wavefunction
                 tensors = self.wavefunction_to_tensors(

@@ -324,6 +324,14 @@ class ReadoutMit:
                             elif s[i] == ans and ans == "1":
                                 error11n += bs[s]
 
+                    if error00d == 0 or error11d == 0:
+                        missing = "0" if error00d == 0 else "1"
+                        raise ValueError(
+                            f"Qubit {i} is never prepared in basis state "
+                            f"'{missing}' across the supplied masks; cannot "
+                            f"calibrate its readout error. Provide masks that "
+                            f"cover both '0' and '1' for every calibrated qubit."
+                        )
                     readout_single = np.array(
                         [
                             [error00n / error00d, 1 - error11n / error11d],
@@ -822,8 +830,7 @@ class ReadoutMit:
 
             if z is None:
                 diagonal_op = [
-                    diagonal_op[i] @ inv_single_qubit_cals[i]
-                    for i in range(diagonal_op)
+                    diagonal_op[i] @ inv_single_qubit_cals[i] for i in range(n)
                 ]
             else:
                 diagonal_op = [

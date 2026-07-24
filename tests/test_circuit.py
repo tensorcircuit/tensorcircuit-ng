@@ -1892,6 +1892,23 @@ def test_general_kraus_with_prob(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("npb")])
+def test_general_kraus_negative_weight_stability(backend):
+    # A Kraus operator whose contraction yields a tiny negative weight
+    # (complex64/float32 roundoff) must not produce NaN. The guard mirrors
+    # `_unitary_kraus_template`: negative/zero weights are treated as noise.
+    c = tc.Circuit(1)
+    c.x(0)
+    # Force a path where weights come from roundoff by using a near-singular
+    # Kraus set; verify finiteness rather than exact probabilities.
+    kraus = [
+        np.array([[1.0, 0.0], [0.0, 0.0]]),
+        np.array([[0.0, 0.0], [0.0, 1.0]]),
+    ]
+    r = c.general_kraus(kraus, 0, status=0.3)
+    assert np.all(np.isfinite(tc.backend.real(r)))
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("npb")])
 def test_circuit_copy(backend):
     c = tc.Circuit(2)
     c.h(0)

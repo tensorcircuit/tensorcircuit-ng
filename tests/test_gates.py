@@ -168,3 +168,11 @@ def test_rxx_gate():
     c2.exp1(0, 2, theta=0.5 / 2, unitary=tc.gates._yy_matrix)
     c2.exp1(0, 1, theta=-0.5 / 2, unitary=tc.gates._zz_matrix)
     np.testing.assert_allclose(c1.state(), c2.state(), atol=1e-5)
+
+
+def test_matrix_for_gate_no_mutation(npb):
+    g = tc.gates.ry(np.pi)
+    before = tc.backend.copy(g.tensor)
+    _ = tc.gates.matrix_for_gate(g)
+    after = g.tensor
+    assert np.array_equal(before, after)
