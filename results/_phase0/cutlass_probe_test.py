@@ -22,6 +22,28 @@ def test_discover_paths_uses_env_vars(monkeypatch):
     )  # not validated here; build validates
 
 
+def test_discover_paths_fails_fast_without_cutlass_root(monkeypatch):
+    """Spec §3.9 / plan §10: missing CUTLASS_ROOT -> fail fast (no
+    machine-specific default path inferred)."""
+    import cutlass_probe
+
+    monkeypatch.delenv("CUTLASS_ROOT", raising=False)
+    monkeypatch.setenv("CUDA_HOME", "/fake/cuda")
+    with pytest.raises(RuntimeError, match="CUTLASS_ROOT"):
+        cutlass_probe.discover_paths()
+
+
+def test_discover_paths_fails_fast_without_cuda_home(monkeypatch):
+    """Spec §3.9 / plan §10: missing CUDA_HOME -> fail fast (no
+    machine-specific default path inferred)."""
+    import cutlass_probe
+
+    monkeypatch.setenv("CUTLASS_ROOT", "/fake/cutlass")
+    monkeypatch.delenv("CUDA_HOME", raising=False)
+    with pytest.raises(RuntimeError, match="CUDA_HOME"):
+        cutlass_probe.discover_paths()
+
+
 def test_build_extension_signature_exists():
     import cutlass_probe
 
@@ -42,7 +64,7 @@ def _gpu_ready():
         return False
 
 
-@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + nvcc_spike + CUTLASS_ROOT")
+@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + CUDA_HOME + CUTLASS_ROOT")
 def test_build_extension_compiles_and_loads():
     import cutlass_probe
 
@@ -76,7 +98,7 @@ def test_c64_reference_matches_numpy_complex():
     np.testing.assert_allclose(ImC, C.imag, rtol=1e-5, atol=1e-5)
 
 
-@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + nvcc_spike + CUTLASS_ROOT")
+@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + CUDA_HOME + CUTLASS_ROOT")
 def test_single_4m_sm80_correctness_real_gemm():
     import cutlass_probe
 
@@ -118,7 +140,7 @@ def test_sm100_compile_failure_falls_back(monkeypatch):
     assert calls["n"] == 1
 
 
-@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + nvcc_spike + CUTLASS_ROOT")
+@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + CUDA_HOME + CUTLASS_ROOT")
 def test_sm100_attempt_runs_or_falls_back():
     import cutlass_probe
 
@@ -165,7 +187,7 @@ def test_sm120_compile_failure_falls_back(monkeypatch):
     assert calls["n"] == 1
 
 
-@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + nvcc_spike + CUTLASS_ROOT")
+@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + CUDA_HOME + CUTLASS_ROOT")
 def test_sm120_attempt_runs_or_falls_back():
     import cutlass_probe
 
@@ -176,7 +198,7 @@ def test_sm120_attempt_runs_or_falls_back():
     assert r["correctness"]["gate_pass"] is True
 
 
-@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + nvcc_spike + CUTLASS_ROOT")
+@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + CUDA_HOME + CUTLASS_ROOT")
 def test_single_4m_sm80_has_resource_and_latency():
     import cutlass_probe
 
@@ -211,7 +233,7 @@ def test_load_grouped_shapes_filters_real_gemm(monkeypatch, tmp_path):
     assert (2, 2, 2) not in ms  # skinny dropped
 
 
-@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + nvcc_spike + CUTLASS_ROOT")
+@pytest.mark.skipif(not _gpu_ready(), reason="needs GPU + CUDA_HOME + CUTLASS_ROOT")
 def test_run_grouped_returns_valid_status():
     """Grouped GEMM either runs+passes correctness, or returns a clean
     NOT_SUPPORTED/BLOCKED — all three are legitimate verdicts per spec §9."""

@@ -10,8 +10,16 @@ Substitutions (order matters -- longer/more-specific first):
   2. repo dir  (absolute path)    -> ``<repo>``
   3. ``$HOME`` / ``~/`` / bare ``~`` -> ``<home>``   (existing placeholders / shell shorthand)
   4. ``$REPO``                     -> ``<repo>``
-  5. toolchain clone dirs          -> ``<toolchain>``  (e.g. ``cutlass_spike``)
-  6. conda env names               -> ``<env>``        (e.g. ``tcng``, ``nvcc_spike``)
+  5. toolchain clone dirs          -> ``<toolchain>``
+  6. conda env names               -> ``<env>``
+  7. caller ``redact`` mapping     -> (extra replacements, applied last)
+
+Private name tokens (env names, toolchain clone dir names) are extracted
+DYNAMICALLY at call time from ``CONDA_PREFIX`` / ``CUDA_HOME`` /
+``CUTLASS_ROOT`` (basenames), never hardcoded as module constants (spec
+§3.9, AGENTS.md: do not list real env/toolchain names in source). An
+optional ``redact`` mapping / CLI ``--redact OLD:NEW`` flag adds
+caller-supplied replacements on top of the dynamic set.
 
 PRESERVES diagnostic semantics: CUTLASS source-file references
 (``sm120_mma_builder.inl:80``, ``mma_sm120.hpp:47``), relative file
@@ -34,13 +42,50 @@ def _repo_root() -> str:
     return os.path.dirname(os.path.dirname(_HERE))
 
 
-# Conda env names used in the project's isolated spike toolchains.
-# These are private environment names that must not appear in tracked
-# artifacts (spec §3.7).
-_ENV_NAMES = ("tcng", "nvcc_spike")
+def _conda_env_name(path: str) -> str | None:
+    """Return the conda env name when *path* is inside a ``.../envs/<name>`` dir.
 
-# Toolchain clone dir names (the CUTLASS source checkout used for probing).
-_TOOLCHAIN_DIRS = ("cutlass_spike",)
+    Returns ``None`` for empty paths or paths not under a conda ``envs/``
+    directory, so a non-conda ``CUDA_HOME`` (e.g. ``/usr/local/cuda``) is NOT
+    mis-redacted as an env name (avoids touching the generic word ``cuda``).
+    Both ``/`` and ``\\`` separators are accepted (Windows conda paths).
+    """
+    if not path:
+        return None
+    parts = path.replace("\\", "/").split("/")
+    for i in range(len(parts) - 1):
+        if parts[i] == "envs" and parts[i + 1]:
+            return parts[i + 1]
+    return None
+
+
+def _dynamic_private_names() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Extract ``(env_names, toolchain_dirs)`` dynamically from the runtime env.
+
+    * env_names: conda env basenames from ``CONDA_PREFIX`` and ``CUDA_HOME``
+      (only when ``CUDA_HOME`` points inside a conda ``envs/`` dir) ->
+      replaced with ``<env>``.
+    * toolchain_dirs: basename of ``CUTLASS_ROOT`` (the CUTLASS source clone)
+      -> replaced with ``<toolchain>``.
+
+    No real env/toolchain names are hardcoded (spec §3.9, AGENTS.md);
+    extraction is purely structural. Returns empty tuples when the env vars
+    are unset (e.g. CI without the toolchain), in which case only the
+    home/repo/``$HOME``/``$REPO`` substitutions apply -- re-running sanitize
+    on already-placeholdered artifacts stays a no-op (idempotent).
+    """
+    env_names: list[str] = []
+    for var in ("CONDA_PREFIX", "CUDA_HOME"):
+        name = _conda_env_name(os.environ.get(var, ""))
+        if name and name not in env_names:
+            env_names.append(name)
+    toolchain_dirs: list[str] = []
+    cutlass_root = os.environ.get("CUTLASS_ROOT", "")
+    if cutlass_root:
+        base = os.path.basename(os.path.normpath(cutlass_root))
+        if base and base not in toolchain_dirs:
+            toolchain_dirs.append(base)
+    return tuple(env_names), tuple(toolchain_dirs)
 
 
 def sanitize_text(
@@ -48,10 +93,15 @@ def sanitize_text(
     *,
     home: str | None = None,
     repo: str | None = None,
-    env_names: tuple[str, ...] = _ENV_NAMES,
-    toolchain_dirs: tuple[str, ...] = _TOOLCHAIN_DIRS,
+    env_names: tuple[str, ...] | None = None,
+    toolchain_dirs: tuple[str, ...] | None = None,
+    redact: dict[str, str] | None = None,
 ) -> str:
     """Return *text* with machine-specific strings normalized.
+
+    Private env/toolchain names are extracted dynamically from the runtime
+    env when ``env_names`` / ``toolchain_dirs`` are not supplied (spec §3.9);
+    callers may pass explicit tuples (tests use fictional names).
 
     Parameters
     ----------
@@ -64,9 +114,14 @@ def sanitize_text(
         The repository root absolute path to replace.  Defaults to
         two levels up from this module.
     env_names
-        Conda env names to replace with ``<env>``.
+        Conda env names to replace with ``<env>``.  Defaults to the
+        dynamic extraction from ``CONDA_PREFIX`` / ``CUDA_HOME``.
     toolchain_dirs
         Toolchain clone dir names to replace with ``<toolchain>``.
+        Defaults to the dynamic extraction from ``CUTLASS_ROOT``.
+    redact
+        Optional extra ``{old: new}`` replacements applied last
+        (wired to the CLI ``--redact OLD:NEW`` flag).
 
     Returns
     -------
@@ -76,17 +131,26 @@ def sanitize_text(
 
     Examples
     --------
-    >>> sanitize_text("/home/alice/miniconda3/envs/tcng/bin/nvcc",
-    ...               home="/home/alice", repo="/repo")
+    >>> sanitize_text("/home/alice/miniconda3/envs/example-env-alpha/bin/nvcc",
+    ...               home="/home/alice", repo="/repo",
+    ...               env_names=("example-env-alpha",))
     '<home>/miniconda3/envs/<env>/bin/nvcc'
-    >>> sanitize_text("$HOME/cutlass_spike/include/cutlass/gemm/collective/"
-    ...               "builders/sm120_mma_builder.inl(80): error")
+    >>> sanitize_text("$HOME/example-toolchain-beta/include/cutlass/gemm/"
+    ...               "collective/builders/sm120_mma_builder.inl(80): error",
+    ...               home="/home/alice", repo="/repo",
+    ...               toolchain_dirs=("example-toolchain-beta",))
     '<home>/<toolchain>/include/cutlass/gemm/collective/builders/sm120_mma_builder.inl(80): error'
     """
     if home is None:
         home = os.path.expanduser("~")
     if repo is None:
         repo = _repo_root()
+    if env_names is None or toolchain_dirs is None:
+        dyn_env, dyn_tc = _dynamic_private_names()
+        if env_names is None:
+            env_names = dyn_env
+        if toolchain_dirs is None:
+            toolchain_dirs = dyn_tc
 
     # 1. Absolute home dir (most specific -- do first so path fragments
     #    don't leave env-name-looking remnants).
@@ -100,23 +164,27 @@ def sanitize_text(
     text = text.replace("~/", "<home>/")
     # 4. Legacy $REPO placeholder.
     text = text.replace("$REPO", "<repo>")
-    # 5. Toolchain clone dirs (e.g. cutlass_spike -> <toolchain>). Replace the
-    #    already-bracketed form (<cutlass_spike>) FIRST so a pre-wrapped token
-    #    does not double-wrap into <<toolchain>>; then the bare form.
+    # 5. Toolchain clone dirs (basename of CUTLASS_ROOT) -> <toolchain>. Replace
+    #    the already-bracketed form (<name>) FIRST so a pre-wrapped token does
+    #    not double-wrap into <<toolchain>>; then the bare form.
     for tc in toolchain_dirs:
         text = text.replace(f"<{tc}>", "<toolchain>")
         text = text.replace(tc, "<toolchain>")
-    # 6. Conda env names (e.g. tcng, nvcc_spike -> <env>). Same bracketed-first
-    #    ordering: <nvcc_spike> -> <env> (not <<env>>), then bare nvcc_spike.
+    # 6. Conda env names (basename of CONDA_PREFIX / CUDA_HOME) -> <env>. Same
+    #    bracketed-first ordering: <name> -> <env> (not <<env>>), then bare.
     #    This is NOT a blanket << -> < collapse -- only the known private
     #    tokens are touched, so C++ template/shift syntax survives intact.
     for env in env_names:
         text = text.replace(f"<{env}>", "<env>")
         text = text.replace(env, "<env>")
+    # 7. Caller-supplied extra redactions (CLI --redact), applied last.
+    if redact:
+        for old, new in redact.items():
+            text = text.replace(old, new)
     return text
 
 
-def sanitize_file(path: str) -> bool:
+def sanitize_file(path: str, *, redact: dict[str, str] | None = None) -> bool:
     """Sanitize a file in-place, also normalizing CRLF -> LF.
 
     Returns ``True`` if the file content changed (private strings removed
@@ -126,7 +194,7 @@ def sanitize_file(path: str) -> bool:
         original = fh.read()
     # Normalize CRLF -> LF (kill OneDrive phantoms) then sanitize.
     normalized = original.replace("\r\n", "\n")
-    sanitized = sanitize_text(normalized)
+    sanitized = sanitize_text(normalized, redact=redact)
     if sanitized != original:
         with open(path, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(sanitized)
@@ -276,3 +344,43 @@ def rehash_numerical_binding(base: str = "results/phase0") -> bool:
         with open(nv_path, "w", newline="") as fh:
             json.dump(nv, fh, indent=2)
     return modified
+
+
+# --- CLI (optional extra --redact replacements, spec §3.9) -----------------
+
+
+def _cli(argv: list[str] | None = None) -> int:
+    """``python -m results._phase0.sanitize [--redact OLD:NEW]... <file>...``
+
+    Sanitize files in-place using dynamic env extraction plus any
+    caller-supplied ``--redact OLD:NEW`` pairs (repeatable). The extra
+    redactions are applied after the dynamic home/repo/env/toolchain
+    substitutions. Returns 0 on success.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="sanitize",
+        description="In-place privacy sanitizer for Phase 0 artifacts.",
+    )
+    parser.add_argument("files", nargs="+", help="files to sanitize in-place")
+    parser.add_argument(
+        "--redact",
+        action="append",
+        default=[],
+        metavar="OLD:NEW",
+        help="extra OLD->NEW replacement (repeatable); applied after dynamic extraction",
+    )
+    args = parser.parse_args(argv)
+    redact: dict[str, str] = {}
+    for pair in args.redact:
+        if ":" in pair:
+            old, new = pair.split(":", 1)
+            redact[old] = new
+    for f in args.files:
+        sanitize_file(f, redact=redact or None)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_cli())

@@ -1,5 +1,5 @@
 // Task 8 CUTLASS SM120 4M kernels. Built via torch.utils.cpp_extension
-// (CUDA_HOME=nvcc_spike, -I<CUTLASS_ROOT>/include). Entry points added per task.
+// (explicit CUDA_HOME, -I<CUTLASS_ROOT>/include). Entry points added per task.
 #include <torch/extension.h>
 #include "cutlass/cutlass.h"
 

@@ -17,12 +17,24 @@ from results._phase0.sanitize import (
 
 
 class TestSanitizeText:
-    """Each substitution rule in sanitize_text."""
+    """Each substitution rule in sanitize_text (fictional names, spec §3.9)."""
+
+    # Fictional private tokens (spec §3.9: tests must NOT use real env/toolchain
+    # names). Passed explicitly so the tests do not depend on the runtime env
+    # having any particular CONDA_PREFIX/CUDA_HOME/CUTLASS_ROOT.
+    _ENV = ("example-env-alpha",)
+    _TC = ("example-toolchain-beta",)
 
     def test_home_absolute_path(self):
         """Absolute home dir -> <home>."""
-        text = "/home/alice/miniconda3/envs/tcng/bin/nvcc"
-        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        text = "/home/alice/miniconda3/envs/example-env-alpha/bin/nvcc"
+        out = sanitize_text(
+            text,
+            home="/home/alice",
+            repo="/repo",
+            env_names=self._ENV,
+            toolchain_dirs=self._TC,
+        )
         assert "/home/alice" not in out
         assert "<home>" in out
 
@@ -38,8 +50,14 @@ class TestSanitizeText:
 
     def test_dollar_home_placeholder(self):
         """Legacy $HOME placeholder -> <home>."""
-        text = "$HOME/miniconda3/envs/tcng/bin/nvcc"
-        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        text = "$HOME/miniconda3/envs/example-env-alpha/bin/nvcc"
+        out = sanitize_text(
+            text,
+            home="/home/alice",
+            repo="/repo",
+            env_names=self._ENV,
+            toolchain_dirs=self._TC,
+        )
         assert "$HOME" not in out
         assert "<home>" in out
 
@@ -52,30 +70,41 @@ class TestSanitizeText:
 
     def test_tilde_slash(self):
         """Shell ~/ shorthand -> <home>/."""
-        text = "~/cutlass_spike/include"
-        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        text = "~/example-toolchain-beta/include"
+        out = sanitize_text(
+            text,
+            home="/home/alice",
+            repo="/repo",
+            env_names=self._ENV,
+            toolchain_dirs=self._TC,
+        )
         assert "~" not in out
         assert "<home>/<toolchain>/include" == out
 
     def test_toolchain_dir(self):
-        """cutlass_spike -> <toolchain>."""
-        text = "$HOME/cutlass_spike/include/cutlass/gemm"
-        out = sanitize_text(text, home="/home/alice", repo="/repo")
-        assert "cutlass_spike" not in out
+        """example-toolchain-beta -> <toolchain>."""
+        text = "$HOME/example-toolchain-beta/include/cutlass/gemm"
+        out = sanitize_text(
+            text,
+            home="/home/alice",
+            repo="/repo",
+            env_names=self._ENV,
+            toolchain_dirs=self._TC,
+        )
+        assert "example-toolchain-beta" not in out
         assert "<toolchain>" in out
 
-    def test_env_name_tcng(self):
-        """tcng -> <env>."""
-        text = "envs/tcng/bin/nvcc"
-        out = sanitize_text(text, home="/home/alice", repo="/repo")
-        assert "tcng" not in out
-        assert "<env>" in out
-
-    def test_env_name_nvcc_spike(self):
-        """nvcc_spike -> <env>."""
-        text = "envs/nvcc_spike/bin/nvcc"
-        out = sanitize_text(text, home="/home/alice", repo="/repo")
-        assert "nvcc_spike" not in out
+    def test_env_name(self):
+        """example-env-alpha -> <env>."""
+        text = "envs/example-env-alpha/bin/nvcc"
+        out = sanitize_text(
+            text,
+            home="/home/alice",
+            repo="/repo",
+            env_names=self._ENV,
+            toolchain_dirs=self._TC,
+        )
+        assert "example-env-alpha" not in out
         assert "<env>" in out
 
 
@@ -85,43 +114,57 @@ class TestSanitizeText:
 class TestPlaceholderDoubleWrapRegression:
     """An already-angle-bracketed private token must NOT double-wrap.
 
-    Regression for the Task 8 review finding: the cutlass recipe string
-    ``CUDA_HOME=<nvcc_spike>`` was sanitized to ``CUDA_HOME=<<env>>`` because
-    the env-name substitution did a naive ``text.replace("nvcc_spike",
-    "<env>")`` on the ``nvcc_spike`` substring *inside* the existing angle
-    brackets, producing ``<`` + ``<env>`` + ``>`` = ``<<env>>``.
+    Regression for the Task 8 review finding: a bracketed private token
+    ``<example-env-alpha>`` was sanitized to ``<<env>>`` because the env-name
+    substitution did a naive ``text.replace("example-env-alpha", "<env>")`` on
+    the ``example-env-alpha`` substring *inside* the existing angle brackets,
+    producing ``<`` + ``<env>`` + ``>`` = ``<<env>>``.
 
-    The fix replaces the already-bracketed form (``<nvcc_spike>``) before the
-    bare form so both ``nvcc_spike`` and ``<nvcc_spike>`` sanitize to exactly
-    ``<env>`` (same bracketed-first ordering for ``<cutlass_spike>`` ->
+    The fix replaces the already-bracketed form (``<example-env-alpha>``)
+    before the bare form so both ``example-env-alpha`` and
+    ``<example-env-alpha>`` sanitize to exactly ``<env>`` (same
+    bracketed-first ordering for ``<example-toolchain-beta>`` ->
     ``<toolchain>``). This is NOT a blanket ``<<``->``<`` collapse -- it only
     touches the known private tokens, so legitimate C++ template/shift syntax
     (``enable_if_t<<expression>``, ``device_kernel<Sm100GemmKernel>``) is
     preserved.
     """
 
+    _ENV = ("example-env-alpha",)
+    _TC = ("example-toolchain-beta",)
+
     def test_env_name_already_bracketed(self):
-        """sanitize_text('CUDA_HOME=<nvcc_spike>') -> 'CUDA_HOME=<env>'."""
-        out = sanitize_text("CUDA_HOME=<nvcc_spike>", home="/home/alice", repo="/repo")
+        """sanitize_text('CUDA_HOME=<example-env-alpha>') -> 'CUDA_HOME=<env>'."""
+        out = sanitize_text(
+            "CUDA_HOME=<example-env-alpha>",
+            home="/home/alice",
+            repo="/repo",
+            env_names=self._ENV,
+            toolchain_dirs=self._TC,
+        )
         assert out == "CUDA_HOME=<env>"
         assert "<<" not in out
         assert ">>" not in out
 
     def test_env_name_bare_still_works(self):
-        """Bare nvcc_spike still sanitizes to <env> (no regression)."""
-        out = sanitize_text("CUDA_HOME=nvcc_spike", home="/home/alice", repo="/repo")
+        """Bare example-env-alpha still sanitizes to <env> (no regression)."""
+        out = sanitize_text(
+            "CUDA_HOME=example-env-alpha",
+            home="/home/alice",
+            repo="/repo",
+            env_names=self._ENV,
+            toolchain_dirs=self._TC,
+        )
         assert out == "CUDA_HOME=<env>"
 
-    def test_tcng_already_bracketed(self):
-        """<tcng> (the other env name) does not double-wrap."""
-        out = sanitize_text("env=<tcng>", home="/home/alice", repo="/repo")
-        assert out == "env=<env>"
-        assert "<<" not in out
-
     def test_toolchain_already_bracketed(self):
-        """<cutlass_spike> does not double-wrap into <<toolchain>>."""
+        """<example-toolchain-beta> does not double-wrap into <<toolchain>>."""
         out = sanitize_text(
-            "CUTLASS_ROOT=<cutlass_spike>", home="/home/alice", repo="/repo"
+            "CUTLASS_ROOT=<example-toolchain-beta>",
+            home="/home/alice",
+            repo="/repo",
+            env_names=self._ENV,
+            toolchain_dirs=self._TC,
         )
         assert out == "CUTLASS_ROOT=<toolchain>"
         assert "<<" not in out
@@ -163,20 +206,35 @@ class TestPlaceholderDoubleWrapRegression:
 class TestPreserveDiagnostics:
     """The sanitizer MUST preserve diagnostic semantics."""
 
+    _ENV = ("example-env-alpha",)
+    _TC = ("example-toolchain-beta",)
+
     def test_cutlass_source_file_refs_preserved(self):
         """CUTLASS source-file references (file:line) survive intact."""
         text = (
-            "$HOME/cutlass_spike/include/cutlass/gemm/collective/builders/"
+            "$HOME/example-toolchain-beta/include/cutlass/gemm/collective/builders/"
             "sm120_mma_builder.inl(80): error: static assertion failed"
         )
-        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        out = sanitize_text(
+            text,
+            home="/home/alice",
+            repo="/repo",
+            env_names=self._ENV,
+            toolchain_dirs=self._TC,
+        )
         assert "sm120_mma_builder.inl(80)" in out
         assert "error: static assertion failed" in out
 
     def test_mma_sm120_ref_preserved(self):
         """mma_sm120.hpp:47 reference survives."""
-        text = "$HOME/cutlass_spike/include/cute/arch/mma_sm120.hpp(47): error"
-        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        text = "$HOME/example-toolchain-beta/include/cute/arch/mma_sm120.hpp(47): error"
+        out = sanitize_text(
+            text,
+            home="/home/alice",
+            repo="/repo",
+            env_names=self._ENV,
+            toolchain_dirs=self._TC,
+        )
         assert "mma_sm120.hpp(47)" in out
         assert "error" in out
 
@@ -215,8 +273,17 @@ class TestPreserveDiagnostics:
 
     def test_line_numbers_preserved(self):
         """Line numbers in compiler diagnostics survive."""
-        text = "$HOME/cutlass_spike/include/cutlass/gemm/kernel/sm100_static_tile_scheduler.hpp(53): warning"
-        out = sanitize_text(text, home="/home/alice", repo="/repo")
+        text = (
+            "$HOME/example-toolchain-beta/include/cutlass/gemm/kernel/"
+            "sm100_static_tile_scheduler.hpp(53): warning"
+        )
+        out = sanitize_text(
+            text,
+            home="/home/alice",
+            repo="/repo",
+            env_names=self._ENV,
+            toolchain_dirs=self._TC,
+        )
         assert "sm100_static_tile_scheduler.hpp(53)" in out
         assert "warning" in out
 
@@ -224,22 +291,28 @@ class TestPreserveDiagnostics:
         """A realistic blocker string is sanitized without losing diagnostics."""
         raw = (
             "Error building extension 'cutlass_4m_sm120': [1/2] "
-            "$HOME/miniconda3/envs/tcng/bin/nvcc -MD -MF cutlass_4m.cuda.o.d "
-            "-I$HOME/cutlass_spike/include "
+            "$HOME/miniconda3/envs/example-env-alpha/bin/nvcc "
+            "-MD -MF cutlass_4m.cuda.o.d "
+            "-I$HOME/example-toolchain-beta/include "
             "-c $REPO/results/_phase0/cpp/cutlass_4m.cu -o cutlass_4m.cuda.o\n"
-            "$HOME/cutlass_spike/include/cutlass/gemm/collective/builders/"
+            "$HOME/example-toolchain-beta/include/cutlass/gemm/collective/builders/"
             "sm120_mma_builder.inl(80): error: static assertion failed with "
             '"SM120 TmaWarpSpecialized builder currently only supports F8F6F4 MMA."\n'
-            "$HOME/cutlass_spike/include/cute/arch/mma_sm120.hpp(47): error: "
+            "$HOME/example-toolchain-beta/include/cute/arch/mma_sm120.hpp(47): error: "
             '"No MMA matches SM120_16x8x32_TN for given data types."\n'
             "3 errors detected in the compilation of "
             '"$REPO/results/_phase0/cpp/cutlass_4m.cu".'
         )
-        out = sanitize_text(raw, home="/home/alice", repo="/repo")
+        out = sanitize_text(
+            raw,
+            home="/home/alice",
+            repo="/repo",
+            env_names=self._ENV,
+            toolchain_dirs=self._TC,
+        )
         # Private strings gone.
-        assert "tcng" not in out
-        assert "cutlass_spike" not in out
-        assert "nvcc_spike" not in out
+        assert "example-env-alpha" not in out
+        assert "example-toolchain-beta" not in out
         assert "$HOME" not in out
         assert "$REPO" not in out
         assert "/home/alice" not in out
@@ -256,16 +329,20 @@ class TestPreserveDiagnostics:
 
 
 class TestSanitizeFile:
-    """sanitize_file in-place sanitization + CRLF normalization."""
+    """sanitize_file in-place sanitization + CRLF normalization.
 
-    def test_sanitize_file_removes_private_strings(self, tmp_path):
+    Uses ``$HOME`` (always extracted dynamically via expanduser) so the file
+    tests do not depend on CONDA_PREFIX/CUDA_HOME/CUTLASS_ROOT being set;
+    env/toolchain name replacement is covered by TestSanitizeText above.
+    """
+
+    def test_sanitize_file_removes_home_path(self, tmp_path):
         p = tmp_path / "test.txt"
-        p.write_text("$HOME/cutlass_spike/include\n", newline="")
+        p.write_text("$HOME/include/path\n", newline="")
         assert sanitize_file(str(p)) is True
         content = p.read_text()
         assert "$HOME" not in content
-        assert "cutlass_spike" not in content
-        assert "<home>/<toolchain>/include" in content
+        assert "<home>/include/path" in content
 
     def test_sanitize_file_noop_when_clean(self, tmp_path):
         p = tmp_path / "clean.txt"
@@ -282,7 +359,7 @@ class TestSanitizeFile:
     def test_sanitize_file_preserves_diagnostics(self, tmp_path):
         p = tmp_path / "diag.txt"
         p.write_text(
-            "$HOME/cutlass_spike/include/cutlass/gemm/collective/builders/"
+            "$HOME/include/cutlass/gemm/collective/builders/"
             "sm120_mma_builder.inl(80): error: F8F6F4\n",
             newline="",
         )
@@ -562,14 +639,14 @@ def test_sanitize_defaults_do_not_hardcode_private_names():
     """Nongpu rereview finding 3.9: the sanitizer must NOT hardcode real env /
     toolchain names as default module constants. It must extract them
     dynamically from ``CONDA_PREFIX`` / ``CUDA_HOME`` / ``CUTLASS_ROOT`` /
-    home / repo. Current source hardcodes ``_ENV_NAMES`` and
-    ``_TOOLCHAIN_DIRS`` with real private names (sanitize.py:40,43)."""
+    home / repo. The old source hardcoded ``_ENV_NAMES`` and
+    ``_TOOLCHAIN_DIRS`` with real private names; those constants are removed."""
     from results._phase0 import sanitize
 
     env_names = getattr(sanitize, "_ENV_NAMES", ())
     toolchain_dirs = getattr(sanitize, "_TOOLCHAIN_DIRS", ())
-    # The defaults must be empty -- the sanitizer must extract names dynamically,
-    # not hardcode them as module-level constants.
+    # The defaults must be empty/absent -- the sanitizer extracts names
+    # dynamically, never as module-level constants of real private names.
     assert (
         len(env_names) == 0
     ), f"_ENV_NAMES must be empty (dynamic extraction), got {env_names!r}"
@@ -580,35 +657,34 @@ def test_sanitize_defaults_do_not_hardcode_private_names():
 
 def test_probe_sources_do_not_hardcode_private_names_from_sanitizer():
     """Nongpu rereview finding 3.9: ``cutlass_probe.py`` and
-    ``cpp/cutlass_4m.cu`` must NOT hardcode real env/toolchain names. The scan
-    patterns are read dynamically from the sanitize module's constants (while
-    they exist); the fix removes the constants so the scan becomes a no-op.
+    ``cpp/cutlass_4m.cu`` must NOT hardcode real env/toolchain names.
 
-    This test does NOT hardcode any real names -- it reads them from the
-    sanitize module (which currently hardcodes them) and checks the probe
-    sources. If the fix removes the constants, the test passes trivially."""
-    from results._phase0 import sanitize
+    Scan patterns are sourced DYNAMICALLY from the runtime env via the
+    sanitizer's own ``_dynamic_private_names`` helper (CONDA_PREFIX /
+    CUDA_HOME / CUTLASS_ROOT basenames) -- never hardcoded in this test and
+    never read from (now-removed) sanitize module constants. The scan ALWAYS
+    reads the probe source files (no early-return), so it genuinely scans
+    even when only a subset of env vars is set. (Task-0 reviewer Minor #2: the
+    old ``if not private_names: return`` trivially passed once the constants
+    were removed, without scanning probe sources.)"""
+    from results._phase0.sanitize import _dynamic_private_names
 
-    # Read the private names from the sanitize module's constants (if they
-    # exist). The fix removes these constants; while they exist, the probe
-    # sources must not contain them.
-    env_names = getattr(sanitize, "_ENV_NAMES", ())
-    toolchain_dirs = getattr(sanitize, "_TOOLCHAIN_DIRS", ())
-    private_names = tuple(env_names) + tuple(toolchain_dirs)
-    if not private_names:
-        return  # fix applied: no hardcoded names to scan for
+    env_names, toolchain_dirs = _dynamic_private_names()
+    private_names = list(env_names) + list(toolchain_dirs)
 
     tracked_sources = [
         "results/_phase0/cutlass_probe.py",
         "results/_phase0/cpp/cutlass_4m.cu",
     ]
+    # Always read every probe source file (prove the scan runs) -- NO early
+    # return, even when private_names happens to be empty.
     violations = []
     for rel in tracked_sources:
         full = os.path.join(_REPO_ROOT, *rel.split("/"))
         with open(full, encoding="utf-8", errors="replace") as fh:
             content = fh.read()
         for name in private_names:
-            if name in content:
+            if name and name in content:
                 violations.append((rel, name))
     assert not violations, (
         "tracked probe source hardcodes private names (must use dynamic "
@@ -620,8 +696,8 @@ def test_sanitize_text_supports_fictional_dynamic_names():
     """Nongpu rereview finding 3.9 (complementary GREEN pin): the sanitizer
     must support dynamic env/toolchain names (not just hardcoded ones). Verified
     with FICTIONAL names per the brief (``example-env-alpha``,
-    ``example-toolchain-beta``). This already passes on current code
-    (``sanitize_text`` accepts ``env_names`` / ``toolchain_dirs`` parameters)."""
+    ``example-toolchain-beta``). ``sanitize_text`` accepts ``env_names`` /
+    ``toolchain_dirs`` parameters for caller-supplied (test) names."""
     out = sanitize_text(
         "/home/user/envs/example-env-alpha/bin/tool "
         "-I/home/user/example-toolchain-beta/include",
@@ -634,3 +710,116 @@ def test_sanitize_text_supports_fictional_dynamic_names():
     assert "example-toolchain-beta" not in out
     assert "<env>" in out
     assert "<toolchain>" in out
+
+
+def test_dynamic_extraction_from_env_vars(monkeypatch):
+    """Spec §3.9: ``_dynamic_private_names`` extracts env/toolchain basenames
+    structurally from CONDA_PREFIX / CUDA_HOME / CUTLASS_ROOT (no hardcoded
+    names). Verified with FICTIONAL env-var paths."""
+    from results._phase0.sanitize import _conda_env_name, _dynamic_private_names
+
+    # Fictional conda env paths (under envs/) + a fictional CUTLASS_ROOT clone.
+    monkeypatch.setenv("CONDA_PREFIX", "/home/alice/miniconda3/envs/example-env-alpha")
+    monkeypatch.setenv("CUDA_HOME", "/home/alice/miniconda3/envs/example-env-gamma")
+    monkeypatch.setenv("CUTLASS_ROOT", "/home/alice/example-toolchain-beta")
+    env_names, toolchain_dirs = _dynamic_private_names()
+    assert "example-env-alpha" in env_names  # CONDA_PREFIX basename
+    assert "example-env-gamma" in env_names  # CUDA_HOME under envs/ -> env name
+    assert toolchain_dirs == ("example-toolchain-beta",)  # CUTLASS_ROOT basename
+
+    # A non-conda CUDA_HOME (e.g. /usr/local/cuda) is NOT redacted as an env
+    # name -- the structural envs/ guard avoids touching the generic "cuda".
+    assert _conda_env_name("/usr/local/cuda") is None
+    assert _conda_env_name("") is None
+
+    # sanitize_text with default env_names/toolchain_dirs (None) uses the
+    # dynamic extraction, so the fictional names redact with NO hardcoded list.
+    out = sanitize_text(
+        "/home/alice/miniconda3/envs/example-env-alpha/bin/nvcc "
+        "-I/home/alice/example-toolchain-beta/include",
+        home="/home/alice",
+        repo="/repo",
+    )
+    assert "example-env-alpha" not in out
+    assert "example-env-gamma" not in out
+    assert "example-toolchain-beta" not in out
+    assert "<env>" in out
+    assert "<toolchain>" in out
+
+
+def test_sanitize_idempotent_running_twice():
+    """Spec §3.9 / plan §10: running sanitize twice must equal once -- the
+    already-placeholdered output is a fixed point (no double-wrapping)."""
+    raw = (
+        "$HOME/example-toolchain-beta/include/envs/example-env-alpha\n"
+        "device_kernel<Sm100GemmKernel> std::enable_if_t<<expr>, void>\n"
+    )
+    kwargs = dict(
+        home="/home/alice",
+        repo="/repo",
+        env_names=("example-env-alpha",),
+        toolchain_dirs=("example-toolchain-beta",),
+    )
+    once = sanitize_text(raw, **kwargs)
+    twice = sanitize_text(once, **kwargs)
+    assert once == twice
+    # Fictional private names gone after the first pass; C++ syntax intact.
+    assert "example-env-alpha" not in once
+    assert "example-toolchain-beta" not in once
+    assert "device_kernel<Sm100GemmKernel>" in once
+    assert "enable_if_t<<expr>, void>" in once
+
+
+def test_sanitize_windows_and_linux_separators():
+    """Spec §3.9 / plan §10: both Windows backslash and Linux forward-slash
+    paths sanitize (home + toolchain/env replacement works across separators)."""
+    env_names = ("example-env-alpha",)
+    toolchain_dirs = ("example-toolchain-beta",)
+
+    # Linux forward-slash path.
+    linux = "/home/alice/example-toolchain-beta/include/envs/example-env-alpha"
+    out_linux = sanitize_text(
+        linux,
+        home="/home/alice",
+        repo="/repo",
+        env_names=env_names,
+        toolchain_dirs=toolchain_dirs,
+    )
+    assert "/home/alice" not in out_linux
+    assert "example-toolchain-beta" not in out_linux
+    assert "example-env-alpha" not in out_linux
+    assert "<home>/<toolchain>/include/envs/<env>" == out_linux
+
+    # Windows backslash path -- home root replaced; toolchain/env basenames are
+    # separator-agnostic bare tokens so they redact regardless of separator.
+    windows = "\\home\\alice\\example-toolchain-beta\\include\\envs\\example-env-alpha"
+    out_windows = sanitize_text(
+        windows,
+        home="\\home\\alice",
+        repo="\\repo",
+        env_names=env_names,
+        toolchain_dirs=toolchain_dirs,
+    )
+    assert "example-toolchain-beta" not in out_windows
+    assert "example-env-alpha" not in out_windows
+    assert "<home>" in out_windows
+    assert "<toolchain>" in out_windows
+    assert "<env>" in out_windows
+
+
+def test_sanitize_existing_artifact_is_idempotent():
+    """Spec §3.9 / plan §10: re-running the (dynamic) sanitizer on the
+    already-sanitized tracked artifact is a no-op. The existing placeholders
+    (``<env>``/``<toolchain>``/``<home>``/``<repo>``) contain no private names,
+    so dynamic extraction has nothing to replace. Verifies idempotence on the
+    current env WITHOUT regenerating the artifact (Task 7 = no regen)."""
+    artifact = os.path.join(_REPO_ROOT, "results", "phase0", "cutlass_sm120_4m.md")
+    with open(artifact, encoding="utf-8", errors="replace") as fh:
+        content = fh.read()
+    # Re-sanitize with dynamic defaults (the production path).
+    re_sanitized = sanitize_text(content)
+    assert re_sanitized == content, (
+        "re-sanitizing the existing artifact changed bytes (not idempotent); "
+        "dynamic extraction must reproduce the existing <env>/<toolchain> "
+        "placeholders so re-sanitizing is a no-op"
+    )

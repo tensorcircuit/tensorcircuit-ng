@@ -1,8 +1,9 @@
 """Task 8 CUTLASS/CuTe SM120 4M probe driver (final-remediation §11).
 
 Replaces the PlanB-T4 compile-only smoke. Compiles CUTLASS kernels in-tree
-via torch.utils.cpp_extension with an isolated nvcc_spike CUDA_HOME, runs
-them on sm_120, and aggregates a cutlass-sm120-4m-v1 capability verdict.
+via torch.utils.cpp_extension with an explicitly-configured CUDA_HOME /
+CUTLASS_ROOT, runs them on sm_120, and aggregates a cutlass-sm120-4m-v1
+capability verdict.
 """
 
 from __future__ import annotations
@@ -20,12 +21,22 @@ _CONTRACTION_SHAPES_CSV = os.path.join(
 
 
 def discover_paths() -> dict:
-    """Discover CUTLASS_ROOT, CUDA_HOME, NVCC from env (no hardcoded /home paths)."""
-    home = os.path.expanduser("~")
-    cutlass_root = os.environ.get("CUTLASS_ROOT", os.path.join(home, "cutlass_spike"))
-    cuda_home = os.environ.get(
-        "CUDA_HOME", os.path.join(home, "miniconda3", "envs", "nvcc_spike")
-    )
+    """Resolve CUTLASS_ROOT, CUDA_HOME, NVCC from the environment.
+
+    CUDA_HOME and CUTLASS_ROOT must be EXPLICITLY set -- no machine-specific
+    default paths are inferred (spec §3.9, AGENTS.md). Missing either -> fail
+    fast with a generic variable name (never a real local dir).
+    """
+    cutlass_root = os.environ.get("CUTLASS_ROOT", "")
+    cuda_home = os.environ.get("CUDA_HOME", "")
+    if not cutlass_root:
+        raise RuntimeError(
+            "CUTLASS_ROOT is not set; set it to the CUTLASS source checkout root."
+        )
+    if not cuda_home:
+        raise RuntimeError(
+            "CUDA_HOME is not set; set it to the CUDA toolkit root (with bin/nvcc)."
+        )
     nvcc = os.environ.get("NVCC", "")
     if not nvcc:
         cands = [os.path.join(cuda_home, "bin", "nvcc")]
@@ -101,9 +112,9 @@ def _cutlass_head(paths: dict) -> str:
 def build_extension(name: str = "cutlass_4m", extra_defines: list[str] | None = None):
     """Compile cpp/cutlass_4m.cu via torch.utils.cpp_extension (ext.cpp build style).
 
-    CUDA_HOME must point at a toolkit whose nvcc targets sm_120 (nvcc_spike env).
-    Returns the loadable module. `name` separates the cached sm100 build from
-    the sm80 build so a sm100 compile failure never poisons the sm80 cache.
+    CUDA_HOME must point at a toolkit whose nvcc targets sm_120. Returns the
+    loadable module. `name` separates the cached sm100 build from the sm80
+    build so a sm100 compile failure never poisons the sm80 cache.
     """
     import torch  # noqa: F401  (ensures torch + its bundled cuda runtime present)
     from torch.utils.cpp_extension import load
@@ -832,21 +843,22 @@ def write_artifacts(verdict: dict, out_dir: str) -> None:
     text = _sanitize_verdict_text(json.dumps(verdict, indent=2))
     with open(os.path.join(out_dir, "cutlass_sm120_4m.json"), "w", newline="\n") as fh:
         fh.write(text)
-    # Recipe text is also sanitized (contains nvcc_spike / ~/cutlass_spike
-    # which must be normalized to <env> / <home>/<toolchain>).
+    # Recipe text uses <env>/<toolchain>/<home> placeholder tokens directly
+    # (no real private names in source); sanitize_text leaves them stable, so
+    # re-sanitizing the artifact is a no-op (idempotent, spec §3.9).
     recipe = _sanitize_verdict_text(
         "# CUTLASS/CuTe SM120 4M capability (Task 8)\n\n"
         f"**overall:** `{verdict['overall']}`  |  "
         f"**schema:** `{verdict['schema_version']}`\n\n"
         "```\n" + text + "\n```\n\n"
         "## Toolkit recipe (reproduce)\n"
-        "1. `conda create -n nvcc_spike -c nvidia cuda-nvcc=12.8`\n"
-        "2. `conda install -n nvcc_spike -c nvidia "
+        "1. `conda create -n <env> -c nvidia cuda-nvcc=12.8`\n"
+        "2. `conda install -n <env> -c nvidia "
         "cuda-cudart-dev=12.8 cuda-cccl=12.8`\n"
         "3. `git clone --depth 1 https://github.com/NVIDIA/cutlass.git "
-        "~/cutlass_spike`\n"
-        "4. `CUDA_HOME=nvcc_spike TORCH_CUDA_ARCH_LIST=12.0 "
-        "CUTLASS_ROOT=~/cutlass_spike`\n"
+        "<home>/<toolchain>`\n"
+        "4. `CUDA_HOME=<env> TORCH_CUDA_ARCH_LIST=12.0 "
+        "CUTLASS_ROOT=<home>/<toolchain>`\n"
     )
     with open(os.path.join(out_dir, "cutlass_sm120_4m.md"), "w", newline="\n") as fh:
         fh.write(recipe)
