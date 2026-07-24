@@ -328,6 +328,71 @@ ROUTE_CAPABILITY_CRITERIA = {
 #: Ordered route names (matches ROUTE_CAPABILITY_CRITERIA keys).
 RECOMPUTE_ROUTES = tuple(ROUTE_CAPABILITY_CRITERIA)
 
+#: Required-criterion -> blocking-artifact reporting map (plan §11). Used by
+#: ``_build_blocking_artifacts`` to list the artifact(s) behind each required
+#: criterion. The 4 C2 layers (``C2_INPUT_LAYERS`` + ``C2_CANONICAL``) share the
+#: same c2_judgment.json + c2_checkpoint_manifest.json chain, so they are
+#: collapsed into a SINGLE ``C2_CANONICAL`` entry -- otherwise an undetermined
+#: C2 family would duplicate the shared chain 4x. Non-C2 criteria each map to
+#: their own artifact.
+#:
+#: Each entry is ``(label, undetermined_triggers, not_ok_criterion, artifact)``:
+#:   * ``undetermined_triggers`` -- criteria checked for UNKNOWN/NOT_RUN (rule 1).
+#:     For the C2 family, ANY layer undetermined lists the shared chain once.
+#:   * ``not_ok_criterion`` -- the single criterion checked for determined
+#:     NOT_OK at COMPLETE + all-routes-NOT_VIABLE (rule 2). For the C2 family
+#:     this is ``C2_CANONICAL`` (the rollup), whose FAIL at COMPLETE means the
+#:     whole C2 chain is definitively bad.
+#:
+#: This is the canonical criterion->artifact map for BLOCKING reporting. Both
+#: gonogo (``aggregate_two_layer``) and manifest (``build_manifest``) derive
+#: blocking through ``recompute_derived_state`` -> ``_build_blocking_artifacts``
+#: using THIS map, so they report identical blockers (DRY -- single helper,
+#: single map). manifest's ``REQUIRED_ARTIFACTS`` is a richer superset (full
+#: per-criterion file lists for presence-gating) and stays in sync because both
+#: derive from the canonical ``CRITERIA_NAMES``.
+CRITERION_BLOCKING_ARTIFACTS = (
+    (
+        "C2_CANONICAL",
+        C2_INPUT_LAYERS + ("C2_CANONICAL",),
+        "C2_CANONICAL",
+        "c2_judgment.json / c2_checkpoint_manifest.json",
+    ),
+    ("C1", ("C1",), "C1", "c1_judgment.json"),
+    (
+        "C3_PLANAR_CORE",
+        ("C3_PLANAR_CORE",),
+        "C3_PLANAR_CORE",
+        "cublaslt_planar_capability.json",
+    ),
+    (
+        "C3_PLANAR_FULL_MATRIX",
+        ("C3_PLANAR_FULL_MATRIX",),
+        "C3_PLANAR_FULL_MATRIX",
+        "cublaslt_full_matrix.csv",
+    ),
+    ("C3_GROUPED", ("C3_GROUPED",), "C3_GROUPED", "cublaslt_grouped_capability.json"),
+    (
+        "CUTLASS_SM120_4M",
+        ("CUTLASS_SM120_4M",),
+        "CUTLASS_SM120_4M",
+        "cutlass_sm120_4m.json",
+    ),
+    (
+        "CUTLASS_SM80_FALLBACK_CAPABILITY",
+        ("CUTLASS_SM80_FALLBACK_CAPABILITY",),
+        "CUTLASS_SM80_FALLBACK_CAPABILITY",
+        "cutlass_sm120_4m.json",
+    ),
+    (
+        "REGION_PROTOTYPE",
+        ("REGION_PROTOTYPE",),
+        "REGION_PROTOTYPE",
+        "region_prototype.json",
+    ),
+    ("NUMERICAL", ("NUMERICAL",), "NUMERICAL", "numerical_validation.json"),
+)
+
 
 def tri_normalize(verdict):
     """Map a canonical criterion token to a gating tri-state (§5 truth table).
@@ -434,15 +499,55 @@ def _build_reasons(criteria, route_verdict_map, completion):
 
 
 def _build_blocking_artifacts(criteria, route_verdict_map):
-    """Artifact paths whose undetermined/failed state blocks a clean GO."""
+    """Artifact paths whose undetermined/failed state blocks a clean GO
+    (plan §11 / nongpu-rereview §3.10).
+
+    Lists ONLY real blockers:
+
+      1. Artifacts causing a required criterion to be UNKNOWN/NOT_RUN
+         (UNDETERMINED) -- these keep ``phase0_completion`` INCONCLUSIVE and
+         are the real completion blockers. In the current honest state this is
+         C2 (C2_CANONICAL undetermined), REGION_PROTOTYPE and NUMERICAL.
+      2. At COMPLETE (no UNDETERMINED required criterion), if EVERY route is
+         NOT_VIABLE, the deterministic global blockers (determined NOT_OK
+         criteria) that make all routes NOT_VIABLE.
+
+    Does NOT list:
+
+      * A determined result that makes only a SINGLE route NOT_VIABLE (e.g.
+        grouped NOT_SUPPORTED sinks the grouped route but doesn't block other
+        routes or completion) -- unless COMPLETE + all routes NOT_VIABLE.
+      * A determined capability that doesn't affect completion (e.g. NUMERICAL
+        FAIL is determined and does NOT sink completion; it only sinks routes
+        via per-route numerical, so it is not a completion blocker).
+
+    The 4 C2 layers share the c2_judgment.json + c2_checkpoint_manifest.json
+    chain and are collapsed into a single C2_CANONICAL entry (via
+    ``CRITERION_BLOCKING_ARTIFACTS``) so the shared chain is not duplicated 4x.
+    """
     blocking = []
-    if tri_normalize(criteria.get("C2")) == _TRI_UNDETERMINED:
-        blocking.append("c2_judgment.json (C2_CANONICAL undetermined)")
-    if tri_normalize(criteria.get("NUMERICAL")) == _TRI_NOT_OK:
-        blocking.append("numerical_validation.json (overall=FAIL)")
-    for r, rv in route_verdict_map.items():
-        if rv["capability"] == _TRI_NOT_OK and r == "grouped":
-            blocking.append("cublaslt_grouped_capability.json (NOT_SUPPORTED)")
+    # Rule 1: artifacts for required criteria that are UNKNOWN/NOT_RUN.
+    for label, triggers, _not_ok, artifact in CRITERION_BLOCKING_ARTIFACTS:
+        if any(tri_normalize(criteria.get(c)) == _TRI_UNDETERMINED for c in triggers):
+            blocking.append(f"{artifact} ({label} undetermined)")
+    # Rule 2: at COMPLETE (no undetermined required criteria), if ALL routes
+    # are NOT_VIABLE, list the deterministic global blockers (determined
+    # NOT_OK). A single route's NOT_VIABLE is NOT a global blocker -- it
+    # doesn't block other routes or completion, so it is only surfaced here
+    # when every route is sunk.
+    if (
+        not blocking
+        and route_verdict_map
+        and all(rv["status"] == "NOT_VIABLE" for rv in route_verdict_map.values())
+    ):
+        for (
+            label,
+            _triggers,
+            not_ok_criterion,
+            artifact,
+        ) in CRITERION_BLOCKING_ARTIFACTS:
+            if tri_normalize(criteria.get(not_ok_criterion)) == _TRI_NOT_OK:
+                blocking.append(f"{artifact} ({label} NOT_OK)")
     return blocking
 
 
@@ -492,6 +597,7 @@ __all__ = [
     # §5 truth table (plan §9 Task 6)
     "ROUTE_CAPABILITY_CRITERIA",
     "RECOMPUTE_ROUTES",
+    "CRITERION_BLOCKING_ARTIFACTS",
     "TRI_OK",
     "TRI_NOT_OK",
     "TRI_UNDETERMINED",

@@ -448,13 +448,16 @@ def test_blocking_artifacts_contains_all_undetermined_not_determined_single_rout
     }
     per_route = {"planar": "FAIL", "grouped": "FAIL"}
     derived = recompute_derived_state(criteria, per_route)
-    blocking = " ".join(derived["blocking_artifacts"]).lower()
+    entries = derived["blocking_artifacts"]
     # Must list REGION_PROTOTYPE (undetermined) -- currently missing.
-    assert "region" in blocking, derived["blocking_artifacts"]
+    assert any("region_prototype.json" in e for e in entries), entries
     # Must list NUMERICAL (undetermined) -- currently missing.
-    assert "numerical" in blocking, derived["blocking_artifacts"]
-    # Must NOT list grouped NOT_SUPPORTED (determined, single-route blocker).
-    assert "grouped" not in blocking, derived["blocking_artifacts"]
+    assert any("numerical_validation.json" in e for e in entries), entries
+    # Must NOT list the determined grouped NOT_SUPPORTED (single-route blocker).
+    # Precise match on the specific artifact string (Minor #4), not a bare
+    # "grouped" substring search on the joined text (which would false-fail if
+    # a future correctly-listed entry's path/description contained "grouped").
+    assert not any("cublaslt_grouped_capability.json" in e for e in entries), entries
 
 
 if __name__ == "__main__":
