@@ -253,6 +253,8 @@ def test_cutlass_status_reads_new_two_section_structure(tmp_path):
                 },
                 "sm80_fallback_bf16_4m": {
                     "capability": "PASS",
+                    "kernel_path": "sm80_fallback",
+                    "runs": True,
                     "correctness": {"gate_pass": True},
                 },
             }
@@ -1063,6 +1065,21 @@ def test_region_proto_status_recomputes_pass_from_full_anchor_evidence(tmp_path)
         json.dumps(
             {
                 "verdict": "PASS",
+                # Real P->T->E prototype fields (Task 4 review fix finding 4):
+                # the region reader now gates PASS on the SAME intrinsic standard
+                # as c2._is_real_pte_prototype -- schema version, region
+                # producer/consumer MNK, full-E consumer, no full P/T
+                # materialized, non-reduction math. Without these the strict
+                # reader returns UNKNOWN (a GEMM->norm artifact cannot PASS).
+                "schema_version": "region-prototype-v2",
+                "region": {
+                    "producer": [4096, 16384, 1024],
+                    "consumer": [64, 1048576, 64],
+                    "dtype": "c64",
+                },
+                "math": "E = D @ transform(A@B); transform = reshape->transpose->reshape",
+                "no_full_P_materialized": True,
+                "no_full_T_materialized": True,
                 "fused_full_anchor_run": True,
                 "relative_l2": 1e-7,
                 "max_rel": 1e-7,

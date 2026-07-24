@@ -414,15 +414,16 @@ def _c3_grouped_status(path):
 
     Recompute (plan §7 4.1)::
 
-        SUPPORTED + required API/run evidence complete -> PASS
+        SUPPORTED + required API-probe evidence (cublaslt_grouped3gemm=True) -> PASS
         NOT_SUPPORTED (definitive API evidence)        -> NOT_SUPPORTED
         BLOCKED (attempted, build failed)              -> FAIL
         missing / malformed / incomplete               -> UNKNOWN / NOT_RUN
 
     NOT_SUPPORTED is a safe negative (accepted as-is). SUPPORTED is a positive
-    claim that MUST be backed by complete API evidence (the grouped-3GEMM API
-    probe present + positive, or the grouped_route actually SUPPORTED); a bare
-    ``SUPPORTED`` with no supporting evidence is an unconfirmable claim -> UNKNOWN.
+    claim that MUST be backed by the definitive grouped-3GEMM API probe
+    (``grouped_api_probe.cublaslt_grouped3gemm == True``). The self-reported
+    ``grouped_route.status == "SUPPORTED"`` ALONE is NOT a PASS signal (same
+    anti-pattern as finding 3.6 -- trusting self-reported status) -> UNKNOWN.
     NOT_RUN only when the artifact itself is absent.
     """
     if not os.path.exists(path):
@@ -439,12 +440,13 @@ def _c3_grouped_status(path):
         return "NOT_SUPPORTED"
     if status == "SUPPORTED":
         probe = data.get("grouped_api_probe") or {}
-        grouped_route = data.get("grouped_route") or {}
         api_ok = probe.get("cublaslt_grouped3gemm") is True
-        route_ok = grouped_route.get("status") == "SUPPORTED"
-        if api_ok or route_ok:
-            return _OK
-        return _UNKNOWN  # SUPPORTED claimed but API/run evidence incomplete
+        if api_ok:
+            return _OK  # definitive API-probe evidence backs the SUPPORTED claim
+        # Self-reported ``grouped_route.status`` alone (or no evidence at all)
+        # cannot confirm a SUPPORTED claim -> UNKNOWN (do not PASS on self-report;
+        # same anti-pattern as finding 3.6).
+        return _UNKNOWN
     if status == "BLOCKED":
         return _BAD  # attempted but build blocked
     return _UNKNOWN
@@ -491,24 +493,28 @@ def _cutlass_status(path):
 
 def _cutlass_evidence(data, section_key):
     """Gather raw ``kernel_path`` / ``runs`` / ``gate_pass`` evidence for a
-    CUTLASS criterion from the named two-section block (preferred) and the
-    legacy ``single_4m`` block. Returns ``(kernel_path, runs, gate_pass)`` where
+    CUTLASS criterion. Returns ``(kernel_path, runs, gate_pass)`` where
     ``runs`` / ``gate_pass`` are ``True`` / ``False`` / ``None`` (``None`` =
     absent -- the field was never recorded, distinct from an explicit ``False``).
+
+    Fix 5 (nongpu-rereview): all three fields are read from ONE consistent
+    source -- the named two-section block when it records a ``kernel_path``,
+    otherwise the legacy ``single_4m`` block as a whole. The prior per-field
+    fallback (section ``kernel_path`` + single_4m ``correctness``) could
+    cross-promote a section ``kernel_path == "sm120_native"`` with a single_4m
+    ``gate_pass`` into false evidence; this never mixes sources.
     """
     sec = data.get(section_key)
     sec = sec if isinstance(sec, dict) else {}
     s4 = data.get("single_4m")
     s4 = s4 if isinstance(s4, dict) else {}
-    kernel_path = sec.get("kernel_path")
-    if kernel_path is None:
-        kernel_path = s4.get("kernel_path")
-    runs = sec.get("runs")
-    if runs is None:
-        runs = s4.get("runs")
-    corr = sec.get("correctness")
-    if not isinstance(corr, dict):
-        corr = s4.get("correctness")
+    # Prefer the named section (canonical two-section structure); fall back to
+    # the legacy single_4m block as a WHOLE only when the section does not
+    # record a kernel_path, so all three fields come from the same block.
+    src = sec if sec.get("kernel_path") is not None else s4
+    kernel_path = src.get("kernel_path")
+    runs = src.get("runs")
+    corr = src.get("correctness")
     corr = corr if isinstance(corr, dict) else {}
     gate = corr.get("gate_pass")
     runs = bool(runs) if runs is not None else None
@@ -569,37 +575,72 @@ def _cutlass_sm80_fallback_criterion(data):
     Recomputes from RAW evidence (``kernel_path`` / ``runs`` / ``gate_pass``);
     does NOT trust ``section.capability``. The self-reported ``capability`` is a
     DIAGNOSTIC consistency check only (mismatch -> UNKNOWN). Fallback PASS must
-    prove the ACTUAL sm80 fallback path (``kernel_path == "sm80_fallback"``) --
-    evidence that the run landed on a native path is NOT cross-promoted into
-    fallback PASS.
+    prove the ACTUAL sm80 fallback path AND that it ran AND passed the
+    correctness gate -- symmetric with the native criterion
+    (``_cutlass_native_sm120_criterion``), which requires
+    ``kernel_path == "sm120_native" AND runs AND gate``. Evidence that the run
+    landed on a native path is NOT cross-promoted into fallback PASS.
 
     Recompute (plan §7 4.3)::
 
-        kernel_path present AND != sm80_fallback -> UNKNOWN (wrong actual path)
-        gate_pass True                             -> PASS (gate pass => ran)
-        kernel_path == sm80_fallback AND gate not passing -> FAIL
-        runs is False (explicitly)                 -> FAIL
-        otherwise                                  -> UNKNOWN
+        kernel_path == sm80_fallback AND runs AND gate_pass  -> PASS
+        kernel_path == sm80_fallback AND (runs is False OR gate False) -> FAIL
+        kernel_path present AND != sm80_fallback             -> UNKNOWN (wrong path)
+        otherwise (path unspecified / runs-gate incomplete)  -> UNKNOWN
     """
     if not isinstance(data, dict):
         return _UNKNOWN
     sec = data.get("sm80_fallback_bf16_4m")
     sec = sec if isinstance(sec, dict) else {}
     kernel_path, runs, gate = _cutlass_evidence(data, "sm80_fallback_bf16_4m")
-    if kernel_path is not None and kernel_path != "sm80_fallback":
-        recomputed = _UNKNOWN  # actual path is not the fallback -> no cross-promo
-    elif gate is True:
-        recomputed = _OK  # correctness gate passed => the fallback ran
-    elif kernel_path == "sm80_fallback":
-        recomputed = _BAD  # on the fallback path but the gate did not pass
-    elif runs is False:
-        recomputed = _BAD  # explicitly did not run
+    if kernel_path == "sm80_fallback" and runs is True and gate is True:
+        recomputed = _OK
+    elif kernel_path == "sm80_fallback" and (runs is False or gate is False):
+        recomputed = _BAD  # on the fallback path but the run/gate failed
     else:
-        recomputed = _UNKNOWN  # no gate evidence, path unspecified
+        # path != sm80_fallback (incl. None / sm120_native) OR path==sm80_fallback
+        # but runs/gate incomplete (None) -> no cross-promo, cannot confirm.
+        recomputed = _UNKNOWN
     self_reported = sec.get("capability")
     if self_reported is not None and self_reported != recomputed:
         return _UNKNOWN
     return recomputed
+
+
+def _region_proto_is_real_pte(data):
+    """Intrinsic P->T->E prototype gate -- shares ONE standard with
+    ``c2._is_real_pte_prototype`` (the same checks the C2 region reader gates on):
+    schema version, real region producer/consumer MNK, a full-E consumer tensor,
+    no full P/T materialized, and non-reduction math. The cross-edge MNK binding
+    (an independent edge artifact) is N/A for the single-artifact region reader,
+    so it is not duplicated here; the intrinsic fields are what distinguish a
+    real P->T->E prototype from the rejected GEMM->norm/reduction artifact
+    (final-review §3.2/§7.1). Returns True iff ``data`` is a real prototype.
+    """
+    from results._phase0 import c2 as _c2
+
+    if not isinstance(data, dict) or not data:
+        return False
+    if data.get("schema_version") != _c2.PROTO_SCHEMA:
+        return False
+    region = data.get("region") or {}
+    prod = region.get("producer")
+    cons = region.get("consumer")
+    if not (
+        isinstance(prod, list) and len(prod) == 3 and all(int(x) > 0 for x in prod)
+    ):
+        return False
+    if not (
+        isinstance(cons, list) and len(cons) == 3 and all(int(x) > 0 for x in cons)
+    ):
+        return False
+    if cons[0] * cons[1] * 8 < _c2.FULL_E_MIN_BYTES:
+        return False
+    if not (data.get("no_full_P_materialized") and data.get("no_full_T_materialized")):
+        return False
+    if any(m in str(data.get("math", "")).lower() for m in _c2._REDUCTION_MARKERS):
+        return False
+    return True
 
 
 def _region_proto_status(path):
@@ -613,10 +654,13 @@ def _region_proto_status(path):
     full-anchor region success stuck at UNKNOWN forever).
 
     PASS requires a success verdict (canonical ``PASS`` or artifact-native
-    ``FEASIBLE_WITH_RECOMPUTE`` / ``TILE_FUSION_FEASIBLE``) PLUS a fused
-    full-anchor run PLUS recomputed accuracy + resource pass PLUS a MEASURED
-    runtime peak (``peak_evidence_class == MEASURED`` + all required measured
-    fields -- the shared peak gate, identical to C2_REGION_KERNEL_FEASIBILITY).
+    ``FEASIBLE_WITH_RECOMPUTE`` / ``TILE_FUSION_FEASIBLE``) PLUS a real P->T->E
+    prototype (``_region_proto_is_real_pte`` -- the same intrinsic standard the
+    C2 reader gates on, so a GEMM->norm / no_full_P=false artifact cannot PASS
+    the region reader while UNKNOWN-ing the C2 reader) PLUS a fused full-anchor
+    run PLUS recomputed accuracy + resource pass PLUS a MEASURED runtime peak
+    (``peak_evidence_class == MEASURED`` + all required measured fields -- the
+    shared peak gate, identical to C2_REGION_KERNEL_FEASIBILITY).
     ``NOT_FEASIBLE`` -> FAIL (definitive negative); anything else -> UNKNOWN.
     """
     if not os.path.exists(path):
@@ -635,6 +679,8 @@ def _region_proto_status(path):
     # so REGION_PROTOTYPE and C2_REGION_KERNEL_FEASIBILITY use ONE standard.
     rc = _c2._recompute_conditions(data, {})
     if verdict in ("PASS", "FEASIBLE_WITH_RECOMPUTE", "TILE_FUSION_FEASIBLE"):
+        if not _region_proto_is_real_pte(data):
+            return _UNKNOWN  # not a real P->T->E prototype -> cannot PASS
         acc, res, peak = (
             rc["accuracy_pass"],
             rc["resource_pass"],
