@@ -405,7 +405,26 @@ def _c3_planar_full_matrix_status(path, contraction_shapes_path=None):
 
 
 def _c3_grouped_status(path):
-    """cublasLt grouped capability verdict (Task 7). NOT_RUN if absent."""
+    """cublasLt grouped capability verdict (Task 7 / nongpu-rereview §3.5.1).
+
+    Recomputes a CANONICAL token from the raw artifact status + evidence; never
+    returns the artifact-native ``SUPPORTED`` detail token (which
+    ``tri_normalize`` would downgrade to UNKNOWN, making real grouped success
+    un-promotable -- the false negative this reader fixes).
+
+    Recompute (plan §7 4.1)::
+
+        SUPPORTED + required API/run evidence complete -> PASS
+        NOT_SUPPORTED (definitive API evidence)        -> NOT_SUPPORTED
+        BLOCKED (attempted, build failed)              -> FAIL
+        missing / malformed / incomplete               -> UNKNOWN / NOT_RUN
+
+    NOT_SUPPORTED is a safe negative (accepted as-is). SUPPORTED is a positive
+    claim that MUST be backed by complete API evidence (the grouped-3GEMM API
+    probe present + positive, or the grouped_route actually SUPPORTED); a bare
+    ``SUPPORTED`` with no supporting evidence is an unconfirmable claim -> UNKNOWN.
+    NOT_RUN only when the artifact itself is absent.
+    """
     if not os.path.exists(path):
         return _NOT_RUN
     try:
@@ -413,9 +432,21 @@ def _c3_grouped_status(path):
             data = json.load(f)
     except (OSError, ValueError):
         return _UNKNOWN
+    if not isinstance(data, dict):
+        return _UNKNOWN
     status = (data.get("capability") or {}).get("status")
-    if status in ("SUPPORTED", "NOT_SUPPORTED"):
-        return status
+    if status == "NOT_SUPPORTED":
+        return "NOT_SUPPORTED"
+    if status == "SUPPORTED":
+        probe = data.get("grouped_api_probe") or {}
+        grouped_route = data.get("grouped_route") or {}
+        api_ok = probe.get("cublaslt_grouped3gemm") is True
+        route_ok = grouped_route.get("status") == "SUPPORTED"
+        if api_ok or route_ok:
+            return _OK
+        return _UNKNOWN  # SUPPORTED claimed but API/run evidence incomplete
+    if status == "BLOCKED":
+        return _BAD  # attempted but build blocked
     return _UNKNOWN
 
 
@@ -458,62 +489,136 @@ def _cutlass_status(path):
     }
 
 
+def _cutlass_evidence(data, section_key):
+    """Gather raw ``kernel_path`` / ``runs`` / ``gate_pass`` evidence for a
+    CUTLASS criterion from the named two-section block (preferred) and the
+    legacy ``single_4m`` block. Returns ``(kernel_path, runs, gate_pass)`` where
+    ``runs`` / ``gate_pass`` are ``True`` / ``False`` / ``None`` (``None`` =
+    absent -- the field was never recorded, distinct from an explicit ``False``).
+    """
+    sec = data.get(section_key)
+    sec = sec if isinstance(sec, dict) else {}
+    s4 = data.get("single_4m")
+    s4 = s4 if isinstance(s4, dict) else {}
+    kernel_path = sec.get("kernel_path")
+    if kernel_path is None:
+        kernel_path = s4.get("kernel_path")
+    runs = sec.get("runs")
+    if runs is None:
+        runs = s4.get("runs")
+    corr = sec.get("correctness")
+    if not isinstance(corr, dict):
+        corr = s4.get("correctness")
+    corr = corr if isinstance(corr, dict) else {}
+    gate = corr.get("gate_pass")
+    runs = bool(runs) if runs is not None else None
+    gate = bool(gate) if gate is not None else None
+    return kernel_path, runs, gate
+
+
 def _cutlass_native_sm120_criterion(data):
-    """Read the native SM120 BF16 capability. Prefer the new two-section
-    ``native_sm120_bf16_4m.capability`` field; fall back to the legacy
-    ``single_4m`` block plus native-sm120 blocker keys so older artifacts
-    (and synths that record ``single_4m.native_sm120_blocker``) still load.
+    """Native SM120 BF16 4M capability (nongpu-rereview §3.6).
+
+    Recomputes from RAW evidence (``kernel_path`` / ``runs`` / ``gate_pass`` +
+    blocker / compile_status); does NOT trust ``section.capability``. The
+    self-reported ``capability`` is a DIAGNOSTIC consistency check only: if it
+    disagrees with the recomputed token, the artifact is internally
+    inconsistent -> UNKNOWN (a self-reported PASS cannot override missing
+    evidence).
+
+    Recompute (plan §7 4.3)::
+
+        kernel_path == sm120_native AND runs AND gate_pass -> PASS
+        kernel_path == sm120_native AND (runs is False OR gate False) -> FAIL
+        blocker recorded OR compile BLOCKED OR landed on sm80_fallback
+                                                          -> NOT_SUPPORTED
+        otherwise (incomplete / unattempted)               -> UNKNOWN
+
+    Native PASS must prove the ACTUAL native SM120 path landed; evidence that
+    the run landed on the sm80 fallback is NOT cross-promoted into native PASS.
     """
     if not isinstance(data, dict):
         return _UNKNOWN
     sec = data.get("native_sm120_bf16_4m")
-    if isinstance(sec, dict):
-        cap = sec.get("capability")
-        if cap in ("PASS", "FAIL", "NOT_SUPPORTED", _UNKNOWN):
-            return cap
+    sec = sec if isinstance(sec, dict) else {}
     s4 = data.get("single_4m")
-    if isinstance(s4, dict):
-        blocker = s4.get("native_sm120_blocker") or s4.get("sm120_blocker")
-        kp = s4.get("kernel_path")
-        runs = bool(s4.get("runs"))
-        gate = bool((s4.get("correctness") or {}).get("gate_pass"))
-        # Theoretical future: native sm120 actually landed + passed.
-        if kp == "sm120_native" and runs and gate:
-            return _OK
-        # Real-world: blocker recorded, OR artifact documents landing on the
-        # sm80 fallback (no native path landed) -> NOT_SUPPORTED.
-        if blocker or kp == "sm80_fallback":
-            return "NOT_SUPPORTED"
-        if kp:
-            # Attempted but outcome unclear; fail-closed -> UNKNOWN.
-            return _UNKNOWN
-    return _UNKNOWN
+    s4 = s4 if isinstance(s4, dict) else {}
+    kernel_path, runs, gate = _cutlass_evidence(data, "native_sm120_bf16_4m")
+    blocker = (
+        sec.get("blocker") or s4.get("sm120_blocker") or s4.get("native_sm120_blocker")
+    )
+    compile_status = sec.get("compile_status")
+    if kernel_path == "sm120_native" and runs is True and gate is True:
+        recomputed = _OK
+    elif kernel_path == "sm120_native" and (runs is False or gate is False):
+        recomputed = _BAD  # native attempted but run/gate failed
+    elif blocker or compile_status == "BLOCKED" or kernel_path == "sm80_fallback":
+        recomputed = "NOT_SUPPORTED"
+    else:
+        recomputed = _UNKNOWN  # incomplete / unattempted
+    # Diagnostic consistency check: self-reported capability vs recomputed.
+    self_reported = sec.get("capability")
+    if self_reported is not None and self_reported != recomputed:
+        return _UNKNOWN
+    return recomputed
 
 
 def _cutlass_sm80_fallback_criterion(data):
-    """Read the SM80 fallback capability. Prefer the new two-section
-    ``sm80_fallback_bf16_4m.capability`` field; fall back to the legacy
-    ``single_4m`` block. CAPABILITY only — numerical is Task 3's concern.
+    """SM80 fallback BF16 4M capability (nongpu-rereview §3.6).
+
+    Recomputes from RAW evidence (``kernel_path`` / ``runs`` / ``gate_pass``);
+    does NOT trust ``section.capability``. The self-reported ``capability`` is a
+    DIAGNOSTIC consistency check only (mismatch -> UNKNOWN). Fallback PASS must
+    prove the ACTUAL sm80 fallback path (``kernel_path == "sm80_fallback"``) --
+    evidence that the run landed on a native path is NOT cross-promoted into
+    fallback PASS.
+
+    Recompute (plan §7 4.3)::
+
+        kernel_path present AND != sm80_fallback -> UNKNOWN (wrong actual path)
+        gate_pass True                             -> PASS (gate pass => ran)
+        kernel_path == sm80_fallback AND gate not passing -> FAIL
+        runs is False (explicitly)                 -> FAIL
+        otherwise                                  -> UNKNOWN
     """
     if not isinstance(data, dict):
         return _UNKNOWN
     sec = data.get("sm80_fallback_bf16_4m")
-    if isinstance(sec, dict):
-        cap = sec.get("capability")
-        if cap in ("PASS", "FAIL", "NOT_SUPPORTED", _UNKNOWN):
-            return cap
-    s4 = data.get("single_4m")
-    if isinstance(s4, dict):
-        kp = s4.get("kernel_path")
-        runs = bool(s4.get("runs"))
-        gate = bool((s4.get("correctness") or {}).get("gate_pass"))
-        if kp == "sm80_fallback":
-            return _OK if (runs and gate) else _BAD
-    return _UNKNOWN
+    sec = sec if isinstance(sec, dict) else {}
+    kernel_path, runs, gate = _cutlass_evidence(data, "sm80_fallback_bf16_4m")
+    if kernel_path is not None and kernel_path != "sm80_fallback":
+        recomputed = _UNKNOWN  # actual path is not the fallback -> no cross-promo
+    elif gate is True:
+        recomputed = _OK  # correctness gate passed => the fallback ran
+    elif kernel_path == "sm80_fallback":
+        recomputed = _BAD  # on the fallback path but the gate did not pass
+    elif runs is False:
+        recomputed = _BAD  # explicitly did not run
+    else:
+        recomputed = _UNKNOWN  # no gate evidence, path unspecified
+    self_reported = sec.get("capability")
+    if self_reported is not None and self_reported != recomputed:
+        return _UNKNOWN
+    return recomputed
 
 
 def _region_proto_status(path):
-    """Region P->T->E prototype verdict (Task 4). NOT_RUN if absent."""
+    """Region P->T->E prototype verdict (Task 4 / nongpu-rereview §3.5.2).
+
+    Returns ONLY a canonical token (PASS/FAIL/UNKNOWN/NOT_RUN). Recomputes from
+    raw evidence via the C2 region helper (``c2._recompute_conditions``) so
+    REGION_PROTOTYPE and C2_REGION_KERNEL_FEASIBILITY share ONE peak gate -- the
+    artifact-native verdict (FEASIBLE* / NOT_FEASIBLE) is NEVER returned
+    directly (it would be downgraded to UNKNOWN by ``tri_normalize``, leaving
+    full-anchor region success stuck at UNKNOWN forever).
+
+    PASS requires a success verdict (canonical ``PASS`` or artifact-native
+    ``FEASIBLE_WITH_RECOMPUTE`` / ``TILE_FUSION_FEASIBLE``) PLUS a fused
+    full-anchor run PLUS recomputed accuracy + resource pass PLUS a MEASURED
+    runtime peak (``peak_evidence_class == MEASURED`` + all required measured
+    fields -- the shared peak gate, identical to C2_REGION_KERNEL_FEASIBILITY).
+    ``NOT_FEASIBLE`` -> FAIL (definitive negative); anything else -> UNKNOWN.
+    """
     if not os.path.exists(path):
         return _NOT_RUN
     try:
@@ -521,14 +626,29 @@ def _region_proto_status(path):
             data = json.load(f)
     except (OSError, ValueError):
         return _UNKNOWN
-    verdict = data.get("verdict") if isinstance(data, dict) else None
-    if verdict in (
-        "TILE_FUSION_FEASIBLE",
-        "FEASIBLE_WITH_RECOMPUTE",
-        "NOT_FEASIBLE",
-        "BLOCKED",
-    ):
-        return verdict
+    if not isinstance(data, dict):
+        return _UNKNOWN
+    from results._phase0 import c2 as _c2
+
+    verdict = data.get("verdict")
+    # Reuse the C2 recompute helper (shared peak gate + accuracy/resource logic)
+    # so REGION_PROTOTYPE and C2_REGION_KERNEL_FEASIBILITY use ONE standard.
+    rc = _c2._recompute_conditions(data, {})
+    if verdict in ("PASS", "FEASIBLE_WITH_RECOMPUTE", "TILE_FUSION_FEASIBLE"):
+        acc, res, peak = (
+            rc["accuracy_pass"],
+            rc["resource_pass"],
+            rc["region_peak_gain_bytes"],
+        )
+        if data.get("fused_full_anchor_run") is not True:
+            return _UNKNOWN  # full-E correctness unmeasured -> never PASS
+        if acc is None or res is None or peak is None:
+            return _UNKNOWN  # evidence incomplete (incl. non-MEASURED peak)
+        if acc and res:
+            return _OK
+        return _BAD  # feasible verdict but recomputed accuracy/resource fail
+    if verdict == "NOT_FEASIBLE":
+        return _BAD  # definitive negative
     return _UNKNOWN
 
 

@@ -152,8 +152,11 @@ def test_c3_grouped_status(tmp_path):
     p = tmp_path / "g.json"
     p.write_text(json.dumps({"capability": {"status": "NOT_SUPPORTED"}}))
     assert _c3_grouped_status(str(p)) == "NOT_SUPPORTED"
+    # Task 4 (nongpu-rereview §3.5.1): a bare SUPPORTED with no backing API/run
+    # evidence is an unconfirmable positive claim -> UNKNOWN (NOT the raw
+    # SUPPORTED detail token, which tri_normalize would also downgrade).
     p.write_text(json.dumps({"capability": {"status": "SUPPORTED"}}))
-    assert _c3_grouped_status(str(p)) == "SUPPORTED"
+    assert _c3_grouped_status(str(p)) == "UNKNOWN"
     assert _c3_grouped_status(str(tmp_path / "missing.json")) == "NOT_RUN"
 
 
@@ -267,10 +270,14 @@ def test_region_proto_status(tmp_path):
     from results._phase0.gonogo import _region_proto_status
 
     p = tmp_path / "r.json"
+    # Task 4 (nongpu-rereview §3.5.2): artifact-native detail tokens are NEVER
+    # returned directly. FEASIBLE_WITH_RECOMPUTE without full-anchor evidence
+    # -> UNKNOWN (the detail token would be downgraded anyway).
     p.write_text(json.dumps({"verdict": "FEASIBLE_WITH_RECOMPUTE"}))
-    assert _region_proto_status(str(p)) == "FEASIBLE_WITH_RECOMPUTE"
+    assert _region_proto_status(str(p)) == "UNKNOWN"
+    # NOT_FEASIBLE is a definitive negative -> canonical FAIL.
     p.write_text(json.dumps({"verdict": "NOT_FEASIBLE"}))
-    assert _region_proto_status(str(p)) == "NOT_FEASIBLE"
+    assert _region_proto_status(str(p)) == "FAIL"
     assert _region_proto_status(str(tmp_path / "missing.json")) == "NOT_RUN"
 
 
@@ -1040,7 +1047,13 @@ def test_region_proto_status_recomputes_pass_from_full_anchor_evidence(tmp_path)
     full-anchor evidence -> canonical ``PASS``. Current ``_region_proto_status``
     (gonogo.py:505-522) doesn't accept canonical ``PASS`` (only ``FEASIBLE*`` /
     ``NOT_FEASIBLE`` / ``BLOCKED``) -> returns UNKNOWN -> full-anchor region
-    success can never be PASS (false negative)."""
+    success can never be PASS (false negative).
+
+    Task 4: the reader now recomputes via the C2 ``_recompute_conditions``
+    helper (shared peak gate). PASS requires a success verdict + a fused
+    full-anchor run + recomputed accuracy/resource pass + a MEASURED runtime
+    peak (peak_evidence_class=MEASURED + required measured fields) -- the same
+    standard C2_REGION_KERNEL_FEASIBILITY uses."""
     import json
 
     from results._phase0.gonogo import _region_proto_status
@@ -1055,6 +1068,14 @@ def test_region_proto_status_recomputes_pass_from_full_anchor_evidence(tmp_path)
                 "max_rel": 1e-7,
                 "registers_per_thread": 40,
                 "occupancy_pct": 100.0,
+                # MEASURED runtime peak (shared peak gate with C2): a full-anchor
+                # fused run measured the runtime allocator peak -> canonical gain.
+                "peak_evidence_class": "MEASURED",
+                "materialized_runtime_allocator_peak_bytes": 2000000000,
+                "fused_runtime_allocator_peak_bytes": 1000000000,
+                "runtime_peak_measurement_method": "cuda allocator high-watermark",
+                "runtime_peak_scope": "full_anchor",
+                "runtime_peak_sample_count": 3,
             }
         )
     )
