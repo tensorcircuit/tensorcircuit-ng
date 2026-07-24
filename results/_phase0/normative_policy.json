@@ -4,5 +4,5 @@
     "min_gain_bytes": 268435456
   },
   "numerical_required_input_profiles": [],
-  "cell_key_fields": []
+  "cell_key_fields": ["route", "dtype", "shape", "level", "input_construction_version", "seed", "reference_dtype"]
 }

@@ -58,7 +58,24 @@ _LEVELS = ("baseline", "mixed_scale", "cancellation")
 # rounding/cancellation risk, but large enough to keep the reference
 # non-zero finite (avoids a trivially all-zero output).
 CANCELLATION_EPSILON = 1e-3
-INPUT_CONSTRUCTION_VERSION = "v2_cancellation"
+INPUT_CONSTRUCTION_VERSION = "cancellation_v2"
+
+
+def _version_token_for_level(level):
+    """Canonical ``input_construction_version`` token for a dynamic-range level.
+
+    Cancellation-level cells carry ``INPUT_CONSTRUCTION_VERSION``
+    (``"cancellation_v2"``) -- the unified token that the producer constant,
+    ``required_cell_keys``, the CSV reader/writer, and ``cell_key_hash`` ALL
+    use (plan §3.1 / errata #2). Baseline / mixed_scale cells carry
+    ``level + "_v1"`` (``"baseline_v1"`` / ``"mixed_scale_v1"``) so their rows
+    match ``required_cell_keys`` (errata #4: those producers MUST write the
+    token; previously only ``_enrich_cancellation_metrics`` wrote it, leaving
+    baseline/mixed rows with an empty field that could never match).
+    """
+    if level == "cancellation":
+        return INPUT_CONSTRUCTION_VERSION
+    return level + "_v1"
 
 
 def make_inputs(level, shape, seed, ref_dtype=np.complex64):
@@ -170,9 +187,16 @@ def _enrich_cancellation_metrics(row):
     For all other rows (non-cancellation level, or label shapes like
     ``"small_contract"``) the row is returned unchanged.
 
-    Idempotent: if the row already carries ``input_construction_version`` the
-    computation is skipped (avoids redundant numpy CPU matmul on re-enrichment,
-    e.g. in the ``regen_no_gpu`` path where collect_cutlass already enriched).
+    Idempotent + legacy short-circuit (errata #6):
+      - ``input_construction_version == "cancellation_legacy_v1"`` -> return
+        immediately (legacy diagnostic from an old GPU run; do NOT re-enrich
+        or overwrite the token -- the row is archival evidence, not a fresh
+        v2 diagnostic).
+      - any other truthy ``input_construction_version`` -> return (idempotent;
+        the row was already enriched by a producer or a prior pass, so the
+        5 diagnostic fields are already present).
+      - absent / empty -> enrich (compute the 5 fields + set the canonical
+        ``cancellation_v2`` token).
 
     Called by the GPU collectors (``collect_planar`` / ``collect_grouped`` /
     ``collect_cutlass``) and by ``main(regen_no_gpu=True)`` for CSV-read rows,
@@ -180,8 +204,11 @@ def _enrich_cancellation_metrics(row):
     """
     if row.get("level") != "cancellation":
         return row
-    if "input_construction_version" in row:
-        return row  # idempotent
+    ver = row.get("input_construction_version")
+    if ver == "cancellation_legacy_v1":
+        return row  # legacy diagnostic: don't re-enrich or overwrite
+    if ver:
+        return row  # idempotent (e.g. "cancellation_v2" from a real GPU run)
     shape = row.get("shape")
     if not (isinstance(shape, (tuple, list)) and len(shape) == 3):
         return row  # label shapes (e.g. "small_contract") cannot compute metrics
@@ -265,16 +292,24 @@ def _shape_key(shape):
 
 
 def _cell_key(row):
-    """Canonical required-cell schema key for a row (plan §6 3.1).
+    """Canonical required-cell schema key for a row (plan §6 3.1 / errata #1).
 
-    Key = (route, dtype, shape, level, seed, reference_id). ``reference_id`` is the
-    reference dtype (always ``"c64"`` for the c64 fp32 materialized reference).
+    Key = (route, dtype, shape, level, input_construction_version, seed,
+    reference_dtype). ``reference_dtype`` is always ``"c64"`` for the c64 fp32
+    materialized reference. ``input_construction_version`` is the unified
+    token (``"cancellation_v2"`` / ``"baseline_v1"`` / ``"mixed_scale_v1"``)
+    that separates MEASURED (GPU v2) from planned (CPU) diagnostics and
+    distinguishes legacy v1 archival rows from real v2 measurements. The
+    7-tuple is consistent across ``_cell_key`` / ``required_cell_keys`` /
+    ``_as_expected_keys`` / ``_emit_not_run_rows`` / ``cell_key_hash`` /
+    ``aggregate`` accounting (errata #1).
     """
     return (
         row["route"],
         row["dtype"],
         _shape_key(row.get("shape")),
         row["level"],
+        row.get("input_construction_version", ""),
         row["seed"],
         row.get("reference_dtype", "c64"),
     )
@@ -283,32 +318,56 @@ def _cell_key(row):
 def required_cell_keys():
     """Build the canonical EXPECTED set of numerical cell keys (plan §6 3.1).
 
-    The schema is the outer product of (route, dtype, shape, level, seed,
-    reference_id) where each route's shape set is fixed by its evidence contract:
+    The schema is the outer product of (route, dtype, shape, level,
+    input_construction_version, seed, reference_dtype) where each route's shape
+    set is fixed by its evidence contract:
 
       - planar, grouped: 8 SHAPES (cublaslt full-matrix set) x {C16BF, C32F}
       - region_fused: the INTENDED full-anchor P=A[4096,1024]@B[1024,16384] (plan
         §5 2.2); these cells are NOT_RUN until Task 3b measures them.
       - cutlass_4m_single: the anchor (16384,1024,1024)
 
-    All routes x 3 levels x >=3 seeds x c64 reference.
+    All routes x 3 levels x >=3 seeds x c64 reference. The
+    ``input_construction_version`` token is ``"cancellation_v2"`` for
+    cancellation-level cells and ``level + "_v1"`` for baseline/mixed_scale
+    (errata #2 / #4: unified token + baseline/mixed producers MUST write
+    version tokens so those routes can match).
     """
     keys = set()
     for shape in SHAPES:
         for route in ("planar", "grouped"):
             for dtype in DTYPES_BY_ROUTE[route]:
                 for level in LEVELS:
+                    ver = _version_token_for_level(level)
                     for seed in SEEDS:
-                        keys.add((route, dtype, tuple(shape), level, seed, "c64"))
+                        keys.add((route, dtype, tuple(shape), level, ver, seed, "c64"))
     for level in LEVELS:
+        ver = _version_token_for_level(level)
         for seed in SEEDS:
             keys.add(
-                ("region_fused", "c64", REGION_FULL_ANCHOR_SHAPE, level, seed, "c64")
+                (
+                    "region_fused",
+                    "c64",
+                    REGION_FULL_ANCHOR_SHAPE,
+                    level,
+                    ver,
+                    seed,
+                    "c64",
+                )
             )
     for level in LEVELS:
+        ver = _version_token_for_level(level)
         for seed in SEEDS:
             keys.add(
-                ("cutlass_4m_single", "C16BF", CUTLASS_ANCHOR_SHAPE, level, seed, "c64")
+                (
+                    "cutlass_4m_single",
+                    "C16BF",
+                    CUTLASS_ANCHOR_SHAPE,
+                    level,
+                    ver,
+                    seed,
+                    "c64",
+                )
             )
     return keys
 
@@ -317,8 +376,9 @@ def _as_expected_keys(expected_counts, rows):
     """Normalize the ``expected_counts`` argument to a set of canonical cell keys.
 
     Accepts either:
-      - a set/iterable of (route, dtype, shape, level, seed, reference_id) tuples
-        (preferred, used by ``required_cell_keys()``), OR
+      - a set/iterable of (route, dtype, shape, level, input_construction_version,
+        seed, reference_dtype) 7-tuples (preferred, used by
+        ``required_cell_keys()``), OR
       - a legacy dict ``{(route, dtype): N_count}`` for backward compatibility with
         count-based tests. In that mode up to N keys per (route, dtype) are sampled
         from the rows themselves in row order, preserving the old count semantics.
@@ -340,9 +400,10 @@ def _as_expected_keys(expected_counts, rows):
 def aggregate(rows, expected_counts, case_hashes, legit_not_run, shape_drift=False):
     """Fail-closed aggregation -> numerical_validation.json payload (spec §6 3.3).
 
-    expected_counts: either a set of canonical cell keys (route, dtype, shape, level,
-      seed, reference_id) [preferred; see ``required_cell_keys()``], or a legacy
-      dict ``{(route, dtype): N_count}`` for backward compatibility.
+    expected_counts: either a set of canonical cell keys (route, dtype, shape,
+      level, input_construction_version, seed, reference_dtype) 7-tuples
+      [preferred; see ``required_cell_keys()``], or a legacy dict
+      ``{(route, dtype): N_count}`` for backward compatibility.
 
     Per-route criterion (plan §6 3.3)::
 
@@ -605,16 +666,18 @@ _CSV_COLUMNS = [
 ]
 
 
-def cell_key_hash(route, dtype, shape, level, seed):
-    """SHA256[:16] of the cell-key tuple (route|dtype|shape|level|seed).
+def cell_key_hash(route, dtype, shape, level, ver, seed):
+    """SHA256[:16] of the cell-key tuple (route|dtype|shape|level|ver|seed).
 
-    This is a cell-metadata hash (identifies which numerical cell a row
-    belongs to), NOT a source-artifact hash. Renamed from ``source_hash``
+    ``ver`` is the ``input_construction_version`` token (errata #5: it MUST be
+    included in the hashed string so the hash is consistent with the 7-tuple
+    cell key). This is a cell-metadata hash (identifies which numerical cell a
+    row belongs to), NOT a source-artifact hash. Renamed from ``source_hash``
     so the field name no longer implies it binds the measurement source
     (plan §3.3). The actual source-artifact hashes live in the JSON
     ``case_binding`` (Task 5's full hash binding).
     """
-    key = f"{route}|{dtype}|{shape}|{level}|{seed}"
+    key = f"{route}|{dtype}|{shape}|{level}|{ver}|{seed}"
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
@@ -643,14 +706,16 @@ def write_csv(path, rows):
             rel_l2 = r.get("relative_l2")
             max_abs = r.get("max_abs")
             max_rel = r.get("max_rel")
+            # Cancellation diagnostic fields (empty for non-cancellation rows).
+            # icv is also consumed by cell_key_hash (errata #5: include
+            # input_construction_version in the hashed string).
+            icv = r.get("input_construction_version", "")
             sh = r.get("cell_key_hash")
             if not sh:
-                sh = cell_key_hash(route, dtype, shape or (), level, seed)
+                sh = cell_key_hash(route, dtype, shape or (), level, icv, seed)
             # source defaults to "measured" for real measured rows; NOT_RUN rows
             # carry "not_run:<reason>"; diagnostic rows carry "diagnostic:*".
             source = r.get("source") or "measured"
-            # Cancellation diagnostic fields (empty for non-cancellation rows).
-            icv = r.get("input_construction_version", "")
             ceps = r.get("cancellation_epsilon")
             rnorm = r.get("reference_norm")
             bnorm = r.get("baseline_norm")
@@ -763,6 +828,12 @@ def collect_planar(shape, dtype, level, seed):
         **metrics,
         "policy_pass": int(verdict == "PASS"),
     }
+    # errata #4: baseline/mixed_scale producers MUST write version tokens so
+    # their rows match required_cell_keys. Cancellation-level rows get the
+    # token from _enrich_cancellation_metrics (which also computes the 5
+    # diagnostic fields -- setting it here would short-circuit that).
+    if level != "cancellation":
+        row["input_construction_version"] = _version_token_for_level(level)
     return _enrich_cancellation_metrics(row)
 
 
@@ -832,18 +903,19 @@ def collect_grouped(shape, dtype, level, seed, batch=4):
         worst["nan_inf"] = worst["nan_inf"] or m["nan_inf"]
         worst["n_elems"] += m["n_elems"]
     verdict, _ = apply_policy("grouped", dtype, worst)
-    return _enrich_cancellation_metrics(
-        {
-            "route": "grouped",
-            "dtype": dtype,
-            "shape": shape,
-            "level": level,
-            "seed": seed,
-            "reference_dtype": "c64",
-            **worst,
-            "policy_pass": int(verdict == "PASS"),
-        }
-    )
+    row = {
+        "route": "grouped",
+        "dtype": dtype,
+        "shape": shape,
+        "level": level,
+        "seed": seed,
+        "reference_dtype": "c64",
+        **worst,
+        "policy_pass": int(verdict == "PASS"),
+    }
+    if level != "cancellation":
+        row["input_construction_version"] = _version_token_for_level(level)
+    return _enrich_cancellation_metrics(row)
 
 
 # ---------------------------------------------------------------------------
@@ -877,23 +949,24 @@ def collect_region_fused(level, seed):
     )
     metrics = compute_metrics(cp.asnumpy(E_fus), cp.asnumpy(E_mat))
     verdict, _ = apply_policy("region_fused", "c64", metrics)
-    return _enrich_cancellation_metrics(
-        {
-            "route": "region_fused",
-            "dtype": "c64",
-            "shape": "small_contract",
-            "level": level,
-            "seed": seed,
-            "reference_dtype": "c64",
-            # diagnostic: this row is the small-contract correctness proof (spec §7.2),
-            # NOT the required full-anchor cell. It shows up as `extra` in the JSON
-            # accounting because its shape key ("small_contract") does not match the
-            # required REGION_FULL_ANCHOR_SHAPE tuple.
-            "source": "diagnostic:small-contract",
-            **metrics,
-            "policy_pass": int(verdict == "PASS"),
-        }
-    )
+    row = {
+        "route": "region_fused",
+        "dtype": "c64",
+        "shape": "small_contract",
+        "level": level,
+        "seed": seed,
+        "reference_dtype": "c64",
+        # diagnostic: this row is the small-contract correctness proof (spec §7.2),
+        # NOT the required full-anchor cell. It shows up as `extra` in the JSON
+        # accounting because its shape key ("small_contract") does not match the
+        # required REGION_FULL_ANCHOR_SHAPE tuple.
+        "source": "diagnostic:small-contract",
+        **metrics,
+        "policy_pass": int(verdict == "PASS"),
+    }
+    if level != "cancellation":
+        row["input_construction_version"] = _version_token_for_level(level)
+    return _enrich_cancellation_metrics(row)
 
 
 # ---------------------------------------------------------------------------
@@ -938,40 +1011,42 @@ def collect_cutlass(level, seed):
             "n_elems": 16384 * 1024,
         }
         verdict, _ = apply_policy("cutlass_4m_single", "C16BF", metrics)
-        return _enrich_cancellation_metrics(
-            {
-                "route": "cutlass_4m_single",
-                "dtype": "C16BF",
-                "shape": CUTLASS_ANCHOR_SHAPE,
-                "level": level,
-                "seed": seed,
-                "reference_dtype": "c64",
-                "source": "task8_reuse",
-                **metrics,
-                "policy_pass": int(verdict == "PASS"),
-            }
-        )
-    # adversarial level
-    if _cutlass_injection_available():
-        # Future: re-run cutlass kernel with make_inputs(level) injected.
-        raise NotImplementedError("cutlass adversarial injection not wired yet")
-    return _enrich_cancellation_metrics(
-        {
+        row = {
             "route": "cutlass_4m_single",
             "dtype": "C16BF",
             "shape": CUTLASS_ANCHOR_SHAPE,
             "level": level,
             "seed": seed,
             "reference_dtype": "c64",
-            "source": "not_run:toolchain-injection-unavailable",
-            "relative_l2": None,
-            "max_abs": None,
-            "max_rel": None,
-            "nan_inf": False,
-            "n_elems": 0,
-            "policy_pass": 0,
+            "source": "task8_reuse",
+            **metrics,
+            "policy_pass": int(verdict == "PASS"),
         }
-    )
+        if level != "cancellation":
+            row["input_construction_version"] = _version_token_for_level(level)
+        return _enrich_cancellation_metrics(row)
+    # adversarial level
+    if _cutlass_injection_available():
+        # Future: re-run cutlass kernel with make_inputs(level) injected.
+        raise NotImplementedError("cutlass adversarial injection not wired yet")
+    row = {
+        "route": "cutlass_4m_single",
+        "dtype": "C16BF",
+        "shape": CUTLASS_ANCHOR_SHAPE,
+        "level": level,
+        "seed": seed,
+        "reference_dtype": "c64",
+        "source": "not_run:toolchain-injection-unavailable",
+        "relative_l2": None,
+        "max_abs": None,
+        "max_rel": None,
+        "nan_inf": False,
+        "n_elems": 0,
+        "policy_pass": 0,
+    }
+    if level != "cancellation":
+        row["input_construction_version"] = _version_token_for_level(level)
+    return _enrich_cancellation_metrics(row)
 
 
 # ---------------------------------------------------------------------------
@@ -1158,13 +1233,14 @@ def _emit_not_run_rows(existing_rows, required_keys):
     present_keys = {_cell_key(r) for r in existing_rows}
     not_run_rows = []
     for key in required_keys - present_keys:
-        route, dtype, shape, level, seed, ref_id = key
+        route, dtype, shape, level, ver, seed, ref_id = key
         not_run_rows.append(
             {
                 "route": route,
                 "dtype": dtype,
                 "shape": shape,
                 "level": level,
+                "input_construction_version": ver,
                 "seed": seed,
                 "reference_dtype": ref_id,
                 "source": f"not_run:{_not_run_reason_for(route)}",
@@ -1212,6 +1288,35 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
         for level in LEVELS:
             for seed in SEEDS:
                 rows.append(collect_cutlass(level, seed))
+        # errata #3 / INV-1 (finding 3.1): relabel ALL old measured cancellation
+        # rows to ``cancellation_legacy_v1``. In a no-GPU regen NO measured
+        # cancellation row can be a real ``cancellation_v2`` (that requires a
+        # GPU v2 run, which the no-GPU round does NOT do). Relabeling
+        # unconditionally -- regardless of the old token (``v2_cancellation``,
+        # empty, or even a previously-mislabeled ``cancellation_v2``) -- ensures
+        # INV-1: non-GPU round ``cancellation_v2`` + ``measured`` row count == 0.
+        # This separates archival GPU v1 evidence (legacy) from planned CPU v2
+        # diagnostics, fixing the provenance forgery where old GPU-measured
+        # cancellation rows were labeled v2 while CPU-computing new v2
+        # diagnostics and appending them (finding 3.1).
+        for r in rows:
+            if (
+                r.get("level") == "cancellation"
+                and not str(r.get("source", "")).startswith("not_run")
+                and r.get("relative_l2") is not None
+            ):
+                r["input_construction_version"] = "cancellation_legacy_v1"
+        # errata #4: ensure baseline/mixed_scale rows carry the correct version
+        # token (``baseline_v1`` / ``mixed_scale_v1``). Old CSV rows from a
+        # pre-schema-bump CSV leave the field empty, and monkeypatched producers
+        # in tests may return the wrong token -- either way those rows would
+        # never match ``required_cell_keys`` (which expects the per-level v1
+        # token for baseline/mixed). Overriding here is defensive and makes the
+        # no-GPU regen robust against producer drift.
+        for r in rows:
+            lvl = r.get("level")
+            if lvl in ("baseline", "mixed_scale"):
+                r["input_construction_version"] = _version_token_for_level(lvl)
         # Emit explicit NOT_RUN rows for required cells with no CSV row at all
         # (region_fused full-anchor; spec §6 3.3). Makes the CSV self-describing.
         rows.extend(_emit_not_run_rows(rows, required_cell_keys()))
@@ -1220,6 +1325,13 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
         # and emitted NOT_RUN rows (e.g. region_fused full-anchor cancellation
         # cells) don't go through a collector, so they are enriched here.
         # collect_cutlass rows are already enriched (idempotent skip).
+        # Legacy-v1 rows short-circuit (errata #6: don't re-enrich archival
+        # diagnostic). NOT_RUN cancellation rows whose version was set to
+        # ``cancellation_v2`` by _emit_not_run_rows also short-circuit
+        # (idempotent). Rows with NO version (e.g. region_fused full-anchor
+        # cancellation NOT_RUN from an old CSV that lacked the field) get
+        # enriched here with the canonical ``cancellation_v2`` token + the 5
+        # diagnostic fields.
         rows = [_enrich_cancellation_metrics(r) for r in rows]
         # Plan §5.4 ordering: write the CSV BEFORE computing case_binding so
         # numerical_csv_sha256 reflects the final on-disk CSV bytes.
