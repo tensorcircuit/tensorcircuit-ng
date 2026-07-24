@@ -203,6 +203,14 @@ class Circuit(BaseCircuit):
         :type index: int
         :param keep: the post-selected digit in {0, ..., d-1}, defaults to be 0.
         :type keep: int, optional
+
+        .. warning::
+
+            This operation is **not recorded in the circuit's QIR**
+            (``self._qir``). It is therefore silently dropped by ``copy``, ``to_qir``,
+            ``inverse``, ``from_qir``, ``gate_count``, ``to_json`` and
+            ``to_openqasm``. A copied/inverted circuit will NOT preserve the
+            post-selection.
         """
         # normalization not guaranteed
         gate = np.array(

@@ -257,7 +257,9 @@ def merge(
     if rules is not None:
         merge_rules.update(rules)  # type: ignore
     if isinstance(circuit, list):
-        qir = circuit
+        # copy: _merge mutates the list in place (del/reassign), so never alias
+        # the caller's list
+        qir = list(circuit)
         output = "qir"
     else:
         qir = circuit.to_qir()

@@ -402,8 +402,11 @@ class AbstractCircuit:
 
         :return: The quantum intermediate representation of the circuit.
         :rtype: List[Dict[str, Any]]
+
+        .. note:: Returns a shallow copy of the internal instruction list, so the
+            caller may freely mutate the result without corrupting this circuit's own IR.
         """
-        return self._qir
+        return list(self._qir)
 
     @classmethod
     def from_qir(
