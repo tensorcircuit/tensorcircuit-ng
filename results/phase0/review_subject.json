@@ -1,0 +1,12 @@
+{
+  "artifact_manifest_sha256": "86db20a2184401286a9ff967d295463a85fb31642d40d8672eba11f9b8e91e53",
+  "closeout_facts_sha256": "969c4283087a26bc18efd176e534ae7558330638605b52a060bd3bb7b00a2633",
+  "dirty_worktree": true,
+  "patch_sha256": null,
+  "plan_sha256": "49bf79b8cacd4d42aced6e93f30c7ef4395c22a7b7e3b3329f0176381c2441b5",
+  "schema_version": 1,
+  "spec_sha256": "edc2a0b768955a5d1be9a8b2fbf086a424d9896de8ddc378d8fc2984e8aa1ee7",
+  "subject_commit": "8c1995ae5b563d61043ae4cadd8732f4dc188c0f",
+  "test_report_sha256": "b79b5f7ad1e1d42fb6ea3400d590066d5a22fdee2148f0f03625d434cc4b7e01",
+  "untracked_hashes": null
+}
