@@ -126,6 +126,23 @@ def _row(route, dtype, shape, level, seed, rel_l2, max_abs, max_rel, nan):
     }
 
 
+def _valid_case_hashes():
+    """Construct a VALID case_hashes dict for aggregate tests: all 9 required
+    case-binding keys present with valid 64-char sha256 hex, so
+    binding_unavailable=False and the route-local loop runs. (Tests that
+    exercise the global-invalid deny-all path construct their own broken
+    case_hashes.) Task 4 errata #2: the old ``case_hashes={}`` now triggers
+    binding_unavailable (no case keys present) -> deny-all, so tests that need
+    to exercise the route-local loop MUST supply valid case_hashes."""
+    from results._phase0.numerical import _case_hashes
+
+    valid_hex = "a" * 64
+    return {
+        "algorithm": "sha256",
+        **{k: valid_hex for k in _case_hashes() if k != "algorithm"},
+    }
+
+
 def test_aggregate_pass_when_all_cells_pass():
     from results._phase0.numerical import aggregate
 
@@ -143,7 +160,7 @@ def test_aggregate_pass_when_all_cells_pass():
         )
     ]
     expected = {("planar", "C16BF"): 1}
-    out = aggregate(rows, expected, case_hashes={}, legit_not_run=[])
+    out = aggregate(rows, expected, case_hashes=_valid_case_hashes(), legit_not_run=[])
     planar = [r for r in out["per_route"] if r["route"] == "planar"][0]
     assert planar["criterion"] == "PASS"
     assert out["overall_numerical_status"] == "PASS"
@@ -154,7 +171,10 @@ def test_aggregate_unknown_when_missing_rows():
 
     rows = []  # expected 1 but present 0
     out = aggregate(
-        rows, expected_counts={("planar", "C16BF"): 1}, case_hashes={}, legit_not_run=[]
+        rows,
+        expected_counts={("planar", "C16BF"): 1},
+        case_hashes=_valid_case_hashes(),
+        legit_not_run=[],
     )
     planar = [r for r in out["per_route"] if r["route"] == "planar"][0]
     assert planar["criterion"] in ("UNKNOWN", "NOT_RUN")
@@ -166,7 +186,7 @@ def test_aggregate_fail_on_nan():
     rows = [
         _row("planar", "C16BF", (16384, 1024, 1024), "baseline", 0, 0.0, 0.0, 0.0, True)
     ]
-    out = aggregate(rows, {("planar", "C16BF"): 1}, {}, [])
+    out = aggregate(rows, {("planar", "C16BF"): 1}, _valid_case_hashes(), [])
     assert out["overall_numerical_status"] == "FAIL"
 
 
@@ -186,10 +206,16 @@ def test_aggregate_hash_mismatch_forces_unknown():
             False,
         )
     ]
+    # Valid case_hashes for all 9 keys, then set ONE to MISMATCH so
+    # binding_mismatch fires (but binding_unavailable does NOT -- the other
+    # 8 keys are valid). This isolates the mismatch path from the unavailable
+    # path (Task 4 errata: both are global-invalid, but tested separately).
+    mismatch_hashes = _valid_case_hashes()
+    mismatch_hashes["edge_map_sha256"] = "MISMATCH"
     out = aggregate(
         rows,
         {("planar", "C16BF"): 1},
-        case_hashes={"edge_map_sha256": "MISMATCH"},
+        case_hashes=mismatch_hashes,
         legit_not_run=[],
     )
     assert out["overall_numerical_status"] == "INCONCLUSIVE"
@@ -410,7 +436,7 @@ def test_aggregate_unknown_when_required_cell_not_run_is_undeclared():
     out = aggregate(
         rows,
         expected_counts={("planar", "C16BF"): 1},  # baseline counted as 'expected'
-        case_hashes={},
+        case_hashes=_valid_case_hashes(),
         legit_not_run=[],  # the not_run cell is NOT declared legit
     )
     planar = [r for r in out["per_route"] if r["route"] == "planar"][0]
@@ -536,7 +562,7 @@ def test_aggregate_region_unknown_when_only_small_contract_measured():
     out = aggregate(
         rows,
         required_cell_keys(),
-        case_hashes={},
+        case_hashes=_valid_case_hashes(),
         legit_not_run=["region_fused:actual-large-fused:compute-bound (Task 3b)"],
     )
     region = [r for r in out["per_route"] if r["route"] == "region_fused"][0]
@@ -599,7 +625,7 @@ def test_aggregate_cutlass_unknown_when_adversarial_not_run():
     out = aggregate(
         rows,
         required_cell_keys(),
-        case_hashes={},
+        case_hashes=_valid_case_hashes(),
         legit_not_run=["cutlass_4m_single:adversarial:toolchain-injection-unavailable"],
     )
     cutlass = [r for r in out["per_route"] if r["route"] == "cutlass_4m_single"][0]
@@ -644,7 +670,7 @@ def test_aggregate_duplicate_key_is_schema_error():
     out = aggregate(
         rows,
         {("planar", "C16BF"): 1},
-        case_hashes={},
+        case_hashes=_valid_case_hashes(),
         legit_not_run=[],
     )
     assert out["overall_numerical_status"] == "INCONCLUSIVE", out
@@ -827,7 +853,7 @@ def test_csv_is_self_describing_aggregate_matches_json_verdicts(tmp_path):
     csv_path = str(tmp_path / "numerical_validation.csv")
     write_csv(csv_path, rows)
     payload = aggregate(
-        rows, required_cell_keys(), {"algorithm": "sha256"}, _legit_not_run_reasons()
+        rows, required_cell_keys(), _valid_case_hashes(), _legit_not_run_reasons()
     )
     write_json(str(tmp_path / "numerical_validation.json"), payload)
 
@@ -836,7 +862,7 @@ def test_csv_is_self_describing_aggregate_matches_json_verdicts(tmp_path):
     recomputed = aggregate(
         read_back,
         required_cell_keys(),
-        {"algorithm": "sha256"},
+        _valid_case_hashes(),
         _legit_not_run_reasons(),
     )
     with open(str(tmp_path / "numerical_validation.json")) as fh:
@@ -1213,6 +1239,215 @@ def test_baseline_mixed_producers_write_version_tokens():
     assert bl.get("input_construction_version") == "baseline_v1", bl
     ms = collect_cutlass("mixed_scale", seed=0)
     assert ms.get("input_construction_version") == "mixed_scale_v1", ms
+
+
+# ---------------------------------------------------------------------------
+# Task 4 (evidence-integrity remediation, finding 3.4): numerical
+# global-invalid explicit flags. The aggregate must compute global-invalid
+# (duplicate / shape_drift / binding_mismatch / binding_unavailable) BEFORE
+# the per-route loop. If global_invalid, ALL per_route = UNKNOWN and overall =
+# INCONCLUSIVE (return early). Previously aggregate computed per-route FIRST,
+# so a shape_drift / duplicate / binding error could leave overall=INCONCLUSIVE
+# but a route=PASS, and gonogo reads per_route directly -> route VIABLE while
+# NUMERICAL=UNKNOWN (fail-open). legit_not_run is informational only (does NOT
+# set global_invalid).
+# ---------------------------------------------------------------------------
+
+
+def test_legit_not_run_does_not_clear_per_route():
+    """Task 4 errata #3: legit_not_run is informational only -- it must NOT
+    change per_route criteria or overall_status. Verified by a with/without
+    comparison: the same globally-valid matrix with vs without legit_not_run
+    entries yields IDENTICAL per_route criteria and overall_status. (Replaces
+    the brief's ``or True`` tautology which asserted nothing.)"""
+    from results._phase0.numerical import aggregate, required_cell_keys
+
+    # Construct a globally-valid matrix (no duplicate/drift/mismatch/unavailable)
+    # with ALL required cells measured + passing, so per_route would be PASS.
+    rows = []
+    for k in required_cell_keys():
+        route, dtype, shape, level, ver, seed, ref = k
+        rows.append(
+            {
+                "route": route,
+                "dtype": dtype,
+                "shape": shape,
+                "level": level,
+                "input_construction_version": ver,
+                "seed": seed,
+                "reference_dtype": ref,
+                "source": "measured",
+                "relative_l2": 1e-5,
+                "max_rel": 1e-5,
+                "nan_inf": False,
+                "policy_pass": True,
+            }
+        )
+    hashes = _valid_case_hashes()
+    out_with = aggregate(
+        rows,
+        required_cell_keys(),
+        hashes,
+        ["some legit not-run reason"],
+        shape_drift=False,
+    )
+    out_without = aggregate(rows, required_cell_keys(), hashes, [], shape_drift=False)
+    # per_route criteria IDENTICAL (legit_not_run does NOT clear them)
+    pr_with = {r["route"]: r["criterion"] for r in out_with["per_route"]}
+    pr_without = {r["route"]: r["criterion"] for r in out_without["per_route"]}
+    assert pr_with == pr_without, (pr_with, pr_without)
+    # overall_status IDENTICAL
+    assert (
+        out_with["overall_numerical_status"] == out_without["overall_numerical_status"]
+    ), (
+        out_with["overall_numerical_status"],
+        out_without["overall_numerical_status"],
+    )
+    # legit_not_run reason IS recorded in fail_closed_reasons (informational)
+    assert "some legit not-run reason" in out_with["fail_closed_reasons"]
+    # but it does NOT trigger global_invalid (no deny-all -> overall PASS)
+    assert out_with["overall_numerical_status"] == "PASS", out_with
+
+
+def test_duplicate_clears_all_per_route():
+    """Task 4 finding 3.4: a duplicate cell key is a schema error -> ALL
+    per_route criteria = UNKNOWN (global-invalid deny-all). On the old code,
+    the per-route loop ran first, so a duplicate only set overall=INCONCLUSIVE
+    while leaving per_route potentially PASS (fail-open: gonogo read per_route
+    directly -> route VIABLE while NUMERICAL=UNKNOWN). Uses legacy count mode
+    with expected=1 so that WITHOUT the duplicate deny-all, planar would reach
+    PASS (1 measured == 1 expected, policy passes)."""
+    from results._phase0.numerical import aggregate
+
+    r = {
+        "route": "planar",
+        "dtype": "C16BF",
+        "shape": (16384, 1024, 1024),
+        "level": "baseline",
+        "input_construction_version": "baseline_v1",
+        "seed": 0,
+        "reference_dtype": "c64",
+        "source": "measured",
+        "relative_l2": 1e-4,
+        "max_rel": 1e-4,
+        "nan_inf": False,
+        "policy_pass": True,
+    }
+    out = aggregate(
+        [r, r], {("planar", "C16BF"): 1}, _valid_case_hashes(), [], shape_drift=False
+    )
+    for pr in out["per_route"]:
+        assert pr["criterion"] == "UNKNOWN", pr
+    assert out["overall_numerical_status"] == "INCONCLUSIVE", out
+    assert any("duplicate" in reason.lower() for reason in out["fail_closed_reasons"])
+
+
+def test_binding_unavailable_clears_per_route():
+    """Task 4 finding 3.4: when case-binding hashes are unavailable (empty
+    values), ALL per_route criteria = UNKNOWN (the case binding is broken ->
+    cannot validate any route). Uses legacy count mode with expected=1 so that
+    WITHOUT the binding-unavailable deny-all, planar would reach PASS."""
+    from results._phase0.numerical import aggregate, _case_hashes
+
+    r = {
+        "route": "planar",
+        "dtype": "C16BF",
+        "shape": (16384, 1024, 1024),
+        "level": "baseline",
+        "input_construction_version": "baseline_v1",
+        "seed": 0,
+        "reference_dtype": "c64",
+        "source": "measured",
+        "relative_l2": 1e-4,
+        "max_rel": 1e-4,
+        "nan_inf": False,
+        "policy_pass": True,
+    }
+    hashes = {k: "" for k in _case_hashes()}  # empty -> UNAVAILABLE
+    hashes["algorithm"] = "sha256"
+    out = aggregate([r], {("planar", "C16BF"): 1}, hashes, [], shape_drift=False)
+    for pr in out["per_route"]:
+        assert pr["criterion"] == "UNKNOWN", pr
+    assert out["overall_numerical_status"] == "INCONCLUSIVE", out
+    assert any("unavailable" in reason.lower() for reason in out["fail_closed_reasons"])
+
+
+def test_binding_unavailable_empty_dict():
+    """Task 4 errata #2: binding_unavailable MUST handle the case where
+    case_hashes = {"algorithm": "sha256"} (only the algorithm key, no case
+    hashes). The plan's original ``any(v == "" for k,v in case_hashes.items()
+    if k != "algorithm")`` would filter out "algorithm", leaving ``{}`` ->
+    ``any([])`` = False -> binding_unavailable=False (WRONG -- the binding is
+    actually unavailable because there are NO case hashes). Fix:
+    binding_unavailable is True if the set of case-hash keys excluding
+    "algorithm" is EMPTY (no case bindings present)."""
+    from results._phase0.numerical import aggregate
+
+    r = {
+        "route": "planar",
+        "dtype": "C16BF",
+        "shape": (16384, 1024, 1024),
+        "level": "baseline",
+        "input_construction_version": "baseline_v1",
+        "seed": 0,
+        "reference_dtype": "c64",
+        "source": "measured",
+        "relative_l2": 1e-4,
+        "max_rel": 1e-4,
+        "nan_inf": False,
+        "policy_pass": True,
+    }
+    # Only the algorithm key, no case hashes -> binding_unavailable=True
+    out = aggregate(
+        [r], {("planar", "C16BF"): 1}, {"algorithm": "sha256"}, [], shape_drift=False
+    )
+    for pr in out["per_route"]:
+        assert pr["criterion"] == "UNKNOWN", pr
+    assert out["overall_numerical_status"] == "INCONCLUSIVE", out
+    assert any("unavailable" in reason.lower() for reason in out["fail_closed_reasons"])
+
+
+def test_complete_required_matrix_reaches_pass():
+    """Task 4 errata #4: a complete required matrix (ALL required cells
+    measured + passing policy) must reach PASS via the REAL aggregate function
+    (not a mock). The global predicate must be VALID (no duplicate/drift/
+    mismatch/unavailable) so it's not a deny-all. The synthetic fixture MAY
+    include a cancellation_v2 measured row (the no-GPU prohibition only
+    constrains COMMITTED artifacts, not test fixtures)."""
+    from results._phase0.numerical import aggregate, required_cell_keys
+
+    rows = []
+    for k in required_cell_keys():
+        route, dtype, shape, level, ver, seed, ref = k
+        rows.append(
+            {
+                "route": route,
+                "dtype": dtype,
+                "shape": shape,
+                "level": level,
+                "input_construction_version": ver,
+                "seed": seed,
+                "reference_dtype": ref,
+                "source": "measured",
+                "relative_l2": 1e-5,
+                "max_rel": 1e-5,
+                "nan_inf": False,
+                "policy_pass": True,
+            }
+        )
+    out = aggregate(
+        rows, required_cell_keys(), _valid_case_hashes(), [], shape_drift=False
+    )
+    # Global predicate VALID -> no deny-all reasons
+    reasons = " ".join(out["fail_closed_reasons"]).lower()
+    assert "duplicate" not in reasons, out["fail_closed_reasons"]
+    assert "shape drift" not in reasons, out["fail_closed_reasons"]
+    assert "mismatch" not in reasons, out["fail_closed_reasons"]
+    assert "unavailable" not in reasons, out["fail_closed_reasons"]
+    # ALL required cells measured + pass -> overall PASS via REAL aggregate
+    assert out["overall_numerical_status"] == "PASS", out
+    for pr in out["per_route"]:
+        assert pr["criterion"] == "PASS", pr
 
 
 if __name__ == "__main__":

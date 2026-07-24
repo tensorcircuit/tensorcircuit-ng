@@ -397,6 +397,56 @@ def _as_expected_keys(expected_counts, rows):
     return {_cell_key(k) if isinstance(k, dict) else k for k in expected_counts}
 
 
+# Case-binding hash keys + their source files (plan §5.2 / spec §4.4). MUST
+# stay in sync with ``manifest.NUMERICAL_BINDINGS``. ``_CASE_HASH_KEYS`` is the
+# canonical set of required case-binding keys (excluding the ``"algorithm"``
+# metadata key) used by ``aggregate``'s ``binding_unavailable`` check (Task 4
+# errata #2: empty/missing/None/short/non-hex -> unavailable -> global-invalid).
+_CASE_HASH_FILES = (
+    ("edge_map_sha256", "c1_c2_edge_map.json"),
+    ("region_prototype_sha256", "region_prototype.json"),
+    ("contraction_shapes_sha256", "contraction_shapes.csv"),
+    ("cublaslt_planar_capability_sha256", "cublaslt_planar_capability.json"),
+    ("cublaslt_full_matrix_sha256", "cublaslt_full_matrix.csv"),
+    ("cublaslt_grouped_capability_sha256", "cublaslt_grouped_capability.json"),
+    ("cublaslt_grouped_rows_sha256", "cublaslt_grouped.csv"),
+    ("cutlass_4m_sha256", "cutlass_sm120_4m.json"),
+    ("numerical_csv_sha256", "numerical_validation.csv"),
+)
+_CASE_HASH_KEYS = tuple(k for k, _ in _CASE_HASH_FILES)
+
+
+def _is_invalid_hash(v):
+    """True if a case-binding hash value is None, not a str, empty, shorter
+    than the expected sha256 hex length, or contains non-hex chars.
+
+    ``"MISMATCH"`` is NOT invalid -- it is the ``binding_mismatch`` sentinel
+    (handled separately by ``aggregate``). Used by the ``binding_unavailable``
+    check (Task 4 errata #2) so that empty/None/short/non-hex case bindings
+    force ``global_invalid`` (ALL per_route = UNKNOWN).
+
+    ``_case_hashes()`` returns full 64-char sha256 hex; ``cell_key_hash()``
+    returns 16-char truncated hex for cell metadata (a different binding). This
+    check is lenient: any non-empty hex string >= 8 chars passes (so a future
+    truncated binding schema does not false-fire), but short garbage like
+    ``"abc"`` or non-hex strings like ``"MISMATCH"``-without-the-sentinel are
+    caught.
+    """
+    if v == "MISMATCH":
+        return False  # binding_mismatch sentinel -- not an unavailable hash
+    if v is None or not isinstance(v, str):
+        return True
+    if len(v) == 0:
+        return True
+    if len(v) < 8:
+        return True
+    try:
+        int(v, 16)  # raises ValueError if non-hex chars
+    except ValueError:
+        return True
+    return False
+
+
 def aggregate(rows, expected_counts, case_hashes, legit_not_run, shape_drift=False):
     """Fail-closed aggregation -> numerical_validation.json payload (spec §6 3.3).
 
@@ -404,6 +454,18 @@ def aggregate(rows, expected_counts, case_hashes, legit_not_run, shape_drift=Fal
       level, input_construction_version, seed, reference_dtype) 7-tuples
       [preferred; see ``required_cell_keys()``], or a legacy dict
       ``{(route, dtype): N_count}`` for backward compatibility.
+
+    Task 4 (finding 3.4): explicit global-invalid flags are computed BEFORE the
+    per-route loop. If ``global_invalid`` (duplicate / shape_drift /
+    binding_mismatch / binding_unavailable), ALL per_route criteria = UNKNOWN
+    and overall = INCONCLUSIVE (return early). Previously aggregate computed
+    per-route criterion FIRST, so a shape_drift / duplicate / binding error
+    could leave overall=INCONCLUSIVE but a route=PASS, and gonogo reads
+    per_route directly -> route VIABLE while NUMERICAL=UNKNOWN (fail-open).
+
+    ``legit_not_run`` is informational only (Task 4 errata #1): recorded in
+    ``fail_closed_reasons`` but does NOT set ``global_invalid`` (a legit NOT_RUN
+    is still an UNKNOWN cell at the route level, not a global deny-all).
 
     Per-route criterion (plan §6 3.3)::
 
@@ -414,33 +476,22 @@ def aggregate(rows, expected_counts, case_hashes, legit_not_run, shape_drift=Fal
     A cell is **not-run** if its ``source`` starts with ``not_run:`` OR its
     ``relative_l2`` is None (the canonical metric was not measured; spec §3.2.1).
     NOT_RUN rows are KEPT in the CSV (diagnostic) but NEVER allow a route to PASS.
-    ``legit_not_run`` is informational only -- recorded as a fail_closed_reason but
-    does NOT change the verdict (a legit NOT_RUN is still an UNKNOWN cell).
 
     ``shape_drift`` (plan §3.2 / §3.11): when True, the hardcoded SHAPES constant
     no longer matches ``contraction_shapes.csv``. The required numerical cells
-    are stale -> overall UNKNOWN (do NOT silently re-hash and continue).
+    are stale -> global_invalid (overall UNKNOWN, ALL per_route UNKNOWN).
 
     JSON accounting per route: ``expected / actual / missing / extra`` cell counts
     where ``actual`` = measured keys that are in the expected set, ``missing`` =
     expected keys without a matching measured row, ``extra`` = measured keys not in
     the expected set (e.g. region_fused small_contract diagnostic rows). A duplicate
-    cell key is a schema error (plan §6 3.1): overall -> INCONCLUSIVE.
+    cell key is a schema error (plan §6 3.1): global_invalid -> overall INCONCLUSIVE.
     """
     expected_keys = _as_expected_keys(expected_counts, rows)
-    fail_closed_reasons = list(legit_not_run)
 
-    hash_mismatch = any(v == "MISMATCH" for v in case_hashes.values())
-    if hash_mismatch:
-        fail_closed_reasons.append("case-binding hash mismatch")
-
-    if shape_drift:
-        fail_closed_reasons.append(
-            "shape drift: SHAPES != contraction_shapes.csv (required numerical "
-            "cells no longer match the contraction artifact)"
-        )
-
-    # duplicate detection (plan §6 3.1: duplicate key = schema error)
+    # Finding 3.4 (Task 4 errata #1): compute explicit global-invalid flags
+    # BEFORE the per-route loop. If global_invalid, ALL per_route = UNKNOWN and
+    # overall = INCONCLUSIVE (return early, before the route-local loop).
     seen = set()
     duplicate_count = 0
     for r in rows:
@@ -448,11 +499,69 @@ def aggregate(rows, expected_counts, case_hashes, legit_not_run, shape_drift=Fal
         if k in seen:
             duplicate_count += 1
         seen.add(k)
-    if duplicate_count:
-        fail_closed_reasons.append(
-            f"duplicate cell keys (schema error): {duplicate_count}"
-        )
 
+    binding_mismatch = any(v == "MISMATCH" for v in case_hashes.values() if v)
+    # Task 4 errata #2: binding_unavailable MUST handle the empty/missing/None/
+    # short/non-hex case + required-key completeness. The plan's original
+    # ``any(v == "" for k,v in case_hashes.items() if k != "algorithm")`` MISSES
+    # ``{"algorithm":"sha256"}`` (only the algorithm key, no case hashes): the
+    # ``if k != "algorithm"`` filter removes it, leaving ``{}`` -> ``any([])`` =
+    # False -> binding_unavailable=False (WRONG -- the binding is actually
+    # unavailable because there are NO case hashes). Fix: True if (a) no required
+    # case keys are present at all, OR (b) any required case key is MISSING from
+    # case_hashes, OR (c) any case-hash value is empty/None/short/non-hex.
+    required_case_keys = _CASE_HASH_KEYS
+    case_hash_values = [case_hashes.get(k) for k in required_case_keys]
+    binding_unavailable = (
+        len(required_case_keys) == 0  # no case keys defined (defensive)
+        or any(k not in case_hashes for k in required_case_keys)  # required key missing
+        or any(
+            _is_invalid_hash(v) for v in case_hash_values
+        )  # empty/None/short/non-hex
+    )
+    schema_error = duplicate_count > 0
+    global_invalid = bool(
+        schema_error or shape_drift or binding_mismatch or binding_unavailable
+    )
+
+    # legit_not_run is informational only (errata #1): recorded in
+    # fail_closed_reasons but does NOT set global_invalid.
+    fail_closed_reasons = list(legit_not_run)
+
+    if global_invalid:
+        per_route = [
+            {
+                "route": rt,
+                "criterion": "UNKNOWN",
+                "n_cells": 0,
+                "expected": 0,
+                "actual": 0,
+                "missing": 0,
+                "extra": 0,
+            }
+            for rt in _ROUTES
+        ]
+        if schema_error:
+            fail_closed_reasons.append(f"duplicate cell keys: {duplicate_count}")
+        if shape_drift:
+            fail_closed_reasons.append(
+                "shape drift: SHAPES != contraction_shapes.csv (required numerical "
+                "cells no longer match the contraction artifact)"
+            )
+        if binding_mismatch:
+            fail_closed_reasons.append("case-binding hash mismatch")
+        if binding_unavailable:
+            fail_closed_reasons.append("case-binding hash unavailable")
+        return {
+            "schema_version": "numerical-validation-v1",
+            "case_binding": case_hashes,
+            "per_route": per_route,
+            "overall_numerical_status": "INCONCLUSIVE",
+            "fail_closed_reasons": fail_closed_reasons,
+        }
+
+    # global valid -> existing route-local loop (legit_not_run recorded as
+    # informational in fail_closed_reasons, does NOT set global_invalid).
     per_route = []
     statuses = []
     for route in _ROUTES:
@@ -515,11 +624,10 @@ def aggregate(rows, expected_counts, case_hashes, legit_not_run, shape_drift=Fal
             }
         )
 
-    if duplicate_count:
-        overall = "INCONCLUSIVE"
-    elif shape_drift:
-        overall = "INCONCLUSIVE"  # required cells stale -> cannot validate
-    elif hash_mismatch or any(s == "UNKNOWN" for s in statuses):
+    # Global-valid path: duplicate / shape_drift / binding_mismatch /
+    # binding_unavailable are all False (otherwise we returned early above).
+    # Overall status depends only on the route-local criteria.
+    if any(s == "UNKNOWN" for s in statuses):
         overall = "INCONCLUSIVE"
     elif any(s == "FAIL" for s in statuses):
         overall = "FAIL"
@@ -1081,21 +1189,14 @@ def _case_hashes():
     privacy-only sanitization (path/name tokens, no numerical semantics) the
     binding hashes are recomputed from the post-sanitized files so the binding
     stays consistent (``sanitize.rehash_numerical_binding``).
+
+    The (binding key, file) pairs live in the module-level ``_CASE_HASH_FILES``
+    constant (shared with ``aggregate``'s ``binding_unavailable`` check via
+    ``_CASE_HASH_KEYS``) so there is a single source of truth for the required
+    case-binding key set.
     """
-    # (binding key) -> (file under OUT_DIR). Must match manifest.NUMERICAL_BINDINGS.
-    sources = [
-        ("edge_map_sha256", "c1_c2_edge_map.json"),
-        ("region_prototype_sha256", "region_prototype.json"),
-        ("contraction_shapes_sha256", "contraction_shapes.csv"),
-        ("cublaslt_planar_capability_sha256", "cublaslt_planar_capability.json"),
-        ("cublaslt_full_matrix_sha256", "cublaslt_full_matrix.csv"),
-        ("cublaslt_grouped_capability_sha256", "cublaslt_grouped_capability.json"),
-        ("cublaslt_grouped_rows_sha256", "cublaslt_grouped.csv"),
-        ("cutlass_4m_sha256", "cutlass_sm120_4m.json"),
-        ("numerical_csv_sha256", "numerical_validation.csv"),
-    ]
     hashes = {"algorithm": "sha256"}
-    for hash_key, fname in sources:
+    for hash_key, fname in _CASE_HASH_FILES:
         p = os.path.join(OUT_DIR, fname)
         if os.path.exists(p):
             with open(p, "rb") as _fh:
