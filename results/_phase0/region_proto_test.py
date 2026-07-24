@@ -155,6 +155,21 @@ def test_run_verdict_and_no_full_PT(tmp_path):
     assert out["peak_evidence_class"] == "MODEL_ONLY", out
     assert "analytical_or_allocation_upper_bound_bytes" in out, out
     assert "peak_saved_bytes" not in out, out  # the misleading name is gone
+    # Task 2 (plan §5 2.1/2.3): legacy raw-allocation fields renamed to analytical
+    # diagnostic names; old names must NOT appear in the producer output.
+    assert "analytical_materialized_buffer_floor_bytes" in out, out
+    assert "analytical_fused_buffer_floor_bytes" in out, out
+    assert "materialized_peak_bytes" not in out, out  # renamed
+    assert "fused_peak_bytes" not in out, out  # renamed
+    # Task 2 (plan §5 2.1): MEASURED runtime allocator peak schema is predefined
+    # as None (GPU Task 2b fills these from the full-anchor fused run). The c2
+    # gate reads ONLY these fields for a canonical region peak gain.
+    assert out["materialized_runtime_allocator_peak_bytes"] is None, out
+    assert out["fused_runtime_allocator_peak_bytes"] is None, out
+    assert out["runtime_peak_gain_bytes"] is None, out
+    assert out["runtime_peak_measurement_method"] is None, out
+    assert out["runtime_peak_scope"] is None, out
+    assert out["runtime_peak_sample_count"] is None, out
 
 
 def test_run_artifacts(tmp_path):

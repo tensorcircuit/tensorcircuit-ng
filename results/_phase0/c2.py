@@ -110,6 +110,22 @@ RESOURCE_MIN_OCCUPANCY_PCT = 25.0
 # A real P->T->E consumer outputs a full E tensor (>= this), not a scalar/reduction.
 FULL_E_MIN_BYTES = 1 * 1024 * 1024
 _FEASIBLE_VERDICTS = ("FEASIBLE_WITH_RECOMPUTE", "TILE_FUSION_FEASIBLE")
+# Peak evidence classes (plan §5 2.1 / finding 3.1): MODEL_ONLY = analytical/
+# allocation upper bound (diagnostic only, never canonical); MEASURED = runtime
+# allocator peak from a full-anchor fused run (canonical-eligible). GPU Task 2b
+# fills the MEASURED fields; until then they are absent -> region peak gain
+# None -> region UNKNOWN.
+PEAK_EVIDENCE_MEASURED = "MEASURED"
+PEAK_EVIDENCE_MODEL_ONLY = "MODEL_ONLY"
+# Required measured-peak fields: all must be present and valid for a canonical
+# region peak gain. Missing any -> region_peak_gain_bytes None -> UNKNOWN.
+_MEASURED_PEAK_REQUIRED_FIELDS = (
+    "materialized_runtime_allocator_peak_bytes",
+    "fused_runtime_allocator_peak_bytes",
+    "runtime_peak_measurement_method",
+    "runtime_peak_scope",
+    "runtime_peak_sample_count",
+)
 _LAYER_KEYS = (
     "C2_REGION_KERNEL_FEASIBILITY",
     "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK",
@@ -482,13 +498,32 @@ def _recompute_conditions(proto, peak):
         rc["resource_pass"] = bool(regs > 0 and occ >= RESOURCE_MIN_OCCUPANCY_PCT)
     else:
         rc["resource_pass"] = None
-    mp = proto.get("materialized_peak_bytes")
-    fp = proto.get("fused_peak_bytes")
-    rc["region_peak_gain_bytes"] = (
-        int(mp) - int(fp)
-        if isinstance(mp, (int, float)) and isinstance(fp, (int, float))
-        else None
-    )
+    # Peak evidence gate (plan §5 2.2 / finding 3.1): only a MEASURED runtime
+    # allocator peak (full-anchor execution scope) may produce a canonical
+    # region peak gain. MODEL_ONLY / missing peak_evidence_class / missing
+    # measured fields (method / scope / sample_count / both runtime peaks) ->
+    # None -> region UNKNOWN. Legacy raw-allocation fields
+    # (materialized_peak_bytes / fused_peak_bytes) are diagnostic only and
+    # NEVER produce a canonical gain.
+    if proto.get("peak_evidence_class") != PEAK_EVIDENCE_MEASURED:
+        rc["region_peak_gain_bytes"] = None
+    else:
+        method = proto.get("runtime_peak_measurement_method")
+        scope = proto.get("runtime_peak_scope")
+        sample_count = proto.get("runtime_peak_sample_count")
+        mr = proto.get("materialized_runtime_allocator_peak_bytes")
+        fr = proto.get("fused_runtime_allocator_peak_bytes")
+        if (
+            method
+            and scope
+            and isinstance(sample_count, int)
+            and sample_count > 0
+            and isinstance(mr, (int, float))
+            and isinstance(fr, (int, float))
+        ):
+            rc["region_peak_gain_bytes"] = int(mr) - int(fr)
+        else:
+            rc["region_peak_gain_bytes"] = None
     base = peak.get("base_peak_bytes")
     after = (peak.get("anchor_window") or {}).get("peak_after_single_elimination")
     rc["single_reduction_bytes"] = (
@@ -570,14 +605,16 @@ def _binding_problems(edge, peak, proto, audit, case, file_hashes):
 def _region_layer(proto, edge, rc):
     """C2_REGION_KERNEL_FEASIBILITY: can the real P->T->E region be computed without
     materializing full P/T (spec §5.1)? Only a real prototype run AT THE FULL ANCHOR
-    gives PASS/FAIL; everything else is UNKNOWN.
+    with MEASURED runtime allocator peak gives PASS/FAIL; everything else is UNKNOWN.
 
     Plan §5 2.1 (Task 2a): small-contract compile/correctness only -> UNKNOWN (never
-    PASS). Plan §3 操作.2 bullet 2 (M1): region is UNKNOWN when ANY of four evidence
-    fields is missing --
+    PASS). Plan §5 2.2 (Task 2): peak must be MEASURED (not MODEL_ONLY) with all
+    required measured fields present. Plan §3 操作.2 bullet 2 (M1): region is UNKNOWN
+    when ANY of four evidence fields is missing --
       1. registers        -> rc["resource_pass"] is None when registers_per_thread is absent
       2. occupancy        -> rc["resource_pass"] is None when occupancy_pct is absent
-      3. actual peak      -> rc["region_peak_gain_bytes"] is None when raw peak fields absent
+      3. measured peak    -> rc["region_peak_gain_bytes"] is None when peak_evidence_class
+                             != MEASURED or required measured fields are missing
       4. full-E correctness-> fused_full_anchor_run != True (full-anchor E not measured)
     """
     if not _is_real_pte_prototype(proto, edge):
@@ -589,8 +626,11 @@ def _region_layer(proto, edge, rc):
     if verdict in _FEASIBLE_VERDICTS:
         acc, res = rc["accuracy_pass"], rc["resource_pass"]
         peak = rc["region_peak_gain_bytes"]
-        # M1 conditions 1/2/3 (registers / occupancy / actual peak): missing
+        # M1 conditions 1/2/3 (registers / occupancy / measured peak): missing
         # evidence -> UNKNOWN (the gate cannot confirm what was not measured).
+        # Condition 3 now requires peak_evidence_class=MEASURED + all required
+        # measured fields (plan §5 2.2 / finding 3.1); MODEL_ONLY or missing
+        # measured fields -> region_peak_gain_bytes None -> UNKNOWN.
         if acc is None or res is None or peak is None:
             return (
                 "UNKNOWN",

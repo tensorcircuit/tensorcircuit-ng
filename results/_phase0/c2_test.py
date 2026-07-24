@@ -205,6 +205,18 @@ def _good_prototype():
         "materialized_peak_bytes": 1778384896,
         "fused_peak_bytes": 704643072,
         "peak_saved_bytes": 1073741824,
+        # Measured runtime allocator peak (plan §5 2.1): these are the canonical
+        # peak fields the gate reads. GPU Task 2b fills them from a real full-anchor
+        # fused run; the fixture carries them so the all-pass / self-recompute paths
+        # exercise the MEASURED gate. Legacy raw-allocation fields above are
+        # diagnostic only and must NOT produce a canonical gain on their own.
+        "peak_evidence_class": "MEASURED",
+        "materialized_runtime_allocator_peak_bytes": 1778384896,
+        "fused_runtime_allocator_peak_bytes": 704643072,
+        "runtime_peak_gain_bytes": 1073741824,
+        "runtime_peak_measurement_method": "cuda_memory_pool_delta",
+        "runtime_peak_scope": "full_anchor_fused_run",
+        "runtime_peak_sample_count": 5,
         "p_buffer_bytes": 536870912,
         "t_buffer_bytes": 536870912,
         "producer_recompute_factor": 64,
@@ -451,10 +463,15 @@ def test_canonical_pass_when_all_layers_pass():
 
 def test_canonical_self_recomputes_region_peak_gain_and_single_reduction():
     """Self-recompute (not trusting self-reported booleans): region_peak_gain =
-    materialized - fused; single_reduction = base_peak - peak_after_single."""
+    materialized_runtime_allocator_peak - fused_runtime_allocator_peak (MEASURED
+    fields only, plan §5 2.2); single_reduction = base_peak - peak_after_single.
+    The gate must NOT trust the self-reported ``runtime_peak_gain_bytes`` /
+    ``peak_saved_bytes`` fields."""
     edge, peak, proto, audit, case, fh = _good()
-    # sabotage the self-reported saved bytes; the gate must recompute from raw peaks
+    # sabotage the self-reported saved bytes; the gate must recompute from raw
+    # MEASURED runtime allocator peaks, not the self-reported gain fields.
     proto["peak_saved_bytes"] = 0
+    proto["runtime_peak_gain_bytes"] = 0
     peak["anchor_window"]["single_reduction_bytes"] = 0
     peak["diagnostics"]["single_anchor_reduction_bytes"] = 0
     j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
@@ -496,18 +513,20 @@ def test_canonical_region_unknown_when_fused_full_anchor_run_false():
 
 
 def test_canonical_region_unknown_when_actual_peak_missing():
-    """plan §3 操作.2 bullet 2: actual peak (``materialized_peak_bytes`` /
-    ``fused_peak_bytes``) missing -> region UNKNOWN. The gate self-recomputes
-    ``region_peak_gain_bytes`` from those raw fields; if either is absent the
-    peak benefit is unconfirmable, so the region criterion must fail closed to
-    UNKNOWN. The current ``_region_layer`` only checks accuracy/resource and
-    ignores a None ``region_peak_gain_bytes`` -> PASS leaks through."""
+    """plan §3 操作.2 bullet 2 / finding 3.1: measured peak fields
+    (``materialized_runtime_allocator_peak_bytes`` /
+    ``fused_runtime_allocator_peak_bytes``) missing -> region UNKNOWN. The gate
+    self-recomputes ``region_peak_gain_bytes`` from those MEASURED fields; if
+    either is absent the peak benefit is unconfirmable, so the region criterion
+    must fail closed to UNKNOWN. Legacy ``materialized_peak_bytes`` /
+    ``fused_peak_bytes`` (still present here) are diagnostic only and must NOT
+    restore a canonical gain."""
     edge, peak, proto, audit, case, fh = _good()
     # Isolate the peak-missing path: declare the full-anchor run done so bullet 1
-    # does not independently force UNKNOWN, then strip the actual-peak fields.
+    # does not independently force UNKNOWN, then strip the measured-peak fields.
     proto["fused_full_anchor_run"] = True
-    del proto["materialized_peak_bytes"]
-    del proto["fused_peak_bytes"]
+    del proto["materialized_runtime_allocator_peak_bytes"]
+    del proto["fused_runtime_allocator_peak_bytes"]
     j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
     assert j["recomputed"]["region_peak_gain_bytes"] is None, j
     assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
@@ -546,13 +565,15 @@ def test_canonical_region_unknown_m1_when_occupancy_missing():
 
 
 def test_canonical_region_unknown_m1_when_actual_peak_missing():
-    """M1 condition 3/4: ``materialized_peak_bytes`` / ``fused_peak_bytes`` missing
-    -> region_peak_gain_bytes None -> region UNKNOWN. (Parallel to the Task 0
-    RED test above, named here to pin M1 condition 3 explicitly.)"""
+    """M1 condition 3/4: ``materialized_runtime_allocator_peak_bytes`` /
+    ``fused_runtime_allocator_peak_bytes`` missing -> region_peak_gain_bytes
+    None -> region UNKNOWN. (Parallel to the Task 0 RED test above, named here
+    to pin M1 condition 3 explicitly. After Task 2 the gate reads MEASURED
+    runtime allocator peaks, not legacy allocation fields.)"""
     edge, peak, proto, audit, case, fh = _good()
     proto["fused_full_anchor_run"] = True
-    del proto["materialized_peak_bytes"]
-    del proto["fused_peak_bytes"]  # M1 #3: actual peak unmeasured
+    del proto["materialized_runtime_allocator_peak_bytes"]
+    del proto["fused_runtime_allocator_peak_bytes"]  # M1 #3: measured peak unmeasured
     j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
     assert j["recomputed"]["region_peak_gain_bytes"] is None, j
     assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
@@ -588,10 +609,11 @@ def test_canonical_region_unknown_when_peak_evidence_model_only():
     is an analytical/allocation upper bound -- not a measured runtime allocator
     peak. The gate must fail closed to UNKNOWN.
 
-    Current ``_recompute_conditions`` reads ``materialized_peak_bytes`` /
-    ``fused_peak_bytes`` with no ``peak_evidence_class`` check (c2.py:485-490),
-    so the MODEL_ONLY peak produces a non-None ``region_peak_gain_bytes`` ->
-    PASS leaks through. This test freezes the target: MODEL_ONLY -> UNKNOWN."""
+    Task 2 fix: ``_recompute_conditions`` now gates on
+    ``peak_evidence_class == MEASURED``; MODEL_ONLY / missing -> region_peak_gain
+    None -> region UNKNOWN. This test was RED before the fix (the old gate read
+    legacy ``materialized_peak_bytes``/``fused_peak_bytes`` with no evidence-class
+    check) and is GREEN after."""
     edge, peak, proto, audit, case, fh = _good()
     proto["fused_full_anchor_run"] = True
     proto["peak_evidence_class"] = "MODEL_ONLY"
@@ -603,6 +625,79 @@ def test_canonical_region_unknown_when_peak_evidence_model_only():
     assert (
         region == "UNKNOWN"
     ), f"MODEL_ONLY peak must yield region UNKNOWN, got {region!r}"
+
+
+# ---------------------------------------------------------------------------
+# Task 2 acceptance (plan §5 验收): the MEASURED gate must reject every
+# incomplete / fake / absent evidence-class combination, and only a complete
+# MEASURED fixture can reach region PASS.
+# ---------------------------------------------------------------------------
+
+
+def test_canonical_region_unknown_when_peak_evidence_class_deleted():
+    """plan §5 验收: delete ``peak_evidence_class`` entirely -> region UNKNOWN.
+    No evidence class means the gate cannot confirm the peak was measured."""
+    edge, peak, proto, audit, case, fh = _good()
+    proto["fused_full_anchor_run"] = True
+    del proto["peak_evidence_class"]
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    assert j["recomputed"]["region_peak_gain_bytes"] is None, j
+    assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
+
+
+def test_canonical_region_unknown_when_measured_but_scope_missing():
+    """plan §5 验收: ``peak_evidence_class=MEASURED`` but ``runtime_peak_scope``
+    missing -> region UNKNOWN. Fake MEASURED without the required scope/method/
+    sample_count metadata cannot produce a canonical gain."""
+    edge, peak, proto, audit, case, fh = _good()
+    proto["fused_full_anchor_run"] = True
+    proto["peak_evidence_class"] = "MEASURED"
+    del proto["runtime_peak_scope"]
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    assert j["recomputed"]["region_peak_gain_bytes"] is None, j
+    assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
+
+
+def test_canonical_region_unknown_when_measured_but_method_missing():
+    """plan §5 验收: ``peak_evidence_class=MEASURED`` but
+    ``runtime_peak_measurement_method`` missing -> region UNKNOWN."""
+    edge, peak, proto, audit, case, fh = _good()
+    proto["fused_full_anchor_run"] = True
+    proto["peak_evidence_class"] = "MEASURED"
+    del proto["runtime_peak_measurement_method"]
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    assert j["recomputed"]["region_peak_gain_bytes"] is None, j
+    assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
+
+
+def test_canonical_region_unknown_when_measured_but_sample_count_missing():
+    """plan §5 验收: ``peak_evidence_class=MEASURED`` but
+    ``runtime_peak_sample_count`` missing -> region UNKNOWN."""
+    edge, peak, proto, audit, case, fh = _good()
+    proto["fused_full_anchor_run"] = True
+    proto["peak_evidence_class"] = "MEASURED"
+    del proto["runtime_peak_sample_count"]
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    assert j["recomputed"]["region_peak_gain_bytes"] is None, j
+    assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
+
+
+def test_canonical_region_pass_only_with_complete_measured_fixture():
+    """plan §5 验收: a COMPLETE measured fixture (MEASURED + full-anchor +
+    all required fields + no P/T evidence) -> region PASS. This is the sole
+    path to canonical region PASS; the _good fixture already carries all
+    required MEASURED fields."""
+    edge, peak, proto, audit, case, fh = _good()
+    proto["fused_full_anchor_run"] = True
+    assert proto["peak_evidence_class"] == "MEASURED", proto
+    assert proto["materialized_runtime_allocator_peak_bytes"] is not None
+    assert proto["fused_runtime_allocator_peak_bytes"] is not None
+    assert proto["runtime_peak_measurement_method"] is not None
+    assert proto["runtime_peak_scope"] is not None
+    assert proto["runtime_peak_sample_count"] is not None
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    assert j["recomputed"]["region_peak_gain_bytes"] is not None, j
+    assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "PASS", j
 
 
 if __name__ == "__main__":

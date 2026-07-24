@@ -13,12 +13,18 @@ transpose (all HLO layouts in this region are row-major == C-order, validated ag
 layout-aware permutation). The fused kernel (cpp/region_proto.cu, nvrtc sm_120) recomputes the
 producer elements on the fly and never writes full P or T.
 
-Honest evidence classification (plan §5 2.1, wired in Task 2a): the fused kernel is compiled
+Honest evidence classification (plan §5 2.1/2.2, wired in Task 2a/2): the fused kernel is compiled
 and its correctness is verified fused == materialized on the SMALL 8-D contract only; the
 full-anchor fused run is NOT executed here. The canonical ``verdict`` is therefore UNKNOWN
 (not the artifact-native ``FEASIBLE_WITH_RECOMPUTE`` detail token) until the full-anchor run
 is actually measured (Task 2b, GPU). The raw allocation-size delta is kept as a MODEL_ONLY
-analytical upper bound (``analytical_or_allocation_upper_bound_bytes``), not a runtime peak.
+analytical upper bound (``analytical_or_allocation_upper_bound_bytes`` /
+``analytical_materialized_buffer_floor_bytes`` / ``analytical_fused_buffer_floor_bytes``), not
+a runtime peak. The MEASURED runtime allocator peak schema
+(``materialized_runtime_allocator_peak_bytes`` / ``fused_runtime_allocator_peak_bytes`` /
+``runtime_peak_measurement_method`` / ``runtime_peak_scope`` / ``runtime_peak_sample_count``)
+is predefined here as None for GPU Task 2b to fill; the c2 gate reads ONLY these MEASURED
+fields for a canonical region peak gain (finding 3.1: MODEL_ONLY must never yield PASS).
 """
 
 from __future__ import annotations
@@ -406,17 +412,30 @@ def run(
         "occupancy_blocks_per_sm": blocks_per_sm,
         "occupancy_pct": round(occ_pct, 1) if occ_pct is not None else None,
         # memory: raw allocation-size deltas (malloc/free counter delta), NOT
-        # runtime path-execution peaks. plan §5 2.1 reclassifies the saved-bytes
-        # difference as `analytical_or_allocation_upper_bound_bytes` (MODEL_ONLY):
-        # it is an analytical upper bound on what fusion might save, not a
-        # measured allocator peak gain. The individual materialized/fused fields
-        # retain their measurement-input names; only the "gain"-like field is
-        # renamed so no downstream gate can mistake it for a runtime peak gain.
-        "materialized_peak_bytes": materialized_peak,
-        "fused_peak_bytes": fused_peak,
+        # runtime path-execution peaks. plan §5 2.1/2.3 reclassifies these as
+        # MODEL_ONLY analytical fields:
+        #   analytical_materialized_buffer_floor_bytes = materialized-path alloc delta
+        #   analytical_fused_buffer_floor_bytes        = fused-path alloc delta
+        #   analytical_or_allocation_upper_bound_bytes = the difference (upper bound)
+        # These are diagnostic only and NEVER produce a canonical region peak gain
+        # (finding 3.1). The canonical gain comes from the MEASURED runtime
+        # allocator peak fields below, filled by GPU Task 2b (all None here because
+        # the full-anchor fused run is not executed in this producer).
+        "analytical_materialized_buffer_floor_bytes": materialized_peak,
+        "analytical_fused_buffer_floor_bytes": fused_peak,
         "analytical_or_allocation_upper_bound_bytes": peak_saved,
         "peak_evidence_class": "MODEL_ONLY",
         "peak_measurement_method": "raw_allocation_size_delta",
+        # MEASURED runtime allocator peak schema (plan §5 2.1): predefined here for
+        # GPU Task 2b to fill. All None until the full-anchor fused run is actually
+        # executed and the runtime allocator peak is sampled. The c2 gate reads
+        # ONLY these fields (not the analytical fields above) for region_peak_gain.
+        "materialized_runtime_allocator_peak_bytes": None,
+        "fused_runtime_allocator_peak_bytes": None,
+        "runtime_peak_gain_bytes": None,
+        "runtime_peak_measurement_method": None,
+        "runtime_peak_scope": None,
+        "runtime_peak_sample_count": None,
         "p_buffer_bytes": P_b,
         "t_buffer_bytes": T_b,
         # cost
@@ -462,8 +481,8 @@ def run(
         w.writerow(
             [
                 "path",
-                "materialized_peak_bytes",
-                "fused_peak_bytes",
+                "analytical_materialized_buffer_floor_bytes",
+                "analytical_fused_buffer_floor_bytes",
                 "analytical_or_allocation_upper_bound_bytes",
             ]
         )
