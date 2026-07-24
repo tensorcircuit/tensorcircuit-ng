@@ -149,6 +149,50 @@ def cancellation_metrics(shape, seed):
     }
 
 
+# The 5 cancellation diagnostic fields that must be recorded in the numerical
+# output (CSV) for cancellation-level rows so the cancellation is independently
+# auditable from the artifacts (plan §3.1 / spec §3.4).
+CANCEL_FIELDS = (
+    "input_construction_version",
+    "cancellation_epsilon",
+    "reference_norm",
+    "baseline_norm",
+    "cancellation_ratio",
+)
+
+
+def _enrich_cancellation_metrics(row):
+    """Wire ``cancellation_metrics()`` into a numerical row dict (GPU-free).
+
+    For cancellation-level rows whose ``shape`` is a real (M, N, K) tuple with
+    even K, computes the 5 cancellation diagnostic fields via
+    ``cancellation_metrics(shape, seed)`` and merges them into ``row`` in place.
+    For all other rows (non-cancellation level, or label shapes like
+    ``"small_contract"``) the row is returned unchanged.
+
+    Idempotent: if the row already carries ``input_construction_version`` the
+    computation is skipped (avoids redundant numpy CPU matmul on re-enrichment,
+    e.g. in the ``regen_no_gpu`` path where collect_cutlass already enriched).
+
+    Called by the GPU collectors (``collect_planar`` / ``collect_grouped`` /
+    ``collect_cutlass``) and by ``main(regen_no_gpu=True)`` for CSV-read rows,
+    so the 5 fields are recorded in the CSV output for every cancellation cell.
+    """
+    if row.get("level") != "cancellation":
+        return row
+    if "input_construction_version" in row:
+        return row  # idempotent
+    shape = row.get("shape")
+    if not (isinstance(shape, (tuple, list)) and len(shape) == 3):
+        return row  # label shapes (e.g. "small_contract") cannot compute metrics
+    M, N, K = shape
+    if K % 2 != 0:
+        return row  # cancellation requires even K (make_inputs constraint)
+    seed = row.get("seed", 0)
+    row.update(cancellation_metrics(tuple(shape), seed))
+    return row
+
+
 # diagnostic only" (e.g. max_abs for region_fused/cutlass where output scale varies
 # with dynamic range). nan_inf is always enforced.
 POLICIES = {
@@ -547,6 +591,17 @@ _CSV_COLUMNS = [
     # detection off this prefix (symmetric with the in-memory rows) in addition
     # to ``relative_l2 is None``.
     "source",
+    # Cancellation diagnostic fields (plan §3.1 / spec §3.4): recorded for
+    # cancellation-level rows via ``_enrich_cancellation_metrics`` so the
+    # cancellation is independently auditable from the CSV artifacts (not just
+    # by calling ``cancellation_metrics`` / ``make_inputs`` directly). Empty for
+    # non-cancellation rows and label-shape rows (e.g. region_fused
+    # "small_contract").
+    "input_construction_version",
+    "cancellation_epsilon",
+    "reference_norm",
+    "baseline_norm",
+    "cancellation_ratio",
 ]
 
 
@@ -594,6 +649,12 @@ def write_csv(path, rows):
             # source defaults to "measured" for real measured rows; NOT_RUN rows
             # carry "not_run:<reason>"; diagnostic rows carry "diagnostic:*".
             source = r.get("source") or "measured"
+            # Cancellation diagnostic fields (empty for non-cancellation rows).
+            icv = r.get("input_construction_version", "")
+            ceps = r.get("cancellation_epsilon")
+            rnorm = r.get("reference_norm")
+            bnorm = r.get("baseline_norm")
+            cratio = r.get("cancellation_ratio")
             w.writerow(
                 [
                     route,
@@ -612,6 +673,11 @@ def write_csv(path, rows):
                     r.get("reference_dtype", "c64"),
                     sh,
                     source,
+                    icv,
+                    f"{ceps:.6e}" if ceps is not None else "",
+                    f"{rnorm:.6e}" if rnorm is not None else "",
+                    f"{bnorm:.6e}" if bnorm is not None else "",
+                    f"{cratio:.6e}" if cratio is not None else "",
                 ]
             )
 
@@ -697,7 +763,7 @@ def collect_planar(shape, dtype, level, seed):
         **metrics,
         "policy_pass": int(verdict == "PASS"),
     }
-    return row
+    return _enrich_cancellation_metrics(row)
 
 
 # ---------------------------------------------------------------------------
@@ -766,16 +832,18 @@ def collect_grouped(shape, dtype, level, seed, batch=4):
         worst["nan_inf"] = worst["nan_inf"] or m["nan_inf"]
         worst["n_elems"] += m["n_elems"]
     verdict, _ = apply_policy("grouped", dtype, worst)
-    return {
-        "route": "grouped",
-        "dtype": dtype,
-        "shape": shape,
-        "level": level,
-        "seed": seed,
-        "reference_dtype": "c64",
-        **worst,
-        "policy_pass": int(verdict == "PASS"),
-    }
+    return _enrich_cancellation_metrics(
+        {
+            "route": "grouped",
+            "dtype": dtype,
+            "shape": shape,
+            "level": level,
+            "seed": seed,
+            "reference_dtype": "c64",
+            **worst,
+            "policy_pass": int(verdict == "PASS"),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -809,21 +877,23 @@ def collect_region_fused(level, seed):
     )
     metrics = compute_metrics(cp.asnumpy(E_fus), cp.asnumpy(E_mat))
     verdict, _ = apply_policy("region_fused", "c64", metrics)
-    return {
-        "route": "region_fused",
-        "dtype": "c64",
-        "shape": "small_contract",
-        "level": level,
-        "seed": seed,
-        "reference_dtype": "c64",
-        # diagnostic: this row is the small-contract correctness proof (spec §7.2),
-        # NOT the required full-anchor cell. It shows up as `extra` in the JSON
-        # accounting because its shape key ("small_contract") does not match the
-        # required REGION_FULL_ANCHOR_SHAPE tuple.
-        "source": "diagnostic:small-contract",
-        **metrics,
-        "policy_pass": int(verdict == "PASS"),
-    }
+    return _enrich_cancellation_metrics(
+        {
+            "route": "region_fused",
+            "dtype": "c64",
+            "shape": "small_contract",
+            "level": level,
+            "seed": seed,
+            "reference_dtype": "c64",
+            # diagnostic: this row is the small-contract correctness proof (spec §7.2),
+            # NOT the required full-anchor cell. It shows up as `extra` in the JSON
+            # accounting because its shape key ("small_contract") does not match the
+            # required REGION_FULL_ANCHOR_SHAPE tuple.
+            "source": "diagnostic:small-contract",
+            **metrics,
+            "policy_pass": int(verdict == "PASS"),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -868,36 +938,40 @@ def collect_cutlass(level, seed):
             "n_elems": 16384 * 1024,
         }
         verdict, _ = apply_policy("cutlass_4m_single", "C16BF", metrics)
-        return {
+        return _enrich_cancellation_metrics(
+            {
+                "route": "cutlass_4m_single",
+                "dtype": "C16BF",
+                "shape": CUTLASS_ANCHOR_SHAPE,
+                "level": level,
+                "seed": seed,
+                "reference_dtype": "c64",
+                "source": "task8_reuse",
+                **metrics,
+                "policy_pass": int(verdict == "PASS"),
+            }
+        )
+    # adversarial level
+    if _cutlass_injection_available():
+        # Future: re-run cutlass kernel with make_inputs(level) injected.
+        raise NotImplementedError("cutlass adversarial injection not wired yet")
+    return _enrich_cancellation_metrics(
+        {
             "route": "cutlass_4m_single",
             "dtype": "C16BF",
             "shape": CUTLASS_ANCHOR_SHAPE,
             "level": level,
             "seed": seed,
             "reference_dtype": "c64",
-            "source": "task8_reuse",
-            **metrics,
-            "policy_pass": int(verdict == "PASS"),
+            "source": "not_run:toolchain-injection-unavailable",
+            "relative_l2": None,
+            "max_abs": None,
+            "max_rel": None,
+            "nan_inf": False,
+            "n_elems": 0,
+            "policy_pass": 0,
         }
-    # adversarial level
-    if _cutlass_injection_available():
-        # Future: re-run cutlass kernel with make_inputs(level) injected.
-        raise NotImplementedError("cutlass adversarial injection not wired yet")
-    return {
-        "route": "cutlass_4m_single",
-        "dtype": "C16BF",
-        "shape": CUTLASS_ANCHOR_SHAPE,
-        "level": level,
-        "seed": seed,
-        "reference_dtype": "c64",
-        "source": "not_run:toolchain-injection-unavailable",
-        "relative_l2": None,
-        "max_abs": None,
-        "max_rel": None,
-        "nan_inf": False,
-        "n_elems": 0,
-        "policy_pass": 0,
-    }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -980,25 +1054,33 @@ def _read_csv_rows(csv_path):
             source = (raw.get("source") or "").strip()
             if not source:
                 source = "diagnostic:small-contract" if is_region_small else "measured"
-            rows.append(
-                {
-                    "route": raw["route"],
-                    "dtype": raw["out_dtype"],
-                    "shape": shape,
-                    "level": raw["dynamic_range_level"],
-                    "seed": int(raw["seed"]),
-                    "reference_dtype": raw.get("reference_dtype") or "c64",
-                    "relative_l2": _maybe_float(raw["relative_l2"]),
-                    "max_abs": _maybe_float(raw["max_abs"]),
-                    "max_rel": _maybe_float(raw["max_rel"]),
-                    "nan_inf": bool(int(raw["nan_inf"])) if raw["nan_inf"] else False,
-                    "n_elems": int(raw["n_elems"]) if raw["n_elems"] else 0,
-                    "policy_pass": (
-                        int(raw["policy_pass"]) if raw["policy_pass"] else 0
-                    ),
-                    "source": source,
-                }
-            )
+            # Cancellation diagnostic fields (absent in pre-schema-bump CSVs
+            # and empty for non-cancellation rows).
+            icv = (raw.get("input_construction_version") or "").strip()
+            row = {
+                "route": raw["route"],
+                "dtype": raw["out_dtype"],
+                "shape": shape,
+                "level": raw["dynamic_range_level"],
+                "seed": int(raw["seed"]),
+                "reference_dtype": raw.get("reference_dtype") or "c64",
+                "relative_l2": _maybe_float(raw["relative_l2"]),
+                "max_abs": _maybe_float(raw["max_abs"]),
+                "max_rel": _maybe_float(raw["max_rel"]),
+                "nan_inf": bool(int(raw["nan_inf"])) if raw["nan_inf"] else False,
+                "n_elems": int(raw["n_elems"]) if raw["n_elems"] else 0,
+                "policy_pass": (int(raw["policy_pass"]) if raw["policy_pass"] else 0),
+                "source": source,
+            }
+            if icv:
+                row["input_construction_version"] = icv
+                row["cancellation_epsilon"] = _maybe_float(
+                    raw.get("cancellation_epsilon")
+                )
+                row["reference_norm"] = _maybe_float(raw.get("reference_norm"))
+                row["baseline_norm"] = _maybe_float(raw.get("baseline_norm"))
+                row["cancellation_ratio"] = _maybe_float(raw.get("cancellation_ratio"))
+            rows.append(row)
     return rows
 
 
@@ -1101,6 +1183,12 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
         # Emit explicit NOT_RUN rows for required cells with no CSV row at all
         # (region_fused full-anchor; spec §6 3.3). Makes the CSV self-describing.
         rows.extend(_emit_not_run_rows(rows, required_cell_keys()))
+        # Enrich cancellation-level rows with the 5 cancellation diagnostic
+        # fields (GPU-free numpy CPU). CSV-read rows from a pre-schema-bump CSV
+        # and emitted NOT_RUN rows (e.g. region_fused full-anchor cancellation
+        # cells) don't go through a collector, so they are enriched here.
+        # collect_cutlass rows are already enriched (idempotent skip).
+        rows = [_enrich_cancellation_metrics(r) for r in rows]
         payload = aggregate(
             rows, required_cell_keys(), _case_hashes(), legit_not_run, shape_drift=drift
         )

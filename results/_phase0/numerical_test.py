@@ -884,6 +884,109 @@ def test_numerical_shapes_derived_from_contraction_csv_not_hardcoded():
     ), f"SHAPES != contraction_shapes.csv shapes: drift must produce UNKNOWN"
 
 
+# ---------------------------------------------------------------------------
+# Nongpu rereview Task 3 review fix: cancellation metrics must be recorded in
+# the numerical output (CSV), not just computable by calling cancellation_metrics
+# directly. The 5 fields make the cancellation independently auditable from the
+# artifacts.
+# ---------------------------------------------------------------------------
+
+
+def test_cancellation_metrics_recorded_in_numerical_output(tmp_path):
+    """Nongpu rereview Task 3 review fix: ``cancellation_metrics()`` was defined
+    but never called -- none of the 5 cancellation diagnostic fields appeared in
+    any CSV row or JSON payload. The brief requires they be recorded in the
+    numerical output so the cancellation is independently auditable from the
+    artifacts (the 3.4 RED test passes only because it calls ``make_inputs``
+    directly; the recorded-output requirement is separate).
+
+    This test verifies GPU-free that:
+    1. ``cancellation_metrics`` returns all 5 required fields with sane values.
+    2. The 5 fields are in the CSV schema (``_CSV_COLUMNS``).
+    3. ``_enrich_cancellation_metrics`` wires them into a cancellation-level row.
+    4. ``write_csv`` -> ``_read_csv_rows`` round-trip preserves the 5 fields.
+
+    RED on current code: ``_enrich_cancellation_metrics`` does not exist, and the
+    5 fields are absent from ``_CSV_COLUMNS``.
+    """
+    from results._phase0.numerical import (
+        _CSV_COLUMNS,
+        _enrich_cancellation_metrics,
+        cancellation_metrics,
+        write_csv,
+        _read_csv_rows,
+    )
+
+    required_fields = (
+        "input_construction_version",
+        "cancellation_epsilon",
+        "reference_norm",
+        "baseline_norm",
+        "cancellation_ratio",
+    )
+
+    # 1. cancellation_metrics returns all 5 required fields with sane values.
+    shape = (64, 64, 64)  # K=64 (even, required for cancellation)
+    seed = 0
+    cm = cancellation_metrics(shape, seed)
+    for f in required_fields:
+        assert f in cm, f"cancellation_metrics missing field {f}"
+    assert cm["input_construction_version"] != ""
+    assert np.isfinite(cm["cancellation_epsilon"]) and cm["cancellation_epsilon"] > 0
+    assert np.isfinite(cm["reference_norm"]) and cm["reference_norm"] > 0
+    assert np.isfinite(cm["baseline_norm"]) and cm["baseline_norm"] > 0
+    assert np.isfinite(cm["cancellation_ratio"])
+    assert cm["cancellation_ratio"] < 0.1, cm["cancellation_ratio"]
+
+    # 2. The 5 fields are in the CSV schema.
+    for f in required_fields:
+        assert f in _CSV_COLUMNS, f"_CSV_COLUMNS missing cancellation field {f}"
+
+    # 3. _enrich_cancellation_metrics wires the fields into a cancellation row.
+    row = {
+        "route": "planar",
+        "dtype": "C16BF",
+        "shape": shape,
+        "level": "cancellation",
+        "seed": seed,
+        "reference_dtype": "c64",
+        "relative_l2": 1e-5,
+        "max_abs": 1e-3,
+        "max_rel": 1e-4,
+        "nan_inf": False,
+        "n_elems": 64,
+        "policy_pass": 1,
+    }
+    enriched = _enrich_cancellation_metrics(dict(row))
+    for f in required_fields:
+        assert f in enriched, f"enriched row missing cancellation field {f}"
+    assert enriched["input_construction_version"] == cm["input_construction_version"]
+    assert enriched["cancellation_ratio"] == pytest.approx(cm["cancellation_ratio"])
+
+    # Non-cancellation rows are NOT enriched (no false fields).
+    baseline_row = dict(row)
+    baseline_row["level"] = "baseline"
+    baseline_enriched = _enrich_cancellation_metrics(baseline_row)
+    for f in required_fields:
+        assert (
+            f not in baseline_enriched
+        ), f"non-cancellation row should not carry cancellation field {f}"
+
+    # 4. write_csv -> _read_csv_rows round-trip preserves the 5 fields.
+    p = tmp_path / "nv.csv"
+    write_csv(str(p), [enriched])
+    read_back = _read_csv_rows(str(p))
+    assert len(read_back) == 1
+    rr = read_back[0]
+    for f in required_fields:
+        assert f in rr, f"CSV round-trip lost cancellation field {f}"
+    assert rr["input_construction_version"] == cm["input_construction_version"]
+    assert rr["cancellation_epsilon"] == pytest.approx(cm["cancellation_epsilon"])
+    assert rr["reference_norm"] == pytest.approx(cm["reference_norm"])
+    assert rr["baseline_norm"] == pytest.approx(cm["baseline_norm"])
+    assert rr["cancellation_ratio"] == pytest.approx(cm["cancellation_ratio"])
+
+
 if __name__ == "__main__":
     import sys, pytest
 
