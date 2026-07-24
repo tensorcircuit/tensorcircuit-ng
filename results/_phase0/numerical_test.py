@@ -1490,6 +1490,29 @@ def test_complete_required_matrix_reaches_pass():
         assert pr["criterion"] == "PASS", pr
 
 
+# ---------------------------------------------------------------------------
+# Task 8 Step 4 concrete: synthetic pipeline VIABLE via recompute_route_verdict
+# ---------------------------------------------------------------------------
+
+
+def test_synthetic_pipeline_route_viable():
+    """Construct criteria with all-PASS capability + numerical PASS for
+    cutlass_4m_single -> route VIABLE via the REAL
+    verdict_schema.recompute_route_verdict. The synthetic fixture builds
+    criteria through the real aggregate output pattern (PASS tokens)."""
+    from results._phase0.verdict_schema import recompute_route_verdict
+
+    # Only CUTLASS_SM80_FALLBACK_CAPABILITY gates cutlass_4m_single capability.
+    criteria = {
+        "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",
+    }
+    per_route = {"cutlass_4m_single": "PASS"}
+    rv = recompute_route_verdict(criteria, per_route)
+    assert rv["cutlass_4m_single"]["status"] == "VIABLE", rv
+    assert rv["cutlass_4m_single"]["capability"] == "OK", rv
+    assert rv["cutlass_4m_single"]["numerical"] == "OK", rv
+
+
 if __name__ == "__main__":
     import sys, pytest
 

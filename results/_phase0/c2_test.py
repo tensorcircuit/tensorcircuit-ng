@@ -852,6 +852,39 @@ def test_region_committed_artifact_is_unknown():
     assert token == "UNKNOWN", (token, raw)
 
 
+# ---------------------------------------------------------------------------
+# Task 8 Step 4 concrete: region negative gain -> FAIL
+# ---------------------------------------------------------------------------
+
+
+def test_region_negative_gain_fails():
+    """A region proto with materialized_peak < fused_peak -> gain negative ->
+    gain_state=NEGATIVE -> evaluate_gate returns FAIL. Uses the shared
+    _normalize_region_peak + evaluate_gate(GATE_CONTRACTS["region_peak"])."""
+    from results._phase0.c2 import _normalize_region_peak
+    from results._phase0.gate_contracts import GATE_CONTRACTS, evaluate_gate
+
+    proto = {
+        "schema_version": "region-prototype-v2",
+        "verdict": "FEASIBLE_WITH_RECOMPUTE",
+        "peak_evidence_class": "MEASURED",
+        "peak_measurement_method": "cuda_allocator_high_watermark_v1",
+        "runtime_peak_scope": "full_anchor_pte_v1",
+        "n_seeds": 3,
+        "materialized_peak_bytes": 100,
+        "fused_peak_bytes": 400,
+        "fused_full_anchor_run": True,
+        "relative_l2": 1e-7,
+        "max_rel": 1e-7,
+        "registers_per_thread": 40,
+        "occupancy_pct": 100.0,
+    }
+    raw = _normalize_region_peak(proto, case_binding_state="MATCH")
+    assert raw["gain_state"] == "NEGATIVE", raw
+    token, reason = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
+    assert token == "FAIL", (token, reason, raw)
+
+
 if __name__ == "__main__":
     import sys, pytest
 

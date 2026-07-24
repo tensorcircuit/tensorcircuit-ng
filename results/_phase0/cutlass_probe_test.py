@@ -442,3 +442,26 @@ def test_native_real_blocker_not_supported():
         }
     )
     assert sec["capability"] == "NOT_SUPPORTED"
+
+
+# ---------------------------------------------------------------------------
+# Task 8 Step 4 concrete: native full positive fixture
+# ---------------------------------------------------------------------------
+
+
+def test_native_full_positive():
+    """Native section with sm120_native kernel + all pass fields green -> PASS.
+    The _native_sm120_section formatter returns capability="PASS" when
+    kernel_path=="sm120_native" AND runs AND gate_pass."""
+    import cutlass_probe
+
+    sec = cutlass_probe._native_sm120_section(
+        {
+            "kernel_path": "sm120_native",
+            "runs": True,
+            "correctness": {"gate_pass": True},
+            "coverage_complete": True,
+            "attempted": True,
+        }
+    )
+    assert sec["capability"] == "PASS"

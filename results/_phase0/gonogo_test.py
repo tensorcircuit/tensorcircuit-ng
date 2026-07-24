@@ -1559,6 +1559,50 @@ def test_gonogo_fallback_missing_coverage_not_pass(tmp_path):
     assert out["CUTLASS_SM120_4M"] == "UNKNOWN"
 
 
+# ---------------------------------------------------------------------------
+# Task 8 Step 4 concrete: no-new-VIABLE assertion + integration smoke
+# ---------------------------------------------------------------------------
+
+
+def test_committed_gonogo_no_viable_routes():
+    """The committed gonogo.json must have NO VIABLE routes. If it HAS a VIABLE
+    route, STOP and report it -- it indicates a stale artifact needing Task 9
+    regen (do not fabricate the assertion)."""
+    import json
+
+    with open("results/phase0/gonogo.json") as f:
+        gonogo = json.load(f)
+    rv = gonogo.get("route_verdict", {})
+    for route, v in rv.items():
+        assert v["status"] != "VIABLE", (
+            f"gonogo.json has VIABLE route {route!r} -- stale artifact; "
+            f"needs Task 9 regen. status={v['status']}"
+        )
+
+
+def test_gonogo_canonical_region_cutlass_integration():
+    """Lightweight integration smoke: _region_proto_status and _cutlass_status
+    return deterministic canonical tokens (not raising) for real artifact paths."""
+    from results._phase0.gonogo import _region_proto_status, _cutlass_status
+
+    # region_proto_status: committed region_prototype.json -> canonical token.
+    region = _region_proto_status("results/phase0/region_prototype.json")
+    assert region in ("PASS", "FAIL", "UNKNOWN", "NOT_RUN", "NOT_SUPPORTED"), region
+
+    # cutlass_status: committed cutlass_sm120_4m.json -> two canonical tokens.
+    cutlass = _cutlass_status("results/phase0/cutlass_sm120_4m.json")
+    assert "CUTLASS_SM120_4M" in cutlass, cutlass
+    assert "CUTLASS_SM80_FALLBACK_CAPABILITY" in cutlass, cutlass
+    for key in ("CUTLASS_SM120_4M", "CUTLASS_SM80_FALLBACK_CAPABILITY"):
+        assert cutlass[key] in (
+            "PASS",
+            "FAIL",
+            "UNKNOWN",
+            "NOT_RUN",
+            "NOT_SUPPORTED",
+        ), f"{key}={cutlass[key]}"
+
+
 if __name__ == "__main__":
     import sys, pytest
 

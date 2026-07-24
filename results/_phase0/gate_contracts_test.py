@@ -136,3 +136,113 @@ def test_normative_policy_constants_only():
     ]
     assert pol["region_policy"]["min_gain_bytes"] == 268435456
     assert "pass_clause" not in pol  # rules in GateContract, not JSON
+
+
+# ---------------------------------------------------------------------------
+# Task 8 Step 4 concrete tests: per-condition flip for region (12), native (7),
+# fallback (5). For each pass condition, flip it to a non-PASS value while
+# keeping the other N-1 at PASS -> assert evaluate_gate != PASS.
+# ---------------------------------------------------------------------------
+
+
+def _flip(contract, flip_map):
+    """Yield (field_name, flipped_value) for each pass condition, using the
+    appropriate non-PASS flip value from *flip_map* (or ``"FLIPPED"`` default)."""
+    for field_name, pass_value in contract.pass_clause:
+        yield field_name, flip_map.get(field_name, "FLIPPED")
+
+
+_REGION_FLIP = {
+    "schema_state": "BROKEN",
+    "evidence_class_state": "MODEL_ONLY",
+    "method_state": "UNAPPROVED",
+    "scope_state": "PARTIAL",
+    "sample_state": "NAN",
+    "peak_state": "NAN",
+    "gain_state": "NEGATIVE",
+    "full_anchor_run_state": "FALSE",
+    "case_binding_state": "MISSING",
+    "consistency_state": "CONFLICT",
+    "accuracy_state": "FAILED",
+    "resource_state": "MISSING",
+}
+
+
+def test_region_12_condition_flip():
+    """Flip each of the 12 region_peak pass conditions one at a time ->
+    evaluate_gate != PASS."""
+    contract = GATE_CONTRACTS["region_peak"]
+    base = {
+        f: v
+        for f, v in contract.pass_clause
+        if f not in {c[0] for c in contract.contradiction_fields}
+    }
+    # Build the full PASS raw with the 10 non-contradiction fields at PASS
+    # values, then add the 2 contradiction-capable fields one at a time
+    # (avoiding the contradiction value in the base so the base itself is PASS).
+    n = 0
+    for field_name, flip_value in _flip(contract, _REGION_FLIP):
+        raw = dict(base)
+        # Set the flipped field to its non-PASS value.
+        raw[field_name] = flip_value
+        # Set all other pass fields that might not be in base to their PASS values.
+        for f, pv in contract.pass_clause:
+            if f not in raw:
+                raw[f] = pv
+        token, _ = evaluate_gate(raw, contract)
+        assert token != "PASS", (
+            f"region flipped {field_name}={flip_value} still got PASS; "
+            f"raw={ {k: v for k, v in raw.items() if k == field_name or k in ('schema_state',)} }"
+        )
+        n += 1
+    assert n == 12, n  # all 12 pass conditions were exercised
+
+
+_NATIVE_FLIP = {
+    "schema_state": "BROKEN",
+    "attempt_state": "NOT_ATTEMPTED",
+    "compile_state": "FAILED",
+    "run_state": "FAILED",
+    "correctness_state": "FAILED",
+    "coverage_state": "INCOMPLETE",
+    "consistency_state": "CONFLICT",
+}
+
+
+def test_cutlass_native_7_condition_flip():
+    """Flip each of the 7 cutlass_native pass conditions one at a time ->
+    evaluate_gate != PASS."""
+    contract = GATE_CONTRACTS["cutlass_native"]
+    base = dict(contract.pass_clause)
+    n = 0
+    for field_name, flip_value in _flip(contract, _NATIVE_FLIP):
+        raw = dict(base)
+        raw[field_name] = flip_value
+        token, _ = evaluate_gate(raw, contract)
+        assert token != "PASS", f"native flipped {field_name}={flip_value} got PASS"
+        n += 1
+    assert n == 7, n
+
+
+_FALLBACK_FLIP = {
+    "attempt_state": "NOT_ATTEMPTED",
+    "compile_state": "BLOCKED",
+    "run_state": "FAILED",
+    "correctness_state": "FAILED",
+    "coverage_state": "INCOMPLETE",
+}
+
+
+def test_cutlass_fallback_5_condition_flip():
+    """Flip each of the 5 cutlass_fallback pass conditions one at a time ->
+    evaluate_gate != PASS."""
+    contract = GATE_CONTRACTS["cutlass_fallback"]
+    base = dict(contract.pass_clause)
+    n = 0
+    for field_name, flip_value in _flip(contract, _FALLBACK_FLIP):
+        raw = dict(base)
+        raw[field_name] = flip_value
+        token, _ = evaluate_gate(raw, contract)
+        assert token != "PASS", f"fallback flipped {field_name}={flip_value} got PASS"
+        n += 1
+    assert n == 5, n
