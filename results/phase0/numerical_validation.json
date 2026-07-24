@@ -10,7 +10,7 @@
     "cublaslt_grouped_capability_sha256": "9af341d56eab8aa0f06e9b1d612a028071af7f44a61e1ecfe47da2099590802d",
     "cublaslt_grouped_rows_sha256": "0ce5d81e867597cf78948effacb19bc140886968a782dc7324a87f6822290221",
     "cutlass_4m_sha256": "f02844cf9359ebbbcbbc2aff89df95e0d46c6a0831beea2278262e3cdbed0e63",
-    "numerical_csv_sha256": "0d0d2b0791a9ef3271e3f22f807220a3ebc7ab24241f87180b59a3fce9204952"
+    "numerical_csv_sha256": "65e83b4323129fbed84d019b4b4c215ca24720288cfd1486d05f5550a87ac0cd"
   },
   "per_route": [
     {

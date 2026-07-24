@@ -13,7 +13,7 @@
     "recomputed": {
       "accuracy_pass": true,
       "resource_pass": null,
-      "region_peak_gain_bytes": 1073741824,
+      "region_peak_gain_bytes": null,
       "single_reduction_bytes": 31872,
       "traffic_gain": "UNKNOWN",
       "workspace_cost": "UNKNOWN",
@@ -33,12 +33,12 @@
       "binding_ok": true,
       "problems": [],
       "file_hashes": {
-        "source_hlo": "a2dba7afeae3a3bfe16dc645d44c0b1b2da4eb2623e5ac65ca5c9042fe9849be",
-        "allocation_audit": "29004fd786ff1302ba00399602ac9e2145229898a4eba61bb70ef993997a35a2",
-        "edge_map": "9dc930781a3e5074eb2ee6b4d8c9329ee9d5a58f96c174e36122735054414e78",
-        "peak_frontier": "0a17bc36b8438a538bd01c87604a956590e40983a252f9ccf989f6ab829c53f3",
+        "source_hlo": "5879b2b41a55ed2b5b198229715efbf610d1c307675bf4043e98081da9cbd1ef",
+        "allocation_audit": "6ee259c9a6ecd3215454f3da7c45e594e5653e12c723608c723dcfb96f8263b5",
+        "edge_map": "c4aa5c2209f133d3bff7aeaaea1444870fdb8ab894b1e00a4592a09e862e87b6",
+        "peak_frontier": "b26f49e326db337b4d1e9fc83f2de04fe7a541f288bfcae30f1975de4de87545",
         "prototype": "1e97addf6aef0f1c46f3814ea711202e9df71def11efaca637968614855d0135",
-        "buffer_assignment": "035d52a92f49cb540a3762edab9632a723dc4fde1d720d0194f2ef6c3e78a79a"
+        "buffer_assignment": "59642cd645a493fe9a1c17da40f7a1724dc374f7a5480d4f4794729e5c0c7f9b"
       }
     },
     "diagnostic_self_reported": {
