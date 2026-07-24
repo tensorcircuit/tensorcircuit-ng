@@ -208,6 +208,10 @@ def _attempt_full_native_hierarchy(shapes, seeds) -> dict:
     """
     sm120_blocker = None
     sm100_blocker = None
+    # Task 5: blocker_source records HOW the sm120 blocker was captured
+    # (compile-time exception -> "compiler"). The gonogo reader's allowlist
+    # gates NOT_SUPPORTED on a RECOGNIZED source.
+    sm120_blocker_source = None
 
     # Stage 1: Sm120 native (consumer Blackwell, arch::Sm120). The arch tag
     # matches our GPU (__CUDA_ARCH__==1200), but CUTLASS 3.x's Sm120 collective
@@ -225,6 +229,7 @@ def _attempt_full_native_hierarchy(shapes, seeds) -> dict:
         return _run_with_module(mod, "sm120_native", shapes, seeds)
     except Exception as exc:
         sm120_blocker = str(exc)
+        sm120_blocker_source = "compiler"
 
     # Stage 2: Sm100 native (datacenter Blackwell, arch::Sm100). Even though
     # __CUDA_ARCH__==1000 excludes our sm_120 target, run the genuine attempt
@@ -242,6 +247,7 @@ def _attempt_full_native_hierarchy(shapes, seeds) -> dict:
         result = _run_with_module(mod, "sm100_native", shapes, seeds)
         if sm120_blocker is not None:
             result["sm120_blocker"] = sm120_blocker
+            result["blocker_source"] = sm120_blocker_source
         return result
     except Exception as exc:
         sm100_blocker = str(exc)
@@ -249,7 +255,11 @@ def _attempt_full_native_hierarchy(shapes, seeds) -> dict:
     # Stage 3: Sm80 fallback (proven 2.x Ampere-era MMA path). Both blockers
     # attached so the artifact can explain the fallback honestly.
     return _run_sm80(
-        shapes, seeds, sm100_blocker=sm100_blocker, sm120_blocker=sm120_blocker
+        shapes,
+        seeds,
+        sm100_blocker=sm100_blocker,
+        sm120_blocker=sm120_blocker,
+        sm120_blocker_source=sm120_blocker_source,
     )
 
 
@@ -277,7 +287,12 @@ def _attempt_sm120_then_sm80(shapes, seeds) -> dict:
         return _run_with_module(mod, "sm120_native", shapes, seeds)
     except Exception as exc:
         # Transparent fallback — record the verbatim compile/run error.
-        return _run_sm80(shapes, seeds, sm120_blocker=str(exc))
+        # Task 5: blocker_source="compiler" — the sm120 blocker was captured
+        # from a compile-time exception (nvcc static_assert), the recognized
+        # authority for native NOT_SUPPORTED.
+        return _run_sm80(
+            shapes, seeds, sm120_blocker=str(exc), sm120_blocker_source="compiler"
+        )
 
 
 def _attempt_sm100_then_sm80(shapes, seeds) -> dict:
@@ -308,16 +323,26 @@ def _attempt_sm100_then_sm80(shapes, seeds) -> dict:
         return _run_sm80(shapes, seeds, sm100_blocker=str(exc))
 
 
-def _run_sm80(shapes, seeds, sm100_blocker=None, sm120_blocker=None) -> dict:
+def _run_sm80(
+    shapes, seeds, sm100_blocker=None, sm120_blocker=None, sm120_blocker_source=None
+) -> dict:
     """Task 2/3 2.x Sm80 path. Optionally records blockers so the artifact can
     explain why a fallback happened (rather than sm80 being the requested
-    path)."""
+    path).
+
+    ``sm120_blocker_source`` (Task 5) records HOW the native sm120 blocker was
+    captured (e.g. ``"compiler"`` for a compile-time static_assert). The gonogo
+    reader's ``_CUTLASS_BLOCKER_SOURCES`` allowlist gates NOT_SUPPORTED on a
+    RECOGNIZED source -- a fallback-only artifact without a captured blocker+
+    source yields UNKNOWN (no synthesized NOT_SUPPORTED)."""
     mod = build_extension()  # default name=cutlass_4m, no extra_defines
     r = _run_with_module(mod, "sm80_fallback", shapes, seeds)
     if sm100_blocker is not None:
         r["sm100_blocker"] = sm100_blocker
     if sm120_blocker is not None:
         r["sm120_blocker"] = sm120_blocker
+        if sm120_blocker_source is not None:
+            r["blocker_source"] = sm120_blocker_source
     return r
 
 
@@ -340,6 +365,14 @@ def _run_with_module(mod, kernel_path: str, shapes, seeds) -> dict:
         "kernel_path": kernel_path,
         "compiles": True,
         "runs": True,
+        # Task 5 (evidence-integrity plan v3): the measurement-to-artifact
+        # producer emits attempted/coverage_complete/compile_status so the
+        # section formatters + gonogo reader can build the normalized raw
+        # dict for GateContract evaluation. All shapes/seeds ran -> coverage
+        # COMPLETE; the run was attempted -> attempted=True; compile OK.
+        "attempted": True,
+        "coverage_complete": True,
+        "compile_status": "OK",
     }
     worst = {"max_rel": 0.0, "max_abs": 0.0, "nan_inf": False}
     for M, K, N in shapes:
@@ -663,20 +696,18 @@ def run_grouped(shapes: list[dict], seeds=(0,)) -> dict:
 # --- Task 6: verdict aggregator + artifact writers + CLI --------------------
 
 
-# Native-SM120 BF16 blocker (consumer Blackwell sm_120), verbatim from CUTLASS
-# 3.x sources — not a private env detail. Used when the captured single_4m
-# landed on the sm80_fallback path but did not record the verbatim sm120
-# blocker string (e.g. legacy artifact shape).
-_DEFAULT_SM120_BLOCKER = (
-    "CUTLASS 3.x Sm120 collective is F8F6F4-only (no BF16 path) "
-    "(sm120_mma_builder.inl:80,115; mma_sm120.hpp:47); the Sm100 route is "
-    "gated by __CUDA_ARCH__==1000 — consumer Blackwell sm_120 has no native "
-    "CUTLASS BF16 4M kernel."
-)
+#: Exact blocker_source allowlist for the native SM120 gate (Task 5 /
+#: evidence-integrity plan v3 finding 3.5). Only a REAL captured blocker
+#: (``blocker_state=PRESENT``) WITH a RECOGNIZED source backs a NOT_SUPPORTED
+#: verdict; fallback-only without a captured blocker+source -> UNKNOWN.
+#: ``compiler`` = compile-time exception (nvcc static_assert / build error);
+#: ``header_probe`` = #ifdef probe against the real CUTLASS header;
+#: ``static_assert`` = static_assert message extracted from the build log.
+_CUTLASS_BLOCKER_SOURCES = frozenset({"compiler", "header_probe", "static_assert"})
 
 
 def _native_sm120_section(single_4m: dict) -> dict:
-    """plan §7 Task 4 split: the native SM120 BF16 4M capability section.
+    """plan S7 Task 4 split: the native SM120 BF16 4M capability section.
 
     Consumer-Blackwell sm_120 has NO native CUTLASS BF16 4M route: the Sm120
     collective builder hard-requires F8F6F4 elements (FP8/FP6/FP4), and the
@@ -684,45 +715,89 @@ def _native_sm120_section(single_4m: dict) -> dict:
     section is ``NOT_SUPPORTED``; ``PASS`` is only returned when the artifact
     genuinely records an ``sm120_native`` kernel_path that ran + passed the
     correctness gate (theoretical future support, e.g. NVFP4/MXFP8).
+
+    Task 5 (finding 3.5): NOT_SUPPORTED requires a REAL captured
+    ``sm120_blocker`` AND a ``blocker_source`` (string). Fallback-only
+    (``kernel_path == "sm80_fallback"``) without a captured blocker+source
+    -> ``UNKNOWN`` (no synthesized NOT_SUPPORTED from the fallback alone --
+    the native verdict must NOT be DERIVED from the fallback). The gonogo
+    reader further gates NOT_SUPPORTED on ``blocker_source`` being in the
+    ``_CUTLASS_BLOCKER_SOURCES`` allowlist.
     """
     if not isinstance(single_4m, dict):
-        return {"capability": "UNKNOWN", "compile_status": "UNKNOWN", "blocker": None}
+        return {
+            "capability": "UNKNOWN",
+            "compile_status": "UNKNOWN",
+            "blocker": None,
+            "attempted": None,
+            "coverage_complete": None,
+            "blocker_source": None,
+        }
     kernel_path = single_4m.get("kernel_path")
     sm120_blocker = single_4m.get("sm120_blocker") or single_4m.get(
         "native_sm120_blocker"
     )
+    blocker_source = single_4m.get("blocker_source")
     runs = bool(single_4m.get("runs"))
     gate_pass = bool((single_4m.get("correctness") or {}).get("gate_pass"))
+    attempted = single_4m.get("attempted")
+    coverage_complete = single_4m.get("coverage_complete")
     # Theoretical future: a native sm120 path actually landed and passed.
     if kernel_path == "sm120_native" and runs and gate_pass:
         return {
             "capability": "PASS",
             "compile_status": "OK",
             "blocker": None,
+            "kernel_path": kernel_path,
+            "sm120_blocker": None,
+            "blocker_source": None,
+            "attempted": attempted,
+            "coverage_complete": coverage_complete,
             "detail": "native sm120 MMA path landed and passed",
         }
-    # Real-world: native sm120 is blocked. Either the artifact captured the
-    # blocker verbatim, or it landed on the sm80 fallback (both native paths
-    # were attempted and neither landed).
-    blocker = sm120_blocker or (
-        _DEFAULT_SM120_BLOCKER if kernel_path == "sm80_fallback" else None
-    )
-    if blocker:
+    # Real-world: native sm120 is blocked. NOT_SUPPORTED ONLY with a REAL
+    # captured blocker (non-empty string) AND a blocker_source (non-empty
+    # string). Fallback-only without a captured blocker+source -> UNKNOWN
+    # (no synthesized default blocker -- finding 3.5).
+    has_real_blocker = isinstance(sm120_blocker, str) and bool(sm120_blocker)
+    has_blocker_source = isinstance(blocker_source, str) and bool(blocker_source)
+    if has_real_blocker and has_blocker_source:
         return {
             "capability": "NOT_SUPPORTED",
             "compile_status": "BLOCKED",
-            "blocker": blocker,
+            "blocker": sm120_blocker,
+            "kernel_path": kernel_path,
+            "sm120_blocker": sm120_blocker,
+            "blocker_source": blocker_source,
+            "attempted": attempted,
+            "coverage_complete": coverage_complete,
         }
-    return {"capability": "UNKNOWN", "compile_status": "UNKNOWN", "blocker": None}
+    # Fallback-only without captured blocker+source -> UNKNOWN.
+    return {
+        "capability": "UNKNOWN",
+        "compile_status": "UNKNOWN",
+        "blocker": None,
+        "kernel_path": kernel_path,
+        "sm120_blocker": sm120_blocker,
+        "blocker_source": blocker_source,
+        "attempted": attempted,
+        "coverage_complete": coverage_complete,
+    }
 
 
 def _sm80_fallback_section(single_4m: dict) -> dict:
-    """plan §7 Task 4 split: the Ampere (Sm80) 2.x MMA fallback section.
+    """plan S7 Task 4 split: the Ampere (Sm80) 2.x MMA fallback section.
 
     This is a CAPABILITY-only claim (kernel compiled + ran + passed the BF16
     correctness gate). The corresponding NUMERICAL criterion
     (``CUTLASS_SM80_FALLBACK_NUMERICAL``) is owned by Task 3 and is read from
-    a separate artifact — do NOT treat capability PASS as numerical PASS.
+    a separate artifact -- do NOT treat capability PASS as numerical PASS.
+
+    Task 5 (finding 3.5): PASS requires ``attempted`` AND ``compile_status
+    =="OK"`` AND ``runs`` AND ``gate_pass`` AND ``coverage_complete`` -- all
+    five must be green (mirrors the ``cutlass_fallback`` GateContract pass
+    clause). Missing coverage -> not PASS (UNKNOWN, fail-closed). FAIL only
+    when ``runs`` or ``gate_pass`` is explicitly False.
     """
     if not isinstance(single_4m, dict):
         return {
@@ -730,24 +805,51 @@ def _sm80_fallback_section(single_4m: dict) -> dict:
             "correctness": {},
             "resource": {},
             "latency": {},
+            "attempted": None,
+            "coverage_complete": None,
+            "compile_status": None,
         }
     kernel_path = single_4m.get("kernel_path")
-    runs = bool(single_4m.get("runs"))
-    gate_pass = bool((single_4m.get("correctness") or {}).get("gate_pass"))
+    runs = single_4m.get("runs")
+    gate_pass = (single_4m.get("correctness") or {}).get("gate_pass")
+    attempted = single_4m.get("attempted")
+    coverage_complete = single_4m.get("coverage_complete")
+    compile_status = single_4m.get("compile_status")
     if kernel_path == "sm80_fallback":
-        capability = "PASS" if (runs and gate_pass) else "FAIL"
+        # FAIL only on explicit False run/gate (not absent -- absent is UNKNOWN).
+        if runs is False or gate_pass is False:
+            capability = "FAIL"
+        elif (
+            attempted is True
+            and compile_status == "OK"
+            and runs is True
+            and gate_pass is True
+            and coverage_complete is True
+        ):
+            capability = "PASS"
+        else:
+            capability = "UNKNOWN"
         return {
             "capability": capability,
+            "kernel_path": kernel_path,
+            "runs": runs,
             "correctness": single_4m.get("correctness", {}),
             "resource": single_4m.get("resource", {}),
             "latency": single_4m.get("latency", {}),
+            "attempted": attempted,
+            "coverage_complete": coverage_complete,
+            "compile_status": compile_status,
             "detail": "2.x Ampere (arch::Sm80) MMA fallback (the path that runs)",
         }
     return {
         "capability": "UNKNOWN",
+        "kernel_path": kernel_path,
         "correctness": {},
         "resource": {},
         "latency": {},
+        "attempted": attempted,
+        "coverage_complete": coverage_complete,
+        "compile_status": compile_status,
         "detail": "sm80 fallback not attempted (kernel_path != sm80_fallback)",
     }
 

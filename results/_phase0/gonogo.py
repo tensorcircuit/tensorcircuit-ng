@@ -633,120 +633,313 @@ def _cutlass_status(path):
     }
 
 
-def _cutlass_evidence(data, section_key):
-    """Gather raw ``kernel_path`` / ``runs`` / ``gate_pass`` evidence for a
-    CUTLASS criterion. Returns ``(kernel_path, runs, gate_pass)`` where
-    ``runs`` / ``gate_pass`` are ``True`` / ``False`` / ``None`` (``None`` =
-    absent -- the field was never recorded, distinct from an explicit ``False``).
+#: Exact schema-version allowlist for the cutlass SM120 4M artifact (Task 5 /
+#: evidence-integrity plan v3 finding 3.5). A different schema_version is
+#: UNRECOGNIZED -- never silently accepted.
+_CUTLASS_SCHEMA_VERSIONS = frozenset({"cutlass-sm120-4m-v1"})
 
-    Fix 5 (nongpu-rereview): all three fields are read from ONE consistent
-    source -- the named two-section block when it records a ``kernel_path``,
-    otherwise the legacy ``single_4m`` block as a whole. The prior per-field
-    fallback (section ``kernel_path`` + single_4m ``correctness``) could
-    cross-promote a section ``kernel_path == "sm120_native"`` with a single_4m
-    ``gate_pass`` into false evidence; this never mixes sources.
+#: Exact blocker_source allowlist for the native SM120 gate (Task 5). Only a
+#: REAL captured blocker WITH a RECOGNIZED source backs NOT_SUPPORTED;
+#: fallback-only without a captured blocker+source -> UNKNOWN. Mirrors
+#: :data:`cutlass_probe._CUTLASS_BLOCKER_SOURCES` (single semantic source).
+_CUTLASS_BLOCKER_SOURCES = frozenset({"compiler", "header_probe", "static_assert"})
+
+
+#: Frozen self-report -> canonical-token map for the native SM120 section
+#: (v3-review errata). The section's ``capability`` is a SELF-REPORT; the
+#: canonical token is recomputed via :func:`evaluate_gate`. If the two
+#: disagree, the artifact is internally inconsistent ->
+#: ``consistency_state=CONFLICT`` -> contradiction -> UNKNOWN.
+_CUTLASS_NATIVE_SELF_REPORT_MAP = {
+    "PASS": "PASS",
+    "NOT_SUPPORTED": "NOT_SUPPORTED",
+    "FAIL": "FAIL",
+    "UNKNOWN": "UNKNOWN",
+}
+
+
+#: Frozen self-report -> canonical-token map for the SM80 fallback section.
+#: The fallback contract has empty ``contradiction_fields``, so CONFLICT does
+#: not trigger a contradiction re-evaluate; the bidirectional check is
+#: informational (the recompute via evaluate_gate is the single decision rule).
+_CUTLASS_FALLBACK_SELF_REPORT_MAP = {
+    "PASS": "PASS",
+    "FAIL": "FAIL",
+    "UNKNOWN": "UNKNOWN",
+}
+
+
+def _cutlass_native_normalized(data):
+    """Build the normalized ``raw`` dict for the native SM120 gate contract
+    (Task 5 / evidence-integrity plan v3 finding 3.5).
+
+    Reads the artifact and emits the cross-task field names defined by
+    :data:`gate_contracts.GATE_CONTRACTS` ``["cutlass_native"]``:
+
+      * ``schema_state``: VALID if ``schema_version`` in the allowlist, MISSING
+        if absent, else UNRECOGNIZED.
+      * ``attempt_state``: ATTEMPTED if ``attempted is True``, else
+        NOT_ATTEMPTED.
+      * ``compile_state`` / ``run_state`` / ``correctness_state`` /
+        ``coverage_state``: set ONLY when the native path actually compiled
+        (``compiles is True`` or ``compile_status == "OK"``). When the native
+        path was blocked (compile failed / blocker captured), these fields
+        are LEFT ABSENT -- so fail clauses needing them do not multi-hit
+        alongside the ``not_supported`` clause (blocker + source). This
+        mirrors the grouped reader pattern of setting execution states
+        only when attempted.
+      * ``blocker_state``: PRESENT if a real ``sm120_blocker`` (non-empty
+        string) exists in the section or ``single_4m``, else MISSING.
+      * ``blocker_source_state``: RECOGNIZED if ``blocker_source`` is in
+        the :data:`cutlass_probe._CUTLASS_BLOCKER_SOURCES` allowlist, else
+        UNRECOGNIZED / MISSING.
+      * ``consistency_state``: CONSISTENT (tentative; the caller may flip
+        it to CONFLICT via the bidirectional consistency check).
+
+    Cross-promo prevention: execution fields are read from the native
+    section, OR from ``single_4m`` only when ``single_4m.kernel_path ==
+    "sm120_native"`` (the native path landed, so ``single_4m`` carries the
+    native evidence). When ``kernel_path == "sm80_fallback"``, the
+    ``single_4m`` execution fields belong to the FALLBACK and are NOT
+    cross-promoted into the native raw dict.
     """
-    sec = data.get(section_key)
-    sec = sec if isinstance(sec, dict) else {}
-    s4 = data.get("single_4m")
-    s4 = s4 if isinstance(s4, dict) else {}
-    # Prefer the named section (canonical two-section structure); fall back to
-    # the legacy single_4m block as a WHOLE only when the section does not
-    # record a kernel_path, so all three fields come from the same block.
-    src = sec if sec.get("kernel_path") is not None else s4
-    kernel_path = src.get("kernel_path")
-    runs = src.get("runs")
-    corr = src.get("correctness")
-    corr = corr if isinstance(corr, dict) else {}
-    gate = corr.get("gate_pass")
-    runs = bool(runs) if runs is not None else None
-    gate = bool(gate) if gate is not None else None
-    return kernel_path, runs, gate
-
-
-def _cutlass_native_sm120_criterion(data):
-    """Native SM120 BF16 4M capability (nongpu-rereview §3.6).
-
-    Recomputes from RAW evidence (``kernel_path`` / ``runs`` / ``gate_pass`` +
-    blocker / compile_status); does NOT trust ``section.capability``. The
-    self-reported ``capability`` is a DIAGNOSTIC consistency check only: if it
-    disagrees with the recomputed token, the artifact is internally
-    inconsistent -> UNKNOWN (a self-reported PASS cannot override missing
-    evidence).
-
-    Recompute (plan §7 4.3)::
-
-        kernel_path == sm120_native AND runs AND gate_pass -> PASS
-        kernel_path == sm120_native AND (runs is False OR gate False) -> FAIL
-        blocker recorded OR compile BLOCKED OR landed on sm80_fallback
-                                                          -> NOT_SUPPORTED
-        otherwise (incomplete / unattempted)               -> UNKNOWN
-
-    Native PASS must prove the ACTUAL native SM120 path landed; evidence that
-    the run landed on the sm80 fallback is NOT cross-promoted into native PASS.
-    """
-    if not isinstance(data, dict):
-        return _UNKNOWN
     sec = data.get("native_sm120_bf16_4m")
     sec = sec if isinstance(sec, dict) else {}
     s4 = data.get("single_4m")
     s4 = s4 if isinstance(s4, dict) else {}
-    kernel_path, runs, gate = _cutlass_evidence(data, "native_sm120_bf16_4m")
-    blocker = (
-        sec.get("blocker") or s4.get("sm120_blocker") or s4.get("native_sm120_blocker")
-    )
-    compile_status = sec.get("compile_status")
-    if kernel_path == "sm120_native" and runs is True and gate is True:
-        recomputed = _OK
-    elif kernel_path == "sm120_native" and (runs is False or gate is False):
-        recomputed = _BAD  # native attempted but run/gate failed
-    elif blocker or compile_status == "BLOCKED" or kernel_path == "sm80_fallback":
-        recomputed = "NOT_SUPPORTED"
+
+    # Schema state (top-level artifact field).
+    sv = data.get("schema_version")
+    if sv is None:
+        schema_state = "MISSING"
+    elif sv in _CUTLASS_SCHEMA_VERSIONS:
+        schema_state = "VALID"
     else:
-        recomputed = _UNKNOWN  # incomplete / unattempted
-    # Diagnostic consistency check: self-reported capability vs recomputed.
-    self_reported = sec.get("capability")
-    if self_reported is not None and self_reported != recomputed:
-        return _UNKNOWN
-    return recomputed
+        schema_state = "UNRECOGNIZED"
+
+    # Attempt state (from section or single_4m).
+    attempted = sec.get("attempted")
+    if attempted is None:
+        attempted = s4.get("attempted")
+    attempt_state = "ATTEMPTED" if attempted is True else "NOT_ATTEMPTED"
+
+    # Blocker state (native-specific; safe to read from section or single_4m).
+    sm120_blocker = (
+        sec.get("sm120_blocker")
+        or sec.get("blocker")
+        or s4.get("sm120_blocker")
+        or s4.get("native_sm120_blocker")
+    )
+    blocker_state = (
+        "PRESENT" if (isinstance(sm120_blocker, str) and sm120_blocker) else "MISSING"
+    )
+
+    # Blocker source state (gates NOT_SUPPORTED on a RECOGNIZED authority).
+    blocker_source = sec.get("blocker_source") or s4.get("blocker_source")
+    if blocker_source is None:
+        blocker_source_state = "MISSING"
+    elif blocker_source in _CUTLASS_BLOCKER_SOURCES:
+        blocker_source_state = "RECOGNIZED"
+    else:
+        blocker_source_state = "UNRECOGNIZED"
+
+    raw = {
+        "schema_state": schema_state,
+        "attempt_state": attempt_state,
+        "blocker_state": blocker_state,
+        "blocker_source_state": blocker_source_state,
+        "consistency_state": "CONSISTENT",
+    }
+
+    # Execution states: set ONLY when the native path compiled. Read from the
+    # native section, or from single_4m when kernel_path == "sm120_native"
+    # (the native path landed -> single_4m carries native evidence). When
+    # kernel_path == "sm80_fallback", single_4m execution fields are the
+    # FALLBACK -> NOT cross-promoted.
+    exec_src = sec
+    if not exec_src.get("kernel_path"):
+        if s4.get("kernel_path") == "sm120_native":
+            exec_src = s4
+        else:
+            exec_src = {}
+
+    compiles = exec_src.get("compiles")
+    compile_status = exec_src.get("compile_status")
+    native_compiled = compiles is True or compile_status == "OK"
+    if native_compiled:
+        raw["compile_state"] = "SUCCEEDED"
+        runs = exec_src.get("runs")
+        if runs is True:
+            raw["run_state"] = "SUCCEEDED"
+        elif runs is False:
+            raw["run_state"] = "FAILED"
+        else:
+            raw["run_state"] = "UNKNOWN"
+        corr = exec_src.get("correctness")
+        corr = corr if isinstance(corr, dict) else {}
+        gate_pass = corr.get("gate_pass")
+        if gate_pass is True:
+            raw["correctness_state"] = "PASSED"
+        elif gate_pass is False:
+            raw["correctness_state"] = "FAILED"
+        else:
+            raw["correctness_state"] = "UNKNOWN"
+        coverage_complete = exec_src.get("coverage_complete")
+        raw["coverage_state"] = (
+            "COMPLETE" if coverage_complete is True else "INCOMPLETE"
+        )
+
+    return raw
 
 
-def _cutlass_sm80_fallback_criterion(data):
-    """SM80 fallback BF16 4M capability (nongpu-rereview §3.6).
+def _cutlass_fallback_normalized(data):
+    """Build the normalized ``raw`` dict for the SM80 fallback gate contract
+    (Task 5 / evidence-integrity plan v3 finding 3.5).
 
-    Recomputes from RAW evidence (``kernel_path`` / ``runs`` / ``gate_pass``);
-    does NOT trust ``section.capability``. The self-reported ``capability`` is a
-    DIAGNOSTIC consistency check only (mismatch -> UNKNOWN). Fallback PASS must
-    prove the ACTUAL sm80 fallback path AND that it ran AND passed the
-    correctness gate -- symmetric with the native criterion
-    (``_cutlass_native_sm120_criterion``), which requires
-    ``kernel_path == "sm120_native" AND runs AND gate``. Evidence that the run
-    landed on a native path is NOT cross-promoted into fallback PASS.
+    Reads the ``sm80_fallback_bf16_4m`` section (or ``single_4m`` when
+    ``kernel_path == "sm80_fallback"``) and emits the field names defined by
+    :data:`gate_contracts.GATE_CONTRACTS` ``["cutlass_fallback"]``:
 
-    Recompute (plan §7 4.3)::
+      * ``attempt_state``: ATTEMPTED if ``attempted is True``, else
+        NOT_ATTEMPTED.
+      * ``compile_state``: ``"OK"`` (not ``"SUCCEEDED"``) if ``compiles is
+        True`` or ``compile_status == "OK"`` (the fallback contract uses
+        ``OK`` per Task 5 test ``compile_status=="OK"``).
+      * ``run_state`` / ``correctness_state`` / ``coverage_state``: mapped
+        from the section ``runs`` / ``correctness.gate_pass`` /
+        ``coverage_complete``.
 
-        kernel_path == sm80_fallback AND runs AND gate_pass  -> PASS
-        kernel_path == sm80_fallback AND (runs is False OR gate False) -> FAIL
-        kernel_path present AND != sm80_fallback             -> UNKNOWN (wrong path)
-        otherwise (path unspecified / runs-gate incomplete)  -> UNKNOWN
+    No blocker fields (the fallback contract has empty not_supported and
+    empty contradiction). No bidirectional consistency check (the contract
+    has empty ``contradiction_fields``, so CONFLICT cannot trigger a
+    contradiction -- the recompute via evaluate_gate is the single rule).
+    """
+    sec = data.get("sm80_fallback_bf16_4m")
+    sec = sec if isinstance(sec, dict) else {}
+    s4 = data.get("single_4m")
+    s4 = s4 if isinstance(s4, dict) else {}
+
+    # Prefer the fallback section; fall back to single_4m when it carries the
+    # fallback kernel_path (single_4m execution fields are the fallback).
+    exec_src = sec if sec.get("kernel_path") is not None else {}
+    if not exec_src and s4.get("kernel_path") == "sm80_fallback":
+        exec_src = s4
+
+    attempted = exec_src.get("attempted")
+    attempt_state = "ATTEMPTED" if attempted is True else "NOT_ATTEMPTED"
+
+    compiles = exec_src.get("compiles")
+    compile_status = exec_src.get("compile_status")
+
+    raw = {
+        "attempt_state": attempt_state,
+        "consistency_state": "CONSISTENT",
+    }
+
+    # compile_state = "OK" (the fallback contract pass clause value).
+    if compiles is True or compile_status == "OK":
+        raw["compile_state"] = "OK"
+
+    runs = exec_src.get("runs")
+    if runs is True:
+        raw["run_state"] = "SUCCEEDED"
+    elif runs is False:
+        raw["run_state"] = "FAILED"
+    else:
+        raw["run_state"] = "UNKNOWN"
+
+    corr = exec_src.get("correctness")
+    corr = corr if isinstance(corr, dict) else {}
+    gate_pass = corr.get("gate_pass")
+    if gate_pass is True:
+        raw["correctness_state"] = "PASSED"
+    elif gate_pass is False:
+        raw["correctness_state"] = "FAILED"
+    else:
+        raw["correctness_state"] = "UNKNOWN"
+
+    coverage_complete = exec_src.get("coverage_complete")
+    raw["coverage_state"] = "COMPLETE" if coverage_complete is True else "INCOMPLETE"
+
+    return raw
+
+
+def _cutlass_native_sm120_criterion(data):
+    """Native SM120 BF16 4M capability (evidence-integrity plan v3 finding 3.5).
+
+    Recomputes a CANONICAL token from the raw artifact via
+    :func:`evaluate_gate` over :data:`GATE_CONTRACTS` ``["cutlass_native"]``
+    -- the SINGLE decision rule. The reader retains NO undeclared PASS branch:
+    every PASS/FAIL/NOT_SUPPORTED flows through the gate engine.
+
+    NOT_SUPPORTED requires a REAL captured blocker (``blocker_state=PRESENT``)
+    WITH a RECOGNIZED source (``blocker_source_state=RECOGNIZED``). Fallback-
+    only (``kernel_path == "sm80_fallback"``) without a captured blocker+
+    source -> UNKNOWN (no synthesized NOT_SUPPORTED from the fallback alone --
+    the native verdict must NOT be DERIVED from the fallback).
+
+    The self-reported ``capability`` is a DIAGNOSTIC consistency check: if it
+    disagrees with the recomputed token, ``consistency_state`` flips to
+    ``CONFLICT`` -> contradiction -> UNKNOWN.
     """
     if not isinstance(data, dict):
         return _UNKNOWN
+
+    raw = _cutlass_native_normalized(data)
+    candidate = evaluate_gate(raw, GATE_CONTRACTS["cutlass_native"])[0]
+
+    # Bidirectional self-report consistency: compare the recomputed token to
+    # what the self-reported capability maps to. Any disagreement -> CONFLICT
+    # -> re-evaluate -> contradiction -> UNKNOWN.
+    sec = data.get("native_sm120_bf16_4m")
+    sec = sec if isinstance(sec, dict) else {}
+    self_reported = sec.get("capability")
+    expected_from_self = _CUTLASS_NATIVE_SELF_REPORT_MAP.get(self_reported)
+    if expected_from_self is not None and candidate != expected_from_self:
+        raw["consistency_state"] = "CONFLICT"
+        candidate = evaluate_gate(raw, GATE_CONTRACTS["cutlass_native"])[0]
+
+    return candidate
+
+
+def _cutlass_sm80_fallback_criterion(data):
+    """SM80 fallback BF16 4M capability (evidence-integrity plan v3 finding 3.5).
+
+    Recomputes a CANONICAL token from the raw artifact via
+    :func:`evaluate_gate` over :data:`GATE_CONTRACTS` ``["cutlass_fallback"]``
+    -- the SINGLE decision rule. The reader retains NO undeclared PASS branch.
+
+    PASS requires ``attempted`` AND ``compile_state="OK"`` AND ``runs`` AND
+    ``gate_pass`` AND ``coverage_complete`` -- all five must be green. Missing
+    coverage -> not PASS (UNKNOWN, fail-closed). FAIL only when ``runs`` or
+    ``gate_pass`` is explicitly False.
+
+    Cross-promo prevention: when ``kernel_path != "sm80_fallback"``, the
+    reader returns UNKNOWN directly (the fallback path was not the one that
+    ran -- no evidence cross-promotion from a native path).
+
+    The fallback contract has empty ``contradiction_fields``, so no
+    bidirectional consistency check is needed (CONFLICT cannot trigger a
+    contradiction re-evaluate; the recompute is the single rule).
+    """
+    if not isinstance(data, dict):
+        return _UNKNOWN
+
     sec = data.get("sm80_fallback_bf16_4m")
     sec = sec if isinstance(sec, dict) else {}
-    kernel_path, runs, gate = _cutlass_evidence(data, "sm80_fallback_bf16_4m")
-    if kernel_path == "sm80_fallback" and runs is True and gate is True:
-        recomputed = _OK
-    elif kernel_path == "sm80_fallback" and (runs is False or gate is False):
-        recomputed = _BAD  # on the fallback path but the run/gate failed
-    else:
-        # path != sm80_fallback (incl. None / sm120_native) OR path==sm80_fallback
-        # but runs/gate incomplete (None) -> no cross-promo, cannot confirm.
-        recomputed = _UNKNOWN
-    self_reported = sec.get("capability")
-    if self_reported is not None and self_reported != recomputed:
+    s4 = data.get("single_4m")
+    s4 = s4 if isinstance(s4, dict) else {}
+    kernel_path = sec.get("kernel_path") or s4.get("kernel_path")
+    # No cross-promo: if the fallback path was not the one that ran, the
+    # fallback criterion is UNKNOWN (a native path evidence cannot confirm
+    # the fallback). This is a fail-closed UNKNOWN, not a PASS branch.
+    if kernel_path != "sm80_fallback":
         return _UNKNOWN
-    return recomputed
+
+    raw = _cutlass_fallback_normalized(data)
+    candidate = evaluate_gate(raw, GATE_CONTRACTS["cutlass_fallback"])[0]
+
+    return candidate
 
 
 def _region_proto_is_real_pte(data):

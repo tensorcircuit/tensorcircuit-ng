@@ -179,10 +179,15 @@ def test_c3_grouped_status(tmp_path):
 
 
 def test_cutlass_status_derives_two_independent_criteria(tmp_path):
-    """plan §7 Task 4: ``_cutlass_status`` returns TWO INDEPENDENT canonical
-    criteria (``CUTLASS_SM120_4M`` native + ``CUTLASS_SM80_FALLBACK_CAPABILITY``
+    """plan Task 4: _cutlass_status returns TWO INDEPENDENT canonical
+    criteria (CUTLASS_SM120_4M native + CUTLASS_SM80_FALLBACK_CAPABILITY
     fallback), never a single merged token. Native failure and fallback
-    success coexist without contradiction."""
+    success coexist without contradiction.
+
+    Task 5 (finding 3.5): the gonogo reader now routes through GateContract.
+    Fallback PASS requires attempted/compile(OK)/run/correctness/coverage.
+    Native NOT_SUPPORTED requires a REAL blocker + recognized blocker_source
+    (fallback-only without captured blocker -> UNKNOWN, NOT NOT_SUPPORTED)."""
     import json
     from results._phase0.gonogo import _cutlass_status
 
@@ -191,32 +196,40 @@ def test_cutlass_status_derives_two_independent_criteria(tmp_path):
     p.write_text(
         json.dumps(
             {
+                "schema_version": "cutlass-sm120-4m-v1",
                 "single_4m": {
                     "kernel_path": "sm80_fallback",
                     "compiles": True,
                     "runs": True,
                     "correctness": {"gate_pass": True},
                     "sm120_blocker": "F8F6F4 static_assert (BF16 blocked)",
-                }
+                    "blocker_source": "compiler",
+                    "attempted": True,
+                    "coverage_complete": True,
+                    "compile_status": "OK",
+                },
             }
         )
     )
     c = _cutlass_status(str(p))
     assert c["CUTLASS_SM120_4M"] == "NOT_SUPPORTED", c
     assert c["CUTLASS_SM80_FALLBACK_CAPABILITY"] == "PASS", c
-    # The two criteria are INDEPENDENT — one is NOT_SUPPORTED, the other PASS.
+    # The two criteria are INDEPENDENT - one is NOT_SUPPORTED, the other PASS.
     assert c["CUTLASS_SM120_4M"] != c["CUTLASS_SM80_FALLBACK_CAPABILITY"], c
 
     # Theoretical future: native sm120 path actually landed + passed (no fallback).
     p.write_text(
         json.dumps(
             {
+                "schema_version": "cutlass-sm120-4m-v1",
                 "single_4m": {
                     "kernel_path": "sm120_native",
                     "compiles": True,
                     "runs": True,
                     "correctness": {"gate_pass": True},
-                }
+                    "attempted": True,
+                    "coverage_complete": True,
+                },
             }
         )
     )
@@ -227,17 +240,24 @@ def test_cutlass_status_derives_two_independent_criteria(tmp_path):
     assert c["CUTLASS_SM80_FALLBACK_CAPABILITY"] == "UNKNOWN", c
 
     # sm80 fallback that failed correctness -> fallback FAIL; native NOT_SUPPORTED
-    # (the artifact documents landing on the sm80 fallback, so native did not
-    # land — independent of whether the fallback itself later passed).
+    # (the artifact documents landing on the sm80 fallback with a captured
+    # blocker+source, so native is NOT_SUPPORTED independent of whether the
+    # fallback itself later passed).
     p.write_text(
         json.dumps(
             {
+                "schema_version": "cutlass-sm120-4m-v1",
                 "single_4m": {
                     "kernel_path": "sm80_fallback",
                     "compiles": True,
                     "runs": False,
                     "correctness": {"gate_pass": False},
-                }
+                    "sm120_blocker": "F8F6F4 static_assert (BF16 blocked)",
+                    "blocker_source": "compiler",
+                    "attempted": True,
+                    "coverage_complete": True,
+                    "compile_status": "OK",
+                },
             }
         )
     )
@@ -254,9 +274,14 @@ def test_cutlass_status_derives_two_independent_criteria(tmp_path):
 
 
 def test_cutlass_status_reads_new_two_section_structure(tmp_path):
-    """plan §7 Task 4: ``_cutlass_status`` reads the regenerated two-section
-    artifact (native_sm120_bf16_4m + sm80_fallback_bf16_4m) directly —
-    preferred over the legacy single_4m block."""
+    """plan Task 4: _cutlass_status reads the regenerated two-section
+    artifact (native_sm120_bf16_4m + sm80_fallback_bf16_4m) directly -
+    preferred over the legacy single_4m block.
+
+    Task 5 (finding 3.5): sections now carry the GateContract fields
+    (attempted/coverage_complete/blocker_source/sm120_blocker/compile_status).
+    Native NOT_SUPPORTED needs blocker + recognized blocker_source; fallback
+    PASS needs attempted/compile(OK)/run/correctness/coverage."""
     import json
     from results._phase0.gonogo import _cutlass_status
 
@@ -264,16 +289,23 @@ def test_cutlass_status_reads_new_two_section_structure(tmp_path):
     p.write_text(
         json.dumps(
             {
+                "schema_version": "cutlass-sm120-4m-v1",
                 "native_sm120_bf16_4m": {
                     "capability": "NOT_SUPPORTED",
                     "compile_status": "BLOCKED",
                     "blocker": "F8F6F4 static_assert",
+                    "sm120_blocker": "F8F6F4 static_assert",
+                    "blocker_source": "compiler",
+                    "kernel_path": "sm80_fallback",
                 },
                 "sm80_fallback_bf16_4m": {
                     "capability": "PASS",
                     "kernel_path": "sm80_fallback",
                     "runs": True,
                     "correctness": {"gate_pass": True},
+                    "attempted": True,
+                    "coverage_complete": True,
+                    "compile_status": "OK",
                 },
             }
         )
@@ -516,17 +548,13 @@ def test_normalize_does_not_promote_feasible_detail_tokens_to_ok():
 def test_main_emits_two_cutlass_criteria_for_native_blocker_plus_sm80_fallback(
     tmp_path, monkeypatch
 ):
-    """plan §3 操作.2 bullet 8: a cutlass artifact recording BOTH a native SM120
-    blocker AND a working SM80 fallback must surface TWO DISTINCT criteria --
-    ``CUTLASS_SM120_4M`` (native SM120 -> FAIL / UNKNOWN, never PASS) and
-    ``CUTLASS_SM80_FALLBACK_CAPABILITY`` (fallback success -> PASS).
+    """plan Task 4: a cutlass artifact recording BOTH a native SM120
+    blocker AND a working SM80 fallback must surface TWO DISTINCT criteria.
 
-    Today ``_cutlass_status`` merges both outcomes into one
-    ``FEASIBLE_WITH_SM80_FALLBACK`` criterion (gonogo.py), so the native SM120
-    blocker is invisible behind the fallback's success -- exactly the
-    information loss plan §3 操作.2 bullet 8 forbids. This test drives ``main``
-    against a synthetic cutlass artifact that records both outcomes and asserts
-    the emitted criteria dict carries BOTH canonical criterion keys."""
+    Task 5 (finding 3.5): the gonogo reader now routes through GateContract.
+    The synthetic artifact must carry the new fields (blocker_source,
+    attempted, coverage_complete, compile_status) so the reader can recompute
+    NOT_SUPPORTED (blocker + recognized source) and PASS (all five green)."""
     import json
     from results._phase0 import gonogo as G
 
@@ -534,6 +562,7 @@ def test_main_emits_two_cutlass_criteria_for_native_blocker_plus_sm80_fallback(
     (tmp_path / "cutlass_sm120_4m.json").write_text(
         json.dumps(
             {
+                "schema_version": "cutlass-sm120-4m-v1",
                 "overall": "FEASIBLE_WITH_SM80_FALLBACK",
                 "single_4m": {
                     "kernel_path": "sm80_fallback",
@@ -541,6 +570,11 @@ def test_main_emits_two_cutlass_criteria_for_native_blocker_plus_sm80_fallback(
                     "runs": True,
                     "correctness": {"gate_pass": True},
                     "native_sm120_blocker": "F8F6F4 static_assert (BF16 blocked)",
+                    "sm120_blocker": "F8F6F4 static_assert (BF16 blocked)",
+                    "blocker_source": "compiler",
+                    "attempted": True,
+                    "coverage_complete": True,
+                    "compile_status": "OK",
                 },
             }
         )
@@ -1485,6 +1519,44 @@ def test_region_proto_missing_case_binding_not_pass(tmp_path):
     )
     # gonogo cannot verify case binding -> MISSING -> not PASS (honest).
     assert _region_proto_status(str(p)) != "PASS"
+
+
+# ---------------------------------------------------------------------------
+# Task 5 (evidence-integrity plan v3 finding 3.5): CUTLASS native/fallback
+# via GateContract in gonogo. The canonical gonogo reader test (NOT a producer
+# test): _cutlass_status recomputes via evaluate_gate over the normalized raw
+# dict. Fallback PASS requires attempted/compile(OK)/run/correctness/coverage;
+# native NOT_SUPPORTED requires a REAL blocker + recognized blocker_source
+# (fallback-only without captured blocker -> UNKNOWN, NOT NOT_SUPPORTED).
+# ---------------------------------------------------------------------------
+
+
+def test_gonogo_fallback_missing_coverage_not_pass(tmp_path):
+    """Task 5 (finding 3.5): gonogo reader -- fallback section missing
+    coverage_complete -> CUTLASS_SM80_FALLBACK_CAPABILITY != PASS (coverage is
+    required for PASS); and fallback-only (no native blocker+source) ->
+    CUTLASS_SM120_4M == UNKNOWN (no synthesized NOT_SUPPORTED from the fallback
+    alone -- the native verdict is NOT DERIVED from the fallback)."""
+    import json
+    from results._phase0.gonogo import _cutlass_status
+
+    p = tmp_path / "c.json"
+    p.write_text(
+        json.dumps(
+            {
+                "sm80_fallback_bf16_4m": {
+                    "kernel_path": "sm80_fallback",
+                    "runs": True,
+                    "correctness": {"gate_pass": True},
+                },
+                "native_sm120_bf16_4m": {"capability": "UNKNOWN"},
+            }
+        )
+    )
+    out = _cutlass_status(str(p))
+    assert out["CUTLASS_SM80_FALLBACK_CAPABILITY"] != "PASS"  # missing coverage
+    # fallback-only doesn't make native NOT_SUPPORTED
+    assert out["CUTLASS_SM120_4M"] == "UNKNOWN"
 
 
 if __name__ == "__main__":

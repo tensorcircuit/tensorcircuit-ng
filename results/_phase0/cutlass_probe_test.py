@@ -366,3 +366,79 @@ def test_full_native_hierarchy_captures_both_blockers(monkeypatch):
     assert r.get("sm100_blocker"), "sm100_blocker must be recorded verbatim"
     assert "F8F6F4" in r["sm120_blocker"]
     assert "1000" in r["sm100_blocker"]
+
+
+# --- Task 5 (evidence-integrity plan v3 finding 3.5): GateContract-wired
+# section formatters. The formatters emit the self-report ``capability`` that
+# the gonogo reader later recomputes via evaluate_gate. PASS requires
+# attempted/compile/run/correctness/coverage; NOT_SUPPORTED requires a REAL
+# captured blocker + recognized blocker_source (fallback-only -> UNKNOWN).
+#
+
+
+def test_fallback_missing_coverage_not_pass():
+    """Fallback section missing coverage_complete -> capability != PASS.
+
+    Per the cutlass_fallback GateContract, PASS requires attempt/compile(OK)/
+    run/correctness/coverage ALL green. Missing coverage -> not PASS."""
+    import cutlass_probe
+
+    sec = cutlass_probe._sm80_fallback_section(
+        {
+            "kernel_path": "sm80_fallback",
+            "runs": True,
+            "correctness": {"gate_pass": True},
+        }
+    )
+    assert sec["capability"] != "PASS"
+
+
+def test_fallback_full_pass():
+    """Fallback section with all required fields green -> capability == PASS."""
+    import cutlass_probe
+
+    sec = cutlass_probe._sm80_fallback_section(
+        {
+            "kernel_path": "sm80_fallback",
+            "runs": True,
+            "correctness": {"gate_pass": True},
+            "coverage_complete": True,
+            "attempted": True,
+            "compile_status": "OK",
+        }
+    )
+    assert sec["capability"] == "PASS"
+
+
+def test_native_fallback_only_no_blocker_source_unknown():
+    """Native section: fallback-only (no real sm120_blocker + blocker_source)
+    -> UNKNOWN. A synthesized NOT_SUPPORTED from fallback-only is forbidden
+    (finding 3.5: the native verdict must NOT be DERIVED from the fallback)."""
+    import cutlass_probe
+
+    sec = cutlass_probe._native_sm120_section(
+        {
+            "kernel_path": "sm80_fallback",
+            "runs": True,
+            "correctness": {"gate_pass": True},
+        }
+    )
+    assert sec["capability"] == "UNKNOWN"
+
+
+def test_native_real_blocker_not_supported():
+    """Native section: real sm120_blocker + recognized blocker_source ->
+    NOT_SUPPORTED. The only path to NOT_SUPPORTED per the cutlass_native
+    GateContract (blocker_state=PRESENT + blocker_source_state=RECOGNIZED)."""
+    import cutlass_probe
+
+    sec = cutlass_probe._native_sm120_section(
+        {
+            "kernel_path": "sm80_fallback",
+            "sm120_blocker": "F8F6F4-only",
+            "blocker_source": "compiler",
+            "runs": True,
+            "correctness": {"gate_pass": True},
+        }
+    )
+    assert sec["capability"] == "NOT_SUPPORTED"
