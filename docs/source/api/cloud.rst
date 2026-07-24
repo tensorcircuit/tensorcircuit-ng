@@ -7,5 +7,6 @@ tensorcircuit.cloud
     cloud/local.rst
     cloud/quafu_provider.rst
     cloud/tencent.rst
+    cloud/tianyan.rst
     cloud/utils.rst
     cloud/wrapper.rst

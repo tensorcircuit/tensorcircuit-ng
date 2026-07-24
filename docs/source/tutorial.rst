@@ -34,3 +34,4 @@ Jupyter Tutorials
     tutorials/sklearn_svc.ipynb
     tutorials/distributed_simulation.ipynb
     tutorials/qcloud_sdk_demo.ipynb
+    tutorials/tianyan_cloud.ipynb

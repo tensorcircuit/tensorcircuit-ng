@@ -31,12 +31,17 @@ try:
 except (ImportError, ModuleNotFoundError):
     logger.info("fail to load cloud provider module: quafu")
 
+try:
+    from . import tianyan
+except (ImportError, ModuleNotFoundError):
+    logger.info("fail to load cloud provider module: tianyan")
+
 package_name = "tensorcircuit"
 thismodule = sys.modules[__name__]
 
 
 default_provider = Provider.from_name("tencent")
-avail_providers = ["tencent", "local", "quafu"]
+avail_providers = ["tencent", "local", "quafu", "tianyan"]
 
 
 def list_providers() -> List[Provider]:
@@ -370,6 +375,8 @@ def list_devices(
         token = provider.get_token()
     if provider.name == "tencent":
         return tencent.list_devices(token, **kws)  # type: ignore
+    elif provider.name == "tianyan":
+        return tianyan.list_devices(token, **kws)
     elif provider.name == "local":
         return local.list_devices(token, **kws)
     else:
@@ -399,6 +406,8 @@ def list_properties(
         token = device.get_token()  # type: ignore
     if provider.name == "tencent":  # type: ignore
         return tencent.list_properties(device, token)  # type: ignore
+    elif provider.name == "tianyan":
+        return tianyan.list_properties(device, token)
     elif provider.name == "local":
         raise ValueError("Unsupported method for local backend")
     else:
@@ -462,6 +471,8 @@ def get_task_details(
 
     if provider.name == "tencent":
         return tencent.get_task_details(task, device, token, prettify)  # type: ignore
+    elif provider.name == "tianyan":
+        return tianyan.get_task_details(task, device, token, prettify)  # type: ignore
     elif provider.name == "local":
         return local.get_task_details(task, device, token, prettify)  # type: ignore
     elif provider.name == "quafu":
@@ -493,6 +504,7 @@ def submit_task(
     :param task_kws: all necessary keywords arguments for task submission,
         see detailed API in each provider backend:
         1. tencent - :py:func:`tensorcircuit.cloud.tencent.submit_task`
+        2. tianyan - :py:func:`tensorcircuit.cloud.tianyan.submit_task`
     :type task_kws: Any
     :return: Task object or list of Task for batch submission
     :rtype: List[Task]
@@ -503,6 +515,8 @@ def submit_task(
         token = device.get_token()  # type: ignore
     if provider.name == "tencent":  # type: ignore
         return tencent.submit_task(device, token, **task_kws)  # type: ignore
+    elif provider.name == "tianyan":  # type: ignore
+        return tianyan.submit_task(device, token, **task_kws)  # type: ignore
     elif provider.name == "local":  # type: ignore
         return local.submit_task(device, token, **task_kws)  # type: ignore
     elif provider.name == "quafu":  # type: ignore
@@ -534,6 +548,8 @@ def resubmit_task(
 
     if provider.name == "tencent":  # type: ignore
         return tencent.resubmit_task(task, token)  # type: ignore
+    elif provider.name == "tianyan":  # type: ignore
+        return tianyan.resubmit_task(task, token)  # type: ignore
     elif provider.name == "local":
         raise ValueError("Unsupported method for local backend")
     else:
@@ -553,6 +569,8 @@ def remove_task(
 
     if provider.name == "tencent":  # type: ignore
         return tencent.remove_task(task, token)  # type: ignore
+    elif provider.name == "tianyan":  # type: ignore
+        return tianyan.remove_task(task, token)  # type: ignore
     elif provider.name == "local":
         raise ValueError("Unsupported method for local backend")
     else:
@@ -586,6 +604,8 @@ def list_tasks(
         device = Device.from_name(device)
     if provider.name == "tencent":  # type: ignore
         return tencent.list_tasks(device, token, **filter_kws)  # type: ignore
+    elif provider.name == "tianyan":  # type: ignore
+        return tianyan.list_tasks(device, token, **filter_kws)  # type: ignore
     elif provider.name == "local":  # type: ignore
         return local.list_tasks(device, token, **filter_kws)  # type: ignore
     else:
