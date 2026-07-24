@@ -475,15 +475,17 @@ def test_main_emits_consistent_gonogo_v2(tmp_path, monkeypatch):
     # C2_REGION_KERNEL). The region prototype verdict=UNKNOWN (canonical, from
     # region_prototype.json) and C2_REGION_KERNEL_FEASIBILITY=UNKNOWN (from
     # c2_judgment layers) -> region_fused capability UNDETERMINED -> route
-    # UNKNOWN. CUTLASS_SM120_4M=NOT_SUPPORTED + CUTLASS_SM80_FALLBACK_CAPABILITY
-    # =PASS (split criteria, Task 4); cutlass_4m_single capability follows the
-    # fallback (PASS) but numerical UNKNOWN -> route UNKNOWN.
+    # UNKNOWN. CUTLASS_SM120_4M=UNKNOWN (native blocked, no recognized source)
+    # + CUTLASS_SM80_FALLBACK_CAPABILITY=UNKNOWN (fallback missing) ->
+    # cutlass_4m_single capability UNDETERMINED -> route UNKNOWN.
+    # planar: C3 planar criteria PASS, C3_GROUPED=NOT_SUPPORTED (not a blocker),
+    # NUMERICAL=UNKNOWN -> planar capability=OK, numerical=UNDETERMINED -> route UNKNOWN.
     assert "C2_REGION_KERNEL_FEASIBILITY" in agg["criteria"]
     assert "C2_REGION_KERNEL" not in agg["criteria"]
     assert "CUTLASS_SM120_4M" in agg["criteria"]
     assert "CUTLASS_SM80_FALLBACK_CAPABILITY" in agg["criteria"]
     assert agg["route_verdict"]["region_fused"]["status"] == "UNKNOWN"
-    assert agg["route_verdict"]["planar"]["status"] == "NOT_VIABLE"
+    assert agg["route_verdict"]["planar"]["status"] == "UNKNOWN"
     assert agg["route_verdict"]["grouped"]["status"] == "NOT_VIABLE"
     assert agg["route_verdict"]["cutlass_4m_single"]["status"] == "UNKNOWN"
     # rule 7: MD rendered from same object
@@ -903,7 +905,8 @@ def test_gonogo_emits_canonical_criteria_keys(tmp_path, monkeypatch):
 def test_gonogo_json_matches_expected_honest_state(tmp_path, monkeypatch):
     """Task 7 plan §10: the regenerated gonogo.json must match the expected
     honest state (no pre-written PASS). region_fused / cutlass_4m_single are
-    UNKNOWN (not yet measured); planar / grouped are NOT_VIABLE; completion
+    UNKNOWN (not yet measured); planar is UNKNOWN (C3 planar PASS, grouped
+    NOT_SUPPORTED, numerical UNDETERMINED); grouped is NOT_VIABLE; completion
     INCONCLUSIVE; authorization NOT_AUTHORIZED."""
     import json, os, shutil
     from results._phase0 import gonogo as G
@@ -929,7 +932,7 @@ def test_gonogo_json_matches_expected_honest_state(tmp_path, monkeypatch):
     G.main(stage_dir=str(stage))
     agg = json.load(open(stage / "gonogo.json"))
     rv = agg["route_verdict"]
-    assert rv["planar"]["status"] == "NOT_VIABLE", rv["planar"]
+    assert rv["planar"]["status"] == "UNKNOWN", rv["planar"]
     assert rv["grouped"]["status"] == "NOT_VIABLE", rv["grouped"]
     assert rv["region_fused"]["status"] == "UNKNOWN", rv["region_fused"]
     assert rv["cutlass_4m_single"]["status"] == "UNKNOWN", rv["cutlass_4m_single"]
