@@ -7,29 +7,29 @@
     "contraction_shapes_sha256": "8e15b9dec8018128986151cfbdc3f85204ca4711ae139a60c0f3706c9ba26590",
     "cublaslt_planar_capability_sha256": "fe729f8d7df8cf7f8903ee5cd1fc0e7843f4998b103fb2ff78a9dcc4840f832b",
     "cublaslt_full_matrix_sha256": "a7aaef7f5b51ca67de0c2a5e84a07546d12656c2dbe37851f6ffd9942968ad21",
-    "cublaslt_grouped_capability_sha256": "9af341d56eab8aa0f06e9b1d612a028071af7f44a61e1ecfe47da2099590802d",
+    "cublaslt_grouped_capability_sha256": "7deb1ec4167802ec9ffcac23fc8baf2a7b56240ac9e71860b076a63d3ed43b81",
     "cublaslt_grouped_rows_sha256": "0ce5d81e867597cf78948effacb19bc140886968a782dc7324a87f6822290221",
-    "cutlass_4m_sha256": "f02844cf9359ebbbcbbc2aff89df95e0d46c6a0831beea2278262e3cdbed0e63",
-    "numerical_csv_sha256": "65e83b4323129fbed84d019b4b4c215ca24720288cfd1486d05f5550a87ac0cd"
+    "cutlass_4m_sha256": "5a3c535ebca3ddbf19c2425597a299803d7f58d85e936dfbdbb014ad565adfff",
+    "numerical_csv_sha256": "44b7f1d92d2ae3b33bd2d7bdef08ff1239aa2a2670e5086632fc999980b31cd7"
   },
   "per_route": [
     {
       "route": "planar",
-      "criterion": "FAIL",
-      "n_cells": 144,
+      "criterion": "UNKNOWN",
+      "n_cells": 192,
       "expected": 144,
-      "actual": 144,
-      "missing": 0,
-      "extra": 0
+      "actual": 96,
+      "missing": 48,
+      "extra": 48
     },
     {
       "route": "grouped",
-      "criterion": "FAIL",
-      "n_cells": 144,
+      "criterion": "UNKNOWN",
+      "n_cells": 192,
       "expected": 144,
-      "actual": 144,
-      "missing": 0,
-      "extra": 0
+      "actual": 96,
+      "missing": 48,
+      "extra": 48
     },
     {
       "route": "region_fused",

@@ -1,20 +1,26 @@
 {
-  "schema_version": "run-context-v1",
-  "source_commit": "205899678c0de72e9ff180ab357a973bf7e1112e",
-  "dirty_worktree": true,
-  "dirty_file_count": 77,
-  "package_versions": {
-    "jax": "0.6.2",
-    "jaxlib": "0.6.2",
-    "cupy-cuda12x": "14.1.1",
-    "torch": "2.11.0+cu128",
-    "numpy": "2.2.6",
-    "cotengra": "0.8.2",
-    "tensorcircuit-ng": "1.7.0",
-    "nvidia-cublas-cu12": "12.8.4.1",
-    "nvidia-cuda-nvcc-cu12": "12.9.86",
-    "nvidia-cuda-runtime-cu12": "12.8.90",
-    "nvidia-cuda-nvrtc-cu12": "12.8.93"
+  "schema_version": "run-context-v2",
+  "measurement": {
+    "source_commit": "205899678c0de72e9ff180ab357a973bf7e1112e"
+  },
+  "aggregation": {
+    "source_commit": "d12f66443e28020e6f99f859cf65c5588004a71b",
+    "dirty_worktree": true,
+    "dirty_file_count": 66,
+    "command": "python results/_phase0/numerical.py --regen-no-gpu",
+    "package_versions": {
+      "jax": "0.6.2",
+      "jaxlib": "0.6.2",
+      "cupy-cuda12x": "14.1.1",
+      "torch": "2.11.0+cu128",
+      "numpy": "2.2.6",
+      "cotengra": "0.8.2",
+      "tensorcircuit-ng": "1.7.0",
+      "nvidia-cublas-cu12": "12.8.4.1",
+      "nvidia-cuda-nvcc-cu12": "12.9.86",
+      "nvidia-cuda-runtime-cu12": "12.8.90",
+      "nvidia-cuda-nvrtc-cu12": "12.8.93"
+    }
   },
   "command_templates": {
     "xla_dump": "python results/_phase0/xla_dump.py",

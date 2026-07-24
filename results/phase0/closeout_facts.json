@@ -1,0 +1,24 @@
+{
+  "gate_results": {
+    "C1": "PASS",
+    "C2": "UNKNOWN",
+    "C2_CANONICAL": "UNKNOWN",
+    "C2_JOINT_EXECUTABLE_LEVERAGE": "UNKNOWN",
+    "C2_REGION_KERNEL_FEASIBILITY": "UNKNOWN",
+    "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK": "FAIL",
+    "C3_GROUPED": "NOT_SUPPORTED",
+    "C3_PLANAR_CORE": "PASS",
+    "C3_PLANAR_FULL_MATRIX": "PASS",
+    "CUTLASS_SM120_4M": "UNKNOWN",
+    "CUTLASS_SM80_FALLBACK_CAPABILITY": "UNKNOWN",
+    "NUMERICAL": "UNKNOWN",
+    "REGION_PROTOTYPE": "UNKNOWN"
+  },
+  "headline": {
+    "phase0_completion": "INCONCLUSIVE",
+    "phase1_authorization": "NOT_AUTHORIZED"
+  },
+  "invariant_results": {},
+  "open_findings": [],
+  "self_verdict": "PENDING_EXTERNAL_REVIEW"
+}

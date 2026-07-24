@@ -1,0 +1,1 @@
+{"schema_version": 1, "command": "python -m pytest results/_phase0/ -m 'not gpu'", "exit_code": 1, "passed": false}

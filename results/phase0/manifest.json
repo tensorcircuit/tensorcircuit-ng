@@ -1,6 +1,11 @@
 {
+  "aggregation_dirty_file_count": 66,
+  "aggregation_dirty_worktree": true,
+  "aggregation_source_commit": "d12f66443e28020e6f99f859cf65c5588004a71b",
   "blocking_artifacts": [
     "c2_judgment.json / c2_checkpoint_manifest.json (C2_CANONICAL undetermined)",
+    "cutlass_sm120_4m.json (CUTLASS_SM120_4M undetermined)",
+    "cutlass_sm120_4m.json (CUTLASS_SM80_FALLBACK_CAPABILITY undetermined)",
     "region_prototype.json (REGION_PROTOTYPE undetermined)",
     "numerical_validation.json (NUMERICAL undetermined)"
   ],
@@ -160,15 +165,13 @@
     "C3_GROUPED": "NOT_SUPPORTED",
     "C3_PLANAR_CORE": "PASS",
     "C3_PLANAR_FULL_MATRIX": "PASS",
-    "CUTLASS_SM120_4M": "NOT_SUPPORTED",
-    "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",
+    "CUTLASS_SM120_4M": "UNKNOWN",
+    "CUTLASS_SM80_FALLBACK_CAPABILITY": "UNKNOWN",
     "NUMERICAL": "UNKNOWN",
     "REGION_PROTOTYPE": "UNKNOWN"
   },
-  "dirty_file_count": 77,
-  "dirty_worktree": true,
   "environment_hash": "07a3371b7b27007d",
-  "generated_at": "2026-07-24T07:56:24Z",
+  "generated_at": "2026-07-24T18:28:53Z",
   "inputs": {
     "c1_buffer_assignment/n22_d10_exp_default.txt": "30cd18ad9941c041",
     "c1_buffer_assignment/n22_d10_exp_nofusion.txt": "b34b02bd6306f6bc",
@@ -229,27 +232,28 @@
     "contraction_shapes.csv": "8e15b9dec8018128",
     "cublaslt_full_matrix.csv": "a7aaef7f5b51ca67",
     "cublaslt_grouped.csv": "0ce5d81e867597cf",
-    "cublaslt_grouped_capability.json": "9af341d56eab8aa0",
+    "cublaslt_grouped_capability.json": "7deb1ec4167802ec",
     "cublaslt_planar_capability.json": "fe729f8d7df8cf7f",
-    "cutlass_sm120_4m.json": "f02844cf9359ebbb",
-    "numerical_validation.csv": "65e83b4323129fbe",
-    "numerical_validation.json": "89bbccbea8e7ad6d",
+    "cutlass_sm120_4m.json": "5a3c535ebca3ddbf",
+    "numerical_validation.csv": "44b7f1d92d2ae3b3",
+    "numerical_validation.json": "8d17a76ff1c17a7e",
     "region_prototype.json": "1e97addf6aef0f1c",
-    "run_context.json": "9080a491aaf829a3"
+    "run_context.json": "f82465671fe93386"
   },
+  "measurement_source_commit": "205899678c0de72e9ff180ab357a973bf7e1112e",
   "outputs": {
     "environment.json": "07a3371b7b27007d",
-    "gonogo.json": "a71dca342e6801c9",
-    "gonogo.md": "82b4238a7c09aa0e"
+    "gonogo.json": "4727778b52513e67",
+    "gonogo.md": "79f16a1123eb46ff"
   },
   "phase0_completion": "INCONCLUSIVE",
   "phase1_authorization": "NOT_AUTHORIZED",
   "reasons": [
-    "canonical criteria undetermined -> phase0_completion INCONCLUSIVE: C2_REGION_KERNEL_FEASIBILITY, C2_JOINT_EXECUTABLE_LEVERAGE, C2_CANONICAL, REGION_PROTOTYPE, NUMERICAL",
-    "planar NOT_VIABLE: capability=OK numerical=NOT_OK",
-    "grouped NOT_VIABLE: capability=NOT_OK numerical=NOT_OK",
+    "canonical criteria undetermined -> phase0_completion INCONCLUSIVE: C2_REGION_KERNEL_FEASIBILITY, C2_JOINT_EXECUTABLE_LEVERAGE, C2_CANONICAL, CUTLASS_SM120_4M, CUTLASS_SM80_FALLBACK_CAPABILITY, REGION_PROTOTYPE, NUMERICAL",
+    "planar UNKNOWN: capability=OK numerical=UNDETERMINED",
+    "grouped NOT_VIABLE: capability=NOT_OK numerical=UNDETERMINED",
     "region_fused UNKNOWN: capability=UNDETERMINED numerical=UNDETERMINED",
-    "cutlass_4m_single UNKNOWN: capability=OK numerical=UNDETERMINED"
+    "cutlass_4m_single UNKNOWN: capability=UNDETERMINED numerical=UNDETERMINED"
   ],
   "required_artifacts": {
     "C1": [
@@ -288,7 +292,8 @@
       "cutlass_sm120_4m.json"
     ],
     "NUMERICAL": [
-      "numerical_validation.json"
+      "numerical_validation.json",
+      "numerical_validation.csv"
     ],
     "REGION_PROTOTYPE": [
       "region_prototype.json"
@@ -296,19 +301,19 @@
   },
   "route_verdict": {
     "cutlass_4m_single": {
-      "capability": "OK",
+      "capability": "UNDETERMINED",
       "numerical": "UNDETERMINED",
       "status": "UNKNOWN"
     },
     "grouped": {
       "capability": "NOT_OK",
-      "numerical": "NOT_OK",
+      "numerical": "UNDETERMINED",
       "status": "NOT_VIABLE"
     },
     "planar": {
       "capability": "OK",
-      "numerical": "NOT_OK",
-      "status": "NOT_VIABLE"
+      "numerical": "UNDETERMINED",
+      "status": "UNKNOWN"
     },
     "region_fused": {
       "capability": "UNDETERMINED",
@@ -316,6 +321,5 @@
       "status": "UNKNOWN"
     }
   },
-  "schema_version": "manifest-v1",
-  "source_commit": "205899678c0de72e9ff180ab357a973bf7e1112e"
+  "schema_version": "manifest-v1"
 }

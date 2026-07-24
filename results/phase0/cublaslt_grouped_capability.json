@@ -1,111 +1,115 @@
 {
-  "schema_version": "c3-grouped-v1",
-  "capability": {
-    "status": "NOT_SUPPORTED",
-    "reason": "batched_route=SUPPORTED (homogeneous, repeated same-shape GEMMs); grouped_route=NOT_SUPPORTED (heterogeneous, needed for the contraction's variable-shape GEMM set). Heterogeneous grouped not available -> handoff CUTLASS group GEMM / persistent kernel."
-  },
   "batched_route": {
-    "status": "SUPPORTED",
-    "reason": "4/4 real-gemm batched shapes pass the 7.5 gate (quorum 1.0)",
+    "per_shape": {
+      "1048576x16x16": {
+        "batch": 4,
+        "gate": "SUPPORTED",
+        "is_real_gemm": true,
+        "ko_ratio": 2.0577433927458624,
+        "min_dim": 16
+      },
+      "16384x1024x1024": {
+        "batch": 4,
+        "gate": "SUPPORTED",
+        "is_real_gemm": true,
+        "ko_ratio": 4.138155492733721,
+        "min_dim": 1024
+      },
+      "2097152x8x8": {
+        "batch": 4,
+        "gate": "SUPPORTED",
+        "is_real_gemm": false,
+        "ko_ratio": 2.2937948443381306,
+        "min_dim": 8
+      },
+      "262144x64x4": {
+        "batch": 4,
+        "gate": "SUPPORTED",
+        "is_real_gemm": false,
+        "ko_ratio": 2.4076233890271714,
+        "min_dim": 4
+      },
+      "262144x64x64": {
+        "batch": 4,
+        "gate": "SUPPORTED",
+        "is_real_gemm": true,
+        "ko_ratio": 2.6339302214449227,
+        "min_dim": 64
+      },
+      "4194304x4x4": {
+        "batch": 4,
+        "gate": "SUPPORTED",
+        "is_real_gemm": false,
+        "ko_ratio": 1.7759731535162062,
+        "min_dim": 4
+      },
+      "524288x32x32": {
+        "batch": 4,
+        "gate": "SUPPORTED",
+        "is_real_gemm": true,
+        "ko_ratio": 2.4481974760856935,
+        "min_dim": 32
+      },
+      "8388608x2x2": {
+        "batch": 4,
+        "gate": "SUPPORTED",
+        "is_real_gemm": false,
+        "ko_ratio": 1.6743245839854783,
+        "min_dim": 2
+      }
+    },
     "policy": {
       "min_dim_floor": 16,
       "quorum": 1.0,
       "real_gemm_pass": 4,
       "real_gemm_total": 4
     },
-    "per_shape": {
-      "262144x64x4": {
-        "gate": "SUPPORTED",
-        "is_real_gemm": false,
-        "min_dim": 4,
-        "batch": 4,
-        "ko_ratio": 2.4076233890271714
-      },
-      "8388608x2x2": {
-        "gate": "SUPPORTED",
-        "is_real_gemm": false,
-        "min_dim": 2,
-        "batch": 4,
-        "ko_ratio": 1.6743245839854783
-      },
-      "4194304x4x4": {
-        "gate": "SUPPORTED",
-        "is_real_gemm": false,
-        "min_dim": 4,
-        "batch": 4,
-        "ko_ratio": 1.7759731535162062
-      },
-      "16384x1024x1024": {
-        "gate": "SUPPORTED",
-        "is_real_gemm": true,
-        "min_dim": 1024,
-        "batch": 4,
-        "ko_ratio": 4.138155492733721
-      },
-      "2097152x8x8": {
-        "gate": "SUPPORTED",
-        "is_real_gemm": false,
-        "min_dim": 8,
-        "batch": 4,
-        "ko_ratio": 2.2937948443381306
-      },
-      "524288x32x32": {
-        "gate": "SUPPORTED",
-        "is_real_gemm": true,
-        "min_dim": 32,
-        "batch": 4,
-        "ko_ratio": 2.4481974760856935
-      },
-      "262144x64x64": {
-        "gate": "SUPPORTED",
-        "is_real_gemm": true,
-        "min_dim": 64,
-        "batch": 4,
-        "ko_ratio": 2.6339302214449227
-      },
-      "1048576x16x16": {
-        "gate": "SUPPORTED",
-        "is_real_gemm": true,
-        "min_dim": 16,
-        "batch": 4,
-        "ko_ratio": 2.0577433927458624
-      }
-    }
+    "reason": "4/4 real-gemm batched shapes pass the 7.5 gate (quorum 1.0)",
+    "status": "SUPPORTED"
   },
-  "grouped_route": {
-    "status": "NOT_SUPPORTED",
-    "reason": "cublasLt grouped-3GEMM descriptor API absent in cublasLt.h (see cublas_version; verified by header grep); legacy cublasGemmGroupedBatchedEx present but has no planar-complex (PLANE_OFFSET) layout -> complex needs 4-real grouped calls, losing the planar fusion leverage",
-    "handoff": "CUTLASS group GEMM / persistent kernel"
+  "capability": {
+    "reason": "batched_route=SUPPORTED (homogeneous, repeated same-shape GEMMs); grouped_route=NOT_SUPPORTED (heterogeneous, needed for the contraction's variable-shape GEMM set). Heterogeneous grouped not available -> handoff CUTLASS group GEMM / persistent kernel.",
+    "status": "NOT_SUPPORTED"
   },
   "grouped_api_probe": {
+    "attempted": true,
     "cublas_version": "12.8.4",
     "cublaslt_grouped3gemm": false,
     "legacy_grouped_batched_ex": true,
     "legacy_grouped_planar": false,
+    "probe_source": "compiled_header_probe",
     "reason": "cublasLt grouped-3GEMM descriptor API absent in cublasLt.h (see cublas_version; verified by header grep); legacy cublasGemmGroupedBatchedEx present but has no planar-complex (PLANE_OFFSET) layout -> complex needs 4-real grouped calls, losing the planar fusion leverage"
   },
+  "grouped_execution": {
+    "attempted": false
+  },
+  "grouped_route": {
+    "handoff": "CUTLASS group GEMM / persistent kernel",
+    "reason": "cublasLt grouped-3GEMM descriptor API absent in cublasLt.h (see cublas_version; verified by header grep); legacy cublasGemmGroupedBatchedEx present but has no planar-complex (PLANE_OFFSET) layout -> complex needs 4-real grouped calls, losing the planar fusion leverage",
+    "status": "NOT_SUPPORTED"
+  },
   "matrix_grid": {
-    "shapes": 8,
     "batch": 4,
+    "batched_cells": 64,
+    "batched_ok": 64,
+    "grouped_cells": 1,
     "out_dtypes": [
       "bf16",
       "fp32"
     ],
+    "shapes": 8,
     "ws_caps": [
       "0",
       "1MiB",
       "16MiB",
       "max"
-    ],
-    "batched_cells": 64,
-    "batched_ok": 64,
-    "grouped_cells": 1
+    ]
   },
+  "schema_version": "c3-grouped-v2",
   "timing_summary": {
     "best_ko_ratio": 4.138155492733721,
-    "worst_max_rel_err": 0.004193764179944992,
     "shapes_ok": 8,
-    "shapes_total": 8
-  },
-  "note": "Task 7 grouped/batched probe (spec 3.6/10). batched_route = real cublasLt planar-complex via BATCH_COUNT + STRIDED_BATCH_OFFSET (homogeneous-shape batches); grouped_route = heterogeneous grouped (cublasLt grouped-3GEMM / legacy grouped planar). On this toolchain (see grouped_api_probe) the heterogeneous-grouped API is absent, so overall keys off grouped_route and the batched SUPPORTED result (if any) is a homogeneous-only partial; CUTLASS group GEMM / persistent kernel is the handoff for the contraction's variable-shape GEMM set."
+    "shapes_total": 8,
+    "worst_max_rel_err": 0.004193764179944992
+  }
 }
