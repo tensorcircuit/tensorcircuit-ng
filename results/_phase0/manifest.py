@@ -19,10 +19,27 @@ from results._phase0.verdict_schema import recompute_derived_state
 
 SCHEMA_VERSION = "manifest-v1"
 
-# criterion -> required artifacts (presence-gating; missing -> NOT_RUN)
+# criterion -> required artifacts (presence-gating; missing -> NOT_RUN).
+# Task 1 (plan §1.1): derived from the canonical CRITERIA_NAMES single source
+# of truth. The old "C2" alias is NOT here -- the 4 real C2 layers each map
+# to the shared c2_judgment.json + c2_checkpoint_manifest.json chain.
+# CUTLASS_SM80_FALLBACK_CAPABILITY is intentionally NOT mapped yet (finding 3.7
+# / Task 5 adds it).
 REQUIRED_ARTIFACTS = {
     "C1": ["c1_judgment.json", "c1_default_vs_nofusion.csv"],
-    "C2": ["c2_judgment.json", "c2_checkpoint_manifest.json"],
+    "C2_REGION_KERNEL_FEASIBILITY": [
+        "c2_judgment.json",
+        "c2_checkpoint_manifest.json",
+    ],
+    "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK": [
+        "c2_judgment.json",
+        "c2_checkpoint_manifest.json",
+    ],
+    "C2_JOINT_EXECUTABLE_LEVERAGE": [
+        "c2_judgment.json",
+        "c2_checkpoint_manifest.json",
+    ],
+    "C2_CANONICAL": ["c2_judgment.json", "c2_checkpoint_manifest.json"],
     "C3_PLANAR_CORE": ["cublaslt_planar_capability.json"],
     "C3_PLANAR_FULL_MATRIX": ["cublaslt_full_matrix.csv"],
     "C3_GROUPED": ["cublaslt_grouped_capability.json"],

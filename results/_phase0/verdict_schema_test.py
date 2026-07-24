@@ -69,6 +69,8 @@ def test_criteria_names_match_plan_section4():
         "C3_GROUPED",
         "CUTLASS_SM120_4M",
         "CUTLASS_SM80_FALLBACK_CAPABILITY",
+        "REGION_PROTOTYPE",
+        "NUMERICAL",
     }
     assert set(CRITERIA_NAMES) == expected
     assert len(CRITERIA_NAMES) == len(expected)  # no duplicates
@@ -337,7 +339,7 @@ def test_completion_complete_when_all_required_determined():
 
 def test_completion_inconclusive_when_any_unknown():
     criteria = _all_determined_criteria()
-    criteria["C2"] = "UNKNOWN"
+    criteria["C2_CANONICAL"] = "UNKNOWN"
     assert recompute_completion(criteria) == "INCONCLUSIVE"
 
 

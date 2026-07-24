@@ -346,11 +346,13 @@ def test_aggregate_two_layer_uses_shared_helper():
     assert agg["phase1_authorization"] == expected["phase1_authorization"]
     assert agg["reasons"] == expected["reasons"]
     assert agg["blocking_artifacts"] == expected["blocking_artifacts"]
-    # Honest headline: C2 UNKNOWN -> INCONCLUSIVE -> NOT_AUTHORIZED.
+    # Honest headline: C2 canonical undetermined -> INCONCLUSIVE -> NOT_AUTHORIZED.
     assert agg["schema_version"] == "gonogo-v2"
     assert agg["phase0_completion"] == "INCONCLUSIVE"
     assert agg["phase1_authorization"] == "NOT_AUTHORIZED"
-    assert agg["criteria"]["C2"] == "UNKNOWN"
+    # Task 1: C2 compat alias tracks C2_CANONICAL (not in REQUIRED_CRITERIA /
+    # gates). The alias is set by validate_criteria after computing the rollup.
+    assert agg["criteria"]["C2"] == agg["criteria"]["C2_CANONICAL"]
     # planar: capability OK (C3 core+full PASS) but numerical FAIL -> NOT_VIABLE.
     assert agg["route_verdict"]["planar"]["status"] == "NOT_VIABLE"
     # region_fused: REGION_PROTOTYPE UNKNOWN -> capability UNDETERMINED -> UNKNOWN.

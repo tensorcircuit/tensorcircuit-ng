@@ -25,10 +25,15 @@ from results._phase0.manifest import (
 
 def test_schema_constants_complete():
     assert SCHEMA_VERSION == "manifest-v1"
-    # every gonogo criterion has a required-artifact entry
+    # every canonical criterion has a required-artifact entry (Task 1: the 4
+    # C2 layers replaced the old "C2" alias; CUTLASS_SM80_FALLBACK_CAPABILITY
+    # is intentionally absent -- finding 3.7 / Task 5 adds it).
     for c in (
         "C1",
-        "C2",
+        "C2_REGION_KERNEL_FEASIBILITY",
+        "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK",
+        "C2_JOINT_EXECUTABLE_LEVERAGE",
+        "C2_CANONICAL",
         "C3_PLANAR_CORE",
         "C3_PLANAR_FULL_MATRIX",
         "C3_GROUPED",
@@ -37,6 +42,8 @@ def test_schema_constants_complete():
         "NUMERICAL",
     ):
         assert c in REQUIRED_ARTIFACTS and REQUIRED_ARTIFACTS[c], c
+    # the old "C2" alias must NOT be in REQUIRED_ARTIFACTS (Task 1 §1.2)
+    assert "C2" not in REQUIRED_ARTIFACTS
     assert "manifest.json" not in OUTPUT_ARTIFACTS  # no self-hash
     assert OUTPUT_ARTIFACTS == ["gonogo.json", "gonogo.md", "environment.json"]
     assert "c1_optimized_hlo" in INPUT_ARTIFACT_DIRS
@@ -98,12 +105,15 @@ def test_presence_check_all_present_inherits(tmp_path):
 def test_presence_check_missing_forces_not_run(tmp_path):
     from results._phase0.manifest import _presence_check
 
-    criteria = {"C1": "PASS", "C2": "UNKNOWN", "NUMERICAL": "FAIL"}
+    # Task 1: "C2" alias removed from REQUIRED_ARTIFACTS; C2_CANONICAL is the
+    # gated criterion. c2_judgment.json / c2_checkpoint_manifest.json missing
+    # -> C2_CANONICAL NOT_RUN.
+    criteria = {"C1": "PASS", "C2_CANONICAL": "UNKNOWN", "NUMERICAL": "FAIL"}
     # only c1_judgment.json exists; c1_default_vs_nofusion.csv + c2/numerical missing
     (tmp_path / "c1_judgment.json").write_text("x")
     out = _presence_check(criteria, str(tmp_path))
     assert out["C1"] == "NOT_RUN"  # c1_default_vs_nofusion.csv missing
-    assert out["C2"] == "NOT_RUN"  # c2 artifacts missing
+    assert out["C2_CANONICAL"] == "NOT_RUN"  # c2 artifacts missing
     assert out["NUMERICAL"] == "NOT_RUN"
 
 

@@ -73,9 +73,15 @@ AUTHORIZATION_TOKENS = frozenset(
 # Criteria names (plan §4 criteria list)
 # ---------------------------------------------------------------------------
 
-#: Ordered list of canonical criteria names. A criterion field keyed by any of
-#: these names must carry a value from ``CRITERION_TOKENS`` (after
+#: Ordered list of canonical criteria names (plan §4.1 / §1.1 -- SINGLE SOURCE OF
+#: TRUTH). CRITERIA_NAMES, REQUIRED_CRITERIA, gonogo output, manifest required
+#: map, and Markdown ALL derive from this one set. A criterion field keyed by
+#: any of these names must carry a value from ``CRITERION_TOKENS`` (after
 #: normalization), never an artifact-native detail token.
+#:
+#: The old ``"C2"`` alias is NOT in this list -- it is a compat-only alias for
+#: ``C2_CANONICAL`` (see ``C2_COMPAT_ALIAS``) and must NOT participate in
+#: completion / route / authorization gates.
 CRITERIA_NAMES = (
     "C1",
     "C2_REGION_KERNEL_FEASIBILITY",
@@ -87,7 +93,26 @@ CRITERIA_NAMES = (
     "C3_GROUPED",
     "CUTLASS_SM120_4M",
     "CUTLASS_SM80_FALLBACK_CAPABILITY",
+    "REGION_PROTOTYPE",
+    "NUMERICAL",
 )
+
+#: Compat alias for the old ``"C2"`` criterion key (plan §1.2). Kept for
+#: backward compatibility with gonogo/manifest output consumers that read the
+#: ``"C2"`` key. After ``validate_criteria`` it always equals
+#: ``C2_CANONICAL``. It must NOT participate in completion / route /
+#: authorization gates (only the 4 real C2 layers do).
+C2_COMPAT_ALIAS = "C2"
+
+#: The 3 C2 input layers that roll up into ``C2_CANONICAL`` (plan §1.4).
+C2_INPUT_LAYERS = (
+    "C2_REGION_KERNEL_FEASIBILITY",
+    "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK",
+    "C2_JOINT_EXECUTABLE_LEVERAGE",
+)
+
+#: All recognized criterion keys: canonical names + the C2 compat alias.
+RECOGNIZED_CRITERIA_KEYS = frozenset(CRITERIA_NAMES) | {C2_COMPAT_ALIAS}
 
 # ---------------------------------------------------------------------------
 # Numerical routes (plan §4 numerical list)
@@ -175,6 +200,94 @@ def normalize_criterion(token):
 
 
 # ---------------------------------------------------------------------------
+# C2 canonical rollup + schema-v3 criteria validation (plan §1.3 / §1.4)
+# ---------------------------------------------------------------------------
+
+
+def rollup_c2_canonical(criteria):
+    """Roll up the 3 C2 input layers into a canonical C2 status (plan §1.4).
+
+    ``C2_CANONICAL`` must equal this rollup. The rollup rules mirror
+    ``gonogo._roll_up_statuses``: any FAIL -> FAIL; any UNKNOWN -> UNKNOWN;
+    any NOT_RUN -> NOT_RUN; all PASS -> PASS; anything else (e.g.
+    NOT_SUPPORTED in a layer) -> UNKNOWN (the canonical cannot be determined).
+
+    Each input layer is first scrubbed by ``normalize_criterion`` so that
+    artifact-native detail tokens (which should never reach this point after
+    ``validate_criteria``) are treated as UNKNOWN.
+    """
+    statuses = [
+        normalize_criterion(criteria.get(layer, "NOT_RUN")) for layer in C2_INPUT_LAYERS
+    ]
+    if any(s == "FAIL" for s in statuses):
+        return "FAIL"
+    if any(s == "UNKNOWN" for s in statuses):
+        return "UNKNOWN"
+    if any(s == "NOT_RUN" for s in statuses):
+        return "NOT_RUN"
+    if all(s == "PASS" for s in statuses):
+        return "PASS"
+    return "UNKNOWN"
+
+
+def validate_criteria(criteria):
+    """Schema-v3 validation of a criteria dict before it reaches the truth
+    table (plan §1.3 / §1.4).
+
+    Returns ``(validated, reasons)`` where ``validated`` is a new dict and
+    ``reasons`` is a list of human-readable validation notes.
+
+    Steps:
+      1. **Unknown keys** -- keys not in ``CRITERIA_NAMES`` and not the
+         ``C2_COMPAT_ALIAS`` are dropped (a reason is recorded).
+      2. **Missing required** -- every ``REQUIRED_CRITERION`` absent from the
+         input is added as ``NOT_RUN``.
+      3. **Token validation** -- each value is scrubbed by
+         ``normalize_criterion``; detail tokens (SUPPORTED / FEASIBLE* /
+         TILE_FUSION_FEASIBLE / NOT_FEASIBLE / BLOCKED / INCONCLUSIVE) are
+         downgraded to ``UNKNOWN`` (a reason is recorded).
+      4. **C2_CANONICAL rollup** -- ``C2_CANONICAL`` is validated against
+         ``rollup_c2_canonical``; if inconsistent (or was missing), it is set
+         to ``UNKNOWN`` (a reason is recorded).
+      5. **C2 compat alias** -- ``C2`` is set to ``C2_CANONICAL`` so the alias
+         always tracks the canonical value. The alias is NOT in
+         ``REQUIRED_CRITERIA`` and does NOT participate in gates.
+    """
+    validated = {}
+    reasons = []
+
+    for key, value in criteria.items():
+        if key not in RECOGNIZED_CRITERIA_KEYS:
+            reasons.append(f"unknown criterion key '{key}' removed from output")
+            continue
+        normalized = normalize_criterion(value)
+        if normalized != value and value not in (None, ""):
+            reasons.append(
+                f"criterion '{key}' detail token '{value}' downgraded to UNKNOWN"
+            )
+        validated[key] = normalized
+
+    # Add missing required criteria as NOT_RUN.
+    for c in REQUIRED_CRITERIA:
+        if c not in validated:
+            validated[c] = "NOT_RUN"
+
+    # Validate C2_CANONICAL against the rollup of the 3 C2 input layers.
+    c2_rollup = rollup_c2_canonical(validated)
+    provided = validated.get("C2_CANONICAL")
+    if provided != c2_rollup:
+        reasons.append(
+            f"C2_CANONICAL={provided} != rollup={c2_rollup} -> downgraded to UNKNOWN"
+        )
+        validated["C2_CANONICAL"] = "UNKNOWN"
+
+    # Set the C2 compat alias = C2_CANONICAL (must NOT participate in gates).
+    validated[C2_COMPAT_ALIAS] = validated["C2_CANONICAL"]
+
+    return validated, reasons
+
+
+# ---------------------------------------------------------------------------
 # §5 truth table: route / completion / authorization recompute (plan §9 Task 6)
 # ---------------------------------------------------------------------------
 # SINGLE SOURCE OF TRUTH for the §5 truth table. manifest.py (Task 6) uses this
@@ -186,21 +299,14 @@ _TRI_OK = "OK"
 _TRI_NOT_OK = "NOT_OK"
 _TRI_UNDETERMINED = "UNDETERMINED"
 
-#: Criteria whose determined-ness gates phase0_completion (§5 truth table).
-#: NUMERICAL=FAIL is "determined" (NOT_OK) and does NOT sink completion.
+#: Criteria whose determined-ness gates phase0_completion (§5 truth table /
+#: plan §1.4). Derived from the SINGLE SOURCE OF TRUTH (``CRITERIA_NAMES``) --
+#: every canonical criterion is required. The old ``"C2"`` alias is NOT here
+#: (plan §1.2: alias must NOT participate in gates; only the 4 real C2 layers
+#: do). NUMERICAL=FAIL is "determined" (NOT_OK) and does NOT sink completion.
 #: CUTLASS_SM120_4M (native, NOT_SUPPORTED) and CUTLASS_SM80_FALLBACK_CAPABILITY
 #: (fallback, PASS) are SPLIT into two independent criteria (plan §7 Task 4).
-REQUIRED_CRITERIA = (
-    "C1",
-    "C2",
-    "C3_PLANAR_CORE",
-    "C3_PLANAR_FULL_MATRIX",
-    "C3_GROUPED",
-    "CUTLASS_SM120_4M",
-    "CUTLASS_SM80_FALLBACK_CAPABILITY",
-    "REGION_PROTOTYPE",
-    "NUMERICAL",
-)
+REQUIRED_CRITERIA = CRITERIA_NAMES  # all 12 canonical criteria are required
 
 #: Route -> capability criteria dependencies (§5 truth table rule 8 + rule 3).
 #: A route is VIABLE only if every listed capability criterion normalizes to OK
@@ -374,11 +480,16 @@ __all__ = [
     "COMPLETION_TOKENS",
     "AUTHORIZATION_TOKENS",
     "CRITERIA_NAMES",
+    "REQUIRED_CRITERIA",
+    "C2_COMPAT_ALIAS",
+    "C2_INPUT_LAYERS",
+    "RECOGNIZED_CRITERIA_KEYS",
     "NUMERICAL_ROUTES",
     "DETAIL_TOKENS",
     "normalize_criterion",
+    "rollup_c2_canonical",
+    "validate_criteria",
     # §5 truth table (plan §9 Task 6)
-    "REQUIRED_CRITERIA",
     "ROUTE_CAPABILITY_CRITERIA",
     "RECOMPUTE_ROUTES",
     "TRI_OK",

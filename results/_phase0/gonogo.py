@@ -20,7 +20,7 @@ import csv
 import json
 import os
 
-from results._phase0.verdict_schema import recompute_derived_state
+from results._phase0.verdict_schema import recompute_derived_state, validate_criteria
 
 VERDICTS = (
     "GO_TO_PHASE1",
@@ -45,6 +45,14 @@ def aggregate_two_layer(criteria, per_route_numerical):
     numerical via the shared §5 truth table
     (``verdict_schema.recompute_derived_state``).
 
+    Task 1 (plan §1.3): before reaching the truth table, ``criteria`` is
+    validated by ``verdict_schema.validate_criteria`` -- unknown keys are
+    dropped, missing required criteria are added as NOT_RUN, detail tokens are
+    downgraded to UNKNOWN, and ``C2_CANONICAL`` is validated against the rollup
+    of the 3 C2 input layers. The ``C2`` compat alias is set to
+    ``C2_CANONICAL``. The validated criteria (not the raw input) appear in the
+    output and feed the truth-table derivation.
+
     Task 7: the route_verdict / phase0_completion / phase1_authorization /
     reasons / blocking_artifacts derivation goes through the shared helper so
     gonogo and manifest derivation cannot diverge (shared derivation logic;
@@ -53,15 +61,17 @@ def aggregate_two_layer(criteria, per_route_numerical):
     object (truth-table rule 7). ``per_route_numerical`` is {route: PASS|FAIL|...};
     a route absent from it is UNDETERMINED (fail-closed).
     """
-    derived = recompute_derived_state(criteria, per_route_numerical)
+    validated, validation_reasons = validate_criteria(criteria)
+    derived = recompute_derived_state(validated, per_route_numerical)
     return {
         "schema_version": "gonogo-v2",
-        "criteria": dict(criteria),
+        "criteria": dict(validated),
         "route_verdict": derived["route_verdict"],
         "phase0_completion": derived["phase0_completion"],
         "phase1_authorization": derived["phase1_authorization"],
         "reasons": derived["reasons"],
         "blocking_artifacts": derived["blocking_artifacts"],
+        "validation_notes": validation_reasons,
     }
 
 
@@ -670,10 +680,20 @@ def main(stage_dir=None):
 
     criteria = {
         "C1": _c1_status_from_judgment(c1_j),
-        "C2": _c2_status_from_judgment(c2_j),
+        # Task 1 (plan §1.1/§1.2): gonogo emits all 4 C2 layers (the 3 input
+        # layers + C2_CANONICAL). The old "C2" alias is NOT produced here --
+        # aggregate_two_layer's validate_criteria sets it as a compat alias =
+        # C2_CANONICAL after validating the rollup.
         "C2_REGION_KERNEL_FEASIBILITY": _c2_layer_status(
             c2_j, "C2_REGION_KERNEL_FEASIBILITY"
         ),
+        "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK": _c2_layer_status(
+            c2_j, "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK"
+        ),
+        "C2_JOINT_EXECUTABLE_LEVERAGE": _c2_layer_status(
+            c2_j, "C2_JOINT_EXECUTABLE_LEVERAGE"
+        ),
+        "C2_CANONICAL": _c2_layer_status(c2_j, "C2_CANONICAL"),
         "C3_PLANAR_CORE": _c3_planar_from_capability(
             os.path.join(base, "cublaslt_planar_capability.json")
         ),
