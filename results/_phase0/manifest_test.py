@@ -1021,6 +1021,100 @@ def test_build_manifest_c2_checkpoint_cascade_closes_region_fused_gap(tmp_path):
     ]
 
 
+# ---------------------------------------------------------------------------
+# Nongpu rereview finding 3.2: numerical binding fail-open on route source &
+# CSV content. The 6 NUMERICAL_REQUIRED_FILES are presence-only (no hash) ->
+# content mutation silently returns OK. Expected: MISMATCH on any mutation.
+# ---------------------------------------------------------------------------
+
+
+def test_validate_numerical_binding_mismatch_on_route_source_mutation(tmp_path):
+    """Nongpu rereview finding 3.2: mutating any of the 6 route-source /
+    numerical-CSV files must produce MISMATCH. Current
+    ``_validate_numerical_binding`` (manifest.py:201-243) only hashes 3 files
+    (edge_map / prototype / contraction_shapes); the other 6 are presence-only
+    (``NUMERICAL_REQUIRED_FILES``) -> content mutation silently returns OK.
+
+    Each mutation is exercised in isolation: all files are restored to the OK
+    state, then exactly one file is mutated. Only the target bug (missing
+    content hash) can trigger the MISMATCH assertion failure."""
+    import hashlib
+
+    from results._phase0.manifest import (
+        NUMERICAL_REQUIRED_FILES,
+        _validate_numerical_binding,
+    )
+
+    # Build a full staging fixture: 3 hashed bindings matching + 6 presence-only
+    # files present.
+    contents = {
+        "edge_map": b"edge-data",
+        "prototype": b"proto-data",
+        "contraction_shapes": b"shape-data",
+    }
+    (tmp_path / "c1_c2_edge_map.json").write_bytes(contents["edge_map"])
+    (tmp_path / "region_prototype.json").write_bytes(contents["prototype"])
+    (tmp_path / "contraction_shapes.csv").write_bytes(contents["contraction_shapes"])
+    presence_contents = {}
+    for f in NUMERICAL_REQUIRED_FILES:
+        presence_contents[f] = b"original-content"
+        (tmp_path / f).write_bytes(presence_contents[f])
+    ok_binding = {
+        "case_binding": {
+            "edge_map_hash": hashlib.sha256(contents["edge_map"]).hexdigest()[:16],
+            "prototype_hash": hashlib.sha256(contents["prototype"]).hexdigest()[:16],
+            "contraction_shapes_hash": hashlib.sha256(
+                contents["contraction_shapes"]
+            ).hexdigest()[:16],
+        }
+    }
+    # Sanity: the fixture is OK before mutation.
+    assert _validate_numerical_binding(str(tmp_path), ok_binding) == "OK"
+
+    # For each of the 6 presence-only files, mutate its content and assert
+    # MISMATCH. Current code only checks presence -> returns OK (RED).
+    for fname in NUMERICAL_REQUIRED_FILES:
+        # Restore all presence-only files to original state.
+        for f, c in presence_contents.items():
+            (tmp_path / f).write_bytes(c)
+        # Mutate this one file.
+        (tmp_path / fname).write_bytes(b"MUTATED-" + presence_contents[fname])
+        result = _validate_numerical_binding(str(tmp_path), ok_binding)
+        assert result == "MISMATCH", (
+            f"mutating {fname} should produce MISMATCH, got {result!r} "
+            f"(presence-only check does not detect content change)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Nongpu rereview finding 3.7: manifest presence map missing fallback criterion.
+# ---------------------------------------------------------------------------
+
+
+def test_presence_check_downgrades_fallback_when_cutlass_artifact_missing(
+    tmp_path,
+):
+    """Nongpu rereview finding 3.7: deleting ``cutlass_sm120_4m.json`` + stale
+    ``CUTLASS_SM80_FALLBACK_CAPABILITY=PASS`` -> fallback must be ``NOT_RUN``.
+    Current ``REQUIRED_ARTIFACTS`` (manifest.py:23-32) only maps
+    ``CUTLASS_SM120_4M -> cutlass_sm120_4m.json``, NOT
+    ``CUTLASS_SM80_FALLBACK_CAPABILITY -> cutlass_sm120_4m.json``, so the
+    fallback criterion stays stale PASS when the shared artifact is absent."""
+    from results._phase0.manifest import _presence_check
+
+    # cutlass_sm120_4m.json is absent (no files created under tmp_path).
+    criteria = {
+        "CUTLASS_SM120_4M": "PASS",  # stale
+        "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",  # stale
+    }
+    out = _presence_check(criteria, str(tmp_path))
+    assert out["CUTLASS_SM120_4M"] == "NOT_RUN"  # artifact absent -> NOT_RUN
+    assert out["CUTLASS_SM80_FALLBACK_CAPABILITY"] == "NOT_RUN", (
+        f"fallback must also be NOT_RUN (same artifact), got "
+        f"{out['CUTLASS_SM80_FALLBACK_CAPABILITY']!r}"
+    )
+
+
 if __name__ == "__main__":
     import sys, pytest
 

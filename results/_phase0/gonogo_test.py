@@ -969,6 +969,257 @@ def test_json_and_md_render_from_same_object(tmp_path, monkeypatch):
         assert reason in md, reason
 
 
+# ---------------------------------------------------------------------------
+# Nongpu rereview finding 3.3: REQUIRED_CRITERIA uses old C2 alias; a UNKNOWN
+# C2 sub-layer must block COMPLETE even when the old "C2" alias is PASS.
+# ---------------------------------------------------------------------------
+
+
+def test_completion_inconclusive_when_c2_region_unknown_even_if_c2_alias_pass():
+    """Nongpu rereview finding 3.3: ``C2=PASS`` (old alias) but
+    ``C2_REGION_KERNEL_FEASIBILITY=UNKNOWN`` -> ``phase0_completion`` must be
+    ``INCONCLUSIVE``, ``phase1_authorization`` ``NOT_AUTHORIZED``.
+
+    Current ``REQUIRED_CRITERIA`` (verdict_schema.py:193-201) includes ``"C2"``
+    (the alias) but NOT the four C2 layers, so a UNKNOWN sub-layer does not
+    block completion -> false COMPLETE / GO_TO_PHASE1."""
+    from results._phase0.gonogo import aggregate_two_layer
+
+    criteria = {
+        "C1": "PASS",
+        "C2": "PASS",  # old alias, determined
+        "C2_REGION_KERNEL_FEASIBILITY": "UNKNOWN",  # sub-layer undetermined
+        "C3_PLANAR_CORE": "PASS",
+        "C3_PLANAR_FULL_MATRIX": "PASS",
+        "C3_GROUPED": "NOT_SUPPORTED",
+        "CUTLASS_SM120_4M": "NOT_SUPPORTED",
+        "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",
+        "REGION_PROTOTYPE": "PASS",
+        "NUMERICAL": "PASS",
+    }
+    per_route = {"planar": "PASS"}
+    agg = aggregate_two_layer(criteria, per_route)
+    assert agg["phase0_completion"] == "INCONCLUSIVE", agg["phase0_completion"]
+    assert agg["phase1_authorization"] == "NOT_AUTHORIZED", agg["phase1_authorization"]
+
+
+# ---------------------------------------------------------------------------
+# Nongpu rereview finding 3.5: canonical capability readers return detail tokens
+# -> false negative (real success can't be PASS).
+# ---------------------------------------------------------------------------
+
+
+def test_c3_grouped_status_recomputes_pass_from_supported_evidence(tmp_path):
+    """Nongpu rereview finding 3.5.1: grouped raw ``SUPPORTED`` + complete
+    evidence -> canonical ``PASS``. Current ``_c3_grouped_status``
+    (gonogo.py:406-409) returns raw ``"SUPPORTED"`` (a detail token) which
+    ``tri_normalize`` maps to UNKNOWN -> real grouped success can never be PASS
+    (false negative)."""
+    import json
+
+    from results._phase0.gonogo import _c3_grouped_status
+
+    p = tmp_path / "g.json"
+    p.write_text(
+        json.dumps(
+            {
+                "capability": {"status": "SUPPORTED"},
+                # complete evidence fields (the fix recomputes from these)
+                "batched_route": {"status": "SUPPORTED"},
+                "grouped_api_probe": {"cublaslt_grouped3gemm": True},
+            }
+        )
+    )
+    assert _c3_grouped_status(str(p)) == "PASS"
+
+
+def test_region_proto_status_recomputes_pass_from_full_anchor_evidence(tmp_path):
+    """Nongpu rereview finding 3.5.2: region canonical ``PASS`` + complete
+    full-anchor evidence -> canonical ``PASS``. Current ``_region_proto_status``
+    (gonogo.py:505-522) doesn't accept canonical ``PASS`` (only ``FEASIBLE*`` /
+    ``NOT_FEASIBLE`` / ``BLOCKED``) -> returns UNKNOWN -> full-anchor region
+    success can never be PASS (false negative)."""
+    import json
+
+    from results._phase0.gonogo import _region_proto_status
+
+    p = tmp_path / "r.json"
+    p.write_text(
+        json.dumps(
+            {
+                "verdict": "PASS",
+                "fused_full_anchor_run": True,
+                "relative_l2": 1e-7,
+                "max_rel": 1e-7,
+                "registers_per_thread": 40,
+                "occupancy_pct": 100.0,
+            }
+        )
+    )
+    assert _region_proto_status(str(p)) == "PASS"
+
+
+def test_region_proto_status_unknown_when_feasible_without_full_anchor(tmp_path):
+    """Nongpu rereview finding 3.5.2 (complementary GREEN pin): region detail
+    ``FEASIBLE*`` without full-anchor evidence -> UNKNOWN. This should already
+    pass on current code (normalize maps FEASIBLE* to UNKNOWN at the criterion
+    level). Included to pin the honest-negative path alongside the false-
+    negative RED test above."""
+    import json
+
+    from results._phase0.gonogo import _region_proto_status
+    from results._phase0.verdict_schema import normalize_criterion
+
+    p = tmp_path / "r.json"
+    p.write_text(json.dumps({"verdict": "FEASIBLE_WITH_RECOMPUTE"}))
+    raw = _region_proto_status(str(p))
+    # The criterion-level value (after normalize) must be UNKNOWN.
+    assert normalize_criterion(raw) == "UNKNOWN", raw
+
+
+# ---------------------------------------------------------------------------
+# Nongpu rereview finding 3.6: CUTLASS trusts self-reported capability.
+# ---------------------------------------------------------------------------
+
+
+def test_cutlass_native_rejects_self_reported_pass_without_evidence():
+    """Nongpu rereview finding 3.6: CUTLASS native ``section.capability=PASS``
+    but ``runs=false`` / ``gate_pass=false`` -> must be UNKNOWN/FAIL, not PASS.
+    Current ``_cutlass_native_sm120_criterion`` (gonogo.py:461-463) returns
+    ``sec.get("capability")`` directly -> PASS leaks through."""
+    from results._phase0.gonogo import _cutlass_native_sm120_criterion
+
+    data = {
+        "native_sm120_bf16_4m": {
+            "capability": "PASS",
+            "runs": False,
+            "correctness": {"gate_pass": False},
+        }
+    }
+    result = _cutlass_native_sm120_criterion(data)
+    assert result != "PASS", (
+        f"self-reported PASS without runs/gate evidence must not be PASS, "
+        f"got {result!r}"
+    )
+    assert result in ("UNKNOWN", "FAIL"), result
+
+
+def test_cutlass_fallback_rejects_self_reported_pass_with_wrong_path():
+    """Nongpu rereview finding 3.6: CUTLASS fallback ``section.capability=PASS``
+    but actual path is native/unknown -> must be UNKNOWN. Current
+    ``_cutlass_sm80_fallback_criterion`` (gonogo.py:492-494) returns
+    ``sec.get("capability")`` directly -> PASS leaks through."""
+    from results._phase0.gonogo import _cutlass_sm80_fallback_criterion
+
+    data = {
+        "sm80_fallback_bf16_4m": {
+            "capability": "PASS",
+            "kernel_path": "sm120_native",  # actual path is native, not fallback
+        }
+    }
+    result = _cutlass_sm80_fallback_criterion(data)
+    assert (
+        result == "UNKNOWN"
+    ), f"self-reported PASS with wrong kernel_path must be UNKNOWN, got {result!r}"
+
+
+# ---------------------------------------------------------------------------
+# Nongpu rereview finding 3.8: full-matrix algorithm/workspace constraints
+# incomplete.
+# ---------------------------------------------------------------------------
+
+
+def test_c3_full_matrix_unknown_on_ok_with_sentinel_algo_id(tmp_path):
+    """Nongpu rereview finding 3.8: ``status='ok'`` + ``first_algo_id=-1`` ->
+    UNKNOWN. An 'ok' row must have a real algo id (>= 0), not the -1 sentinel.
+    Current reader (gonogo.py) checks ``algo_count >= 1`` for ok rows but not
+    ``first_algo_id >= 0`` -> PASS leaks through."""
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+
+    shapes = [(16384, 16, 16)]  # all-ok shape
+    shapes_csv = _write_synthetic_shapes(tmp_path, shapes)
+    rows = _synth_complete_rows(shapes)
+    rows[0][8] = -1  # first_algo_id=-1 on an ok row (should be >= 0)
+    fm = _write_full_matrix(tmp_path, rows)
+    assert _c3_planar_full_matrix_status(str(fm), str(shapes_csv)) == "UNKNOWN"
+
+
+def test_c3_full_matrix_unknown_on_workspace_exceeding_cap(tmp_path):
+    """Nongpu rereview finding 3.8: ``workspace_bytes > ws_cap`` bytes ->
+    UNKNOWN. The workspace must not exceed the selected workspace cap. Current
+    reader checks ``workspace_bytes >= 0`` but not ``<= cap`` -> PASS leaks
+    through."""
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+
+    shapes = [(16384, 16, 16)]
+    shapes_csv = _write_synthetic_shapes(tmp_path, shapes)
+    rows = _synth_complete_rows(shapes)
+    # Find the ws_cap="0" (cap=0 bytes) row and set workspace_bytes=1000 (>0).
+    for r in rows:
+        if r[4] == "0":  # ws_cap name "0" -> cap 0 bytes
+            r[9] = 1000  # workspace_bytes=1000 > cap 0
+            break
+    fm = _write_full_matrix(tmp_path, rows)
+    assert _c3_planar_full_matrix_status(str(fm), str(shapes_csv)) == "UNKNOWN"
+
+
+def test_c3_full_matrix_unknown_on_no_algo_with_nonzero_workspace(tmp_path):
+    """Nongpu rereview finding 3.8: ``status='no-algo'`` + ``workspace_bytes>0``
+    -> UNKNOWN. A no-algo row must have ``workspace_bytes=0``. Current reader
+    checks ``algo_count==0`` + ``first_algo_id==-1`` for no-algo rows but not
+    ``workspace_bytes==0`` -> PASS leaks through."""
+    from results._phase0.gonogo import _c3_planar_full_matrix_status
+
+    shapes = [(262144, 64, 4)]  # policy shape -> has legitimate no-algo cells
+    shapes_csv = _write_synthetic_shapes(tmp_path, shapes)
+    rows = _synth_complete_rows(shapes)
+    idx = next(i for i, r in enumerate(rows) if r[10] == "no-algo")
+    rows[idx][9] = 100  # workspace_bytes=100 on a no-algo row (should be 0)
+    fm = _write_full_matrix(tmp_path, rows)
+    assert _c3_planar_full_matrix_status(str(fm), str(shapes_csv)) == "UNKNOWN"
+
+
+# ---------------------------------------------------------------------------
+# Nongpu rereview finding 3.10: blocking_artifacts semantics wrong.
+# ---------------------------------------------------------------------------
+
+
+def test_blocking_artifacts_lists_real_blockers_not_determined_grouped():
+    """Nongpu rereview finding 3.10: ``blocking_artifacts`` must contain C2,
+    REGION_PROTOTYPE, NUMERICAL (the undetermined required criteria) and must
+    NOT contain the determined grouped NOT_SUPPORTED (a single-route blocker
+    that doesn't affect completion).
+
+    Current ``_build_blocking_artifacts`` (verdict_schema.py:330-340) lists
+    only C2 + grouped NOT_SUPPORTED (wrong): it misses REGION_PROTOTYPE and
+    NUMERICAL (undetermined), and wrongly includes grouped (determined)."""
+    from results._phase0.gonogo import aggregate_two_layer
+
+    criteria = {
+        "C1": "PASS",
+        "C2": "UNKNOWN",
+        "C2_REGION_KERNEL_FEASIBILITY": "UNKNOWN",
+        "C3_PLANAR_CORE": "PASS",
+        "C3_PLANAR_FULL_MATRIX": "PASS",
+        "C3_GROUPED": "NOT_SUPPORTED",  # determined, sinks grouped route only
+        "CUTLASS_SM120_4M": "NOT_SUPPORTED",
+        "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",
+        "REGION_PROTOTYPE": "UNKNOWN",  # undetermined -> must be in blocking
+        "NUMERICAL": "UNKNOWN",  # undetermined -> must be in blocking
+    }
+    per_route = {"planar": "FAIL", "grouped": "FAIL"}
+    agg = aggregate_two_layer(criteria, per_route)
+    blocking = " ".join(agg["blocking_artifacts"]).lower()
+    # Must list C2 (undetermined).
+    assert "c2" in blocking, agg["blocking_artifacts"]
+    # Must list REGION_PROTOTYPE (undetermined) -- currently missing.
+    assert "region" in blocking, agg["blocking_artifacts"]
+    # Must list NUMERICAL (undetermined) -- currently missing.
+    assert "numerical" in blocking, agg["blocking_artifacts"]
+    # Must NOT list grouped NOT_SUPPORTED (determined, single-route blocker).
+    assert "grouped" not in blocking, agg["blocking_artifacts"]
+
+
 if __name__ == "__main__":
     import sys, pytest
 

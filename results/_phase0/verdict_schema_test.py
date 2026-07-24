@@ -374,6 +374,87 @@ def test_authorization_no_go_when_complete_and_none_viable():
     assert recompute_authorization("COMPLETE", rv) == "NO_GO"
 
 
+# ---------------------------------------------------------------------------
+# Nongpu rereview finding 3.3: each C2 sub-layer UNKNOWN must block COMPLETE.
+# Current REQUIRED_CRITERIA (verdict_schema.py:193-201) uses the old "C2"
+# alias, not the four C2 layers, so a UNKNOWN sub-layer doesn't block
+# completion -> false COMPLETE.
+# ---------------------------------------------------------------------------
+
+
+def test_completion_inconclusive_when_c2_single_anchor_unknown():
+    """Nongpu rereview finding 3.3: ``C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK``
+    = UNKNOWN must block COMPLETE. Current ``REQUIRED_CRITERIA`` uses the old
+    ``"C2"`` alias; the four C2 layers are not in ``REQUIRED_CRITERIA``, so a
+    UNKNOWN sub-layer doesn't block completion."""
+    from results._phase0.verdict_schema import REQUIRED_CRITERIA, recompute_completion
+
+    criteria = {c: "PASS" for c in REQUIRED_CRITERIA}
+    criteria["C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK"] = "UNKNOWN"
+    assert recompute_completion(criteria) == "INCONCLUSIVE"
+
+
+def test_completion_inconclusive_when_c2_joint_leverage_unknown():
+    """Nongpu rereview finding 3.3: ``C2_JOINT_EXECUTABLE_LEVERAGE`` = UNKNOWN
+    must block COMPLETE."""
+    from results._phase0.verdict_schema import REQUIRED_CRITERIA, recompute_completion
+
+    criteria = {c: "PASS" for c in REQUIRED_CRITERIA}
+    criteria["C2_JOINT_EXECUTABLE_LEVERAGE"] = "UNKNOWN"
+    assert recompute_completion(criteria) == "INCONCLUSIVE"
+
+
+def test_completion_inconclusive_when_c2_canonical_unknown():
+    """Nongpu rereview finding 3.3: ``C2_CANONICAL`` = UNKNOWN must block
+    COMPLETE."""
+    from results._phase0.verdict_schema import REQUIRED_CRITERIA, recompute_completion
+
+    criteria = {c: "PASS" for c in REQUIRED_CRITERIA}
+    criteria["C2_CANONICAL"] = "UNKNOWN"
+    assert recompute_completion(criteria) == "INCONCLUSIVE"
+
+
+# ---------------------------------------------------------------------------
+# Nongpu rereview finding 3.10: blocking_artifacts semantics wrong.
+# Must list ALL undetermined required criteria (C2, REGION_PROTOTYPE,
+# NUMERICAL), not just C2. Must NOT list determined single-route blockers
+# (grouped NOT_SUPPORTED).
+# ---------------------------------------------------------------------------
+
+
+def test_blocking_artifacts_contains_all_undetermined_not_determined_single_route():
+    """Nongpu rereview finding 3.10: ``blocking_artifacts`` lists artifacts for
+    ALL undetermined required criteria (C2, REGION_PROTOTYPE, NUMERICAL), not
+    just C2. And does NOT list determined single-route blockers (grouped
+    NOT_SUPPORTED).
+
+    Current ``_build_blocking_artifacts`` (verdict_schema.py:330-340) lists
+    only C2 + grouped NOT_SUPPORTED (wrong): misses REGION_PROTOTYPE and
+    NUMERICAL (undetermined), wrongly includes grouped (determined)."""
+    from results._phase0.verdict_schema import recompute_derived_state
+
+    criteria = {
+        "C1": "PASS",
+        "C2": "UNKNOWN",
+        "C3_PLANAR_CORE": "PASS",
+        "C3_PLANAR_FULL_MATRIX": "PASS",
+        "C3_GROUPED": "NOT_SUPPORTED",  # determined, sinks grouped route only
+        "CUTLASS_SM120_4M": "NOT_SUPPORTED",
+        "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",
+        "REGION_PROTOTYPE": "UNKNOWN",  # undetermined -> must be in blocking
+        "NUMERICAL": "UNKNOWN",  # undetermined -> must be in blocking
+    }
+    per_route = {"planar": "FAIL", "grouped": "FAIL"}
+    derived = recompute_derived_state(criteria, per_route)
+    blocking = " ".join(derived["blocking_artifacts"]).lower()
+    # Must list REGION_PROTOTYPE (undetermined) -- currently missing.
+    assert "region" in blocking, derived["blocking_artifacts"]
+    # Must list NUMERICAL (undetermined) -- currently missing.
+    assert "numerical" in blocking, derived["blocking_artifacts"]
+    # Must NOT list grouped NOT_SUPPORTED (determined, single-route blocker).
+    assert "grouped" not in blocking, derived["blocking_artifacts"]
+
+
 if __name__ == "__main__":
     import sys, pytest
 

@@ -530,3 +530,88 @@ class TestLFPinRegression:
             assert (
                 b"\r\n" not in content
             ), f"{rel} contains CRLF bytes (OneDrive phantom regressed)"
+
+
+# ---------------------------------------------------------------------------
+# Nongpu rereview finding 3.9: sanitizer source hardcodes private names.
+# The sanitizer must extract env/toolchain names dynamically from
+# CONDA_PREFIX / CUDA_HOME / CUTLASS_ROOT / home / repo, not hardcode them.
+# ---------------------------------------------------------------------------
+
+
+def test_sanitize_defaults_do_not_hardcode_private_names():
+    """Nongpu rereview finding 3.9: the sanitizer must NOT hardcode real env /
+    toolchain names as default module constants. It must extract them
+    dynamically from ``CONDA_PREFIX`` / ``CUDA_HOME`` / ``CUTLASS_ROOT`` /
+    home / repo. Current source hardcodes ``_ENV_NAMES`` and
+    ``_TOOLCHAIN_DIRS`` with real private names (sanitize.py:40,43)."""
+    from results._phase0 import sanitize
+
+    env_names = getattr(sanitize, "_ENV_NAMES", ())
+    toolchain_dirs = getattr(sanitize, "_TOOLCHAIN_DIRS", ())
+    # The defaults must be empty -- the sanitizer must extract names dynamically,
+    # not hardcode them as module-level constants.
+    assert (
+        len(env_names) == 0
+    ), f"_ENV_NAMES must be empty (dynamic extraction), got {env_names!r}"
+    assert (
+        len(toolchain_dirs) == 0
+    ), f"_TOOLCHAIN_DIRS must be empty (dynamic extraction), got {toolchain_dirs!r}"
+
+
+def test_probe_sources_do_not_hardcode_private_names_from_sanitizer():
+    """Nongpu rereview finding 3.9: ``cutlass_probe.py`` and
+    ``cpp/cutlass_4m.cu`` must NOT hardcode real env/toolchain names. The scan
+    patterns are read dynamically from the sanitize module's constants (while
+    they exist); the fix removes the constants so the scan becomes a no-op.
+
+    This test does NOT hardcode any real names -- it reads them from the
+    sanitize module (which currently hardcodes them) and checks the probe
+    sources. If the fix removes the constants, the test passes trivially."""
+    from results._phase0 import sanitize
+
+    # Read the private names from the sanitize module's constants (if they
+    # exist). The fix removes these constants; while they exist, the probe
+    # sources must not contain them.
+    env_names = getattr(sanitize, "_ENV_NAMES", ())
+    toolchain_dirs = getattr(sanitize, "_TOOLCHAIN_DIRS", ())
+    private_names = tuple(env_names) + tuple(toolchain_dirs)
+    if not private_names:
+        return  # fix applied: no hardcoded names to scan for
+
+    tracked_sources = [
+        "results/_phase0/cutlass_probe.py",
+        "results/_phase0/cpp/cutlass_4m.cu",
+    ]
+    violations = []
+    for rel in tracked_sources:
+        full = os.path.join(_REPO_ROOT, *rel.split("/"))
+        with open(full, encoding="utf-8", errors="replace") as fh:
+            content = fh.read()
+        for name in private_names:
+            if name in content:
+                violations.append((rel, name))
+    assert not violations, (
+        "tracked probe source hardcodes private names (must use dynamic "
+        "extraction): " + ", ".join(f"{rel}:{name}" for rel, name in violations)
+    )
+
+
+def test_sanitize_text_supports_fictional_dynamic_names():
+    """Nongpu rereview finding 3.9 (complementary GREEN pin): the sanitizer
+    must support dynamic env/toolchain names (not just hardcoded ones). Verified
+    with FICTIONAL names per the brief (``example-env-alpha``,
+    ``example-toolchain-beta``). This already passes on current code
+    (``sanitize_text`` accepts ``env_names`` / ``toolchain_dirs`` parameters)."""
+    out = sanitize_text(
+        "/home/user/envs/example-env-alpha/bin/tool "
+        "-I/home/user/example-toolchain-beta/include",
+        home="/home/user",
+        repo="/repo",
+        env_names=("example-env-alpha",),
+        toolchain_dirs=("example-toolchain-beta",),
+    )
+    assert "example-env-alpha" not in out
+    assert "example-toolchain-beta" not in out
+    assert "<env>" in out
+    assert "<toolchain>" in out

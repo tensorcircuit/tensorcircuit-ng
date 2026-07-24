@@ -575,6 +575,36 @@ def test_canonical_region_unknown_m1_when_full_E_correctness_missing():
     assert region in CRITERION_TOKENS, region
 
 
+# ---------------------------------------------------------------------------
+# Nongpu rereview finding 3.1: MODEL_ONLY peak must not yield region PASS.
+# ---------------------------------------------------------------------------
+
+
+def test_canonical_region_unknown_when_peak_evidence_model_only():
+    """Nongpu rereview finding 3.1: ``peak_evidence_class=MODEL_ONLY`` must NOT
+    yield ``C2_REGION_KERNEL_FEASIBILITY=PASS``. Even with
+    ``fused_full_anchor_run=True``, complete accuracy/resource, and legacy
+    ``materialized_peak_bytes``/``fused_peak_bytes`` present, a MODEL_ONLY peak
+    is an analytical/allocation upper bound -- not a measured runtime allocator
+    peak. The gate must fail closed to UNKNOWN.
+
+    Current ``_recompute_conditions`` reads ``materialized_peak_bytes`` /
+    ``fused_peak_bytes`` with no ``peak_evidence_class`` check (c2.py:485-490),
+    so the MODEL_ONLY peak produces a non-None ``region_peak_gain_bytes`` ->
+    PASS leaks through. This test freezes the target: MODEL_ONLY -> UNKNOWN."""
+    edge, peak, proto, audit, case, fh = _good()
+    proto["fused_full_anchor_run"] = True
+    proto["peak_evidence_class"] = "MODEL_ONLY"
+    # Legacy raw-allocation fields are present (the _good fixture carries them).
+    assert proto["materialized_peak_bytes"] is not None
+    assert proto["fused_peak_bytes"] is not None
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    region = j["layers"]["C2_REGION_KERNEL_FEASIBILITY"]
+    assert (
+        region == "UNKNOWN"
+    ), f"MODEL_ONLY peak must yield region UNKNOWN, got {region!r}"
+
+
 if __name__ == "__main__":
     import sys, pytest
 

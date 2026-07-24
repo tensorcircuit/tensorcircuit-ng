@@ -802,6 +802,82 @@ def test_csv_is_self_describing_aggregate_matches_json_verdicts():
             assert r_csv[field] == r_json[field], (r_csv, r_json)
 
 
+# ---------------------------------------------------------------------------
+# Nongpu rereview finding 3.4: cancellation input must produce real cancellation.
+# ---------------------------------------------------------------------------
+
+
+def test_cancellation_input_produces_real_cancellation_ratio():
+    """Nongpu rereview finding 3.4: the cancellation input must produce a real
+    cancellation (``cancellation_norm / baseline_norm < configured_ratio``),
+    not just paired B rows. Current construction has ``B[2j+1]=-B[2j]`` but
+    ``A[:,2j]`` and ``A[:,2j+1]`` are independent, so the contribution
+    ``(A[:,2j]-A[:,2j+1])@B[2j]`` is NOT near zero -> no actual cancellation.
+
+    The test also verifies the reference is non-zero finite (the controlled
+    residual that prevents an all-zero reference). Current construction fails
+    the ratio assertion (ratio ~1.0, not < 0.1) -> RED."""
+    import numpy as np
+
+    from results._phase0.numerical import make_inputs
+
+    shape = (64, 64, 64)  # K=64 (even, required for cancellation)
+    seed = 0
+
+    # Baseline: random A, B -> C = A @ B (reference magnitude).
+    A_base, B_base = make_inputs("baseline", shape, seed)
+    C_base = A_base @ B_base
+    baseline_norm = float(np.linalg.norm(C_base))
+    assert np.isfinite(baseline_norm) and baseline_norm > 0
+
+    # Cancellation: B[2j+1] = -B[2j], A[:,2j] and A[:,2j+1] independent.
+    A_cancel, B_cancel = make_inputs("cancellation", shape, seed)
+    C_cancel = A_cancel @ B_cancel
+    cancellation_norm = float(np.linalg.norm(C_cancel))
+    assert np.isfinite(cancellation_norm)
+
+    # The cancellation ratio must be small (real cancellation). Current
+    # construction doesn't achieve cancellation (A columns independent) ->
+    # ratio ~ 1.0, NOT < 0.1.
+    ratio = cancellation_norm / baseline_norm
+    assert ratio < 0.1, (
+        f"cancellation_norm/baseline_norm = {ratio:.4f} >= 0.1; "
+        f"the cancellation input does not produce real cancellation"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Nongpu rereview finding 3.11: numerical shapes must be bound to contraction
+# artifact, not hardcoded.
+# ---------------------------------------------------------------------------
+
+
+def test_numerical_shapes_derived_from_contraction_csv_not_hardcoded():
+    """Nongpu rereview finding 3.11: ``SHAPES`` must be derived from
+    ``contraction_shapes.csv`` (or asserted equal to it), with shape drift
+    producing UNKNOWN (not a silent re-hash). Current code hardcodes 8 SHAPES
+    as a standalone constant with no CSV binding or drift detection.
+
+    The module must provide a shape loader (``load_current_shapes``) that reads
+    the contraction artifact. Currently no such function exists -- SHAPES is
+    hardcoded, so a CSV update can silently re-hash while the required shape
+    set stays stale."""
+    from results._phase0 import numerical
+    from results._phase0.numerical import SHAPES
+
+    # The module MUST provide a shape loader bound to contraction_shapes.csv.
+    # Currently SHAPES is a standalone hardcoded constant.
+    assert hasattr(numerical, "load_current_shapes"), (
+        "numerical.SHAPES is hardcoded; must be derived from "
+        "contraction_shapes.csv via load_current_shapes() so shape drift "
+        "produces UNKNOWN instead of a silent re-hash"
+    )
+    loaded = numerical.load_current_shapes()
+    assert set(SHAPES) == set(
+        loaded
+    ), f"SHAPES != contraction_shapes.csv shapes: drift must produce UNKNOWN"
+
+
 if __name__ == "__main__":
     import sys, pytest
 
