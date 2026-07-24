@@ -79,7 +79,7 @@ def list_properties(device: Device, token: Optional[str] = None) -> Dict[str, An
      'links': {(0, 1): { 'CZErrRate': 0.03, 'at': 1673605888},
                 ...},
      'bits': {0: { 'At': 1673605888,
-                'Freqency': 4420,
+                'Frequency': 4420,
                 'ReadoutF0Err': 0.0415,
                 'ReadoutF1Err': 0.1006,
                 'SingleQubitErrRate': 0.00095,

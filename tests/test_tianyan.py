@@ -257,9 +257,10 @@ def test_result_without_explicit_state_is_completed() -> None:
     assert details["results"] == {"0": 1, "1": 1}
 
 
-def test_parse_result_emits_bits_in_ascending_qubit_order() -> None:
-    # shot[i] is the bit of qubit measure_order[i]; the bitstring must be
-    # emitted in ascending qubit-index order regardless of measure_order
+def test_parse_result_preserves_platform_measure_order() -> None:
+    # Qubits 2 and 0 are a partial measurement in this positional order.
+    # The first bit of every shot belongs to qubit 2, not the numerically
+    # smaller qubit 0.
     result = {
         "experimentTaskId": "permuted-task",
         "resultStatus": [[2, 0], [1, 0], [1, 1]],
@@ -268,7 +269,8 @@ def test_parse_result_emits_bits_in_ascending_qubit_order() -> None:
         result, Device.from_name("tianyan::offline-permuted")
     )
 
-    assert details["results"] == {"01": 1, "11": 1}
+    assert details["measure_order"] == [2, 0]
+    assert details["results"] == {"10": 1, "11": 1}
 
 
 def test_topology_failure_stops_before_submission() -> None:
@@ -603,6 +605,25 @@ def test_cloud_asymmetric_state_bit_ordering() -> None:
     counts = task.results(blocked=True)
 
     assert counts == {"10": 100}
+
+
+@requires_cloud
+def test_cloud_results_preserve_measurement_order() -> None:
+    """A reversed measurement order remains the positional result order."""
+    device = apis.get_device(f"tianyan::{SIMULATOR}")
+
+    c = tc.Circuit(2)
+    c.h(0)
+    c.measure_instruction(1, 0)
+
+    task = apis.submit_task(circuit=c, device=device, shots=100)
+    counts = task.results(blocked=True)
+    details = task.details()
+
+    assert details["measure_order"] == [1, 0]
+    assert sum(counts.values()) == 100
+    assert counts.get("10", 0) == 0
+    assert counts.get("01", 0) > 0
 
 
 @requires_cloud

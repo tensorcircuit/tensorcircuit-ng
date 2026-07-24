@@ -368,25 +368,17 @@ def _parse_result(result_item: Dict[str, Any], device: Device) -> Dict[str, Any]
             # The SDK result endpoint only returns an item after reaching a terminal state.
             state = "completed"
 
-    # Parse counts
-    # Bit ordering convention verified against the TianYan simulator (2026-07):
-    # shot bits are emitted in measure_order; we re-emit them in ascending
-    # qubit-index order (qubit 0 is the most significant bit), so the counts
-    # stay correct even if the platform changes the measure_order arrangement.
+    # Parse counts. TianYan emits each shot in measure_order; retain that
+    # positional order so partial measurements and nontrivial logical-to-
+    # physical mappings remain recoverable from the returned metadata.
     if result_status and len(result_status) > 1:
         measure_order = result_status[0]  # e.g. [0, 1]
         shots_data = result_status[1:]  # each shot is a list of bits
         total_shots = len(shots_data)
 
-        # shot[i] is the bit of qubit measure_order[i]; emit bits for qubits
-        # in ascending index order to form the bitstring
-        permutation = sorted(range(len(measure_order)), key=lambda i: measure_order[i])
         counts: Counter[str] = Counter()
         for shot in shots_data:
-            if len(shot) != len(permutation):
-                bitstring = "".join(str(b) for b in shot)
-            else:
-                bitstring = "".join(str(shot[i]) for i in permutation)
+            bitstring = "".join(str(b) for b in shot)
             counts[bitstring] += 1
         counts_dict = dict(counts)
     else:
@@ -452,7 +444,7 @@ def list_properties(device: Device, token: Optional[str] = None) -> Dict[str, An
         if config:
             properties.update(config)
     except Exception as e:
-        logger.debug("Failed to download config for %s: %s", device.name, e)
+        logger.warning("Failed to download config for %s: %s", device.name, e)
 
     # Standardize topology data into "links" and "bits" dicts
     # (compatible with tencent provider format)
@@ -612,7 +604,9 @@ def submit_task(
     Circuits submitted to real hardware must already respect the device
     topology: compile and map the circuit for the device first, e.g. via
     :py:mod:`tensorcircuit.compiler`. A ``ValueError`` is raised when a
-    TensorCircuit circuit is incompatible with the device topology.
+    TensorCircuit circuit is incompatible with the device topology. This
+    provider validates compatibility only; it does not compile or remap
+    circuits.
     Topology validation only applies to TensorCircuit circuits; for qiskit
     circuits and direct sources, compatibility is the user's responsibility.
 

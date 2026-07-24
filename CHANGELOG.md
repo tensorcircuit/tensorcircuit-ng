@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Add Tianyan cloud provider.
+
 ### Fixed
 
 - Fix pytorch backend `softmax` and align `axis=None` to global normalization.
