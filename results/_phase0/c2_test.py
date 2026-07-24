@@ -205,18 +205,17 @@ def _good_prototype():
         "materialized_peak_bytes": 1778384896,
         "fused_peak_bytes": 704643072,
         "peak_saved_bytes": 1073741824,
-        # Measured runtime allocator peak (plan §5 2.1): these are the canonical
-        # peak fields the gate reads. GPU Task 2b fills them from a real full-anchor
-        # fused run; the fixture carries them so the all-pass / self-recompute paths
-        # exercise the MEASURED gate. Legacy raw-allocation fields above are
-        # diagnostic only and must NOT produce a canonical gain on their own.
+        # MEASURED runtime allocator peak (plan §5 2.1 / Task 3): these are the
+        # canonical peak fields the gate reads via ``_normalize_region_peak``.
+        # Task 3 errata: the normalizer reads the committed artifact's REAL
+        # field names (``peak_measurement_method``, ``peak_evidence_class``,
+        # ``materialized_peak_bytes``, ``fused_peak_bytes``, ``n_seeds``).
+        # The approved method is ``cuda_allocator_high_watermark_v1`` (the
+        # ONLY entry in normative_policy.json's approved_methods); the
+        # canonical full-anchor scope is ``full_anchor_pte_v1``.
         "peak_evidence_class": "MEASURED",
-        "materialized_runtime_allocator_peak_bytes": 1778384896,
-        "fused_runtime_allocator_peak_bytes": 704643072,
-        "runtime_peak_gain_bytes": 1073741824,
-        "runtime_peak_measurement_method": "cuda_memory_pool_delta",
-        "runtime_peak_scope": "full_anchor_fused_run",
-        "runtime_peak_sample_count": 5,
+        "peak_measurement_method": "cuda_allocator_high_watermark_v1",
+        "runtime_peak_scope": "full_anchor_pte_v1",
         "p_buffer_bytes": 536870912,
         "t_buffer_bytes": 536870912,
         "producer_recompute_factor": 64,
@@ -514,19 +513,19 @@ def test_canonical_region_unknown_when_fused_full_anchor_run_false():
 
 def test_canonical_region_unknown_when_actual_peak_missing():
     """plan §3 操作.2 bullet 2 / finding 3.1: measured peak fields
-    (``materialized_runtime_allocator_peak_bytes`` /
-    ``fused_runtime_allocator_peak_bytes``) missing -> region UNKNOWN. The gate
-    self-recomputes ``region_peak_gain_bytes`` from those MEASURED fields; if
+    (``materialized_peak_bytes`` /
+    ``fused_peak_bytes``) missing -> region UNKNOWN. The gate
+    self-recomputes ``region_peak_gain_bytes`` from those fields; if
     either is absent the peak benefit is unconfirmable, so the region criterion
-    must fail closed to UNKNOWN. Legacy ``materialized_peak_bytes`` /
-    ``fused_peak_bytes`` (still present here) are diagnostic only and must NOT
-    restore a canonical gain."""
+    must fail closed to UNKNOWN. (Task 3: the normalizer reads the committed
+    artifact's REAL field names ``materialized_peak_bytes`` /
+    ``fused_peak_bytes``, not the plan's stale ``runtime_*`` variants.)"""
     edge, peak, proto, audit, case, fh = _good()
     # Isolate the peak-missing path: declare the full-anchor run done so bullet 1
-    # does not independently force UNKNOWN, then strip the measured-peak fields.
+    # does not independently force UNKNOWN, then strip the peak fields.
     proto["fused_full_anchor_run"] = True
-    del proto["materialized_runtime_allocator_peak_bytes"]
-    del proto["fused_runtime_allocator_peak_bytes"]
+    del proto["materialized_peak_bytes"]
+    del proto["fused_peak_bytes"]
     j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
     assert j["recomputed"]["region_peak_gain_bytes"] is None, j
     assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
@@ -565,15 +564,15 @@ def test_canonical_region_unknown_m1_when_occupancy_missing():
 
 
 def test_canonical_region_unknown_m1_when_actual_peak_missing():
-    """M1 condition 3/4: ``materialized_runtime_allocator_peak_bytes`` /
-    ``fused_runtime_allocator_peak_bytes`` missing -> region_peak_gain_bytes
+    """M1 condition 3/4: ``materialized_peak_bytes`` /
+    ``fused_peak_bytes`` missing -> region_peak_gain_bytes
     None -> region UNKNOWN. (Parallel to the Task 0 RED test above, named here
-    to pin M1 condition 3 explicitly. After Task 2 the gate reads MEASURED
-    runtime allocator peaks, not legacy allocation fields.)"""
+    to pin M1 condition 3 explicitly. Task 3: the normalizer reads the
+    committed artifact's REAL field names.)"""
     edge, peak, proto, audit, case, fh = _good()
     proto["fused_full_anchor_run"] = True
-    del proto["materialized_runtime_allocator_peak_bytes"]
-    del proto["fused_runtime_allocator_peak_bytes"]  # M1 #3: measured peak unmeasured
+    del proto["materialized_peak_bytes"]
+    del proto["fused_peak_bytes"]  # M1 #3: peak unmeasured
     j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
     assert j["recomputed"]["region_peak_gain_bytes"] is None, j
     assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
@@ -660,11 +659,14 @@ def test_canonical_region_unknown_when_measured_but_scope_missing():
 
 def test_canonical_region_unknown_when_measured_but_method_missing():
     """plan §5 验收: ``peak_evidence_class=MEASURED`` but
-    ``runtime_peak_measurement_method`` missing -> region UNKNOWN."""
+    ``peak_measurement_method`` missing -> region UNKNOWN. (Task 3: the
+    normalizer reads the committed artifact's REAL field name
+    ``peak_measurement_method``, not the plan's stale
+    ``runtime_peak_measurement_method``.)"""
     edge, peak, proto, audit, case, fh = _good()
     proto["fused_full_anchor_run"] = True
     proto["peak_evidence_class"] = "MEASURED"
-    del proto["runtime_peak_measurement_method"]
+    del proto["peak_measurement_method"]
     j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
     assert j["recomputed"]["region_peak_gain_bytes"] is None, j
     assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
@@ -672,11 +674,13 @@ def test_canonical_region_unknown_when_measured_but_method_missing():
 
 def test_canonical_region_unknown_when_measured_but_sample_count_missing():
     """plan §5 验收: ``peak_evidence_class=MEASURED`` but
-    ``runtime_peak_sample_count`` missing -> region UNKNOWN."""
+    ``n_seeds`` missing -> region UNKNOWN. (Task 3: the normalizer reads
+    ``n_seeds``, the committed artifact's REAL field name, not the plan's
+    stale ``runtime_peak_sample_count``.)"""
     edge, peak, proto, audit, case, fh = _good()
     proto["fused_full_anchor_run"] = True
     proto["peak_evidence_class"] = "MEASURED"
-    del proto["runtime_peak_sample_count"]
+    del proto["n_seeds"]
     j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
     assert j["recomputed"]["region_peak_gain_bytes"] is None, j
     assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
@@ -686,18 +690,166 @@ def test_canonical_region_pass_only_with_complete_measured_fixture():
     """plan §5 验收: a COMPLETE measured fixture (MEASURED + full-anchor +
     all required fields + no P/T evidence) -> region PASS. This is the sole
     path to canonical region PASS; the _good fixture already carries all
-    required MEASURED fields."""
+    required MEASURED fields (Task 3: uses the committed artifact's REAL
+    field names -- ``peak_measurement_method``, ``materialized_peak_bytes``,
+    ``fused_peak_bytes``, ``n_seeds``, ``runtime_peak_scope``)."""
     edge, peak, proto, audit, case, fh = _good()
     proto["fused_full_anchor_run"] = True
     assert proto["peak_evidence_class"] == "MEASURED", proto
-    assert proto["materialized_runtime_allocator_peak_bytes"] is not None
-    assert proto["fused_runtime_allocator_peak_bytes"] is not None
-    assert proto["runtime_peak_measurement_method"] is not None
+    assert proto["materialized_peak_bytes"] is not None
+    assert proto["fused_peak_bytes"] is not None
+    assert proto["peak_measurement_method"] is not None
     assert proto["runtime_peak_scope"] is not None
-    assert proto["runtime_peak_sample_count"] is not None
+    assert proto["n_seeds"] is not None
     j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
     assert j["recomputed"]["region_peak_gain_bytes"] is not None, j
     assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "PASS", j
+
+
+# ---------------------------------------------------------------------------
+# Task 3 (evidence-integrity plan v3 finding 3.3): shared region normalizer +
+# GateContract in BOTH c2 and gonogo. The tests below pin the shared
+# ``_normalize_region_peak`` + ``_classify_peak_v2`` + the 12-field
+# region_peak contract (with accuracy_state + resource_state).
+# ---------------------------------------------------------------------------
+
+
+def test_classify_peak_strict():
+    """Plan Task 3 Step 1: ``_classify_peak_v2`` strict peak-value classifier."""
+    from results._phase0.c2 import _classify_peak_v2
+
+    for v, exp in [
+        (float("nan"), "NAN_INF"),
+        (float("inf"), "NAN_INF"),
+        (-5, "NEGATIVE"),
+        (True, "BOOL"),
+        (None, "MISSING"),
+        (3.5, "NON_INTEGER"),
+        (100, "OK"),
+    ]:
+        assert _classify_peak_v2(v) == exp, (v, exp, _classify_peak_v2(v))
+
+
+def test_region_missing_case_binding_not_pass():
+    """Task 3 errata #2: ``case_binding_state=MISSING`` (no binding verification)
+    -> not PASS. Uses the committed artifact's REAL field names
+    (``schema_version=region-prototype-v2``, ``peak_measurement_method``,
+    ``materialized_peak_bytes``, ``fused_peak_bytes``, ``n_seeds``)."""
+    from results._phase0.c2 import _normalize_region_peak
+    from results._phase0.gate_contracts import GATE_CONTRACTS, evaluate_gate
+
+    proto = {
+        "schema_version": "region-prototype-v2",
+        "verdict": "FEASIBLE_WITH_RECOMPUTE",
+        "peak_evidence_class": "MEASURED",
+        "peak_measurement_method": "cuda_allocator_high_watermark_v1",
+        "runtime_peak_scope": "full_anchor_pte_v1",
+        "n_seeds": 3,
+        "materialized_peak_bytes": 400,
+        "fused_peak_bytes": 100,
+        "fused_full_anchor_run": True,
+        "relative_l2": 1e-7,
+        "max_rel": 1e-7,
+        "registers_per_thread": 40,
+        "occupancy_pct": 100.0,
+    }
+    # Default case_binding_state=MISSING (no binding context) -> not PASS.
+    raw = _normalize_region_peak(proto)
+    assert raw["case_binding_state"] == "MISSING"
+    token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
+    assert token != "PASS", (token, raw)
+
+
+def test_region_scope_mismatch_conflict():
+    """Task 3 errata #3: scope claims full_anchor AND ``fused_full_anchor_run``
+    is False -> ``scope_state=MISMATCH`` -> contradiction -> UNKNOWN. Checked
+    BEFORE ``FULL_ANCHOR_PTE`` (the MISMATCH ordering)."""
+    from results._phase0.c2 import _normalize_region_peak
+
+    proto = {
+        "peak_evidence_class": "MEASURED",
+        "peak_measurement_method": "cuda_allocator_high_watermark_v1",
+        "runtime_peak_scope": "full_anchor_pte_v1",
+        "n_seeds": 3,
+        "materialized_peak_bytes": 400,
+        "fused_peak_bytes": 100,
+        "fused_full_anchor_run": False,  # scope full_anchor but run False -> MISMATCH
+    }
+    raw = _normalize_region_peak(proto)
+    assert raw["scope_state"] == "MISMATCH", raw
+
+
+def test_region_full_positive_pass():
+    """Task 3 errata #7: a full positive fixture with ALL 12 conditions OK ->
+    PASS, using REAL recomputed accuracy/resource (not self-reported booleans).
+    Uses the committed artifact's REAL field names. Requires
+    ``case_binding_state=MATCH`` (the c2 reader's binding-verified path)."""
+    from results._phase0.c2 import _normalize_region_peak
+    from results._phase0.gate_contracts import GATE_CONTRACTS, evaluate_gate
+
+    proto = {
+        "schema_version": "region-prototype-v2",
+        "verdict": "FEASIBLE_WITH_RECOMPUTE",
+        "peak_evidence_class": "MEASURED",
+        "peak_measurement_method": "cuda_allocator_high_watermark_v1",
+        "runtime_peak_scope": "full_anchor_pte_v1",
+        "n_seeds": 3,
+        "materialized_peak_bytes": 2000000000,
+        "fused_peak_bytes": 1000000000,
+        "fused_full_anchor_run": True,
+        "relative_l2": 1e-7,
+        "max_rel": 1e-7,
+        "registers_per_thread": 40,
+        "occupancy_pct": 100.0,
+    }
+    # c2 reader's binding-verified path: case_binding_state=MATCH.
+    raw = _normalize_region_peak(proto, case_binding_state="MATCH")
+    # All 12 states must be at their PASS values.
+    assert raw["schema_state"] == "VALID"
+    assert raw["evidence_class_state"] == "MEASURED"
+    assert raw["method_state"] == "APPROVED"
+    assert raw["scope_state"] == "FULL_ANCHOR_PTE"
+    assert raw["sample_state"] == "OK"
+    assert raw["peak_state"] == "OK"
+    assert raw["gain_state"] == "OK"
+    assert raw["full_anchor_run_state"] == "TRUE"
+    assert raw["case_binding_state"] == "MATCH"
+    assert raw["accuracy_state"] == "PASSED"
+    assert raw["resource_state"] == "OK"
+    token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
+    assert token == "PASS", (token, raw)
+
+
+def test_region_committed_artifact_is_unknown():
+    """Task 3: the committed ``results/phase0/region_prototype.json`` (MODEL_ONLY,
+    no full-anchor run, resource null, unapproved method) -> reader returns
+    UNKNOWN (honest). No regen needed; the committed artifact is honestly
+    UNKNOWN and the shared normalizer + GateContract must reflect that."""
+    import json
+
+    from results._phase0.c2 import _normalize_region_peak
+    from results._phase0.gate_contracts import GATE_CONTRACTS, evaluate_gate
+
+    with open("results/phase0/region_prototype.json") as f:
+        proto = json.load(f)
+    # The committed artifact has the REAL fields the normalizer maps.
+    assert proto["schema_version"] == "region-prototype-v2"
+    assert proto["peak_evidence_class"] == "MODEL_ONLY"
+    assert proto["peak_measurement_method"] == "raw_allocation_size_delta"
+    assert proto["fused_full_anchor_run"] is False
+    assert proto["registers_per_thread"] is None
+    assert proto["occupancy_pct"] is None
+    raw = _normalize_region_peak(proto, case_binding_state="MATCH")
+    token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
+    # Bidirectional consistency: verdict=UNKNOWN -> expected=UNKNOWN; candidate
+    # is FAIL (resource_state=MISSING) -> CONFLICT -> UNKNOWN. Either way UNKNOWN.
+    from results._phase0.c2 import _REGION_SELF_REPORT_MAP
+
+    expected = _REGION_SELF_REPORT_MAP.get(proto.get("verdict"))
+    if expected is not None and token != expected:
+        raw["consistency_state"] = "CONFLICT"
+        token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
+    assert token == "UNKNOWN", (token, raw)
 
 
 if __name__ == "__main__":

@@ -42,6 +42,11 @@ def test_empty_not_supported_does_not_hit():
         "full_anchor_run_state": "TRUE",
         "case_binding_state": "MATCH",
         "consistency_state": "CONSISTENT",
+        # v3-review errata (Task 3): accuracy_state + resource_state added
+        # to the pass clause (12 fields total). Without these, a region with
+        # relative_l2 above threshold or missing registers/occupancy would PASS.
+        "accuracy_state": "PASSED",
+        "resource_state": "OK",
     }
     assert evaluate_gate(full_region, GATE_CONTRACTS["region_peak"])[0] == "PASS"
 

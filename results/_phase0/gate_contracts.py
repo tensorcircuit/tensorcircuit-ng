@@ -214,12 +214,27 @@ GROUPED = GateContract(
 #: Region peak (C2 region kernel feasibility / REGION_PROTOTYPE) gate.
 #: A real PASS requires MEASURED (not model-only) evidence, an approved
 #: method, full-anchor PTE scope, OK sample/peak/gain, a real full-anchor
-#: run, matched case binding, and consistency. FAIL is substantive only:
-#: peak reduction negative or below the 256 MiB policy threshold
-#: (``min_gain_bytes`` from ``normative_policy.json``). NOT_SUPPORTED is
+#: run, matched case binding, recomputed accuracy AND resource all green,
+#: and consistency. FAIL is substantive only: peak reduction negative or
+#: below the 256 MiB policy threshold (``min_gain_bytes`` from
+#: ``normative_policy.json``), OR recomputed accuracy FAILED, OR resource
+#: evidence MISSING (registers/occupancy absent -- the region claims
+#: feasibility but the resource was never measured). NOT_SUPPORTED is
 #: empty (region has no NOT_SUPPORTED path -- empty-safe). Scope mismatch
 #: and consistency conflict are contradictions. ``case_binding_state=MISSING``
 #: yields no hit -> default UNKNOWN (unverified binding cannot PASS).
+#:
+#: v3-review errata (Task 3): ``accuracy_state`` and ``resource_state`` are
+#: ADDED to the pass clause (the plan's original 10 fields omitted these,
+#: so a region with relative_l2 above threshold or missing registers/
+#: occupancy would still PASS). Without ``("resource_state","MISSING")`` in
+#: fail_clauses, a region claiming feasibility with unmeasured resources
+#: could PASS -- a fail-open. The bidirectional self-report consistency
+#: check (caller compares the recomputed token to the artifact's ``verdict``
+#: field) typically routes MISSING-resource cases through CONFLICT -> UNKNOWN
+#: when the artifact self-reports FEASIBLE* (PASS != FAIL -> CONFLICT), so
+#: the FAIL clause fires definitively only when the self-report agrees the
+#: region is NOT_FEASIBLE (FAIL == FAIL -> no conflict -> FAIL).
 REGION_PEAK = GateContract(
     name="region_peak",
     pass_clause=(
@@ -233,10 +248,14 @@ REGION_PEAK = GateContract(
         ("full_anchor_run_state", "TRUE"),
         ("case_binding_state", "MATCH"),
         ("consistency_state", "CONSISTENT"),
+        ("accuracy_state", "PASSED"),
+        ("resource_state", "OK"),
     ),
     fail_clauses=(
         (("gain_state", "NEGATIVE"),),
         (("gain_state", "BELOW_POLICY"),),
+        (("accuracy_state", "FAILED"),),
+        (("resource_state", "MISSING"),),
     ),
     not_supported_clauses=(),
     contradiction_fields=(

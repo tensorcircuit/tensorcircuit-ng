@@ -441,6 +441,223 @@ def _case_field_mismatch(d, case):
 _REDUCTION_MARKERS = ("norm", "reduce", "reduction", "sum(")
 
 
+# ---------------------------------------------------------------------------
+# Task 3 (evidence-integrity plan v3 finding 3.3): shared region normalizer.
+# Both ``c2._region_layer`` AND ``gonogo._region_proto_status`` call
+# ``_normalize_region_peak`` + ``evaluate_gate(GATE_CONTRACTS["region_peak"])``.
+# No undeclared PASS branch in either consumer -- the GateContract is the
+# SINGLE executable semantic source.
+# ---------------------------------------------------------------------------
+
+#: Canonical full-anchor PTE scope tokens (the only scopes that can back a
+#: canonical region peak gain). Any other scope -> NON_FULL_ANCHOR (not PASS).
+_FULL_ANCHOR_SCOPES = frozenset({"full_anchor_pte_v1"})
+
+#: Frozen self-report -> canonical-token map for the region prototype's
+#: ``verdict`` field (bidirectional consistency check, mirroring the grouped
+#: gate's ``_GROUPED_SELF_REPORT_MAP``). The artifact's ``verdict`` is a
+#: SELF-REPORT; the canonical token is recomputed via ``evaluate_gate``. If
+#: the two disagree, ``consistency_state`` flips to CONFLICT -> contradiction
+#: -> UNKNOWN.
+_REGION_SELF_REPORT_MAP = {
+    "PASS": "PASS",
+    "FEASIBLE_WITH_RECOMPUTE": "PASS",
+    "TILE_FUSION_FEASIBLE": "PASS",
+    "NOT_FEASIBLE": "FAIL",
+    "UNKNOWN": "UNKNOWN",
+}
+
+
+def _classify_peak_v2(val):
+    """Strict peak-value classifier (plan Task 3 Step 3).
+
+    Returns one of: ``MISSING`` (None), ``BOOL`` (bool -- not a real byte
+    count), ``NAN_INF`` (float NaN/Inf), ``NON_INTEGER`` (float or non-int),
+    ``NEGATIVE`` (int < 0), ``OK`` (non-negative int).
+    """
+    if val is None:
+        return "MISSING"
+    if isinstance(val, bool):
+        return "BOOL"
+    if isinstance(val, float):
+        if val != val or val in (float("inf"), float("-inf")):
+            return "NAN_INF"
+        return "NON_INTEGER"
+    if not isinstance(val, int):
+        return "NON_INTEGER"
+    if val < 0:
+        return "NEGATIVE"
+    return "OK"
+
+
+def _normalize_region_peak(proto, *, case_binding_state="MISSING"):
+    """Build the normalized ``raw`` dict for the region_peak gate contract.
+
+    Maps the committed artifact's REAL fields (``schema_version=
+    region-prototype-v2``, ``peak_evidence_class``, ``peak_measurement_method``,
+    ``materialized_peak_bytes``, ``fused_peak_bytes``, ``n_seeds``,
+    ``relative_l2``, ``registers_per_thread``, ``occupancy_pct``,
+    ``fused_full_anchor_run``, ``verdict``) to the 12 cross-task field names
+    defined by :data:`gate_contracts.GATE_CONTRACTS` ``["region_peak"]``.
+
+    ``case_binding_state`` is supplied by the CALLER from its ACTUAL binding
+    verification (errata #2): ``MATCH`` only if the reader's real binding check
+    (case_id matches canonical + hash binding) passes. The default ``MISSING``
+    is the honest value when no binding verification is available (e.g.
+    ``gonogo._region_proto_status`` reads a single artifact with no canonical
+    case context -> MISSING -> not PASS).
+
+    The caller performs the bidirectional self-report consistency check
+    (compare the recomputed token to ``proto["verdict"]`` via
+    :data:`_REGION_SELF_REPORT_MAP`; disagreement -> ``consistency_state=
+    CONFLICT`` -> re-evaluate -> contradiction -> UNKNOWN).
+    """
+    from results._phase0.gate_contracts import load_normative_policy
+
+    if not isinstance(proto, dict):
+        return {"parse_error": "proto is not a dict"}
+
+    pol = load_normative_policy()
+    region_pol = pol.get("region_policy", {})
+    approved_methods = frozenset(region_pol.get("approved_methods", ()))
+    min_gain_bytes = region_pol.get("min_gain_bytes", 0)
+    min_seeds = region_pol.get("min_sample_count", 1)
+
+    # schema_state: VALID iff schema_version == PROTO_SCHEMA (region-prototype-v2).
+    sv = proto.get("schema_version")
+    if sv is None:
+        schema_state = "MISSING"
+    elif sv == PROTO_SCHEMA:
+        schema_state = "VALID"
+    else:
+        schema_state = "UNRECOGNIZED"
+
+    # evidence_class_state: from peak_evidence_class (MEASURED / MODEL_ONLY / ...).
+    ec = proto.get("peak_evidence_class")
+    if ec == PEAK_EVIDENCE_MEASURED:
+        evidence_class_state = "MEASURED"
+    elif ec == PEAK_EVIDENCE_MODEL_ONLY:
+        evidence_class_state = "MODEL_ONLY"
+    elif ec is None:
+        evidence_class_state = "MISSING"
+    else:
+        evidence_class_state = "UNRECOGNIZED"
+
+    # method_state: APPROVED iff peak_measurement_method in the policy allowlist.
+    method = proto.get("peak_measurement_method")
+    if method is None:
+        method_state = "MISSING"
+    elif method in approved_methods:
+        method_state = "APPROVED"
+    else:
+        method_state = "UNAPPROVED"
+
+    # scope_state (errata #3): MISMATCH if scope claims full_anchor AND
+    # fused_full_anchor_run != True (checked BEFORE FULL_ANCHOR_PTE). This
+    # catches a scope claim that is contradicted by the run evidence.
+    scope = proto.get("runtime_peak_scope")
+    far = proto.get("fused_full_anchor_run")
+    if scope in _FULL_ANCHOR_SCOPES:
+        if far is not True:
+            scope_state = "MISMATCH"
+        else:
+            scope_state = "FULL_ANCHOR_PTE"
+    elif scope is None:
+        scope_state = "MISSING"
+    else:
+        scope_state = "NON_FULL_ANCHOR"
+
+    # sample_state: from n_seeds (the committed artifact's field, NOT the
+    # plan's stale runtime_peak_sample_count).
+    n_seeds = proto.get("n_seeds")
+    if n_seeds is None:
+        sample_state = "MISSING"
+    elif isinstance(n_seeds, bool):
+        sample_state = "BOOL"
+    elif isinstance(n_seeds, int):
+        sample_state = "OK" if n_seeds >= min_seeds else "BELOW_MIN"
+    else:
+        sample_state = "NON_INTEGER"
+
+    # peak_state: classify both peaks via _classify_peak_v2; OK iff both OK,
+    # else the worst (any non-OK sinks the pair).
+    mr_state = _classify_peak_v2(proto.get("materialized_peak_bytes"))
+    fr_state = _classify_peak_v2(proto.get("fused_peak_bytes"))
+    if mr_state == "OK" and fr_state == "OK":
+        peak_state = "OK"
+    else:
+        worst_order = ("NEGATIVE", "NAN_INF", "BOOL", "NON_INTEGER", "MISSING")
+        peak_state = "MISSING"
+        for s in worst_order:
+            if mr_state == s or fr_state == s:
+                peak_state = s
+                break
+
+    # gain_state: MISSING unless evidence_class=MEASURED AND peaks OK (no
+    # false PASS from MODEL_ONLY gains). Then from (materialized - fused)
+    # vs min_gain_bytes: NEGATIVE if <0, BELOW_POLICY if <min, OK if >=min.
+    if peak_state == "OK" and evidence_class_state == "MEASURED":
+        gain = int(proto["materialized_peak_bytes"]) - int(proto["fused_peak_bytes"])
+        if gain < 0:
+            gain_state = "NEGATIVE"
+        elif gain < min_gain_bytes:
+            gain_state = "BELOW_POLICY"
+        else:
+            gain_state = "OK"
+    else:
+        gain_state = "MISSING"
+
+    # full_anchor_run_state: TRUE iff fused_full_anchor_run is True.
+    full_anchor_run_state = "TRUE" if far is True else "FALSE"
+
+    # accuracy_state (errata #1): PASSED if relative_l2 + max_rel present and
+    # below the accuracy thresholds; FAILED if above; MISSING if absent.
+    rel_l2 = proto.get("relative_l2")
+    max_rel = proto.get("max_rel")
+    if (
+        isinstance(rel_l2, (int, float))
+        and not isinstance(rel_l2, bool)
+        and (isinstance(max_rel, (int, float)) and not isinstance(max_rel, bool))
+    ):
+        if rel_l2 < ACCURACY_REL_L2 and max_rel < ACCURACY_MAX_REL:
+            accuracy_state = "PASSED"
+        else:
+            accuracy_state = "FAILED"
+    else:
+        accuracy_state = "MISSING"
+
+    # resource_state (errata #1): OK if registers_per_thread AND occupancy_pct
+    # present and meet policy; FAILED if present but fail; MISSING if absent
+    # (the fail clause ``("resource_state","MISSING")`` fires -> FAIL, but the
+    # bidirectional consistency check typically routes FEASIBLE* self-reports
+    # through CONFLICT -> UNKNOWN when the resource was never measured).
+    regs = proto.get("registers_per_thread")
+    occ = proto.get("occupancy_pct")
+    regs_ok = isinstance(regs, (int, float)) and not isinstance(regs, bool)
+    occ_ok = isinstance(occ, (int, float)) and not isinstance(occ, bool)
+    if regs_ok and occ_ok:
+        resource_state = (
+            "OK" if (regs > 0 and occ >= RESOURCE_MIN_OCCUPANCY_PCT) else "FAILED"
+        )
+    else:
+        resource_state = "MISSING"
+
+    return {
+        "schema_state": schema_state,
+        "evidence_class_state": evidence_class_state,
+        "method_state": method_state,
+        "scope_state": scope_state,
+        "sample_state": sample_state,
+        "peak_state": peak_state,
+        "gain_state": gain_state,
+        "full_anchor_run_state": full_anchor_run_state,
+        "case_binding_state": case_binding_state,
+        "consistency_state": "CONSISTENT",
+        "accuracy_state": accuracy_state,
+        "resource_state": resource_state,
+    }
+
+
 def _is_real_pte_prototype(proto, edge):
     """A genuine two-stage ``P=A@B -> T=transform(P) -> E=D@T`` prototype, not the rejected
     GEMM->norm/reduction artifact (final-review §3.2/§7.1). Requires a schema-correct record,
@@ -498,28 +715,38 @@ def _recompute_conditions(proto, peak):
         rc["resource_pass"] = bool(regs > 0 and occ >= RESOURCE_MIN_OCCUPANCY_PCT)
     else:
         rc["resource_pass"] = None
-    # Peak evidence gate (plan §5 2.2 / finding 3.1): only a MEASURED runtime
-    # allocator peak (full-anchor execution scope) may produce a canonical
-    # region peak gain. MODEL_ONLY / missing peak_evidence_class / missing
-    # measured fields (method / scope / sample_count / both runtime peaks) ->
-    # None -> region UNKNOWN. Legacy raw-allocation fields
-    # (materialized_peak_bytes / fused_peak_bytes) are diagnostic only and
-    # NEVER produce a canonical gain.
+    # Peak evidence gate (plan §5 2.2 / finding 3.1 / Task 3 errata #6):
+    # region_peak_gain_bytes is now computed via the SAME strict checks as
+    # ``_normalize_region_peak`` (None unless method/scope/sample/peaks all
+    # OK; gain = materialized - fused). Only a MEASURED runtime allocator
+    # peak (full-anchor execution scope) with an APPROVED method, a
+    # recognized full_anchor scope, adequate sample count, and both peaks
+    # valid non-negative integers may produce a canonical gain. MODEL_ONLY /
+    # missing evidence_class / unapproved method / missing scope / missing
+    # sample_count / invalid peaks -> None -> region UNKNOWN.
     if proto.get("peak_evidence_class") != PEAK_EVIDENCE_MEASURED:
         rc["region_peak_gain_bytes"] = None
     else:
-        method = proto.get("runtime_peak_measurement_method")
+        from results._phase0.gate_contracts import load_normative_policy
+
+        pol = load_normative_policy()
+        region_pol = pol.get("region_policy", {})
+        approved_methods = frozenset(region_pol.get("approved_methods", ()))
+        min_seeds = region_pol.get("min_sample_count", 1)
+
+        method = proto.get("peak_measurement_method")
         scope = proto.get("runtime_peak_scope")
-        sample_count = proto.get("runtime_peak_sample_count")
-        mr = proto.get("materialized_runtime_allocator_peak_bytes")
-        fr = proto.get("fused_runtime_allocator_peak_bytes")
+        n_seeds = proto.get("n_seeds")
+        mr = proto.get("materialized_peak_bytes")
+        fr = proto.get("fused_peak_bytes")
         if (
-            method
-            and scope
-            and isinstance(sample_count, int)
-            and sample_count > 0
-            and isinstance(mr, (int, float))
-            and isinstance(fr, (int, float))
+            method in approved_methods
+            and scope in _FULL_ANCHOR_SCOPES
+            and isinstance(n_seeds, int)
+            and not isinstance(n_seeds, bool)
+            and n_seeds >= min_seeds
+            and _classify_peak_v2(mr) == "OK"
+            and _classify_peak_v2(fr) == "OK"
         ):
             rc["region_peak_gain_bytes"] = int(mr) - int(fr)
         else:
@@ -607,54 +834,48 @@ def _region_layer(proto, edge, rc):
     materializing full P/T (spec §5.1)? Only a real prototype run AT THE FULL ANCHOR
     with MEASURED runtime allocator peak gives PASS/FAIL; everything else is UNKNOWN.
 
-    Plan §5 2.1 (Task 2a): small-contract compile/correctness only -> UNKNOWN (never
-    PASS). Plan §5 2.2 (Task 2): peak must be MEASURED (not MODEL_ONLY) with all
-    required measured fields present. Plan §3 操作.2 bullet 2 (M1): region is UNKNOWN
-    when ANY of four evidence fields is missing --
-      1. registers        -> rc["resource_pass"] is None when registers_per_thread is absent
-      2. occupancy        -> rc["resource_pass"] is None when occupancy_pct is absent
-      3. measured peak    -> rc["region_peak_gain_bytes"] is None when peak_evidence_class
-                             != MEASURED or required measured fields are missing
-      4. full-E correctness-> fused_full_anchor_run != True (full-anchor E not measured)
+    Task 3 (finding 3.3): the prior ad-hoc PASS/FAIL branch logic is replaced by
+    the shared ``_normalize_region_peak`` + ``evaluate_gate(GATE_CONTRACTS
+    ["region_peak"])`` -- the SINGLE decision rule. No undeclared PASS branch
+    survives in the reader. ``case_binding_state=MATCH`` is supplied because
+    ``_region_layer`` is only reached when ``_binding_problems`` returned no
+    problems (binding verified at the ``judge_c2_canonical`` level); if binding
+    had failed, every layer is already forced UNKNOWN before this function runs.
+
+    The bidirectional self-report consistency check (errata #2) compares the
+    recomputed token to ``proto["verdict"]`` via :data:`_REGION_SELF_REPORT_MAP`;
+    disagreement -> ``consistency_state=CONFLICT`` -> contradiction -> UNKNOWN.
+    This is what routes a FEASIBLE* self-report with missing resource evidence
+    (resource_state=MISSING -> candidate=FAIL) through CONFLICT -> UNKNOWN
+    (the self-report claims PASS but the evidence says FAIL -> dishonest ->
+    UNKNOWN), which is the honest outcome.
     """
+    from results._phase0.gate_contracts import GATE_CONTRACTS, evaluate_gate
+
     if not _is_real_pte_prototype(proto, edge):
         return (
             "UNKNOWN",
             "no real P->T->E prototype (missing / GEMM->norm / MNK mismatch)",
         )
+    # NOT_FEASIBLE is a definitive negative self-report -> canonical FAIL
+    # (short-circuit before the gate, mirroring gonogo._region_proto_status).
+    # The gate's contradiction check (e.g. scope MISMATCH from
+    # fused_full_anchor_run=False) must NOT override a definitive NOT_FEASIBLE
+    # verdict: the region kernel is infeasible regardless of peak scope.
     verdict = proto.get("verdict")
-    if verdict in _FEASIBLE_VERDICTS:
-        acc, res = rc["accuracy_pass"], rc["resource_pass"]
-        peak = rc["region_peak_gain_bytes"]
-        # M1 conditions 1/2/3 (registers / occupancy / measured peak): missing
-        # evidence -> UNKNOWN (the gate cannot confirm what was not measured).
-        # Condition 3 now requires peak_evidence_class=MEASURED + all required
-        # measured fields (plan §5 2.2 / finding 3.1); MODEL_ONLY or missing
-        # measured fields -> region_peak_gain_bytes None -> UNKNOWN.
-        if acc is None or res is None or peak is None:
-            return (
-                "UNKNOWN",
-                "prototype claims feasible but accuracy/resource/peak not confirmable",
-            )
-        # M1 condition 4 (full-E correctness) + plan §5 2.1: the full-anchor fused
-        # run is the only way to measure E correctness on the real anchor shape.
-        # Without it the region criterion stays UNKNOWN -- small-contract evidence
-        # alone cannot promote to PASS. (This is the deleted "judge region PASS
-        # from small-contract accuracy/resource only" path.)
-        if proto.get("fused_full_anchor_run") is not True:
-            return (
-                "UNKNOWN",
-                "fused full-anchor run not executed; full-E correctness unmeasured",
-            )
-        if acc and res:
-            return ("PASS", "real kernel feasible (full-anchor run measured)")
-        return (
-            "FAIL",
-            "prototype claims feasible but recomputed accuracy/resource fail",
-        )
     if verdict == "NOT_FEASIBLE":
         return ("FAIL", "real P->T->E prototype definitively NOT_FEASIBLE")
-    return ("UNKNOWN", f"prototype verdict {verdict} is not a definitive kernel result")
+    # Binding is verified at the judge_c2_canonical level (problems=[]). The
+    # reader's actual binding check passed -> case_binding_state=MATCH.
+    raw = _normalize_region_peak(proto, case_binding_state="MATCH")
+    token, reason = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
+    # Bidirectional self-report consistency: compare recomputed token to the
+    # self-reported verdict. Disagreement -> CONFLICT -> contradiction -> UNKNOWN.
+    expected_from_self = _REGION_SELF_REPORT_MAP.get(verdict)
+    if expected_from_self is not None and token != expected_from_self:
+        raw["consistency_state"] = "CONFLICT"
+        token, reason = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
+    return (token, reason)
 
 
 def _single_layer(rc):

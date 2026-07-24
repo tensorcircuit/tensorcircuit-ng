@@ -786,24 +786,38 @@ def _region_proto_is_real_pte(data):
 
 
 def _region_proto_status(path):
-    """Region P->T->E prototype verdict (Task 4 / nongpu-rereview §3.5.2).
+    """Region P->T->E prototype verdict (Task 4 / nongpu-rereview §3.5.2 /
+    evidence-integrity plan v3 finding 3.3 -- a P1 fail-open fix).
 
-    Returns ONLY a canonical token (PASS/FAIL/UNKNOWN/NOT_RUN). Recomputes from
-    raw evidence via the C2 region helper (``c2._recompute_conditions``) so
-    REGION_PROTOTYPE and C2_REGION_KERNEL_FEASIBILITY share ONE peak gate -- the
-    artifact-native verdict (FEASIBLE* / NOT_FEASIBLE) is NEVER returned
-    directly (it would be downgraded to UNKNOWN by ``tri_normalize``, leaving
-    full-anchor region success stuck at UNKNOWN forever).
+    Returns ONLY a canonical token (PASS/FAIL/UNKNOWN/NOT_RUN). Recomputes
+    from raw evidence via the SHARED ``c2._normalize_region_peak`` +
+    ``evaluate_gate(GATE_CONTRACTS["region_peak"])`` -- the SINGLE decision
+    rule. The reader retains NO undeclared PASS branch: every PASS/FAIL/
+    UNKNOWN flows through the gate engine.
 
-    PASS requires a success verdict (canonical ``PASS`` or artifact-native
-    ``FEASIBLE_WITH_RECOMPUTE`` / ``TILE_FUSION_FEASIBLE``) PLUS a real P->T->E
-    prototype (``_region_proto_is_real_pte`` -- the same intrinsic standard the
-    C2 reader gates on, so a GEMM->norm / no_full_P=false artifact cannot PASS
-    the region reader while UNKNOWN-ing the C2 reader) PLUS a fused full-anchor
-    run PLUS recomputed accuracy + resource pass PLUS a MEASURED runtime peak
-    (``peak_evidence_class == MEASURED`` + all required measured fields -- the
-    shared peak gate, identical to C2_REGION_KERNEL_FEASIBILITY).
-    ``NOT_FEASIBLE`` -> FAIL (definitive negative); anything else -> UNKNOWN.
+    Task 3 (finding 3.3): the prior ad-hoc acc/res/peak PASS branch is
+    replaced by the shared normalizer + GateContract. Both
+    ``c2._region_layer`` AND this function call the SAME normalizer +
+    contract, so REGION_PROTOTYPE and C2_REGION_KERNEL_FEASIBILITY share
+    ONE standard.
+
+    ``case_binding_state=MISSING`` (the default in ``_normalize_region_peak``)
+    is the honest value here: gonogo reads a single artifact with no
+    canonical case context or hash binding, so the reader CANNOT verify
+    binding -> MISSING -> not PASS. Only ``c2._region_layer`` (which runs
+    after ``_binding_problems`` verifies case+hash binding at the
+    ``judge_c2_canonical`` level) supplies ``case_binding_state=MATCH``.
+
+    The bidirectional self-report consistency check (errata #2) compares the
+    recomputed token to ``data["verdict"]`` via
+    ``c2._REGION_SELF_REPORT_MAP``; disagreement -> ``consistency_state=
+    CONFLICT`` -> contradiction -> UNKNOWN. This routes a FEASIBLE*
+    self-report with missing evidence (candidate=FAIL or UNKNOWN) through
+    CONFLICT -> UNKNOWN (the honest outcome for an unsubstantiated claim).
+
+    ``NOT_FEASIBLE`` -> FAIL (definitive negative, kept as a direct short-
+    circuit before the gate: the artifact itself declares the region
+    infeasible). Absent artifact -> NOT_RUN; malformed -> UNKNOWN.
     """
     if not os.path.exists(path):
         return _NOT_RUN
@@ -815,29 +829,32 @@ def _region_proto_status(path):
     if not isinstance(data, dict):
         return _UNKNOWN
     from results._phase0 import c2 as _c2
+    from results._phase0.gate_contracts import GATE_CONTRACTS, evaluate_gate
 
     verdict = data.get("verdict")
-    # Reuse the C2 recompute helper (shared peak gate + accuracy/resource logic)
-    # so REGION_PROTOTYPE and C2_REGION_KERNEL_FEASIBILITY use ONE standard.
-    rc = _c2._recompute_conditions(data, {})
-    if verdict in ("PASS", "FEASIBLE_WITH_RECOMPUTE", "TILE_FUSION_FEASIBLE"):
-        if not _region_proto_is_real_pte(data):
-            return _UNKNOWN  # not a real P->T->E prototype -> cannot PASS
-        acc, res, peak = (
-            rc["accuracy_pass"],
-            rc["resource_pass"],
-            rc["region_peak_gain_bytes"],
-        )
-        if data.get("fused_full_anchor_run") is not True:
-            return _UNKNOWN  # full-E correctness unmeasured -> never PASS
-        if acc is None or res is None or peak is None:
-            return _UNKNOWN  # evidence incomplete (incl. non-MEASURED peak)
-        if acc and res:
-            return _OK
-        return _BAD  # feasible verdict but recomputed accuracy/resource fail
+    # NOT_FEASIBLE is a definitive negative -> canonical FAIL (short-circuit
+    # before the gate; the artifact itself declares the region infeasible).
     if verdict == "NOT_FEASIBLE":
-        return _BAD  # definitive negative
-    return _UNKNOWN
+        return _BAD
+
+    # Gate the intrinsic P->T->E prototype standard (same checks c2 gates on).
+    if not _region_proto_is_real_pte(data):
+        return _UNKNOWN
+
+    # Shared normalizer + GateContract (the SINGLE decision rule).
+    # case_binding_state=MISSING: gonogo has no canonical case context ->
+    # cannot verify binding -> not PASS (honest).
+    raw = _c2._normalize_region_peak(data, case_binding_state="MISSING")
+    token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
+
+    # Bidirectional self-report consistency: compare recomputed token to the
+    # self-reported verdict. Disagreement -> CONFLICT -> contradiction -> UNKNOWN.
+    expected_from_self = _c2._REGION_SELF_REPORT_MAP.get(verdict)
+    if expected_from_self is not None and token != expected_from_self:
+        raw["consistency_state"] = "CONFLICT"
+        token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
+
+    return token
 
 
 def _numerical_overall_status(path):

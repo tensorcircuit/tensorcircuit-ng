@@ -1214,17 +1214,24 @@ def test_grouped_authoritative_absent_not_supported(tmp_path):
 
 
 def test_region_proto_status_recomputes_pass_from_full_anchor_evidence(tmp_path):
-    """Nongpu rereview finding 3.5.2: region canonical ``PASS`` + complete
-    full-anchor evidence -> canonical ``PASS``. Current ``_region_proto_status``
-    (gonogo.py:505-522) doesn't accept canonical ``PASS`` (only ``FEASIBLE*`` /
-    ``NOT_FEASIBLE`` / ``BLOCKED``) -> returns UNKNOWN -> full-anchor region
-    success can never be PASS (false negative).
+    """Nongpu rereview finding 3.5.2 + Task 3 (evidence-integrity plan v3
+    finding 3.3): region canonical ``PASS`` requires complete full-anchor
+    evidence AND verified case binding. The gonogo reader reads a single
+    artifact with NO canonical case context -> ``case_binding_state=MISSING``
+    -> not PASS (honest). Even with a complete MEASURED fixture (approved
+    method, full-anchor scope, all peaks/accuracy/resource green), gonogo
+    returns UNKNOWN because it cannot verify case binding.
 
-    Task 4: the reader now recomputes via the C2 ``_recompute_conditions``
-    helper (shared peak gate). PASS requires a success verdict + a fused
-    full-anchor run + recomputed accuracy/resource pass + a MEASURED runtime
-    peak (peak_evidence_class=MEASURED + required measured fields) -- the same
-    standard C2_REGION_KERNEL_FEASIBILITY uses."""
+    Only ``c2._region_layer`` (which runs after ``_binding_problems``
+    verifies case+hash binding at the ``judge_c2_canonical`` level) supplies
+    ``case_binding_state=MATCH`` -> can reach PASS. This test pins the gonogo
+    reader's honest UNKNOWN: the shared normalizer + GateContract enforce
+    binding verification, and gonogo alone cannot PASS the region.
+
+    Task 3: uses the committed artifact's REAL field names
+    (``peak_measurement_method``, ``materialized_peak_bytes``,
+    ``fused_peak_bytes``, ``n_seeds``, ``schema_version=
+    region-prototype-v2``) -- NOT the plan's stale ``runtime_*`` variants."""
     import json
 
     from results._phase0.gonogo import _region_proto_status
@@ -1256,16 +1263,20 @@ def test_region_proto_status_recomputes_pass_from_full_anchor_evidence(tmp_path)
                 "occupancy_pct": 100.0,
                 # MEASURED runtime peak (shared peak gate with C2): a full-anchor
                 # fused run measured the runtime allocator peak -> canonical gain.
+                # Task 3: uses the committed artifact's REAL field names.
                 "peak_evidence_class": "MEASURED",
-                "materialized_runtime_allocator_peak_bytes": 2000000000,
-                "fused_runtime_allocator_peak_bytes": 1000000000,
-                "runtime_peak_measurement_method": "cuda allocator high-watermark",
-                "runtime_peak_scope": "full_anchor",
-                "runtime_peak_sample_count": 3,
+                "peak_measurement_method": "cuda_allocator_high_watermark_v1",
+                "runtime_peak_scope": "full_anchor_pte_v1",
+                "n_seeds": 3,
+                "materialized_peak_bytes": 2000000000,
+                "fused_peak_bytes": 1000000000,
             }
         )
     )
-    assert _region_proto_status(str(p)) == "PASS"
+    # gonogo cannot verify case binding -> case_binding_state=MISSING -> not PASS.
+    # The shared normalizer + GateContract enforce this; no undeclared PASS
+    # branch survives in the reader.
+    assert _region_proto_status(str(p)) == "UNKNOWN"
 
 
 def test_region_proto_status_unknown_when_feasible_without_full_anchor(tmp_path):
@@ -1431,6 +1442,49 @@ def test_blocking_artifacts_lists_real_blockers_not_determined_grouped():
     # search on the joined blocking text, which would false-fail if a future
     # correctly-listed entry's path/description contained "grouped".
     assert not any("cublaslt_grouped_capability.json" in e for e in entries), entries
+
+
+def test_region_proto_missing_case_binding_not_pass(tmp_path):
+    """Task 3 (evidence-integrity plan v3 finding 3.3): gonogo reads a single
+    artifact with NO canonical case context -> ``case_binding_state=MISSING``
+    -> not PASS. Even with a complete MEASURED fixture (all 12 gate fields
+    green EXCEPT case_binding), the gonogo reader returns UNKNOWN because it
+    cannot verify case binding. Uses the committed artifact's REAL field names
+    (``schema_version=region-prototype-v2``, ``peak_measurement_method``,
+    ``materialized_peak_bytes``, ``fused_peak_bytes``, ``n_seeds``)."""
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    p = tmp_path / "r.json"
+    p.write_text(
+        json.dumps(
+            {
+                "schema_version": "region-prototype-v2",
+                "verdict": "FEASIBLE_WITH_RECOMPUTE",
+                "region": {
+                    "producer": [4096, 16384, 1024],
+                    "consumer": [64, 1048576, 64],
+                    "dtype": "c64",
+                },
+                "math": "E = D @ transform(A@B)",
+                "no_full_P_materialized": True,
+                "no_full_T_materialized": True,
+                "peak_evidence_class": "MEASURED",
+                "peak_measurement_method": "cuda_allocator_high_watermark_v1",
+                "runtime_peak_scope": "full_anchor_pte_v1",
+                "n_seeds": 3,
+                "materialized_peak_bytes": 400,
+                "fused_peak_bytes": 100,
+                "fused_full_anchor_run": True,
+                "relative_l2": 1e-7,
+                "max_rel": 1e-7,
+                "registers_per_thread": 40,
+                "occupancy_pct": 100.0,
+            }
+        )
+    )
+    # gonogo cannot verify case binding -> MISSING -> not PASS (honest).
+    assert _region_proto_status(str(p)) != "PASS"
 
 
 if __name__ == "__main__":
