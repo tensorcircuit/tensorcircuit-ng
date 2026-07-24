@@ -20,6 +20,7 @@ import csv
 import json
 import os
 
+from results._phase0.gate_contracts import GATE_CONTRACTS, evaluate_gate
 from results._phase0.verdict_schema import recompute_derived_state, validate_criteria
 
 VERDICTS = (
@@ -419,27 +420,152 @@ def _c3_planar_full_matrix_status(path, contraction_shapes_path=None):
     return _OK
 
 
+#: Exact schema-version allowlist for the grouped capability artifact (Task 2 /
+#: evidence-integrity plan v3 finding 3.2). A v1 (or any other) schema_version
+#: is UNRECOGNIZED -- never silently accepted.
+_GROUPED_SCHEMA_VERSIONS = frozenset({"c3-grouped-v2"})
+
+#: Exact probe_source allowlist for the grouped API probe (Task 2). Only the
+#: compile-header probe (``#ifdef`` against the real ``cublasLt.h``) is a
+#: RECOGNIZED authority for API absence/presence; any other source is
+#: UNRECOGNIZED -> the not_supported clause cannot hit -> UNKNOWN.
+_GROUPED_PROBE_SOURCES = frozenset({"compiled_header_probe"})
+
+#: Frozen self-report -> canonical-token map (v3-review errata). The artifact's
+#: ``capability.status`` is a SELF-REPORT; the canonical token is recomputed via
+#: :func:`evaluate_gate`. If the two disagree, the artifact is internally
+#: inconsistent -> consistency_state=CONFLICT -> contradiction -> UNKNOWN.
+_GROUPED_SELF_REPORT_MAP = {
+    "SUPPORTED": "PASS",
+    "NOT_SUPPORTED": "NOT_SUPPORTED",
+    "BLOCKED": "FAIL",
+}
+
+
+def _grouped_normalized(data):
+    """Build the normalized ``raw`` dict for the grouped gate contract (Task 2).
+
+    Reads the v2 artifact and emits the cross-task field names defined by
+    :data:`gate_contracts.GATE_CONTRACTS` ``["grouped"]``:
+
+      * ``schema_state``: VALID if ``schema_version`` in the allowlist, MISSING
+        if absent, else UNRECOGNIZED.
+      * ``api_state``: PRESENT / ABSENT_DEFINITIVE / ABSENT_INCONCLUSIVE from
+        ``grouped_api_probe.cublaslt_grouped3gemm`` (True / False / absent).
+      * ``attempt_state``: ATTEMPTED / NOT_ATTEMPTED from the API PROBE attempt
+        (``grouped_api_probe.attempted``), NOT the execution attempt.
+      * ``probe_source_state``: RECOGNIZED / UNRECOGNIZED / MISSING from
+        ``grouped_api_probe.probe_source``.
+      * ``compile_state`` / ``run_state`` / ``correctness_state`` /
+        ``coverage_state``: set ONLY when ``grouped_execution.attempted`` is
+        True. When the execution block is absent or not attempted, these fields
+        are LEFT ABSENT -- so fail clauses needing them don't hit, and
+        authoritative API absence yields NOT_SUPPORTED (via the not_supported
+        clause), NOT FAIL.
+      * ``consistency_state``: CONSISTENT (tentative; the caller may flip it to
+        CONFLICT via the bidirectional consistency check).
+    """
+    probe = data.get("grouped_api_probe") or {}
+    if not isinstance(probe, dict):
+        probe = {}
+
+    sv = data.get("schema_version")
+    if sv is None:
+        schema_state = "MISSING"
+    elif sv in _GROUPED_SCHEMA_VERSIONS:
+        schema_state = "VALID"
+    else:
+        schema_state = "UNRECOGNIZED"
+
+    g3 = probe.get("cublaslt_grouped3gemm")
+    if g3 is True:
+        api_state = "PRESENT"
+    elif g3 is False:
+        api_state = "ABSENT_DEFINITIVE"
+    else:
+        api_state = "ABSENT_INCONCLUSIVE"
+
+    attempt_state = "ATTEMPTED" if probe.get("attempted") is True else "NOT_ATTEMPTED"
+
+    ps = probe.get("probe_source")
+    if ps is None:
+        probe_source_state = "MISSING"
+    elif ps in _GROUPED_PROBE_SOURCES:
+        probe_source_state = "RECOGNIZED"
+    else:
+        probe_source_state = "UNRECOGNIZED"
+
+    raw = {
+        "schema_state": schema_state,
+        "api_state": api_state,
+        "attempt_state": attempt_state,
+        "probe_source_state": probe_source_state,
+        "consistency_state": "CONSISTENT",
+    }
+
+    # Execution states are set ONLY when the execution was actually attempted.
+    # When absent (the API-absent toolchain reality), they stay out of ``raw``
+    # so the fail clauses needing them don't hit -- authoritative API absence
+    # then routes to NOT_SUPPORTED via the not_supported clause, NOT FAIL.
+    exec_block = data.get("grouped_execution")
+    if isinstance(exec_block, dict) and exec_block.get("attempted") is True:
+        compiles = exec_block.get("compiles")
+        if compiles is True:
+            raw["compile_state"] = "SUCCEEDED"
+        elif compiles is False:
+            raw["compile_state"] = "FAILED"
+        else:
+            raw["compile_state"] = "UNKNOWN"
+        runs = exec_block.get("runs")
+        if runs is True:
+            raw["run_state"] = "SUCCEEDED"
+        elif runs is False:
+            raw["run_state"] = "FAILED"
+        else:
+            raw["run_state"] = "UNKNOWN"
+        corr = exec_block.get("correctness")
+        corr = corr if isinstance(corr, dict) else {}
+        gate_pass = corr.get("gate_pass")
+        if gate_pass is True:
+            raw["correctness_state"] = "PASSED"
+        elif gate_pass is False:
+            raw["correctness_state"] = "FAILED"
+        else:
+            raw["correctness_state"] = "UNKNOWN"
+        raw["coverage_state"] = (
+            "COMPLETE" if exec_block.get("coverage_complete") is True else "INCOMPLETE"
+        )
+
+    return raw
+
+
 def _c3_grouped_status(path):
-    """cublasLt grouped capability verdict (Task 7 / nongpu-rereview §3.5.1).
+    """cublasLt grouped capability verdict (Task 2 / evidence-integrity plan v3
+    finding 3.2 -- a P1 fail-open fix).
 
-    Recomputes a CANONICAL token from the raw artifact status + evidence; never
-    returns the artifact-native ``SUPPORTED`` detail token (which
-    ``tri_normalize`` would downgrade to UNKNOWN, making real grouped success
-    un-promotable -- the false negative this reader fixes).
+    Recomputes a CANONICAL token from the raw v2 artifact via
+    :func:`evaluate_gate` over :data:`GATE_CONTRACTS` ``["grouped"]`` -- the
+    SINGLE decision rule. The reader retains NO undeclared PASS branch: every
+    PASS/FAIL/NOT_SUPPORTED flows through the gate engine.
 
-    Recompute (plan §7 4.1)::
+    The prior reader returned PASS for ``capability.status=SUPPORTED`` + API
+    presence alone, without checking schema/execution/coverage -- a fail-open
+    that trusted the self-reported status. The v2 reader enforces:
 
-        SUPPORTED + required API-probe evidence (cublaslt_grouped3gemm=True) -> PASS
-        NOT_SUPPORTED (definitive API evidence)        -> NOT_SUPPORTED
-        BLOCKED (attempted, build failed)              -> FAIL
-        missing / malformed / incomplete               -> UNKNOWN / NOT_RUN
+      * exact schema-version allowlist (``c3-grouped-v2``); any other schema ->
+        UNRECOGNIZED (never PASS).
+      * exact probe_source allowlist (``compiled_header_probe``); an
+        unrecognized source cannot back a NOT_SUPPORTED claim.
+      * execution states (compile/run/correctness/coverage) are checked ONLY
+        when the execution was attempted; an API-absent toolchain with no
+        execution yields NOT_SUPPORTED (via the not_supported clause), NOT FAIL.
+      * bidirectional self-report consistency: the recomputed token is compared
+        to the self-reported ``capability.status`` (frozen map: SUPPORTED->PASS,
+        NOT_SUPPORTED->NOT_SUPPORTED, BLOCKED->FAIL); any disagreement ->
+        ``consistency_state=CONFLICT`` -> contradiction -> UNKNOWN.
 
-    NOT_SUPPORTED is a safe negative (accepted as-is). SUPPORTED is a positive
-    claim that MUST be backed by the definitive grouped-3GEMM API probe
-    (``grouped_api_probe.cublaslt_grouped3gemm == True``). The self-reported
-    ``grouped_route.status == "SUPPORTED"`` ALONE is NOT a PASS signal (same
-    anti-pattern as finding 3.6 -- trusting self-reported status) -> UNKNOWN.
-    NOT_RUN only when the artifact itself is absent.
+    Returns ``PASS`` / ``FAIL`` / ``UNKNOWN`` / ``NOT_SUPPORTED`` / ``NOT_RUN``
+    (NOT_RUN only when the artifact itself is absent).
     """
     if not os.path.exists(path):
         return _NOT_RUN
@@ -450,21 +576,22 @@ def _c3_grouped_status(path):
         return _UNKNOWN
     if not isinstance(data, dict):
         return _UNKNOWN
+
+    raw = _grouped_normalized(data)
+
+    # 1. Tentative candidate with consistency=CONSISTENT.
+    candidate = evaluate_gate(raw, GATE_CONTRACTS["grouped"])[0]
+
+    # 2. Bidirectional self-report consistency: compare the recomputed token to
+    #    what the self-reported capability.status maps to. Any disagreement ->
+    #    CONFLICT -> re-evaluate -> contradiction -> UNKNOWN.
     status = (data.get("capability") or {}).get("status")
-    if status == "NOT_SUPPORTED":
-        return "NOT_SUPPORTED"
-    if status == "SUPPORTED":
-        probe = data.get("grouped_api_probe") or {}
-        api_ok = probe.get("cublaslt_grouped3gemm") is True
-        if api_ok:
-            return _OK  # definitive API-probe evidence backs the SUPPORTED claim
-        # Self-reported ``grouped_route.status`` alone (or no evidence at all)
-        # cannot confirm a SUPPORTED claim -> UNKNOWN (do not PASS on self-report;
-        # same anti-pattern as finding 3.6).
-        return _UNKNOWN
-    if status == "BLOCKED":
-        return _BAD  # attempted but build blocked
-    return _UNKNOWN
+    expected_from_self = _GROUPED_SELF_REPORT_MAP.get(status)
+    if expected_from_self is not None and candidate != expected_from_self:
+        raw["consistency_state"] = "CONFLICT"
+        candidate = evaluate_gate(raw, GATE_CONTRACTS["grouped"])[0]
+
+    return candidate
 
 
 def _cutlass_status(path):

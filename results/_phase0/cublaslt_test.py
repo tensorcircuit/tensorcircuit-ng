@@ -603,8 +603,15 @@ def test_aggregate_grouped_records_batched_per_shape():
 
 
 def test_build_grouped_capability_json_schema():
-    """The canonical JSON carries schema_version c3-grouped-v1, the overall
-    capability, both route verdicts, and the raw grouped-API probe evidence."""
+    """The canonical JSON carries schema_version c3-grouped-v2, the overall
+    capability, both route verdicts, and the raw grouped-API probe evidence.
+
+    Task 2 (evidence-integrity plan v3): the producer emits v2 with
+    ``attempted``/``probe_source`` intrinsic to the compile-header probe method
+    (set by the producer when the caller's availability dict omits them), and a
+    ``grouped_execution`` block whose ``attempted`` flag is False on this
+    toolchain (the grouped execution path is not implemented; API absent ->
+    no execution attempted)."""
     agg = aggregate_capability_grouped(
         [_batched_shape_result(_REAL_GEMM_BATCHED, ko=7.0)],
         _GROUPED_ABSENT,
@@ -615,12 +622,21 @@ def test_build_grouped_capability_json_schema():
         matrix_grid={"batched_cells": 8, "grouped_cells": 1},
         timing_summary={"best_ko_ratio": 7.0},
     )
-    assert js["schema_version"] == "c3-grouped-v1"
+    assert js["schema_version"] == "c3-grouped-v2"
     assert js["capability"]["status"] == "NOT_SUPPORTED"
     assert js["batched_route"]["status"] in {"SUPPORTED", "NOT_SUPPORTED"}
     assert js["grouped_route"]["status"] == "NOT_SUPPORTED"
     # raw header evidence echoed for reproducibility
     assert js["grouped_api_probe"]["cublaslt_grouped3gemm"] is False
+    # Task 2: the producer stamps the intrinsic probe-method fields the v2
+    # reader's probe_source allowlist requires (compiled_header_probe is the
+    # only recognized source; attempted=True because the compile-header probe
+    # always runs).
+    assert js["grouped_api_probe"]["attempted"] is True
+    assert js["grouped_api_probe"]["probe_source"] == "compiled_header_probe"
+    # Task 2: grouped_execution block present; API-absent toolchain -> the
+    # grouped execution path is not exercised -> attempted=False (honest).
+    assert js["grouped_execution"]["attempted"] is False
     assert js["matrix_grid"]["batched_cells"] == 8
 
 

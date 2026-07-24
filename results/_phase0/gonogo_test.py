@@ -150,11 +150,29 @@ def test_c3_grouped_status(tmp_path):
     from results._phase0.gonogo import _c3_grouped_status
 
     p = tmp_path / "g.json"
-    p.write_text(json.dumps({"capability": {"status": "NOT_SUPPORTED"}}))
+    # Task 2 (v2 reader): NOT_SUPPORTED requires the authoritative-absence
+    # evidence triple (api=ABSENT_DEFINITIVE + attempt=ATTEMPTED + probe_source
+    # RECOGNIZED) on a v2 schema -- a bare status claim with no backing evidence
+    # is NOT trusted (finding 3.2).
+    p.write_text(
+        json.dumps(
+            {
+                "schema_version": "c3-grouped-v2",
+                "capability": {"status": "NOT_SUPPORTED"},
+                "grouped_api_probe": {
+                    "attempted": True,
+                    "cublaslt_grouped3gemm": False,
+                    "probe_source": "compiled_header_probe",
+                },
+            }
+        )
+    )
     assert _c3_grouped_status(str(p)) == "NOT_SUPPORTED"
     # Task 4 (nongpu-rereview §3.5.1): a bare SUPPORTED with no backing API/run
     # evidence is an unconfirmable positive claim -> UNKNOWN (NOT the raw
-    # SUPPORTED detail token, which tri_normalize would also downgrade).
+    # SUPPORTED detail token, which tri_normalize would also downgrade). Under
+    # the v2 reader this routes through the bidirectional-consistency conflict
+    # path (self-report SUPPORTED->PASS vs recompute FAIL) -> UNKNOWN.
     p.write_text(json.dumps({"capability": {"status": "SUPPORTED"}}))
     assert _c3_grouped_status(str(p)) == "UNKNOWN"
     assert _c3_grouped_status(str(tmp_path / "missing.json")) == "NOT_RUN"
@@ -1022,10 +1040,11 @@ def test_completion_inconclusive_when_c2_region_unknown_even_if_c2_alias_pass():
 
 def test_c3_grouped_status_recomputes_pass_from_supported_evidence(tmp_path):
     """Nongpu rereview finding 3.5.1: grouped raw ``SUPPORTED`` + complete
-    evidence -> canonical ``PASS``. Current ``_c3_grouped_status``
-    (gonogo.py:406-409) returns raw ``"SUPPORTED"`` (a detail token) which
-    ``tri_normalize`` maps to UNKNOWN -> real grouped success can never be PASS
-    (false negative)."""
+    evidence -> canonical ``PASS``. The v2 reader (Task 2) recomputes via
+    :func:`evaluate_gate` over the full normalized raw dict -- SUPPORTED +
+    v2 schema + API present + attempted + recognized probe + full execution
+    (compiles/runs/correctness/coverage all green) + self-report consistency
+    -> PASS. A raw ``SUPPORTED`` detail token is NEVER returned directly."""
     import json
 
     from results._phase0.gonogo import _c3_grouped_status
@@ -1034,14 +1053,164 @@ def test_c3_grouped_status_recomputes_pass_from_supported_evidence(tmp_path):
     p.write_text(
         json.dumps(
             {
+                "schema_version": "c3-grouped-v2",
                 "capability": {"status": "SUPPORTED"},
-                # complete evidence fields (the fix recomputes from these)
-                "batched_route": {"status": "SUPPORTED"},
-                "grouped_api_probe": {"cublaslt_grouped3gemm": True},
+                "grouped_api_probe": {
+                    "attempted": True,
+                    "cublaslt_grouped3gemm": True,
+                    "probe_source": "compiled_header_probe",
+                },
+                "grouped_execution": {
+                    "attempted": True,
+                    "compiles": True,
+                    "runs": True,
+                    "coverage_complete": True,
+                    "correctness": {"gate_pass": True},
+                },
             }
         )
     )
     assert _c3_grouped_status(str(p)) == "PASS"
+
+
+# ---------------------------------------------------------------------------
+# Task 2 (evidence-integrity plan v3): grouped v2 reader -- exact schema
+# allowlist + probe_source allowlist + bidirectional self-report consistency
+# via GateContract (finding 3.2, a P1 fail-open fix).
+# ---------------------------------------------------------------------------
+
+import json as _json_for_grouped_v2  # noqa: E402
+
+from results._phase0.gonogo import (
+    _c3_grouped_status as _grouped_status_v2,
+)  # noqa: E402
+
+
+def _grouped_v2_write(tmp_path, obj):
+    p = tmp_path / "g.json"
+    p.write_text(_json_for_grouped_v2.dumps(obj))
+    return str(p)
+
+
+def test_grouped_unknown_schema_is_unknown(tmp_path):
+    """An unrecognized schema_version -> schema_state=UNRECOGNIZED -> not PASS;
+    the self-report (NOT_SUPPORTED) disagrees with the recompute (UNKNOWN) ->
+    bidirectional consistency CONFLICT -> UNKNOWN."""
+    p = _grouped_v2_write(
+        tmp_path,
+        {
+            "schema_version": "unknown-schema",
+            "capability": {"status": "NOT_SUPPORTED"},
+            "grouped_api_probe": {
+                "attempted": True,
+                "cublaslt_grouped3gemm": True,
+                "probe_source": "compiled_header_probe",
+            },
+            "grouped_execution": {
+                "attempted": True,
+                "compiles": True,
+                "runs": True,
+                "coverage_complete": True,
+                "correctness": {"gate_pass": True},
+            },
+        },
+    )
+    assert _grouped_status_v2(p) == "UNKNOWN"  # unknown schema, NOT PASS
+
+
+def test_grouped_unknown_probe_source_is_unknown(tmp_path):
+    """A probe_source not in the allowlist -> probe_source_state=UNRECOGNIZED ->
+    the not_supported clause (which needs RECOGNIZED) doesn't hit -> UNKNOWN;
+    self-report NOT_SUPPORTED disagrees with recompute UNKNOWN -> CONFLICT ->
+    UNKNOWN."""
+    p = _grouped_v2_write(
+        tmp_path,
+        {
+            "schema_version": "c3-grouped-v2",
+            "capability": {"status": "NOT_SUPPORTED"},
+            "grouped_api_probe": {
+                "attempted": True,
+                "cublaslt_grouped3gemm": False,
+                "probe_source": "made_up",
+            },
+        },
+    )
+    assert _grouped_status_v2(p) == "UNKNOWN"  # probe_source not in allowlist
+
+
+def test_grouped_not_supported_with_full_execution_conflict(tmp_path):
+    """Self-report NOT_SUPPORTED but full execution evidence recomputes to PASS
+    -> the two disagree -> consistency_state=CONFLICT -> contradiction ->
+    UNKNOWN (a self-report cannot override contradictory evidence)."""
+    p = _grouped_v2_write(
+        tmp_path,
+        {
+            "schema_version": "c3-grouped-v2",
+            "capability": {"status": "NOT_SUPPORTED"},
+            "grouped_api_probe": {
+                "attempted": True,
+                "cublaslt_grouped3gemm": True,
+                "probe_source": "compiled_header_probe",
+            },
+            "grouped_execution": {
+                "attempted": True,
+                "compiles": True,
+                "runs": True,
+                "coverage_complete": True,
+                "correctness": {"gate_pass": True},
+            },
+        },
+    )
+    assert _grouped_status_v2(p) == "UNKNOWN"  # self-report vs recompute conflict
+
+
+def test_grouped_full_pass(tmp_path):
+    """v2 schema + API present + attempted + recognized probe + full green
+    execution + self-report SUPPORTED (maps to PASS) -> PASS. The canonical
+    PASS is recomputed via GateContract, never the raw SUPPORTED token."""
+    p = _grouped_v2_write(
+        tmp_path,
+        {
+            "schema_version": "c3-grouped-v2",
+            "capability": {"status": "SUPPORTED"},
+            "grouped_api_probe": {
+                "attempted": True,
+                "cublaslt_grouped3gemm": True,
+                "probe_source": "compiled_header_probe",
+            },
+            "grouped_execution": {
+                "attempted": True,
+                "compiles": True,
+                "runs": True,
+                "coverage_complete": True,
+                "correctness": {"gate_pass": True},
+            },
+        },
+    )
+    assert _grouped_status_v2(p) == "PASS"
+
+
+def test_grouped_authoritative_absent_not_supported(tmp_path):
+    """Authoritative API absence (cublaslt_grouped3gemm=False, attempted=True,
+    recognized probe_source) with NO execution block -> only the
+    not_supported clause hits (api=ABSENT_DEFINITIVE + attempt=ATTEMPTED +
+    probe_source=RECOGNIZED); execution states are ABSENT so no fail clause
+    hits -> NOT_SUPPORTED. Self-report NOT_SUPPORTED matches recompute
+    NOT_SUPPORTED -> no conflict."""
+    p = _grouped_v2_write(
+        tmp_path,
+        {
+            "schema_version": "c3-grouped-v2",
+            "capability": {"status": "NOT_SUPPORTED"},
+            "grouped_api_probe": {
+                "attempted": True,
+                "cublaslt_grouped3gemm": False,
+                "probe_source": "compiled_header_probe",
+                "toolchain_fingerprint": "nvcc12.8",
+            },
+        },
+    )
+    assert _grouped_status_v2(p) == "NOT_SUPPORTED"
 
 
 def test_region_proto_status_recomputes_pass_from_full_anchor_evidence(tmp_path):

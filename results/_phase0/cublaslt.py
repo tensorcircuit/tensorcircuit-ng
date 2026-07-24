@@ -937,11 +937,37 @@ def aggregate_capability_grouped(
 def build_grouped_capability_json(
     agg, grouped_availability, *, matrix_grid=None, timing_summary=None
 ):
-    """Assemble the canonical c3-grouped-v1 JSON from the aggregation + the raw
+    """Assemble the canonical c3-grouped-v2 JSON from the aggregation + the raw
     grouped-API probe evidence. Pure (GPU-free) so the schema is unit-testable;
-    run_grouped calls this after the live ext probes."""
+    run_grouped calls this after the live ext probes.
+
+    Task 2 (evidence-integrity plan v3): emits v2 with two probe-method fields
+    the v2 reader's allowlists require -- ``grouped_api_probe.attempted`` (True;
+    the compile-header probe always runs) and ``grouped_api_probe.probe_source``
+    (``"compiled_header_probe"``) -- stamped by the producer when the caller's
+    availability dict omits them (they are intrinsic to the probe method, not
+    caller-supplied). Also emits a ``grouped_execution`` block whose
+    ``attempted`` flag reflects whether the grouped execution path ran: on this
+    toolchain the API is absent and the execution path is not implemented, so
+    ``attempted=False`` (honest -- no execution was attempted).
+    """
+    probe = dict(grouped_availability) if isinstance(grouped_availability, dict) else {}
+    # Intrinsic probe-method fields: the compile-header #ifdef probe always
+    # runs (attempted=True) and its source is compiled_header_probe. setdefault
+    # so a future ext that carries these natively is respected.
+    probe.setdefault("attempted", True)
+    probe.setdefault("probe_source", "compiled_header_probe")
+
+    # Grouped execution: the heterogeneous-grouped execution path is not
+    # implemented on this toolchain (the API is absent and no compile/run/
+    # correctness probe exists for it), so no execution is attempted.
+    # ``attempted=False`` is honest. If the API were present and execution ran,
+    # the caller would populate compiles/runs/coverage_complete/correctness.
+    # gate_pass -- but that path is not exercised here.
+    grouped_execution = {"attempted": False}
+
     return {
-        "schema_version": "c3-grouped-v1",
+        "schema_version": "c3-grouped-v2",
         "capability": agg["overall"],
         "batched_route": {
             "status": agg["batched_route"]["status"],
@@ -953,7 +979,8 @@ def build_grouped_capability_json(
             },
         },
         "grouped_route": agg["grouped_route"],
-        "grouped_api_probe": grouped_availability,
+        "grouped_api_probe": probe,
+        "grouped_execution": grouped_execution,
         "matrix_grid": matrix_grid or {},
         "timing_summary": timing_summary or {},
         "note": (
@@ -1104,7 +1131,7 @@ def run_grouped(shapes, out_dir="results/phase0", *, batch=4):
     3. Per real-gemm shape: batched planar matmul + correctness + fair kernel-only
        timing (batched planar vs batched c64) -> ko_ratio.
     Writes cublaslt_grouped.csv (batched cells + the single grouped row) and
-    cublaslt_grouped_capability.json (schema c3-grouped-v1). Returns the verdict.
+    cublaslt_grouped_capability.json (schema c3-grouped-v2). Returns the verdict.
     """
     import torch  # noqa: F401  availability guard; timing helpers import it too
 
