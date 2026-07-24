@@ -17,6 +17,12 @@ from importlib import metadata
 
 OUT = "results/phase0/run_context.json"
 
+# The real aggregation command (Task 6 errata #2: a real reproducible script,
+# not a nonexistent script or a ``python -c`` one-liner). ``numerical.py
+# --regen-no-gpu`` regenerates the numerical validation matrix from existing
+# CSV rows without GPU measurement (plan §6 3a / Task 3a regen path).
+AGGREGATION_COMMAND = "python results/_phase0/numerical.py --regen-no-gpu"
+
 COMMAND_TEMPLATES = {
     "xla_dump": "python results/_phase0/xla_dump.py",
     "c1_ab": "python results/_phase0/c1.py --ab --n {n} --depth {depth}",
@@ -65,14 +71,77 @@ def _versions():
     return out
 
 
+def _preserve_measurement(existing):
+    """Read the existing run_context.json dict and preserve its measurement
+    role (Task 6 errata #1: v1->v2 migration).
+
+    - v2 nested (has ``measurement`` dict): preserve verbatim.
+    - v1 flat (has ``source_commit``): migrate ``source_commit`` ->
+      ``measurement.source_commit`` (validate non-empty). Also carry over
+      ``run_id`` / ``environment_hash`` if present in the v1 file.
+    - missing/empty/malformed: no measurement role to preserve (first run).
+
+    Returns a dict (possibly empty) suitable for the ``measurement`` field
+    of the v2 schema. Never raises.
+    """
+    if not isinstance(existing, dict):
+        return {}
+    meas = existing.get("measurement")
+    if isinstance(meas, dict) and meas.get("source_commit"):
+        return dict(meas)  # v2 nested: preserve verbatim
+    # v1 flat migration: source_commit -> measurement.source_commit
+    flat_commit = existing.get("source_commit")
+    if flat_commit:
+        migrated = {"source_commit": flat_commit}
+        for k in ("run_id", "environment_hash"):
+            if existing.get(k):
+                migrated[k] = existing[k]
+        return migrated
+    return {}  # no prior measurement role to preserve
+
+
 def build():
+    """Build the run-context-v2 provenance record and write it to ``OUT``.
+
+    v2 schema (Task 6 / finding 3.6): separates the MEASUREMENT role (the
+    commit that produced the GPU evidence -- preserved from the existing
+    run_context.json, never overwritten by the aggregation HEAD) from the
+    AGGREGATION role (the real current HEAD + dirty-worktree flag + the real
+    reproducible command that re-derives the aggregate artifacts).
+
+    v1->v2 migration (errata #1): if the existing ``run_context.json`` is v1
+    flat (single ``source_commit`` from a prior GPU run), that commit is
+    migrated to ``measurement.source_commit``. The aggregation role is then
+    set to the real current HEAD, so the stale-generator-commit fail-open
+    (finding 3.6) is closed: the manifest records BOTH which commit measured
+    the GPU evidence AND which commit produced the aggregate.
+
+    Lightweight: uses importlib.metadata (no GPU/CUDA init) + git. Run:
+      python results/_phase0/run_context.py
+    """
+    # Preserve the measurement role from the existing file (v1 or v2).
+    measurement = {}
+    if os.path.exists(OUT):
+        try:
+            with open(OUT) as fh:
+                existing = json.load(fh)
+            measurement = _preserve_measurement(existing)
+        except (OSError, ValueError):
+            pass  # unreadable/missing -> no measurement role to preserve
+
     porcelain = _git(["status", "--porcelain"]) or ""
     ctx = {
-        "schema_version": "run-context-v1",
-        "source_commit": _git(["rev-parse", "HEAD"]),
-        "dirty_worktree": bool(porcelain.strip()),
-        "dirty_file_count": len([ln for ln in porcelain.splitlines() if ln.strip()]),
-        "package_versions": _versions(),
+        "schema_version": "run-context-v2",
+        "measurement": measurement,
+        "aggregation": {
+            "source_commit": _git(["rev-parse", "HEAD"]),
+            "dirty_worktree": bool(porcelain.strip()),
+            "dirty_file_count": len(
+                [ln for ln in porcelain.splitlines() if ln.strip()]
+            ),
+            "command": AGGREGATION_COMMAND,
+            "package_versions": _versions(),
+        },
         "command_templates": COMMAND_TEMPLATES,
         "runner_note": (
             "All commands run via the project WSL harness in the project conda "

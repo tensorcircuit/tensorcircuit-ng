@@ -52,7 +52,7 @@ REQUIRED_ARTIFACTS = {
     "CUTLASS_SM120_4M": ["cutlass_sm120_4m.json"],
     "CUTLASS_SM80_FALLBACK_CAPABILITY": ["cutlass_sm120_4m.json"],
     "REGION_PROTOTYPE": ["region_prototype.json"],
-    "NUMERICAL": ["numerical_validation.json"],
+    "NUMERICAL": ["numerical_validation.json", "numerical_validation.csv"],
 }
 
 # Task 5 fold-in (I2): REQUIRED_ARTIFACTS must be a subset of the canonical
@@ -222,6 +222,21 @@ def _presence_check(gonogo_criteria, base):
         if any(not os.path.exists(os.path.join(base, r)) for r in required):
             validated[criterion] = "NOT_RUN"
     return validated
+
+
+def validate_required_artifacts(base, criterion):
+    """Per-criterion presence check (Task 6 errata #5 / finding 3.7).
+
+    Returns True iff ALL required artifacts for ``criterion`` exist under
+    ``base``. Unknown criteria return True (vacuously -- no required
+    artifacts to check). Content/hash validation stays in
+    ``_validate_numerical_binding`` (binding chain); this is the presence
+    gate that ensures NUMERICAL requires BOTH the JSON and the CSV before
+    the criterion can be evaluated (the CSV was previously missing from
+    REQUIRED_ARTIFACTS, allowing a PASS with only the JSON present).
+    """
+    required = REQUIRED_ARTIFACTS.get(criterion, [])
+    return all(os.path.exists(os.path.join(base, r)) for r in required)
 
 
 def _c2_artifact_paths(c2_judgment):
@@ -477,6 +492,13 @@ def build_manifest(base, generated_at=None):
     gonogo = _load_json(os.path.join(base, "gonogo.json"))
     gonogo = gonogo if isinstance(gonogo, dict) else {}
     run_ctx = run_ctx if isinstance(run_ctx, dict) else {}
+    # Task 6 (finding 3.6): run_context is v2 nested (measurement +
+    # aggregation roles). The manifest records BOTH the measurement commit
+    # (which commit produced the GPU evidence) and the aggregation commit
+    # (which commit produced the aggregate). The flat v1 source_commit /
+    # dirty_worktree / dirty_file_count reads are replaced.
+    measurement = run_ctx.get("measurement") or {}
+    aggregation = run_ctx.get("aggregation") or {}
     c1_j = _load_json(os.path.join(base, "c1_judgment.json"))
     c2_j = _load_json(os.path.join(base, "c2_judgment.json"))
     c2_ckpt = _load_json(os.path.join(base, "c2_checkpoint_manifest.json"))
@@ -517,9 +539,10 @@ def build_manifest(base, generated_at=None):
 
     return {
         "schema_version": SCHEMA_VERSION,
-        "source_commit": run_ctx.get("source_commit"),
-        "dirty_worktree": run_ctx.get("dirty_worktree"),
-        "dirty_file_count": run_ctx.get("dirty_file_count"),
+        "measurement_source_commit": measurement.get("source_commit"),
+        "aggregation_source_commit": aggregation.get("source_commit"),
+        "aggregation_dirty_worktree": aggregation.get("dirty_worktree"),
+        "aggregation_dirty_file_count": aggregation.get("dirty_file_count"),
         "commands": run_ctx.get("command_templates") or {},
         "environment_hash": _hash_file(os.path.join(base, "environment.json")),
         "criteria": criteria,

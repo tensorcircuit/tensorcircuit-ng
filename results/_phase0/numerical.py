@@ -1485,6 +1485,23 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
 
 
 if __name__ == "__main__":
+    import argparse
     import json as _json
 
-    print(_json.dumps(main(), indent=2))
+    parser = argparse.ArgumentParser(
+        description="Phase 0 numerical validation matrix (plan §6 / spec §3)."
+    )
+    parser.add_argument(
+        "--regen-no-gpu",
+        action="store_true",
+        help="Regenerate numerical_validation.{csv,json} from existing CSV rows "
+        "WITHOUT GPU measurement (Task 3a regen path). Reads planar/grouped/"
+        "region_fused rows from the existing CSV, regenerates cutlass rows via "
+        "the non-GPU artifact reader, and recomputes the fail-closed aggregate.",
+    )
+    args = parser.parse_args()
+    if args.regen_no_gpu:
+        result = main(run_gpu=False, regen_no_gpu=True)
+    else:
+        result = main()
+    print(_json.dumps(result, indent=2))

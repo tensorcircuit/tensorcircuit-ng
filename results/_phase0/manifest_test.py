@@ -402,9 +402,18 @@ def test_build_manifest_schema_and_stability(tmp_path):
     (tmp_path / "run_context.json").write_text(
         json.dumps(
             {
-                "source_commit": "abc123",
-                "dirty_worktree": False,
-                "dirty_file_count": 0,
+                "schema_version": "run-context-v2",
+                "measurement": {
+                    "source_commit": "gpu_abc",
+                    "run_id": "r1",
+                    "environment_hash": "h",
+                },
+                "aggregation": {
+                    "source_commit": "agg_abc",
+                    "dirty_worktree": False,
+                    "dirty_file_count": 0,
+                    "command": "python results/_phase0/numerical.py --regen-no-gpu",
+                },
                 "command_templates": {"gonogo": "python results/_phase0/gonogo.py"},
             }
         )
@@ -435,8 +444,9 @@ def test_build_manifest_schema_and_stability(tmp_path):
 
     m = build_manifest(str(tmp_path), generated_at="2026-07-23T00:00:00Z")
     assert m["schema_version"] == SCHEMA_VERSION
-    assert m["source_commit"] == "abc123"
-    assert m["dirty_worktree"] is False
+    assert m["measurement_source_commit"] == "gpu_abc"
+    assert m["aggregation_source_commit"] == "agg_abc"
+    assert m["aggregation_dirty_worktree"] is False
     assert m["phase0_completion"] == "INCONCLUSIVE"
     assert m["phase1_authorization"] == "NOT_AUTHORIZED"
     # presence + checkpoint validation applied: C2 checkpoint UNAVAILABLE (6 of
@@ -471,13 +481,31 @@ def test_main_writes_manifest_v1(tmp_path):
         sd = os.path.join(src, d)
         if os.path.isdir(sd):
             shutil.copytree(sd, stage / d)
+    # Overwrite the staged run_context.json with a v2 nested structure (the
+    # tracked file is v1 flat until the final clean rerun regenerates it;
+    # manifest now consumes v2 nested -- finding 3.6 / Task 6).
+    (stage / "run_context.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "run-context-v2",
+                "measurement": {"source_commit": "gpu_abc"},
+                "aggregation": {
+                    "source_commit": "agg_abc",
+                    "dirty_worktree": False,
+                    "dirty_file_count": 0,
+                    "command": "python results/_phase0/numerical.py --regen-no-gpu",
+                },
+                "command_templates": {},
+            }
+        )
+    )
     M.main(stage_dir=str(stage))
     m = json.load(open(stage / "manifest.json"))
     assert m["schema_version"] == "manifest-v1"
     assert m["criteria"]["C1"] == "PASS"
     assert m["phase0_completion"] == "INCONCLUSIVE"
     assert "manifest.json" not in m["outputs"]
-    assert m["source_commit"] and m["environment_hash"]
+    assert m["measurement_source_commit"] and m["environment_hash"]
 
 
 # ---------------------------------------------------------------------------
@@ -1162,6 +1190,149 @@ def test_presence_check_downgrades_fallback_when_cutlass_artifact_missing(
         f"fallback must also be NOT_RUN (same artifact), got "
         f"{out['CUTLASS_SM80_FALLBACK_CAPABILITY']!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 6 (finding 3.6 / 3.7): run-context-v2 wired into manifest; measurement
+# role preserved; NUMERICAL required-artifact map gains CSV; real
+# --regen-no-gpu aggregation command.
+# ---------------------------------------------------------------------------
+
+
+def test_numerical_required_has_csv():
+    """Finding 3.7: NUMERICAL required-artifact map must include BOTH the
+    JSON and the CSV (the CSV was missing -> presence gate could pass with
+    only the JSON present)."""
+    assert "numerical_validation.csv" in REQUIRED_ARTIFACTS["NUMERICAL"]
+    assert "numerical_validation.json" in REQUIRED_ARTIFACTS["NUMERICAL"]
+
+
+def test_run_context_v2_preserves_measurement_and_real_aggregation(
+    tmp_path, monkeypatch
+):
+    """Finding 3.6: run_context.json migrates from v1 flat (single
+    source_commit) to v2 nested (measurement role + aggregation role). The
+    measurement role from a prior GPU run MUST be preserved verbatim; the
+    aggregation role records the REAL current HEAD + a real reproducible
+    command (not a nonexistent script or python -c one-liner)."""
+    import json
+
+    from results._phase0.run_context import build
+
+    monkeypatch.setattr(
+        "results._phase0.run_context.OUT", str(tmp_path / "run_context.json")
+    )
+    # simulate an existing v2 file with a measurement role from a prior GPU run
+    (tmp_path / "run_context.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "run-context-v2",
+                "measurement": {
+                    "source_commit": "gpu_commit_abc",
+                    "run_id": "run42",
+                    "environment_hash": "h",
+                },
+            }
+        )
+    )
+    ctx = build()
+    assert ctx["schema_version"] == "run-context-v2"
+    # measurement role preserved, NOT overwritten by the aggregation HEAD
+    assert ctx["measurement"]["source_commit"] == "gpu_commit_abc"
+    assert ctx["measurement"]["run_id"] == "run42"
+    # aggregation role: real current HEAD + real command
+    assert ctx["aggregation"]["source_commit"]  # real current HEAD (truthy)
+    assert ctx["aggregation"]["command"].startswith("python results/_phase0/")
+    assert ctx["aggregation"]["dirty_worktree"] in (True, False)
+    assert "dirty_file_count" in ctx["aggregation"]
+    assert "package_versions" in ctx["aggregation"]
+
+
+def test_run_context_v2_migrates_v1_flat_source_commit(tmp_path, monkeypatch):
+    """Errata #1: if the existing run_context.json is v1 flat (single
+    source_commit from a prior GPU run), build() must migrate it to
+    measurement.source_commit (validate non-empty)."""
+    import json
+
+    from results._phase0.run_context import build
+
+    monkeypatch.setattr(
+        "results._phase0.run_context.OUT", str(tmp_path / "run_context.json")
+    )
+    # simulate the current tracked file: v1 flat with a stale GPU commit
+    (tmp_path / "run_context.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "run-context-v1",
+                "source_commit": "205899678c0de72e9ff180ab357a973bf7e1112e",
+                "dirty_worktree": True,
+                "dirty_file_count": 77,
+            }
+        )
+    )
+    ctx = build()
+    assert ctx["schema_version"] == "run-context-v2"
+    # v1 flat source_commit migrated to measurement.source_commit
+    assert (
+        ctx["measurement"]["source_commit"]
+        == "205899678c0de72e9ff180ab357a973bf7e1112e"
+    )
+    # aggregation role: real current HEAD (different from the stale measurement)
+    assert ctx["aggregation"]["source_commit"]
+    assert (
+        ctx["aggregation"]["source_commit"]
+        != "205899678c0de72e9ff180ab357a973bf7e1112e"
+    )
+
+
+def test_manifest_consumes_v2_nested(tmp_path, monkeypatch):
+    """Task 6 errata #3: build_manifest reads measurement/aggregation from
+    the v2 nested run_context, not the flat source_commit/dirty_worktree."""
+    import json
+
+    from results._phase0.manifest import build_manifest
+
+    (tmp_path / "run_context.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "run-context-v2",
+                "measurement": {
+                    "source_commit": "gpu_commit_abc",
+                    "run_id": "r",
+                    "environment_hash": "h",
+                },
+                "aggregation": {
+                    "source_commit": "agg_commit",
+                    "dirty_worktree": False,
+                    "command": "python x",
+                },
+            }
+        )
+    )
+    (tmp_path / "gonogo.json").write_text(json.dumps({"criteria": {}}))
+    m = build_manifest(str(tmp_path))
+    assert m.get("measurement_source_commit") == "gpu_commit_abc"
+    assert m.get("aggregation_source_commit") == "agg_commit"
+    assert m.get("aggregation_dirty_worktree") is False
+    # flat reads removed (errata #3: replace, not supplement)
+    assert "source_commit" not in m
+    assert "dirty_worktree" not in m
+
+
+def test_validate_required_artifacts_presence(tmp_path):
+    """Task 6 errata #5: validate_required_artifacts(base, criterion) is a
+    per-criterion presence check. NUMERICAL now requires BOTH .json + .csv
+    (finding 3.7). Hash validation stays in _validate_numerical_binding."""
+    from results._phase0.manifest import validate_required_artifacts
+
+    # nothing present -> NUMERICAL fails (both files missing)
+    assert not validate_required_artifacts(str(tmp_path), "NUMERICAL")
+    # only JSON present -> still fails (CSV missing)
+    (tmp_path / "numerical_validation.json").write_text("x")
+    assert not validate_required_artifacts(str(tmp_path), "NUMERICAL")
+    # both present -> passes
+    (tmp_path / "numerical_validation.csv").write_text("x")
+    assert validate_required_artifacts(str(tmp_path), "NUMERICAL")
 
 
 if __name__ == "__main__":
