@@ -53,6 +53,13 @@ def compute_metrics(out, ref, signal_floor: float = 0.5) -> dict:
 
 _LEVELS = ("baseline", "mixed_scale", "cancellation")
 
+# Cancellation input construction (plan §3.1 / spec §3.4). eps is small
+# enough to produce real cancellation (ratio << 0.1) and amplify BF16
+# rounding/cancellation risk, but large enough to keep the reference
+# non-zero finite (avoids a trivially all-zero output).
+CANCELLATION_EPSILON = 1e-3
+INPUT_CONSTRUCTION_VERSION = "v2_cancellation"
+
 
 def make_inputs(level, shape, seed, ref_dtype=np.complex64):
     """Generate (A, B) for C = A @ B at a given dynamic-range level.
@@ -61,8 +68,11 @@ def make_inputs(level, shape, seed, ref_dtype=np.complex64):
     - baseline: real/imag ~ N(0,1)
     - mixed_scale: per-element Bernoulli(0.5) mix of N(0, 1e2^2) and N(0, 1e-2^2)
       -> dynamic range 1e4, exposes bf16 small-magnitude loss (spec §4.2)
-    - cancellation: B rows paired +- (B[2j+1] = -B[2j]); reference C has near-zero
-      elements -> amplifies max_rel denominator sensitivity (spec §4.3). Requires K even.
+    - cancellation: A columns paired equal (A[:,2j+1]=A[:,2j]) and B rows
+      paired +- with a controlled residual (B[2j+1]=-B[2j]+eps*residual) so
+      the paired contribution is A[:,2j]@(eps*residual) -- small and
+      controlled, amplifying max_rel denominator sensitivity (spec §4.3 /
+      plan §3.1). Requires K even.
     """
     if level not in _LEVELS:
         raise ValueError(f"unknown level {level!r}; expected one of {_LEVELS}")
@@ -86,18 +96,59 @@ def make_inputs(level, shape, seed, ref_dtype=np.complex64):
         big_b = complex_normal((K, N), 1e2)
         small_b = complex_normal((K, N), 1e-2)
         B = np.where(mask_b, big_b, small_b).astype(ref_dtype)
-    else:  # cancellation
+    else:  # cancellation (plan §3.1 / spec §3.4)
         if K % 2 != 0:
             raise ValueError(f"cancellation requires even K, got K={K}")
-        A = complex_normal((M, K), 1.0)
-        half = complex_normal((K // 2, N), 1.0)
+        # A[:, 2j+1] = A[:, 2j] (paired equal columns) so the paired
+        # contribution collapses:
+        #   A[:,2j]@B[2j] + A[:,2j+1]@B[2j+1] = A[:,2j]@(B[2j]+B[2j+1])
+        # With B[2j+1] = -B[2j] + eps*residual, this becomes
+        #   A[:,2j] @ (eps * residual)  -- small and controlled (real
+        #   cancellation), while the residual keeps the reference non-zero
+        #   finite (spec §4.3). eps is small enough to amplify BF16
+        #   rounding/cancellation risk but large enough to avoid an
+        #   all-zero reference.
+        half_A = complex_normal((M, K // 2), 1.0)
+        A = np.empty((M, K), dtype=ref_dtype)
+        A[:, 0::2] = half_A
+        A[:, 1::2] = half_A  # paired equal columns
+        half_B = complex_normal((K // 2, N), 1.0)
+        residual = complex_normal((K // 2, N), 1.0)
         B = np.empty((K, N), dtype=ref_dtype)
-        B[0::2] = half
-        B[1::2] = -half
+        B[0::2] = half_B
+        B[1::2] = -half_B + CANCELLATION_EPSILON * residual
     return A, B
 
 
-# Per route x dtype policy (spec §5). A threshold of None means "not applicable /
+def cancellation_metrics(shape, seed):
+    """Diagnostic metrics for the cancellation input (plan §3.1).
+
+    Computes the output norm under cancellation vs baseline and returns the
+    fields that must be recorded in the numerical output so the cancellation
+    is independently auditable:
+
+      - input_construction_version: identifies the A/B pairing scheme
+      - cancellation_epsilon: the controlled-residual coefficient
+      - reference_norm: ||A_cancel @ B_cancel||_F (the small, non-zero output)
+      - baseline_norm:  ||A_base   @ B_base  ||_F (the reference magnitude)
+      - cancellation_ratio: reference_norm / baseline_norm (must be << 0.1)
+
+    GPU-free: uses numpy CPU matmul only.
+    """
+    A_base, B_base = make_inputs("baseline", shape, seed)
+    baseline_norm = float(np.linalg.norm(A_base @ B_base))
+    A_cancel, B_cancel = make_inputs("cancellation", shape, seed)
+    reference_norm = float(np.linalg.norm(A_cancel @ B_cancel))
+    ratio = reference_norm / baseline_norm if baseline_norm > 0 else float("inf")
+    return {
+        "input_construction_version": INPUT_CONSTRUCTION_VERSION,
+        "cancellation_epsilon": CANCELLATION_EPSILON,
+        "reference_norm": reference_norm,
+        "baseline_norm": baseline_norm,
+        "cancellation_ratio": ratio,
+    }
+
+
 # diagnostic only" (e.g. max_abs for region_fused/cutlass where output scale varies
 # with dynamic range). nan_inf is always enforced.
 POLICIES = {
@@ -242,7 +293,7 @@ def _as_expected_keys(expected_counts, rows):
     return {_cell_key(k) if isinstance(k, dict) else k for k in expected_counts}
 
 
-def aggregate(rows, expected_counts, case_hashes, legit_not_run):
+def aggregate(rows, expected_counts, case_hashes, legit_not_run, shape_drift=False):
     """Fail-closed aggregation -> numerical_validation.json payload (spec §6 3.3).
 
     expected_counts: either a set of canonical cell keys (route, dtype, shape, level,
@@ -261,6 +312,10 @@ def aggregate(rows, expected_counts, case_hashes, legit_not_run):
     ``legit_not_run`` is informational only -- recorded as a fail_closed_reason but
     does NOT change the verdict (a legit NOT_RUN is still an UNKNOWN cell).
 
+    ``shape_drift`` (plan §3.2 / §3.11): when True, the hardcoded SHAPES constant
+    no longer matches ``contraction_shapes.csv``. The required numerical cells
+    are stale -> overall UNKNOWN (do NOT silently re-hash and continue).
+
     JSON accounting per route: ``expected / actual / missing / extra`` cell counts
     where ``actual`` = measured keys that are in the expected set, ``missing`` =
     expected keys without a matching measured row, ``extra`` = measured keys not in
@@ -273,6 +328,12 @@ def aggregate(rows, expected_counts, case_hashes, legit_not_run):
     hash_mismatch = any(v == "MISMATCH" for v in case_hashes.values())
     if hash_mismatch:
         fail_closed_reasons.append("case-binding hash mismatch")
+
+    if shape_drift:
+        fail_closed_reasons.append(
+            "shape drift: SHAPES != contraction_shapes.csv (required numerical "
+            "cells no longer match the contraction artifact)"
+        )
 
     # duplicate detection (plan §6 3.1: duplicate key = schema error)
     seen = set()
@@ -351,6 +412,8 @@ def aggregate(rows, expected_counts, case_hashes, legit_not_run):
 
     if duplicate_count:
         overall = "INCONCLUSIVE"
+    elif shape_drift:
+        overall = "INCONCLUSIVE"  # required cells stale -> cannot validate
     elif hash_mismatch or any(s == "UNKNOWN" for s in statuses):
         overall = "INCONCLUSIVE"
     elif any(s == "FAIL" for s in statuses):
@@ -410,6 +473,55 @@ DTYPES_BY_ROUTE = {
     "cutlass_4m_single": ("C16BF",),
 }
 
+
+def load_current_shapes(csv_path=None):
+    """Stdlib-only loader for actual-large contraction shapes (plan §3.2 / §3.11).
+
+    Reads ``contraction_shapes.csv``, applies the SAME actual-large policy as
+    ``cublaslt.load_c1_c2_shapes`` (``bytes >= 64 MiB``), dedupes by (M,N,K),
+    and returns a list of (M,N,K) tuples in first-seen order. Pure stdlib
+    (csv + os) -- no numpy/CUDA -- so pure-function tests work GPU-free.
+
+    Shape drift (CSV updated while SHAPES stays stale) is detected by
+    ``shapes_in_sync()`` and forces the numerical route to UNKNOWN.
+    """
+    if csv_path is None:
+        csv_path = os.path.join(OUT_DIR, "contraction_shapes.csv")
+    min_bytes = 64 << 20  # 64 MiB -- matches cublaslt.load_c1_c2_shapes default
+    seen = set()
+    shapes = []
+    with open(csv_path, newline="") as fh:
+        rd = csv.DictReader(fh)
+        for raw in rd:
+            try:
+                b = int(raw["bytes"])
+                if b < min_bytes:
+                    continue
+                m, n, k = int(raw["M"]), int(raw["N"]), int(raw["K"])
+            except (KeyError, ValueError, TypeError):
+                continue
+            key = (m, n, k)
+            if key not in seen:
+                seen.add(key)
+                shapes.append(key)
+    return shapes
+
+
+def shapes_in_sync():
+    """Check that SHAPES matches the current contraction artifact (plan §3.2).
+
+    Returns True iff ``set(SHAPES) == set(load_current_shapes())``; False on
+    drift or if the CSV is unreadable. Shape drift -> UNKNOWN: the required
+    numerical cells no longer match the contraction artifact, so the case
+    cannot be validated (do NOT silently re-hash and continue).
+    """
+    try:
+        loaded = load_current_shapes()
+    except (OSError, ValueError):
+        return False
+    return set(SHAPES) == set(loaded)
+
+
 _CSV_COLUMNS = [
     "route",
     "M",
@@ -425,7 +537,7 @@ _CSV_COLUMNS = [
     "n_elems",
     "policy_pass",
     "reference_dtype",
-    "source_hash",
+    "cell_key_hash",
     # ``source`` (spec §6 3.3) makes the CSV self-describing about each row's
     # origin: a real measurement ("measured"), a diagnostic row
     # ("diagnostic:small-contract"), a reused artifact ("task8_reuse"), or a
@@ -438,7 +550,15 @@ _CSV_COLUMNS = [
 ]
 
 
-def source_hash(route, dtype, shape, level, seed):
+def cell_key_hash(route, dtype, shape, level, seed):
+    """SHA256[:16] of the cell-key tuple (route|dtype|shape|level|seed).
+
+    This is a cell-metadata hash (identifies which numerical cell a row
+    belongs to), NOT a source-artifact hash. Renamed from ``source_hash``
+    so the field name no longer implies it binds the measurement source
+    (plan §3.3). The actual source-artifact hashes live in the JSON
+    ``case_binding`` (Task 5's full hash binding).
+    """
     key = f"{route}|{dtype}|{shape}|{level}|{seed}"
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
@@ -468,9 +588,9 @@ def write_csv(path, rows):
             rel_l2 = r.get("relative_l2")
             max_abs = r.get("max_abs")
             max_rel = r.get("max_rel")
-            sh = r.get("source_hash")
+            sh = r.get("cell_key_hash")
             if not sh:
-                sh = source_hash(route, dtype, shape or (), level, seed)
+                sh = cell_key_hash(route, dtype, shape or (), level, seed)
             # source defaults to "measured" for real measured rows; NOT_RUN rows
             # carry "not_run:<reason>"; diagnostic rows carry "diagnostic:*".
             source = r.get("source") or "measured"
@@ -961,6 +1081,9 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
       and recompute the fail-closed aggregate. NO GPU measurement.
     """
     legit_not_run = _legit_not_run_reasons()
+    # Shape drift check (plan §3.2 / §3.11): if SHAPES no longer matches
+    # contraction_shapes.csv, the required numerical cells are stale -> UNKNOWN.
+    drift = not shapes_in_sync()
 
     if regen_no_gpu:
         existing_csv = os.path.join(OUT_DIR, "numerical_validation.csv")
@@ -978,7 +1101,9 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
         # Emit explicit NOT_RUN rows for required cells with no CSV row at all
         # (region_fused full-anchor; spec §6 3.3). Makes the CSV self-describing.
         rows.extend(_emit_not_run_rows(rows, required_cell_keys()))
-        payload = aggregate(rows, required_cell_keys(), _case_hashes(), legit_not_run)
+        payload = aggregate(
+            rows, required_cell_keys(), _case_hashes(), legit_not_run, shape_drift=drift
+        )
         write_csv(os.path.join(OUT_DIR, "numerical_validation.csv"), rows)
         write_json(os.path.join(OUT_DIR, "numerical_validation.json"), payload)
         return payload
@@ -1004,7 +1129,9 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
     # (region_fused full-anchor; spec §6 3.3). Makes the CSV self-describing.
     rows.extend(_emit_not_run_rows(rows, required_cell_keys()))
 
-    payload = aggregate(rows, required_cell_keys(), _case_hashes(), legit_not_run)
+    payload = aggregate(
+        rows, required_cell_keys(), _case_hashes(), legit_not_run, shape_drift=drift
+    )
     write_csv(os.path.join(OUT_DIR, "numerical_validation.csv"), rows)
     write_json(os.path.join(OUT_DIR, "numerical_validation.json"), payload)
     return payload

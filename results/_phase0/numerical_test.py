@@ -47,11 +47,17 @@ def test_make_inputs_mixed_scale_dynamic_range():
 def test_make_inputs_cancellation_paired_rows():
     from results._phase0.numerical import make_inputs
 
-    _, B = make_inputs("cancellation", (64, 64, 64), seed=2)
+    A, B = make_inputs("cancellation", (64, 64, 64), seed=2)
     K = 64
-    # B[2j+1] == -B[2j] for paired rows (cancellation structure, spec §4.3)
-    assert np.allclose(B[1], -B[0])
-    assert np.allclose(B[K - 1], -B[K - 2])
+    # A[:, 2j+1] == A[:, 2j] (paired equal columns, plan §3.1 / spec §3.4)
+    assert np.allclose(A[:, 1], A[:, 0])
+    assert np.allclose(A[:, K - 1], A[:, K - 2])
+    # B[2j+1] ≈ -B[2j] (paired negative + controlled residual so the
+    # paired contribution cancels while keeping the reference non-zero).
+    # The residual (eps * N(0,1) ~ 1e-3) is small, so B[2j+1] + B[2j] ≈ 0
+    # but NOT exactly zero (prevents all-zero reference).
+    assert np.allclose(B[1], -B[0], atol=0.1)
+    assert np.allclose(B[K - 1], -B[K - 2], atol=0.1)
 
 
 def test_make_inputs_deterministic_in_seed():
@@ -201,7 +207,7 @@ def test_write_csv_header_and_rows(tmp_path):
     write_csv(str(p), [{"route": "planar", "M": 8, "relative_l2": 1e-4}])
     text = p.read_text()
     assert text.startswith(
-        "route,M,N,K,out_dtype,dynamic_range_level,seed,relative_l2,max_abs,max_rel,nan_inf,n_elems,policy_pass,reference_dtype,source_hash,source"
+        "route,M,N,K,out_dtype,dynamic_range_level,seed,relative_l2,max_abs,max_rel,nan_inf,n_elems,policy_pass,reference_dtype,cell_key_hash,source"
     )
     assert "planar" in text
 
