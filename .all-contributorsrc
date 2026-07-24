@@ -392,7 +392,11 @@
       "avatar_url": "https://avatars.githubusercontent.com/u/136054857?v=4",
       "profile": "https://github.com/QuiXamii",
       "contributions": [
-        "example"
+        "example",
+        "code",
+        "doc",
+        "test",
+        "tutorial"
       ]
     },
     {
