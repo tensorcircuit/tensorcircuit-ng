@@ -26,8 +26,8 @@ from results._phase0.manifest import (
 def test_schema_constants_complete():
     assert SCHEMA_VERSION == "manifest-v1"
     # every canonical criterion has a required-artifact entry (Task 1: the 4
-    # C2 layers replaced the old "C2" alias; CUTLASS_SM80_FALLBACK_CAPABILITY
-    # is intentionally absent -- finding 3.7 / Task 5 adds it).
+    # C2 layers replaced the old "C2" alias; Task 5: CUTLASS_SM80_FALLBACK_CAPABILITY
+    # now maps to the same cutlass_sm120_4m.json artifact -- finding 3.7 fix).
     for c in (
         "C1",
         "C2_REGION_KERNEL_FEASIBILITY",
@@ -38,6 +38,7 @@ def test_schema_constants_complete():
         "C3_PLANAR_FULL_MATRIX",
         "C3_GROUPED",
         "CUTLASS_SM120_4M",
+        "CUTLASS_SM80_FALLBACK_CAPABILITY",
         "REGION_PROTOTYPE",
         "NUMERICAL",
     ):
@@ -53,8 +54,10 @@ def test_schema_constants_complete():
     assert "c2_judgment" in C2_CHECKPOINT_KEYS, C2_CHECKPOINT_KEYS
     assert len(C2_CHECKPOINT_KEYS) == 7, C2_CHECKPOINT_KEYS
     assert C2_FIXED_PATH_KEYS["c2_judgment"] == "c2_judgment.json"
-    # numerical: 3 hashed bindings + presence-only required files
-    assert len(NUMERICAL_BINDINGS) == 3, NUMERICAL_BINDINGS
+    # numerical: ALL 9 route-source files hash-bound (Task 5 / finding 3.2 fix;
+    # no presence-only files remain). The 6 NUMERICAL_REQUIRED_FILES are a
+    # subset (the previously presence-only fail-open surface).
+    assert len(NUMERICAL_BINDINGS) == 9, NUMERICAL_BINDINGS
     assert "numerical_validation.csv" in NUMERICAL_REQUIRED_FILES
     assert "cutlass_sm120_4m.json" in NUMERICAL_REQUIRED_FILES
 
@@ -248,9 +251,8 @@ def test_validate_numerical_binding(tmp_path):
     import hashlib
     from results._phase0.manifest import _validate_numerical_binding
 
-    # Build a fixture satisfying ALL required numerical bindings: 3 hashed
-    # bindings (edge_map / prototype / contraction_shapes) + 6 presence-only
-    # required files (numerical CSV + route source artifacts).
+    # Build a fixture satisfying ALL 9 required numerical bindings (Task 5 /
+    # finding 3.2: every route-source file is now hash-bound, no presence-only).
     contents = {
         "edge_map": b"edge-data",
         "prototype": b"proto-data",
@@ -268,17 +270,27 @@ def test_validate_numerical_binding(tmp_path):
         "cutlass_sm120_4m.json",
     ):
         (tmp_path / f).write_text("x")
+    x_hash = hashlib.sha256(b"x").hexdigest()
     ok = {
         "case_binding": {
-            "edge_map_hash": hashlib.sha256(contents["edge_map"]).hexdigest()[:16],
-            "prototype_hash": hashlib.sha256(contents["prototype"]).hexdigest()[:16],
-            "contraction_shapes_hash": hashlib.sha256(
+            "algorithm": "sha256",
+            "edge_map_sha256": hashlib.sha256(contents["edge_map"]).hexdigest(),
+            "region_prototype_sha256": hashlib.sha256(
+                contents["prototype"]
+            ).hexdigest(),
+            "contraction_shapes_sha256": hashlib.sha256(
                 contents["contraction_shapes"]
-            ).hexdigest()[:16],
+            ).hexdigest(),
+            "cublaslt_planar_capability_sha256": x_hash,
+            "cublaslt_full_matrix_sha256": x_hash,
+            "cublaslt_grouped_capability_sha256": x_hash,
+            "cublaslt_grouped_rows_sha256": x_hash,
+            "cutlass_4m_sha256": x_hash,
+            "numerical_csv_sha256": x_hash,
         }
     }
     assert _validate_numerical_binding(str(tmp_path), ok) == "OK"
-    bad = {"case_binding": {**ok["case_binding"], "edge_map_hash": "deadbeef" * 2}}
+    bad = {"case_binding": {**ok["case_binding"], "edge_map_sha256": "0" * 64}}
     assert _validate_numerical_binding(str(tmp_path), bad) == "MISMATCH"
     assert _validate_numerical_binding(str(tmp_path), {}) == "UNAVAILABLE"
 
@@ -383,7 +395,7 @@ def test_build_manifest_schema_and_stability(tmp_path):
     (tmp_path / "cutlass_sm120_4m.json").write_text("{}")
     (tmp_path / "region_prototype.json").write_text("{}")
     (tmp_path / "numerical_validation.json").write_text(
-        json.dumps({"case_binding": {"edge_map_hash": "0" * 16}})
+        json.dumps({"case_binding": {"edge_map_sha256": "0" * 64}})
     )
     (tmp_path / "contraction_shapes.csv").write_text("s")
     (tmp_path / "c2_tileability.csv").write_text("t")
@@ -531,16 +543,16 @@ def test_validate_numerical_binding_unavailable_when_any_required_binding_missin
         _validate_numerical_binding,
     )
 
-    # Provide ONLY the edge_map binding; region_prototype.json +
-    # contraction_shapes.csv are absent (so their bindings cannot be validated).
+    # Provide ONLY the edge_map binding; the other 8 required bindings are
+    # absent (so their bindings cannot be validated).
     content = b"edge-data"
-    short = hashlib.sha256(content).hexdigest()[:16]
+    full = hashlib.sha256(content).hexdigest()
     (tmp_path / "c1_c2_edge_map.json").write_bytes(content)
-    numerical_json = {"case_binding": {"edge_map_hash": short}}
+    numerical_json = {"case_binding": {"edge_map_sha256": full}}
 
-    assert len(NUMERICAL_BINDINGS) >= 3, NUMERICAL_BINDINGS  # sanity
+    assert len(NUMERICAL_BINDINGS) >= 9, NUMERICAL_BINDINGS  # sanity
     result = _validate_numerical_binding(str(tmp_path), numerical_json)
-    # 1-of-3 required bindings present -> UNAVAILABLE
+    # 1-of-9 required bindings present -> UNAVAILABLE
     assert result == "UNAVAILABLE", result
 
 
@@ -633,7 +645,7 @@ def test_build_manifest_recomputes_routes_after_checkpoint_downgrade(tmp_path):
     (tmp_path / "cutlass_sm120_4m.json").write_text("{}")
     (tmp_path / "region_prototype.json").write_text("{}")
     (tmp_path / "numerical_validation.json").write_text(
-        json.dumps({"case_binding": {"edge_map_hash": "0" * 16}})
+        json.dumps({"case_binding": {"edge_map_sha256": "0" * 64}})
     )
     (tmp_path / "contraction_shapes.csv").write_text("s")
     (tmp_path / "c2_tileability.csv").write_text("t")
@@ -783,17 +795,25 @@ def test_build_manifest_self_consistent_no_unknown_plus_viable(tmp_path):
     ):
         (tmp_path / f).write_text("x")
     (tmp_path / "cublaslt_full_matrix.csv").write_text("h\n1\n")
-    # numerical binding: all 3 hashes present but edge_map_hash MISMATCHES -> MISMATCH
+    # numerical binding: all 9 hashes present but edge_map_sha256 MISMATCHES
     (tmp_path / "contraction_shapes.csv").write_bytes(b"shapes")
+    x_hash = hashlib.sha256(b"x").hexdigest()
     (tmp_path / "numerical_validation.json").write_text(
         json.dumps(
             {
                 "case_binding": {
-                    "edge_map_hash": "0" * 16,  # MISMATCH
-                    "prototype_hash": hashlib.sha256(b"proto").hexdigest()[:16],
-                    "contraction_shapes_hash": hashlib.sha256(b"shapes").hexdigest()[
-                        :16
-                    ],
+                    "algorithm": "sha256",
+                    "edge_map_sha256": "0" * 64,  # MISMATCH
+                    "region_prototype_sha256": hashlib.sha256(b"proto").hexdigest(),
+                    "contraction_shapes_sha256": hashlib.sha256(b"shapes").hexdigest(),
+                    "cublaslt_planar_capability_sha256": x_hash,
+                    "cublaslt_full_matrix_sha256": hashlib.sha256(
+                        b"h\n1\n"
+                    ).hexdigest(),
+                    "cublaslt_grouped_capability_sha256": x_hash,
+                    "cublaslt_grouped_rows_sha256": x_hash,
+                    "cutlass_4m_sha256": x_hash,
+                    "numerical_csv_sha256": x_hash,
                 },
                 "per_route": [
                     {"route": "planar", "criterion": "PASS"},
@@ -946,17 +966,25 @@ def test_build_manifest_c2_checkpoint_cascade_closes_region_fused_gap(tmp_path):
     ):
         (tmp_path / f).write_text("x")
     (tmp_path / "cublaslt_full_matrix.csv").write_text("h\n1\n")
-    # numerical binding: all 3 hashes present AND MATCHING -> OK (only C2 broken).
+    # numerical binding: all 9 hashes present AND MATCHING -> OK (only C2 broken).
     (tmp_path / "contraction_shapes.csv").write_bytes(b"shapes")
+    x_hash = hashlib.sha256(b"x").hexdigest()
     (tmp_path / "numerical_validation.json").write_text(
         json.dumps(
             {
                 "case_binding": {
-                    "edge_map_hash": hashlib.sha256(b"edge").hexdigest()[:16],
-                    "prototype_hash": hashlib.sha256(b"proto").hexdigest()[:16],
-                    "contraction_shapes_hash": hashlib.sha256(b"shapes").hexdigest()[
-                        :16
-                    ],
+                    "algorithm": "sha256",
+                    "edge_map_sha256": hashlib.sha256(b"edge").hexdigest(),
+                    "region_prototype_sha256": hashlib.sha256(b"proto").hexdigest(),
+                    "contraction_shapes_sha256": hashlib.sha256(b"shapes").hexdigest(),
+                    "cublaslt_planar_capability_sha256": x_hash,
+                    "cublaslt_full_matrix_sha256": hashlib.sha256(
+                        b"h\n1\n"
+                    ).hexdigest(),
+                    "cublaslt_grouped_capability_sha256": x_hash,
+                    "cublaslt_grouped_rows_sha256": x_hash,
+                    "cutlass_4m_sha256": x_hash,
+                    "numerical_csv_sha256": x_hash,
                 },
                 "per_route": [
                     {"route": "region_fused", "criterion": "PASS"},
@@ -1055,8 +1083,8 @@ def test_validate_numerical_binding_mismatch_on_route_source_mutation(tmp_path):
         _validate_numerical_binding,
     )
 
-    # Build a full staging fixture: 3 hashed bindings matching + 6 presence-only
-    # files present.
+    # Build a full staging fixture: all 9 hash bindings matching (Task 5 / 3.2
+    # fix -- the 6 previously presence-only files are now hash-bound).
     contents = {
         "edge_map": b"edge-data",
         "prototype": b"proto-data",
@@ -1069,20 +1097,31 @@ def test_validate_numerical_binding_mismatch_on_route_source_mutation(tmp_path):
     for f in NUMERICAL_REQUIRED_FILES:
         presence_contents[f] = b"original-content"
         (tmp_path / f).write_bytes(presence_contents[f])
+    pc_hash = hashlib.sha256(b"original-content").hexdigest()
     ok_binding = {
         "case_binding": {
-            "edge_map_hash": hashlib.sha256(contents["edge_map"]).hexdigest()[:16],
-            "prototype_hash": hashlib.sha256(contents["prototype"]).hexdigest()[:16],
-            "contraction_shapes_hash": hashlib.sha256(
+            "algorithm": "sha256",
+            "edge_map_sha256": hashlib.sha256(contents["edge_map"]).hexdigest(),
+            "region_prototype_sha256": hashlib.sha256(
+                contents["prototype"]
+            ).hexdigest(),
+            "contraction_shapes_sha256": hashlib.sha256(
                 contents["contraction_shapes"]
-            ).hexdigest()[:16],
+            ).hexdigest(),
+            "cublaslt_planar_capability_sha256": pc_hash,
+            "cublaslt_full_matrix_sha256": pc_hash,
+            "cublaslt_grouped_capability_sha256": pc_hash,
+            "cublaslt_grouped_rows_sha256": pc_hash,
+            "cutlass_4m_sha256": pc_hash,
+            "numerical_csv_sha256": pc_hash,
         }
     }
     # Sanity: the fixture is OK before mutation.
     assert _validate_numerical_binding(str(tmp_path), ok_binding) == "OK"
 
-    # For each of the 6 presence-only files, mutate its content and assert
-    # MISMATCH. Current code only checks presence -> returns OK (RED).
+    # For each of the 6 previously-presence-only files, mutate its content and
+    # assert MISMATCH. Before the 3.2 fix the code only checked presence ->
+    # returned OK (RED); now every file is hash-bound -> MISMATCH.
     for fname in NUMERICAL_REQUIRED_FILES:
         # Restore all presence-only files to original state.
         for f, c in presence_contents.items():

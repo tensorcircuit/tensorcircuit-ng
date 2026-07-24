@@ -980,21 +980,53 @@ def collect_cutlass(level, seed):
 
 
 def _case_hashes():
-    """Read existing artifact hashes for case binding (spec §6.2). Missing files -> empty."""
-    hashes = {}
-    for name, fname in [
-        ("edge_map_hash", "c1_c2_edge_map.json"),
-        ("prototype_hash", "region_prototype.json"),
-        ("contraction_shapes_hash", "contraction_shapes.csv"),
-    ]:
+    """Read ALL 9 route-source artifact hashes for case binding (plan §5.2 /
+    spec §4.4 -- full SHA256 binding of every numerical source file).
+
+    Returns a dict keyed by the ``_sha256`` binding key names (matching
+    ``manifest.NUMERICAL_BINDINGS``) with full 64-hex-char sha256 values, plus
+    an ``"algorithm": "sha256"`` metadata field documenting the algorithm +
+    length (spec §4.4: no unexplained truncation). Missing files -> empty
+    string for that key (the manifest validator treats an empty expected hash
+    as UNAVAILABLE).
+
+    Sanitization ordering invariant (plan §5.4): this function MUST be called
+    AFTER ``write_csv`` (so ``numerical_csv_sha256`` reflects the final CSV
+    bytes) and AFTER source-artifact sanitization (so all 9 hashes reflect
+    POST-sanitization file bytes). The canonical pipeline is::
+
+      sanitize source artifacts
+        -> generate/recompute numerical CSV/JSON (write_csv THEN _case_hashes)
+        -> compute final bindings (this function)
+        -> generate gonogo
+        -> generate manifest
+
+    The sanitizer must NOT mask a source content change by only rewriting the
+    expected hash -- for semantic changes the producer MUST be re-run. For
+    privacy-only sanitization (path/name tokens, no numerical semantics) the
+    binding hashes are recomputed from the post-sanitized files so the binding
+    stays consistent (``sanitize.rehash_numerical_binding``).
+    """
+    # (binding key) -> (file under OUT_DIR). Must match manifest.NUMERICAL_BINDINGS.
+    sources = [
+        ("edge_map_sha256", "c1_c2_edge_map.json"),
+        ("region_prototype_sha256", "region_prototype.json"),
+        ("contraction_shapes_sha256", "contraction_shapes.csv"),
+        ("cublaslt_planar_capability_sha256", "cublaslt_planar_capability.json"),
+        ("cublaslt_full_matrix_sha256", "cublaslt_full_matrix.csv"),
+        ("cublaslt_grouped_capability_sha256", "cublaslt_grouped_capability.json"),
+        ("cublaslt_grouped_rows_sha256", "cublaslt_grouped.csv"),
+        ("cutlass_4m_sha256", "cutlass_sm120_4m.json"),
+        ("numerical_csv_sha256", "numerical_validation.csv"),
+    ]
+    hashes = {"algorithm": "sha256"}
+    for hash_key, fname in sources:
         p = os.path.join(OUT_DIR, fname)
         if os.path.exists(p):
-            import hashlib as _hl
-
             with open(p, "rb") as _fh:
-                hashes[name] = _hl.sha256(_fh.read()).hexdigest()[:16]
+                hashes[hash_key] = hashlib.sha256(_fh.read()).hexdigest()
         else:
-            hashes[name] = ""
+            hashes[hash_key] = ""
     return hashes
 
 
@@ -1189,10 +1221,12 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
         # cells) don't go through a collector, so they are enriched here.
         # collect_cutlass rows are already enriched (idempotent skip).
         rows = [_enrich_cancellation_metrics(r) for r in rows]
+        # Plan §5.4 ordering: write the CSV BEFORE computing case_binding so
+        # numerical_csv_sha256 reflects the final on-disk CSV bytes.
+        write_csv(os.path.join(OUT_DIR, "numerical_validation.csv"), rows)
         payload = aggregate(
             rows, required_cell_keys(), _case_hashes(), legit_not_run, shape_drift=drift
         )
-        write_csv(os.path.join(OUT_DIR, "numerical_validation.csv"), rows)
         write_json(os.path.join(OUT_DIR, "numerical_validation.json"), payload)
         return payload
 
@@ -1217,10 +1251,12 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
     # (region_fused full-anchor; spec §6 3.3). Makes the CSV self-describing.
     rows.extend(_emit_not_run_rows(rows, required_cell_keys()))
 
+    # Plan §5.4 ordering: write the CSV BEFORE computing case_binding so
+    # numerical_csv_sha256 reflects the final on-disk CSV bytes.
+    write_csv(os.path.join(OUT_DIR, "numerical_validation.csv"), rows)
     payload = aggregate(
         rows, required_cell_keys(), _case_hashes(), legit_not_run, shape_drift=drift
     )
-    write_csv(os.path.join(OUT_DIR, "numerical_validation.csv"), rows)
     write_json(os.path.join(OUT_DIR, "numerical_validation.json"), payload)
     return payload
 

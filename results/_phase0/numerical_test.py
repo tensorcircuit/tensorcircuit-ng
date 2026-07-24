@@ -189,7 +189,7 @@ def test_aggregate_hash_mismatch_forces_unknown():
     out = aggregate(
         rows,
         {("planar", "C16BF"): 1},
-        case_hashes={"edge_map_hash": "MISMATCH"},
+        case_hashes={"edge_map_sha256": "MISMATCH"},
         legit_not_run=[],
     )
     assert out["overall_numerical_status"] == "INCONCLUSIVE"

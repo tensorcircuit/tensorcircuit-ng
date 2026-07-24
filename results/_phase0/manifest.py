@@ -15,7 +15,11 @@ import hashlib
 import json
 import os
 
-from results._phase0.verdict_schema import recompute_derived_state
+from results._phase0.verdict_schema import (
+    CRITERIA_NAMES,
+    recompute_derived_state,
+    validate_criteria,
+)
 
 SCHEMA_VERSION = "manifest-v1"
 
@@ -23,8 +27,10 @@ SCHEMA_VERSION = "manifest-v1"
 # Task 1 (plan §1.1): derived from the canonical CRITERIA_NAMES single source
 # of truth. The old "C2" alias is NOT here -- the 4 real C2 layers each map
 # to the shared c2_judgment.json + c2_checkpoint_manifest.json chain.
-# CUTLASS_SM80_FALLBACK_CAPABILITY is intentionally NOT mapped yet (finding 3.7
-# / Task 5 adds it).
+# Task 5 (finding 3.7): CUTLASS_SM80_FALLBACK_CAPABILITY now maps to the SAME
+# cutlass_sm120_4m.json artifact as CUTLASS_SM120_4M -- deleting the shared
+# artifact downgrades BOTH criteria together (plus NUMERICAL via the cutlass
+# source hash in case_binding), so a stale fallback PASS can no longer survive.
 REQUIRED_ARTIFACTS = {
     "C1": ["c1_judgment.json", "c1_default_vs_nofusion.csv"],
     "C2_REGION_KERNEL_FEASIBILITY": [
@@ -44,9 +50,19 @@ REQUIRED_ARTIFACTS = {
     "C3_PLANAR_FULL_MATRIX": ["cublaslt_full_matrix.csv"],
     "C3_GROUPED": ["cublaslt_grouped_capability.json"],
     "CUTLASS_SM120_4M": ["cutlass_sm120_4m.json"],
+    "CUTLASS_SM80_FALLBACK_CAPABILITY": ["cutlass_sm120_4m.json"],
     "REGION_PROTOTYPE": ["region_prototype.json"],
     "NUMERICAL": ["numerical_validation.json"],
 }
+
+# Task 5 fold-in (I2): REQUIRED_ARTIFACTS must be a subset of the canonical
+# CRITERIA_NAMES (plan §1.1 single source of truth). This assertion prevents
+# the required-artifact map from drifting to criterion names that don't exist
+# in the canonical schema.
+assert set(REQUIRED_ARTIFACTS).issubset(set(CRITERIA_NAMES)), (
+    "REQUIRED_ARTIFACTS keys must all be canonical CRITERIA_NAMES; "
+    f"extra: {set(REQUIRED_ARTIFACTS) - set(CRITERIA_NAMES)}"
+)
 
 # driving artifacts hashed into inputs{} (files + dirs expanded per-file)
 INPUT_ARTIFACT_FILES = [
@@ -92,17 +108,41 @@ C2_PATH_KEY_ALIASES = {"allocation_audit": "audit"}
 # Keys whose source file is a fixed artifact under base (not in artifact_paths).
 C2_FIXED_PATH_KEYS = {"c2_judgment": "c2_judgment.json"}
 
-# NUMERICAL case_binding hashes (sha[:16]): (file under base) -> binding key.
-# ALL must be present (hash recorded) AND match for OK.
+# Numerical case_binding hashes (plan §5.2 / spec §4.4 -- full SHA256 binding
+# of ALL 9 route-source files). EVERY entry is hash-checked (no presence-only
+# files). The hash_key suffix ``_sha256`` documents the algorithm; the
+# ``case_binding["algorithm"]`` field in numerical_validation.json documents
+# the full (non-truncated) 64-hex-char length (spec §4.4: no unexplained
+# truncation). Missing expected hash / missing file -> UNAVAILABLE; content
+# mismatch -> MISMATCH (plan §5.3).
 NUMERICAL_BINDINGS = {
-    "edge_map": ("c1_c2_edge_map.json", "edge_map_hash"),
-    "prototype": ("region_prototype.json", "prototype_hash"),
-    "contraction_shapes": ("contraction_shapes.csv", "contraction_shapes_hash"),
+    "edge_map": ("c1_c2_edge_map.json", "edge_map_sha256"),
+    "region_prototype": ("region_prototype.json", "region_prototype_sha256"),
+    "contraction_shapes": ("contraction_shapes.csv", "contraction_shapes_sha256"),
+    "cublaslt_planar_capability": (
+        "cublaslt_planar_capability.json",
+        "cublaslt_planar_capability_sha256",
+    ),
+    "cublaslt_full_matrix": (
+        "cublaslt_full_matrix.csv",
+        "cublaslt_full_matrix_sha256",
+    ),
+    "cublaslt_grouped_capability": (
+        "cublaslt_grouped_capability.json",
+        "cublaslt_grouped_capability_sha256",
+    ),
+    "cublaslt_grouped_rows": (
+        "cublaslt_grouped.csv",
+        "cublaslt_grouped_rows_sha256",
+    ),
+    "cutlass_4m": ("cutlass_sm120_4m.json", "cutlass_4m_sha256"),
+    "numerical_csv": ("numerical_validation.csv", "numerical_csv_sha256"),
 }
 
-# Additional required numerical source files (plan §9 6.1: "route-specific
-# source artifacts" + "numerical CSV"). case_binding does NOT record hashes for
-# these, so they are presence-only checks. Missing any -> UNAVAILABLE.
+# The 6 files that were PREVIOUSLY presence-only (finding 3.2 fail-open
+# surface). They are now fully hash-bound via NUMERICAL_BINDINGS above; this
+# list is kept for the 3.2 mutation-test iteration and documents which files
+# were the original fail-open gap.
 NUMERICAL_REQUIRED_FILES = [
     "numerical_validation.csv",
     "cublaslt_planar_capability.json",
@@ -122,6 +162,24 @@ def _hash_file(path):
         for chunk in iter(lambda: f.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()[:16]
+
+
+def _hash_file_full(path):
+    """Full sha256 (64 hex chars) of file bytes; None if missing.
+
+    Used by ``_validate_numerical_binding`` for the 9 route-source hashes in
+    ``case_binding`` (plan §5.2 / spec §4.4). Full (non-truncated) sha256 is
+    recorded so the ``_sha256`` key suffix is literal and there is no
+    unexplained truncation. The manifest's provenance ``inputs``/``outputs``
+    hashes still use the ``_hash_file`` (sha256[:16]) helper for brevity.
+    """
+    if not os.path.exists(path):
+        return None
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _hash_dir(dir_path):
@@ -216,20 +274,20 @@ def _validate_c2_checkpoint(base, c2_judgment, c2_checkpoint):
 
 
 def _validate_numerical_binding(base, numerical_json):
-    """Re-hash numerical case_binding source files; compare to recorded sha[:16]
-    (plan §9 6.1 / spec §3.3.1 -- full required binding, fail-closed).
+    """Re-hash ALL 9 numerical case_binding source files; compare to recorded
+    full sha256 (plan §5.2-5.3 / spec §3.2 / §4.4 -- full required binding,
+    fail-closed).
 
-    Requires ALL of:
-      - case_binding hashes for edge_map / prototype / contraction_shapes
-        (present AND match)
-      - presence of route-specific source artifacts + numerical CSV
-        (NUMERICAL_REQUIRED_FILES; no hash recorded -> presence-only)
+    Every entry in ``NUMERICAL_BINDINGS`` (the 3 structural sources + the 6
+    route-specific sources + the numerical CSV) is hash-checked. There are NO
+    presence-only files (finding 3.2 fix): mutating any of the 6 previously
+    presence-only files now produces MISMATCH.
 
     Returns:
-      OK          -- all required hashes present + match AND all required files
-                     present.
+      OK          -- all 9 required hashes present + match AND all 9 source
+                     files present.
       UNAVAILABLE -- any required hash missing from case_binding, any required
-                     file absent, or case_binding itself absent/malformed.
+                     source file absent, or case_binding itself absent/malformed.
       MISMATCH    -- all required hashes present but at least one differs from
                      the on-disk source file.
 
@@ -246,16 +304,14 @@ def _validate_numerical_binding(base, numerical_json):
             return "UNAVAILABLE"
     # Phase 2: every required source file must exist. Any absent -> UNAVAILABLE.
     for _name, (rel, _hash_key) in NUMERICAL_BINDINGS.items():
-        if _hash_file(os.path.join(base, rel)) is None:
+        if _hash_file_full(os.path.join(base, rel)) is None:
             return "UNAVAILABLE"
-    for rel in NUMERICAL_REQUIRED_FILES:
-        if not os.path.exists(os.path.join(base, rel)):
-            return "UNAVAILABLE"
-    # Phase 3: every recorded hash must match the on-disk file. Any diff -> MISMATCH.
+    # Phase 3: every recorded hash must match the on-disk file (full sha256).
+    # Any diff -> MISMATCH.
     for _name, (rel, hash_key) in NUMERICAL_BINDINGS.items():
         exp = binding.get(hash_key)
-        actual = _hash_file(os.path.join(base, rel))
-        if actual is None or actual != exp[:16]:
+        actual = _hash_file_full(os.path.join(base, rel))
+        if actual is None or actual != exp:
             return "MISMATCH"
     return "OK"
 
@@ -403,6 +459,7 @@ def build_manifest(base, generated_at=None):
 
     Pipeline (plan §9 6.3):
       load gonogo native criteria
+        -> schema-v3 validation (validate_criteria -- Task 5 fold-in I1)
         -> presence validation
         -> binding/hash validation
         -> validated criteria/numerical
@@ -427,8 +484,18 @@ def build_manifest(base, generated_at=None):
 
     # Stage 1: load gonogo native criteria.
     gonogo_criteria = gonogo.get("criteria", {})
-    # Stage 2: presence validation (missing artifacts -> NOT_RUN).
-    criteria = _presence_check(gonogo_criteria, base)
+    # Stage 2a: schema-v3 validation (Task 5 fold-in I1 -- DRY gap: gonogo's
+    # aggregate_two_layer already validates via validate_criteria; manifest
+    # didn't). This scrubs detail tokens to UNKNOWN, fills missing required
+    # criteria as NOT_RUN, validates C2_CANONICAL against the rollup, and sets
+    # the C2 compat alias = C2_CANONICAL. Run BEFORE _apply_checkpoint_validation
+    # so the C2 binding cascade (which downgrades the whole C2 family to
+    # UNKNOWN on UNAVAILABLE/MISMATCH) takes effect AFTER the alias is set.
+    # Verify honest state preserved: current artifacts are UNKNOWN/FAIL ->
+    # validate_criteria keeps them UNKNOWN/INCONCLUSIVE (no promotion).
+    criteria, _validation_notes = validate_criteria(gonogo_criteria)
+    # Stage 2b: presence validation (missing artifacts -> NOT_RUN).
+    criteria = _presence_check(criteria, base)
     # Stage 3: binding/hash validation.
     c2_status = _validate_c2_checkpoint(base, c2_j, c2_ckpt)
     num_status = _validate_numerical_binding(base, numerical)

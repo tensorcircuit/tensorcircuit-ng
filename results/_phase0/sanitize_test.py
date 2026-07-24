@@ -414,7 +414,59 @@ class TestRehashC2Checkpoint:
 
 
 class TestRehashNumericalBinding:
-    """rehash_numerical_binding updates case_binding hashes after sanitization."""
+    """rehash_numerical_binding updates case_binding hashes after sanitization.
+
+    Task 5: the binding now covers ALL 9 route-source files (full sha256, new
+    ``_sha256`` key names matching ``manifest.NUMERICAL_BINDINGS``). These
+    tests create all 9 source files and verify the rehash handles the full set.
+    """
+
+    # (filename, content) for all 9 NUMERICAL_BINDINGS source files.
+    _FILES = [
+        ("c1_c2_edge_map.json", '{"edge": "sanitized <repo>"}'),
+        ("region_prototype.json", '{"proto": 1}'),
+        ("contraction_shapes.csv", "M,N,K\n16,16,16\n"),
+        ("cublaslt_planar_capability.json", '{"planar": 1}'),
+        ("cublaslt_full_matrix.csv", "M,N,K,status\n16,16,16,ok\n"),
+        ("cublaslt_grouped_capability.json", '{"grouped": 1}'),
+        ("cublaslt_grouped.csv", "route,M,N,K\nplanar,16,16,16\n"),
+        ("cutlass_sm120_4m.json", '{"single_4m": 1}'),
+        ("numerical_validation.csv", "route,relative_l2\nplanar,1e-5\n"),
+    ]
+
+    def _write_files(self, base):
+        for rel, content in self._FILES:
+            with open(os.path.join(base, rel), "w") as fh:
+                fh.write(content)
+
+    def _correct_hashes(self):
+        import hashlib
+
+        return {
+            "edge_map_sha256": hashlib.sha256(self._FILES[0][1].encode()).hexdigest(),
+            "region_prototype_sha256": hashlib.sha256(
+                self._FILES[1][1].encode()
+            ).hexdigest(),
+            "contraction_shapes_sha256": hashlib.sha256(
+                self._FILES[2][1].encode()
+            ).hexdigest(),
+            "cublaslt_planar_capability_sha256": hashlib.sha256(
+                self._FILES[3][1].encode()
+            ).hexdigest(),
+            "cublaslt_full_matrix_sha256": hashlib.sha256(
+                self._FILES[4][1].encode()
+            ).hexdigest(),
+            "cublaslt_grouped_capability_sha256": hashlib.sha256(
+                self._FILES[5][1].encode()
+            ).hexdigest(),
+            "cublaslt_grouped_rows_sha256": hashlib.sha256(
+                self._FILES[6][1].encode()
+            ).hexdigest(),
+            "cutlass_4m_sha256": hashlib.sha256(self._FILES[7][1].encode()).hexdigest(),
+            "numerical_csv_sha256": hashlib.sha256(
+                self._FILES[8][1].encode()
+            ).hexdigest(),
+        }
 
     def test_rehash_updates_edge_map_hash(self, tmp_path):
         """After c1_c2_edge_map.json is regenerated, the binding hash is updated."""
@@ -422,23 +474,12 @@ class TestRehashNumericalBinding:
         import json
 
         base = str(tmp_path)
-        edge_content = '{"edge": "sanitized <repo>"}'
-        with open(os.path.join(base, "c1_c2_edge_map.json"), "w") as fh:
-            fh.write(edge_content)
-        with open(os.path.join(base, "region_prototype.json"), "w") as fh:
-            fh.write('{"proto": 1}')
-        with open(os.path.join(base, "contraction_shapes.csv"), "w") as fh:
-            fh.write("M,N,K\n16,16,16\n")
-
-        nv = {
-            "case_binding": {
-                "edge_map_hash": "stale_hash_0000",
-                "prototype_hash": hashlib.sha256(b'{"proto": 1}').hexdigest()[:16],
-                "contraction_shapes_hash": hashlib.sha256(
-                    b"M,N,K\n16,16,16\n"
-                ).hexdigest()[:16],
-            }
-        }
+        self._write_files(base)
+        correct = self._correct_hashes()
+        # Stale edge_map_sha256; all other 8 correct.
+        stale_binding = {"algorithm": "sha256", **correct}
+        stale_binding["edge_map_sha256"] = "0" * 64
+        nv = {"case_binding": stale_binding}
         with open(os.path.join(base, "numerical_validation.json"), "w") as fh:
             json.dump(nv, fh)
 
@@ -446,37 +487,15 @@ class TestRehashNumericalBinding:
 
         with open(os.path.join(base, "numerical_validation.json")) as fh:
             updated = json.load(fh)
-        expected = hashlib.sha256(edge_content.encode()).hexdigest()[:16]
-        assert updated["case_binding"]["edge_map_hash"] == expected
+        assert updated["case_binding"]["edge_map_sha256"] == correct["edge_map_sha256"]
 
     def test_rehash_noop_when_hashes_match(self, tmp_path):
-        """When all case_binding hashes match, rehash returns False."""
-        import hashlib
+        """When all 9 case_binding hashes match, rehash returns False."""
         import json
 
         base = str(tmp_path)
-        edge_content = '{"edge": "clean"}'
-        proto_content = '{"proto": 1}'
-        shapes_content = "M,N,K\n16,16,16\n"
-        for rel, content in [
-            ("c1_c2_edge_map.json", edge_content),
-            ("region_prototype.json", proto_content),
-            ("contraction_shapes.csv", shapes_content),
-        ]:
-            with open(os.path.join(base, rel), "w") as fh:
-                fh.write(content)
-
-        nv = {
-            "case_binding": {
-                "edge_map_hash": hashlib.sha256(edge_content.encode()).hexdigest()[:16],
-                "prototype_hash": hashlib.sha256(proto_content.encode()).hexdigest()[
-                    :16
-                ],
-                "contraction_shapes_hash": hashlib.sha256(
-                    shapes_content.encode()
-                ).hexdigest()[:16],
-            }
-        }
+        self._write_files(base)
+        nv = {"case_binding": {"algorithm": "sha256", **self._correct_hashes()}}
         with open(os.path.join(base, "numerical_validation.json"), "w") as fh:
             json.dump(nv, fh)
 
