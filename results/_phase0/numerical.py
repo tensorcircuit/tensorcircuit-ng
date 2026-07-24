@@ -414,23 +414,33 @@ _CASE_HASH_FILES = (
     ("numerical_csv_sha256", "numerical_validation.csv"),
 )
 _CASE_HASH_KEYS = tuple(k for k, _ in _CASE_HASH_FILES)
+# Minimum length of a valid case-binding hash: ``_case_hashes()`` returns the
+# full ``hashlib.sha256(...).hexdigest()`` = 64 hex chars (no truncation).
+# Task 4 finding 3.4 fix: the errata explicitly lists "short" as a trigger for
+# ``binding_unavailable`` -> a valid-hex string of 8-63 chars (e.g. ``"a"*10``)
+# must be rejected so it cannot slip past ``_is_invalid_hash`` and let the
+# route-local loop run (false PASS). ``cell_key_hash()`` returns 16-char
+# truncated hex for cell metadata -- a DIFFERENT binding, not checked here.
+_CASE_HASH_MIN_LEN = 64
 
 
 def _is_invalid_hash(v):
     """True if a case-binding hash value is None, not a str, empty, shorter
-    than the expected sha256 hex length, or contains non-hex chars.
+    than the expected sha256 hex length (64 chars), or contains non-hex chars.
 
     ``"MISMATCH"`` is NOT invalid -- it is the ``binding_mismatch`` sentinel
     (handled separately by ``aggregate``). Used by the ``binding_unavailable``
     check (Task 4 errata #2) so that empty/None/short/non-hex case bindings
     force ``global_invalid`` (ALL per_route = UNKNOWN).
 
-    ``_case_hashes()`` returns full 64-char sha256 hex; ``cell_key_hash()``
-    returns 16-char truncated hex for cell metadata (a different binding). This
-    check is lenient: any non-empty hex string >= 8 chars passes (so a future
-    truncated binding schema does not false-fire), but short garbage like
-    ``"abc"`` or non-hex strings like ``"MISMATCH"``-without-the-sentinel are
-    caught.
+    ``_case_hashes()`` returns the full 64-char sha256 hex; ``cell_key_hash()``
+    returns 16-char truncated hex for cell metadata (a different binding, NOT
+    checked here). A case-binding hash shorter than ``_CASE_HASH_MIN_LEN``
+    (64) is treated as malformed: valid-hex but too-short strings like
+    ``"a"*10`` (Task 4 finding 3.4) MUST be rejected so they cannot bypass the
+    ``binding_unavailable`` deny-all and let the route-local loop run (false
+    PASS). ``"MISMATCH"``-without-the-sentinel would still be caught by the
+    non-hex branch below.
     """
     if v == "MISMATCH":
         return False  # binding_mismatch sentinel -- not an unavailable hash
@@ -438,7 +448,7 @@ def _is_invalid_hash(v):
         return True
     if len(v) == 0:
         return True
-    if len(v) < 8:
+    if len(v) < _CASE_HASH_MIN_LEN:
         return True
     try:
         int(v, 16)  # raises ValueError if non-hex chars

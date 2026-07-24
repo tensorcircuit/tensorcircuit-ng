@@ -1407,6 +1407,46 @@ def test_binding_unavailable_empty_dict():
     assert any("unavailable" in reason.lower() for reason in out["fail_closed_reasons"])
 
 
+def test_binding_unavailable_short_hash():
+    """Task 4 finding 3.4 fix: a case-binding hash that is valid hex but too
+    SHORT (e.g. ``"a"*10`` -- 10 chars, valid hex) MUST trigger
+    ``binding_unavailable`` -> ALL per_route = UNKNOWN. ``_case_hashes()``
+    returns the full 64-char ``sha256().hexdigest()`` (no truncation), so the
+    ``_is_invalid_hash`` threshold is 64 (``_CASE_HASH_MIN_LEN``); the old
+    ``< 8`` threshold let an 8-63-char valid-hex string pass -> the route-local
+    loop ran -> potential false PASS. Uses legacy count mode with expected=1
+    so WITHOUT the deny-all, planar would reach PASS."""
+    from results._phase0.numerical import aggregate, _case_hashes
+
+    r = {
+        "route": "planar",
+        "dtype": "C16BF",
+        "shape": (16384, 1024, 1024),
+        "level": "baseline",
+        "input_construction_version": "baseline_v1",
+        "seed": 0,
+        "reference_dtype": "c64",
+        "source": "measured",
+        "relative_l2": 1e-4,
+        "max_rel": 1e-4,
+        "nan_inf": False,
+        "policy_pass": True,
+    }
+    valid_hex = "a" * 64
+    # All required case keys present; ONE set to a 10-char valid-hex string
+    # (valid hex, but shorter than the 64-char sha256 case-binding length).
+    case_keys = [k for k in _case_hashes() if k != "algorithm"]
+    hashes = {"algorithm": "sha256"}
+    for k in case_keys:
+        hashes[k] = valid_hex
+    hashes[case_keys[0]] = "a" * 10  # too-short valid-hex -> UNAVAILABLE
+    out = aggregate([r], {("planar", "C16BF"): 1}, hashes, [], shape_drift=False)
+    for pr in out["per_route"]:
+        assert pr["criterion"] == "UNKNOWN", pr
+    assert out["overall_numerical_status"] == "INCONCLUSIVE", out
+    assert any("unavailable" in reason.lower() for reason in out["fail_closed_reasons"])
+
+
 def test_complete_required_matrix_reaches_pass():
     """Task 4 errata #4: a complete required matrix (ALL required cells
     measured + passing policy) must reach PASS via the REAL aggregate function
