@@ -129,7 +129,13 @@ def build():
         except (OSError, ValueError):
             pass  # unreadable/missing -> no measurement role to preserve
 
-    porcelain = _git(["status", "--porcelain"]) or ""
+    # dirty_worktree reflects TRACKED modifications only (exclude untracked
+    # ``??`` scratch, which is pre-existing throwaway not part of the commit and
+    # does not affect reproducibility from source_commit). This is the
+    # reproducibility signal: were there uncommitted changes to committed files
+    # when the aggregation ran? Run run_context.build() BEFORE the regenerating
+    # producers (numerical/gonogo) so the tracked tree is clean -> dirty=False.
+    porcelain = _git(["status", "--porcelain", "--untracked-files=no"]) or ""
     ctx = {
         "schema_version": "run-context-v2",
         "measurement": measurement,
