@@ -28,6 +28,12 @@ _PLAN_REL = (
 _SPEC_CONTENT = b"# Anti-cycle4 scope reset spec\n"
 _PLAN_CONTENT = b"# Phase0 nongpu evidence integrity remediation plan v2\n"
 
+#: F6a: the manifest committed in the temp repo declares ``inputs`` so
+#: validate_review_subject's step 7 (input-chain verification) passes. The
+#: fixture commits one input file (c1_judgment.json) referenced by the manifest.
+_INPUT_CONTENT = b"input-data"
+_INPUT_HASH = hashlib.sha256(_INPUT_CONTENT).hexdigest()
+
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -65,7 +71,14 @@ def _init_temp_repo(tmp_path, monkeypatch):
 
     phase0 = tmp_path / "results" / "phase0"
     phase0.mkdir(parents=True)
-    manifest = json.dumps({"schema_version": "manifest-v1"}).encode()
+    # Commit an input file referenced by the manifest (F6a input chain).
+    (phase0 / "c1_judgment.json").write_bytes(_INPUT_CONTENT)
+    manifest = json.dumps(
+        {
+            "schema_version": "manifest-v1",
+            "inputs": {"c1_judgment.json": _INPUT_HASH},
+        }
+    ).encode()
     test_report = json.dumps(
         {"schema_version": 1, "command": "...", "exit_code": 0, "passed": True}
     ).encode()

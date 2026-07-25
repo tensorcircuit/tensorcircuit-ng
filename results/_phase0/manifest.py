@@ -91,10 +91,10 @@ OUTPUT_ARTIFACTS = ["gonogo.json", "gonogo.md", "environment.json"]
 
 # C2 checkpoint binding keys to re-hash (plan §9 6.1 / spec §3.3.1). ALL must
 # be present and match for OK. c2_checkpoint_manifest.artifact_hashes records
-# full sha256 (truncate to [:16] for comparison). allocation_audit in the
-# checkpoint corresponds to the "audit" key in c2_judgment.artifact_paths.
-# c2_judgment hashes the c2_judgment.json file itself (fixed location, not in
-# artifact_paths).
+# full sha256 (64-hex, compared directly -- F6b removed the [:16] truncation).
+# allocation_audit in the checkpoint corresponds to the "audit" key in
+# c2_judgment.artifact_paths. c2_judgment hashes the c2_judgment.json file
+# itself (fixed location, not in artifact_paths).
 C2_CHECKPOINT_KEYS = [
     "source_hlo",
     "buffer_assignment",
@@ -154,24 +154,12 @@ NUMERICAL_REQUIRED_FILES = [
 
 
 def _hash_file(path):
-    """sha256[:16] of file bytes; None if missing."""
-    if not os.path.exists(path):
-        return None
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()[:16]
-
-
-def _hash_file_full(path):
     """Full sha256 (64 hex chars) of file bytes; None if missing.
 
-    Used by ``_validate_numerical_binding`` for the 9 route-source hashes in
-    ``case_binding`` (plan §5.2 / spec §4.4). Full (non-truncated) sha256 is
-    recorded so the ``_sha256`` key suffix is literal and there is no
-    unexplained truncation. The manifest's provenance ``inputs``/``outputs``
-    hashes still use the ``_hash_file`` (sha256[:16]) helper for brevity.
+    F6b (Scope Reset): was sha256[:16] (16-hex truncation); now full 64-hex
+    so ALL manifest provenance hashes (inputs/outputs/environment) are unified
+    with the case_binding hashes (which were already full sha256 via
+    ``_hash_file_full``). No unexplained truncation remains.
     """
     if not os.path.exists(path):
         return None
@@ -182,10 +170,38 @@ def _hash_file_full(path):
     return h.hexdigest()
 
 
-def _hash_dir(dir_path):
-    """{relative_path: sha256[:16]} for each file under dir_path (recursive).
+def _hash_file_full(path):
+    """Full sha256 (64 hex chars) of file bytes; None if missing.
 
-    Keys are relative to the dir's PARENT (so 'c1_optimized_hlo/<file>'), '/'-joined.
+    F6b: ``_hash_file`` now also returns full 64-hex, so this helper is
+    functionally identical. It is retained at the numerical case_binding call
+    sites (``_validate_numerical_binding``) to document that the full sha256
+    is required there (the ``_sha256`` key suffix is literal).
+    """
+    if not os.path.exists(path):
+        return None
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+#: F6c: evidence-file extensions hashed from INPUT_ARTIFACT_DIRS. Scratch XLA
+#: dump byproducts (.ptx, .ll, .debug_options, .pbtxt, .ir-no-opt.ll,
+#: .ir-with-opt.ll) are regenerable compiler byproducts NOT bound by
+#: c1_judgment -- only .hlo / .txt / .json are evidence.
+_EVIDENCE_EXTENSIONS = {".hlo", ".txt", ".json"}
+
+
+def _hash_dir(dir_path):
+    """{relative_path: full sha256} for each evidence file under dir_path.
+
+    Keys are relative to the dir's PARENT (so 'c1_optimized_hlo/<file>'),
+    '/'-joined. F6c: only files with extensions in ``_EVIDENCE_EXTENSIONS``
+    (.hlo / .txt / .json) are hashed -- scratch XLA dump byproducts
+    (.ptx / .ll / .debug_options / .pbtxt) are excluded because they are
+    regenerable compiler byproducts, not evidence bound by c1_judgment.
     """
     out = {}
     if not os.path.isdir(dir_path):
@@ -194,6 +210,9 @@ def _hash_dir(dir_path):
     entries = []
     for root, _dirs, files in os.walk(dir_path):
         for name in files:
+            ext = os.path.splitext(name)[1]
+            if ext not in _EVIDENCE_EXTENSIONS:
+                continue
             entries.append(os.path.join(root, name))
     for full in sorted(entries):
         rel = os.path.relpath(full, parent).replace(os.sep, "/")
@@ -283,8 +302,8 @@ def _validate_c2_checkpoint(base, c2_judgment, c2_checkpoint):
         actual = _hash_file(_resolve_under_base(base, src))
         if actual is None:
             return "UNAVAILABLE"  # source file absent on disk
-        if actual != exp_full[:16]:
-            return "MISMATCH"  # hash mismatch
+        if actual != exp_full:
+            return "MISMATCH"  # hash mismatch (F6b: full 64-hex compare)
     return "OK"
 
 

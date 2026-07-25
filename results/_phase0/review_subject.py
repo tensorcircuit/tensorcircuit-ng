@@ -28,6 +28,7 @@ stdlib only (``hashlib`` / ``json`` / ``subprocess`` / ``pathlib``).
 from __future__ import annotations
 
 import hashlib
+import json
 import subprocess
 from pathlib import Path
 
@@ -38,6 +39,11 @@ SCHEMA_VERSION = 1
 _PHASE0_MANIFEST_PATH = "results/phase0/manifest.json"
 _PHASE0_TEST_REPORT_PATH = "results/phase0/test_report.json"
 _PHASE0_CLOSEOUT_FACTS_PATH = "results/phase0/closeout_facts.json"
+
+#: Manifest ``inputs`` keys are relative to results/phase0/ (e.g.
+#: ``c1_judgment.json``, ``c1_buffer_assignment/n24_d10_default.txt``). The
+#: git path to retrieve an input from tree X is this prefix + the input key.
+_PHASE0_INPUTS_PREFIX = "results/phase0/"
 
 #: Doc paths OUTSIDE the git repo (read from workspace_root filesystem).
 _SPEC_REL = "docs/superpowers/specs/2026-07-24-anti-cycle4-scope-reset-spec.md"
@@ -221,6 +227,11 @@ def validate_review_subject(rs, git_tree_x, workspace_root):
          (``patch_sha256`` = sha256 of ``git diff <git_tree_x>`` output;
          ``untracked_hashes`` = ``{path: sha256(content)}`` for untracked files)
          and compares to rs's values.
+      7. F6a: the manifest (read FROM Git tree X) declares ``inputs`` -- a dict
+         of {relative_path: hash}. EVERY input must be retrievable from X via
+         ``git show <X>:results/phase0/<input>``. If dirty=False and ANY input
+         is NOT in X -> False (X is not a reproducible snapshot). If dirty=True,
+         inputs not in X must be covered by ``untracked_hashes`` (step 6).
 
     Any git error (invalid commit, file not in tree, etc.) -> False (not raise).
     The current HEAD may be handoff Y (the validator checks Git tree X, a commit
@@ -290,6 +301,41 @@ def validate_review_subject(rs, git_tree_x, workspace_root):
             except Exception:
                 return False
         if recomputed != untracked:
+            return False
+
+    # 7. F6a: verify the manifest's input chain is retrievable from X. The
+    #    manifest (read FROM Git tree X) declares ``inputs`` -- a dict of
+    #    {relative_path: hash} where relative_path is relative to
+    #    results/phase0/. For a CLEAN snapshot (dirty=False) EVERY input must
+    #    be retrievable from X via ``git show <X>:results/phase0/<input>`` --
+    #    otherwise X is not a reproducible snapshot (the evidence chain is
+    #    broken). If dirty=True, inputs not in X must be covered by
+    #    ``untracked_hashes`` (already recomputed + compared in step 6); their
+    #    content hash was verified there, so here we only check the path is
+    #    present in untracked_hashes.
+    manifest_bytes = _git_show_path(repo_cwd, git_tree_x, _PHASE0_MANIFEST_PATH)
+    if manifest_bytes is None:
+        return False  # defensive (step 4 already read this)
+    try:
+        manifest_obj = json.loads(manifest_bytes)
+    except (ValueError, TypeError):
+        return False
+    inputs = manifest_obj.get("inputs") if isinstance(manifest_obj, dict) else None
+    if not isinstance(inputs, dict):
+        return False  # malformed manifest (no inputs dict)
+    dirty = bool(rs.get("dirty_worktree"))
+    untracked = rs.get("untracked_hashes") or {}
+    for input_path in inputs:
+        git_path = _PHASE0_INPUTS_PREFIX + input_path
+        content = _git_show_path(repo_cwd, git_tree_x, git_path)
+        if content is not None:
+            continue  # input is in X -- reproducible from the commit
+        # Input NOT in Git tree X.
+        if not dirty:
+            return False  # clean snapshot: X is not a reproducible snapshot
+        # dirty=True: the input must be covered by untracked_hashes (its
+        # content hash was already verified in step 6).
+        if git_path not in untracked:
             return False
 
     return True

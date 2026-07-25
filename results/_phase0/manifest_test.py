@@ -62,11 +62,15 @@ def test_schema_constants_complete():
     assert "cutlass_sm120_4m.json" in NUMERICAL_REQUIRED_FILES
 
 
-def test_hash_file_sha256_16(tmp_path):
+def test_hash_file_sha256_64(tmp_path):
     p = tmp_path / "a.txt"
     p.write_bytes(b"hello")
-    # sha256("hello")[:16]
-    assert _hash_file(str(p)) == "2cf24dba5fb0a30e"
+    # F6b: full sha256 (64 hex chars) -- was [:16] truncation.
+    import hashlib
+
+    expected = hashlib.sha256(b"hello").hexdigest()
+    assert _hash_file(str(p)) == expected
+    assert len(_hash_file(str(p))) == 64
     assert _hash_file(str(tmp_path / "missing.txt")) is None
 
 
@@ -78,7 +82,42 @@ def test_hash_dir_recursive_sorted(tmp_path):
     (d / "n22.hlo").write_bytes(b"y")
     out = _hash_dir(str(d))
     assert set(out) == {"c1_optimized_hlo/n24.hlo", "c1_optimized_hlo/n22.hlo"}
-    assert all(len(v) == 16 for v in out.values())
+    assert all(len(v) == 64 for v in out.values())
+
+
+def test_hash_dir_excludes_scratch_byproducts(tmp_path):
+    """F6c: _hash_dir must EXCLUDE scratch XLA dump byproducts (.ptx/.ll/
+    .debug_options/.pbtxt) and only hash evidence files (.hlo/.txt/.json).
+
+    These byproducts are regenerable compiler output, not evidence bound by
+    c1_judgment. Binding them would inflate the manifest inputs with files
+    that can't be retrieved from the subject commit (the fail-open root cause).
+    """
+    base = tmp_path / "phase0"
+    d = base / "c1_xla_dump"
+    d.mkdir(parents=True)
+    # evidence files (KEEP)
+    (d / "n24.hlo").write_bytes(b"hlo")
+    (d / "n24.txt").write_bytes(b"txt")
+    (d / "summary.json").write_bytes(b"json")
+    # scratch byproducts (EXCLUDE)
+    (d / "n24.ptx").write_bytes(b"ptx")
+    (d / "n24.ll").write_bytes(b"ll")
+    (d / "n24.debug_options").write_bytes(b"dbg")
+    (d / "n24.pbtxt").write_bytes(b"pbtxt")
+    (d / "n24.ir-no-opt.ll").write_bytes(b"irno")
+    (d / "n24.ir-with-opt.ll").write_bytes(b"irwo")
+    out = _hash_dir(str(d))
+    assert "c1_xla_dump/n24.hlo" in out
+    assert "c1_xla_dump/n24.txt" in out
+    assert "c1_xla_dump/summary.json" in out
+    assert "c1_xla_dump/n24.ptx" not in out
+    assert "c1_xla_dump/n24.ll" not in out
+    assert "c1_xla_dump/n24.debug_options" not in out
+    assert "c1_xla_dump/n24.pbtxt" not in out
+    assert "c1_xla_dump/n24.ir-no-opt.ll" not in out
+    assert "c1_xla_dump/n24.ir-with-opt.ll" not in out
+    assert all(len(v) == 64 for v in out.values())
 
 
 def test_resolve_under_base_strips_phase0_prefix():
@@ -343,7 +382,7 @@ def test_collect_inputs_outputs_excludes_manifest(tmp_path):
     (tmp_path / "environment.json").write_text("z")
     (tmp_path / "manifest.json").write_text("self")
     inputs, outputs = _collect_inputs_outputs(str(tmp_path))
-    assert "c1_judgment.json" in inputs and len(inputs["c1_judgment.json"]) == 16
+    assert "c1_judgment.json" in inputs and len(inputs["c1_judgment.json"]) == 64
     assert outputs["gonogo.json"] and outputs["environment.json"]
     assert "manifest.json" not in outputs and "manifest.json" not in inputs
     # missing input files are simply omitted (not None entries)
