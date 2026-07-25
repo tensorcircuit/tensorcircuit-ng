@@ -301,6 +301,7 @@ def test_cutlass_status_reads_new_two_section_structure(tmp_path):
                 "sm80_fallback_bf16_4m": {
                     "capability": "PASS",
                     "kernel_path": "sm80_fallback",
+                    "compiles": True,
                     "runs": True,
                     "correctness": {"gate_pass": True},
                     "attempted": True,
@@ -1378,6 +1379,156 @@ def test_cutlass_fallback_rejects_self_reported_pass_with_wrong_path():
     assert (
         result == "UNKNOWN"
     ), f"self-reported PASS with wrong kernel_path must be UNKNOWN, got {result!r}"
+
+
+# ---------------------------------------------------------------------------
+# F3 (evidence-integrity): cutlass readers require ``compiles is True`` (no
+# compile_status substitute) and MERGE sec + single_4m sections (no pick-one
+# evidence loss). compile_status alone is INSUFFICIENT -- compiles=False +
+# compile_status="OK" is a contradiction that must not PASS.
+# ---------------------------------------------------------------------------
+
+
+def test_cutlass_fallback_compiles_false_with_ok_status_not_pass():
+    """F3a: compiles=False + compile_status='OK' + all else green -> fallback
+    NOT PASS (compile_state=FAILED). compile_status does NOT substitute for
+    compiles is True -- the contradiction must not leak a PASS."""
+    from results._phase0.gonogo import _cutlass_sm80_fallback_criterion
+
+    data = {
+        "schema_version": "cutlass-sm120-4m-v1",
+        "sm80_fallback_bf16_4m": {
+            "kernel_path": "sm80_fallback",
+            "compiles": False,
+            "compile_status": "OK",
+            "runs": True,
+            "correctness": {"gate_pass": True},
+            "attempted": True,
+            "coverage_complete": True,
+        },
+    }
+    result = _cutlass_sm80_fallback_criterion(data)
+    assert result != "PASS", f"compiles=False must not PASS, got {result!r}"
+    assert result == "UNKNOWN", result
+
+
+def test_cutlass_native_compiles_false_with_ok_status_not_pass():
+    """F3a (native): compiles=False + compile_status='OK' + all else green ->
+    native NOT PASS. compile_status does NOT substitute for compiles is True."""
+    from results._phase0.gonogo import _cutlass_native_sm120_criterion
+
+    data = {
+        "schema_version": "cutlass-sm120-4m-v1",
+        "native_sm120_bf16_4m": {
+            "kernel_path": "sm120_native",
+            "compiles": False,
+            "compile_status": "OK",
+            "runs": True,
+            "correctness": {"gate_pass": True},
+            "attempted": True,
+            "coverage_complete": True,
+        },
+    }
+    result = _cutlass_native_sm120_criterion(data)
+    assert result != "PASS", f"compiles=False must not PASS, got {result!r}"
+
+
+def test_cutlass_fallback_compiles_none_with_ok_status_not_pass():
+    """F3a: compiles=None (absent) + compile_status='OK' + all else green ->
+    fallback NOT PASS (compile_state=UNKNOWN). compile_status alone is
+    insufficient to confirm a compile."""
+    from results._phase0.gonogo import _cutlass_sm80_fallback_criterion
+
+    data = {
+        "schema_version": "cutlass-sm120-4m-v1",
+        "sm80_fallback_bf16_4m": {
+            "kernel_path": "sm80_fallback",
+            "compile_status": "OK",
+            "runs": True,
+            "correctness": {"gate_pass": True},
+            "attempted": True,
+            "coverage_complete": True,
+        },
+    }
+    result = _cutlass_sm80_fallback_criterion(data)
+    assert result != "PASS", f"compiles=None must not PASS, got {result!r}"
+    assert result == "UNKNOWN", result
+
+
+def test_cutlass_fallback_compiles_true_all_green_pass():
+    """F3a: compiles=True + all else green -> fallback PASS (compile_state=OK).
+    compile_status is NOT required when compiles is True (it confirms but is
+    not the gate)."""
+    from results._phase0.gonogo import _cutlass_sm80_fallback_criterion
+
+    data = {
+        "schema_version": "cutlass-sm120-4m-v1",
+        "sm80_fallback_bf16_4m": {
+            "kernel_path": "sm80_fallback",
+            "compiles": True,
+            "runs": True,
+            "correctness": {"gate_pass": True},
+            "attempted": True,
+            "coverage_complete": True,
+        },
+    }
+    result = _cutlass_sm80_fallback_criterion(data)
+    assert result == "PASS", f"compiles=True + all green must PASS, got {result!r}"
+
+
+def test_cutlass_fallback_merges_sec_and_single_4m_sections():
+    """F3b: the committed artifact splits fields -- sm80_fallback_bf16_4m has
+    attempted/coverage_complete/compile_status/correctness; single_4m has
+    kernel_path/runs/compiles. The old pick-one reader discarded one section's
+    evidence (losing attempted/coverage or kernel_path/runs); the merge
+    recombines them -> fallback PASS (all green)."""
+    from results._phase0.gonogo import _cutlass_sm80_fallback_criterion
+
+    data = {
+        "schema_version": "cutlass-sm120-4m-v1",
+        "sm80_fallback_bf16_4m": {
+            "attempted": True,
+            "coverage_complete": True,
+            "compile_status": "OK",
+            "correctness": {"gate_pass": True},
+        },
+        "single_4m": {
+            "kernel_path": "sm80_fallback",
+            "runs": True,
+            "compiles": True,
+        },
+    }
+    result = _cutlass_sm80_fallback_criterion(data)
+    assert result == "PASS", f"merged sec+s4 must PASS, got {result!r}"
+
+
+def test_cutlass_fallback_no_cross_promo_from_native_single_4m():
+    """F3b: sec has sm80_fallback fields but lacks compiles/runs; single_4m has
+    kernel_path='sm120_native' with compiles=True/runs=True. The native
+    single_4m fields must NOT cross-promote into the fallback (cross-promo
+    prevented) -> fallback NOT PASS (compiles/runs stay None)."""
+    from results._phase0.gonogo import _cutlass_sm80_fallback_criterion
+
+    data = {
+        "schema_version": "cutlass-sm120-4m-v1",
+        "sm80_fallback_bf16_4m": {
+            "kernel_path": "sm80_fallback",
+            "attempted": True,
+            "coverage_complete": True,
+            "compile_status": "OK",
+            "correctness": {"gate_pass": True},
+        },
+        "single_4m": {
+            "kernel_path": "sm120_native",
+            "runs": True,
+            "compiles": True,
+        },
+    }
+    result = _cutlass_sm80_fallback_criterion(data)
+    assert (
+        result != "PASS"
+    ), f"native single_4m must not cross-promote into fallback, got {result!r}"
+    assert result == "UNKNOWN", result
 
 
 # ---------------------------------------------------------------------------

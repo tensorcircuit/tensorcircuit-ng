@@ -669,6 +669,42 @@ _CUTLASS_FALLBACK_SELF_REPORT_MAP = {
 }
 
 
+#: Fields the cutlass readers consume from the merged (section + single_4m)
+#: execution source (F3b). The committed artifact splits these across the
+#: dedicated section (attempted/coverage_complete/compile_status/correctness)
+#: and single_4m (kernel_path/runs/compiles). The old pick-one reader discarded
+#: one section's evidence; the merge recombines them.
+_CUTLASS_MERGE_FIELDS = (
+    "attempted",
+    "compiles",
+    "compile_status",
+    "runs",
+    "correctness",
+    "coverage_complete",
+    "kernel_path",
+)
+
+
+def _cutlass_merge_sections(sec, s4, kernel_filter):
+    """Merge a dedicated cutlass section with ``single_4m`` (F3b).
+
+    Each field is read from ``sec`` first; if ``sec``'s value is ``None``, the
+    field falls back to ``single_4m`` -- but ONLY when
+    ``single_4m.kernel_path == kernel_filter`` (cross-promo prevention: a
+    ``single_4m`` that ran a DIFFERENT kernel path must NOT contribute its
+    execution evidence to this section). Returns a flat dict of the merged
+    fields (absent fields map to ``None``).
+    """
+    s4_ok = s4.get("kernel_path") == kernel_filter
+    out = {}
+    for k in _CUTLASS_MERGE_FIELDS:
+        v = sec.get(k)
+        if v is None and s4_ok:
+            v = s4.get(k)
+        out[k] = v
+    return out
+
+
 def _cutlass_native_normalized(data):
     """Build the normalized ``raw`` dict for the native SM120 gate contract
     (Task 5 / evidence-integrity plan v3 finding 3.5).
@@ -682,9 +718,10 @@ def _cutlass_native_normalized(data):
         NOT_ATTEMPTED.
       * ``compile_state`` / ``run_state`` / ``correctness_state`` /
         ``coverage_state``: set ONLY when the native path actually compiled
-        (``compiles is True`` or ``compile_status == "OK"``). When the native
-        path was blocked (compile failed / blocker captured), these fields
-        are LEFT ABSENT -- so fail clauses needing them do not multi-hit
+        (``compiles is True`` -- F3a: ``compile_status`` alone does NOT
+        substitute). When the native path was blocked (compile failed /
+        blocker captured), these fields are LEFT ABSENT -- so fail clauses
+        needing them do not multi-hit
         alongside the ``not_supported`` clause (blocker + source). This
         mirrors the grouped reader pattern of setting execution states
         only when attempted.
@@ -751,22 +788,23 @@ def _cutlass_native_normalized(data):
         "consistency_state": "CONSISTENT",
     }
 
-    # Execution states: set ONLY when the native path compiled. Read from the
-    # native section, or from single_4m when kernel_path == "sm120_native"
-    # (the native path landed -> single_4m carries native evidence). When
-    # kernel_path == "sm80_fallback", single_4m execution fields are the
-    # FALLBACK -> NOT cross-promoted.
-    exec_src = sec
-    if not exec_src.get("kernel_path"):
-        if s4.get("kernel_path") == "sm120_native":
-            exec_src = s4
-        else:
-            exec_src = {}
+    # F3b: MERGE sec + single_4m execution fields (cross-promo respect). The
+    # old reader picked ONE section (exec_src = sec if sec.kernel_path else
+    # (s4 if s4.kernel_path=="sm120_native" else {})), discarding the other
+    # section's evidence. Now each field is read from sec first, falling back to
+    # single_4m ONLY when single_4m.kernel_path == "sm120_native" (the native
+    # path landed -> single_4m carries native evidence; a fallback single_4m is
+    # NOT cross-promoted into the native raw dict).
+    exec_src = _cutlass_merge_sections(sec, s4, "sm120_native")
 
+    # F3a: native compile success requires ``compiles is True``. compile_status
+    # alone does NOT substitute (compiles=False + compile_status="OK" is a
+    # contradiction). Execution states (compile/run/correctness/coverage) are
+    # set ONLY when compiles is True -- when the native path was blocked
+    # (compiles False/None), they are LEFT ABSENT so fail clauses do not
+    # multi-hit alongside the not_supported clause (blocker+source).
     compiles = exec_src.get("compiles")
-    compile_status = exec_src.get("compile_status")
-    native_compiled = compiles is True or compile_status == "OK"
-    if native_compiled:
+    if compiles is True:
         raw["compile_state"] = "SUCCEEDED"
         runs = exec_src.get("runs")
         if runs is True:
@@ -807,8 +845,11 @@ def _cutlass_fallback_normalized(data):
       * ``attempt_state``: ATTEMPTED if ``attempted is True``, else
         NOT_ATTEMPTED.
       * ``compile_state``: ``"OK"`` (not ``"SUCCEEDED"``) if ``compiles is
-        True`` or ``compile_status == "OK"`` (the fallback contract uses
-        ``OK`` per Task 5 test ``compile_status=="OK"``).
+        True`` (F3a: ``compile_status`` alone does NOT substitute --
+        ``compiles=False`` + ``compile_status="OK"`` is a contradiction and
+        yields ``compile_state=FAILED``; ``compiles=None`` yields UNKNOWN).
+        The fallback contract uses ``OK`` per Task 5 test
+        ``compile_status=="OK"``.
       * ``run_state`` / ``correctness_state`` / ``coverage_state``: mapped
         from the section ``runs`` / ``correctness.gate_pass`` /
         ``coverage_complete``.
@@ -823,11 +864,16 @@ def _cutlass_fallback_normalized(data):
     s4 = data.get("single_4m")
     s4 = s4 if isinstance(s4, dict) else {}
 
-    # Prefer the fallback section; fall back to single_4m when it carries the
-    # fallback kernel_path (single_4m execution fields are the fallback).
-    exec_src = sec if sec.get("kernel_path") is not None else {}
-    if not exec_src and s4.get("kernel_path") == "sm80_fallback":
-        exec_src = s4
+    # F3b: MERGE sec + single_4m fields (cross-promo respect). The committed
+    # artifact splits fields: sm80_fallback_bf16_4m carries
+    # attempted/coverage_complete/compile_status/correctness; single_4m carries
+    # kernel_path/runs/compiles. The old reader picked ONE section (exec_src =
+    # sec if sec.kernel_path else s4), discarding the other's evidence. Now each
+    # field is read from sec first, falling back to single_4m ONLY when
+    # single_4m.kernel_path == "sm80_fallback" (the fallback path landed ->
+    # single_4m carries fallback evidence; a native single_4m is NOT
+    # cross-promoted).
+    exec_src = _cutlass_merge_sections(sec, s4, "sm80_fallback")
 
     attempted = exec_src.get("attempted")
     attempt_state = "ATTEMPTED" if attempted is True else "NOT_ATTEMPTED"
@@ -843,7 +889,6 @@ def _cutlass_fallback_normalized(data):
         schema_state = "UNRECOGNIZED"
 
     compiles = exec_src.get("compiles")
-    compile_status = exec_src.get("compile_status")
 
     raw = {
         "schema_state": schema_state,
@@ -851,9 +896,16 @@ def _cutlass_fallback_normalized(data):
         "consistency_state": "CONSISTENT",
     }
 
-    # compile_state = "OK" (the fallback contract pass clause value).
-    if compiles is True or compile_status == "OK":
+    # F3a: compile_state requires ``compiles is True``. compile_status alone
+    # does NOT substitute -- compiles=False + compile_status="OK" is a
+    # contradiction and must NOT pass. compiles is True -> OK; compiles is
+    # False -> FAILED; else (None/absent) -> UNKNOWN (cannot confirm).
+    if compiles is True:
         raw["compile_state"] = "OK"
+    elif compiles is False:
+        raw["compile_state"] = "FAILED"
+    else:
+        raw["compile_state"] = "UNKNOWN"
 
     runs = exec_src.get("runs")
     if runs is True:
