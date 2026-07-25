@@ -1,0 +1,2 @@
+source: memory_analysis
+{'alias_size_in_bytes': 0, 'argument_size_in_bytes': 880, 'generated_code_size_in_bytes': 2231000, 'output_size_in_bytes': 8, 'temp_size_in_bytes': 268521976, 'host_alias_size_in_bytes': 0, 'host_argument_size_in_bytes': 0, 'host_generated_code_size_in_bytes': 0, 'host_output_size_in_bytes': 0, 'host_temp_size_in_bytes': 0, 'serialized_buffer_assignment_proto_len': 0}

@@ -17,3 +17,7 @@ results/phase0/**/*.md eol=lf
 # suite run).  The csv/json/hlo/txt/md patterns above cover the artifacts; this
 # covers the .py generators that Black and the test suite read/write.
 results/_phase0/*.py eol=lf
+
+# F7: raw XLA/compiler dump evidence is exempt from blank-at-eof style
+# check (trailing newline is part of the captured output, not a style error).
+results/phase0/c1_optimized_hlo/**/*.hlo whitespace=-blank-at-eof
