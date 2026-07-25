@@ -1,7 +1,7 @@
 {
   "aggregation_dirty_file_count": 0,
   "aggregation_dirty_worktree": false,
-  "aggregation_source_commit": "fc35d75100a185940e46329dab2879cbe1254c4c",
+  "aggregation_source_commit": "e849b5296fb56e2ea88937486c3ac0a9822b6579",
   "blocking_artifacts": [
     "c2_judgment.json / c2_checkpoint_manifest.json (C2_CANONICAL undetermined)",
     "region_prototype.json (REGION_PROTOTYPE undetermined)",
@@ -89,7 +89,7 @@
     "REGION_PROTOTYPE": "UNKNOWN"
   },
   "environment_hash": "07a3371b7b27007d94b8cbeb09053ca36475d9d0280259ac7755c5bf7573cbf3",
-  "generated_at": "2026-07-25T04:23:25Z",
+  "generated_at": "2026-07-25T06:13:56Z",
   "inputs": {
     "c1_buffer_assignment/n22_d10_exp_default.txt": "30cd18ad9941c04174e110d187e7ef838d080e04b12da5acb82cdfbb05351bb1",
     "c1_buffer_assignment/n22_d10_exp_nofusion.txt": "b34b02bd6306f6bccdf39569d6e4dbbb74d4f385a0be59c3d505ebed6d6c86c6",
@@ -113,10 +113,10 @@
     "cublaslt_grouped_capability.json": "7deb1ec4167802ec9ffcac23fc8baf2a7b56240ac9e71860b076a63d3ed43b81",
     "cublaslt_planar_capability.json": "fe729f8d7df8cf7f8903ee5cd1fc0e7843f4998b103fb2ff78a9dcc4840f832b",
     "cutlass_sm120_4m.json": "7d4ecf485a4f1cc859c06f15569b8b0051b5b5489a21908aed46eff7895dc81f",
-    "numerical_validation.csv": "c00664782c5b5bf250862f23450e69e74dbcaa5a1e0dd35eaaf16c897bfe44ea",
-    "numerical_validation.json": "dac80cfea0993fdd6c6b486832ab7c6cb90e9339e7604a18cac25409b256ffc9",
+    "numerical_validation.csv": "316b870324120b249eea2deb5eb76df695fc8a4b18c5a69b78892180e482b524",
+    "numerical_validation.json": "4c3084563d8ddf71ae725e8fc705bd55c3556ff1660eafb6498d8a1da0d7324c",
     "region_prototype.json": "1e97addf6aef0f1c46f3814ea711202e9df71def11efaca637968614855d0135",
-    "run_context.json": "075a486dcb3722e26f87d59a665984cf2b4c39b8c2d1e450678a48d8d8ec6285"
+    "run_context.json": "cd1653cbc7af305cba6022270cbb92b799bf7b1c0331b60811d8743047da5b53"
   },
   "measurement_source_commit": "205899678c0de72e9ff180ab357a973bf7e1112e",
   "outputs": {
