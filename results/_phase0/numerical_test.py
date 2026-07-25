@@ -393,41 +393,102 @@ def test_collect_grouped_smoke_one_cell():
 
 @pytest.mark.gpu
 def test_collect_region_fused_small_contract():
-    from results._phase0.numerical import collect_region_fused
-    from results._phase0.region_proto import SMALL_SHAPES
+    """G5: collect_region_fused now runs the FULL-ANCHOR P->T->E contract
+    (PM=4096, PN=16384, K1=1024, TM=64, TN=1048576) via the direct-recompute
+    fused kernel (G1) vs the materialized oracle, at the requested dynamic-
+    range level. The small-contract diagnostic path is retired (G5 promotes
+    region_fused from NOT_RUN to MEASURED at the full anchor)."""
+    from results._phase0.numerical import collect_region_fused, REGION_FULL_ANCHOR_SHAPE
 
     row = collect_region_fused("baseline", seed=0)
     assert row["route"] == "region_fused"
     assert row["dtype"] == "c64"
-    assert row["shape"] == "small_contract"
-    assert row["relative_l2"] < 1e-4  # fused == materialized at c64
+    assert row["shape"] == REGION_FULL_ANCHOR_SHAPE
+    # fused == materialized at c64 (G1 showed rel_l2 ~ 8.5e-7)
+    assert row["relative_l2"] < 1e-4
+    assert row["source"] == "measured"
     assert row["policy_pass"] == 1, row
 
 
-def test_collect_cutlass_baseline_reads_task8_json():
-    """Task 3a: the cutlass artifact measures max_rel but NOT relative_l2. The
-    baseline row therefore carries relative_l2=None (never the max_rel proxy) and
-    policy_pass=0 (apply_policy flags the cell incomplete on the missing canonical
-    metric). The honest max_rel evidence is still recorded."""
-    from results._phase0.numerical import collect_cutlass
+@pytest.mark.gpu
+def test_region_fused_full_anchor_numerical_measured():
+    """G5 Step 1: collect_region_fused(level, seed) returns a MEASURED row at
+    the full-anchor shape with real relative_l2 >= 0 and a cell key in
+    required_cell_keys(). The row carries the canonical
+    input_construction_version token (baseline_v1 / mixed_scale_v1 /
+    cancellation_v2) so it matches the 7-tuple required-cell schema."""
+    from results._phase0.numerical import (
+        collect_region_fused,
+        required_cell_keys,
+        _cell_key,
+    )
 
-    row = collect_cutlass("baseline", seed=0)
+    row = collect_region_fused(level="baseline", seed=0)
+    assert row["source"] == "measured"
+    assert row["input_construction_version"] == "baseline_v1"
+    assert row["relative_l2"] is not None and row["relative_l2"] >= 0
+    # full-anchor shape (M=4096, N=16384, K=1024)
+    assert row["shape"] == (4096, 16384, 1024)
+    key = _cell_key(row)
+    assert key in required_cell_keys()
+
+
+@pytest.mark.gpu
+def test_collect_cutlass_measured_when_toolchain_available():
+    """G5: when the cutlass toolchain is available (CUTLASS_ROOT/CUDA_HOME env
+    vars set + cutlass include dir present), collect_cutlass returns a MEASURED
+    row with real relative_l2 >= 0 at the cutlass anchor shape. The row carries
+    the canonical input_construction_version token and its cell key is in
+    required_cell_keys()."""
+    import os
+
+    from results._phase0.numerical import (
+        collect_cutlass,
+        required_cell_keys,
+        _cell_key,
+        _cutlass_toolchain_available,
+    )
+
+    if not _cutlass_toolchain_available():
+        pytest.skip("cutlass toolchain not available (CUTLASS_ROOT/CUDA_HOME)")
+    row = collect_cutlass(level="baseline", seed=0)
+    assert row["source"] == "measured", row
+    assert row["input_construction_version"] == "baseline_v1", row
+    assert row["relative_l2"] is not None and row["relative_l2"] >= 0, row
+    assert row["shape"] == (16384, 1024, 1024), row
+    key = _cell_key(row)
+    assert key in required_cell_keys(), key
+
+
+def test_collect_cutlass_baseline_not_run_when_toolchain_unavailable(monkeypatch):
+    """G5: when the cutlass toolchain is unavailable (CUTLASS_ROOT/CUDA_HOME env
+    vars not set), collect_cutlass returns an honest NOT_RUN row with the real
+    failure reason -- never fakes a measurement. The input_construction_version
+    token is ALWAYS set so the row's cell key matches required_cell_keys().
+
+    Replaces the old ``test_collect_cutlass_baseline_reads_task8_json`` which
+    tested the task8_reuse path (G5 retires that path in favor of real
+    measurement when the toolchain is available)."""
+    from results._phase0 import numerical
+
+    # Force the toolchain probe to report unavailable (no env vars / include dir).
+    monkeypatch.setattr(numerical, "_cutlass_toolchain_available", lambda: False)
+    row = numerical.collect_cutlass("baseline", seed=0)
     assert row["route"] == "cutlass_4m_single"
     assert row["dtype"] == "C16BF"
-    # max_rel evidence from Task 8 (~6.5e-5) still passes its own threshold
-    assert row["max_rel"] < 5e-3
-    # relative_l2 was NOT measured by the artifact -> None, never the max_rel proxy
+    assert row["source"].startswith("not_run"), row
+    assert "toolchain" in row["source"].lower(), row
+    # relative_l2 is None (not measured), never faked
     assert row["relative_l2"] is None, row
-    assert row["relative_l2"] != row["max_rel"], row
-    # policy can't conclude PASS without relative_l2 -> cell incomplete
-    assert row["policy_pass"] == 0, row
+    # version token is ALWAYS set so the cell key matches required_cell_keys
+    assert row["input_construction_version"] == "baseline_v1", row
 
 
 def test_collect_cutlass_adversarial_records_not_run_when_unavailable(monkeypatch):
     from results._phase0 import numerical
 
-    # force the injection probe to report unavailable
-    monkeypatch.setattr(numerical, "_cutlass_injection_available", lambda: False)
+    # force the toolchain probe to report unavailable
+    monkeypatch.setattr(numerical, "_cutlass_toolchain_available", lambda: False)
     row = numerical.collect_cutlass("mixed_scale", seed=0)
     assert row.get("source", "").startswith("not_run")
 
@@ -544,48 +605,27 @@ def test_aggregate_unknown_when_required_cell_not_run_is_undeclared():
     assert out["overall_numerical_status"] == "INCONCLUSIVE", out
 
 
-def test_collect_cutlass_does_not_substitute_max_rel_for_relative_l2(
-    tmp_path, monkeypatch
-):
-    """plan §3 操作.2 bullet 4: when ``relative_l2`` is missing from the cutlass
-    artifact's correctness block, ``collect_cutlass`` must NOT substitute
-    ``max_rel`` as a proxy for it. Cross-metric substitution hides the missing
-    evidence and lets apply_policy pass a cell that did not actually measure
-    relative_l2.
+def test_collect_cutlass_not_run_carries_none_metrics(monkeypatch):
+    """G5: when the cutlass toolchain is unavailable, collect_cutlass returns a
+    NOT_RUN row with relative_l2=None AND max_rel=None (both absent, not
+    substituted). The old task8_reuse path (which carried max_rel from the
+    artifact but not relative_l2) is retired by G5 -- when the toolchain is
+    unavailable, ALL metrics are None (honest NOT_RUN, no partial reuse).
 
-    Today ``collect_cutlass`` baseline-path sets
-    ``relative_l2 = c.get('max_rel', 1e9)`` (numerical.py), which is exactly the
-    forbidden substitution. The fix emits ``relative_l2=None`` so apply_policy
-    flags the cell incomplete. This test uses a synthetic cutlass artifact with
-    NO ``relative_l2`` field and asserts the emitted row carries
-    ``relative_l2=None`` -- failing today because the row inherits max_rel."""
-    import json
-
+    Replaces ``test_collect_cutlass_does_not_substitute_max_rel_for_relative_l2``
+    which tested the task8_reuse path's max_rel->relative_l2 substitution concern
+    (G5 eliminates that path entirely)."""
     from results._phase0 import numerical
 
-    # Synthetic cutlass_sm120_4m.json: correctness block has max_rel + max_abs
-    # but NO relative_l2 field -> collect_cutlass must not invent one.
-    (tmp_path / "cutlass_sm120_4m.json").write_text(
-        json.dumps(
-            {
-                "single_4m": {
-                    "correctness": {
-                        "max_rel": 6.5e-5,
-                        "max_abs": 1e-3,
-                        "nan_inf": False,
-                        # relative_l2 deliberately absent
-                    }
-                }
-            }
-        )
-    )
-    monkeypatch.setattr(numerical, "OUT_DIR", str(tmp_path))
-
+    # Force the toolchain probe to report unavailable.
+    monkeypatch.setattr(numerical, "_cutlass_toolchain_available", lambda: False)
     row = numerical.collect_cutlass("baseline", seed=0)
-    # The row must carry relative_l2=None (missing), not the max_rel proxy.
+    # Both metrics are None (NOT_RUN, no partial reuse from task8 json).
     assert row["relative_l2"] is None, row
-    # And it must never equal max_rel (the smoking gun for the substitution).
-    assert row["relative_l2"] != row["max_rel"], row
+    assert row["max_rel"] is None, row
+    # And they are not substituting one for the other.
+    assert row["relative_l2"] == row["max_rel"]  # both None (honest NOT_RUN)
+    assert row["policy_pass"] == 0, row
 
 
 # ---------------------------------------------------------------------------
@@ -838,11 +878,12 @@ def test_write_csv_round_trip_preserves_not_run_source(tmp_path):
     assert diag["relative_l2"] == pytest.approx(1e-7)
 
 
-def test_regenerated_csv_contains_region_full_anchor_not_run_rows():
-    """The regenerated ``numerical_validation.csv`` (real artifact) MUST now list
-    the 9 region_fused intended-full-anchor cells as explicit NOT_RUN rows with a
-    ``not_run:<reason>`` source (spec §6 3.3). Previously these 9 required cells
-    existed only as JSON ``missing=9`` -- the CSV had zero rows for them."""
+def test_regenerated_csv_contains_region_full_anchor_measured_rows():
+    """G5: the regenerated ``numerical_validation.csv`` (real artifact) MUST now
+    list the 9 region_fused full-anchor cells as MEASURED rows with real
+    ``relative_l2`` (source=``measured``). Previously (pre-G5) these 9 required
+    cells were NOT_RUN -- G5 promotes region_fused from NOT_RUN to MEASURED at
+    the full anchor via the direct-recompute fused_pte_kernel (G1)."""
     import csv
     import os
 
@@ -851,21 +892,22 @@ def test_regenerated_csv_contains_region_full_anchor_not_run_rows():
     csv_path = os.path.join("results", "phase0", "numerical_validation.csv")
     with open(csv_path, newline="") as fh:
         rows = list(csv.DictReader(fh))
-    region_not_run = [
+    region_measured = [
         r
         for r in rows
         if r["route"] == "region_fused"
-        and r["source"].startswith("not_run:")
+        and r["source"] == "measured"
         and (int(r["M"]), int(r["N"]), int(r["K"])) == REGION_FULL_ANCHOR_SHAPE
     ]
-    # 3 levels x 3 seeds = 9 intended full-anchor NOT_RUN cells.
-    assert len(region_not_run) == 9, region_not_run
-    # every NOT_RUN row carries a non-empty reason after the ``not_run:`` prefix
-    for r in region_not_run:
-        assert r["source"] != "not_run:", r
-        assert r["relative_l2"] == "", r  # empty metrics
+    # 3 levels x 3 seeds = 9 full-anchor MEASURED cells.
+    assert len(region_measured) == 9, region_measured
+    for r in region_measured:
+        assert r["relative_l2"] != "", r  # real measured metric
+        rel_l2 = float(r["relative_l2"])
+        assert rel_l2 >= 0, r  # non-negative
+        assert rel_l2 < 1e-4, r  # within policy (G1: rel_l2 ~ 8.5e-7)
     # levels x seeds coverage is complete
-    levels_seeds = {(r["dynamic_range_level"], int(r["seed"])) for r in region_not_run}
+    levels_seeds = {(r["dynamic_range_level"], int(r["seed"])) for r in region_measured}
     assert levels_seeds == {
         (lvl, s)
         for lvl in ("baseline", "mixed_scale", "cancellation")
@@ -873,28 +915,36 @@ def test_regenerated_csv_contains_region_full_anchor_not_run_rows():
     }
 
 
-def test_regenerated_csv_contains_cutlass_not_run_rows_with_reason():
-    """The regenerated ``numerical_validation.csv`` MUST preserve the cutlass
-    adversarial NOT_RUN reason (``not_run:toolchain-injection-unavailable``) in
-    the ``source`` column. Previously the reason was stripped because
-    ``_CSV_COLUMNS`` lacked ``source``; it lived only ephemerally on the
-    in-memory row from collect_cutlass."""
+def test_regenerated_csv_contains_cutlass_measured_or_not_run_rows():
+    """G5: the regenerated ``numerical_validation.csv`` lists 9 cutlass_4m_single
+    rows (3 levels x 3 seeds) that are EITHER measured (source=``measured`` with
+    real relative_l2, when the cutlass toolchain was available during regen) OR
+    not_run (source=``not_run:...`` with the real failure reason, when the
+    toolchain was unavailable). Replaces the old test that expected exactly 6
+    adversarial NOT_RUN rows (G5 measures all 3 levels when the toolchain is
+    available)."""
     import csv
     import os
 
     csv_path = os.path.join("results", "phase0", "numerical_validation.csv")
     with open(csv_path, newline="") as fh:
         rows = list(csv.DictReader(fh))
-    cutlass_not_run = [
-        r
-        for r in rows
-        if r["route"] == "cutlass_4m_single" and r["source"].startswith("not_run:")
-    ]
-    # 2 adversarial levels (mixed_scale, cancellation) x 3 seeds = 6 NOT_RUN cells.
-    assert len(cutlass_not_run) == 6, cutlass_not_run
-    for r in cutlass_not_run:
-        assert "toolchain-injection-unavailable" in r["source"], r
-        assert r["relative_l2"] == "", r
+    cutlass_rows = [r for r in rows if r["route"] == "cutlass_4m_single"]
+    # 3 levels x 3 seeds = 9 cutlass rows total (measured or not_run).
+    assert len(cutlass_rows) == 9, cutlass_rows
+    for r in cutlass_rows:
+        if r["source"] == "measured":
+            assert r["relative_l2"] != "", r  # real measured metric
+        else:
+            assert r["source"].startswith("not_run"), r
+            assert r["relative_l2"] == "", r  # NOT_RUN -> empty metrics
+    # levels x seeds coverage is complete
+    levels_seeds = {(r["dynamic_range_level"], int(r["seed"])) for r in cutlass_rows}
+    assert levels_seeds == {
+        (lvl, s)
+        for lvl in ("baseline", "mixed_scale", "cancellation")
+        for s in (0, 1, 2)
+    }
 
 
 def test_csv_is_self_describing_aggregate_matches_json_verdicts(tmp_path):
