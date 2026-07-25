@@ -1,2 +1,2 @@
-path,materialized_latency_ms,registers_per_thread,occupancy_pct
-anchor,149.01640799999427,,
+path,materialized_latency_ms,kernel_only_latency_ms,registers_per_thread,occupancy_pct
+anchor,104.16975600000455,20210.05859375,60,66.7
