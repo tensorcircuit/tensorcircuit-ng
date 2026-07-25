@@ -169,3 +169,107 @@ extern "C" __global__ void fused_pte_tiled_kernel(
         E[eidx].y = accy;
     }
 }
+
+// Persistent CTA kernel (Task G4).
+//
+// A persistent variant of the producer-tiled kernel: a FIXED number of CTAs
+// (num_sm * target_occupancy, set by the host) grid-stride over J-TILES
+// (output column tiles of width BN). For each j-tile, the CTA loads the FULL
+// producer tile T[:, j0:j0+BN] into shared memory ONCE, then iterates over ALL
+// i-tiles (num_tiles_y = ceil(TM/BM) of them), reusing the producer tile
+// across every BM consumer rows per i-tile AND across all i-tiles.
+//
+// Cross-tile producer reuse: in G3 (tiled), each output tile (i-tile + j-tile)
+// is handled by a separate CTA that loads its own producer tile. CTAs sharing
+// the same j-range re-load the same producer tile -> TM/BM x redundancy. The
+// persistent kernel eliminates this: one CTA loads the producer tile once and
+// serves all i-tiles for that j-tile, reducing producer recompute by TM/BM.
+//
+// Shared memory holds the FULL producer tile TM*BN c64 elements (the (k, jl)
+// pairs needed by any i-tile for this j-tile). The K1 inner accumulation is
+// not tiled (full K1 loop per producer element), matching G1's proven math.
+//
+// Thread -> output mapping: within an i-tile, threads handle outputs in
+// strided chunks (tid, tid+threads, ...). Each output is independent (no
+// cross-output accumulator), so there is no MAX_OUT_PER_THREAD register cap.
+extern "C" __global__ void fused_pte_persistent_kernel(
+    const c64* A, const c64* B, const c64* D, c64* E,
+    int PM, int PN, int K1, int TM, int TN,
+    int BM, int BN, int num_tiles_y,
+    const int* outdim, const int* out_stride, const int* rd_stride, const int* tp) {
+
+    int tid = threadIdx.x;
+    int threads = blockDim.x;
+    int num_j_tiles = (TN + BN - 1) / BN;
+    int outputs_per_itile = BM * BN;
+
+    // Shared memory: full producer tile [k][jl], k in [0, TM), jl in [0, BN).
+    // Layout: shared_P[k * BN + jl]. Size: TM * BN c64 elements (dynamic smem).
+    extern __shared__ c64 shared_P[];
+
+    // Persistent grid-stride over j-tiles. Each CTA handles j_tiles
+    // {blockIdx.x, blockIdx.x + gridDim.x, ...} until all j-tiles are done.
+    for (int j_tile = blockIdx.x; j_tile < num_j_tiles; j_tile += gridDim.x) {
+        int j0 = j_tile * BN;
+
+        // Phase 1: cooperatively load producer tile T[k, j0+jl] for k in
+        // [0, TM), jl in [0, BN). Each element T[k, j] = P[m, n] = sum_l A[m,l]*B[l,n]
+        // where (m, n) = divmod(inv_transform(k*TN + j), PN). Reuses G1/G3's
+        // inv_transform math exactly (proven rel_l2 = 8.5e-7).
+        int producer_n = TM * BN;
+        for (int idx = tid; idx < producer_n; idx += threads) {
+            int k = idx / BN;
+            int jl = idx - k * BN;
+            int j_cur = j0 + jl;
+            int t_lin = k * TN + j_cur;
+            long long p = inv_transform(t_lin, outdim, out_stride, rd_stride, tp);
+            int m = (int)(p / PN);
+            int n = (int)(p % PN);
+            const c64* arow = A + (long long)m * K1;
+            float px = 0.f, py = 0.f;
+            for (int l = 0; l < K1; ++l) {
+                const c64& a = arow[l];
+                const c64& b = B[(long long)l * PN + n];
+                px += a.x * b.x - a.y * b.y;
+                py += a.x * b.y + a.y * b.x;
+            }
+            shared_P[k * BN + jl].x = px;
+            shared_P[k * BN + jl].y = py;
+        }
+        __syncthreads();
+
+        // Phase 2: iterate i-tiles, reusing the producer tile in shared_P.
+        // For each i-tile, each thread handles one output per chunk iteration.
+        // The accumulator is per-output (independent), reset per output.
+        for (int i_tile = 0; i_tile < num_tiles_y; ++i_tile) {
+            int i0 = i_tile * BM;
+
+            for (int chunk = 0; chunk < outputs_per_itile; chunk += threads) {
+                int o = chunk + tid;
+                if (o < outputs_per_itile) {
+                    int ty = o / BN;
+                    int tx = o - ty * BN;
+                    int i = i0 + ty;
+                    int j = j0 + tx;
+                    if (i < TM && j < TN) {
+                        const c64* drow = D + (long long)i * TM;
+                        float accx = 0.f, accy = 0.f;
+                        // E[i,j] = sum_k D[i,k] * T[k,j] = sum_k D[i,k] * shared_P[k, tx]
+                        for (int k = 0; k < TM; ++k) {
+                            const c64& t = shared_P[k * BN + tx];
+                            const c64& d = drow[k];
+                            accx += d.x * t.x - d.y * t.y;
+                            accy += d.x * t.y + d.y * t.x;
+                        }
+                        long long eidx = (long long)i * TN + j;
+                        E[eidx].x = accx;
+                        E[eidx].y = accy;
+                    }
+                }
+            }
+        }
+        // Ensure all threads finished reading shared_P before the next j-tile
+        // overwrites it (persistent CTAs reuse the same shared buffer).
+        __syncthreads();
+    }
+}

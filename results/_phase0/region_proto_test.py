@@ -354,6 +354,37 @@ def test_tiled_kernel_correctness():
     assert bool(cp.all(cp.isfinite(E_tiled)))
 
 
+# ---------------------------------------------------------------------------
+# Task G4: persistent CTA kernel + tile search (GPU phase).
+# A persistent variant: a FIXED number of CTAs (num_sm * target_occupancy)
+# grid-stride over j-tiles; for each j-tile, the CTA loads the FULL producer
+# tile T[:, j0:j0+BN] into shared memory once, then iterates over ALL i-tiles
+# (TM/BM of them), reusing the producer tile across all i-tiles. This gives a
+# producer-recompute reduction factor of TM/BM vs G3 (where each i-tile's CTA
+# re-loads the same producer tile).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.gpu
+def test_persistent_kernel_correctness():
+    """Persistent CTA fused kernel == materialized E at full anchor."""
+    from results._phase0.region_proto import (
+        fused_reference_persistent,
+        materialized_reference_full,
+        full_anchor_contract,
+    )
+
+    steps = full_anchor_contract()["steps"]
+    E_mat, _, _ = materialized_reference_full(steps)
+    E_pers = fused_reference_persistent(
+        steps, tile_cfg={"BM": 16, "BN": 16, "warps": 4}
+    )
+    diff = E_pers - E_mat
+    rel_l2 = float(cp.linalg.norm(diff) / max(1.0, cp.linalg.norm(E_mat)))
+    assert rel_l2 < 1e-4, rel_l2
+    assert bool(cp.all(cp.isfinite(E_pers)))
+
+
 if __name__ == "__main__":
     import sys, pytest
 

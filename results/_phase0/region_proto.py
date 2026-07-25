@@ -574,6 +574,329 @@ def _tile_search_tiled() -> list:
     return results
 
 
+# --- Layer 2d: persistent CTA kernel (Task G4, GPU phase) ---
+#
+# A persistent variant of the producer-tiled kernel. A FIXED number of CTAs
+# (num_sm * target_occupancy) grid-stride over j-tiles (output column tiles of
+# width BN). For each j-tile, the CTA loads the FULL producer tile
+# T[:, j0:j0+BN] into shared memory ONCE, then iterates over ALL i-tiles
+# (ceil(TM/BM) of them), reusing the producer tile across every BM consumer
+# rows per i-tile AND across all i-tiles.
+#
+# Cross-tile producer reuse: in G3 (tiled), each output tile (i-tile + j-tile)
+# is handled by a separate CTA that loads its own producer tile. CTAs sharing
+# the same j-range re-load the same producer tile -> ceil(TM/BM) x redundancy.
+# The persistent kernel eliminates this: one CTA loads the producer tile once
+# and serves all i-tiles for that j-tile, reducing producer recompute by
+# ceil(TM/BM). For BM=16, TM=64 this is a 4x producer-recompute reduction.
+#
+# The producer tile (TM*BN c64 elements) fits in shared memory for the explored
+# BN dims (BN <= 64 -> <= 32 KB, under the 48 KB default smem per block on
+# sm_120). The K1 inner accumulation is not tiled (full K1 loop), matching G1.
+
+
+def fused_reference_persistent(steps, tile_cfg: dict, seed: int = 7):
+    """E = D @ transform(A @ B) at the FULL anchor via the persistent CTA
+    kernel. Same inputs (seed) as ``materialized_reference_full`` so the diff
+    is purely the kernel's numerical behavior.
+
+    ``tile_cfg`` selects:
+      - BM: output tile i-dim (per i-tile). The persistent kernel iterates
+        ceil(TM/BM) i-tiles per j-tile, reusing the producer tile across all.
+      - BN: output tile j-dim = producer tile j-dim. The full producer tile
+        T[:, j0:j0+BN] (TM*BN c64 elements) is loaded into shared memory once
+        per j-tile.
+      - warps: warps per CTA -> threads = warps * 32.
+      - blocks_per_sm (optional, default 2): persistent CTAs per SM. The grid
+        launches num_sm * blocks_per_sm CTAs total.
+
+    Returns E (c64[TM, TN])."""
+    s = FULL_ANCHOR
+    rng = np.random.default_rng(seed)
+    A = (
+        rng.standard_normal((s["PM"], s["K1"]))
+        + 1j * rng.standard_normal((s["PM"], s["K1"]))
+    ).astype(np.complex64)
+    B = (
+        rng.standard_normal((s["K1"], s["PN"]))
+        + 1j * rng.standard_normal((s["K1"], s["PN"]))
+    ).astype(np.complex64)
+    D = (
+        rng.standard_normal((s["TM"], s["TM"]))
+        + 1j * rng.standard_normal((s["TM"], s["TM"]))
+    ).astype(np.complex64)
+    dA, dB, dD = cp.asarray(A), cp.asarray(B), cp.asarray(D)
+    E = cp.empty((s["TM"], s["TN"]), dtype=cp.complex64)
+    idx = _transform_index_arrays(steps)
+    kr = _kernel("fused_pte_persistent_kernel")
+
+    BM = int(tile_cfg["BM"])
+    BN = int(tile_cfg["BN"])
+    warps = int(tile_cfg["warps"])
+    threads = warps * 32
+
+    if threads > 1024:
+        raise ValueError(
+            f"warps={warps} -> threads={threads} exceeds 1024 max (sm_120)"
+        )
+
+    num_tiles_y = (s["TM"] + BM - 1) // BM
+
+    # Persistent CTA count: num_sm * target_blocks_per_sm.
+    props = _device_props()
+    num_sm = props["num_sm"]
+    blocks_per_sm = int(tile_cfg.get("blocks_per_sm", 2))
+    grid_size = num_sm * blocks_per_sm
+
+    # Shared mem: full producer tile TM * BN c64 elements (8 bytes each).
+    shared_mem = s["TM"] * BN * 8
+    if shared_mem > props["shared_mem_per_block"]:
+        raise ValueError(
+            f"shared_mem={shared_mem} > per_block=" f"{props['shared_mem_per_block']}"
+        )
+
+    kr(
+        (grid_size,),
+        (threads,),
+        (
+            dA,
+            dB,
+            dD,
+            E,
+            np.int32(s["PM"]),
+            np.int32(s["PN"]),
+            np.int32(s["K1"]),
+            np.int32(s["TM"]),
+            np.int32(s["TN"]),
+            np.int32(BM),
+            np.int32(BN),
+            np.int32(num_tiles_y),
+            idx["outdim"],
+            idx["out_stride"],
+            idx["rd_stride"],
+            idx["tp"],
+        ),
+        shared_mem=shared_mem,
+    )
+    cp.cuda.Device(0).synchronize()
+    return E
+
+
+def _tile_search_persistent() -> list:
+    """Explore persistent-kernel configs and return per-config metrics.
+
+    TRACTABLE SCOPE (G3 lesson): a curated representative subset of ~12 configs
+    (varying BM/BN output-tile dims + warps + blocks_per_sm) with REDUCED
+    latency measurement (1 warmup + 3 iters, median-of-3). This produces honest
+    bench data in ~10-15 min and keeps the function and CSV consistent. The
+    full exhaustive search is available by expanding ``CONFIGS`` below.
+
+    For each config: measure correctness (rel_l2 vs materialized oracle),
+    latency (kernel-only via cuda events, 1w+3i), and resources (registers,
+    occupancy). Infeasible configs (compile/launch fail or OOM) are recorded
+    honestly with the failure reason, not silently skipped. Appends persistent
+    rows to ``results/phase0/region_prototype_bench.csv`` (preserving G2's
+    direct rows + G3's tiled rows) with a ``strategy`` column.
+
+    CSV column mapping for persistent rows (the schema is shared with
+    direct/tiled for a single comparison table; the persistent-specific
+    parameters are placed in the existing tile-config columns):
+      BM_p  <- BM (output tile i-dim)
+      BN_p  <- BN (output tile j-dim = producer tile j-dim)
+      BK_p  <- warps (warps per CTA)
+      BM_c  <- blocks_per_sm (persistent CTAs per SM)
+      BN_c  <- "" (unused for persistent)
+    """
+    contract = full_anchor_contract()
+    steps = contract["steps"]
+    s = FULL_ANCHOR
+
+    # Materialize the oracle E once (seed=7) and keep it resident for all configs.
+    E_mat, _p_b, _t_b = materialized_reference_full(steps, seed=7)
+    norm_mat = float(cp.linalg.norm(E_mat))
+
+    # Curated representative subset (~12 configs). Varies:
+    #   - BM (output i-tile): 8/16/32/64 -> num_tiles_y = 8/4/2/1 (cross-tile
+    #     producer reuse factor = num_tiles_y; smaller BM = more reuse).
+    #   - BN (output j-tile = producer j-tile): 16/32/64 -> shared mem
+    #     TM*BN*8 = 8/16/32 KB.
+    #   - warps (threads = warps*32): 4/8 -> 128/256 threads.
+    #   - blocks_per_sm (persistent CTAs/SM): 1/2/4 -> grid_size = 46/92/184.
+    CONFIGS = [
+        {"BM": 16, "BN": 16, "warps": 4},  # test config (baseline)
+        {"BM": 16, "BN": 16, "warps": 8},
+        {"BM": 16, "BN": 32, "warps": 8},
+        {"BM": 16, "BN": 32, "warps": 4},
+        {"BM": 8, "BN": 16, "warps": 4},  # 8x cross-tile reuse (max)
+        {"BM": 8, "BN": 32, "warps": 8},
+        {"BM": 32, "BN": 16, "warps": 8},  # 2x reuse
+        {"BM": 32, "BN": 32, "warps": 8},
+        {"BM": 16, "BN": 64, "warps": 8},  # wider producer tile (32 KB smem)
+        {"BM": 64, "BN": 16, "warps": 8},  # BM=TM -> 1 i-tile (no cross-tile reuse)
+        {"BM": 16, "BN": 16, "warps": 4, "blocks_per_sm": 1},  # fewer CTAs
+        {"BM": 16, "BN": 16, "warps": 4, "blocks_per_sm": 4},  # more CTAs
+    ]
+
+    props = _device_props()
+    results = []
+    for i, cfg in enumerate(CONFIGS):
+        threads = cfg["warps"] * 32
+        shared_mem = s["TM"] * cfg["BN"] * 8
+        bpsm = cfg.get("blocks_per_sm", 2)
+        tag = (
+            f"cfg{i+1}/{len(CONFIGS)} BM={cfg['BM']},BN={cfg['BN']},"
+            f"warps={cfg['warps']},bpsm={bpsm}"
+        )
+
+        # Static feasibility checks (threads / shared mem limits).
+        if threads > 1024:
+            results.append(
+                {
+                    **cfg,
+                    "rel_l2": None,
+                    "kernel_only_latency_ms": None,
+                    "registers_per_thread": None,
+                    "occupancy_pct": None,
+                    "strategy": "persistent",
+                    "infeasible": True,
+                    "failure_reason": f"threads={threads} > 1024",
+                }
+            )
+            continue
+        if shared_mem > props["shared_mem_per_block"]:
+            results.append(
+                {
+                    **cfg,
+                    "rel_l2": None,
+                    "kernel_only_latency_ms": None,
+                    "registers_per_thread": None,
+                    "occupancy_pct": None,
+                    "strategy": "persistent",
+                    "infeasible": True,
+                    "failure_reason": (
+                        f"shared_mem={shared_mem} > " f"{props['shared_mem_per_block']}"
+                    ),
+                }
+            )
+            continue
+
+        # Correctness (single run, seed=7).
+        try:
+            cp.get_default_memory_pool().free_all_blocks()
+            cp.cuda.Device(0).synchronize()
+            E_pers = fused_reference_persistent(steps, cfg, seed=7)
+            diff = E_pers - E_mat
+            rel_l2 = float(cp.linalg.norm(diff) / max(1.0, norm_mat))
+            finite = bool(cp.all(cp.isfinite(E_pers)))
+            del E_pers
+            cp.get_default_memory_pool().free_all_blocks()
+        except Exception as exc:
+            results.append(
+                {
+                    **cfg,
+                    "rel_l2": None,
+                    "kernel_only_latency_ms": None,
+                    "registers_per_thread": None,
+                    "occupancy_pct": None,
+                    "strategy": "persistent",
+                    "infeasible": True,
+                    "failure_reason": (f"correctness: {type(exc).__name__}: {exc}"),
+                }
+            )
+            continue
+
+        # Latency (cuda events, median of 3 after 1 warmup -- reduced scope).
+        try:
+            cp.get_default_memory_pool().free_all_blocks()
+            cp.cuda.Device(0).synchronize()
+            latency = _measure_latency_full(
+                lambda c=cfg: fused_reference_persistent(steps, c, seed=7),
+                warmup=1,
+                iters=3,
+            )
+            latency_ms = latency["kernel_only_latency_ms"]
+        except Exception as exc:
+            results.append(
+                {
+                    **cfg,
+                    "rel_l2": rel_l2,
+                    "kernel_only_latency_ms": None,
+                    "registers_per_thread": None,
+                    "occupancy_pct": None,
+                    "strategy": "persistent",
+                    "infeasible": True,
+                    "failure_reason": f"latency: {type(exc).__name__}: {exc}",
+                }
+            )
+            continue
+
+        # Resources.
+        regs = _registers_for_kernel("fused_pte_persistent_kernel")
+        occ = None
+        if regs is not None:
+            _b, occ = _occupancy(props, threads, regs)
+
+        results.append(
+            {
+                **cfg,
+                "rel_l2": rel_l2,
+                "kernel_only_latency_ms": latency_ms,
+                "registers_per_thread": regs,
+                "occupancy_pct": round(occ, 1) if occ is not None else None,
+                "strategy": "persistent",
+                "infeasible": False,
+                "finite": finite,
+            }
+        )
+
+    # Append persistent rows to the bench CSV (preserve direct + tiled rows).
+    import csv
+
+    csv_path = f"{OUT_DIR}/region_prototype_bench.csv"
+    # Read existing rows, keep only direct + tiled (discard old persistent).
+    existing = []
+    if os.path.exists(csv_path):
+        with open(csv_path, newline="") as fh:
+            reader = csv.reader(fh)
+            header = next(reader, None)
+            if header is not None:
+                existing.append(header)
+            for row in reader:
+                if row and row[0] in ("direct", "tiled"):
+                    existing.append(row)
+
+    with open(csv_path, "w", newline="") as fh:
+        w = csv.writer(fh, lineterminator="\n")
+        # Re-emit header + preserved direct/tiled rows.
+        for row in existing:
+            w.writerow(row)
+        # Append persistent rows. Tile-config columns are repurposed (see
+        # docstring): BM_p=BM, BN_p=BN, BK_p=warps, BM_c=blocks_per_sm, BN_c="".
+        for r in results:
+            w.writerow(
+                [
+                    "persistent",
+                    r.get("BM", ""),
+                    r.get("BN", ""),
+                    r.get("warps", ""),
+                    r.get("blocks_per_sm", 2),
+                    "",
+                    "",
+                    r.get("kernel_only_latency_ms", ""),
+                    r.get("registers_per_thread", ""),
+                    r.get("occupancy_pct", ""),
+                    r.get("rel_l2", ""),
+                    r.get("infeasible", ""),
+                    r.get("failure_reason", ""),
+                ]
+            )
+
+    del E_mat
+    cp.get_default_memory_pool().free_all_blocks()
+    cp.cuda.Device(0).synchronize()
+    return results
+
+
 def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
     """Full-anchor correctness: fused (direct recompute) vs materialized oracle,
     across ``seeds`` (default 3). For each seed, materialized and fused use
