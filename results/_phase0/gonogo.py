@@ -800,6 +800,10 @@ def _cutlass_fallback_normalized(data):
     ``kernel_path == "sm80_fallback"``) and emits the field names defined by
     :data:`gate_contracts.GATE_CONTRACTS` ``["cutlass_fallback"]``:
 
+      * ``schema_state``: VALID if ``schema_version`` in the allowlist, MISSING
+        if absent, else UNRECOGNIZED (F1 fail-open fix -- the fallback pass
+        clause now requires schema_state=VALID, mirroring the native reader;
+        an unrecognized schema can never back a fallback PASS).
       * ``attempt_state``: ATTEMPTED if ``attempted is True``, else
         NOT_ATTEMPTED.
       * ``compile_state``: ``"OK"`` (not ``"SUCCEEDED"``) if ``compiles is
@@ -828,10 +832,21 @@ def _cutlass_fallback_normalized(data):
     attempted = exec_src.get("attempted")
     attempt_state = "ATTEMPTED" if attempted is True else "NOT_ATTEMPTED"
 
+    # Schema state (top-level artifact field; F1 fail-open fix -- the fallback
+    # pass clause now requires schema_state=VALID, mirroring the native reader).
+    sv = data.get("schema_version")
+    if sv is None:
+        schema_state = "MISSING"
+    elif sv in _CUTLASS_SCHEMA_VERSIONS:
+        schema_state = "VALID"
+    else:
+        schema_state = "UNRECOGNIZED"
+
     compiles = exec_src.get("compiles")
     compile_status = exec_src.get("compile_status")
 
     raw = {
+        "schema_state": schema_state,
         "attempt_state": attempt_state,
         "consistency_state": "CONSISTENT",
     }

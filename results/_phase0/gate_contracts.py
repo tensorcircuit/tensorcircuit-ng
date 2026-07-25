@@ -186,6 +186,12 @@ GROUPED = GateContract(
         ("schema_state", "VALID"),
         ("api_state", "PRESENT"),
         ("attempt_state", "ATTEMPTED"),
+        # F1 fail-open fix: a PASS must require a RECOGNIZED probe_source.
+        # Without this, probe_source_state="UNRECOGNIZED" + all else green ->
+        # PASS (WRONG: an unrecognized probe source means the API presence is
+        # unverified). The not_supported clause already gates on RECOGNIZED;
+        # the pass clause must too.
+        ("probe_source_state", "RECOGNIZED"),
         ("compile_state", "SUCCEEDED"),
         ("run_state", "SUCCEEDED"),
         ("correctness_state", "PASSED"),
@@ -307,6 +313,12 @@ CUTLASS_NATIVE = GateContract(
 CUTLASS_FALLBACK = GateContract(
     name="cutlass_fallback",
     pass_clause=(
+        # F1 fail-open fix: a PASS must require a VALID schema. Without this,
+        # schema_state="UNRECOGNIZED" + all else green -> PASS (WRONG). The
+        # native contract already gates on schema_state=VALID; the fallback
+        # contract must too. The reader (_cutlass_fallback_normalized) sets
+        # schema_state from schema_version (same allowlist as native).
+        ("schema_state", "VALID"),
         ("attempt_state", "ATTEMPTED"),
         ("compile_state", "OK"),
         ("run_state", "SUCCEEDED"),

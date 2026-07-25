@@ -22,6 +22,8 @@ v3-review errata it is split into TWO tests:
     pass fields.
 """
 
+import pytest
+
 from results._phase0.gate_contracts import (
     GATE_CONTRACTS,
     GateContract,
@@ -70,6 +72,7 @@ def test_allowlist_dominance_per_condition_flip():
         "schema_state": "VALID",
         "api_state": "PRESENT",
         "attempt_state": "ATTEMPTED",
+        "probe_source_state": "RECOGNIZED",
         "compile_state": "SUCCEEDED",
         "run_state": "SUCCEEDED",
         "correctness_state": "PASSED",
@@ -80,6 +83,7 @@ def test_allowlist_dominance_per_condition_flip():
         ("schema_state", "MISSING"),
         ("api_state", "ABSENT_DEFINITIVE"),
         ("attempt_state", "NOT_ATTEMPTED"),
+        ("probe_source_state", "UNRECOGNIZED"),
         ("compile_state", "FAILED"),
         ("run_state", "FAILED"),
         ("correctness_state", "FAILED"),
@@ -100,6 +104,7 @@ def test_contradiction_field_yields_unknown():
         "schema_state": "VALID",
         "api_state": "PRESENT",
         "attempt_state": "ATTEMPTED",
+        "probe_source_state": "RECOGNIZED",
         "compile_state": "SUCCEEDED",
         "run_state": "SUCCEEDED",
         "correctness_state": "PASSED",
@@ -140,7 +145,7 @@ def test_normative_policy_constants_only():
 
 # ---------------------------------------------------------------------------
 # Task 8 Step 4 concrete tests: per-condition flip for region (12), native (7),
-# fallback (5). For each pass condition, flip it to a non-PASS value while
+# fallback (6). For each pass condition, flip it to a non-PASS value while
 # keeping the other N-1 at PASS -> assert evaluate_gate != PASS.
 # ---------------------------------------------------------------------------
 
@@ -225,6 +230,7 @@ def test_cutlass_native_7_condition_flip():
 
 
 _FALLBACK_FLIP = {
+    "schema_state": "UNRECOGNIZED",
     "attempt_state": "NOT_ATTEMPTED",
     "compile_state": "BLOCKED",
     "run_state": "FAILED",
@@ -233,8 +239,8 @@ _FALLBACK_FLIP = {
 }
 
 
-def test_cutlass_fallback_5_condition_flip():
-    """Flip each of the 5 cutlass_fallback pass conditions one at a time ->
+def test_cutlass_fallback_6_condition_flip():
+    """Flip each of the 6 cutlass_fallback pass conditions one at a time ->
     evaluate_gate != PASS."""
     contract = GATE_CONTRACTS["cutlass_fallback"]
     base = dict(contract.pass_clause)
@@ -245,4 +251,85 @@ def test_cutlass_fallback_5_condition_flip():
         token, _ = evaluate_gate(raw, contract)
         assert token != "PASS", f"fallback flipped {field_name}={flip_value} got PASS"
         n += 1
-    assert n == 5, n
+    assert n == 6, n
+
+
+# ---------------------------------------------------------------------------
+# F1 fail-open fix: EXHAUSTIVE truth-table test (the anti-reactive part). For
+# EACH of the 4 contracts, flip EACH pass field to EACH invalid value (None,
+# "" empty, "WRONG" generic token, and a field-specific invalid) and assert
+# evaluate_gate != PASS. This proves NO single-field invalid value yields PASS
+# -- the coverage the prior reactive (one-value-per-field) flips missed.
+# ---------------------------------------------------------------------------
+
+# Field-specific invalid value per pass field (the "natural" failure token for
+# that field). Every pass field across all 4 contracts is covered so each
+# field gets a 4th, semantically-meaningful invalid value alongside the
+# generic None / "" / "WRONG".
+_FIELD_SPECIFIC_INVALID = {
+    "schema_state": "UNRECOGNIZED",
+    "api_state": "ABSENT_INCONCLUSIVE",
+    "attempt_state": "NOT_ATTEMPTED",
+    "probe_source_state": "UNRECOGNIZED",
+    "compile_state": "FAILED",
+    "run_state": "FAILED",
+    "correctness_state": "FAILED",
+    "coverage_state": "INCOMPLETE",
+    "consistency_state": "CONFLICT",
+    "evidence_class_state": "MODEL_ONLY",
+    "method_state": "UNAPPROVED",
+    "scope_state": "PARTIAL",
+    "sample_state": "NAN",
+    "peak_state": "NAN",
+    "gain_state": "NEGATIVE",
+    "full_anchor_run_state": "FALSE",
+    "case_binding_state": "MISSING",
+    "accuracy_state": "FAILED",
+    "resource_state": "MISSING",
+}
+
+
+def _exhaustive_no_pass_cases():
+    """Build (contract_name, field_name, invalid_value) cases: for each
+    contract, for each pass field, for each of {None, "", "WRONG",
+    field-specific invalid}."""
+    cases = []
+    for contract_name in (
+        "grouped",
+        "region_peak",
+        "cutlass_native",
+        "cutlass_fallback",
+    ):
+        contract = GATE_CONTRACTS[contract_name]
+        for field_name, _pass_value in contract.pass_clause:
+            specific = _FIELD_SPECIFIC_INVALID[field_name]
+            for invalid in (None, "", "WRONG", specific):
+                cases.append((contract_name, field_name, invalid))
+    return cases
+
+
+@pytest.mark.parametrize(
+    "contract_name,field_name,invalid_value",
+    _exhaustive_no_pass_cases(),
+)
+def test_no_invalid_value_yields_PASS(contract_name, field_name, invalid_value):
+    """EXHAUSTIVE truth-table: flipping any single pass field to any invalid
+    value must NOT yield PASS (anti-reactive coverage for the F1 fail-open
+    fix). The all-PASS base is first asserted PASS so the test is never
+    vacuous; then one field is flipped and the result must differ from PASS."""
+    contract = GATE_CONTRACTS[contract_name]
+    base = dict(contract.pass_clause)
+    # Sanity: the all-PASS base itself must be PASS (else the flip test is
+    # vacuous -- a broken base would mask a real fail-open).
+    base_token, _ = evaluate_gate(base, contract)
+    assert base_token == "PASS", (
+        f"{contract_name} all-PASS base is {base_token!r}, not PASS; "
+        f"test harness is broken"
+    )
+    raw = dict(base)
+    raw[field_name] = invalid_value
+    token, reason = evaluate_gate(raw, contract)
+    assert token != "PASS", (
+        f"{contract_name} field {field_name}={invalid_value!r} yielded PASS; "
+        f"reason={reason}"
+    )
