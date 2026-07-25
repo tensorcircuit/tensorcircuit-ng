@@ -17,6 +17,7 @@ render from one canonical gonogo-v2 object (no divergent code paths).
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
 
@@ -585,9 +586,18 @@ def _c3_grouped_status(path):
     # 2. Bidirectional self-report consistency: compare the recomputed token to
     #    what the self-reported capability.status maps to. Any disagreement ->
     #    CONFLICT -> re-evaluate -> contradiction -> UNKNOWN.
+    #    F8d: an UNKNOWN self-report enum (not in the map) is ALSO a conflict --
+    #    the artifact makes an unrecognized claim that cannot be trusted.
+    #    Previously unknown enums were silently ignored (expected_from_self =
+    #    None -> no conflict check) -> a forged "MADE_UP" status + all green
+    #    -> PASS (fail-open).
     status = (data.get("capability") or {}).get("status")
     expected_from_self = _GROUPED_SELF_REPORT_MAP.get(status)
-    if expected_from_self is not None and candidate != expected_from_self:
+    if status is not None and expected_from_self is None:
+        # F8d: unknown self-report enum -> CONFLICT -> contradiction -> UNKNOWN.
+        raw["consistency_state"] = "CONFLICT"
+        candidate = evaluate_gate(raw, GATE_CONTRACTS["grouped"])[0]
+    elif expected_from_self is not None and candidate != expected_from_self:
         raw["consistency_state"] = "CONFLICT"
         candidate = evaluate_gate(raw, GATE_CONTRACTS["grouped"])[0]
 
@@ -658,10 +668,11 @@ _CUTLASS_NATIVE_SELF_REPORT_MAP = {
 }
 
 
-#: Frozen self-report -> canonical-token map for the SM80 fallback section.
-#: The fallback contract has empty ``contradiction_fields``, so CONFLICT does
-#: not trigger a contradiction re-evaluate; the bidirectional check is
-#: informational (the recompute via evaluate_gate is the single decision rule).
+#: Frozen self-report -> canonical-token map for the SM80 fallback section
+#: (F8d: the fallback contract's ``contradiction_fields`` now includes
+#: ``("consistency_state","CONFLICT")``, so the bidirectional consistency
+#: check is binding -- a disagreement or unknown self-report -> CONFLICT ->
+#: contradiction -> UNKNOWN, not PASS).
 _CUTLASS_FALLBACK_SELF_REPORT_MAP = {
     "PASS": "PASS",
     "FAIL": "FAIL",
@@ -755,8 +766,14 @@ def _cutlass_native_normalized(data):
         schema_state = "UNRECOGNIZED"
 
     # Attempt state (from section or single_4m).
+    # F8d: ``attempted`` must come from the native section OR single_4m ONLY IF
+    # single_4m.kernel_path == "sm120_native" (not from an sm80_fallback's
+    # single_4m -- cross-path borrowing is a fail-open). Previously the reader
+    # fell back to s4.get("attempted") without checking kernel_path, so a
+    # native section missing ``attempted`` + an sm80_fallback single_4m with
+    # attempted=True -> ATTEMPTED (wrong -- borrowed from the fallback path).
     attempted = sec.get("attempted")
-    if attempted is None:
+    if attempted is None and s4.get("kernel_path") == "sm120_native":
         attempted = s4.get("attempted")
     attempt_state = "ATTEMPTED" if attempted is True else "NOT_ATTEMPTED"
 
@@ -854,10 +871,11 @@ def _cutlass_fallback_normalized(data):
         from the section ``runs`` / ``correctness.gate_pass`` /
         ``coverage_complete``.
 
-    No blocker fields (the fallback contract has empty not_supported and
-    empty contradiction). No bidirectional consistency check (the contract
-    has empty ``contradiction_fields``, so CONFLICT cannot trigger a
-    contradiction -- the recompute via evaluate_gate is the single rule).
+    No blocker fields (the fallback contract has empty not_supported).
+    F8d: bidirectional consistency check IS now performed by the caller
+    (``_cutlass_sm80_fallback_criterion``); the contract's
+    ``contradiction_fields`` includes ``("consistency_state","CONFLICT")``
+    so a conflict -> contradiction -> UNKNOWN.
     """
     sec = data.get("sm80_fallback_bf16_4m")
     sec = sec if isinstance(sec, dict) else {}
@@ -958,11 +976,17 @@ def _cutlass_native_sm120_criterion(data):
     # Bidirectional self-report consistency: compare the recomputed token to
     # what the self-reported capability maps to. Any disagreement -> CONFLICT
     # -> re-evaluate -> contradiction -> UNKNOWN.
+    # F8d: an UNKNOWN self-report enum (not in the map) is ALSO a conflict --
+    # the artifact makes an unrecognized claim that cannot be trusted.
     sec = data.get("native_sm120_bf16_4m")
     sec = sec if isinstance(sec, dict) else {}
     self_reported = sec.get("capability")
     expected_from_self = _CUTLASS_NATIVE_SELF_REPORT_MAP.get(self_reported)
-    if expected_from_self is not None and candidate != expected_from_self:
+    if self_reported is not None and expected_from_self is None:
+        # F8d: unknown self-report enum -> CONFLICT -> contradiction -> UNKNOWN.
+        raw["consistency_state"] = "CONFLICT"
+        candidate = evaluate_gate(raw, GATE_CONTRACTS["cutlass_native"])[0]
+    elif expected_from_self is not None and candidate != expected_from_self:
         raw["consistency_state"] = "CONFLICT"
         candidate = evaluate_gate(raw, GATE_CONTRACTS["cutlass_native"])[0]
 
@@ -985,9 +1009,10 @@ def _cutlass_sm80_fallback_criterion(data):
     reader returns UNKNOWN directly (the fallback path was not the one that
     ran -- no evidence cross-promotion from a native path).
 
-    The fallback contract has empty ``contradiction_fields``, so no
-    bidirectional consistency check is needed (CONFLICT cannot trigger a
-    contradiction re-evaluate; the recompute is the single rule).
+    F8d: the fallback NOW performs a bidirectional self-report consistency
+    check (the F3 reader skipped it). The contract's ``contradiction_fields``
+    includes ``("consistency_state","CONFLICT")``, so a disagreement or an
+    unknown self-report enum -> CONFLICT -> contradiction -> UNKNOWN (not PASS).
     """
     if not isinstance(data, dict):
         return _UNKNOWN
@@ -1005,6 +1030,24 @@ def _cutlass_sm80_fallback_criterion(data):
 
     raw = _cutlass_fallback_normalized(data)
     candidate = evaluate_gate(raw, GATE_CONTRACTS["cutlass_fallback"])[0]
+
+    # F8d: bidirectional self-report consistency (the F3 reader skipped this).
+    # Compare the recomputed token to the self-reported capability. Any
+    # disagreement -> CONFLICT -> contradiction -> UNKNOWN. An unknown
+    # self-report enum (not in the map) is ALSO a conflict. Previously the
+    # fallback had NO consistency check, so a forged capability="FAIL" +
+    # execution all green -> PASS (fail-open).
+    sec = data.get("sm80_fallback_bf16_4m")
+    sec = sec if isinstance(sec, dict) else {}
+    self_reported = sec.get("capability")
+    expected_from_self = _CUTLASS_FALLBACK_SELF_REPORT_MAP.get(self_reported)
+    if self_reported is not None and expected_from_self is None:
+        # F8d: unknown self-report enum -> CONFLICT -> contradiction -> UNKNOWN.
+        raw["consistency_state"] = "CONFLICT"
+        candidate = evaluate_gate(raw, GATE_CONTRACTS["cutlass_fallback"])[0]
+    elif expected_from_self is not None and candidate != expected_from_self:
+        raw["consistency_state"] = "CONFLICT"
+        candidate = evaluate_gate(raw, GATE_CONTRACTS["cutlass_fallback"])[0]
 
     return candidate
 
@@ -1038,14 +1081,20 @@ def _region_proto_is_real_pte(data):
         return False
     if cons[0] * cons[1] * 8 < _c2.FULL_E_MIN_BYTES:
         return False
-    if not (data.get("no_full_P_materialized") and data.get("no_full_T_materialized")):
+    # F8c: strict bool check (is True) -- a string "false" is truthy but NOT
+    # True. Without this, no_full_P_materialized="false" (string) passes the
+    # real-PTE gate and can reach PASS (fail-open).
+    if not (
+        data.get("no_full_P_materialized") is True
+        and data.get("no_full_T_materialized") is True
+    ):
         return False
     if any(m in str(data.get("math", "")).lower() for m in _c2._REDUCTION_MARKERS):
         return False
     return True
 
 
-def _region_case_binding_state(proto, c2_judgment_path):
+def _region_case_binding_state(proto, c2_judgment_path, proto_path=None):
     """Resolve ``case_binding_state`` for the region proto from
     ``c2_judgment.json`` (F4a -- the region positive path must be REACHABLE).
 
@@ -1057,11 +1106,24 @@ def _region_case_binding_state(proto, c2_judgment_path):
     missing/malformed c2_judgment / no matching case_id / binding_ok not True
     -> MISSING -> the region_peak pass_clause cannot hit -> not PASS).
 
+    F8c (evidence-integrity): the prior reader trusted ``binding_ok is True``
+    WITHOUT re-verifying the judgment itself. Now the reader RE-DERIVES the
+    binding's integrity from the judgment's raw fields:
+      (a) the judgment's ``schema_version`` must be in the allowlist
+          (``c2.C2_JUDGMENT_SCHEMA``);
+      (b) ``case["binding"]["problems"]`` must be EMPTY (no binding problems);
+      (c) if the judgment records a prototype hash (``binding.file_hashes
+          .prototype``), it must match the ACTUAL ``region_prototype.json``
+          byte hash (re-derived from ``proto_path``, not trusted).
+    If ANY of these fail -> MISSING (not MATCH), even if ``binding_ok is True``.
+
     This makes the region POSITIVE PATH reachable: a future MEASURED proto with
     a verified binding -> ``case_binding_state=MATCH`` -> can reach PASS. The
     committed proto is MODEL_ONLY + ``fused_full_anchor_run=false`` -> UNKNOWN
     regardless (honest -- the GPU phase has not run).
     """
+    from results._phase0 import c2 as _c2
+
     case_id = proto.get("case_id") if isinstance(proto, dict) else None
     if not case_id:
         return "MISSING"
@@ -1074,12 +1136,32 @@ def _region_case_binding_state(proto, c2_judgment_path):
         return "MISSING"
     if not isinstance(j, dict):
         return "MISSING"
+    # F8c(a): re-verify the judgment's schema_version is in the allowlist.
+    if j.get("schema_version") != _c2.C2_JUDGMENT_SCHEMA:
+        return "MISSING"
     case = j.get(case_id)
     if not isinstance(case, dict):
         return "MISSING"
     binding = case.get("binding")
     if not isinstance(binding, dict):
         return "MISSING"
+    # F8c(b): re-verify binding has NO problems (no binding problems).
+    problems = binding.get("problems")
+    if problems:
+        return "MISSING"
+    # F8c(c): if the judgment records a prototype hash, compare it to the
+    # actual region_prototype.json byte hash (re-derive, don't trust).
+    file_hashes = binding.get("file_hashes")
+    if isinstance(file_hashes, dict):
+        proto_hash = file_hashes.get("prototype")
+        if proto_hash and proto_path:
+            try:
+                with open(proto_path, "rb") as fh:
+                    actual = hashlib.sha256(fh.read()).hexdigest()
+            except Exception:
+                return "MISSING"
+            if actual != proto_hash:
+                return "MISSING"
     return "MATCH" if binding.get("binding_ok") is True else "MISSING"
 
 
@@ -1145,8 +1227,12 @@ def _region_proto_status(path):
     # F4a: VERIFY case binding from c2_judgment.json (the canonical C2 gate's
     # verified binding result), not hard-coded MISSING. MATCH iff the proto's
     # case_id has binding_ok=True; else MISSING (fail-closed -> not PASS).
+    # F8c: pass proto_path so the reader can re-derive the prototype byte hash
+    # and compare to the judgment's recorded prototype hash.
     c2_judgment_path = os.path.join(os.path.dirname(path), "c2_judgment.json")
-    case_binding_state = _region_case_binding_state(data, c2_judgment_path)
+    case_binding_state = _region_case_binding_state(
+        data, c2_judgment_path, proto_path=path
+    )
     raw = _c2._normalize_region_peak(data, case_binding_state=case_binding_state)
     token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
 

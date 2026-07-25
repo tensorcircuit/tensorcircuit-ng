@@ -690,8 +690,12 @@ def _is_real_pte_prototype(proto, edge):
         cons[0] * cons[1] * 8 < FULL_E_MIN_BYTES
     ):  # full E tensor, not a scalar/reduction
         return False
+    # F8c: strict bool check (is True) -- a string "false" is truthy but NOT
+    # True. Without this, no_full_P_materialized="false" (string) passes the
+    # real-PTE gate and can reach PASS (fail-open).
     if not (
-        proto.get("no_full_P_materialized") and proto.get("no_full_T_materialized")
+        proto.get("no_full_P_materialized") is True
+        and proto.get("no_full_T_materialized") is True
     ):
         return False
     if any(m in str(proto.get("math", "")).lower() for m in _REDUCTION_MARKERS):

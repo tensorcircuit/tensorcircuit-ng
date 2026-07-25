@@ -444,7 +444,13 @@ def test_validate_manifest_input_not_in_x_dirty_untracked_covers_returns_true(
     an untracked working-tree file. dirty=True with correct patch_sha256 +
     untracked_hashes (covering extra.json) -> step 6 passes, step 7 finds
     extra.json not in X but covered by untracked_hashes -> True.
+
+    F8b: the manifest's declared hash for extra.json must match the actual
+    untracked content hash (re-derived, not trusted).
     """
+    # Add extra.json as an untracked working-tree file.
+    extra_content = b"extra-untracked"
+    extra_hash = _sha(extra_content)
     # Commit manifest referencing c1_judgment.json (committed) + extra.json
     # (NOT committed). extra.json will be added as untracked after commit.
     commit = _init_temp_repo(
@@ -452,12 +458,10 @@ def test_validate_manifest_input_not_in_x_dirty_untracked_covers_returns_true(
         monkeypatch,
         manifest_inputs={
             "c1_judgment.json": _INPUT_HASH,
-            "extra.json": "0" * 64,
+            "extra.json": extra_hash,
         },
         input_files={"c1_judgment.json": _INPUT_CONTENT},
     )
-    # Add extra.json as an untracked working-tree file.
-    extra_content = b"extra-untracked"
     (tmp_path / "results" / "phase0" / "extra.json").write_bytes(extra_content)
 
     # Recompute patch_sha256 (no tracked changes -> empty diff).
@@ -481,7 +485,7 @@ def test_validate_manifest_input_not_in_x_dirty_untracked_covers_returns_true(
             "schema_version": "manifest-v1",
             "inputs": {
                 "c1_judgment.json": _INPUT_HASH,
-                "extra.json": "0" * 64,
+                "extra.json": extra_hash,
             },
         }
     ).encode()
@@ -578,6 +582,74 @@ def test_validate_manifest_no_inputs_returns_false(tmp_path, monkeypatch):
     assert (
         validate_review_subject(rs, new_commit, workspace_root=str(tmp_path)) is False
     )
+
+
+# ---------------------------------------------------------------------------
+# F8b: manifest input declared hashes must be RE-DERIVED from X content.
+# Previously step 7 checked ``git show <X>:<input>`` EXISTS (not content hash),
+# so a manifest declaring an OLD hash for an input whose X content is NEW
+# still passed (fail-open).
+# ---------------------------------------------------------------------------
+
+
+def test_f8b_manifest_input_declared_hash_mismatch_returns_false(tmp_path, monkeypatch):
+    """F8b: manifest declares an OLD hash for an input whose X content is NEW
+    -> False.
+
+    Counter-example: the manifest declares hash X for c1_judgment.json, but X
+    has different content (hash Y). Previously step 7 only checked the input
+    EXISTS in X -> True (fail-open). Now the content hash is re-derived and
+    compared -> False."""
+    # Commit c1_judgment.json with _INPUT_CONTENT, but declare a WRONG hash.
+    wrong_hash = "0" * 64  # valid 64-hex but != sha256(_INPUT_CONTENT)
+    commit = _init_temp_repo(
+        tmp_path,
+        monkeypatch,
+        manifest_inputs={"c1_judgment.json": wrong_hash},
+        input_files={"c1_judgment.json": _INPUT_CONTENT},
+    )
+    custom_manifest = json.dumps(
+        {
+            "schema_version": "manifest-v1",
+            "inputs": {"c1_judgment.json": wrong_hash},
+        }
+    ).encode()
+    hashes = _good_hashes()
+    hashes["artifact_manifest_sha256"] = _sha(custom_manifest)
+    rs = build_review_subject(subject_commit=commit, dirty=False, **hashes)
+    assert validate_review_subject(rs, commit, workspace_root=str(tmp_path)) is False
+
+
+def test_f8b_manifest_input_declared_hash_non_hex_returns_false(tmp_path, monkeypatch):
+    """F8b: manifest declares a non-64-hex hash for an input -> False.
+
+    The declared hash must be a full 64-hex sha256. A 40-char git-sha or a
+    short string is rejected."""
+    short_hash = "abc123"  # not 64-hex
+    commit = _init_temp_repo(
+        tmp_path,
+        monkeypatch,
+        manifest_inputs={"c1_judgment.json": short_hash},
+        input_files={"c1_judgment.json": _INPUT_CONTENT},
+    )
+    custom_manifest = json.dumps(
+        {
+            "schema_version": "manifest-v1",
+            "inputs": {"c1_judgment.json": short_hash},
+        }
+    ).encode()
+    hashes = _good_hashes()
+    hashes["artifact_manifest_sha256"] = _sha(custom_manifest)
+    rs = build_review_subject(subject_commit=commit, dirty=False, **hashes)
+    assert validate_review_subject(rs, commit, workspace_root=str(tmp_path)) is False
+
+
+def test_f8b_manifest_input_declared_hash_match_returns_true(tmp_path, monkeypatch):
+    """F8b: with matching declared hash (64-hex == sha256 of X content) -> True
+    (positive reachable)."""
+    commit = _init_temp_repo(tmp_path, monkeypatch)
+    rs = build_review_subject(subject_commit=commit, dirty=False, **_good_hashes())
+    assert validate_review_subject(rs, commit, workspace_root=str(tmp_path)) is True
 
 
 if __name__ == "__main__":

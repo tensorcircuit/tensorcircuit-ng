@@ -34,6 +34,13 @@ _PLAN_CONTENT = b"# Phase0 nongpu evidence integrity remediation plan v2\n"
 _INPUT_CONTENT = b"input-data"
 _INPUT_HASH = hashlib.sha256(_INPUT_CONTENT).hexdigest()
 
+#: F8a: the exact bytes of the committed test_report.json in the temp repo.
+#: Positive tests must pass a tr file whose byte hash matches
+#: rs["test_report_sha256"] (which is the hash of the committed test_report).
+_COMMITTED_TR_CONTENT = json.dumps(
+    {"schema_version": 1, "command": "...", "exit_code": 0, "passed": True}
+).encode()
+
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -114,6 +121,18 @@ def _init_temp_repo(tmp_path, monkeypatch):
         "closeout_facts_sha256": _sha(closeout),
     }
     return commit, str(tmp_path), hashes
+
+
+def _committed_tr(tmp_path):
+    """Write a tr file matching the committed test_report.json bytes (F8a).
+
+    The F8a fix binds ``test_report_path`` to ``rs["test_report_sha256"]``;
+    positive tests must pass a tr file whose byte hash matches the rs's
+    recorded hash (which is the hash of the committed test_report.json).
+    """
+    p = tmp_path / "tr.json"
+    p.write_bytes(_COMMITTED_TR_CONTENT)
+    return str(p)
 
 
 # ---------------------------------------------------------------------------
@@ -378,11 +397,7 @@ def test_closed_p2_does_not_block(tmp_path, monkeypatch):
             "review_subject_sha256": rs_file_sha,
         },
     )
-    tr = _w(
-        tmp_path,
-        "tr.json",
-        {"schema_version": 1, "exit_code": 0, "passed": True},
-    )
+    tr = _committed_tr(tmp_path)
     out = derive_release_status(
         ext,
         rs_path,
@@ -411,11 +426,7 @@ def test_user_confirms_false_not_accepted(tmp_path, monkeypatch):
             "review_subject_sha256": rs_file_sha,
         },
     )
-    tr = _w(
-        tmp_path,
-        "tr.json",
-        {"schema_version": 1, "exit_code": 0, "passed": True},
-    )
+    tr = _committed_tr(tmp_path)
     out = derive_release_status(
         ext,
         rs_path,
@@ -458,6 +469,7 @@ def test_test_report_not_passed_not_accepted(tmp_path, monkeypatch):
         workspace_root=ws_root,
     )
     assert out["release"] != "ACCEPTED"
+    assert any("exit_code" in r for r in out["reasons"]), out["reasons"]
 
 
 def test_review_subject_sha256_mismatch_not_accepted(tmp_path, monkeypatch):
@@ -476,11 +488,7 @@ def test_review_subject_sha256_mismatch_not_accepted(tmp_path, monkeypatch):
             "review_subject_sha256": "0" * 64,  # wrong
         },
     )
-    tr = _w(
-        tmp_path,
-        "tr.json",
-        {"schema_version": 1, "exit_code": 0, "passed": True},
-    )
+    tr = _committed_tr(tmp_path)
     out = derive_release_status(
         ext,
         rs_path,
@@ -522,11 +530,7 @@ def test_accepted_positive_all_conditions_met(tmp_path, monkeypatch):
             "review_subject_sha256": rs_file_sha,
         },
     )
-    tr = _w(
-        tmp_path,
-        "tr.json",
-        {"schema_version": 1, "exit_code": 0, "passed": True},
-    )
+    tr = _committed_tr(tmp_path)
     out = derive_release_status(
         ext,
         rs_path,
@@ -555,11 +559,7 @@ def test_accepted_reasons_empty_on_success(tmp_path, monkeypatch):
             "review_subject_sha256": rs_file_sha,
         },
     )
-    tr = _w(
-        tmp_path,
-        "tr.json",
-        {"schema_version": 1, "exit_code": 0, "passed": True},
-    )
+    tr = _committed_tr(tmp_path)
     out = derive_release_status(
         ext,
         rs_path,
@@ -581,10 +581,23 @@ def test_accepted_reasons_empty_on_success(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+#: F8a: the exact bytes of ``_valid_tr``'s content. ``_synthetic_rs`` records
+#: this hash as ``test_report_sha256`` so the F8a byte-hash binding check
+#: passes (isolating the F5 conditions under test).
+_VALID_TR_CONTENT = json.dumps(
+    {"schema_version": 1, "exit_code": 0, "passed": True}
+).encode()
+_VALID_TR_HASH = hashlib.sha256(_VALID_TR_CONTENT).hexdigest()
+
+
 def _synthetic_rs(tmp_path):
     """Write a synthetic rs JSON (fails real Git-tree validation) for negative
     tests. The rs validation will fail-closed on the synthetic data, which is
-    fine -- the tests assert NOT_ACCEPTED and check for the specific reason."""
+    fine -- the tests assert NOT_ACCEPTED and check for the specific reason.
+
+    F8a: ``test_report_sha256`` is set to the hash of ``_valid_tr``'s content
+    so the F8a byte-hash binding check does NOT fire (isolating the test's
+    intended condition)."""
     return _w(
         tmp_path,
         "rs.json",
@@ -595,7 +608,7 @@ def _synthetic_rs(tmp_path):
             "spec_sha256": "s",
             "plan_sha256": "p",
             "artifact_manifest_sha256": "m",
-            "test_report_sha256": "t",
+            "test_report_sha256": _VALID_TR_HASH,
             "closeout_facts_sha256": "c",
         },
     )
@@ -615,12 +628,13 @@ def _synthetic_ext(tmp_path, findings):
 
 
 def _valid_tr(tmp_path):
-    """Write a valid test_report (frozen schema: v1, exit 0, passed True)."""
-    return _w(
-        tmp_path,
-        "tr.json",
-        {"schema_version": 1, "exit_code": 0, "passed": True},
-    )
+    """Write a valid test_report (frozen schema: v1, exit 0, passed True).
+
+    F8a: writes the exact ``_VALID_TR_CONTENT`` bytes so the F8a byte-hash
+    binding check matches ``_synthetic_rs``'s ``test_report_sha256``."""
+    p = tmp_path / "tr.json"
+    p.write_bytes(_VALID_TR_CONTENT)
+    return str(p)
 
 
 # --- F5a: findings must be a list of dicts ---
@@ -820,6 +834,93 @@ def test_test_report_valid_passes_condition(tmp_path):
     )
     tr_reasons = [r for r in out["reasons"] if r.startswith("test_report ")]
     assert tr_reasons == [], tr_reasons
+
+
+# ---------------------------------------------------------------------------
+# F8a: test_report_path must be bound to rs.test_report_sha256 by byte hash.
+# Previously the caller passed a SEPARATE test_report_path; without comparing
+# its byte hash to rs["test_report_sha256"], a forged test_report (different
+# bytes, same exit_code=0/passed=True/schema_version=1) was accepted.
+# ---------------------------------------------------------------------------
+
+
+def test_f8a_test_report_byte_hash_mismatch_not_accepted(tmp_path, monkeypatch):
+    """F8a: a test_report whose byte hash != rs.test_report_sha256 (but
+    exit_code=0, passed=True, schema_version=1) -> NOT_ACCEPTED.
+
+    Counter-example: pass a DIFFERENT test_report (different hash, forged
+    command="not-the-subject-report") with exit_code=0, passed=true,
+    schema_version=1. Without F8a, the frozen-schema check passes and the
+    release is ACCEPTED (the test_report_path was never bound to the rs's
+    recorded hash)."""
+    commit, ws_root, hashes = _init_temp_repo(tmp_path, monkeypatch)
+    rs = build_review_subject(subject_commit=commit, dirty=False, **hashes)
+    rs_path = str(tmp_path / "rs.json")
+    with open(rs_path, "w") as f:
+        json.dump(rs, f)
+    rs_file_sha = hashlib.sha256((tmp_path / "rs.json").read_bytes()).hexdigest()
+    ext = _w(
+        tmp_path,
+        "ext.json",
+        {
+            "verdict": "ACCEPTED",
+            "findings": [],
+            "review_subject_sha256": rs_file_sha,
+        },
+    )
+    # Forged test_report: different content (different hash) but valid schema.
+    forged_tr = _w(
+        tmp_path,
+        "tr.json",
+        {
+            "schema_version": 1,
+            "command": "not-the-subject-report",
+            "exit_code": 0,
+            "passed": True,
+        },
+    )
+    out = derive_release_status(
+        ext,
+        rs_path,
+        forged_tr,
+        user_confirms=True,
+        git_tree_x=commit,
+        workspace_root=ws_root,
+    )
+    assert out["release"] != "ACCEPTED"
+    assert any("byte hash != rs.test_report_sha256" in r for r in out["reasons"]), out[
+        "reasons"
+    ]
+
+
+def test_f8a_test_report_byte_hash_match_accepted(tmp_path, monkeypatch):
+    """F8a: with the CORRECT test_report (byte hash matches rs's recorded hash)
+    -> this condition passes (ACCEPTED if all other conditions met)."""
+    commit, ws_root, hashes = _init_temp_repo(tmp_path, monkeypatch)
+    rs = build_review_subject(subject_commit=commit, dirty=False, **hashes)
+    rs_path = str(tmp_path / "rs.json")
+    with open(rs_path, "w") as f:
+        json.dump(rs, f)
+    rs_file_sha = hashlib.sha256((tmp_path / "rs.json").read_bytes()).hexdigest()
+    ext = _w(
+        tmp_path,
+        "ext.json",
+        {
+            "verdict": "ACCEPTED",
+            "findings": [],
+            "review_subject_sha256": rs_file_sha,
+        },
+    )
+    tr = _committed_tr(tmp_path)
+    out = derive_release_status(
+        ext,
+        rs_path,
+        tr,
+        user_confirms=True,
+        git_tree_x=commit,
+        workspace_root=ws_root,
+    )
+    assert out["release"] == "ACCEPTED", out["reasons"]
 
 
 if __name__ == "__main__":

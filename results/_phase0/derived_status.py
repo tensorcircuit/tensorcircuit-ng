@@ -121,6 +121,29 @@ def derive_release_status(
         if not validate_review_subject(rs, git_tree_x, workspace_root):
             reasons.append("review_subject invalid: Git tree X recompute failed")
 
+    # --- 4b. F8a: bind test_report_path to rs.test_report_sha256. ---
+    # The caller passes a SEPARATE test_report_path; without binding it to the
+    # rs's recorded hash, a forged test_report (different bytes, same
+    # exit_code=0 / passed=True / schema_version=1) would be accepted. Re-derive
+    # the byte hash of the test_report_path file and compare to
+    # rs["test_report_sha256"]. (rs["test_report_sha256"] is itself verified
+    # against Git tree X by validate_review_subject in step 4, so this closes
+    # the triangle: caller-path bytes == rs hash == Git tree X content.)
+    try:
+        tr_path_bytes = Path(test_report_path).read_bytes()
+        tr_path_sha = hashlib.sha256(tr_path_bytes).hexdigest()
+    except Exception as exc:
+        reasons.append(f"test_report file read error: {exc}")
+        tr_path_sha = None
+
+    if rs is not None and tr_path_sha is not None:
+        rs_tr_sha = rs.get("test_report_sha256")
+        if rs_tr_sha != tr_path_sha:
+            reasons.append(
+                "test_report byte hash != rs.test_report_sha256: "
+                f"{tr_path_sha!r} != {rs_tr_sha!r}"
+            )
+
     # --- 5. Load test_report; frozen-schema check (F5b). ---
     # Require schema_version==1 AND exit_code==0 AND passed is True. Previously
     # only ``passed is True`` was checked, so ``{"exit_code":1,"passed":True}``

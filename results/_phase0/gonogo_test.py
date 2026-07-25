@@ -1719,14 +1719,20 @@ def test_region_proto_pass_with_verified_binding(tmp_path):
     The gonogo reader verifies case binding via c2_judgment.json's binding_ok
     field, making the POSITIVE PATH reachable (a future MEASURED proto + verified
     binding -> PASS). Before F4a this path was permanently unreachable
-    (hard-coded MISSING -> never MATCH -> never PASS)."""
+    (hard-coded MISSING -> never MATCH -> never PASS).
+
+    F8c: the c2_judgment must carry schema_version=c2-judgment-v2 and empty
+    binding.problems for the reader to re-verify the binding's integrity."""
     import json
     from results._phase0.gonogo import _region_proto_status
 
     (tmp_path / "r.json").write_text(json.dumps(_full_measured_region_proto()))
     (tmp_path / "c2_judgment.json").write_text(
         json.dumps(
-            {"n24_d10_default": {"binding": {"binding_ok": True, "problems": []}}}
+            {
+                "schema_version": "c2-judgment-v2",
+                "n24_d10_default": {"binding": {"binding_ok": True, "problems": []}},
+            }
         )
     )
     assert _region_proto_status(str(tmp_path / "r.json")) == "PASS"
@@ -1742,9 +1748,10 @@ def test_region_proto_not_pass_when_binding_ok_false(tmp_path):
     (tmp_path / "c2_judgment.json").write_text(
         json.dumps(
             {
+                "schema_version": "c2-judgment-v2",
                 "n24_d10_default": {
                     "binding": {"binding_ok": False, "problems": ["hash mismatch"]}
-                }
+                },
             }
         )
     )
@@ -1771,7 +1778,10 @@ def test_region_proto_not_pass_when_c2_judgment_case_id_mismatch(tmp_path):
     (tmp_path / "r.json").write_text(json.dumps(_full_measured_region_proto()))
     (tmp_path / "c2_judgment.json").write_text(
         json.dumps(
-            {"n22_d10_default": {"binding": {"binding_ok": True, "problems": []}}}
+            {
+                "schema_version": "c2-judgment-v2",
+                "n22_d10_default": {"binding": {"binding_ok": True, "problems": []}},
+            }
         )
     )
     assert _region_proto_status(str(tmp_path / "r.json")) != "PASS"
@@ -1868,6 +1878,335 @@ def test_gonogo_canonical_region_cutlass_integration():
             "NOT_RUN",
             "NOT_SUPPORTED",
         ), f"{key}={cutlass[key]}"
+
+
+# ---------------------------------------------------------------------------
+# F8c: region must re-verify c2_judgment (schema/problems/prototype hash) and
+# use strict bool (is True) for no_full_P/T_materialized. Previously
+# _region_case_binding_state trusted binding_ok=True without re-verifying, and
+# _region_proto_is_real_pte used truthiness (string "false" is truthy).
+# ---------------------------------------------------------------------------
+
+
+def test_f8c_region_judgment_prototype_hash_mismatch_not_pass(tmp_path):
+    """F8c: c2_judgment binding_ok=True but the judgment's recorded prototype
+    hash != the actual region_prototype.json byte hash -> != PASS.
+
+    Counter-example: judgment with prototype hash = "000...000" -> still PASS
+    (trusted binding_ok without re-verifying the hash). F8c re-derives the
+    prototype byte hash and compares -> MISSING -> not PASS."""
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    (tmp_path / "r.json").write_text(json.dumps(_full_measured_region_proto()))
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "c2-judgment-v2",
+                "n24_d10_default": {
+                    "binding": {
+                        "binding_ok": True,
+                        "problems": [],
+                        "file_hashes": {"prototype": "0" * 64},  # wrong hash
+                    }
+                },
+            }
+        )
+    )
+    assert _region_proto_status(str(tmp_path / "r.json")) != "PASS"
+
+
+def test_f8c_region_no_full_P_string_not_pass(tmp_path):
+    """F8c: no_full_P_materialized="false" (string) -> != PASS.
+
+    Counter-example: a string "false" is truthy, so the old truthiness check
+    passed -> the proto was considered a real PTE -> could reach PASS. F8c uses
+    ``is True`` (strict bool): "false" is not True -> not a real PTE -> UNKNOWN."""
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    proto = _full_measured_region_proto()
+    proto["no_full_P_materialized"] = "false"  # string, not bool
+    (tmp_path / "r.json").write_text(json.dumps(proto))
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "c2-judgment-v2",
+                "n24_d10_default": {"binding": {"binding_ok": True, "problems": []}},
+            }
+        )
+    )
+    assert _region_proto_status(str(tmp_path / "r.json")) != "PASS"
+
+
+def test_f8c_region_no_full_P_bool_true_pass_reachable(tmp_path):
+    """F8c: no_full_P_materialized=True (bool) + all green + verified binding
+    -> PASS (positive reachable). Confirms the strict ``is True`` check does
+    not break the legitimate positive path."""
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    proto = _full_measured_region_proto()
+    # no_full_P_materialized is already True (bool) in _full_measured_region_proto
+    (tmp_path / "r.json").write_text(json.dumps(proto))
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "c2-judgment-v2",
+                "n24_d10_default": {"binding": {"binding_ok": True, "problems": []}},
+            }
+        )
+    )
+    assert _region_proto_status(str(tmp_path / "r.json")) == "PASS"
+
+
+def test_f8c_region_judgment_problems_nonempty_not_pass(tmp_path):
+    """F8c: c2_judgment binding_ok=True but binding.problems is non-empty ->
+    != PASS (binding had problems; binding_ok is trusted without re-verifying
+    problems). F8c re-verifies problems is empty."""
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    (tmp_path / "r.json").write_text(json.dumps(_full_measured_region_proto()))
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "c2-judgment-v2",
+                "n24_d10_default": {
+                    "binding": {
+                        "binding_ok": True,  # claims ok
+                        "problems": ["case field mismatch"],  # but has problems!
+                    }
+                },
+            }
+        )
+    )
+    assert _region_proto_status(str(tmp_path / "r.json")) != "PASS"
+
+
+def test_f8c_region_judgment_wrong_schema_not_pass(tmp_path):
+    """F8c: c2_judgment with wrong schema_version -> != PASS (the judgment's
+    schema must be in the allowlist c2-judgment-v2)."""
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    (tmp_path / "r.json").write_text(json.dumps(_full_measured_region_proto()))
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "c2-judgment-v1",  # wrong version
+                "n24_d10_default": {"binding": {"binding_ok": True, "problems": []}},
+            }
+        )
+    )
+    assert _region_proto_status(str(tmp_path / "r.json")) != "PASS"
+
+
+def test_f8c_region_judgment_prototype_hash_match_pass(tmp_path):
+    """F8c: c2_judgment with correct prototype hash (matching actual
+    region_prototype.json byte hash) + binding_ok=True -> PASS (positive
+    reachable with hash verification)."""
+    import hashlib
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    proto = _full_measured_region_proto()
+    proto_bytes = json.dumps(proto).encode()
+    proto_hash = hashlib.sha256(proto_bytes).hexdigest()
+    (tmp_path / "r.json").write_bytes(proto_bytes)
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "c2-judgment-v2",
+                "n24_d10_default": {
+                    "binding": {
+                        "binding_ok": True,
+                        "problems": [],
+                        "file_hashes": {"prototype": proto_hash},
+                    }
+                },
+            }
+        )
+    )
+    assert _region_proto_status(str(tmp_path / "r.json")) == "PASS"
+
+
+# ---------------------------------------------------------------------------
+# F8d: unknown self-report enum -> CONFLICT -> UNKNOWN (not PASS). All three
+# readers (grouped, cutlass_native, cutlass_fallback) must reject unknown
+# self-reports. The fallback must ALSO perform the bidirectional check (F3
+# skipped it). Native ``attempted`` must NOT be borrowed from an sm80_fallback
+# single_4m.
+# ---------------------------------------------------------------------------
+
+
+def _grouped_all_green_v2():
+    """A grouped v2 artifact with all-green execution + SUPPORTED self-report."""
+    return {
+        "schema_version": "c3-grouped-v2",
+        "capability": {"status": "SUPPORTED"},
+        "grouped_api_probe": {
+            "attempted": True,
+            "cublaslt_grouped3gemm": True,
+            "probe_source": "compiled_header_probe",
+        },
+        "grouped_execution": {
+            "attempted": True,
+            "compiles": True,
+            "runs": True,
+            "coverage_complete": True,
+            "correctness": {"gate_pass": True},
+        },
+    }
+
+
+def test_f8d_grouped_unknown_self_report_not_pass(tmp_path):
+    """F8d: grouped capability.status='MADE_UP' + all green -> != PASS.
+
+    Counter-example: unknown enum 'MADE_UP' was silently ignored
+    (expected_from_self = None -> no conflict check) -> PASS. F8d: unknown
+    enum -> CONFLICT -> contradiction -> UNKNOWN."""
+    import json
+    from results._phase0.gonogo import _c3_grouped_status
+
+    data = _grouped_all_green_v2()
+    data["capability"]["status"] = "MADE_UP"
+    p = tmp_path / "g.json"
+    p.write_text(json.dumps(data))
+    assert _c3_grouped_status(str(p)) != "PASS"
+
+
+def test_f8d_native_unknown_self_report_not_pass():
+    """F8d: native capability='MADE_UP' + all green -> != PASS.
+
+    Counter-example: unknown enum 'MADE_UP' was silently ignored -> PASS.
+    F8d: unknown enum -> CONFLICT -> contradiction -> UNKNOWN."""
+    from results._phase0.gonogo import _cutlass_native_sm120_criterion
+
+    data = {
+        "schema_version": "cutlass-sm120-4m-v1",
+        "native_sm120_bf16_4m": {
+            "capability": "MADE_UP",
+            "attempted": True,
+            "compiles": True,
+            "runs": True,
+            "correctness": {"gate_pass": True},
+            "coverage_complete": True,
+            "kernel_path": "sm120_native",
+        },
+    }
+    result = _cutlass_native_sm120_criterion(data)
+    assert result != "PASS", f"MADE_UP self-report must not PASS, got {result!r}"
+
+
+def test_f8d_fallback_disagreeing_self_report_not_pass():
+    """F8d: fallback capability='FAIL' + execution all green -> != PASS.
+
+    Counter-example: the F3 fallback reader had NO consistency check, so a
+    self-reported FAIL + all-green execution -> PASS (fail-open). F8d adds the
+    bidirectional check: FAIL != PASS -> CONFLICT -> contradiction -> UNKNOWN."""
+    from results._phase0.gonogo import _cutlass_sm80_fallback_criterion
+
+    data = {
+        "schema_version": "cutlass-sm120-4m-v1",
+        "sm80_fallback_bf16_4m": {
+            "capability": "FAIL",
+            "kernel_path": "sm80_fallback",
+            "compiles": True,
+            "runs": True,
+            "correctness": {"gate_pass": True},
+            "attempted": True,
+            "coverage_complete": True,
+        },
+    }
+    result = _cutlass_sm80_fallback_criterion(data)
+    assert (
+        result != "PASS"
+    ), f"FAIL self-report + green exec must not PASS, got {result!r}"
+
+
+def test_f8d_fallback_unknown_self_report_not_pass():
+    """F8d: fallback capability='MADE_UP' + execution all green -> != PASS.
+
+    Counter-example: unknown enum 'MADE_UP' + all green -> PASS (the F3 reader
+    had no consistency check at all). F8d: unknown enum -> CONFLICT ->
+    contradiction -> UNKNOWN."""
+    from results._phase0.gonogo import _cutlass_sm80_fallback_criterion
+
+    data = {
+        "schema_version": "cutlass-sm120-4m-v1",
+        "sm80_fallback_bf16_4m": {
+            "capability": "MADE_UP",
+            "kernel_path": "sm80_fallback",
+            "compiles": True,
+            "runs": True,
+            "correctness": {"gate_pass": True},
+            "attempted": True,
+            "coverage_complete": True,
+        },
+    }
+    result = _cutlass_sm80_fallback_criterion(data)
+    assert result != "PASS", f"MADE_UP self-report must not PASS, got {result!r}"
+
+
+def test_f8d_fallback_correct_self_report_pass():
+    """F8d: fallback capability='PASS' + execution all green -> PASS (positive
+    reachable -- the consistency check does not break the legitimate path)."""
+    from results._phase0.gonogo import _cutlass_sm80_fallback_criterion
+
+    data = {
+        "schema_version": "cutlass-sm120-4m-v1",
+        "sm80_fallback_bf16_4m": {
+            "capability": "PASS",
+            "kernel_path": "sm80_fallback",
+            "compiles": True,
+            "runs": True,
+            "correctness": {"gate_pass": True},
+            "attempted": True,
+            "coverage_complete": True,
+        },
+    }
+    result = _cutlass_sm80_fallback_criterion(data)
+    assert (
+        result == "PASS"
+    ), f"PASS self-report + green exec should PASS, got {result!r}"
+
+
+def test_f8d_native_attempted_not_borrowed_from_sm80_fallback():
+    """F8d: native section missing 'attempted' + sm80_fallback single_4m has
+    attempted=True -> != PASS (not borrowed).
+
+    Counter-example: the F3 merge read ``attempted`` from sec first, then from
+    s4 (single_4m) WITHOUT checking kernel_path. A native section missing
+    'attempted' + an sm80_fallback single_4m with attempted=True -> ATTEMPTED
+    (wrong -- borrowed from the fallback path). F8d: ``attempted`` is only
+    borrowed from s4 when s4.kernel_path == 'sm120_native'."""
+    from results._phase0.gonogo import _cutlass_native_sm120_criterion
+
+    data = {
+        "schema_version": "cutlass-sm120-4m-v1",
+        "native_sm120_bf16_4m": {
+            # NOTE: no 'attempted' field in the native section
+            "compiles": True,
+            "runs": True,
+            "correctness": {"gate_pass": True},
+            "coverage_complete": True,
+            "kernel_path": "sm120_native",
+        },
+        "single_4m": {
+            "kernel_path": "sm80_fallback",  # fallback, not native
+            "attempted": True,  # must NOT be borrowed for native
+            "compiles": True,
+            "runs": True,
+            "correctness": {"gate_pass": True},
+            "coverage_complete": True,
+        },
+    }
+    result = _cutlass_native_sm120_criterion(data)
+    assert result != "PASS", (
+        f"native must not borrow attempted from sm80_fallback single_4m, "
+        f"got {result!r}"
+    )
 
 
 if __name__ == "__main__":

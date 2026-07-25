@@ -310,6 +310,9 @@ CUTLASS_NATIVE = GateContract(
 #: ``cutlass_4m_single`` route. Note ``compile_state=OK`` here (not
 #: ``SUCCEEDED``) per Task 5's test ``compile_status=="OK"`` -- the
 #: fallback compile is a softer check. NOT_SUPPORTED is empty (empty-safe).
+#: F8d: ``consistency_state=CONFLICT`` is now a contradiction (the F3 reader
+#: skipped the bidirectional check; now an unknown/disagreeing self-report ->
+#: CONFLICT -> contradiction -> UNKNOWN, not PASS).
 CUTLASS_FALLBACK = GateContract(
     name="cutlass_fallback",
     pass_clause=(
@@ -330,7 +333,7 @@ CUTLASS_FALLBACK = GateContract(
         (("correctness_state", "FAILED"),),
     ),
     not_supported_clauses=(),
-    contradiction_fields=(),
+    contradiction_fields=(("consistency_state", "CONFLICT"),),
 )
 
 #: SINGLE SOURCE OF TRUTH -- the four canonical gate contracts, keyed by

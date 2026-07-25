@@ -94,6 +94,13 @@ def _is_full_sha(s):
     return isinstance(s, str) and len(s) == 40
 
 
+def _is_sha256_hex(s):
+    """True iff *s* is a 64-character lowercase-hex sha256 string."""
+    return (
+        isinstance(s, str) and len(s) == 64 and all(c in "0123456789abcdef" for c in s)
+    )
+
+
 def _git_cat_file_commit_exists(repo_cwd, git_tree_x):
     """True iff ``git_tree_x`` resolves to a valid commit object.
 
@@ -303,16 +310,23 @@ def validate_review_subject(rs, git_tree_x, workspace_root):
         if recomputed != untracked:
             return False
 
-    # 7. F6a: verify the manifest's input chain is retrievable from X. The
-    #    manifest (read FROM Git tree X) declares ``inputs`` -- a dict of
-    #    {relative_path: hash} where relative_path is relative to
-    #    results/phase0/. For a CLEAN snapshot (dirty=False) EVERY input must
-    #    be retrievable from X via ``git show <X>:results/phase0/<input>`` --
-    #    otherwise X is not a reproducible snapshot (the evidence chain is
-    #    broken). If dirty=True, inputs not in X must be covered by
-    #    ``untracked_hashes`` (already recomputed + compared in step 6); their
-    #    content hash was verified there, so here we only check the path is
-    #    present in untracked_hashes.
+    # 7. F6a/F8b: verify the manifest's input chain is retrievable from X AND
+    #    that each input's DECLARED content hash matches the ACTUAL content
+    #    re-derived from X. The manifest (read FROM Git tree X) declares
+    #    ``inputs`` -- a dict of {relative_path: declared_hash} where
+    #    relative_path is relative to results/phase0/.
+    #
+    #    F6a: for a CLEAN snapshot (dirty=False) EVERY input must be retrievable
+    #    from X via ``git show <X>:results/phase0/<input>`` -- otherwise X is
+    #    not a reproducible snapshot. If dirty=True, inputs not in X must be
+    #    covered by ``untracked_hashes`` (already recomputed + compared in step
+    #    6).
+    #
+    #    F8b: the manifest's declared hash is a SELF-REPORT. Re-derive the
+    #    actual content hash from X (or from the untracked file for dirty) and
+    #    compare. Without this, a manifest declaring an OLD hash for an input
+    #    whose X content is NEW would still pass (fail-open). The declared hash
+    #    must be a full 64-hex sha256; a non-64-hex value or a mismatch -> False.
     manifest_bytes = _git_show_path(repo_cwd, git_tree_x, _PHASE0_MANIFEST_PATH)
     if manifest_bytes is None:
         return False  # defensive (step 4 already read this)
@@ -325,17 +339,27 @@ def validate_review_subject(rs, git_tree_x, workspace_root):
         return False  # malformed manifest (no inputs dict)
     dirty = bool(rs.get("dirty_worktree"))
     untracked = rs.get("untracked_hashes") or {}
-    for input_path in inputs:
+    for input_path, declared_hash in inputs.items():
         git_path = _PHASE0_INPUTS_PREFIX + input_path
+        # F8b: the declared hash must be a full 64-hex sha256.
+        if not _is_sha256_hex(declared_hash):
+            return False
         content = _git_show_path(repo_cwd, git_tree_x, git_path)
         if content is not None:
-            continue  # input is in X -- reproducible from the commit
+            # F8b: re-derive the content hash from X and compare to the
+            # manifest's declared hash (don't trust the declared hash).
+            if _sha256_bytes(content) != declared_hash:
+                return False
+            continue  # input is in X AND content hash matches
         # Input NOT in Git tree X.
         if not dirty:
             return False  # clean snapshot: X is not a reproducible snapshot
         # dirty=True: the input must be covered by untracked_hashes (its
-        # content hash was already verified in step 6).
+        # content hash was already verified in step 6). F8b: also verify the
+        # manifest's declared hash matches the recomputed untracked hash.
         if git_path not in untracked:
+            return False
+        if untracked.get(git_path) != declared_hash:
             return False
 
     return True
