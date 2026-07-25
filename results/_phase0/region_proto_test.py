@@ -279,6 +279,14 @@ def test_full_anchor_direct_recompute_correctness():
     assert result["output_shape"] == [64, 1048576]
     assert result["output_dtype"] == "complex64"
     assert result["output_bytes"] == 64 * 1048576 * 8
+    # finding 3: make the "fused path does not allocate full P/T" proof
+    # executable, not just inspectable. Frozen math contract:
+    #   P = c64[4096,16384] = 4096*16384*8 = 536870912 bytes (512 MiB)
+    #   T = c64[64,1048576] = 64*1048576*8 = 536870912 bytes (512 MiB)
+    # The fused path avoids both; the materialized oracle reports the
+    # transient P/T sizes it allocated and freed.
+    assert result["P_bytes_avoided"] == 536870912, result
+    assert result["T_bytes_avoided"] == 536870912, result
 
 
 if __name__ == "__main__":

@@ -30,6 +30,7 @@ fields for a canonical region peak gain (finding 3.1: MODEL_ONLY must never yiel
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import time
@@ -303,9 +304,32 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
         diff = E_fus - E_mat
         rel_l2 = float(cp.linalg.norm(diff) / max(1.0, cp.linalg.norm(E_mat)))
         max_rel = float(cp.max(cp.abs(diff)) / max(1.0, cp.max(cp.abs(E_mat))))
-        worst_rel_l2 = max(worst_rel_l2, rel_l2)
-        worst_max_rel = max(worst_max_rel, max_rel)
-        nan_inf = nan_inf or not bool(cp.all(cp.isfinite(E_fus)))
+        # NaN-safe worst-case accumulation (finding 1): Python's builtin
+        # ``max(0.0, nan)`` returns ``0.0`` (NaN > 0.0 is False), so a
+        # non-finite measurement would be silently masked to a deceptively
+        # clean 0.0 -> false PASS. Instead, surface non-finite values as
+        # ``nan_inf=True`` and treat them as +inf for the worst-case max so
+        # the verdict can never look perfect when a NaN/Inf occurred. No
+        # constant fallback (honesty-first).
+        if not math.isfinite(rel_l2):
+            nan_inf = True
+            worst_rel_l2 = float("inf")
+        else:
+            worst_rel_l2 = max(worst_rel_l2, rel_l2)
+        if not math.isfinite(max_rel):
+            nan_inf = True
+            worst_max_rel = float("inf")
+        else:
+            worst_max_rel = max(worst_max_rel, max_rel)
+        # finding 2: ``nan_inf`` must be True if EITHER ``E_fus`` OR ``E_mat``
+        # contains non-finite values (not just ``E_fus``). A NaN in the
+        # materialized oracle would otherwise false-PASS via finding 1's
+        # masking. Check both buffers explicitly.
+        nan_inf = (
+            nan_inf
+            or not bool(cp.all(cp.isfinite(E_fus)))
+            or not bool(cp.all(cp.isfinite(E_mat)))
+        )
         del E_mat, E_fus
         cp.get_default_memory_pool().free_all_blocks()
         cp.cuda.Device(0).synchronize()
