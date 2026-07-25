@@ -473,22 +473,25 @@ def test_main_emits_consistent_gonogo_v2(tmp_path, monkeypatch):
     assert agg["phase0_completion"] == "INCONCLUSIVE"
     assert agg["phase1_authorization"] == "NOT_AUTHORIZED"
     # Task 7: gonogo emits canonical CRITERIA_NAMES keys (NOT the abbreviated
-    # C2_REGION_KERNEL). The region prototype verdict=UNKNOWN (canonical, from
-    # region_prototype.json) and C2_REGION_KERNEL_FEASIBILITY=UNKNOWN (from
-    # c2_judgment layers) -> region_fused capability UNDETERMINED -> route
-    # UNKNOWN. CUTLASS_SM120_4M=UNKNOWN (native blocked, no recognized source)
-    # + CUTLASS_SM80_FALLBACK_CAPABILITY=UNKNOWN (fallback missing) ->
-    # cutlass_4m_single capability UNDETERMINED -> route UNKNOWN.
-    # planar: C3 planar criteria PASS, C3_GROUPED=NOT_SUPPORTED (not a blocker),
-    # NUMERICAL=UNKNOWN -> planar capability=OK, numerical=UNDETERMINED -> route UNKNOWN.
+    # C2_REGION_KERNEL). GPU phase (G5) measured: REGION_PROTOTYPE=PASS,
+    # C2_REGION_KERNEL_FEASIBILITY=PASS (G2 MEASURED), CUTLASS_SM120_4M=
+    # NOT_SUPPORTED + CUTLASS_SM80_FALLBACK_CAPABILITY=PASS, NUMERICAL=FAIL
+    # (region_fused per-route PASS, planar/grouped/cutlass per-route FAIL).
+    # region_fused: capability=OK + numerical=OK -> VIABLE. planar/cutlass:
+    # capability=OK + numerical=NOT_OK -> NOT_VIABLE. grouped: NOT_VIABLE.
     assert "C2_REGION_KERNEL_FEASIBILITY" in agg["criteria"]
     assert "C2_REGION_KERNEL" not in agg["criteria"]
     assert "CUTLASS_SM120_4M" in agg["criteria"]
     assert "CUTLASS_SM80_FALLBACK_CAPABILITY" in agg["criteria"]
-    assert agg["route_verdict"]["region_fused"]["status"] == "UNKNOWN"
-    assert agg["route_verdict"]["planar"]["status"] == "UNKNOWN"
+    # GPU phase (G5) honest state: region_fused MEASURED PASS (capability=OK,
+    # numerical=OK) -> VIABLE. planar/cutlass_4m_single MEASURED FAIL
+    # (numerical=NOT_OK) -> NOT_VIABLE. grouped capability=NOT_OK -> NOT_VIABLE.
+    # phase0 stays INCONCLUSIVE (C2_CANONICAL + C2_JOINT_EXECUTABLE_LEVERAGE
+    # still UNKNOWN); phase1 NOT_AUTHORIZED.
+    assert agg["route_verdict"]["region_fused"]["status"] == "VIABLE"
+    assert agg["route_verdict"]["planar"]["status"] == "NOT_VIABLE"
     assert agg["route_verdict"]["grouped"]["status"] == "NOT_VIABLE"
-    assert agg["route_verdict"]["cutlass_4m_single"]["status"] == "UNKNOWN"
+    assert agg["route_verdict"]["cutlass_4m_single"]["status"] == "NOT_VIABLE"
     # rule 7: MD rendered from same object
     md = (stage / "gonogo.md").read_text()
     assert agg["phase0_completion"] in md and agg["phase1_authorization"] in md
@@ -905,10 +908,12 @@ def test_gonogo_emits_canonical_criteria_keys(tmp_path, monkeypatch):
 
 def test_gonogo_json_matches_expected_honest_state(tmp_path, monkeypatch):
     """Task 7 plan §10: the regenerated gonogo.json must match the expected
-    honest state (no pre-written PASS). region_fused / cutlass_4m_single are
-    UNKNOWN (not yet measured); planar is UNKNOWN (C3 planar PASS, grouped
-    NOT_SUPPORTED, numerical UNDETERMINED); grouped is NOT_VIABLE; completion
-    INCONCLUSIVE; authorization NOT_AUTHORIZED."""
+    honest state. GPU phase (G5) measured: region_fused numerical PASS ->
+    VIABLE (capability=OK, numerical=OK); planar numerical FAIL -> NOT_VIABLE;
+    grouped capability NOT_OK -> NOT_VIABLE; cutlass_4m_single numerical FAIL
+    (8/9 cells pass, 1 mixed_scale policy_pass=0) -> NOT_VIABLE. phase0 stays
+    INCONCLUSIVE (C2_CANONICAL + C2_JOINT_EXECUTABLE_LEVERAGE UNKNOWN);
+    phase1 NOT_AUTHORIZED."""
     import json, os, shutil
     from results._phase0 import gonogo as G
 
@@ -933,14 +938,15 @@ def test_gonogo_json_matches_expected_honest_state(tmp_path, monkeypatch):
     G.main(stage_dir=str(stage))
     agg = json.load(open(stage / "gonogo.json"))
     rv = agg["route_verdict"]
-    assert rv["planar"]["status"] == "UNKNOWN", rv["planar"]
+    assert rv["planar"]["status"] == "NOT_VIABLE", rv["planar"]
     assert rv["grouped"]["status"] == "NOT_VIABLE", rv["grouped"]
-    assert rv["region_fused"]["status"] == "UNKNOWN", rv["region_fused"]
-    assert rv["cutlass_4m_single"]["status"] == "UNKNOWN", rv["cutlass_4m_single"]
+    assert rv["region_fused"]["status"] == "VIABLE", rv["region_fused"]
+    assert rv["cutlass_4m_single"]["status"] == "NOT_VIABLE", rv["cutlass_4m_single"]
     assert agg["phase0_completion"] == "INCONCLUSIVE"
     assert agg["phase1_authorization"] == "NOT_AUTHORIZED"
-    # No route is VIABLE (no pre-written PASS).
-    assert all(v["status"] != "VIABLE" for v in rv.values()), rv
+    # Exactly one route (region_fused) is VIABLE from the G5 MEASURED PASS.
+    viable = [r for r, v in rv.items() if v["status"] == "VIABLE"]
+    assert viable == ["region_fused"], viable
     # reasons precisely name the undetermined criteria.
     assert any("C2" in r for r in agg["reasons"]), agg["reasons"]
     # blocking_artifacts lists only real blockers.
@@ -1839,23 +1845,33 @@ def test_gonogo_fallback_missing_coverage_not_pass(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Task 8 Step 4 concrete: no-new-VIABLE assertion + integration smoke
+# Task 8 Step 4 concrete: committed-gonogo honest-route assertion + integration smoke
 # ---------------------------------------------------------------------------
 
 
-def test_committed_gonogo_no_viable_routes():
-    """The committed gonogo.json must have NO VIABLE routes. If it HAS a VIABLE
-    route, STOP and report it -- it indicates a stale artifact needing Task 9
-    regen (do not fabricate the assertion)."""
+def test_committed_gonogo_honest_route_verdict():
+    """The committed gonogo.json must match the GPU phase's honest route
+    verdict: region_fused=VIABLE (G5 MEASURED numerical PASS + capability OK);
+    all other routes NOT_VIABLE. A VIABLE route OTHER than region_fused, or an
+    UNKNOWN/NOT_VIABLE region_fused, indicates a stale artifact needing regen."""
     import json
 
     with open("results/phase0/gonogo.json") as f:
         gonogo = json.load(f)
     rv = gonogo.get("route_verdict", {})
+    # region_fused is the ONE measured-VIABLE route (G5 PASS).
+    assert rv["region_fused"]["status"] == "VIABLE", (
+        f"gonogo.json region_fused expected VIABLE (G5 measured PASS), "
+        f"got {rv['region_fused']['status']!r} -- stale artifact needing regen."
+    )
+    # All other routes must NOT be VIABLE (planar/grouped/cutlass all have
+    # numerical FAIL or capability NOT_OK).
     for route, v in rv.items():
+        if route == "region_fused":
+            continue
         assert v["status"] != "VIABLE", (
-            f"gonogo.json has VIABLE route {route!r} -- stale artifact; "
-            f"needs Task 9 regen. status={v['status']}"
+            f"gonogo.json has unexpected VIABLE route {route!r} -- "
+            f"stale artifact; needs regen. status={v['status']}"
         )
 
 

@@ -5,10 +5,10 @@
 
 ## Route verdict
 
-- `planar`: **UNKNOWN** (capability=OK, numerical=UNDETERMINED)
-- `grouped`: **NOT_VIABLE** (capability=NOT_OK, numerical=UNDETERMINED)
-- `region_fused`: **UNKNOWN** (capability=OK, numerical=UNDETERMINED)
-- `cutlass_4m_single`: **UNKNOWN** (capability=OK, numerical=UNDETERMINED)
+- `planar`: **NOT_VIABLE** (capability=OK, numerical=NOT_OK)
+- `grouped`: **NOT_VIABLE** (capability=NOT_OK, numerical=NOT_OK)
+- `region_fused`: **VIABLE** (capability=OK, numerical=OK)
+- `cutlass_4m_single`: **NOT_VIABLE** (capability=OK, numerical=NOT_OK)
 
 ## Criteria
 ```json
@@ -24,18 +24,16 @@
   "CUTLASS_SM120_4M": "NOT_SUPPORTED",
   "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",
   "REGION_PROTOTYPE": "PASS",
-  "NUMERICAL": "UNKNOWN",
+  "NUMERICAL": "FAIL",
   "C2": "UNKNOWN"
 }
 ```
 
 ## Reasons
-- canonical criteria undetermined -> phase0_completion INCONCLUSIVE: C2_JOINT_EXECUTABLE_LEVERAGE, C2_CANONICAL, NUMERICAL
-- planar UNKNOWN: capability=OK numerical=UNDETERMINED
-- grouped NOT_VIABLE: capability=NOT_OK numerical=UNDETERMINED
-- region_fused UNKNOWN: capability=OK numerical=UNDETERMINED
-- cutlass_4m_single UNKNOWN: capability=OK numerical=UNDETERMINED
+- canonical criteria undetermined -> phase0_completion INCONCLUSIVE: C2_JOINT_EXECUTABLE_LEVERAGE, C2_CANONICAL
+- planar NOT_VIABLE: capability=OK numerical=NOT_OK
+- grouped NOT_VIABLE: capability=NOT_OK numerical=NOT_OK
+- cutlass_4m_single NOT_VIABLE: capability=OK numerical=NOT_OK
 
 ## Blocking artifacts
 - c2_judgment.json / c2_checkpoint_manifest.json (C2_CANONICAL undetermined)
-- numerical_validation.json (NUMERICAL undetermined)

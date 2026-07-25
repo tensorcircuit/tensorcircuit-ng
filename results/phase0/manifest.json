@@ -1,10 +1,9 @@
 {
   "aggregation_dirty_file_count": 0,
   "aggregation_dirty_worktree": false,
-  "aggregation_source_commit": "e849b5296fb56e2ea88937486c3ac0a9822b6579",
+  "aggregation_source_commit": "976c7892fa575758f14ce63677aa733b97961ac4",
   "blocking_artifacts": [
-    "c2_judgment.json / c2_checkpoint_manifest.json (C2_CANONICAL undetermined)",
-    "numerical_validation.json (NUMERICAL undetermined)"
+    "c2_judgment.json / c2_checkpoint_manifest.json (C2_CANONICAL undetermined)"
   ],
   "cases": {
     "n22_d10": {
@@ -84,11 +83,11 @@
     "C3_PLANAR_FULL_MATRIX": "PASS",
     "CUTLASS_SM120_4M": "NOT_SUPPORTED",
     "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",
-    "NUMERICAL": "UNKNOWN",
+    "NUMERICAL": "FAIL",
     "REGION_PROTOTYPE": "PASS"
   },
   "environment_hash": "07a3371b7b27007d94b8cbeb09053ca36475d9d0280259ac7755c5bf7573cbf3",
-  "generated_at": "2026-07-25T11:29:19Z",
+  "generated_at": "2026-07-25T16:04:46Z",
   "inputs": {
     "c1_buffer_assignment/n22_d10_exp_default.txt": "30cd18ad9941c04174e110d187e7ef838d080e04b12da5acb82cdfbb05351bb1",
     "c1_buffer_assignment/n22_d10_exp_nofusion.txt": "b34b02bd6306f6bccdf39569d6e4dbbb74d4f385a0be59c3d505ebed6d6c86c6",
@@ -112,25 +111,24 @@
     "cublaslt_grouped_capability.json": "7deb1ec4167802ec9ffcac23fc8baf2a7b56240ac9e71860b076a63d3ed43b81",
     "cublaslt_planar_capability.json": "fe729f8d7df8cf7f8903ee5cd1fc0e7843f4998b103fb2ff78a9dcc4840f832b",
     "cutlass_sm120_4m.json": "7d4ecf485a4f1cc859c06f15569b8b0051b5b5489a21908aed46eff7895dc81f",
-    "numerical_validation.csv": "316b870324120b249eea2deb5eb76df695fc8a4b18c5a69b78892180e482b524",
-    "numerical_validation.json": "4c3084563d8ddf71ae725e8fc705bd55c3556ff1660eafb6498d8a1da0d7324c",
+    "numerical_validation.csv": "ca502633b793beb65703b5d50ede1022d80557ffb315b6cf72e699cbc7e1be18",
+    "numerical_validation.json": "4a4025364924c80f7a7e95bafa870baaf0673633e060ac0d34739f4b9823ce98",
     "region_prototype.json": "c513c7465365d4d7508cd3db469cd219ce7d3e10cb897adb1996e4b258d16550",
-    "run_context.json": "cd1653cbc7af305cba6022270cbb92b799bf7b1c0331b60811d8743047da5b53"
+    "run_context.json": "089d70376547c9a68383d1f65defb9a262c7107da4cd0f0de431791d863ea5e3"
   },
   "measurement_source_commit": "205899678c0de72e9ff180ab357a973bf7e1112e",
   "outputs": {
     "environment.json": "07a3371b7b27007d94b8cbeb09053ca36475d9d0280259ac7755c5bf7573cbf3",
-    "gonogo.json": "47c549285cdf289aed4ec5f0f98b2992404b634893f629271cfaebec761d6c29",
-    "gonogo.md": "8a218793145ac1598292f0e550672d41911e8c8df958b72112351cab3ccd8c46"
+    "gonogo.json": "639b8124997a5a08785a538f7ebc375480beeff8aa837d9bc5a99c95ca7c24f0",
+    "gonogo.md": "d7c07b89c21e3c7a293c2a993b4c83bea42f3678fcdd7bda063ba8f9b5366e24"
   },
   "phase0_completion": "INCONCLUSIVE",
   "phase1_authorization": "NOT_AUTHORIZED",
   "reasons": [
-    "canonical criteria undetermined -> phase0_completion INCONCLUSIVE: C2_JOINT_EXECUTABLE_LEVERAGE, C2_CANONICAL, NUMERICAL",
-    "planar UNKNOWN: capability=OK numerical=UNDETERMINED",
-    "grouped NOT_VIABLE: capability=NOT_OK numerical=UNDETERMINED",
-    "region_fused UNKNOWN: capability=OK numerical=UNDETERMINED",
-    "cutlass_4m_single UNKNOWN: capability=OK numerical=UNDETERMINED"
+    "canonical criteria undetermined -> phase0_completion INCONCLUSIVE: C2_JOINT_EXECUTABLE_LEVERAGE, C2_CANONICAL",
+    "planar NOT_VIABLE: capability=OK numerical=NOT_OK",
+    "grouped NOT_VIABLE: capability=NOT_OK numerical=NOT_OK",
+    "cutlass_4m_single NOT_VIABLE: capability=OK numerical=NOT_OK"
   ],
   "required_artifacts": {
     "C1": [
@@ -179,23 +177,23 @@
   "route_verdict": {
     "cutlass_4m_single": {
       "capability": "OK",
-      "numerical": "UNDETERMINED",
-      "status": "UNKNOWN"
+      "numerical": "NOT_OK",
+      "status": "NOT_VIABLE"
     },
     "grouped": {
       "capability": "NOT_OK",
-      "numerical": "UNDETERMINED",
+      "numerical": "NOT_OK",
       "status": "NOT_VIABLE"
     },
     "planar": {
       "capability": "OK",
-      "numerical": "UNDETERMINED",
-      "status": "UNKNOWN"
+      "numerical": "NOT_OK",
+      "status": "NOT_VIABLE"
     },
     "region_fused": {
       "capability": "OK",
-      "numerical": "UNDETERMINED",
-      "status": "UNKNOWN"
+      "numerical": "OK",
+      "status": "VIABLE"
     }
   },
   "schema_version": "manifest-v1"
