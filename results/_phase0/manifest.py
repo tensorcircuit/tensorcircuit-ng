@@ -84,7 +84,7 @@ INPUT_ARTIFACT_FILES = [
     "c2_tileability.csv",
     "run_context.json",
 ]
-INPUT_ARTIFACT_DIRS = ["c1_optimized_hlo", "c1_buffer_assignment", "c1_xla_dump"]
+INPUT_ARTIFACT_DIRS = ["c1_optimized_hlo", "c1_buffer_assignment"]
 
 # generated verdicts hashed into outputs{} (manifest.json excluded — no self-hash)
 OUTPUT_ARTIFACTS = ["gonogo.json", "gonogo.md", "environment.json"]
