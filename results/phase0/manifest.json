@@ -4,7 +4,6 @@
   "aggregation_source_commit": "e849b5296fb56e2ea88937486c3ac0a9822b6579",
   "blocking_artifacts": [
     "c2_judgment.json / c2_checkpoint_manifest.json (C2_CANONICAL undetermined)",
-    "region_prototype.json (REGION_PROTOTYPE undetermined)",
     "numerical_validation.json (NUMERICAL undetermined)"
   ],
   "cases": {
@@ -57,7 +56,7 @@
         "C2_layers": {
           "C2_CANONICAL": "UNKNOWN",
           "C2_JOINT_EXECUTABLE_LEVERAGE": "UNKNOWN",
-          "C2_REGION_KERNEL_FEASIBILITY": "UNKNOWN",
+          "C2_REGION_KERNEL_FEASIBILITY": "PASS",
           "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK": "FAIL"
         }
       }
@@ -78,7 +77,7 @@
     "C2": "UNKNOWN",
     "C2_CANONICAL": "UNKNOWN",
     "C2_JOINT_EXECUTABLE_LEVERAGE": "UNKNOWN",
-    "C2_REGION_KERNEL_FEASIBILITY": "UNKNOWN",
+    "C2_REGION_KERNEL_FEASIBILITY": "PASS",
     "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK": "FAIL",
     "C3_GROUPED": "NOT_SUPPORTED",
     "C3_PLANAR_CORE": "PASS",
@@ -86,10 +85,10 @@
     "CUTLASS_SM120_4M": "NOT_SUPPORTED",
     "CUTLASS_SM80_FALLBACK_CAPABILITY": "PASS",
     "NUMERICAL": "UNKNOWN",
-    "REGION_PROTOTYPE": "UNKNOWN"
+    "REGION_PROTOTYPE": "PASS"
   },
   "environment_hash": "07a3371b7b27007d94b8cbeb09053ca36475d9d0280259ac7755c5bf7573cbf3",
-  "generated_at": "2026-07-25T06:13:56Z",
+  "generated_at": "2026-07-25T11:29:19Z",
   "inputs": {
     "c1_buffer_assignment/n22_d10_exp_default.txt": "30cd18ad9941c04174e110d187e7ef838d080e04b12da5acb82cdfbb05351bb1",
     "c1_buffer_assignment/n22_d10_exp_nofusion.txt": "b34b02bd6306f6bccdf39569d6e4dbbb74d4f385a0be59c3d505ebed6d6c86c6",
@@ -103,8 +102,8 @@
     "c1_optimized_hlo/n22_d10_exp_nofusion.hlo": "33753ff4a5a461fa72179d02a9c3bb9be3d644ab81aea6687c4ee4ba91f6329a",
     "c1_optimized_hlo/n24_d10_exp_default.hlo": "5879b2b41a55ed2b5b198229715efbf610d1c307675bf4043e98081da9cbd1ef",
     "c1_optimized_hlo/n24_d10_exp_nofusion.hlo": "f95b1c5b9eb27378f418213cc82ca66c7fe6196faed0075f908eebcc3e9732ca",
-    "c2_checkpoint_manifest.json": "5d9cf95cee61c0a71d708699a467f8984c40f90cf5eca89486f0f0c58883eed7",
-    "c2_judgment.json": "413e7ad879c7dffd2e6e4513a215732d40f3c380aa7deba447c5ffa7bc26b79a",
+    "c2_checkpoint_manifest.json": "1eb9af271715728e58da8210ca3126639b76f7702d3f9515ccb9675730692223",
+    "c2_judgment.json": "1cc8721b8977d805796dc697529e5687e809c0acd7cbbb10f88b2e5207d9f943",
     "c2_peak_frontier.json": "b26f49e326db337b4d1e9fc83f2de04fe7a541f288bfcae30f1975de4de87545",
     "c2_tileability.csv": "f2fb95e5de3e99c002b3dd758461d282d7f4b8992e61b4e9352a09cc883bc817",
     "contraction_shapes.csv": "8e15b9dec8018128986151cfbdc3f85204ca4711ae139a60c0f3706c9ba26590",
@@ -115,22 +114,22 @@
     "cutlass_sm120_4m.json": "7d4ecf485a4f1cc859c06f15569b8b0051b5b5489a21908aed46eff7895dc81f",
     "numerical_validation.csv": "316b870324120b249eea2deb5eb76df695fc8a4b18c5a69b78892180e482b524",
     "numerical_validation.json": "4c3084563d8ddf71ae725e8fc705bd55c3556ff1660eafb6498d8a1da0d7324c",
-    "region_prototype.json": "1e97addf6aef0f1c46f3814ea711202e9df71def11efaca637968614855d0135",
+    "region_prototype.json": "c513c7465365d4d7508cd3db469cd219ce7d3e10cb897adb1996e4b258d16550",
     "run_context.json": "cd1653cbc7af305cba6022270cbb92b799bf7b1c0331b60811d8743047da5b53"
   },
   "measurement_source_commit": "205899678c0de72e9ff180ab357a973bf7e1112e",
   "outputs": {
     "environment.json": "07a3371b7b27007d94b8cbeb09053ca36475d9d0280259ac7755c5bf7573cbf3",
-    "gonogo.json": "8c3c2e333b02fb39f93cf0158418d6b4bde50fcb79a3baad515a4547b58f4f14",
-    "gonogo.md": "db33d82fc8e81fa08983750c58b9c34ea645048e3e81ddce10e29782c5c200ee"
+    "gonogo.json": "47c549285cdf289aed4ec5f0f98b2992404b634893f629271cfaebec761d6c29",
+    "gonogo.md": "8a218793145ac1598292f0e550672d41911e8c8df958b72112351cab3ccd8c46"
   },
   "phase0_completion": "INCONCLUSIVE",
   "phase1_authorization": "NOT_AUTHORIZED",
   "reasons": [
-    "canonical criteria undetermined -> phase0_completion INCONCLUSIVE: C2_REGION_KERNEL_FEASIBILITY, C2_JOINT_EXECUTABLE_LEVERAGE, C2_CANONICAL, REGION_PROTOTYPE, NUMERICAL",
+    "canonical criteria undetermined -> phase0_completion INCONCLUSIVE: C2_JOINT_EXECUTABLE_LEVERAGE, C2_CANONICAL, NUMERICAL",
     "planar UNKNOWN: capability=OK numerical=UNDETERMINED",
     "grouped NOT_VIABLE: capability=NOT_OK numerical=UNDETERMINED",
-    "region_fused UNKNOWN: capability=UNDETERMINED numerical=UNDETERMINED",
+    "region_fused UNKNOWN: capability=OK numerical=UNDETERMINED",
     "cutlass_4m_single UNKNOWN: capability=OK numerical=UNDETERMINED"
   ],
   "required_artifacts": {
@@ -194,7 +193,7 @@
       "status": "UNKNOWN"
     },
     "region_fused": {
-      "capability": "UNDETERMINED",
+      "capability": "OK",
       "numerical": "UNDETERMINED",
       "status": "UNKNOWN"
     }

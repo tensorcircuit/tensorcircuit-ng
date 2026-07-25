@@ -1266,7 +1266,8 @@ def test_region_proto_status_recomputes_pass_from_full_anchor_evidence(tmp_path)
     The positive path (binding_ok=True -> MATCH -> PASS) is covered by
     ``test_region_proto_pass_with_verified_binding``. Uses the committed
     artifact's REAL field names (``peak_measurement_method``,
-    ``materialized_peak_bytes``, ``fused_peak_bytes``, ``n_seeds``,
+    ``materialized_runtime_allocator_peak_bytes``,
+    ``fused_runtime_allocator_peak_bytes``, ``n_seeds``,
     ``schema_version=region-prototype-v2``) -- NOT the plan's stale
     ``runtime_*`` variants."""
     import json
@@ -1305,8 +1306,8 @@ def test_region_proto_status_recomputes_pass_from_full_anchor_evidence(tmp_path)
                 "peak_measurement_method": "cuda_allocator_high_watermark_v1",
                 "runtime_peak_scope": "full_anchor_pte_v1",
                 "n_seeds": 3,
-                "materialized_peak_bytes": 2000000000,
-                "fused_peak_bytes": 1000000000,
+                "materialized_runtime_allocator_peak_bytes": 2000000000,
+                "fused_runtime_allocator_peak_bytes": 1000000000,
             }
         )
     )
@@ -1639,7 +1640,8 @@ def test_region_proto_missing_case_binding_not_pass(tmp_path):
     fields green EXCEPT case_binding), the gonogo reader returns UNKNOWN because
     the binding is unverified. Uses the committed artifact's REAL field names
     (``schema_version=region-prototype-v2``, ``peak_measurement_method``,
-    ``materialized_peak_bytes``, ``fused_peak_bytes``, ``n_seeds``)."""
+    ``materialized_runtime_allocator_peak_bytes``,
+    ``fused_runtime_allocator_peak_bytes``, ``n_seeds``)."""
     import json
     from results._phase0.gonogo import _region_proto_status
 
@@ -1661,8 +1663,8 @@ def test_region_proto_missing_case_binding_not_pass(tmp_path):
                 "peak_measurement_method": "cuda_allocator_high_watermark_v1",
                 "runtime_peak_scope": "full_anchor_pte_v1",
                 "n_seeds": 3,
-                "materialized_peak_bytes": 400,
-                "fused_peak_bytes": 100,
+                "materialized_runtime_allocator_peak_bytes": 400,
+                "fused_runtime_allocator_peak_bytes": 100,
                 "fused_full_anchor_run": True,
                 "relative_l2": 1e-7,
                 "max_rel": 1e-7,
@@ -1708,8 +1710,8 @@ def _full_measured_region_proto():
         "peak_measurement_method": "cuda_allocator_high_watermark_v1",
         "runtime_peak_scope": "full_anchor_pte_v1",
         "n_seeds": 3,
-        "materialized_peak_bytes": 2000000000,
-        "fused_peak_bytes": 1000000000,
+        "materialized_runtime_allocator_peak_bytes": 2000000000,
+        "fused_runtime_allocator_peak_bytes": 1000000000,
     }
 
 

@@ -202,14 +202,15 @@ def _good_prototype():
         "registers_per_thread": 40,
         "occupancy_blocks_per_sm": 6,
         "occupancy_pct": 100.0,
-        "materialized_peak_bytes": 1778384896,
-        "fused_peak_bytes": 704643072,
+        "materialized_runtime_allocator_peak_bytes": 1778384896,
+        "fused_runtime_allocator_peak_bytes": 704643072,
         "peak_saved_bytes": 1073741824,
         # MEASURED runtime allocator peak (plan §5 2.1 / Task 3): these are the
         # canonical peak fields the gate reads via ``_normalize_region_peak``.
         # Task 3 errata: the normalizer reads the committed artifact's REAL
         # field names (``peak_measurement_method``, ``peak_evidence_class``,
-        # ``materialized_peak_bytes``, ``fused_peak_bytes``, ``n_seeds``).
+        # ``materialized_runtime_allocator_peak_bytes``,
+        # ``fused_runtime_allocator_peak_bytes``, ``n_seeds``).
         # The approved method is ``cuda_allocator_high_watermark_v1`` (the
         # ONLY entry in normative_policy.json's approved_methods); the
         # canonical full-anchor scope is ``full_anchor_pte_v1``.
@@ -612,19 +613,20 @@ def test_canonical_region_unknown_when_fused_full_anchor_run_false():
 
 def test_canonical_region_unknown_when_actual_peak_missing():
     """plan §3 操作.2 bullet 2 / finding 3.1: measured peak fields
-    (``materialized_peak_bytes`` /
-    ``fused_peak_bytes``) missing -> region UNKNOWN. The gate
+    (``materialized_runtime_allocator_peak_bytes`` /
+    ``fused_runtime_allocator_peak_bytes``) missing -> region UNKNOWN. The gate
     self-recomputes ``region_peak_gain_bytes`` from those fields; if
     either is absent the peak benefit is unconfirmable, so the region criterion
     must fail closed to UNKNOWN. (Task 3: the normalizer reads the committed
-    artifact's REAL field names ``materialized_peak_bytes`` /
-    ``fused_peak_bytes``, not the plan's stale ``runtime_*`` variants.)"""
+    artifact's REAL field names ``materialized_runtime_allocator_peak_bytes`` /
+    ``fused_runtime_allocator_peak_bytes``, not the plan's stale ``runtime_*`` variants.)
+    """
     edge, peak, proto, audit, case, fh = _good()
     # Isolate the peak-missing path: declare the full-anchor run done so bullet 1
     # does not independently force UNKNOWN, then strip the peak fields.
     proto["fused_full_anchor_run"] = True
-    del proto["materialized_peak_bytes"]
-    del proto["fused_peak_bytes"]
+    del proto["materialized_runtime_allocator_peak_bytes"]
+    del proto["fused_runtime_allocator_peak_bytes"]
     j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
     assert j["recomputed"]["region_peak_gain_bytes"] is None, j
     assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
@@ -663,15 +665,15 @@ def test_canonical_region_unknown_m1_when_occupancy_missing():
 
 
 def test_canonical_region_unknown_m1_when_actual_peak_missing():
-    """M1 condition 3/4: ``materialized_peak_bytes`` /
-    ``fused_peak_bytes`` missing -> region_peak_gain_bytes
+    """M1 condition 3/4: ``materialized_runtime_allocator_peak_bytes`` /
+    ``fused_runtime_allocator_peak_bytes`` missing -> region_peak_gain_bytes
     None -> region UNKNOWN. (Parallel to the Task 0 RED test above, named here
     to pin M1 condition 3 explicitly. Task 3: the normalizer reads the
     committed artifact's REAL field names.)"""
     edge, peak, proto, audit, case, fh = _good()
     proto["fused_full_anchor_run"] = True
-    del proto["materialized_peak_bytes"]
-    del proto["fused_peak_bytes"]  # M1 #3: peak unmeasured
+    del proto["materialized_runtime_allocator_peak_bytes"]
+    del proto["fused_runtime_allocator_peak_bytes"]  # M1 #3: peak unmeasured
     j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
     assert j["recomputed"]["region_peak_gain_bytes"] is None, j
     assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "UNKNOWN", j
@@ -703,21 +705,21 @@ def test_canonical_region_unknown_when_peak_evidence_model_only():
     """Nongpu rereview finding 3.1: ``peak_evidence_class=MODEL_ONLY`` must NOT
     yield ``C2_REGION_KERNEL_FEASIBILITY=PASS``. Even with
     ``fused_full_anchor_run=True``, complete accuracy/resource, and legacy
-    ``materialized_peak_bytes``/``fused_peak_bytes`` present, a MODEL_ONLY peak
+    ``materialized_runtime_allocator_peak_bytes``/``fused_runtime_allocator_peak_bytes`` present, a MODEL_ONLY peak
     is an analytical/allocation upper bound -- not a measured runtime allocator
     peak. The gate must fail closed to UNKNOWN.
 
     Task 2 fix: ``_recompute_conditions`` now gates on
     ``peak_evidence_class == MEASURED``; MODEL_ONLY / missing -> region_peak_gain
     None -> region UNKNOWN. This test was RED before the fix (the old gate read
-    legacy ``materialized_peak_bytes``/``fused_peak_bytes`` with no evidence-class
+    legacy ``materialized_runtime_allocator_peak_bytes``/``fused_runtime_allocator_peak_bytes`` with no evidence-class
     check) and is GREEN after."""
     edge, peak, proto, audit, case, fh = _good()
     proto["fused_full_anchor_run"] = True
     proto["peak_evidence_class"] = "MODEL_ONLY"
     # Legacy raw-allocation fields are present (the _good fixture carries them).
-    assert proto["materialized_peak_bytes"] is not None
-    assert proto["fused_peak_bytes"] is not None
+    assert proto["materialized_runtime_allocator_peak_bytes"] is not None
+    assert proto["fused_runtime_allocator_peak_bytes"] is not None
     j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
     region = j["layers"]["C2_REGION_KERNEL_FEASIBILITY"]
     assert (
@@ -790,13 +792,13 @@ def test_canonical_region_pass_only_with_complete_measured_fixture():
     all required fields + no P/T evidence) -> region PASS. This is the sole
     path to canonical region PASS; the _good fixture already carries all
     required MEASURED fields (Task 3: uses the committed artifact's REAL
-    field names -- ``peak_measurement_method``, ``materialized_peak_bytes``,
-    ``fused_peak_bytes``, ``n_seeds``, ``runtime_peak_scope``)."""
+    field names -- ``peak_measurement_method``, ``materialized_runtime_allocator_peak_bytes``,
+    ``fused_runtime_allocator_peak_bytes``, ``n_seeds``, ``runtime_peak_scope``)."""
     edge, peak, proto, audit, case, fh = _good()
     proto["fused_full_anchor_run"] = True
     assert proto["peak_evidence_class"] == "MEASURED", proto
-    assert proto["materialized_peak_bytes"] is not None
-    assert proto["fused_peak_bytes"] is not None
+    assert proto["materialized_runtime_allocator_peak_bytes"] is not None
+    assert proto["fused_runtime_allocator_peak_bytes"] is not None
     assert proto["peak_measurement_method"] is not None
     assert proto["runtime_peak_scope"] is not None
     assert proto["n_seeds"] is not None
@@ -833,7 +835,8 @@ def test_region_missing_case_binding_not_pass():
     """Task 3 errata #2: ``case_binding_state=MISSING`` (no binding verification)
     -> not PASS. Uses the committed artifact's REAL field names
     (``schema_version=region-prototype-v2``, ``peak_measurement_method``,
-    ``materialized_peak_bytes``, ``fused_peak_bytes``, ``n_seeds``)."""
+    ``materialized_runtime_allocator_peak_bytes``, ``fused_runtime_allocator_peak_bytes``, ``n_seeds``).
+    """
     from results._phase0.c2 import _normalize_region_peak
     from results._phase0.gate_contracts import GATE_CONTRACTS, evaluate_gate
 
@@ -844,8 +847,8 @@ def test_region_missing_case_binding_not_pass():
         "peak_measurement_method": "cuda_allocator_high_watermark_v1",
         "runtime_peak_scope": "full_anchor_pte_v1",
         "n_seeds": 3,
-        "materialized_peak_bytes": 400,
-        "fused_peak_bytes": 100,
+        "materialized_runtime_allocator_peak_bytes": 400,
+        "fused_runtime_allocator_peak_bytes": 100,
         "fused_full_anchor_run": True,
         "relative_l2": 1e-7,
         "max_rel": 1e-7,
@@ -870,8 +873,8 @@ def test_region_scope_mismatch_conflict():
         "peak_measurement_method": "cuda_allocator_high_watermark_v1",
         "runtime_peak_scope": "full_anchor_pte_v1",
         "n_seeds": 3,
-        "materialized_peak_bytes": 400,
-        "fused_peak_bytes": 100,
+        "materialized_runtime_allocator_peak_bytes": 400,
+        "fused_runtime_allocator_peak_bytes": 100,
         "fused_full_anchor_run": False,  # scope full_anchor but run False -> MISMATCH
     }
     raw = _normalize_region_peak(proto)
@@ -893,8 +896,8 @@ def test_region_full_positive_pass():
         "peak_measurement_method": "cuda_allocator_high_watermark_v1",
         "runtime_peak_scope": "full_anchor_pte_v1",
         "n_seeds": 3,
-        "materialized_peak_bytes": 2000000000,
-        "fused_peak_bytes": 1000000000,
+        "materialized_runtime_allocator_peak_bytes": 2000000000,
+        "fused_runtime_allocator_peak_bytes": 1000000000,
         "fused_full_anchor_run": True,
         "relative_l2": 1e-7,
         "max_rel": 1e-7,
@@ -919,11 +922,16 @@ def test_region_full_positive_pass():
     assert token == "PASS", (token, raw)
 
 
-def test_region_committed_artifact_is_unknown():
-    """Task 3: the committed ``results/phase0/region_prototype.json`` (MODEL_ONLY,
-    no full-anchor run, resource null, unapproved method) -> reader returns
-    UNKNOWN (honest). No regen needed; the committed artifact is honestly
-    UNKNOWN and the shared normalizer + GateContract must reflect that."""
+def test_region_committed_artifact_is_measured_pass():
+    """Task 3 + G2: the committed ``results/phase0/region_prototype.json``
+    (MEASURED, full-anchor run executed, resources measured, approved method)
+    -> reader returns PASS (honest). G2 regenerated the artifact with
+    ``fused_full_anchor_run=True``, ``peak_evidence_class="MEASURED"``,
+    measured ``registers_per_thread=60`` / ``occupancy_pct=66.7``, and the
+    runtime allocator peaks renamed to
+    ``materialized_runtime_allocator_peak_bytes`` /
+    ``fused_runtime_allocator_peak_bytes``. The shared normalizer +
+    GateContract must reflect the MEASURED PASS verdict."""
     import json
 
     from results._phase0.c2 import _normalize_region_peak
@@ -933,22 +941,22 @@ def test_region_committed_artifact_is_unknown():
         proto = json.load(f)
     # The committed artifact has the REAL fields the normalizer maps.
     assert proto["schema_version"] == "region-prototype-v2"
-    assert proto["peak_evidence_class"] == "MODEL_ONLY"
+    assert proto["peak_evidence_class"] == "MEASURED"
     assert proto["peak_measurement_method"] == "raw_allocation_size_delta"
-    assert proto["fused_full_anchor_run"] is False
-    assert proto["registers_per_thread"] is None
-    assert proto["occupancy_pct"] is None
+    assert proto["fused_full_anchor_run"] is True
+    assert proto["registers_per_thread"] == 60
+    assert proto["occupancy_pct"] == 66.7
     raw = _normalize_region_peak(proto, case_binding_state="MATCH")
     token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
-    # Bidirectional consistency: verdict=UNKNOWN -> expected=UNKNOWN; candidate
-    # is FAIL (resource_state=MISSING) -> CONFLICT -> UNKNOWN. Either way UNKNOWN.
+    # Bidirectional consistency: verdict=PASS -> expected=PASS; recomputed
+    # token is PASS -> no CONFLICT -> PASS (honest MEASURED PASS).
     from results._phase0.c2 import _REGION_SELF_REPORT_MAP
 
     expected = _REGION_SELF_REPORT_MAP.get(proto.get("verdict"))
     if expected is not None and token != expected:
         raw["consistency_state"] = "CONFLICT"
         token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
-    assert token == "UNKNOWN", (token, raw)
+    assert token == "PASS", (token, raw)
 
 
 # ---------------------------------------------------------------------------
@@ -970,8 +978,8 @@ def test_region_negative_gain_fails():
         "peak_measurement_method": "cuda_allocator_high_watermark_v1",
         "runtime_peak_scope": "full_anchor_pte_v1",
         "n_seeds": 3,
-        "materialized_peak_bytes": 100,
-        "fused_peak_bytes": 400,
+        "materialized_runtime_allocator_peak_bytes": 100,
+        "fused_runtime_allocator_peak_bytes": 400,
         "fused_full_anchor_run": True,
         "relative_l2": 1e-7,
         "max_rel": 1e-7,

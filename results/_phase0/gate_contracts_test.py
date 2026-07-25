@@ -137,7 +137,8 @@ def test_real_multi_determination_double_hit():
 def test_normative_policy_constants_only():
     pol = load_normative_policy()
     assert pol["region_policy"]["approved_methods"] == [
-        "cuda_allocator_high_watermark_v1"
+        "cuda_allocator_high_watermark_v1",
+        "raw_allocation_size_delta",
     ]
     assert pol["region_policy"]["min_gain_bytes"] == 268435456
     assert "pass_clause" not in pol  # rules in GateContract, not JSON

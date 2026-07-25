@@ -1136,11 +1136,17 @@ def _region_case_binding_state(proto, c2_judgment_path, proto_path=None):
         return "MISSING"
     if not isinstance(j, dict):
         return "MISSING"
-    # F8c(a): re-verify the judgment's schema_version is in the allowlist.
-    if j.get("schema_version") != _c2.C2_JUDGMENT_SCHEMA:
-        return "MISSING"
     case = j.get(case_id)
     if not isinstance(case, dict):
+        return "MISSING"
+    # F8c(a): re-verify the judgment's schema_version is in the allowlist.
+    # The production c2_judgment.json stores schema_version inside the case
+    # entry; the F8c test fixtures store it at the top level. Check the case
+    # first, then fall back to the top level.
+    sv = case.get("schema_version")
+    if sv is None:
+        sv = j.get("schema_version")
+    if sv != _c2.C2_JUDGMENT_SCHEMA:
         return "MISSING"
     binding = case.get("binding")
     if not isinstance(binding, dict):

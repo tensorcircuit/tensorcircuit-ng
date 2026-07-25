@@ -503,7 +503,8 @@ def _normalize_region_peak(proto, *, case_binding_state="MISSING"):
 
     Maps the committed artifact's REAL fields (``schema_version=
     region-prototype-v2``, ``peak_evidence_class``, ``peak_measurement_method``,
-    ``materialized_peak_bytes``, ``fused_peak_bytes``, ``n_seeds``,
+    ``materialized_runtime_allocator_peak_bytes``,
+    ``fused_runtime_allocator_peak_bytes``, ``n_seeds``,
     ``relative_l2``, ``registers_per_thread``, ``occupancy_pct``,
     ``fused_full_anchor_run``, ``verdict``) to the 12 cross-task field names
     defined by :data:`gate_contracts.GATE_CONTRACTS` ``["region_peak"]``.
@@ -589,8 +590,8 @@ def _normalize_region_peak(proto, *, case_binding_state="MISSING"):
 
     # peak_state: classify both peaks via _classify_peak_v2; OK iff both OK,
     # else the worst (any non-OK sinks the pair).
-    mr_state = _classify_peak_v2(proto.get("materialized_peak_bytes"))
-    fr_state = _classify_peak_v2(proto.get("fused_peak_bytes"))
+    mr_state = _classify_peak_v2(proto.get("materialized_runtime_allocator_peak_bytes"))
+    fr_state = _classify_peak_v2(proto.get("fused_runtime_allocator_peak_bytes"))
     if mr_state == "OK" and fr_state == "OK":
         peak_state = "OK"
     else:
@@ -605,7 +606,9 @@ def _normalize_region_peak(proto, *, case_binding_state="MISSING"):
     # false PASS from MODEL_ONLY gains). Then from (materialized - fused)
     # vs min_gain_bytes: NEGATIVE if <0, BELOW_POLICY if <min, OK if >=min.
     if peak_state == "OK" and evidence_class_state == "MEASURED":
-        gain = int(proto["materialized_peak_bytes"]) - int(proto["fused_peak_bytes"])
+        gain = int(proto["materialized_runtime_allocator_peak_bytes"]) - int(
+            proto["fused_runtime_allocator_peak_bytes"]
+        )
         if gain < 0:
             gain_state = "NEGATIVE"
         elif gain < min_gain_bytes:
@@ -749,8 +752,8 @@ def _recompute_conditions(proto, peak):
         method = proto.get("peak_measurement_method")
         scope = proto.get("runtime_peak_scope")
         n_seeds = proto.get("n_seeds")
-        mr = proto.get("materialized_peak_bytes")
-        fr = proto.get("fused_peak_bytes")
+        mr = proto.get("materialized_runtime_allocator_peak_bytes")
+        fr = proto.get("fused_runtime_allocator_peak_bytes")
         if (
             method in approved_methods
             and scope in _FULL_ANCHOR_SCOPES
