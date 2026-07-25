@@ -253,6 +253,34 @@ def test_region_prototype_verdict_field_is_canonical_when_full_anchor_not_run():
     )
 
 
+# ---------------------------------------------------------------------------
+# Task G1: full-anchor direct-recompute correctness (GPU phase).
+# Runs the existing fused_pte_kernel at FULL anchor dims (PM=4096, PN=16384,
+# K1=1024, TM=64, TN=1048576) and compares E_fused against a materialized
+# oracle E_mat (which materializes P and T) across 3 seeds. This resolves the
+# region_fused criterion's correctness leg from UNKNOWN -> real PASS/FAIL.
+# Memory: materialized ~1.7 GB peak (P+T+E+inputs), fused ~672 MiB (A+B+D+E
+# only) -- both fit in 12 GB. Per-seed: materialize (P/T transient, freed
+# before return), free pool, then fuse with the SAME seed (identical inputs).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.gpu
+def test_full_anchor_direct_recompute_correctness():
+    """Full-anchor fused (direct recompute) == materialized E, 3 seeds, near-exact."""
+    from results._phase0.region_proto import run_full_anchor_correctness
+
+    result = run_full_anchor_correctness(seeds=(0, 1, 2))
+    assert result["n_seeds"] == 3
+    assert result["worst_relative_l2"] < 1e-4, result
+    assert result["worst_max_rel"] < 1e-3, result
+    assert result["nan_inf"] is False
+    # output shape/dtype/bytes
+    assert result["output_shape"] == [64, 1048576]
+    assert result["output_dtype"] == "complex64"
+    assert result["output_bytes"] == 64 * 1048576 * 8
+
+
 if __name__ == "__main__":
     import sys, pytest
 

@@ -153,6 +153,175 @@ def fused_reference(A, B, D, steps, shapes) -> cp.ndarray:
     return E
 
 
+# --- Layer 2b: full-anchor direct recompute (Task G1, GPU phase) ---
+#
+# Runs the existing fused_pte_kernel at the FULL anchor dims (PM=4096,
+# PN=16384, K1=1024, TM=64, TN=1048576) and compares E against a materialized
+# oracle E_mat that DOES allocate P (A@B, 512 MiB) and T (transform(P), 512 MiB).
+# Memory: materialized peak ~1.7 GB (P+T+E+inputs), fused ~672 MiB (A+B+D+E
+# only, no full P/T) -- both fit in the 12 GB dev GPU. The fused path provably
+# allocates only A/B/D/E (no P/T buffers). Per seed: materialize (P/T transient,
+# freed before return) -> free pool -> fuse with the SAME seed (identical inputs)
+# so the diff is purely the kernel's numerical behavior.
+
+FULL_ANCHOR = {
+    "PM": 4096,
+    "PN": 16384,
+    "K1": 1024,
+    "TM": 64,
+    "TN": 1048576,
+    "PM_x_K1": (4096, 1024),
+    "K1_x_PN": (1024, 16384),
+    "TM_x_TM": (64, 64),
+    "TM_x_TN": (64, 1048576),
+}
+
+
+def full_anchor_contract(n: int = 24, depth: int = 10, fusion: str = "default") -> dict:
+    """Read the edge map for the full-anchor region's transform + producer/consumer
+    and attach the full-anchor GEMM shapes (PM=4096, PN=16384, K1=1024, TM=64,
+    TN=1048576)."""
+    contract = load_region_contract(n, depth, fusion)
+    contract.update(FULL_ANCHOR)
+    return contract
+
+
+def materialized_reference_full(steps, seed: int = 7):
+    """E = D @ transform(A @ B) at the FULL anchor, materializing P and T.
+
+    Returns (E, P_bytes, T_bytes). P and T are freed before returning (the
+    oracle's transient ~1 GiB P+T is released); P_bytes/T_bytes are returned
+    so the caller can confirm the fused path avoided those allocations. Inputs
+    are deterministic in ``seed`` so fused_reference_full(steps, seed) sees
+    IDENTICAL A/B/D and the diff is purely the kernel's numerical behavior."""
+    s = FULL_ANCHOR
+    rng = np.random.default_rng(seed)
+    A = (
+        rng.standard_normal((s["PM"], s["K1"]))
+        + 1j * rng.standard_normal((s["PM"], s["K1"]))
+    ).astype(np.complex64)
+    B = (
+        rng.standard_normal((s["K1"], s["PN"]))
+        + 1j * rng.standard_normal((s["K1"], s["PN"]))
+    ).astype(np.complex64)
+    D = (
+        rng.standard_normal((s["TM"], s["TM"]))
+        + 1j * rng.standard_normal((s["TM"], s["TM"]))
+    ).astype(np.complex64)
+    dA, dB, dD = cp.asarray(A), cp.asarray(B), cp.asarray(D)
+    P = dA @ dB  # c64[4096,16384]  512 MiB
+    T = apply_transform_steps(P, steps)  # c64[64,1048576]  512 MiB
+    E = dD @ T  # c64[64,1048576]  512 MiB
+    P_bytes = P.nbytes
+    T_bytes = T.nbytes
+    del P, T  # free before returning (oracle no longer needs them)
+    cp.cuda.Device(0).synchronize()
+    return E, P_bytes, T_bytes
+
+
+def fused_reference_full(steps, seed: int = 7):
+    """E = D @ transform(A @ B) at the FULL anchor via fused_pte_kernel, with
+    NO full P or T buffer ever allocated (only A/B/D/E). Producer elements are
+    recomputed on the fly inside the kernel. Inputs use the SAME ``seed`` as
+    materialized_reference_full so the diff is purely the kernel's numerical
+    behavior, not input mismatch."""
+    s = FULL_ANCHOR
+    rng = np.random.default_rng(seed)  # SAME seed -> same A/B/D as materialized
+    A = (
+        rng.standard_normal((s["PM"], s["K1"]))
+        + 1j * rng.standard_normal((s["PM"], s["K1"]))
+    ).astype(np.complex64)
+    B = (
+        rng.standard_normal((s["K1"], s["PN"]))
+        + 1j * rng.standard_normal((s["K1"], s["PN"]))
+    ).astype(np.complex64)
+    D = (
+        rng.standard_normal((s["TM"], s["TM"]))
+        + 1j * rng.standard_normal((s["TM"], s["TM"]))
+    ).astype(np.complex64)
+    dA, dB, dD = cp.asarray(A), cp.asarray(B), cp.asarray(D)
+    E = cp.empty((s["TM"], s["TN"]), dtype=cp.complex64)
+    idx = _transform_index_arrays(steps)
+    kr = _kernel("fused_pte_kernel")
+    bx, by = 16, 16
+    gx = (s["TN"] + bx - 1) // bx
+    gy = (s["TM"] + by - 1) // by
+    kr(
+        (gx, gy),
+        (bx, by),
+        (
+            dA,
+            dB,
+            dD,
+            E,
+            np.int32(s["PM"]),
+            np.int32(s["PN"]),
+            np.int32(s["K1"]),
+            np.int32(s["TM"]),
+            np.int32(s["TN"]),
+            idx["outdim"],
+            idx["out_stride"],
+            idx["rd_stride"],
+            idx["tp"],
+        ),
+    )
+    cp.cuda.Device(0).synchronize()
+    return E
+
+
+def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
+    """Full-anchor correctness: fused (direct recompute) vs materialized oracle,
+    across ``seeds`` (default 3). For each seed, materialized and fused use
+    IDENTICAL inputs (same seed) so the diff is purely the kernel's numerical
+    behavior. Returns the worst relative_l2 / max_rel across seeds.
+
+    Memory: within each seed, the materialized path's pool is freed before the
+    fused path runs (they share the 12 GB cupy pool); between seeds the pool is
+    freed again so inputs/E from one seed do not accumulate. The fused path
+    allocates only A/B/D/E -- P and T are never materialized on the fused path.
+    """
+    contract = full_anchor_contract()
+    steps = contract["steps"]
+    s = FULL_ANCHOR
+    worst_rel_l2 = 0.0
+    worst_max_rel = 0.0
+    nan_inf = False
+    p_bytes_avoided = 0
+    t_bytes_avoided = 0
+    for seed in seeds:
+        # Materialized oracle: allocates P+T transiently, frees them in-function
+        # before returning (E_mat still live).
+        E_mat, p_bytes_avoided, t_bytes_avoided = materialized_reference_full(
+            steps, seed
+        )
+        # Reclaim the materialized path's pool (P/T already del'd, but cupy's pool
+        # retains freed blocks) so the fused path has the full 12 GB available.
+        cp.get_default_memory_pool().free_all_blocks()
+        cp.cuda.Device(0).synchronize()
+        # Fused path: SAME seed -> IDENTICAL A/B/D. Never allocates P or T.
+        E_fus = fused_reference_full(steps, seed)
+        diff = E_fus - E_mat
+        rel_l2 = float(cp.linalg.norm(diff) / max(1.0, cp.linalg.norm(E_mat)))
+        max_rel = float(cp.max(cp.abs(diff)) / max(1.0, cp.max(cp.abs(E_mat))))
+        worst_rel_l2 = max(worst_rel_l2, rel_l2)
+        worst_max_rel = max(worst_max_rel, max_rel)
+        nan_inf = nan_inf or not bool(cp.all(cp.isfinite(E_fus)))
+        del E_mat, E_fus
+        cp.get_default_memory_pool().free_all_blocks()
+        cp.cuda.Device(0).synchronize()
+    return {
+        "n_seeds": len(seeds),
+        "worst_relative_l2": worst_rel_l2,
+        "worst_max_rel": worst_max_rel,
+        "nan_inf": nan_inf,
+        "output_shape": [s["TM"], s["TN"]],
+        "output_dtype": "complex64",
+        "output_bytes": s["TM"] * s["TN"] * 8,
+        "P_bytes_avoided": p_bytes_avoided,
+        "T_bytes_avoided": t_bytes_avoided,
+    }
+
+
 # --- Layer 3: resources / memory / latency / verdict ---
 
 
