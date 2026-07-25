@@ -559,6 +559,256 @@ def test_accepted_reasons_empty_on_success(tmp_path, monkeypatch):
     assert out["reasons"] == []
 
 
+# ---------------------------------------------------------------------------
+# F5 (evidence-integrity remediation): derive_release_status must fail-closed on
+# (a) non-list findings / non-dict finding elements, and (b) a non-frozen
+# test_report schema. Previously a dict findings was treated as empty (no open
+# P0/P1/P2 detected) and a test_report with exit_code=1 + passed=True was
+# accepted (fail-open).
+# ---------------------------------------------------------------------------
+
+
+def _synthetic_rs(tmp_path):
+    """Write a synthetic rs JSON (fails real Git-tree validation) for negative
+    tests. The rs validation will fail-closed on the synthetic data, which is
+    fine -- the tests assert NOT_ACCEPTED and check for the specific reason."""
+    return _w(
+        tmp_path,
+        "rs.json",
+        {
+            "schema_version": 1,
+            "subject_commit": "a" * 40,
+            "dirty_worktree": False,
+            "spec_sha256": "s",
+            "plan_sha256": "p",
+            "artifact_manifest_sha256": "m",
+            "test_report_sha256": "t",
+            "closeout_facts_sha256": "c",
+        },
+    )
+
+
+def _synthetic_ext(tmp_path, findings):
+    """Write an ext JSON with verdict=ACCEPTED and the given findings."""
+    return _w(
+        tmp_path,
+        "ext.json",
+        {
+            "verdict": "ACCEPTED",
+            "findings": findings,
+            "review_subject_sha256": "x",
+        },
+    )
+
+
+def _valid_tr(tmp_path):
+    """Write a valid test_report (frozen schema: v1, exit 0, passed True)."""
+    return _w(
+        tmp_path,
+        "tr.json",
+        {"schema_version": 1, "exit_code": 0, "passed": True},
+    )
+
+
+# --- F5a: findings must be a list of dicts ---
+
+
+def test_findings_dict_not_accepted(tmp_path):
+    """F5a: findings is a dict (not a list) -> NOT_ACCEPTED.
+
+    Previously ``findings={"severity":"P0","status":"OPEN"}`` was treated as
+    empty (``not isinstance(dict, list)`` -> ``findings = []``) -> no open
+    P0/P1/P2 detected -> ACCEPTED (fail-open).
+    """
+    ext = _synthetic_ext(tmp_path, {"severity": "P0", "status": "OPEN"})
+    rs = _synthetic_rs(tmp_path)
+    tr = _valid_tr(tmp_path)
+    out = derive_release_status(
+        ext,
+        rs,
+        tr,
+        user_confirms=True,
+        git_tree_x="a" * 40,
+        workspace_root=str(tmp_path),
+    )
+    assert out["release"] != "ACCEPTED"
+    assert any("findings not a list" in r for r in out["reasons"]), out["reasons"]
+
+
+def test_findings_non_dict_element_not_accepted(tmp_path):
+    """F5a: a non-dict finding in the list -> NOT_ACCEPTED (don't skip).
+
+    Previously ``continue`` skipped non-dict elements silently -> the open P0
+    in element 0 was detected, but element 1 was silently dropped (no reason).
+    Now each non-dict element adds its own reason.
+    """
+    ext = _synthetic_ext(tmp_path, [{"severity": "P0", "status": "OPEN"}, "not a dict"])
+    rs = _synthetic_rs(tmp_path)
+    tr = _valid_tr(tmp_path)
+    out = derive_release_status(
+        ext,
+        rs,
+        tr,
+        user_confirms=True,
+        git_tree_x="a" * 40,
+        workspace_root=str(tmp_path),
+    )
+    assert out["release"] != "ACCEPTED"
+    assert any("finding 1 not a dict" in r for r in out["reasons"]), out["reasons"]
+
+
+def test_findings_string_not_accepted(tmp_path):
+    """F5a: findings as a string -> NOT_ACCEPTED (not a list)."""
+    ext = _synthetic_ext(tmp_path, "not a list")
+    rs = _synthetic_rs(tmp_path)
+    tr = _valid_tr(tmp_path)
+    out = derive_release_status(
+        ext,
+        rs,
+        tr,
+        user_confirms=True,
+        git_tree_x="a" * 40,
+        workspace_root=str(tmp_path),
+    )
+    assert out["release"] != "ACCEPTED"
+    assert any("findings not a list" in r for r in out["reasons"]), out["reasons"]
+
+
+def test_findings_none_not_accepted(tmp_path):
+    """F5a: findings=None -> NOT_ACCEPTED (not a list).
+
+    ``ext.get("findings", [])`` returns None when the key is present with value
+    None (the default is only used for absent keys). Previously None was treated
+    as empty (``not isinstance(None, list)`` -> ``findings = []``) -> ACCEPTED.
+    """
+    ext = _w(
+        tmp_path,
+        "ext.json",
+        {"verdict": "ACCEPTED", "findings": None, "review_subject_sha256": "x"},
+    )
+    rs = _synthetic_rs(tmp_path)
+    tr = _valid_tr(tmp_path)
+    out = derive_release_status(
+        ext,
+        rs,
+        tr,
+        user_confirms=True,
+        git_tree_x="a" * 40,
+        workspace_root=str(tmp_path),
+    )
+    assert out["release"] != "ACCEPTED"
+    assert any("findings not a list" in r for r in out["reasons"]), out["reasons"]
+
+
+# --- F5b: test_report frozen-schema check ---
+
+
+def test_test_report_exit_code_1_not_accepted(tmp_path):
+    """F5b: exit_code=1 + passed=True -> NOT_ACCEPTED.
+
+    Previously only ``passed is True`` was checked, so a test_report with
+    exit_code=1 (tests failed) but passed=True (stale/forged) was accepted.
+    """
+    ext = _synthetic_ext(tmp_path, [])
+    rs = _synthetic_rs(tmp_path)
+    tr = _w(
+        tmp_path,
+        "tr.json",
+        {"schema_version": 1, "exit_code": 1, "passed": True},
+    )
+    out = derive_release_status(
+        ext,
+        rs,
+        tr,
+        user_confirms=True,
+        git_tree_x="a" * 40,
+        workspace_root=str(tmp_path),
+    )
+    assert out["release"] != "ACCEPTED"
+    assert any("exit_code" in r for r in out["reasons"]), out["reasons"]
+
+
+def test_test_report_missing_schema_version_not_accepted(tmp_path):
+    """F5b: missing schema_version -> NOT_ACCEPTED (frozen schema requires v1)."""
+    ext = _synthetic_ext(tmp_path, [])
+    rs = _synthetic_rs(tmp_path)
+    tr = _w(tmp_path, "tr.json", {"exit_code": 0, "passed": True})
+    out = derive_release_status(
+        ext,
+        rs,
+        tr,
+        user_confirms=True,
+        git_tree_x="a" * 40,
+        workspace_root=str(tmp_path),
+    )
+    assert out["release"] != "ACCEPTED"
+    assert any("schema_version" in r for r in out["reasons"]), out["reasons"]
+
+
+def test_test_report_passed_string_not_accepted(tmp_path):
+    """F5b: passed='true' (string) -> NOT_ACCEPTED (must be bool True)."""
+    ext = _synthetic_ext(tmp_path, [])
+    rs = _synthetic_rs(tmp_path)
+    tr = _w(
+        tmp_path,
+        "tr.json",
+        {"schema_version": 1, "exit_code": 0, "passed": "true"},
+    )
+    out = derive_release_status(
+        ext,
+        rs,
+        tr,
+        user_confirms=True,
+        git_tree_x="a" * 40,
+        workspace_root=str(tmp_path),
+    )
+    assert out["release"] != "ACCEPTED"
+    assert any("test_report passed" in r for r in out["reasons"]), out["reasons"]
+
+
+def test_test_report_passed_int_not_accepted(tmp_path):
+    """F5b: passed=1 (int) -> NOT_ACCEPTED (must be bool True, not 1)."""
+    ext = _synthetic_ext(tmp_path, [])
+    rs = _synthetic_rs(tmp_path)
+    tr = _w(
+        tmp_path,
+        "tr.json",
+        {"schema_version": 1, "exit_code": 0, "passed": 1},
+    )
+    out = derive_release_status(
+        ext,
+        rs,
+        tr,
+        user_confirms=True,
+        git_tree_x="a" * 40,
+        workspace_root=str(tmp_path),
+    )
+    assert out["release"] != "ACCEPTED"
+    assert any("test_report passed" in r for r in out["reasons"]), out["reasons"]
+
+
+def test_test_report_valid_passes_condition(tmp_path):
+    """F5b: valid test_report (schema_version=1, exit_code=0, passed=True) ->
+    no test_report reason (the frozen-schema check passes this condition).
+
+    Note: the overall result may still be NOT_ACCEPTED from rs validation on
+    synthetic data; this test only asserts the test_report check adds no reason.
+    """
+    ext = _synthetic_ext(tmp_path, [])
+    rs = _synthetic_rs(tmp_path)
+    tr = _valid_tr(tmp_path)
+    out = derive_release_status(
+        ext,
+        rs,
+        tr,
+        user_confirms=True,
+        git_tree_x="a" * 40,
+        workspace_root=str(tmp_path),
+    )
+    tr_reasons = [r for r in out["reasons"] if r.startswith("test_report ")]
+    assert tr_reasons == [], tr_reasons
+
+
 if __name__ == "__main__":
     import sys
 

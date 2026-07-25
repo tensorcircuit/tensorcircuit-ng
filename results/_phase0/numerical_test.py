@@ -112,6 +112,106 @@ def test_apply_policy_missing_metric_returns_none():
     assert verdict == "PASS"
 
 
+# ---------------------------------------------------------------------------
+# F2 (evidence-integrity remediation): apply_policy must reject NaN / inf /
+# negative / non-numeric / bool metrics (fail-closed). Previously NaN and
+# negative values silently passed because ``NaN >= thresh`` and ``-1 >= thresh``
+# are both False -> no FAIL -> PASS (fail-open). A bool metric (True/False) is
+# also rejected because bool is not a valid error metric (False would pass every
+# threshold, and True would be misreported as a threshold breach rather than an
+# invalid metric).
+# ---------------------------------------------------------------------------
+
+_INVALID_METRIC_VALUES = [
+    float("nan"),
+    float("inf"),
+    float("-inf"),
+    -1.0,
+    -1e-9,
+    "abc",
+    True,
+    False,
+]
+
+
+@pytest.mark.parametrize("bad_val", _INVALID_METRIC_VALUES)
+def test_apply_policy_relative_l2_invalid_fails(bad_val):
+    """F2: an invalid relative_l2 (NaN/inf/negative/non-numeric/bool) -> FAIL."""
+    from results._phase0.numerical import apply_policy
+
+    m = {"relative_l2": bad_val, "max_abs": 1e-3, "max_rel": 1e-5, "nan_inf": False}
+    verdict, reason = apply_policy("planar", "C16BF", m)
+    assert verdict == "FAIL", (bad_val, verdict, reason)
+    assert "invalid" in reason, (bad_val, reason)
+
+
+def test_apply_policy_relative_l2_none_returns_none():
+    """F2: relative_l2=None -> None (missing metric, cell incomplete)."""
+    from results._phase0.numerical import apply_policy
+
+    m = {"relative_l2": None, "max_abs": 1e-3, "max_rel": 1e-5, "nan_inf": False}
+    verdict, reason = apply_policy("planar", "C16BF", m)
+    assert verdict is None, (verdict, reason)
+    assert "missing" in reason, reason
+
+
+@pytest.mark.parametrize("bad_val", _INVALID_METRIC_VALUES)
+def test_apply_policy_max_rel_invalid_fails(bad_val):
+    """F2: an invalid max_rel (NaN/inf/negative/non-numeric/bool) -> FAIL."""
+    from results._phase0.numerical import apply_policy
+
+    m = {"relative_l2": 1e-5, "max_abs": 1e-3, "max_rel": bad_val, "nan_inf": False}
+    verdict, reason = apply_policy("planar", "C16BF", m)
+    assert verdict == "FAIL", (bad_val, verdict, reason)
+    assert "invalid" in reason, (bad_val, reason)
+
+
+def test_apply_policy_max_rel_none_returns_none():
+    """F2: max_rel=None -> None (missing metric, cell incomplete)."""
+    from results._phase0.numerical import apply_policy
+
+    m = {"relative_l2": 1e-5, "max_abs": 1e-3, "max_rel": None, "nan_inf": False}
+    verdict, reason = apply_policy("planar", "C16BF", m)
+    assert verdict is None, (verdict, reason)
+    assert "missing" in reason, reason
+
+
+def test_apply_policy_real_measured_values_pass():
+    """F2: real measured values (planar C16BF, spec §4.2) -> PASS (not rejected)."""
+    from results._phase0.numerical import apply_policy
+
+    m = {
+        "relative_l2": 1.66e-3,
+        "max_abs": 0.136,
+        "max_rel": 3.85e-3,
+        "nan_inf": False,
+    }
+    verdict, reason = apply_policy("planar", "C16BF", m)
+    assert verdict == "PASS", (verdict, reason)
+
+
+def test_apply_policy_bool_metric_fails():
+    """F2: a bool metric (True/False) -> FAIL (bool is not a valid metric).
+
+    Without the explicit ``isinstance(val, bool)`` guard, ``False`` would pass
+    every threshold (``0 < thresh``) -> PASS (fail-open), and ``True`` would be
+    misreported as a threshold breach (``1 >= thresh``) rather than an invalid
+    metric.
+    """
+    from results._phase0.numerical import apply_policy
+
+    for bad in (True, False):
+        m = {
+            "relative_l2": bad,
+            "max_abs": 1e-3,
+            "max_rel": 1e-5,
+            "nan_inf": False,
+        }
+        verdict, reason = apply_policy("planar", "C16BF", m)
+        assert verdict == "FAIL", (bad, verdict, reason)
+        assert "invalid" in reason, (bad, reason)
+
+
 def _row(route, dtype, shape, level, seed, rel_l2, max_abs, max_rel, nan):
     return {
         "route": route,

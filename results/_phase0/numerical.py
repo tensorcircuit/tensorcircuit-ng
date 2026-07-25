@@ -16,6 +16,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import math
 import os
 
 import numpy as np
@@ -255,6 +256,12 @@ def apply_policy(route, dtype, metrics):
 
     Returns (verdict, reason). verdict in {"PASS","FAIL",None}: None means a required
     metric was missing (cell incomplete). nan_inf=True forces FAIL regardless of values.
+
+    F2 (evidence-integrity): NaN / inf / negative / non-numeric / bool metrics are
+    rejected as FAIL *before* the threshold comparison. Previously NaN and negative
+    values silently passed because ``NaN >= thresh`` and ``-1 >= thresh`` are both
+    False -> no FAIL -> PASS (fail-open). A bool metric (True/False) is also rejected
+    because bool is not a valid error metric (False would pass every threshold).
     """
     # nan_inf is enforced first, before the policy-key lookup, so that a non-finite
     # output fails for *any* route/dtype cell (test_apply_policy_nan_inf_fails_any_route
@@ -271,6 +278,17 @@ def apply_policy(route, dtype, metrics):
         val = metrics.get(field)
         if val is None:
             return None, f"missing metric {field}"
+        # F2: reject NaN/inf/negative/non-numeric/bool metrics (fail-closed).
+        # Short-circuit order: non-numeric -> bool -> isnan/isinf (safe: val is
+        # now a non-bool int/float) -> negative. None is handled above.
+        if (
+            not isinstance(val, (int, float))
+            or isinstance(val, bool)
+            or math.isnan(val)
+            or math.isinf(val)
+            or val < 0
+        ):
+            return "FAIL", f"{field} invalid ({val!r})"
         if val >= thresh:
             return "FAIL", f"{field}={val:.2e} >= {thresh:.0e}"
     return "PASS", None

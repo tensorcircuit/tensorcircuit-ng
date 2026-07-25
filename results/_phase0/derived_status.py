@@ -13,7 +13,8 @@ condition:
      the 5 file hashes from Git tree X (not just checks fields exist) and
      verifies the dirty-worktree binding. This validates Git tree X, NOT the
      current HEAD (the current HEAD may be handoff Y).
-  5. The test_report must have ``passed is True`` (frozen schema).
+  5. The test_report must have ``schema_version == 1`` AND ``exit_code == 0``
+     AND ``passed is True`` (frozen schema).
   6. ``user_confirms`` must be True.
 
 Any missing / unknown / conflict / fail -> ``NOT_ACCEPTED`` with a reason.
@@ -75,11 +76,17 @@ def derive_release_status(
         reasons.append(f"ext verdict={ext.get('verdict')!r} != ACCEPTED")
 
     # --- 2. Self-parse findings: open P0/P1/P2 blocks. ---
+    # F5a: findings MUST be a list of dicts. A non-list findings (dict, string,
+    # None) is fail-closed -> NOT_ACCEPTED (previously treated as empty -> no
+    # open P0/P1/P2 detected -> fail-open). A non-dict element is also NOT_ACCEPTED
+    # (previously skipped via ``continue`` -> fail-open).
     findings = ext.get("findings", [])
     if not isinstance(findings, list):
+        reasons.append("ext findings not a list")
         findings = []
-    for f in findings:
+    for i, f in enumerate(findings):
         if not isinstance(f, dict):
+            reasons.append(f"ext finding {i} not a dict")
             continue
         severity = f.get("severity", "")
         status = f.get("status", "")
@@ -114,7 +121,10 @@ def derive_release_status(
         if not validate_review_subject(rs, git_tree_x, workspace_root):
             reasons.append("review_subject invalid: Git tree X recompute failed")
 
-    # --- 5. Load test_report; check passed is True (frozen schema). ---
+    # --- 5. Load test_report; frozen-schema check (F5b). ---
+    # Require schema_version==1 AND exit_code==0 AND passed is True. Previously
+    # only ``passed is True`` was checked, so ``{"exit_code":1,"passed":True}``
+    # (no schema_version, exit_code=1) was accepted (fail-open).
     try:
         tr = json.loads(Path(test_report_path).read_text(encoding="utf-8"))
     except Exception as exc:
@@ -122,6 +132,12 @@ def derive_release_status(
         tr = None
 
     if tr is not None:
+        if tr.get("schema_version") != 1:
+            reasons.append(
+                f"test_report schema_version={tr.get('schema_version')!r} != 1"
+            )
+        if tr.get("exit_code") != 0:
+            reasons.append(f"test_report exit_code={tr.get('exit_code')!r} != 0")
         if tr.get("passed") is not True:
             reasons.append(f"test_report passed={tr.get('passed')!r} != True")
 
