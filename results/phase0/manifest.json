@@ -1,7 +1,7 @@
 {
-  "aggregation_dirty_file_count": 66,
-  "aggregation_dirty_worktree": true,
-  "aggregation_source_commit": "d12f66443e28020e6f99f859cf65c5588004a71b",
+  "aggregation_dirty_file_count": 0,
+  "aggregation_dirty_worktree": false,
+  "aggregation_source_commit": "3f4a04c18952576ca1ba28106a801483d2be3066",
   "blocking_artifacts": [
     "c2_judgment.json / c2_checkpoint_manifest.json (C2_CANONICAL undetermined)",
     "cutlass_sm120_4m.json (CUTLASS_SM120_4M undetermined)",
@@ -171,7 +171,7 @@
     "REGION_PROTOTYPE": "UNKNOWN"
   },
   "environment_hash": "07a3371b7b27007d",
-  "generated_at": "2026-07-24T18:28:53Z",
+  "generated_at": "2026-07-25T02:10:06Z",
   "inputs": {
     "c1_buffer_assignment/n22_d10_exp_default.txt": "30cd18ad9941c041",
     "c1_buffer_assignment/n22_d10_exp_nofusion.txt": "b34b02bd6306f6bc",
@@ -235,10 +235,10 @@
     "cublaslt_grouped_capability.json": "7deb1ec4167802ec",
     "cublaslt_planar_capability.json": "fe729f8d7df8cf7f",
     "cutlass_sm120_4m.json": "5a3c535ebca3ddbf",
-    "numerical_validation.csv": "44b7f1d92d2ae3b3",
-    "numerical_validation.json": "8d17a76ff1c17a7e",
+    "numerical_validation.csv": "050672a8d857b118",
+    "numerical_validation.json": "130f08b46d3fc0b8",
     "region_prototype.json": "1e97addf6aef0f1c",
-    "run_context.json": "f82465671fe93386"
+    "run_context.json": "31cfadf488919fba"
   },
   "measurement_source_commit": "205899678c0de72e9ff180ab357a973bf7e1112e",
   "outputs": {

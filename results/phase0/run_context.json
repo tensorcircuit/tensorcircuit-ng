@@ -4,9 +4,9 @@
     "source_commit": "205899678c0de72e9ff180ab357a973bf7e1112e"
   },
   "aggregation": {
-    "source_commit": "d12f66443e28020e6f99f859cf65c5588004a71b",
-    "dirty_worktree": true,
-    "dirty_file_count": 66,
+    "source_commit": "3f4a04c18952576ca1ba28106a801483d2be3066",
+    "dirty_worktree": false,
+    "dirty_file_count": 0,
     "command": "python results/_phase0/numerical.py --regen-no-gpu",
     "package_versions": {
       "jax": "0.6.2",
