@@ -130,29 +130,34 @@ def test_fused_matches_materialized_small_shape():
 
 
 def test_run_verdict_and_no_full_PT(tmp_path):
+    """Schema regression guard for run() output after G2 (MEASURED full-anchor run).
+
+    The full-anchor fused run is now executed (G2): fused_full_anchor_run=True,
+    peak_evidence_class=MEASURED, and the canonical verdict is derived from real
+    measurements (PASS/FAIL/UNKNOWN), not hardcoded UNKNOWN. The small-contract
+    correctness, no-full-P/T, and analytical-diagnostic-field guards from Task 2a
+    are preserved."""
     from results._phase0.region_proto import run
     from results._phase0.verdict_schema import CRITERION_TOKENS
 
     out = run(out_dir=str(tmp_path))
-    # Task 2a (plan §5 2.1): full-anchor fused run NOT executed -> canonical
-    # verdict UNKNOWN (a canonical criterion token), NOT the artifact-native
-    # FEASIBLE_WITH_RECOMPUTE detail token that used to live in this field.
+    # G2: full-anchor fused run IS executed -> canonical verdict is a real
+    # PASS/FAIL/UNKNOWN derived from measured correctness+peak+resources.
     assert out["verdict"] in CRITERION_TOKENS, out["verdict"]
-    assert out["verdict"] == "UNKNOWN", out  # full-anchor run pending (Task 2b)
-    assert out["fused_full_anchor_run"] is False, out
+    assert out["verdict"] in ("PASS", "FAIL", "UNKNOWN"), out
+    assert out["fused_full_anchor_run"] is True, out
     assert out["no_full_P_materialized"] is True, out
     assert out["no_full_T_materialized"] is True, out
     assert "relative_l2" in out and out["n_seeds"] >= 1, out
     assert out["relative_l2"] < 1e-4, out  # fused == materialized on the small contract
-    # resources reported when nvrtc --res-usage retrieval succeeds; when it does not
-    # the fields are None (UNKNOWN, plan §5 2.1 -- the deleted behavior was a 40
-    # fallback). On the dev GPU retrieval typically succeeds.
-    if out["registers_per_thread"] is not None:
-        assert out["registers_per_thread"] > 0, out
-        assert out["occupancy_pct"] > 0, out
-    # Task 2a: raw allocation delta is reclassified MODEL_ONLY (analytical upper
-    # bound), not a runtime peak gain.
-    assert out["peak_evidence_class"] == "MODEL_ONLY", out
+    # G2: resources are now MEASURED (registers via RawKernel.num_regs fallback
+    # when nvrtc --res-usage is unavailable, e.g. cupy 14.x / nvrtc 12.8 sm_120).
+    assert (
+        out["registers_per_thread"] is not None and out["registers_per_thread"] > 0
+    ), out
+    assert out["occupancy_pct"] is not None and out["occupancy_pct"] > 0, out
+    # G2: peak evidence is now MEASURED (runtime allocator high-water mark).
+    assert out["peak_evidence_class"] == "MEASURED", out
     assert "analytical_or_allocation_upper_bound_bytes" in out, out
     assert "peak_saved_bytes" not in out, out  # the misleading name is gone
     # Task 2 (plan §5 2.1/2.3): legacy raw-allocation fields renamed to analytical
@@ -161,15 +166,20 @@ def test_run_verdict_and_no_full_PT(tmp_path):
     assert "analytical_fused_buffer_floor_bytes" in out, out
     assert "materialized_peak_bytes" not in out, out  # renamed
     assert "fused_peak_bytes" not in out, out  # renamed
-    # Task 2 (plan §5 2.1): MEASURED runtime allocator peak schema is predefined
-    # as None (GPU Task 2b fills these from the full-anchor fused run). The c2
-    # gate reads ONLY these fields for a canonical region peak gain.
-    assert out["materialized_runtime_allocator_peak_bytes"] is None, out
-    assert out["fused_runtime_allocator_peak_bytes"] is None, out
-    assert out["runtime_peak_gain_bytes"] is None, out
-    assert out["runtime_peak_measurement_method"] is None, out
-    assert out["runtime_peak_scope"] is None, out
-    assert out["runtime_peak_sample_count"] is None, out
+    # G2: MEASURED runtime allocator peak schema is now filled from the
+    # full-anchor fused run. The c2 gate reads ONLY these fields for
+    # region_peak_gain.
+    assert out["materialized_runtime_allocator_peak_bytes"] is not None, out
+    assert out["materialized_runtime_allocator_peak_bytes"] > 512 * 1024 * 1024, out
+    assert out["fused_runtime_allocator_peak_bytes"] is not None, out
+    assert (
+        out["fused_runtime_allocator_peak_bytes"]
+        < out["materialized_runtime_allocator_peak_bytes"]
+    ), out
+    assert out["runtime_peak_gain_bytes"] is not None, out
+    assert out["runtime_peak_measurement_method"] is not None, out
+    assert out["runtime_peak_scope"] is not None, out
+    assert out["runtime_peak_sample_count"] is not None, out
 
 
 def test_run_artifacts(tmp_path):
@@ -215,20 +225,10 @@ def test_run_artifacts(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_region_prototype_verdict_field_is_canonical_when_full_anchor_not_run():
-    """plan §3 操作.2 bullets 1+2 (producer side): the canonical
-    region_prototype.json verdict must carry a canonical criterion token. Today
-    the producer (region_proto.run) writes ``FEASIBLE_WITH_RECOMPUTE`` into
-    ``verdict`` even though ``fused_full_anchor_run=false`` — that detail token
-    belongs in detail_status, and a canonical criterion field carrying it is the
-    fail-open surface that downstream gates (c2._region_layer) wrongly promote
-    to PASS.
-
-    The canonical criterion value when the full-anchor fused run was NOT
-    executed is UNKNOWN (the leverage was not measured at the full anchor). This
-    test reads the committed artifact and asserts the verdict field is in the
-    canonical criterion set; it FAILS today because the field still holds the
-    FEASIBLE_WITH_RECOMPUTE detail token."""
+def test_region_prototype_verdict_field_is_canonical():
+    """G2: the canonical region_prototype.json verdict must carry a canonical
+    criterion token, and the full-anchor fused run must be executed
+    (fused_full_anchor_run=True, peak_evidence_class=MEASURED)."""
     import json
     import os
 
@@ -239,17 +239,15 @@ def test_region_prototype_verdict_field_is_canonical_when_full_anchor_not_run():
     with open(path) as fh:
         proto = json.load(fh)
 
-    # the committed canonical artifact records the full-anchor run as NOT done;
-    # fail loudly if that precondition ever flips (no silent-skip green).
-    assert proto["fused_full_anchor_run"] is False, proto
-    # The verdict field must be a canonical criterion token. The canonical
-    # value is UNKNOWN (full-anchor leverage unmeasured); the detail token
-    # 'FEASIBLE_WITH_RECOMPUTE' must not appear in this canonical field.
+    # G2: the committed canonical artifact records the full-anchor run as DONE.
+    assert proto["fused_full_anchor_run"] is True, proto
+    assert proto["peak_evidence_class"] == "MEASURED", proto
+    # The verdict field must be a canonical criterion token (PASS/FAIL/UNKNOWN).
     verdict = proto.get("verdict")
     assert verdict in CRITERION_TOKENS, (
         f"region_prototype.verdict={verdict!r} is not a canonical criterion "
-        f"token; fused_full_anchor_run=False must yield criterion UNKNOWN "
-        f"(normalize_criterion maps {verdict!r} -> {normalize_criterion(verdict)!r})"
+        f"token (normalize_criterion maps {verdict!r} -> "
+        f"{normalize_criterion(verdict)!r})"
     )
 
 
@@ -287,6 +285,45 @@ def test_full_anchor_direct_recompute_correctness():
     # transient P/T sizes it allocated and freed.
     assert result["P_bytes_avoided"] == 536870912, result
     assert result["T_bytes_avoided"] == 536870912, result
+
+
+# ---------------------------------------------------------------------------
+# Task G2: full-anchor MEASURED resources/peak/latency + verdict (GPU phase).
+# Wires the full-anchor measurement into run() to produce the first honest
+# MEASURED verdict (PASS/FAIL/UNKNOWN) for the region-fusion criterion,
+# replacing the MODEL_ONLY / fused_full_anchor_run=false block.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.gpu
+def test_full_anchor_measured_verdict():
+    """run() produces a MEASURED verdict (not MODEL_ONLY) with real peak/latency/resources."""
+    import tempfile
+
+    from results._phase0.region_proto import run
+
+    with tempfile.TemporaryDirectory() as td:
+        out = run(n=24, depth=10, out_dir=td)
+    assert out["fused_full_anchor_run"] is True
+    assert out["peak_evidence_class"] == "MEASURED"
+    assert out["runtime_peak_measurement_method"] == "cuda_allocator_highwatermark"
+    assert out["materialized_runtime_allocator_peak_bytes"] is not None
+    assert (
+        out["materialized_runtime_allocator_peak_bytes"] > 512 * 1024 * 1024
+    )  # at least E (512MiB)
+    assert out["fused_runtime_allocator_peak_bytes"] is not None
+    assert (
+        out["fused_runtime_allocator_peak_bytes"]
+        < out["materialized_runtime_allocator_peak_bytes"]
+    )  # leverage
+    assert out["registers_per_thread"] is not None and out["registers_per_thread"] > 0
+    assert out["occupancy_pct"] is not None
+    assert (
+        out["kernel_only_latency_ms"] is not None and out["kernel_only_latency_ms"] > 0
+    )
+    assert out["verdict"] in ("PASS", "FAIL", "UNKNOWN")
+    # fused avoided P+T (no full materialization)
+    assert out.get("fused_avoided_P_T") is True
 
 
 if __name__ == "__main__":
