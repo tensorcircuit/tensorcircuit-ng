@@ -1254,22 +1254,21 @@ def test_grouped_authoritative_absent_not_supported(tmp_path):
 def test_region_proto_status_recomputes_pass_from_full_anchor_evidence(tmp_path):
     """Nongpu rereview finding 3.5.2 + Task 3 (evidence-integrity plan v3
     finding 3.3): region canonical ``PASS`` requires complete full-anchor
-    evidence AND verified case binding. The gonogo reader reads a single
-    artifact with NO canonical case context -> ``case_binding_state=MISSING``
-    -> not PASS (honest). Even with a complete MEASURED fixture (approved
-    method, full-anchor scope, all peaks/accuracy/resource green), gonogo
-    returns UNKNOWN because it cannot verify case binding.
+    evidence AND verified case binding.
 
-    Only ``c2._region_layer`` (which runs after ``_binding_problems``
-    verifies case+hash binding at the ``judge_c2_canonical`` level) supplies
-    ``case_binding_state=MATCH`` -> can reach PASS. This test pins the gonogo
-    reader's honest UNKNOWN: the shared normalizer + GateContract enforce
-    binding verification, and gonogo alone cannot PASS the region.
+    F4a: gonogo now VERIFIES case binding via ``c2_judgment.json``'s
+    ``binding_ok`` field. This test provides NO ``c2_judgment.json`` alongside
+    the proto -> ``case_binding_state=MISSING`` -> the region_peak pass_clause
+    cannot hit -> not PASS (honest fail-closed). Even with a complete MEASURED
+    fixture (approved method, full-anchor scope, all peaks/accuracy/resource
+    green), gonogo returns UNKNOWN because the binding is unverified.
 
-    Task 3: uses the committed artifact's REAL field names
-    (``peak_measurement_method``, ``materialized_peak_bytes``,
-    ``fused_peak_bytes``, ``n_seeds``, ``schema_version=
-    region-prototype-v2``) -- NOT the plan's stale ``runtime_*`` variants."""
+    The positive path (binding_ok=True -> MATCH -> PASS) is covered by
+    ``test_region_proto_pass_with_verified_binding``. Uses the committed
+    artifact's REAL field names (``peak_measurement_method``,
+    ``materialized_peak_bytes``, ``fused_peak_bytes``, ``n_seeds``,
+    ``schema_version=region-prototype-v2``) -- NOT the plan's stale
+    ``runtime_*`` variants."""
     import json
 
     from results._phase0.gonogo import _region_proto_status
@@ -1311,7 +1310,7 @@ def test_region_proto_status_recomputes_pass_from_full_anchor_evidence(tmp_path)
             }
         )
     )
-    # gonogo cannot verify case binding -> case_binding_state=MISSING -> not PASS.
+    # No c2_judgment.json provided -> case_binding_state=MISSING -> not PASS.
     # The shared normalizer + GateContract enforce this; no undeclared PASS
     # branch survives in the reader.
     assert _region_proto_status(str(p)) == "UNKNOWN"
@@ -1633,11 +1632,12 @@ def test_blocking_artifacts_lists_real_blockers_not_determined_grouped():
 
 
 def test_region_proto_missing_case_binding_not_pass(tmp_path):
-    """Task 3 (evidence-integrity plan v3 finding 3.3): gonogo reads a single
-    artifact with NO canonical case context -> ``case_binding_state=MISSING``
-    -> not PASS. Even with a complete MEASURED fixture (all 12 gate fields
-    green EXCEPT case_binding), the gonogo reader returns UNKNOWN because it
-    cannot verify case binding. Uses the committed artifact's REAL field names
+    """Task 3 (evidence-integrity plan v3 finding 3.3) + F4a: gonogo verifies
+    case binding via ``c2_judgment.json``'s ``binding_ok`` field. This test
+    provides NO ``c2_judgment.json`` alongside the proto -> ``case_binding_state
+    =MISSING`` -> not PASS. Even with a complete MEASURED fixture (all 12 gate
+    fields green EXCEPT case_binding), the gonogo reader returns UNKNOWN because
+    the binding is unverified. Uses the committed artifact's REAL field names
     (``schema_version=region-prototype-v2``, ``peak_measurement_method``,
     ``materialized_peak_bytes``, ``fused_peak_bytes``, ``n_seeds``)."""
     import json
@@ -1671,8 +1671,121 @@ def test_region_proto_missing_case_binding_not_pass(tmp_path):
             }
         )
     )
-    # gonogo cannot verify case binding -> MISSING -> not PASS (honest).
+    # No c2_judgment.json provided -> case_binding_state=MISSING -> not PASS.
     assert _region_proto_status(str(p)) != "PASS"
+
+
+# ---------------------------------------------------------------------------
+# F4a (evidence-integrity): the region POSITIVE PATH must be REACHABLE via
+# gonogo. ``case_binding_state`` is verified from ``c2_judgment.json``'s
+# ``binding_ok`` field (not hard-coded MISSING). A full legal MEASURED
+# full-anchor fixture + binding_ok=True -> PASS; binding_ok=False / c2_judgment
+# missing -> MISSING -> not PASS (fail-closed).
+# ---------------------------------------------------------------------------
+
+
+def _full_measured_region_proto():
+    """A full legal MEASURED full-anchor region proto (all 12 region_peak gate
+    fields green) + a real P->T->E intrinsic standard. Used by the F4a tests."""
+    return {
+        "schema_version": "region-prototype-v2",
+        "case_id": "n24_d10_default",
+        "verdict": "PASS",
+        "region": {
+            "producer": [4096, 16384, 1024],
+            "consumer": [64, 1048576, 64],
+            "dtype": "c64",
+        },
+        "math": "E = D @ transform(A@B); transform = reshape->transpose->reshape",
+        "no_full_P_materialized": True,
+        "no_full_T_materialized": True,
+        "fused_full_anchor_run": True,
+        "relative_l2": 1e-7,
+        "max_rel": 1e-7,
+        "registers_per_thread": 40,
+        "occupancy_pct": 100.0,
+        "peak_evidence_class": "MEASURED",
+        "peak_measurement_method": "cuda_allocator_high_watermark_v1",
+        "runtime_peak_scope": "full_anchor_pte_v1",
+        "n_seeds": 3,
+        "materialized_peak_bytes": 2000000000,
+        "fused_peak_bytes": 1000000000,
+    }
+
+
+def test_region_proto_pass_with_verified_binding(tmp_path):
+    """F4a positive path: a full legal MEASURED full-anchor fixture (all 12
+    region_peak fields green) + c2_judgment.binding_ok=True -> region PASS.
+    The gonogo reader verifies case binding via c2_judgment.json's binding_ok
+    field, making the POSITIVE PATH reachable (a future MEASURED proto + verified
+    binding -> PASS). Before F4a this path was permanently unreachable
+    (hard-coded MISSING -> never MATCH -> never PASS)."""
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    (tmp_path / "r.json").write_text(json.dumps(_full_measured_region_proto()))
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {"n24_d10_default": {"binding": {"binding_ok": True, "problems": []}}}
+        )
+    )
+    assert _region_proto_status(str(tmp_path / "r.json")) == "PASS"
+
+
+def test_region_proto_not_pass_when_binding_ok_false(tmp_path):
+    """F4a fail-closed: same full MEASURED fixture but c2_judgment.binding_ok=False
+    -> case_binding_state=MISSING -> not PASS (binding not verified)."""
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    (tmp_path / "r.json").write_text(json.dumps(_full_measured_region_proto()))
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {
+                "n24_d10_default": {
+                    "binding": {"binding_ok": False, "problems": ["hash mismatch"]}
+                }
+            }
+        )
+    )
+    assert _region_proto_status(str(tmp_path / "r.json")) != "PASS"
+
+
+def test_region_proto_not_pass_when_c2_judgment_missing(tmp_path):
+    """F4a fail-closed: same full MEASURED fixture but no c2_judgment.json ->
+    case_binding_state=MISSING -> not PASS (cannot verify binding)."""
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    (tmp_path / "r.json").write_text(json.dumps(_full_measured_region_proto()))
+    # No c2_judgment.json written -> MISSING -> not PASS.
+    assert _region_proto_status(str(tmp_path / "r.json")) != "PASS"
+
+
+def test_region_proto_not_pass_when_c2_judgment_case_id_mismatch(tmp_path):
+    """F4a fail-closed: c2_judgment.json exists but has no entry for the proto's
+    case_id -> case_binding_state=MISSING -> not PASS (no matching case)."""
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    (tmp_path / "r.json").write_text(json.dumps(_full_measured_region_proto()))
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {"n22_d10_default": {"binding": {"binding_ok": True, "problems": []}}}
+        )
+    )
+    assert _region_proto_status(str(tmp_path / "r.json")) != "PASS"
+
+
+def test_region_proto_not_pass_when_c2_judgment_malformed(tmp_path):
+    """F4a fail-closed: c2_judgment.json exists but is malformed JSON ->
+    case_binding_state=MISSING -> not PASS."""
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    (tmp_path / "r.json").write_text(json.dumps(_full_measured_region_proto()))
+    (tmp_path / "c2_judgment.json").write_text("{not valid json")
+    assert _region_proto_status(str(tmp_path / "r.json")) != "PASS"
 
 
 # ---------------------------------------------------------------------------

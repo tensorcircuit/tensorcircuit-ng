@@ -103,6 +103,14 @@ PROTO_SCHEMA = "region-prototype-v2"
 AUDIT_SCHEMA = "c1-buffer-audit-v2"
 C2_JUDGMENT_SCHEMA = "c2-judgment-v2"
 CHECKPOINT_MANIFEST_SCHEMA = "c2-checkpoint-manifest-v2"
+
+# F4b (evidence-integrity): exact schema_version allowlists for the three
+# cross-artifact inputs (edge / peak / audit). An illegal OR missing
+# schema_version -> problem -> every layer forced UNKNOWN (fail-closed, spec
+# §8 step 1-2). Mirrors the grouped/cutlass schema allowlists in gonogo.py.
+_EDGE_SCHEMA_VERSIONS = frozenset({EDGE_SCHEMA})
+_PEAK_SCHEMA_VERSIONS = frozenset({PEAK_SCHEMA})
+_AUDIT_SCHEMA_VERSIONS = frozenset({AUDIT_SCHEMA})
 # Self-recompute policies (spec §5.2; mirror the prototype's own contracts).
 ACCURACY_REL_L2 = 1e-4
 ACCURACY_MAX_REL = 1e-3
@@ -780,6 +788,14 @@ def _binding_problems(edge, peak, proto, audit, case, file_hashes):
     """Cross-cutting case/hash/schema/contract problems. Any -> the artifacts are
     untrustworthy, so every layer is forced UNKNOWN (fail-closed, spec §8 step 1-2)."""
     probs = []
+    # F4b: exact schema_version allowlist per artifact. An illegal/missing
+    # schema_version is a problem -> all layers UNKNOWN (fail-closed). The
+    # prototype schema is gated separately by ``_is_real_pte_prototype``.
+    schema_allow = {
+        "edge": _EDGE_SCHEMA_VERSIONS,
+        "peak": _PEAK_SCHEMA_VERSIONS,
+        "audit": _AUDIT_SCHEMA_VERSIONS,
+    }
     for name, d in (("edge", edge), ("peak", peak), ("audit", audit)):
         if not isinstance(d, dict) or not d:
             probs.append(f"{name} artifact missing")
@@ -787,6 +803,12 @@ def _binding_problems(edge, peak, proto, audit, case, file_hashes):
         if _case_field_mismatch(d, case):
             probs.append(
                 f"{name} case fields disagree with judged {case.get('case_id')}"
+            )
+        sv = d.get("schema_version")
+        if sv not in schema_allow[name]:
+            probs.append(
+                f"{name} schema_version={sv!r} not in allowlist "
+                f"{sorted(schema_allow[name])}"
             )
     if isinstance(proto, dict) and proto and _case_field_mismatch(proto, case):
         probs.append(
@@ -898,13 +920,18 @@ def _joint_layer(peak):
     (workspace/recompute uncounted) -> an OPTIMISTIC UPPER BOUND on the reduction:
       * upper bound < threshold  -> genuinely infeasible -> FAIL
       * upper bound >= threshold, no executable joint impl -> UNKNOWN (workspace may eat it)
-      * recognized executable joint PASS + model meets threshold -> PASS."""
+
+    F4c (evidence-integrity): a self-reported ``joint_executable_status="PASS"``
+    (a field in ``peak.diagnostics``) is NOT accepted as joint PASS evidence --
+    it is a SELF-REPORT, not a real executable joint artifact. PASS requires a
+    REAL executable joint run (not yet available in the non-GPU phase); until
+    then ``max_red >= threshold`` -> UNKNOWN (no executable joint). The
+    ``joint_executable_status`` field is a diagnostic only (ignored for PASS).
+    A forged peak with ``joint_executable_status="PASS"`` + ``max_red >=
+    threshold`` can no longer yield C2_JOINT=PASS -> C2_CANONICAL=PASS."""
     max_red = (peak.get("joint_model") or {}).get("max_joint_reduction_bytes")
-    diag = peak.get("diagnostics") or {}
     if not isinstance(max_red, (int, float)):
         return ("UNKNOWN", "joint model max reduction unavailable")
-    if diag.get("joint_executable_status") == "PASS" and max_red >= C2_MEMORY_THRESHOLD:
-        return ("PASS", "executable joint implementation meets threshold")
     if max_red < C2_MEMORY_THRESHOLD:
         return ("FAIL", "joint model upper-bound reduction < threshold (infeasible)")
     return (
@@ -916,7 +943,13 @@ def _joint_layer(peak):
 def _compose_canonical(region, joint):
     """Canonical C2 composition (spec §5.4). A single-pair peak FAIL never becomes a
     canonical FAIL on its own -- only a definitive region-kernel blocker or a proven joint
-    verdict can."""
+    verdict can.
+
+    F4c note: ``joint == "PASS"`` is currently UNREACHABLE through
+    ``judge_c2_canonical`` (the self-report ``joint_executable_status`` path was
+    removed from ``_joint_layer``; joint is now UNKNOWN or FAIL until a real
+    executable joint artifact exists). The ``if joint == "PASS": return "PASS"``
+    branch is retained for that future GPU joint case but does not fire now."""
     if region == "FAIL":
         return "FAIL"
     if region == "UNKNOWN":

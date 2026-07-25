@@ -1045,6 +1045,44 @@ def _region_proto_is_real_pte(data):
     return True
 
 
+def _region_case_binding_state(proto, c2_judgment_path):
+    """Resolve ``case_binding_state`` for the region proto from
+    ``c2_judgment.json`` (F4a -- the region positive path must be REACHABLE).
+
+    The gonogo reader reads a single region artifact; the case binding is
+    VERIFIED by the canonical C2 gate (``c2.judge_c2_canonical``) and recorded
+    in ``c2_judgment.json`` as ``case["binding"]["binding_ok"]``. gonogo looks
+    up the case keyed by the proto's ``case_id`` and trusts that verified
+    result: ``MATCH`` iff ``binding_ok is True``; else ``MISSING`` (fail-closed:
+    missing/malformed c2_judgment / no matching case_id / binding_ok not True
+    -> MISSING -> the region_peak pass_clause cannot hit -> not PASS).
+
+    This makes the region POSITIVE PATH reachable: a future MEASURED proto with
+    a verified binding -> ``case_binding_state=MATCH`` -> can reach PASS. The
+    committed proto is MODEL_ONLY + ``fused_full_anchor_run=false`` -> UNKNOWN
+    regardless (honest -- the GPU phase has not run).
+    """
+    case_id = proto.get("case_id") if isinstance(proto, dict) else None
+    if not case_id:
+        return "MISSING"
+    if not os.path.exists(c2_judgment_path):
+        return "MISSING"
+    try:
+        with open(c2_judgment_path) as f:
+            j = json.load(f)
+    except (OSError, ValueError):
+        return "MISSING"
+    if not isinstance(j, dict):
+        return "MISSING"
+    case = j.get(case_id)
+    if not isinstance(case, dict):
+        return "MISSING"
+    binding = case.get("binding")
+    if not isinstance(binding, dict):
+        return "MISSING"
+    return "MATCH" if binding.get("binding_ok") is True else "MISSING"
+
+
 def _region_proto_status(path):
     """Region P->T->E prototype verdict (Task 4 / nongpu-rereview §3.5.2 /
     evidence-integrity plan v3 finding 3.3 -- a P1 fail-open fix).
@@ -1061,12 +1099,15 @@ def _region_proto_status(path):
     contract, so REGION_PROTOTYPE and C2_REGION_KERNEL_FEASIBILITY share
     ONE standard.
 
-    ``case_binding_state=MISSING`` (the default in ``_normalize_region_peak``)
-    is the honest value here: gonogo reads a single artifact with no
-    canonical case context or hash binding, so the reader CANNOT verify
-    binding -> MISSING -> not PASS. Only ``c2._region_layer`` (which runs
-    after ``_binding_problems`` verifies case+hash binding at the
-    ``judge_c2_canonical`` level) supplies ``case_binding_state=MATCH``.
+    F4a (evidence-integrity): ``case_binding_state`` is now VERIFIED from
+    ``c2_judgment.json`` (the canonical C2 gate's verified binding result),
+    not hard-coded MISSING. The region_peak pass_clause requires
+    ``case_binding_state=MATCH``; the prior hard-coded MISSING meant the
+    region route could NEVER reach PASS via gonogo (permanently UNKNOWN even
+    with a full legal MEASURED full-anchor fixture). Now ``MATCH`` iff the
+    proto's ``case_id`` has ``binding_ok=True`` in ``c2_judgment.json``;
+    else MISSING (fail-closed: missing/malformed c2_judgment / no matching
+    case_id / binding_ok not True -> not PASS).
 
     The bidirectional self-report consistency check (errata #2) compares the
     recomputed token to ``data["verdict"]`` via
@@ -1101,10 +1142,12 @@ def _region_proto_status(path):
     if not _region_proto_is_real_pte(data):
         return _UNKNOWN
 
-    # Shared normalizer + GateContract (the SINGLE decision rule).
-    # case_binding_state=MISSING: gonogo has no canonical case context ->
-    # cannot verify binding -> not PASS (honest).
-    raw = _c2._normalize_region_peak(data, case_binding_state="MISSING")
+    # F4a: VERIFY case binding from c2_judgment.json (the canonical C2 gate's
+    # verified binding result), not hard-coded MISSING. MATCH iff the proto's
+    # case_id has binding_ok=True; else MISSING (fail-closed -> not PASS).
+    c2_judgment_path = os.path.join(os.path.dirname(path), "c2_judgment.json")
+    case_binding_state = _region_case_binding_state(data, c2_judgment_path)
+    raw = _c2._normalize_region_peak(data, case_binding_state=case_binding_state)
     token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
 
     # Bidirectional self-report consistency: compare recomputed token to the

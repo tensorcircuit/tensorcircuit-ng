@@ -388,6 +388,71 @@ def test_canonical_unknown_when_unknown_schema_version():
     assert j["layers"]["C2_CANONICAL"] == "UNKNOWN", j
 
 
+# --- F4b (evidence-integrity): exact schema_version allowlists for edge/peak/audit.
+# An illegal OR missing schema_version -> binding problem -> all layers UNKNOWN. ---
+
+
+def test_canonical_unknown_when_edge_schema_illegal():
+    """F4b: an illegal edge ``schema_version`` (not ``c1-c2-edge-v2``) ->
+    binding problem -> all layers UNKNOWN (fail-closed)."""
+    edge, peak, proto, audit, case, fh = _good()
+    edge["schema_version"] = "wrong-schema"
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    assert j["layers"]["C2_CANONICAL"] != "PASS", j
+    assert j["layers"]["C2_CANONICAL"] == "UNKNOWN", j
+    assert j["binding"]["problems"], j
+    assert any("edge schema_version" in p for p in j["binding"]["problems"]), j
+
+
+def test_canonical_unknown_when_peak_schema_illegal():
+    """F4b: an illegal peak ``schema_version`` (not ``c2-peak-frontier-v1``) ->
+    binding problem -> all layers UNKNOWN (fail-closed)."""
+    edge, peak, proto, audit, case, fh = _good()
+    peak["schema_version"] = "wrong-schema"
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    assert j["layers"]["C2_CANONICAL"] != "PASS", j
+    assert j["layers"]["C2_CANONICAL"] == "UNKNOWN", j
+    assert any("peak schema_version" in p for p in j["binding"]["problems"]), j
+
+
+def test_canonical_unknown_when_audit_schema_illegal():
+    """F4b: an illegal audit ``schema_version`` (not ``c1-buffer-audit-v2``) ->
+    binding problem -> all layers UNKNOWN (fail-closed)."""
+    edge, peak, proto, audit, case, fh = _good()
+    audit["schema_version"] = "wrong-schema"
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    assert j["layers"]["C2_CANONICAL"] != "PASS", j
+    assert j["layers"]["C2_CANONICAL"] == "UNKNOWN", j
+    assert any("audit schema_version" in p for p in j["binding"]["problems"]), j
+
+
+def test_canonical_unknown_when_edge_schema_missing():
+    """F4b: a MISSING edge ``schema_version`` -> binding problem -> UNKNOWN."""
+    edge, peak, proto, audit, case, fh = _good()
+    del edge["schema_version"]
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    assert j["layers"]["C2_CANONICAL"] == "UNKNOWN", j
+    assert any("edge schema_version" in p for p in j["binding"]["problems"]), j
+
+
+def test_canonical_not_pass_when_all_schemas_illegal_and_joint_self_report_pass():
+    """F4b+F4c combined: 3 illegal schemas (edge/peak/audit) + joint self-report
+    PASS + region PASS path -> C2_CANONICAL != PASS. The illegal schemas force
+    binding problems -> all layers UNKNOWN; the joint self-report cannot
+    override (F4c); the region PASS path is short-circuited by the binding
+    failure. A forged all-green-looking artifact set cannot reach canonical PASS."""
+    edge, peak, proto, audit, case, fh = _good()
+    edge["schema_version"] = "wrong-edge"
+    peak["schema_version"] = "wrong-peak"
+    audit["schema_version"] = "wrong-audit"
+    peak["diagnostics"]["joint_executable_status"] = "PASS"  # self-report (F4c ignored)
+    proto["fused_full_anchor_run"] = True  # would-be region PASS path
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    assert j["layers"]["C2_CANONICAL"] != "PASS", j
+    assert j["layers"]["C2_CANONICAL"] == "UNKNOWN", j
+    assert j["binding"]["problems"], j
+
+
 def test_canonical_unknown_when_only_single_anchor_fail_no_prototype():
     """The core bug fix: single-pair peak FAIL with NO kernel/joint evidence must be
     canonical UNKNOWN, never canonical FAIL (the old gate's over-generalization)."""
@@ -438,23 +503,57 @@ def test_canonical_joint_fail_when_joint_model_below_threshold():
 # --- §5.1: PASS only when every layer is complete and positive ---
 
 
-def test_canonical_pass_when_all_layers_pass():
-    """canonical PASS requires region PASS + joint executable PASS (all hashes bound).
+def test_canonical_joint_self_report_pass_not_accepted():
+    """F4c: a self-reported ``joint_executable_status='PASS'`` (a diagnostics
+    field) must NOT yield ``C2_JOINT_EXECUTABLE_LEVERAGE=PASS``. The joint model
+    is a COUNTERFACTUAL upper bound; PASS requires a REAL executable joint
+    artifact (not a self-report), which is absent in the non-GPU phase.
 
-    Task 2a: region PASS now requires fused_full_anchor_run=True (plan §5 2.1); the
-    good fixture's prototype carries fused_full_anchor_run=False (mirrors the
-    committed canonical artifact), so this test sets it True to exercise the
-    all-pass composition path."""
+    With ``max_red >= threshold`` + self-report PASS -> joint UNKNOWN (no
+    executable). Region can still PASS (``fused_full_anchor_run=True`` +
+    MEASURED), but canonical = UNKNOWN (region PASS, joint UNKNOWN -> compose
+    UNKNOWN). A forged peak with self-report PASS can no longer reach
+    C2_CANONICAL=PASS (the prior fail-open)."""
     edge, peak, proto, audit, case, fh = _good()
-    proto["fused_full_anchor_run"] = True  # exercise the full-anchor-measured PASS path
-    # recognize an executable joint implementation (absent in the real frontier, which
-    # stays UNKNOWN; this exercises the PASS composition path).
-    peak["diagnostics"]["joint_executable_status"] = "PASS"
+    proto["fused_full_anchor_run"] = (
+        True  # exercise the full-anchor-measured region PASS path
+    )
+    peak["diagnostics"][
+        "joint_executable_status"
+    ] = "PASS"  # self-report (ignored for PASS)
     j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
     assert j["layers"]["C2_REGION_KERNEL_FEASIBILITY"] == "PASS", j
-    assert j["layers"]["C2_JOINT_EXECUTABLE_LEVERAGE"] == "PASS", j
-    assert j["layers"]["C2_CANONICAL"] == "PASS", j
-    assert j["status"] == "PASS"
+    assert j["layers"]["C2_JOINT_EXECUTABLE_LEVERAGE"] != "PASS", j
+    assert j["layers"]["C2_JOINT_EXECUTABLE_LEVERAGE"] == "UNKNOWN", j
+    assert j["layers"]["C2_CANONICAL"] != "PASS", j
+    assert j["layers"]["C2_CANONICAL"] == "UNKNOWN", j
+
+
+def test_canonical_joint_fail_when_self_report_pass_below_threshold():
+    """F4c: joint self-report PASS + ``max_red < threshold`` -> FAIL (the
+    counterfactual upper bound is below threshold -> genuinely infeasible).
+    The self-report is ignored; the FAIL is substantive."""
+    edge, peak, proto, audit, case, fh = _good()
+    peak["joint_model"]["max_joint_reduction_bytes"] = 1024  # << threshold
+    peak["diagnostics"]["joint_executable_status"] = "PASS"  # self-report (ignored)
+    j = judge_c2_canonical(edge, peak, proto, audit, case=case, file_hashes=fh)
+    assert j["layers"]["C2_JOINT_EXECUTABLE_LEVERAGE"] == "FAIL", j
+
+
+def test_compose_canonical_keeps_future_joint_pass_branch():
+    """F4c: ``_compose_canonical`` keeps the ``joint == "PASS" -> PASS`` branch
+    for the future GPU joint run (a real executable joint artifact). The branch
+    is UNREACHABLE through ``judge_c2_canonical`` now (joint self-report no
+    longer accepted -> joint is UNKNOWN/FAIL), but the composition logic is
+    tested directly here so the future PASS path stays covered."""
+    from results._phase0.c2 import _compose_canonical
+
+    assert _compose_canonical("PASS", "PASS") == "PASS"
+    assert _compose_canonical("PASS", "UNKNOWN") == "UNKNOWN"
+    assert _compose_canonical("PASS", "FAIL") == "FAIL"
+    assert _compose_canonical("FAIL", "PASS") == "FAIL"
+    assert _compose_canonical("UNKNOWN", "PASS") == "UNKNOWN"
+    assert _compose_canonical("UNKNOWN", "UNKNOWN") == "UNKNOWN"
 
 
 # --- §5.2: the gate self-recomputes from raw fields ---
