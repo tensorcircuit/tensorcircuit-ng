@@ -326,6 +326,34 @@ def test_full_anchor_measured_verdict():
     assert out.get("fused_avoided_P_T") is True
 
 
+# ---------------------------------------------------------------------------
+# Task G3: producer-tiled streaming kernel + tile search (GPU phase).
+# A producer-tiled variant that computes a producer tile (batch of T[k,j]
+# values) into shared memory once and reuses it across the BM_c consumer rows,
+# reducing the recompute factor from TM (direct) to ceil(TM/BM_c).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.gpu
+def test_tiled_kernel_correctness():
+    """Producer-tiled fused kernel == materialized E at full anchor."""
+    from results._phase0.region_proto import (
+        fused_reference_tiled,
+        materialized_reference_full,
+        full_anchor_contract,
+    )
+
+    steps = full_anchor_contract()["steps"]
+    E_mat, _, _ = materialized_reference_full(steps)
+    E_tiled = fused_reference_tiled(
+        steps, tile_cfg={"BM_p": 32, "BN_p": 32, "BK_p": 32, "BM_c": 8, "BN_c": 16}
+    )
+    diff = E_tiled - E_mat
+    rel_l2 = float(cp.linalg.norm(diff) / max(1.0, cp.linalg.norm(E_mat)))
+    assert rel_l2 < 1e-4, rel_l2
+    assert bool(cp.all(cp.isfinite(E_tiled)))
+
+
 if __name__ == "__main__":
     import sys, pytest
 

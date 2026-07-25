@@ -71,3 +71,101 @@ extern "C" __global__ void __launch_bounds__(256) fused_pte_kernel(
     E[eidx].x = accx;
     E[eidx].y = accy;
 }
+
+// Producer-tiled streaming kernel (Task G3).
+//
+// Computes E = D @ transform(A @ B) with producer tiling: each CTA owns an output tile
+// E[i0:i0+BM_c, j0:j0+BN_c] and computes the needed T[k,j] = transform(P)[k,j] values into
+// shared memory ONCE (as a "producer tile"), then reuses them across the BM_c consumer rows
+// (the i dimension). This reduces the producer recompute factor from TM (direct kernel, which
+// recomputes P[m,n] per E element) to ceil(TM/BM_c): each P[m,n] is computed by at most
+// ceil(TM/BM_c) CTAs that share the same j-range.
+//
+// The needed P[m,n] for the CTA's output tile are {inv_transform(k*TN + j) : j in [j0, j0+BN_c),
+// k in [0, TM)}. These are NOT contiguous in P[PM,PN] for this 8-D transform, so the "producer
+// tile" in shared memory is a logical batch of (j_local, k) pairs (not a 2-D contiguous P slice).
+// The batch is tiled in (BN_p, BM_p) chunks to bound shared-memory size. The BK_p parameter
+// tiles the K1 inner accumulation (standard GEMM K-tiling; no effect on correctness).
+//
+// Each thread owns exactly one output E[i0+ty, j0+tx] (blockDim.x == BM_c * BN_c). The thread
+// cooperatively computes shared_P in phase 1, then accumulates D[i,k]*shared_P[jl][kl] in phase 2.
+// The accumulator persists in registers across (jb, kb) batches.
+extern "C" __global__ void fused_pte_tiled_kernel(
+    const c64* A, const c64* B, const c64* D, c64* E,
+    int PM, int PN, int K1, int TM, int TN,
+    int BM_p, int BN_p, int BK_p, int BM_c, int BN_c,
+    const int* outdim, const int* out_stride, const int* rd_stride, const int* tp) {
+
+    int i0 = blockIdx.y * BM_c;
+    int j0 = blockIdx.x * BN_c;
+    int tid = threadIdx.x;
+
+    // Shared memory: producer tile [BN_p][BM_p] (c64). Dynamic shared mem sized by caller.
+    extern __shared__ c64 shared_P[];
+
+    // Thread -> output element. blockDim.x == BM_c * BN_c (one thread per output).
+    int ty = tid / BN_c;
+    int tx = tid % BN_c;
+    int i = i0 + ty;
+    int j = j0 + tx;
+    bool valid = (i < TM && j < TN);
+
+    const c64* drow = valid ? (D + (long long)i * TM) : 0;
+    float accx = 0.f, accy = 0.f;
+
+    // Iterate over (j_batch, k_batch) covering [0, BN_c) x [0, TM) in (BN_p, BM_p) chunks.
+    for (int jb = 0; jb < BN_c; jb += BN_p) {
+        int batch_j = (BN_p < BN_c - jb) ? BN_p : (BN_c - jb);
+        for (int kb = 0; kb < TM; kb += BM_p) {
+            int batch_k = (BM_p < TM - kb) ? BM_p : (TM - kb);
+            int batch_n = batch_j * batch_k;
+
+            // Phase 1: cooperatively compute producer tile into shared_P[0..batch_n-1].
+            for (int idx = tid; idx < batch_n; idx += blockDim.x) {
+                int jl = idx / batch_k;  // 0..batch_j-1
+                int kl = idx % batch_k;  // 0..batch_k-1
+                int j_cur = j0 + jb + jl;
+                int k_cur = kb + kl;
+                int t_lin = k_cur * TN + j_cur;
+                long long p = inv_transform(t_lin, outdim, out_stride, rd_stride, tp);
+                int m = (int)(p / PN);
+                int n = (int)(p % PN);
+                const c64* arow = A + (long long)m * K1;
+                float px = 0.f, py = 0.f;
+                for (int l0 = 0; l0 < K1; l0 += BK_p) {
+                    int l_end = (BK_p < K1 - l0) ? (l0 + BK_p) : K1;
+                    for (int l = l0; l < l_end; ++l) {
+                        const c64& a = arow[l];
+                        const c64& b = B[(long long)l * PN + n];
+                        px += a.x * b.x - a.y * b.y;
+                        py += a.x * b.y + a.y * b.x;
+                    }
+                }
+                shared_P[jl * BM_p + kl].x = px;
+                shared_P[jl * BM_p + kl].y = py;
+            }
+            __syncthreads();
+
+            // Phase 2: accumulate D[i, kb+kl] * shared_P[tx-jb][kl] for this thread's output.
+            if (valid) {
+                int jl = tx - jb;  // this thread's j offset relative to batch
+                if (jl >= 0 && jl < batch_j) {
+                    const c64* srow = &shared_P[jl * BM_p];
+                    for (int kl = 0; kl < batch_k; ++kl) {
+                        const c64& t = srow[kl];
+                        const c64& d = drow[kb + kl];
+                        accx += d.x * t.x - d.y * t.y;
+                        accy += d.x * t.y + d.y * t.x;
+                    }
+                }
+            }
+            __syncthreads();
+        }
+    }
+
+    if (valid) {
+        long long eidx = (long long)i * TN + j;
+        E[eidx].x = accx;
+        E[eidx].y = accy;
+    }
+}

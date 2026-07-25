@@ -270,6 +270,310 @@ def fused_reference_full(steps, seed: int = 7):
     return E
 
 
+# --- Layer 2c: producer-tiled streaming kernel (Task G3, GPU phase) ---
+#
+# A producer-tiled variant of the fused kernel. Each CTA owns an output tile
+# E[i0:i0+BM_c, j0:j0+BN_c] and computes the needed T[k,j] values into shared
+# memory ONCE, then reuses them across the BM_c consumer (i) rows. This reduces
+# the producer recompute factor from TM (direct: each P[m,n] recomputed per E
+# element) to ceil(TM/BM_c): each P[m,n] is computed by at most ceil(TM/BM_c)
+# CTAs that share the same j-range.
+#
+# The "producer tile" in shared memory is a logical batch of (j_local, k) pairs
+# (NOT a 2-D contiguous P slice) because this 8-D transform scatters the (m,n)
+# addresses needed by a contiguous (j,k) output tile across P. The batch is
+# tiled in (BN_p, BM_p) chunks to bound shared-memory size; BK_p tiles the K1
+# inner accumulation. All three are correctness-invariant (only affect
+# shared-mem footprint / loop structure).
+
+
+def fused_reference_tiled(steps, tile_cfg: dict, seed: int = 7):
+    """E = D @ transform(A @ B) at the FULL anchor via the producer-tiled
+    kernel. Same inputs (seed) as ``materialized_reference_full`` so the diff
+    is purely the kernel's numerical behavior. ``tile_cfg`` selects
+    BM_p/BN_p/BK_p (producer batch + K-tiling) and BM_c/BN_c (output tile).
+    Returns E (c64[TM, TN])."""
+    s = FULL_ANCHOR
+    rng = np.random.default_rng(seed)
+    A = (
+        rng.standard_normal((s["PM"], s["K1"]))
+        + 1j * rng.standard_normal((s["PM"], s["K1"]))
+    ).astype(np.complex64)
+    B = (
+        rng.standard_normal((s["K1"], s["PN"]))
+        + 1j * rng.standard_normal((s["K1"], s["PN"]))
+    ).astype(np.complex64)
+    D = (
+        rng.standard_normal((s["TM"], s["TM"]))
+        + 1j * rng.standard_normal((s["TM"], s["TM"]))
+    ).astype(np.complex64)
+    dA, dB, dD = cp.asarray(A), cp.asarray(B), cp.asarray(D)
+    E = cp.empty((s["TM"], s["TN"]), dtype=cp.complex64)
+    idx = _transform_index_arrays(steps)
+    kr = _kernel("fused_pte_tiled_kernel")
+
+    BM_p = int(tile_cfg["BM_p"])
+    BN_p = int(tile_cfg["BN_p"])
+    BK_p = int(tile_cfg["BK_p"])
+    BM_c = int(tile_cfg["BM_c"])
+    BN_c = int(tile_cfg["BN_c"])
+
+    threads = BM_c * BN_c
+    if threads > 1024:
+        raise ValueError(f"BM_c*BN_c={threads} exceeds 1024 max threads/block (sm_120)")
+    gx = (s["TN"] + BN_c - 1) // BN_c
+    gy = (s["TM"] + BM_c - 1) // BM_c
+    # Dynamic shared memory: BM_p * BN_p c64 elements (8 bytes each).
+    shared_mem = BM_p * BN_p * 8
+    kr(
+        (gx, gy),
+        (threads,),
+        (
+            dA,
+            dB,
+            dD,
+            E,
+            np.int32(s["PM"]),
+            np.int32(s["PN"]),
+            np.int32(s["K1"]),
+            np.int32(s["TM"]),
+            np.int32(s["TN"]),
+            np.int32(BM_p),
+            np.int32(BN_p),
+            np.int32(BK_p),
+            np.int32(BM_c),
+            np.int32(BN_c),
+            idx["outdim"],
+            idx["out_stride"],
+            idx["rd_stride"],
+            idx["tp"],
+        ),
+        shared_mem=shared_mem,
+    )
+    cp.cuda.Device(0).synchronize()
+    return E
+
+
+def _tile_search_tiled() -> list:
+    """Explore producer-tiled configs and return per-config metrics.
+
+    Iterates feasible tile configs (BM_p/BN_p/BK_p in {16,32,64}, BM_c/BN_c in
+    {8,16,32} with BM_c*BN_c <= 256 to respect the warps-in-{4,8} budget from
+    the brief). For each config: measure correctness (rel_l2 vs materialized
+    oracle), latency (kernel-only via cuda events), and resources (registers,
+    occupancy). Infeasible configs (compile/launch fail or OOM) are recorded
+    honestly with the failure reason, not silently skipped. Appends tiled rows
+    to ``results/phase0/region_prototype_bench.csv`` (preserving G2's direct
+    row) with a ``strategy`` column distinguishing direct/tiled.
+    """
+    contract = full_anchor_contract()
+    steps = contract["steps"]
+    s = FULL_ANCHOR
+
+    # Materialize the oracle E once (seed=7) and keep it resident for all configs.
+    E_mat, _p_b, _t_b = materialized_reference_full(steps, seed=7)
+    norm_mat = float(cp.linalg.norm(E_mat))
+
+    configs = []
+    for BM_c in (8, 16, 32):
+        for BN_c in (8, 16, 32):
+            if BM_c * BN_c > 256:
+                continue  # warps in {4, 8} -> threads <= 256
+            for BM_p in (16, 32, 64):
+                for BN_p in (16, 32, 64):
+                    for BK_p in (16, 32, 64):
+                        shared_mem = BM_p * BN_p * 8
+                        if shared_mem > 100 * 1024:
+                            configs.append(
+                                {
+                                    "BM_p": BM_p,
+                                    "BN_p": BN_p,
+                                    "BK_p": BK_p,
+                                    "BM_c": BM_c,
+                                    "BN_c": BN_c,
+                                    "infeasible": True,
+                                    "failure_reason": (
+                                        f"shared_mem {shared_mem} > 100KB limit"
+                                    ),
+                                }
+                            )
+                            continue
+                        configs.append(
+                            {
+                                "BM_p": BM_p,
+                                "BN_p": BN_p,
+                                "BK_p": BK_p,
+                                "BM_c": BM_c,
+                                "BN_c": BN_c,
+                            }
+                        )
+
+    results = []
+    for cfg in configs:
+        if cfg.get("infeasible"):
+            results.append(
+                {
+                    **cfg,
+                    "rel_l2": None,
+                    "kernel_only_latency_ms": None,
+                    "registers_per_thread": None,
+                    "occupancy_pct": None,
+                    "strategy": "tiled",
+                }
+            )
+            continue
+        # Correctness (single run, seed=7).
+        try:
+            cp.get_default_memory_pool().free_all_blocks()
+            cp.cuda.Device(0).synchronize()
+            E_tiled = fused_reference_tiled(steps, cfg, seed=7)
+            diff = E_tiled - E_mat
+            rel_l2 = float(cp.linalg.norm(diff) / max(1.0, norm_mat))
+            finite = bool(cp.all(cp.isfinite(E_tiled)))
+            del E_tiled
+            cp.get_default_memory_pool().free_all_blocks()
+        except Exception as exc:
+            results.append(
+                {
+                    **cfg,
+                    "rel_l2": None,
+                    "kernel_only_latency_ms": None,
+                    "registers_per_thread": None,
+                    "occupancy_pct": None,
+                    "strategy": "tiled",
+                    "infeasible": True,
+                    "failure_reason": f"correctness: {type(exc).__name__}: {exc}",
+                }
+            )
+            continue
+
+        # Latency (cuda events, median of 5 after 3 warmup).
+        try:
+            cp.get_default_memory_pool().free_all_blocks()
+            cp.cuda.Device(0).synchronize()
+            latency = _measure_latency_full(
+                lambda: fused_reference_tiled(steps, cfg, seed=7)
+            )
+            latency_ms = latency["kernel_only_latency_ms"]
+        except Exception as exc:
+            results.append(
+                {
+                    **cfg,
+                    "rel_l2": rel_l2,
+                    "kernel_only_latency_ms": None,
+                    "registers_per_thread": None,
+                    "occupancy_pct": None,
+                    "strategy": "tiled",
+                    "infeasible": True,
+                    "failure_reason": f"latency: {type(exc).__name__}: {exc}",
+                }
+            )
+            continue
+
+        # Resources.
+        regs = _registers_for_kernel("fused_pte_tiled_kernel")
+        props = _device_props()
+        threads = cfg["BM_c"] * cfg["BN_c"]
+        if regs is not None:
+            _b, occ = _occupancy(props, threads, regs)
+        else:
+            occ = None
+
+        results.append(
+            {
+                "BM_p": cfg["BM_p"],
+                "BN_p": cfg["BN_p"],
+                "BK_p": cfg["BK_p"],
+                "BM_c": cfg["BM_c"],
+                "BN_c": cfg["BN_c"],
+                "rel_l2": rel_l2,
+                "kernel_only_latency_ms": latency_ms,
+                "registers_per_thread": regs,
+                "occupancy_pct": round(occ, 1) if occ is not None else None,
+                "strategy": "tiled",
+                "infeasible": False,
+                "finite": finite,
+            }
+        )
+
+    # Append tiled rows to the bench CSV (preserve G2's direct row).
+    import csv
+
+    csv_path = f"{OUT_DIR}/region_prototype_bench.csv"
+    # Read existing rows to preserve them.
+    existing = []
+    if os.path.exists(csv_path):
+        with open(csv_path, newline="") as fh:
+            reader = csv.reader(fh)
+            for row in reader:
+                existing.append(row)
+
+    # Write back existing rows + a strategy column + tiled rows.
+    with open(csv_path, "w", newline="") as fh:
+        w = csv.writer(fh, lineterminator="\n")
+        # Header: add strategy + tile config columns if not present.
+        header = [
+            "strategy",
+            "BM_p",
+            "BN_p",
+            "BK_p",
+            "BM_c",
+            "BN_c",
+            "materialized_latency_ms",
+            "kernel_only_latency_ms",
+            "registers_per_thread",
+            "occupancy_pct",
+            "rel_l2",
+            "infeasible",
+            "failure_reason",
+        ]
+        w.writerow(header)
+        # Emit G2's direct row (strategy=direct, tile cfg empty).
+        for row in existing[1:]:
+            # G2 row: [anchor, mat_lat, ker_lat, regs, occ]
+            w.writerow(
+                [
+                    "direct",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    row[1] if len(row) > 1 else "",
+                    row[2] if len(row) > 2 else "",
+                    row[3] if len(row) > 3 else "",
+                    row[4] if len(row) > 4 else "",
+                    "",
+                    "",
+                    "",
+                ]
+            )
+        # Tiled rows.
+        for r in results:
+            w.writerow(
+                [
+                    "tiled",
+                    r["BM_p"],
+                    r["BN_p"],
+                    r["BK_p"],
+                    r["BM_c"],
+                    r["BN_c"],
+                    "",
+                    r.get("kernel_only_latency_ms", ""),
+                    r.get("registers_per_thread", ""),
+                    r.get("occupancy_pct", ""),
+                    r.get("rel_l2", ""),
+                    r.get("infeasible", ""),
+                    r.get("failure_reason", ""),
+                ]
+            )
+
+    del E_mat
+    cp.get_default_memory_pool().free_all_blocks()
+    cp.cuda.Device(0).synchronize()
+    return results
+
+
 def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
     """Full-anchor correctness: fused (direct recompute) vs materialized oracle,
     across ``seeds`` (default 3). For each seed, materialized and fused use
