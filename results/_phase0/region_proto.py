@@ -902,9 +902,13 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
     across ``seeds`` (default 3). For each seed, materialized and fused use
     IDENTICAL inputs (same seed) so the diff is purely the kernel's numerical
     behavior. Returns the worst relative_l2 / max_rel across seeds, PLUS the
-    v3 dual-gate accuracy metrics (reference_rms, global_rel_l2,
-    worst_local_scaled_max, local_scaled_argmax_reference_abs) per the
-    region_fused dual-gate accuracy policy spec.
+    v4 dual-gate accuracy metrics (reference_rms, worst_global_rel_l2,
+    worst_local_scaled_max, local_scaled_argmax_reference_abs,
+    any_nan_inf) per the region_fused dual-gate accuracy policy spec.
+
+    v4 (reviewer B v3): worst_local_scaled_max and worst_global_rel_l2 are
+    independently tracked across seeds -- the two worst values may come from
+    DIFFERENT seeds. ``any_nan_inf`` is True if any seed has nan_inf=True.
 
     Memory: within each seed, the materialized path's pool is freed before the
     fused path runs (they share the 12 GB cupy pool); between seeds the pool is
@@ -921,13 +925,17 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
     nan_inf = False
     p_bytes_avoided = 0
     t_bytes_avoided = 0
-    # v3 dual-gate tracking: track the worst (max) local_scaled_max across seeds
-    # and record the seed that produced it (for argmax reference abs).
+    # v4 dual-gate tracking: independently track worst_local_scaled_max
+    # and worst_global_rel_l2 across seeds (they may come from different seeds).
     worst_local_scaled_max = 0.0
-    worst_dg_seed = None
-    worst_dg_global_rel_l2 = None
-    worst_dg_reference_rms = None
-    worst_dg_argmax_ref_abs = None
+    worst_local_l2_seed = None
+    worst_local_l2_dg_ref_rms = None
+    worst_local_l2_dg_argmax_ref_abs = None
+    worst_global_rel_l2 = 0.0
+    worst_global_l2_seed = None
+    any_nan_inf = False
+    # Per-seed dual-gate results (stored for diagnostic traceability).
+    per_seed_dg = {}
     for seed in seeds:
         # Materialized oracle: allocates P+T transiently, frees them in-function
         # before returning (E_mat still live).
@@ -969,16 +977,30 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
             or not bool(cp.all(cp.isfinite(E_fus)))
             or not bool(cp.all(cp.isfinite(E_mat)))
         )
-        # v3 dual-gate metrics: compute for this seed (before freeing arrays).
-        dg = compute_metrics_dual_gate(cp.asnumpy(E_fus), cp.asnumpy(E_mat), alpha=1e-3)
+        # v4 dual-gate metrics: compute for this seed (before freeing arrays).
+        dg = compute_metrics_dual_gate(
+            cp.asnumpy(E_fus), cp.asnumpy(E_mat), alpha=1e-3
+        )
+        per_seed_dg[str(seed)] = dg
+        # Track per-seed nan_inf for any_nan_inf summary.
+        if dg.get("nan_inf") is True:
+            any_nan_inf = True
+        # Independent worst-local (local_scaled_max): track max and its seed.
         dg_lsm = dg.get("local_scaled_max")
         if isinstance(dg_lsm, (int, float)) and math.isfinite(dg_lsm):
             if dg_lsm > worst_local_scaled_max:
                 worst_local_scaled_max = dg_lsm
-                worst_dg_seed = seed
-                worst_dg_global_rel_l2 = dg.get("global_rel_l2")
-                worst_dg_reference_rms = dg.get("reference_rms")
-                worst_dg_argmax_ref_abs = dg.get("local_scaled_argmax_reference_abs")
+                worst_local_l2_seed = seed
+                worst_local_l2_dg_ref_rms = dg.get("reference_rms")
+                worst_local_l2_dg_argmax_ref_abs = dg.get(
+                    "local_scaled_argmax_reference_abs"
+                )
+        # Independent worst-global (global_rel_l2): track max and its seed.
+        dg_gl2 = dg.get("global_rel_l2")
+        if isinstance(dg_gl2, (int, float)) and math.isfinite(dg_gl2):
+            if dg_gl2 > worst_global_rel_l2:
+                worst_global_rel_l2 = dg_gl2
+                worst_global_l2_seed = seed
         del E_mat, E_fus
         cp.get_default_memory_pool().free_all_blocks()
         cp.cuda.Device(0).synchronize()
@@ -992,17 +1014,40 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
         "output_bytes": s["TM"] * s["TN"] * 8,
         "P_bytes_avoided": p_bytes_avoided,
         "T_bytes_avoided": t_bytes_avoided,
-        # v3 dual-gate accuracy fields (per spec §2 field schema)
-        "reference_rms": worst_dg_reference_rms,
-        "global_rel_l2": worst_dg_global_rel_l2,
+        # v4 dual-gate accuracy fields (per spec §2 field schema)
+        "reference_rms": (
+            worst_local_l2_dg_ref_rms
+            if worst_local_l2_seed is not None
+            else None
+        ),
+        "global_rel_l2": (
+            worst_global_rel_l2 if worst_global_l2_seed is not None else None
+        ),
         "local_scaled_max": (
-            worst_local_scaled_max if worst_dg_seed is not None else None
+            worst_local_scaled_max if worst_local_l2_seed is not None else None
         ),
         "worst_local_scaled_max": (
-            worst_local_scaled_max if worst_dg_seed is not None else None
+            worst_local_scaled_max if worst_local_l2_seed is not None else None
         ),
-        "local_scaled_argmax_reference_abs": worst_dg_argmax_ref_abs,
-        "worst_dg_seed": worst_dg_seed,
+        "local_scaled_argmax_reference_abs": worst_local_l2_dg_argmax_ref_abs,
+        "worst_dg_seed": worst_local_l2_seed,
+        # v4 summary fields (independent worst-case across seeds)
+        "worst_global_rel_l2": (
+            worst_global_rel_l2 if worst_global_l2_seed is not None else None
+        ),
+        "worst_global_rel_l2_cell_key": (
+            f"seed={worst_global_l2_seed}"
+            if worst_global_l2_seed is not None
+            else None
+        ),
+        "worst_local_scaled_max_cell_key": (
+            f"seed={worst_local_l2_seed}"
+            if worst_local_l2_seed is not None
+            else None
+        ),
+        "any_nan_inf": any_nan_inf,
+        # Per-seed dual-gate diagnostic trace (seed -> dg dict).
+        "per_seed_dual_gate": per_seed_dg,
     }
 
 

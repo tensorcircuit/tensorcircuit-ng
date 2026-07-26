@@ -322,8 +322,11 @@ DEFAULT_REGION_FUSED_CONSTANTS: dict = {
 }
 
 # Policy identity (frozen at freeze).
-POLICY_ID = "REGION_FUSED_FULL_ANCHOR_ACCURACY_v3"
-METRIC_SCHEMA_VERSION = "dual-gate-v3"
+POLICY_ID = "REGION_FUSED_FULL_ANCHOR_ACCURACY_v4"
+METRIC_SCHEMA_VERSION = "dual-gate-v4"
+POLICY_FILE_SHA256 = (
+    "fed7dc81fc3c4ea01bcdb0a205c0cceca9ea47571456c86c9ab9efbeae88c074"
+)
 
 
 def compute_metrics_dual_gate(output, reference, alpha=1e-3):
@@ -1358,6 +1361,12 @@ def _run_region_fused_full_anchor(A, B, D, steps):
     return E_mat, E_fus
 
 
+# Module-level cache for collect_region_fused dual-gate summary across seeds.
+# Keyed by level; stores per-seed dg results + summary fields so subsequent
+# calls for the same level reuse the cached computation.
+_REGION_FUSED_DG_CACHE: dict = {}
+
+
 def collect_region_fused(level, seed):
     """region_fused correctness at the FULL ANCHOR (G5; spec §3, §7.2).
 
@@ -1369,7 +1378,18 @@ def collect_region_fused(level, seed):
     via ``make_inputs`` so the 3-level x 3-seed matrix exercises real
     adversarial dynamic range at the full anchor, not just the small
     contract. Returns a MEASURED row with real relative_l2/max_abs/max_rel/
-    nan_inf and the canonical input_construction_version token.
+    nan_inf AND v4 dual-gate per-cell + summary fields AND the canonical
+    input_construction_version token.
+
+    P1 #4 fix (reviewer B v3): wired to compute_metrics_dual_gate +
+    apply_policy_region_fused (NOT the old compute_metrics + apply_policy).
+    Emits v4 per-cell fields (reference_rms, global_rel_l2, local_scaled_max,
+    local_scaled_argmax_reference_abs, nan_inf, policy_id, policy_file_sha256,
+    metric_schema_version) AND summary fields (worst_global_rel_l2,
+    worst_global_rel_l2_cell_key, worst_local_scaled_max,
+    worst_local_scaled_max_cell_key, any_nan_inf) computed across seeds 0,1,2
+    for this level. Every seed row for the same level gets the same summary
+    values.
     """
     from results._phase0 import region_proto as rp
 
@@ -1384,12 +1404,69 @@ def collect_region_fused(level, seed):
     E_mat, E_fus = _run_region_fused_full_anchor(A, B, D, steps)
     import cupy as cp
 
+    # OLD backward-compatible metrics (relative_l2, max_abs, max_rel, nan_inf).
     metrics = compute_metrics(cp.asnumpy(E_fus), cp.asnumpy(E_mat))
-    # free GPU memory before returning (the 9-cell matrix runs sequentially)
+    # NEW v4 dual-gate metrics for this seed.
+    dg = compute_metrics_dual_gate(
+        cp.asnumpy(E_fus), cp.asnumpy(E_mat), alpha=1e-3
+    )
+    verdict, _ = apply_policy_region_fused(dg)
+    # Free GPU memory before returning (the 9-cell matrix runs sequentially).
     del E_mat, E_fus
     cp.get_default_memory_pool().free_all_blocks()
     cp.cuda.Device(0).synchronize()
-    verdict, _ = apply_policy("region_fused", "c64", metrics)
+
+    # v4 summary across seeds: compute once per level, cache the results.
+    if level not in _REGION_FUSED_DG_CACHE:
+        dg_by_seed = {s: None for s in SEEDS}
+        dg_by_seed[seed] = dg
+        # Run the other two seeds.
+        for other_seed in SEEDS:
+            if other_seed == seed:
+                continue
+            A2, B2 = make_inputs(level, REGION_FULL_ANCHOR_SHAPE, other_seed)
+            D2 = make_inputs(level, (64, 64, 64), other_seed + 7000)[0]
+            E_mat2, E_fus2 = _run_region_fused_full_anchor(A2, B2, D2, steps)
+            dg2 = compute_metrics_dual_gate(
+                cp.asnumpy(E_fus2), cp.asnumpy(E_mat2), alpha=1e-3
+            )
+            dg_by_seed[other_seed] = dg2
+            del E_mat2, E_fus2
+            cp.get_default_memory_pool().free_all_blocks()
+            cp.cuda.Device(0).synchronize()
+        # Compute summary across all 3 seeds.
+        worst_lsm = 0.0
+        worst_lsm_seed = 0
+        worst_gl2 = 0.0
+        worst_gl2_seed = 0
+        any_nan = False
+        for s_id in SEEDS:
+            sdg = dg_by_seed[s_id]
+            if sdg is None:
+                continue
+            if sdg.get("nan_inf") is True:
+                any_nan = True
+            lsm = sdg.get("local_scaled_max")
+            if isinstance(lsm, (int, float)) and math.isfinite(lsm) and lsm > worst_lsm:
+                worst_lsm = lsm
+                worst_lsm_seed = s_id
+            gl2 = sdg.get("global_rel_l2")
+            if (
+                isinstance(gl2, (int, float))
+                and math.isfinite(gl2)
+                and gl2 > worst_gl2
+            ):
+                worst_gl2 = gl2
+                worst_gl2_seed = s_id
+        _REGION_FUSED_DG_CACHE[level] = {
+            "worst_global_rel_l2": worst_gl2,
+            "worst_global_rel_l2_cell_key": f"seed={worst_gl2_seed}",
+            "worst_local_scaled_max": worst_lsm,
+            "worst_local_scaled_max_cell_key": f"seed={worst_lsm_seed}",
+            "any_nan_inf": any_nan,
+        }
+    summary = _REGION_FUSED_DG_CACHE[level]
+
     row = {
         "route": "region_fused",
         "dtype": "c64",
@@ -1398,7 +1475,23 @@ def collect_region_fused(level, seed):
         "seed": seed,
         "reference_dtype": "c64",
         "source": "measured",
+        # OLD backward-compatible fields
         **metrics,
+        # NEW v4 per-cell dual-gate fields
+        "reference_rms": dg["reference_rms"],
+        "global_rel_l2": dg["global_rel_l2"],
+        "local_scaled_max": dg["local_scaled_max"],
+        "local_scaled_argmax_reference_abs": dg["local_scaled_argmax_reference_abs"],
+        "nan_inf": dg["nan_inf"],
+        "policy_id": POLICY_ID,
+        "policy_file_sha256": POLICY_FILE_SHA256,
+        "metric_schema_version": METRIC_SCHEMA_VERSION,
+        # v4 summary fields (same for all seeds of this level)
+        "worst_global_rel_l2": summary["worst_global_rel_l2"],
+        "worst_global_rel_l2_cell_key": summary["worst_global_rel_l2_cell_key"],
+        "worst_local_scaled_max": summary["worst_local_scaled_max"],
+        "worst_local_scaled_max_cell_key": summary["worst_local_scaled_max_cell_key"],
+        "any_nan_inf": summary["any_nan_inf"],
         "policy_pass": int(verdict == "PASS"),
     }
     if level != "cancellation":

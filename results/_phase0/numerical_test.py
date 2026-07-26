@@ -401,7 +401,8 @@ def test_collect_region_fused_small_contract():
     (PM=4096, PN=16384, K1=1024, TM=64, TN=1048576) via the direct-recompute
     fused kernel (G1) vs the materialized oracle, at the requested dynamic-
     range level. The small-contract diagnostic path is retired (G5 promotes
-    region_fused from NOT_RUN to MEASURED at the full anchor)."""
+    region_fused from NOT_RUN to MEASURED at the full anchor).
+    P1 #4 (v4): also checks v4 dual-gate per-cell + summary fields."""
     from results._phase0.numerical import collect_region_fused, REGION_FULL_ANCHOR_SHAPE
 
     row = collect_region_fused("baseline", seed=0)
@@ -412,6 +413,19 @@ def test_collect_region_fused_small_contract():
     assert row["relative_l2"] < 1e-4
     assert row["source"] == "measured"
     assert row["policy_pass"] == 1, row
+    # P1 #4: v4 per-cell dual-gate fields present
+    assert "reference_rms" in row and row["reference_rms"] is not None
+    assert "global_rel_l2" in row and isinstance(row["global_rel_l2"], float)
+    assert "local_scaled_max" in row and isinstance(row["local_scaled_max"], float)
+    assert "local_scaled_argmax_reference_abs" in row
+    assert "policy_id" in row and row["policy_id"] is not None
+    assert "metric_schema_version" in row and row["metric_schema_version"] is not None
+    # P1 #4: v4 summary fields present
+    assert "worst_global_rel_l2" in row
+    assert "worst_global_rel_l2_cell_key" in row
+    assert "worst_local_scaled_max" in row
+    assert "worst_local_scaled_max_cell_key" in row
+    assert "any_nan_inf" in row and isinstance(row["any_nan_inf"], bool)
 
 
 @pytest.mark.gpu
@@ -2028,6 +2042,62 @@ def test_dual_gate_fp64_accumulation_accuracy():
     assert m["global_rel_l2"] == pytest.approx(expected, rel=1e-15)
     assert m["reference_rms"] == pytest.approx(1.0, rel=1e-15)
     assert m["local_scaled_max"] == pytest.approx(1e-8, rel=1e-15)
+
+
+# ---------------------------------------------------------------------------
+# P1 #4 (reviewer B v3): wiring test -- collect_region_fused MUST use
+# compute_metrics_dual_gate + apply_policy_region_fused and emit v4 per-cell
+# + summary fields. RED if fields missing, GREEN after wiring.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.gpu
+def test_p1_4_collect_region_fused_wired_to_dual_gate():
+    """P1 #4: collect_region_fused(level=baseline, seed=0) returns a row with
+    source=measured AND all v4 per-cell fields (reference_rms, global_rel_l2,
+    local_scaled_max, local_scaled_argmax_reference_abs, nan_inf, policy_id,
+    policy_file_sha256, metric_schema_version) AND v4 summary fields
+    (worst_global_rel_l2, worst_global_rel_l2_cell_key, worst_local_scaled_max,
+    worst_local_scaled_max_cell_key, any_nan_inf)."""
+    from results._phase0.numerical import collect_region_fused
+
+    row = collect_region_fused(level="baseline", seed=0)
+    assert row["source"] == "measured"
+
+    # v4 per-cell fields
+    for field in (
+        "reference_rms",
+        "global_rel_l2",
+        "local_scaled_max",
+        "local_scaled_argmax_reference_abs",
+        "nan_inf",
+        "policy_id",
+        "policy_file_sha256",
+        "metric_schema_version",
+    ):
+        assert field in row, f"missing v4 per-cell field: {field}"
+        assert row[field] is not None or field == "local_scaled_argmax_reference_abs", (
+            f"v4 per-cell field {field} is None"
+        )
+
+    # v4 summary fields
+    for field in (
+        "worst_global_rel_l2",
+        "worst_global_rel_l2_cell_key",
+        "worst_local_scaled_max",
+        "worst_local_scaled_max_cell_key",
+        "any_nan_inf",
+    ):
+        assert field in row, f"missing v4 summary field: {field}"
+
+    # Field type checks
+    assert isinstance(row["any_nan_inf"], bool)
+    assert isinstance(row["global_rel_l2"], float)
+    assert isinstance(row["local_scaled_max"], float)
+    assert isinstance(row["reference_rms"], float)
+    assert row["policy_id"] == "REGION_FUSED_FULL_ANCHOR_ACCURACY_v4"
+    assert row["metric_schema_version"] == "dual-gate-v4"
+    assert row["policy_file_sha256"] is not None and len(row["policy_file_sha256"]) == 64
 
 
 if __name__ == "__main__":
