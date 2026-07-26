@@ -5,13 +5,13 @@
     "case_id": "n24_d10_default",
     "status": "UNKNOWN",
     "layers": {
-      "C2_REGION_KERNEL_FEASIBILITY": "PASS",
+      "C2_REGION_KERNEL_FEASIBILITY": "UNKNOWN",
       "C2_SINGLE_ANCHOR_PATCH_EXECUTABLE_PEAK": "FAIL",
       "C2_JOINT_EXECUTABLE_LEVERAGE": "UNKNOWN",
       "C2_CANONICAL": "UNKNOWN"
     },
     "recomputed": {
-      "accuracy_pass": true,
+      "accuracy_pass": false,
       "resource_pass": true,
       "region_peak_gain_bytes": 1073741824,
       "single_reduction_bytes": 31872,
@@ -37,7 +37,7 @@
         "allocation_audit": "6ee259c9a6ecd3215454f3da7c45e594e5653e12c723608c723dcfb96f8263b5",
         "edge_map": "c4aa5c2209f133d3bff7aeaaea1444870fdb8ab894b1e00a4592a09e862e87b6",
         "peak_frontier": "b26f49e326db337b4d1e9fc83f2de04fe7a541f288bfcae30f1975de4de87545",
-        "prototype": "c513c7465365d4d7508cd3db469cd219ce7d3e10cb897adb1996e4b258d16550",
+        "prototype": "aa662f588df845e6f583ca219625e72078c2a8aa8a02f37b24a2232fd23982d1",
         "buffer_assignment": "59642cd645a493fe9a1c17da40f7a1724dc374f7a5480d4f4794729e5c0c7f9b"
       }
     },
@@ -50,7 +50,7 @@
       "frontier_joint_model_status": "joint_reduction_meets_threshold"
     },
     "memory_threshold_bytes": 268435456,
-    "reason": "region=PASS (pass_clause satisfied) | single=FAIL (single-anchor patch reduces peak by only 31872 B < threshold (unchanged-rest-of-program counterfactual; the peak is structural)) | joint=UNKNOWN (joint model meets threshold but no executable joint implementation) -> canonical=UNKNOWN",
+    "reason": "region=UNKNOWN (contradiction: consistency_state=CONFLICT) | single=FAIL (single-anchor patch reduces peak by only 31872 B < threshold (unchanged-rest-of-program counterfactual; the peak is structural)) | joint=UNKNOWN (joint model meets threshold but no executable joint implementation) -> canonical=UNKNOWN",
     "n": 24,
     "depth": 10,
     "fusion": "default",
