@@ -12,7 +12,7 @@ import numpy as np
 
 from .abstractcircuit import AbstractCircuit
 from .cons import backend, dtypestr, rdtypestr, idtypestr
-from .quantum import sample2all
+from .quantum import sample2all, _resolve_subsystem
 from .utils import arg_alias
 
 logger = logging.getLogger(__name__)
@@ -842,19 +842,15 @@ class U1Circuit(AbstractCircuit):
                 "Only one of subsystem_to_keep or subsystem_to_traceout should be provided"
             )
 
-        if subsystem_to_keep is None:
-            # Type ignore since we already checked both aren't None
-            subsystem_to_keep = [
-                i
-                for i in range(self._nqubits)
-                if i not in subsystem_to_traceout  # type: ignore
-            ]
+        subsystem_to_keep, subsystem_B = _resolve_subsystem(
+            self._nqubits,
+            subsystem_to_keep,
+            subsystem_to_traceout,
+            name="U1Circuit._process_subsystem",
+        )
 
         nA = len(subsystem_to_keep)
         nB = self._nqubits - nA
-        subsystem_B = [
-            i for i in range(self._nqubits) if i not in subsystem_to_keep  # type: ignore
-        ]
 
         # Use static mapping to stay JIT friendly
         # Now using cached global helper functions
@@ -892,6 +888,7 @@ class U1Circuit(AbstractCircuit):
         Compute the reduced density matrix for the specified qubits.
 
         :param subsystem_to_keep: The qubits to keep (all others are traced out).
+            Mutually exclusive with ``subsystems_to_trace_out``.
         :type subsystem_to_keep: Sequence[int], optional
         :param subsystem_to_traceout: The qubits to trace out.
         :type subsystem_to_traceout: Sequence[int], optional
@@ -980,6 +977,7 @@ class U1Circuit(AbstractCircuit):
         Compute the von Neumann entanglement entropy for the specified qubits.
 
         :param subsystem_to_keep: The qubits to keep.
+            Mutually exclusive with ``subsystems_to_trace_out``.
         :type subsystem_to_keep: Sequence[int], optional
         :param subsystem_to_traceout: The qubits to trace out.
         :type subsystem_to_traceout: Sequence[int], optional

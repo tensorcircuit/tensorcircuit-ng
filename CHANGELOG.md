@@ -32,6 +32,8 @@
 
 - Fix `StabilizerCircuit.measure` when `with_prob=True`.
 
+- Unified the subsystem specification interface across methods, `subsystem_to_trace_out`, `subsystem_to_keep`.
+
 ### Removed
 
 - remove the `tng` contractor which is deprecated long ago

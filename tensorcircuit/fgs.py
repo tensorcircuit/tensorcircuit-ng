@@ -2,7 +2,7 @@
 Fermion Gaussian state simulator
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -269,7 +269,12 @@ class FGSSimulator:
             self.otcmatrix[(0, 0)] = cmatrix
             return cmatrix
 
-    def get_reduced_cmatrix(self, subsystems_to_trace_out: List[int]) -> Tensor:
+    def get_reduced_cmatrix(
+        self,
+        subsystems_to_trace_out: Optional[List[int]] = None,
+        *,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
+    ) -> Tensor:
         """
         Calculates the reduced correlation matrix by tracing out specified subsystems.
 
@@ -277,14 +282,35 @@ class FGSSimulator:
         the correlation matrix, reducing complexity from O(L³) to O(L·L_A²) where
         L_A is the size of the kept subsystem.
 
+        The subsystem can be specified by ``subsystems_to_trace_out`` (the default
+        and historical convention here) or, equivalently, by ``subsystem_to_keep``
+        (its complement). If neither is given, the full system is kept (no sites
+        traced out), matching the legacy ``None`` default. Exactly one may be
+        given otherwise.
+
         :param subsystems_to_trace_out: A list of site indices to be traced out.
-        :type subsystems_to_trace_out: List[int]
+            If ``None`` (the default) and ``subsystem_to_keep`` is also ``None``,
+            no sites are traced out.
+        :type subsystems_to_trace_out: Optional[List[int]]
+        :param subsystem_to_keep: Sites to keep (complement is traced out).
+            Mutually exclusive with ``subsystems_to_trace_out``.
+        :type subsystem_to_keep: Optional[Sequence[int]]
         :return: The reduced correlation matrix.
         :rtype: Tensor
         """
-        if subsystems_to_trace_out is None:
+        # ``None`` for both means "trace out nothing" (entropy of the full system),
+        # which is a legal FGS default; normalize to an empty trace-out list so the
+        # resolver (which requires at least one subsystem to be specified) handles
+        # all validation uniformly.
+        if subsystems_to_trace_out is None and subsystem_to_keep is None:
             subsystems_to_trace_out = []
-        trace_set = set(subsystems_to_trace_out)
+        _, traceout = quantum._resolve_subsystem(
+            self.L,
+            subsystem_to_keep,
+            subsystems_to_trace_out,
+            name="FGSSimulator.get_reduced_cmatrix",
+        )
+        trace_set = set(traceout)
         keep = [i for i in range(self.L) if i not in trace_set]
         keep += [i + self.L for i in range(self.L) if i not in trace_set]
         if len(keep) == 0:
@@ -296,18 +322,33 @@ class FGSSimulator:
         alpha_sub = backend.gather1d(self.alpha, keep)  # shape: (2*L_A, L)
         return alpha_sub @ backend.adjoint(alpha_sub)
 
-    def renyi_entropy(self, n: int, subsystems_to_trace_out: List[int]) -> Tensor:
+    def renyi_entropy(
+        self,
+        n: int,
+        subsystems_to_trace_out: Optional[List[int]] = None,
+        *,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
+    ) -> Tensor:
         """
         Computes the Renyi entropy of order n for a given subsystem.
+
+        The subsystem is specified by ``subsystems_to_trace_out`` (default) or,
+        equivalently, by ``subsystem_to_keep``. If neither is given, the entropy
+        of the full system is computed.
 
         :param n: The order of the Renyi entropy.
         :type n: int
         :param subsystems_to_trace_out: A list of site indices to be traced out, defining the subsystem.
-        :type subsystems_to_trace_out: List[int]
+        :type subsystems_to_trace_out: Optional[List[int]]
+        :param subsystem_to_keep: Sites to keep (complement is traced out).
+            Mutually exclusive with ``subsystems_to_trace_out``.
+        :type subsystem_to_keep: Optional[Sequence[int]]
         :return: The Renyi entropy of order n.
         :rtype: Tensor
         """
-        m = self.get_reduced_cmatrix(subsystems_to_trace_out)
+        m = self.get_reduced_cmatrix(
+            subsystems_to_trace_out, subsystem_to_keep=subsystem_to_keep
+        )
         lbd, _ = backend.eigh(m)
         lbd = backend.real(lbd)
         lbd = backend.relu(lbd)
@@ -321,7 +362,9 @@ class FGSSimulator:
         self,
         alpha: Tensor,
         n: int,
-        subsystems_to_trace_out: List[int],
+        subsystems_to_trace_out: Optional[List[int]] = None,
+        *,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
     ) -> Tensor:
         """
         Computes the charge moment of order n.
@@ -333,11 +376,16 @@ class FGSSimulator:
         :param n: The order of the charge moment (Renyi-n).
         :type n: int
         :param subsystems_to_trace_out: A list of site indices to be traced out.
-        :type subsystems_to_trace_out: List[int]
+        :type subsystems_to_trace_out: Optional[List[int]]
+        :param subsystem_to_keep: Sites to keep (complement is traced out).
+            Mutually exclusive with ``subsystems_to_trace_out``.
+        :type subsystem_to_keep: Optional[Sequence[int]]
         :return: The charge moment.
         :rtype: Tensor
         """
-        m = self.get_reduced_cmatrix(subsystems_to_trace_out)
+        m = self.get_reduced_cmatrix(
+            subsystems_to_trace_out, subsystem_to_keep=subsystem_to_keep
+        )
         subL = backend.shape_tuple(m)[-1] // 2
         gamma = 2 * m - backend.eye(2 * subL)
         if n == 2:
@@ -369,10 +417,12 @@ class FGSSimulator:
     def renyi_entanglement_asymmetry(
         self,
         n: int,
-        subsystems_to_trace_out: List[int],
+        subsystems_to_trace_out: Optional[List[int]] = None,
         batch: int = 100,
         status: Optional[Tensor] = None,
         with_std: bool = False,
+        *,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
     ) -> Tensor:
         """
         Computes the Renyi entanglement asymmetry.
@@ -382,7 +432,7 @@ class FGSSimulator:
         :param n: The order of the Renyi entanglement asymmetry.
         :type n: int
         :param subsystems_to_trace_out: A list of site indices to be traced out.
-        :type subsystems_to_trace_out: List[int]
+        :type subsystems_to_trace_out: Optional[List[int]]
         :param batch: The number of samples to use for the Monte Carlo estimation. Defaults to 100.
         :type batch: int, optional
         :param status: A tensor of random numbers for the sampling. If None, it will be generated internally.
@@ -390,6 +440,9 @@ class FGSSimulator:
         :type status: Optional[Tensor], optional
         :param with_std: If True, also return the standard deviation of the estimation. Defaults to False.
         :type with_std: bool, optional
+        :param subsystem_to_keep: Sites to keep (complement is traced out).
+            Mutually exclusive with ``subsystems_to_trace_out``.
+        :type subsystem_to_keep: Optional[Sequence[int]]
         :return: The Renyi entanglement asymmetry.
             If `with_std` is True, a tuple containing the asymmetry and its standard deviation is returned.
         :rtype: Tensor
@@ -398,7 +451,9 @@ class FGSSimulator:
         if status is None:
             status = backend.implicit_randu([batch, n], -np.pi, np.pi)
         status = backend.cast(status, dtypestr)
-        m = self.get_reduced_cmatrix(subsystems_to_trace_out)
+        m = self.get_reduced_cmatrix(
+            subsystems_to_trace_out, subsystem_to_keep=subsystem_to_keep
+        )
         subL = backend.shape_tuple(m)[-1] // 2
         gamma = 2 * m - backend.eye(2 * subL)
         if n == 2:
@@ -435,17 +490,31 @@ class FGSSimulator:
         else:
             return saq, backend.abs(1 / (1 - n) * backend.real(backend.std(r)) / saq)
 
-    def entropy(self, subsystems_to_trace_out: Optional[List[int]] = None) -> Tensor:
+    def entropy(
+        self,
+        subsystems_to_trace_out: Optional[List[int]] = None,
+        *,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
+    ) -> Tensor:
         """
         Computes the von Neumann entropy of a subsystem.
+
+        The subsystem is specified by ``subsystems_to_trace_out`` (default) or,
+        equivalently, by ``subsystem_to_keep``. If neither is given, the entropy
+        of the entire system is computed (matching the legacy ``None`` default).
 
         :param subsystems_to_trace_out: A list of site indices to be traced out, defining the subsystem.
                                       If None, the entropy of the entire system is computed. Defaults to None.
         :type subsystems_to_trace_out: Optional[List[int]], optional
+        :param subsystem_to_keep: Sites to keep (complement is traced out).
+            Mutually exclusive with ``subsystems_to_trace_out``.
+        :type subsystem_to_keep: Optional[Sequence[int]]
         :return: The von Neumann entropy.
         :rtype: Tensor
         """
-        m = self.get_reduced_cmatrix(subsystems_to_trace_out)  # type: ignore
+        m = self.get_reduced_cmatrix(
+            subsystems_to_trace_out, subsystem_to_keep=subsystem_to_keep
+        )  # type: ignore
         lbd, _ = backend.eigh(m)
         lbd = backend.real(lbd)
         # eigh on the default complex64/float32 backend can return eigenvalues
@@ -1371,18 +1440,46 @@ class FGSTestSimulator:
             @ npb.reshape(self.state, [-1, 1])
         )[0, 0]
 
-    def entropy(self, subsystems_to_trace_out: Optional[List[int]] = None) -> Tensor:
-        rm = quantum.reduced_density_matrix(self.state, subsystems_to_trace_out)  # type: ignore
+    def entropy(
+        self,
+        subsystems_to_trace_out: Optional[List[int]] = None,
+        *,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
+    ) -> Tensor:
+        rm = quantum.reduced_density_matrix(
+            self.state,
+            subsystems_to_trace_out=subsystems_to_trace_out,
+            subsystem_to_keep=subsystem_to_keep,
+        )  # type: ignore
         return quantum.entropy(rm)
 
-    def renyi_entropy(self, n: int, subsystems_to_trace_out: List[int]) -> Tensor:
-        rm = quantum.reduced_density_matrix(self.state, subsystems_to_trace_out)
+    def renyi_entropy(
+        self,
+        n: int,
+        subsystems_to_trace_out: Optional[List[int]] = None,
+        *,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
+    ) -> Tensor:
+        rm = quantum.reduced_density_matrix(
+            self.state,
+            subsystems_to_trace_out=subsystems_to_trace_out,
+            subsystem_to_keep=subsystem_to_keep,
+        )
         return quantum.renyi_entropy(rm, n)
 
     def charge_moment(
-        self, alpha: Tensor, n: int, subsystems_to_trace_out: List[int]
+        self,
+        alpha: Tensor,
+        n: int,
+        subsystems_to_trace_out: Optional[List[int]] = None,
+        *,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
     ) -> Tensor:
-        rho = quantum.reduced_density_matrix(self.state, subsystems_to_trace_out)
+        rho = quantum.reduced_density_matrix(
+            self.state,
+            subsystems_to_trace_out=subsystems_to_trace_out,
+            subsystem_to_keep=subsystem_to_keep,
+        )
         l = rho.shape[-1]  # type: ignore
         r = np.eye(l)
         L = int(np.log(l) / np.log(2) + 0.001)
@@ -1397,9 +1494,17 @@ class FGSTestSimulator:
         return np.trace(r)
 
     def renyi_entanglement_asymmetry(
-        self, n: int, subsystems_to_trace_out: List[int]
+        self,
+        n: int,
+        subsystems_to_trace_out: Optional[List[int]] = None,
+        *,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
     ) -> Tensor:
-        rho = quantum.reduced_density_matrix(self.state, subsystems_to_trace_out)
+        rho = quantum.reduced_density_matrix(
+            self.state,
+            subsystems_to_trace_out=subsystems_to_trace_out,
+            subsystem_to_keep=subsystem_to_keep,
+        )
         l = rho.shape[-1]  # type: ignore
         L = int(np.log(l) / np.log(2) + 0.001)
 

@@ -356,6 +356,166 @@ def test_reduced_density_from_density(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_subsystem_resolve_dual_args(backend):
+    """The new ``subsystem_to_keep``/``subsystems_to_trace_out`` dual arguments
+    must agree with the legacy ``cut`` (int = ``list(range(cut))`` = ``[0, cut)``,
+    list = explicit sites) and with each other's complement."""
+    n = 5
+    w = np.random.normal(size=[2**n]) + 1.0j * np.random.normal(size=[2**n])
+    w /= np.linalg.norm(w)
+    rho = np.reshape(w, [-1, 1]) @ np.reshape(np.conj(w), [1, -1])
+
+    # int cut == list(range(cut)) == [0, cut)
+    ref = tc.quantum.reduced_density_matrix(w, cut=2)
+    np.testing.assert_allclose(
+        ref, tc.quantum.reduced_density_matrix(w, cut=[0, 1]), atol=1e-5
+    )
+    np.testing.assert_allclose(
+        ref,
+        tc.quantum.reduced_density_matrix(w, subsystems_to_trace_out=[0, 1]),
+        atol=1e-5,
+    )
+    # keep is the complement of trace-out
+    np.testing.assert_allclose(
+        ref,
+        tc.quantum.reduced_density_matrix(w, subsystem_to_keep=[2, 3, 4]),
+        atol=1e-5,
+    )
+    # same equivalences on the density-matrix path
+    np.testing.assert_allclose(
+        tc.quantum.reduced_density_matrix(rho, cut=[0, 1]),
+        tc.quantum.reduced_density_matrix(rho, subsystem_to_keep=[2, 3, 4]),
+        atol=1e-5,
+    )
+
+    # entanglement_entropy / mutual_information / reduced_wavefunction agree
+    np.testing.assert_allclose(
+        tc.quantum.entanglement_entropy(w, cut=2),
+        tc.quantum.entanglement_entropy(w, subsystem_to_keep=[2, 3, 4]),
+        atol=1e-5,
+    )
+    np.testing.assert_allclose(
+        tc.quantum.mutual_information(w, cut=[0, 1]),
+        tc.quantum.mutual_information(w, subsystems_to_trace_out=[0, 1]),
+        atol=1e-5,
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(tc.quantum.reduced_wavefunction(w, cut=[0])),
+        tc.backend.numpy(
+            tc.quantum.reduced_wavefunction(w, subsystem_to_keep=[1, 2, 3, 4])
+        ),
+        atol=1e-5,
+    )
+
+
+def test_subsystem_resolve_validation_and_conflict():
+    w = np.array([1.0, 0, 0, 0], dtype="complex128")
+
+    # both dual args given -> ValueError
+    with pytest.raises(ValueError, match="only one of"):
+        tc.quantum.reduced_density_matrix(
+            w, subsystem_to_keep=[0], subsystems_to_trace_out=[1]
+        )
+
+    # neither cut nor a dual arg -> ValueError
+    with pytest.raises(ValueError, match="must specify one of"):
+        tc.quantum.reduced_density_matrix(w)
+
+    # out-of-range index -> ValueError mentioning the offending value
+    with pytest.raises(ValueError, match="4 is out of range"):
+        tc.quantum.reduced_density_matrix(w, subsystems_to_trace_out=[4])
+
+    # duplicate index -> ValueError
+    with pytest.raises(ValueError, match="duplicated"):
+        tc.quantum.reduced_density_matrix(w, subsystems_to_trace_out=[0, 0])
+
+    # cut + new arg both given -> UserWarning, new arg wins, cut ignored
+    with pytest.warns(UserWarning, match="take precedence"):
+        r = tc.quantum.reduced_density_matrix(
+            w, cut=[0], subsystems_to_trace_out=[0, 1]
+        )
+    np.testing.assert_allclose(
+        r,
+        tc.quantum.reduced_density_matrix(w, subsystems_to_trace_out=[0, 1]),
+        atol=1e-12,
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_quoperator_partial_trace_dual_and_validation(backend):
+    # build a 2-qubit QuOperator (square) via projector of a QuVector
+    n = 2
+    c = tc.Circuit(n)
+    c.h(0)
+    c.cx(0, 1)
+    qv = c.get_quvector()
+    op = qv.projector()  # square QuOperator over 2 subsystems
+
+    # legacy positional == keyword trace_out
+    r1 = op.partial_trace([0]).eval_matrix()
+    r2 = op.partial_trace(subsystems_to_trace_out=[0]).eval_matrix()
+    r3 = op.partial_trace(subsystem_to_keep=[1]).eval_matrix()
+    np.testing.assert_allclose(tc.backend.numpy(r1), tc.backend.numpy(r2), atol=1e-5)
+    np.testing.assert_allclose(tc.backend.numpy(r2), tc.backend.numpy(r3), atol=1e-5)
+
+    # reduced_density dual
+    rd1 = qv.reduced_density([0]).eval_matrix()
+    rd2 = qv.reduced_density(subsystems_to_trace_out=[0]).eval_matrix()
+    rd3 = qv.reduced_density(subsystem_to_keep=[1]).eval_matrix()
+    np.testing.assert_allclose(tc.backend.numpy(rd1), tc.backend.numpy(rd2), atol=1e-5)
+    np.testing.assert_allclose(tc.backend.numpy(rd2), tc.backend.numpy(rd3), atol=1e-5)
+
+    # validation
+    with pytest.raises(ValueError, match="only one of"):
+        op.partial_trace(subsystem_to_keep=[0], subsystems_to_trace_out=[1])
+    with pytest.raises(ValueError, match="must specify one of"):
+        op.partial_trace()
+    with pytest.raises(ValueError, match="out of range"):
+        op.partial_trace(subsystems_to_trace_out=[n])
+    with pytest.raises(ValueError, match="out of range"):
+        qv.reduced_density(subsystems_to_trace_out=[n])
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_reduced_density_matrix_quvector_pure_state(backend):
+    # P1 regression: reduced_density_matrix on a pure-state QuVector used to
+    # IndexError in partial_trace (no in-edges); it must now route through
+    # reduced_density (project -> trace) and match the dense path.
+    n = 4
+    c = tc.Circuit(n)
+    c.h(0)
+    c.cx(0, 1)
+    c.cx(1, 2)
+    c.cx(2, 3)
+    w = c.wavefunction()
+    qv = c.get_quvector()
+
+    dense = tc.quantum.reduced_density_matrix(w, subsystems_to_trace_out=[0, 1])
+
+    # QuVector path (previously crashed)
+    r_qv = tc.backend.numpy(
+        tc.quantum.reduced_density_matrix(
+            qv, subsystems_to_trace_out=[0, 1]
+        ).eval_matrix()
+    )
+    np.testing.assert_allclose(r_qv, dense, atol=1e-5)
+
+    # legacy cut on a QuVector
+    r_cut = tc.backend.numpy(
+        tc.quantum.reduced_density_matrix(qv, [0, 1]).eval_matrix()
+    )
+    np.testing.assert_allclose(r_cut, dense, atol=1e-5)
+
+    # QuAdjointVector path
+    r_va = tc.backend.numpy(
+        tc.quantum.reduced_density_matrix(
+            qv.adjoint(), subsystems_to_trace_out=[0, 1]
+        ).eval_matrix()
+    )
+    np.testing.assert_allclose(r_va, dense, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_mutual_information(backend):
     n = 5
     w = np.random.normal(size=[2**n]) + 1.0j * np.random.normal(size=[2**n])
@@ -386,6 +546,48 @@ def test_ee(backend):
     s = c.state()
     np.testing.assert_allclose(
         tc.quantum.entanglement_entropy(s, [0, 1]), np.log(2.0), atol=1e-5
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_entanglement_entropy_qudit(backend, highp):
+    # Non-flat Schmidt coefficients give a non-degenerate reference entropy
+    # (neither 0 nor log d), which would mismatch if `dim` were silently
+    # dropped and the state reinterpreted as qubits.
+    d = 3
+    schmidt = np.array([0.6, 0.3, 0.1], dtype="complex128")
+    schmidt = schmidt / np.linalg.norm(schmidt)
+    ref_entropy = -np.sum(np.abs(schmidt) ** 2 * np.log(np.abs(schmidt) ** 2))
+
+    psi = np.zeros(d * d, dtype="complex128")
+    for k in range(d):
+        psi[k * d + k] = schmidt[k]
+
+    rho = np.outer(psi, np.conj(psi))
+
+    s_pure = tc.quantum.entanglement_entropy(psi, subsystems_to_trace_out=[0], dim=d)
+    s_rho = tc.quantum.entanglement_entropy(rho, subsystems_to_trace_out=[0], dim=d)
+    np.testing.assert_allclose(tc.backend.numpy(s_pure), ref_entropy, atol=1e-5)
+    np.testing.assert_allclose(tc.backend.numpy(s_rho), ref_entropy, atol=1e-5)
+
+    np.testing.assert_allclose(
+        tc.quantum.entanglement_entropy(psi, subsystem_to_keep=[1], dim=d),
+        tc.quantum.entanglement_entropy(psi, subsystems_to_trace_out=[0], dim=d),
+        atol=1e-5,
+    )
+
+    # int cut means list(range(cut)) = [0, cut)
+    np.testing.assert_allclose(
+        tc.quantum.entanglement_entropy(psi, cut=1, dim=d),
+        tc.quantum.entanglement_entropy(psi, subsystems_to_trace_out=[0], dim=d),
+        atol=1e-5,
+    )
+
+    # for a pure bipartite state I(A:B) = 2 S(A)
+    np.testing.assert_allclose(
+        tc.quantum.mutual_information(psi, subsystems_to_trace_out=[0], dim=d),
+        2.0 * ref_entropy,
+        atol=1e-5,
     )
 
 

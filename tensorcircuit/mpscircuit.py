@@ -21,6 +21,7 @@ from .quantum import (
     extract_tensors_from_qop,
     _decode_basis_label,
     sample2all,
+    _resolve_subsystem,
 )
 from .mps_base import FiniteMPS
 from .abstractcircuit import AbstractCircuit
@@ -1092,7 +1093,12 @@ class MPSCircuit(AbstractCircuit):
         else:
             return sample, -1.0
 
-    def reduced_density_matrix(self, subsystem_to_keep: Sequence[int]) -> Tensor:
+    def reduced_density_matrix(
+        self,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
+        *,
+        subsystems_to_trace_out: Optional[Sequence[int]] = None,
+    ) -> Tensor:
         """
         Compute the reduced density matrix for the specified qubits.
 
@@ -1100,16 +1106,34 @@ class MPSCircuit(AbstractCircuit):
         ``subsystem_to_keep``, so passing ``[3, 1]`` yields a different
         index ordering from ``[1, 3]``.
 
+        The subsystem can be specified by ``subsystem_to_keep`` (the default
+        and historical convention here) or, equivalently, by
+        ``subsystems_to_trace_out`` (its complement). Exactly one must be
+        given. At least one qubit must be kept.
+
+        .. warning::
+
+            Unlike :func:`tensorcircuit.quantum.reduced_density_matrix`,
+            this method's ``subsystem_to_keep`` argument names the sites to
+            **keep**, not to trace out. The two functions share a method name
+            but use opposite conventions for the positional argument.
+
         :param subsystem_to_keep: The qubits to keep (all others are traced out).
-        :type subsystem_to_keep: Sequence[int]
+            Mutually exclusive with ``subsystems_to_trace_out``.
+        :type subsystem_to_keep: Optional[Sequence[int]]
+        :param subsystems_to_trace_out: The qubits to trace out (complement is kept).
+        :type subsystems_to_trace_out: Optional[Sequence[int]]
         :return: The reduced density matrix.
         :rtype: Tensor
         """
-        keep = list(subsystem_to_keep)
+        keep, _ = _resolve_subsystem(
+            self._nqubits,
+            subsystem_to_keep,
+            subsystems_to_trace_out,
+            name="MPSCircuit.reduced_density_matrix",
+        )
         if not keep:
             raise ValueError("Must keep at least one qubit index.")
-        if len(keep) != len(set(keep)):
-            raise ValueError("Duplicate qubit indices in subsystem_to_keep.")
 
         keep_sorted = sorted(keep)
         is_contiguous = all(

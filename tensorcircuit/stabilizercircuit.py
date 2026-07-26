@@ -7,6 +7,7 @@ import numpy as np
 import stim
 
 from .abstractcircuit import AbstractCircuit
+from .quantum import _resolve_keep_or_subsystem
 
 Tensor = Any
 
@@ -408,12 +409,38 @@ class StabilizerCircuit(AbstractCircuit):
         """
         return self.current_simulator().current_inverse_tableau()
 
-    def entanglement_entropy(self, cut: Sequence[int]) -> float:
+    def entanglement_entropy(
+        self,
+        cut: Optional[Sequence[int]] = None,
+        *,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
+        subsystems_to_trace_out: Optional[Sequence[int]] = None,
+    ) -> float:
         """
         Calculate the entanglement entropy for a subset of qubits using stabilizer formalism.
 
-        :param cut: Indices of qubits to calculate entanglement entropy for
-        :type cut: Sequence[int]
+        The subsystem can be specified by ``cut`` (legacy, the qubits to **keep**
+        and compute the entropy of), or by exactly one of
+        ``subsystem_to_keep`` / ``subsystems_to_trace_out``. If both ``cut`` and
+        a new argument are given, the new argument wins and ``cut`` is ignored
+        (with a ``UserWarning``).
+
+        .. warning::
+
+            Unlike :func:`tensorcircuit.quantum.entanglement_entropy`, the
+            legacy ``cut`` argument here names the qubits to **keep** (the
+            subsystem whose entropy is computed), not the qubits to trace out.
+            The two functions share a name but use opposite conventions for
+            ``cut``; prefer the explicit ``subsystem_to_keep`` /
+            ``subsystems_to_trace_out`` to avoid ambiguity.
+
+        :param cut: Indices of qubits to calculate entanglement entropy for (kept).
+        :type cut: Optional[Sequence[int]]
+        :param subsystem_to_keep: Indices of qubits to keep (entropy of this subsystem).
+            Mutually exclusive with ``subsystems_to_trace_out``.
+        :type subsystem_to_keep: Optional[Sequence[int]]
+        :param subsystems_to_trace_out: Indices to trace out (complement is kept).
+        :type subsystems_to_trace_out: Optional[Sequence[int]]
         :return: Entanglement entropy
         :rtype: float
         """
@@ -421,10 +448,20 @@ class StabilizerCircuit(AbstractCircuit):
         tableau = self.current_tableau()
         N = len(tableau)
 
+        # `cut` is legacy keep semantics (the subsystem whose entropy is computed);
+        # resolve via the dual helper, which also validates ranges/duplicates.
+        keep = _resolve_keep_or_subsystem(
+            N,
+            cut,
+            subsystem_to_keep,
+            subsystems_to_trace_out,
+            name="StabilizerCircuit.entanglement_entropy",
+        )
+
         _, _, z2x, z2z, _, _ = tableau.to_numpy()
         binary_matrix = np.concatenate([z2x, z2z], axis=1)
         # Get reduced matrix for the cut using boolean indexing
-        cut_set = set(cut)
+        cut_set = set(keep)
         cut_indices = np.array(
             [i for i in range(N) if i in cut_set]
             + [i + N for i in range(N) if i in cut_set]
@@ -461,7 +498,7 @@ class StabilizerCircuit(AbstractCircuit):
                     break
 
         # Calculate entropy
-        return float((rank - len(cut)) * np.log(2))
+        return float((rank - len(keep)) * np.log(2))
 
 
 # Call _meta_apply at module level to register the gates

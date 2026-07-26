@@ -9,6 +9,7 @@ import numpy as np
 
 from .cons import backend, dtypestr, rdtypestr
 from .circuit import Circuit
+from .quantum import _resolve_keep_or_subsystem
 
 Tensor = Any
 
@@ -305,17 +306,38 @@ def entropy_shadow(
     pauli_strings: Optional[Tensor] = None,
     sub: Optional[Sequence[int]] = None,
     alpha: int = 2,
+    *,
+    subsystem_to_keep: Optional[Sequence[int]] = None,
+    subsystems_to_trace_out: Optional[Sequence[int]] = None,
 ) -> Tensor:
     r"""To calculate the Renyi entropy of a subsystem from shadow state or shadow snapshot states
+
+    The subsystem can be specified by ``sub`` (legacy, the qubits to **keep**) or
+    by exactly one of ``subsystem_to_keep`` / ``subsystems_to_trace_out``. If
+    both ``sub`` and a new argument are given, the new argument wins and ``sub``
+    is ignored (with a ``UserWarning``). If none is given, the entropy of the
+    full system is computed.
+
+    .. warning::
+
+        Unlike :func:`tensorcircuit.quantum.reduced_density_matrix`, the legacy
+        ``sub`` argument here names the qubits to **keep**, not to trace out.
+        Prefer the explicit ``subsystem_to_keep`` / ``subsystems_to_trace_out``
+        to avoid ambiguity.
 
     :param snapshots: shape = (ns, repeat, nq, 2, 2) or (ns, repeat, nq)
     :type: Tensor
     :param pauli_strings: shape = None or (ns, nq) or (ns, repeat, nq)
     :type: Optional[Tensor]
-    :param sub: qubit indices of subsystem
+    :param sub: qubit indices of subsystem (kept).
     :type: Optional[Sequence[int]]
     :param alpha: order of the Renyi entropy, alpha=1 corresponds to the von Neumann entropy
     :type: int
+    :param subsystem_to_keep: qubit indices to keep (entropy of this subsystem).
+        Mutually exclusive with ``subsystems_to_trace_out``.
+    :type: subsystem_to_keep: Optional[Sequence[int]]
+    :param subsystems_to_trace_out: qubit indices to trace out (complement is kept).
+    :type: subsystems_to_trace_out: Optional[Sequence[int]]
 
     :return Renyi entropy: shape = ()
     :rtype: Tensor
@@ -323,7 +345,12 @@ def entropy_shadow(
     if alpha <= 0:
         raise ValueError("Alpha should not be less than 1!")
 
-    sdw_rdm = global_shadow_state(snapshots, pauli_strings, sub)  # (2 ** nq, 2 ** nq)
+    nq = snapshots.shape[2]
+    keep = _resolve_keep_or_subsystem(
+        nq, sub, subsystem_to_keep, subsystems_to_trace_out, name="entropy_shadow"
+    )
+
+    sdw_rdm = global_shadow_state(snapshots, pauli_strings, keep)  # (2 ** nq, 2 ** nq)
 
     evs = backend.relu(backend.real(backend.eigvalsh(sdw_rdm)))
     evs /= backend.sum(evs)
@@ -333,14 +360,38 @@ def entropy_shadow(
         return backend.log(backend.sum(backend.power(evs, alpha))) / (1 - alpha)
 
 
-def renyi_entropy_2(snapshots: Tensor, sub: Optional[Sequence[int]] = None) -> Tensor:
+def renyi_entropy_2(
+    snapshots: Tensor,
+    sub: Optional[Sequence[int]] = None,
+    *,
+    subsystem_to_keep: Optional[Sequence[int]] = None,
+    subsystems_to_trace_out: Optional[Sequence[int]] = None,
+) -> Tensor:
     r"""To calculate the second order Renyi entropy of a subsystem from snapshot, please refer to
     Brydges, T. et al. Science 364, 260-263 (2019). This function is not jitable.
 
+    The subsystem can be specified by ``sub`` (legacy, the qubits to **keep**) or
+    by exactly one of ``subsystem_to_keep`` / ``subsystems_to_trace_out``. If
+    both ``sub`` and a new argument are given, the new argument wins and ``sub``
+    is ignored (with a ``UserWarning``). If none is given, the entropy of the
+    full system is computed.
+
+    .. warning::
+
+        Unlike :func:`tensorcircuit.quantum.reduced_density_matrix`, the legacy
+        ``sub`` argument here names the qubits to **keep**, not to trace out.
+        Prefer the explicit ``subsystem_to_keep`` / ``subsystems_to_trace_out``
+        to avoid ambiguity.
+
     :param snapshots: shape = (ns, repeat, nq)
     :type: Tensor
-    :param sub: qubit indices of subsystem
+    :param sub: qubit indices of subsystem (kept).
     :type: Optional[Sequence[int]]
+    :param subsystem_to_keep: qubit indices to keep (entropy of this subsystem).
+        Mutually exclusive with ``subsystems_to_trace_out``.
+    :type: subsystem_to_keep: Optional[Sequence[int]]
+    :param subsystems_to_trace_out: qubit indices to trace out (complement is kept).
+    :type: subsystems_to_trace_out: Optional[Sequence[int]]
 
     :return second order Renyi entropy: shape = ()
     :rtype: Tensor
@@ -355,8 +406,11 @@ def renyi_entropy_2(snapshots: Tensor, sub: Optional[Sequence[int]] = None) -> T
         is the correct "estimate failed" signal — increase ``ns``/``repeat``
         rather than interpreting such a return as a finite entropy.
     """
-    if sub is not None:
-        snapshots = slice_sub(snapshots, sub)
+    nq_full = snapshots.shape[2]
+    keep = _resolve_keep_or_subsystem(
+        nq_full, sub, subsystem_to_keep, subsystems_to_trace_out, name="renyi_entropy_2"
+    )
+    snapshots = slice_sub(snapshots, keep)
     snapshots = backend.cast(snapshots, dtype="int32")
     ns, repeat, nq = snapshots.shape
 

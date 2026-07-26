@@ -267,3 +267,36 @@ def test_measure_with_prob_correlated():
     c = tc.StabilizerCircuit(3)
     _, p = c.measure(0, 1, 2, with_prob=True)
     np.testing.assert_allclose(p, 1.0, atol=1e-6)
+
+
+def test_entanglement_entropy_dual_and_validation():
+    n = 4
+    stc = tc.StabilizerCircuit(n)
+    stc.h(0)
+    stc.cx(0, 1)
+    stc.cx(1, 2)
+    stc.cx(2, 3)
+
+    # legacy cut (keep) == keyword keep
+    ref = stc.entanglement_entropy([0, 1])
+    assert np.isclose(ref, stc.entanglement_entropy(subsystem_to_keep=[0, 1]))
+    # trace_out complement == keep
+    assert np.isclose(ref, stc.entanglement_entropy(subsystems_to_trace_out=[2, 3]))
+    # matches quantum.entanglement_entropy on the same state when both keep [0,1]
+    c = tc.Circuit(n)
+    c.h(0)
+    c.cx(0, 1)
+    c.cx(1, 2)
+    c.cx(2, 3)
+    q_ee = float(
+        np.real(tc.quantum.entanglement_entropy(c.state(), subsystem_to_keep=[0, 1]))
+    )
+    assert np.isclose(ref, q_ee, atol=1e-6)
+    # None (full system) -> entropy 0
+    assert np.isclose(stc.entanglement_entropy(), 0.0)
+
+    # validation
+    with pytest.raises(ValueError, match="only one of"):
+        stc.entanglement_entropy(subsystem_to_keep=[0], subsystems_to_trace_out=[1])
+    with pytest.raises(ValueError, match="out of range"):
+        stc.entanglement_entropy([n])

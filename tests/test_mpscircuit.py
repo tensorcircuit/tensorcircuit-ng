@@ -523,3 +523,54 @@ def test_mps_base_extra(jaxb):
     # apply_two_site_gate
     gate = tc.backend.ones([2, 2, 2, 2])
     mps.apply_two_site_gate(gate, 1, 2)
+
+
+def test_mps_reduced_density_matrix_dual_and_validation(npb):
+    n = 6
+    mps = tc.MPSCircuit(n)
+    for i in range(n):
+        mps.h(i)
+    for i in range(n - 1):
+        mps.cx(i, i + 1)
+
+    c = tc.Circuit(n)
+    for i in range(n):
+        c.h(i)
+    for i in range(n - 1):
+        c.cx(i, i + 1)
+    w = c.wavefunction()
+
+    # positional keep (legacy) == keyword keep
+    ref = mps.reduced_density_matrix([1, 2])
+    np.testing.assert_allclose(
+        tc.backend.numpy(ref),
+        tc.backend.numpy(mps.reduced_density_matrix(subsystem_to_keep=[1, 2])),
+        atol=1e-10,
+    )
+    # subsystems_to_trace_out (complement) matches the kept rdm
+    np.testing.assert_allclose(
+        tc.backend.numpy(ref),
+        tc.backend.numpy(
+            mps.reduced_density_matrix(subsystems_to_trace_out=[0, 3, 4, 5])
+        ),
+        atol=1e-10,
+    )
+    # matches quantum.reduced_density_matrix on the same wavefunction (reversed
+    # convention): mps keep [1,2] == quantum trace_out [0,3,4,5]
+    np.testing.assert_allclose(
+        tc.backend.numpy(ref),
+        tc.backend.numpy(
+            tc.quantum.reduced_density_matrix(w, subsystems_to_trace_out=[0, 3, 4, 5])
+        ),
+        atol=1e-6,
+    )
+
+    # validation
+    with pytest.raises(ValueError, match="only one of"):
+        mps.reduced_density_matrix(subsystem_to_keep=[0], subsystems_to_trace_out=[1])
+    with pytest.raises(ValueError, match="must specify one of"):
+        mps.reduced_density_matrix()
+    with pytest.raises(ValueError, match="out of range"):
+        mps.reduced_density_matrix(subsystem_to_keep=[n])
+    with pytest.raises(ValueError, match="Must keep at least one"):
+        mps.reduced_density_matrix(subsystems_to_trace_out=list(range(n)))

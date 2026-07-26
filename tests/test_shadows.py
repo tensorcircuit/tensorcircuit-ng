@@ -176,3 +176,65 @@ def test_shadow_extra(jaxb):
 
     snapshots = shadow_snapshots(psi, pauli_strings, measurement_only=True, sub=[0, 1])
     assert snapshots.shape == (ns, 1, 2)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_entropy_shadow_dual_and_validation(backend):
+    nq, ns, repeat = 4, 2000, 1
+    c = tc.Circuit(nq)
+    c.h(0)
+    c.rx(1, theta=0.7)
+    c.cx(0, 1)
+    c.ry(2, theta=0.4)
+    c.cx(1, 2)
+    c.rz(3, theta=1.1)
+    c.cx(2, 3)
+    psi = c.state()
+
+    # Asymmetry guard: complementary halves of a pure state have equal
+    # entropy, so compare non-complementary subsystems — otherwise a routing
+    # bug picking the wrong subsystem would still pass.
+    e_01 = float(np.real(tc.quantum.entanglement_entropy(psi, [0, 1])))
+    e_02 = float(np.real(tc.quantum.entanglement_entropy(psi, [0, 2])))
+    assert not np.isclose(
+        e_01, e_02, atol=1e-3
+    ), "fixture is symmetric; test is vacuous"
+
+    pauli_strings = tc.backend.convert_to_tensor(np.random.randint(1, 4, size=(ns, nq)))
+    status = tc.backend.convert_to_tensor(np.random.rand(ns, repeat))
+    snapshots = shadow_snapshots(psi, pauli_strings, status, measurement_only=True)
+
+    # The three forms below resolve to the same keep=[0,1], so they must
+    # agree within shadow statistical noise (loose atol, not exact).
+    e_sub = float(
+        np.real(entropy_shadow(snapshots, pauli_strings, sub=[0, 1], alpha=2))
+    )
+    e_keep = float(
+        np.real(
+            entropy_shadow(snapshots, pauli_strings, subsystem_to_keep=[0, 1], alpha=2)
+        )
+    )
+    e_to = float(
+        np.real(
+            entropy_shadow(
+                snapshots, pauli_strings, subsystems_to_trace_out=[2, 3], alpha=2
+            )
+        )
+    )
+    assert np.isclose(e_sub, e_keep, atol=0.3)
+    assert np.isclose(e_keep, e_to, atol=0.3)
+
+    # renyi_entropy_2 dual
+    r_sub = float(renyi_entropy_2(snapshots, sub=[0, 1]))
+    r_keep = float(renyi_entropy_2(snapshots, subsystem_to_keep=[0, 1]))
+    r_to = float(renyi_entropy_2(snapshots, subsystems_to_trace_out=[2, 3]))
+    assert np.isclose(r_sub, r_keep, atol=0.3)
+    assert np.isclose(r_keep, r_to, atol=0.3)
+
+    # validation
+    with pytest.raises(ValueError, match="only one of"):
+        entropy_shadow(
+            snapshots, pauli_strings, subsystem_to_keep=[0], subsystems_to_trace_out=[1]
+        )
+    with pytest.raises(ValueError, match="out of range"):
+        entropy_shadow(snapshots, pauli_strings, subsystem_to_keep=[nq])

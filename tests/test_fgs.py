@@ -392,3 +392,47 @@ def test_entanglement_asymmetry(backend, highp):
                 atol=6 * std,
             )
             print(std)
+
+
+def test_fgs_entropy_dual_and_validation():
+    N = 4
+    # Cross-cut hopping (1,2) entangles the two halves; distinct intracell
+    # couplings and a chemical potential make non-complementary subsystems
+    # differ, so a keep/trace_out routing bug would change the result.
+    hc = (
+        F.hopping(1.0, 0, 1, N)
+        + F.hopping(0.5, 2, 3, N)
+        + F.hopping(0.8, 1, 2, N)
+        + F.chemical_potential(0.3, 0, N)
+    )
+    sim = F(N, hc=hc)
+
+    # legacy trace_out == subsystem_to_keep complement
+    e_to = sim.entropy([0, 1])
+    e_keep = sim.entropy(subsystem_to_keep=[2, 3])
+    np.testing.assert_allclose(np.real(e_to), np.real(e_keep), atol=1e-6)
+    # None / [] == full system
+    np.testing.assert_allclose(
+        np.real(sim.entropy()), np.real(sim.entropy([])), atol=1e-6
+    )
+    # renyi_entropy dual
+    r_to = sim.renyi_entropy(2, [0, 1])
+    r_keep = sim.renyi_entropy(2, subsystem_to_keep=[2, 3])
+    np.testing.assert_allclose(np.real(r_to), np.real(r_keep), atol=1e-6)
+
+    # Asymmetry guard: complementary halves of a pure state have equal
+    # entropy, so compare non-complementary subsystems — otherwise a routing
+    # bug picking the wrong subsystem would still pass.
+    e_01 = np.real(sim.entropy([0, 1]))
+    e_02 = np.real(sim.entropy([0, 2]))
+    assert not np.isclose(
+        e_01, e_02, atol=1e-3
+    ), "fixture is symmetric; test is vacuous"
+
+    # validation
+    with pytest.raises(ValueError, match="only one of"):
+        sim.entropy(subsystem_to_keep=[0], subsystems_to_trace_out=[1])
+    with pytest.raises(ValueError, match="out of range"):
+        sim.entropy(subsystems_to_trace_out=[N])
+    with pytest.raises(ValueError, match="the full system is traced out"):
+        sim.entropy([0, 1, 2, 3])

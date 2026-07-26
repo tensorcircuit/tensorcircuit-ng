@@ -7,6 +7,7 @@ Quantum state and operator class backend by tensornetwork
 import logging
 import math
 import os
+import warnings
 from functools import partial, reduce
 from operator import matmul, mul, or_
 from collections import Counter
@@ -246,6 +247,151 @@ def _infer_num_sites(D: int, dim: int) -> int:
     if tmp != 1:
         raise ValueError(f"Dimension {D} is not a power of local dim {dim}")
     return n
+
+
+def _resolve_subsystem(
+    n: int,
+    subsystem_to_keep: Optional[Sequence[int]] = None,
+    subsystems_to_trace_out: Optional[Sequence[int]] = None,
+    *,
+    name: str = "subsystem",
+) -> Tuple[List[int], List[int]]:
+    """
+    Resolve a subsystem specification into explicit ``(keep, traceout)`` lists.
+
+    Exactly one of ``subsystem_to_keep`` / ``subsystems_to_trace_out`` must be
+    provided; the other is inferred as the complement within ``range(n)``.
+    Both returned lists cover ``range(n)`` with no overlap and no duplicates.
+
+    :param n: total number of sites
+    :param subsystem_to_keep: sites to keep (user-supplied order preserved)
+    :param subsystems_to_trace_out: sites to trace out
+    :param name: function name for error messages
+    :return: ``(keep, traceout)`` as plain ``list[int]``
+    """
+    if subsystem_to_keep is not None and subsystems_to_trace_out is not None:
+        raise ValueError(
+            f"{name}: specify only one of `subsystem_to_keep` or "
+            f"`subsystems_to_trace_out`, not both"
+        )
+    if subsystem_to_keep is None and subsystems_to_trace_out is None:
+        raise ValueError(
+            f"{name}: must specify one of `subsystem_to_keep` or "
+            f"`subsystems_to_trace_out`"
+        )
+
+    def _validate(indices: Sequence[int], label: str) -> List[int]:
+        out = list(indices)
+        seen = set()
+        for i in out:
+            if not isinstance(i, (int, np.integer)) or i < 0 or i >= n:
+                raise ValueError(f"{name}: {label} index {i} is out of range [0, {n})")
+            if i in seen:
+                raise ValueError(f"{name}: {label} index {i} is duplicated")
+            seen.add(i)
+        return out
+
+    if subsystem_to_keep is not None:
+        keep = _validate(subsystem_to_keep, "subsystem_to_keep")
+        keep_set = set(keep)
+        traceout = [i for i in range(n) if i not in keep_set]
+    else:
+        traceout = _validate(subsystems_to_trace_out, "subsystems_to_trace_out")  # type: ignore
+        traceout_set = set(traceout)
+        keep = [i for i in range(n) if i not in traceout_set]
+    return keep, traceout
+
+
+def _resolve_cut_or_subsystem(
+    n: int,
+    cut: Union[int, List[int], Tuple[int, ...], None] = None,
+    subsystem_to_keep: Optional[Sequence[int]] = None,
+    subsystems_to_trace_out: Optional[Sequence[int]] = None,
+    *,
+    name: str = "subsystem",
+) -> List[int]:
+    """
+    Bridge the legacy ``cut`` argument and the dual ``subsystem_to_keep`` /
+    ``subsystems_to_trace_out`` arguments, returning the resolved trace-out list.
+
+    ``cut`` is the legacy trace-out specification (``int`` means
+    ``list(range(cut))``, i.e. ``[0, cut)``; a sequence is the explicit site
+    list). The new ``subsystem_to_keep`` / ``subsystems_to_trace_out`` arguments
+    take precedence when given alongside ``cut`` (a ``UserWarning`` is emitted
+    and ``cut`` is ignored) so that silent overrides cannot hide a typo.
+    """
+    has_new = subsystem_to_keep is not None or subsystems_to_trace_out is not None
+    if cut is not None and has_new:
+        warnings.warn(
+            f"{name}: both the legacy `cut` argument and the new "
+            f"`subsystem_to_keep`/`subsystems_to_trace_out` were given; "
+            f"the new arguments take precedence and `cut` is ignored",
+            UserWarning,
+            stacklevel=3,
+        )
+        _, traceout = _resolve_subsystem(
+            n, subsystem_to_keep, subsystems_to_trace_out, name=name
+        )
+        return traceout
+    if cut is not None:
+        if isinstance(cut, (list, tuple, set)):
+            legacy_traceout = list(cut)
+        else:
+            legacy_traceout = list(range(int(cut)))
+        _, traceout = _resolve_subsystem(n, None, legacy_traceout, name=name)
+        return traceout
+    _, traceout = _resolve_subsystem(
+        n, subsystem_to_keep, subsystems_to_trace_out, name=name
+    )
+    return traceout
+
+
+def _resolve_keep_or_subsystem(
+    n: int,
+    legacy_keep: Optional[Sequence[int]] = None,
+    subsystem_to_keep: Optional[Sequence[int]] = None,
+    subsystems_to_trace_out: Optional[Sequence[int]] = None,
+    *,
+    name: str = "subsystem",
+) -> List[int]:
+    """
+    Bridge a legacy ``keep``-semantic argument and the dual
+    ``subsystem_to_keep`` / ``subsystems_to_trace_out`` arguments, returning the
+    resolved keep list.
+
+    ``legacy_keep`` is the legacy specification of the sites to **keep** (e.g. the
+    ``cut`` argument of ``StabilizerCircuit.entanglement_entropy`` or the ``sub``
+    argument of ``entropy_shadow``, both of which name the kept subsystem). The
+    new ``subsystem_to_keep`` / ``subsystems_to_trace_out`` arguments take
+    precedence when given alongside ``legacy_keep`` (a ``UserWarning`` is emitted
+    and ``legacy_keep`` is ignored) so that silent overrides cannot hide a typo.
+    If all of ``legacy_keep``, ``subsystem_to_keep`` and
+    ``subsystems_to_trace_out`` are ``None``, the full system is kept (returns
+    ``list(range(n))``), matching the legacy ``None`` default of the keep-semantic
+    callers.
+    """
+    has_new = subsystem_to_keep is not None or subsystems_to_trace_out is not None
+    if legacy_keep is not None and has_new:
+        warnings.warn(
+            f"{name}: both the legacy keep argument and the new "
+            f"`subsystem_to_keep`/`subsystems_to_trace_out` were given; "
+            f"the new arguments take precedence and the legacy argument is ignored",
+            UserWarning,
+            stacklevel=3,
+        )
+        keep, _ = _resolve_subsystem(
+            n, subsystem_to_keep, subsystems_to_trace_out, name=name
+        )
+        return keep
+    if legacy_keep is not None:
+        keep, _ = _resolve_subsystem(n, list(legacy_keep), None, name=name)
+        return keep
+    if has_new:
+        keep, _ = _resolve_subsystem(
+            n, subsystem_to_keep, subsystems_to_trace_out, name=name
+        )
+        return keep
+    return list(range(n))
 
 
 def _reachable(nodes: List[AbstractNode]) -> List[AbstractNode]:
@@ -744,7 +890,12 @@ class QuOperator:
         """
         return (self.adjoint() @ self).trace()
 
-    def partial_trace(self, subsystems_to_trace_out: Collection[int]) -> "QuOperator":
+    def partial_trace(
+        self,
+        subsystems_to_trace_out: Optional[Sequence[int]] = None,
+        *,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
+    ) -> "QuOperator":
         """
         The partial trace of the operator.
         Subsystems to trace out are supplied as indices, so that dangling edges
@@ -753,13 +904,27 @@ class QuOperator:
         This does not modify the original network. The original ordering of the
         remaining subsystems is maintained.
 
+        Exactly one of ``subsystems_to_trace_out`` (legacy, positional) or
+        ``subsystem_to_keep`` must be given; the other is inferred as the
+        complement over ``range(len(self.in_edges))``. Out-of-range and
+        duplicate indices raise ``ValueError`` with the offending value.
+
         :param subsystems_to_trace_out: Indices of subsystems to trace out.
-        :type subsystems_to_trace_out: Collection[int]
+        :type subsystems_to_trace_out: Optional[Sequence[int]]
+        :param subsystem_to_keep: Indices of subsystems to keep (complement is traced out).
+            Mutually exclusive with ``subsystems_to_trace_out``.
+        :type subsystem_to_keep: Optional[Sequence[int]]
         :return: A new QuOperator or QuScalar representing the result.
         :rtype: QuOperator
         """
-        out_edges_trace = [self.out_edges[i] for i in subsystems_to_trace_out]
-        in_edges_trace = [self.in_edges[i] for i in subsystems_to_trace_out]
+        _, traceout = _resolve_subsystem(
+            len(self.in_edges),
+            subsystem_to_keep,
+            subsystems_to_trace_out,
+            name="partial_trace",
+        )
+        out_edges_trace = [self.out_edges[i] for i in traceout]
+        in_edges_trace = [self.in_edges[i] for i in traceout]
 
         check_spaces(in_edges_trace, out_edges_trace)
 
@@ -1076,7 +1241,12 @@ class QuVector(QuOperator):
         """
         return self @ self.adjoint()
 
-    def reduced_density(self, subsystems_to_trace_out: Collection[int]) -> "QuOperator":
+    def reduced_density(
+        self,
+        subsystems_to_trace_out: Optional[Sequence[int]] = None,
+        *,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
+    ) -> "QuOperator":
         """
         The reduced density of the operator.
 
@@ -1093,13 +1263,23 @@ class QuVector(QuOperator):
         This does not modify the original network. The original ordering of the
         remaining subsystems is maintained.
 
+        Exactly one of ``subsystems_to_trace_out`` (legacy, positional) or
+        ``subsystem_to_keep`` must be given. See :meth:`QuOperator.partial_trace`
+        for the resolution and validation semantics.
+
         :param subsystems_to_trace_out: Indices of subsystems to trace out.
-        :type subsystems_to_trace_out: Collection[int]
+        :type subsystems_to_trace_out: Optional[Sequence[int]]
+        :param subsystem_to_keep: Indices of subsystems to keep (complement is traced out).
+            Mutually exclusive with ``subsystems_to_trace_out``.
+        :type subsystem_to_keep: Optional[Sequence[int]]
         :return: The QuOperator of the reduced density of the operator with given subsystems.
         :rtype: QuOperator
         """
         rho = self.projector()
-        return rho.partial_trace(subsystems_to_trace_out)
+        return rho.partial_trace(
+            subsystems_to_trace_out,
+            subsystem_to_keep=subsystem_to_keep,
+        )
 
 
 class QuAdjointVector(QuOperator):
@@ -1195,7 +1375,12 @@ class QuAdjointVector(QuOperator):
         """
         return self.adjoint() @ self
 
-    def reduced_density(self, subsystems_to_trace_out: Collection[int]) -> "QuOperator":
+    def reduced_density(
+        self,
+        subsystems_to_trace_out: Optional[Sequence[int]] = None,
+        *,
+        subsystem_to_keep: Optional[Sequence[int]] = None,
+    ) -> "QuOperator":
         """
         The reduced density of the operator.
 
@@ -1212,13 +1397,23 @@ class QuAdjointVector(QuOperator):
         This does not modify the original network. The original ordering of the
         remaining subsystems is maintained.
 
+        Exactly one of ``subsystems_to_trace_out`` (legacy, positional) or
+        ``subsystem_to_keep`` must be given. See :meth:`QuOperator.partial_trace`
+        for the resolution and validation semantics.
+
         :param subsystems_to_trace_out: Indices of subsystems to trace out.
-        :type subsystems_to_trace_out: Collection[int]
+        :type subsystems_to_trace_out: Optional[Sequence[int]]
+        :param subsystem_to_keep: Indices of subsystems to keep (complement is traced out).
+            Mutually exclusive with ``subsystems_to_trace_out``.
+        :type subsystem_to_keep: Optional[Sequence[int]]
         :return: The QuOperator of the reduced density of the operator with given subsystems.
         :rtype: QuOperator
         """
         rho = self.projector()
-        return rho.partial_trace(subsystems_to_trace_out)
+        return rho.partial_trace(
+            subsystems_to_trace_out,
+            subsystem_to_keep=subsystem_to_keep,
+        )
 
 
 class QuScalar(QuOperator):
@@ -2512,52 +2707,100 @@ def trace_product(*o: Union[Tensor, QuOperator]) -> Tensor:
 
 
 @op2tensor
-def entanglement_entropy(state: Tensor, cut: Union[int, List[int]]) -> Tensor:
+def entanglement_entropy(
+    state: Tensor,
+    cut: Union[int, List[int], Tuple[int, ...], None] = None,
+    *,
+    subsystem_to_keep: Optional[Sequence[int]] = None,
+    subsystems_to_trace_out: Optional[Sequence[int]] = None,
+    dim: Optional[int] = None,
+) -> Tensor:
     """
     Compute the von Neumann entanglement entropy of ``state`` across the bipartition
     defined by ``cut``.
 
+    The traced-out subsystem can be specified via the legacy ``cut`` argument
+    (``int`` = ``list(range(cut))`` i.e. ``[0, cut)``; or an explicit site list)
+    or, preferably, via exactly one of ``subsystem_to_keep`` /
+    ``subsystems_to_trace_out``. See :func:`reduced_density_matrix` for the
+    full resolution semantics; if both ``cut`` and a new argument are given,
+    the new argument wins and ``cut`` is ignored (with a ``UserWarning``).
+
     :param state: wavefunction or density matrix of the full system
     :type state: Tensor
-    :param cut: site index (or list of indices) defining the subsystem to trace out
-    :type cut: Union[int, List[int]]
+    :param cut: legacy trace-out specification; prefer the dual arguments below.
+    :type cut: Union[int, List[int], Tuple[int, ...], None]
+    :param subsystem_to_keep: sites to keep (all others are traced out).
+        Mutually exclusive with ``subsystems_to_trace_out``.
+    :type subsystem_to_keep: Optional[Sequence[int]]
+    :param subsystems_to_trace_out: sites to trace out.
+    :type subsystems_to_trace_out: Optional[Sequence[int]]
+    :param dim: dimension of qudit system, defaults to 2
+    :type dim: Optional[int]
     :return: the von Neumann entanglement entropy :math:`S = -\\mathrm{Tr}(\\rho \\log\\rho)`
     :rtype: Tensor
     """
-    rho = reduced_density_matrix(state, cut)
+    d = 2 if dim is None else dim
+    if len(state.shape) == 2 and state.shape[0] == state.shape[1]:
+        n = _infer_num_sites(state.shape[0], d)
+    else:
+        n = _infer_num_sites(int(backend.sizen(state)), d)
+    traceout = _resolve_cut_or_subsystem(
+        n, cut, subsystem_to_keep, subsystems_to_trace_out, name="entanglement_entropy"
+    )
+    rho = reduced_density_matrix(state, subsystems_to_trace_out=traceout, dim=dim)
     return entropy(rho)
 
 
 def reduced_wavefunction(
     state: Tensor,
-    cut: List[int],
+    cut: Union[List[int], Tuple[int, ...], None] = None,
     measure: Optional[List[int]] = None,
     dim: Optional[int] = None,
+    *,
+    subsystem_to_keep: Optional[Sequence[int]] = None,
+    subsystems_to_trace_out: Optional[Sequence[int]] = None,
 ) -> Tensor:
     """
     Compute the reduced wavefunction from the quantum state ``state``.
     The fixed measure result is guaranteed by users,
     otherwise final normalization may required in the return
 
+    The reduced (measured) sites can be specified via the legacy ``cut``
+    argument (an explicit site list) or, preferably, via exactly one of
+    ``subsystem_to_keep`` / ``subsystems_to_trace_out``. See
+    :func:`reduced_density_matrix` for the resolution semantics; if both
+    ``cut`` and a new argument are given, the new argument wins and ``cut``
+    is ignored (with a ``UserWarning``).
+
     :param state: wavefunction of the full system
     :type state: Tensor
-    :param cut: the list of position for qubit to be reduced
-    :type cut: List[int]
-    :param measure: the fixed results of given qubits in the same shape list as ``cut``
+    :param cut: the list of position for qubit to be reduced; prefer the dual
+        arguments below.
+    :type cut: Union[List[int], Tuple[int, ...], None]
+    :param measure: the fixed results of given qubits in the same shape list as the reduced sites
     :type measure: List[int]
     :return: the (unnormalized) reduced wavefunction on the remaining sites
     :rtype: Tensor
     :param dim: dimension of qudit system
     :type dim: int
+    :param subsystem_to_keep: sites to keep (all others are reduced).
+        Mutually exclusive with ``subsystems_to_trace_out``.
+    :type subsystem_to_keep: Optional[Sequence[int]]
+    :param subsystems_to_trace_out: sites to reduce (measure out).
+    :type subsystems_to_trace_out: Optional[Sequence[int]]
     """
     dim = 2 if dim is None else dim
-    if measure is None:
-        measure = [0 for _ in cut]
     s = backend.reshaped(state, dim)
     n = len(backend.shape_tuple(s))
+    traceout = _resolve_cut_or_subsystem(
+        n, cut, subsystem_to_keep, subsystems_to_trace_out, name="reduced_wavefunction"
+    )
+    if measure is None:
+        measure = [0 for _ in traceout]
     s_node = Gate(s)
     end_nodes = []
-    for c, m in zip(cut, measure):
+    for c, m in zip(traceout, measure):
         oh = backend.cast(
             backend.one_hot(backend.cast(backend.convert_to_tensor(m), "int32"), dim),
             dtypestr,
@@ -2567,26 +2810,42 @@ def reduced_wavefunction(
         s_node[c] ^ end_node[0]
     new_node = contractor(
         [s_node] + end_nodes,
-        output_edge_order=[s_node[i] for i in range(n) if i not in cut],
+        output_edge_order=[s_node[i] for i in range(n) if i not in traceout],
     )
     return backend.reshape(new_node.tensor, [-1])
 
 
 def reduced_density_matrix(
     state: Union[Tensor, QuOperator],
-    cut: Union[int, List[int]],
+    cut: Union[int, List[int], Tuple[int, ...], None] = None,
     p: Optional[Tensor] = None,
     normalize: bool = True,
     dim: Optional[int] = None,
+    *,
+    subsystem_to_keep: Optional[Sequence[int]] = None,
+    subsystems_to_trace_out: Optional[Sequence[int]] = None,
 ) -> Union[Tensor, QuOperator]:
     r"""
     Compute the reduced density matrix from the quantum state ``state``.
 
+    The subsystem can be specified in either of two equivalent ways:
+
+    * ``cut`` (legacy): the indices to trace out. If ``cut`` is an ``int``,
+      it indicates ``[0, cut)`` (i.e. ``list(range(cut))``) as the traced-out
+      region; if it is a sequence, it is the explicit site list.
+    * ``subsystem_to_keep`` / ``subsystems_to_trace_out`` (preferred): exactly
+      one must be given; the other is inferred as the complement. These are
+      mutually exclusive with each other.
+
+    If both ``cut`` and one of the new arguments are given, the new argument
+    takes precedence and ``cut`` is ignored (a ``UserWarning`` is emitted).
+
     :param state: The quantum state in form of Tensor or QuOperator.
     :type state: Union[Tensor, QuOperator]
-    :param cut: the index list that is traced out, if cut is a int,
-        it indicates [0, cut] as the traced out region
-    :type cut: Union[int, List[int]]
+    :param cut: legacy trace-out specification (int = ``list(range(cut))``,
+        i.e. ``[0, cut)``; or an explicit site list). Prefer
+        ``subsystem_to_keep``/``subsystems_to_trace_out``.
+    :type cut: Union[int, List[int], Tuple[int, ...], None]
     :param p: probability decoration, default is None.
     :type p: Optional[Tensor]
     :return: The reduced density matrix.
@@ -2595,21 +2854,43 @@ def reduced_density_matrix(
     :type normalize: bool
     :param dim: dimension of qudit system
     :type dim: int
+    :param subsystem_to_keep: sites to keep (all others are traced out).
+        Mutually exclusive with ``subsystems_to_trace_out``.
+    :type subsystem_to_keep: Optional[Sequence[int]]
+    :param subsystems_to_trace_out: sites to trace out.
+    :type subsystems_to_trace_out: Optional[Sequence[int]]
     """
     dim = 2 if dim is None else dim
-    if isinstance(cut, list) or isinstance(cut, tuple) or isinstance(cut, set):
-        traceout = list(cut)
-    else:
-        traceout = [i for i in range(cut)]
     if isinstance(state, QuOperator):
         if p is not None:
             raise NotImplementedError(
                 "p arguments is not supported when state is a `QuOperator`"
             )
+        # A square QuOperator (out and in edges both present) can be partially
+        # traced directly. A pure-state vector (QuVector / QuAdjointVector) has
+        # no in-edges, so partial_trace would IndexError; route it through
+        # reduced_density, which projects first (|psi><psi|) then traces.
+        n = len(state.out_edges) if state.is_vector() else len(state.in_edges)
+        traceout = _resolve_cut_or_subsystem(
+            n,
+            cut,
+            subsystem_to_keep,
+            subsystems_to_trace_out,
+            name="reduced_density_matrix",
+        )
+        if state.is_vector() or state.is_adjoint_vector():
+            return state.reduced_density(subsystems_to_trace_out=traceout)  # type: ignore[attr-defined]
         return state.partial_trace(traceout)
     if len(state.shape) == 2 and state.shape[0] == state.shape[1]:
         # density operator
         freedom = _infer_num_sites(state.shape[0], dim)
+        traceout = _resolve_cut_or_subsystem(
+            freedom,
+            cut,
+            subsystem_to_keep,
+            subsystems_to_trace_out,
+            name="reduced_density_matrix",
+        )
         left = traceout + [i for i in range(freedom) if i not in traceout]
         right = [i + freedom for i in left]
 
@@ -2643,6 +2924,13 @@ def reduced_density_matrix(
         w = state / backend.norm(state)
         size = int(backend.sizen(state))
         freedom = _infer_num_sites(size, dim)
+        traceout = _resolve_cut_or_subsystem(
+            freedom,
+            cut,
+            subsystem_to_keep,
+            subsystems_to_trace_out,
+            name="reduced_density_matrix",
+        )
         perm = [i for i in range(freedom) if i not in traceout]
         perm = perm + traceout
         w = backend.reshape(w, [dim] * freedom)
@@ -2958,44 +3246,71 @@ def double_state(h: Tensor, beta: float = 1) -> Tensor:
 
 @op2tensor
 def mutual_information(
-    s: Tensor, cut: Union[int, List[int]], dim: Optional[int] = None
+    s: Tensor,
+    cut: Union[int, List[int], Tuple[int, ...], None] = None,
+    dim: Optional[int] = None,
+    *,
+    subsystem_to_keep: Optional[Sequence[int]] = None,
+    subsystems_to_trace_out: Optional[Sequence[int]] = None,
 ) -> Tensor:
     """
-    Mutual information between AB subsystem described by ``cut``.
+    Mutual information between the two sides of the bipartition described by ``cut``.
+
+    The traced-out subsystem can be specified via the legacy ``cut`` argument
+    (``int`` = ``list(range(cut))`` i.e. ``[0, cut)``; or an explicit site list)
+    or, preferably, via exactly one of ``subsystem_to_keep`` /
+    ``subsystems_to_trace_out``. See :func:`reduced_density_matrix` for the
+    full resolution semantics; if both ``cut`` and a new argument are given,
+    the new argument wins and ``cut`` is ignored (with a ``UserWarning``).
 
     :param s: The density matrix in form of Tensor.
     :type s: Tensor
-    :param cut: The AB subsystem.
-    :type cut: Union[int, List[int]]
-    :param dim: The diagonal matrix in form of Tensor.
-    :type dim: Tensor
+    :param cut: legacy trace-out specification; prefer the dual arguments below.
+    :type cut: Union[int, List[int], Tuple[int, ...], None]
+    :param dim: dimension of qudit system, defaults to 2.
+    :type dim: Optional[int]
+    :param subsystem_to_keep: sites to keep (all others form the other subsystem).
+        Mutually exclusive with ``subsystems_to_trace_out``.
+    :type subsystem_to_keep: Optional[Sequence[int]]
+    :param subsystems_to_trace_out: sites to trace out (defines subsystem A).
+    :type subsystems_to_trace_out: Optional[Sequence[int]]
     :return: The mutual information between AB subsystem described by ``cut``.
     :rtype: Tensor
     """
     dim = 2 if dim is None else dim
-    if isinstance(cut, list) or isinstance(cut, tuple) or isinstance(cut, set):
-        traceout = list(cut)
-    else:
-        traceout = [i for i in range(cut)]
-
     if len(s.shape) == 2 and s.shape[0] == s.shape[1]:
         # mixed state
         n = _infer_num_sites(s.shape[0], dim=dim)
+        traceout = _resolve_cut_or_subsystem(
+            n,
+            cut,
+            subsystem_to_keep,
+            subsystems_to_trace_out,
+            name="mutual_information",
+        )
         hab = entropy(s)
 
         # subsystem a
-        rhoa = reduced_density_matrix(s, traceout, dim=dim)
+        rhoa = reduced_density_matrix(s, subsystems_to_trace_out=traceout, dim=dim)
         ha = entropy(rhoa)
 
         # need subsystem b as well
         other = tuple(i for i in range(n) if i not in traceout)
-        rhob = reduced_density_matrix(s, other, dim=dim)  # type: ignore
+        rhob = reduced_density_matrix(s, subsystems_to_trace_out=other, dim=dim)  # type: ignore
         hb = entropy(rhob)
 
     # pure system
     else:
+        n = _infer_num_sites(int(backend.sizen(s)), dim=dim)
+        traceout = _resolve_cut_or_subsystem(
+            n,
+            cut,
+            subsystem_to_keep,
+            subsystems_to_trace_out,
+            name="mutual_information",
+        )
         hab = 0.0
-        rhoa = reduced_density_matrix(s, traceout, dim=dim)
+        rhoa = reduced_density_matrix(s, subsystems_to_trace_out=traceout, dim=dim)
         ha = hb = entropy(rhoa)
 
     return ha + hb - hab
