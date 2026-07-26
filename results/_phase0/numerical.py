@@ -310,7 +310,7 @@ def apply_policy(route, dtype, metrics):
 
 
 # ---------------------------------------------------------------------------
-# Dual-gate accuracy policy v3 (spec: 2026-07-26-region-fused-dual-gate-accuracy-policy.md)
+# Dual-gate accuracy policy v5 (spec: 2026-07-26-region-fused-dual-gate-accuracy-policy.md)
 # Frozen constants + compute_metrics_dual_gate + apply_policy_region_fused.
 # ---------------------------------------------------------------------------
 
@@ -322,11 +322,18 @@ DEFAULT_REGION_FUSED_CONSTANTS: dict = {
 }
 
 # Policy identity (frozen at freeze).
-POLICY_ID = "REGION_FUSED_FULL_ANCHOR_ACCURACY_v4"
-METRIC_SCHEMA_VERSION = "dual-gate-v4"
-POLICY_FILE_SHA256 = (
-    "fed7dc81fc3c4ea01bcdb0a205c0cceca9ea47571456c86c9ab9efbeae88c074"
-)
+POLICY_ID = "REGION_FUSED_FULL_ANCHOR_ACCURACY_v5"
+METRIC_SCHEMA_VERSION = "dual-gate-v5"
+POLICY_FILE_SHA256 = "3ecfa370409e2397319276b8aa1b64bf19a816b2e8e0fb478b51569bf383ced1"
+
+
+def _region_policy_identity_matches(metrics):
+    file_hash = metrics.get("policy_file_sha256")
+    return (
+        metrics.get("policy_id") == POLICY_ID
+        and metrics.get("metric_schema_version") == METRIC_SCHEMA_VERSION
+        and file_hash == POLICY_FILE_SHA256
+    )
 
 
 def compute_metrics_dual_gate(output, reference, alpha=1e-3):
@@ -504,7 +511,12 @@ def apply_policy_region_fused(metrics, constants=None):
     ref_rms = metrics.get("reference_rms")
     if ref_rms is None:
         return "UNKNOWN", ["UNKNOWN_MISSING_METRIC"]
-    if not isinstance(ref_rms, (int, float)) or isinstance(ref_rms, bool):
+    if (
+        not isinstance(ref_rms, (int, float))
+        or isinstance(ref_rms, bool)
+        or not math.isfinite(ref_rms)
+        or ref_rms < 0
+    ):
         return "FAIL", ["FAIL_INVALID_METRIC"]
     if ref_rms == 0.0:
         return "UNKNOWN", ["UNKNOWN_ALL_ZERO_REFERENCE"]
@@ -569,7 +581,38 @@ def _cell_key(row):
     )
 
 
-def required_cell_keys():
+def _normalize_region_seeds(region_seeds):
+    """Return a deterministic, duplicate-free tuple of valid integer seeds."""
+    seeds = tuple(SEEDS if region_seeds is None else region_seeds)
+    if len(seeds) < 3:
+        raise ValueError("region_fused requires at least three frozen seeds")
+    if any(
+        not isinstance(seed, int) or isinstance(seed, bool) or seed < 0
+        for seed in seeds
+    ):
+        raise ValueError("region_fused seeds must be non-negative integers (not bool)")
+    if len(set(seeds)) != len(seeds):
+        raise ValueError("region_fused seeds must be unique")
+    return seeds
+
+
+def _region_expected_coverage_valid(expected_keys):
+    region = {key for key in expected_keys if key[0] == "region_fused"}
+    seeds = {key[5] for key in region}
+    return (
+        len(region) == 18
+        and len(seeds) == 6
+        and {0, 1, 2}.issubset(seeds)
+        and {key[3] for key in region} == set(LEVELS)
+        and all(
+            sum(1 for key in region if key[3] == level and key[5] == seed) == 1
+            for level in LEVELS
+            for seed in seeds
+        )
+    )
+
+
+def required_cell_keys(region_seeds=None):
     """Build the canonical EXPECTED set of numerical cell keys (plan §6 3.1).
 
     The schema is the outer product of (route, dtype, shape, level,
@@ -587,6 +630,7 @@ def required_cell_keys():
     (errata #2 / #4: unified token + baseline/mixed producers MUST write
     version tokens so those routes can match).
     """
+    region_seeds = _normalize_region_seeds(region_seeds)
     keys = set()
     for shape in SHAPES:
         for route in ("planar", "grouped"):
@@ -597,7 +641,7 @@ def required_cell_keys():
                         keys.add((route, dtype, tuple(shape), level, ver, seed, "c64"))
     for level in LEVELS:
         ver = _version_token_for_level(level)
-        for seed in SEEDS:
+        for seed in region_seeds:
             keys.add(
                 (
                     "region_fused",
@@ -869,7 +913,16 @@ def aggregate(rows, expected_counts, case_hashes, legit_not_run, shape_drift=Fal
             else:
                 for r in measured_rows:
                     if _cell_key(r) in exp:
-                        v, _ = apply_policy(route, dtype, r)
+                        if route == "region_fused":
+                            # Recompute the v5 dual-gate result from the recorded
+                            # per-cell metrics.  ``policy_pass`` is producer output
+                            # and is never a trust input to the aggregate.
+                            if _region_policy_identity_matches(r):
+                                v, _ = apply_policy_region_fused(r)
+                            else:
+                                v = "UNKNOWN"
+                        else:
+                            v, _ = apply_policy(route, dtype, r)
                         route_verdicts.append(v or "UNKNOWN")
 
         if not route_verdicts:
@@ -880,6 +933,14 @@ def aggregate(rows, expected_counts, case_hashes, legit_not_run, shape_drift=Fal
             criterion = "UNKNOWN"
         else:
             criterion = "PASS"
+        if (
+            route == "region_fused"
+            and criterion == "PASS"
+            and not _region_expected_coverage_valid(expected_keys)
+        ):
+            # Three calibration seeds remain useful diagnostics, but only the
+            # frozen 3-profile x 6-seed matrix can establish a v5 PASS.
+            criterion = "UNKNOWN"
         statuses.append(criterion)
         per_route.append(
             {
@@ -911,6 +972,9 @@ def aggregate(rows, expected_counts, case_hashes, legit_not_run, shape_drift=Fal
         "schema_version": "numerical-validation-v1",
         "case_binding": case_hashes,
         "per_route": per_route,
+        "region_fused_dual_gate_summary": summarize_region_fused_rows(
+            rows, expected_keys
+        ),
         "overall_numerical_status": overall,
         "fail_closed_reasons": fail_closed_reasons,
     }
@@ -1040,6 +1104,16 @@ _CSV_COLUMNS = [
     "reference_norm",
     "baseline_norm",
     "cancellation_ratio",
+    # v5 region_fused dual-gate fields.  They are empty for other routes but
+    # must survive CSV round-trips so regen-no-gpu can recompute the policy.
+    "reference_rms",
+    "global_rel_l2",
+    "local_scaled_max",
+    "local_scaled_argmax_reference_abs",
+    "any_nan_inf",
+    "policy_id",
+    "policy_file_sha256",
+    "metric_schema_version",
 ]
 
 
@@ -1120,6 +1194,34 @@ def write_csv(path, rows):
                     f"{rnorm:.6e}" if rnorm is not None else "",
                     f"{bnorm:.6e}" if bnorm is not None else "",
                     f"{cratio:.6e}" if cratio is not None else "",
+                    (
+                        f"{r['reference_rms']:.17g}"
+                        if r.get("reference_rms") is not None
+                        else ""
+                    ),
+                    (
+                        f"{r['global_rel_l2']:.17g}"
+                        if r.get("global_rel_l2") is not None
+                        else ""
+                    ),
+                    (
+                        f"{r['local_scaled_max']:.17g}"
+                        if r.get("local_scaled_max") is not None
+                        else ""
+                    ),
+                    (
+                        f"{r['local_scaled_argmax_reference_abs']:.17g}"
+                        if r.get("local_scaled_argmax_reference_abs") is not None
+                        else ""
+                    ),
+                    (
+                        int(r["any_nan_inf"])
+                        if isinstance(r.get("any_nan_inf"), bool)
+                        else ""
+                    ),
+                    r.get("policy_id", ""),
+                    r.get("policy_file_sha256", ""),
+                    r.get("metric_schema_version", ""),
                 ]
             )
 
@@ -1361,12 +1463,6 @@ def _run_region_fused_full_anchor(A, B, D, steps):
     return E_mat, E_fus
 
 
-# Module-level cache for collect_region_fused dual-gate summary across seeds.
-# Keyed by level; stores per-seed dg results + summary fields so subsequent
-# calls for the same level reuse the cached computation.
-_REGION_FUSED_DG_CACHE: dict = {}
-
-
 def collect_region_fused(level, seed):
     """region_fused correctness at the FULL ANCHOR (G5; spec §3, §7.2).
 
@@ -1375,21 +1471,19 @@ def collect_region_fused(level, seed):
     E=D[64,64]@T (c64), via the direct-recompute fused_pte_kernel (G1,
     correctness-verified) vs the materialized oracle. Inputs are generated
     at the requested dynamic-range level (baseline/mixed_scale/cancellation)
-    via ``make_inputs`` so the 3-level x 3-seed matrix exercises real
+    via ``make_inputs`` so the 3-level x explicit-seed matrix exercises real
     adversarial dynamic range at the full anchor, not just the small
     contract. Returns a MEASURED row with real relative_l2/max_abs/max_rel/
-    nan_inf AND v4 dual-gate per-cell + summary fields AND the canonical
+    nan_inf AND v5 dual-gate per-cell fields AND the canonical
     input_construction_version token.
 
     P1 #4 fix (reviewer B v3): wired to compute_metrics_dual_gate +
     apply_policy_region_fused (NOT the old compute_metrics + apply_policy).
-    Emits v4 per-cell fields (reference_rms, global_rel_l2, local_scaled_max,
+    Emits v5 per-cell fields (reference_rms, global_rel_l2, local_scaled_max,
     local_scaled_argmax_reference_abs, nan_inf, policy_id, policy_file_sha256,
-    metric_schema_version) AND summary fields (worst_global_rel_l2,
-    worst_global_rel_l2_cell_key, worst_local_scaled_max,
-    worst_local_scaled_max_cell_key, any_nan_inf) computed across seeds 0,1,2
-    for this level. Every seed row for the same level gets the same summary
-    values.
+    metric_schema_version). Summary fields are computed later, exactly once,
+    from the complete set of already-measured rows; this collector never runs
+    hidden extra seeds and has no call-order-dependent cache.
     """
     from results._phase0 import region_proto as rp
 
@@ -1406,66 +1500,13 @@ def collect_region_fused(level, seed):
 
     # OLD backward-compatible metrics (relative_l2, max_abs, max_rel, nan_inf).
     metrics = compute_metrics(cp.asnumpy(E_fus), cp.asnumpy(E_mat))
-    # NEW v4 dual-gate metrics for this seed.
-    dg = compute_metrics_dual_gate(
-        cp.asnumpy(E_fus), cp.asnumpy(E_mat), alpha=1e-3
-    )
+    # NEW v5 dual-gate metrics for this seed.
+    dg = compute_metrics_dual_gate(cp.asnumpy(E_fus), cp.asnumpy(E_mat), alpha=1e-3)
     verdict, _ = apply_policy_region_fused(dg)
-    # Free GPU memory before returning (the 9-cell matrix runs sequentially).
+    # Free GPU memory before returning (the matrix runs sequentially).
     del E_mat, E_fus
     cp.get_default_memory_pool().free_all_blocks()
     cp.cuda.Device(0).synchronize()
-
-    # v4 summary across seeds: compute once per level, cache the results.
-    if level not in _REGION_FUSED_DG_CACHE:
-        dg_by_seed = {s: None for s in SEEDS}
-        dg_by_seed[seed] = dg
-        # Run the other two seeds.
-        for other_seed in SEEDS:
-            if other_seed == seed:
-                continue
-            A2, B2 = make_inputs(level, REGION_FULL_ANCHOR_SHAPE, other_seed)
-            D2 = make_inputs(level, (64, 64, 64), other_seed + 7000)[0]
-            E_mat2, E_fus2 = _run_region_fused_full_anchor(A2, B2, D2, steps)
-            dg2 = compute_metrics_dual_gate(
-                cp.asnumpy(E_fus2), cp.asnumpy(E_mat2), alpha=1e-3
-            )
-            dg_by_seed[other_seed] = dg2
-            del E_mat2, E_fus2
-            cp.get_default_memory_pool().free_all_blocks()
-            cp.cuda.Device(0).synchronize()
-        # Compute summary across all 3 seeds.
-        worst_lsm = 0.0
-        worst_lsm_seed = 0
-        worst_gl2 = 0.0
-        worst_gl2_seed = 0
-        any_nan = False
-        for s_id in SEEDS:
-            sdg = dg_by_seed[s_id]
-            if sdg is None:
-                continue
-            if sdg.get("nan_inf") is True:
-                any_nan = True
-            lsm = sdg.get("local_scaled_max")
-            if isinstance(lsm, (int, float)) and math.isfinite(lsm) and lsm > worst_lsm:
-                worst_lsm = lsm
-                worst_lsm_seed = s_id
-            gl2 = sdg.get("global_rel_l2")
-            if (
-                isinstance(gl2, (int, float))
-                and math.isfinite(gl2)
-                and gl2 > worst_gl2
-            ):
-                worst_gl2 = gl2
-                worst_gl2_seed = s_id
-        _REGION_FUSED_DG_CACHE[level] = {
-            "worst_global_rel_l2": worst_gl2,
-            "worst_global_rel_l2_cell_key": f"seed={worst_gl2_seed}",
-            "worst_local_scaled_max": worst_lsm,
-            "worst_local_scaled_max_cell_key": f"seed={worst_lsm_seed}",
-            "any_nan_inf": any_nan,
-        }
-    summary = _REGION_FUSED_DG_CACHE[level]
 
     row = {
         "route": "region_fused",
@@ -1477,7 +1518,7 @@ def collect_region_fused(level, seed):
         "source": "measured",
         # OLD backward-compatible fields
         **metrics,
-        # NEW v4 per-cell dual-gate fields
+        # NEW v5 per-cell dual-gate fields
         "reference_rms": dg["reference_rms"],
         "global_rel_l2": dg["global_rel_l2"],
         "local_scaled_max": dg["local_scaled_max"],
@@ -1486,17 +1527,106 @@ def collect_region_fused(level, seed):
         "policy_id": POLICY_ID,
         "policy_file_sha256": POLICY_FILE_SHA256,
         "metric_schema_version": METRIC_SCHEMA_VERSION,
-        # v4 summary fields (same for all seeds of this level)
-        "worst_global_rel_l2": summary["worst_global_rel_l2"],
-        "worst_global_rel_l2_cell_key": summary["worst_global_rel_l2_cell_key"],
-        "worst_local_scaled_max": summary["worst_local_scaled_max"],
-        "worst_local_scaled_max_cell_key": summary["worst_local_scaled_max_cell_key"],
-        "any_nan_inf": summary["any_nan_inf"],
         "policy_pass": int(verdict == "PASS"),
     }
     if level != "cancellation":
         row["input_construction_version"] = _version_token_for_level(level)
     return _enrich_cancellation_metrics(row)
+
+
+def summarize_region_fused_rows(rows, expected_keys):
+    """Summarize v5 metrics over the exact required region_fused cell set.
+
+    The global-L2 and local maxima are tracked independently, so their cell
+    keys may differ. Missing/duplicate cells or invalid fields leave the
+    summary incomplete instead of silently selecting a passing subset.
+    """
+    required = {key for key in expected_keys if key[0] == "region_fused"}
+    selected = [
+        row
+        for row in rows
+        if row.get("route") == "region_fused"
+        and row.get("source") == MEASURED_SOURCE
+        and _cell_key(row) in required
+    ]
+    by_key = {}
+    duplicates = []
+    for row in selected:
+        key = _cell_key(row)
+        if key in by_key:
+            duplicates.append(key)
+        else:
+            by_key[key] = row
+    missing = required - set(by_key)
+
+    worst_global = None
+    worst_global_key = None
+    worst_local = None
+    worst_local_key = None
+    any_nan_inf = False
+    invalid = []
+
+    def _summary_key(key):
+        return f"{key[3]}:{key[4]}:seed={key[5]}"
+
+    for key, row in by_key.items():
+        if not _region_policy_identity_matches(row):
+            invalid.append((_summary_key(key), "policy_identity"))
+        cell_verdict, _ = apply_policy_region_fused(row)
+        if cell_verdict == "UNKNOWN":
+            invalid.append((_summary_key(key), "policy_verdict_unknown"))
+        nan_inf = row.get("nan_inf")
+        if not isinstance(nan_inf, bool):
+            invalid.append((_summary_key(key), "nan_inf"))
+        elif nan_inf:
+            any_nan_inf = True
+        for field in ("reference_rms", "global_rel_l2", "local_scaled_max"):
+            value = row.get(field)
+            if (
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not math.isfinite(value)
+                or value < 0
+            ):
+                invalid.append((_summary_key(key), field))
+                continue
+            if field == "global_rel_l2" and (
+                worst_global is None or value > worst_global
+            ):
+                worst_global = float(value)
+                worst_global_key = _summary_key(key)
+            if field == "local_scaled_max" and (
+                worst_local is None or value > worst_local
+            ):
+                worst_local = float(value)
+                worst_local_key = _summary_key(key)
+
+    coverage_policy_satisfied = _region_expected_coverage_valid(expected_keys)
+    complete = (
+        coverage_policy_satisfied and not missing and not duplicates and not invalid
+    )
+    if not complete:
+        worst_global = None
+        worst_global_key = None
+        worst_local = None
+        worst_local_key = None
+    return {
+        "policy_id": POLICY_ID,
+        "policy_file_sha256": POLICY_FILE_SHA256,
+        "metric_schema_version": METRIC_SCHEMA_VERSION,
+        "n_cells_expected": len(required),
+        "n_cells_measured": len(by_key),
+        "summary_complete": complete,
+        "coverage_policy_satisfied": coverage_policy_satisfied,
+        "worst_global_rel_l2": worst_global,
+        "worst_global_rel_l2_cell_key": worst_global_key,
+        "worst_local_scaled_max": worst_local,
+        "worst_local_scaled_max_cell_key": worst_local_key,
+        "any_nan_inf": any_nan_inf,
+        "missing_cell_keys": sorted(_summary_key(key) for key in missing),
+        "duplicate_cell_keys": sorted(_summary_key(key) for key in duplicates),
+        "invalid_fields": sorted([list(item) for item in invalid]),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1754,6 +1884,22 @@ def _read_csv_rows(csv_path):
                 "policy_pass": (int(raw["policy_pass"]) if raw["policy_pass"] else 0),
                 "source": source,
             }
+            # v5 region_fused fields. Empty cells round-trip to None, so the
+            # dual-gate consumer fails closed rather than falling back to the
+            # legacy relative_l2/max_rel columns.
+            for field in (
+                "reference_rms",
+                "global_rel_l2",
+                "local_scaled_max",
+                "local_scaled_argmax_reference_abs",
+            ):
+                row[field] = _maybe_float(raw.get(field))
+            ani = (raw.get("any_nan_inf") or "").strip()
+            row["any_nan_inf"] = (
+                bool(int(ani)) if ani in ("0", "1") else (None if not ani else ani)
+            )
+            for field in ("policy_id", "policy_file_sha256", "metric_schema_version"):
+                row[field] = (raw.get(field) or "").strip() or None
             if icv:
                 row["input_construction_version"] = icv
                 row["cancellation_epsilon"] = _maybe_float(
@@ -1836,7 +1982,7 @@ def _emit_not_run_rows(existing_rows, required_keys):
     return not_run_rows
 
 
-def main(run_gpu: bool = True, regen_no_gpu: bool = False):
+def main(run_gpu: bool = True, regen_no_gpu: bool = False, region_seeds=None):
     """Run the full numerical matrix and write numerical_validation.{csv,json}.
 
     run_gpu=False: use whatever collect_* resolve to (test harness monkeypatches them).
@@ -1853,6 +1999,18 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
     if regen_no_gpu:
         existing_csv = os.path.join(OUT_DIR, "numerical_validation.csv")
         rows = _read_csv_rows(existing_csv)
+        if region_seeds is None:
+            inferred = sorted(
+                {
+                    row["seed"]
+                    for row in rows
+                    if row.get("route") == "region_fused"
+                    and row.get("shape") == REGION_FULL_ANCHOR_SHAPE
+                }
+            )
+            region_seeds = inferred or SEEDS
+        region_seeds = _normalize_region_seeds(region_seeds)
+        required_keys = required_cell_keys(region_seeds)
         # Drop any old cutlass rows and regenerate them via the (non-GPU) artifact
         # reader so the baseline rows carry relative_l2=None (no max_rel proxy).
         rows = [r for r in rows if r["route"] != "cutlass_4m_single"]
@@ -1894,7 +2052,7 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
                 r["input_construction_version"] = _version_token_for_level(lvl)
         # Emit explicit NOT_RUN rows for required cells with no CSV row at all
         # (region_fused full-anchor; spec §6 3.3). Makes the CSV self-describing.
-        rows.extend(_emit_not_run_rows(rows, required_cell_keys()))
+        rows.extend(_emit_not_run_rows(rows, required_keys))
         # Enrich cancellation-level rows with the 5 cancellation diagnostic
         # fields (GPU-free numpy CPU). CSV-read rows from a pre-schema-bump CSV
         # and emitted NOT_RUN rows (e.g. region_fused full-anchor cancellation
@@ -1912,11 +2070,13 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
         # numerical_csv_sha256 reflects the final on-disk CSV bytes.
         write_csv(os.path.join(OUT_DIR, "numerical_validation.csv"), rows)
         payload = aggregate(
-            rows, required_cell_keys(), _case_hashes(), legit_not_run, shape_drift=drift
+            rows, required_keys, _case_hashes(), legit_not_run, shape_drift=drift
         )
         write_json(os.path.join(OUT_DIR, "numerical_validation.json"), payload)
         return payload
 
+    region_seeds = _normalize_region_seeds(region_seeds)
+    required_keys = required_cell_keys(region_seeds)
     rows = []
     # planar + grouped: 8 shapes x {C16BF,C32F} x 3 levels x 3 seeds
     for shape in SHAPES:
@@ -1925,10 +2085,11 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
                 for seed in SEEDS:
                     rows.append(collect_planar(shape, dtype, level, seed))
                     rows.append(collect_grouped(shape, dtype, level, seed))
-    # region_fused: G5 full-anchor x 3 levels x 3 seeds (MEASURED via the
+    # region_fused: G5 full-anchor x 3 levels x the explicit frozen seed set
+    # (MEASURED via the
     # direct-recompute fused_pte_kernel vs materialized oracle).
     for level in LEVELS:
-        for seed in SEEDS:
+        for seed in region_seeds:
             rows.append(collect_region_fused(level, seed))
     # cutlass_4m_single: G5 real run x 3 levels x 3 seeds (sm80_fallback kernel
     # at the cutlass anchor; NOT_RUN if toolchain unavailable).
@@ -1937,13 +2098,13 @@ def main(run_gpu: bool = True, regen_no_gpu: bool = False):
             rows.append(collect_cutlass(level, seed))
     # Emit explicit NOT_RUN rows for required cells with no CSV row at all
     # (region_fused full-anchor; spec §6 3.3). Makes the CSV self-describing.
-    rows.extend(_emit_not_run_rows(rows, required_cell_keys()))
+    rows.extend(_emit_not_run_rows(rows, required_keys))
 
     # Plan §5.4 ordering: write the CSV BEFORE computing case_binding so
     # numerical_csv_sha256 reflects the final on-disk CSV bytes.
     write_csv(os.path.join(OUT_DIR, "numerical_validation.csv"), rows)
     payload = aggregate(
-        rows, required_cell_keys(), _case_hashes(), legit_not_run, shape_drift=drift
+        rows, required_keys, _case_hashes(), legit_not_run, shape_drift=drift
     )
     write_json(os.path.join(OUT_DIR, "numerical_validation.json"), payload)
     return payload
@@ -1964,9 +2125,23 @@ if __name__ == "__main__":
         "region_fused rows from the existing CSV, regenerates cutlass rows via "
         "the non-GPU artifact reader, and recomputes the fail-closed aggregate.",
     )
+    parser.add_argument(
+        "--region-seeds",
+        help="Comma-separated frozen region_fused seed list. Required for an "
+        "official policy remeasurement; omitted uses the legacy 0,1,2 set.",
+    )
     args = parser.parse_args()
+    parsed_region_seeds = (
+        tuple(int(value) for value in args.region_seeds.split(","))
+        if args.region_seeds
+        else None
+    )
     if args.regen_no_gpu:
-        result = main(run_gpu=False, regen_no_gpu=True)
+        result = main(
+            run_gpu=False,
+            regen_no_gpu=True,
+            region_seeds=parsed_region_seeds,
+        )
     else:
-        result = main()
+        result = main(region_seeds=parsed_region_seeds)
     print(_json.dumps(result, indent=2))

@@ -77,6 +77,21 @@ PROTO_H = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 BA_H = "035d52a92f49cb540a3762edab9632a723dc4fde1d720d0194f2ef6c3e78a79a"
 
 
+def _v5_accuracy_metadata():
+    return {
+        "summary_complete": True,
+        "n_cells_expected": 18,
+        "n_cells_measured": 18,
+        "required_seed_list": [0, 1, 2, 101, 202, 303],
+        "required_input_profiles": ["baseline", "mixed_scale", "cancellation"],
+        "policy_id": "REGION_FUSED_FULL_ANCHOR_ACCURACY_v5",
+        "policy_file_sha256": "3ecfa370409e2397319276b8aa1b64bf19a816b2e8e0fb478b51569bf383ced1",
+        "metric_schema_version": "dual-gate-v5",
+        "worst_global_rel_l2_cell_key": "baseline:baseline_v1:seed=0",
+        "worst_local_scaled_max_cell_key": "baseline:baseline_v1:seed=0",
+    }
+
+
 def _good_case():
     return {"n": 24, "depth": 10, "fusion": "default", "case_id": "n24_d10_default"}
 
@@ -218,6 +233,7 @@ def _good_prototype():
         "runtime_peak_scope": "full_anchor_pte_v1",
         "runtime_peak_sample_count": 3,
         "full_anchor_correctness": {
+            **_v5_accuracy_metadata(),
             "worst_relative_l2": 1.35e-7,
             "worst_max_rel": 2.4e-7,
             "any_nan_inf": False,
@@ -864,6 +880,7 @@ def test_region_missing_case_binding_not_pass():
         "fused_runtime_allocator_peak_bytes": 100,
         "fused_full_anchor_run": True,
         "full_anchor_correctness": {
+            **_v5_accuracy_metadata(),
             "worst_relative_l2": 1e-7,
             "worst_max_rel": 1e-7,
             "any_nan_inf": False,
@@ -919,6 +936,7 @@ def test_region_full_positive_pass():
         "fused_runtime_allocator_peak_bytes": 1000000000,
         "fused_full_anchor_run": True,
         "full_anchor_correctness": {
+            **_v5_accuracy_metadata(),
             "worst_relative_l2": 1e-7,
             "worst_max_rel": 1e-7,
             "any_nan_inf": False,
@@ -947,15 +965,13 @@ def test_region_full_positive_pass():
     assert token == "PASS", (token, raw)
 
 
-def test_region_committed_artifact_is_measured_pass():
-    """Task 3 + G2 + v4 dual-gate: the committed ``region_prototype.json``
-    (MEASURED, full-anchor run executed, resources measured, approved method)
-    -> reader returns PASS (honest). v4: the committed artifact's
-    ``full_anchor_correctness`` is enriched with the new dual-gate fields
-    (worst_local_scaled_max, worst_global_rel_l2) derived from the existing
-    worst_relative_l2 / worst_max_rel until the artifact is regenerated
-    with the new ``run_full_anchor_correctness`` (which emits both old and
-    new fields)."""
+def test_region_committed_artifact_is_honestly_unknown():
+    """The current artifact predates the v5 identity/coverage freeze.
+
+    Missing v5 provenance plus its PASS self-report is CONFLICT -> UNKNOWN until
+    a frozen-seed remeasurement replaces it. The test must never synthesize new
+    metrics from the legacy ``worst_max_rel`` field.
+    """
     import json
 
     from results._phase0.c2 import _normalize_region_peak
@@ -975,29 +991,17 @@ def test_region_committed_artifact_is_measured_pass():
     assert proto["fused_full_anchor_run"] is True
     assert proto["registers_per_thread"] == 60
     assert proto["occupancy_pct"] == 66.7
-    # v4: inject the new dual-gate fields into full_anchor_correctness
-    # (the committed artifact has old fields; new run_full_anchor_correctness
-    # will emit both). Derive from existing worst_relative_l2 / worst_max_rel.
-    fac = proto.setdefault("full_anchor_correctness", {})
-    if "worst_local_scaled_max" not in fac:
-        fac["worst_local_scaled_max"] = fac.get("worst_max_rel", 1e-7)
-    if "worst_global_rel_l2" not in fac:
-        fac["worst_global_rel_l2"] = fac.get("worst_relative_l2", 1e-7)
-    if "reference_rms" not in fac:
-        fac["reference_rms"] = 1.0
-    if "any_nan_inf" not in fac:
-        fac["any_nan_inf"] = False
     raw = _normalize_region_peak(proto, case_binding_state="MATCH")
+    assert raw["accuracy_state"] == "MISSING", raw
     token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
-    # Bidirectional consistency: verdict=PASS -> expected=PASS; recomputed
-    # token is PASS -> no CONFLICT -> PASS (honest MEASURED PASS).
     from results._phase0.c2 import _REGION_SELF_REPORT_MAP
 
     expected = _REGION_SELF_REPORT_MAP.get(proto.get("verdict"))
     if expected is not None and token != expected:
         raw["consistency_state"] = "CONFLICT"
         token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
-    assert token == "PASS", (token, raw)
+    assert raw["consistency_state"] == "CONFLICT"
+    assert token == "UNKNOWN", (token, raw)
 
 
 # ---------------------------------------------------------------------------
@@ -1023,6 +1027,7 @@ def test_region_negative_gain_fails():
         "fused_runtime_allocator_peak_bytes": 400,
         "fused_full_anchor_run": True,
         "full_anchor_correctness": {
+            **_v5_accuracy_metadata(),
             "worst_relative_l2": 1e-7,
             "worst_max_rel": 1e-7,
             "any_nan_inf": False,
@@ -1063,6 +1068,7 @@ def _p1_full_green_proto():
         "fused_runtime_allocator_peak_bytes": 1000000000,
         "fused_full_anchor_run": True,
         "full_anchor_correctness": {
+            **_v5_accuracy_metadata(),
             "worst_relative_l2": 1e-7,
             "worst_max_rel": 1e-7,
             "any_nan_inf": False,
@@ -1115,12 +1121,12 @@ def test_p1_region_zero_runtime_sample_count_not_pass():
 
 
 def test_p1_region_bad_full_anchor_correctness_not_pass():
-    """P1 #2 mutation + v4 dual-gate: full_anchor_correctness.worst_global_rel_l2=1.0
+    """P1 #2 mutation + v5 dual-gate: full_anchor_correctness.worst_global_rel_l2=1.0
     (above threshold), but top-level relative_l2=1e-7 (below threshold) -> gate
     must NOT PASS. Pre-fix: gate read top-level relative_l2 (good) ->
     accuracy_state=PASSED -> PASS (fail-open). Post-fix: gate reads
     full_anchor_correctness.worst_global_rel_l2 (bad) -> accuracy_state=FAILED
-    -> not PASS. v4: reads new fields worst_local_scaled_max + worst_global_rel_l2."""
+    -> not PASS. v5 reads new fields worst_local_scaled_max + worst_global_rel_l2."""
     from results._phase0.c2 import _normalize_region_peak
     from results._phase0.gate_contracts import GATE_CONTRACTS, evaluate_gate
 
@@ -1128,6 +1134,7 @@ def test_p1_region_bad_full_anchor_correctness_not_pass():
     proto["relative_l2"] = 1e-7  # stale top-level (would pass if read)
     proto["max_rel"] = 1e-7  # stale top-level (would pass if read)
     proto["full_anchor_correctness"] = {
+        **_v5_accuracy_metadata(),
         "worst_relative_l2": 1e-7,
         "worst_max_rel": 1e-7,
         "any_nan_inf": False,
@@ -1142,8 +1149,8 @@ def test_p1_region_bad_full_anchor_correctness_not_pass():
 
 
 def test_p1_region_nan_inf_full_anchor_correctness_fails():
-    """P1 #2 mutation + v4 dual-gate: full_anchor_correctness.any_nan_inf=true ->
-    gate must FAIL. v4: any_nan_inf MUST be strict bool False; anything else ->
+    """P1 #2 mutation + v5 dual-gate: full_anchor_correctness.any_nan_inf=true ->
+    gate must FAIL. v5: any_nan_inf MUST be strict bool False; anything else ->
     FAILED."""
     from results._phase0.c2 import _normalize_region_peak
     from results._phase0.gate_contracts import GATE_CONTRACTS, evaluate_gate
@@ -1152,6 +1159,7 @@ def test_p1_region_nan_inf_full_anchor_correctness_fails():
     proto["relative_l2"] = 1e-7  # stale top-level (would pass if read)
     proto["max_rel"] = 1e-7
     proto["full_anchor_correctness"] = {
+        **_v5_accuracy_metadata(),
         "worst_relative_l2": 1e-7,
         "worst_max_rel": 1e-7,
         "any_nan_inf": True,  # BAD: non-finite output in full-anchor
@@ -1245,7 +1253,7 @@ def test_c2_v3_accuracy_state_no_alias_worst_max_rel():
 
 # ---------------------------------------------------------------------------
 # P1 #5 (reviewer B v4): negative / NaN / Inf values in full_anchor_correctness
-# v4 fields -> accuracy_state=FAILED (fail-closed). Previously only isinstance
+# v5 fields -> accuracy_state=FAILED (fail-closed). Previously only isinstance
 # check was performed; negative/NaN/Inf values silently passed (fail-open).
 # ---------------------------------------------------------------------------
 
@@ -1265,52 +1273,53 @@ def _p1_5_green_proto():
         "registers_per_thread": 60,
         "occupancy_pct": 100.0,
         "full_anchor_correctness": {
+            **_v5_accuracy_metadata(),
             "any_nan_inf": False,
             "worst_global_rel_l2": 1e-7,
-            "worst_global_rel_l2_cell_key": "seed=0",
+            "worst_global_rel_l2_cell_key": "baseline:baseline_v1:seed=0",
             "worst_local_scaled_max": 1e-7,
-            "worst_local_scaled_max_cell_key": "seed=0",
+            "worst_local_scaled_max_cell_key": "baseline:baseline_v1:seed=0",
         },
     }
 
 
 def test_p1_5_worst_local_scaled_max_negative_fails():
     """P1 #5: worst_local_scaled_max=-1 -> accuracy_state=FAILED (negative value
-    invalid per v4 spec)."""
+    invalid per v5 spec)."""
     from results._phase0.c2 import _normalize_region_peak
 
     proto = _p1_5_green_proto()
     proto["full_anchor_correctness"]["worst_local_scaled_max"] = -1.0
     raw = _normalize_region_peak(proto, case_binding_state="MATCH")
-    assert raw["accuracy_state"] == "FAILED", (
-        f"negative worst_local_scaled_max must be FAILED, got {raw['accuracy_state']}"
-    )
+    assert (
+        raw["accuracy_state"] == "FAILED"
+    ), f"negative worst_local_scaled_max must be FAILED, got {raw['accuracy_state']}"
 
 
 def test_p1_5_worst_local_scaled_max_nan_fails():
     """P1 #5: worst_local_scaled_max=NaN -> accuracy_state=FAILED (non-finite
-    invalid per v4 spec)."""
+    invalid per v5 spec)."""
     from results._phase0.c2 import _normalize_region_peak
 
     proto = _p1_5_green_proto()
     proto["full_anchor_correctness"]["worst_local_scaled_max"] = float("nan")
     raw = _normalize_region_peak(proto, case_binding_state="MATCH")
-    assert raw["accuracy_state"] == "FAILED", (
-        f"NaN worst_local_scaled_max must be FAILED, got {raw['accuracy_state']}"
-    )
+    assert (
+        raw["accuracy_state"] == "FAILED"
+    ), f"NaN worst_local_scaled_max must be FAILED, got {raw['accuracy_state']}"
 
 
 def test_p1_5_global_rel_l2_negative_fails():
-    """P1 #5: global_rel_l2=-1 (v4 field name worst_global_rel_l2) ->
+    """P1 #5: global_rel_l2=-1 (v5 field name worst_global_rel_l2) ->
     accuracy_state=FAILED (negative value invalid)."""
     from results._phase0.c2 import _normalize_region_peak
 
     proto = _p1_5_green_proto()
     proto["full_anchor_correctness"]["worst_global_rel_l2"] = -1.0
     raw = _normalize_region_peak(proto, case_binding_state="MATCH")
-    assert raw["accuracy_state"] == "FAILED", (
-        f"negative worst_global_rel_l2 must be FAILED, got {raw['accuracy_state']}"
-    )
+    assert (
+        raw["accuracy_state"] == "FAILED"
+    ), f"negative worst_global_rel_l2 must be FAILED, got {raw['accuracy_state']}"
 
 
 def test_p1_5_global_rel_l2_inf_fails():
@@ -1321,9 +1330,9 @@ def test_p1_5_global_rel_l2_inf_fails():
     proto = _p1_5_green_proto()
     proto["full_anchor_correctness"]["worst_global_rel_l2"] = float("inf")
     raw = _normalize_region_peak(proto, case_binding_state="MATCH")
-    assert raw["accuracy_state"] == "FAILED", (
-        f"Inf worst_global_rel_l2 must be FAILED, got {raw['accuracy_state']}"
-    )
+    assert (
+        raw["accuracy_state"] == "FAILED"
+    ), f"Inf worst_global_rel_l2 must be FAILED, got {raw['accuracy_state']}"
 
 
 def test_p1_5_valid_finite_values_pass():
@@ -1333,9 +1342,52 @@ def test_p1_5_valid_finite_values_pass():
 
     proto = _p1_5_green_proto()
     raw = _normalize_region_peak(proto, case_binding_state="MATCH")
-    assert raw["accuracy_state"] == "PASSED", (
-        f"valid finite values must be PASSED, got {raw['accuracy_state']}"
-    )
+    assert (
+        raw["accuracy_state"] == "PASSED"
+    ), f"valid finite values must be PASSED, got {raw['accuracy_state']}"
+
+
+def test_v5_accuracy_missing_exact_coverage_is_missing():
+    from results._phase0.c2 import _normalize_region_peak
+
+    proto = _p1_5_green_proto()
+    proto["full_anchor_correctness"]["n_cells_measured"] = 17
+    raw = _normalize_region_peak(proto, case_binding_state="MATCH")
+    assert raw["accuracy_state"] == "MISSING"
+
+
+def test_v5_accuracy_missing_policy_identity_is_missing():
+    from results._phase0.c2 import _normalize_region_peak
+
+    proto = _p1_5_green_proto()
+    del proto["full_anchor_correctness"]["policy_id"]
+    raw = _normalize_region_peak(proto, case_binding_state="MATCH")
+    assert raw["accuracy_state"] == "MISSING"
+
+
+def test_v5_accuracy_wrong_policy_hash_is_missing():
+    from results._phase0.c2 import _normalize_region_peak
+
+    proto = _p1_5_green_proto()
+    proto["full_anchor_correctness"]["policy_file_sha256"] = "b" * 64
+    raw = _normalize_region_peak(proto, case_binding_state="MATCH")
+    assert raw["accuracy_state"] == "MISSING"
+
+
+def test_v5_accuracy_malformed_seed_list_fails_closed_without_exception():
+    from results._phase0.c2 import _normalize_region_peak
+
+    proto = _p1_5_green_proto()
+    proto["full_anchor_correctness"]["required_seed_list"] = [
+        0,
+        1,
+        2,
+        101,
+        202,
+        {"bad": "seed"},
+    ]
+    raw = _normalize_region_peak(proto, case_binding_state="MATCH")
+    assert raw["accuracy_state"] == "MISSING"
 
 
 if __name__ == "__main__":

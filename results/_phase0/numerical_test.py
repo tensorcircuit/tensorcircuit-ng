@@ -402,7 +402,8 @@ def test_collect_region_fused_small_contract():
     fused kernel (G1) vs the materialized oracle, at the requested dynamic-
     range level. The small-contract diagnostic path is retired (G5 promotes
     region_fused from NOT_RUN to MEASURED at the full anchor).
-    P1 #4 (v4): also checks v4 dual-gate per-cell + summary fields."""
+    P1 #4 (v5): also checks the v5 dual-gate per-cell fields. The aggregate
+    summary is intentionally not produced by this one-cell collector."""
     from results._phase0.numerical import collect_region_fused, REGION_FULL_ANCHOR_SHAPE
 
     row = collect_region_fused("baseline", seed=0)
@@ -413,19 +414,17 @@ def test_collect_region_fused_small_contract():
     assert row["relative_l2"] < 1e-4
     assert row["source"] == "measured"
     assert row["policy_pass"] == 1, row
-    # P1 #4: v4 per-cell dual-gate fields present
+    # P1 #4: v5 per-cell dual-gate fields present
     assert "reference_rms" in row and row["reference_rms"] is not None
     assert "global_rel_l2" in row and isinstance(row["global_rel_l2"], float)
     assert "local_scaled_max" in row and isinstance(row["local_scaled_max"], float)
     assert "local_scaled_argmax_reference_abs" in row
     assert "policy_id" in row and row["policy_id"] is not None
     assert "metric_schema_version" in row and row["metric_schema_version"] is not None
-    # P1 #4: v4 summary fields present
-    assert "worst_global_rel_l2" in row
-    assert "worst_global_rel_l2_cell_key" in row
-    assert "worst_local_scaled_max" in row
-    assert "worst_local_scaled_max_cell_key" in row
-    assert "any_nan_inf" in row and isinstance(row["any_nan_inf"], bool)
+    # A single-cell collector must not invent an aggregate summary or run
+    # hidden seeds. summarize_region_fused_rows() owns that responsibility.
+    assert "worst_global_rel_l2" not in row
+    assert "worst_local_scaled_max" not in row
 
 
 @pytest.mark.gpu
@@ -697,7 +696,13 @@ def test_aggregate_region_unknown_when_only_small_contract_measured():
     The 9 intended full-anchor cells are missing -> route UNKNOWN, regardless of
     how good the small-contract correctness is. NOT_RUN cells never let a route
     PASS."""
-    from results._phase0.numerical import aggregate, required_cell_keys
+    from results._phase0.numerical import (
+        METRIC_SCHEMA_VERSION,
+        POLICY_FILE_SHA256,
+        POLICY_ID,
+        aggregate,
+        required_cell_keys,
+    )
 
     # 9 small_contract diagnostic rows (real, very low error) -- these are NOT
     # the required full-anchor cells.
@@ -1429,38 +1434,56 @@ def test_legit_not_run_does_not_clear_per_route():
     comparison: the same globally-valid matrix with vs without legit_not_run
     entries yields IDENTICAL per_route criteria and overall_status. (Replaces
     the brief's ``or True`` tautology which asserted nothing.)"""
-    from results._phase0.numerical import aggregate, required_cell_keys
+    from results._phase0.numerical import (
+        METRIC_SCHEMA_VERSION,
+        POLICY_FILE_SHA256,
+        POLICY_ID,
+        aggregate,
+        required_cell_keys,
+    )
 
-    # Construct a globally-valid matrix (no duplicate/drift/mismatch/unavailable)
-    # with ALL required cells measured + passing, so per_route would be PASS.
+    # Construct a globally-valid matrix with the official six-seed region set.
+    frozen_region_seeds = (0, 1, 2, 101, 202, 303)
+    required = required_cell_keys(frozen_region_seeds)
     rows = []
-    for k in required_cell_keys():
+    for k in required:
         route, dtype, shape, level, ver, seed, ref = k
-        rows.append(
-            {
-                "route": route,
-                "dtype": dtype,
-                "shape": shape,
-                "level": level,
-                "input_construction_version": ver,
-                "seed": seed,
-                "reference_dtype": ref,
-                "source": "measured",
-                "relative_l2": 1e-5,
-                "max_rel": 1e-5,
-                "nan_inf": False,
-                "policy_pass": True,
-            }
-        )
+        row = {
+            "route": route,
+            "dtype": dtype,
+            "shape": shape,
+            "level": level,
+            "input_construction_version": ver,
+            "seed": seed,
+            "reference_dtype": ref,
+            "source": "measured",
+            "relative_l2": 1e-5,
+            "max_rel": 1e-5,
+            "nan_inf": False,
+            "policy_pass": True,
+        }
+        if route == "region_fused":
+            row.update(
+                {
+                    "reference_rms": 1.0,
+                    "global_rel_l2": 1e-5,
+                    "local_scaled_max": 1e-5,
+                    "local_scaled_argmax_reference_abs": 1.0,
+                    "policy_id": POLICY_ID,
+                    "policy_file_sha256": POLICY_FILE_SHA256,
+                    "metric_schema_version": METRIC_SCHEMA_VERSION,
+                }
+            )
+        rows.append(row)
     hashes = _valid_case_hashes()
     out_with = aggregate(
         rows,
-        required_cell_keys(),
+        required,
         hashes,
         ["some legit not-run reason"],
         shape_drift=False,
     )
-    out_without = aggregate(rows, required_cell_keys(), hashes, [], shape_drift=False)
+    out_without = aggregate(rows, required, hashes, [], shape_drift=False)
     # per_route criteria IDENTICAL (legit_not_run does NOT clear them)
     pr_with = {r["route"]: r["criterion"] for r in out_with["per_route"]}
     pr_without = {r["route"]: r["criterion"] for r in out_without["per_route"]}
@@ -1623,30 +1646,47 @@ def test_complete_required_matrix_reaches_pass():
     mismatch/unavailable) so it's not a deny-all. The synthetic fixture MAY
     include a cancellation_v2 measured row (the no-GPU prohibition only
     constrains COMMITTED artifacts, not test fixtures)."""
-    from results._phase0.numerical import aggregate, required_cell_keys
-
-    rows = []
-    for k in required_cell_keys():
-        route, dtype, shape, level, ver, seed, ref = k
-        rows.append(
-            {
-                "route": route,
-                "dtype": dtype,
-                "shape": shape,
-                "level": level,
-                "input_construction_version": ver,
-                "seed": seed,
-                "reference_dtype": ref,
-                "source": "measured",
-                "relative_l2": 1e-5,
-                "max_rel": 1e-5,
-                "nan_inf": False,
-                "policy_pass": True,
-            }
-        )
-    out = aggregate(
-        rows, required_cell_keys(), _valid_case_hashes(), [], shape_drift=False
+    from results._phase0.numerical import (
+        METRIC_SCHEMA_VERSION,
+        POLICY_FILE_SHA256,
+        POLICY_ID,
+        aggregate,
+        required_cell_keys,
     )
+
+    frozen_region_seeds = (0, 1, 2, 101, 202, 303)
+    required = required_cell_keys(frozen_region_seeds)
+    rows = []
+    for k in required:
+        route, dtype, shape, level, ver, seed, ref = k
+        row = {
+            "route": route,
+            "dtype": dtype,
+            "shape": shape,
+            "level": level,
+            "input_construction_version": ver,
+            "seed": seed,
+            "reference_dtype": ref,
+            "source": "measured",
+            "relative_l2": 1e-5,
+            "max_rel": 1e-5,
+            "nan_inf": False,
+            "policy_pass": True,
+        }
+        if route == "region_fused":
+            row.update(
+                {
+                    "reference_rms": 1.0,
+                    "global_rel_l2": 1e-5,
+                    "local_scaled_max": 1e-5,
+                    "local_scaled_argmax_reference_abs": 1.0,
+                    "policy_id": POLICY_ID,
+                    "policy_file_sha256": POLICY_FILE_SHA256,
+                    "metric_schema_version": METRIC_SCHEMA_VERSION,
+                }
+            )
+        rows.append(row)
+    out = aggregate(rows, required, _valid_case_hashes(), [], shape_drift=False)
     # Global predicate VALID -> no deny-all reasons
     reasons = " ".join(out["fail_closed_reasons"]).lower()
     assert "duplicate" not in reasons, out["fail_closed_reasons"]
@@ -2026,6 +2066,68 @@ def test_dual_gate_pass():
     assert v == "PASS", r
 
 
+@pytest.mark.parametrize("reference_rms", [-1.0, float("nan"), float("inf"), True])
+def test_v5_invalid_reference_rms_fails(reference_rms):
+    m = {
+        "nan_inf": False,
+        "status": None,
+        "reference_rms": reference_rms,
+        "global_rel_l2": 1e-7,
+        "local_scaled_max": 1e-7,
+    }
+    v, reasons = apply_policy_region_fused(m)
+    assert v == "FAIL"
+    assert reasons == ["FAIL_INVALID_METRIC"]
+
+
+def test_v5_aggregate_recomputes_dual_gate_instead_of_policy_pass():
+    from results._phase0.numerical import _cell_key, aggregate
+
+    row = _dual_gate_row("baseline", 7, 1e-7, 2e-3)
+    row.update({"max_rel": 1e-7, "max_abs": 1e-7, "policy_pass": 1})
+    expected = {_cell_key(row)}
+    result = aggregate([row], expected, _valid_case_hashes(), [])
+    region = next(
+        item for item in result["per_route"] if item["route"] == "region_fused"
+    )
+    assert region["criterion"] == "FAIL"
+
+
+def test_v5_aggregate_rejects_wrong_policy_identity():
+    from results._phase0.numerical import _cell_key, aggregate
+
+    row = _dual_gate_row("baseline", 7, 1e-7, 1e-7)
+    row.update({"max_rel": 1e-7, "max_abs": 1e-7, "policy_pass": 1})
+    row["policy_id"] = "REGION_FUSED_FULL_ANCHOR_ACCURACY_v4"
+    expected = {_cell_key(row)}
+    result = aggregate([row], expected, _valid_case_hashes(), [])
+    region = next(
+        item for item in result["per_route"] if item["route"] == "region_fused"
+    )
+    assert region["criterion"] == "UNKNOWN"
+
+
+def test_v5_three_seed_diagnostic_matrix_cannot_reach_pass():
+    from results._phase0.numerical import aggregate, required_cell_keys
+
+    required = {
+        key for key in required_cell_keys((0, 1, 2)) if key[0] == "region_fused"
+    }
+    rows = []
+    for key in required:
+        _, _, _, level, _, seed, _ = key
+        row = _dual_gate_row(level, seed, 1e-7, 1e-7)
+        if level == "cancellation":
+            row["input_construction_version"] = "cancellation_v2"
+        rows.append(row)
+    result = aggregate(rows, required, _valid_case_hashes(), [])
+    region = next(
+        item for item in result["per_route"] if item["route"] == "region_fused"
+    )
+    assert region["criterion"] == "UNKNOWN"
+    assert result["region_fused_dual_gate_summary"]["summary_complete"] is False
+
+
 def test_dual_gate_fp64_accumulation_accuracy():
     """FP64 accumulation correctness: with FP64-precise inputs, the computed
     global_rel_l2 must match the expected value within 1e-15 relative tolerance
@@ -2046,25 +2148,23 @@ def test_dual_gate_fp64_accumulation_accuracy():
 
 # ---------------------------------------------------------------------------
 # P1 #4 (reviewer B v3): wiring test -- collect_region_fused MUST use
-# compute_metrics_dual_gate + apply_policy_region_fused and emit v4 per-cell
-# + summary fields. RED if fields missing, GREEN after wiring.
+# compute_metrics_dual_gate + apply_policy_region_fused and emit v5 per-cell
+# fields. The summary is a pure post-collection reduction.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.gpu
 def test_p1_4_collect_region_fused_wired_to_dual_gate():
     """P1 #4: collect_region_fused(level=baseline, seed=0) returns a row with
-    source=measured AND all v4 per-cell fields (reference_rms, global_rel_l2,
+    source=measured AND all v5 per-cell fields (reference_rms, global_rel_l2,
     local_scaled_max, local_scaled_argmax_reference_abs, nan_inf, policy_id,
-    policy_file_sha256, metric_schema_version) AND v4 summary fields
-    (worst_global_rel_l2, worst_global_rel_l2_cell_key, worst_local_scaled_max,
-    worst_local_scaled_max_cell_key, any_nan_inf)."""
+    policy_file_sha256, metric_schema_version), without hidden summary runs."""
     from results._phase0.numerical import collect_region_fused
 
     row = collect_region_fused(level="baseline", seed=0)
     assert row["source"] == "measured"
 
-    # v4 per-cell fields
+    # v5 per-cell fields
     for field in (
         "reference_rms",
         "global_rel_l2",
@@ -2075,29 +2175,129 @@ def test_p1_4_collect_region_fused_wired_to_dual_gate():
         "policy_file_sha256",
         "metric_schema_version",
     ):
-        assert field in row, f"missing v4 per-cell field: {field}"
-        assert row[field] is not None or field == "local_scaled_argmax_reference_abs", (
-            f"v4 per-cell field {field} is None"
-        )
-
-    # v4 summary fields
-    for field in (
-        "worst_global_rel_l2",
-        "worst_global_rel_l2_cell_key",
-        "worst_local_scaled_max",
-        "worst_local_scaled_max_cell_key",
-        "any_nan_inf",
-    ):
-        assert field in row, f"missing v4 summary field: {field}"
+        assert field in row, f"missing v5 per-cell field: {field}"
+        assert (
+            row[field] is not None or field == "local_scaled_argmax_reference_abs"
+        ), f"v5 per-cell field {field} is None"
 
     # Field type checks
-    assert isinstance(row["any_nan_inf"], bool)
     assert isinstance(row["global_rel_l2"], float)
     assert isinstance(row["local_scaled_max"], float)
     assert isinstance(row["reference_rms"], float)
-    assert row["policy_id"] == "REGION_FUSED_FULL_ANCHOR_ACCURACY_v4"
-    assert row["metric_schema_version"] == "dual-gate-v4"
-    assert row["policy_file_sha256"] is not None and len(row["policy_file_sha256"]) == 64
+    assert row["policy_id"] == "REGION_FUSED_FULL_ANCHOR_ACCURACY_v5"
+    assert row["metric_schema_version"] == "dual-gate-v5"
+    assert (
+        row["policy_file_sha256"] is not None and len(row["policy_file_sha256"]) == 64
+    )
+
+
+def _dual_gate_row(level, seed, global_rel_l2, local_scaled_max):
+    from results._phase0.numerical import (
+        METRIC_SCHEMA_VERSION,
+        POLICY_FILE_SHA256,
+        POLICY_ID,
+        REGION_FULL_ANCHOR_SHAPE,
+    )
+
+    return {
+        "route": "region_fused",
+        "dtype": "c64",
+        "shape": REGION_FULL_ANCHOR_SHAPE,
+        "level": level,
+        "input_construction_version": f"{level}_v1",
+        "seed": seed,
+        "reference_dtype": "c64",
+        "source": "measured",
+        "relative_l2": global_rel_l2,
+        "global_rel_l2": global_rel_l2,
+        "local_scaled_max": local_scaled_max,
+        "nan_inf": False,
+        "reference_rms": 1.0,
+        "policy_id": POLICY_ID,
+        "policy_file_sha256": POLICY_FILE_SHA256,
+        "metric_schema_version": METRIC_SCHEMA_VERSION,
+    }
+
+
+def test_v5_summary_uses_explicit_nondefault_seeds_and_independent_argmaxes():
+    from results._phase0.numerical import (
+        required_cell_keys,
+        summarize_region_fused_rows,
+    )
+
+    seeds = (0, 1, 2, 7, 13, 17)
+    rows = []
+    for level in ("baseline", "mixed_scale", "cancellation"):
+        for seed in seeds:
+            row = _dual_gate_row(level, seed, 1e-7, 2e-4)
+            if level == "baseline" and seed == 7:
+                row["global_rel_l2"] = 8e-7
+            if level == "mixed_scale" and seed == 17:
+                row["local_scaled_max"] = 9e-4
+            if level == "cancellation":
+                row["input_construction_version"] = "cancellation_v2"
+            rows.append(row)
+
+    summary = summarize_region_fused_rows(rows, required_cell_keys(seeds))
+    assert summary["summary_complete"] is True
+    assert summary["n_cells_expected"] == 18
+    assert summary["n_cells_measured"] == 18
+    assert summary["worst_global_rel_l2"] == pytest.approx(8e-7)
+    assert summary["worst_global_rel_l2_cell_key"] == "baseline:baseline_v1:seed=7"
+    assert summary["worst_local_scaled_max"] == pytest.approx(9e-4)
+    assert (
+        summary["worst_local_scaled_max_cell_key"]
+        == "mixed_scale:mixed_scale_v1:seed=17"
+    )
+
+
+def test_v5_summary_fails_closed_when_a_required_cell_is_missing():
+    from results._phase0.numerical import (
+        required_cell_keys,
+        summarize_region_fused_rows,
+    )
+
+    seeds = (0, 1, 2, 7, 13, 17)
+    rows = []
+    for level in ("baseline", "mixed_scale", "cancellation"):
+        for seed in seeds:
+            if (level, seed) == ("cancellation", 17):
+                continue
+            row = _dual_gate_row(level, seed, 1e-7, 2e-4)
+            if level == "cancellation":
+                row["input_construction_version"] = "cancellation_v2"
+            rows.append(row)
+
+    summary = summarize_region_fused_rows(rows, required_cell_keys(seeds))
+    assert summary["summary_complete"] is False
+    assert summary["worst_global_rel_l2"] is None
+    assert summary["worst_local_scaled_max"] is None
+    assert summary["missing_cell_keys"] == ["cancellation:cancellation_v2:seed=17"]
+
+
+def test_v5_dual_gate_fields_survive_csv_round_trip(tmp_path):
+    from results._phase0.numerical import _read_csv_rows, write_csv
+
+    row = _dual_gate_row("baseline", 7, 8.5e-7, 9.5e-4)
+    row.update(
+        {
+            "reference_rms": 731.25,
+            "local_scaled_argmax_reference_abs": 0.25,
+            "any_nan_inf": False,
+            "policy_id": "REGION_FUSED_FULL_ANCHOR_ACCURACY_v5",
+            "policy_file_sha256": "a" * 64,
+            "metric_schema_version": "dual-gate-v5",
+        }
+    )
+    path = tmp_path / "numerical.csv"
+    write_csv(path, [row])
+    loaded = _read_csv_rows(path)[0]
+    assert loaded["global_rel_l2"] == pytest.approx(8.5e-7)
+    assert loaded["local_scaled_max"] == pytest.approx(9.5e-4)
+    assert loaded["reference_rms"] == pytest.approx(731.25)
+    assert loaded["any_nan_inf"] is False
+    assert loaded["policy_id"] == "REGION_FUSED_FULL_ANCHOR_ACCURACY_v5"
+    assert loaded["metric_schema_version"] == "dual-gate-v5"
 
 
 if __name__ == "__main__":

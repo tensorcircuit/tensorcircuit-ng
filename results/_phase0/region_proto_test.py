@@ -265,14 +265,23 @@ def test_region_prototype_verdict_field_is_canonical():
 
 @pytest.mark.gpu
 def test_full_anchor_direct_recompute_correctness():
-    """Full-anchor fused (direct recompute) == materialized E, 3 seeds, near-exact."""
+    """Full-anchor direct kernel records the complete 3-profile x 3-seed matrix."""
     from results._phase0.region_proto import run_full_anchor_correctness
 
     result = run_full_anchor_correctness(seeds=(0, 1, 2))
     assert result["n_seeds"] == 3
+    assert result["n_profiles"] == 3
+    assert result["n_cells_expected"] == 9
+    assert result["n_cells_measured"] == 9
+    # The legacy 3-seed run is diagnostic only; v5 requires six frozen seeds.
+    assert result["summary_complete"] is False
+    assert result["coverage_policy_satisfied"] is False
     assert result["worst_relative_l2"] < 1e-4, result
-    assert result["worst_max_rel"] < 1e-3, result
     assert result["nan_inf"] is False
+    assert result["policy_id"] == "REGION_FUSED_FULL_ANCHOR_ACCURACY_v5"
+    assert result["metric_schema_version"] == "dual-gate-v5"
+    assert result["worst_global_rel_l2_cell_key"]
+    assert result["worst_local_scaled_max_cell_key"]
     # output shape/dtype/bytes
     assert result["output_shape"] == [64, 1048576]
     assert result["output_dtype"] == "complex64"

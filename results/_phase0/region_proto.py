@@ -187,15 +187,15 @@ def full_anchor_contract(n: int = 24, depth: int = 10, fusion: str = "default") 
     return contract
 
 
-def materialized_reference_full(steps, seed: int = 7):
-    """E = D @ transform(A @ B) at the FULL anchor, materializing P and T.
-
-    Returns (E, P_bytes, T_bytes). P and T are freed before returning (the
-    oracle's transient ~1 GiB P+T is released); P_bytes/T_bytes are returned
-    so the caller can confirm the fused path avoided those allocations. Inputs
-    are deterministic in ``seed`` so fused_reference_full(steps, seed) sees
-    IDENTICAL A/B/D and the diff is purely the kernel's numerical behavior."""
+def _full_anchor_inputs(seed: int, level: str | None = None):
+    """Build one full-anchor input cell for capability or accuracy runs."""
     s = FULL_ANCHOR
+    if level is not None:
+        from results._phase0.numerical import make_inputs
+
+        A, B = make_inputs(level, (s["PM"], s["PN"], s["K1"]), seed)
+        D = make_inputs(level, (s["TM"], s["TM"], s["TM"]), seed + 7000)[0]
+        return A, B, D
     rng = np.random.default_rng(seed)
     A = (
         rng.standard_normal((s["PM"], s["K1"]))
@@ -209,6 +209,18 @@ def materialized_reference_full(steps, seed: int = 7):
         rng.standard_normal((s["TM"], s["TM"]))
         + 1j * rng.standard_normal((s["TM"], s["TM"]))
     ).astype(np.complex64)
+    return A, B, D
+
+
+def materialized_reference_full(steps, seed: int = 7, level: str | None = None):
+    """E = D @ transform(A @ B) at the FULL anchor, materializing P and T.
+
+    Returns (E, P_bytes, T_bytes). P and T are freed before returning (the
+    oracle's transient ~1 GiB P+T is released); P_bytes/T_bytes are returned
+    so the caller can confirm the fused path avoided those allocations. Inputs
+    are deterministic in ``(level, seed)`` so both paths see identical A/B/D."""
+    s = FULL_ANCHOR
+    A, B, D = _full_anchor_inputs(seed, level)
     dA, dB, dD = cp.asarray(A), cp.asarray(B), cp.asarray(D)
     P = dA @ dB  # c64[4096,16384]  512 MiB
     T = apply_transform_steps(P, steps)  # c64[64,1048576]  512 MiB
@@ -220,26 +232,13 @@ def materialized_reference_full(steps, seed: int = 7):
     return E, P_bytes, T_bytes
 
 
-def fused_reference_full(steps, seed: int = 7):
+def fused_reference_full(steps, seed: int = 7, level: str | None = None):
     """E = D @ transform(A @ B) at the FULL anchor via fused_pte_kernel, with
     NO full P or T buffer ever allocated (only A/B/D/E). Producer elements are
-    recomputed on the fly inside the kernel. Inputs use the SAME ``seed`` as
-    materialized_reference_full so the diff is purely the kernel's numerical
-    behavior, not input mismatch."""
+    recomputed on the fly inside the kernel. Inputs use the SAME ``(level,
+    seed)`` as materialized_reference_full, so the diff is kernel behavior."""
     s = FULL_ANCHOR
-    rng = np.random.default_rng(seed)  # SAME seed -> same A/B/D as materialized
-    A = (
-        rng.standard_normal((s["PM"], s["K1"]))
-        + 1j * rng.standard_normal((s["PM"], s["K1"]))
-    ).astype(np.complex64)
-    B = (
-        rng.standard_normal((s["K1"], s["PN"]))
-        + 1j * rng.standard_normal((s["K1"], s["PN"]))
-    ).astype(np.complex64)
-    D = (
-        rng.standard_normal((s["TM"], s["TM"]))
-        + 1j * rng.standard_normal((s["TM"], s["TM"]))
-    ).astype(np.complex64)
+    A, B, D = _full_anchor_inputs(seed, level)
     dA, dB, dD = cp.asarray(A), cp.asarray(B), cp.asarray(D)
     E = cp.empty((s["TM"], s["TN"]), dtype=cp.complex64)
     idx = _transform_index_arrays(steps)
@@ -369,6 +368,7 @@ def _tile_search_tiled() -> list:
     contract = full_anchor_contract()
     steps = contract["steps"]
     s = FULL_ANCHOR
+    version_token = "cancellation_v2" if level == "cancellation" else f"{level}_v1"
 
     # Materialize the oracle E once (seed=7) and keep it resident for all configs.
     E_mat, _p_b, _t_b = materialized_reference_full(steps, seed=7)
@@ -897,16 +897,15 @@ def _tile_search_persistent() -> list:
     return results
 
 
-def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
-    """Full-anchor correctness: fused (direct recompute) vs materialized oracle,
-    across ``seeds`` (default 3). For each seed, materialized and fused use
-    IDENTICAL inputs (same seed) so the diff is purely the kernel's numerical
-    behavior. Returns the worst relative_l2 / max_rel across seeds, PLUS the
-    v4 dual-gate accuracy metrics (reference_rms, worst_global_rel_l2,
+def _run_full_anchor_correctness_profile(seeds, level) -> dict:
+    """Measure one input profile across an explicit seed set.
+
+    Materialized and fused use identical inputs in every cell. Returns legacy
+    diagnostics plus v5 metrics (reference_rms, worst_global_rel_l2,
     worst_local_scaled_max, local_scaled_argmax_reference_abs,
     any_nan_inf) per the region_fused dual-gate accuracy policy spec.
 
-    v4 (reviewer B v3): worst_local_scaled_max and worst_global_rel_l2 are
+    v5: worst_local_scaled_max and worst_global_rel_l2 are
     independently tracked across seeds -- the two worst values may come from
     DIFFERENT seeds. ``any_nan_inf`` is True if any seed has nan_inf=True.
 
@@ -915,7 +914,10 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
     freed again so inputs/E from one seed do not accumulate. The fused path
     allocates only A/B/D/E -- P and T are never materialized on the fused path.
     """
-    from results._phase0.numerical import compute_metrics_dual_gate
+    from results._phase0.numerical import (
+        apply_policy_region_fused,
+        compute_metrics_dual_gate,
+    )
 
     contract = full_anchor_contract()
     steps = contract["steps"]
@@ -925,7 +927,7 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
     nan_inf = False
     p_bytes_avoided = 0
     t_bytes_avoided = 0
-    # v4 dual-gate tracking: independently track worst_local_scaled_max
+    # v5 dual-gate tracking: independently track worst_local_scaled_max
     # and worst_global_rel_l2 across seeds (they may come from different seeds).
     worst_local_scaled_max = 0.0
     worst_local_l2_seed = None
@@ -940,14 +942,14 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
         # Materialized oracle: allocates P+T transiently, frees them in-function
         # before returning (E_mat still live).
         E_mat, p_bytes_avoided, t_bytes_avoided = materialized_reference_full(
-            steps, seed
+            steps, seed, level=level
         )
         # Reclaim the materialized path's pool (P/T already del'd, but cupy's pool
         # retains freed blocks) so the fused path has the full 12 GB available.
         cp.get_default_memory_pool().free_all_blocks()
         cp.cuda.Device(0).synchronize()
         # Fused path: SAME seed -> IDENTICAL A/B/D. Never allocates P or T.
-        E_fus = fused_reference_full(steps, seed)
+        E_fus = fused_reference_full(steps, seed, level=level)
         diff = E_fus - E_mat
         rel_l2 = float(cp.linalg.norm(diff) / max(1.0, cp.linalg.norm(E_mat)))
         max_rel = float(cp.max(cp.abs(diff)) / max(1.0, cp.max(cp.abs(E_mat))))
@@ -977,18 +979,21 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
             or not bool(cp.all(cp.isfinite(E_fus)))
             or not bool(cp.all(cp.isfinite(E_mat)))
         )
-        # v4 dual-gate metrics: compute for this seed (before freeing arrays).
-        dg = compute_metrics_dual_gate(
-            cp.asnumpy(E_fus), cp.asnumpy(E_mat), alpha=1e-3
-        )
-        per_seed_dg[str(seed)] = dg
+        # v5 dual-gate metrics: compute for this seed (before freeing arrays).
+        dg = compute_metrics_dual_gate(cp.asnumpy(E_fus), cp.asnumpy(E_mat), alpha=1e-3)
+        policy_verdict, policy_reasons = apply_policy_region_fused(dg)
+        per_seed_dg[str(seed)] = {
+            **dg,
+            "policy_verdict": policy_verdict,
+            "policy_reasons": policy_reasons,
+        }
         # Track per-seed nan_inf for any_nan_inf summary.
         if dg.get("nan_inf") is True:
             any_nan_inf = True
         # Independent worst-local (local_scaled_max): track max and its seed.
         dg_lsm = dg.get("local_scaled_max")
         if isinstance(dg_lsm, (int, float)) and math.isfinite(dg_lsm):
-            if dg_lsm > worst_local_scaled_max:
+            if worst_local_l2_seed is None or dg_lsm > worst_local_scaled_max:
                 worst_local_scaled_max = dg_lsm
                 worst_local_l2_seed = seed
                 worst_local_l2_dg_ref_rms = dg.get("reference_rms")
@@ -998,7 +1003,7 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
         # Independent worst-global (global_rel_l2): track max and its seed.
         dg_gl2 = dg.get("global_rel_l2")
         if isinstance(dg_gl2, (int, float)) and math.isfinite(dg_gl2):
-            if dg_gl2 > worst_global_rel_l2:
+            if worst_global_l2_seed is None or dg_gl2 > worst_global_rel_l2:
                 worst_global_rel_l2 = dg_gl2
                 worst_global_l2_seed = seed
         del E_mat, E_fus
@@ -1014,11 +1019,13 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
         "output_bytes": s["TM"] * s["TN"] * 8,
         "P_bytes_avoided": p_bytes_avoided,
         "T_bytes_avoided": t_bytes_avoided,
-        # v4 dual-gate accuracy fields (per spec §2 field schema)
+        "summary_complete": all(
+            cell.get("policy_verdict") in ("PASS", "FAIL")
+            for cell in per_seed_dg.values()
+        ),
+        # v5 dual-gate accuracy fields (per spec §2 field schema)
         "reference_rms": (
-            worst_local_l2_dg_ref_rms
-            if worst_local_l2_seed is not None
-            else None
+            worst_local_l2_dg_ref_rms if worst_local_l2_seed is not None else None
         ),
         "global_rel_l2": (
             worst_global_rel_l2 if worst_global_l2_seed is not None else None
@@ -1031,23 +1038,126 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
         ),
         "local_scaled_argmax_reference_abs": worst_local_l2_dg_argmax_ref_abs,
         "worst_dg_seed": worst_local_l2_seed,
-        # v4 summary fields (independent worst-case across seeds)
+        # v5 summary fields (independent worst-case across seeds)
         "worst_global_rel_l2": (
             worst_global_rel_l2 if worst_global_l2_seed is not None else None
         ),
         "worst_global_rel_l2_cell_key": (
-            f"seed={worst_global_l2_seed}"
+            f"{level}:{version_token}:seed={worst_global_l2_seed}"
             if worst_global_l2_seed is not None
             else None
         ),
         "worst_local_scaled_max_cell_key": (
-            f"seed={worst_local_l2_seed}"
+            f"{level}:{version_token}:seed={worst_local_l2_seed}"
             if worst_local_l2_seed is not None
             else None
         ),
         "any_nan_inf": any_nan_inf,
         # Per-seed dual-gate diagnostic trace (seed -> dg dict).
         "per_seed_dual_gate": per_seed_dg,
+    }
+
+
+def run_full_anchor_correctness(
+    seeds=(0, 1, 2), levels=("baseline", "mixed_scale", "cancellation")
+) -> dict:
+    """Measure and summarize the exact full-anchor profile/seed matrix.
+
+    The caller supplies the frozen seed set. The three required profiles are
+    fixed by policy; global and local maxima are selected independently.
+    """
+    from results._phase0.numerical import (
+        METRIC_SCHEMA_VERSION,
+        POLICY_FILE_SHA256,
+        POLICY_ID,
+        _normalize_region_seeds,
+    )
+
+    seeds = _normalize_region_seeds(seeds)
+    levels = tuple(levels)
+    required_levels = ("baseline", "mixed_scale", "cancellation")
+    if levels != required_levels:
+        raise ValueError(f"full-anchor profiles must be exactly {required_levels!r}")
+
+    per_profile = {
+        level: _run_full_anchor_correctness_profile(seeds, level) for level in levels
+    }
+    summary_complete = all(
+        result.get("summary_complete") is True
+        and result.get("worst_global_rel_l2") is not None
+        and result.get("worst_local_scaled_max") is not None
+        for result in per_profile.values()
+    )
+    worst_global_profile = (
+        max(levels, key=lambda level: per_profile[level]["worst_global_rel_l2"])
+        if summary_complete
+        else levels[0]
+    )
+    worst_local_profile = (
+        max(levels, key=lambda level: per_profile[level]["worst_local_scaled_max"])
+        if summary_complete
+        else levels[0]
+    )
+    worst_global = per_profile[worst_global_profile]
+    worst_local = per_profile[worst_local_profile]
+    n_expected = len(levels) * len(seeds)
+    n_measured = sum(result["n_seeds"] for result in per_profile.values())
+    coverage_policy_satisfied = (
+        len(seeds) == 6 and {0, 1, 2}.issubset(seeds) and n_expected == 18
+    )
+
+    return {
+        "n_seeds": len(seeds),
+        "n_profiles": len(levels),
+        "n_cells_expected": n_expected,
+        "n_cells_measured": n_measured,
+        "summary_complete": (
+            coverage_policy_satisfied and summary_complete and n_measured == n_expected
+        ),
+        "coverage_policy_satisfied": coverage_policy_satisfied,
+        "required_seed_list": list(seeds),
+        "required_input_profiles": list(levels),
+        "worst_relative_l2": max(
+            result["worst_relative_l2"] for result in per_profile.values()
+        ),
+        "worst_max_rel": max(
+            result["worst_max_rel"] for result in per_profile.values()
+        ),
+        "nan_inf": any(result["nan_inf"] for result in per_profile.values()),
+        "output_shape": worst_local["output_shape"],
+        "output_dtype": worst_local["output_dtype"],
+        "output_bytes": worst_local["output_bytes"],
+        "P_bytes_avoided": worst_local["P_bytes_avoided"],
+        "T_bytes_avoided": worst_local["T_bytes_avoided"],
+        "reference_rms": worst_local["reference_rms"] if summary_complete else None,
+        "global_rel_l2": (
+            worst_global["worst_global_rel_l2"] if summary_complete else None
+        ),
+        "local_scaled_max": (
+            worst_local["worst_local_scaled_max"] if summary_complete else None
+        ),
+        "worst_global_rel_l2": (
+            worst_global["worst_global_rel_l2"] if summary_complete else None
+        ),
+        "worst_global_rel_l2_cell_key": (
+            worst_global["worst_global_rel_l2_cell_key"] if summary_complete else None
+        ),
+        "worst_local_scaled_max": (
+            worst_local["worst_local_scaled_max"] if summary_complete else None
+        ),
+        "worst_local_scaled_max_cell_key": (
+            worst_local["worst_local_scaled_max_cell_key"] if summary_complete else None
+        ),
+        "local_scaled_argmax_reference_abs": (
+            worst_local["local_scaled_argmax_reference_abs"]
+            if summary_complete
+            else None
+        ),
+        "any_nan_inf": any(result["any_nan_inf"] for result in per_profile.values()),
+        "policy_id": POLICY_ID,
+        "policy_file_sha256": POLICY_FILE_SHA256,
+        "metric_schema_version": METRIC_SCHEMA_VERSION,
+        "per_profile_dual_gate": per_profile,
     }
 
 
@@ -1387,7 +1497,7 @@ def run(
     # fused_full_anchor_run=false block (Task 2a) with the first honest
     # MEASURED verdict (PASS/FAIL/UNKNOWN) for the region-fusion criterion.
     steps = contract["steps"]
-    correctness_full = run_full_anchor_correctness(seeds=(0, 1, 2))
+    correctness_full = run_full_anchor_correctness(seeds=seeds)
     resources_full = _measure_resources_full()
     # Peak measurement: free_all_blocks() inside _measure_peak_full ensures the
     # pool is empty and driver-free is at max before each path. Cupy's pool
@@ -1407,9 +1517,17 @@ def run(
 
     # Verdict (honesty-first: no pre-written target PASS).
     # PASS: correctness passes, resources measured, fused peak < materialized peak.
-    # FAIL: correctness definitively fails (worst_relative_l2 >= 1e-4 or nan_inf).
+    # FAIL: either frozen dual gate fails or any output is non-finite.
     # UNKNOWN: measurement incomplete / resources unreadable / peak not comparable.
-    if correctness_full["worst_relative_l2"] >= 1e-4 or correctness_full["nan_inf"]:
+    if (
+        correctness_full["summary_complete"] is not True
+        or correctness_full["any_nan_inf"] is not False
+    ):
+        verdict = "UNKNOWN"
+    elif (
+        correctness_full["worst_global_rel_l2"] >= 1e-4
+        or correctness_full["worst_local_scaled_max"] >= 1e-3
+    ):
         verdict = "FAIL"
     elif (
         regs_full is not None and peak_mat_bytes > 0 and peak_fus_bytes < peak_mat_bytes
@@ -1515,8 +1633,8 @@ def run(
             "real two-stage P->T->E prototype: fused producer-recompute kernel "
             "(nvrtc sm_120) computes E = D @ transform(A@B) without writing full "
             "P/T. G2: full-anchor fused run IS executed -- correctness verified "
-            "fused == materialized across 3 seeds at full anchor dims "
-            "(worst_relative_l2 < 1e-4), runtime allocator peak measured for "
+            "fused == materialized across all requested profiles/seeds at full "
+            "anchor dims under the frozen dual gate, runtime allocator peak measured for "
             "both paths (materialized ~1.7 GB, fused ~672 MiB), kernel-only "
             "latency measured via cuda events. The canonical verdict is a real "
             "PASS/FAIL/UNKNOWN derived from measured evidence, not a hardcoded "
@@ -1532,8 +1650,40 @@ def run(
 
     with open(f"{out_dir}/region_prototype_accuracy.csv", "w", newline="") as fh:
         w = csv.writer(fh, lineterminator="\n")
-        w.writerow(["seed", "relative_l2", "max_rel", "n_seeds"])
-        w.writerow(["worst", worst_rel_l2, worst_max_rel, len(seeds)])
+        w.writerow(
+            [
+                "input_profile",
+                "seed",
+                "reference_rms",
+                "global_rel_l2",
+                "local_scaled_max",
+                "local_scaled_argmax_reference_abs",
+                "nan_inf",
+                "policy_verdict",
+                "policy_id",
+                "policy_file_sha256",
+                "metric_schema_version",
+            ]
+        )
+        for profile, profile_result in correctness_full[
+            "per_profile_dual_gate"
+        ].items():
+            for seed, metrics in profile_result["per_seed_dual_gate"].items():
+                w.writerow(
+                    [
+                        profile,
+                        seed,
+                        metrics.get("reference_rms"),
+                        metrics.get("global_rel_l2"),
+                        metrics.get("local_scaled_max"),
+                        metrics.get("local_scaled_argmax_reference_abs"),
+                        metrics.get("nan_inf"),
+                        metrics.get("policy_verdict"),
+                        correctness_full["policy_id"],
+                        correctness_full["policy_file_sha256"],
+                        correctness_full["metric_schema_version"],
+                    ]
+                )
     with open(f"{out_dir}/region_prototype_memory.csv", "w", newline="") as fh:
         w = csv.writer(fh, lineterminator="\n")
         w.writerow(
@@ -1564,4 +1714,18 @@ def run(
 
 
 if __name__ == "__main__":
-    print(json.dumps(run(), indent=2))
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run the region_fused prototype.")
+    parser.add_argument(
+        "--seeds",
+        help="Comma-separated frozen accuracy seed list. Official v5 runs use "
+        "the six seeds from policy_freeze_manifest.json.",
+    )
+    args = parser.parse_args()
+    run_seeds = (
+        tuple(int(value) for value in args.seeds.split(","))
+        if args.seeds
+        else (0, 1, 2)
+    )
+    print(json.dumps(run(seeds=run_seeds), indent=2))

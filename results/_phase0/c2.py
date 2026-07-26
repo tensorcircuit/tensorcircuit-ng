@@ -114,10 +114,19 @@ _PEAK_SCHEMA_VERSIONS = frozenset({PEAK_SCHEMA})
 _AUDIT_SCHEMA_VERSIONS = frozenset({AUDIT_SCHEMA})
 # Self-recompute policies (spec §5.2; mirror the prototype's own contracts).
 ACCURACY_REL_L2 = 1e-4
-#: Threshold for ``worst_local_scaled_max`` (v3 dual-gate policy, eta=1e-3).
+#: Threshold for ``worst_local_scaled_max`` (v5 dual-gate policy, eta=1e-3).
 #: Previously applied to the old ``worst_max_rel`` field (deprecated in the
 #: region_fused decision chain but retained for audit/history).
 ACCURACY_MAX_REL = 1e-3
+REGION_ACCURACY_POLICY_ID = "REGION_FUSED_FULL_ANCHOR_ACCURACY_v5"
+REGION_ACCURACY_METRIC_SCHEMA = "dual-gate-v5"
+REGION_ACCURACY_POLICY_FILE_SHA256 = (
+    "3ecfa370409e2397319276b8aa1b64bf19a816b2e8e0fb478b51569bf383ced1"
+)
+REGION_ACCURACY_PROFILES = ("baseline", "mixed_scale", "cancellation")
+REGION_ACCURACY_CALIBRATION_SEEDS = (0, 1, 2)
+REGION_ACCURACY_REQUIRED_SEED_COUNT = 6
+REGION_ACCURACY_REQUIRED_CELL_COUNT = 18
 RESOURCE_MIN_OCCUPANCY_PCT = 25.0
 # A real P->T->E consumer outputs a full E tensor (>= this), not a scalar/reduction.
 FULL_E_MIN_BYTES = 1 * 1024 * 1024
@@ -502,6 +511,74 @@ def _classify_peak_v2(val):
     return "OK"
 
 
+def _region_accuracy_state(fac):
+    """Validate v5 summary provenance/coverage, then recompute both gates."""
+    if not isinstance(fac, dict):
+        return "MISSING"
+
+    file_hash = fac.get("policy_file_sha256")
+    seeds = fac.get("required_seed_list")
+    profiles = fac.get("required_input_profiles")
+
+    def _valid_summary_cell_key(value):
+        if not isinstance(value, str) or not isinstance(seeds, list):
+            return False
+        prefixes = (
+            "baseline:baseline_v1:seed=",
+            "mixed_scale:mixed_scale_v1:seed=",
+            "cancellation:cancellation_v2:seed=",
+        )
+        for prefix in prefixes:
+            if value.startswith(prefix):
+                suffix = value[len(prefix) :]
+                return suffix.isdigit() and int(suffix) in seeds
+        return False
+
+    identity_complete = (
+        fac.get("policy_id") == REGION_ACCURACY_POLICY_ID
+        and fac.get("metric_schema_version") == REGION_ACCURACY_METRIC_SCHEMA
+        and file_hash == REGION_ACCURACY_POLICY_FILE_SHA256
+    )
+    coverage_complete = (
+        fac.get("summary_complete") is True
+        and fac.get("n_cells_expected") == REGION_ACCURACY_REQUIRED_CELL_COUNT
+        and fac.get("n_cells_measured") == REGION_ACCURACY_REQUIRED_CELL_COUNT
+        and isinstance(seeds, list)
+        and len(seeds) == REGION_ACCURACY_REQUIRED_SEED_COUNT
+        and all(
+            isinstance(seed, int) and not isinstance(seed, bool) and 0 <= seed < 2**31
+            for seed in seeds
+        )
+        and len(set(seeds)) == REGION_ACCURACY_REQUIRED_SEED_COUNT
+        and set(REGION_ACCURACY_CALIBRATION_SEEDS).issubset(seeds)
+        and profiles == list(REGION_ACCURACY_PROFILES)
+        and _valid_summary_cell_key(fac.get("worst_global_rel_l2_cell_key"))
+        and _valid_summary_cell_key(fac.get("worst_local_scaled_max_cell_key"))
+    )
+    if not identity_complete or not coverage_complete:
+        return "MISSING"
+
+    if fac.get("any_nan_inf") is not False:
+        return "FAILED"
+    worst_local = fac.get("worst_local_scaled_max")
+    global_l2 = fac.get("worst_global_rel_l2")
+    valid_metrics = (
+        isinstance(worst_local, (int, float))
+        and not isinstance(worst_local, bool)
+        and math.isfinite(worst_local)
+        and worst_local >= 0
+        and isinstance(global_l2, (int, float))
+        and not isinstance(global_l2, bool)
+        and math.isfinite(global_l2)
+        and global_l2 >= 0
+    )
+    if not valid_metrics:
+        return "FAILED"
+    if global_l2 < ACCURACY_REL_L2 and worst_local < ACCURACY_MAX_REL:
+        return "PASSED"
+    return "FAILED"
+
+
 def _normalize_region_peak(proto, *, case_binding_state="MISSING"):
     """Build the normalized ``raw`` dict for the region_peak gate contract.
 
@@ -635,54 +712,9 @@ def _normalize_region_peak(proto, *, case_binding_state="MISSING"):
     # full_anchor_run_state: TRUE iff fused_full_anchor_run is True.
     full_anchor_run_state = "TRUE" if far is True else "FALSE"
 
-    # accuracy_state (P1 #2 fix, reviewer B + v4 dual-gate policy): read
-    # nested ``full_anchor_correctness`` v4 fields
-    # ``worst_local_scaled_max`` / ``worst_global_rel_l2`` / ``any_nan_inf``,
-    # NOT the old ``worst_max_rel`` / ``worst_relative_l2`` / ``nan_inf``.
-    # If any new field is missing -> accuracy_state=MISSING (fail-closed).
-    # ``any_nan_inf`` MUST be strict bool (False); anything else
-    # (True / None / 0 / non-bool) -> FAILED. ``worst_max_rel`` MUST NOT be
-    # used as an alias for ``worst_local_scaled_max``.
-    #
-    # P1 #5 fix (reviewer B v3): after the isinstance check, also verify
-    # ``math.isfinite(val) and val >= 0``. A present-but-invalid metric
-    # (NaN, Inf, negative) -> FAILED (not MISSING, per v4 spec §1).
-    fac = proto.get("full_anchor_correctness")
-    if not isinstance(fac, dict):
-        accuracy_state = "MISSING"
-    else:
-        nan_check = fac.get("any_nan_inf")
-        # any_nan_inf MUST be strict bool False (v4 spec);
-        # anything other than False -> FAILED (fail-closed)
-        if nan_check is True or nan_check is not False:
-            accuracy_state = "FAILED"
-        else:
-            # v4: read NEW fields worst_local_scaled_max + worst_global_rel_l2
-            # MUST NOT read worst_max_rel as alias
-            worst_local = fac.get("worst_local_scaled_max")
-            global_l2 = fac.get("worst_global_rel_l2")
-            if (
-                isinstance(worst_local, (int, float))
-                and not isinstance(worst_local, bool)
-                and isinstance(global_l2, (int, float))
-                and not isinstance(global_l2, bool)
-            ):
-                # P1 #5: must be finite and non-negative (v4 spec §1)
-                if (
-                    math.isfinite(worst_local)
-                    and worst_local >= 0
-                    and math.isfinite(global_l2)
-                    and global_l2 >= 0
-                ):
-                    if global_l2 < ACCURACY_REL_L2 and worst_local < ACCURACY_MAX_REL:
-                        accuracy_state = "PASSED"
-                    else:
-                        accuracy_state = "FAILED"
-                else:
-                    # present-but-invalid (NaN, Inf, negative) -> FAILED
-                    accuracy_state = "FAILED"
-            else:
-                accuracy_state = "MISSING"  # missing new field -> fail-closed
+    # v5 reads only the new summary fields and also binds policy identity plus
+    # exact 18-cell coverage. Legacy worst_max_rel is never an alias.
+    accuracy_state = _region_accuracy_state(proto.get("full_anchor_correctness"))
 
     # resource_state (errata #1): OK if registers_per_thread AND occupancy_pct
     # present and meet policy; FAILED if present but fail; MISSING if absent
@@ -763,41 +795,13 @@ def _recompute_conditions(proto, peak):
     ``None`` means the field is absent -> that sub-condition is UNKNOWN (cannot confirm).
     """
     rc: dict[str, Any] = {}
-    # P1 #2 fix (reviewer B) + v4 dual-gate policy: accuracy_pass reads from
-    # nested full_anchor_correctness v4 fields
-    # (worst_local_scaled_max + worst_global_rel_l2 + any_nan_inf), NOT old
-    # worst_relative_l2/worst_max_rel (small-contract values).
-    fac = proto.get("full_anchor_correctness")
-    if isinstance(fac, dict):
-        nan_check = fac.get("any_nan_inf")
-        # v4: any_nan_inf MUST be strict bool; anything other than False -> fail
-        if nan_check is True or nan_check is not False:
-            rc["accuracy_pass"] = False
-        else:
-            worst_local = fac.get("worst_local_scaled_max")
-            global_l2 = fac.get("worst_global_rel_l2")
-            if (
-                isinstance(worst_local, (int, float))
-                and not isinstance(worst_local, bool)
-                and isinstance(global_l2, (int, float))
-                and not isinstance(global_l2, bool)
-            ):
-                # P1 #5: must be finite and non-negative
-                if (
-                    math.isfinite(worst_local)
-                    and worst_local >= 0
-                    and math.isfinite(global_l2)
-                    and global_l2 >= 0
-                ):
-                    rc["accuracy_pass"] = bool(
-                        global_l2 < ACCURACY_REL_L2 and worst_local < ACCURACY_MAX_REL
-                    )
-                else:
-                    rc["accuracy_pass"] = False
-            else:
-                rc["accuracy_pass"] = None
-    else:
-        rc["accuracy_pass"] = None
+    # Keep the recompute path identical to the normalized v5 gate path.
+    accuracy_state = _region_accuracy_state(proto.get("full_anchor_correctness"))
+    rc["accuracy_pass"] = {
+        "PASSED": True,
+        "FAILED": False,
+        "MISSING": None,
+    }[accuracy_state]
     regs = proto.get("registers_per_thread")
     occ = proto.get("occupancy_pct")
     if isinstance(regs, (int, float)) and isinstance(occ, (int, float)):
