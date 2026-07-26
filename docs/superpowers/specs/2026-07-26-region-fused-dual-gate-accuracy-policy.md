@@ -33,23 +33,36 @@ This resolves the v2 contradiction (v2 line 29 "all metrics non-bool real" vs li
 
 The dual-gate metrics use **NEW distinct field names**. The old `worst_max_rel` field is NOT overloaded (it keeps its old semantics, deprecated but not redefined). Producers MUST emit the new fields; consumers (c2.py `accuracy_state`) MUST read the new fields; missing new field -> UNKNOWN (not aliased to an old field).
 
-### Per-cell metric fields (produced + recorded in numerical artifacts)
+### Per-cell metric fields (produced + recorded for EACH seed in numerical artifacts)
 
 | field | type | definition |
 |---|---|---|
 | `reference_rms` | numerical | `s = sqrt(mean(|reference_i|^2))`, FP64 |
-| `global_rel_l2` | numerical | `\|\|error\|\|_2 / \|\|reference\|\|_2`, FP64 stable accumulation |
-| `local_scaled_max` | numerical | `max_i \|error_i\| / max(\|reference_i\|, α·s)`, FP64 |
-| `worst_local_scaled_max` | numerical | worst (max) of `local_scaled_max` across the 3 seeds for the cell (per-cell worst; this is the NEW field replacing the role v2 wrongly assigned to `worst_max_rel`) |
-| `local_scaled_argmax_reference_abs` | numerical | `\|reference_i\|` at the `i` where `local_scaled_max` is attained (the NEW field replacing v2's ambiguous `max_error_reference_abs`; used to verify the v1 hypothesis about small-magnitude blow-up) |
-| `nan_inf` | status (bool) | `not all(isfinite(output)) OR not all(isfinite(reference)) OR not all(isfinite(error)) OR not all(isfinite(numerical_metrics))` |
-| `policy_id` | string | `"REGION_FUSED_FULL_ANCHOR_ACCURACY_v3"` (frozen at freeze) |
+| `global_rel_l2` | numerical | `\|\|error\|\|_2 / \|\|reference\|\|_2`, FP64 stable accumulation, for THIS seed/cell |
+| `local_scaled_max` | numerical | `max_i \|error_i\| / max(\|reference_i\|, α·s)`, FP64, for THIS seed/cell |
+| `local_scaled_argmax_reference_abs` | numerical | `\|reference_i\|` at the `i` where `local_scaled_max` is attained, for THIS seed/cell |
+| `nan_inf` | status (bool) | `not all(isfinite(output)) OR not all(isfinite(reference)) OR not all(isfinite(error)) OR not all(isfinite(numerical_metrics))`, for THIS seed/cell |
+| `policy_id` | string | `"REGION_FUSED_FULL_ANCHOR_ACCURACY_v4"` (frozen at freeze) |
 | `policy_file_sha256` | string | file SHA-256 of the frozen policy spec (64-hex) |
-| `metric_schema_version` | string | `"dual-gate-v3"` |
+| `metric_schema_version` | string | `"dual-gate-v4"` |
 
-### Consumer (c2.py accuracy_state) MUST read the new fields
+### Summary fields (produced by the 3-seed loop, recorded in the per-cell row AND in `full_anchor_correctness`)
 
-`c2.py` `accuracy_state` (the P1 #2 fix reads nested `full_anchor_correctness.*`) MUST read `full_anchor_correctness.worst_local_scaled_max` + `full_anchor_correctness.global_rel_l2` + `full_anchor_correctness.nan_inf` (the NEW fields), NOT `worst_max_rel`. If any new field is missing -> `accuracy_state=MISSING` -> UNKNOWN (fail-closed). **`worst_max_rel` MUST NOT be used as an alias** for `worst_local_scaled_max`.
+These are **independent worst-case across seeds**: `worst_global_rel_l2` and `worst_local_scaled_max` may come from DIFFERENT seeds (one seed has the worst L2, a different seed has the worst local error). C2 MUST read both independently; NOT assume they come from the same seed.
+
+| field | type | definition |
+|---|---|---|
+| `worst_global_rel_l2` | numerical | max of `global_rel_l2` across all 3 seeds |
+| `worst_global_rel_l2_cell_key` | string | which seed/cell produced this worst value (e.g. `"seed=2"`) |
+| `worst_local_scaled_max` | numerical | max of `local_scaled_max` across all 3 seeds |
+| `worst_local_scaled_max_cell_key` | string | which seed/cell produced this worst value |
+| `any_nan_inf` | status (bool) | `True` if ANY seed had `nan_inf=True`; `False` iff ALL 3 seeds have `nan_inf=False` |
+
+The per-cell row for a given (profile, seed) records BOTH its own per-cell metrics AND the summary fields (same summary value across all seeds — the aggregate worst-case). The summary field values for seed=(0,1,2) rows are identical (same worst-case across seeds). `full_anchor_correctness` in `region_prototype.json` records the summary fields.
+
+### Consumer (c2.py accuracy_state) MUST read the NEW summary fields
+
+`c2.py` `accuracy_state` (the P1 #2 fix) MUST read `full_anchor_correctness.worst_local_scaled_max` + `full_anchor_correctness.worst_global_rel_l2` + `full_anchor_correctness.any_nan_inf` (the NEW summary fields). Both summary fields MUST be **finite, non-negative, non-bool real** (per §1 numerical-metric rules). If either is NaN/Inf/negative/bool/missing -> `accuracy_state=FAILED` (violates `FAIL_INVALID_METRIC`; P1 #5 fix). If `any_nan_inf` is missing or not strict bool `False` -> `FAILED`. If any new field is missing -> `accuracy_state=MISSING` -> UNKNOWN (fail-closed). **`worst_max_rel` MUST NOT be used as an alias** for `worst_local_scaled_max`.
 
 `full_anchor_correctness` (produced by `run_full_anchor_correctness` in `region_proto.py`) MUST emit the new fields (`reference_rms`, `global_rel_l2`, `local_scaled_max`, `worst_local_scaled_max`, `local_scaled_argmax_reference_abs`) per the new schema, alongside the (deprecated, unchanged-semantics) old `worst_relative_l2`/`worst_max_rel` fields which are retained for audit/history but NOT gated on.
 
@@ -123,12 +136,12 @@ The freeze manifest binds the **specific kernel variant** (direct `fused_pte_ker
 
 ## Trust chain (P1 #3 fix, reviewer B v2 — Git SHA-1, not SHA-256)
 
-The git repo (`tensorcircuit-ng/.git`) uses **SHA-1** (40-hex commit IDs). v2 wrongly required "Git commit SHA-256." v3 binds TWO distinct objects (file content hash is SHA-256; git commit identity is SHA-1):
+The git repo (`tensorcircuit-ng/.git`) uses **SHA-1** (40-hex commit IDs). The spec binds TWO distinct objects (file content hash is SHA-256; git commit identity is SHA-1). **This spec file cannot embed its own final commit SHA or file SHA** (that would be a self-reference — the commit hash changes when the hash is embedded). The concrete values are assigned by the external `POLICY_ACCEPTED` token:
 
 ```
 {
-  "policy_git_commit": "b97b63c64159c95fde83cb4abd579d7b08a45ee9 (40-hex git SHA-1)",
-  "policy_file_sha256": "897E955A9BA57AD90CAC2E06CFAD658A11FD1DF9B3BC7E3EB5704E3A73452979 (64-hex file content)",
+  "policy_git_commit": "<40-hex git SHA-1 — assigned by POLICY_ACCEPTED, NOT embedded in the spec>",
+  "policy_file_sha256": "<64-hex file content — assigned by POLICY_ACCEPTED, NOT embedded in the spec>",
   "policy_file_path": "docs/superpowers/specs/2026-07-26-region-fused-dual-gate-accuracy-policy.md"
 }
 ```
@@ -238,10 +251,19 @@ Schema (v3):
     "retry_only_on": "infra failure (OOM/timeout), NEVER on policy FAIL (a policy FAIL is a final measurement result)"
   },
   "freeze_created_at": "<ISO datetime at freeze creation>",
-  "frozen_by": "<agent/agent+controller>",
-  "measurement_source_commit": "<40-hex git SHA-1 F: the exact commit checked out at measurement time; recorded here pre-measurement, verified equal to run_context.measurement.source_commit post-measurement>"
+  "frozen_by": "<agent/agent+controller>"
 }
 ```
+
+### Correct freeze-then-measure flow (P1 #1 fix, reviewer B v3)
+
+The freeze manifest cannot reference its own commit F (self-reference — embedding F's hash in the manifest changes F). The correct flow:
+
+1. **I** = implementation commit (contains `compute_metrics_dual_gate` + `apply_policy_region_fused` + tests + `collect_region_fused` wired to dual-gate).
+2. Create `policy_freeze_manifest.json` on top of I, binding: policy_git_commit (placeholder, filled by POLICY_ACCEPTED), policy_file_sha256, policy_id, constants, implementation_git_commit = **I**, kernel variant, full contract, holdout seeds, env deps SHA, retry rules. Commit this as **F**. F binds I, but does NOT bind F (no self-reference).
+3. Checkout **F**. Run the 9-cell measurement on F.
+4. `run_context.measurement.source_commit = F` (recorded at runtime; verifies the measurement was run on the freeze commit).
+5. Verification: `git show F:policy_freeze_manifest.json` — the manifest is in F's tree, proving it existed before measurement. `run_context.measurement.source_commit == F` — the measurement was run on F.
 
 ### Seed derivation (per B v2 minor)
 
