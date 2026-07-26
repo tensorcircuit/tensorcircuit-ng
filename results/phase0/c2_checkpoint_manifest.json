@@ -1,7 +1,7 @@
 {
   "schema_version": "c2-checkpoint-manifest-v2",
   "case_id": "n24_d10_default",
-  "generated_at_epoch": 1785057690,
+  "generated_at_epoch": 1785067828,
   "case_statuses": {
     "n24_d10_default": {
       "C2_CANONICAL": "UNKNOWN",
@@ -16,8 +16,8 @@
     "allocation_audit": "6ee259c9a6ecd3215454f3da7c45e594e5653e12c723608c723dcfb96f8263b5",
     "edge_map": "c4aa5c2209f133d3bff7aeaaea1444870fdb8ab894b1e00a4592a09e862e87b6",
     "peak_frontier": "b26f49e326db337b4d1e9fc83f2de04fe7a541f288bfcae30f1975de4de87545",
-    "prototype": "aa662f588df845e6f583ca219625e72078c2a8aa8a02f37b24a2232fd23982d1",
-    "c2_judgment": "112ccfc4cbf4745c698e6ea0da32ba65e522abf1a36feaba8b686dc1c3de6d2e"
+    "prototype": "bc23ce817dd07cedd7ad499052830296def00961898198ac817cba2a203aa348",
+    "c2_judgment": "0f80488ed5a1a233617120c0f6d0bfd752b6ff39a8dfcb70a1d8ae8e9d5d506a"
   },
   "environment_hash": "20ff56a28d803fb0e84f752868689a9cb2578750a561d3e1146a9d439313f7a5",
   "package_versions": {

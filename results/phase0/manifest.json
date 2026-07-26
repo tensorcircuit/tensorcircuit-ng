@@ -89,7 +89,7 @@
     "REGION_PROTOTYPE": "UNKNOWN"
   },
   "environment_hash": "07a3371b7b27007d94b8cbeb09053ca36475d9d0280259ac7755c5bf7573cbf3",
-  "generated_at": "2026-07-26T09:21:32Z",
+  "generated_at": "2026-07-26T12:10:30Z",
   "inputs": {
     "c1_buffer_assignment/n22_d10_exp_default.txt": "30cd18ad9941c04174e110d187e7ef838d080e04b12da5acb82cdfbb05351bb1",
     "c1_buffer_assignment/n22_d10_exp_nofusion.txt": "b34b02bd6306f6bccdf39569d6e4dbbb74d4f385a0be59c3d505ebed6d6c86c6",
@@ -103,8 +103,8 @@
     "c1_optimized_hlo/n22_d10_exp_nofusion.hlo": "33753ff4a5a461fa72179d02a9c3bb9be3d644ab81aea6687c4ee4ba91f6329a",
     "c1_optimized_hlo/n24_d10_exp_default.hlo": "5879b2b41a55ed2b5b198229715efbf610d1c307675bf4043e98081da9cbd1ef",
     "c1_optimized_hlo/n24_d10_exp_nofusion.hlo": "f95b1c5b9eb27378f418213cc82ca66c7fe6196faed0075f908eebcc3e9732ca",
-    "c2_checkpoint_manifest.json": "a6a59e29817c807efc51f06cf9b970cc6800b75deb1ae493bd78d47d5179d6fe",
-    "c2_judgment.json": "112ccfc4cbf4745c698e6ea0da32ba65e522abf1a36feaba8b686dc1c3de6d2e",
+    "c2_checkpoint_manifest.json": "0929121e556bd0498a6253ab28c3ef4055c1e2d9a5af741b66227ae3507c4a66",
+    "c2_judgment.json": "0f80488ed5a1a233617120c0f6d0bfd752b6ff39a8dfcb70a1d8ae8e9d5d506a",
     "c2_peak_frontier.json": "b26f49e326db337b4d1e9fc83f2de04fe7a541f288bfcae30f1975de4de87545",
     "c2_tileability.csv": "f2fb95e5de3e99c002b3dd758461d282d7f4b8992e61b4e9352a09cc883bc817",
     "contraction_shapes.csv": "8e15b9dec8018128986151cfbdc3f85204ca4711ae139a60c0f3706c9ba26590",
@@ -113,9 +113,9 @@
     "cublaslt_grouped_capability.json": "7deb1ec4167802ec9ffcac23fc8baf2a7b56240ac9e71860b076a63d3ed43b81",
     "cublaslt_planar_capability.json": "fe729f8d7df8cf7f8903ee5cd1fc0e7843f4998b103fb2ff78a9dcc4840f832b",
     "cutlass_sm120_4m.json": "7d4ecf485a4f1cc859c06f15569b8b0051b5b5489a21908aed46eff7895dc81f",
-    "numerical_validation.csv": "31dcab8c5459704b9fbff645c193f5e45dbbfd4c3e5a77c8e2e2bff66dc6e501",
-    "numerical_validation.json": "9fa7dec3c9ec2c83f063ad0117d8f8854754cec63f24b192cc2808eb569ea9a6",
-    "region_prototype.json": "aa662f588df845e6f583ca219625e72078c2a8aa8a02f37b24a2232fd23982d1",
+    "numerical_validation.csv": "fb8977b30b5a70d9deb81aacf8cbed5c706b8275f4284717e1ad19ca155917bf",
+    "numerical_validation.json": "1bf26b3439bea0d04b72ef006ac3ff2733d3c7fde15218d2b3deea17b92a7add",
+    "region_prototype.json": "bc23ce817dd07cedd7ad499052830296def00961898198ac817cba2a203aa348",
     "run_context.json": "089d70376547c9a68383d1f65defb9a262c7107da4cd0f0de431791d863ea5e3"
   },
   "measurement_provenance_valid": true,

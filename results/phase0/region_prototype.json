@@ -15,7 +15,8 @@
   "full_anchor_correctness": {
     "P_bytes_avoided": 536870912,
     "T_bytes_avoided": 536870912,
-    "global_rel_l2": 8.498279054467433e-07,
+    "any_nan_inf": false,
+    "global_rel_l2": 8.499349462149729e-07,
     "local_scaled_argmax_reference_abs": 0.7478158549647939,
     "local_scaled_max": 0.0020803196682047265,
     "n_seeds": 3,
@@ -26,9 +27,38 @@
       64,
       1048576
     ],
+    "per_seed_dual_gate": {
+      "0": {
+        "global_rel_l2": 8.499349462149729e-07,
+        "local_scaled_argmax_reference_abs": 0.8786239606484444,
+        "local_scaled_max": 0.001375343871910854,
+        "nan_inf": false,
+        "reference_rms": 732.5890338827346,
+        "status": null
+      },
+      "1": {
+        "global_rel_l2": 8.49886146250824e-07,
+        "local_scaled_argmax_reference_abs": 0.25575582300020033,
+        "local_scaled_max": 0.001673999617784921,
+        "nan_inf": false,
+        "reference_rms": 728.8119708254151,
+        "status": null
+      },
+      "2": {
+        "global_rel_l2": 8.498279054467433e-07,
+        "local_scaled_argmax_reference_abs": 0.7478158549647939,
+        "local_scaled_max": 0.0020803196682047265,
+        "nan_inf": false,
+        "reference_rms": 718.4464478058138,
+        "status": null
+      }
+    },
     "reference_rms": 718.4464478058138,
     "worst_dg_seed": 2,
+    "worst_global_rel_l2": 8.499349462149729e-07,
+    "worst_global_rel_l2_cell_key": "seed=0",
     "worst_local_scaled_max": 0.0020803196682047265,
+    "worst_local_scaled_max_cell_key": "seed=2",
     "worst_max_rel": 1.1485871027616668e-06,
     "worst_relative_l2": 8.499349064550188e-07
   },
@@ -36,8 +66,8 @@
   "fused_full_anchor_run": true,
   "fused_latency_note": "fused kernel at the full anchor is timed via cuda events (kernel_only_latency_ms). The materialized path's runtime allocator peak (~1.7 GB, P+T+E coexist during GEMMs) is measured via driver memGetInfo delta; the fused path's peak (~672 MiB, A+B+D+E only, no P/T) is measured the same way. peak_evidence_class=MEASURED.",
   "fused_runtime_allocator_peak_bytes": 704643072,
-  "kernel_only_latency_ms": 19157.951171875,
-  "materialized_latency_ms": 89.72563499997932,
+  "kernel_only_latency_ms": 20147.203125,
+  "materialized_latency_ms": 93.64002399996707,
   "materialized_runtime_allocator_peak_bytes": 1778384896,
   "math": "E = D @ transform(A@B); transform = reshape->transpose->reshape (Task 2)",
   "max_rel": 2.39476690921947e-07,
