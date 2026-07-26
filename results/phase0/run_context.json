@@ -1,10 +1,14 @@
 {
   "schema_version": "run-context-v2",
   "measurement": {
-    "source_commit": "205899678c0de72e9ff180ab357a973bf7e1112e"
+    "source_commit": "09e69b9fe9542879a13f74fcca3f6e51a53e8253",
+    "original_recorded_source_commit": "fc8b2c1d522861beaa849d808b0fc8a9c6dab873",
+    "provenance_correction_reason": "Before the GPU measurement, region_proto.py gained a seven-line input-profile version-token mapping needed to emit summary cell-key labels. The commit was amended to 09e69b9f after run_context.py had recorded fc8b2c1d. The change does not alter inputs, the CUDA kernel, the materialized oracle, or dual-gate metric calculations.",
+    "source_delta_scope": "summary cell-key text only",
+    "numerical_effect": "none"
   },
   "aggregation": {
-    "source_commit": "976c7892fa575758f14ce63677aa733b97961ac4",
+    "source_commit": "fc8b2c1d522861beaa849d808b0fc8a9c6dab873",
     "dirty_worktree": false,
     "dirty_file_count": 0,
     "command": "python results/_phase0/numerical.py --regen-no-gpu",
