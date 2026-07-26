@@ -311,6 +311,14 @@ def apply_policy(route, dtype, metrics):
 
 _ROUTES = ("planar", "grouped", "region_fused", "cutlass_4m_single")
 
+#: P1 #4 fix (reviewer B): the ONLY source token that counts as a real
+#: measurement. Any other source (MODEL_ONLY, diagnostic, reused, unknown,
+#: missing) is NOT measured -> the cell is not counted as measured -> if it's
+#: a required cell, the route -> UNKNOWN (fail-closed). Previously any
+#: non-``not_run:*`` source with a non-None relative_l2 was treated as
+#: measured, so source="MODEL_ONLY" + relative_l2=0 -> measured -> PASS.
+MEASURED_SOURCE = "measured"
+
 
 def _shape_key(shape):
     """Normalize a row's ``shape`` field to a hashable schema-key component.
@@ -617,11 +625,16 @@ def aggregate(rows, expected_counts, case_hashes, legit_not_run, shape_drift=Fal
         for dtype in dtypes:
             exp = {k for k in expected_keys if k[0] == route and k[1] == dtype}
             cells = [r for r in rows if r["route"] == route and r["dtype"] == dtype]
-            # measured = real source AND a real relative_l2 (the canonical metric)
+            # P1 #4 fix (reviewer B): measured requires STRICT source ==
+            # "measured" (the canonical measurement token). Any other source
+            # (MODEL_ONLY, diagnostic, reused, unknown, missing) is NOT
+            # measured -> the cell is not counted as measured -> if required,
+            # the route -> UNKNOWN (fail-closed). Previously any non-not_run
+            # source with relative_l2 != None was treated as measured.
             measured_rows = [
                 r
                 for r in cells
-                if not str(r.get("source", "")).startswith("not_run")
+                if r.get("source") == MEASURED_SOURCE
                 and r.get("relative_l2") is not None
             ]
             not_run_rows = [

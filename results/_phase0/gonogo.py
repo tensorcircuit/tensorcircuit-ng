@@ -1157,17 +1157,24 @@ def _region_case_binding_state(proto, c2_judgment_path, proto_path=None):
         return "MISSING"
     # F8c(c): if the judgment records a prototype hash, compare it to the
     # actual region_prototype.json byte hash (re-derive, don't trust).
+    # F8c(c): P1 #3 fix (reviewer B): REQUIRE the prototype hash. If
+    # file_hashes missing OR proto_hash missing/None OR proto_path is None ->
+    # return "MISSING" (fail-closed, not MATCH). Previously the hash check was
+    # SKIPPED when file_hashes was missing or proto_hash was None, so a
+    # binding_ok=True with no hash -> MATCH -> could PASS (fail-open).
     file_hashes = binding.get("file_hashes")
-    if isinstance(file_hashes, dict):
-        proto_hash = file_hashes.get("prototype")
-        if proto_hash and proto_path:
-            try:
-                with open(proto_path, "rb") as fh:
-                    actual = hashlib.sha256(fh.read()).hexdigest()
-            except Exception:
-                return "MISSING"
-            if actual != proto_hash:
-                return "MISSING"
+    if not isinstance(file_hashes, dict):
+        return "MISSING"
+    proto_hash = file_hashes.get("prototype")
+    if not proto_hash or not proto_path:
+        return "MISSING"
+    try:
+        with open(proto_path, "rb") as fh:
+            actual = hashlib.sha256(fh.read()).hexdigest()
+    except Exception:
+        return "MISSING"
+    if actual != proto_hash:
+        return "MISSING"
     return "MATCH" if binding.get("binding_ok") is True else "MISSING"
 
 
@@ -1225,6 +1232,12 @@ def _region_proto_status(path):
     # before the gate; the artifact itself declares the region infeasible).
     if verdict == "NOT_FEASIBLE":
         return _BAD
+    # P1 #3 fix (reviewer B): absent verdict (None) -> incomplete artifact ->
+    # UNKNOWN (not PASS). A proto without a verdict field cannot be trusted to
+    # carry a canonical token. Previously verdict=None skipped the consistency
+    # check and the gate could return PASS with all-green evidence (fail-open).
+    if verdict is None:
+        return _UNKNOWN
 
     # Gate the intrinsic P->T->E prototype standard (same checks c2 gates on).
     if not _region_proto_is_real_pte(data):
@@ -1244,8 +1257,18 @@ def _region_proto_status(path):
 
     # Bidirectional self-report consistency: compare recomputed token to the
     # self-reported verdict. Disagreement -> CONFLICT -> contradiction -> UNKNOWN.
+    # P1 #3 fix (reviewer B): an UNKNOWN verdict enum (not in the map, e.g.
+    # "MADE_UP") is ALSO a conflict -- the artifact makes an unrecognized claim
+    # that cannot be trusted. Previously unknown enums were silently ignored
+    # (expected_from_self = None -> no conflict check) -> a forged "MADE_UP"
+    # verdict + all green -> PASS (fail-open). Only verdict=None (absent) skips
+    # the consistency check (absent verdict is handled as UNKNOWN below).
     expected_from_self = _c2._REGION_SELF_REPORT_MAP.get(verdict)
-    if expected_from_self is not None and token != expected_from_self:
+    if verdict is not None and expected_from_self is None:
+        # Unknown verdict (not in the allowlist) -> CONFLICT -> UNKNOWN.
+        raw["consistency_state"] = "CONFLICT"
+        token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
+    elif expected_from_self is not None and token != expected_from_self:
         raw["consistency_state"] = "CONFLICT"
         token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
 

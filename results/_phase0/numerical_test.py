@@ -223,6 +223,10 @@ def _row(route, dtype, shape, level, seed, rel_l2, max_abs, max_rel, nan):
         "max_abs": max_abs,
         "max_rel": max_rel,
         "nan_inf": nan,
+        # P1 #4: aggregate now requires strict source == "measured" for a row
+        # to count as a real measurement. Default to "measured" so existing
+        # tests that rely on _row producing measured rows still work.
+        "source": "measured",
     }
 
 
@@ -578,7 +582,7 @@ def test_aggregate_unknown_when_required_cell_not_run_is_undeclared():
             "max_rel": 1e-5,
             "nan_inf": False,
             "policy_pass": 1,
-            # no source -> real measured cell
+            "source": "measured",  # P1 #4: explicit source=measured
         },
         {
             "route": "planar",
@@ -695,6 +699,7 @@ def test_aggregate_region_unknown_when_only_small_contract_measured():
             "max_abs": 1e-6,
             "max_rel": 1e-7,
             "nan_inf": False,
+            "source": "measured",  # P1 #4: explicit source=measured
         }
         for level in ("baseline", "mixed_scale", "cancellation")
         for seed in (0, 1, 2)
@@ -739,7 +744,7 @@ def test_aggregate_cutlass_unknown_when_adversarial_not_run():
             "max_abs": 1e-4,
             "max_rel": 1e-5,
             "nan_inf": False,
-            "source": "task8_reuse",
+            "source": "measured",  # P1 #4: strict source=measured (was task8_reuse)
         }
         for seed in (0, 1, 2)
     ] + [
@@ -1661,6 +1666,143 @@ def test_synthetic_pipeline_route_viable():
     assert rv["cutlass_4m_single"]["status"] == "VIABLE", rv
     assert rv["cutlass_4m_single"]["capability"] == "OK", rv
     assert rv["cutlass_4m_single"]["numerical"] == "OK", rv
+
+
+# ---------------------------------------------------------------------------
+# P1 #4 (reviewer B): mutation tests -- aggregate MUST require strict
+# source == "measured" for a row to count as a real measurement. Any other
+# source (MODEL_ONLY, diagnostic, reused, unknown, missing) is NOT measured.
+# Each mutation proves the pre-fix code fail-opened; the post-fix code
+# fail-closes.
+# ---------------------------------------------------------------------------
+
+
+def test_p1_aggregate_model_only_source_not_measured():
+    """P1 #4 mutation: all required cells have source="MODEL_ONLY" +
+    relative_l2=0 -> all routes must be UNKNOWN (not PASS). Pre-fix: any
+    non-not_run source with relative_l2 != None was treated as measured ->
+    all routes PASS (fail-open). Post-fix: strict source=="measured" required
+    -> MODEL_ONLY not measured -> missing -> UNKNOWN."""
+    from results._phase0.numerical import aggregate
+
+    rows = [
+        {
+            "route": "planar",
+            "dtype": "C16BF",
+            "shape": (16384, 1024, 1024),
+            "level": "baseline",
+            "seed": 0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "max_rel": 0.0,
+            "nan_inf": False,
+            "policy_pass": 1,
+            "source": "MODEL_ONLY",  # NOT "measured" -> not a real measurement
+        },
+    ]
+    out = aggregate(
+        rows,
+        expected_counts={("planar", "C16BF"): 1},
+        case_hashes=_valid_case_hashes(),
+        legit_not_run=[],
+    )
+    planar = [r for r in out["per_route"] if r["route"] == "planar"][0]
+    assert planar["criterion"] == "UNKNOWN", planar
+    assert out["overall_numerical_status"] == "INCONCLUSIVE", out
+
+
+def test_p1_aggregate_diagnostic_source_not_measured():
+    """P1 #4 mutation: a required cell with source="diagnostic" -> UNKNOWN.
+    Pre-fix: "diagnostic" doesn't start with "not_run" -> treated as measured
+    -> could PASS (fail-open). Post-fix: strict source=="measured" required
+    -> "diagnostic" not measured -> missing -> UNKNOWN."""
+    from results._phase0.numerical import aggregate
+
+    rows = [
+        {
+            "route": "planar",
+            "dtype": "C16BF",
+            "shape": (16384, 1024, 1024),
+            "level": "baseline",
+            "seed": 0,
+            "relative_l2": 1e-5,
+            "max_abs": 1e-4,
+            "max_rel": 1e-5,
+            "nan_inf": False,
+            "policy_pass": 1,
+            "source": "diagnostic",  # NOT "measured" -> not a real measurement
+        },
+    ]
+    out = aggregate(
+        rows,
+        expected_counts={("planar", "C16BF"): 1},
+        case_hashes=_valid_case_hashes(),
+        legit_not_run=[],
+    )
+    planar = [r for r in out["per_route"] if r["route"] == "planar"][0]
+    assert planar["criterion"] == "UNKNOWN", planar
+
+
+def test_p1_aggregate_missing_source_not_measured():
+    """P1 #4 mutation: a required cell with NO source field (missing) ->
+    UNKNOWN. Pre-fix: missing source -> str("") doesn't start with "not_run"
+    -> treated as measured -> could PASS (fail-open). Post-fix: strict
+    source=="measured" required -> missing source not measured -> UNKNOWN."""
+    from results._phase0.numerical import aggregate
+
+    rows = [
+        {
+            "route": "planar",
+            "dtype": "C16BF",
+            "shape": (16384, 1024, 1024),
+            "level": "baseline",
+            "seed": 0,
+            "relative_l2": 1e-5,
+            "max_abs": 1e-4,
+            "max_rel": 1e-5,
+            "nan_inf": False,
+            "policy_pass": 1,
+            # NO source field -> not "measured" -> not a real measurement
+        },
+    ]
+    out = aggregate(
+        rows,
+        expected_counts={("planar", "C16BF"): 1},
+        case_hashes=_valid_case_hashes(),
+        legit_not_run=[],
+    )
+    planar = [r for r in out["per_route"] if r["route"] == "planar"][0]
+    assert planar["criterion"] == "UNKNOWN", planar
+
+
+def test_p1_aggregate_measured_source_with_valid_rel_l2_is_measured():
+    """P1 #4 GREEN pin: source="measured" + valid relative_l2 -> cell IS
+    counted as measured -> can reach PASS (the legitimate measured path)."""
+    from results._phase0.numerical import aggregate
+
+    rows = [
+        {
+            "route": "planar",
+            "dtype": "C16BF",
+            "shape": (16384, 1024, 1024),
+            "level": "baseline",
+            "seed": 0,
+            "relative_l2": 1e-5,
+            "max_abs": 1e-4,
+            "max_rel": 1e-5,
+            "nan_inf": False,
+            "policy_pass": 1,
+            "source": "measured",  # correct source -> counted as measured
+        },
+    ]
+    out = aggregate(
+        rows,
+        expected_counts={("planar", "C16BF"): 1},
+        case_hashes=_valid_case_hashes(),
+        legit_not_run=[],
+    )
+    planar = [r for r in out["per_route"] if r["route"] == "planar"][0]
+    assert planar["criterion"] == "PASS", planar
 
 
 if __name__ == "__main__":

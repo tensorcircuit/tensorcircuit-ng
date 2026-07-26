@@ -14,6 +14,7 @@ import datetime
 import hashlib
 import json
 import os
+import subprocess
 
 from results._phase0.verdict_schema import (
     CRITERIA_NAMES,
@@ -487,6 +488,26 @@ def _load_json(path):
         return {}
 
 
+def _verify_commit_exists(commit_sha):
+    """P1 #5 fix (reviewer B): verify that ``commit_sha`` exists in the git
+    repo (a basic provenance check, not a full chain). Returns True if the
+    commit exists, False if it doesn't or is empty/None. Uses ``git cat-file
+    -t`` which is fast and does not require network access.
+    """
+    if not commit_sha or not isinstance(commit_sha, str):
+        return False
+    try:
+        r = subprocess.run(
+            ["git", "cat-file", "-t", commit_sha],
+            capture_output=True,
+            text=True,
+            cwd=os.getcwd(),
+        )
+        return r.returncode == 0 and r.stdout.strip() == "commit"
+    except Exception:
+        return False
+
+
 def build_manifest(base, generated_at=None):
     """Compose the manifest-v1 object from run_context + gonogo + validated
     criteria + cases + inputs/outputs. Deterministic given fixed generated_at.
@@ -556,9 +577,23 @@ def build_manifest(base, generated_at=None):
             "%Y-%m-%dT%H:%M:%SZ"
         )
 
+    # P1 #5 fix (reviewer B): verify the measurement source commit exists in
+    # the git repo. If it doesn't (stale/impossible commit), flag it as
+    # invalid and add a reason. The manifest must NOT silently copy a
+    # non-existent measurement commit.
+    meas_commit = measurement.get("source_commit")
+    meas_provenance_valid = _verify_commit_exists(meas_commit)
+    extra_reasons = []
+    if not meas_provenance_valid:
+        extra_reasons.append(
+            f"measurement_source_commit {meas_commit!r} does not exist in the "
+            f"git repo (stale/impossible commit)"
+        )
+
     return {
         "schema_version": SCHEMA_VERSION,
-        "measurement_source_commit": measurement.get("source_commit"),
+        "measurement_source_commit": meas_commit,
+        "measurement_provenance_valid": meas_provenance_valid,
         "aggregation_source_commit": aggregation.get("source_commit"),
         "aggregation_dirty_worktree": aggregation.get("dirty_worktree"),
         "aggregation_dirty_file_count": aggregation.get("dirty_file_count"),
@@ -568,7 +603,7 @@ def build_manifest(base, generated_at=None):
         "route_verdict": derived["route_verdict"],
         "phase0_completion": derived["phase0_completion"],
         "phase1_authorization": derived["phase1_authorization"],
-        "reasons": derived["reasons"],
+        "reasons": derived["reasons"] + extra_reasons,
         "blocking_artifacts": derived["blocking_artifacts"],
         "required_artifacts": {k: list(v) for k, v in REQUIRED_ARTIFACTS.items()},
         "inputs": dict(sorted(inputs.items())),

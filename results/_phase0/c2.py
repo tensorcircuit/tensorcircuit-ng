@@ -552,8 +552,14 @@ def _normalize_region_peak(proto, *, case_binding_state="MISSING"):
     else:
         evidence_class_state = "UNRECOGNIZED"
 
-    # method_state: APPROVED iff peak_measurement_method in the policy allowlist.
-    method = proto.get("peak_measurement_method")
+    # method_state: APPROVED iff runtime_peak_measurement_method (the REAL
+    # runtime method) in the policy allowlist. P1 #2 fix (reviewer B): the
+    # gate MUST read ``runtime_peak_measurement_method`` (the actual runtime
+    # method = "cuda_allocator_highwatermark"), NOT the stale analytical
+    # ``peak_measurement_method`` (= "raw_allocation_size_delta"). Reading the
+    # stale field fail-opens: a proto with an unapproved runtime method but a
+    # stale approved analytical method -> APPROVED -> can PASS.
+    method = proto.get("runtime_peak_measurement_method")
     if method is None:
         method_state = "MISSING"
     elif method in approved_methods:
@@ -576,15 +582,19 @@ def _normalize_region_peak(proto, *, case_binding_state="MISSING"):
     else:
         scope_state = "NON_FULL_ANCHOR"
 
-    # sample_state: from n_seeds (the committed artifact's field, NOT the
-    # plan's stale runtime_peak_sample_count).
-    n_seeds = proto.get("n_seeds")
-    if n_seeds is None:
+    # sample_state: from runtime_peak_sample_count (the ACTUAL peak sample
+    # count), NOT n_seeds (the correctness seed count). P1 #2 fix (reviewer B):
+    # the gate MUST read ``runtime_peak_sample_count`` (the actual peak sample
+    # count), NOT ``n_seeds`` (the correctness seed count = 3). Reading n_seeds
+    # fail-opens: a proto with 0 peak samples but 3 correctness seeds -> OK ->
+    # can PASS.
+    n_samples = proto.get("runtime_peak_sample_count")
+    if n_samples is None:
         sample_state = "MISSING"
-    elif isinstance(n_seeds, bool):
+    elif isinstance(n_samples, bool):
         sample_state = "BOOL"
-    elif isinstance(n_seeds, int):
-        sample_state = "OK" if n_seeds >= min_seeds else "BELOW_MIN"
+    elif isinstance(n_samples, int):
+        sample_state = "OK" if n_samples >= min_seeds else "BELOW_MIN"
     else:
         sample_state = "NON_INTEGER"
 
@@ -621,21 +631,40 @@ def _normalize_region_peak(proto, *, case_binding_state="MISSING"):
     # full_anchor_run_state: TRUE iff fused_full_anchor_run is True.
     full_anchor_run_state = "TRUE" if far is True else "FALSE"
 
-    # accuracy_state (errata #1): PASSED if relative_l2 + max_rel present and
-    # below the accuracy thresholds; FAILED if above; MISSING if absent.
-    rel_l2 = proto.get("relative_l2")
-    max_rel = proto.get("max_rel")
-    if (
-        isinstance(rel_l2, (int, float))
-        and not isinstance(rel_l2, bool)
-        and (isinstance(max_rel, (int, float)) and not isinstance(max_rel, bool))
-    ):
-        if rel_l2 < ACCURACY_REL_L2 and max_rel < ACCURACY_MAX_REL:
-            accuracy_state = "PASSED"
-        else:
-            accuracy_state = "FAILED"
-    else:
+    # accuracy_state (P1 #2 fix, reviewer B): read nested
+    # ``full_anchor_correctness.worst_relative_l2`` /
+    # ``full_anchor_correctness.worst_max_rel`` /
+    # ``full_anchor_correctness.nan_inf`` (the FULL-ANCHOR correctness
+    # evidence), NOT top-level ``relative_l2`` / ``max_rel`` (small-contract
+    # values). If ``full_anchor_correctness`` is missing/malformed ->
+    # accuracy_state=MISSING (fail-closed). If ``nan_inf=True`` -> FAILED.
+    # If ``worst_relative_l2 >= ACCURACY_REL_L2`` or ``worst_max_rel >=
+    # ACCURACY_MAX_REL`` -> FAILED. Reading the top-level fields fail-opens:
+    # a proto with bad full-anchor accuracy but good small-contract accuracy
+    # -> PASSED -> can PASS.
+    fac = proto.get("full_anchor_correctness")
+    if not isinstance(fac, dict):
         accuracy_state = "MISSING"
+    else:
+        nan_inf = fac.get("nan_inf")
+        if nan_inf is True:
+            accuracy_state = "FAILED"
+        else:
+            rel_l2 = fac.get("worst_relative_l2")
+            max_rel = fac.get("worst_max_rel")
+            if (
+                isinstance(rel_l2, (int, float))
+                and not isinstance(rel_l2, bool)
+                and (
+                    isinstance(max_rel, (int, float)) and not isinstance(max_rel, bool)
+                )
+            ):
+                if rel_l2 < ACCURACY_REL_L2 and max_rel < ACCURACY_MAX_REL:
+                    accuracy_state = "PASSED"
+                else:
+                    accuracy_state = "FAILED"
+            else:
+                accuracy_state = "MISSING"
 
     # resource_state (errata #1): OK if registers_per_thread AND occupancy_pct
     # present and meet policy; FAILED if present but fail; MISSING if absent
@@ -716,12 +745,21 @@ def _recompute_conditions(proto, peak):
     ``None`` means the field is absent -> that sub-condition is UNKNOWN (cannot confirm).
     """
     rc: dict[str, Any] = {}
-    rel_l2 = proto.get("relative_l2")
-    max_rel = proto.get("max_rel")
-    if isinstance(rel_l2, (int, float)) and isinstance(max_rel, (int, float)):
-        rc["accuracy_pass"] = bool(
-            rel_l2 < ACCURACY_REL_L2 and max_rel < ACCURACY_MAX_REL
-        )
+    # P1 #2 fix (reviewer B): accuracy_pass reads from nested
+    # full_anchor_correctness (the full-anchor correctness evidence), NOT
+    # top-level relative_l2/max_rel (small-contract values).
+    fac = proto.get("full_anchor_correctness")
+    if isinstance(fac, dict) and fac.get("nan_inf") is True:
+        rc["accuracy_pass"] = False
+    elif isinstance(fac, dict):
+        rel_l2 = fac.get("worst_relative_l2")
+        max_rel = fac.get("worst_max_rel")
+        if isinstance(rel_l2, (int, float)) and isinstance(max_rel, (int, float)):
+            rc["accuracy_pass"] = bool(
+                rel_l2 < ACCURACY_REL_L2 and max_rel < ACCURACY_MAX_REL
+            )
+        else:
+            rc["accuracy_pass"] = None
     else:
         rc["accuracy_pass"] = None
     regs = proto.get("registers_per_thread")
@@ -749,9 +787,9 @@ def _recompute_conditions(proto, peak):
         approved_methods = frozenset(region_pol.get("approved_methods", ()))
         min_seeds = region_pol.get("min_sample_count", 1)
 
-        method = proto.get("peak_measurement_method")
+        method = proto.get("runtime_peak_measurement_method")
         scope = proto.get("runtime_peak_scope")
-        n_seeds = proto.get("n_seeds")
+        n_seeds = proto.get("runtime_peak_sample_count")
         mr = proto.get("materialized_runtime_allocator_peak_bytes")
         fr = proto.get("fused_runtime_allocator_peak_bytes")
         if (
@@ -900,8 +938,16 @@ def _region_layer(proto, edge, rc):
     token, reason = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
     # Bidirectional self-report consistency: compare recomputed token to the
     # self-reported verdict. Disagreement -> CONFLICT -> contradiction -> UNKNOWN.
+    # P1 #3 fix (reviewer B): an UNKNOWN verdict enum (not in the map, e.g.
+    # "MADE_UP") is ALSO a conflict -- the artifact makes an unrecognized claim
+    # that cannot be trusted. Previously unknown enums were silently ignored
+    # (expected_from_self = None -> no conflict check) -> a forged "MADE_UP"
+    # verdict + all green -> PASS (fail-open).
     expected_from_self = _REGION_SELF_REPORT_MAP.get(verdict)
-    if expected_from_self is not None and token != expected_from_self:
+    if verdict is not None and expected_from_self is None:
+        raw["consistency_state"] = "CONFLICT"
+        token, reason = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
+    elif expected_from_self is not None and token != expected_from_self:
         raw["consistency_state"] = "CONFLICT"
         token, reason = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
     return (token, reason)

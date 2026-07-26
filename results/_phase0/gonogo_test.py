@@ -1301,17 +1301,20 @@ def test_region_proto_status_recomputes_pass_from_full_anchor_evidence(tmp_path)
                 "no_full_P_materialized": True,
                 "no_full_T_materialized": True,
                 "fused_full_anchor_run": True,
-                "relative_l2": 1e-7,
-                "max_rel": 1e-7,
+                "full_anchor_correctness": {
+                    "worst_relative_l2": 1e-7,
+                    "worst_max_rel": 1e-7,
+                    "nan_inf": False,
+                },
                 "registers_per_thread": 40,
                 "occupancy_pct": 100.0,
                 # MEASURED runtime peak (shared peak gate with C2): a full-anchor
                 # fused run measured the runtime allocator peak -> canonical gain.
-                # Task 3: uses the committed artifact's REAL field names.
+                # P1 #2: uses the RUNTIME field names.
                 "peak_evidence_class": "MEASURED",
-                "peak_measurement_method": "cuda_allocator_high_watermark_v1",
+                "runtime_peak_measurement_method": "cuda_allocator_highwatermark",
                 "runtime_peak_scope": "full_anchor_pte_v1",
-                "n_seeds": 3,
+                "runtime_peak_sample_count": 3,
                 "materialized_runtime_allocator_peak_bytes": 2000000000,
                 "fused_runtime_allocator_peak_bytes": 1000000000,
             }
@@ -1644,10 +1647,9 @@ def test_region_proto_missing_case_binding_not_pass(tmp_path):
     provides NO ``c2_judgment.json`` alongside the proto -> ``case_binding_state
     =MISSING`` -> not PASS. Even with a complete MEASURED fixture (all 12 gate
     fields green EXCEPT case_binding), the gonogo reader returns UNKNOWN because
-    the binding is unverified. Uses the committed artifact's REAL field names
-    (``schema_version=region-prototype-v2``, ``peak_measurement_method``,
-    ``materialized_runtime_allocator_peak_bytes``,
-    ``fused_runtime_allocator_peak_bytes``, ``n_seeds``)."""
+    the binding is unverified. P1 #2: uses RUNTIME field names
+    (``runtime_peak_measurement_method``, ``runtime_peak_sample_count``,
+    ``full_anchor_correctness``)."""
     import json
     from results._phase0.gonogo import _region_proto_status
 
@@ -1666,14 +1668,17 @@ def test_region_proto_missing_case_binding_not_pass(tmp_path):
                 "no_full_P_materialized": True,
                 "no_full_T_materialized": True,
                 "peak_evidence_class": "MEASURED",
-                "peak_measurement_method": "cuda_allocator_high_watermark_v1",
+                "runtime_peak_measurement_method": "cuda_allocator_highwatermark",
                 "runtime_peak_scope": "full_anchor_pte_v1",
-                "n_seeds": 3,
+                "runtime_peak_sample_count": 3,
                 "materialized_runtime_allocator_peak_bytes": 400,
                 "fused_runtime_allocator_peak_bytes": 100,
                 "fused_full_anchor_run": True,
-                "relative_l2": 1e-7,
-                "max_rel": 1e-7,
+                "full_anchor_correctness": {
+                    "worst_relative_l2": 1e-7,
+                    "worst_max_rel": 1e-7,
+                    "nan_inf": False,
+                },
                 "registers_per_thread": 40,
                 "occupancy_pct": 100.0,
             }
@@ -1694,7 +1699,10 @@ def test_region_proto_missing_case_binding_not_pass(tmp_path):
 
 def _full_measured_region_proto():
     """A full legal MEASURED full-anchor region proto (all 12 region_peak gate
-    fields green) + a real P->T->E intrinsic standard. Used by the F4a tests."""
+    fields green) + a real P->T->E intrinsic standard. Used by the F4a tests.
+    P1 #2 fix: uses RUNTIME field names (runtime_peak_measurement_method,
+    runtime_peak_sample_count, full_anchor_correctness), not the stale
+    analytical fields."""
     return {
         "schema_version": "region-prototype-v2",
         "case_id": "n24_d10_default",
@@ -1708,14 +1716,17 @@ def _full_measured_region_proto():
         "no_full_P_materialized": True,
         "no_full_T_materialized": True,
         "fused_full_anchor_run": True,
-        "relative_l2": 1e-7,
-        "max_rel": 1e-7,
+        "full_anchor_correctness": {
+            "worst_relative_l2": 1e-7,
+            "worst_max_rel": 1e-7,
+            "nan_inf": False,
+        },
         "registers_per_thread": 40,
         "occupancy_pct": 100.0,
         "peak_evidence_class": "MEASURED",
-        "peak_measurement_method": "cuda_allocator_high_watermark_v1",
+        "runtime_peak_measurement_method": "cuda_allocator_highwatermark",
         "runtime_peak_scope": "full_anchor_pte_v1",
-        "n_seeds": 3,
+        "runtime_peak_sample_count": 3,
         "materialized_runtime_allocator_peak_bytes": 2000000000,
         "fused_runtime_allocator_peak_bytes": 1000000000,
     }
@@ -1730,16 +1741,28 @@ def test_region_proto_pass_with_verified_binding(tmp_path):
     (hard-coded MISSING -> never MATCH -> never PASS).
 
     F8c: the c2_judgment must carry schema_version=c2-judgment-v2 and empty
-    binding.problems for the reader to re-verify the binding's integrity."""
+    binding.problems for the reader to re-verify the binding's integrity.
+    P1 #3: the c2_judgment must also carry file_hashes.prototype matching the
+    actual proto file hash (hash is now REQUIRED, not optional)."""
+    import hashlib
     import json
     from results._phase0.gonogo import _region_proto_status
 
-    (tmp_path / "r.json").write_text(json.dumps(_full_measured_region_proto()))
+    proto = _full_measured_region_proto()
+    proto_bytes = json.dumps(proto).encode()
+    proto_hash = hashlib.sha256(proto_bytes).hexdigest()
+    (tmp_path / "r.json").write_bytes(proto_bytes)
     (tmp_path / "c2_judgment.json").write_text(
         json.dumps(
             {
                 "schema_version": "c2-judgment-v2",
-                "n24_d10_default": {"binding": {"binding_ok": True, "problems": []}},
+                "n24_d10_default": {
+                    "binding": {
+                        "binding_ok": True,
+                        "problems": [],
+                        "file_hashes": {"prototype": proto_hash},
+                    }
+                },
             }
         )
     )
@@ -1960,18 +1983,28 @@ def test_f8c_region_no_full_P_string_not_pass(tmp_path):
 def test_f8c_region_no_full_P_bool_true_pass_reachable(tmp_path):
     """F8c: no_full_P_materialized=True (bool) + all green + verified binding
     -> PASS (positive reachable). Confirms the strict ``is True`` check does
-    not break the legitimate positive path."""
+    not break the legitimate positive path.
+    P1 #3: file_hashes.prototype must match the actual proto file hash."""
+    import hashlib
     import json
     from results._phase0.gonogo import _region_proto_status
 
     proto = _full_measured_region_proto()
     # no_full_P_materialized is already True (bool) in _full_measured_region_proto
-    (tmp_path / "r.json").write_text(json.dumps(proto))
+    proto_bytes = json.dumps(proto).encode()
+    proto_hash = hashlib.sha256(proto_bytes).hexdigest()
+    (tmp_path / "r.json").write_bytes(proto_bytes)
     (tmp_path / "c2_judgment.json").write_text(
         json.dumps(
             {
                 "schema_version": "c2-judgment-v2",
-                "n24_d10_default": {"binding": {"binding_ok": True, "problems": []}},
+                "n24_d10_default": {
+                    "binding": {
+                        "binding_ok": True,
+                        "problems": [],
+                        "file_hashes": {"prototype": proto_hash},
+                    }
+                },
             }
         )
     )
@@ -2225,6 +2258,110 @@ def test_f8d_native_attempted_not_borrowed_from_sm80_fallback():
         f"native must not borrow attempted from sm80_fallback single_4m, "
         f"got {result!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# P1 #3 (reviewer B): mutation tests -- the region binding MUST require the
+# prototype hash, and the verdict MUST be validated against the allowlist.
+# Each mutation proves the pre-fix code fail-opened; the post-fix code
+# fail-closes.
+# ---------------------------------------------------------------------------
+
+
+def test_p1_binding_no_file_hashes_not_pass(tmp_path):
+    """P1 #3 mutation: binding_ok=True but file_hashes is MISSING (no dict)
+    -> gate must NOT PASS. Pre-fix: hash check was SKIPPED when file_hashes
+    was not a dict -> MATCH -> PASS (fail-open). Post-fix: file_hashes
+    missing -> MISSING -> not PASS."""
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    (tmp_path / "r.json").write_text(json.dumps(_full_measured_region_proto()))
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "c2-judgment-v2",
+                "n24_d10_default": {
+                    "binding": {
+                        "binding_ok": True,
+                        "problems": [],
+                        # NO file_hashes dict -> hash check skipped pre-fix
+                    }
+                },
+            }
+        )
+    )
+    assert _region_proto_status(str(tmp_path / "r.json")) != "PASS"
+
+
+def test_p1_binding_no_proto_hash_not_pass(tmp_path):
+    """P1 #3 mutation: binding_ok=True + file_hashes present but prototype
+    hash missing (None) -> gate must NOT PASS. Pre-fix: hash check was
+    SKIPPED when proto_hash was falsy -> MATCH -> PASS (fail-open). Post-fix:
+    proto_hash missing -> MISSING -> not PASS."""
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    (tmp_path / "r.json").write_text(json.dumps(_full_measured_region_proto()))
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "c2-judgment-v2",
+                "n24_d10_default": {
+                    "binding": {
+                        "binding_ok": True,
+                        "problems": [],
+                        "file_hashes": {"prototype": None},  # missing hash
+                    }
+                },
+            }
+        )
+    )
+    assert _region_proto_status(str(tmp_path / "r.json")) != "PASS"
+
+
+def test_p1_verdict_made_up_not_pass(tmp_path):
+    """P1 #3 mutation: verdict="MADE_UP" (not in _REGION_SELF_REPORT_MAP) +
+    all evidence green + verified binding -> gate must NOT PASS. Pre-fix:
+    expected_from_self = None -> consistency check SKIPPED -> PASS (fail-open).
+    Post-fix: unknown verdict -> CONFLICT -> contradiction -> UNKNOWN."""
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    proto = _full_measured_region_proto()
+    proto["verdict"] = "MADE_UP"  # unknown verdict
+    (tmp_path / "r.json").write_text(json.dumps(proto))
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "c2-judgment-v2",
+                "n24_d10_default": {"binding": {"binding_ok": True, "problems": []}},
+            }
+        )
+    )
+    assert _region_proto_status(str(tmp_path / "r.json")) != "PASS"
+
+
+def test_p1_verdict_none_not_pass(tmp_path):
+    """P1 #3 mutation: verdict=None (absent) + all evidence green + verified
+    binding -> gate must NOT PASS. Pre-fix: verdict=None skipped the
+    consistency check and the gate could return PASS with all-green evidence
+    (fail-open). Post-fix: verdict=None -> UNKNOWN (incomplete artifact)."""
+    import json
+    from results._phase0.gonogo import _region_proto_status
+
+    proto = _full_measured_region_proto()
+    del proto["verdict"]  # absent verdict
+    (tmp_path / "r.json").write_text(json.dumps(proto))
+    (tmp_path / "c2_judgment.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "c2-judgment-v2",
+                "n24_d10_default": {"binding": {"binding_ok": True, "problems": []}},
+            }
+        )
+    )
+    assert _region_proto_status(str(tmp_path / "r.json")) != "PASS"
 
 
 if __name__ == "__main__":

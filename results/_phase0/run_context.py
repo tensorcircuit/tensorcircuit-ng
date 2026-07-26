@@ -104,30 +104,40 @@ def build():
     """Build the run-context-v2 provenance record and write it to ``OUT``.
 
     v2 schema (Task 6 / finding 3.6): separates the MEASUREMENT role (the
-    commit that produced the GPU evidence -- preserved from the existing
-    run_context.json, never overwritten by the aggregation HEAD) from the
-    AGGREGATION role (the real current HEAD + dirty-worktree flag + the real
-    reproducible command that re-derives the aggregate artifacts).
+    commit that produced the GPU evidence) from the AGGREGATION role (the real
+    current HEAD + dirty-worktree flag + the real reproducible command that
+    re-derives the aggregate artifacts).
 
-    v1->v2 migration (errata #1): if the existing ``run_context.json`` is v1
-    flat (single ``source_commit`` from a prior GPU run), that commit is
-    migrated to ``measurement.source_commit``. The aggregation role is then
-    set to the real current HEAD, so the stale-generator-commit fail-open
-    (finding 3.6) is closed: the manifest records BOTH which commit measured
-    the GPU evidence AND which commit produced the aggregate.
+    P1 #5 fix (reviewer B): ``measurement.source_commit`` MUST be the current
+    HEAD (the commit containing the measurement code), NOT a stale preserved
+    value from a prior run. The old ``_preserve_measurement`` carried over
+    hardcoded stale commits (e.g. ``20589967`` from evidence-integrity), but
+    the GPU measurement code (full-anchor collectors, G1-G5 kernels, current
+    policy) only exists at ``976c7892+``. The actual re-measurement with the
+    new dual-gate policy waits for B approval; until then, ``build()`` records
+    the current HEAD as the measurement commit. ``run_id`` /
+    ``environment_hash`` from a prior measurement role are still preserved.
 
     Lightweight: uses importlib.metadata (no GPU/CUDA init) + git. Run:
       python results/_phase0/run_context.py
     """
-    # Preserve the measurement role from the existing file (v1 or v2).
-    measurement = {}
+    head = _git(["rev-parse", "HEAD"])
+
+    # P1 #5: measurement.source_commit = current HEAD (NOT stale preserved).
+    # Preserve only run_id / environment_hash from a prior measurement role.
+    measurement = {"source_commit": head}
     if os.path.exists(OUT):
         try:
             with open(OUT) as fh:
                 existing = json.load(fh)
-            measurement = _preserve_measurement(existing)
+            if isinstance(existing, dict):
+                prior = existing.get("measurement")
+                if isinstance(prior, dict):
+                    for k in ("run_id", "environment_hash"):
+                        if prior.get(k):
+                            measurement[k] = prior[k]
         except (OSError, ValueError):
-            pass  # unreadable/missing -> no measurement role to preserve
+            pass  # unreadable/missing -> no prior measurement role
 
     # dirty_worktree reflects TRACKED modifications only (exclude untracked
     # ``??`` scratch, which is pre-existing throwaway not part of the commit and
@@ -140,7 +150,7 @@ def build():
         "schema_version": "run-context-v2",
         "measurement": measurement,
         "aggregation": {
-            "source_commit": _git(["rev-parse", "HEAD"]),
+            "source_commit": head,
             "dirty_worktree": bool(porcelain.strip()),
             "dirty_file_count": len(
                 [ln for ln in porcelain.splitlines() if ln.strip()]

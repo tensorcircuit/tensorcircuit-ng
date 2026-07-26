@@ -1,6 +1,6 @@
 {
   "region_policy": {
-    "approved_methods": ["cuda_allocator_high_watermark_v1", "raw_allocation_size_delta"],
+    "approved_methods": ["cuda_allocator_high_watermark_v1", "cuda_allocator_highwatermark"],
     "min_gain_bytes": 268435456
   },
   "numerical_required_input_profiles": [],

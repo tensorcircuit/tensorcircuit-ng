@@ -1249,14 +1249,17 @@ def test_numerical_required_has_csv():
 def test_run_context_v2_preserves_measurement_and_real_aggregation(
     tmp_path, monkeypatch
 ):
-    """Finding 3.6: run_context.json migrates from v1 flat (single
-    source_commit) to v2 nested (measurement role + aggregation role). The
-    measurement role from a prior GPU run MUST be preserved verbatim; the
+    """Finding 3.6: run_context.json uses v2 nested (measurement role +
+    aggregation role). P1 #5 fix (reviewer B): measurement.source_commit is
+    now set to the current HEAD (NOT preserved from a prior run), because the
+    old _preserve_measurement carried over stale commits (e.g. 20589967 from
+    evidence-integrity) that predate the GPU measurement code. run_id /
+    environment_hash from a prior measurement role ARE still preserved. The
     aggregation role records the REAL current HEAD + a real reproducible
-    command (not a nonexistent script or python -c one-liner)."""
+    command."""
     import json
 
-    from results._phase0.run_context import build
+    from results._phase0.run_context import build, _git
 
     monkeypatch.setattr(
         "results._phase0.run_context.OUT", str(tmp_path / "run_context.json")
@@ -1276,8 +1279,11 @@ def test_run_context_v2_preserves_measurement_and_real_aggregation(
     )
     ctx = build()
     assert ctx["schema_version"] == "run-context-v2"
-    # measurement role preserved, NOT overwritten by the aggregation HEAD
-    assert ctx["measurement"]["source_commit"] == "gpu_commit_abc"
+    # P1 #5: measurement.source_commit = current HEAD (NOT preserved "gpu_commit_abc")
+    head = _git(["rev-parse", "HEAD"])
+    assert ctx["measurement"]["source_commit"] == head
+    assert ctx["measurement"]["source_commit"] != "gpu_commit_abc"
+    # run_id / environment_hash from prior measurement role ARE preserved
     assert ctx["measurement"]["run_id"] == "run42"
     # aggregation role: real current HEAD + real command
     assert ctx["aggregation"]["source_commit"]  # real current HEAD (truthy)
@@ -1288,12 +1294,15 @@ def test_run_context_v2_preserves_measurement_and_real_aggregation(
 
 
 def test_run_context_v2_migrates_v1_flat_source_commit(tmp_path, monkeypatch):
-    """Errata #1: if the existing run_context.json is v1 flat (single
-    source_commit from a prior GPU run), build() must migrate it to
-    measurement.source_commit (validate non-empty)."""
+    """P1 #5 fix (reviewer B): build() no longer preserves/migrates a stale
+    measurement.source_commit from a v1 flat file. Instead,
+    measurement.source_commit is set to the current HEAD (the commit
+    containing the measurement code). The old v1 flat source_commit
+    (e.g. 20589967 from evidence-integrity) predates the GPU measurement code
+    and must NOT be carried over."""
     import json
 
-    from results._phase0.run_context import build
+    from results._phase0.run_context import build, _git
 
     monkeypatch.setattr(
         "results._phase0.run_context.OUT", str(tmp_path / "run_context.json")
@@ -1311,17 +1320,15 @@ def test_run_context_v2_migrates_v1_flat_source_commit(tmp_path, monkeypatch):
     )
     ctx = build()
     assert ctx["schema_version"] == "run-context-v2"
-    # v1 flat source_commit migrated to measurement.source_commit
+    # P1 #5: measurement.source_commit = current HEAD (NOT the stale v1 commit)
+    head = _git(["rev-parse", "HEAD"])
+    assert ctx["measurement"]["source_commit"] == head
     assert (
         ctx["measurement"]["source_commit"]
-        == "205899678c0de72e9ff180ab357a973bf7e1112e"
-    )
-    # aggregation role: real current HEAD (different from the stale measurement)
-    assert ctx["aggregation"]["source_commit"]
-    assert (
-        ctx["aggregation"]["source_commit"]
         != "205899678c0de72e9ff180ab357a973bf7e1112e"
     )
+    # aggregation role: real current HEAD (same as measurement in this code fix)
+    assert ctx["aggregation"]["source_commit"] == head
 
 
 def test_manifest_consumes_v2_nested(tmp_path, monkeypatch):
@@ -1372,6 +1379,84 @@ def test_validate_required_artifacts_presence(tmp_path):
     # both present -> passes
     (tmp_path / "numerical_validation.csv").write_text("x")
     assert validate_required_artifacts(str(tmp_path), "NUMERICAL")
+
+
+# ---------------------------------------------------------------------------
+# P1 #5 (reviewer B): mutation tests -- run_context.build() must set
+# measurement.source_commit to the current HEAD (not preserve a stale value),
+# and manifest must verify the commit exists (flag stale/non-existent).
+# ---------------------------------------------------------------------------
+
+
+def test_p1_run_context_measurement_source_commit_is_current_head(
+    tmp_path, monkeypatch
+):
+    """P1 #5 mutation: build() produces measurement.source_commit == current
+    HEAD, NOT a stale preserved value from the existing file. Pre-fix:
+    _preserve_measurement carried over the old measurement.source_commit
+    (e.g. "20589967" from evidence-integrity) -> stale provenance (fail-open).
+    Post-fix: build() sets measurement.source_commit = current HEAD."""
+    import json
+    from results._phase0.run_context import build, _git
+
+    monkeypatch.setattr(
+        "results._phase0.run_context.OUT", str(tmp_path / "run_context.json")
+    )
+    # existing file with a STALE measurement commit
+    (tmp_path / "run_context.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "run-context-v2",
+                "measurement": {
+                    "source_commit": "205899678c0de72e9ff180ab357a973bf7e1112e",
+                },
+            }
+        )
+    )
+    ctx = build()
+    head = _git(["rev-parse", "HEAD"])
+    assert ctx["measurement"]["source_commit"] == head, (
+        f"measurement.source_commit should be current HEAD ({head}), "
+        f"got {ctx['measurement']['source_commit']!r}"
+    )
+    assert (
+        ctx["measurement"]["source_commit"]
+        != "205899678c0de72e9ff180ab357a973bf7e1112e"
+    ), "stale measurement commit must NOT be preserved"
+
+
+def test_p1_manifest_rejects_stale_measurement_commit(tmp_path, monkeypatch):
+    """P1 #5 mutation: manifest flags a non-existent measurement commit as
+    invalid (measurement_provenance_valid=False). Pre-fix: manifest silently
+    copied measurement_source_commit without verifying it exists (fail-open).
+    Post-fix: manifest verifies the commit exists via git cat-file."""
+    import json
+    from results._phase0.manifest import build_manifest
+
+    (tmp_path / "run_context.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "run-context-v2",
+                "measurement": {
+                    "source_commit": "nonexistent_commit_abc123",
+                },
+                "aggregation": {
+                    "source_commit": "agg_commit",
+                    "dirty_worktree": False,
+                    "command": "python x",
+                },
+            }
+        )
+    )
+    m = build_manifest(str(tmp_path), generated_at="2026-07-26T00:00:00Z")
+    assert m["measurement_provenance_valid"] is False, (
+        f"non-existent measurement commit must be flagged invalid, "
+        f"got measurement_provenance_valid={m['measurement_provenance_valid']}"
+    )
+    # The reason must mention the stale/impossible commit
+    assert any(
+        "stale" in r.lower() or "does not exist" in r.lower() for r in m["reasons"]
+    ), f"reasons must mention the stale commit, got {m['reasons']}"
 
 
 if __name__ == "__main__":
