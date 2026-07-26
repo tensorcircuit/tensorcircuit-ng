@@ -15,6 +15,9 @@
   "full_anchor_correctness": {
     "P_bytes_avoided": 536870912,
     "T_bytes_avoided": 536870912,
+    "global_rel_l2": 8.498279054467433e-07,
+    "local_scaled_argmax_reference_abs": 0.7478158549647939,
+    "local_scaled_max": 0.0020803196682047265,
     "n_seeds": 3,
     "nan_inf": false,
     "output_bytes": 536870912,
@@ -23,6 +26,9 @@
       64,
       1048576
     ],
+    "reference_rms": 718.4464478058138,
+    "worst_dg_seed": 2,
+    "worst_local_scaled_max": 0.0020803196682047265,
     "worst_max_rel": 1.1485871027616668e-06,
     "worst_relative_l2": 8.499349064550188e-07
   },
@@ -30,8 +36,8 @@
   "fused_full_anchor_run": true,
   "fused_latency_note": "fused kernel at the full anchor is timed via cuda events (kernel_only_latency_ms). The materialized path's runtime allocator peak (~1.7 GB, P+T+E coexist during GEMMs) is measured via driver memGetInfo delta; the fused path's peak (~672 MiB, A+B+D+E only, no P/T) is measured the same way. peak_evidence_class=MEASURED.",
   "fused_runtime_allocator_peak_bytes": 704643072,
-  "kernel_only_latency_ms": 20210.05859375,
-  "materialized_latency_ms": 104.16975600000455,
+  "kernel_only_latency_ms": 19157.951171875,
+  "materialized_latency_ms": 89.72563499997932,
   "materialized_runtime_allocator_peak_bytes": 1778384896,
   "math": "E = D @ transform(A@B); transform = reshape->transpose->reshape (Task 2)",
   "max_rel": 2.39476690921947e-07,
