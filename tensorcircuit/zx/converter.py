@@ -1347,7 +1347,10 @@ def build_sampling_graph(
         vertices = l2v[label]
         if not vertices:
             continue
-        assert len(vertices) == 2
+        if len(vertices) != 2:
+            raise ValueError(
+                f"rec[{i}] vertex invariant violated: expected 2 vertices, got {len(vertices)}"
+            )
         v0, v1 = vertices
         if not g.connected(v0, v1):
             g.add_edge((v0, v1))
@@ -1364,7 +1367,10 @@ def build_sampling_graph(
     for i in range(len(built.silent_rec)):
         label = f"m[{i}]"
         vertices = l2v[label]
-        assert len(vertices) == 2
+        if len(vertices) != 2:
+            raise ValueError(
+                f"m[{i}] vertex invariant violated: expected 2 vertices, got {len(vertices)}"
+            )
         v0, v1 = vertices
         if not g.connected(v0, v1):
             g.add_edge((v0, v1))
@@ -1374,13 +1380,19 @@ def build_sampling_graph(
     if not sample_detectors:
         # Remove detectors and observables
         for vs in a2v.values():
-            assert len(vs) == 2
+            if len(vs) != 2:
+                raise ValueError(
+                    f"observable vertex invariant violated: expected 2 vertices, got {len(vs)}"
+                )
             for v in vs:
                 g.remove_vertex(v)
     else:
         # Keep annotations but remove adjoint copies
         for vs in a2v.values():
-            assert len(vs) == 2
+            if len(vs) != 2:
+                raise ValueError(
+                    f"observable vertex invariant violated: expected 2 vertices, got {len(vs)}"
+                )
             g.remove_vertex(vs.pop())
 
         labels = [f"det[{i}]" for i in range(len(built.detectors))] + [
@@ -1388,7 +1400,10 @@ def build_sampling_graph(
         ]
         for label in labels:
             vs = a2v[label]
-            assert len(vs) == 1
+            if len(vs) != 1:
+                raise ValueError(
+                    f"{label} vertex invariant violated: expected 1 vertex, got {len(vs)}"
+                )
             v = vs[0]
             vb = g.add_vertex(
                 VertexType.BOUNDARY, qubit=-2 if "det" in label else -2.5, row=g.row(v)

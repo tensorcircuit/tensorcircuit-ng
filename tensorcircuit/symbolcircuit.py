@@ -119,6 +119,9 @@ class SymbolCircuit(Circuit):
         if dim is not None and dim != 2:
             raise ValueError("SymbolCircuit only supports qubit (dim=2) for now.")
         if mps_inputs is not None or tensors is not None:
+            # TODO(refraction-ray): support mps_inputs / tensors so symbolic
+            # circuits can be built on top of MPS or custom node graphs, and so
+            # ``bind`` / ``to_circuit`` can propagate them like ``inputs``.
             raise NotImplementedError(
                 "mps_inputs and tensors are not yet supported in SymbolCircuit"
             )
@@ -207,7 +210,11 @@ class SymbolCircuit(Circuit):
                 for ind in zip(*index):
                     apply(self, *ind, **kws)
             else:
-                raise ValueError("Illegal index specification")
+                raise ValueError(
+                    f"Illegal index specification: each positional index must be an int "
+                    f"or a sequence/range of ints, got first element of type "
+                    f"{type(index[0]).__name__}: {index[0]!r}"
+                )
 
         return apply_list
 
@@ -272,7 +279,11 @@ class SymbolCircuit(Circuit):
                             nvars[k] = v
                     apply(self, *ind, **nvars)
             else:
-                raise ValueError("Illegal index specification")
+                raise ValueError(
+                    f"Illegal index specification: each positional index must be an int "
+                    f"or a sequence/range of ints, got first element of type "
+                    f"{type(index[0]).__name__}: {index[0]!r}"
+                )
 
         return apply_list
 
@@ -489,7 +500,11 @@ class SymbolCircuit(Circuit):
 
             for j, e in enumerate(index):
                 if e in occupied:
-                    raise ValueError("Cannot measure two operators in one index")
+                    raise ValueError(
+                        f"Cannot measure two operators in one index: qubit {e} "
+                        f"is already occupied by a previous operator in this "
+                        f"measurement, index={index}"
+                    )
                 newdang[e + nq] ^ op.get_edge(j)
                 newdang[e] ^ op.get_edge(j + noe)
                 occupied.add(e)
@@ -711,7 +726,15 @@ class SymbolCircuit(Circuit):
         :return: New :class:`SymbolCircuit` with substituted parameters.
         :rtype: SymbolCircuit
         """
-        sc = SymbolCircuit(self._nqubits)
+        # Propagate construction state (inputs/split/dim) so the bound circuit
+        # starts from the same initial state as ``self``; otherwise ``bind``
+        # silently resets the input to ``|0>``.
+        sc = SymbolCircuit(
+            self._nqubits,
+            inputs=self.inputs,
+            split=self.split,
+            dim=self._d,
+        )
         for d in self._qir:
             gate_name = d["name"]
             index = d["index"]

@@ -4,11 +4,14 @@ general function for interfaces transformation
 
 from typing import Any, Callable, Union, Sequence
 from functools import partial, wraps
+import logging
 
 from ..cons import backend, dtypestr
 from ..gates import Gate
 from ..quantum import QuOperator
 from ..backends import get_backend
+
+logger = logging.getLogger(__name__)
 
 Tensor = Any
 Array = Any
@@ -131,6 +134,10 @@ def general_args_to_backend(
     try:
         t = backend.tree_map(target_backend.from_dlpack, caps)
     except TypeError:
+        logger.debug(
+            "dlpack transfer to backend %r failed, falling back to direct conversion",
+            getattr(target_backend, "name", target_backend),
+        )
         t = backend.tree_map(target_backend.from_dlpack, args)
 
     if dtype is None:

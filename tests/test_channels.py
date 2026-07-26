@@ -471,3 +471,32 @@ def test_composedkraus(backend):
     rho_m2 = tc.channels.evol_kraus(rho, composedkraus(a, b))
     rho_m2_seq = tc.channels.evol_kraus(tc.channels.evol_kraus(rho, b), a)
     np.testing.assert_allclose(rho_m2, rho_m2_seq, atol=1e-6)
+
+
+def test_composedkraus_m3_jit(jaxb):
+    # Regression: the m>=3 path used to branch on singular values
+    # (``if e > atol``) and crashed under jax.jit with
+    # TracerBoolConversionError. It now caps Kraus count at D^2 via a
+    # static-integer loop, so it must trace.
+    ch = [
+        tc.channels.depolarizingchannel(0.1, 0.1, 0.1),
+        tc.channels.phasedampingchannel(0.3),
+        tc.channels.amplitudedampingchannel(0.2, 0.4),
+    ]
+    D = 2
+
+    def composed_super():
+        comp = composedkraus(*ch)
+        # output length is fixed at D^2 (may include zero operators)
+        assert len(comp) == D * D
+        return tc.channels.kraus_to_super(comp)
+
+    jit_super = tc.backend.jit(composed_super)()
+    eager_super = tc.channels.kraus_to_super(composedkraus(*ch))
+    np.testing.assert_allclose(jit_super, eager_super, atol=1e-6)
+
+    # still trace-preserving: sum_k K_k^\dagger K_k == I
+    comp = composedkraus(*ch)
+    kk = [tc.backend.reshapem(g.tensor) for g in comp]
+    s = sum(tc.backend.adjoint(k) @ k for k in kk)
+    np.testing.assert_allclose(s, np.eye(D), atol=1e-5)

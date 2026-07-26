@@ -916,7 +916,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
             return "cpu"
         if platform == "GPU":
             return "gpu" + ":" + str(id_)
-        raise ValueError("TensorFlowBackend don't support non-GPU/CPU device")
+        raise ValueError(
+            f"TensorFlowBackend doesn't support non-GPU/CPU device, got dev={dev!r}"
+        )
 
     def _str2dev(self, str_: str) -> Any:
         return str_

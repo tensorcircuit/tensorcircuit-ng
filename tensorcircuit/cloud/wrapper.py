@@ -212,6 +212,11 @@ def batch_expectation_ps(
                 }
             )
         except (AttributeError, ValueError):
+            logger.warning(
+                "device topology unavailable for %r, falling back to "
+                "unconstrained compile",
+                getattr(device, "name", device),
+            )
             compile_func = DefaultCompiler()
     c1, info = compile_func(c)  # type: ignore
     if not info.get("logical_physical_mapping", None):

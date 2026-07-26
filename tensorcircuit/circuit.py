@@ -93,7 +93,11 @@ class Circuit(BaseCircuit):
             inputs = backend.reshape(inputs, [-1])
             N = inputs.shape[0]
             n = _infer_num_sites(N, dim=self._d)
-            assert n == nqubits or n == 2 * nqubits
+            if n != nqubits and n != 2 * nqubits:
+                raise ValueError(
+                    f"inputs has {N} elements => {n} sites (dim={self._d}), "
+                    f"expected {nqubits} (state) or {2 * nqubits} (density matrix)"
+                )
             inputs = backend.reshape(inputs, [self._d] * n)
             inputs = Gate(inputs)
             nodes = [inputs]
@@ -1009,7 +1013,11 @@ def expectation(
             noe = len(index)
             for j, e in enumerate(index):
                 if e in occupied:
-                    raise ValueError("Cannot measure two operators in one index")
+                    raise ValueError(
+                        f"Cannot measure two operators in one index: qubit {e} "
+                        f"is already occupied by a previous operator in this "
+                        f"measurement, index={index}"
+                    )
                 bra.in_edges[e] ^ op.get_edge(j)
                 ket.out_edges[e] ^ op.get_edge(j + noe)
                 occupied.add(e)
@@ -1046,7 +1054,11 @@ def expectation(
             noe = len(index)
             for j, e in enumerate(index):
                 if e in occupied:
-                    raise ValueError("Cannot measure two operators in one index")
+                    raise ValueError(
+                        f"Cannot measure two operators in one index: qubit {e} "
+                        f"is already occupied by a previous operator in this "
+                        f"measurement, index={index}"
+                    )
                 bra[e] ^ op.get_edge(j)
                 ket[e] ^ op.get_edge(j + noe)
                 occupied.add(e)

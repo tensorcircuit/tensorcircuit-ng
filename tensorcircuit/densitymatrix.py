@@ -82,7 +82,11 @@ class DMCircuit(BaseCircuit):
                 inputs = backend.reshape(inputs, [-1])
                 N = inputs.shape[0]
                 n = _infer_num_sites(N, self._d)
-                assert n == nqubits
+                if n != nqubits:
+                    raise ValueError(
+                        f"inputs has {N} elements => {n} sites (dim={self._d}), "
+                        f"expected {nqubits} sites"
+                    )
                 inputs = backend.reshape(inputs, [self._d] * n)
                 inputs_gate = Gate(inputs)
                 self._nodes = [inputs_gate]
@@ -366,7 +370,11 @@ class DMCircuit(BaseCircuit):
 
     @staticmethod
     def check_density_matrix(dm: Tensor) -> None:
-        assert np.allclose(backend.trace(dm), 1.0, atol=1e-5)
+        tr = backend.trace(dm)
+        if not np.allclose(tr, 1.0, atol=1e-5):
+            raise ValueError(
+                f"input is not a valid density matrix: trace={tr} (expected 1.0)"
+            )
 
     def to_circuit(self, circuit_params: Optional[Dict[str, Any]] = None) -> Circuit:
         """

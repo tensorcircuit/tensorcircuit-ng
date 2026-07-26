@@ -878,15 +878,18 @@ class QuOperator:
         ignore_edges = [edge_dict[e] for e in self.ignore_edges]
         return quantum_constructor(out_edges, in_edges, ref_nodes, ignore_edges)
 
-    def trace(self) -> "QuOperator":
-        """The trace of the operator."""
-        return self.partial_trace(range(len(self.in_edges)))
-
-    def norm(self) -> "QuOperator":
+    def trace(self) -> "QuScalar":
         """
-        The norm of the operator.
-        This is the 2-norm (also known as the Frobenius or Hilbert-Schmidt
-        norm).
+        The trace of the operator as a lazy ``QuScalar``; call ``.eval()``
+        for a number.
+        """
+        return self.partial_trace(range(len(self.in_edges)))  # type: ignore[return-value]
+
+    def norm(self) -> "QuScalar":
+        """
+        The squared Hilbert-Schmidt norm of the operator as a lazy
+        ``QuScalar``; call ``.eval()`` for a number and take ``sqrt`` for the
+        actual norm.
         """
         return (self.adjoint() @ self).trace()
 
@@ -1562,7 +1565,10 @@ def extract_tensors_from_qop(qop: QuOperator) -> Tuple[List[Node], bool, int]:
     # Collect all nodes from edges
     nodes_for_sorting = qop.nodes
     if len(nodes_for_sorting) != nwires:
-        raise ValueError(f"Number of nodes  does not match number of wires.")
+        raise ValueError(
+            f"Number of nodes does not match number of wires: "
+            f"got {len(nodes_for_sorting)} nodes for {nwires} wires."
+        )
 
     # Find endpoint nodes
     endpoint_nodes = set()
@@ -1826,7 +1832,8 @@ def quimb2qop(qb_mpo: Any) -> QuOperator:
     """
     qb_mpo = qb_mpo.tensors
     nwires = len(qb_mpo)
-    assert nwires >= 3, "number of tensors must be larger than 2"
+    if nwires < 3:
+        raise ValueError(f"quimb2qop requires at least 3 tensors, got {nwires}")
     mpo = []
     edges = []
     for i in range(nwires):
@@ -3594,10 +3601,10 @@ def measurement_counts(
         pi = state / backend.sum(state)
     else:
         if len(state.shape) == 2:
-            state /= backend.trace(state)
+            state = state / backend.trace(state)
             pi = backend.abs(backend.diagonal(state))
         else:
-            state /= backend.norm(state)
+            state = state / backend.norm(state)
             pi = backend.real(backend.conj(state) * state)
         pi = backend.reshape(pi, [-1])
 

@@ -196,6 +196,9 @@ def num_to_tensor(*num: Union[float, Tensor], dtype: Optional[str] = None) -> An
     r"""
     Convert the inputs to Tensor with specified dtype.
 
+    When ``dtype`` is ``None`` (the default), a real-valued input is upcast to
+    the backend complex dtype. Pass an explicit dtype to keep it real-typed.
+
     :Example:
 
     >>> from tensorcircuit.gates import num_to_tensor
@@ -230,7 +233,9 @@ def num_to_tensor(*num: Union[float, Tensor], dtype: Optional[str] = None) -> An
 
     :param num: inputs
     :type num: Union[float, Tensor]
-    :param dtype: dtype of the output Tensors
+    :param dtype: dtype of the output Tensors, defaults to ``None`` which upcasts
+        to the backend complex dtype. Pass an explicit dtype (e.g. ``"float32"``)
+        to control the output dtype.
     :type dtype: str, optional
     :return: List of Tensors or a single Tensor
     :rtype: Union[List[Tensor], Tensor]
@@ -705,7 +710,7 @@ def iswap_gate(theta: float = 1.0) -> Gate:
             0 & 0 & 0 & 1\\
         \end{pmatrix}
 
-    :param theta: angle in radians
+    :param theta: fraction of π/2 (1.0 = full iSwap), not radians
     :type theta: float
     :return: iSwap Gate
     :rtype: Gate

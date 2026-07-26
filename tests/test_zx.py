@@ -101,6 +101,23 @@ def test_zx_detector_xor_simple(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
+def test_zx_sample_detectors_after_sample_measurements(backend):
+    batch = 5000
+    c = StabilizerTCircuit(1)
+    c.x_error(0, 0.1)
+    c.measure_instruction(0)  # m0
+    c.x_error(0, 0.2)
+    c.measure_instruction(0)  # m1
+    c.detector_instruction([-1, -2])  # m0 ^ m1
+    stc = StabilizerTCircuit.from_circuit(c)
+
+    stc.sample_measurements(shots=batch, seed=0)
+    res = stc.sample_detectors(shots=batch, seed=0)
+    prob = np.mean(np.asarray(res))
+    np.testing.assert_allclose(prob, 0.2, atol=0.05, rtol=0.0)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb")])
 def test_zx_depolarize2_simple(backend):
     batch = 5000
     c = StabilizerTCircuit(2)

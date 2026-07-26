@@ -279,15 +279,30 @@ def simple_compile(
     info: Optional[Dict[str, Any]] = None,
     output: str = "tc",
     compiled_options: Optional[Dict[str, Any]] = None,
-) -> Any:
+) -> Tuple[Any, Optional[Dict[str, Any]]]:
+    """
+    Compile a circuit by merging/replacing/pruning its QIR.
+
+    Returns ``(circuit, info)`` — a tuple, not a bare circuit. ``info`` is the
+    caller-supplied dict passed through unchanged. Unpack: ``c, info = simple_compile(c)``.
+
+    :param circuit: circuit to compile
+    :param info: optional dict, returned unchanged
+    :param output: output format (``"tc"`` etc.)
+    :param compiled_options: extra options forwarded to merge/prune/replace passes
+    :return: ``(compiled_circuit, info)``
+    """
     if compiled_options is None:
         compiled_options = {}
     len0 = len(circuit.to_qir())
     for d in circuit._extra_qir:
         if d["pos"] < len0 - 1:
             raise ValueError(
-                "TC's simple compiler doesn't support measurement/reset instructions \
-                in the middle of the circuit"
+                "TC's simple compiler doesn't support measurement/reset "
+                f"instructions in the middle of the circuit: found a "
+                f"{d.get('name', 'measurement/reset')!r} instruction at "
+                f"position {d.get('pos')} (qir length={len0}, only the final "
+                f"position {len0 - 1} is allowed for such instructions)."
             )
 
     c = replace_r(circuit, **compiled_options)

@@ -219,7 +219,9 @@ class ReadoutMit:
         """
         Get local calibriation matrix from cloud API from tc supported providers
 
-        :param qubits: list of physical qubits to be calibriated
+        :param qubits: list of physical qubits to be calibriated. When given as
+            an ``int``, it is the *number* of qubits calibrated (qubits
+            ``0..n-1``), not a single qubit id
         :type qubits: Union[int, List[int]]
         :param device: the device str to qurey for the info, defaults to None
         :type device: Optional[str], optional
@@ -271,7 +273,7 @@ class ReadoutMit:
         """
         if not is_sequence(qubits):
             qubits = list(range(qubits))  # type: ignore
-        qubits.sort()  # type: ignore
+        qubits = sorted(qubits)  # type: ignore
         self.cal_qubits = qubits  # type: ignore
         self.cal_shots = shots
 
@@ -381,7 +383,9 @@ class ReadoutMit:
             probability_cali = res.x
         return probability_cali
 
-    def apply_readout_mitigation(self, raw_count: ct, method: str = "inverse") -> ct:
+    def apply_readout_mitigation(
+        self, raw_count: ct, method: str = "inverse"
+    ) -> Dict[str, float]:
         """
         Main readout mitigation program for method="inverse" or "square"
 
@@ -389,14 +393,15 @@ class ReadoutMit:
         :type raw_count: ct
         :param method: mitigation method, defaults to "inverse"
         :type method: str, optional
-        :return: mitigated count
-        :rtype: ct
+        :return: mitigated quasi-counts (mitigated probabilities × shots);
+            values can be non-integer and negative
+        :rtype: Dict[str, float]
         """
         probability = count2vec(raw_count)
         shots = sum([v for k, v in raw_count.items()])
         probability = self.mitigate_probability(probability, method=method)
         probability = probability * shots
-        return vec2count(probability, prune=True)
+        return vec2count(probability, prune=True)  # type: ignore[return-value]
 
     def mapping_preprocess(
         self,
@@ -447,8 +452,11 @@ class ReadoutMit:
         counts = marginal_count(counts, use_position_qubits)
 
         if not set(self.use_qubits).issubset(set(self.cal_qubits)):  # type: ignore
+            missing = sorted(set(self.use_qubits) - set(self.cal_qubits))  # type: ignore
             raise ValueError(
-                "The qubit list used in calculation must included in  the calibration qubit list."
+                f"The qubit list used in calculation must be included in the "
+                f"calibration qubit list: missing qubits {missing}, "
+                f"calibration qubits={sorted(set(self.cal_qubits))}."  # type: ignore
             )
 
         return counts
@@ -515,13 +523,13 @@ class ReadoutMit:
         # methods for small system, "global" calibration only fit for those methods.
         if method in ["inverse", "pseudo_inverse"]:
             mitcounts = self.apply_readout_mitigation(counts, method="inverse")
-            return sort_count(mitcounts)
+            return sort_count(mitcounts)  # type: ignore[arg-type]
         elif method in ["square", "constrained_least_square"]:
             mitcounts = self.apply_readout_mitigation(counts, method="square")
-            return sort_count(mitcounts)
+            return sort_count(mitcounts)  # type: ignore[arg-type]
         if mthree_installed is False:
-            warnings.warn(
-                " To use [scalable-] related methods, please pip install mthree !"
+            raise ImportError(
+                "To use [scalable-] related methods, please pip install mthree."
             )
 
         if len(counts) == 0:

@@ -1717,3 +1717,24 @@ def test_backend_random_dtype_lowp(backend):
     g = tc.backend.get_random_state(42)
     r7 = tc.backend.stateful_randn(g)
     assert tc.backend.dtype(r7) == "float32"
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_backend_real_imag(backend):
+    # real part of a complex tensor
+    c = np.array([1.0 + 2.0j, 3.0 - 4.0j], dtype=dtype)
+    ct = tc.gates.array_to_tensor(c)
+    np.testing.assert_allclose(
+        tc.backend.numpy(tc.backend.real(ct)), np.real(c), atol=1e-6
+    )
+    # imag of a complex tensor is the imaginary part
+    np.testing.assert_allclose(
+        tc.backend.numpy(tc.backend.imag(ct)), np.imag(c), atol=1e-6
+    )
+
+    r = np.array([1.0, -2.0, 3.5], dtype=np.float32)
+    rt = tc.backend.cast(tc.gates.array_to_tensor(r), "float32")
+    np.testing.assert_allclose(tc.backend.numpy(tc.backend.real(rt)), r, atol=1e-6)
+    np.testing.assert_allclose(
+        tc.backend.numpy(tc.backend.imag(rt)), np.zeros_like(r), atol=1e-6
+    )

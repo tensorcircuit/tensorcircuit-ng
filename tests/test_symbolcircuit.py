@@ -1041,6 +1041,25 @@ def test_bind_with_fixed_and_variable_gates(SymbolCircuit: Any, sym: Any) -> Non
     assert sc2.gate_count() == 2
 
 
+def test_bind_propagates_inputs(SymbolCircuit: Any, sym: Any) -> None:
+    """bind() must propagate ``inputs``."""
+    theta = sym["theta"]
+
+    inputs = np.zeros(4, dtype=complex)
+    inputs[3] = 1.0
+
+    sc = SymbolCircuit(2, inputs=inputs)
+    sc.rx(0, theta=theta)
+
+    orig = sc.expectation_ps(z=[0])
+    assert sympy.simplify(orig.subs(theta, 0.0) + 1) == 0
+
+    sc2 = sc.bind({theta: 0.0})
+    assert sc2.inputs is not None
+    bound = sc2.expectation_ps(z=[0])
+    assert sympy.simplify(bound + 1) == 0
+
+
 # -- to_qiskit coverage (various gate branches) --------------------------------
 
 

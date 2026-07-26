@@ -190,6 +190,12 @@ class BaseCircuit(AbstractCircuit):
         diagonal: bool = False,
         ir_dict: Optional[Dict[str, Any]] = None,
     ) -> None:
+        """
+        Internal helper.
+
+        Apply an arbitrary unitary via ``c.unitary(matrix, *index)`` or
+        ``c.any(matrix, *index)`` instead.
+        """
         if name is None:
             name = ""
         gate_dict = {
@@ -205,7 +211,11 @@ class BaseCircuit(AbstractCircuit):
         else:
             ir_dict = gate_dict
         self._qir.append(ir_dict)
-        assert len(index) == len(set(index))
+        if len(index) != len(set(index)):
+            raise ValueError(
+                f"gate index {list(index)} has duplicate qubits; "
+                "each qubit may appear at most once"
+            )
         index = tuple(i if i >= 0 else self._nqubits + i for i in index)
         noe = len(index)
         nq = self._nqubits
@@ -420,7 +430,11 @@ class BaseCircuit(AbstractCircuit):
 
             for j, e in enumerate(index):
                 if e in occupied:
-                    raise ValueError("Cannot measure two operators in one index")
+                    raise ValueError(
+                        f"Cannot measure two operators in one index: qubit {e} "
+                        f"is already occupied by a previous operator in this "
+                        f"measurement, index={index}"
+                    )
                 newdang[e + nq] ^ op.get_edge(j)
                 newdang[e] ^ op.get_edge(j + noe)
                 occupied.add(e)
@@ -1826,14 +1840,15 @@ class BaseCircuit(AbstractCircuit):
 
     def projected_subsystem(self, traceout: Tensor, left: Tuple[int, ...]) -> Tensor:
         """
-        remaining wavefunction or density matrix on sites in ``left``, with other sites
-        fixed to given digits (0..d-1) as indicated by ``traceout``
+        Reduced state on sites in ``left``; all other sites (the complement of
+        ``left``) are projected onto the per-site digits given by ``traceout``.
 
-        :param traceout: can be jitted
+        :param traceout: per-site projection digit (0..d-1) on sites not in ``left``;
+            can be jitted
         :type traceout: Tensor
-        :param left: cannot be jitted
+        :param left: sites to keep; cannot be jitted
         :type left: Tuple
-        :return: _description_
+        :return: reduced state on sites in ``left``
         :rtype: Tensor
         """
 

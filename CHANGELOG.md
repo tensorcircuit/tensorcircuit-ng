@@ -34,6 +34,10 @@
 
 - Unified the subsystem specification interface across methods, `subsystem_to_trace_out`, `subsystem_to_keep`.
 
+- `StabilizerTCircuit` caching: Split measurement sampling and detector sampling into independent cache slots.
+
+- pytorch_backend.imag returns 0 for real tensor.
+
 ### Removed
 
 - remove the `tng` contractor which is deprecated long ago

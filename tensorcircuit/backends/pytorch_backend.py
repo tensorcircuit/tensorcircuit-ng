@@ -444,18 +444,14 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         return torchlib.linalg.det(a)
 
     def real(self, a: Tensor) -> Tensor:
-        try:
+        if a.is_complex():
             a = torchlib.real(a)
-        except RuntimeError:
-            pass
         return a
 
     def imag(self, a: Tensor) -> Tensor:
-        try:
-            a = torchlib.imag(a)
-        except RuntimeError:
-            pass
-        return a
+        if a.is_complex():
+            return torchlib.imag(a)
+        return torchlib.zeros_like(a)
 
     def dtype(self, a: Tensor) -> str:
         return a.dtype.__str__().split(".")[-1]  # type: ignore
@@ -741,7 +737,9 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
             return "cpu"
         if dev.type == "cuda":
             return "gpu:" + str(dev.index)
-        raise ValueError("PyTorchBackend don't support non-GPU/CPU device")
+        raise ValueError(
+            f"PyTorchBackend doesn't support non-GPU/CPU device, got dev={dev!r}"
+        )
 
     def _str2dev(self, str_: str) -> Any:
         if str_ == "cpu":
@@ -749,7 +747,10 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         if str_.startswith("gpu"):
             _id = int(str_.split(":")[-1])
             return torchlib.cuda.device(_id)
-        raise ValueError("PyTorchBackend don't support non-GPU/CPU device")
+        raise ValueError(
+            f"PyTorchBackend doesn't support non-GPU/CPU device, "
+            f"got device string={str_!r}"
+        )
 
     def stop_gradient(self, a: Tensor) -> Tensor:
         return a.detach()

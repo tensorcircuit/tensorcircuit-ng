@@ -235,7 +235,10 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
             return a[idx], idx
         else:
             # Handle multi-dimensional if needed, but 1D is enough for us now
-            raise NotImplementedError("Numpy top_k only implemented for 1D")
+            raise NotImplementedError(
+                f"Numpy top_k only implemented for 1D tensors, "
+                f"got input with shape {a.shape}"
+            )
 
     def lexsort(self, keys: Any, axis: int = -1) -> Any:
         return np.lexsort(keys, axis=axis)
@@ -493,17 +496,19 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     def device_move(self, a: Tensor, dev: Any) -> Tensor:
         if dev == "cpu":
             return a
-        raise ValueError("NumPy backend only support CPU device")
+        raise ValueError(f"NumPy backend only supports the CPU device, got dev={dev!r}")
 
     def _dev2str(self, dev: Any) -> str:
         if dev == "cpu":
             return "cpu"
-        raise ValueError("NumPy backend only support CPU device")
+        raise ValueError(f"NumPy backend only supports the CPU device, got dev={dev!r}")
 
     def _str2dev(self, str_: str) -> Any:
         if str_ == "cpu":
             return "cpu"
-        raise ValueError("NumPy backend only support CPU device")
+        raise ValueError(
+            f"NumPy backend only supports the CPU device, got device string={str_!r}"
+        )
 
     def stop_gradient(self, a: Tensor) -> Tensor:
         raise NotImplementedError("numpy backend doesn't support AD")

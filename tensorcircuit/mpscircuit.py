@@ -134,27 +134,33 @@ class MPSCircuit(AbstractCircuit):
             split = {}
         self.split = split
         if wavefunction is not None:
-            assert (
-                tensors is None
-            ), "tensors and wavefunction cannot be used at input simutaneously"
+            if tensors is not None:
+                raise ValueError(
+                    "tensors and wavefunction cannot be used at input simultaneously"
+                )
             # TODO(@SUSYUSTC): find better way to address QuVector
             if isinstance(wavefunction, QuVector):
                 try:
                     nodes, is_mps, _ = extract_tensors_from_qop(wavefunction)
-                    if not is_mps:
-                        raise ValueError("wavefunction is not a valid MPS")
-                    tensors = [node.tensor for node in nodes]
                 except ValueError as e:
                     logger.warning(repr(e))
+                    is_mps = False
+                    nodes = []
+                if not is_mps:
                     wavefunction = wavefunction.eval()
                     tensors = self.wavefunction_to_tensors(
                         wavefunction, dim_phys=self._d, split=self.split
                     )
+                else:
+                    tensors = [node.tensor for node in nodes]
             else:  # full wavefunction
                 tensors = self.wavefunction_to_tensors(
                     wavefunction, dim_phys=self._d, split=self.split
                 )
-            assert len(tensors) == nqubits
+            if len(tensors) != nqubits:
+                raise ValueError(
+                    f"number of MPS tensors ({len(tensors)}) must match nqubits ({nqubits})"
+                )
             self._mps = FiniteMPS(tensors, canonicalize=False)
             self._mps.center_position = 0
             if center_position is not None:
@@ -279,7 +285,10 @@ class MPSCircuit(AbstractCircuit):
             split = self.split
         # The center position of MPS must be either `index1` or `index2` before applying a double gate
         # Choose the one closer to the current center
-        assert index2 - index1 == 1
+        if index2 - index1 != 1:
+            raise ValueError(
+                f"two-qubit gate indices must be adjacent, got index1={index1}, index2={index2}"
+            )
         diff1 = abs(index1 - self._mps.center_position)  # type: ignore
         diff2 = abs(index2 - self._mps.center_position)  # type: ignore
         if diff1 < diff2:
@@ -693,10 +702,17 @@ class MPSCircuit(AbstractCircuit):
         else:
             ir_dict = gate_dict
         self._qir.append(ir_dict)
-        assert len(index) == len(set(index))
-        assert mpo is False, "MPO not implemented for MPS"
-        assert diagonal is False, "diagonal hyperedge not implemented for MPS"
-        assert isinstance(gate, tn.Node)
+        if len(index) != len(set(index)):
+            raise ValueError(
+                f"gate index {list(index)} has duplicate qubits; "
+                "each qubit may appear at most once"
+            )
+        if mpo is not False:
+            raise NotImplementedError("MPO not implemented for MPS")
+        if diagonal is not False:
+            raise NotImplementedError("diagonal hyperedge not implemented for MPS")
+        if not isinstance(gate, tn.Node):
+            raise TypeError(f"gate must be a tn.Node, got {type(gate).__name__}")
         noe = len(index)
         if noe == 1:
             self.apply_single_gate(gate, *index)
@@ -782,7 +798,10 @@ class MPSCircuit(AbstractCircuit):
                 split=split,
             )
             tensors.insert(0, backend.reshape(Q, (-1, dim_phys, nright)))
-        assert wavefunction.shape == (1, 1)
+        if wavefunction.shape != (1, 1):
+            raise ValueError(
+                f"expected scalar wavefunction of shape (1, 1), got {wavefunction.shape}"
+            )
         if not norm:
             tensors[0] *= wavefunction[0, 0]
         return tensors
@@ -924,7 +943,8 @@ class MPSCircuit(AbstractCircuit):
 
     def slice(self, begin: int, end: int) -> "MPSCircuit":
         """
-        Get a slice of the MPS (only for internal use)
+        Get a slice of the MPS (only for internal use). ``end`` is inclusive,
+        i.e. the subcircuit covers qubits ``[begin, end]``.
         """
         nqubits = end - begin + 1
         tensors = [backend.copy(t) for t in self._mps.tensors[begin : end + 1]]
@@ -974,6 +994,10 @@ class MPSCircuit(AbstractCircuit):
         :type split: Any
         :return: The expectation of corresponding operators
         :rtype: Tensor
+
+        .. warning::
+
+            Moves ``self``'s MPS orthogonality center into the operator's site range as a side effect.
         """
         if split is None:
             split = {}
@@ -1117,6 +1141,10 @@ class MPSCircuit(AbstractCircuit):
             this method's ``subsystem_to_keep`` argument names the sites to
             **keep**, not to trace out. The two functions share a method name
             but use opposite conventions for the positional argument.
+
+        .. warning::
+
+            Moves ``self``'s MPS orthogonality center as a side effect.
 
         :param subsystem_to_keep: The qubits to keep (all others are traced out).
             Mutually exclusive with ``subsystems_to_trace_out``.

@@ -23,6 +23,7 @@ When activated, you act as a **Senior Systems Architect and Code Quality Auditor
 - **Public API Docstrings**: Every public class and method MUST have a well-documented docstring. Verify that:
     - They are up-to-date with the implementation.
     - They include clear descriptions of all parameters and return types.
+- **Docstring Formatting**: After the opening `"""`, start the docstring content on a new line unless the entire docstring consists of a single line.
 
 ### 4. Code Integrity & Structure
 - **Dead Code**: Identify and remove unreachable code, unused variables, and dead branches (e.g., `if False:`, `if DEBUG:` that is always false).

@@ -132,12 +132,18 @@ class StabilizerTCircuit(AbstractCircuit):
         self._seed = seed
         self._key = jax.random.key(seed)
         self.strategy = strategy
-        self._compiled_program: Optional[CompiledProgram] = None
-        self._compiled_probs: Optional[CompiledProgram] = None
-        self._channel_sampler: Optional[ChannelSampler] = None
-        self._channel_sampler_probs: Optional[ChannelSampler] = None
+        # Sampling cache, split by semantics: measurement sampling and detector
+        # sampling are independent operations, so they get independent caches
+        # instead of sharing one slot distinguished by a flag.
+        self._compiled_program_measurements: Optional[CompiledProgram] = None
+        self._channel_sampler_measurements: Optional[ChannelSampler] = None
+        self._compiled_program_detectors: Optional[CompiledProgram] = None
+        self._channel_sampler_detectors: Optional[ChannelSampler] = None
         self._num_detectors = 0
         self._num_observables = 0
+        # Probability-evaluation cache (mode="joint"), independent of sampling.
+        self._compiled_probs: Optional[CompiledProgram] = None
+        self._channel_sampler_probs: Optional[ChannelSampler] = None
 
     def _merge_qir(self) -> List[Dict[str, Any]]:
         """
@@ -145,18 +151,22 @@ class StabilizerTCircuit(AbstractCircuit):
         """
         return self._qir
 
-    def _compile(self, sample_detectors: bool, force_measure_all: bool = False) -> None:
+    def _compile(
+        self, sample_detectors: bool, force_measure_all: bool = False
+    ) -> Tuple[CompiledProgram, ChannelSampler, int, int]:
         prepared = prepare_graph(
             self, sample_detectors=sample_detectors, force_measure_all=force_measure_all
         )
-        self._compiled_program = compile_program(
-            prepared, mode="sequential", strategy=self.strategy
-        )
-        self._channel_sampler = ChannelSampler(
+        program = compile_program(prepared, mode="sequential", strategy=self.strategy)
+        channel_sampler = ChannelSampler(
             prepared.channel_probs, prepared.error_transform, seed=self._seed
         )
-        self._num_detectors = prepared.num_detectors
-        self._num_observables = len(prepared.observables)
+        return (
+            program,
+            channel_sampler,
+            prepared.num_detectors,
+            len(prepared.observables),
+        )
 
     @classmethod
     def from_circuit(
@@ -224,12 +234,19 @@ class StabilizerTCircuit(AbstractCircuit):
             in ["MEASURE", "M", "MR", "MRX", "MRY", "MRZ", "MX", "MY", "MZ", "MPP"]
             for d in self._qir
         )
-        if (
-            self._compiled_program is None
-            or self._compiled_program.mode != "sequential"
-        ):
-            self._compile(sample_detectors=False, force_measure_all=not has_m)
-        return self._sample_batches(shots, batch_size)
+        if self._compiled_program_measurements is None:
+            (
+                self._compiled_program_measurements,
+                self._channel_sampler_measurements,
+                _,
+                _,
+            ) = self._compile(sample_detectors=False, force_measure_all=not has_m)
+        return self._sample_batches(
+            shots,
+            batch_size,
+            self._compiled_program_measurements,  # type: ignore[arg-type]
+            self._channel_sampler_measurements,  # type: ignore[arg-type]
+        )
 
     def sample_detectors(
         self,
@@ -257,21 +274,30 @@ class StabilizerTCircuit(AbstractCircuit):
         """
         if seed is not None:
             self._key = jax.random.key(seed)
-        if (
-            self._compiled_program is None
-            or self._compiled_program.mode != "sequential"
-        ):
-            self._compile(sample_detectors=True)
+        if self._compiled_program_detectors is None:
+            (
+                self._compiled_program_detectors,
+                self._channel_sampler_detectors,
+                self._num_detectors,
+                self._num_observables,
+            ) = self._compile(sample_detectors=True)
 
-        samples = self._sample_batches(shots, batch_size)
+        samples = self._sample_batches(
+            shots,
+            batch_size,
+            self._compiled_program_detectors,  # type: ignore[arg-type]
+            self._channel_sampler_detectors,  # type: ignore[arg-type]
+        )
 
         if use_reference:
-            assert self._channel_sampler is not None
+            assert self._channel_sampler_detectors is not None
             f_zeros = jnp.zeros(
-                (1, self._channel_sampler.num_f_params), dtype=jnp.bool_
+                (1, self._channel_sampler_detectors.num_f_params), dtype=jnp.bool_
             )
-            assert self._compiled_program is not None
-            ref_sample = sample_program(self._compiled_program, f_zeros, self._key)
+            assert self._compiled_program_detectors is not None
+            ref_sample = sample_program(
+                self._compiled_program_detectors, f_zeros, self._key
+            )
             samples = samples ^ ref_sample
 
         if separate_observables:
@@ -476,18 +502,22 @@ class StabilizerTCircuit(AbstractCircuit):
         vals = evaluate(compiled, param_values)
         return jnp.mean(vals) / (2.0**self._nqubits)
 
-    def _sample_batches(self, shots: int, batch_size: int = 1000) -> jax.Array:
+    def _sample_batches(
+        self,
+        shots: int,
+        batch_size: int,
+        program: CompiledProgram,
+        channel_sampler: ChannelSampler,
+    ) -> jax.Array:
         batches = []
         use_jax_sampler = jax.default_backend() != "cpu"
         for _ in range(ceil(shots / batch_size)):
-            assert self._channel_sampler is not None
             self._key, subkey = jax.random.split(self._key)
             if use_jax_sampler:
-                f_params, subkey = self._channel_sampler.sample_jax(batch_size, subkey)
+                f_params, subkey = channel_sampler.sample_jax(batch_size, subkey)
             else:
-                f_params = jnp.asarray(self._channel_sampler.sample(batch_size))
-            assert self._compiled_program is not None
-            samples = sample_program(self._compiled_program, f_params, subkey)
+                f_params = jnp.asarray(channel_sampler.sample(batch_size))
+            samples = sample_program(program, f_params, subkey)
             batches.append(samples)
         return jnp.concatenate(batches, axis=0)[:shots]
 

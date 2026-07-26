@@ -13,7 +13,7 @@ from ..results import counts
 from ..utils import arg_alias
 
 
-class TCException(BaseException):
+class TCException(Exception):
     pass
 
 

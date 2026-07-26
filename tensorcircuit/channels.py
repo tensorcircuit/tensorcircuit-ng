@@ -92,7 +92,7 @@ def depolarizingchannel(px: float, py: float, pz: float) -> Sequence[Gate]:
     :return: Sequences of Gates
     :rtype: Sequence[Gate]
     """
-    # assert px + py + pz <= 1
+    # px/py/pz may be backend tensors, so we cannot assert px+py+pz<=1 here.
     i = Gate(_sqrt(1 - px - py - pz) * gates.i().tensor)  # type: ignore
     x = Gate(_sqrt(px) * gates.x().tensor)  # type: ignore
     y = Gate(_sqrt(py) * gates.y().tensor)  # type: ignore
@@ -215,7 +215,10 @@ def generaldepolarizingchannel(
     final_shape = [-1] + [2] * (2 * num_qubits)
     tup = current.reshape(final_shape)
 
-    assert len(tup) == len(probs)
+    if len(tup) != len(probs):
+        raise ValueError(
+            f"Pauli term count ({len(tup)}) does not match probability count ({len(probs)})"
+        )
 
     tup = backend.convert_to_tensor(tup)
     tup = backend.cast(tup, dtype=cons.dtypestr)
@@ -473,7 +476,11 @@ def thermalrelaxationchannel(
         return KrausList(Gatelist, name="thermal_relaxation", is_unitary=False)
 
     else:
-        raise ValueError("No valid method is provided")
+        raise ValueError(
+            f"No valid method is provided for thermalrelaxationchannel: "
+            f"got method={method!r}, expected one of "
+            f"['ByChoi', 'ByKraus', 'AUTO']. Note 'AUTO' is not jitable."
+        )
 
 
 def _collect_channels() -> Sequence[str]:
@@ -1009,14 +1016,18 @@ def composedkraus(*kraus_lists: KrausList) -> KrausList:
         multi-channel code paths.
 
     For two channels the Kraus operators are combined directly as
-    :math:`\{K_i L_j\}`, which has the lowest constant overhead.
+    :math:`\{K_i L_j\}`, which has the lowest constant overhead and returns
+    only non-zero products.
     For three or more channels, the channels are first converted to the
     superoperator representation :math:`\varepsilon = \sum_k K_k^* \otimes K_k`,
     multiplied as matrices, and converted back to Kraus operators once.
     This avoids the exponential growth of Kraus operators
     (:math:`4^m` for ``m`` channels with four Kraus operators each) that the
-    direct pairwise composition would incur when chained: the output operator
-    count is bounded by :math:`D^2` regardless of ``m``.
+    direct pairwise composition would incur when chained.
+
+    The m>=3 path fixes the output length at :math:`D^2` (the superoperator
+    dimension) for JIT compatibility; the result may include zero operators
+    when rank-deficient but stays trace-preserving.
 
     :param kraus_lists: Two or more noise channels to compose. The first
         argument is the outermost channel (applied last to the state); the last
@@ -1044,8 +1055,15 @@ def composedkraus(*kraus_lists: KrausList) -> KrausList:
     superop = kraus_to_super(kraus_lists[0])
     for kl in kraus_lists[1:]:
         superop = superop @ kraus_to_super(kl)
+    # Cap at D^2 via a static truncation rule; the default atol-based
+    # truncation branches on tensor values and is not jittable.
+    sup_shape = backend.shape_tuple(superop)
+    choi = super_to_choi(superop)
+    kraus_m = choi_to_kraus(
+        choi, truncation_rules={"max_singular_values": sup_shape[0]}
+    )
     return KrausList(
-        krausmatrix_to_krausgate(super_to_kraus(superop)),
+        krausmatrix_to_krausgate(kraus_m),
         name=name,
         is_unitary=is_unitary,
     )

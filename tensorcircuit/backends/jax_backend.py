@@ -640,6 +640,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     ) -> Tensor:
         if dtype is None:
             dtype = rdtypestr
+        original_dtype = dtype
         if isinstance(dtype, str):
             dtype = dtype[-2:]
         if isinstance(shape, int):
@@ -650,6 +651,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
             dtyper = jnp.float64
         elif not isinstance(dtype, str):
             dtyper = dtype
+        else:
+            raise ValueError(
+                f"unsupported dtype for stateful_randn: {original_dtype!r}, "
+                f"expected '32', '64', or a dtype object"
+            )
         r = libjax.random.normal(g, shape=shape, dtype=dtyper) * stddev + mean
         return r
 
@@ -663,6 +669,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     ) -> Tensor:
         if dtype is None:
             dtype = rdtypestr
+        original_dtype = dtype
         if isinstance(dtype, str):
             dtype = dtype[-2:]
         if isinstance(shape, int):
@@ -673,6 +680,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
             dtyper = jnp.float64
         elif not isinstance(dtype, str):
             dtyper = dtype
+        else:
+            raise ValueError(
+                f"unsupported dtype for stateful_randu: {original_dtype!r}, "
+                f"expected '32', '64', or a dtype object"
+            )
         r = libjax.random.uniform(g, shape=shape, dtype=dtyper, minval=low, maxval=high)
         return r
 

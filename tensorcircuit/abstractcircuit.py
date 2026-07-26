@@ -174,7 +174,11 @@ class AbstractCircuit:
                             nvars[k] = v
                     apply(self, *ind, **nvars)
             else:
-                raise ValueError("Illegal index specification")
+                raise ValueError(
+                    f"Illegal index specification: each positional index must be an int "
+                    f"or a sequence/range of ints, got first element of type "
+                    f"{type(index[0]).__name__}: {index[0]!r}"
+                )
 
         return apply_list
 
@@ -184,6 +188,11 @@ class AbstractCircuit:
         name: Optional[str] = None,
         mpo: bool = False,
     ) -> Callable[..., None]:
+        """
+        Internal helper for registering named gate methods.
+
+        Apply an arbitrary unitary via ``c.unitary(matrix, *index)`` instead.
+        """
         # it is more like a register instead of apply
         # nested function must be utilized, functools.partial doesn't work for method register on class
         # see https://re-ra.xyz/Python-中实例方法动态绑定的几组最小对立/
@@ -222,7 +231,11 @@ class AbstractCircuit:
                 for ind in zip(*index):
                     apply(self, *ind, **kws)
             else:
-                raise ValueError("Illegal index specification")
+                raise ValueError(
+                    f"Illegal index specification: each positional index must be an int "
+                    f"or a sequence/range of ints, got first element of type "
+                    f"{type(index[0]).__name__}: {index[0]!r}"
+                )
 
         return apply_list
 
