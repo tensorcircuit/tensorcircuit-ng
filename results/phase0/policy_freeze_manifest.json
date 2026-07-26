@@ -1,0 +1,86 @@
+{
+  "schema_version": "policy-freeze-manifest-v2",
+  "policy_id": "REGION_FUSED_FULL_ANCHOR_ACCURACY_v5",
+  "policy_git_commit": "30a0048b09f6f7f58d9fa72ea8eacbd161ca382a",
+  "policy_file_sha256": "3ecfa370409e2397319276b8aa1b64bf19a816b2e8e0fb478b51569bf383ced1",
+  "policy_file_path": "docs/superpowers/specs/2026-07-26-region-fused-dual-gate-accuracy-policy.md",
+  "metric_schema_version": "dual-gate-v5",
+  "constants": {
+    "alpha": 0.001,
+    "global_rel_l2_threshold": 0.0001,
+    "eta": 0.001
+  },
+  "implementation": {
+    "implementation_git_commit": "30a0048b09f6f7f58d9fa72ea8eacbd161ca382a",
+    "implementation_file_sha256": "e1bf31d32c57fc6f3971079e2db8501c6fb7406c89b862e848132041d90e0ad4",
+    "implementation_hash_algorithm": "SHA-256 of sorted UTF-8 records path<TAB>git_blob_sha256<LF>, including terminal LF",
+    "implementation_files": {
+      "results/_phase0/c2.py": "f311804310972e65a5c0ec86cc35963b8f13dbb95f9dcea55700cb3bd9e4c5a8",
+      "results/_phase0/numerical.py": "9a659851e3045683338783c93d7256ac909491ec41a89b8245d8364fe406668d",
+      "results/_phase0/region_proto.py": "66a432948e9772df9637cd9b7b5650a7968fb9ecd4005436eb75f16adbfe538a"
+    }
+  },
+  "kernel_variant": {
+    "variant": "direct",
+    "kernel_name": "fused_pte_kernel",
+    "kernel_source_path": "results/_phase0/cpp/region_proto.cu",
+    "kernel_source_sha256": "41cf256d3dc8aa4242b51c55b6690300f21e4f69016114042659349830da3f8c",
+    "kernel_blob_or_ptx_sha256": null,
+    "kernel_blob_null_reason": "fused_pte_kernel is JIT-compiled by cupy via nvrtc at runtime (cupy.RawKernel). There is no pre-compiled PTX/CUBIN artifact that is stable across toolchain runs. The kernel source SHA-256 is the binding reference; nvrtc compilation is deterministic on the same GPU/toolchain."
+  },
+  "contract": {
+    "PM": 4096,
+    "PN": 16384,
+    "K1": 1024,
+    "TM": 64,
+    "TN": 1048576,
+    "transform": "P=c64[PM,PN]=A@B -> T=transform(P)=c64[TM,TN] (8-D reshape->transpose->reshape, row-major) -> E=D@T=c64[TM,TN]",
+    "transform_contract_sha256": "c4aa5c2209f133d3bff7aeaaea1444870fdb8ab894b1e00a4592a09e862e87b6",
+    "transform_contract_path": "results/phase0/c1_c2_edge_map.json",
+    "D_seed_offset": 7000,
+    "D_input_construction_version": "baseline_v1 / mixed_scale_v1 / cancellation_v2 (via numerical.make_inputs with seed_offset +7000 for D)"
+  },
+  "profiles": {
+    "required_input_profiles": [
+      "baseline_v1",
+      "mixed_scale_v1",
+      "cancellation_v2"
+    ],
+    "shape": [64, 1048576],
+    "dtype": "complex64",
+    "qualifying_matrix": "3 required profiles x 6 required seeds = 18 required cells"
+  },
+  "seeds": {
+    "calibration_seed_list": [0, 1, 2],
+    "holdout_seed_list": [1598166685, 542109305, 1463850203],
+    "required_seed_list": [0, 1, 2, 1598166685, 542109305, 1463850203],
+    "seed_count": 6,
+    "holdout_provided_by": "Reviewer B",
+    "holdout_first_disclosed": "at POLICY_ACCEPTED issuance, before freeze commit F"
+  },
+  "run_env": {
+    "gpu": "RTX 5070 Ti Laptop (sm_120, 12GB)",
+    "env_deps_sha256": "20ff56a28d803fb0e84f752868689a9cb2578750a561d3e1146a9d439313f7a5",
+    "env_deps_source": "SHA-256 of sorted JSON of run_context._versions() output",
+    "env_deps_versions": {
+      "cotengra": "0.8.2",
+      "cupy-cuda12x": "14.1.1",
+      "jax": "0.6.2",
+      "jaxlib": "0.6.2",
+      "numpy": "2.2.6",
+      "nvidia-cublas-cu12": "12.8.4.1",
+      "nvidia-cuda-nvcc-cu12": "12.9.86",
+      "nvidia-cuda-nvrtc-cu12": "12.8.93",
+      "nvidia-cuda-runtime-cu12": "12.8.90",
+      "tensorcircuit-ng": "1.7.0",
+      "torch": "2.11.0+cu128"
+    }
+  },
+  "retry_and_retention": {
+    "max_retries_per_cell": 1,
+    "retry_semantics": "ONE retry allowed after initial execution",
+    "retry_only_on": ["OOM", "timeout", "infrastructure failure"],
+    "retain_all_attempts": true,
+    "policy_failure_is_retriable": false
+  }
+}

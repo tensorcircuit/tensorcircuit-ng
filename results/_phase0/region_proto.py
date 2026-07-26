@@ -918,6 +918,13 @@ def _run_full_anchor_correctness_profile(seeds, level) -> dict:
         apply_policy_region_fused,
         compute_metrics_dual_gate,
     )
+    _LEVEL_TOKEN = {
+        "baseline": "baseline_v1",
+        "mixed_scale": "mixed_scale_v1",
+        "cancellation": "cancellation_v2",
+    }
+    version_token = _LEVEL_TOKEN.get(level, f"{level}_v1")
+
 
     contract = full_anchor_contract()
     steps = contract["steps"]
