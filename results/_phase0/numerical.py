@@ -309,6 +309,216 @@ def apply_policy(route, dtype, metrics):
     return "PASS", None
 
 
+# ---------------------------------------------------------------------------
+# Dual-gate accuracy policy v3 (spec: 2026-07-26-region-fused-dual-gate-accuracy-policy.md)
+# Frozen constants + compute_metrics_dual_gate + apply_policy_region_fused.
+# ---------------------------------------------------------------------------
+
+# Frozen policy constants (B v2-accredited, POLICY_ACCEPTED freezes them).
+DEFAULT_REGION_FUSED_CONSTANTS: dict = {
+    "alpha": 1e-3,
+    "global_rel_l2_threshold": 1e-4,
+    "eta": 1e-3,
+}
+
+# Policy identity (frozen at freeze).
+POLICY_ID = "REGION_FUSED_FULL_ANCHOR_ACCURACY_v3"
+METRIC_SCHEMA_VERSION = "dual-gate-v3"
+
+
+def compute_metrics_dual_gate(output, reference, alpha=1e-3):
+    """Dual-gate accuracy metrics for region_fused c64 full-anchor numerical.
+
+    Pure function. Takes numpy/cupy arrays ``output`` and ``reference``
+    (c64 complex, same shape expected). Returns a dict with:
+
+    - ``reference_rms`` (FP64 float): s = sqrt(mean(|reference_i|^2))
+    - ``global_rel_l2`` (FP64 float): ||error||_2 / max(||reference||_2, eps)
+    - ``local_scaled_max`` (FP64 float): max_i(|error_i| / max(|reference_i|, alpha*s))
+    - ``local_scaled_argmax_reference_abs`` (FP64 float or None): |reference_i|
+      at the index where local_scaled_max is attained
+    - ``nan_inf`` (strict bool): True if any non-finite in output/reference/error/metrics
+    - ``status`` (str or None): error status if the computation cannot produce
+      valid metrics (e.g. shape mismatch, empty array, all-zero reference)
+
+    FP64 accumulation method (documented per spec §3):
+      ``|z|^2 = re(z)^2 + im(z)^2`` is computed element-wise on the float64
+      real/imag components (extracted from complex64 via ``.real.astype(np.float64)``
+      / ``.imag.astype(np.float64)`` -- this preserves BOTH parts and is NOT a
+      c64->f64 cast which would drop imaginary parts). The element-wise squared
+      magnitudes are summed via ``np.sum(sq, dtype=np.float64)`` (numpy uses
+      pairwise summation for float64 arrays, which is numerically stable for
+      sums of 2^26 non-negative terms). The RMS is ``sqrt(sum / N)``.
+    """
+    output = np.asarray(output)
+    reference = np.asarray(reference)
+
+    # Shape mismatch (spec §3: fail-closed, not PASS)
+    if output.shape != reference.shape:
+        return {
+            "reference_rms": None,
+            "global_rel_l2": None,
+            "local_scaled_max": None,
+            "local_scaled_argmax_reference_abs": None,
+            "nan_inf": False,
+            "status": "UNKNOWN_SHAPE_MISMATCH",
+        }
+
+    # Empty array (spec §3)
+    if output.size == 0:
+        return {
+            "reference_rms": None,
+            "global_rel_l2": None,
+            "local_scaled_max": None,
+            "local_scaled_argmax_reference_abs": None,
+            "nan_inf": False,
+            "status": "UNKNOWN_EMPTY_ARRAY",
+        }
+
+    # --- nan_inf check (spec §3: check ALL four: output, reference, error, metrics) ---
+    out_fin = np.all(np.isfinite(output))
+    ref_fin = np.all(np.isfinite(reference))
+    error = output - reference
+    err_fin = np.all(np.isfinite(error))
+
+    # --- FP64 accumulation: |z|^2 = re(z)^2 + im(z)^2, then pairwise sum ---
+    # Extract real/imag as float64 (NOT c64->f64 cast)
+    ref_re = reference.real.astype(np.float64)
+    ref_im = reference.imag.astype(np.float64)
+    ref_sq = ref_re * ref_re + ref_im * ref_im  # |reference_i|^2, FP64
+
+    err_re = error.real.astype(np.float64)
+    err_im = error.imag.astype(np.float64)
+    err_sq = err_re * err_re + err_im * err_im  # |error_i|^2, FP64
+
+    N = float(output.size)
+    ref_sum_sq = float(np.sum(ref_sq, dtype=np.float64))
+    err_sum_sq = float(np.sum(err_sq, dtype=np.float64))
+
+    s = math.sqrt(ref_sum_sq / N)  # RMS(reference), FP64
+    ref_norm = math.sqrt(ref_sum_sq)  # ||reference||_2, FP64
+
+    # Check numerical metrics finiteness (spec: all four checked for nan_inf)
+    metrics_fin = (
+        math.isfinite(s) and math.isfinite(ref_norm) and math.isfinite(err_sum_sq)
+    )
+
+    # All-zero reference (s == 0) -> metrics undefined (spec §5)
+    if s == 0.0:
+        return {
+            "reference_rms": 0.0,
+            "global_rel_l2": None,
+            "local_scaled_max": None,
+            "local_scaled_argmax_reference_abs": None,
+            "nan_inf": bool(not (out_fin and ref_fin and err_fin and metrics_fin)),
+            "status": "UNKNOWN_ALL_ZERO_REFERENCE",
+        }
+
+    # --- global_rel_l2 (FP64) ---
+    eps = (
+        1e-16  # prevents division by zero when reference is all-zero (already handled)
+    )
+    err_norm = math.sqrt(err_sum_sq)  # ||error||_2, FP64
+    global_rel_l2 = float(err_norm / max(ref_norm, eps))
+
+    # --- local_scaled_max (FP64, continuous gate) ---
+    tau = alpha * s
+    abs_ref = np.sqrt(ref_sq)  # FP64, |reference_i|
+    abs_err = np.sqrt(err_sq)  # FP64, |error_i|
+    denom = np.maximum(abs_ref, tau)  # clip denominator to tau
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratios = abs_err / denom
+    local_scaled_max = float(np.max(ratios))
+    argmax_idx = int(np.argmax(ratios))
+    local_scaled_argmax_reference_abs = float(abs_ref.flat[argmax_idx])
+
+    # --- nan_inf: all four checked (spec §3) ---
+    nan_inf = bool(
+        not out_fin
+        or not ref_fin
+        or not err_fin
+        or not metrics_fin
+        or not math.isfinite(global_rel_l2)
+        or not math.isfinite(local_scaled_max)
+        or not math.isfinite(local_scaled_argmax_reference_abs)
+    )
+
+    return {
+        "reference_rms": float(s),
+        "global_rel_l2": float(global_rel_l2),
+        "local_scaled_max": float(local_scaled_max),
+        "local_scaled_argmax_reference_abs": float(local_scaled_argmax_reference_abs),
+        "nan_inf": nan_inf,  # strict bool
+        "status": None,  # no error
+    }
+
+
+def apply_policy_region_fused(metrics, constants=None):
+    """Consume dual-gate metrics, apply the region_fused accuracy policy.
+
+    Returns ``(verdict, reasons)`` where verdict in {"PASS","FAIL","UNKNOWN"}
+    and reasons is a list of reason codes. Priority: FAIL > UNKNOWN > PASS.
+    All triggered reason codes are retained.
+
+    Frozen constants: alpha=1e-3, global_rel_l2_threshold=1e-4, eta=1e-3.
+    Override via ``constants`` dict.
+    """
+    if constants is None:
+        constants = DEFAULT_REGION_FUSED_CONSTANTS
+
+    reasons = []
+
+    # --- nan_inf gate (MUST be strict bool; missing/non-bool -> fail-closed) ---
+    nan_inf = metrics.get("nan_inf")
+    if not isinstance(nan_inf, bool):
+        return "FAIL", ["FAIL_NAN_INF"]
+    if nan_inf is True:
+        return "FAIL", ["FAIL_NAN_INF"]
+
+    # --- Status-based early returns (shape/empty/zero-reference from compute_metrics) ---
+    status = metrics.get("status")
+    if status == "UNKNOWN_SHAPE_MISMATCH":
+        return "UNKNOWN", ["UNKNOWN_SHAPE_MISMATCH"]
+    if status == "UNKNOWN_EMPTY_ARRAY":
+        return "UNKNOWN", ["UNKNOWN_EMPTY_ARRAY"]
+    if status == "UNKNOWN_ALL_ZERO_REFERENCE":
+        return "UNKNOWN", ["UNKNOWN_ALL_ZERO_REFERENCE"]
+
+    # --- Numerical metrics validity (spec §1 field-type distinction) ---
+    for key in ("global_rel_l2", "local_scaled_max"):
+        val = metrics.get(key)
+        if val is None:
+            return "UNKNOWN", ["UNKNOWN_MISSING_METRIC"]
+        if (
+            not isinstance(val, (int, float))
+            or isinstance(val, bool)
+            or not math.isfinite(val)
+            or val < 0
+        ):
+            return "FAIL", ["FAIL_INVALID_METRIC"]
+
+    # reference_rms must be present and > 0
+    ref_rms = metrics.get("reference_rms")
+    if ref_rms is None:
+        return "UNKNOWN", ["UNKNOWN_MISSING_METRIC"]
+    if not isinstance(ref_rms, (int, float)) or isinstance(ref_rms, bool):
+        return "FAIL", ["FAIL_INVALID_METRIC"]
+    if ref_rms == 0.0:
+        return "UNKNOWN", ["UNKNOWN_ALL_ZERO_REFERENCE"]
+
+    # --- Threshold checks ---
+    verdict = "PASS"
+    if metrics["global_rel_l2"] >= constants["global_rel_l2_threshold"]:
+        verdict = "FAIL"
+        reasons.append("FAIL_GLOBAL_REL_L2")
+    if metrics["local_scaled_max"] >= constants["eta"]:
+        verdict = "FAIL"
+        reasons.append("FAIL_LOCAL_SCALED_MAX")
+    if not reasons:
+        reasons.append("PASS")
+    return verdict, reasons
+
+
 _ROUTES = ("planar", "grouped", "region_fused", "cutlass_4m_single")
 
 #: P1 #4 fix (reviewer B): the ONLY source token that counts as a real

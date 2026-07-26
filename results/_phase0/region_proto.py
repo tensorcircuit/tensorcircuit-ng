@@ -901,13 +901,18 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
     """Full-anchor correctness: fused (direct recompute) vs materialized oracle,
     across ``seeds`` (default 3). For each seed, materialized and fused use
     IDENTICAL inputs (same seed) so the diff is purely the kernel's numerical
-    behavior. Returns the worst relative_l2 / max_rel across seeds.
+    behavior. Returns the worst relative_l2 / max_rel across seeds, PLUS the
+    v3 dual-gate accuracy metrics (reference_rms, global_rel_l2,
+    worst_local_scaled_max, local_scaled_argmax_reference_abs) per the
+    region_fused dual-gate accuracy policy spec.
 
     Memory: within each seed, the materialized path's pool is freed before the
     fused path runs (they share the 12 GB cupy pool); between seeds the pool is
     freed again so inputs/E from one seed do not accumulate. The fused path
     allocates only A/B/D/E -- P and T are never materialized on the fused path.
     """
+    from results._phase0.numerical import compute_metrics_dual_gate
+
     contract = full_anchor_contract()
     steps = contract["steps"]
     s = FULL_ANCHOR
@@ -916,6 +921,13 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
     nan_inf = False
     p_bytes_avoided = 0
     t_bytes_avoided = 0
+    # v3 dual-gate tracking: track the worst (max) local_scaled_max across seeds
+    # and record the seed that produced it (for argmax reference abs).
+    worst_local_scaled_max = 0.0
+    worst_dg_seed = None
+    worst_dg_global_rel_l2 = None
+    worst_dg_reference_rms = None
+    worst_dg_argmax_ref_abs = None
     for seed in seeds:
         # Materialized oracle: allocates P+T transiently, frees them in-function
         # before returning (E_mat still live).
@@ -957,6 +969,16 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
             or not bool(cp.all(cp.isfinite(E_fus)))
             or not bool(cp.all(cp.isfinite(E_mat)))
         )
+        # v3 dual-gate metrics: compute for this seed (before freeing arrays).
+        dg = compute_metrics_dual_gate(cp.asnumpy(E_fus), cp.asnumpy(E_mat), alpha=1e-3)
+        dg_lsm = dg.get("local_scaled_max")
+        if isinstance(dg_lsm, (int, float)) and math.isfinite(dg_lsm):
+            if dg_lsm > worst_local_scaled_max:
+                worst_local_scaled_max = dg_lsm
+                worst_dg_seed = seed
+                worst_dg_global_rel_l2 = dg.get("global_rel_l2")
+                worst_dg_reference_rms = dg.get("reference_rms")
+                worst_dg_argmax_ref_abs = dg.get("local_scaled_argmax_reference_abs")
         del E_mat, E_fus
         cp.get_default_memory_pool().free_all_blocks()
         cp.cuda.Device(0).synchronize()
@@ -970,6 +992,17 @@ def run_full_anchor_correctness(seeds=(0, 1, 2)) -> dict:
         "output_bytes": s["TM"] * s["TN"] * 8,
         "P_bytes_avoided": p_bytes_avoided,
         "T_bytes_avoided": t_bytes_avoided,
+        # v3 dual-gate accuracy fields (per spec §2 field schema)
+        "reference_rms": worst_dg_reference_rms,
+        "global_rel_l2": worst_dg_global_rel_l2,
+        "local_scaled_max": (
+            worst_local_scaled_max if worst_dg_seed is not None else None
+        ),
+        "worst_local_scaled_max": (
+            worst_local_scaled_max if worst_dg_seed is not None else None
+        ),
+        "local_scaled_argmax_reference_abs": worst_dg_argmax_ref_abs,
+        "worst_dg_seed": worst_dg_seed,
     }
 
 

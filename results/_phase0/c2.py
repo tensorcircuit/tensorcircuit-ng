@@ -113,6 +113,9 @@ _PEAK_SCHEMA_VERSIONS = frozenset({PEAK_SCHEMA})
 _AUDIT_SCHEMA_VERSIONS = frozenset({AUDIT_SCHEMA})
 # Self-recompute policies (spec §5.2; mirror the prototype's own contracts).
 ACCURACY_REL_L2 = 1e-4
+#: Threshold for ``worst_local_scaled_max`` (v3 dual-gate policy, eta=1e-3).
+#: Previously applied to the old ``worst_max_rel`` field (deprecated in the
+#: region_fused decision chain but retained for audit/history).
 ACCURACY_MAX_REL = 1e-3
 RESOURCE_MIN_OCCUPANCY_PCT = 25.0
 # A real P->T->E consumer outputs a full E tensor (>= this), not a scalar/reduction.
@@ -631,40 +634,39 @@ def _normalize_region_peak(proto, *, case_binding_state="MISSING"):
     # full_anchor_run_state: TRUE iff fused_full_anchor_run is True.
     full_anchor_run_state = "TRUE" if far is True else "FALSE"
 
-    # accuracy_state (P1 #2 fix, reviewer B): read nested
-    # ``full_anchor_correctness.worst_relative_l2`` /
-    # ``full_anchor_correctness.worst_max_rel`` /
-    # ``full_anchor_correctness.nan_inf`` (the FULL-ANCHOR correctness
-    # evidence), NOT top-level ``relative_l2`` / ``max_rel`` (small-contract
-    # values). If ``full_anchor_correctness`` is missing/malformed ->
-    # accuracy_state=MISSING (fail-closed). If ``nan_inf=True`` -> FAILED.
-    # If ``worst_relative_l2 >= ACCURACY_REL_L2`` or ``worst_max_rel >=
-    # ACCURACY_MAX_REL`` -> FAILED. Reading the top-level fields fail-opens:
-    # a proto with bad full-anchor accuracy but good small-contract accuracy
-    # -> PASSED -> can PASS.
+    # accuracy_state (P1 #2 fix, reviewer B + v3 dual-gate policy): read
+    # nested ``full_anchor_correctness`` NEW fields
+    # ``worst_local_scaled_max`` / ``global_rel_l2`` / ``nan_inf`` (v3 schema),
+    # NOT the old ``worst_max_rel`` / ``worst_relative_l2``. If any new field
+    # is missing -> accuracy_state=MISSING (fail-closed). ``nan_inf`` MUST be
+    # strict bool (False); anything else (True / None / 0 / non-bool) -> FAILED.
+    # ``worst_max_rel`` MUST NOT be used as an alias for ``worst_local_scaled_max``.
     fac = proto.get("full_anchor_correctness")
     if not isinstance(fac, dict):
         accuracy_state = "MISSING"
     else:
         nan_inf = fac.get("nan_inf")
-        if nan_inf is True:
+        # nan_inf MUST be strict bool False (per v3 spec field-type distinction);
+        # anything other than False -> FAILED (fail-closed)
+        if nan_inf is True or nan_inf is not False:
             accuracy_state = "FAILED"
         else:
-            rel_l2 = fac.get("worst_relative_l2")
-            max_rel = fac.get("worst_max_rel")
+            # v3: read NEW fields worst_local_scaled_max + global_rel_l2
+            # MUST NOT read worst_max_rel as alias
+            worst_local = fac.get("worst_local_scaled_max")
+            global_l2 = fac.get("global_rel_l2")
             if (
-                isinstance(rel_l2, (int, float))
-                and not isinstance(rel_l2, bool)
-                and (
-                    isinstance(max_rel, (int, float)) and not isinstance(max_rel, bool)
-                )
+                isinstance(worst_local, (int, float))
+                and not isinstance(worst_local, bool)
+                and isinstance(global_l2, (int, float))
+                and not isinstance(global_l2, bool)
             ):
-                if rel_l2 < ACCURACY_REL_L2 and max_rel < ACCURACY_MAX_REL:
+                if global_l2 < ACCURACY_REL_L2 and worst_local < ACCURACY_MAX_REL:
                     accuracy_state = "PASSED"
                 else:
                     accuracy_state = "FAILED"
             else:
-                accuracy_state = "MISSING"
+                accuracy_state = "MISSING"  # missing new field -> fail-closed
 
     # resource_state (errata #1): OK if registers_per_thread AND occupancy_pct
     # present and meet policy; FAILED if present but fail; MISSING if absent
@@ -745,21 +747,30 @@ def _recompute_conditions(proto, peak):
     ``None`` means the field is absent -> that sub-condition is UNKNOWN (cannot confirm).
     """
     rc: dict[str, Any] = {}
-    # P1 #2 fix (reviewer B): accuracy_pass reads from nested
-    # full_anchor_correctness (the full-anchor correctness evidence), NOT
-    # top-level relative_l2/max_rel (small-contract values).
+    # P1 #2 fix (reviewer B) + v3 dual-gate policy: accuracy_pass reads from
+    # nested full_anchor_correctness NEW fields
+    # (worst_local_scaled_max + global_rel_l2 + nan_inf), NOT old
+    # worst_relative_l2/worst_max_rel (small-contract values).
     fac = proto.get("full_anchor_correctness")
-    if isinstance(fac, dict) and fac.get("nan_inf") is True:
-        rc["accuracy_pass"] = False
-    elif isinstance(fac, dict):
-        rel_l2 = fac.get("worst_relative_l2")
-        max_rel = fac.get("worst_max_rel")
-        if isinstance(rel_l2, (int, float)) and isinstance(max_rel, (int, float)):
-            rc["accuracy_pass"] = bool(
-                rel_l2 < ACCURACY_REL_L2 and max_rel < ACCURACY_MAX_REL
-            )
+    if isinstance(fac, dict):
+        nan_inf = fac.get("nan_inf")
+        # v3: nan_inf MUST be strict bool; anything other than False -> fail
+        if nan_inf is True or nan_inf is not False:
+            rc["accuracy_pass"] = False
         else:
-            rc["accuracy_pass"] = None
+            worst_local = fac.get("worst_local_scaled_max")
+            global_l2 = fac.get("global_rel_l2")
+            if (
+                isinstance(worst_local, (int, float))
+                and not isinstance(worst_local, bool)
+                and isinstance(global_l2, (int, float))
+                and not isinstance(global_l2, bool)
+            ):
+                rc["accuracy_pass"] = bool(
+                    global_l2 < ACCURACY_REL_L2 and worst_local < ACCURACY_MAX_REL
+                )
+            else:
+                rc["accuracy_pass"] = None
     else:
         rc["accuracy_pass"] = None
     regs = proto.get("registers_per_thread")

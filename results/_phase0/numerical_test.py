@@ -1805,6 +1805,231 @@ def test_p1_aggregate_measured_source_with_valid_rel_l2_is_measured():
     assert planar["criterion"] == "PASS", planar
 
 
+# ---------------------------------------------------------------------------
+# Dual-gate accuracy policy v3 mutation tests (15 + 1 FP64 accumulation test).
+# TDD: these tests are written FIRST (RED) before implementing
+# compute_metrics_dual_gate + apply_policy_region_fused.
+# ---------------------------------------------------------------------------
+
+import math as _math  # noqa: E402
+from results._phase0.numerical import (  # noqa: E402
+    compute_metrics_dual_gate,
+    apply_policy_region_fused,
+)
+
+
+def _identity_ref(N=1000):
+    """Fixture: output == reference (no error)."""
+    rng = np.random.default_rng(42)
+    ref = (rng.standard_normal(N) + 1j * rng.standard_normal(N)).astype(np.complex64)
+    return ref, ref.copy()
+
+
+def test_dual_gate_identity_pass():
+    """output == reference -> PASS."""
+    ref, out = _identity_ref()
+    m = compute_metrics_dual_gate(out, ref)
+    v, r = apply_policy_region_fused(m)
+    assert v == "PASS", r
+
+
+def test_dual_gate_all_zero_reference_unknown():
+    """reference all zeros (s=0) -> UNKNOWN."""
+    ref = np.zeros(1000, dtype=np.complex64)
+    out = ref.copy()
+    m = compute_metrics_dual_gate(out, ref)
+    v, r = apply_policy_region_fused(m)
+    assert v == "UNKNOWN", r
+    assert "UNKNOWN_ALL_ZERO_REFERENCE" in r
+
+
+def test_dual_gate_nan_inf_true_fail():
+    """nan_inf=True (proper bool) -> FAIL."""
+    ref, out = _identity_ref()
+    out[0] = float("nan") + 0j
+    m = compute_metrics_dual_gate(out, ref)
+    assert m["nan_inf"] is True  # strict bool
+    v, r = apply_policy_region_fused(m)
+    assert v == "FAIL", r
+    assert "FAIL_NAN_INF" in r
+
+
+def test_dual_gate_nan_inf_missing_fail():
+    """nan_inf field missing -> FAIL (fail-closed)."""
+    v, r = apply_policy_region_fused(
+        {"global_rel_l2": 1e-7, "local_scaled_max": 1e-7, "reference_rms": 1.0}
+    )
+    assert v == "FAIL", r  # nan_inf missing
+    assert "FAIL_NAN_INF" in r
+
+
+def test_dual_gate_nan_inf_nonbool_fail():
+    """nan_inf=0 (non-bool) -> FAIL."""
+    v, r = apply_policy_region_fused(
+        {
+            "nan_inf": 0,
+            "global_rel_l2": 1e-7,
+            "local_scaled_max": 1e-7,
+            "reference_rms": 1.0,
+        }
+    )
+    assert v == "FAIL", r
+
+
+def test_dual_gate_reference_nan_fail():
+    """NaN in REFERENCE -> FAIL_NAN_INF."""
+    ref, out = _identity_ref()
+    ref[0] = float("nan") + 0j
+    m = compute_metrics_dual_gate(out, ref)
+    assert m["nan_inf"] is True
+    v, r = apply_policy_region_fused(m)
+    assert v == "FAIL", r
+
+
+def test_dual_gate_error_nan_fail():
+    """NaN in error propagation -> FAIL_NAN_INF (error checked)."""
+    ref, out = _identity_ref()
+    out[0] = float("inf") + 0j  # inf in output propagates to error
+    m = compute_metrics_dual_gate(out, ref)
+    assert m["nan_inf"] is True
+    v, r = apply_policy_region_fused(m)
+    assert v == "FAIL", r
+    assert "FAIL_NAN_INF" in r
+
+
+def test_dual_gate_invalid_numerical_metric_fail():
+    """A numerical metric is negative -> FAIL_INVALID_METRIC."""
+    v, r = apply_policy_region_fused(
+        {
+            "nan_inf": False,
+            "global_rel_l2": -1.0,
+            "local_scaled_max": 1e-7,
+            "reference_rms": 1.0,
+        }
+    )
+    assert v == "FAIL", r
+    assert "FAIL_INVALID_METRIC" in r
+
+
+def test_dual_gate_global_rel_l2_fail():
+    """output = 2*reference -> global_rel_l2 approx 1.0 -> FAIL."""
+    ref, _ = _identity_ref()
+    out = 2 * ref
+    m = compute_metrics_dual_gate(out, ref)
+    v, r = apply_policy_region_fused(m)
+    assert v == "FAIL", r
+    assert "FAIL_GLOBAL_REL_L2" in r
+
+
+def test_dual_gate_local_scaled_max_localized_error_fail():
+    """Single localized error: local_scaled_max triggers FAIL but global_rel_l2
+    stays below threshold (proves the local gate catches what rel_l2 misses).
+    Error injected at the smallest high-signal element (>=τ) to minimize
+    global impact while keeping local_scaled_max at ~0.5."""
+    ref, out = _identity_ref(100000)
+    s = _math.sqrt(np.mean(np.abs(ref) ** 2))
+    tau = 1e-3 * s  # α * s
+    # Pick the element with smallest |ref| that is still >= tau, so the absolute
+    # error is tiny but the per-element ratio is 0.5 -> local_scaled_max >= 0.5.
+    abs_ref = np.abs(ref)
+    eligible = np.where(abs_ref >= tau, abs_ref, np.inf)
+    idx = int(np.argmin(eligible))
+    out[idx] = ref[idx] * 1.5  # |error|/|ref| = 0.5 at this element
+    m = compute_metrics_dual_gate(out, ref)
+    assert m["global_rel_l2"] < 1e-4  # localized error diluted in global L2
+    assert m["local_scaled_max"] > 0.4  # approx 0.5
+    v, r = apply_policy_region_fused(m)
+    assert v == "FAIL", r
+    assert "FAIL_LOCAL_SCALED_MAX" in r
+
+
+def test_dual_gate_shape_mismatch_unknown():
+    """output.shape != reference.shape -> UNKNOWN."""
+    ref = np.zeros((100,), dtype=np.complex64)
+    out = np.zeros((200,), dtype=np.complex64)
+    m = compute_metrics_dual_gate(out, ref)
+    v, r = apply_policy_region_fused(m)
+    assert v == "UNKNOWN", r
+    assert "UNKNOWN_SHAPE_MISMATCH" in r
+
+
+def test_dual_gate_empty_array_unknown():
+    """output.size == 0 -> UNKNOWN."""
+    ref = np.zeros(0, dtype=np.complex64)
+    out = ref.copy()
+    m = compute_metrics_dual_gate(out, ref)
+    v, r = apply_policy_region_fused(m)
+    assert v == "UNKNOWN", r
+    assert "UNKNOWN_EMPTY_ARRAY" in r
+
+
+def test_dual_gate_missing_new_metric_field_unknown():
+    """local_scaled_max missing -> UNKNOWN (not aliased to old worst_max_rel)."""
+    v, r = apply_policy_region_fused(
+        {"nan_inf": False, "global_rel_l2": 1e-7, "reference_rms": 1.0}
+    )
+    assert v == "UNKNOWN", r
+    assert "UNKNOWN_MISSING_METRIC" in r
+
+
+def test_dual_gate_no_worst_max_rel_alias():
+    """A fixture with ONLY old worst_max_rel (no new local_scaled_max) ->
+    apply_policy MUST NOT read it as alias -> UNKNOWN_MISSING_METRIC."""
+    m = {
+        "nan_inf": False,
+        "global_rel_l2": 1e-7,
+        "reference_rms": 1.0,
+        "worst_max_rel": 1e-8,
+    }
+    v, r = apply_policy_region_fused(m)
+    assert v == "UNKNOWN", r  # local_scaled_max missing; worst_max_rel NOT used
+
+
+def test_dual_gate_multiple_reasons_priority():
+    """Multiple anomalies -> FAIL (highest priority) AND ALL reasons."""
+    v, r = apply_policy_region_fused(
+        {
+            "nan_inf": False,
+            "global_rel_l2": 2e-4,
+            "local_scaled_max": 2e-3,
+            "reference_rms": 1.0,
+        }
+    )
+    assert v == "FAIL", r
+    assert len(r) >= 2
+    assert "FAIL_GLOBAL_REL_L2" in r
+    assert "FAIL_LOCAL_SCALED_MAX" in r
+
+
+def test_dual_gate_pass():
+    """All metrics within thresholds -> PASS."""
+    ref, out = _identity_ref()
+    m = compute_metrics_dual_gate(out, ref)
+    assert isinstance(m["nan_inf"], bool)
+    assert isinstance(m["global_rel_l2"], float)
+    assert isinstance(m["local_scaled_max"], float)
+    v, r = apply_policy_region_fused(m)
+    assert v == "PASS", r
+
+
+def test_dual_gate_fp64_accumulation_accuracy():
+    """FP64 accumulation correctness: with FP64-precise inputs, the computed
+    global_rel_l2 must match the expected value within 1e-15 relative tolerance
+    (validates that |z|^2 = re^2 + im^2 is computed in FP64 internally, not
+    truncated to float32 accumulation which would lose ~8 decimal digits).
+    Uses complex128 inputs to eliminate input-quantization noise."""
+    N = 1000
+    ref = np.ones(N, dtype=np.complex128)  # FP64-precise inputs
+    out = ref + np.array(1e-8 + 0j, dtype=np.complex128)
+    m = compute_metrics_dual_gate(out, ref)
+    # Expected: ||error||_2 = 1e-8 * sqrt(N), ||ref||_2 = sqrt(N)
+    # global_rel_l2 = 1e-8
+    expected = 1e-8
+    assert m["global_rel_l2"] == pytest.approx(expected, rel=1e-15)
+    assert m["reference_rms"] == pytest.approx(1.0, rel=1e-15)
+    assert m["local_scaled_max"] == pytest.approx(1e-8, rel=1e-15)
+
+
 if __name__ == "__main__":
     import sys, pytest
 

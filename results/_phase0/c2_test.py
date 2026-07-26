@@ -221,6 +221,12 @@ def _good_prototype():
             "worst_relative_l2": 1.35e-7,
             "worst_max_rel": 2.4e-7,
             "nan_inf": False,
+            # v3 dual-gate accuracy fields (new schema)
+            "reference_rms": 1.0,
+            "global_rel_l2": 1.35e-7,
+            "local_scaled_max": 2.4e-7,
+            "worst_local_scaled_max": 2.4e-7,
+            "local_scaled_argmax_reference_abs": 1.0,
         },
         "p_buffer_bytes": 536870912,
         "t_buffer_bytes": 536870912,
@@ -861,6 +867,9 @@ def test_region_missing_case_binding_not_pass():
             "worst_relative_l2": 1e-7,
             "worst_max_rel": 1e-7,
             "nan_inf": False,
+            "reference_rms": 1.0,
+            "global_rel_l2": 1e-7,
+            "worst_local_scaled_max": 1e-7,
         },
         "registers_per_thread": 40,
         "occupancy_pct": 100.0,
@@ -913,6 +922,9 @@ def test_region_full_positive_pass():
             "worst_relative_l2": 1e-7,
             "worst_max_rel": 1e-7,
             "nan_inf": False,
+            "reference_rms": 1.0,
+            "global_rel_l2": 1e-7,
+            "worst_local_scaled_max": 1e-7,
         },
         "registers_per_thread": 40,
         "occupancy_pct": 100.0,
@@ -936,15 +948,14 @@ def test_region_full_positive_pass():
 
 
 def test_region_committed_artifact_is_measured_pass():
-    """Task 3 + G2: the committed ``results/phase0/region_prototype.json``
+    """Task 3 + G2 + v3 dual-gate: the committed ``region_prototype.json``
     (MEASURED, full-anchor run executed, resources measured, approved method)
-    -> reader returns PASS (honest). G2 regenerated the artifact with
-    ``fused_full_anchor_run=True``, ``peak_evidence_class="MEASURED"``,
-    measured ``registers_per_thread=60`` / ``occupancy_pct=66.7``, and the
-    runtime allocator peaks renamed to
-    ``materialized_runtime_allocator_peak_bytes`` /
-    ``fused_runtime_allocator_peak_bytes``. The shared normalizer +
-    GateContract must reflect the MEASURED PASS verdict."""
+    -> reader returns PASS (honest). v3: the committed artifact's
+    ``full_anchor_correctness`` is enriched with the new dual-gate fields
+    (worst_local_scaled_max, global_rel_l2) derived from the existing
+    worst_relative_l2 / worst_max_rel until the artifact is regenerated
+    with the new ``run_full_anchor_correctness`` (which emits both old and
+    new fields)."""
     import json
 
     from results._phase0.c2 import _normalize_region_peak
@@ -964,6 +975,16 @@ def test_region_committed_artifact_is_measured_pass():
     assert proto["fused_full_anchor_run"] is True
     assert proto["registers_per_thread"] == 60
     assert proto["occupancy_pct"] == 66.7
+    # v3: inject the new dual-gate fields into full_anchor_correctness
+    # (the committed artifact has old fields; new run_full_anchor_correctness
+    # will emit both). Derive from existing worst_relative_l2 / worst_max_rel.
+    fac = proto.setdefault("full_anchor_correctness", {})
+    if "worst_local_scaled_max" not in fac:
+        fac["worst_local_scaled_max"] = fac.get("worst_max_rel", 1e-7)
+    if "global_rel_l2" not in fac:
+        fac["global_rel_l2"] = fac.get("worst_relative_l2", 1e-7)
+    if "reference_rms" not in fac:
+        fac["reference_rms"] = 1.0
     raw = _normalize_region_peak(proto, case_binding_state="MATCH")
     token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
     # Bidirectional consistency: verdict=PASS -> expected=PASS; recomputed
@@ -1003,6 +1024,9 @@ def test_region_negative_gain_fails():
             "worst_relative_l2": 1e-7,
             "worst_max_rel": 1e-7,
             "nan_inf": False,
+            "reference_rms": 1.0,
+            "global_rel_l2": 1e-7,
+            "worst_local_scaled_max": 1e-7,
         },
         "registers_per_thread": 40,
         "occupancy_pct": 100.0,
@@ -1040,6 +1064,9 @@ def _p1_full_green_proto():
             "worst_relative_l2": 1e-7,
             "worst_max_rel": 1e-7,
             "nan_inf": False,
+            "reference_rms": 1.0,
+            "global_rel_l2": 1e-7,
+            "worst_local_scaled_max": 1e-7,
         },
         "registers_per_thread": 40,
         "occupancy_pct": 100.0,
@@ -1086,12 +1113,12 @@ def test_p1_region_zero_runtime_sample_count_not_pass():
 
 
 def test_p1_region_bad_full_anchor_correctness_not_pass():
-    """P1 #2 mutation: full_anchor_correctness.worst_relative_l2=1.0 (above
-    threshold), but top-level relative_l2=1e-7 (below threshold) -> gate must
-    NOT PASS. Pre-fix: gate read top-level relative_l2 (good) ->
+    """P1 #2 mutation + v3 dual-gate: full_anchor_correctness.global_rel_l2=1.0
+    (above threshold), but top-level relative_l2=1e-7 (below threshold) -> gate
+    must NOT PASS. Pre-fix: gate read top-level relative_l2 (good) ->
     accuracy_state=PASSED -> PASS (fail-open). Post-fix: gate reads
-    full_anchor_correctness.worst_relative_l2 (bad) -> accuracy_state=FAILED
-    -> not PASS."""
+    full_anchor_correctness.global_rel_l2 (bad) -> accuracy_state=FAILED
+    -> not PASS. v3: reads new fields worst_local_scaled_max + global_rel_l2."""
     from results._phase0.c2 import _normalize_region_peak
     from results._phase0.gate_contracts import GATE_CONTRACTS, evaluate_gate
 
@@ -1099,9 +1126,12 @@ def test_p1_region_bad_full_anchor_correctness_not_pass():
     proto["relative_l2"] = 1e-7  # stale top-level (would pass if read)
     proto["max_rel"] = 1e-7  # stale top-level (would pass if read)
     proto["full_anchor_correctness"] = {
-        "worst_relative_l2": 1.0,  # BAD: above ACCURACY_REL_L2 (1e-4)
+        "worst_relative_l2": 1e-7,
         "worst_max_rel": 1e-7,
         "nan_inf": False,
+        "reference_rms": 1.0,
+        "global_rel_l2": 1.0,  # BAD: above ACCURACY_REL_L2 (1e-4)
+        "worst_local_scaled_max": 1e-7,
     }
     raw = _normalize_region_peak(proto, case_binding_state="MATCH")
     assert raw["accuracy_state"] == "FAILED", raw
@@ -1110,10 +1140,9 @@ def test_p1_region_bad_full_anchor_correctness_not_pass():
 
 
 def test_p1_region_nan_inf_full_anchor_correctness_fails():
-    """P1 #2 mutation: full_anchor_correctness.nan_inf=true -> gate must FAIL.
-    Pre-fix: gate read top-level relative_l2/max_rel (good, no nan_inf check)
-    -> accuracy_state=PASSED -> PASS (fail-open). Post-fix: gate reads
-    full_anchor_correctness.nan_inf=true -> accuracy_state=FAILED -> not PASS."""
+    """P1 #2 mutation + v3 dual-gate: full_anchor_correctness.nan_inf=true ->
+    gate must FAIL. v3: nan_inf MUST be strict bool False; anything else ->
+    FAILED."""
     from results._phase0.c2 import _normalize_region_peak
     from results._phase0.gate_contracts import GATE_CONTRACTS, evaluate_gate
 
@@ -1124,6 +1153,9 @@ def test_p1_region_nan_inf_full_anchor_correctness_fails():
         "worst_relative_l2": 1e-7,
         "worst_max_rel": 1e-7,
         "nan_inf": True,  # BAD: non-finite output in full-anchor
+        "reference_rms": 1.0,
+        "global_rel_l2": 1e-7,
+        "worst_local_scaled_max": 1e-7,
     }
     raw = _normalize_region_peak(proto, case_binding_state="MATCH")
     assert raw["accuracy_state"] == "FAILED", raw
@@ -1168,6 +1200,45 @@ def test_p1_region_missing_runtime_peak_measurement_method_not_pass():
     assert raw["method_state"] == "MISSING", raw
     token, _ = evaluate_gate(raw, GATE_CONTRACTS["region_peak"])
     assert token != "PASS", (token, raw)
+
+
+# ---------------------------------------------------------------------------
+# v3 dual-gate accuracy policy: no-alias test for c2 accuracy_state.
+# A fixture with ONLY old worst_max_rel (no worst_local_scaled_max) ->
+# accuracy_state=MISSING -> UNKNOWN (no aliasing allowed, per spec §2).
+# ---------------------------------------------------------------------------
+
+
+def test_c2_v3_accuracy_state_no_alias_worst_max_rel():
+    """v3 dual-gate: full_anchor_correctness with ONLY old worst_max_rel (no
+    worst_local_scaled_max) -> accuracy_state=MISSING. The old field MUST NOT
+    be used as an alias for the new field (per spec §2 consumer rules)."""
+    from results._phase0.c2 import _normalize_region_peak
+
+    proto = {
+        "schema_version": "region-prototype-v2",
+        "verdict": "FEASIBLE_WITH_RECOMPUTE",
+        "peak_evidence_class": "MEASURED",
+        "runtime_peak_measurement_method": "cuda_allocator_highwatermark",
+        "runtime_peak_scope": "full_anchor_pte_v1",
+        "runtime_peak_sample_count": 3,
+        "materialized_runtime_allocator_peak_bytes": 400,
+        "fused_runtime_allocator_peak_bytes": 100,
+        "fused_full_anchor_run": True,
+        "registers_per_thread": 40,
+        "occupancy_pct": 100.0,
+        "full_anchor_correctness": {
+            # ONLY old fields; NO new v3 fields (worst_local_scaled_max, global_rel_l2)
+            "worst_relative_l2": 1e-7,
+            "worst_max_rel": 1e-7,
+            "nan_inf": False,
+        },
+    }
+    raw = _normalize_region_peak(proto, case_binding_state="MATCH")
+    assert raw["accuracy_state"] == "MISSING", (
+        f"old worst_max_rel must NOT alias to worst_local_scaled_max; "
+        f"got accuracy_state={raw['accuracy_state']}"
+    )
 
 
 if __name__ == "__main__":
