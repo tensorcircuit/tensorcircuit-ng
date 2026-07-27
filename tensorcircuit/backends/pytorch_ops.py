@@ -47,8 +47,6 @@ def torchqr_grad(
         qr_epsilon_diag = torch.ones_like(rdiag) * qr_epsilon
         rdiag = torch.where(rdiag.abs() < qr_epsilon, qr_epsilon_diag, rdiag)
         r = torch.diagonal_scatter(r, rdiag, dim1=-2, dim2=-1)
-        # delta_dq = math_ops.matmul(q, math_ops.matmul(dr, tf.linalg.adjoint(delta_r)))
-        # dq = dq + delta_dq
         # Modification ends
 
         qdq = torch.matmul(q.adjoint(), dq)
@@ -93,7 +91,6 @@ class torchqr(torch.autograd.Function):
     @staticmethod
     def forward(a: Array) -> Any:
         q, r = torch.linalg.qr(a, mode="reduced")
-        # ctx.save_for_backward(a, q, r)
         return q, r
 
     # setup_context is responsible for calling methods and/or assigning to

@@ -158,22 +158,18 @@ def lanczos_iteration(
     :return: Tuple containing (basis matrix, projected Hamiltonian)
     :rtype: Tuple[Tensor, Tensor]
     """
-    # Initialize
     vector = initial_vector
     vector = backend.cast(vector, dtypestr)
 
-    # Use list to store basis vectors
     basis_vectors: List[Any] = []
 
-    # Store alpha and beta coefficients for constructing tridiagonal matrix
+    # alpha (diagonal) and beta (off-diagonal) of the projected tridiagonal Hamiltonian
     alphas = []
     betas = []
 
-    # Normalize initial vector
     vector_norm = backend.norm(vector)
     vector = vector / vector_norm
 
-    # Add first basis vector
     basis_vectors.append(vector)
 
     hamiltonian = aslinearoperator(
@@ -198,9 +194,6 @@ def lanczos_iteration(
             projection = backend.sum(backend.conj(v_k) * w)
             w = w - projection * v_k
 
-        # if j > 0:
-        #     w = w - prev_beta * basis_vectors[-2]
-
         # Calculate beta_{j+1} = ||w||
         beta = backend.norm(w)
         betas.append(beta)
@@ -215,21 +208,17 @@ def lanczos_iteration(
             vector = w * backend.cast(norm_factor, dtypestr)
             basis_vectors.append(vector)
 
-    # Construct final basis matrix
     basis_matrix = backend.stack(basis_vectors, axis=1)
 
-    # Construct tridiagonal projected Hamiltonian
     # Use vectorized method to construct tridiagonal matrix at once
     alphas_tensor = backend.stack(alphas)
     # Only use first krylov_dim-1 beta values to construct off-diagonal
     betas_tensor = backend.stack(betas[:-1]) if len(betas) > 1 else backend.stack([])
 
-    # Convert to correct data type
     alphas_tensor = backend.cast(alphas_tensor, dtype=dtypestr)
     if len(betas_tensor) > 0:
         betas_tensor = backend.cast(betas_tensor, dtype=dtypestr)
 
-    # Construct diagonal and off-diagonal parts
     diag_part = backend.diagflat(alphas_tensor)
     if len(betas_tensor) > 0:
         off_diag_part = backend.diagflat(betas_tensor, k=1)
@@ -300,7 +289,6 @@ def krylov_evol(
         backend.conj(backend.transpose(eigenvectors)), projected_state
     )
 
-    # Calculate exp(-i*projected_H*t) * projected_state
     results = []
     for t in times:
         # Calculate exp(-i*eigenvalues*t)
@@ -315,7 +303,6 @@ def krylov_evol(
         # Transform back to original basis: |psi(t)> = V_m |psi_evolved_proj>
         evolved_state = backend.matvec(basis_matrix, evolved_projected)
 
-        # Apply callback function if provided
         if callback is not None:
             result = callback(evolved_state)
         else:
@@ -671,7 +658,7 @@ def evol_local(
     ode evolution of time dependent Hamiltonian on circuit of given indices
     [only jax backend support for now]
 
-    :param c: _description_
+    :param c: Input circuit whose state is evolved.
     :type c: Circuit
     :param index: qubit sites to evolve
     :type index: Sequence[int]
@@ -680,7 +667,8 @@ def evol_local(
     :type h_fun: Callable[..., Tensor]
     :param t: evolution time
     :type t: float
-    :return: _description_
+    :return: A new Circuit of the same type whose state is the ODE-evolved
+        state at the final time point.
     :rtype: Circuit
     """
     s = c.state()
@@ -701,14 +689,15 @@ def evol_global(
     ode evolution of time dependent Hamiltonian on circuit of all qubits
     [only jax backend support for now]
 
-    :param c: _description_
+    :param c: Input circuit whose state is evolved.
     :type c: Circuit
     :param h_fun: h_fun should return a **SPARSE** Hamiltonian matrix
         with input arguments ``time`` and ``*args``
     :type h_fun: Callable[..., Tensor]
-    :param t: _description_
+    :param t: evolution time
     :type t: float
-    :return: _description_
+    :return: A new Circuit of the same type whose state is the ODE-evolved
+        state at the final time point.
     :rtype: Circuit
     """
     s = c.state()
@@ -763,14 +752,13 @@ def chebyshev_evol(
     )
 
     def apply_h_norm(psi: Any) -> Any:
-        """Applies the normalized Hamiltonian to a state."""
         return ((hamiltonian @ psi) - b * psi) / a
 
     # Handle edge case where no evolution is needed.
     if k < 1:
         raise ValueError("k (number of Chebyshev terms) must be >= 1.")
 
-    # --- 2. Calculate Chebyshev Expansion Coefficients ---
+    # --- 2. Chebyshev Expansion Coefficients ---
     k_indices = backend.arange(k)
     bessel_vals = backend.special_jv(k, tau, M)
 
@@ -785,7 +773,7 @@ def chebyshev_evol(
     ik_powers = backend.power(0 - 1j, k_indices)
     coeffs = prefactor * ik_powers * bessel_vals
 
-    # --- 3. Iteratively build the result using a scan ---
+    # --- 3. scan recurrence ---
 
     # Handle the simple case of k=1 separately.
     if k == 1:
@@ -801,7 +789,6 @@ def chebyshev_evol(
         initial_carry = (T1, T0, initial_sum)
 
         def scan_body(carry, i):  # type: ignore
-            """The body of the scan operation."""
             Tk, Tkm1, current_sum = carry
 
             # Calculate the next Chebyshev vector using the recurrence relation.
@@ -819,7 +806,7 @@ def chebyshev_evol(
         # The final result is the sum accumulated in the last carry state.
         psi_unphased = final_carry[2]
 
-    # --- 4. Final Step: Apply Phase Correction ---
+    # --- 4. phase correction ---
     # This undoes the energy shift from the Hamiltonian normalization.
     phase = backend.exp(-1j * b * t)
     psi_final = phase * psi_unphased

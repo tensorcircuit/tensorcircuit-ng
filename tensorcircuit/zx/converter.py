@@ -418,7 +418,6 @@ def x_phase(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
     v1 = b.last_vertex[qubit]
     b.graph.set_type(v1, VertexType.X)
     b.graph.set_phase(v1, phase)
-    # Correctly handle lane update
     v2 = b.graph.add_vertex(VertexType.BOUNDARY, qubit=qubit, row=b.graph.row(v1) + 1)
     b.graph.add_edge((v1, v2), EdgeType.SIMPLE)
     b.last_vertex[qubit] = v2
@@ -439,7 +438,6 @@ def z_phase(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
     v1 = b.last_vertex[qubit]
     b.graph.set_type(v1, VertexType.Z)
     b.graph.set_phase(v1, phase)
-    # Correctly handle lane update
     v2 = b.graph.add_vertex(VertexType.BOUNDARY, qubit=qubit, row=b.graph.row(v1) + 1)
     b.graph.add_edge((v1, v2), EdgeType.SIMPLE)
     b.last_vertex[qubit] = v2

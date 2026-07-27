@@ -538,7 +538,6 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
     ) -> Callable[..., Any]:
         logger.info("numpy backend has no jit interface, just do nothing")
         return f
-        # raise NotImplementedError("numpy backend doesn't support jit compiling")
 
     def vmap(
         self, f: Callable[..., Any], vectorized_argnums: Union[int, Sequence[int]] = 0

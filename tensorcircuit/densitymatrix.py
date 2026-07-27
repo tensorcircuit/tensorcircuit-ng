@@ -203,18 +203,15 @@ class DMCircuit(BaseCircuit):
         :rtype: bool
         :raises ValueError: If completeness relation is not satisfied
         """
-        # Convert all operators to tensors and get their shape
         k_tensors = [k.tensor if isinstance(k, tn.Node) else k for k in kraus]
         shape = k_tensors[0].shape
         dim = shape[0]  # Assuming square matrices
 
-        # Sum K_i K_i^†
         sum_kk = backend.zeros([dim, dim], dtype=k_tensors[0].dtype)
         for k in k_tensors:
             kdag = backend.conj(backend.transpose(k))
             sum_kk = sum_kk + backend.matmul(kdag, k)
 
-        # Check if sum equals identity within tolerance
         identity = backend.eye(dim, dtype=sum_kk.dtype)
         if not np.allclose(sum_kk, identity, atol=1e-5):
             raise ValueError("Kraus operators do not satisfy completeness relation")
@@ -413,9 +410,6 @@ class DMCircuit2(DMCircuit):
             index[0], int
         ):  # try best to be compatible with DMCircuit interface
             index = index[0][0]
-        # assert len(kraus) == len(index) or len(index) == 1
-        # if len(index) == 1:
-        #     index = [index[0] for _ in range(len(kraus))]
         super_op = kraus_to_super_gate(kraus)
         nlegs = 4 * len(index)
         super_op = backend.reshape(super_op, [self._d] * nlegs)

@@ -291,7 +291,6 @@ def args_to_tensor(
                     )
                 arg = backend.tree_map(tensor_to_backend_jittable, arg)
 
-                # arg = backend.tree_map(backend.convert_to_tensor, arg)
                 def _cast(a: Tensor, dtype: str) -> Tensor:
                     if isinstance(a, QuOperator):
                         return a

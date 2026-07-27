@@ -174,8 +174,8 @@ def apply_dd(
         returned. If ``True`` a dictionary containing all DD data is
         returned too, defaults to False
     :type full_output: bool, optional
-    :param ig_idle_qubit: ignore the DD sequences that added to unused qubits, defaults to True
-    :type ig_idle_qubit: bool, optional
+    :param ignore_idle_qubit: ignore the DD sequences that added to unused qubits, defaults to True
+    :type ignore_idle_qubit: bool, optional
     :param fulldd: dd sequence full fill the idle circuits, defaults to False
     :type fulldd: bool, optional
     :param iscount: whether the output is bit string, defaults to False
@@ -242,20 +242,6 @@ def apply_dd(
 
     if full_output is True:
         result = [result, c3]  # type: ignore
-
-    # def executortc(c):
-    #     c = Circuit.from_qiskit(c, c.num_qubits)
-    #     c = prune_ddcircuit(c,qlist)
-    #     return executor(c)
-    # circuit = circuit.to_qiskit()
-    # result = ddd.execute_with_ddd(
-    #     circuit=circuit,
-    #     executor=executortc,
-    #     rule=rule,
-    #     rule_args=rule_args,
-    #     num_trials=num_trials,
-    #     full_output=full_output,
-    # )
 
     return result  # type: ignore
 

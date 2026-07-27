@@ -345,7 +345,7 @@ class ExtendedBackend:
         :return: sqrtm of ``a``
         :rtype: Tensor
         """
-        # maybe friendly for AD and also cosidering that several backend has no support for native sqrtm
+        # maybe friendly for AD and also considering that several backend has no support for native sqrtm
         e, v = self.eigh(a)
         if psd:
             e = self.relu(e)

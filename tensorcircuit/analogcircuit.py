@@ -146,7 +146,6 @@ class AnalogCircuit:
         :param solver_options: Keyword arguments passed directly to `tc.timeevol.ode_evolve`
         :type solver_options: Dict[str, Any]
         """
-        # Create and store the analog block information
         time = backend.convert_to_tensor(time, dtype=rdtypestr)
         time = backend.reshape(time, [-1])
         if backend.shape_tuple(time)[0] == 1:
@@ -165,10 +164,9 @@ class AnalogCircuit:
         )
         self.analog_blocks.append(block)
 
-        # After adding an analog block, we start a new digital block.
         self.digital_circuits.append(Circuit(self.num_qubits, inputs=self.inputs))
         self._effective_circuit = None
-        return self  # Allow for chaining
+        return self
 
     def append(self, c: Any, indices: Optional[List[int]] = None) -> "AnalogCircuit":
         """
@@ -276,9 +274,7 @@ class AnalogCircuit:
         :return: The final state vector after the full evolution
         :rtype: Tensor
         """
-        # Propagate the state through the alternating circuit blocks
         for i, analog_block in enumerate(self.analog_blocks):
-            # 1. Apply Digital Block i
             digital_c = self.digital_circuits[i]
             if i > 0:
                 digital_c.replace_inputs(psi)  # type: ignore
@@ -302,7 +298,6 @@ class AnalogCircuit:
             psi = psi[-1]
             # TODO(@refraction-ray): support more time evol methods
 
-        # 3. Apply the final digital circuit
         if self.analog_blocks:
             self.digital_circuits[-1].replace_inputs(psi)
             psi = self.digital_circuits[-1].wavefunction()

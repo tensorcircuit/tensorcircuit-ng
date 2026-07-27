@@ -261,8 +261,8 @@ class StabilizerTCircuit(AbstractCircuit):
 
         :param shots: Number of samples to draw, defaults to 1.
         :type shots: int, optional
-        :param separate_objects: Whether to return detectors and observables separately, defaults to False.
-        :type separate_objects: bool, optional
+        :param separate_observables: Whether to return detectors and observables separately, defaults to False.
+        :type separate_observables: bool, optional
         :param use_reference: Whether to XOR results with a noiseless reference run, defaults to False.
         :type use_reference: bool, optional
         :param seed: Random seed for this sampling run, defaults to None.
@@ -915,6 +915,3 @@ class StabilizerTCircuit(AbstractCircuit):
         import stim
 
         return cls.from_stim_circuit(stim.Circuit(stim_str))
-
-
-# StabilizerTCircuit._meta_apply()

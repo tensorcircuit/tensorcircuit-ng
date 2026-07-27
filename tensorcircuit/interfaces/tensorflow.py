@@ -104,15 +104,9 @@ def tensorflow_interface(
         if len(xdtype) == 1:
             xdtype = xdtype[0]
         y = tf.py_function(func=fun_tf, inp=x, Tout=ydtype)
-        # if len(x) == 1:
-        #     x = x[0]
 
         def grad(*dy: Any, **kws: Any) -> Any:
-            # if len(dy) == 1:
-            #     dy = dy[0]
-            # g = vjp_fun_tf(*(x+dy))
             g = tf.py_function(func=vjp_fun_tf, inp=x + dy, Tout=xdtype)
-            # a redundency due to current vjp API
 
             return g
 

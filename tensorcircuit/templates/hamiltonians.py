@@ -142,9 +142,6 @@ def rydberg_hamiltonian(
         for j in range(i + 1, num_sites):
             distance = dist_matrix[i, j]
 
-            # if distance < 1e-9:
-            #     continue
-
             interaction_strength = c6 / (distance**6)
             coefficient = interaction_strength / 4.0
 
@@ -163,7 +160,6 @@ def rydberg_hamiltonian(
             z_coefficients[j] -= coefficient
 
     for i in range(num_sites):
-        # if abs(z_coefficients[i]) > 1e-9:
         z_string = [0] * num_sites
         z_string[i] = pauli_map["Z"]
         ls.append(z_string)

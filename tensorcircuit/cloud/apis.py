@@ -48,7 +48,7 @@ def list_providers() -> List[Provider]:
     """
     list all cloud providers that tensorcircuit supports
 
-    :return: _description_
+    :return: list of all supported Provider objects
     :rtype: List[Provider]
     """
     return [get_provider(s) for s in avail_providers]
@@ -60,12 +60,13 @@ def set_provider(
     """
     set default provider for the program
 
-    :param provider: _description_, defaults to None
+    :param provider: provider name or Provider instance; defaults to None
+        which means the current default provider
     :type provider: Optional[Union[str, Provider]], optional
     :param set_global: whether set, defaults to True,
         if False, equivalent to ``get_provider``
     :type set_global: bool, optional
-    :return: _description_
+    :return: the resolved Provider
     :rtype: Provider
     """
     if provider is None:
@@ -99,7 +100,7 @@ def set_device(
     :param set_global: whether set, defaults to True,
         if False, equivalent to ``get_device``, defaults to True
     :type set_global: bool, optional
-    :return: _description_
+    :return: the resolved Device
     :rtype: Device
     """
     if provider is not None and device is None:
@@ -210,9 +211,9 @@ def _preprocess(
     """
     Smartly determine the provider and device based on the input
 
-    :param provider: _description_, defaults to None
+    :param provider: provider name or Provider instance; defaults to None
     :type provider: Optional[Union[str, Provider]], optional
-    :param device: _description_, defaults to None
+    :param device: device name or Device instance; defaults to None
     :type device: Optional[Union[str, Device]], optional
     :return: a pair of provider and device after preprocessing
     :rtype: Tuple[Provider, Device]
@@ -247,15 +248,16 @@ def set_token(
 
     :param token: the API token, defaults to None
     :type token: Optional[str], optional
-    :param provider: _description_, defaults to None
+    :param provider: provider scope of the token; defaults to None
     :type provider: Optional[Union[str, Provider]], optional
-    :param device: _description_, defaults to None
+    :param device: device scope of the token (more specific than provider);
+        defaults to None
     :type device: Optional[Union[str, Device]], optional
     :param cached: whether save on the disk, defaults to True
     :type cached: bool, optional
     :param clear: if True, clear all token saved, defaults to False
     :type clear: bool, optional
-    :return: _description_
+    :return: the session-level saved_token dict
     :rtype: Dict[str, Any]
     """
     global saved_token
@@ -315,11 +317,12 @@ def get_token(
     token can be supplied via ``TC_TOKEN``, or a per-provider token via
     ``TC_TOKEN_<PROVIDER_NAME>`` (uppercased), e.g. ``TC_TOKEN_TENCENT``.
 
-    :param provider: _description_, defaults to None
+    :param provider: provider scope to look up; defaults to the current
+        default provider
     :type provider: Optional[Union[str, Provider]], optional
-    :param device: _description_, defaults to None
+    :param device: device scope to look up; defaults to None
     :type device: Optional[Union[str, Device]], optional
-    :return: _description_
+    :return: the matching token, or None if no token is set
     :rtype: Optional[str]
     """
     if provider is None:
@@ -361,11 +364,12 @@ def list_devices(
     """
     List all devices under a provider
 
-    :param provider: _description_, defaults to None
+    :param provider: provider name or Provider instance; defaults to None
     :type provider: Optional[Union[str, Provider]], optional
-    :param token: _description_, defaults to None
+    :param token: API token for the provider; defaults to None which uses
+        the saved token
     :type token: Optional[str], optional
-    :return: _description_
+    :return: list of Device objects under the provider
     :rtype: Any
     """
     if provider is None:
@@ -391,11 +395,12 @@ def list_properties(
     """
     List properties of a given device
 
-    :param provider: _description_, defaults to None
+    :param provider: provider name or Provider instance; defaults to None
     :type provider: Optional[Union[str, Provider]], optional
-    :param device: _description_, defaults to None
+    :param device: device name or Device instance; defaults to None
     :type device: Optional[Union[str, Device]], optional
-    :param token: _description_, defaults to None
+    :param token: API token for the provider; defaults to None which uses
+        the saved token
     :type token: Optional[str], optional
     :return: Propeties dict
     :rtype: Dict[str, Any]
@@ -422,13 +427,14 @@ def get_task(
     """
     Get ``Task`` object from task string, the binding device can also be provided
 
-    :param taskid: _description_
+    :param taskid: task id string, optionally prefixed with the device via
+        the sep2 separator
     :type taskid: str
-    :param provider: _description_, defaults to None
+    :param provider: provider name or Provider instance; defaults to None
     :type provider: Optional[Union[str, Provider]], optional
-    :param device: _description_, defaults to None
+    :param device: device name or Device instance; defaults to None
     :type device: Optional[Union[str, Device]], optional
-    :return: _description_
+    :return: the resolved Task object
     :rtype: Task
     """
     if provider is not None and device is None:
@@ -447,14 +453,15 @@ def get_task_details(
     """
     Get task details dict given task id
 
-    :param taskid: _description_
+    :param taskid: task id string or Task object
     :type taskid: Union[str, Task]
-    :param token: _description_, defaults to None
+    :param token: API token for the provider; defaults to None which uses
+        the saved token
     :type token: Optional[str], optional
     :param prettify: whether make the returned dict more readable and more phythonic,
         defaults to False
     :type prettify: bool
-    :return: _description_
+    :return: task details dict (raw or prettified)
     :rtype: Dict[str, Any]
     """
     if isinstance(taskid, str):
@@ -495,11 +502,12 @@ def submit_task(
 
         :py:func:`tensorcircuit.cloud.tencent.submit_task`
 
-    :param provider: _description_, defaults to None
+    :param provider: provider name or Provider instance; defaults to None
     :type provider: Optional[Union[str, Provider]], optional
-    :param device: _description_, defaults to None
+    :param device: device name or Device instance; defaults to None
     :type device: Optional[Union[str, Device]], optional
-    :param token: _description_, defaults to None
+    :param token: API token for the provider; defaults to None which uses
+        the saved token
     :type token: Optional[str], optional
     :param task_kws: all necessary keywords arguments for task submission,
         see detailed API in each provider backend:
@@ -532,11 +540,12 @@ def resubmit_task(
     """
     Rerun the given task
 
-    :param task: _description_
+    :param task: task id string or Task object to rerun
     :type task: Optional[Union[str, Task]]
-    :param token: _description_, defaults to None
+    :param token: API token for the provider; defaults to None which uses
+        the saved token
     :type token: Optional[str], optional
-    :return: _description_
+    :return: the newly submitted Task
     :rtype: Task
     """
     if isinstance(task, str):
@@ -586,11 +595,12 @@ def list_tasks(
     """
     List tasks based on given filters
 
-    :param provider: _description_, defaults to None
+    :param provider: provider name or Provider instance; defaults to None
     :type provider: Optional[Union[str, Provider]], optional
-    :param device: _description_, defaults to None
+    :param device: device name or Device instance; defaults to None
     :type device: Optional[Union[str, Device]], optional
-    :param token: _description_, defaults to None
+    :param token: API token for the provider; defaults to None which uses
+        the saved token
     :type token: Optional[str], optional
     :return: list of task object that satisfy these filter criteria
     :rtype: List[Task]

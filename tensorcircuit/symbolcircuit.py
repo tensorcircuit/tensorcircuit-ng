@@ -435,7 +435,6 @@ class SymbolCircuit(Circuit):
             all_endns.append(vec)
 
         nodes, front = self._copy()
-        # L = self._nqubits
         edges = []
         for i in range(len(traceout)):
             if i not in left:
@@ -594,7 +593,6 @@ class SymbolCircuit(Circuit):
                 "sampling parameters."
             )
 
-        # Analytical (symbolic) expectation
         return self.expectation_ps(x=x, y=y, z=z, **kws)
 
     def sample(self, *args: Any, **kwargs: Any) -> Any:

@@ -153,17 +153,6 @@ class FGSSimulator:
         hm = 0.25 * w @ hc @ backend.adjoint(w)
         hm = backend.real((-1.0j) * hm)
         hd, om = backend.schur(hm, output="real")
-        # order not kept
-        # eps = 1e-10
-        # idm = backend.convert_to_tensor(np.array([[1.0, 0], [0, 1.0]]))
-        # idm = backend.cast(idm, dtypestr)
-        # xm = backend.convert_to_tensor(np.array([[0, 1.0], [1.0, 0]]))
-        # xm = backend.cast(xm, dtypestr)
-        # for i in range(0, 2 * L, 2):
-        #     (backend.sign(hd[i, i + 1] + eps) + 1) / 2 * idm - (
-        #         backend.sign(hd[i, i + 1] + eps) - 1
-        #     ) / 2 * xm
-        # print(hd)
 
         es = backend.adjoint(w) @ (1.0j * hd) @ w
         u = 0.5 * backend.adjoint(w) @ backend.transpose(om) @ w
@@ -958,7 +947,6 @@ class FGSSimulator:
         keep = backend.convert_to_tensor(keep)
         keep = backend.cast(keep, "int32")
         alpha = self.alpha
-        # if keep == 0:
         i = i + L * (1 - keep)
         i0 = backend.argmax(backend.abs(alpha[(i + L) % (2 * L), :]))
         i0 = backend.cast(i0, "int32")
@@ -1030,38 +1018,16 @@ class FGSSimulator:
         else:
             return keep, prob
 
-    # @classmethod
-    # def product(cls, cm1, cm2):
-    #     L = cm1.shape([-1])//2
-    #     wtransform = cls.wmatrix(L)
-    #     gamma1 = -1.0j * (2*wtransform @ cm1 @ backend.adjoint(wtransform)-backend.eye(2*L))
-    #     gamma2 = -1.0j * (2*wtransform @ cm2 @ backend.adjoint(wtransform)-backend.eye(2*L))
-    #     den = backend.inv(1 + gamma1 @ gamma2)
-    #     idm = backend.eye(2 * L)
-    #     covm = idm - (idm - gamma2) @ den @ (idm - gamma1)
-    #     cm = (1.0j * covm + idm) / 2
-    #     cmatrix = backend.adjoint(wtransform) @ cm @ wtransform * 0.25
-    #     return cmatrix
-
-    # def product(self, other):
-    #     # self@other
-    #     gamma1 = self.get_covariance_matrix()
-    #     gamma2 = other.get_covariance_matrix()
-    #     den = backend.inv(1 + gamma1 @ gamma2)
-    #     idm = backend.eye(2 * self.L)
-    #     covm = idm - (idm - gamma2) @ den @ (idm - gamma1)
-    #     cm = (1.0j * covm + idm) / 2
-    #     cmatrix = backend.adjoint(self.wtransform) @ cm @ self.wtransform * 0.25
-    #     return type(self)(self.L, cmatrix=cmatrix)
-
     def overlap(self, other: "FGSSimulator") -> Tensor:
         """
         overlap upto a U(1) phase
 
-        :param other: _description_
+        :param other: The other Gaussian fermionic state simulator to overlap with.
         :type other: FGSSimulator
-        :return: _description_
-        :rtype: _type_
+        :return: Non-negative scalar ``sqrt(|det(u1^dagger u + v1^dagger v)|)``,
+            the overlap magnitude between ``self`` and ``other`` up to a global
+            U(1) phase. Shape is ``()``.
+        :rtype: Tensor
         """
         u, v = self.get_bogoliubov_uv()
         u1, v1 = other.get_bogoliubov_uv()

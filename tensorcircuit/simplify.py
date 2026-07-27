@@ -55,11 +55,17 @@ def pseudo_contract_between(a: tn.Node, b: tn.Node, **kws: Any) -> tn.Node:
     """
     Contract between Node ``a`` and ``b``, with correct shape only and no calculation
 
-    :param a: [description]
+    The returned node's tensor is filled with zeros (no actual contraction is
+    performed); this is useful for shape inference and graph manipulation when
+    the resulting values are not needed.
+
+    :param a: first node to "contract"
     :type a: tn.Node
-    :param b: [description]
+    :param b: second node to "contract"
     :type b: tn.Node
-    :return: [description]
+    :return: A new node whose tensor has the contracted shape but uninitialized
+        (zero-filled) values; the shared edges between ``a`` and ``b`` are
+        removed from the graph.
     :rtype: tn.Node
     """
     from .cons import backend
@@ -123,8 +129,6 @@ def _split_two_qubit_gate(
 
 
 def _rank_simplify(nodes: List[Any]) -> Tuple[List[Any], bool]:
-    # if total_size is None:
-    # total_size = sum([_sizen(t) for t in nodes])
     is_changed = False
     l = len(nodes)
     for i in range(l):

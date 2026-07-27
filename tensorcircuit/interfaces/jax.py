@@ -38,19 +38,15 @@ def jax_wrapper(
                 and len(output_shape) > 0
                 and not isinstance(output_shape[0], int)
             ):
-                # Multiple outputs case
                 out_shape = tuple(
                     jax.ShapeDtypeStruct(s, d)
                     for s, d in zip(output_shape, output_dtype)
                 )
             else:
-                # Single output case
                 out_shape = jax.ShapeDtypeStruct(output_shape, output_dtype)  # type: ignore
         else:
-            # Get expected output shape by running function once
             test_out = wrapped_fun(*x)
             if isinstance(test_out, tuple):
-                # Multiple outputs case
                 out_shape = tuple(
                     jax.ShapeDtypeStruct(
                         t.shape if hasattr(t, "shape") else (),
@@ -59,13 +55,11 @@ def jax_wrapper(
                     for t in test_out
                 )
             else:
-                # Single output case
                 out_shape = jax.ShapeDtypeStruct(  # type: ignore
                     test_out.shape if hasattr(test_out, "shape") else (),
                     test_out.dtype if hasattr(test_out, "dtype") else x[0].dtype,
                 )
 
-        # Use pure_callback with correct output shape
         result = jax.pure_callback(wrapped_fun, out_shape, *x)
         return result
 

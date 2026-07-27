@@ -86,12 +86,6 @@ def adaptive_vmap(
             ]
             r.append(_vmap(*nreshape_args, **kws))
         r = backend.tree_map(lambda *x: backend.concat(x), *r)
-        # rshape = list(backend.shape_tuple(r))
-        # if len(rshape) == 2:
-        #     nshape = [rshape[0] * rshape[1]]
-        # else:
-        #     nshape = [rshape[0] * rshape[1], -1]
-        # r = backend.reshape(r, nshape)
         if s2 != 0:
             rest_r = _vmap(*rest_args, **kws)
             return backend.tree_map(lambda *x: backend.concat(x), r, rest_r)
@@ -143,7 +137,7 @@ def qng(
     >>> print(qng_matrix.shape)  # (2, 2)
     """
 
-    # for both qng and qng2 calculation, we highly recommended complex-dtype but real valued inputs
+    # for both qng and qng2 calculation, we highly recommend complex-dtype but real valued inputs
     def wrapper(params: Tensor, **kws: Any) -> Tensor:
         params = backend.cast(params, dtype=dtypestr)  # R->C protection
         psi = f(params)
@@ -484,7 +478,7 @@ def jax_jitted_function_save(filename: str, f: Callable[..., Any], *args: Any) -
     """
     save a jitted jax function as a file
 
-    :param filename: _description_
+    :param filename: path to the output file
     :type filename: str
     :param f: the jitted function
     :type f: Callable[..., Any]
@@ -507,10 +501,10 @@ def jax_jitted_function_load(filename: str) -> Callable[..., Any]:
     """
     load a jitted function from file
 
-    :param filename: _description_
+    :param filename: path to a file written by ``jax_jitted_function_save``
     :type filename: str
-    :return: the loaded function
-    :rtype: _type_
+    :return: the deserialized callable reconstructed from the exported artifact
+    :rtype: Callable[..., Any]
     """
     from jax import export  # type: ignore
 
@@ -633,8 +627,6 @@ def broadcast_py_object_jax(obj: Any) -> Any:
     # Step 3: Reconstruct the object from the received bytes.
     # Convert the NumPy array back to bytes, truncate any padding, and unpickle.
     received_data = received_arr_uint8[:length].tobytes()
-    # if jaxlib.process_index() == 0:
-    #     logger.info(f"Broadcasted object {obj}")
     return pickle.loads(received_data)
 
 
@@ -674,7 +666,6 @@ def broadcast_py_object_fs(
 
     if jax.process_index() == 0:
         transfer_id = str(uuid.uuid4())
-        # print(f"[Process 0] Generated unique transfer ID: {transfer_id}", flush=True)
         with open(id_comm_path, "w") as f:
             f.write(transfer_id)
 
@@ -708,7 +699,6 @@ def broadcast_py_object_fs(
         if obj is None:
             raise ValueError("None cannot be broadcasted.")
 
-        # print(f"[Process 0] Pickling object...", flush=True)
         pickled_data = pickle.dumps(obj)
         logger.info(
             f"[Process 0] Writing {len(pickled_data) / 1024**2:.3f} MB to {data_path}"
@@ -721,7 +711,6 @@ def broadcast_py_object_fs(
         logger.info(f"[Process 0] Write complete.")
         result_obj = obj
     else:
-        # print(f"[Process {jax.process_index()}] Waiting for done file: {done_path}", flush=True)
         start_time = time.time()
         while not os.path.exists(done_path):
             time.sleep(0.1)
@@ -730,7 +719,6 @@ def broadcast_py_object_fs(
                     f"Process {jax.process_index()} timed out waiting for done file: {done_path}"
                 )
 
-        # print(f"[Process {jax.process_index()}] Done file found. Reading data from {data_path}", flush=True)
         with open(data_path, "rb") as f:
             pickled_data = f.read()
 
@@ -743,7 +731,6 @@ def broadcast_py_object_fs(
         try:
             os.remove(data_path)
             os.remove(done_path)
-            # print(f"[Process 0] Cleaned up temporary files for transfer {transfer_id}.", flush=True)
         except OSError as e:
             logger.info(
                 f"[Process 0]: Failed to clean up temporary files: {e}",

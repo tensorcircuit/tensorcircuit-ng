@@ -57,8 +57,6 @@ def tfqr_grad(a: Array, q: Array, r: Array, dq: Array, dr: Array) -> Array:
         rdiag = tf.tensor_scatter_nd_update(rdiag, small_indices, newvalues)
         delta_r = tf.linalg.set_diag(r, rdiag) - r
         r = r + delta_r
-        # delta_dq = math_ops.matmul(q, math_ops.matmul(dr, tf.linalg.adjoint(delta_r)))
-        # dq = dq + delta_dq
         # Modification ends
 
         qdq = tf.matmul(q, dq, adjoint_a=True)

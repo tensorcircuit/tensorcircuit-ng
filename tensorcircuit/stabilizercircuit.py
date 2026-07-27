@@ -265,7 +265,6 @@ class StabilizerCircuit(AbstractCircuit):
         :return: Expectation value
         :rtype: float
         """
-        # Build Pauli string representation
         pauli_str = ["I"] * self._nqubits
 
         if x:
@@ -279,7 +278,6 @@ class StabilizerCircuit(AbstractCircuit):
                 pauli_str[i] = "Z"
 
         pauli_string = "".join(pauli_str)
-        # Calculate expectation using stim's direct method
         expectation = self.current_simulator().peek_observable_expectation(
             stim.PauliString(pauli_string)
         )
@@ -323,7 +321,6 @@ class StabilizerCircuit(AbstractCircuit):
                 circuit.append("S_DAG", [i])
                 circuit.append("H", [i])
 
-        # Add measurements
         measured_qubits: List[int] = []
         if x:
             measured_qubits.extend(x)
@@ -340,10 +337,8 @@ class StabilizerCircuit(AbstractCircuit):
         samples = sampler.sample(shots)
         results = np.array(samples)
 
-        # Convert from {0,1} to {1,-1}
         results = 1 - 2 * results
 
-        # Average over shots
         expectation = np.mean(np.prod(results, axis=1))
 
         return float(expectation)
@@ -444,7 +439,6 @@ class StabilizerCircuit(AbstractCircuit):
         :return: Entanglement entropy
         :rtype: float
         """
-        # Get stabilizer tableau
         tableau = self.current_tableau()
         N = len(tableau)
 
@@ -475,7 +469,6 @@ class StabilizerCircuit(AbstractCircuit):
         row = 0
 
         for col in range(n_cols):
-            # Vectorized pivot finding
             pivot_rows = np.nonzero(matrix[row:, col])[0]
             if len(pivot_rows) > 0:
                 pivot_row = pivot_rows[0] + row
@@ -487,7 +480,6 @@ class StabilizerCircuit(AbstractCircuit):
                         matrix[row].copy(),
                     )
 
-                # Vectorized elimination
                 eliminate_mask = matrix[row + 1 :, col] == 1
                 matrix[row + 1 :][eliminate_mask] ^= matrix[row]
 
@@ -497,7 +489,6 @@ class StabilizerCircuit(AbstractCircuit):
                 if row == n_rows:
                     break
 
-        # Calculate entropy
         return float((rank - len(keep)) * np.log(2))
 
 

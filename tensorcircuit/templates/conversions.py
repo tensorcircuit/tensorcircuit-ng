@@ -39,7 +39,7 @@ def get_ps(qo: Any, n: int) -> Tuple[Tensor, Tensor]:
 
 def QUBO_to_Ising(Q: Tensor) -> Tuple[Tensor, List[float], float]:
     """
-    Cnvert the Q matrix into a the indication of pauli terms, the corresponding weights, and the offset.
+    Convert the Q matrix into the indication of pauli terms, the corresponding weights, and the offset.
     The outputs are used to construct an Ising Hamiltonian for QAOA.
 
     :param Q: The n-by-n square and symmetric Q-matrix.
@@ -49,29 +49,19 @@ def QUBO_to_Ising(Q: Tensor) -> Tuple[Tensor, List[float], float]:
     :return offset: A float representing the offset term of the Ising Hamiltonian.
     """
 
-    # input is n-by-n symmetric numpy array corresponding to Q-matrix
-    # output is the components of Ising Hamiltonian
-
     n = Q.shape[0]
 
-    # square matrix check
     if Q[0].shape[0] != n:
         raise ValueError("Matrix is not a square matrix.")
 
-    offset = (
-        np.triu(Q, 0).sum() / 2
-    )  # Calculate the offset term of the Ising Hamiltonian
-    pauli_terms = []  # List to store the Pauli terms
-    weights = (
-        -np.sum(Q, axis=1) / 2
-    )  # Calculate the weights corresponding to each Pauli term
+    offset = np.triu(Q, 0).sum() / 2
+    pauli_terms = []
+    weights = -np.sum(Q, axis=1) / 2
 
     for i in range(n):
         term = np.zeros(n)
         term[i] = 1
-        pauli_terms.append(
-            term.tolist()
-        )  # Add a Pauli term corresponding to a single qubit
+        pauli_terms.append(term.tolist())
 
     quadratic_weights = []
     for i in range(n - 1):
@@ -79,17 +69,11 @@ def QUBO_to_Ising(Q: Tensor) -> Tuple[Tensor, List[float], float]:
             term = np.zeros(n)
             term[i] = 1
             term[j] = 1
-            pauli_terms.append(
-                term.tolist()
-            )  # Add a Pauli term corresponding to a two-qubit interaction
+            pauli_terms.append(term.tolist())
 
-            weight = (
-                Q[i][j] / 2
-            )  # Calculate the weight for the two-qubit interaction term
+            weight = Q[i][j] / 2
             quadratic_weights.append(weight)
 
-    weights = np.concatenate(
-        (weights, quadratic_weights), axis=None
-    )  # Add the weight to the weights list
+    weights = np.concatenate((weights, quadratic_weights), axis=None)
 
     return pauli_terms, weights, offset

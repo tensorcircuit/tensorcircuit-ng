@@ -39,7 +39,6 @@ def submit_task(
 
             if isinstance(c, QuantumCircuit):
                 s = c.qasm()
-                # nq = c.num_qubits
             else:
                 s = c.to_openqasm()
             return s  # type: ignore
@@ -83,7 +82,6 @@ def list_tasks(device: Device, token: str, **filter_kws: Any) -> List[Task]:
 def get_task_details(
     task: Task, device: Device, token: str, prettify: bool
 ) -> Dict[str, Any]:
-    # id results
     r = {}
     r["id"] = task.id_
     t = Task_()

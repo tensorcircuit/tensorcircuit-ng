@@ -369,15 +369,14 @@ def bessel_jv_jax_rescaled(k: int, x: jnp.ndarray, M: int) -> jnp.ndarray:
             f"Recurrence length M ({M}) must be greater than the required order k ({k})."
         )
 
-    # Use vmap to handle array inputs for x efficiently.
-    # We map _bessel_jv_scalar_rescaled over the last dimension of x.
+    # _bessel_jv_scalar_rescaled is jitted and broadcasts over array inputs for x.
     return _bessel_jv_scalar_rescaled(k, M, x)
 
 
 def _bessel_jv_scalar_rescaled(k: int, M: int, x_val: jnp.ndarray) -> jnp.ndarray:
     """
-    JAX implementation for a scalar input x_val.
-    This function will be vmapped for array inputs.
+    Miller recurrence with dynamic rescaling for Jv(k, x_val).
+    Operates elementwise on x_val (broadcasts over array inputs).
     """
     rescale_threshold = 1e250
 

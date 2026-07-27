@@ -141,9 +141,9 @@ def submit_task(
     qubit mapping may fail silently. If the user directly provide ``source`` or qiskit Circuit in ``circuit``,
     the qubit mapping should be taken care of by the users.
 
-    :param device: [description]
+    :param device: the target device to submit the task to
     :type device: Device
-    :param token: [description]
+    :param token: API token for the tencent provider
     :type token: str
     :param lang: language choice for ``source``, defaults to "OPENQASM"
     :type lang: str, optional
@@ -178,10 +178,6 @@ def submit_task(
     :return: Task object or List of Task for batch submission
     :rtype: List[Task]
     """
-    # :param measure: [deprecated] which group of qubit to measure,
-    #     defaults to None, the measure result is in the order of qubit index
-    #     instead of the ``measure`` list
-    # :type measure: Optional[Sequence[int]], optional
     if source is None:
         if compiled_options is None and compiling is True:
             links = device.topology()
@@ -211,19 +207,8 @@ def submit_task(
             else:
                 if isinstance(c, QuantumCircuit):
                     s = c.qasm()
-                    # nq = c.num_qubits
                 else:
                     s = c.to_openqasm()
-                    # nq = c._nqubits
-            # s = _free_pi(s) # tQuk translation now supports this
-            # if measure is not None:  # ad hoc partial measurement
-            #     slist = s.split("\n")[:-1]
-            #     if len(slist) > 3 and not slist[3].startswith("creg"):
-            #         slist.insert(3, "creg c[%s];" % nq)
-            #     for m in measure:
-            #         slist.append("measure q[%s]->c[%s];" % (m, m))
-            #     slist.append("")
-            #     s = "\n".join(slist)
             s = _replace_rz_to_st(s)
             return s  # type: ignore
 
@@ -396,12 +381,12 @@ def get_task_details(
         raise ValueError(dumps(r))
 
     # make the return at least contain the following terms across different providers
-    """
+    r"""
     'id': 'd947cd76-a961-4c22-b295-76287c9fdaa3',
     'state': 'completed',
     'at': 1666752095915849,
     'shots': 1024,
-    'source': 'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[3];\nh q[0];\nh q[1];\nh q[2];\n', 
+    'source': 'OPENQASM 2.0;\ninclude "qelib1.inc";\nqreg q[3];\nh q[0];\nh q[1];\nh q[2];\n',
     'device': 'simulator:aer',
     'results':  {'000': 123,
     '001': 126,

@@ -577,14 +577,8 @@ def qiskit2tc(
                 )
         elif gate_name == "measure":
             tc_circuit.measure_instruction(*idx)
-            # logger.warning(
-            #     "qiskit to tc translation currently doesn't support measure instruction, just skipping"
-            # )
         elif gate_name == "reset":
             tc_circuit.reset_instruction(*idx)
-            # logger.warning(
-            #     "qiskit to tc translation currently doesn't support reset instruction, just skipping"
-            # )
         elif gate_name == "barrier":
             tc_circuit.barrier_instruction(*idx)
         elif gate_name == "initialize":

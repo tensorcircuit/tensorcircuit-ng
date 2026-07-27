@@ -125,11 +125,7 @@ class Circuit(BaseCircuit):
         self._nodes = nodes
 
         self._start_index = len(nodes)
-        # self._start = nodes
-        # self._meta_apply()
 
-        # self._qcode = ""  # deprecated
-        # self._qcode += str(self._nqubits) + "\n"
         self._qir: List[Dict[str, Any]] = []
         self._extra_qir: List[Dict[str, Any]] = []
         self._measure_counter = 0
@@ -224,12 +220,6 @@ class Circuit(BaseCircuit):
 
         mg1 = tn.Node(gate)
         mg2 = tn.Node(gate)
-        # mg1.flag = "post-select"
-        # mg1.is_dagger = False
-        # mg1.id = id(mg1)
-        # mg2.flag = "post-select"
-        # mg2.is_dagger = False
-        # mg2.id = id(mg2)
         self.coloring_nodes([mg1, mg2], flag="post-select")
         mg1.get_edge(0) ^ self._front[index]
         mg1.get_edge(1) ^ mg2.get_edge(1)

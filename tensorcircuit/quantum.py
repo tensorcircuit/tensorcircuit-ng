@@ -449,7 +449,7 @@ def reachable(
     return _reachable(processed_inputs)
 
 
-# general conventions left (first) out, right (then) in
+# Edge ordering convention: out_edges first, in_edges second.
 
 
 def quantum_constructor(
@@ -2238,7 +2238,6 @@ def PauliStringSum2MVP(
     :return: MVP function taking wavefunction (shape [2**n] or [2]*n) and returning the same shape.
     :rtype: Callable[[Tensor], Tensor]
     """
-    # Infer n from the first structure
     if not structures:
 
         def mvp_identity(psi: Tensor) -> Tensor:
@@ -2381,23 +2380,6 @@ def PauliStringSum2Dense(
     return backend.convert_to_tensor(densem)
 
 
-# already implemented as backend method
-#
-# def _tf2numpy_sparse(a: Tensor) -> Tensor:
-#     return get_backend("numpy").coo_sparse_matrix(
-#         indices=a.indices,
-#         values=a.values,
-#         shape=a.get_shape(),
-#     )
-
-# def _numpy2tf_sparse(a: Tensor) -> Tensor:
-#     return get_backend("tensorflow").coo_sparse_matrix(
-#         indices=np.array([a.row, a.col]).T,
-#         values=a.data,
-#         shape=a.shape,
-#     )
-
-
 def PauliStringSum2COO(
     ls: Sequence[Sequence[int]],
     weight: Optional[Sequence[float]] = None,
@@ -2422,17 +2404,10 @@ def PauliStringSum2COO(
     # numpy version is 3* faster!
 
     nterms = len(ls)
-    # n = len(ls[0])
-    # s = 0b1 << n
     if weight is None:
         weight = [1.0] * nterms
     weight = num_to_tensor(weight)
     ls = num_to_tensor(ls)
-    # rsparse = get_backend("numpy").coo_sparse_matrix(
-    #     indices=np.array([[0, 0]], dtype=np.int64),
-    #     values=np.array([0.0], dtype=getattr(np, dtypestr)),
-    #     shape=(s, s),
-    # )
     global PauliString2COO_jit
     if backend.name == "jax" and not numpy:
         if backend.name not in PauliString2COO_jit:
@@ -2465,8 +2440,6 @@ def PauliStringSum2COO(
             return backend.numpy(rsparse)
         return rsparse
 
-    # for i in range(nterms):
-    #     rsparse += get_backend("tensorflow").numpy(PauliString2COO(ls[i], weight[i]))
     rsparse = rsparse.tocoo()
     if numpy:
         return rsparse
@@ -2478,9 +2451,10 @@ def _dc_sum(l: List[Any]) -> Any:
     For the sparse sum, the speed is determined by the non zero terms,
     so the DC way to do the sum can indeed bring some speed advantage (several times)
 
-    :param l: _description_
+    :param l: list of sparse matrices to sum elementwise
     :type l: List[Any]
-    :return: _description_
+    :return: the elementwise sum of the matrices, computed via divide-and-conquer
+        recursion for sparse-matrix efficiency
     :rtype: Any
     """
     n = len(l)
@@ -2544,13 +2518,11 @@ def PauliString2COO(l: Sequence[int], weight: Optional[float] = None) -> Tensor:
     """
     n = len(l)
     l = num_to_tensor(l, dtype=idtypestr)
-    # l = backend.cast(l, dtype="int64")
     one = num_to_tensor(0b1, dtype=idtypestr)
     idx_x = num_to_tensor(0b0, dtype=idtypestr)
     idx_y = num_to_tensor(0b0, dtype=idtypestr)
     idx_z = num_to_tensor(0b0, dtype=idtypestr)
     i = num_to_tensor(0, dtype=idtypestr)
-    # for j in l:
     for j in range(n):
         oh = backend.onehot(l[j], 4)
         s = backend.left_shift(one, n - i - 1)
@@ -2559,12 +2531,6 @@ def PauliString2COO(l: Sequence[int], weight: Optional[float] = None) -> Tensor:
         idx_y += oh[2] * s
         idx_z += oh[3] * s
 
-        # if j == 1:  # xi
-        #     idx_x += backend.left_shift(one, n - i - 1)
-        # elif j == 2:  # yi
-        #     idx_y += backend.left_shift(one, n - i - 1)
-        # elif j == 3:  # zi
-        #     idx_z += backend.left_shift(one, n - i - 1)
         i += 1
 
     if weight is None:
@@ -2913,10 +2879,7 @@ def reduced_density_matrix(
             ],
         )
         if p is None:
-            # for i, (tr, tr2) in enumerate(zip(traceout, traceout2)):
-            #     rho = backend.trace(rho, axis1=tr, axis2=tr2 - i)
-            # correct but tf trace fail to support so much dimension with tf.einsum
-
+            # correct but per-axis loop with tf.einsum fails on high-dim tensors
             rho = backend.trace(rho, axis1=0, axis2=2)
         else:
             p = backend.reshape(p, [-1])
@@ -3333,13 +3296,13 @@ def count_s2d(
     measurement shots results, sparse tuple representation to dense representation
     count_vector to count_tuple
 
-    :param srepr: [description]
+    :param srepr: (indices, values) tuple of nonzero shot-count entries
     :type srepr: Tuple[Tensor, Tensor]
     :param n: number of qubits
     :type n: int
-    :param dim: [description], defaults to None
+    :param dim: local Hilbert-space dimension, defaults to None (treated as 2)
     :type dim: int, optional
-    :return: [description]
+    :return: dense count vector of shape [dim**n]
     :rtype: Tensor
     """
     dim = 2 if dim is None else dim
@@ -3364,11 +3327,11 @@ def count_d2s(drepr: Tensor, eps: float = 1e-7) -> Tuple[Tensor, Tensor]:
     >>> tc.quantum.counts_d2s(np.array([0.1, 0, -0.3, 0.2]))
     (array([0, 2, 3]), array([ 0.1, -0.3,  0.2]))
 
-    :param drepr: [description]
+    :param drepr: dense count vector of shape [dim**n]
     :type drepr: Tensor
     :param eps: cutoff to determine nonzero elements, defaults to 1e-7
     :type eps: float, optional
-    :return: [description]
+    :return: (indices, values) of entries with absolute value greater than eps
     :rtype: Tuple[Tensor, Tensor]
     """
     # unjittable since the return shape is not fixed

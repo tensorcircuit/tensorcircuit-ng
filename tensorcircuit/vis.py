@@ -193,14 +193,6 @@ def qir2tex(
     for i in range(n):
         tex_string_table[i] += [r"\qw "] * (p - flag[i])
 
-    #             # old version: linethrought
-    #             for i in range(low_idx, high_idx + 1):
-    #                 if (tex_string_table[i][-1] == r"\qw "):
-    #                     tex_string_table[i][-1] = r"\linethrough "
-    #             for i in idx[ctrl_number:]:
-    #                 tex_string_table[i][-1] = r" "
-    #             tex_string_table[low_idx][-1] = r"\gate[" + str(high_idx + 1 - low_idx) + r"]{" + gate_name + r"} "
-
     # right compression
     if rcompress:
         for i in range(n):
@@ -300,10 +292,10 @@ def render_pdf(
     :type latex: Optional[str], optional
     :param filepath: File path, defaults to current working place `os.getcwd()`
     :type filepath: Optional[str], optional
-    :param notebook: [description], defaults to False
+    :param notebook: If True, rasterize the PDF at 300 dpi and return an `Image` object, defaults to False
     :type notebook: bool, optional
     :return: if notebook is True, return `Image` object; otherwise return `None`
-    :rtype: Optional[Image], defaults to None
+    :rtype: Optional[Image]
     """
 
     if not filepath:
@@ -336,11 +328,6 @@ def render_pdf(
         stdout=subprocess.DEVNULL,
     )
     if notebook:
-        # from IPython.display import IFrame
-
-        # assert width is not None, ValueError("width must be a number")
-        # assert height is not None, ValueError("width must be a number")
-        # return IFrame(filename + ".pdf", width=width, height=height)
         from wand.image import Image
 
         return Image(filename=filename + ".pdf", resolution=300)

@@ -255,9 +255,7 @@ class FiniteMPS(tn.FiniteMPS):  # type: ignore
         # first we get all correlators <op2(site2) op1(site1)> with site2 < site1
         # then all correlators <op1(site1) op2(site2)> with site2 >= site1
 
-        # get all sites smaller than site1
         left_sites = np.sort(sites2[sites2 < site1])  # type: ignore
-        # get all sites larger than site1
         right_sites = np.sort(sites2[sites2 > site1])  # type: ignore
         # compute all neccessary right reduced
         # density matrices in one go. This is

@@ -57,7 +57,6 @@ def Bell_pair_block(
     :return: Circuit out
     :rtype: Circuit
     """
-    # from |00> return |01>-|10>
     n = c._nqubits
     if links is None:
         links = [(i, i + 1) for i in range(0, n - 1, 2)]

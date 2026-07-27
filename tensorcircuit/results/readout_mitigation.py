@@ -500,16 +500,6 @@ class ReadoutMit:
         :return: mitigated count
         :rtype: ct
         """
-        # if not is_sequence(qubits):
-        #     qubits = list(range(qubits))  # type: ignore
-        # self.use_qubits = qubits  # type: ignore
-        # if not set(self.use_qubits).issubset(set(self.cal_qubits)):  # type: ignore
-        #     raise ValueError(
-        #         "The qubit list used in calculation must included in  the calibration qubit list."
-        #     )
-
-        # counts = marginal_count(counts, self.use_qubits)  # type: ignore
-
         counts = self.mapping_preprocess(
             counts=counts,
             qubits=qubits,
@@ -573,7 +563,6 @@ class ReadoutMit:
             r = sort_count(r)
             r = {k: v * shots for k, v in r.items()}
             return sort_count(r)
-            # return quasi_out[0]  # type: ignore
         mitcounts = QuasiCollection(quasi_out)
         return sort_count(mitcounts.nearest_probability_distribution())  # type: ignore
 
@@ -795,9 +784,9 @@ class ReadoutMit:
         :param z: if defaults as None, then ``diagonal_op`` must be set
             a list of qubit that we measure Z op on
         :type z: Optional[Sequence[int]]
-        :param diagoal_op: shape [n, 2], explicitly indicate the diagonal op on each qubit
+        :param diagonal_op: shape [n, 2], explicitly indicate the diagonal op on each qubit
             eg. [1, -1] for z [1, 1] for I, etc.
-        :type diagoal_op: Tensor
+        :type diagonal_op: Tensor
         :param positional_logical_mapping: positional_logical_mapping, defaults to None.
         :type positional_logical_mapping: Optional[Dict[int, int]], optional
         :param logical_physical_mapping: logical_physical_mapping, defaults to None

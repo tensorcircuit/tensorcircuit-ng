@@ -98,15 +98,12 @@ def torch_interface(
             grad_y = general_args_to_backend(
                 grad_y, dtype=ctx.ydtype, enable_dlpack=enable_dlpack
             )
-            # grad_y = general_args_to_numpy(grad_y)
-            # grad_y = numpy_args_to_backend(grad_y, dtype=ctx.ydtype)  # backend.dtype
             if len(x_backend) == 1:
                 x_backend_for_vjp = x_backend[0]
             else:
                 x_backend_for_vjp = x_backend
 
             _, g = vjp_fun(x_backend_for_vjp, grad_y)
-            # a redundency due to current vjp API
 
             r = general_args_to_backend(
                 g,
@@ -151,13 +148,16 @@ def torch_interface_kws(
         print(fnew(torch.ones([2]), integer=3))
         print(fnew(torch.ones([2]), integer=4))
 
-    :param f: _description_
+    :param f: the function to wrap, which may take static non-tensor
+        keyword arguments that are cached per kwarg-tuple key
     :type f: Callable[..., Any]
-    :param jit: _description_, defaults to True
+    :param jit: whether to JIT compile the wrapped function, defaults to True
     :type jit: bool, optional
-    :param enable_dlpack: _description_, defaults to False
+    :param enable_dlpack: whether to use dlpack for zero-copy tensor transfer
+        between backends, defaults to False
     :type enable_dlpack: bool, optional
-    :return: _description_
+    :return: a wrapper that dispatches to a cached ``torch_interface`` instance
+        keyed by the keyword-argument tuple
     :rtype: Callable[..., Any]
     """
     cache_dict: Dict[Tuple[Any, ...], Callable[..., Any]] = {}

@@ -917,9 +917,7 @@ class MPSCircuit(AbstractCircuit):
             bra = other.copy()
         ket = self.copy()
         assert bra._nqubits == ket._nqubits
-        # n = bra._nqubits
 
-        # while n > 1:
         for _ in range(bra._nqubits, 1, -1):
             """
             i--bA--k--bB---m
@@ -935,7 +933,6 @@ class MPSCircuit(AbstractCircuit):
             bra._mps.tensors.pop()
             ket._mps.tensors.pop()
             ket._mps.tensors[-1] = new_kA
-            # n -= 1
         bra_A = bra._mps.tensors[0]
         ket_A = ket._mps.tensors[0]
         result = backend.sum(bra_A * ket_A)

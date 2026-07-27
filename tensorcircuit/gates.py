@@ -275,7 +275,6 @@ class GateF:
 
     def __call__(self, *args: Any, **kws: Any) -> Gate:
         m1 = array_to_tensor(self.m)
-        # m = backend.cast(m, dtypestr)
         m1 = backend.cast(m1, dtypestr)
         return Gate(m1, name=self.n)
 
@@ -378,9 +377,6 @@ class GateVF(GateF):
             shape0 = backend.shape_tuple(m.tensor)
             m0 = backend.reshapem(m.tensor)
             ma = backend.adjoint(m0)
-            # if np.allclose(m0, ma, atol=1e-5):
-            #     name = self.n
-            # else:
             name = self.n + "d"
             ma = backend.reshape(ma, shape0)
             return Gate(ma, name)
@@ -401,8 +397,6 @@ def meta_gate() -> None:
             if m.shape[0] == 8:
                 m = np.reshape(m, (2, 2, 2, 2, 2, 2))
             m = _cast_registered_gate(m)
-            # m = m.astype(npdtype)
-            # not enough for new mechanism: register method on class instead of instance
             temp = GateF(m, n)
             setattr(thismodule, n + "gate", temp)
             setattr(thismodule, n + "_gate", temp)
@@ -528,7 +522,7 @@ def get_u_parameter(m: Tensor) -> Tuple[float, float, float]:
 
 def u_gate(theta: float = 0.0, phi: float = 0.0, lbd: float = 0.0) -> Gate:
     r"""
-    IBMQ U gate following the converntion of OpenQASM3.0.
+    IBMQ U gate following the convention of OpenQASM3.0.
     See `OpenQASM doc <https://openqasm.com/language/gates.html#built-in-gates>`_
 
     .. math::
@@ -588,9 +582,6 @@ def r_gate(theta: float = 0.0, alpha: float = 0.0, phi: float = 0.0) -> Gate:
     return Gate(unitary)
 
 
-# r = r_gate
-
-
 def rx_gate(theta: float = 0.0) -> Gate:
     r"""
     Rotation gate along :math:`x` axis.
@@ -609,9 +600,6 @@ def rx_gate(theta: float = 0.0) -> Gate:
     return Gate(unitary)
 
 
-# rx = rx_gate
-
-
 def ry_gate(theta: float = 0.0) -> Gate:
     r"""
     Rotation gate along :math:`y` axis.
@@ -628,9 +616,6 @@ def ry_gate(theta: float = 0.0) -> Gate:
     theta = num_to_tensor(theta)
     unitary = backend.cos(theta / 2.0) * i - backend.i() * backend.sin(theta / 2.0) * y
     return Gate(unitary)
-
-
-# ry = ry_gate
 
 
 def rz_gate(theta: float = 0.0) -> Gate:
@@ -689,12 +674,8 @@ def random_single_qubit_gate() -> Gate:
     :return: A random single-qubit gate
     :rtype: Gate
     """
-    # Get the random parameters
     theta, alpha, phi = np.random.rand(3) * 2 * np.pi
     return r_gate(theta, alpha, phi)
-
-
-# rs = random_single_qubit_gate  # deprecated
 
 
 def iswap_gate(theta: float = 1.0) -> Gate:
@@ -727,9 +708,6 @@ def iswap_gate(theta: float = 1.0) -> Gate:
     )
     unitary = backend.reshape(unitary, [2, 2, 2, 2])
     return Gate(unitary)
-
-
-# iswap = iswap_gate
 
 
 def cr_gate(theta: float = 0.0, alpha: float = 0.0, phi: float = 0.0) -> Gate:
@@ -765,9 +743,6 @@ def cr_gate(theta: float = 0.0, alpha: float = 0.0, phi: float = 0.0) -> Gate:
     )
     unitary = backend.reshape(unitary, [2, 2, 2, 2])
     return Gate(unitary)
-
-
-# cr = cr_gate
 
 
 def random_two_qubit_gate() -> Gate:
@@ -811,9 +786,6 @@ def any_gate(unitary: Tensor, name: str = "any", dim: Optional[int] = None) -> G
     return Gate(unitary, name=name)
 
 
-# any = any_gate
-
-
 @partial(arg_alias, alias_dict={"unitary": ["hermitian", "hamiltonian"]})
 def exponential_gate(unitary: Tensor, theta: float, name: str = "none") -> Gate:
     r"""
@@ -839,7 +811,6 @@ def exponential_gate(unitary: Tensor, theta: float, name: str = "none") -> Gate:
 
 
 exp_gate = exponential_gate
-# exp = exponential_gate
 
 
 @partial(arg_alias, alias_dict={"unitary": ["hermitian", "hamiltonian"]})
@@ -857,7 +828,7 @@ def exponential_gate_unity(
     :type unitary: Tensor
     :param theta: angle in radians
     :type theta: float
-    :param half: if True, the angel theta is mutiplied by 1/2,
+    :param half: if True, the angle theta is multiplied by 1/2,
         defaults to False
     :type half: bool
     :param name: suffix of Gate name
@@ -916,7 +887,6 @@ def su4_gate(theta: Tensor, name: str = "su(4)") -> Gate:
 
 
 exp1_gate = exponential_gate_unity
-# exp1 = exponential_gate_unity
 rzz_gate = partial(exp1_gate, unitary=_zz_matrix, half=True)
 rxx_gate = partial(exp1_gate, unitary=_xx_matrix, half=True)
 ryy_gate = partial(exp1_gate, unitary=_yy_matrix, half=True)

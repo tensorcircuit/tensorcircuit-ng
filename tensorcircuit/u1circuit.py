@@ -293,8 +293,7 @@ class U1Circuit(AbstractCircuit):
                 backend.cast(filled_state, dtype=self._idtypestr), [1]
             )
             initial_idx = backend.searchsorted(self._basis_tensor, fs_tensor)[0]
-            # Clip index for safety - searchsorted should always find exact match
-            # but we clip for safety across backends
+            # Clip to valid range; searchsorted returns an exact match but some backends return len on miss.
             initial_idx = backend.where(
                 initial_idx >= self._dim, self._dim - 1, initial_idx
             )

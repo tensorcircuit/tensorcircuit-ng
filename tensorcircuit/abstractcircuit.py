@@ -273,14 +273,6 @@ class AbstractCircuit:
                 g,
                 matrix,
             )
-            # docs = """
-            # Apply **%s** gate on the circuit.
-
-            # :param index: Qubit number that the gate applies on.
-            # :type index: int.
-            # """ % (
-            #     g.upper()
-            # )
             getattr(cls, g).__doc__ = doc
             getattr(cls, g.upper()).__doc__ = doc
 
@@ -670,9 +662,12 @@ class AbstractCircuit:
         :type logical_physical_mapping: Dict[int, int]
         :param n: number of qubit of the new circuit, can be different from the original one, defaults to None
         :type n: Optional[int], optional
-        :param circuit_params: _description_, defaults to None
+        :param circuit_params: keyword arguments forwarded to the new circuit constructor;
+            if ``nqubits`` is not present it is inferred from ``n`` or the original circuit,
+            defaults to None
         :type circuit_params: Optional[Dict[str, Any]], optional
-        :return: _description_
+        :return: A new circuit of the same type with both ``_qir`` and ``_extra_qir``
+            instructions remapped onto the new qubit layout.
         :rtype: AbstractCircuit
         """
         if circuit_params is None:
@@ -1436,8 +1431,6 @@ class AbstractCircuit:
             In terms of ``DMCircuit``, this method returns nothing and the density
             matrix after this method is kept in mixed state without knowing the
             measurement results
-
-
 
         :param index: the qubit for the z-basis measurement
         :type index: int

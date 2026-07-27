@@ -34,9 +34,10 @@ def _comment_qasm(s: str) -> str:
     """
     return the qasm str in comment format
 
-    :param s: _description_
+    :param s: qasm string to wrap line-by-line in ``//`` comments
     :type s: str
-    :return: _description_
+    :return: the input qasm with each line prefixed by ``//``, bookended by
+        ``//circuit begins`` and ``//circuit ends`` markers
     :rtype: str
     """
     nslist = []
@@ -51,11 +52,13 @@ def _comment_dict(d: Dict[int, int], name: str = "logical_physical_mapping") -> 
     """
     save a dict in commented qasm
 
-    :param d: _description_
+    :param d: mapping serialized as ``// k : v`` lines
     :type d: Dict[int, int]
-    :param name: _description_, defaults to "logical_physical_mapping"
+    :param name: header label used for the begin/end marker lines, defaults
+        to "logical_physical_mapping"
     :type name: str, optional
-    :return: _description_
+    :return: the dict rendered as commented qasm under a named header, with
+        ``//<name> begins`` and ``//<name> ends`` bookends
     :rtype: str
     """
     nslist = []

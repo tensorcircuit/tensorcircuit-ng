@@ -468,9 +468,6 @@ def plain_contractor(
 # TODO(@refraction-ray): consistent logger system for different contractors.
 
 
-# base = tn.contractors.opt_einsum_paths.path_contractors.base
-# utils = tn.contractors.opt_einsum_paths.utils
-
 _einsum_symbols_base = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
@@ -839,7 +836,7 @@ opt = ctg.ReusableHyperOptimizer(
 
 def opt_reconf(inputs, output, size, **kws):
     tree = opt.search(inputs, output, size)
-    tree_r = tree.subtree_reconfigure_forest(progbar=True, num_trees=10, 
+    tree_r = tree.subtree_reconfigure_forest(progbar=True, num_trees=10,
                         num_restarts=20, subtree_weight_what=("size", ))
     return tree_r.get_path()
 
@@ -921,8 +918,6 @@ def _base(
                 idx = [i for i, n in enumerate(nodes) if id(n) == id(edge.node1)]
                 nodes = _multi_remove(nodes, idx)
                 nodes.append(tn.contract_parallel(edge))
-                # nodes_set.remove(edge.node1)
-                # nodes_set.add(tn.contract_parallel(edge))
 
     if len(nodes) == 1:
         # There's nothing to contract.
@@ -930,12 +925,7 @@ def _base(
             return list(nodes)[0]
         return list(nodes)[0].reorder_edges(output_edge_order)
 
-    # nodes = list(nodes_set)
-
     # Then apply `opt_einsum`'s algorithm
-    # if isinstance(algorithm, list):
-    #     path = algorithm
-    # else:
     path, nodes = _get_path_cache_friendly(nodes, algorithm)
     if debug_level == 2:  # do nothing
         if output_edge_order:
@@ -959,8 +949,6 @@ def _base(
         else:
             new_node = tn.contract_between(nodes[a], nodes[b], allow_outer_product=True)
         nodes.append(new_node)
-        # nodes[a] = backend.zeros([1])
-        # nodes[b] = backend.zeros([1])
         nodes = _multi_remove(nodes, [a, b])
 
         logger.debug(_sizen(new_node, is_log=True))

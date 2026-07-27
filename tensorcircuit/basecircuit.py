@@ -400,10 +400,11 @@ class BaseCircuit(AbstractCircuit):
         Get the tensor network in the form of a list of nodes
         for the expectation calculation before the real contraction
 
-        :param reuse: _description_, defaults to True
+        :param reuse: whether to reuse the existing state tensor nodes instead of copying them, defaults to True
         :type reuse: bool, optional
-        :raises ValueError: _description_
-        :return: _description_
+        :raises ValueError: if two operators in ``ops`` act on the same qubit index
+        :return: The uncontracted tensor network nodes (state ket and bra copies plus
+            the inserted operator nodes) with dangling edges paired as ket-then-bra per qubit.
         :rtype: List[tn.Node]
         """
         nq = self._nqubits
@@ -439,9 +440,6 @@ class BaseCircuit(AbstractCircuit):
                 newdang[e] ^ op.get_edge(j + noe)
                 occupied.add(e)
             self.coloring_nodes([op], flag="operator")
-            # op.flag = "operator"
-            # op.is_dagger = False
-            # op.id = id(op)
             nodes.append(op)
         for j in range(nq):
             if j not in occupied:  # edge1[j].is_dangling invalid here!
@@ -1490,7 +1488,6 @@ class BaseCircuit(AbstractCircuit):
                 return r
             r = backend.stack([ri[0] for ri in r])  # type: ignore
             ch = backend.cast(r, "int32")
-            # ch = sample_bin2int(r, self._nqubits, dim=self._d)
         else:  # allow_state
             if batch is None:
                 nbatch = 1
@@ -1502,18 +1499,6 @@ class BaseCircuit(AbstractCircuit):
             if readout_error is not None:
                 p = self.readouterror_bs(readout_error, p)
             ch = backend.probability_sample(nbatch, p, status, random_generator)
-            # if random_generator is None:
-            #     ch = backend.implicit_randc(a=a_range, shape=[nbatch], p=p)
-            # else:
-            #     ch = backend.stateful_randc(
-            #         random_generator, a=a_range, shape=[nbatch], p=p
-            #     )
-            # confg = backend.mod(
-            #     backend.right_shift(
-            #         ch[..., None], backend.reverse(backend.arange(self._nqubits))
-            #     ),
-            #     2,
-            # )
             if format is None:  # for backward compatibility
                 confg = sample_int2bin(ch, self._nqubits, dim=self._d)
                 prob = backend.gather1d(p, ch)
@@ -1594,7 +1579,7 @@ class BaseCircuit(AbstractCircuit):
         :param statusc: external randomness given by tensor uniformly from [0, 1], defaults to None,
             used for noisfy circuit sampling
         :type statusc: Optional[Tensor], optional
-        :return: [description]
+        :return: Estimated expectation value of the Pauli string (float Tensor).
         :rtype: Tensor
         """
         from .noisemodel import sample_expectation_ps_noisfy
@@ -1755,9 +1740,7 @@ class BaseCircuit(AbstractCircuit):
 
             In terms of ``DMCircuit``, this method returns nothing and the density
             matrix after this method is kept in mixed state without knowing the
-            measuremet resuslts
-
-
+            measurement results
 
         :param index: the site index for the Z-basis measurement
         :type index: int

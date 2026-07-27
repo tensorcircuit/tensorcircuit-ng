@@ -37,7 +37,7 @@ class QuantumLayer(Layer):  # type: ignore
         :type weights_shape: Sequence[Tuple[int, ...]]
         :param initializer: The initializer of the weights, defaults to "glorot_uniform"
         :type initializer: Union[Text, Sequence[Text]], optional
-        :param constraint: [description], defaults to None
+        :param constraint: The constraint of the weights, defaults to None
         :type constraint: Optional[Union[Text, Sequence[Text]]], optional
         :param regularizer: The regularizer of the weights, defaults to None
         :type regularizer: Union[Text, Sequence[Text]], optional
@@ -105,8 +105,6 @@ class QuantumLayer(Layer):  # type: ignore
         mask: Optional[tf.Tensor] = None,
         **kwargs: Any,
     ) -> tf.Tensor:
-        # input_shape = list(inputs.shape)
-        # inputs = tf.reshape(inputs, (-1, input_shape[-1]))
         if inputs is None:  # not possible
             result = self.f(*self.pqc_weights, **kwargs)
         elif (

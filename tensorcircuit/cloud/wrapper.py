@@ -36,9 +36,6 @@ def batch_submit_template(
         if not is_sequence(cs):
             cs = [cs]  # type: ignore
             single = True
-        # for c in cs:  # type: ignore
-        #     ts.append(submit_task(circuit=c, shots=shots, device=device))
-        #     time.sleep(0.3)
         kws.update(nkws)
         if len(cs) <= batch_limit:  # type: ignore
             css = [cs]
@@ -123,15 +120,6 @@ def reduce_and_evaluate(
             recover_dict[key] = len(reduced_cs) - 1
         else:
             reduced_dict[key].append(j)
-
-    # for j, ps in enumerate(pss):
-    #     ps = [i if i in [1, 2] else 0 for i in ps]
-    #     if tuple(ps) not in reduced_dict:
-    #         reduced_dict[tuple(ps)] = [j]
-    #         reduced_cs.append(cs[j])
-    #         recover_dict[tuple(ps)] = len(reduced_cs) - 1
-    #     else:
-    #         reduced_dict[tuple(ps)].append(j)
 
     reduced_raw_counts = run(reduced_cs, shots)
     raw_counts: List[Dict[str, int]] = [None] * len(cs)  # type: ignore
@@ -240,25 +228,11 @@ def batch_expectation_ps(
                 exp.append(j)
         for i in range(c._nqubits):
             c2.measure_instruction(info["logical_physical_mapping"][i])
-        # c1, info = compile_func(c1)  # type: ignore
         # TODO(@refraction-ray): two steps compiling with pre compilation:
         # basically done, require some fine tuning for performance
         cs.append(c2)
         infos.append(info)
         exps.append(exp)
-
-    # reduced_cs = []
-    # reduced_dict = {}
-    # recover_dict = {}
-    # # merge the same circuit
-    # for j, ps in enumerate(pss):
-    #     ps = [i if i in [1, 2] else 0 for i in ps]
-    #     if tuple(ps) not in reduced_dict:
-    #         reduced_dict[tuple(ps)] = [j]
-    #         reduced_cs.append(cs[j])
-    #         recover_dict[tuple(ps)] = len(reduced_cs) - 1
-    #     else:
-    #         reduced_dict[tuple(ps)].append(j)
 
     if batch_submit_func is None:
         run = batch_submit_template(
@@ -271,31 +245,6 @@ def batch_expectation_ps(
         run = batch_submit_func
 
     raw_counts = reduce_and_evaluate(cs, shots, run)  # type: ignore
-
-    # def run(cs: List[Any], shots: int) -> List[Dict[str, int]]:
-    #     logger.info(f"submit task on {device.name} for {len(cs)} circuits")
-    #     time0 = time.time()
-    #     ts = submit_task(
-    #         circuit=cs,
-    #         device=device,
-    #         shots=shots,
-    #         enable_qos_qubit_mapping=False,
-    #         enable_qos_gate_decomposition=False,
-    #     )
-    #     if not is_sequence(ts):
-    #         ts = [ts]  # type: ignore
-    #     raw_counts = [t.results(blocked=True) for t in ts]
-    #     time1 = time.time()
-    #     logger.info(
-    #         f"finished collecting count results of {len(cs)} tasks in {round(time1-time0, 4)} seconds"
-    #     )
-    #     return raw_counts
-
-    # reduced_raw_counts = run(reduced_cs, shots)
-    # raw_counts: List[Dict[str, int]] = [None] * len(cs)  # type: ignore
-    # for i in range(len(cs)):
-    #     ps = [i if i in [1, 2] else 0 for i in pss[i]]
-    #     raw_counts[i] = reduced_raw_counts[recover_dict[tuple(ps)]]
 
     if with_rem:
         if getattr(device, "readout_mit", None) is None:

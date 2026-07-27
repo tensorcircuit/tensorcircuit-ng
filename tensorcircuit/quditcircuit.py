@@ -181,15 +181,6 @@ class QuditCircuit:
 
     X = x
 
-    # def y(self, index: int) -> None:
-    #     """
-    #     Apply the Y gate on the given qudit index.
-    #
-    #     :param index: Qudit index to apply the gate on.
-    #     :type index: int
-    #     """
-    #     self._apply_gate(index, name="Y")
-
     def z(self, index: int) -> None:
         """
         Apply the generalized phase gate `Z` on the given qudit (multiplies by `omega^k`).
@@ -408,11 +399,6 @@ class QuditCircuit:
         :rtype: Tensor
         """
         return self._circ.matrix()
-
-    # def measure_reference(
-    #     self, *index: int, with_prob: bool = False
-    # ) -> Tuple[str, float]:
-    #     return self._circ.measure_reference(*index, with_prob=with_prob)
 
     def expectation(
         self,

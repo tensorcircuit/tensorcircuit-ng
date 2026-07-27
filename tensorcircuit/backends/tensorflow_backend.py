@@ -29,9 +29,6 @@ class keras_optimizer:
         self.optimizer = optimizer
         self.is_initialized = False
 
-    # def _apply_gradients(self, grads: Tensor, params: Tensor) -> None:
-    #     self.optimizer.apply_gradients([(grads, params)])
-
     def update(self, grads: pytree, params: pytree) -> pytree:
         # if not self.is_initialized:
         #     l, treedef = TensorFlowBackend.tree_flatten(None, params)
@@ -1062,70 +1059,6 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
             return tf.function(f, experimental_compile=jit_compile)
         else:
             return tf.function(f, jit_compile=jit_compile)
-
-    # old vmap impl before I know pytrees support in tf
-    # def vmap(
-    #     self, f: Callable[..., Any], vectorized_argnums: Union[int, Sequence[int]] = 0
-    # ) -> Any:
-    #     if isinstance(vectorized_argnums, int):
-    #         vectorized_argnums = (vectorized_argnums,)
-    #     if vectorized_argnums == (0,):  # fast shortcut
-
-    #         def wrapper(*args: Any, **kws: Any) -> Tensor:
-    #             def pf(x: Tensor) -> Tensor:
-    #                 return f(x, *args[1:], **kws)
-
-    #             return tf.vectorized_map(pf, args[0])
-
-    #     else:
-
-    #         @self.jit
-    #         def wrapper(*args: Any, **kws: Any) -> Tensor:
-    #             shapes = []
-    #             l = len(args)
-    #             seps = [0]
-    #             batch = args[vectorized_argnums[0]].shape[0]  # type: ignore
-    #             nargs = []
-    #             for i, arg in enumerate(args):
-    #                 if i in vectorized_argnums:  # type: ignore
-    #                     shapes.append(arg.shape[1:])
-    #                     assert (
-    #                         arg.shape[0] == batch
-    #                     ), "different tensors has different batch dimensions!"
-    #                     arg = tf.reshape(arg, [batch, -1])
-    #                     nargs.append(arg)
-    #                     seps.append(seps[-1] + arg.shape[-1])
-    #             sargs = tf.concat(nargs, 1)
-
-    #             def sf(sarg: Any) -> Any:
-    #                 vargs = []
-    #                 for i in range(len(shapes)):
-    #                     arg = sarg[seps[i] : seps[i + 1]]
-    #                     arg = tf.reshape(arg, shapes[i])
-    #                     vargs.append(arg)
-    #                 vvargs = []
-    #                 j = 0
-    #                 for i in range(l):
-    #                     if i in vectorized_argnums:  # type: ignore
-    #                         vvargs.append(vargs[j])
-    #                         j += 1
-    #                     else:
-    #                         vvargs.append(args[i])
-    #                 return f(*vvargs, **kws)
-
-    #             return tf.vectorized_map(sf, sargs)
-
-    #     return wrapper
-
-    # def wrapper(f: Callable[..., Any], args: Sequence[Any]) -> Any:
-    #     return f(*args)
-
-    # wrapper = partial(wrapper, f)
-
-    # def own_vectorized_map(f: Callable[..., Any], *args: Any) -> Any:
-    #     return tf.vectorized_map(f, args)
-
-    # return partial(own_vectorized_map, wrapper)
 
     def vmap(
         self, f: Callable[..., Any], vectorized_argnums: Union[int, Sequence[int]] = 0

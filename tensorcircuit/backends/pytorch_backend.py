@@ -769,28 +769,6 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
 
         return wrapper
 
-        # def wrapper(*args: Any, **kws: Any) -> Any:
-        #     x = []
-        #     if isinstance(argnums, int):
-        #         argnumsl = [argnums]
-        #         # if you also call lhs as argnums, something weird may happen
-        #         # the reason is that python then take it as local vars
-        #     else:
-        #         argnumsl = argnums  # type: ignore
-        #     for i, arg in enumerate(args):
-        #         if i in argnumsl:
-        #             x.append(arg.requires_grad_(True))
-        #         else:
-        #             x.append(arg)
-        #     y = f(*x, **kws)
-        #     y.backward()
-        #     gs = [x[i].grad for i in argnumsl]
-        #     if len(gs) == 1:
-        #         gs = gs[0]
-        #     return gs
-
-        # return wrapper
-
     def value_and_grad(
         self,
         f: Callable[..., Any],
@@ -803,37 +781,6 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
             return v, g
 
         return wrapper
-        # def ask_require(t: Tensor) -> Any:
-        #     t.requires_grad_(True)
-        #     return t
-
-        # def get_grad(t: Tensor) -> Tensor:
-        #     return t.grad
-
-        # def wrapper(*args: Any, **kws: Any) -> Any:
-        #     # x = []
-        #     if isinstance(argnums, int):
-        #         argnumsl = [argnums]
-        #         # if you also call lhs as argnums, something weird may happen
-        #         # the reason is that python then take it as local vars
-        #     else:
-        #         argnumsl = argnums  # type: ignore
-        #     args = list(args)
-        #     for i, arg in enumerate(args):
-        #         if i in argnumsl:
-        #             args[i] = self.tree_map(ask_require, arg)
-        #     args = tuple(args)
-        #     y = f(*args, **kws)
-        #     if has_aux:
-        #         y[0].backward()
-        #     else:
-        #         y.backward()
-        #     gs = [self.tree_map(get_grad, x[i]) for i in argnumsl]
-        #     if len(gs) == 1:
-        #         gs = gs[0]
-        #     return y, gs
-
-        # return wrapper
 
     def vjp(
         self,
@@ -876,46 +823,6 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
             return torchlib.vmap(f, in_axes, 0)(*args, **kws)
 
         return wrapper
-        # v3
-        # logger.warning(
-        #     "pytorch backend has no intrinsic vmap like interface"
-        #     ", use plain for loop for compatibility"
-        # )
-        # # the vmap support is vey limited, f must return one tensor
-        # # nested list of tensor as return is not supported
-        # if isinstance(vectorized_argnums, int):
-        #     vectorized_argnums = (vectorized_argnums,)
-
-        # def wrapper(*args: Any, **kws: Any) -> Tensor:
-        #     results = []
-        #     for barg in zip(*[args[i] for i in vectorized_argnums]):  # type: ignore
-        #         narg = []
-        #         j = 0
-        #         for k in range(len(args)):
-        #             if k in vectorized_argnums:  # type: ignore
-        #                 narg.append(barg[j])
-        #                 j += 1
-        #             else:
-        #                 narg.append(args[k])
-        #         results.append(f(*narg, **kws))
-        #     return torchlib.stack(results)
-
-        # return wrapper
-
-        # v2
-        # def vmapf(*args: Tensor, **kws: Any) -> Tensor:
-        #     r = []
-        #     for i in range(args[0].shape[0]):
-        #         nargs = [arg[i] for arg in args]
-        #         r.append(f(*nargs, **kws))
-        #     return torchlib.stack(r)
-
-        # return vmapf
-
-        # v1
-        # raise NotImplementedError("pytorch backend doesn't support vmap")
-        # There seems to be no map like architecture in pytorch for now
-        # see https://discuss.pytorch.org/t/fast-way-to-use-map-in-pytorch/70814
 
     def jit(
         self,

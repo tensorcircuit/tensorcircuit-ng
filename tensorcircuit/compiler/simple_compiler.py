@@ -182,11 +182,8 @@ default_merge_rules = {
 
 
 def _find_next(qir: List[Dict[str, Any]], i: int) -> Optional[int]:
-    # if qir[i] is None:
-    # return None
     index = qir[i]["index"]
     for j, item in enumerate(qir[i + 1 :]):
-        # if item is not None:
         if item["index"] == index:
             return j + i + 1
         for ind in item["index"]:
@@ -216,8 +213,6 @@ def _merge(
                 if nn == "i":
                     del qir[i]
                     del qir[j - 1]
-                    # qir[i] = None
-                    # qir[j] = None
                 else:
                     param = {}
                     if nn.startswith("r") or nn.startswith("cr"):
@@ -231,19 +226,14 @@ def _merge(
                         "index": qir[i]["index"],
                     }
                     del qir[j]
-                    # qir[j] = None
                 flg = True
-                # return qir, flg
             elif (
                 qir[i]["gatef"].n == qir[j]["gatef"].n + "d"
                 or qir[i]["gatef"].n + "d" == qir[j]["gatef"].n
             ):
                 del qir[i]
                 del qir[j - 1]
-                # qir[i] = None
-                # qir[j] = None
                 flg = True
-                # return qir, True
         i += 1
     return qir, flg
 
