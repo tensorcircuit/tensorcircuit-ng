@@ -2266,3 +2266,211 @@ def test_merge_single_gates_via_plain_experimental(backend):
     with tc.runtime_contractor("plain-experimental", local_steps=3):
         got = _build_merge_circuit().state()
     np.testing.assert_allclose(got, expected, rtol=1e-5, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_cirq2tc_gate_families(backend):
+    pytest.importorskip("cirq")
+    import cirq
+
+    # Each case targets a distinct branch of ``cirq2tc`` (translation.py):
+    # standard PowGates (exp=1), variable X/Y/Z pows, the Z->S/T special cases,
+    # ISwapPowGate (exp!=1), FSimGate, PhasedXPowGate, MatrixGate, and the
+    # generic fallback that skips gates without a unitary.
+    n = 2
+    q = cirq.LineQubit.range(n)
+
+    cases = [
+        (
+            "standard",
+            cirq.Circuit(
+                [
+                    cirq.H(q[0]),
+                    cirq.X(q[1]),
+                    cirq.CNOT(q[0], q[1]),
+                    cirq.SWAP(q[0], q[1]),
+                ]
+            ),
+        ),
+        (
+            "zpows",
+            cirq.Circuit(
+                [cirq.Z(q[0]) ** 0.5, cirq.Z(q[1]) ** 0.25, cirq.Z(q[0]) ** 0.3]
+            ),
+        ),
+        ("xypows", cirq.Circuit([cirq.X(q[0]) ** 0.3, cirq.Y(q[1]) ** 0.4])),
+        ("iswap_pow", cirq.Circuit([cirq.ISWAP(q[0], q[1]) ** 0.6])),
+        ("fsim", cirq.Circuit([cirq.FSimGate(theta=0.5, phi=0.2).on(q[0], q[1])])),
+        (
+            "phasedx",
+            cirq.Circuit(
+                [cirq.PhasedXPowGate(phase_exponent=0.25, exponent=0.5).on(q[0])]
+            ),
+        ),
+        (
+            "matrixgate",
+            cirq.Circuit(
+                [cirq.MatrixGate(np.array([[1, 0], [0, 1j]], dtype=complex)).on(q[0])]
+            ),
+        ),
+    ]
+    for _, c in cases:
+        c_tc = tc.Circuit.from_cirq(c)
+        u_cirq = cirq.unitary(c)
+        u_tc = tc.backend.numpy(c_tc.matrix())
+        assert_allclose_up_to_global_phase(u_cirq, u_tc, atol=1e-5)
+
+    # ZPowGate exp=0.5 must route to ``s`` and exp=0.25 to ``t`` (not rz)
+    c = cirq.Circuit([cirq.Z(q[0]) ** 0.5])
+    names = [d["name"] for d in tc.Circuit.from_cirq(c)._qir]
+    assert "s" in names
+    c = cirq.Circuit([cirq.Z(q[0]) ** 0.25])
+    names = [d["name"] for d in tc.Circuit.from_cirq(c)._qir]
+    assert "t" in names
+
+    # IdentityGate is dropped (continue branch)
+    c = cirq.Circuit([cirq.I(q[0])])
+    assert len(tc.Circuit.from_cirq(c)._qir) == 0
+
+    # Fallback: a gate with no unitary is skipped with a warning, not raised.
+    class _NoUnitaryGate(cirq.Gate):
+        def _qid_shape_(self):
+            return (2,)
+
+        def num_qubits(self):
+            return 1
+
+    c = cirq.Circuit([_NoUnitaryGate().on(q[0])])
+    assert len(tc.Circuit.from_cirq(c)._qir) == 0
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_stim2tc_advanced(backend):
+    pytest.importorskip("stim")
+    import stim
+
+    stim2tc = tc.translation.stim2tc
+
+    # SQRT_XX/YY/ZZ -> rxx/ryy/rzz(theta=pi/2): unitary matches stim's tableau sim.
+    for name in ["SQRT_XX", "SQRT_YY", "SQRT_ZZ"]:
+        sc = stim.Circuit(f"{name} 0 1")
+        c = stim2tc(sc)
+        s_tc = tc.backend.numpy(c.state()).flatten()
+        sim = stim.TableauSimulator()
+        sim.do(sc)
+        s_stim = np.array(sim.state_vector())
+        np.testing.assert_allclose(np.abs(s_tc), np.abs(s_stim), atol=1e-6)
+
+    # ISWAP_DAG routes to iswap with theta=-1.0 (ISWAP_DAG = ISWAP^{-1}).
+    sc = stim.Circuit("ISWAP_DAG 0 1")
+    c = stim2tc(sc)
+    names = [d["name"] for d in c._qir]
+    assert names == ["iswap"]
+    # inv(ISWAP(theta=1)) == ISWAP(theta=-1); chain to identity on |00>
+    c0 = tc.Circuit(2)
+    c0.iswap(0, 1, theta=1.0)
+    c0.iswap(0, 1, theta=-1.0)
+    np.testing.assert_allclose(tc.backend.numpy(c0.state()), [1, 0, 0, 0], atol=1e-6)
+
+    # X_ERROR / Y_ERROR / Z_ERROR produce single-axis depolarizing channels
+    # whose density-matrix effect matches the named Pauli error.
+    # X_ERROR(1.0) on |0> -> |1><1|
+    c = stim2tc(stim.Circuit("X_ERROR(1.0) 0"), is_dm=True)
+    rho = tc.backend.numpy(c.densitymatrix())
+    np.testing.assert_allclose(np.diag(np.real(rho)), [0.0, 1.0], atol=1e-6)
+    # Z_ERROR(1.0) on |+> flips the sign of the off-diagonal coherence.
+    c_plus = tc.DMCircuit(1)
+    c_plus.h(0)
+    rho_plus = tc.backend.numpy(c_plus.densitymatrix())
+    c = stim2tc(stim.Circuit("H 0\nZ_ERROR(1.0) 0"), is_dm=True)
+    rho = tc.backend.numpy(c.densitymatrix())
+    np.testing.assert_allclose(rho[0, 1], -rho_plus[0, 1], atol=1e-6)
+
+    # PAULI_CHANNEL_1 carries (px, py, pz); DEPOLARIZE2 acts on a qubit pair.
+    c = stim2tc(stim.Circuit("PAULI_CHANNEL_1(0.1, 0.2, 0.3) 0"), is_dm=True)
+    assert c._qir[0]["name"] == "depolarizing"
+    assert list(c._qir[0]["index"]) == [0]
+    c = stim2tc(stim.Circuit("DEPOLARIZE2(0.2) 0 1"), is_dm=True)
+    assert list(c._qir[0]["index"]) == [0, 1]
+
+    # circuit_constructor + circuit_params forwarding.
+    c = stim2tc(
+        stim.Circuit("H 0"),
+        circuit_constructor=tc.DMCircuit,
+        circuit_params={"nqubits": 3},
+    )
+    assert c._nqubits == 3
+    assert type(c).__name__ == "DMCircuit2"
+
+    # X/Y-basis measure+reset sequences: MRX conjugates the measure+reset by H,
+    # MRY by Sdg..S. measure/reset land in ``_extra_qir``; the conjugating unitary
+    # gates land in ``_qir``.
+    c = stim2tc(stim.Circuit("MRX 0"))
+    gate_names = [d["name"] for d in c._qir]
+    instr_names = [d["name"] for d in c._extra_qir]
+    assert gate_names == ["h", "h"]
+    assert "measure" in instr_names and "reset" in instr_names
+    c = stim2tc(stim.Circuit("MRY 0"))
+    gate_names = [d["name"] for d in c._qir]
+    assert "sd" in gate_names and "h" in gate_names and "s" in gate_names
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_qsim_roundtrip(backend, tmp_path):
+    # qsim format: line 1 = nqubits; then "<time> <gate> <targets...>".
+    lines = [
+        "2",
+        "0 h 0",
+        "1 cnot 0 1",
+        "2 x 1",
+        "3 y 0",
+        "4 z 1",
+        "5 s 0",
+        "6 t 1",
+        "7 x_1_2 0",
+        "8 y_1_2 1",
+        "9 z_1_2 0",
+        "10 w_1_2 1",
+        "11 hz_1_2 0",
+        "12 cz 0 1",
+        "13 is 0 1",
+        "14 rx 0 0.7",
+        "15 ry 1 0.3",
+        "16 rz 0 0.5",
+        "17 fsim 0 1 0.4 0.2",
+    ]
+    qsim_path = tmp_path / "c.qsim"
+    qsim_path.write_text("\n".join(lines))
+    c = tc.Circuit.from_qsim_file(str(qsim_path))
+    assert c._nqubits == 2
+    # ``fsim`` expands to two gates (iswap + cphase); every other line is
+    # one qir entry, so total = (n_lines - 1 header) + 1 fsim expansion.
+    assert len(c._qir) == (len(lines) - 1) + 1
+    # representative gate families all landed in the qir.
+    # qsim aliases: s/t -> phase, x_1_2/y_1_2/z_1_2 -> rx/ry/rz,
+    # w_1_2 -> u, hz_1_2 -> wroot, is -> iswap, fsim -> iswap + cphase.
+    names = [d["name"] for d in c._qir]
+    for g in [
+        "h",
+        "cnot",
+        "x",
+        "y",
+        "z",
+        "phase",
+        "u",
+        "wroot",
+        "iswap",
+        "cphase",
+        "rx",
+        "ry",
+        "rz",
+        "cz",
+    ]:
+        assert g in names
+    # matrix must be unitary (the circuit is a valid unitary sequence)
+    m = tc.backend.numpy(c.matrix())
+    np.testing.assert_allclose(m @ m.conj().T, np.eye(4), atol=1e-5)
+
+    # unknown gate name raises NotImplementedError (fail-fast contract).
+    with pytest.raises(NotImplementedError):
+        tc.Circuit._apply_qsim(tc.Circuit(2), ["2", "0 bogus 0"])

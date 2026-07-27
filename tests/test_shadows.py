@@ -10,6 +10,7 @@ from tensorcircuit.shadows import (
     renyi_entropy_2,
     expectation_ps_shadow,
     global_shadow_state1,
+    global_shadow_state2,
 )
 
 
@@ -238,3 +239,80 @@ def test_entropy_shadow_dual_and_validation(backend):
         )
     with pytest.raises(ValueError, match="out of range"):
         entropy_shadow(snapshots, pauli_strings, subsystem_to_keep=[nq])
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+def test_global_shadow_state_pauli_strings(backend):
+    # Cover the ``pauli_strings is not None`` branch of ``global_shadow_state``
+    # and ``global_shadow_state1`` (unreached by existing tests, which only call
+    # the no-pauli_strings branch) plus the ``sub`` subsystem path and the
+    # 3-d rank validation. Physics invariants:
+    #   * the two implementations reconstruct the same density matrix;
+    #   * on a known pure state they converge to the true density matrix;
+    #   * the subsystem shadow of |+0> on qubit 0 reconstructs |+><+|.
+    # ``status`` and ``pauli_strings`` are deterministic (no global RNG seed):
+    # a balanced tiling of all 3^nq Pauli bases plus a stratified [0, 1) grid
+    # samples the measurement distribution reproducibly across backends and
+    # converges faster than i.i.d. draws.
+    nq, ns, repeat = 2, 8000, 5
+
+    c = tc.Circuit(nq)
+    c.h(0)
+    c.cnot(0, 1)
+    psi = c.state()
+    rho_true = tc.backend.numpy(psi[:, None] @ psi[None, :])
+
+    base = np.array([[i, j] for i in (1, 2, 3) for j in (1, 2, 3)])
+    pauli_strings = tc.backend.convert_to_tensor(
+        np.tile(base, (ns // len(base) + 1, 1))[:ns]
+    )
+    status = tc.backend.convert_to_tensor(
+        np.linspace(0, 1, ns * repeat, endpoint=False).reshape(ns, repeat)
+    )
+    snapshots = shadow_snapshots(psi, pauli_strings, status, measurement_only=True)
+
+    rho0 = tc.backend.numpy(global_shadow_state(snapshots, pauli_strings))
+    rho1 = tc.backend.numpy(global_shadow_state1(snapshots, pauli_strings))
+    np.testing.assert_allclose(rho1, rho0, atol=1e-6)
+    np.testing.assert_allclose(rho0, rho_true, atol=0.1)
+
+    # subsystem: |+0> -> reduced state of qubit 0 is |+><+|.
+    c = tc.Circuit(nq)
+    c.h(0)
+    psi_plus = c.state()
+    snaps = shadow_snapshots(psi_plus, pauli_strings, status, measurement_only=True)
+    rho_sub = tc.backend.numpy(global_shadow_state(snaps, pauli_strings, sub=[0]))
+    assert rho_sub.shape == (2, 2)
+    np.testing.assert_allclose(rho_sub, [[0.5, 0.5], [0.5, 0.5]], atol=0.1)
+
+    # 3-d rank validation: already-local (5-d) snapshots are rejected.
+    snapshots_5d = np.zeros((4, 3, 2, 2, 2), dtype=np.float32)
+    ps = np.ones((4, 2), dtype=np.int32)
+    with pytest.raises(ValueError, match="should be 3-d"):
+        global_shadow_state1(snapshots_5d, ps)
+
+
+def test_global_shadow_state2_matches(jaxb):
+    # ``global_shadow_state2`` (vmap-over-einsum variant) is unreached by existing
+    # tests. It is not TF-graph-compatible (it iterates over a symbolic tensor
+    # inside ``tf.vectorized_map``), so the equivalence check runs on jax only.
+    # Invariant: it reconstructs the same density matrix as ``global_shadow_state``.
+    nq, ns, repeat = 2, 8000, 5
+
+    c = tc.Circuit(nq)
+    c.h(0)
+    c.cnot(0, 1)
+    psi = c.state()
+
+    base = np.array([[i, j] for i in (1, 2, 3) for j in (1, 2, 3)])
+    pauli_strings = tc.backend.convert_to_tensor(
+        np.tile(base, (ns // len(base) + 1, 1))[:ns]
+    )
+    status = tc.backend.convert_to_tensor(
+        np.linspace(0, 1, ns * repeat, endpoint=False).reshape(ns, repeat)
+    )
+    snapshots = shadow_snapshots(psi, pauli_strings, status, measurement_only=True)
+
+    rho0 = tc.backend.numpy(global_shadow_state(snapshots, pauli_strings))
+    rho2 = tc.backend.numpy(global_shadow_state2(snapshots, pauli_strings))
+    np.testing.assert_allclose(rho2, rho0, atol=1e-6)

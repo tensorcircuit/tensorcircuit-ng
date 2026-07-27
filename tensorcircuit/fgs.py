@@ -1415,23 +1415,11 @@ class FGSTestSimulator:
         return cmatrix
 
     def expectation_4body(self, i: int, j: int, k: int, l: int) -> Tensor:
-        s = ""
-        if i < self.L:
-            s += str(i) + ""
-        else:
-            s += str(i - self.L) + "^ "
-        if j < self.L:
-            s += str(j) + ""
-        else:
-            s += str(j - self.L) + "^ "
-        if k < self.L:
-            s += str(k) + ""
-        else:
-            s += str(k - self.L) + "^ "
-        if l < self.L:
-            s += str(l) + ""
-        else:
-            s += str(l - self.L) + "^ "
+        def _term(m: int) -> str:
+            # indices >= L denote creation operators c_{m-L}^\dagger
+            return str(m) if m < self.L else str(m - self.L) + "^"
+
+        s = " ".join(_term(m) for m in (i, j, k, l))
         op = openfermion.FermionOperator(s)
         m = openfermion.get_sparse_operator(op, n_qubits=self.L).todense()
         return (

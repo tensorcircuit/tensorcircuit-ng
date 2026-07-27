@@ -303,42 +303,6 @@ def test_exp_2body(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
-def test_exp_4body(backend):
-    c = F(4, filled=[0, 2])
-    c.evol_hp(0, 1, 0.3)
-    c.evol_hp(2, 3, 0.3)
-    c.evol_sp(0, 3, 0.5)
-    c.evol_sp(0, 2, 0.9)
-    c.evol_cp(0, -0.4)
-
-    c1 = FT(4, filled=[0, 2])
-    c1.evol_hp(0, 1, 0.3)
-    c1.evol_hp(2, 3, 0.3)
-    c1.evol_sp(0, 3, 0.5)
-    c1.evol_sp(0, 2, 0.9)
-    c1.evol_cp(0, -0.4)
-
-    np.testing.assert_allclose(
-        c.expectation_4body(0, 4, 1, 5), c.expectation_4body(0, 4, 1, 5), atol=1e-5
-    )
-    np.testing.assert_allclose(
-        c.expectation_4body(0, 1, 4, 5), c.expectation_4body(0, 1, 4, 5), atol=1e-5
-    )
-    np.testing.assert_allclose(
-        c.expectation_4body(0, 4, 2, 6), c.expectation_4body(0, 4, 2, 6), atol=1e-5
-    )
-    np.testing.assert_allclose(
-        c.expectation_4body(0, 2, 3, 1), c.expectation_4body(0, 2, 3, 1), atol=1e-5
-    )
-    np.testing.assert_allclose(
-        c.expectation_4body(0, 1, 4, 6), c.expectation_4body(0, 1, 4, 6), atol=1e-5
-    )
-    np.testing.assert_allclose(
-        c.expectation_4body(1, 0, 6, 7), c.expectation_4body(1, 0, 6, 7), atol=1e-5
-    )
-
-
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_overlap(backend):
     def compute_overlap(FGScls):
         c = FGScls(3, filled=[0, 2])
@@ -436,3 +400,38 @@ def test_fgs_entropy_dual_and_validation():
         sim.entropy(subsystems_to_trace_out=[N])
     with pytest.raises(ValueError, match="the full system is traced out"):
         sim.entropy([0, 1, 2, 3])
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_exp_4body(backend, highp):
+    # Cross-check the Wick's-theorem fast path ``FGSSimulator.expectation_4body``
+    # against the brute-force openfermion reference ``FGSTestSimulator.expectation_4body``
+    # (which contracts the full 4-fermion operator against the JW-represented state).
+    L = 4
+    c = F(L, filled=[0, 2])
+    c1 = FT(L, filled=[0, 2])
+    for sim in (c, c1):
+        sim.evol_hp(0, 1, 0.3)
+        sim.evol_hp(2, 3, 0.3)
+        sim.evol_sp(0, 3, 0.5)
+        sim.evol_sp(0, 2, 0.9)
+        sim.evol_cp(0, -0.4)
+
+    # indices >= L denote creation operators (c_{i-L}^dagger); mix creation and
+    # annihilation so all four string-building branches are exercised.
+    quad_indices = [
+        (0, 1, 4, 5),
+        (0, 4, 1, 5),
+        (0, 4, 2, 6),
+        (0, 2, 3, 1),
+        (0, 1, 4, 6),
+        (1, 0, 6, 7),
+        (4, 5, 6, 7),
+        (0, 5, 4, 1),
+    ]
+    for i, j, k, l in quad_indices:
+        fast = tc.backend.numpy(c.expectation_4body(i, j, k, l))
+        # ``FGSTestSimulator`` is hardcoded to numpy (``npb``), so its result is
+        # already a numpy scalar and must not be routed through ``backend.numpy``.
+        exact = np.asarray(c1.expectation_4body(i, j, k, l))
+        np.testing.assert_allclose(fast, exact, atol=1e-5)

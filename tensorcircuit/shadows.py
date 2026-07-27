@@ -502,6 +502,12 @@ def global_shadow_state2(
     Note: This version uses vmap over einsum which may be slower during compilation
     and execution for larger qubit counts compared to `global_shadow_state`.
 
+    .. warning::
+
+        Not compatible with the tensorflow backend: the inner vmap unpacks the
+        per-qubit axis (``*dms``), which is forbidden inside tensorflow's graph
+        mode. Use `global_shadow_state` instead on tensorflow.
+
     :param snapshots: shape = (ns, repeat, nq, 2, 2) or (ns, repeat, nq)
     :type: Tensor
     :param pauli_strings: shape = None or (ns, nq) or (ns, repeat, nq)
