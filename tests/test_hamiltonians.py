@@ -27,7 +27,7 @@ class TestHeisenbergHamiltonian:
 
     def test_empty_lattice(self):
         """
-        Test that an empty lattice produces a 0x0 matrix.
+        Test that an empty lattice produces a 1x1 matrix (2^0 x 2^0).
         """
         empty_lattice = CustomizeLattice(
             dimensionality=2, identifiers=[], coordinates=[]

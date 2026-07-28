@@ -99,7 +99,9 @@ def test_dd(backend):
         )
         return count
 
-    _ = apply_dd(
+    ideal_value = c.expectation_ps(z=[0])
+
+    mit_value, dd_circuit = apply_dd(
         circuit=c,
         executor=execute,
         rule=["X", "X"],
@@ -108,8 +110,11 @@ def test_dd(backend):
         ignore_idle_qubit=True,
         fulldd=False,
     )
+    assert np.isfinite(mit_value)
+    np.testing.assert_allclose(ideal_value, mit_value, atol=1e-5)
+    assert dd_circuit.circuit_param["nqubits"] == c.circuit_param["nqubits"]
 
-    _ = apply_dd(
+    mit_count, dd_circuit2 = apply_dd(
         circuit=c,
         executor=execute2,
         rule=dd_option.rules.xyxy,
@@ -119,9 +124,12 @@ def test_dd(backend):
         fulldd=True,
         iscount=True,
     )
+    assert isinstance(mit_count, dict)
+    assert len(dd_circuit2.to_qir()) > 0
 
     # wash circuit based on use_qubits and washout iden gates
-    _ = qem.prune_ddcircuit(c, qlist=list(range(c.circuit_param["nqubits"])))
+    pruned = qem.prune_ddcircuit(c, qlist=list(range(c.circuit_param["nqubits"])))
+    assert pruned.circuit_param["nqubits"] == c.circuit_param["nqubits"]
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
@@ -142,11 +150,23 @@ def test_rc(backend):
         )
         return count
 
-    _ = apply_rc(circuit=c, executor=execute, num_to_average=6, simplify=False)
+    ideal_value = c.expectation_ps(z=[0])
 
-    _ = apply_rc(
+    mit_value, circuit_list = apply_rc(
+        circuit=c, executor=execute, num_to_average=6, simplify=False
+    )
+    assert np.isfinite(mit_value)
+    np.testing.assert_allclose(ideal_value, mit_value, atol=1e-5)
+    assert len(circuit_list) == 6
+    assert circuit_list[0].circuit_param["nqubits"] == c.circuit_param["nqubits"]
+
+    mit_count, circuit_list2 = apply_rc(
         circuit=c, executor=execute2, num_to_average=6, simplify=True, iscount=True
     )
+    assert isinstance(mit_count, dict)
+    assert len(circuit_list2) == 6
 
     # generate a circuit with rc
-    _ = qem.rc_circuit(c)
+    rc_c = qem.rc_circuit(c)
+    assert rc_c.circuit_param["nqubits"] == c.circuit_param["nqubits"]
+    assert len(rc_c.to_qir()) > 0

@@ -194,23 +194,6 @@ def test_readout(backend):
     valueaim = 0.04
     np.testing.assert_allclose(value, valueaim, atol=1e-1)
 
-    # test contractor time
-    # start = timeit.default_timer()
-    # def speed(nqubit):
-    #     c = tc.Circuit(nqubit)
-    #     c.X(0)
-    #     readout_error = []
-    #     for _ in range(nqubit):
-    #         readout_error.append([0.9, 0.75])  # readout error of qubit 0
-    #     value = c.sample_expectation_ps(
-    #         z=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], readout_error=readout_error
-    #     )
-    #     return value
-
-    # speed(10)
-    # stop = timeit.default_timer()
-    # print("Time: ", stop - start)
-
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_noisesample(backend):
@@ -222,22 +205,49 @@ def test_noisesample(backend):
     c = tc.Circuit(3)
     c.H(0)
     c.cnot(0, 1)
-    print(c.sample(allow_state=True, readout_error=readout_error))
-    print(c.sample(batch=8, allow_state=True, readout_error=readout_error))
-    print(
-        c.sample(
-            batch=8,
-            allow_state=True,
-            readout_error=readout_error,
-            random_generator=tc.backend.get_random_state(42),
-        )
-    )
 
+    # single sample: tuple of (config, probability)
+    single = c.sample(allow_state=True, readout_error=readout_error)
+    assert len(single) == 2
+    assert tc.backend.shape_tuple(single[0]) == (3,)
+    assert 0.0 <= float(tc.backend.numpy(single[1])) <= 1.0
+
+    # batch=8: list of 8 (config, probability) pairs
+    batched = c.sample(batch=8, allow_state=True, readout_error=readout_error)
+    assert len(batched) == 8
+    for conf, prob in batched:
+        assert tc.backend.shape_tuple(conf) == (3,)
+        assert 0.0 <= float(tc.backend.numpy(prob)) <= 1.0
+
+    # seeded determinism: same random_generator yields identical samples
+    key = tc.backend.get_random_state(42)
+    s1 = c.sample(
+        batch=8,
+        allow_state=True,
+        readout_error=readout_error,
+        random_generator=key,
+    )
+    key = tc.backend.get_random_state(42)
+    s2 = c.sample(
+        batch=8,
+        allow_state=True,
+        readout_error=readout_error,
+        random_generator=key,
+    )
+    np.testing.assert_allclose(tc.backend.numpy(s1[0][0]), tc.backend.numpy(s2[0][0]))
+    np.testing.assert_allclose(tc.backend.numpy(s1[0][1]), tc.backend.numpy(s2[0][1]))
+
+    # count_dict_bin format sums to the batch size
     key = tc.backend.get_random_state(42)
     bs = c.sample(
-        batch=1000, allow_state=True, format_="count_dict_bin", random_generator=key
+        batch=1000,
+        allow_state=True,
+        format_="count_dict_bin",
+        random_generator=key,
     )
-    print(bs)
+    assert sum(bs.values()) == 1000
+
+    key = tc.backend.get_random_state(42)
     bs = c.sample(
         batch=1000,
         allow_state=True,
@@ -245,7 +255,7 @@ def test_noisesample(backend):
         format_="count_dict_bin",
         random_generator=key,
     )
-    print(bs)
+    assert sum(bs.values()) == 1000
 
     # test jitble
     def jitest(readout_error):
@@ -256,7 +266,9 @@ def test_noisesample(backend):
 
     calsample = tc.backend.jit(jitest)
     sampletest = calsample(readout_error)
-    print(sampletest)
+    assert tc.backend.shape_tuple(sampletest) == (8,)
+    assert int(tc.backend.numpy(sampletest).max()) < 8
+    assert int(tc.backend.numpy(sampletest).min()) >= 0
 
 
 # mitigate readout error

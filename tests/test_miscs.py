@@ -53,7 +53,6 @@ def test_pss2coo(tfb):
     r1 = PauliStringSum2COO(tf.constant(l, dtype=tf.int64))
     np.testing.assert_allclose(tc.backend.to_dense(r1), a, atol=1e-5)
     l = [t[0] for t in check_pairs[4:]]
-    a = sum([t[1] for t in check_pairs[4:]])
     r1 = PauliStringSum2COO(tf.constant(l, dtype=tf.int64), weight=[0.5, 1])
     a = check_pairs[4][1] * 0.5 + check_pairs[5][1] * 1.0
     np.testing.assert_allclose(tc.backend.to_dense(r1), a, atol=1e-5)
@@ -311,7 +310,7 @@ def test_runtime_nodes_capture(backend):
         c = tc.Circuit(3)
         c.h(0)
         c.amplitude("010")
-    len(captured["nodes"]) == 7
+    assert len(captured["nodes"]) == 7
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -501,6 +500,15 @@ def test_cons_extra(jaxb):
     @tc.cons.set_function_dtype("complex128")
     def g():
         return tc.dtypestr
+
+    outer_backend = tc.backend.name
+    outer_dtype = tc.dtypestr
+
+    assert f() == "jax"
+    assert tc.backend.name == outer_backend
+
+    assert g() == "complex128"
+    assert tc.dtypestr == outer_dtype
 
 
 def test_ascii_art():

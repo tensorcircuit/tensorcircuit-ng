@@ -223,11 +223,27 @@ def test_subset_jump(request, backend):
 
     # We want to measure Z1 Z4 at the end.
     # In PPE, we initialize with Z1 Z4 and propagate backward.
-    obs = [(1.0, "IZIIZ")]  # Z1 Z4
+    pp = PauliPropagationEngine(N, k)
+    structures = np.zeros((1, N), dtype=int)
+    structures[0, 1] = 3
+    structures[0, 4] = 3
+    weights = K.convert_to_tensor(np.array([1.0]), dtype="complex64")
+    state = pp.get_initial_state(structures, weights)
 
-    res = pauli_propagation(c, obs, k=k)
-    # The expectation value should be 1.0 (identity state)
-    assert np.allclose(K.numpy(res), 1.0)
+    for op in reversed(c.to_qir()):
+        state = pp.apply_gate(
+            state, op["name"], op["index"], op.get("parameters") or None
+        )
+
+    # Inspect the propagated Pauli composition directly: the SWAP(3,4) must move
+    # weight from Z1 Z4 to Z1 Z3. Asserting expectation==1.0 alone cannot
+    # distinguish a correct subset jump from a silent no-op, since both Z1 Z3
+    # and Z1 Z4 have eigenvalue +1 on |0^5>.
+    idx_z1z3 = pp.string_to_idx[((1, 3), (3, 3))]
+    idx_z1z4 = pp.string_to_idx[((1, 4), (3, 3))]
+    coeffs = K.numpy(state)
+    assert np.isclose(coeffs[idx_z1z3], 1.0, atol=1e-5)
+    assert np.isclose(coeffs[idx_z1z4], 0.0, atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", ["npb", "jaxb"])
@@ -398,8 +414,7 @@ def test_truncation_and_buffer_sparse(request, backend, highp):
     top2_idx = np.argsort(c_abs)[-2:]
     expected_sum_abs = np.sum(c_abs[top2_idx])
 
-    s_codes, s_coeffs = s_state
-    print(s_codes)
+    _s_codes, s_coeffs = s_state
     assert np.allclose(K.numpy(K.sum(K.abs(s_coeffs))), expected_sum_abs, atol=1e-5)
 
 

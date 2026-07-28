@@ -19,15 +19,28 @@ from tensorcircuit.circuit import Circuit
 
 def test_vag(tfb):
     set_op_pool([Hlayer, rxlayer, zzlayer])
+    params = np.array([0.0, 0.3, 0.5, 0.7, -0.8])
+    preset = [0, 2, 1, 2, 1]
+    graph = get_graph("10A")
     expene, ene, eneg, p = evaluate_vag(
-        np.array([0.0, 0.3, 0.5, 0.7, -0.8]),
-        [0, 2, 1, 2, 1],
-        get_graph("10A"),
-        lbd=0,
-        overlap_threhold=11,
+        params, preset, graph, lbd=0, overlap_threhold=11
     )
     print(expene, eneg, p)
     np.testing.assert_allclose(ene.numpy(), -7.01, rtol=1e-2)
+    # finite-difference reference for the energy gradient (eneg)
+    eps = 1e-3
+    fd_grad = np.zeros_like(params)
+    for i in range(len(params)):
+        dp = np.zeros_like(params)
+        dp[i] = eps
+        _, ene_plus, _, _ = evaluate_vag(
+            params + dp, preset, graph, lbd=0, overlap_threhold=11
+        )
+        _, ene_minus, _, _ = evaluate_vag(
+            params - dp, preset, graph, lbd=0, overlap_threhold=11
+        )
+        fd_grad[i] = (ene_plus.numpy() - ene_minus.numpy()) / (2 * eps)
+    np.testing.assert_allclose(eneg.numpy(), fd_grad, atol=1e-2)
 
 
 cases = [

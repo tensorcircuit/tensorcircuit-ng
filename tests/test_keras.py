@@ -64,6 +64,8 @@ def test_vqe_layer2(tfb, highp):
     )
     model.fit(np.zeros([1, 1]), np.zeros([1]), batch_size=1, epochs=300)
 
+    np.testing.assert_allclose(model.predict(np.zeros([1])), -7.27, atol=1e-1)
+
 
 def vqe_f(inputs, weights, nlayers, n):
     c = tc.Circuit(n)
@@ -108,8 +110,14 @@ def test_function_io(tfb, tmp_path, highp):
     vqe_f_p(weights=tf.ones([6, 6], dtype=tf.float64), nlayers=3, n=6)
     tc.keras.save_func(vqe_f_p, str(tmp_path))
     loaded = tc.keras.load_func(str(tmp_path), fallback=vqe_f_p)
-    print(loaded(weights=tf.ones([6, 6], dtype=tf.float64), nlayers=3, n=6))
-    print(loaded(weights=tf.ones([6, 6], dtype=tf.float64), nlayers=3, n=6))
+    weights = tf.ones([6, 6], dtype=tf.float64)
+    expected = vqe_f_p(weights=weights, nlayers=3, n=6)
+    np.testing.assert_allclose(
+        loaded(weights=weights, nlayers=3, n=6), expected, atol=1e-5
+    )
+    np.testing.assert_allclose(
+        loaded(weights=weights, nlayers=3, n=6), expected, atol=1e-5
+    )
 
 
 def test_keras_hardware(tfb):

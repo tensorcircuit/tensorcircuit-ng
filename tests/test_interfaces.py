@@ -346,13 +346,15 @@ def test_args_transformation(backend):
     ans1 = tc.interfaces.numpy_args_to_backend(
         ans, target_backend="jax", dtype="float32"
     )
-    print(ans1[1]["a"].dtype)
+    assert tc.get_backend("jax").numpy(ans1[1]["a"]).dtype == np.float32
     ans1 = tc.interfaces.numpy_args_to_backend(
         ans,
         target_backend="jax",
         dtype=("complex64", {"a": "float32", "b": ["complex64"]}),
     )
-    print(ans1[1]["a"].dtype)
+    assert tc.get_backend("jax").numpy(ans1[0]).dtype == np.complex64
+    assert tc.get_backend("jax").numpy(ans1[1]["a"]).dtype == np.float32
+    assert tc.get_backend("jax").numpy(ans1[1]["b"][0]).dtype == np.complex64
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])

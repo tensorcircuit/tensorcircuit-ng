@@ -32,16 +32,14 @@ def test_u1circuit_ad_gradients(backend):
     def loss(theta):
         sim = U1Circuit(2, 1, filled=[0])  # |10>
         sim.iswap(0, 1, theta=theta)
-        # |10> -> cos(theta)|10> + i sin(theta)|01>
-        # <Z0> = cos^2(theta)*(-1) + sin^2(theta)*(1) = -cos(2*theta)
+        # |10> -> cos(theta*pi/2)|10> + i sin(theta*pi/2)|01>
+        # <Z0> = cos^2(theta*pi/2)*(-1) + sin^2(theta*pi/2)*(1) = -cos(theta*pi)
         return tc.backend.real(sim.expectation_z(0))
 
     vg = tc.backend.value_and_grad(loss)
     theta_v = tc.backend.convert_to_tensor(0.5, dtype="float32")
     val, grad = vg(theta_v)
 
-    # Expected Val: -cos(theta_v * pi) approx -0.58778 (for theta=0.5, pi*theta=pi/2, so -cos(pi/2)=0)
-    # Wait, if theta=0.5, th*pi = pi/2, -cos(pi/2) = 0.
     # d/dth (-cos(th*pi)) = pi * sin(th*pi). For th=0.5, pi * sin(pi/2) = pi.
     assert np.allclose(
         tc.backend.numpy(val), -np.cos(tc.backend.numpy(theta_v) * np.pi), atol=1e-4
@@ -212,15 +210,12 @@ def test_u1circuit_expectation_ps(backend):
 
     # test X0Y1 - Y0X1 (non-zero for entangling states)
     sim.iswap(0, 1, theta=np.pi / 4)
-    # |10> -> 1/sqrt(2) (|10> - i|01>)
-    # <X0Y1> = <1/sqrt(2)(|10> - i|01|) | X0Y1 | 1/sqrt(2)(|10> - i|01|)>
-    # X0Y1 |10> = |0>(-i)|0> = -i|00> NO, Y1 |0> = i|1>
-    # Correct mapping:
-    # |10> -> Z0=-1, Z1=1
-    # |01> -> Z0=1, Z1=-1
-    # <X0Y1 - Y0X1> ... let's just check non-zero
+    # |10> -> cos(theta*pi/2)|10> + i sin(theta*pi/2)|01>
+    # For theta=pi/4, angle = pi^2/8; <X0Y1 - Y0X1> = 2*sin(pi^2/4)
     val = sim.expectation_ps(x=[0], y=[1]) - sim.expectation_ps(y=[0], x=[1])
-    assert np.abs(tc.backend.numpy(val)) > 0.1
+    np.testing.assert_allclose(
+        tc.backend.numpy(val), 2 * np.sin(np.pi**2 / 4), atol=1e-5
+    )
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -441,7 +436,7 @@ def test_u1circuit_measure(backend):
     k = 2
 
     # Test 1: Measure from known state
-    u1c = U1Circuit(n, k, filled=[0, 1])  # |0011>
+    u1c = U1Circuit(n, k, filled=[0, 1])  # |1100>
     outcome, prob = u1c.measure(0, 1, with_prob=True)
 
     outcome_np = tc.backend.numpy(outcome)

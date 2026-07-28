@@ -33,9 +33,14 @@ def test_bell_state():
     # Test Z measurements correlation
     samples = c.sample(batch=1000)
     assert samples.shape == (1000, 2)
-    counts = np.sum(samples, axis=0)
-    # Should be roughly equal number of 00 and 11 states
-    np.testing.assert_allclose(counts[0], counts[1], atol=50)
+    # Assert on the joint outcome histogram: Bell state yields only (0,0) and (1,1).
+    joint = samples[:, 0].astype(int) * 2 + samples[:, 1].astype(int)
+    hist = np.bincount(joint, minlength=4)
+    # correlated outcomes dominate, anti-correlated outcomes ~ 0
+    assert hist[0] + hist[3] == 1000
+    assert hist[1] == 0 and hist[2] == 0
+    # both parity branches should occur with nonzero support
+    assert hist[0] > 0 and hist[3] > 0
 
 
 def test_ghz_state():
@@ -156,8 +161,19 @@ def test_random_gates():
     c.random_gate(0, 1, recorded=True)
     c.random_gate(2, 3)
     c.random_gate(1, 2)
-    print(c.entanglement_entropy(list(range(2))))
-    print(len(c.current_circuit()))
+    ee = float(c.entanglement_entropy(list(range(2))))
+    assert np.isfinite(ee)
+    assert 0.0 <= ee <= 2.0
+    # recorded gate is appended to the stim circuit, unrecorded gates are not
+    n_recorded = len(c.current_circuit())
+    assert n_recorded > 0
+    c2 = tc.StabilizerCircuit(4)
+    c2.random_gate(0, 1)
+    c2.random_gate(2, 3)
+    c2.random_gate(1, 2)
+    assert len(c2.current_circuit()) == 0
+    print(ee)
+    print(n_recorded)
 
 
 def test_circuit_state():
@@ -215,6 +231,11 @@ def test_mipt():
         return c.entanglement_entropy(list(range(n // 2)))
 
     print(ruc(50, 10, 0.1))
+
+    # entropy should be finite and within a sane range for the MIPT phase
+    ee = float(ruc(50, 10, 0.1))
+    assert np.isfinite(ee)
+    assert 0.0 <= ee <= 25.0
 
 
 def test_measure_with_prob():

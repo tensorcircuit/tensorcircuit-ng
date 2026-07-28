@@ -70,10 +70,14 @@ def test_inputs_multiple(backend):
     noise = 0.2 * torchb.ones([2, n], dtype="float32")
     l = layer(state, noise)
     lsum = torchb.sum(l)
-    print(l)
+    np.testing.assert_allclose(tc.get_backend("pytorch").numpy(l).shape, np.array([2]))
     lsum.backward()
     for p in layer.parameters():
-        print(p.grad)
+        assert p.grad is not None
+        np.testing.assert_allclose(
+            tc.get_backend("pytorch").numpy(p.grad).shape, np.array([n])
+        )
+        assert np.all(np.isfinite(tc.get_backend("pytorch").numpy(p.grad)))
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])

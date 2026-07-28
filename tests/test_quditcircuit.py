@@ -62,10 +62,9 @@ def test_u8_gate(backend):
 @pytest.mark.parametrize("backend", [lf("npb"), lf("cpb")])
 def test_measure(backend):
     c = tc.QuditCircuit(2, 3)
-    c.h(0)
     c.x(1)
-    c.csum(0, 1)
-    assert c.measure(1)[0] in [0, 1, 2]
+    sample, _ = c.measure(1)
+    np.testing.assert_allclose(tc.backend.numpy(sample), np.array([1.0]))
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
@@ -109,7 +108,9 @@ def test_complex128(highp, tfb):
     c = tc.QuditCircuit(2, 3)
     c.h(1)
     c.rx(0, theta=1j)
-    c.wavefunction()
+    state = c.wavefunction()
+    # highp fixture should propagate complex128 dtype through the circuit state
+    assert tc.backend.numpy(state).dtype == np.complex128
     np.testing.assert_allclose(
         c.expectation((tc.quditgates.z_matrix_func(3), [1])), 0, atol=1e-15
     )
@@ -118,9 +119,8 @@ def test_complex128(highp, tfb):
 def test_single_qubit():
     c = tc.QuditCircuit(1, 10)
     c.h(0)
-    w = c.state()[0]
     np.testing.assert_allclose(
-        w,
+        tc.backend.numpy(c.state()),
         np.array(
             [
                 1,
@@ -136,17 +136,9 @@ def test_single_qubit():
 def test_expectation_between_two_states_qudit(backend):
     dim = 3
     X3 = tc.quditgates.x_matrix_func(dim)
-    # Y3 = tc.quditgates._y_matrix_func(dim)  # ZX/i
     Z3 = tc.quditgates.z_matrix_func(dim)
     H3 = tc.quditgates.h_matrix_func(dim)
     X3_dag = np.conjugate(X3.T)
-
-    # e0 = np.array([1.0, 0.0, 0.0], dtype=np.complex64)
-    # e1 = np.array([0.0, 1.0, 0.0], dtype=np.complex64)
-    # val = tc.expectation((tc.gates.Gate(Y3), [0]), ket=e0, bra=e1, dim=dim)
-    # omega = np.exp(2j * np.pi / dim)
-    # expected = omega / 1j
-    # np.testing.assert_allclose(tc.backend.numpy(val), expected, rtol=1e-6, atol=1e-6)
 
     c = tc.QuditCircuit(3, dim)
     c.unitary(0, unitary=tc.gates.Gate(H3))
@@ -296,26 +288,26 @@ def test_batch_sample(backend):
     c = tc.QuditCircuit(3, 3)
     c.h(0)
     c.csum(0, 1)
-    print(c.sample())
-    print(c.sample(batch=8, status=np.random.uniform(size=[8, 3])))
-    print(c.sample(batch=8))
-    print(c.sample(random_generator=tc.backend.get_random_state(42)))
-    print(c.sample(allow_state=True))
-    print(c.sample(batch=8, allow_state=True))
-    print(
-        c.sample(
-            batch=8, allow_state=True, random_generator=tc.backend.get_random_state(42)
-        )
-    )
-    print(
-        c.sample(
-            batch=8,
-            allow_state=True,
-            status=np.random.uniform(size=[8]),
-            format="sample_bin",
-        )
-    )
-    print(
+    dim = 3
+
+    # single draw, default format: (config tensor of shape [n], prob scalar)
+    conf, prob = c.sample(random_generator=tc.backend.get_random_state(0))
+    conf_np = tc.backend.numpy(conf)
+    assert conf_np.shape == (3,)
+    assert conf_np.dtype.kind in "iuf"
+    assert np.all(conf_np >= 0) and np.all(conf_np < dim)
+    assert 0.0 <= float(tc.backend.numpy(prob)) <= 1.0
+
+    # batched draws with explicit status: list of (config, prob) tuples
+    r = c.sample(batch=8, status=np.random.uniform(size=[8, 3]))
+    assert isinstance(r, list) and len(r) == 8
+    for conf, prob in r:
+        conf_np = tc.backend.numpy(conf)
+        assert conf_np.shape == (3,)
+        assert np.all(conf_np >= 0) and np.all(conf_np < dim)
+
+    # batched sample_bin: int tensor of shape [batch, n], values in [0, dim)
+    sb = tc.backend.numpy(
         c.sample(
             batch=8,
             allow_state=False,
@@ -323,6 +315,41 @@ def test_batch_sample(backend):
             format="sample_bin",
         )
     )
+    assert sb.shape == (8, 3)
+    assert sb.dtype.kind in "iu"
+    assert np.all(sb >= 0) and np.all(sb < dim)
+
+    # batched count_dict_bin: dict[str, int] summing to batch
+    cd = c.sample(
+        batch=16,
+        allow_state=True,
+        format="count_dict_bin",
+        random_generator=tc.backend.get_random_state(42),
+    )
+    assert isinstance(cd, dict)
+    assert sum(cd.values()) == 16
+    for key in cd:
+        assert len(key) == 3
+        assert all(ch in "012" for ch in key)
+
+    # seeded determinism: same seed -> identical sample_bin draws
+    a = tc.backend.numpy(
+        c.sample(
+            batch=8,
+            allow_state=True,
+            format="sample_bin",
+            random_generator=tc.backend.get_random_state(42),
+        )
+    )
+    b = tc.backend.numpy(
+        c.sample(
+            batch=8,
+            allow_state=True,
+            format="sample_bin",
+            random_generator=tc.backend.get_random_state(42),
+        )
+    )
+    np.testing.assert_array_equal(a, b)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -330,26 +357,44 @@ def test_sample_format(backend):
     c = tc.QuditCircuit(2, 3)
     c.h(0)
     c.csum(0, 1)
+    dim = 3
+    n = 2
     key = tc.backend.get_random_state(42)
     for allow_state in [False, True]:
-        print("allow_state: ", allow_state)
         for batch in [None, 1, 3]:
-            print("  batch: ", batch)
-            for format_ in [
-                None,
-                "sample_bin",
-                "count_dict_bin",
-            ]:
-                print("    format: ", format_)
-                print(
-                    "      ",
-                    c.sample(
-                        batch=batch,
-                        allow_state=allow_state,
-                        format_=format_,
-                        random_generator=key,
-                    ),
+            for format_ in [None, "sample_bin", "count_dict_bin"]:
+                r = c.sample(
+                    batch=batch,
+                    allow_state=allow_state,
+                    format_=format_,
+                    random_generator=key,
                 )
+                if format_ is None:
+                    if batch is None:
+                        # single (config, prob) tuple
+                        conf, _ = r
+                        conf_np = tc.backend.numpy(conf)
+                        assert conf_np.shape == (n,)
+                        assert np.all(conf_np >= 0) and np.all(conf_np < dim)
+                    else:
+                        assert isinstance(r, list) and len(r) == batch
+                        for conf, _ in r:
+                            conf_np = tc.backend.numpy(conf)
+                            assert conf_np.shape == (n,)
+                            assert np.all(conf_np >= 0) and np.all(conf_np < dim)
+                elif format_ == "sample_bin":
+                    arr = tc.backend.numpy(r)
+                    expected_rows = 1 if batch is None else batch
+                    assert arr.shape == (expected_rows, n)
+                    assert arr.dtype.kind in "iu"
+                    assert np.all(arr >= 0) and np.all(arr < dim)
+                elif format_ == "count_dict_bin":
+                    assert isinstance(r, dict)
+                    expected_total = 1 if batch is None else batch
+                    assert sum(r.values()) == expected_total
+                    for k_ in r:
+                        assert len(k_) == n
+                        assert all(ch in "012" for ch in k_)
 
 
 def test_sample_representation():

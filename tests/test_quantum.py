@@ -305,7 +305,9 @@ def test_measurement_counts(backend):
     np.testing.assert_allclose(ct.shape[0], 2, atol=atol)
     np.testing.assert_allclose(tc.backend.sum(cs), 8192, atol=atol)
     state = np.array([1.0, 1.0, 0, 0])
-    print(qu.measurement_counts(state))
+    cv = qu.measurement_counts(state)
+    np.testing.assert_allclose(tc.backend.shape_tuple(cv), (4,), atol=atol)
+    np.testing.assert_allclose(tc.backend.sum(cv), 8192, atol=atol)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -1180,16 +1182,24 @@ def test_measurement_results(backend):
         )
         assert tc.backend.shape_tuple(r) == (2**n,)
         print(r)
+        expected_total = 9 if c > 0 else 1
         r = tc.quantum.measurement_results(w, counts=c, format="count_tuple")
-        print(r)
+        assert isinstance(r, tuple) and len(r) == 2
+        indices, values = r
+        assert tc.backend.shape_tuple(indices) == tc.backend.shape_tuple(values)
+        np.testing.assert_allclose(tc.backend.sum(values), expected_total, atol=1e-5)
         r = tc.quantum.measurement_results(
             w, counts=c, format="count_dict_bin", jittable=True
         )
-        print(r)
+        assert isinstance(r, dict) and len(r) > 0
+        assert all(isinstance(k, str) and len(k) == n for k in r.keys())
+        np.testing.assert_allclose(sum(r.values()), expected_total, atol=1e-5)
         r = tc.quantum.measurement_results(
             w, counts=c, format="count_dict_int", jittable=True
         )
-        print(r)
+        assert isinstance(r, dict) and len(r) > 0
+        assert all(isinstance(k, int) and 0 <= k < 2**n for k in r.keys())
+        np.testing.assert_allclose(sum(r.values()), expected_total, atol=1e-5)
 
 
 def test_ps2xyz():

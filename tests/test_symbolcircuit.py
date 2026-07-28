@@ -6,7 +6,6 @@ import sympy
 import tensornetwork as tn
 
 import tensorcircuit as tc
-from tensorcircuit.gates import Gate
 from tensorcircuit.simplify import _full_light_cone_cancel
 from tensorcircuit.symbolgates import (
     sym_cphase,
@@ -991,8 +990,7 @@ def test_expectation_before_tn_node_numeric_dtype(SymbolCircuit: Any) -> None:
     z_numeric = tn.Node(np.array([[1.0, 0.0], [0.0, -1.0]], dtype=float))
     z_numeric = z_numeric.reorder_edges([z_numeric[0], z_numeric[1]])
 
-    z_gate = Gate(np.array([[1.0, 0.0], [0.0, -1.0]], dtype=float).reshape(2, 2))
-    expr = sc.expectation((z_gate, [0]))
+    expr = sc.expectation((z_numeric, [0]))
     assert sympy.simplify(expr - sympy.cos(theta)) == 0
 
 
@@ -1090,8 +1088,12 @@ def test_to_qiskit_orx_ory_orz(SymbolCircuit: Any) -> None:
     theta = sympy.Symbol("theta", real=True)
     sc = SymbolCircuit(2)
     sc.orx(0, 1, theta=theta)
+    sc.ory(0, 1, theta=theta)
+    sc.orz(0, 1, theta=theta)
     qc = sc.to_qiskit()
     assert len(qc.parameters) == 1
+    op_names = [instr.operation.name for instr in qc.data]
+    assert "crx_o0" in op_names and "cry_o0" in op_names and "crz_o0" in op_names
 
 
 def test_to_qiskit_rotation_gates(SymbolCircuit: Any) -> None:
@@ -1276,14 +1278,18 @@ def test_apply_gate_with_custom_name_fallback(SymbolCircuit: Any) -> None:
     assert sympy.simplify(psi[0] - v) == 0
 
 
-def test_to_qiskit_else_fallback_logs_warning(SymbolCircuit: Any) -> None:
+def test_to_qiskit_else_fallback_logs_warning(SymbolCircuit: Any, caplog) -> None:
     """Gate not in any to_qiskit branch hits else fallback with AttributeError (lines 596-603)."""
     pytest.importorskip("qiskit")
     theta, alpha, phi = sympy.symbols("theta alpha phi", real=True)
     sc = SymbolCircuit(2)
     sc.cr(0, 1, theta=theta, alpha=alpha, phi=phi)  # cr has no Qiskit native method
-    qc = sc.to_qiskit()  # should not raise; AttributeError is caught and warning logged
+    with caplog.at_level("WARNING", logger="tensorcircuit.symbolcircuit"):
+        qc = (
+            sc.to_qiskit()
+        )  # should not raise; AttributeError is caught and warning logged
     assert len(qc.data) == 0  # gate was skipped
+    assert any("skipping unsupported gate" in rec.message for rec in caplog.records)
 
 
 def test_backend_isolation(jaxb, SymbolCircuit):

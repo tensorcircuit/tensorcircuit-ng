@@ -33,11 +33,13 @@ def universal_vmap():
 def test_vmap_np():
     r = universal_vmap()
     assert r.shape == (20, 1)
+    assert tc.backend.numpy(r)[0, 0] == 3.0
 
 
 def test_vmap_jax(jaxb):
     r = universal_vmap()
     assert r.shape == (20, 1)
+    assert tc.backend.numpy(r)[0, 0] == 3.0
 
 
 def test_vmap_tf(tfb):
@@ -178,7 +180,11 @@ def test_backend_jv_grad(jaxb, highp):
     def f(x):
         return tc.backend.sum(tc.backend.special_jv(5, x, 100))
 
-    print(tc.backend.jit(tc.backend.value_and_grad(f))(0.2))
+    x = 2.0
+    _, g = tc.backend.jit(tc.backend.value_and_grad(f))(x)
+    eps = 1e-5
+    fd = (float(f(x + eps)) - float(f(x - eps))) / (2 * eps)
+    np.testing.assert_allclose(tc.backend.numpy(g), fd, atol=1e-4)
 
 
 def _make_hermitian_matrix(n: int, dtype: str) -> np.ndarray:
@@ -602,14 +608,6 @@ def test_backend_methods_2(backend):
     assert tc.backend.dtype(o) == "complex64"
 
 
-# @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
-# def test_backend_array(backend):
-#     a = tc.backend.array([[0, 1], [1, 0]])
-#     assert tc.interfaces.which_backend(a).name == tc.backend.name
-#     a = tc.backend.array([[0, 1], [1, 0]], dtype=tc.rdtypestr)
-#     assert tc.dtype(a) == "float32"
-
-
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_floor(backend):
     """Test floor method (element-wise, dtype/device preservation, integers unchanged)."""
@@ -1012,10 +1010,12 @@ def test_jvp_pytree(backend):
         return d["a"] + d["b"], d["a"]
 
     inputs = {"a": tc.backend.ones([2]), "b": tc.backend.ones([1])}
-    v = (tc.backend.ones([2]), tc.backend.zeros([2]))
-    v, g = tc.backend.vjp(f3, inputs, v)
-    np.testing.assert_allclose(v[0], 2 * np.ones([2]), atol=1e-5)
-    np.testing.assert_allclose(g["a"], np.ones([2]), atol=1e-5)
+    tangents = {"a": tc.backend.ones([2]), "b": tc.backend.ones([1])}
+    v, g = tc.backend.jvp(f3, inputs, tangents)
+    np.testing.assert_allclose(tc.backend.numpy(v[0]), 2 * np.ones([2]), atol=1e-5)
+    np.testing.assert_allclose(tc.backend.numpy(v[1]), np.ones([2]), atol=1e-5)
+    np.testing.assert_allclose(tc.backend.numpy(g[0]), 2 * np.ones([2]), atol=1e-5)
+    np.testing.assert_allclose(tc.backend.numpy(g[1]), np.ones([2]), atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])

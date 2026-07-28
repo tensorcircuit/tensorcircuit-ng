@@ -337,7 +337,6 @@ def test_entanglement_asymmetry(backend, highp):
     c1 = discrete_c(tc.fgs.FGSTestSimulator(7, filled=[0, 2, 4, 6]))
     for k in [2, 3, 4]:
         for traceout in [[1, 2, 4, 5], [2, 3, 5], [0, 3, 4, 5, 6]]:
-            print(k, traceout)
             sa_ans = c1.renyi_entropy(k, traceout)
             saq_ans = c1.renyi_entanglement_asymmetry(k, traceout)
             np.testing.assert_allclose(
@@ -355,7 +354,6 @@ def test_entanglement_asymmetry(backend, highp):
                 saq_ans,
                 atol=6 * std,
             )
-            print(std)
 
 
 def test_fgs_entropy_dual_and_validation():

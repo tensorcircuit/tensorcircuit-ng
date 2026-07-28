@@ -27,15 +27,13 @@ def test_detector_current_m_count_freeze(backend):
     c1.measure_instruction(0)
     c1.detector_instruction([-1])  # should bind to rec[0]
     c1.reset_instruction(0)
-    c1.x(0)
-    c1.measure_instruction(0)
+    c1.measure_instruction(0)  # m1=0; if freeze is broken, [-1] resolves here instead
 
     c2 = tc.Circuit(1)
     c2.x(0)
     c2.measure_instruction(0)
     c2.detector_instruction([0])  # absolute reference
     c2.reset_instruction(0)
-    c2.x(0)
     c2.measure_instruction(0)
 
     s1 = np.asarray(c1.sample_detector(batch_size=32, seed=11))
@@ -260,6 +258,10 @@ def test_detector_multi_qubit_various_gates(backend):
     # so m0^m1^m2 should be 1
     # m2^m0 should be 1^m0
     np.testing.assert_array_equal(samples[:, 0], np.ones(100, dtype=bool))
+    # col1 = m2 ^ m0 = 1 ^ m0; valid bits and non-degenerate across shots
+    assert set(np.unique(samples[:, 1]).tolist()).issubset({0, 1})
+    assert np.sum(samples[:, 1]) > 0
+    assert np.sum(samples[:, 1]) < 100
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])

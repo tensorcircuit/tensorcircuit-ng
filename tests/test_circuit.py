@@ -134,15 +134,27 @@ def test_jittable_measure(backend):
     if tc.backend.name == "tensorflow":
         import tensorflow as tf
 
-        print(f(tc.backend.ones([6, 6]), None))
-        print(f(tc.backend.ones([6, 6]), None))
-        print(f(tc.backend.ones([6, 6]), tf.random.Generator.from_seed(23)))
-        print(f(tc.backend.ones([6, 6]), tf.random.Generator.from_seed(24)))
+        r1 = f(tc.backend.ones([6, 6]), None)
+        r2 = f(tc.backend.ones([6, 6]), None)
+        r3 = f(tc.backend.ones([6, 6]), tf.random.Generator.from_seed(23))
+        r4 = f(tc.backend.ones([6, 6]), tf.random.Generator.from_seed(23))
     elif tc.backend.name == "jax":
         import jax
 
-        print(f(tc.backend.ones([6, 6]), jax.random.PRNGKey(23)))
-        print(f(tc.backend.ones([6, 6]), jax.random.PRNGKey(24)))
+        r1 = f(tc.backend.ones([6, 6]), jax.random.PRNGKey(23))
+        r2 = f(tc.backend.ones([6, 6]), jax.random.PRNGKey(24))
+        r3 = f(tc.backend.ones([6, 6]), jax.random.PRNGKey(23))
+        r4 = f(tc.backend.ones([6, 6]), jax.random.PRNGKey(23))
+
+    samples, prob = r1
+    assert len(samples) == 3
+    for s in samples:
+        assert float(s) in (0.0, 1.0)
+    assert 0.0 <= float(prob) <= 1.0
+    # Different key / random state should give different samples
+    assert [float(s) for s in r1[0]] != [float(s) for s in r2[0]]
+    # Same seed should give deterministic results under jit
+    np.testing.assert_allclose(r3[0], r4[0], atol=1e-6)
 
     # As seen here, though I have tried the best, the random API is still not that consistent under jit
 
@@ -354,18 +366,6 @@ def test_complex128(highp, tfb):
     c.rx(0, theta=tc.gates.num_to_tensor(1j))
     c.wavefunction()
     np.testing.assert_allclose(c.expectation((tc.gates.z(), [1])), 0, atol=1e-8)
-
-
-# def test_qcode():
-#     qcode = """
-# 4
-# x 0
-# cnot 0 1
-# r 2 theta 1.0 alpha 1.57
-# """
-#     c = tc.Circuit.from_qcode(qcode)
-#     assert c.measure(1)[0] == "1"
-#     assert c.to_qcode() == qcode[1:]
 
 
 def universal_ad():
@@ -768,11 +768,8 @@ def test_circuit_split(backend):
     f_jit = tc.backend.jit(f, static_argnums=(1, 2, 3))
 
     s1 = f_jit(tc.backend.ones([4, n]))
-    # s2 = f_jit(tc.backend.ones([4, n]), max_truncation_err=1e-5) # doesn't work now
-    # this cannot be done anyway, since variable size tensor network will fail opt einsum
     s3 = f_jit(tc.backend.ones([4, n]), max_singular_values=2, fixed_choice=1)
 
-    # np.testing.assert_allclose(s1, s2, atol=1e-5)
     np.testing.assert_allclose(s1, s3, atol=1e-5)
 
     f_vg = tc.backend.jit(
@@ -783,12 +780,6 @@ def test_circuit_split(backend):
     s3, g3 = f_vg(tc.backend.ones([4, n]), max_singular_values=2, fixed_choice=1)
 
     np.testing.assert_allclose(s1, s3, atol=1e-5)
-    # DONE(@refraction-ray): nan on jax backend?
-    # i see, complex value SVD is not supported on jax for now :)
-    # I shall further customize complex SVD, finally it has applications
-
-    # tf 2.6.2 also doesn't support complex valued SVD AD, weird...
-    # if tc.backend.name == "tensorflow":
     np.testing.assert_allclose(g1, g3, atol=1e-5)
 
 
@@ -916,7 +907,14 @@ def test_vis_tex():
     c.cnot(0, 1)
     c.cz(2, 1)
 
-    print(c.vis_tex(init=["0", "1", ""], measure=["x", "y", "z"]))
+    tex = c.vis_tex(init=["0", "1", ""], measure=["x", "y", "z"])
+    assert "\\begin{quantikz}" in tex
+    assert "\\gate{h}" in tex
+    assert "hihi" in tex
+    assert "\\targ{}" in tex
+    assert "\\meter{x}" in tex
+    assert "\\meter{y}" in tex
+    assert "\\meter{z}" in tex
 
 
 def test_debug_contract():
@@ -1463,33 +1461,39 @@ def test_batch_sample(backend):
     c = tc.Circuit(3)
     c.H(0)
     c.cnot(0, 1)
-    print(c.sample())
-    print(c.sample(batch=8, status=np.random.uniform(size=[8, 3])))
-    print(c.sample(batch=8))
-    print(c.sample(random_generator=tc.backend.get_random_state(42)))
-    print(c.sample(allow_state=True))
-    print(c.sample(batch=8, allow_state=True))
-    print(
-        c.sample(
-            batch=8, allow_state=True, random_generator=tc.backend.get_random_state(42)
-        )
+    s = c.sample()
+    assert len(s) == 2
+    r = c.sample(batch=8, status=np.random.uniform(size=[8, 3]))
+    assert len(r) == 8
+    for conf, prob in r:
+        assert len(conf) == 3
+        assert 0.0 <= float(prob) <= 1.0
+    r = c.sample(batch=8)
+    assert len(r) == 8
+    r = c.sample(random_generator=tc.backend.get_random_state(42))
+    assert len(r) == 2
+    r = c.sample(allow_state=True)
+    assert len(r) == 2
+    r = c.sample(batch=8, allow_state=True)
+    assert len(r) == 8
+    r = c.sample(
+        batch=8, allow_state=True, random_generator=tc.backend.get_random_state(42)
     )
-    print(
-        c.sample(
-            batch=8,
-            allow_state=True,
-            status=np.random.uniform(size=[8]),
-            format="sample_bin",
-        )
+    assert len(r) == 8
+    r = c.sample(
+        batch=8,
+        allow_state=True,
+        status=np.random.uniform(size=[8]),
+        format="sample_bin",
     )
-    print(
-        c.sample(
-            batch=8,
-            allow_state=False,
-            status=np.random.uniform(size=[8, 3]),
-            format="sample_bin",
-        )
+    assert len(r) == 8
+    r = c.sample(
+        batch=8,
+        allow_state=False,
+        status=np.random.uniform(size=[8, 3]),
+        format="sample_bin",
     )
+    assert len(r) == 8
 
 
 def test_expectation_y_bug():
@@ -1576,7 +1580,7 @@ def test_circuit_inverse_2(backend):
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
 def test_jittable_amplitude(backend):
-    # @tc.backend.jit
+    @tc.backend.jit
     def amp(s):
         c = tc.Circuit(3)
         c.H(0)
@@ -1642,29 +1646,43 @@ def test_sample_format(backend):
     c.H(0)
     c.cnot(0, 1)
     key = tc.backend.get_random_state(42)
+    formats = [
+        None,
+        "sample_int",
+        "sample_bin",
+        "count_vector",
+        "count_tuple",
+        "count_dict_bin",
+        "count_dict_int",
+    ]
     for allow_state in [False, True]:
-        print("allow_state: ", allow_state)
         for batch in [None, 1, 3]:
-            print("  batch: ", batch)
-            for format_ in [
-                None,
-                "sample_int",
-                "sample_bin",
-                "count_vector",
-                "count_tuple",
-                "count_dict_bin",
-                "count_dict_int",
-            ]:
-                print("    format: ", format_)
-                print(
-                    "      ",
-                    c.sample(
-                        batch=batch,
-                        allow_state=allow_state,
-                        format_=format_,
-                        random_generator=key,
-                    ),
+            for format_ in formats:
+                r = c.sample(
+                    batch=batch,
+                    allow_state=allow_state,
+                    format_=format_,
+                    random_generator=key,
                 )
+                if format_ == "sample_int":
+                    expected = 1 if batch is None else batch
+                    assert len(r) == expected
+                elif format_ == "sample_bin":
+                    expected = 1 if batch is None else batch
+                    assert len(r) == expected
+                    assert len(r[0]) == 2
+                elif format_ == "count_vector":
+                    assert len(r) == 4
+                elif format_ == "count_tuple":
+                    samples, counts = r
+                    assert len(samples) == len(counts)
+                    assert len(samples) >= 1
+                elif format_ == "count_dict_bin":
+                    for k in r:
+                        assert len(k) == 2
+                elif format_ == "count_dict_int":
+                    for k in r:
+                        assert int(k) in (0, 1, 2, 3)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -1755,9 +1773,13 @@ h q[0];
 measure q[1] -> c[1];
 measure q[0] -> c[0];"""
     c = tc.Circuit.from_openqasm(qasm_str)
-    c.to_openqasm().split("\n")[-2][-3] == "1"
+    measures_default = [d["index"][0] for d in c._extra_qir if d["name"] == "measure"]
     c = tc.Circuit.from_openqasm(qasm_str, keep_measure_order=True)
-    c.to_openqasm().split("\n")[-2][-3] == "0"
+    measures_ordered = [d["index"][0] for d in c._extra_qir if d["name"] == "measure"]
+    # The QASM source measures q[1] before q[0]; both branches must preserve
+    # that ordering in the internal circuit state.
+    assert measures_default == [1, 0]
+    assert measures_ordered == [1, 0]
 
 
 def test_initial_mapping():

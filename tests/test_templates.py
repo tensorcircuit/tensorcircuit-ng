@@ -53,7 +53,10 @@ def test_sparse_expectation(backend):
 
     fvag = tc.backend.jit(tc.backend.value_and_grad(f))
     param = tc.backend.zeros([1])
-    print(fvag(param))
+    v, g = fvag(param)
+    # state is |+> after H on |0>; <X> = 1 at theta=0, d/dtheta <X> = 0
+    np.testing.assert_allclose(tc.backend.numpy(v), 1.0, atol=1e-4)
+    np.testing.assert_allclose(tc.backend.numpy(g), 0.0, atol=1e-4)
 
 
 def test_bell_block():

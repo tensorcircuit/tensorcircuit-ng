@@ -51,6 +51,7 @@ def assert_unitary_match(g, c, atol=1e-5):
         rtol=0.0,
         err_msg=f"Ratio {ratio} is not a power of sqrt(2)",
     )
+    return True
 
 
 # --- New simple sanity tests ---
@@ -63,7 +64,7 @@ def test_zx_simple_cases(backend):
         ("X_ERROR(0.1)", lambda c: c.x_error(0, 0.1), 0.1),
         ("X gate", lambda c: c.x(0), 1.0),
         ("Z gate + H", lambda c: (c.z(0), c.h(0)), 0.5),
-        ("Z_ERROR(0.2) + H", lambda c: (c.z_error(0, 0.2), c.h(0)), 0.5),
+        ("H + Z_ERROR(0.2) + H", lambda c: (c.h(0), c.z_error(0, 0.2), c.h(0)), 0.2),
         ("Y_ERROR(0.3)", lambda c: c.y_error(0, 0.3), 0.3),
         ("X + RESET", lambda c: (c.x(0), c.reset_instruction(0)), 0.0),
         ("H + M", lambda c: c.h(0), 0.5),
@@ -119,7 +120,7 @@ def test_zx_sample_detectors_after_sample_measurements(backend):
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
 def test_zx_depolarize2_simple(backend):
-    batch = 5000
+    batch = 100000
     c = StabilizerTCircuit(2)
     c.depolarizing2(0, 1, 0.1)
     c.measure_instruction(0)
@@ -127,8 +128,9 @@ def test_zx_depolarize2_simple(backend):
     stc = StabilizerTCircuit.from_circuit(c)
     res = stc.sample_measurements(shots=batch)
     p11 = np.mean(res[:, 0] & res[:, 1])
-    # Theory: 3/15 * 0.1 = 0.02
-    np.testing.assert_allclose(p11, 0.02, atol=0.02, rtol=0.0)
+    # From |00>, four Pauli errors (XX, XY, YX, YY) map to |11>,
+    # each occurring with prob p/15 = 0.1/15. P(11) = 4 * 0.1/15 ~= 0.02667
+    np.testing.assert_allclose(p11, 4 * 0.1 / 15, atol=3e-3, rtol=0.0)
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
@@ -306,7 +308,7 @@ def test_converter_all_single_qubit_gates(backend):
         c = tc.Circuit(1)
         getattr(c, g_name)(0)
         g = circuit_to_zx(c)
-        assert_unitary_match(g, c), f"Gate {g_name} failed"
+        assert assert_unitary_match(g, c), f"Gate {g_name} failed"
 
 
 @pytest.mark.parametrize("backend", [lf("npb")])
@@ -315,7 +317,7 @@ def test_converter_all_two_qubit_gates(backend):
         c = tc.Circuit(2)
         getattr(c, g_name)(0, 1)
         g = circuit_to_zx(c)
-        assert_unitary_match(g, c), f"Gate {g_name} failed"
+        assert assert_unitary_match(g, c), f"Gate {g_name} failed"
 
 
 @pytest.mark.parametrize("backend", [lf("npb")])
@@ -438,9 +440,12 @@ def test_from_circuit_with_noise(backend):
     for v in g.vertices():
         labels = g._phaseVars.get(v, set())
         if any(s.startswith("e") for s in labels):
-            has_ex = True
-            has_ez = True
-    assert has_ex and has_ez
+            if g.type(v) == pyzx.VertexType.X:
+                has_ex = True
+            elif g.type(v) == pyzx.VertexType.Z:
+                has_ez = True
+    assert has_ex, "Missing X-type error vertex (ex channel)"
+    assert has_ez, "Missing Z-type error vertex (ez channel)"
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])

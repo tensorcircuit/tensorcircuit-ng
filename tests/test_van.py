@@ -69,27 +69,22 @@ def test_made():
 def test_made_fit_peak():
     opt = tf.optimizers.Adam(learning_rate=0.01)
     m = MADE(5, 5, 4, 3, 2)
+    patterns = tf.one_hot([[0, 0, 0, 0, 0], [1, 1, 1, 1, 1], [2, 2, 1, 1, 0]], depth=3)
+
+    def total_log_prob():
+        return tf.reduce_sum(m.log_prob(patterns))
+
+    initial_logp = total_log_prob().numpy()
     for step in range(100):
         with tf.GradientTape() as t:
-            loss = -tf.reduce_sum(
-                m.log_prob(
-                    tf.one_hot(
-                        [[0, 0, 0, 0, 0], [1, 1, 1, 1, 1], [2, 2, 1, 1, 0]], depth=3
-                    )
-                )
-            )
+            loss = -total_log_prob()
             gr = t.gradient(loss, m.variables)
         if step % 20 == 0:
-            print(
-                tf.exp(
-                    m.log_prob(
-                        tf.one_hot(
-                            [[0, 0, 0, 0, 0], [1, 1, 1, 1, 1], [2, 2, 1, 1, 0]], depth=3
-                        )
-                    )
-                ).numpy()
-            )
+            print(tf.exp(total_log_prob()).numpy())
         opt.apply_gradients(zip(gr, m.variables))
+    final_logp = total_log_prob().numpy()
+    # training should increase the log-probability of the target patterns
+    assert final_logp > initial_logp + 0.5
 
 
 def test_pixelcnn():

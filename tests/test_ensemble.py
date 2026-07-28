@@ -67,7 +67,15 @@ def test_ensemble_bagging():
     v_weight = obj_bagging.predict(x_train, "weight")
     v_average = obj_bagging.predict(x_train, "average")
     v_most = obj_bagging.predict(x_train, "most")
+    for v in (v_weight, v_average, v_most):
+        assert np.asarray(v).shape == (data_amount,)
     validation_data = []
     validation_data.append(obj_bagging.eval([y_train, v_weight], "acc"))
     validation_data.append(obj_bagging.eval([y_train, v_average], "auc"))
     validation_data.append(obj_bagging.eval([y_train, v_most], "acc"))
+    for val in validation_data:
+        assert 0.0 <= val <= 1.0
+    # x_train and y_train are trivially separable (all ones -> all ones),
+    # so a fitted ensemble should beat random guessing on accuracy.
+    assert validation_data[0] > 0.5
+    assert validation_data[2] > 0.5

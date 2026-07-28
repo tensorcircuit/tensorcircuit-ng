@@ -1146,7 +1146,7 @@ class TestTILattice:
 
     def test_init_with_mismatched_shapes_raises_error(self):
         """
-        Tests that TILattice raises AssertionError if the 'size' parameter's
+        Tests that TILattice raises ValueError if the 'size' parameter's
         length does not match the dimensionality.
         """
         # Act & Assert:
@@ -2653,7 +2653,7 @@ class TestPrivateHelpers:
                 dimensionality=2, identifiers=list(range(num_sites)), coordinates=coords
             )
 
-        # Test small lattice branch (num_sites <= 100)
+        # Test small lattice branch (num_sites < 200, falls back to distance matrix)
         lat_small_kdtree = generate_lattice(150)
         lat_small_kdtree._build_neighbors(max_k=2, use_kdtree=True)
 
@@ -2662,7 +2662,7 @@ class TestPrivateHelpers:
 
         assert lat_small_kdtree._neighbor_maps == lat_small_dist._neighbor_maps
 
-        # Test large lattice branch (num_sites > 100)
+        # Test large lattice branch (num_sites >= 200, uses KDTree)
         lat_large_kdtree = generate_lattice(250)
         lat_large_kdtree._build_neighbors(max_k=2, use_kdtree=True)
 

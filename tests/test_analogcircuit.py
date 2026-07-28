@@ -169,7 +169,6 @@ def test_analog_circuit_ad_jit(jaxb):
     eps = 1e-4 * np.array([1.0, 0, 0])
     num_grad = (cost_fn(param + eps) - cost_fn(param - eps)) / (2e-4)
 
-    np.testing.assert_allclose(gf(param), gf(param), atol=1e-6)
     np.testing.assert_allclose(gf(param)[0], num_grad, atol=1e-3)
 
 

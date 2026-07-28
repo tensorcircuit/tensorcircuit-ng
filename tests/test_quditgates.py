@@ -77,14 +77,6 @@ def test_Z_diagonal_and_value(d, backend, highp):
     assert is_unitary(Z)
 
 
-# @pytest.mark.parametrize("d", [2, 3, 5])
-# def test_Y_equals_ZX_over_i(d, highp):
-#     Y = _y_matrix_func(d)
-#     ZX_over_i = (_z_matrix_func(d) @ _x_matrix_func(d)) / 1j
-#     np.testing.assert_allclose(Y, ZX_over_i, atol=1e-5)
-#     assert is_unitary(Y)
-
-
 @pytest.mark.parametrize("d", [2, 3, 5])
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_H_is_fourier_like_and_unitary(d, backend, highp):
@@ -190,6 +182,13 @@ def test_RXX_selected_block(backend, highp):
             if {t, s} & {idx_a, idx_b}:
                 continue
             np.testing.assert_allclose(RXX[t, s], I[t, s], atol=1e-5, rtol=1e-5)
+
+    c = np.cos(theta / 2.0)
+    s = np.sin(theta / 2.0)
+    np.testing.assert_allclose(RXX[idx_a, idx_a], c, atol=1e-5)
+    np.testing.assert_allclose(RXX[idx_b, idx_b], c, atol=1e-5)
+    np.testing.assert_allclose(RXX[idx_a, idx_b], -1j * s, atol=1e-5)
+    np.testing.assert_allclose(RXX[idx_b, idx_a], -1j * s, atol=1e-5)
 
 
 @pytest.mark.parametrize("d", [3, 5])
@@ -326,17 +325,8 @@ def test_u8_p_greater_than_3_matches_closed_form(backend):
     d = 5
     gamma, z, eps = 2, 1, 3
 
-    inv_12 = pow(12, -1, d)  # 12 \equiv 2 (mod 5), inverse = 3
-    vks = [0] * d
-    for k in range(1, d):
-        k_ = k % d
-        term_inner = ((6 * z) % d + ((2 * k_ - 3) % d) * gamma % d) % d
-        term = (gamma + (k_ * term_inner) % d) % d
-        vk = ((inv_12 * k_) % d) * term % d
-        vk = (vk + (eps * k_) % d) % d
-        vks[k] = vk
-
     omega = np.exp(2j * np.pi / d)
+    vks = [0, 1, 4, 1, 4]
     expected5 = np.diag([omega**v for v in vks])
 
     U5 = u8_matrix_func(d=d, gamma=gamma, z=z, eps=eps)

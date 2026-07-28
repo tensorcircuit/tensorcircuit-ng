@@ -239,8 +239,18 @@ def test_measure(backend):
 
     key1, key2 = tc.backend.random_split(key)
     rs1, rs2 = r(key1), r(key2)
-    # assert rs1[0] != rs2[0]
-    print(rs1[1], rs2[1])
+    sample1, prob1 = tc.backend.numpy(rs1[0]), tc.backend.numpy(rs1[1])
+    sample2, prob2 = tc.backend.numpy(rs2[0]), tc.backend.numpy(rs2[1])
+    # sample is a single-qubit computational-basis outcome
+    assert sample1.shape == (1,)
+    assert sample2.shape == (1,)
+    assert sample1[0] in (0.0, 1.0)
+    assert sample2[0] in (0.0, 1.0)
+    # probability of the realized outcome is in [0, 1] and matches the state:
+    # depolarizing |0><0| with px=py=pz=0.2 gives p(0)=0.6, p(1)=0.4
+    for s, p in [(sample1[0], float(prob1)), (sample2[0], float(prob2))]:
+        assert 0.0 <= p <= 1.0
+        np.testing.assert_allclose(p, 0.6 if s == 0.0 else 0.4, atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -309,8 +319,10 @@ def test_dm_circuit_draw():
     c.cnot(0, 2)
     c.depolarizing(1, px=0.1, py=0.1, pz=0.1)
     c.rxx(1, 2, theta=0.5)
-    print("\n")
-    print(c.draw())
+    drawing = str(c.draw())
+    assert isinstance(drawing, str)
+    for label in ["q_0", "q_1", "q_2", "H", "Rxx"]:
+        assert label in drawing
 
 
 def test_dm_qiskit():
@@ -375,9 +387,6 @@ def test_dmcircuit_split(backend):
     np.testing.assert_allclose(s1, s2, atol=1e-5)
     np.testing.assert_allclose(s1, s3, atol=1e-5)
 
-    # np.testing.assert_allclose(s1, s2, atol=1e-5)
-    np.testing.assert_allclose(s1, s3, atol=1e-5)
-
     f_vg = tc.backend.jit(
         tc.backend.value_and_grad(f, argnums=0), static_argnums=(1, 2, 3)
     )
@@ -417,8 +426,22 @@ def test_sample():
     c.H(0)
     c.cnot(0, 1)
     c.depolarizing(1, px=0.2, py=0.0, pz=0.0)
-    print(c.sample(batch=10))
-    print(c.sample(batch=20, allow_state=True))
+
+    s1 = c.sample(batch=10)
+    assert len(s1) == 10
+    for cfg, prob in s1:
+        assert tc.backend.shape_tuple(cfg) == (2,)
+        cfg_np = tc.backend.numpy(cfg)
+        assert np.all((cfg_np == 0) | (cfg_np == 1))
+        assert 0.0 <= float(prob) <= 1.0
+
+    s2 = c.sample(batch=20, allow_state=True)
+    assert len(s2) == 20
+    for cfg, prob in s2:
+        assert tc.backend.shape_tuple(cfg) == (2,)
+        cfg_np = tc.backend.numpy(cfg)
+        assert np.all((cfg_np == 0) | (cfg_np == 1))
+        assert 0.0 <= float(prob) <= 1.0
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])

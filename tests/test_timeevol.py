@@ -200,7 +200,32 @@ def test_ode_evol_global(highp, jaxb):
         final_state = states[-1]
         return tc.backend.real(zz_correlation(final_state))
 
-    print(objective_function(tc.backend.ones(4)))
+    params0 = tc.backend.ones(4)
+    value, grad = objective_function(params0)
+
+    # Value and gradient must be finite, with correct gradient shape.
+    assert np.isfinite(float(value))
+    assert np.all(np.isfinite(np.asarray(grad)))
+    assert grad.shape == (4,)
+
+    # Finite-difference comparison for the gradient. The objective returns a
+    # real scalar; AD through the complex Hamiltonian may yield a complex-typed
+    # gradient, so compare the real part against the (real) finite-difference.
+    p0 = np.ones(4)
+
+    def obj_value(p):
+        v, _ = objective_function(tc.backend.convert_to_tensor(p))
+        return float(v)
+
+    eps = 1e-4
+    fd = np.zeros(4)
+    for i in range(4):
+        p_plus = p0.copy()
+        p_minus = p0.copy()
+        p_plus[i] += eps
+        p_minus[i] -= eps
+        fd[i] = (obj_value(p_plus) - obj_value(p_minus)) / (2 * eps)
+    np.testing.assert_allclose(np.real(np.asarray(grad)), fd, atol=1e-2)
 
 
 def test_ode_evol_global_raw_mode(highp, jaxb):
@@ -399,7 +424,14 @@ def test_ed_evol(backend):
 
     # Evolve and get states
     states = tc.timeevol.ed_evol(h, psi0, times)
-    print(states)
+
+    # Shape and normalization checks
+    assert states.shape == (4, 2**n)
+    for state in states:
+        np.testing.assert_allclose(tc.backend.norm(state), 1.0, atol=1e-5)
+
+    # At t=0, the evolved state should equal the initial state
+    np.testing.assert_allclose(states[0], psi0, atol=1e-5)
 
     def evolve_and_measure(params):
         # Parametrized Hamiltonian
@@ -411,7 +443,11 @@ def test_ed_evol(backend):
         circuit = tc.Circuit(n, inputs=states[-1])
         return tc.backend.real(circuit.expectation_ps(z=[0]))
 
-    evolve_and_measure(tc.backend.ones([3]))
+    # With params = ones, evolve_and_measure uses the same Hamiltonian as the
+    # ground-truth ed_evol call above, so the final-time <Z_0> must match.
+    result = evolve_and_measure(tc.backend.ones([3]))
+    expected = tc.backend.real(tc.Circuit(n, inputs=states[-1]).expectation_ps(z=[0]))
+    np.testing.assert_allclose(result, expected, atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -547,33 +583,38 @@ def test_krylov_evol_heisenberg_8_sites(backend):
     # Generate Heisenberg Hamiltonian
     h = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, hxx=1.0, hyy=1.0, sparse=True)
 
-    # Initial Neel state (alternating up and down spins)
+    # Initial Neel state (alternating up and down spins): X on even sites
     c = tc.Circuit(n)
-    c.x([i for i in range(n // 2)])
+    c.x([i for i in range(0, n, 2)])
     psi0 = c.state()
 
     # Evolution times
     times = tc.backend.convert_to_tensor([0.0, 0.2, 0.4])
 
-    # Define callback to compute total magnetization
-    def total_magnetization(state):
-        # Calculate sum of <Z_i> for all sites
+    # Define callback to compute staggered magnetization
+    # M_s = (1/n) * sum_i (-1)^i <Z_i>
+    def staggered_magnetization(state):
         c = tc.Circuit(n, inputs=state)
-        total_z = 0.0
+        total = 0.0
         for i in range(n):
-            total_z += c.expectation_ps(z=[i])
-        return tc.backend.real(total_z)
+            sign = 1.0 if i % 2 == 0 else -1.0
+            total += sign * c.expectation_ps(z=[i])
+        return tc.backend.real(total / n)
 
     # Perform Krylov evolution with callback
     results = tc.timeevol.krylov_evol(
-        h, psi0, times, subspace_dimension=12, callback=total_magnetization
+        h, psi0, times, subspace_dimension=12, callback=staggered_magnetization
     )
 
     # Check output shape - should be scalar for each time point
     assert results.shape == (3,)
 
-    # At t=0, for Neel state, total magnetization should be 0
-    np.testing.assert_allclose(results[0], 0.0, atol=1e-5)
+    # At t=0, the Neel state has |M_s| = 1
+    np.testing.assert_allclose(abs(float(results[0])), 1.0, atol=1e-5)
+
+    # Staggered magnetization should decay under Heisenberg dynamics,
+    # so intermediate-time value differs from the t=0 value.
+    assert abs(float(results[1])) < abs(float(results[0]))
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
@@ -620,10 +661,29 @@ def test_krylov_evol_subspace_accuracy(backend):
     np.testing.assert_allclose(norm_small, 1.0, atol=1e-5)
     np.testing.assert_allclose(norm_large, 1.0, atol=1e-5)
 
-    # Larger subspace should be more accurate (but we can't easily test that without exact solution)
-    # At least verify they have the correct shape
+    # Verify they have the correct shape
     assert state_small.shape == (1, 2**n)
     assert state_large.shape == (1, 2**n)
+
+    # ed_evol provides an exact ground-truth state for real-time evolution
+    # when called with imaginary time argument (exp(-1j*E*t) = exp(-i*H*t)).
+    h_dense = tc.backend.to_dense(h)
+    state_exact = tc.timeevol.ed_evol(
+        h_dense,
+        psi0,
+        1.0j * tc.backend.cast(tc.backend.convert_to_tensor([1.0]), tc.dtypestr),
+    )[0]
+
+    def fidelity(a, b):
+        return float(np.abs(np.vdot(np.asarray(a), np.asarray(b))) ** 2)
+
+    fid_small = fidelity(state_exact, state_small[0])
+    fid_large = fidelity(state_exact, state_large[0])
+
+    # The larger Krylov subspace should converge to the exact state.
+    np.testing.assert_allclose(fid_large, 1.0, atol=1e-5)
+    # And it should be more accurate than the smaller subspace.
+    assert fid_large > fid_small
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -698,7 +758,18 @@ def test_krylov_evol_gradient(backend):
 
     grad_fn = tc.backend.jit(tc.backend.grad(loss_function))
     gradient = grad_fn(t)
-    print(gradient)
+
+    # Gradient shape and finiteness
+    assert gradient.shape == (1,)
+    assert np.all(np.isfinite(np.asarray(gradient)))
+
+    # Finite-difference comparison
+    def loss_at(t_scalar):
+        return float(loss_function(tc.backend.convert_to_tensor([t_scalar])))
+
+    eps = 1e-3
+    fd = (loss_at(1.0 + eps) - loss_at(1.0 - eps)) / (2 * eps)
+    np.testing.assert_allclose(float(gradient[0]), fd, atol=5e-3)
 
 
 @pytest.mark.parametrize(
@@ -717,7 +788,7 @@ def test_chebyshev_evol_basic(backend, highp, sparse):
 
     # Initial Neel state: |↑↓↑↓⟩
     c = tc.Circuit(n)
-    c.x([1, 3, 5])  # Apply X gates to qubits 1 and 3
+    c.x([1, 3, 5])  # Apply X gates to qubits 1, 3, and 5
     psi0 = c.state()
 
     # Evolution time

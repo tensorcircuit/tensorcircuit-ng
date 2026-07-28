@@ -515,14 +515,20 @@ def test_mps_base_extra(jaxb):
 
     # measure_local_operator
     ops = [tc.backend.ones([2, 2])]
-    mps.measure_local_operator(ops, [1])
+    loc = mps.measure_local_operator(ops, [1])
+    # the MPS represents 8 * |++++>, so <O=ones> on any single site is 2
+    np.testing.assert_allclose(tc.backend.numpy(loc[0]), 2.0, atol=1e-5)
 
     # measure_two_body_correlator
-    mps.measure_two_body_correlator(ops[0], ops[0], 0, [1, 2])
+    corr = mps.measure_two_body_correlator(ops[0], ops[0], 0, [1, 2])
+    # product state => <O_0 O_s> = <O_0> * <O_s> = 2 * 2 = 4
+    for c in corr:
+        np.testing.assert_allclose(tc.backend.numpy(c), 4.0, atol=1e-5)
 
     # apply_two_site_gate
     gate = tc.backend.ones([2, 2, 2, 2])
-    mps.apply_two_site_gate(gate, 1, 2)
+    tw = mps.apply_two_site_gate(gate, 1, 2)
+    np.testing.assert_allclose(tc.backend.numpy(tw), 0.0, atol=1e-5)
 
 
 def test_mps_reduced_density_matrix_dual_and_validation(npb):
