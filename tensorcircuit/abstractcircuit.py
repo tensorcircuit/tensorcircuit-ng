@@ -1464,7 +1464,7 @@ class AbstractCircuit:
         self, c: "AbstractCircuit", indices: Optional[List[int]] = None
     ) -> "AbstractCircuit":
         """
-        append circuit ``c`` before
+        Append circuit ``c`` after this circuit in place.
 
         :example:
 
@@ -1487,7 +1487,7 @@ class AbstractCircuit:
         :param indices: the qubit indices to which ``c`` is appended on.
             Defaults to None, which means plain concatenation.
         :type indices: Optional[List[int]], optional
-        :return: The composed circuit
+        :return: This circuit after it has been updated in place with ``c``.
         :rtype: BaseCircuit
         """
         qir1 = self.to_qir()

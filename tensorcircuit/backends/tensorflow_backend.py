@@ -929,9 +929,25 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         argnums: Union[int, Sequence[int]] = 0,
         has_aux: bool = False,
     ) -> Callable[..., Any]:
-        # experimental attempt
-        # Note: tensorflow grad is gradient while jax grad is derivative, they are different with a conjugate!
-        # And we DONT make them consitent by mannually set conjugate of the returns.
+        """
+        Return a function that computes the TensorFlow gradient of ``f``.
+
+        For complex-valued functions, TensorFlow's result differs from the JAX
+        backend's ``grad`` result by complex conjugation. TensorCircuit preserves
+        each backend's native convention rather than reconciling the two.
+
+        :param f: Differentiable function.
+        :type f: Callable[..., Any]
+        :param argnums: Positional argument or arguments with respect to which to
+            differentiate.
+        :type argnums: Union[int, Sequence[int]]
+        :param has_aux: Whether ``f`` returns an auxiliary value after its
+            differentiable output.
+        :type has_aux: bool
+        :return: A function that evaluates the gradient of ``f``.
+        :rtype: Callable[..., Any]
+        """
+
         def wrapper(*args: Any, **kws: Any) -> Any:
             with tf.GradientTape() as t:
                 if isinstance(argnums, int):

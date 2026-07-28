@@ -841,7 +841,9 @@ class ExtendedBackend:
         :type a: Sequence[Tensor]
         :param axis: the stack axis, defaults to 0
         :type axis: int, optional
-        :return: concatenated tensor
+        :return: Tensor with the same shape as ``a``, normalized so its elements
+            along ``axis`` sum to one. When ``axis`` is ``None``, normalization
+            is over all elements.
         :rtype: Tensor
         """
         raise NotImplementedError(

@@ -59,6 +59,14 @@ class NoiseConf:
         :type kraus: Sequence[Gate]
         :param qubit: the list of noisy qubit, defaults to None, indicating applying the noise channel on all qubits
         :type qubit: Optional[Sequence[Any]], optional
+
+        ``gate_name="readout"`` configures classical readout error rather than a
+        quantum channel. In that case, ``qubit`` must be ``None`` and ``kraus``
+        must provide one row per circuit qubit, where row ``i`` is
+        ``[P(observe 0 | prepared 0), P(observe 1 | prepared 1)]``. It is stored
+        directly in ``readout_error``; the complementary bit-flip probabilities
+        define the per-qubit classical transition matrices applied to sampled
+        bitstring probabilities.
         """
         if gate_name == "readout":
             assert qubit is None

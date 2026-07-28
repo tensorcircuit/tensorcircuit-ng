@@ -571,6 +571,14 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         stddev: float = 1,
         dtype: Optional[str] = None,
     ) -> Tensor:
+        """
+        Sample normally distributed values using the backend's implicit PRNG key.
+
+        If reusing a key captured by a JIT trace raises
+        ``UnexpectedTracerError``, the implicit key is reset and sampling is
+        retried. This recovery advances the global implicit PRNG state and can
+        change the subsequent random sequence.
+        """
         g = getattr(self, "g", None)
         if g is None:  # or getattr(g, "_trace", None) is not None:
             # avoid random state is set in a jitted function
@@ -595,6 +603,14 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         high: float = 1,
         dtype: Optional[str] = None,
     ) -> Tensor:
+        """
+        Sample uniformly distributed values using the backend's implicit PRNG key.
+
+        If reusing a key captured by a JIT trace raises
+        ``UnexpectedTracerError``, the implicit key is reset and sampling is
+        retried. This recovery advances the global implicit PRNG state and can
+        change the subsequent random sequence.
+        """
         g = getattr(self, "g", None)
         if g is None:
             # set with _trace is bad, since the function can itself in jit env
@@ -616,6 +632,14 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         shape: Union[int, Sequence[int]],
         p: Optional[Union[Sequence[float], Tensor]] = None,
     ) -> Tensor:
+        """
+        Sample categorical values using the backend's implicit PRNG key.
+
+        If reusing a key captured by a JIT trace raises
+        ``UnexpectedTracerError``, the implicit key is reset and sampling is
+        retried. This recovery advances the global implicit PRNG state and can
+        change the subsequent random sequence.
+        """
         g = getattr(self, "g", None)
         if g is None:
             self.set_random_state()
@@ -807,6 +831,24 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         argnums: Union[int, Sequence[int]] = 0,
         has_aux: bool = False,
     ) -> Any:
+        """
+        Return a function that computes the JAX derivative of ``f``.
+
+        For complex-valued functions, JAX's result differs from the TensorFlow
+        backend's ``grad`` result by complex conjugation. TensorCircuit preserves
+        each backend's native convention rather than reconciling the two.
+
+        :param f: Differentiable function.
+        :type f: Callable[..., Any]
+        :param argnums: Positional argument or arguments with respect to which to
+            differentiate.
+        :type argnums: Union[int, Sequence[int]]
+        :param has_aux: Whether ``f`` returns an auxiliary value after its
+            differentiable output.
+        :type has_aux: bool
+        :return: A function that evaluates the derivative of ``f``.
+        :rtype: Callable[..., Any]
+        """
         return libjax.grad(f, argnums=argnums, has_aux=has_aux)
 
     def value_and_grad(

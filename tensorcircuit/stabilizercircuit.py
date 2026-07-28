@@ -345,17 +345,16 @@ class StabilizerCircuit(AbstractCircuit):
 
     sexpps = sample_expectation_ps
 
-    def mid_measurement(self, index: int, keep: int = 0) -> Tensor:
+    def mid_measurement(self, index: int, keep: int = 0) -> None:
         """
         Perform a mid-measurement operation on a qubit on z direction.
         The post-selection cannot be recorded in ``stim.Circuit``
+        The method post-selects ``self.current_sim`` in place.
 
         :param index: Index of the qubit to measure
         :type index: int
         :param keep: State of qubits to keep after measurement, defaults to 0 (up)
         :type keep: int, optional
-        :return: Result of the mid-measurement operation
-        :rtype: Tensor
         """
         if keep not in [0, 1]:
             raise ValueError("keep must be 0 or 1")

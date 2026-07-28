@@ -123,6 +123,10 @@ def qng(
     :param mode: Mode of differentiation ("fwd" or "rev")
     :return: Function computing QNG matrix
 
+    On the JAX backend, the result differs from :func:`qng2` by complex
+    conjugation. On the TensorFlow backend, both functions return the same
+    result.
+
     :Example:
 
     >>> import tensorcircuit as tc
@@ -189,6 +193,21 @@ def qng2(
     postprocess: Optional[str] = "qng",
     mode: str = "rev",
 ) -> Callable[..., Tensor]:
+    """
+    Compute the quantum natural gradient using a nested derivative formulation.
+
+    :param f: Function that takes parameters and returns quantum state.
+    :param kernel: Type of kernel to use (``"qng"`` or ``"dynamics"``).
+    :param postprocess: Post-processing method (``"qng"`` or ``None``).
+    :param mode: Mode of differentiation (``"fwd"`` or ``"rev"``).
+    :return: Function computing the QNG matrix.
+    :rtype: Callable[..., Tensor]
+
+    On the JAX backend, the result differs from :func:`qng` by complex
+    conjugation. On the TensorFlow backend, both functions return the same
+    result.
+    """
+
     # reverse mode has a slightly better running time
     # wan's approach for qng
     def wrapper(params: Tensor, **kws: Any) -> Tensor:
@@ -229,8 +248,6 @@ def qng2(
         fim = _post_process(fim)
         return fim
 
-    # on jax backend, qng and qng2 output is different by a conj
-    # on tf backend, the outputs are the same
     return wrapper
 
 
