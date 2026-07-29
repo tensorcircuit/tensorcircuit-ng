@@ -359,7 +359,7 @@ def lobpcg_standard_jax(
 
 
 @partial(jax.jit, static_argnums=[0, 2])
-def bessel_jv_jax_rescaled(k: int, x: jnp.ndarray, M: int) -> jnp.ndarray:
+def _bessel_jv_jax_rescaled(k: int, x: jnp.ndarray, M: int) -> jnp.ndarray:
     """
     Computes Bessel function Jv using Miller's algorithm with dynamic rescaling,
     implemented in JAX.
@@ -371,6 +371,30 @@ def bessel_jv_jax_rescaled(k: int, x: jnp.ndarray, M: int) -> jnp.ndarray:
 
     # _bessel_jv_scalar_rescaled is jitted and broadcasts over array inputs for x.
     return _bessel_jv_scalar_rescaled(k, M, x)
+
+
+@partial(jax.custom_jvp, nondiff_argnums=(0, 2))
+def bessel_jv_jax_rescaled(k: int, x: jnp.ndarray, M: int) -> jnp.ndarray:
+    """Compute Bessel values with an analytic derivative with respect to ``x``."""
+    return _bessel_jv_jax_rescaled(k, x, M)  # type: ignore[no-any-return]
+
+
+@bessel_jv_jax_rescaled.defjvp  # type: ignore[misc]
+def _bessel_jv_jax_rescaled_jvp(
+    k: int, M: int, primals: Tuple[jnp.ndarray], tangents: Tuple[jnp.ndarray]
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    (x,) = primals
+    (x_dot,) = tangents
+    extended_M = max(M, k + 2)
+    extended_vals = _bessel_jv_jax_rescaled(k + 1, x, extended_M)
+    if extended_M == M:
+        bessel_vals = extended_vals[:-1]
+    else:
+        bessel_vals = _bessel_jv_jax_rescaled(k, x, M)
+    derivative = jnp.concatenate(
+        [-extended_vals[1:2], (extended_vals[:-2] - extended_vals[2:]) / 2.0]
+    )
+    return bessel_vals, derivative * x_dot
 
 
 def _bessel_jv_scalar_rescaled(k: int, M: int, x_val: jnp.ndarray) -> jnp.ndarray:

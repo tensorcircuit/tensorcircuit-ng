@@ -921,15 +921,6 @@ def chebyshev_evol(
 
     # --- 2. Chebyshev Expansion Coefficients ---
     k_indices = backend.arange(k)
-    # TODO(@refraction-ray): autodiff of bessel_jv_jax_rescaled is numerically
-    # unstable for small tau (short t / narrow spectral range). The forward
-    # values are exact at all tau (Miller's algorithm + normalization is
-    # self-consistent), but the gradient passes through the rescaling /
-    # normalization quotient whose backward pass suffers catastrophic
-    # cancellation in the small-tau regime. Short-time evolution (tau -> 0)
-    # is the worst case because the result is dominated by J_0, whose
-    # autodiff gradient carries the largest relative noise. Consider a
-    # custom_vjp using the analytic identity J_k'(x) = (J_{k-1} - J_{k+1})/2.
     bessel_vals = backend.special_jv(k, tau, M)
 
     # Prefactor is 1 for k=0 and 2 for k>0.

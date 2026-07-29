@@ -309,9 +309,8 @@ autodiff:
 
     The Chebyshev method requires a backend with a Bessel function
     implementation and is currently not supported on the TensorFlow backend.
-    Autodiff of the evolution time ``t`` can be numerically unstable in the
-    short-time / narrow-spectrum regime (small ``tau = t * (Emax - Emin) / 2``);
-    the forward values remain accurate.
+    On JAX, autodiff of the evolution time uses an analytic Bessel derivative,
+    including in the short-time / narrow-spectrum regime.
 
 **Fixed-Schedule Taylor Exponential Action:**
 

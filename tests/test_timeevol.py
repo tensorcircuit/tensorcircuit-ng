@@ -1086,6 +1086,23 @@ def test_chebyshev_evol_ad_on_t(jaxb, highp):
     assert gradient.shape == ()
 
 
+@pytest.mark.parametrize("t", [1.0e-3, 1.0e-6, 1.0e-9])
+def test_chebyshev_evol_ad_on_small_t(jaxb, highp, t):
+    """Chebyshev time gradients remain accurate in the small-tau regime."""
+    h = tc.gates.x().tensor
+    z = tc.gates.z().tensor
+    psi0 = tc.backend.convert_to_tensor([1.0 + 0.0j, 0.0 + 0.0j])
+
+    def loss(time):
+        psi = tc.timeevol.chebyshev_evol(h, psi0, time, (1.0, -1.0), 20, 50)
+        return tc.backend.real(
+            tc.backend.sum(tc.backend.conj(psi) * tc.backend.matvec(z, psi))
+        )
+
+    gradient = tc.backend.jit(tc.backend.grad(loss))(tc.backend.convert_to_tensor(t))
+    np.testing.assert_allclose(gradient, -2.0 * np.sin(2.0 * t), atol=1e-14, rtol=1e-11)
+
+
 def test_estimate_k():
     # Case 1: tau = 0
     # a = (1.0 - (-1.0)) / 2.0 = 1.0

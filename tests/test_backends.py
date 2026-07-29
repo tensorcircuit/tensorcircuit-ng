@@ -206,6 +206,29 @@ def test_backend_jv_grad(jaxb, highp):
     np.testing.assert_allclose(tc.backend.numpy(g), fd, atol=1e-4)
 
 
+@pytest.mark.parametrize("x", [1.0e-3, 1.0e-6, 1.0e-9])
+def test_backend_jv_grad_small_tau(jaxb, highp, x):
+    """The analytic JVP avoids cancellation in the Miller recurrence gradient."""
+    k = 5
+    weights = tc.backend.convert_to_tensor([1.0, -2.0, 3.0, -4.0, 5.0])
+
+    def f(tau):
+        return tc.backend.sum(weights * tc.backend.special_jv(k, tau, 100))
+
+    tau = tc.backend.convert_to_tensor(x)
+    gradient = tc.backend.jit(tc.backend.grad(f))(tau)
+    expected_jvp = scipy.special.jvp(np.arange(k), x)
+    expected = np.dot(np.asarray(weights), expected_jvp)
+    np.testing.assert_allclose(gradient, expected, atol=1e-13, rtol=1e-12)
+
+    _, tangent = tc.backend.jvp(
+        lambda value: tc.backend.special_jv(k, value, 100),
+        tau,
+        tc.backend.ones([], dtype=tc.rdtypestr),
+    )
+    np.testing.assert_allclose(tangent, expected_jvp, atol=1e-13, rtol=1e-12)
+
+
 def _make_hermitian_matrix(n: int, dtype: str) -> np.ndarray:
     rng = np.random.RandomState(0)
     a = rng.normal(size=(n, n))
