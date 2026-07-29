@@ -4,6 +4,7 @@ Analog time evolution engines
 
 from typing import Any, Tuple, Optional, Callable, List, Sequence, Dict
 from functools import partial
+import math
 import warnings
 
 import numpy as np
@@ -15,6 +16,47 @@ from .utils import arg_alias
 
 Tensor = Any
 Circuit = Any
+
+
+# Double-precision truncation bounds from Al-Mohy and Higham (2011), table 3.1.
+# They are used outside JIT by ``estimate_expm_multiply_parameters``.
+_EXPM_MULTIPLY_THETA = {
+    1: 2.29e-16,
+    2: 2.58e-8,
+    3: 1.39e-5,
+    4: 3.40e-4,
+    5: 2.40e-3,
+    6: 9.07e-3,
+    7: 2.38e-2,
+    8: 5.00e-2,
+    9: 8.96e-2,
+    10: 1.44e-1,
+    11: 2.14e-1,
+    12: 3.00e-1,
+    13: 4.00e-1,
+    14: 5.14e-1,
+    15: 6.41e-1,
+    16: 7.81e-1,
+    17: 9.31e-1,
+    18: 1.09,
+    19: 1.26,
+    20: 1.44,
+    21: 1.62,
+    22: 1.82,
+    23: 2.01,
+    24: 2.22,
+    25: 2.43,
+    26: 2.64,
+    27: 2.86,
+    28: 3.08,
+    29: 3.31,
+    30: 3.54,
+    35: 4.7,
+    40: 6.0,
+    45: 7.2,
+    50: 8.5,
+    55: 9.9,
+}
 
 
 def lanczos_iteration_scan(
@@ -311,6 +353,125 @@ def krylov_evol(
         results.append(result)
 
     return backend.stack(results)
+
+
+def estimate_expm_multiply_parameters(
+    t_max: float, norm_bound: float
+) -> Tuple[int, int]:
+    """
+    Choose a static Taylor degree and scaling count for ``expm_multiply_evol``.
+
+    The returned pair is selected from the Al-Mohy--Higham truncation bounds
+    using ``norm_bound >= ||H - trace(H) I / n||_1`` and is intended to be
+    computed outside JIT. It is conservative when ``norm_bound`` is an upper
+    bound rather than an exact norm. Unlike SciPy, it does not run dynamic
+    power-norm estimators; this keeps schedule selection independent of an MVP
+    implementation. The tabulated bounds target double-precision truncation,
+    so complex64 workloads should be validated at their required tolerance.
+
+    :param t_max: Largest absolute evolution time to be used by the compiled kernel.
+    :type t_max: float
+    :param norm_bound: Upper bound on the 1-norm of the trace-shifted Hamiltonian.
+    :type norm_bound: float
+    :return: Static Taylor degree ``m`` and scaling count ``s``.
+    :rtype: Tuple[int, int]
+    """
+    t_max = float(t_max)
+    norm_bound = float(norm_bound)
+    if not math.isfinite(t_max) or t_max < 0:
+        raise ValueError("t_max must be a finite non-negative number.")
+    if not math.isfinite(norm_bound) or norm_bound < 0:
+        raise ValueError("norm_bound must be a finite non-negative number.")
+
+    scaled_norm = t_max * norm_bound
+    if scaled_norm == 0:
+        return 0, 1
+
+    candidates = []
+    for m, theta in _EXPM_MULTIPLY_THETA.items():
+        s = max(1, int(math.ceil(scaled_norm / theta)))
+        candidates.append((m * s, m, s))
+    _, m, s = min(candidates)
+    return m, s
+
+
+def expm_multiply_evol(
+    hamiltonian: Any,
+    initial_state: Tensor,
+    t: Tensor,
+    *,
+    m: int,
+    s: int,
+    traceH: Optional[Tensor] = None,
+) -> Tensor:
+    """
+    Evolve a state with a fixed-schedule scaling-and-Taylor exponential action.
+
+    This is a JIT- and autodiff-compatible counterpart of SciPy's
+    ``expm_multiply`` specialized to real-time evolution,
+    ``exp(-1j * t * H) @ initial_state``. It accepts a dense or sparse matrix,
+    a :class:`~tensorcircuit.quantum.LinearOperator`, or an MVP callable.
+
+    Unlike SciPy, the Taylor degree ``m`` and scaling count ``s`` are static
+    Python integers. The kernel deliberately does not estimate a norm or stop
+    the Taylor series early, so it can be safely used under JIT and reverse-mode
+    autodiff. Use :func:`estimate_expm_multiply_parameters` outside JIT to
+    select a conservative schedule for a bounded time interval.
+
+    :param hamiltonian: Hamiltonian matrix, LinearOperator, or MVP callable.
+    :type hamiltonian: Any
+    :param initial_state: One-dimensional initial state vector.
+    :type initial_state: Tensor
+    :param t: Real evolution time.
+    :type t: Tensor
+    :param m: Static Taylor degree. Must be non-negative.
+    :type m: int
+    :param s: Static number of scaling steps. Must be positive.
+    :type s: int
+    :param traceH: Optional trace of the Hamiltonian. Supplying it applies the
+        trace shift exactly and can substantially reduce ``m * s``. Omitting it
+        uses a zero shift and remains mathematically correct.
+    :type traceH: Optional[Tensor]
+    :return: The evolved state ``exp(-1j * t * H) @ initial_state``.
+    :rtype: Tensor
+    """
+    if m < 0:
+        raise ValueError("m must be non-negative.")
+    if s < 1:
+        raise ValueError("s must be positive.")
+
+    state_size = backend.shape_tuple(initial_state)[0]
+    hamiltonian = aslinearoperator(
+        hamiltonian, shape=(state_size, state_size), dtype=dtypestr
+    )
+    initial_state = backend.cast(initial_state, dtypestr)
+    t = backend.convert_to_tensor(t, dtype=dtypestr)
+
+    if traceH is None:
+        mu = backend.zeros((), dtype=dtypestr)
+    else:
+        traceH = backend.convert_to_tensor(traceH, dtype=dtypestr)
+        mu = -1.0j * traceH / state_size
+
+    if m == 0:
+        return backend.exp(t * mu) * initial_state
+
+    def shifted_matvec(state: Tensor) -> Tensor:
+        return -1.0j * (hamiltonian @ state) - mu * state
+
+    def scaling_step(state: Tensor, _: Tensor) -> Tensor:
+        def taylor_step(
+            carry: Tuple[Tensor, Tensor], j: Tensor
+        ) -> Tuple[Tensor, Tensor]:
+            total, term = carry
+            denominator = backend.cast(s * (j + 1), dtypestr)
+            term = (t / denominator) * shifted_matvec(term)
+            return total + term, term
+
+        total, _ = backend.scan(taylor_step, backend.arange(m), (state, state))
+        return backend.exp(t * mu / s) * total
+
+    return backend.scan(scaling_step, backend.arange(s), initial_state)
 
 
 @partial(

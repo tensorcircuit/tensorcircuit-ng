@@ -251,6 +251,98 @@ It supports both standard and scan-based jit-friendly implementations:
     # Scan-based implementation for better JIT performance
     states = tc.timeevol.krylov_evol(h, psi0, times, subspace_dimension=20, scan_impl=True)
 
+**Chebyshev Expansion:**
+
+For time-independent Hermitian Hamiltonians with a reliable spectral interval,
+the fixed-order Chebyshev expansion is a useful JIT-friendly alternative.
+It expands ``exp(-1j * t * H)`` in Chebyshev polynomials of the rescaled
+Hamiltonian, so it uses only repeated Hamiltonian-vector products and can be
+more economical than a fully reorthogonalized Krylov basis. The expansion order
+depends on ``t`` and the spectral width, so its parameters must be chosen
+outside the compiled evolution kernel while the kernel itself stays JIT- and
+AD-friendly. The :py:func:`tensorcircuit.timeevol.chebyshev_evol` function
+implements this approach:
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+
+    # Create a Heisenberg Hamiltonian for a 1D chain
+    n = 10
+    g = tc.templates.graphs.Line1D(n, pbc=False)
+    h = tc.quantum.heisenberg_hamiltonian(g, hzz=1.0, hxx=1.0, hyy=1.0, sparse=True)
+
+    # Initial domain wall state: |↑↑↑↑↑↓↓↓↓↓⟩
+    c = tc.Circuit(n)
+    c.x(range(n//2, n))
+    psi0 = c.state()
+
+    t = 2.0
+
+    # 1. Estimate spectral bounds (Emax, Emin) with a short Lanczos run.
+    #    This step is non-jittable and should run outside the kernel.
+    bounds = tc.timeevol.estimate_spectral_bounds(h, n_iter=30)
+    # Pad the bounds slightly so the true spectrum stays inside the interval.
+    bounds = (float(bounds[0]) + 1.0, float(bounds[1]) - 1.0)
+
+    # 2. Pick the expansion order k and the Bessel iteration count M.
+    k = tc.timeevol.estimate_k(t, bounds)
+    m = tc.timeevol.estimate_M(t, bounds, k)
+
+    # 3. Evolve. The returned state is unnormalized; its norm being close to 1
+    #    is a convenient built-in accuracy check for the chosen k and M.
+    psi_t = tc.timeevol.chebyshev_evol(h, psi0, t, bounds, k, m)
+
+The Hamiltonian may be a dense/sparse matrix, a ``LinearOperator``, or a
+matrix-free MVP callable such as :py:func:`tensorcircuit.quantum.PauliStringSum2MVP`.
+Because ``k`` and ``M`` are fixed Python integers, the evolution kernel is
+compatible with JIT compilation, ``vmap`` over evolution times, and reverse-mode
+autodiff:
+
+.. code-block:: python
+
+    @tc.backend.jit
+    def evolve(psi):
+        return tc.timeevol.chebyshev_evol(h, psi, t, bounds, k, m)
+
+.. note::
+
+    The Chebyshev method requires a backend with a Bessel function
+    implementation and is currently not supported on the TensorFlow backend.
+    Autodiff of the evolution time ``t`` can be numerically unstable in the
+    short-time / narrow-spectrum regime (small ``tau = t * (Emax - Emin) / 2``);
+    the forward values remain accurate.
+
+**Fixed-Schedule Taylor Exponential Action:**
+
+For a time-independent Hamiltonian represented by a sparse matrix or a matrix-free
+MVP, :py:func:`tensorcircuit.timeevol.expm_multiply_evol` applies the
+scaling-and-Taylor action ``exp(-1j * t * H) @ psi``. In contrast with SciPy's
+adaptive ``expm_multiply``, its Taylor degree and scaling count are fixed Python
+integers. This makes the evolution compatible with JIT compilation and
+reverse-mode autodiff. Choose them outside JIT for a maximum evolution time and
+a 1-norm upper bound, then close over them in the compiled function:
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+
+    h_mvp = tc.quantum.PauliStringSum2MVP(pauli_strings, coefficients)
+    # For a Pauli sum, sum(abs(coefficients)) is a conservative 1-norm bound.
+    m, s = tc.timeevol.estimate_expm_multiply_parameters(
+        t_max=2.0,
+        norm_bound=sum(abs(c) for c in coefficients),
+    )
+
+    @tc.backend.jit
+    def evolve(psi, t):
+        return tc.timeevol.expm_multiply_evol(h_mvp, psi, t, m=m, s=s)
+
+When the Hamiltonian trace is known, pass ``traceH`` to remove its scalar part
+before the Taylor expansion. This only changes a global phase, but can reduce the
+required work substantially. The repository example
+``examples/expm_multiply_evol.py`` compares this method with SciPy on CPU.
+
 **ODE-Based Evolution:**
 
 For time-dependent Hamiltonians or when fine control over the evolution process is needed, TensorCircuit provides ODE-based evolution methods. 
@@ -1051,4 +1143,3 @@ Here is a quick example of running distributed simulation to calculate expectati
     value, grad = dc.value_and_grad(params)
 
 For detailed end-to-end examples, distributed scheduling details, and multi-GPU VQE optimizations, please refer to the `Distributed Simulation Tutorial <https://tensorcircuit-ng.readthedocs.io/en/latest/tutorials/distributed_simulation.html>`__.
-

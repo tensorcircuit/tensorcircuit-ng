@@ -3,6 +3,7 @@ import os
 import pytest
 import numpy as np
 from pytest_lazyfixture import lazy_fixture as lf
+from scipy.sparse.linalg import expm_multiply as scipy_expm_multiply
 
 thisfile = os.path.abspath(__file__)
 modulepath = os.path.dirname(os.path.dirname(thisfile))
@@ -770,6 +771,100 @@ def test_krylov_evol_gradient(backend):
     eps = 1e-3
     fd = (loss_at(1.0 + eps) - loss_at(1.0 - eps)) / (2 * eps)
     np.testing.assert_allclose(float(gradient[0]), fd, atol=5e-3)
+
+
+def test_estimate_expm_multiply_parameters():
+    assert tc.timeevol.estimate_expm_multiply_parameters(0.0, 2.0) == (0, 1)
+
+    m, s = tc.timeevol.estimate_expm_multiply_parameters(1.0, 2.0)
+    assert m in tc.timeevol._EXPM_MULTIPLY_THETA
+    assert s >= 1
+    assert 2.0 / s <= tc.timeevol._EXPM_MULTIPLY_THETA[m]
+
+    with pytest.raises(ValueError):
+        tc.timeevol.estimate_expm_multiply_parameters(-1.0, 1.0)
+    with pytest.raises(ValueError):
+        tc.timeevol.estimate_expm_multiply_parameters(1.0, -1.0)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_expm_multiply_evol_dense(backend, highp):
+    h_np = np.array([[0.3, 0.7 - 0.2j], [0.7 + 0.2j, -0.1]], dtype=np.complex128)
+    psi_np = np.array([1.0 + 0.0j, -0.2 + 0.4j], dtype=np.complex128)
+    t = 1.3
+    trace_h = np.trace(h_np)
+    shifted_h = h_np - trace_h / h_np.shape[0] * np.eye(h_np.shape[0])
+    m, s = tc.timeevol.estimate_expm_multiply_parameters(
+        t, np.linalg.norm(shifted_h, ord=1)
+    )
+
+    h = tc.backend.convert_to_tensor(h_np)
+    psi = tc.backend.convert_to_tensor(psi_np)
+    evolved = tc.timeevol.expm_multiply_evol(h, psi, t, m=m, s=s, traceH=trace_h)
+    expected = scipy_expm_multiply(-1.0j * t * h_np, psi_np)
+    np.testing.assert_allclose(evolved, expected, atol=1e-12, rtol=1e-12)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_expm_multiply_evol_sparse_and_mvp(backend, highp):
+    structures = [[3, 0], [1, 1], [0, 3]]
+    weights = [0.7, -0.3, 0.2]
+    h_sparse = tc.quantum.PauliStringSum2COO(structures, weights)
+    h_mvp = tc.quantum.PauliStringSum2MVP(structures, weights)
+    psi = tc.backend.convert_to_tensor(
+        np.array([1.0, 0.2j, -0.3, 0.1 + 0.2j], dtype=np.complex128)
+    )
+    t = 0.8
+    m, s = tc.timeevol.estimate_expm_multiply_parameters(
+        t, sum(abs(w) for w in weights)
+    )
+
+    evolved_sparse = tc.timeevol.expm_multiply_evol(h_sparse, psi, t, m=m, s=s)
+    evolved_mvp = tc.timeevol.expm_multiply_evol(h_mvp, psi, t, m=m, s=s)
+    h_np = np.asarray(tc.backend.to_dense(h_sparse))
+    expected = scipy_expm_multiply(-1.0j * t * h_np, np.asarray(psi))
+
+    np.testing.assert_allclose(evolved_sparse, expected, atol=1e-12, rtol=1e-12)
+    np.testing.assert_allclose(evolved_mvp, expected, atol=1e-12, rtol=1e-12)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_expm_multiply_evol_trace_shift(backend, highp):
+    energy = 0.4
+    h = tc.backend.eye(4, dtype=tc.dtypestr) * energy
+    psi = tc.backend.convert_to_tensor(np.array([1.0, 0.2j, 0.0, -0.3]))
+    t = 2.1
+
+    evolved = tc.timeevol.expm_multiply_evol(h, psi, t, m=0, s=1, traceH=energy * 4)
+    expected = np.exp(-1.0j * energy * t) * np.asarray(psi)
+    np.testing.assert_allclose(evolved, expected, atol=1e-12, rtol=1e-12)
+
+
+def test_expm_multiply_evol_jit_and_gradient(jaxb, highp):
+    x = tc.backend.cast(tc.gates.x().tensor, tc.dtypestr)
+    z = tc.backend.cast(tc.gates.z().tensor, tc.dtypestr)
+    psi = tc.backend.convert_to_tensor(np.array([1.0, 0.2j], dtype=np.complex128))
+    t = tc.backend.convert_to_tensor(0.7)
+
+    def loss(theta):
+        h = theta * x + 0.3 * z
+        evolved = tc.timeevol.expm_multiply_evol(h, psi, t, m=20, s=1)
+        return tc.backend.real(
+            tc.backend.sum(tc.backend.conj(evolved) * tc.backend.matvec(z, evolved))
+        )
+
+    theta = tc.backend.convert_to_tensor(0.4)
+    gradient = tc.backend.jit(tc.backend.grad(loss))(theta)
+    eps = 1.0e-5
+    fd = (float(loss(theta + eps)) - float(loss(theta - eps))) / (2 * eps)
+    np.testing.assert_allclose(float(gradient), fd, atol=1e-7, rtol=1e-6)
+
+    h = 0.4 * x + 0.3 * z
+    run = tc.backend.jit(
+        lambda time: tc.timeevol.expm_multiply_evol(h, psi, time, m=20, s=1)
+    )
+    expected = scipy_expm_multiply(-1.0j * float(t) * np.asarray(h), np.asarray(psi))
+    np.testing.assert_allclose(run(t), expected, atol=1e-12, rtol=1e-12)
 
 
 @pytest.mark.parametrize(

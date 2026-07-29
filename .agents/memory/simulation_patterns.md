@@ -22,6 +22,7 @@ Use this file for model-specific performance patterns that are broader than one 
 
 ## Pauli and Heisenberg evolution
 
+- For repeated real-time evolution under a time-independent Hermitian Hamiltonian with a tight spectral enclosure, use a fixed-order Chebyshev MVP recurrence as the first JAX performance baseline. It keeps only three state-sized vectors and avoids the full-basis reorthogonalization cost of robust Lanczos implementations. Select spectral bounds and the polynomial order outside JIT; this recommendation does not extend unchanged to non-Hermitian or genuinely time-dependent Hamiltonians.
 - Pauli propagation evolves observables backward through the circuit, so apply gates in reversed chronological order.
 - When operator coefficients are traced tensors, use functional indexed updates rather than Python-side mutation or direct array assignment.
 - If a Heisenberg-style expectation is used as a loss, return its real part explicitly before differentiation.

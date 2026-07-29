@@ -135,14 +135,14 @@ def test_jittable_measure(backend):
         import tensorflow as tf
 
         r1 = f(tc.backend.ones([6, 6]), None)
-        r2 = f(tc.backend.ones([6, 6]), None)
+        keys = [tf.random.Generator.from_seed(s) for s in range(8)]
         r3 = f(tc.backend.ones([6, 6]), tf.random.Generator.from_seed(23))
         r4 = f(tc.backend.ones([6, 6]), tf.random.Generator.from_seed(23))
     elif tc.backend.name == "jax":
         import jax
 
         r1 = f(tc.backend.ones([6, 6]), jax.random.PRNGKey(23))
-        r2 = f(tc.backend.ones([6, 6]), jax.random.PRNGKey(24))
+        keys = [jax.random.PRNGKey(s) for s in range(8, 16)]
         r3 = f(tc.backend.ones([6, 6]), jax.random.PRNGKey(23))
         r4 = f(tc.backend.ones([6, 6]), jax.random.PRNGKey(23))
 
@@ -151,8 +151,10 @@ def test_jittable_measure(backend):
     for s in samples:
         assert float(s) in (0.0, 1.0)
     assert 0.0 <= float(prob) <= 1.0
-    # Different key / random state should give different samples
-    assert [float(s) for s in r1[0]] != [float(s) for s in r2[0]]
+    # Sampling over several keys should yield at least two distinct outcomes;
+    # a single pair comparison flakes on the small (3-bit) output space.
+    outcomes = {tuple(float(s) for s in f(tc.backend.ones([6, 6]), k)[0]) for k in keys}
+    assert len(outcomes) >= 2
     # Same seed should give deterministic results under jit
     np.testing.assert_allclose(r3[0], r4[0], atol=1e-6)
 

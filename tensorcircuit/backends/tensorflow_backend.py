@@ -465,10 +465,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         return tf.identity(a)
 
     def convert_to_tensor(self, tensor: Tensor, dtype: Optional[str] = None) -> Tensor:
-        result = tf.convert_to_tensor(tensor)
-        if dtype is not None:
-            result = self.cast(result, dtype)
-        return result
+        if dtype is not None and tf.is_tensor(tensor):
+            return self.cast(tensor, dtype)
+        return tf.convert_to_tensor(tensor, dtype=dtype)
 
     def expm(self, a: Tensor) -> Tensor:
         return tf.linalg.expm(a)

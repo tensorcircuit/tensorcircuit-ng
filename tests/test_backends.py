@@ -47,6 +47,15 @@ def test_vmap_tf(tfb):
     assert r.numpy()[0, 0] == 3.0
 
 
+def test_convert_to_tensor_dtype_tf(tfb):
+    value = tc.backend.convert_to_tensor(2.1, dtype="complex128")
+    np.testing.assert_allclose(value, np.complex128(2.1), atol=0.0, rtol=0.0)
+
+    real_tensor = tc.backend.convert_to_tensor(np.float64(2.1))
+    widened = tc.backend.convert_to_tensor(real_tensor, dtype="complex128")
+    np.testing.assert_allclose(widened, np.complex128(2.1), atol=0.0, rtol=0.0)
+
+
 def test_vmap_torch(torchb):
     r = universal_vmap()
     assert r.numpy()[0, 0] == 3.0
