@@ -378,7 +378,10 @@ def _bessel_jv_scalar_rescaled(k: int, M: int, x_val: jnp.ndarray) -> jnp.ndarra
     Miller recurrence with dynamic rescaling for Jv(k, x_val).
     Operates elementwise on x_val (broadcasts over array inputs).
     """
-    rescale_threshold = 1e250
+    # ``1e250`` overflows to inf in float32, which disables the rescaling
+    # branch entirely. Keep the established float64 threshold and use a safe
+    # float32 value before the recurrence can overflow.
+    rescale_threshold = 1e20 if x_val.dtype == jnp.float32 else 1e250
 
     # Define the body of the recurrence loop
     def recurrence_body(i, state):  # type: ignore

@@ -155,6 +155,16 @@ def test_backend_jv(backend, highp):
             )
 
 
+def test_backend_jv_float32_large_recurrence(jaxb):
+    """Regression test for float32 Miller-recurrence rescaling."""
+    k = 301
+    x_val = tc.backend.cast(tc.backend.convert_to_tensor(273.645), "float32")
+    f_vals = tc.backend.special_jv(k, x_val, 549)
+    expected = scipy.special.jv(np.arange(k), 273.645)
+    assert np.all(np.isfinite(np.asarray(f_vals)))
+    np.testing.assert_allclose(f_vals, expected, atol=1e-5)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
 def test_backend_jaxy_scan(backend):
     def body_fun(carry, x):
