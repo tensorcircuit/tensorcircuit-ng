@@ -141,7 +141,7 @@ def run_simulation(n, d, n_layers, batch_size, J, h_field):
     param_shape = (n_layers, n, n_params_per_qudit)
 
     # Initialize batch of parameters
-    # shape: (batch_size, n_layers, n, 2)
+    # shape: (batch_size, n_layers, n, n_params_per_qudit)
     params_batch = tc.backend.implicit_randn(shape=(batch_size,) + param_shape)
 
     # VQE Optimization with Optax

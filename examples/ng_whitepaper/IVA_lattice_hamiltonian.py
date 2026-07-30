@@ -124,9 +124,10 @@ def demo_ad_optimization():
     print(f"System: Triangular Lattice {nx}x{ny} ({nx*ny} sites)")
     print(f"Hamiltonian: Rydberg (Omega={omega}, Delta={delta}, C6={c6})")
 
-    def get_ground_state_energy(a):
+    def get_rydberg_hamiltonian_dense(a):
         """
-        Computes the ground state energy for a given lattice constant 'a'.
+        Builds the dense Rydberg Hamiltonian matrix for a given lattice constant 'a'.
+
         This function is designed to be fully differentiable and JIT-compatible.
         """
         lattice_constant = K.abs(a)  # Ensure positivity
@@ -153,7 +154,7 @@ def demo_ad_optimization():
     target_energy = -20.0
 
     def get_loss_val(a):
-        H_mat = get_ground_state_energy(a)
+        H_mat = get_rydberg_hamiltonian_dense(a)
         # Use K.eigh for JAX, which is differentiable
         evals = K.eigh(H_mat)[0]
         ground_energy = evals[0]

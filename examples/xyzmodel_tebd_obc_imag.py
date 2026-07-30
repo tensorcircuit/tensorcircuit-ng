@@ -18,7 +18,7 @@ def apply_trotter_step(
 ):
     split_rules = {"max_singular_values": bond_dim}
     mps_circuit = tc.MPSCircuit(nqubits, tensors=mps_tensors, split=split_rules)
-    # Apply odd bonds (1-2, 3-4, ...)
+    # Apply even bonds (0-1, 2-3, ...)
 
     for i in range(0, nqubits - 1, 2):
         mps_circuit.rxx(i, (i + 1), theta=-2.0j * hxx * dt_step)
@@ -26,7 +26,7 @@ def apply_trotter_step(
         mps_circuit.rzz(i, (i + 1), theta=-2.0j * hzz * dt_step)
     mps_circuit._mps.position(nqubits - 1, normalize=True)
 
-    # Apply even bonds (2-3, 4-5, ...)
+    # Apply odd bonds (1-2, 3-4, ...)
     for i in reversed(range(1, nqubits - 1, 2)):
         mps_circuit.rxx(i, (i + 1), theta=-2.0j * hxx * dt_step)
         mps_circuit.ryy(i, (i + 1), theta=-2.0j * hyy * dt_step)

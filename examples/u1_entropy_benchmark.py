@@ -30,7 +30,6 @@ def benchmark_u1_efficiency(n: int, k: int, cut: int):
     subsystem = list(range(cut))
 
     # 2. Benchmark Entanglement Entropy
-    start = time.time()
     # We wrap in jit for fair benchmarking if using jax/tf
     # subsystem_to_keep must be static for JAX due to Python logic in U1Circuit
     ee_func = K.jit(c.entanglement_entropy, static_argnums=0)

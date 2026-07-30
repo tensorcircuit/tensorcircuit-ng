@@ -10,7 +10,7 @@ For the measured low-memory configuration, run with::
 
     NVIDIA_TF32_OVERRIDE=0 XLA_PYTHON_CLIENT_PREALLOCATE=false \
     XLA_FLAGS=--xla_gpu_autotune_level=0 \
-    python examples/omeco_block_scan_mpo.py
+    python examples/omeco_spatial_scan_mpo.py
 """
 
 import math

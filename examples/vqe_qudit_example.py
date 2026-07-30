@@ -4,13 +4,13 @@ VQE on QuditCircuits.
 This example shows how to run a simple VQE on a qudit system using
 `tensorcircuit.QuditCircuit`. We build a compact ansatz using single-qudit
 rotations in selected two-level subspaces and RXX-type entanglers, then
-optimize the energy of a Hermitian "clock-shift" Hamiltonian:
+optimize the energy of a Hermitian hopping + clock-field Hamiltonian:
 
-    H(d) = - J * (X_c \otimes X_c)  -  h * (Z_c \otimes I + I \otimes Z_c)
+    H = - J/2 * (S_i S_j^\dagger + S_i^\dagger S_j)  -  h * (Z_c,i + Z_c,j)
 
 where, for local dimension `d`,
 - Z_c = (Z + Z^\dagger)/2 is the Hermitian "clock" observable with Z = diag(1, \omega, \omega^2, ..., \omega^{d-1})
-- X_c = (S + S^\dagger)/2 is the Hermitian "shift" observable with S the cyclic shift
+- S is the (non-Hermitian) cyclic shift; S_i S_j^\dagger + S_i^\dagger S_j is the Hermitian hopping coupling
 - \omega = exp(2\pi i/d)
 
 The code defaults to a 2-qutrit (d=3) problem but can be changed via CLI flags.

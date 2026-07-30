@@ -54,7 +54,7 @@ def adiabatic_range(hm, history):
                     r["model_weights"],
                     r["circuit_weights"],
                 )
-                for r in history[-1]
+                for r in history[-2]
             ],
             key=lambda s: s[0],
         )[0]

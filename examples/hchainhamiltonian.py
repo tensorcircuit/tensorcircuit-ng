@@ -8,7 +8,6 @@ from openfermion.chem import MolecularData
 from openfermion.transforms import (
     get_fermion_operator,
     binary_code_transform,
-    get_fermion_operator,
     reorder,
     checksum_code,
 )

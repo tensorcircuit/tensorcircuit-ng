@@ -58,7 +58,7 @@ def benchmark_case(n_qubits: int, t: float, repeats: int, operator_mode: str) ->
     psi = tc.backend.convert_to_tensor(psi_numpy)
 
     # Every Pauli string has 1-norm one. The triangle inequality gives a
-    # static, conservative bound for this traceless Hamiltonian.
+    # static, conservative bound on the operator 1-norm.
     m, s = tc.timeevol.estimate_expm_multiply_parameters(
         t, sum(abs(w) for w in weights)
     )

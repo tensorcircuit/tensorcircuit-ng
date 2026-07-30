@@ -95,7 +95,7 @@ def run_vqe_main(coordinator_address: str, num_processes: int, process_id: int):
 
     # Now that all processes have `params_cpu`, we can initialize the contractor safely.
     # The contractor will use this concrete array to run its (now internal)
-    # "find path on 0 and broadcast" logic.},
+    # "find path on 0 and broadcast" logic.
 
     # Shard the parameters onto devices for the actual GPU/TPU computation.
     params_sharding = NamedSharding(global_mesh, P(*([None] * len(params_shape))))

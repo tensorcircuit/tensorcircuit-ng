@@ -154,7 +154,7 @@ def main():
     @jax.jit
     def accuracy(params, x, y):
         logits = model.apply(params, x)
-        predicted_class = (logits > 0).astype(jnp.float32)
+        predicted_class = (logits.real > 0).astype(jnp.float32)
         return jnp.mean(predicted_class == y[:, None])
 
     # Training Loop

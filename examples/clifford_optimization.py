@@ -53,12 +53,6 @@ def ansatz(structureo, structuret, preprocess="direct"):
                 + structuret[j, i, 1] * tc.gates.cnot().tensor
                 + structuret[j, i, 2] * tc.gates.cz().tensor,
             )
-    # loss = K.real(
-    #     sum(
-    #         [c.expectation_ps(z=[i, i + 1]) for i in range(n - 1)]
-    #         + [c.expectation_ps(x=[i]) for i in range(n)]
-    #     )
-    # )
     s = c.state()
     loss = -K.real(tc.quantum.entropy(tc.quantum.reduced_density_matrix(s, cut=n // 2)))
     return loss
@@ -133,15 +127,9 @@ def main(stddev=0.05, lr=None, epochs=2000, debug_step=50, batch=256, verbose=Fa
         go = K.mean(K.reshape(vs - avcost2, [-1, 1, 1]) * go, axis=0)
         gt = K.mean(K.reshape(vs - avcost2, [-1, 1, 1]) * gt, axis=0)
 
-        # go = [(vs[i] - avcost2) * go[i] for i in range(batch)]
-        # gt = [(vs[i] - avcost2) * gt[i] for i in range(batch)]
-        # go = tf.math.reduce_mean(go, axis=0)
-        # gt = tf.math.reduce_mean(gt, axis=0)
         avcost2 = avcost
 
         [so, st] = structure_opt.update([go, gt], [so, st])
-        # so -= K.reshape(K.mean(so, axis=-1), [-1, 1])
-        # st -= K.reshape(K.mean(st, axis=-1), [-1, 1])
         if epoch % debug_step == 0 or epoch == epochs - 1:
             print("----------epoch %s-----------" % epoch)
             print(
