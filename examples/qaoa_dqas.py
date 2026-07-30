@@ -4,9 +4,6 @@ Old-fashioned DQAS code on QAOA ansatz design, now deprecated.
 
 # pylint: disable=wildcard-import
 
-import sys
-
-sys.path.insert(0, "../")
 
 from collections import namedtuple
 from pickle import dump

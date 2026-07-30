@@ -4,10 +4,6 @@ Schrodinger-Heisenberg quantum variational eigensolver (SHVQE) with DQAS-style o
 DQAS part is modified from: examples/clifford_optimization.py
 """
 
-import sys
-
-sys.path.insert(0, "../")
-
 import numpy as np
 import tensorflow as tf
 
@@ -95,7 +91,7 @@ def hybrid_ansatz(structure, paramq, preprocess="direct", train=True):
                     c.cz(i, (i + dis) % n)
 
         for i in range(0, n // 2):
-            if structure[j, 1] == 1:
+            if structure[n // 2 - 1, 1] == 1:
                 c.cz(i, i + n // 2)
 
     return c

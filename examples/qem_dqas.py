@@ -2,10 +2,6 @@
 DQAS for QFT QEM circuit design, deprecated DQAS implementation
 """
 
-import sys
-
-sys.path.insert(0, "../")
-
 from functools import partial
 import cirq
 import numpy as np

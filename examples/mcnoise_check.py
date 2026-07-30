@@ -6,9 +6,7 @@ import os
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 # cpu is fast for small scale circuit simulation
-import sys
 
-sys.path.insert(0, "../")
 
 from tqdm import tqdm
 import jax

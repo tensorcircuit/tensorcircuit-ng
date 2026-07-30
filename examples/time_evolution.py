@@ -43,7 +43,7 @@ def main(N):
         psit /= K.norm(psit)
         print(total_z(psit, N))
     time1 = time.time()
-    r = hamiltonian_evol(1.0j * tlist, h, psi0, callback=partial(total_z, N=N))
+    r = hamiltonian_evol(h, psi0, 1.0j * tlist, callback=partial(total_z, N=N))
     print(r)
     time2 = time.time()
 

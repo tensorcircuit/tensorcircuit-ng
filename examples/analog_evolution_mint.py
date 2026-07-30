@@ -18,7 +18,8 @@ def h_fun(t, b):
 def fast_evol(t, b):
     lbd = 0.08
     c = tc.Circuit(1)
-    c = evol_global(c, h_fun, t, b)
+    ts = K.stack([0.0 * t, t])
+    c = evol_global(c, h_fun, ts, b)
     loss = K.real(c.expectation_ps(z=[0]))
     return loss + lbd * t**2, loss
     # l2 regularization to minimize t while target z=-1

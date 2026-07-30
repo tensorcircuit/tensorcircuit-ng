@@ -78,7 +78,7 @@ def sliced_core(param, n, nlayers, ps, cut, mask1, mask2):
     c = circuit(param, n, nlayers)
     ss = sliced_state(c, cut, mask1)
     ssc = sliced_state(c, cut, mask2)
-    ssc, _ = tc.Circuit.copy([ssc], conj=True)
+    ssc, _ = tc.Circuit.copy_nodes([ssc], conj=True)
     op_nodes, op_edges = sliced_op(ps, cut, mask1, mask2)
     nodes = [ss] + ssc + op_nodes
     ssc = ssc[0]
@@ -151,7 +151,7 @@ def sliced_expectation_ref(c, ps, cut):
                 mask2[j] = 1 - mask1[j]
         mask2t = tc.array_to_tensor(np.array(mask2))
         ssc = sliced_state(c, cut, mask2t)
-        ssc, _ = tc.Circuit.copy([ssc], conj=True)
+        ssc, _ = tc.Circuit.copy_nodes([ssc], conj=True)
         ps = tc.array_to_tensor(ps)
         op_nodes, op_edges = sliced_op(ps, cut, mask1t, mask2t)
         nodes = [ss] + ssc + op_nodes

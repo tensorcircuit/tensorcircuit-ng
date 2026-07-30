@@ -2,9 +2,6 @@
 DQAS for GHZ state preparation circuit, deprecated DQAS implementation
 """
 
-import sys
-
-sys.path.insert(0, "../")
 import numpy as np
 import tensorflow as tf
 import cirq

@@ -3,13 +3,11 @@ Optimization for performance comparison with different cotengra settings.
 """
 
 import itertools
-import sys
 import warnings
 
 import cotengra as ctg
 import networkx as nx
 
-sys.path.insert(0, "../")
 import tensorcircuit as tc
 
 try:

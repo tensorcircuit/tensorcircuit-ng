@@ -7,9 +7,7 @@ a demonstration on most of core features and paradigm of tensorcircuit
 # we also include jit, vmap and AD features in this pure classical example
 # this demonstrates that tensorcircuit can serve as a solid unified ML library without any "quantumness"
 
-import sys
 
-sys.path.insert(0, "../")
 import numpy as np
 import optax
 import tensorflow as tf

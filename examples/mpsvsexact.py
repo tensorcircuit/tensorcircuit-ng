@@ -2,10 +2,6 @@
 A simple script to benchmark the approximation power of the MPS simulator.
 """
 
-import sys
-
-sys.path.insert(0, "../")
-
 import tensorcircuit as tc
 
 tc.set_backend("tensorflow")

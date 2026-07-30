@@ -3,9 +3,7 @@ Some chaotic properties calculations from the circuit state.
 """
 
 from functools import partial
-import sys
 
-sys.path.insert(0, "../")
 import tensorflow as tf
 import tensorcircuit as tc
 

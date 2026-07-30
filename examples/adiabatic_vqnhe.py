@@ -3,9 +3,7 @@ Calculate the molecule dissociation curve using VQNHE.
 """
 
 from functools import partial
-import sys
 
-sys.path.insert(0, "../")
 
 import numpy as np
 import tensorflow as tf
@@ -22,12 +20,10 @@ def initial_param(t, last=None, lastlast=None):
         if t % 3 == 2:
             last = lastlast
         qw = last[-1]
-        qw = tf.Variable(
-            qw.numpy() + np.random.uniform(low=-0.1, high=0.1, size=qw.numpy().shape)
-        )
+        qw = tf.Variable(qw + np.random.uniform(low=-0.1, high=0.1, size=qw.shape))
         cw = last[-2]
         for i, b in enumerate(cw):
-            cw[i] = b + np.random.uniform(low=-0.1, high=0.1, size=t.shape)
+            cw[i] = b + np.random.uniform(low=-0.1, high=0.1, size=b.shape)
         return {"c": cw, "q": qw}
 
     return {}

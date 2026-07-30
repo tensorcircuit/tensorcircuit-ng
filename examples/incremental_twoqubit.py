@@ -3,9 +3,6 @@ Optimizing the parameterized circuit with progressively dense two-qubit gates,
 as a potential approach to alleviate barren plateau.
 """
 
-import sys
-
-sys.path.insert(0, "../")
 import tensorflow as tf
 import numpy as np
 import tensorcircuit as tc

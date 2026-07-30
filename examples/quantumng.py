@@ -2,10 +2,8 @@
 Quantum natural gradient descent demonstration with the TFIM VQE example.
 """
 
-import sys
 import time
 
-sys.path.insert(0, "../")
 
 import optax
 import tensorflow as tf

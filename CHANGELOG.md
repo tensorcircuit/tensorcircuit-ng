@@ -4,9 +4,13 @@
 
 ### Added
 
+- Add fixed-schedule Taylor exponential action via `expm_multiply_evol` and `estimate_expm_multiply_parameters` for JIT- and AD-compatible time evolution.
+
 - Add Tianyan cloud provider.
 
 ### Fixed
+
+- Stabilize JAX Bessel and Chebyshev time gradients at small rescaled times, including float32 Miller-recurrence rescaling.
 
 - Fix pytorch backend `softmax` and align `axis=None` to global normalization.
 

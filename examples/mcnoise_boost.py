@@ -4,9 +4,7 @@ on general error with circuit layerwise slicing
 """
 
 import time
-import sys
 
-sys.path.insert(0, "../")
 import tensorcircuit as tc
 
 tc.set_backend("jax")

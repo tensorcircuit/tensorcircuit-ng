@@ -5,10 +5,8 @@ Variational wavefunctions based on variational circuits and its dynamics.
 # Variational Quantum Algorithm for Quantum Dynamics
 # Ref: PRL 125, 010501 (2020)
 
-import sys
 import time
 
-sys.path.insert(0, "../")
 
 import numpy as np
 import tensorcircuit as tc

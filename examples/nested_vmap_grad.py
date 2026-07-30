@@ -2,10 +2,6 @@
 demonstration of vmap + grad like API
 """
 
-import sys
-
-sys.path.insert(0, "../")
-
 import tensorcircuit as tc
 
 # See issues in https://github.com/tencent-quantum-lab/tensorcircuit/issues/229#issuecomment-2600773780

@@ -5,9 +5,7 @@ essentially the same as v1, but much simpler
 """
 
 import time
-import sys
 
-sys.path.insert(0, "../")
 import tensorcircuit as tc
 
 tc.set_backend("jax")

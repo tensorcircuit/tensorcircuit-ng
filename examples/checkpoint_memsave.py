@@ -16,7 +16,6 @@ ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 logger.addHandler(ch)
 
-sys.path.insert(0, "../")
 sys.setrecursionlimit(10000)
 
 import tensorcircuit as tc

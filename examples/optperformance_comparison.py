@@ -3,9 +3,6 @@ Optimization for performance comparison for different densities of two-qubit gat
 (random layouts averaged).
 """
 
-import sys
-
-sys.path.insert(0, "../")
 import tensorflow as tf
 import numpy as np
 import cotengra as ctg

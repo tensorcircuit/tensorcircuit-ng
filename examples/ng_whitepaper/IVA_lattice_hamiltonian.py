@@ -179,15 +179,9 @@ def demo_ad_optimization():
     print(f"Initial lattice constant: {a_init}")
 
     steps = 100
+    vg_wrapper = K.jit(K.value_and_grad(get_loss_val, has_aux=True))
     for i in range(steps):
         time_start = time.time()
-
-        # Redefine wrapper for optimization variable
-        def loss_wrapper(a):
-            loss, aux = get_loss_val(a)
-            return loss, aux
-
-        vg_wrapper = K.jit(K.value_and_grad(loss_wrapper, has_aux=True))
 
         (loss, real_energy), grads = vg_wrapper(a_param)
         time_end = time.time()

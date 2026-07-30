@@ -6,10 +6,8 @@ Variational wavefunctions based on variational circuits and its dynamics.
 # Eq 13, 14, based on discussion:
 # https://github.com/tencent-quantum-lab/tensorcircuit/discussions/22
 
-import sys
 import time
 
-sys.path.insert(0, "../")
 
 import numpy as np
 import tensorcircuit as tc
