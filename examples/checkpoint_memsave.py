@@ -1,5 +1,11 @@
 """
-Some possible attempts to save memory from the state-like simulator with checkpoint tricks (jax support only).
+Save memory in state-like simulation by rematerializing layers with jax.checkpoint
+(jax support only).
+
+The active mechanism is the per-layer @jax.checkpoint (a.k.a. jax.remat) decorator on
+zzxlayer / zzxsqrtlayer: each layer's forward activations are dropped and recomputed on
+the backward pass, trading compute for memory. recursive_checkpoint below is an unused
+alternative recipe (a tree of nested checkpoints) kept for reference.
 """
 
 import time
@@ -56,11 +62,11 @@ def recursive_checkpoint(funs):
 # not suggest in general for recursive checkpoint: too slow for staging (compiling)
 
 """
-test case:
+test case (unused alternative recipe):
 def f(s, param):
     return s + param
 fc = recursive_checkpoint([f for _ in range(100)])
-print(fc(jnp.zeros([2]), jnp.array([[i, i] for i in range(100)])))
+print(fc(jax.numpy.zeros([2]), jax.numpy.array([[i, i] for i in range(100)])))
 """
 
 

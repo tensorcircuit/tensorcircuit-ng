@@ -62,8 +62,8 @@ print(
 print(c4.draw())
 
 print("gate number comparison (last ours vs before qiskit (0, 1, 2, 3))")
-for c in [c0, c1, c2, c3, c4]:
-    print(c.gate_count())
+for compiled in [c0, c1, c2, c3, c4]:
+    print(compiled.gate_count())
 
 # if we want to apply routing/qubit mapping
 
