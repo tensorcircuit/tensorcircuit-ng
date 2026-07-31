@@ -8,8 +8,6 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
-from .cons import rdtypestr
-
 logger = logging.getLogger(__name__)
 
 
@@ -45,7 +43,7 @@ except ImportError:
 
 from . import gates
 from .circuit import Circuit
-from .cons import backend
+from .cons import backend, rdtypestr
 from .densitymatrix import DMCircuit2
 from .interfaces.tensortrans import tensor_to_numpy
 
@@ -283,7 +281,6 @@ def qir2qiskit(
             "cnot",
             "toffoli",
             "fredkin",
-            "cnot",
             "cx",
             "cy",
             "cz",

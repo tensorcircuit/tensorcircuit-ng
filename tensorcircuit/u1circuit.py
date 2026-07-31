@@ -333,16 +333,9 @@ class U1Circuit(AbstractCircuit):
 
     def _apply_rz(self, i: int, theta: Any) -> None:
         """Apply RZ(theta) on qubit i: |0> -> |0>, |1> -> e^{-i*theta/2}|1>."""
-        bit_val = self._get_bit(i)
-        phases = backend.cast(
-            -0.5
-            * theta
-            * backend.cast(
-                1 - 2 * backend.cast(bit_val, dtype=dtypestr), dtype=dtypestr
-            ),
-            dtype=dtypestr,
-        )
-        self._state = self._state * backend.exp(1j * phases)
+        bit_val = backend.cast(self._get_bit(i), dtype=dtypestr)
+        phases = -0.5 * theta * (1.0 - 2.0 * bit_val)
+        self._state = self._state * backend.exp(1j * backend.cast(phases, dtypestr))
 
     def _apply_rzz(self, i: int, j: int, theta: Any) -> None:
         """Apply RZZ(theta) on qubits i,j: exp(-i*theta/2 * Z_i Z_j)."""

@@ -277,13 +277,13 @@ def load_func(
     ms = [tf.saved_model.load(p) for p in path]
 
     def wrapper(*args: Any, **kws: Any) -> Any:
-        try:
-            for m in ms:
+        for m in ms:
+            try:
                 return m.f(*args, **kws)
-        except ValueError as e:
-            if fallback is not None:
-                return fallback(*args, **kws)
-            else:
-                raise e
+            except ValueError:
+                continue
+        if fallback is not None:
+            return fallback(*args, **kws)
+        raise ValueError("no loaded function matched the input shape")
 
     return wrapper

@@ -478,6 +478,8 @@ class BaseCircuit(AbstractCircuit):
         sample: List[Tensor] = []
         one_r = backend.cast(backend.convert_to_tensor(1.0), rdtypestr)
         p = one_r
+        basis0 = gates.array_to_tensor(np.array([1, 0])) if self._d == 2 else None
+        basis1 = gates.array_to_tensor(np.array([0, 1])) if self._d == 2 else None
         for k, j in enumerate(index):
             if self.is_dm is False:
                 nodes1, edge1 = self._copy()
@@ -493,9 +495,7 @@ class BaseCircuit(AbstractCircuit):
                     e ^ edge2[i]
             for i in range(k):
                 if self._d == 2:
-                    m = (1 - sample[i]) * gates.array_to_tensor(
-                        np.array([1, 0])
-                    ) + sample[i] * gates.array_to_tensor(np.array([0, 1]))
+                    m = (1 - sample[i]) * basis0 + sample[i] * basis1
                 else:
                     m = onehot_d_tensor(sample[i], d=self._d)
                 g1 = Gate(m)
@@ -542,7 +542,6 @@ class BaseCircuit(AbstractCircuit):
                         p=backend.cast(pu, rdtypestr),
                     )
                 else:
-                    one_r = backend.cast(backend.convert_to_tensor(1.0), rdtypestr)
                     st = backend.cast(status[k : k + 1], rdtypestr)
                     ind = backend.probability_sample(
                         shots=1,

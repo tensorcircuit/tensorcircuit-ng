@@ -55,8 +55,7 @@ def tfqr_grad(a: Array, q: Array, r: Array, dq: Array, dr: Array) -> Array:
         length = tf.shape(small_indices)[0]
         newvalues = tf.ones((length,), dtype=rdiag.dtype) * qr_epsilon
         rdiag = tf.tensor_scatter_nd_update(rdiag, small_indices, newvalues)
-        delta_r = tf.linalg.set_diag(r, rdiag) - r
-        r = r + delta_r
+        r = tf.linalg.set_diag(r, rdiag)
         # Modification ends
 
         qdq = tf.matmul(q, dq, adjoint_a=True)

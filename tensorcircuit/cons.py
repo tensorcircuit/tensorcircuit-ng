@@ -311,7 +311,7 @@ def _merge_single_gates(
     #     at most once, so total deque churn is O(n).
     nodes = list(nodes)
     if total_size is None:
-        total_size = sum([_sizen(t) for t in nodes])
+        total_size = sum(_sizen(t) for t in nodes)
     node_pos: Dict[int, int] = {id(n): i for i, n in enumerate(nodes)}
     queue = deque(n for n in nodes if len(n.tensor.shape) <= 2)
     in_queue: Set[int] = {id(n) for n in queue}
@@ -380,7 +380,7 @@ def experimental_contractor(
     ignore_edge_order: bool = False,
     local_steps: int = 2,
 ) -> Any:
-    total_size = sum([_sizen(t) for t in nodes])
+    total_size = sum(_sizen(t) for t in nodes)
     nodes = list(nodes)
     # merge single qubit gate
     if len(nodes) > 5:
@@ -441,10 +441,8 @@ def plain_contractor(
     :return: The ``tn.Node`` after contraction
     :rtype: tn.Node
     """
-    total_size = sum([_sizen(t) for t in nodes])
-    # nodes = list(reversed(list(nodes)))
-    nodes = list(nodes)
-    nodes = list(reversed(nodes))
+    total_size = sum(_sizen(t) for t in nodes)
+    nodes = list(reversed(list(nodes)))
 
     width = 0
 
@@ -935,7 +933,7 @@ def _base(
         return tn.Node(backend.zeros(shape))
     logger.info("the contraction path is given as %s" % str(path))
     if total_size is None:
-        total_size = sum([_sizen(t) for t in nodes])
+        total_size = sum(_sizen(t) for t in nodes)
     for ab in path:
         if len(ab) < 2:
             logger.warning("single element tuple in contraction path!")

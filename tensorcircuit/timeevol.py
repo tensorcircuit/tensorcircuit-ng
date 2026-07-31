@@ -1071,7 +1071,6 @@ def estimate_spectral_bounds(
 
         q_prev = q
         beta = backend.norm(r)
-        beta = backend.abs(beta)
         betas.append(beta)
         if beta < 1e-8:
             break

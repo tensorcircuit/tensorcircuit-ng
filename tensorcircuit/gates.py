@@ -19,7 +19,7 @@ except ImportError:  # np2.0 compatibility
 import tensornetwork as tn
 from scipy.stats import unitary_group
 
-from .cons import backend, dtypestr, npdtype, runtime_backend
+from .cons import backend, dtypestr, npdtype
 from .utils import arg_alias
 
 thismodule = sys.modules[__name__]
@@ -112,6 +112,17 @@ _swap_matrix = np.array(
         [0.0, 1.0, 0.0, 0.0],
         [0.0, 0.0, 0.0, 1.0],
     ]
+)
+
+# iSwap decomposition: d1 (diagonal endpoints), d2 (diagonal swap), od (off-diagonal swap)
+_iswap_d1_matrix = np.array(
+    [[1.0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1.0]]
+)
+_iswap_d2_matrix = np.array(
+    [[0, 0, 0, 0], [0, 1.0, 0, 0], [0, 0, 1.0, 0], [0, 0, 0, 0]]
+)
+_iswap_od_matrix = np.array(
+    [[0, 0, 0, 0], [0, 0, 1.0, 0], [0, 1.0, 0, 0], [0, 0, 0, 0]]
 )
 
 
@@ -401,9 +412,6 @@ def meta_gate() -> None:
             setattr(thismodule, n + "gate", temp)
             setattr(thismodule, n + "_gate", temp)
             setattr(thismodule, n, temp)
-
-    with runtime_backend("numpy"):  # backward compatibility
-        setattr(thismodule, "pauli_gates", [i(), x(), y(), z()])  # type: ignore
 
 
 meta_gate()
@@ -696,10 +704,7 @@ def iswap_gate(theta: float = 1.0) -> Gate:
     :return: iSwap Gate
     :rtype: Gate
     """
-    d1 = np.array([[1.0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1.0]])
-    d2 = np.array([[0, 0, 0, 0], [0, 1.0, 0, 0], [0, 0, 1.0, 0], [0, 0, 0, 0]])
-    od = np.array([[0, 0, 0, 0], [0, 0, 1.0, 0], [0, 1.0, 0, 0], [0, 0, 0, 0]])
-    d1, d2, od = array_to_tensor(d1, d2, od)
+    d1, d2, od = array_to_tensor(_iswap_d1_matrix, _iswap_d2_matrix, _iswap_od_matrix)
     theta = num_to_tensor(theta)
     unitary = (
         d1

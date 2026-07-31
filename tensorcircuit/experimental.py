@@ -48,6 +48,11 @@ def adaptive_vmap(
     if isinstance(vectorized_argnums, int):
         vectorized_argnums = (vectorized_argnums,)
 
+    _vmap = backend.jit(
+        backend.vmap(f, vectorized_argnums=vectorized_argnums),
+        static_argnums=static_argnums,
+    )
+
     def wrapper(*args: Any, **kws: Any) -> Tensor:
         # only support `f` outputs a tensor
         batch = args[vectorized_argnums[0]].shape[0]  # type: ignore
@@ -73,10 +78,6 @@ def adaptive_vmap(
             reshape_args.append(arg)
             if s2 != 0:
                 rest_args.append(arg_rest)
-        _vmap = backend.jit(
-            backend.vmap(f, vectorized_argnums=vectorized_argnums),
-            static_argnums=static_argnums,
-        )
         r = []
         for i in range(s1):
             # currently using naive python loop for simplicity

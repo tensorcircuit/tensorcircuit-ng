@@ -85,7 +85,7 @@ class QuantumNet(torch.nn.Module):  # type: ignore
         if isinstance(weights_shape[0], int):
             weights_shape = [weights_shape]
         if not is_sequence(initializer):
-            initializer = [initializer]
+            initializer = [initializer] * len(weights_shape)
         for ws, initf in zip(weights_shape, initializer):
             if initf is None:
                 initf = torch.randn

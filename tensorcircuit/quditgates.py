@@ -509,7 +509,6 @@ def u8_matrix_func(
             f"Sum of v_k's is not 0 mod {d}. Got {sum(vks) % d}. Check parameters."
         )
 
-    omega = np.exp(2j * np.pi / d) if omega is None else omega
     m = np.diag([omega**v for v in vks])
     return backend.cast(backend.convert_to_tensor(m), dtype=dtypestr)
 

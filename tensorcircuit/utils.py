@@ -121,16 +121,12 @@ def is_m1mac() -> bool:
 
 def is_sequence(x: Any) -> bool:
     """Return True if ``x`` is a list or tuple."""
-    if isinstance(x, list) or isinstance(x, tuple):
-        return True
-    return False
+    return isinstance(x, (list, tuple))
 
 
 def is_number(x: Any) -> bool:
     """Return True if ``x`` is an int, float, or complex."""
-    if isinstance(x, int) or isinstance(x, float) or isinstance(x, complex):
-        return True
-    return False
+    return isinstance(x, (int, float, complex))
 
 
 def arg_alias(

@@ -2086,12 +2086,12 @@ def u1_mask(n: int, m: int) -> Tensor:
     :rtype: Tensor
     """
     inds = u1_inds(n, m)
-    m = backend.scatter(
+    mask = backend.scatter(
         backend.zeros([2**n]),
         backend.reshape(inds, [-1, 1]),
         backend.ones([math.comb(n, m)]),
     )
-    return m
+    return mask
 
 
 def u1_project(s: Tensor, n: int, m: int) -> Tensor:
@@ -2409,11 +2409,11 @@ def PauliStringSum2COO(
     weight = num_to_tensor(weight)
     ls = num_to_tensor(ls)
     global PauliString2COO_jit
+    if backend.name not in PauliString2COO_jit:
+        PauliString2COO_jit[backend.name] = backend.jit(
+            PauliString2COO, jit_compile=True
+        )
     if backend.name == "jax" and not numpy:
-        if backend.name not in PauliString2COO_jit:
-            PauliString2COO_jit[backend.name] = backend.jit(
-                PauliString2COO, jit_compile=True
-            )
         # Use vmap to generate batched BCOO and then sum reduction
         # This keeps everything in JAX/tracers and avoids backend.numpy()
         batch_f = backend.vmap(
@@ -2423,10 +2423,6 @@ def PauliStringSum2COO(
         rsparse = rsparses.sum(axis=0)  # Sum over the batch dimension (terms)
 
     else:
-        if backend.name not in PauliString2COO_jit:
-            PauliString2COO_jit[backend.name] = backend.jit(
-                PauliString2COO, jit_compile=True
-            )
         rsparses = [
             backend.numpy(PauliString2COO_jit[backend.name](ls[i], weight[i]))  # type: ignore
             for i in range(nterms)
@@ -2522,16 +2518,13 @@ def PauliString2COO(l: Sequence[int], weight: Optional[float] = None) -> Tensor:
     idx_x = num_to_tensor(0b0, dtype=idtypestr)
     idx_y = num_to_tensor(0b0, dtype=idtypestr)
     idx_z = num_to_tensor(0b0, dtype=idtypestr)
-    i = num_to_tensor(0, dtype=idtypestr)
     for j in range(n):
         oh = backend.onehot(l[j], 4)
-        s = backend.left_shift(one, n - i - 1)
+        s = backend.left_shift(one, n - j - 1)
         oh = backend.cast(oh, dtype=idtypestr)
         idx_x += oh[1] * s
         idx_y += oh[2] * s
         idx_z += oh[3] * s
-
-        i += 1
 
     if weight is None:
         weight = num_to_tensor(1.0, dtype=dtypestr)
@@ -3014,11 +3007,12 @@ def taylorlnm(x: Tensor, k: int) -> Tensor:
     """
     dtype = x.dtype
     s = x.shape[-1]
-    y = 1 / k * (-1) ** (k + 1) * backend.eye(s, dtype=dtype)
+    eye = backend.eye(s, dtype=dtype)
+    y = 1 / k * (-1) ** (k + 1) * eye
     for i in reversed(range(k)):
         y = y @ x
         if i > 0:
-            y += 1 / (i) * (-1) ** (i + 1) * backend.eye(s, dtype=dtype)
+            y += 1 / (i) * (-1) ** (i + 1) * eye
     return y
 
 

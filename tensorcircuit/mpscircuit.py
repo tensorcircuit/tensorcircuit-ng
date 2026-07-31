@@ -1082,6 +1082,7 @@ class MPSCircuit(AbstractCircuit):
         p = backend.convert_to_tensor(p)
         p = backend.cast(p, dtype=rdtypestr)
         sample: Tensor = []
+        basis = backend.convert_to_tensor(np.eye(self._d).astype(dtypestr))
         for k, site in enumerate(index):
             mps.position(site)
             # TODO(@refraction-ray): potential performance issue, position might be saved
@@ -1103,7 +1104,6 @@ class MPSCircuit(AbstractCircuit):
                 outcome = backend.cast(ind[0], "int32")
 
             p = p * ps[outcome]
-            basis = backend.convert_to_tensor(np.eye(self._d).astype(dtypestr))
             m = basis[outcome]
             mps._mps.tensors[site] = backend.einsum("iaj,a->ij", tensor, m)[:, None, :]
             sample.append(outcome)

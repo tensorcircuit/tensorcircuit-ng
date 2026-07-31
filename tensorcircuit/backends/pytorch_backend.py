@@ -210,16 +210,16 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     ) -> Tensor:
         if dtype is None:
             dtype = dtypestr
+        torch_dtype = getattr(torchlib, dtype) if isinstance(dtype, str) else dtype
         if not M:
             M = N
-        r = torchlib.eye(n=N, m=M)
-        return self.cast(r, dtype)
+        return torchlib.eye(n=N, m=M, dtype=torch_dtype)
 
     def ones(self, shape: Tuple[int, ...], dtype: Optional[str] = None) -> Tensor:
         if dtype is None:
             dtype = dtypestr
-        r = torchlib.ones(shape)
-        return self.cast(r, dtype)
+        torch_dtype = getattr(torchlib, dtype) if isinstance(dtype, str) else dtype
+        return torchlib.ones(shape, dtype=torch_dtype)
 
     def exp(self, tensor: Tensor) -> Tensor:
         return torchlib.exp(tensor)
@@ -227,8 +227,8 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def zeros(self, shape: Tuple[int, ...], dtype: Optional[str] = None) -> Tensor:
         if dtype is None:
             dtype = dtypestr
-        r = torchlib.zeros(shape)
-        return self.cast(r, dtype)
+        torch_dtype = getattr(torchlib, dtype) if isinstance(dtype, str) else dtype
+        return torchlib.zeros(shape, dtype=torch_dtype)
 
     def zeros_like(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
         if dtype is None:

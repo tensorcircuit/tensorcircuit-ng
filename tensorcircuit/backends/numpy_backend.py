@@ -275,9 +275,7 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         return np.cumsum(a, axis)
 
     def is_tensor(self, a: Any) -> bool:
-        if isinstance(a, np.ndarray):
-            return True
-        return False
+        return isinstance(a, np.ndarray)
 
     def real(self, a: Tensor) -> Tensor:
         return np.real(a)
