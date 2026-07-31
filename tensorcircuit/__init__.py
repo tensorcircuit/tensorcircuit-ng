@@ -50,7 +50,7 @@ try:
 
     CliffordCircuit = StabilizerCircuit
     StabCircuit = StabilizerCircuit
-except ModuleNotFoundError:
+except (ImportError, ModuleNotFoundError):
     pass
 
 from .gates import num_to_tensor, array_to_tensor
