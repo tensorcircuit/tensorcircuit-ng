@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add `tc.gates.batched_unitary` for backend-vectorized dense gate construction.
+
 - Add fixed-schedule Taylor exponential action via `expm_multiply_evol` and `estimate_expm_multiply_parameters` for JIT- and AD-compatible time evolution.
 
 - Add Tianyan cloud provider.

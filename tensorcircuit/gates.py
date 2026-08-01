@@ -2,6 +2,7 @@
 Declarations of single-qubit and two-qubit gates and their corresponding matrix.
 """
 
+import builtins
 import sys
 import warnings
 from copy import deepcopy
@@ -76,6 +77,26 @@ _yx_matrix = np.kron(_y_matrix, _x_matrix)
 _yz_matrix = np.kron(_y_matrix, _z_matrix)
 _zx_matrix = np.kron(_z_matrix, _x_matrix)
 _zy_matrix = np.kron(_z_matrix, _y_matrix)
+
+_su4_generators = np.stack(
+    [
+        _ix_matrix,
+        _iy_matrix,
+        _iz_matrix,
+        _xi_matrix,
+        _xx_matrix,
+        _xy_matrix,
+        _xz_matrix,
+        _yi_matrix,
+        _yx_matrix,
+        _yy_matrix,
+        _yz_matrix,
+        _zi_matrix,
+        _zx_matrix,
+        _zy_matrix,
+        _zz_matrix,
+    ]
+)
 
 
 _cnot_matrix = np.array(
@@ -393,6 +414,84 @@ class GateVF(GateF):
             return Gate(ma, name)
 
         return GateVF(f, self.n + "d", self.ctrl)
+
+
+def batched_unitary(
+    gate: Union[str, Callable[..., Any]],
+    *,
+    vectorized_argnames: Union[str, Sequence[str]],
+    **params: Any,
+) -> Tensor:
+    """
+    Construct dense matrices for a batch of parameterized gates.
+
+    Parameters named by ``vectorized_argnames`` are mapped together over their
+    leading dimension. All remaining parameters are shared by the full batch.
+    The gate callable may return either a :class:`Gate` or a dense tensor.
+
+    :param gate: Gate name or callable returning a ``Gate`` or dense tensor.
+    :param vectorized_argnames: Gate parameter name or names carrying a leading
+        batch dimension.
+    :param params: Keyword parameters passed to the gate callable.
+    :return: Dense gate matrices with shape ``(batch, dimension, dimension)``.
+    :rtype: Tensor
+
+    :Example:
+
+    >>> theta = tc.backend.ones((3,))
+    >>> matrices = tc.gates.batched_unitary(
+    ...     "rx", vectorized_argnames="theta", theta=theta
+    ... )
+    >>> tc.backend.shape_tuple(matrices)
+    (3, 2, 2)
+    """
+    names: Tuple[str, ...]
+    if isinstance(vectorized_argnames, str):
+        names = (vectorized_argnames,)
+    else:
+        names = tuple(vectorized_argnames)
+    if not names:
+        raise ValueError("vectorized_argnames must contain at least one name")
+    if not builtins.all(isinstance(name, str) for name in names):
+        raise TypeError("vectorized_argnames must contain only strings")
+    if len(set(names)) != len(names):
+        raise ValueError("vectorized_argnames must not contain duplicates")
+
+    if isinstance(gate, str):
+        gatef = getattr(thismodule, f"{gate}_gate", None)
+        if gatef is None:
+            gatef = getattr(thismodule, gate, None)
+        if gatef is None:
+            raise ValueError(f"unknown gate name: {gate}")
+    else:
+        gatef = gate
+    if not callable(gatef):
+        raise TypeError("gate must be a gate name or callable")
+
+    missing = [name for name in names if name not in params]
+    if missing:
+        raise ValueError(f"missing vectorized gate parameters: {missing}")
+
+    batched_args = tuple(backend.convert_to_tensor(params[name]) for name in names)
+    batch_shapes = [backend.shape_tuple(arg) for arg in batched_args]
+    if builtins.any(not shape for shape in batch_shapes):
+        raise ValueError("vectorized gate parameters must have a batch dimension")
+    batch_size = batch_shapes[0][0]
+    if builtins.any(shape[0] != batch_size for shape in batch_shapes[1:]):
+        raise ValueError("vectorized gate parameter batch dimensions must match")
+    static_params = {key: value for key, value in params.items() if key not in names}
+
+    def matrix_fn(*values: Tensor) -> Tensor:
+        call_params = dict(static_params)
+        call_params.update(zip(names, values))
+        result = gatef(**call_params)
+        if isinstance(result, Gate):
+            result = result.tensor
+        return backend.reshapem(result)
+
+    return backend.vmap(matrix_fn, vectorized_argnums=tuple(range(len(batched_args))))(
+        *batched_args
+    )
 
 
 def meta_gate() -> None:
@@ -866,27 +965,9 @@ def su4_gate(theta: Tensor, name: str = "su(4)") -> Gate:
     :rtype: Gate
     """
     theta = num_to_tensor(theta)
-    pauli_ops = array_to_tensor(
-        _ix_matrix,
-        _iy_matrix,
-        _iz_matrix,
-        _xi_matrix,
-        _xx_matrix,
-        _xy_matrix,
-        _xz_matrix,
-        _yi_matrix,
-        _yx_matrix,
-        _yy_matrix,
-        _yz_matrix,
-        _zi_matrix,
-        _zx_matrix,
-        _zy_matrix,
-        _zz_matrix,
-    )
-    generator = backend.sum(
-        backend.stack([theta[i] * pauli_ops[i] for i in range(15)]), axis=0
-    )
-    mat = backend.expm(-1j * generator)
+    pauli_ops = array_to_tensor(_su4_generators)
+    generator = backend.einsum("i,iab->ab", theta, pauli_ops)
+    mat = backend.expm(-backend.i() * generator)
     mat = backend.reshape2(mat)
     return Gate(mat, name=name)
 

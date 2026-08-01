@@ -1,6 +1,8 @@
 import sys
 import os
 import numpy as np
+import pytest
+from pytest_lazyfixture import lazy_fixture as lf
 
 thisfile = os.path.abspath(__file__)
 modulepath = os.path.dirname(os.path.dirname(thisfile))
@@ -176,3 +178,174 @@ def test_matrix_for_gate_no_mutation(npb):
     _ = tc.gates.matrix_for_gate(g)
     after = g.tensor
     assert np.array_equal(before, after)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_batched_unitary_parameterized_gates(backend):
+    parameters = tc.backend.convert_to_tensor(
+        np.array(
+            [
+                [0.1, 0.2, 0.3],
+                [0.4, 0.5, 0.6],
+                [0.7, 0.8, 0.9],
+            ],
+            dtype=np.float32,
+        )
+    )
+    actual = tc.gates.batched_unitary(
+        tc.gates.u,
+        vectorized_argnames=("theta", "phi", "lbd"),
+        theta=parameters[:, 0],
+        phi=parameters[:, 1],
+        lbd=parameters[:, 2],
+    )
+    expected = tc.backend.stack(
+        [
+            tc.backend.reshapem(
+                tc.gates.u_gate(
+                    theta=parameters[i, 0],
+                    phi=parameters[i, 1],
+                    lbd=parameters[i, 2],
+                ).tensor
+            )
+            for i in range(3)
+        ]
+    )
+    assert tc.backend.shape_tuple(actual) == (3, 2, 2)
+    np.testing.assert_allclose(
+        tc.backend.numpy(actual), tc.backend.numpy(expected), atol=1e-6
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_batched_unitary_shared_and_custom_parameters(backend):
+    theta = tc.backend.convert_to_tensor(np.array([0.1, 0.2, 0.3], dtype=np.float32))
+    unitary = tc.gates.array_to_tensor(tc.gates._zz_matrix)
+    actual = tc.gates.batched_unitary(
+        tc.gates.exp_gate,
+        vectorized_argnames="theta",
+        unitary=unitary,
+        theta=theta,
+    )
+    expected = tc.backend.stack(
+        [
+            tc.backend.reshapem(
+                tc.gates.exp_gate(unitary=unitary, theta=theta[i]).tensor
+            )
+            for i in range(3)
+        ]
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(actual), tc.backend.numpy(expected), atol=1e-5
+    )
+
+    def custom_tensor_gate(theta):
+        return tc.backend.reshapem(tc.gates.rx_gate(theta=theta).tensor)
+
+    custom = tc.gates.batched_unitary(
+        custom_tensor_gate, vectorized_argnames="theta", theta=theta
+    )
+    reference = tc.gates.batched_unitary("rx", vectorized_argnames="theta", theta=theta)
+    np.testing.assert_allclose(
+        tc.backend.numpy(custom), tc.backend.numpy(reference), atol=1e-6
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_batched_unitary_su4(backend):
+    theta = tc.backend.convert_to_tensor(
+        np.arange(45, dtype=np.float32).reshape(3, 15) / 100
+    )
+    actual = tc.gates.batched_unitary("su4", vectorized_argnames="theta", theta=theta)
+    theta_complex = tc.gates.num_to_tensor(theta)
+    pauli_ops = tc.gates.array_to_tensor(
+        tc.gates._ix_matrix,
+        tc.gates._iy_matrix,
+        tc.gates._iz_matrix,
+        tc.gates._xi_matrix,
+        tc.gates._xx_matrix,
+        tc.gates._xy_matrix,
+        tc.gates._xz_matrix,
+        tc.gates._yi_matrix,
+        tc.gates._yx_matrix,
+        tc.gates._yy_matrix,
+        tc.gates._yz_matrix,
+        tc.gates._zi_matrix,
+        tc.gates._zx_matrix,
+        tc.gates._zy_matrix,
+        tc.gates._zz_matrix,
+    )
+    expected = tc.backend.stack(
+        [
+            tc.backend.expm(
+                -tc.backend.i()
+                * tc.backend.sum(
+                    tc.backend.stack(
+                        [theta_complex[batch, i] * pauli_ops[i] for i in range(15)]
+                    ),
+                    axis=0,
+                )
+            )
+            for batch in range(3)
+        ]
+    )
+    assert tc.backend.shape_tuple(actual) == (3, 4, 4)
+    np.testing.assert_allclose(
+        tc.backend.numpy(actual), tc.backend.numpy(expected), atol=1e-5
+    )
+
+
+def test_batched_unitary_jax_autodiff(jaxb):
+    theta = tc.backend.convert_to_tensor(
+        np.arange(30, dtype=np.float32).reshape(2, 15) / 100
+    )
+
+    def batched_loss(parameters):
+        matrices = tc.gates.batched_unitary(
+            tc.gates.su4,
+            vectorized_argnames="theta",
+            theta=parameters,
+        )
+        return tc.backend.real(
+            tc.backend.sum(matrices[:, 0, 0] + 0.37 * matrices[:, 0, 1])
+        )
+
+    def loop_loss(parameters):
+        matrices = tc.backend.stack(
+            [
+                tc.backend.reshapem(tc.gates.su4_gate(theta=parameters[i]).tensor)
+                for i in range(2)
+            ]
+        )
+        return tc.backend.real(
+            tc.backend.sum(matrices[:, 0, 0] + 0.37 * matrices[:, 0, 1])
+        )
+
+    batched_value, batched_grad = tc.backend.jit(
+        tc.backend.value_and_grad(batched_loss)
+    )(theta)
+    loop_value, loop_grad = tc.backend.jit(tc.backend.value_and_grad(loop_loss))(theta)
+    np.testing.assert_allclose(
+        tc.backend.numpy(batched_value), tc.backend.numpy(loop_value), atol=1e-5
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(batched_grad), tc.backend.numpy(loop_grad), atol=1e-5
+    )
+
+
+def test_batched_unitary_validation(npb):
+    with pytest.raises(ValueError, match="at least one"):
+        tc.gates.batched_unitary("rx", vectorized_argnames=(), theta=np.ones(2))
+    with pytest.raises(ValueError, match="unknown gate"):
+        tc.gates.batched_unitary(
+            "unknown", vectorized_argnames="theta", theta=np.ones(2)
+        )
+    with pytest.raises(ValueError, match="missing vectorized"):
+        tc.gates.batched_unitary("rx", vectorized_argnames="theta")
+    with pytest.raises(ValueError, match="batch dimensions must match"):
+        tc.gates.batched_unitary(
+            tc.gates.u,
+            vectorized_argnames=("theta", "phi"),
+            theta=np.ones(2),
+            phi=np.ones(3),
+        )
