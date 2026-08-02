@@ -204,11 +204,12 @@ class DMCircuit(BaseCircuit):
         :raises ValueError: If completeness relation is not satisfied
         """
         k_tensors = [k.tensor if isinstance(k, tn.Node) else k for k in kraus]
-        shape = k_tensors[0].shape
-        dim = shape[0]  # Assuming square matrices
+        shape = backend.shape_tuple(k_tensors[0])
+        dim = int(2 ** (len(shape) / 2))
 
+        k_mats = [backend.reshape(k, [dim, dim]) for k in k_tensors]
         sum_kk = backend.zeros([dim, dim], dtype=k_tensors[0].dtype)
-        for k in k_tensors:
+        for k in k_mats:
             kdag = backend.conj(backend.transpose(k))
             sum_kk = sum_kk + backend.matmul(kdag, k)
 

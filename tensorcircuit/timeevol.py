@@ -516,7 +516,7 @@ def hamiltonian_evol(
     >>> # Evolution times
     >>> times = tc.array_to_tensor([0.0, 0.5, 1.0])
     >>> # Evolve and get states
-    >>> states = tc.experimental.hamiltonian_evol(times, h, psi0)
+    >>> states = tc.experimental.hamiltonian_evol(h, psi0, times)
     >>> print(states.shape)  # (3, 4)
 
 

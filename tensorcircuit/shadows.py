@@ -335,9 +335,9 @@ def entropy_shadow(
     :type: int
     :param subsystem_to_keep: qubit indices to keep (entropy of this subsystem).
         Mutually exclusive with ``subsystems_to_trace_out``.
-    :type: subsystem_to_keep: Optional[Sequence[int]]
+    :type subsystem_to_keep: Optional[Sequence[int]]
     :param subsystems_to_trace_out: qubit indices to trace out (complement is kept).
-    :type: subsystems_to_trace_out: Optional[Sequence[int]]
+    :type subsystems_to_trace_out: Optional[Sequence[int]]
 
     :return Renyi entropy: shape = ()
     :rtype: Tensor
@@ -389,9 +389,9 @@ def renyi_entropy_2(
     :type: Optional[Sequence[int]]
     :param subsystem_to_keep: qubit indices to keep (entropy of this subsystem).
         Mutually exclusive with ``subsystems_to_trace_out``.
-    :type: subsystem_to_keep: Optional[Sequence[int]]
+    :type subsystem_to_keep: Optional[Sequence[int]]
     :param subsystems_to_trace_out: qubit indices to trace out (complement is kept).
-    :type: subsystems_to_trace_out: Optional[Sequence[int]]
+    :type subsystems_to_trace_out: Optional[Sequence[int]]
 
     :return second order Renyi entropy: shape = ()
     :rtype: Tensor

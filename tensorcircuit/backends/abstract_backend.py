@@ -756,12 +756,13 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `schur`.".format(self.name)
         )
 
-    def i(self: Any, dtype: str) -> Tensor:
+    def i(self: Any, dtype: Any = None) -> Tensor:
         """
         Return 1.j in as a tensor compatible with the backend.
 
-        :param dtype: "complex64" or "complex128"
-        :type dtype: str
+        :param dtype: "complex64" or "complex128"; when None the backend's default
+            complex dtype is used
+        :type dtype: Any, optional
         :return: 1.j tensor
         :rtype: Tensor
         """

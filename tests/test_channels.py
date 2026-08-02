@@ -16,6 +16,7 @@ from tensorcircuit.channels import (
     phasedampingchannel,
     resetchannel,
     composedkraus,
+    generaldepolarizingchannel,
 )
 
 
@@ -422,6 +423,17 @@ def test_non_square_matrices():
     ]
     with pytest.raises(ValueError):
         tc.DMCircuit.check_kraus(invalid_kraus)
+
+
+def test_multi_qubit_kraus_operators():
+    # multi-qubit Kraus operators are stored as [2] * (2 * n) leg tensors and must
+    # be reshaped to square matrices before the completeness check, mirroring
+    # ``channels.kraus_identity_check``.
+    kraus = generaldepolarizingchannel(0.02, 2)
+    assert tc.DMCircuit.check_kraus(kraus) is True
+
+    kraus = generaldepolarizingchannel(0.01, 3)
+    assert tc.DMCircuit.check_kraus(kraus) is True
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])

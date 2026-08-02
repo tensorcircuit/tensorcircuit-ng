@@ -967,27 +967,32 @@ def check_rep_transformation(
         print("kraus:", kraus)
         print("kraus_new", kraus2)
 
-    print("test identity from kraus/choi to superop")
+    if verbose:
+        print("test identity from kraus/choi to superop")
     superop = kraus_to_super(kraus)
     superop2 = choi_to_super(choi)
     np.testing.assert_allclose(superop, superop2, atol=1e-5)
 
     # cheack kraus2 satisfy identity
-    print("test normaliztion of kraus_new")
+    if verbose:
+        print("test normaliztion of kraus_new")
     krausg = krausmatrix_to_krausgate(kraus2)
     kraus_identity_check(krausg)
 
     # cheack choi2 equals to choi
-    print("test identity of choi and choi_new")
+    if verbose:
+        print("test identity of choi and choi_new")
     np.testing.assert_allclose(choi, choi2, atol=1e-5)
 
     # cheack evolution
-    print("test evolution identity of kraus and kraus_new")
+    if verbose:
+        print("test evolution identity of kraus and kraus_new")
     density_matrix1 = evol_kraus(density_matrix, kraus)
     density_matrix2 = evol_kraus(density_matrix, kraus2)
     np.testing.assert_allclose(density_matrix1, density_matrix2, atol=1e-5)
 
-    print("test evolution identity of kraus and superop")
+    if verbose:
+        print("test evolution identity of kraus and superop")
     density_matrix3 = evol_superop(density_matrix, superop)
     np.testing.assert_allclose(density_matrix1, density_matrix3, atol=1e-5)
 

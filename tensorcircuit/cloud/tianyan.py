@@ -247,6 +247,12 @@ def _tc_qir_to_qcis(circuit: AbstractCircuit) -> str:
         elif name == "cy":
             cqlib_circuit.cy(index[0], index[1])
         elif name == "iswap":
+            theta = resolved_params.get("theta", 1.0)
+            if abs(float(theta) - 1.0) > 1e-6:
+                raise ValueError(
+                    "tianyan QCIS conversion only supports full iSwap (theta=1.0), "
+                    "got theta=%r" % theta
+                )
             # iswap = swap * (s (x) s) * cz
             cqlib_circuit.cz(index[0], index[1])
             cqlib_circuit.s(index[0])
