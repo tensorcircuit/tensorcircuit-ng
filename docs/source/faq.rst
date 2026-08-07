@@ -326,6 +326,58 @@ Try the following:
     # get the k-th order renyi entropy
 
 
+How to get the stabilizer Rényi entropy of a pure state?
+---------------------------------------------------------
+
+Use :py:func:`tensorcircuit.quantum.stabilizer_renyi_entropy` with a pure-state qubit wavefunction of shape ``(2**N,)``. Qudit states are not supported yet. With no ``status`` argument, the function evaluates all Pauli families exactly. Passing an external uniform tensor enables the FWHT Monte Carlo estimator while keeping randomness outside a JIT-compiled function.
+
+.. code-block:: python
+
+    c = tc.Circuit(4)
+    # omit circuit construction
+    psi = c.state()
+
+    # exact FWHT evaluation
+    m2 = tc.quantum.stabilizer_renyi_entropy(psi, alpha=2)
+
+    # external randomness for Monte Carlo over nonzero x families
+    status = tc.backend.convert_to_tensor([0.13, 0.47, 0.82])
+    m2_mc = tc.quantum.stabilizer_renyi_entropy(psi, alpha=2, status=status)
+
+    # entropy and an estimated Monte Carlo standard error
+    m2_mc, m2_std = tc.quantum.stabilizer_renyi_entropy(
+        psi, alpha=2, status=status, with_std=True
+    )
+
+Here ``m2_std`` is an estimated error bar for the final entropy caused by
+resampling ``status``.  It is obtained from the spread of the sampled
+``x``-family moments and is not an additional exact evaluation.  In exact
+mode, ``with_std=True`` returns zero as the second value.
+
+For a structured state, the nonzero ``x``-family contributions can be very
+uneven, which increases the Monte Carlo variance.  A user can optionally
+insert fixed or randomly selected Hadamard gates into the state-preparation
+circuit before calling ``state()``.  This is a Clifford transformation, so it
+does not change the exact stabilizer Rényi entropy; it only changes the
+sampling distribution and may improve the estimate when ``status`` is used.
+
+.. code-block:: python
+
+    c = tc.Circuit(14)
+    # Prepare the target state first.
+    # ... circuit construction ...
+    selected_qubits = [7, 8, 9, 10, 11, 12, 13]
+    for qubit in selected_qubits:
+        c.h(qubit)
+    psi_preconditioned = c.state()
+    m2_mc = tc.quantum.stabilizer_renyi_entropy(
+        psi_preconditioned, alpha=2, status=status
+    )
+
+The useful qubits and the number of Hadamard gates are state-dependent.  This
+manual preconditioning is optional; it is not required by the entropy API.
+
+
 What is the long-term support (LTS) commitment for TensorCircuit-NG?
 ---------------------------------------------------------------------
 

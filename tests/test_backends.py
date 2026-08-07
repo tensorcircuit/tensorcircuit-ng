@@ -478,6 +478,11 @@ def test_backend_methods_2(backend):
         tc.backend.exp(tc.backend.ones([2, 3])), np.exp(np.ones([2, 3])), atol=1e-5
     )
     np.testing.assert_allclose(
+        tc.backend.log(2.0 * tc.backend.ones([2, 3])),
+        np.log(2.0 * np.ones([2, 3])),
+        atol=1e-5,
+    )
+    np.testing.assert_allclose(
         tc.backend.expm(tc.backend.ones([3, 3])),
         scipy.linalg.expm(np.ones([3, 3])),
         atol=1e-5,

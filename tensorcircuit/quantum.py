@@ -2960,6 +2960,161 @@ def renyi_entropy(rho: Union[Tensor, QuOperator], k: int = 2) -> Tensor:
     return s
 
 
+def _fwht(vector: Tensor) -> Tensor:
+    """Apply the unnormalized fast Walsh-Hadamard transform to a vector."""
+    size = int(backend.sizen(vector))
+    if size == 0 or size & (size - 1):
+        raise ValueError("The FWHT input size must be a positive power of two.")
+
+    transformed = vector
+    block_size = 1
+    while block_size < size:
+        blocks = backend.reshape(transformed, [-1, 2 * block_size])
+        left = blocks[:, :block_size]
+        right = blocks[:, block_size:]
+        transformed = backend.reshape(
+            backend.stack([left + right, left - right], axis=1), [-1]
+        )
+        block_size *= 2
+    return transformed
+
+
+def stabilizer_renyi_entropy(
+    state: Tensor,
+    alpha: int = 2,
+    status: Optional[Tensor] = None,
+    with_std: bool = False,
+) -> Union[Tensor, Tuple[Tensor, Tensor]]:
+    r"""
+    Compute the pure-state qubit stabilizer Rényi entropy with FWHT.
+
+    This implementation currently supports qubit states only.  For an
+    ``N``-qubit pure state ``|psi>`` and ``d=2**N``, the Pauli
+    correlators are grouped by ``x`` using
+
+    ``f_x[b] = conjugate(psi[b]) * psi[b xor x]``.
+
+    An unnormalized fast Walsh-Hadamard transform of ``f_x`` returns all
+    correlators in the ``x`` family simultaneously.  If ``status`` is not
+    provided, all ``x`` families are evaluated exactly.  If ``status`` is a
+    rank-one tensor with values in ``[0, 1)``, ``x=0`` is evaluated exactly
+    and each status value samples one nonzero ``x`` family uniformly.  The
+    latter mode gives an unbiased estimator of the moment before the final
+    logarithm and is convenient for JIT-compiled functions because its
+    randomness is supplied externally.  If ``with_std`` is true, the sampled
+    family moments are also used to estimate the standard error of the final
+    entropy.  This adds only scalar accumulators to the sampling scan and does
+    not store all sampled family moments.  More precisely, if ``s_m`` is the
+    sample standard deviation of the sampled family moments, the returned
+    error bar is the first-order estimate
+    ``(d - 1) * s_m / (sqrt(K) * abs(1 - alpha) * log(2) * S)`` for the
+    entropy estimator, where ``K`` is the number of nonzero ``x`` samples and
+    ``S`` is the estimated moment.  Thus it is the estimated standard
+    deviation of the final entropy across repeated Monte Carlo runs, rather
+    than the raw standard deviation of the family moments.
+    A fixed Clifford unitary may be inserted into the state-preparation
+    circuit before obtaining ``state``.  Since Clifford unitaries permute the
+    Pauli operators, this does not change the exact entropy, but it can change
+    the sampling variance.  For structured states, applying Hadamard gates to
+    selected computational-basis qubits is a simple user-controlled
+    preconditioning option.  The choice is state-dependent and is not needed
+    for the exact mode.
+
+    :param state: Pure-state qubit wavefunction with shape ``(2**N,)``.
+    :type state: Tensor
+    :param alpha: Integer Rényi order, currently restricted to ``alpha >= 2``.
+    :type alpha: int, optional
+    :param status: Optional external uniform random tensor with shape
+        ``(number_of_samples,)`` and values in ``[0, 1)``.
+    :type status: Optional[Tensor]
+    :param with_std: If true, return a tuple containing the entropy and an
+        estimated standard error.  The standard error is zero in exact mode;
+        sampled mode requires at least two ``status`` values.
+    :type with_std: bool, optional
+    :return: The stabilizer Rényi entropy ``M_alpha``.
+        If ``with_std`` is true, return ``(entropy, standard_error)``.
+    :rtype: Union[Tensor, Tuple[Tensor, Tensor]]
+    """
+    if not isinstance(alpha, int) or alpha < 2:
+        raise ValueError("alpha must be an integer greater than or equal to 2.")
+
+    state = backend.cast(backend.convert_to_tensor(state), dtypestr)
+    if len(state.shape) != 1:
+        raise ValueError("state must be a rank-one pure-state wavefunction.")
+
+    dimension = int(backend.sizen(state))
+    if dimension < 2 or dimension & (dimension - 1):
+        raise ValueError(
+            "The state size must be a power of two with at least one qubit."
+        )
+    nqubits = int(math.log2(dimension))
+
+    state = state / backend.norm(state)
+    basis = backend.arange(dimension)
+
+    def family_moment(x: Tensor) -> Tensor:
+        shifted_state = backend.gather1d(state, backend.bitwise_xor(basis, x))
+        family = _fwht(backend.conj(state) * shifted_state)
+        magnitude = backend.abs(family)
+        moment_power = magnitude * magnitude
+        for _ in range(1, alpha):
+            moment_power = moment_power * magnitude * magnitude
+        return backend.sum(moment_power) / dimension**alpha
+
+    zero = backend.convert_to_tensor(0.0, dtype=rdtypestr)
+    if status is None:
+        x_values = backend.arange(dimension)
+        moment = backend.scan(lambda carry, x: carry + family_moment(x), x_values, zero)
+        entropy = backend.real(
+            backend.log(moment) / math.log(2.0) / (1 - alpha) - nqubits
+        )
+        if with_std:
+            return entropy, zero
+        return entropy
+    else:
+        status = backend.cast(backend.convert_to_tensor(status), rdtypestr)
+        if len(status.shape) != 1 or int(status.shape[0]) == 0:
+            raise ValueError("status must be a non-empty rank-one tensor.")
+
+        sample_count = int(status.shape[0])
+        if with_std and sample_count < 2:
+            raise ValueError(
+                "status must contain at least two samples when with_std is true."
+            )
+        sampled_x = backend.cast(backend.floor(status * (dimension - 1)), idtypestr)
+        sampled_x = backend.clip(sampled_x, 0, dimension - 2) + 1
+        if with_std:
+
+            def accumulate_sample_stats(
+                carry: Tuple[Tensor, Tensor], x: Tensor
+            ) -> Tuple[Tensor, Tensor]:
+                sample = family_moment(x)
+                return carry[0] + sample, carry[1] + sample * sample
+
+            sampled_moment, sampled_moment_square = backend.scan(
+                accumulate_sample_stats, sampled_x, (zero, zero)
+            )
+            sample_mean = sampled_moment / sample_count
+            sample_variance = backend.relu(
+                (sampled_moment_square - sampled_moment * sample_mean)
+                / (sample_count - 1)
+            )
+        else:
+            sampled_moment = backend.scan(
+                lambda carry, x: carry + family_moment(x), sampled_x, zero
+            )
+        moment = family_moment(backend.convert_to_tensor(0, dtype=idtypestr))
+        moment += (dimension - 1) * sampled_moment / sample_count
+        entropy = backend.real(
+            backend.log(moment) / math.log(2.0) / (1 - alpha) - nqubits
+        )
+        if with_std:
+            moment_std = (dimension - 1) * backend.sqrt(sample_variance / sample_count)
+            entropy_std = moment_std / (abs(1 - alpha) * math.log(2.0) * moment)
+            return entropy, backend.real(entropy_std)
+        return entropy
+
+
 def renyi_free_energy(
     rho: Union[Tensor, QuOperator],
     h: Union[Tensor, QuOperator],

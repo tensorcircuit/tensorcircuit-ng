@@ -6,6 +6,8 @@
 
 - Add `tc.gates.batched_unitary` for backend-vectorized dense gate construction.
 
+- Add `tc.quantum.stabilizer_renyi_entropy` for FWHT-based pure-state qubit stabilizer Rényi entropy, with exact evaluation, external-status Monte Carlo sampling, and optional Monte Carlo standard-error estimates.
+
 - Add fixed-schedule Taylor exponential action via `expm_multiply_evol` and `estimate_expm_multiply_parameters` for JIT- and AD-compatible time evolution.
 
 - Add Tianyan cloud provider.
@@ -13,6 +15,8 @@
 ### Fixed
 
 - Stabilize JAX Bessel and Chebyshev time gradients at small rescaled times, including float32 Miller-recurrence rescaling.
+
+- Add the missing logarithm operation to the PyTorch backend for entropy calculations.
 
 - Fix pytorch backend `softmax` and align `axis=None` to global normalization.
 

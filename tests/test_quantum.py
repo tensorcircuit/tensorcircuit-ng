@@ -1,5 +1,6 @@
 # pylint: disable=invalid-name
 
+import itertools
 import os
 import sys
 from functools import partial
@@ -22,6 +23,25 @@ from tensorcircuit import quantum as qu
 # tc.set_contractor("greedy")
 atol = 1e-5  # relax jax 32 precision
 decimal = 5
+
+
+def _brute_force_stabilizer_renyi_entropy(state, alpha):
+    paulis = [
+        np.eye(2, dtype=np.complex128),
+        np.array([[0, 1], [1, 0]], dtype=np.complex128),
+        np.array([[0, -1j], [1j, 0]], dtype=np.complex128),
+        np.array([[1, 0], [0, -1]], dtype=np.complex128),
+    ]
+    nqubits = int(np.log2(len(state)))
+    dimension = 2**nqubits
+    total = 0.0
+    for labels in itertools.product(range(4), repeat=nqubits):
+        operator = paulis[labels[0]]
+        for label in labels[1:]:
+            operator = np.kron(operator, paulis[label])
+        correlator = np.vdot(state, operator @ state)
+        total += np.abs(correlator) ** (2 * alpha) / dimension**alpha
+    return np.log2(total) / (1 - alpha) - nqubits
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -549,6 +569,113 @@ def test_ee(backend):
     np.testing.assert_allclose(
         tc.quantum.entanglement_entropy(s, [0, 1]), np.log(2.0), atol=1e-5
     )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_fwht_matches_reference(backend):
+    vector = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.complex64)
+    result = tc.backend.numpy(qu._fwht(tc.backend.convert_to_tensor(vector)))
+    np.testing.assert_allclose(result, [10.0, -2.0, -4.0, 0.0], atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_stabilizer_renyi_entropy_known_states(backend):
+    stabilizer_state = np.array([1.0, 0.0], dtype=np.complex64)
+    t_state = np.array([1.0, np.exp(1j * np.pi / 4)], dtype=np.complex64) / np.sqrt(2)
+
+    np.testing.assert_allclose(
+        qu.stabilizer_renyi_entropy(stabilizer_state), 0.0, atol=1e-5
+    )
+    np.testing.assert_allclose(
+        qu.stabilizer_renyi_entropy(t_state), np.log2(4.0 / 3.0), atol=1e-5
+    )
+    entropy, std = qu.stabilizer_renyi_entropy(
+        t_state,
+        status=np.array([0.125, 0.375], dtype=np.float32),
+        with_std=True,
+    )
+    np.testing.assert_allclose(entropy, np.log2(4.0 / 3.0), atol=1e-5)
+    np.testing.assert_allclose(std, 0.0, atol=1e-7)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_stabilizer_renyi_entropy_matches_brute_force(backend):
+    rng = np.random.default_rng(1234)
+    state = rng.normal(size=8) + 1j * rng.normal(size=8)
+    state = state / np.linalg.norm(state)
+
+    for alpha in (2, 3):
+        expected = _brute_force_stabilizer_renyi_entropy(state, alpha)
+        result = qu.stabilizer_renyi_entropy(state, alpha=alpha)
+        np.testing.assert_allclose(tc.backend.numpy(result), expected, atol=2e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_stabilizer_renyi_entropy_status_sampling(backend):
+    rng = np.random.default_rng(5678)
+    state = rng.normal(size=8) + 1j * rng.normal(size=8)
+    state = state / np.linalg.norm(state)
+    dimension = len(state)
+
+    # The status values visit every nonzero x exactly once.  This makes the
+    # Monte Carlo estimator equal to the exact result while exercising the
+    # external-randomness path.
+    status = (np.arange(1, dimension) - 0.25) / (dimension - 1)
+    exact = qu.stabilizer_renyi_entropy(state)
+    sampled = qu.stabilizer_renyi_entropy(state, status=status)
+    np.testing.assert_allclose(
+        tc.backend.numpy(sampled), tc.backend.numpy(exact), atol=2e-5
+    )
+    sampled_with_std, sampled_std = qu.stabilizer_renyi_entropy(
+        state, status=status, with_std=True
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(sampled_with_std), tc.backend.numpy(exact), atol=2e-5
+    )
+    assert np.isfinite(tc.backend.numpy(sampled_std))
+    assert tc.backend.numpy(sampled_std) >= 0.0
+
+
+def test_stabilizer_renyi_entropy_jit_and_grad(jaxb):
+    state = np.array([1.0, np.exp(1j * np.pi / 4)], dtype=np.complex64) / np.sqrt(2)
+    status = np.array([0.125, 0.375, 0.625], dtype=np.float32)
+
+    @partial(tc.backend.jit, static_argnums=())
+    def entropy_fn(psi, random_status):
+        return qu.stabilizer_renyi_entropy(psi, status=random_status)
+
+    result = entropy_fn(state, status)
+    np.testing.assert_allclose(tc.backend.numpy(result), np.log2(4.0 / 3.0), atol=2e-5)
+
+    @partial(tc.backend.jit, static_argnums=())
+    def entropy_with_std_fn(psi, random_status):
+        return qu.stabilizer_renyi_entropy(psi, status=random_status, with_std=True)
+
+    result_with_std, std = entropy_with_std_fn(state, status)
+    np.testing.assert_allclose(
+        tc.backend.numpy(result_with_std), np.log2(4.0 / 3.0), atol=2e-5
+    )
+    assert np.isfinite(tc.backend.numpy(std))
+
+    def differentiable_entropy(theta):
+        psi = tc.backend.stack([tc.backend.cos(theta), tc.backend.sin(theta)], axis=0)
+        return qu.stabilizer_renyi_entropy(psi)
+
+    gradient = tc.backend.grad(differentiable_entropy)(0.23)
+    assert np.isfinite(tc.backend.numpy(gradient))
+
+
+def test_stabilizer_renyi_entropy_validation(npb):
+    with pytest.raises(ValueError, match="alpha"):
+        qu.stabilizer_renyi_entropy(np.ones(2), alpha=1)
+    with pytest.raises(ValueError, match="rank-one"):
+        qu.stabilizer_renyi_entropy(np.ones([2, 2]))
+    with pytest.raises(ValueError, match="power of two"):
+        qu.stabilizer_renyi_entropy(np.ones(3))
+    with pytest.raises(ValueError, match="non-empty rank-one"):
+        qu.stabilizer_renyi_entropy(np.ones(2), status=np.ones([1, 0]))
+    with pytest.raises(ValueError, match="at least two samples"):
+        qu.stabilizer_renyi_entropy(np.ones(2), status=np.ones(1), with_std=True)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])

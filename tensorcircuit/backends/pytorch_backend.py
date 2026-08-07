@@ -224,6 +224,9 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def exp(self, tensor: Tensor) -> Tensor:
         return torchlib.exp(tensor)
 
+    def log(self, tensor: Tensor) -> Tensor:
+        return torchlib.log(tensor)
+
     def zeros(self, shape: Tuple[int, ...], dtype: Optional[str] = None) -> Tensor:
         if dtype is None:
             dtype = dtypestr
