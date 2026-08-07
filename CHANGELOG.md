@@ -8,6 +8,8 @@
 
 - Add `tc.quantum.stabilizer_renyi_entropy` for FWHT-based pure-state qubit stabilizer Rényi entropy, with exact evaluation, external-status Monte Carlo sampling, and optional Monte Carlo standard-error estimates.
 
+- Add `tc.quantum.anti_flatness` and `tc.quantum.entanglement_anti_flatness` for computing entanglement-spectrum anti-flatness from density matrices and subsystem states.
+
 - Add fixed-schedule Taylor exponential action via `expm_multiply_evol` and `estimate_expm_multiply_parameters` for JIT- and AD-compatible time evolution.
 
 - Add Tianyan cloud provider.

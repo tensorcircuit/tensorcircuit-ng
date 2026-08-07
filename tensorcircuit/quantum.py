@@ -2640,6 +2640,36 @@ def entropy(rho: Union[Tensor, QuOperator], eps: Optional[float] = None) -> Tens
     return backend.real(entropy)
 
 
+@op2tensor
+def anti_flatness(rho: Union[Tensor, QuOperator]) -> Tensor:
+    r"""
+    Compute the anti-flatness of a normalized density matrix.
+
+    For the eigenvalues :math:`\lambda_i` of ``rho``, anti-flatness is
+
+    .. math::
+
+        \mathcal{F} = \operatorname{Tr}(\rho^3)
+        - \left[\operatorname{Tr}(\rho^2)\right]^2.
+
+    The input is expected to be a square, trace-one density matrix.  The
+    expression is evaluated with matrix products rather than an eigendecomposition,
+    so it remains differentiable and compatible with backend JIT transforms.
+    Anti-flatness is zero for a rank-one spectrum and for a flat spectrum on
+    its support; it is a spectral diagnostic, not by itself a complete
+    non-stabilizerness measure.
+
+    :param rho: The normalized density matrix in form of Tensor or QuOperator.
+    :type rho: Union[Tensor, QuOperator]
+    :return: The anti-flatness of the density matrix.
+    :rtype: Tensor
+    """
+    rho_squared = backend.matmul(rho, rho)
+    purity = backend.real(backend.trace(rho_squared))
+    third_moment = backend.real(backend.sum(rho_squared * backend.transpose(rho)))
+    return third_moment - purity * purity
+
+
 def trace_product(*o: Union[Tensor, QuOperator]) -> Tensor:
     """
     Compute the trace of several inputs ``o`` as tensor or ``QuOperator``.
@@ -2716,6 +2746,48 @@ def entanglement_entropy(
     )
     rho = reduced_density_matrix(state, subsystems_to_trace_out=traceout, dim=dim)
     return entropy(rho)
+
+
+@op2tensor
+def entanglement_anti_flatness(
+    state: Tensor,
+    *,
+    subsystem_to_keep: Optional[Sequence[int]] = None,
+    subsystems_to_trace_out: Optional[Sequence[int]] = None,
+    dim: Optional[int] = None,
+) -> Tensor:
+    r"""
+    Compute the anti-flatness of a subsystem entanglement spectrum.
+
+    The subsystem is specified via exactly one of ``subsystem_to_keep`` /
+    ``subsystems_to_trace_out``.  The argument resolution follows the new
+    subsystem specification used by :func:`entanglement_entropy`.
+
+    :param state: Wavefunction or density matrix of the full system.
+    :type state: Tensor
+    :param subsystem_to_keep: Sites to keep; all others are traced out.
+    :type subsystem_to_keep: Optional[Sequence[int]]
+    :param subsystems_to_trace_out: Sites to trace out.
+    :type subsystems_to_trace_out: Optional[Sequence[int]]
+    :param dim: Local qudit dimension, defaulting to 2.
+    :type dim: Optional[int]
+    :return: The subsystem anti-flatness.
+    :rtype: Tensor
+    """
+    d = 2 if dim is None else dim
+    if len(state.shape) == 2 and state.shape[0] == state.shape[1]:
+        n = _infer_num_sites(state.shape[0], d)
+    else:
+        n = _infer_num_sites(int(backend.sizen(state)), d)
+    traceout = _resolve_cut_or_subsystem(
+        n,
+        None,
+        subsystem_to_keep,
+        subsystems_to_trace_out,
+        name="entanglement_anti_flatness",
+    )
+    rho = reduced_density_matrix(state, subsystems_to_trace_out=traceout, dim=dim)
+    return anti_flatness(rho)
 
 
 def reduced_wavefunction(

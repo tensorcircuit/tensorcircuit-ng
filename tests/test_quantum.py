@@ -304,6 +304,78 @@ def test_trace_product(backend):
     np.testing.assert_allclose(qu.trace_product(o, hq), 2, atol=atol)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_anti_flatness(backend):
+    probability = 0.2
+    state = np.array(
+        [np.sqrt(probability), 0.0, 0.0, np.sqrt(1.0 - probability)],
+        dtype=np.complex64,
+    )
+    rho = np.outer(state, np.conj(state))
+    rho_a = np.diag([probability, 1.0 - probability]).astype(np.complex64)
+    expected = probability * (1.0 - probability) * (2.0 * probability - 1.0) ** 2
+
+    np.testing.assert_allclose(qu.anti_flatness(rho_a), expected, atol=atol)
+    np.testing.assert_allclose(
+        qu.entanglement_anti_flatness(state, subsystem_to_keep=[0]),
+        expected,
+        atol=atol,
+    )
+    np.testing.assert_allclose(
+        qu.entanglement_anti_flatness(rho, subsystems_to_trace_out=[1]),
+        expected,
+        atol=atol,
+    )
+
+    rho_qop = qu.QuOperator.from_tensor(rho_a)
+    np.testing.assert_allclose(qu.anti_flatness(rho_qop), expected, atol=atol)
+
+    np.testing.assert_allclose(qu.anti_flatness(np.eye(2) / 2), 0.0, atol=atol)
+    np.testing.assert_allclose(qu.anti_flatness(np.diag([1.0, 0.0])), 0.0, atol=atol)
+
+    complex_rho = np.array([[0.3, 0.1 + 0.05j], [0.1 - 0.05j, 0.7]], dtype=np.complex64)
+    complex_rho_squared = complex_rho @ complex_rho
+    complex_expected = (
+        np.trace(complex_rho_squared @ complex_rho) - np.trace(complex_rho_squared) ** 2
+    ).real
+    np.testing.assert_allclose(
+        qu.anti_flatness(complex_rho), complex_expected, atol=atol
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_entanglement_anti_flatness_qudit(backend, highp):
+    d = 3
+    schmidt = np.array([0.6, 0.3, 0.1], dtype="complex128")
+    schmidt = schmidt / np.linalg.norm(schmidt)
+    state = np.zeros(d * d, dtype="complex128")
+    for k in range(d):
+        state[k * d + k] = schmidt[k]
+
+    probabilities = np.abs(schmidt) ** 2
+    expected = np.sum(probabilities**3) - np.sum(probabilities**2) ** 2
+    np.testing.assert_allclose(
+        qu.entanglement_anti_flatness(state, subsystems_to_trace_out=[0], dim=d),
+        expected,
+        atol=atol,
+    )
+
+
+def test_entanglement_anti_flatness_jit_and_grad(jaxb):
+    @partial(tc.backend.jit, static_argnums=())
+    def anti_flatness_fn(theta):
+        state = tc.backend.stack(
+            [tc.backend.cos(theta), 0.0, 0.0, tc.backend.sin(theta)]
+        )
+        return qu.entanglement_anti_flatness(state, subsystem_to_keep=[0])
+
+    result = anti_flatness_fn(0.23)
+    assert np.isfinite(tc.backend.numpy(result))
+
+    gradient = tc.backend.grad(anti_flatness_fn)(0.23)
+    assert np.isfinite(tc.backend.numpy(gradient))
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_free_energy(backend):
     rho = np.array([[1.0, 0], [0, 0]])
