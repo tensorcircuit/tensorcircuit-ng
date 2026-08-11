@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.9.0
+
 ### Added
 
 - Add `tc.gates.batched_unitary` for backend-vectorized dense gate construction.
