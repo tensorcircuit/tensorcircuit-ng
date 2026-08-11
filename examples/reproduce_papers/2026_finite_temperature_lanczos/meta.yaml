@@ -1,22 +1,28 @@
-title: "QUANTUM FINITE TEMPERATURE LANCZOS METHOD"
+title: "Quantum Finite Temperature Lanczos Method"
 arxiv_id: "2603.25394"
 url: "https://arxiv.org/abs/2603.25394"
 year: 2026
-authors: 
+authors:
   - "Gian Gentinetta"
   - "Friederike Metz"
   - "William Kirby"
   - "Giuseppe Carleo"
 tags:
-  - "qftlm"
-  - "quantum-krylov"
+  - "quantum-algorithm"
   - "finite-temperature"
-  - "lanczos"
+  - "many-body-physics"
+tc_features:
+  - "pauli-operator"
+  - "jit"
+  - "vmap"
+backend: "jax"
 hardware_requirements:
-  gpu: False
+  gpu: false
   min_memory: "2GB"
+card_title: "Figure 1(a) · Thermal energy versus temperature"
+summary: "Quantum Hutchinson states and a generalized eigenvalue problem give thermal energies of a 10-site TFIM without full diagonalization."
 description: "Reproduces thermal expectation values of energy for the Transverse-Field Ising Model using the Quantum Finite Temperature Lanczos Method (QFTLM). The original system size L=14 is scaled to L=10 for computational feasibility while maintaining the core algorithm logic (Quantum Hutchinson states and generalized eigenvalue problem)."
 outputs:
   - target: "Figure 1(a): Thermal expectation of Energy <E> vs Temperature T"
-    path: outputs/result.png
+    path: "outputs/result.png"
     script: "main.py"

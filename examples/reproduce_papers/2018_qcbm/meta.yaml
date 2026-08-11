@@ -6,14 +6,22 @@ authors:
   - "Jin-Guo Liu"
   - "Lei Wang"
 tags:
-  - "QCBM"
-  - "Generative Modeling"
-  - "Differentiable Programming"
+  - "quantum-machine-learning"
+  - "generative-model"
+  - "variational-algorithm"
+tc_features:
+  - "circuit"
+  - "jit"
+  - "vmap"
+  - "autodiff"
+backend: "jax"
 hardware_requirements:
-  gpu: False
+  gpu: false
   min_memory: "4GB"
-description: "Reproduction of Figure 6: QCBM learning a mixture of Gaussians. The QCBM uses 10 qubits and a hardware-efficient ansatz. The training objective is to minimize the MMD (Maximum Mean Discrepancy) loss."
+card_title: "Figure 6 · QCBM learning a Gaussian mixture"
+summary: "A 10-qubit hardware-efficient Born machine trained with an MMD loss to fit a Gaussian mixture, differentiated end to end with JAX."
+description: "Reproduction of Figure 6: QCBM learning a mixture of Gaussians. The QCBM uses 10 qubits and a 5-layer hardware-efficient ansatz. The training objective is to minimize the MMD (Maximum Mean Discrepancy) loss with an Adam optimizer."
 outputs:
   - target: "Figure 6"
-    path: outputs/result.png
+    path: "outputs/result.png"
     script: "main.py"

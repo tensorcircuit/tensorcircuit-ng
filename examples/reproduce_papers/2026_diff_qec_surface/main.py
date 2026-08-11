@@ -18,7 +18,7 @@ Implementation Details:
 - This structure avoids dense tensor construction and allows efficient path finding and JIT reuse.
 """
 
-import os
+from pathlib import Path
 import matplotlib.pyplot as plt
 import tensornetwork as tn
 import jax
@@ -31,6 +31,8 @@ import tensorcircuit as tc
 tc.set_backend("jax")
 tc.set_dtype("complex128")
 tc.set_contractor("cotengra")
+
+OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
 
 # -----------------------------------------------------------------------------
 # 1. Surface Code Parameters and Helper Functions
@@ -281,15 +283,8 @@ def main():
     print(f"True p: {p_true}")
 
     # Save Output Plot
-    os.makedirs("outputs", exist_ok=True)
-
-    # Ensure directory exists for the full path if needed,
-    # but 'outputs' relative to current dir is fine as script is run from repo root usually.
-    # The meta.yaml uses specific path, but here we just need to save to where we are running.
-    # Assuming running from repo root.
-    output_dir = "examples/reproduce_papers/2026_diff_qec_surface/outputs"
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "convergence.png")
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    output_path = OUTPUT_DIR / "convergence.png"
 
     plt.figure(figsize=(10, 5))
     plt.subplot(1, 2, 1)

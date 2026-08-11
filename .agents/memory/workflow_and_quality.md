@@ -23,6 +23,12 @@ Use this file for public-feature integration, examples, tests, and validation de
 - Keep examples on the public API and fail fast on correctness mismatches. Move exploratory sweeps, verbose diagnostics, and incidental benchmark controls out of the pedagogical script.
 - After exploration establishes a stable pattern, distill it into a short example instead of preserving the full experiment harness.
 
+## Paper reproduction gallery
+
+- `docs/source/public/reproduce/` is generated output, never hand-edited. Rerun `python generate_gallery.py` from `docs/source` after touching any `meta.yaml` under `examples/reproduce_papers`, and commit the result; `html_extra_path = ["public"]` publishes it verbatim.
+- `meta.yaml` is the sole data source for that gallery, so its `tags` and `tc_features` must come from `examples/reproduce_papers/taxonomy.yaml`. The generator fails fast on unknown vocabulary, undeclared figures, untracked outputs, or repository-root paths rather than guessing.
+- Claim a `tc_features` entry only when the corresponding API appears in the script; a reproduction that only uses `tc.backend.*` array operations is `backend-api` and nothing more.
+
 ## Testing and validation refinements
 
 - For a differentiable feature, cover the core kernel, a correctness comparison against an existing reference path, and its AD behavior.

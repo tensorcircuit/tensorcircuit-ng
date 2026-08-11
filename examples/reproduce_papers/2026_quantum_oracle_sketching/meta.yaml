@@ -1,8 +1,8 @@
-title: "Exponential quantum advantage in processing massive classical data"
+title: "Exponential Quantum Advantage in Processing Massive Classical Data"
 arxiv_id: "2604.07639"
-url: "https://arxiv.org/pdf/2604.07639"
+url: "https://arxiv.org/abs/2604.07639"
 year: 2026
-authors: 
+authors:
   - "Haimeng Zhao"
   - "Alexander Zlokapa"
   - "Hartmut Neven"
@@ -11,13 +11,22 @@ authors:
   - "Jarrod R. McClean"
   - "Hsin-Yuan Huang"
 tags:
-  - "Quantum Oracle Sketching"
-  - "Binary Classification"
+  - "quantum-advantage"
+  - "quantum-machine-learning"
+  - "classification"
+tc_features:
+  - "backend-api"
+backend: "jax"
 hardware_requirements:
-  gpu: False
+  gpu: false
   min_memory: "2GB"
-description: "Reproduces Figure 4(a) logic using a subset of MNIST (1 and 9) to simulate the binary classification task. We compare classical streaming, sparse representations, and the quantum oracle sketching size scaling. Additionally, we explicitly implement the quantum oracle sketching (QOS) circuit for small vectors using TensorCircuit to verify the foundational physics without 'cheating'."
+card_title: "Figure 4(a) · Machine size versus accuracy"
+summary: "Quantum oracle sketching is compared with classical streaming and sparse baselines on an MNIST 3-vs-8 task at matched accuracy."
+description: "Reproduces the Figure 4(a) machine-size versus accuracy trade-off on a binary MNIST task (digits 3 and 8, 2000 samples per class, full 28x28 images reduced by PCA), comparing classical streaming, classical sparse representations, and quantum oracle sketching. A second experiment verifies the sample-complexity theory behind Figure 3(a) by evaluating the expected sketching unitary for a random Boolean oracle on 6 qubits and comparing its operator-norm error against the theoretical O(N/M) bound. That second experiment is diagonal operator algebra written with tc.backend array operations rather than a gate-level tc.Circuit simulation."
 outputs:
-  - target: "Figure 4(a) - Binary classification"
-    path: outputs/result.png
+  - target: "Figure 4(a) - Binary classification machine size vs accuracy"
+    path: "outputs/result.png"
+    script: "main.py"
+  - target: "Figure 3(a) - Boolean oracle sketching error scaling vs O(N/M) bound"
+    path: "outputs/qos_scaling.png"
     script: "main.py"

@@ -112,7 +112,14 @@ We offer standardized engagement options, including one-time consultations, proj
 
       Performance, architecture, and adoption
 
-   
+
+   .. card:: Paper Reproductions
+      :link: reproduce/index.html
+      :shadow: md
+
+      Published papers, rerun with TC-NG
+
+
    .. card:: PyPI
       :link:  https://pypi.org/project/tensorcircuit-ng
       :shadow: md

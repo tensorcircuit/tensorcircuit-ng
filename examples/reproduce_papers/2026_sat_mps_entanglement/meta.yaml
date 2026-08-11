@@ -7,14 +7,19 @@ authors:
   - "Frank Pollmann"
   - "Jan Carl Budich"
 tags:
-  - "MPS"
-  - "3-SAT"
-  - "imaginary time propagation"
-  - "entanglement entropy"
+  - "matrix-product-state"
+  - "entanglement"
+  - "combinatorial-optimization"
+  - "tensor-network"
+tc_features:
+  - "backend-api"
+backend: "jax"
 hardware_requirements:
-  gpu: False
+  gpu: false
   min_memory: "4GB"
-description: "Figure 2 reproduction using the authors' Zenodo protocol (10.5281/zenodo.18743084): Weigt hard-satisfiable 3-SAT generator with p0=0.08, violation-vector Hamiltonian, and continuous tau optimization in [0,7.5] with the same sample-rejection criterion f(7.5) > f(10.0). Scaled down to n=4-15 (Panel A), n=8-10 (Panel B), 200 instances for feasible runtimes while preserving the core physics (linear entropy scaling and alpha_c peak)."
+card_title: "Figure 2 · Entanglement barrier in 3-SAT"
+summary: "Imaginary-time propagation of hard 3-SAT instances shows the MPS entanglement entropy peaking near the satisfiability threshold."
+description: "Figure 2 reproduction using the authors' Zenodo protocol (10.5281/zenodo.18743084): Weigt hard-satisfiable 3-SAT generator with p0=0.08, violation-vector Hamiltonian, and continuous tau optimization in [0,7.5] with the same sample-rejection criterion f(7.5) > f(10.0). Scaled down to n=4-15 (Panel A), n=8-10 (Panel B), 200 instances for feasible runtimes while preserving the core physics (linear entropy scaling and alpha_c peak). The bipartite entropy is obtained from a singular value decomposition of the propagated state on the JAX backend rather than from a tc.MPSCircuit."
 outputs:
   - target: "Figure 2: (a) <S_hat> vs n at alpha_c, (b) <S_hat>/n vs alpha"
     path: "outputs/result.png"

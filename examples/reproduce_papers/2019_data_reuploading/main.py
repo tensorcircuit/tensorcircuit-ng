@@ -10,6 +10,7 @@ The task is to classify points inside/outside a circle.
 
 import time
 from functools import partial
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 import optax
@@ -18,6 +19,8 @@ import tensorcircuit as tc
 
 # Set backend to JAX for better performance
 K = tc.set_backend("jax")
+
+OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
 
 
 def generate_circle_data(n_samples: int):
@@ -182,7 +185,8 @@ def main():
             plt.legend()
 
     plt.tight_layout()
-    output_path = "examples/reproduce_papers/2019_Data_re_uploading/outputs/result.png"
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    output_path = OUTPUT_DIR / "result.png"
     plt.savefig(output_path)
     print(f"Results saved to {output_path}")
 

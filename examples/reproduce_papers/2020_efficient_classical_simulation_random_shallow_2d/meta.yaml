@@ -1,4 +1,4 @@
-title: "Efficient classical simulation of random shallow 2D quantum circuits"
+title: "Efficient Classical Simulation of Random Shallow 2D Quantum Circuits"
 arxiv_id: "2001.00021"
 url: "https://arxiv.org/abs/2001.00021"
 year: 2020
@@ -9,13 +9,19 @@ authors:
   - "Fernando G. S. L. Brandão"
   - "Aram W. Harrow"
 tags:
-  - "classical simulation"
-  - "random circuits"
-  - "tensor networks"
+  - "classical-simulation"
+  - "tensor-network"
+  - "matrix-product-state"
+  - "random-circuit"
+tc_features:
+  - "circuit"
+backend: "numpy"
 hardware_requirements:
-  gpu: False
+  gpu: false
   min_memory: "8GB"
-description: "This script implements the Spatial Evolution Block Decimation (SEBD) algorithm described in the paper for efficient classical simulation of random shallow 2D quantum circuits."
+card_title: "SEBD accuracy versus bond dimension"
+summary: "Spatial Evolution Block Decimation contracts a random shallow 2D circuit as a PEPS-to-MPS sweep, checked against exact amplitudes."
+description: "This script implements the Spatial Evolution Block Decimation (SEBD) algorithm described in the paper for efficient classical simulation of random shallow 2D quantum circuits. Output amplitudes are compared against exact statevector amplitudes to quantify the truncation error as a function of the MPS bond dimension."
 outputs:
   - target: "Benchmark results (probability)"
     path: "outputs/results.log"

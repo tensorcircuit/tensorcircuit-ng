@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paper Reproductions | TensorCircuit-NG</title>
+<meta name="description" content="A browsable gallery of quantum computing papers reproduced with TensorCircuit-NG, each with runnable source code and the figures it regenerates.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+    --bg-primary: #04060d;
+    --bg-secondary: #090c16;
+    --bg-card: rgba(13, 17, 33, 0.7);
+    --accent-cyan: #00f0ff;
+    --accent-violet: #8a2be2;
+    --text-primary: #ffffff;
+    --text-secondary: #b4c3df;
+    --text-muted: #6b7c96;
+    --border-glass: rgba(255, 255, 255, 0.07);
+    --font-sans: 'Inter', sans-serif;
+    --font-display: 'Outfit', sans-serif;
+    --font-mono: 'Fira Code', monospace;
+    --transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    overflow-x: hidden;
+}
+a { color: var(--accent-cyan); text-decoration: none; }
+a:hover { text-decoration: underline; }
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(var(--accent-cyan), var(--accent-violet));
+    border-radius: 4px;
+}
+.container { width: 100%; max-width: 1320px; margin: 0 auto; padding: 0 2rem; }
+.gradient-text {
+    background: linear-gradient(135deg, var(--accent-cyan) 0%, #a450ff 60%, #ff007f 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+header.hero {
+    position: relative;
+    padding: 4.5rem 0 2.5rem;
+    border-bottom: 1px solid var(--border-glass);
+    background:
+        radial-gradient(900px 340px at 15% -10%, rgba(0, 240, 255, 0.10), transparent 70%),
+        radial-gradient(760px 300px at 85% -20%, rgba(138, 43, 226, 0.14), transparent 70%);
+}
+.eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.9rem;
+}
+h1 { font-family: var(--font-display); font-size: clamp(2.1rem, 5vw, 3.3rem); line-height: 1.15; }
+.lede { color: var(--text-secondary); max-width: 62ch; margin-top: 1rem; font-size: 1.05rem; }
+.disclaimer {
+    margin-top: 1.6rem;
+    padding: 0.95rem 1.15rem;
+    border: 1px solid rgba(255, 176, 32, 0.28);
+    border-left: 3px solid rgba(255, 176, 32, 0.85);
+    border-radius: 10px;
+    background: rgba(255, 176, 32, 0.05);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    max-width: 82ch;
+}
+.disclaimer strong { color: #ffcf72; font-weight: 600; }
+
+.controls { padding: 2rem 0 0.5rem; }
+.searchrow { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
+.search {
+    flex: 1 1 320px;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-glass);
+    border-radius: 10px;
+    padding: 0.65rem 0.95rem;
+    transition: var(--transition);
+}
+.search:focus-within { border-color: rgba(0, 240, 255, 0.45); box-shadow: 0 0 18px rgba(0, 240, 255, 0.12); }
+.search svg { flex: none; opacity: 0.55; }
+.search input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 0.95rem;
+}
+.search input::placeholder { color: var(--text-muted); }
+select {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-glass);
+    border-radius: 10px;
+    color: var(--text-secondary);
+    padding: 0.7rem 0.9rem;
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    outline: none;
+    cursor: pointer;
+}
+.facet { margin-top: 1.2rem; display: flex; gap: 0.55rem; align-items: baseline; flex-wrap: wrap; }
+.facet-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    min-width: 5.6rem;
+}
+.chip {
+    border: 1px solid var(--border-glass);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+    border-radius: 999px;
+    padding: 0.3rem 0.8rem;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: var(--transition);
+    font-family: var(--font-sans);
+}
+.chip:hover { border-color: rgba(0, 240, 255, 0.35); color: var(--text-primary); }
+.chip[aria-pressed="true"] {
+    background: linear-gradient(135deg, rgba(0, 240, 255, 0.18), rgba(138, 43, 226, 0.22));
+    border-color: rgba(0, 240, 255, 0.55);
+    color: #fff;
+}
+.chip .count { opacity: 0.5; margin-left: 0.35rem; font-size: 0.76rem; }
+.statusbar {
+    margin: 1.6rem 0 0.4rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    color: var(--text-muted);
+    font-size: 0.86rem;
+    font-family: var(--font-mono);
+}
+.linkbtn {
+    background: none;
+    border: none;
+    color: var(--accent-cyan);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    padding: 0;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    gap: 1.5rem;
+    padding: 1.2rem 0 5rem;
+}
+.card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-card);
+    border: 1px solid var(--border-glass);
+    border-radius: 16px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: var(--transition);
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    padding: 0;
+}
+.card[hidden] { display: none; }
+.card:hover, .card:focus-visible {
+    transform: translateY(-4px);
+    border-color: rgba(0, 240, 255, 0.4);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5), 0 0 22px rgba(0, 240, 255, 0.12);
+    outline: none;
+}
+.card .shot {
+    background: #ffffff;
+    aspect-ratio: 8 / 5;
+    display: block;
+    width: 100%;
+    object-fit: contain;
+    border-bottom: 1px solid var(--border-glass);
+}
+.card .body { padding: 1.15rem 1.25rem 1.35rem; display: flex; flex-direction: column; gap: 0.55rem; flex: 1; }
+.card h3 { font-family: var(--font-display); font-size: 1.03rem; line-height: 1.35; font-weight: 600; }
+.card .paper { color: var(--text-muted); font-size: 0.8rem; line-height: 1.45; }
+.card .summary { color: var(--text-secondary); font-size: 0.88rem; flex: 1; }
+.card .meta {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+.card .meta span { border: 1px solid var(--border-glass); border-radius: 6px; padding: 0.1rem 0.45rem; }
+.taglist { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.taglist em {
+    font-style: normal;
+    font-size: 0.72rem;
+    color: #9fd8ff;
+    background: rgba(0, 240, 255, 0.08);
+    border: 1px solid rgba(0, 240, 255, 0.16);
+    border-radius: 999px;
+    padding: 0.1rem 0.55rem;
+}
+.empty { padding: 4rem 0; text-align: center; color: var(--text-muted); }
+
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 4, 10, 0.82);
+    backdrop-filter: blur(8px);
+    display: none;
+    z-index: 50;
+    padding: 3vh 1rem;
+    overflow-y: auto;
+}
+.modal.open { display: block; }
+.sheet {
+    max-width: 980px;
+    margin: 0 auto;
+    background: var(--bg-secondary);
+    border: 1px solid rgba(0, 240, 255, 0.18);
+    border-radius: 18px;
+    padding: 2rem 2.2rem 2.4rem;
+}
+.sheet h2 { font-family: var(--font-display); font-size: 1.6rem; line-height: 1.25; padding-right: 2.5rem; }
+.sheet .authors { color: var(--text-muted); font-size: 0.86rem; margin-top: 0.6rem; }
+.closebtn {
+    float: right;
+    background: none;
+    border: 1px solid var(--border-glass);
+    color: var(--text-secondary);
+    border-radius: 8px;
+    width: 2.1rem;
+    height: 2.1rem;
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+}
+.closebtn:hover { color: #fff; border-color: rgba(0, 240, 255, 0.5); }
+.sheet .actions { display: flex; gap: 0.7rem; flex-wrap: wrap; margin: 1.3rem 0; }
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 1.1rem;
+    border-radius: 8px;
+    font-family: var(--font-display);
+    font-size: 0.88rem;
+    font-weight: 600;
+    border: 1px solid var(--border-glass);
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.04);
+    transition: var(--transition);
+}
+.btn:hover { text-decoration: none; border-color: rgba(0, 240, 255, 0.5); }
+.btn.primary { background: linear-gradient(135deg, rgba(0, 240, 255, 0.2), rgba(138, 43, 226, 0.28)); }
+.sheet h4 {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 1.8rem 0 0.7rem;
+}
+.sheet p.prose { color: var(--text-secondary); font-size: 0.92rem; }
+.figure { margin-bottom: 1.4rem; }
+.figure img { width: 100%; background: #fff; border-radius: 12px; display: block; }
+.figure figcaption { color: var(--text-muted); font-size: 0.82rem; margin-top: 0.5rem; }
+.kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.55rem; }
+.kv div {
+    border: 1px solid var(--border-glass);
+    border-radius: 9px;
+    padding: 0.55rem 0.8rem;
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+}
+.kv b { color: var(--text-primary); font-weight: 600; display: block; font-size: 0.82rem; }
+.kv code { font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-muted); }
+pre {
+    background: #05070f;
+    border: 1px solid var(--border-glass);
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+footer {
+    border-top: 1px solid var(--border-glass);
+    padding: 2.5rem 0 3.5rem;
+    color: var(--text-muted);
+    font-size: 0.86rem;
+}
+@media (max-width: 640px) {
+    .container { padding: 0 1.1rem; }
+    .sheet { padding: 1.5rem 1.2rem 2rem; }
+    .facet-label { min-width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="container">
+    <p class="eyebrow">TensorCircuit-NG</p>
+    <h1>Papers, <span class="gradient-text">Reproduced</span></h1>
+    <p class="lede">Every entry below is a self-contained script that regenerates a figure from a published quantum computing paper on a laptop. Read the paper, read the code, run it yourself.</p>
+    <p class="disclaimer"><strong>Please read:</strong> these are independent reimplementations by the TensorCircuit-NG project, not author-endorsed replications. Most are deliberately scaled down &mdash; fewer qubits, smaller bond dimensions, shorter training &mdash; so that they finish quickly on a single machine, and some make explicit modeling simplifications. Each entry documents what was changed. Treat them as executable illustrations of the physics, not as verification of the original results.</p>
+  </div>
+</header>
+
+<section class="controls">
+  <div class="container">
+    <div class="searchrow">
+      <label class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="search" type="search" placeholder="Search titles, authors, methods, arXiv id" autocomplete="off">
+      </label>
+      <select id="sort" aria-label="Sort order">
+        <option value="newest">Newest first</option>
+        <option value="oldest">Oldest first</option>
+        <option value="title">Title A&ndash;Z</option>
+      </select>
+    </div>
+    <div class="facet">
+      <span class="facet-label">Topic</span>
+      <button class="chip" type="button" data-facet="tags" data-value="quantum-machine-learning" aria-pressed="false">Quantum Machine Learning<span class="count">5</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="classification" aria-pressed="false">Classification<span class="count">4</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="tensor-network" aria-pressed="false">Tensor Network<span class="count">4</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="variational-algorithm" aria-pressed="false">Variational Algorithm<span class="count">3</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="many-body-physics" aria-pressed="false">Many-Body Physics<span class="count">2</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="matrix-product-state" aria-pressed="false">Matrix Product State<span class="count">2</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="classical-simulation" aria-pressed="false">Classical Simulation<span class="count">1</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="combinatorial-optimization" aria-pressed="false">Combinatorial Optimization<span class="count">1</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="entanglement" aria-pressed="false">Entanglement<span class="count">1</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="finite-temperature" aria-pressed="false">Finite Temperature<span class="count">1</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="floquet-dynamics" aria-pressed="false">Floquet Dynamics<span class="count">1</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="generative-model" aria-pressed="false">Generative Model<span class="count">1</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="quantum-advantage" aria-pressed="false">Quantum Advantage<span class="count">1</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="quantum-algorithm" aria-pressed="false">Quantum Algorithm<span class="count">1</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="quantum-error-correction" aria-pressed="false">Quantum Error Correction<span class="count">1</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="qudit" aria-pressed="false">Qudit<span class="count">1</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="random-circuit" aria-pressed="false">Random Circuit<span class="count">1</span></button>
+          <button class="chip" type="button" data-facet="tags" data-value="topological-phase" aria-pressed="false">Topological Phase<span class="count">1</span></button>
+    </div>
+    <div class="facet">
+      <span class="facet-label">TC feature</span>
+      <button class="chip" type="button" data-facet="features" data-value="jit" aria-pressed="false">JIT<span class="count">7</span></button>
+          <button class="chip" type="button" data-facet="features" data-value="circuit" aria-pressed="false">Circuit Simulation<span class="count">5</span></button>
+          <button class="chip" type="button" data-facet="features" data-value="vmap" aria-pressed="false">Vectorization<span class="count">5</span></button>
+          <button class="chip" type="button" data-facet="features" data-value="autodiff" aria-pressed="false">Automatic Differentiation<span class="count">4</span></button>
+          <button class="chip" type="button" data-facet="features" data-value="backend-api" aria-pressed="false">Backend API<span class="count">2</span></button>
+          <button class="chip" type="button" data-facet="features" data-value="contractor" aria-pressed="false">Custom Contractor<span class="count">2</span></button>
+          <button class="chip" type="button" data-facet="features" data-value="expectation" aria-pressed="false">Expectation<span class="count">2</span></button>
+          <button class="chip" type="button" data-facet="features" data-value="pauli-operator" aria-pressed="false">Pauli Operator<span class="count">2</span></button>
+          <button class="chip" type="button" data-facet="features" data-value="interop" aria-pressed="false">Framework Interop<span class="count">1</span></button>
+          <button class="chip" type="button" data-facet="features" data-value="quoperator" aria-pressed="false">QuOperator<span class="count">1</span></button>
+          <button class="chip" type="button" data-facet="features" data-value="qudit-circuit" aria-pressed="false">Qudit Circuit<span class="count">1</span></button>
+          <button class="chip" type="button" data-facet="features" data-value="sampling" aria-pressed="false">Sampling<span class="count">1</span></button>
+          <button class="chip" type="button" data-facet="features" data-value="scan" aria-pressed="false">Scan<span class="count">1</span></button>
+    </div>
+    <div class="statusbar">
+      <span id="count">10 reproductions</span>
+      <button class="linkbtn" id="reset" type="button">reset filters</button>
+    </div>
+  </div>
+</section>
+
+<main class="container">
+  <div class="grid" id="grid">
+      <article class="card" role="button" tabindex="0"
+        data-slug="2026_qutrit_time_crystal"
+        data-title="A Qutrit Time Crystal Stabilized with Native Chiral Interactions"
+        data-year="2026"
+        data-tags="qudit floquet-dynamics many-body-physics"
+        data-features="qudit-circuit jit"
+        data-search="a qutrit time crystal stabilized with native chiral interactions figure 2(b) · qutrit time-crystal response a driven chiral clock model of 9 qutrits shows period-doubled magnetization and a sharp subharmonic peak in the fourier spectrum. 2605.14293 2026_qutrit_time_crystal jax noah goss nishchay suri brian marinelli larry chen akel hashim sajant anand alexis morvan ravi k. naik ermal rrapaj david i. santiago wibe de jong norman y. yao joel e. moore irfan siddiqi qudit floquet-dynamics many-body-physics qudit-circuit jit">
+        <img class="shot" loading="lazy" src="thumbs/2026_qutrit_time_crystal__result.webp" alt="Figure 2(b) · Qutrit time-crystal response">
+        <div class="body">
+          <h3>Figure 2(b) · Qutrit time-crystal response</h3>
+          <p class="paper">A Qutrit Time Crystal Stabilized with Native Chiral Interactions</p>
+          <p class="summary">A driven chiral clock model of 9 qutrits shows period-doubled magnetization and a sharp subharmonic peak in the Fourier spectrum.</p>
+          <div class="meta"><span>2026</span><span>Noah Goss et al.</span><span>jax</span></div>
+          <div class="taglist"><em>qudit</em><em>floquet-dynamics</em><em>many-body-physics</em></div>
+        </div>
+      </article>
+      <article class="card" role="button" tabindex="0"
+        data-slug="2026_diff_qec_surface"
+        data-title="Differentiable Maximum Likelihood Noise Estimation for Quantum Error Correction"
+        data-year="2026"
+        data-tags="quantum-error-correction tensor-network"
+        data-features="contractor jit vmap autodiff"
+        data-search="differentiable maximum likelihood noise estimation for quantum error correction noise estimation convergence surface-code noise parameters are recovered by differentiating through a copynode tensor-network contraction and optimizing with adam. 2602.19722 2026_diff_qec_surface jax hanyan cao dongyang feng cheng ye feng pan quantum-error-correction tensor-network contractor jit vmap autodiff">
+        <img class="shot" loading="lazy" src="thumbs/2026_diff_qec_surface__convergence.webp" alt="Noise estimation convergence">
+        <div class="body">
+          <h3>Noise estimation convergence</h3>
+          <p class="paper">Differentiable Maximum Likelihood Noise Estimation for Quantum Error Correction</p>
+          <p class="summary">Surface-code noise parameters are recovered by differentiating through a CopyNode tensor-network contraction and optimizing with Adam.</p>
+          <div class="meta"><span>2026</span><span>Hanyan Cao et al.</span><span>jax</span></div>
+          <div class="taglist"><em>quantum-error-correction</em><em>tensor-network</em></div>
+        </div>
+      </article>
+      <article class="card" role="button" tabindex="0"
+        data-slug="2026_sat_mps_entanglement"
+        data-title="Entanglement Barriers from Computational Complexity: Matrix-Product-State Approach to Satisfiability"
+        data-year="2026"
+        data-tags="matrix-product-state entanglement combinatorial-optimization tensor-network"
+        data-features="backend-api"
+        data-search="entanglement barriers from computational complexity: matrix-product-state approach to satisfiability figure 2 · entanglement barrier in 3-sat imaginary-time propagation of hard 3-sat instances shows the mps entanglement entropy peaking near the satisfiability threshold. 2602.20299 2026_sat_mps_entanglement jax tim pokart frank pollmann jan carl budich matrix-product-state entanglement combinatorial-optimization tensor-network backend-api">
+        <img class="shot" loading="lazy" src="thumbs/2026_sat_mps_entanglement__result.webp" alt="Figure 2 · Entanglement barrier in 3-SAT">
+        <div class="body">
+          <h3>Figure 2 · Entanglement barrier in 3-SAT</h3>
+          <p class="paper">Entanglement Barriers from Computational Complexity: Matrix-Product-State Approach to Satisfiability</p>
+          <p class="summary">Imaginary-time propagation of hard 3-SAT instances shows the MPS entanglement entropy peaking near the satisfiability threshold.</p>
+          <div class="meta"><span>2026</span><span>Tim Pokart et al.</span><span>jax</span></div>
+          <div class="taglist"><em>matrix-product-state</em><em>entanglement</em><em>combinatorial-optimization</em><em>tensor-network</em></div>
+        </div>
+      </article>
+      <article class="card" role="button" tabindex="0"
+        data-slug="2026_quantum_oracle_sketching"
+        data-title="Exponential Quantum Advantage in Processing Massive Classical Data"
+        data-year="2026"
+        data-tags="quantum-advantage quantum-machine-learning classification"
+        data-features="backend-api"
+        data-search="exponential quantum advantage in processing massive classical data figure 4(a) · machine size versus accuracy quantum oracle sketching is compared with classical streaming and sparse baselines on an mnist 3-vs-8 task at matched accuracy. 2604.07639 2026_quantum_oracle_sketching jax haimeng zhao alexander zlokapa hartmut neven ryan babbush john preskill jarrod r. mcclean hsin-yuan huang quantum-advantage quantum-machine-learning classification backend-api">
+        <img class="shot" loading="lazy" src="thumbs/2026_quantum_oracle_sketching__result.webp" alt="Figure 4(a) · Machine size versus accuracy">
+        <div class="body">
+          <h3>Figure 4(a) · Machine size versus accuracy</h3>
+          <p class="paper">Exponential Quantum Advantage in Processing Massive Classical Data</p>
+          <p class="summary">Quantum oracle sketching is compared with classical streaming and sparse baselines on an MNIST 3-vs-8 task at matched accuracy.</p>
+          <div class="meta"><span>2026</span><span>Haimeng Zhao et al.</span><span>jax</span></div>
+          <div class="taglist"><em>quantum-advantage</em><em>quantum-machine-learning</em><em>classification</em></div>
+        </div>
+      </article>
+      <article class="card" role="button" tabindex="0"
+        data-slug="2026_finite_temperature_lanczos"
+        data-title="Quantum Finite Temperature Lanczos Method"
+        data-year="2026"
+        data-tags="quantum-algorithm finite-temperature many-body-physics"
+        data-features="pauli-operator jit vmap"
+        data-search="quantum finite temperature lanczos method figure 1(a) · thermal energy versus temperature quantum hutchinson states and a generalized eigenvalue problem give thermal energies of a 10-site tfim without full diagonalization. 2603.25394 2026_finite_temperature_lanczos jax gian gentinetta friederike metz william kirby giuseppe carleo quantum-algorithm finite-temperature many-body-physics pauli-operator jit vmap">
+        <img class="shot" loading="lazy" src="thumbs/2026_finite_temperature_lanczos__result.webp" alt="Figure 1(a) · Thermal energy versus temperature">
+        <div class="body">
+          <h3>Figure 1(a) · Thermal energy versus temperature</h3>
+          <p class="paper">Quantum Finite Temperature Lanczos Method</p>
+          <p class="summary">Quantum Hutchinson states and a generalized eigenvalue problem give thermal energies of a 10-site TFIM without full diagonalization.</p>
+          <div class="meta"><span>2026</span><span>Gian Gentinetta et al.</span><span>jax</span></div>
+          <div class="taglist"><em>quantum-algorithm</em><em>finite-temperature</em><em>many-body-physics</em></div>
+        </div>
+      </article>
+      <article class="card" role="button" tabindex="0"
+        data-slug="2021_quantum_continual_learning"
+        data-title="Quantum Continual Learning Overcoming Catastrophic Forgetting"
+        data-year="2021"
+        data-tags="quantum-machine-learning classification variational-algorithm"
+        data-features="circuit jit vmap scan autodiff sampling"
+        data-search="quantum continual learning overcoming catastrophic forgetting figure 2(b) · catastrophic forgetting an 8-qubit amplitude-encoded classifier trained sequentially on mnist and permuted mnist forgets the first task as it learns the second. 2108.02786 2021_quantum_continual_learning jax wenjie jiang zhide lu dong-ling deng quantum-machine-learning classification variational-algorithm circuit jit vmap scan autodiff sampling">
+        <img class="shot" loading="lazy" src="thumbs/2021_quantum_continual_learning__result.webp" alt="Figure 2(b) · Catastrophic forgetting">
+        <div class="body">
+          <h3>Figure 2(b) · Catastrophic forgetting</h3>
+          <p class="paper">Quantum Continual Learning Overcoming Catastrophic Forgetting</p>
+          <p class="summary">An 8-qubit amplitude-encoded classifier trained sequentially on MNIST and permuted MNIST forgets the first task as it learns the second.</p>
+          <div class="meta"><span>2021</span><span>Wenjie Jiang et al.</span><span>jax</span></div>
+          <div class="taglist"><em>quantum-machine-learning</em><em>classification</em><em>variational-algorithm</em></div>
+        </div>
+      </article>
+      <article class="card" role="button" tabindex="0"
+        data-slug="2020_efficient_classical_simulation_random_shallow_2d"
+        data-title="Efficient Classical Simulation of Random Shallow 2D Quantum Circuits"
+        data-year="2020"
+        data-tags="classical-simulation tensor-network matrix-product-state random-circuit"
+        data-features="circuit"
+        data-search="efficient classical simulation of random shallow 2d quantum circuits sebd accuracy versus bond dimension spatial evolution block decimation contracts a random shallow 2d circuit as a peps-to-mps sweep, checked against exact amplitudes. 2001.00021 2020_efficient_classical_simulation_random_shallow_2d numpy john napp rolando l. la placa alexander m. dalzell fernando g. s. l. brandão aram w. harrow classical-simulation tensor-network matrix-product-state random-circuit circuit">
+        <img class="shot" loading="lazy" src="thumbs/2020_efficient_classical_simulation_random_shallow_2d__accuracy.webp" alt="SEBD accuracy versus bond dimension">
+        <div class="body">
+          <h3>SEBD accuracy versus bond dimension</h3>
+          <p class="paper">Efficient Classical Simulation of Random Shallow 2D Quantum Circuits</p>
+          <p class="summary">Spatial Evolution Block Decimation contracts a random shallow 2D circuit as a PEPS-to-MPS sweep, checked against exact amplitudes.</p>
+          <div class="meta"><span>2020</span><span>John Napp et al.</span><span>numpy</span></div>
+          <div class="taglist"><em>classical-simulation</em><em>tensor-network</em><em>matrix-product-state</em><em>random-circuit</em></div>
+        </div>
+      </article>
+      <article class="card" role="button" tabindex="0"
+        data-slug="2019_data_reuploading"
+        data-title="Data Re-uploading for a Universal Quantum Classifier"
+        data-year="2019"
+        data-tags="quantum-machine-learning classification variational-algorithm"
+        data-features="circuit jit autodiff expectation"
+        data-search="data re-uploading for a universal quantum classifier figure 6 · single-qubit universal classifier one qubit re-uploads the input at every layer to act as a universal classifier, trained with l-bfgs on the jax backend. 1907.02085 2019_data_reuploading jax adrián pérez-salinas alba cervera-lierta elies gil-fuster josé i. latorre quantum-machine-learning classification variational-algorithm circuit jit autodiff expectation">
+        <img class="shot" loading="lazy" src="thumbs/2019_data_reuploading__result.webp" alt="Figure 6 · Single-qubit universal classifier">
+        <div class="body">
+          <h3>Figure 6 · Single-qubit universal classifier</h3>
+          <p class="paper">Data Re-uploading for a Universal Quantum Classifier</p>
+          <p class="summary">One qubit re-uploads the input at every layer to act as a universal classifier, trained with L-BFGS on the JAX backend.</p>
+          <div class="meta"><span>2019</span><span>Adrián Pérez-Salinas et al.</span><span>jax</span></div>
+          <div class="taglist"><em>quantum-machine-learning</em><em>classification</em><em>variational-algorithm</em></div>
+        </div>
+      </article>
+      <article class="card" role="button" tabindex="0"
+        data-slug="2018_qcbm"
+        data-title="Differentiable Learning of Quantum Circuit Born Machine"
+        data-year="2018"
+        data-tags="quantum-machine-learning generative-model variational-algorithm"
+        data-features="circuit jit vmap autodiff"
+        data-search="differentiable learning of quantum circuit born machine figure 6 · qcbm learning a gaussian mixture a 10-qubit hardware-efficient born machine trained with an mmd loss to fit a gaussian mixture, differentiated end to end with jax. 1804.04168 2018_qcbm jax jin-guo liu lei wang quantum-machine-learning generative-model variational-algorithm circuit jit vmap autodiff">
+        <img class="shot" loading="lazy" src="thumbs/2018_qcbm__result.webp" alt="Figure 6 · QCBM learning a Gaussian mixture">
+        <div class="body">
+          <h3>Figure 6 · QCBM learning a Gaussian mixture</h3>
+          <p class="paper">Differentiable Learning of Quantum Circuit Born Machine</p>
+          <p class="summary">A 10-qubit hardware-efficient Born machine trained with an MMD loss to fit a Gaussian mixture, differentiated end to end with JAX.</p>
+          <div class="meta"><span>2018</span><span>Jin-Guo Liu et al.</span><span>jax</span></div>
+          <div class="taglist"><em>quantum-machine-learning</em><em>generative-model</em><em>variational-algorithm</em></div>
+        </div>
+      </article>
+      <article class="card" role="button" tabindex="0"
+        data-slug="2018_qcnn"
+        data-title="Quantum Convolutional Neural Networks"
+        data-year="2018"
+        data-tags="quantum-machine-learning classification topological-phase tensor-network"
+        data-features="circuit jit vmap contractor pauli-operator quoperator expectation interop"
+        data-search="quantum convolutional neural networks figure 2(c) · qcnn phase recognition quimb dmrg ground states feed a tensorcircuit qcnn that separates an spt phase from the trivial one at n = 11 and n = 45 sites. 1810.03787 2018_qcnn jax iris cong soonwon choi mikhail d. lukin quantum-machine-learning classification topological-phase tensor-network circuit jit vmap contractor pauli-operator quoperator expectation interop">
+        <img class="shot" loading="lazy" src="thumbs/2018_qcnn__result.webp" alt="Figure 2(c) · QCNN phase recognition">
+        <div class="body">
+          <h3>Figure 2(c) · QCNN phase recognition</h3>
+          <p class="paper">Quantum Convolutional Neural Networks</p>
+          <p class="summary">quimb DMRG ground states feed a TensorCircuit QCNN that separates an SPT phase from the trivial one at N = 11 and N = 45 sites.</p>
+          <div class="meta"><span>2018</span><span>Iris Cong et al.</span><span>jax</span></div>
+          <div class="taglist"><em>quantum-machine-learning</em><em>classification</em><em>topological-phase</em><em>tensor-network</em></div>
+        </div>
+      </article>
+  </div>
+  <p class="empty" id="empty" hidden>No reproduction matches these filters.</p>
+</main>
+
+<footer>
+  <div class="container">
+    <p>Want to add one? Pick a paper, follow
+    <a href="https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers">examples/reproduce_papers</a>,
+    and open a pull request.
+    &middot; <a href="../index.html">Documentation</a>
+    &middot; <a href="../platform/index.html">Platform</a>
+    &middot; <a href="https://github.com/tensorcircuit/tensorcircuit-ng">GitHub</a></p>
+  </div>
+</footer>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true"><div class="sheet" id="sheet"></div></div>
+
+<script id="gallery-data" type="application/json">[{"slug": "2026_qutrit_time_crystal", "title": "A Qutrit Time Crystal Stabilized with Native Chiral Interactions", "card_title": "Figure 2(b) · Qutrit time-crystal response", "summary": "A driven chiral clock model of 9 qutrits shows period-doubled magnetization and a sharp subharmonic peak in the Fourier spectrum.", "description": "Reproduces Figure 2(b) qualitatively with a noiseless TensorCircuit-NG and JAX simulation of the driven chiral clock model. The original 15-qutrit experiment is scaled to 9 qutrits for fast local execution, while keeping the same Floquet structure U_F = exp(-i H0) exp(-i Hint) X^g, disordered chiral couplings, the spin-1 magnetization observable M = |0><0| - |2><2|, and the DTC-versus-thermal comparison. The microwave kick is modeled as the fractional spectral power of the qutrit shift operator X^g, which is an explicit modeling simplification used to obtain a smooth noiseless interpolation away from the exact g = 1 kick.", "authors": ["Noah Goss", "Nishchay Suri", "Brian Marinelli", "Larry Chen", "Akel Hashim", "Sajant Anand", "Alexis Morvan", "Ravi K. Naik", "Ermal Rrapaj", "David I. Santiago", "Wibe de Jong", "Norman Y. Yao", "Joel E. Moore", "Irfan Siddiqi"], "year": 2026, "arxiv_id": "2605.14293", "url": "https://arxiv.org/abs/2605.14293", "tags": ["qudit", "floquet-dynamics", "many-body-physics"], "tc_features": ["qudit-circuit", "jit"], "backend": "jax", "hardware": {"gpu": false, "min_memory": "2GB"}, "figures": [{"target": "Figure 2(b): Single-site magnetization traces and Fourier spectroscopy versus kick strength", "source": "outputs/result.png", "figure": "figures/2026_qutrit_time_crystal__result.webp", "thumb": "thumbs/2026_qutrit_time_crystal__result.webp", "script": "main.py"}], "artifacts": [], "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2026_qutrit_time_crystal"}, {"slug": "2026_diff_qec_surface", "title": "Differentiable Maximum Likelihood Noise Estimation for Quantum Error Correction", "card_title": "Noise estimation convergence", "summary": "Surface-code noise parameters are recovered by differentiating through a CopyNode tensor-network contraction and optimizing with Adam.", "description": "Reproducing the differentiable maximum likelihood noise estimation for surface code using Tensor Network contraction with CopyNodes. The paper reports no single target figure for this experiment, so the reproduction reports the optimization convergence of the estimated noise parameters.", "authors": ["Hanyan Cao", "Dongyang Feng", "Cheng Ye", "Feng Pan"], "year": 2026, "arxiv_id": "2602.19722", "url": "https://arxiv.org/abs/2602.19722", "tags": ["quantum-error-correction", "tensor-network"], "tc_features": ["contractor", "jit", "vmap", "autodiff"], "backend": "jax", "hardware": {"gpu": false, "min_memory": "8GB"}, "figures": [{"target": "Maximum-likelihood noise estimation convergence", "source": "outputs/convergence.png", "figure": "figures/2026_diff_qec_surface__convergence.webp", "thumb": "thumbs/2026_diff_qec_surface__convergence.webp", "script": "main.py"}], "artifacts": [], "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2026_diff_qec_surface"}, {"slug": "2026_sat_mps_entanglement", "title": "Entanglement Barriers from Computational Complexity: Matrix-Product-State Approach to Satisfiability", "card_title": "Figure 2 · Entanglement barrier in 3-SAT", "summary": "Imaginary-time propagation of hard 3-SAT instances shows the MPS entanglement entropy peaking near the satisfiability threshold.", "description": "Figure 2 reproduction using the authors' Zenodo protocol (10.5281/zenodo.18743084): Weigt hard-satisfiable 3-SAT generator with p0=0.08, violation-vector Hamiltonian, and continuous tau optimization in [0,7.5] with the same sample-rejection criterion f(7.5) > f(10.0). Scaled down to n=4-15 (Panel A), n=8-10 (Panel B), 200 instances for feasible runtimes while preserving the core physics (linear entropy scaling and alpha_c peak). The bipartite entropy is obtained from a singular value decomposition of the propagated state on the JAX backend rather than from a tc.MPSCircuit.", "authors": ["Tim Pokart", "Frank Pollmann", "Jan Carl Budich"], "year": 2026, "arxiv_id": "2602.20299", "url": "https://arxiv.org/abs/2602.20299", "tags": ["matrix-product-state", "entanglement", "combinatorial-optimization", "tensor-network"], "tc_features": ["backend-api"], "backend": "jax", "hardware": {"gpu": false, "min_memory": "4GB"}, "figures": [{"target": "Figure 2: (a) <S_hat> vs n at alpha_c, (b) <S_hat>/n vs alpha", "source": "outputs/result.png", "figure": "figures/2026_sat_mps_entanglement__result.webp", "thumb": "thumbs/2026_sat_mps_entanglement__result.webp", "script": "main.py"}], "artifacts": [], "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2026_sat_mps_entanglement"}, {"slug": "2026_quantum_oracle_sketching", "title": "Exponential Quantum Advantage in Processing Massive Classical Data", "card_title": "Figure 4(a) · Machine size versus accuracy", "summary": "Quantum oracle sketching is compared with classical streaming and sparse baselines on an MNIST 3-vs-8 task at matched accuracy.", "description": "Reproduces the Figure 4(a) machine-size versus accuracy trade-off on a binary MNIST task (digits 3 and 8, 2000 samples per class, full 28x28 images reduced by PCA), comparing classical streaming, classical sparse representations, and quantum oracle sketching. A second experiment verifies the sample-complexity theory behind Figure 3(a) by evaluating the expected sketching unitary for a random Boolean oracle on 6 qubits and comparing its operator-norm error against the theoretical O(N/M) bound. That second experiment is diagonal operator algebra written with tc.backend array operations rather than a gate-level tc.Circuit simulation.", "authors": ["Haimeng Zhao", "Alexander Zlokapa", "Hartmut Neven", "Ryan Babbush", "John Preskill", "Jarrod R. McClean", "Hsin-Yuan Huang"], "year": 2026, "arxiv_id": "2604.07639", "url": "https://arxiv.org/abs/2604.07639", "tags": ["quantum-advantage", "quantum-machine-learning", "classification"], "tc_features": ["backend-api"], "backend": "jax", "hardware": {"gpu": false, "min_memory": "2GB"}, "figures": [{"target": "Figure 4(a) - Binary classification machine size vs accuracy", "source": "outputs/result.png", "figure": "figures/2026_quantum_oracle_sketching__result.webp", "thumb": "thumbs/2026_quantum_oracle_sketching__result.webp", "script": "main.py"}, {"target": "Figure 3(a) - Boolean oracle sketching error scaling vs O(N/M) bound", "source": "outputs/qos_scaling.png", "figure": "figures/2026_quantum_oracle_sketching__qos_scaling.webp", "thumb": "thumbs/2026_quantum_oracle_sketching__qos_scaling.webp", "script": "main.py"}], "artifacts": [], "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2026_quantum_oracle_sketching"}, {"slug": "2026_finite_temperature_lanczos", "title": "Quantum Finite Temperature Lanczos Method", "card_title": "Figure 1(a) · Thermal energy versus temperature", "summary": "Quantum Hutchinson states and a generalized eigenvalue problem give thermal energies of a 10-site TFIM without full diagonalization.", "description": "Reproduces thermal expectation values of energy for the Transverse-Field Ising Model using the Quantum Finite Temperature Lanczos Method (QFTLM). The original system size L=14 is scaled to L=10 for computational feasibility while maintaining the core algorithm logic (Quantum Hutchinson states and generalized eigenvalue problem).", "authors": ["Gian Gentinetta", "Friederike Metz", "William Kirby", "Giuseppe Carleo"], "year": 2026, "arxiv_id": "2603.25394", "url": "https://arxiv.org/abs/2603.25394", "tags": ["quantum-algorithm", "finite-temperature", "many-body-physics"], "tc_features": ["pauli-operator", "jit", "vmap"], "backend": "jax", "hardware": {"gpu": false, "min_memory": "2GB"}, "figures": [{"target": "Figure 1(a): Thermal expectation of Energy <E> vs Temperature T", "source": "outputs/result.png", "figure": "figures/2026_finite_temperature_lanczos__result.webp", "thumb": "thumbs/2026_finite_temperature_lanczos__result.webp", "script": "main.py"}], "artifacts": [], "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2026_finite_temperature_lanczos"}, {"slug": "2021_quantum_continual_learning", "title": "Quantum Continual Learning Overcoming Catastrophic Forgetting", "card_title": "Figure 2(b) · Catastrophic forgetting", "summary": "An 8-qubit amplitude-encoded classifier trained sequentially on MNIST and permuted MNIST forgets the first task as it learns the second.", "description": "This reproduction demonstrates catastrophic forgetting in a quantum classifier by training sequentially on MNIST (0, 9) and permuted MNIST (0, 9). We use an 8-qubit variational quantum circuit with amplitude encoding and 10 layers of hardware-efficient gates, with the layer sweep expressed through tc.backend.scan.", "authors": ["Wenjie Jiang", "Zhide Lu", "Dong-Ling Deng"], "year": 2021, "arxiv_id": "2108.02786", "url": "https://arxiv.org/abs/2108.02786", "tags": ["quantum-machine-learning", "classification", "variational-algorithm"], "tc_features": ["circuit", "jit", "vmap", "scan", "autodiff", "sampling"], "backend": "jax", "hardware": {"gpu": false, "min_memory": "4GB"}, "figures": [{"target": "Figure 2(b)", "source": "outputs/result.png", "figure": "figures/2021_quantum_continual_learning__result.webp", "thumb": "thumbs/2021_quantum_continual_learning__result.webp", "script": "main.py"}], "artifacts": [], "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2021_quantum_continual_learning"}, {"slug": "2020_efficient_classical_simulation_random_shallow_2d", "title": "Efficient Classical Simulation of Random Shallow 2D Quantum Circuits", "card_title": "SEBD accuracy versus bond dimension", "summary": "Spatial Evolution Block Decimation contracts a random shallow 2D circuit as a PEPS-to-MPS sweep, checked against exact amplitudes.", "description": "This script implements the Spatial Evolution Block Decimation (SEBD) algorithm described in the paper for efficient classical simulation of random shallow 2D quantum circuits. Output amplitudes are compared against exact statevector amplitudes to quantify the truncation error as a function of the MPS bond dimension.", "authors": ["John Napp", "Rolando L. La Placa", "Alexander M. Dalzell", "Fernando G. S. L. Brandão", "Aram W. Harrow"], "year": 2020, "arxiv_id": "2001.00021", "url": "https://arxiv.org/abs/2001.00021", "tags": ["classical-simulation", "tensor-network", "matrix-product-state", "random-circuit"], "tc_features": ["circuit"], "backend": "numpy", "hardware": {"gpu": false, "min_memory": "8GB"}, "figures": [{"target": "Accuracy comparison plot", "source": "outputs/accuracy.png", "figure": "figures/2020_efficient_classical_simulation_random_shallow_2d__accuracy.webp", "thumb": "thumbs/2020_efficient_classical_simulation_random_shallow_2d__accuracy.webp", "script": "main.py"}], "artifacts": ["outputs/results.log"], "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2020_efficient_classical_simulation_random_shallow_2d"}, {"slug": "2019_data_reuploading", "title": "Data Re-uploading for a Universal Quantum Classifier", "card_title": "Figure 6 · Single-qubit universal classifier", "summary": "One qubit re-uploads the input at every layer to act as a universal classifier, trained with L-BFGS on the JAX backend.", "description": "Reproduces the single-qubit classifier experiment (Figure 6) using the data re-uploading technique, with the layer parameters optimized by optax L-BFGS.", "authors": ["Adrián Pérez-Salinas", "Alba Cervera-Lierta", "Elies Gil-Fuster", "José I. Latorre"], "year": 2019, "arxiv_id": "1907.02085", "url": "https://arxiv.org/abs/1907.02085", "tags": ["quantum-machine-learning", "classification", "variational-algorithm"], "tc_features": ["circuit", "jit", "autodiff", "expectation"], "backend": "jax", "hardware": {"gpu": false, "min_memory": "1GB"}, "figures": [{"target": "Figure 6", "source": "outputs/result.png", "figure": "figures/2019_data_reuploading__result.webp", "thumb": "thumbs/2019_data_reuploading__result.webp", "script": "main.py"}], "artifacts": [], "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2019_data_reuploading"}, {"slug": "2018_qcbm", "title": "Differentiable Learning of Quantum Circuit Born Machine", "card_title": "Figure 6 · QCBM learning a Gaussian mixture", "summary": "A 10-qubit hardware-efficient Born machine trained with an MMD loss to fit a Gaussian mixture, differentiated end to end with JAX.", "description": "Reproduction of Figure 6: QCBM learning a mixture of Gaussians. The QCBM uses 10 qubits and a 5-layer hardware-efficient ansatz. The training objective is to minimize the MMD (Maximum Mean Discrepancy) loss with an Adam optimizer.", "authors": ["Jin-Guo Liu", "Lei Wang"], "year": 2018, "arxiv_id": "1804.04168", "url": "https://arxiv.org/abs/1804.04168", "tags": ["quantum-machine-learning", "generative-model", "variational-algorithm"], "tc_features": ["circuit", "jit", "vmap", "autodiff"], "backend": "jax", "hardware": {"gpu": false, "min_memory": "4GB"}, "figures": [{"target": "Figure 6", "source": "outputs/result.png", "figure": "figures/2018_qcbm__result.webp", "thumb": "thumbs/2018_qcbm__result.webp", "script": "main.py"}], "artifacts": [], "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2018_qcbm"}, {"slug": "2018_qcnn", "title": "Quantum Convolutional Neural Networks", "card_title": "Figure 2(c) · QCNN phase recognition", "summary": "quimb DMRG ground states feed a TensorCircuit QCNN that separates an SPT phase from the trivial one at N = 11 and N = 45 sites.", "description": "Reproduces the analytical QCNN phase recognition (Figure 2c) using exact ground states obtained from quimb DMRG simulation fed into a TensorCircuit QCNN through quimb2qop. Pauli sums are assembled with PauliStringSum2COO and the contraction is driven by a cotengra contractor.", "authors": ["Iris Cong", "Soonwon Choi", "Mikhail D. Lukin"], "year": 2018, "arxiv_id": "1810.03787", "url": "https://arxiv.org/abs/1810.03787", "tags": ["quantum-machine-learning", "classification", "topological-phase", "tensor-network"], "tc_features": ["circuit", "jit", "vmap", "contractor", "pauli-operator", "quoperator", "expectation", "interop"], "backend": "jax", "hardware": {"gpu": false, "min_memory": "16GB"}, "figures": [{"target": "Figure 2(c)", "source": "outputs/result.png", "figure": "figures/2018_qcnn__result.webp", "thumb": "thumbs/2018_qcnn__result.webp", "script": "main.py"}], "artifacts": [], "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2018_qcnn"}]</script>
+<script>const FEATURES = {"circuit": {"label": "Circuit Simulation", "api": "tc.Circuit"}, "qudit-circuit": {"label": "Qudit Circuit", "api": "tc.QuditCircuit"}, "density-matrix": {"label": "Density Matrix", "api": "tc.DMCircuit"}, "stabilizer": {"label": "Stabilizer Simulation", "api": "tc.StabilizerCircuit"}, "mps-circuit": {"label": "MPS Circuit", "api": "tc.MPSCircuit"}, "analog": {"label": "Analog Evolution", "api": "tc.AnalogCircuit, tc.timeevol"}, "jit": {"label": "JIT", "api": "tc.backend.jit"}, "vmap": {"label": "Vectorization", "api": "tc.backend.vmap"}, "scan": {"label": "Scan", "api": "tc.backend.scan"}, "autodiff": {"label": "Automatic Differentiation", "api": "tc.backend.grad, tc.backend.value_and_grad"}, "contractor": {"label": "Custom Contractor", "api": "tc.set_contractor, tc.contractor"}, "pauli-operator": {"label": "Pauli Operator", "api": "tc.quantum.PauliStringSum2COO, tc.quantum.PauliStringSum2Dense"}, "quoperator": {"label": "QuOperator", "api": "tc.quantum.QuOperator"}, "expectation": {"label": "Expectation", "api": "Circuit.expectation, Circuit.expectation_ps"}, "sampling": {"label": "Sampling", "api": "Circuit.sample"}, "noise": {"label": "Noise Model", "api": "tc.noisemodel, Circuit.unitary_kraus"}, "interop": {"label": "Framework Interop", "api": "tc.quantum.quimb2qop, tc.translation"}, "backend-api": {"label": "Backend API", "api": "tc.backend.* array operations only"}};
+const DATA = JSON.parse(document.getElementById('gallery-data').textContent);
+const BY_SLUG = Object.fromEntries(DATA.map(d => [d.slug, d]));
+const cards = Array.from(document.querySelectorAll('.card'));
+const searchInput = document.getElementById('search');
+const sortSelect = document.getElementById('sort');
+const countLabel = document.getElementById('count');
+const emptyState = document.getElementById('empty');
+const grid = document.getElementById('grid');
+const active = { tags: new Set(), features: new Set() };
+
+function apply() {
+    const query = searchInput.value.trim().toLowerCase();
+    let visible = 0;
+    for (const card of cards) {
+        const tags = card.dataset.tags.split(' ').filter(Boolean);
+        const features = card.dataset.features.split(' ').filter(Boolean);
+        const matchTags = [...active.tags].every(t => tags.includes(t));
+        const matchFeatures = [...active.features].every(f => features.includes(f));
+        const matchQuery = !query || card.dataset.search.includes(query);
+        const show = matchTags && matchFeatures && matchQuery;
+        card.hidden = !show;
+        if (show) visible += 1;
+    }
+    countLabel.textContent = visible + (visible === 1 ? ' reproduction' : ' reproductions');
+    emptyState.hidden = visible !== 0;
+}
+
+function sortCards() {
+    const mode = sortSelect.value;
+    const ordered = [...cards].sort((a, b) => {
+        if (mode === 'title') return a.dataset.title.localeCompare(b.dataset.title);
+        const delta = Number(a.dataset.year) - Number(b.dataset.year);
+        return mode === 'oldest' ? delta || a.dataset.title.localeCompare(b.dataset.title)
+                                 : -delta || a.dataset.title.localeCompare(b.dataset.title);
+    });
+    ordered.forEach(card => grid.appendChild(card));
+}
+
+document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+        const set = active[chip.dataset.facet];
+        const key = chip.dataset.value;
+        if (set.has(key)) { set.delete(key); chip.setAttribute('aria-pressed', 'false'); }
+        else { set.add(key); chip.setAttribute('aria-pressed', 'true'); }
+        apply();
+    });
+});
+
+document.getElementById('reset').addEventListener('click', () => {
+    active.tags.clear();
+    active.features.clear();
+    document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', 'false'));
+    searchInput.value = '';
+    apply();
+});
+
+searchInput.addEventListener('input', apply);
+sortSelect.addEventListener('change', sortCards);
+
+const modal = document.getElementById('modal');
+const sheet = document.getElementById('sheet');
+
+function esc(value) {
+    return String(value).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function open(slug) {
+    const item = BY_SLUG[slug];
+    const figures = item.figures.map(f =>
+        `<figure class="figure"><img loading="lazy" src="${esc(f.figure)}" alt="${esc(f.target)}">` +
+        `<figcaption>${esc(f.target)} &middot; <code>${esc(f.source)}</code></figcaption></figure>`).join('');
+    const features = item.tc_features.map(f =>
+        `<div><b>${esc(FEATURES[f].label)}</b><code>${esc(FEATURES[f].api)}</code></div>`).join('');
+    const artifacts = item.artifacts.length
+        ? `<h4>Other artifacts</h4><p class="prose">${item.artifacts.map(a => `<code>${esc(a)}</code>`).join(', ')}</p>`
+        : '';
+    const command = 'git clone https://github.com/tensorcircuit/tensorcircuit-ng.git\n' +
+        `cd tensorcircuit-ng/examples/reproduce_papers/${item.slug}\npython ${item.figures[0].script}`;
+    sheet.innerHTML =
+        `<button class="closebtn" id="close" aria-label="Close">&times;</button>` +
+        `<h2>${esc(item.title)}</h2>` +
+        `<p class="authors">${esc(item.authors.join(', '))} &middot; ${item.year} &middot; arXiv:${esc(item.arxiv_id)}</p>` +
+        `<div class="actions">` +
+        `<a class="btn primary" href="${esc(item.url)}" target="_blank" rel="noopener">Read the paper</a>` +
+        `<a class="btn" href="${esc(item.code_url)}" target="_blank" rel="noopener">View the code</a>` +
+        `</div>` +
+        `<h4>Reproduced results</h4>${figures}` +
+        `<h4>What was done</h4><p class="prose">${esc(item.description)}</p>` +
+        `<h4>TensorCircuit-NG APIs used</h4><div class="kv">${features}</div>` +
+        `<h4>Environment</h4><div class="kv">` +
+        `<div><b>Backend</b><code>tc.set_backend("${esc(item.backend)}")</code></div>` +
+        `<div><b>GPU required</b><code>${item.hardware.gpu ? 'yes' : 'no'}</code></div>` +
+        `<div><b>Minimum memory</b><code>${esc(item.hardware.min_memory)}</code></div>` +
+        `</div>${artifacts}` +
+        `<h4>Run it yourself</h4><pre>${esc(command)}</pre>`;
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    document.getElementById('close').addEventListener('click', close);
+}
+
+function close() {
+    modal.classList.remove('open');
+    document.body.style.overflow = '';
+}
+
+cards.forEach(card => {
+    card.addEventListener('click', () => open(card.dataset.slug));
+    card.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(card.dataset.slug); }
+    });
+});
+modal.addEventListener('click', event => { if (event.target === modal) close(); });
+document.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
+
+sortCards();
+apply();
+</script>
+</body>
+</html>

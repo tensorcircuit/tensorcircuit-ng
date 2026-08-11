@@ -8,15 +8,21 @@ authors:
   - "Cheng Ye"
   - "Feng Pan"
 tags:
-  - "tensor network"
-  - "quantum error correction"
-  - "differentiable programming"
-  - "surface code"
+  - "quantum-error-correction"
+  - "tensor-network"
+tc_features:
+  - "contractor"
+  - "jit"
+  - "vmap"
+  - "autodiff"
+backend: "jax"
 hardware_requirements:
-  gpu: False
+  gpu: false
   min_memory: "8GB"
-description: "Reproducing the differentiable maximum likelihood noise estimation for surface code using Tensor Network contraction with CopyNodes."
+card_title: "Noise estimation convergence"
+summary: "Surface-code noise parameters are recovered by differentiating through a CopyNode tensor-network contraction and optimizing with Adam."
+description: "Reproducing the differentiable maximum likelihood noise estimation for surface code using Tensor Network contraction with CopyNodes. The paper reports no single target figure for this experiment, so the reproduction reports the optimization convergence of the estimated noise parameters."
 outputs:
-  - target: "No specific figure"
-    path: "examples/reproduce_papers/2026_diff_qec_surface/outputs/convergence.png"
+  - target: "Maximum-likelihood noise estimation convergence"
+    path: "outputs/convergence.png"
     script: "main.py"

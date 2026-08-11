@@ -211,6 +211,19 @@ We utilize a python script to generate/refresh all API docs rst files under /doc
     cd docs/source
     python generate_rst.py
 
+**Paper Reproduction Gallery:**
+
+The static gallery served at ``/reproduce/`` is generated from the ``meta.yaml`` files of git-tracked
+reproductions under ``examples/reproduce_papers``. Regenerate and commit it whenever a reproduction is
+added or its metadata changes. The generator validates every entry against
+``examples/reproduce_papers/taxonomy.yaml`` and aborts on unknown tags, undeclared figures, or missing
+files, and its output is deterministic, so a rerun without data changes leaves no diff.
+
+.. code-block:: bash
+
+    cd docs/source
+    python generate_gallery.py
+
 **i18n:**
 
 For Chinese docs, we refer to the standard i18n workflow provided by sphinx, see `here <https://www.sphinx-doc.org/en/master/usage/advanced/intl.html>`__.

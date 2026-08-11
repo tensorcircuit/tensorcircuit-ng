@@ -13,3 +13,5 @@ nbsphinx
 myst-parser
 sphinx-design
 build
+pyyaml
+pillow

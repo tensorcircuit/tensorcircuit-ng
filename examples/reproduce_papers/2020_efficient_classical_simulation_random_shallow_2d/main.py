@@ -14,6 +14,7 @@ grids and demonstrates its capability on larger grids.
 
 import time
 import logging
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorcircuit as tc
@@ -28,7 +29,8 @@ logger = logging.getLogger(__name__)
 # TODO(@refraction-ray): Support JAX backend with JIT compilation for better performance
 K = tc.set_backend("numpy")
 
-LOG_FILE_PATH = "examples/reproduce_papers/2020_efficient_classical_simulation_random_shallow_2d/outputs/results.log"
+OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
+LOG_FILE_PATH = OUTPUT_DIR / "results.log"
 
 
 def generate_random_2d_circuit(rows, cols, depth, seed=42):
@@ -406,6 +408,7 @@ def main():
     test_sebd_simple()
 
     # Clear log file
+    OUTPUT_DIR.mkdir(exist_ok=True)
     with open(LOG_FILE_PATH, "w") as f:
         f.write("Verification Results:\n")
 
@@ -485,9 +488,7 @@ def main():
     plt.ylabel("Abs Error")
     plt.title("SEBD Accuracy vs Bond Dimension (4x4)")
     plt.grid(True)
-    plt.savefig(
-        "examples/reproduce_papers/2020_efficient_classical_simulation_random_shallow_2d/outputs/accuracy.png"
-    )
+    plt.savefig(OUTPUT_DIR / "accuracy.png")
     logger.info("Plot saved.")
 
 
