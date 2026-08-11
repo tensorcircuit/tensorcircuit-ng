@@ -190,6 +190,11 @@ class U1Circuit(AbstractCircuit):
 
     Note: Supports up to 64 qubits by utilizing 64-bit integer bitmasks for
     basis state representation.
+
+    For fixed-particle-number U(1) circuits with more than 64 qubits, see
+    `TenCirPauli <https://github.com/tensorcircuit/TenCirPauli>`_. It provides
+    larger-width U(1) circuit execution through a Python-first API, together
+    with native value-and-gradient execution.
     """
 
     def __init__(

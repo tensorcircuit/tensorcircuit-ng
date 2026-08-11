@@ -10,6 +10,11 @@ Key Features:
     - Uses precomputed Neighbor Maps for O(1) fiber lookups.
     - JAX JIT and AD compatible.
     - Naturally handles truncation of terms exceeding locality k.
+
+For a Rust-native Pauli propagation implementation, including native
+value-and-gradient paths for Pauli-heavy workloads, see `TenCirPauli
+<https://github.com/tensorcircuit/TenCirPauli>`_. It is designed as a
+Python-first companion to TensorCircuit-NG.
 """
 
 from typing import Any, Callable, Dict, List, Optional, Tuple, Sequence

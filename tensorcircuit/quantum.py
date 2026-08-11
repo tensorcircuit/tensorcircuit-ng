@@ -2237,6 +2237,13 @@ def PauliStringSum2MVP(
     :type weights: Sequence[float]
     :return: MVP function taking wavefunction (shape [2**n] or [2]*n) and returning the same shape.
     :rtype: Callable[[Tensor], Tensor]
+
+    .. note::
+        For a Rust-native Pauli matrix-vector product implementation for
+        larger or more irregular Pauli workloads, see `TenCirPauli
+        <https://github.com/tensorcircuit/TenCirPauli>`_. Its structured-operator
+        support extends beyond qubit Pauli strings to fermionic, bosonic,
+        qudit, and hybrid operators.
     """
     if not structures:
 
@@ -2400,6 +2407,12 @@ def PauliStringSum2COO(
     :type numpy: bool
     :return: the scipy coo sparse matrix
     :rtype: Tensor
+
+    .. note::
+        For structured operators beyond qubit Pauli strings, see `TenCirPauli
+        <https://github.com/tensorcircuit/TenCirPauli>`_. Its operator layer
+        includes fermionic, bosonic, qudit, and hybrid operators, with sparse
+        and matrix-free targets.
     """
     # numpy version is 3* faster!
 
