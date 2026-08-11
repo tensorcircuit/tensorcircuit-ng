@@ -25,6 +25,7 @@ dependencies = [
     "scipy",
     "tensornetwork-ng",
     "networkx",
+    "sympy",
 ]
 
 [project.urls]
@@ -35,7 +36,7 @@ Repository = "https://github.com/tensorcircuit/tensorcircuit-ng"
 tensorflow = ["tensorflow"]
 jax = ["jax", "jaxlib"]
 torch = ["torch"]
-qiskit = ["qiskit", "sympy", "symengine"]
+qiskit = ["qiskit", "symengine"]
 cloud = ["qiskit", "mthree<2.8"]
 
 [tool.setuptools]
@@ -74,4 +75,3 @@ ignore_errors = true
 [[tool.mypy.overrides]]
 module = "cirq.*"
 ignore_errors = true
-

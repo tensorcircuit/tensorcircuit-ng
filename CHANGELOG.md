@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v1.9.1
+
+### Fixed
+
+- Add SymPy as a default dependency because the symbolic compiler is imported through the default package import path.
+
 ## v1.9.0
 
 ### Added
