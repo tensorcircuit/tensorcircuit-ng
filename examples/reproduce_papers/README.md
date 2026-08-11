@@ -23,6 +23,10 @@ controlled vocabulary in `taxonomy.yaml`, `card_title` and `summary` carry the g
 and every image under `outputs/` must be declared and git-tracked. Extend `taxonomy.yaml` in the same
 pull request when an existing key genuinely does not fit.
 
+Each gallery entry credits a contributor, taken from the earliest non-bot author in the folder's git
+history so that the credit belongs to the person who created or first reviewed the reproduction. Add an
+explicit `contributor` to `meta.yaml` only when the whole history is bot-authored.
+
 ## Guidance for AI Agents
 
 Refer to the complete instruction set in the `arxiv-reproduce` skill (`.agents/skills/arxiv-reproduce/SKILL.md`) for detailed specifications.

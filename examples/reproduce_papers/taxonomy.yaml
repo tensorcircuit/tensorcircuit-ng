@@ -1,0 +1,136 @@
+# Controlled vocabulary for the paper reproduction gallery.
+#
+# Every `tags` and `tc_features` entry in a meta.yaml MUST be a key defined
+# below. The gallery generator fails fast on unknown keys rather than guessing,
+# so filter chips stay a small, stable set instead of growing one-off synonyms.
+#
+# If a reproduction genuinely does not fit, add a new key here in the same pull
+# request and say why in the description. Reviewing a one-line vocabulary diff
+# is far cheaper than re-normalizing the whole corpus later.
+
+# Research topic of the reproduced paper. Pick 2-4.
+tags:
+  quantum-machine-learning:
+    label: "Quantum Machine Learning"
+    aliases: ["QML", "quantum ML"]
+  classification:
+    label: "Classification"
+    aliases: ["binary classification", "phase recognition"]
+  generative-model:
+    label: "Generative Model"
+    aliases: ["generative modeling", "Born machine"]
+  variational-algorithm:
+    label: "Variational Algorithm"
+    aliases: ["VQA", "VQE", "parameterized circuit"]
+  quantum-algorithm:
+    label: "Quantum Algorithm"
+    aliases: ["quantum Krylov", "Lanczos", "phase estimation"]
+  quantum-error-correction:
+    label: "Quantum Error Correction"
+    aliases: ["QEC", "surface code", "color code", "decoder"]
+  tensor-network:
+    label: "Tensor Network"
+    aliases: ["tensor networks", "PEPS", "TN"]
+  matrix-product-state:
+    label: "Matrix Product State"
+    aliases: ["MPS", "DMRG"]
+  classical-simulation:
+    label: "Classical Simulation"
+    aliases: ["simulability", "dequantization"]
+  random-circuit:
+    label: "Random Circuit"
+    aliases: ["random circuit sampling", "XEB"]
+  many-body-physics:
+    label: "Many-Body Physics"
+    aliases: ["condensed matter", "spin chain", "quantum dynamics"]
+  floquet-dynamics:
+    label: "Floquet Dynamics"
+    aliases: ["time crystal", "periodic driving", "DTC"]
+  finite-temperature:
+    label: "Finite Temperature"
+    aliases: ["thermal state", "Gibbs state"]
+  entanglement:
+    label: "Entanglement"
+    aliases: ["entanglement entropy", "area law"]
+  topological-phase:
+    label: "Topological Phase"
+    aliases: ["SPT", "symmetry-protected topological"]
+  qudit:
+    label: "Qudit"
+    aliases: ["qutrit", "d-level system", "multi-level"]
+  combinatorial-optimization:
+    label: "Combinatorial Optimization"
+    aliases: ["SAT", "3-SAT", "MaxCut", "QUBO"]
+  quantum-advantage:
+    label: "Quantum Advantage"
+    aliases: ["quantum speedup", "separation"]
+  quantum-chemistry:
+    label: "Quantum Chemistry"
+    aliases: ["molecular simulation", "electronic structure"]
+
+# TensorCircuit-NG capabilities the script actually exercises. Claim a feature
+# only if the corresponding API appears in the code; this list doubles as a
+# reverse index from physics problem to TC-NG API.
+tc_features:
+  circuit:
+    label: "Circuit Simulation"
+    api: "tc.Circuit"
+  qudit-circuit:
+    label: "Qudit Circuit"
+    api: "tc.QuditCircuit"
+  density-matrix:
+    label: "Density Matrix"
+    api: "tc.DMCircuit"
+  stabilizer:
+    label: "Stabilizer Simulation"
+    api: "tc.StabilizerCircuit"
+  mps-circuit:
+    label: "MPS Circuit"
+    api: "tc.MPSCircuit"
+  analog:
+    label: "Analog Evolution"
+    api: "tc.AnalogCircuit, tc.timeevol"
+  jit:
+    label: "JIT"
+    api: "tc.backend.jit"
+  vmap:
+    label: "Vectorization"
+    api: "tc.backend.vmap"
+  scan:
+    label: "Scan"
+    api: "tc.backend.scan"
+  autodiff:
+    label: "Automatic Differentiation"
+    api: "tc.backend.grad, tc.backend.value_and_grad"
+  contractor:
+    label: "Custom Contractor"
+    api: "tc.set_contractor, tc.contractor"
+  pauli-operator:
+    label: "Pauli Operator"
+    api: "tc.quantum.PauliStringSum2COO, tc.quantum.PauliStringSum2Dense"
+  quoperator:
+    label: "QuOperator"
+    api: "tc.quantum.QuOperator"
+  expectation:
+    label: "Expectation"
+    api: "Circuit.expectation, Circuit.expectation_ps"
+  sampling:
+    label: "Sampling"
+    api: "Circuit.sample"
+  noise:
+    label: "Noise Model"
+    api: "tc.noisemodel, Circuit.unitary_kraus"
+  interop:
+    label: "Framework Interop"
+    api: "tc.quantum.quimb2qop, tc.translation"
+  backend-api:
+    label: "Backend API"
+    api: "tc.backend.* array operations only"
+
+# Simulation backend the script sets via tc.set_backend.
+backends:
+  - jax
+  - tensorflow
+  - pytorch
+  - numpy
+  - cupy

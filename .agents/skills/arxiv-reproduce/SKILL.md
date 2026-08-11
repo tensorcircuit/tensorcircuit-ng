@@ -41,6 +41,7 @@ When tasked with reproducing an arXiv paper using TensorCircuit-NG, you act as a
       path: outputs/result.png
       script: "main.py"
   # thumbnail: outputs/other.png   # optional, only when the first image is a poor card image
+  # contributor: "Name"            # optional, see below; normally derived from git history
 ```
 
 `meta.yaml` is not a private note: it is the sole data source for the public reproduction gallery,
@@ -64,6 +65,10 @@ rules or the gallery build fails fast on your entry:
 - **Canonical `url`**: always the `/abs/` form, never `/pdf/`.
 - **Only git-tracked reproductions are published**: `git add` the new folder, including `meta.yaml`,
   `main.py`, and everything under `outputs/` that `meta.yaml` declares.
+- **Do not write `contributor` yourself**: the gallery credits the earliest non-bot author in the
+  folder's git history, so it resolves to the human who created or first reviewed the reproduction
+  rather than to whatever tool generated it. Set `contributor` explicitly only when the entire history
+  is bot-authored, in which case name the person who reviewed and vouches for the reproduction.
 
 ### 3. Code Synthesis (`main.py`)
 

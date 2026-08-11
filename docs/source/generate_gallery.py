@@ -30,6 +30,7 @@ PAPERS_DIR = REPO_ROOT / "examples" / "reproduce_papers"
 OUT_DIR = HERE / "public" / "reproduce"
 
 GITHUB_TREE = "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master"
+BOT_SUFFIX = "[bot]"
 RASTER_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 IMAGE_SUFFIXES = RASTER_SUFFIXES | {".svg"}
 
@@ -76,6 +77,35 @@ def tracked_paths(relative_dir):
         check=True,
     )
     return set(result.stdout.split())
+
+
+_CONTRIBUTOR_CACHE = {}
+
+
+def derive_contributor(folder):
+    """
+    Return the earliest non-bot author in the folder's git history.
+
+    Bot-authored reproductions fall through to the first human who touched the
+    folder, because the gallery credits whoever vouches for a reproduction
+    rather than whatever tool typed it. Returns None when only bots appear.
+    """
+    relative = folder.relative_to(REPO_ROOT).as_posix()
+    if relative not in _CONTRIBUTOR_CACHE:
+        result = subprocess.run(
+            ["git", "log", "--reverse", "--format=%an", "--", relative],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        humans = [
+            name.strip()
+            for name in result.stdout.splitlines()
+            if name.strip() and not name.strip().endswith(BOT_SUFFIX)
+        ]
+        _CONTRIBUTOR_CACHE[relative] = humans[0] if humans else None
+    return _CONTRIBUTOR_CACHE[relative]
 
 
 def load_taxonomy():
@@ -141,6 +171,12 @@ def validate(slug, meta, folder, errors, tag_vocab, feature_vocab, backends):
     thumbnail = meta.get("thumbnail")
     if thumbnail is not None and thumbnail not in declared:
         fail(f"thumbnail '{thumbnail}' is not among the declared outputs")
+
+    if not meta.get("contributor") and derive_contributor(folder) is None:
+        fail(
+            "git history has only bot authors, so the reproduction has no one "
+            "vouching for it; add an explicit 'contributor' to meta.yaml"
+        )
 
 
 def flatten_white(image):
@@ -264,6 +300,7 @@ def collect():
                 "summary": meta["summary"],
                 "description": meta["description"],
                 "authors": meta["authors"],
+                "contributor": meta.get("contributor") or derive_contributor(folder),
                 "year": meta["year"],
                 "arxiv_id": meta["arxiv_id"],
                 "url": meta["url"],
@@ -517,6 +554,15 @@ select {
 }
 .sheet h2 { font-family: var(--font-display); font-size: 1.6rem; line-height: 1.25; padding-right: 2.5rem; }
 .sheet .authors { color: var(--text-muted); font-size: 0.86rem; margin-top: 0.6rem; }
+.sheet .credit { color: var(--text-secondary); font-size: 0.84rem; margin-top: 0.45rem; }
+.sheet .credit span {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-right: 0.5rem;
+}
 .closebtn {
     float: right;
     background: none;
@@ -675,6 +721,7 @@ function open(slug) {
         `<button class="closebtn" id="close" aria-label="Close">&times;</button>` +
         `<h2>${esc(item.title)}</h2>` +
         `<p class="authors">${esc(item.authors.join(', '))} &middot; ${item.year} &middot; arXiv:${esc(item.arxiv_id)}</p>` +
+        `<p class="credit"><span>Reproduction by</span>${esc(item.contributor)}</p>` +
         `<div class="actions">` +
         `<a class="btn primary" href="${esc(item.url)}" target="_blank" rel="noopener">Read the paper</a>` +
         `<a class="btn" href="${esc(item.code_url)}" target="_blank" rel="noopener">View the code</a>` +

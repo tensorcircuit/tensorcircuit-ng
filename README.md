@@ -388,6 +388,14 @@ TensorCircuit-NG is open source, released under the Apache License, Version 2.0.
 
 <!-- ALL-CONTRIBUTORS-LIST:END -->
 
+## Paper Reproductions
+
+We maintain a growing gallery of quantum computing papers reproduced with TensorCircuit-NG. Each entry is a self-contained script that regenerates a figure from a published paper on a laptop, with its reproduction strategy documented alongside.
+
+**[Browse the gallery](https://tensorcircuit-ng.readthedocs.io/en/latest/reproduce/index.html)** or read the source in [examples/reproduce_papers](/examples/reproduce_papers).
+
+Adding one is the most approachable way to make a first contribution: pick a paper, follow the conventions in [examples/reproduce_papers](/examples/reproduce_papers), and open a pull request.
+
 ## Research and Applications
 
 TensorCircuit-NG is a powerful framework for driving research and applications in quantum computing. Below are examples of published academic works (150+ in total) and open-source projects that utilize TensorCircuit and TensorCircuit-NG.
