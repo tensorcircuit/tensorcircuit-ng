@@ -39,6 +39,8 @@ TensorCircuit-NG 现在支持真实量子硬件连接和实验，并提供优雅
 
 TensorCircuit-NG 是 TensorCircuit 在技术与架构上的演进版本，由原核心开发团队领导并持续维护。本仓库填补了旧有镜像在维护上的空白（如对 numpy > 2.0 和 qiskit > 1.0 的支持）并实现了大幅的功能增强。作为[完全兼容](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng)的无缝替代方案，TensorCircuit-NG 提供了下一代量子计算模拟能力，包括稳定子（stabilizer）、量子多能级（qudit）、模拟（analog）及对称性（symmetric）线路模拟，以及支持多节点、多 GPU 的分布式大规模模拟。
 
+> **新的配套项目：** 我们最近发布了 [TenCirPauli](https://github.com/tensorcircuit/TenCirPauli)。这是一个 Python-first、Rust-native 的配套项目，为 TensorCircuit-NG 提供原生 Pauli propagation 和固定粒子数的 U(1) 量子线路执行能力。
+
 ## 入门
 
 请从 [完整文档](https://tensorcircuit-ng.readthedocs.io/) 中的 [快速上手](/docs/source/quickstart.rst) 开始。
@@ -207,6 +209,10 @@ VQEX 在 MBL 相位识别上的应用见 [教程](/docs/source/tutorials/vqex_mb
 [TenCirChem](https://github.com/tencent-quantum-lab/TenCirChem) 是高效的，专注于处理和计算分子性质的量子计算软件。其基于 TensorCircuit 并为量子化学任务进行了专门的优化。
 
 参考论文: https://arxiv.org/abs/2303.10825 (JCTC)。
+
+### TenCirPauli
+
+关于围绕 TensorCircuit-NG 的 Rust-native Pauli propagation、固定粒子数 U(1) 量子线路执行、Pauli 代数、结构化 Hamiltonian、测量规划、对称性约化、受限子空间和后端矩阵-向量乘法接口，请参见 [TenCirPauli](https://github.com/tensorcircuit/TenCirPauli)。该项目还支持费米子、玻色子、qudit、Majorana 和混合系统的结构化算符代数，以及费米子到量子比特的映射和化学计算互操作。
 
 ### EMQAOA-DARBO
 

@@ -2,6 +2,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from pytest_lazyfixture import lazy_fixture as lf
 import sympy
 import tensornetwork as tn
 
@@ -85,6 +86,193 @@ def test_fixed_gates_recorded_in_qir(SymbolCircuit):
     sc.z(1)
     assert sc.gate_count() == 3
     assert [d["name"] for d in sc.to_qir()] == ["h", "cnot", "z"]
+
+
+def test_lightcone_compile_rebuilds_symbolic_circuit(SymbolCircuit):
+    theta = [sympy.Symbol(f"theta{i}", real=True) for i in range(3)]
+    sc = SymbolCircuit(4)
+    sc.rzz(1, 2, theta=theta[1])
+    sc.rzz(0, 1, theta=theta[0])
+    sc.rzz(2, 3, theta=theta[2])
+
+    reduced, info = tc.compiler.lightcone_compile(sc, [0, 1])
+    observables = info["observable_qubits"]
+
+    assert reduced._nqubits == 3
+    assert observables == [0, 1]
+    assert info["logical_physical_mapping"] == {0: 0, 1: 1, 2: 2}
+    assert [d["index"] for d in reduced.to_qir()] == [(1, 2), (0, 1)]
+    assert reduced.free_symbols() == {theta[0], theta[1]}
+
+
+def test_lightcone_compile_accepts_complete_bindings(jaxb, SymbolCircuit):
+    theta = [sympy.Symbol(f"theta{i}", real=True) for i in range(2)]
+    sc = SymbolCircuit(2)
+    sc.rx(0, theta=theta[0])
+    sc.rx(1, theta=theta[1])
+    reduced, info = tc.compiler.lightcone_compile(sc, [0])
+
+    def loss(params):
+        bindings = {symbol: params[index] for index, symbol in enumerate(theta)}
+        circuit = reduced.to_circuit(bindings)
+        return tc.backend.real(circuit.expectation_ps(z=info["observable_qubits"]))
+
+    params = tc.backend.convert_to_tensor([0.4, 0.7])
+    value, gradient = tc.backend.jit(tc.backend.value_and_grad(loss))(params)
+
+    np.testing.assert_allclose(value, np.cos(0.4), atol=1e-6, rtol=0.0)
+    np.testing.assert_allclose(gradient, [-np.sin(0.4), 0.0], atol=1e-6, rtol=0.0)
+
+
+def test_lightcone_compile_is_observable_type_agnostic(SymbolCircuit, sym):
+    theta, phi = sym["theta"], sym["phi"]
+    sc = SymbolCircuit(2)
+    sc.ry(0, theta=theta)
+    sc.rx(1, theta=phi)
+    reduced, info = tc.compiler.lightcone_compile(sc, [0])
+
+    full = sc.expectation_ps(x=[0])
+    compiled = reduced.expectation_ps(x=info["observable_qubits"])
+
+    assert sympy.simplify(full - compiled) == 0
+    assert sympy.simplify(compiled - sympy.sin(theta)) == 0
+
+
+def test_lightcone_compile_rejects_channels(SymbolCircuit):
+    sc = SymbolCircuit(1)
+    sc.depolarizing(0, px=1.0, py=0.0, pz=0.0, status=0.5)
+
+    with pytest.raises(NotImplementedError, match="does not support channel"):
+        tc.compiler.lightcone_compile(sc, [0])
+
+
+def test_lightcone_compile_preserves_custom_gate_name(SymbolCircuit, sym):
+    theta = sym["theta"]
+    sc = SymbolCircuit(2)
+    sc.rx(0, theta=theta, name="alias")
+
+    reduced, info = tc.compiler.lightcone_compile(sc, [0])
+    observables = info["observable_qubits"]
+    instruction = reduced.to_qir()[0]
+
+    assert instruction["name"] == "alias"
+    assert instruction["gatef"].n == "rx"
+    circuit = reduced.to_circuit({theta: 0.4})
+    assert circuit.to_qir()[0]["name"] == "alias"
+    np.testing.assert_allclose(
+        complex(circuit.expectation_ps(z=observables)), np.cos(0.4), atol=1e-6
+    )
+
+
+def test_lightcone_compile_preserves_custom_fixed_gate_name(SymbolCircuit):
+    sc = SymbolCircuit(1)
+    sc.h(0, name="alias")
+
+    reduced, info = tc.compiler.lightcone_compile(sc, [0])
+    observables = info["observable_qubits"]
+    instruction = reduced.to_qir()[0]
+
+    assert instruction["name"] == "alias"
+    assert instruction["gatef"].n == "h"
+    assert sympy.simplify(reduced.amplitude("0") - sympy.sqrt(2) / 2) == 0
+    assert observables == [0]
+
+
+def test_bind_preserves_custom_gate_name(SymbolCircuit, sym):
+    theta = sym["theta"]
+    sc = SymbolCircuit(1)
+    sc.rx(0, theta=theta, name="alias")
+
+    bound = sc.bind({theta: sympy.pi / 2})
+    instruction = bound.to_qir()[0]
+
+    assert instruction["name"] == "alias"
+    assert instruction["gatef"].n == "rx"
+    assert bound.free_symbols() == set()
+    assert sympy.simplify(bound.expectation_ps(z=[0])) == 0
+
+
+@pytest.mark.parametrize("observable", [2, -1])
+def test_lightcone_compile_normalizes_negative_indices(SymbolCircuit, observable):
+    sc = SymbolCircuit(3)
+    sc.x(-1)
+
+    reduced, info = tc.compiler.lightcone_compile(sc, [observable])
+    observables = info["observable_qubits"]
+
+    assert reduced._nqubits == 1
+    assert observables == [0]
+    assert reduced.to_qir()[0]["index"] == (0,)
+    np.testing.assert_allclose(
+        complex(sc.expectation_ps(z=[-1])),
+        complex(reduced.expectation_ps(z=observables)),
+        atol=1e-7,
+        rtol=0.0,
+    )
+
+
+def _lightcone_case(case):
+    theta = [sympy.Symbol(f"lc_theta{i}", real=True) for i in range(8)]
+    if case == "chain":
+        sc = tc.SymbolCircuit(5)
+        sc.h(0)
+        sc.rx(0, theta=theta[0])
+        sc.cnot(0, 1)
+        sc.ry(1, theta=theta[1])
+        sc.cnot(1, 2)
+        sc.rz(2, theta=theta[2])
+        sc.rx(3, theta=theta[3])
+        sc.cnot(3, 4)
+        return sc, theta[:4], [0]
+    if case == "two_observables":
+        sc = tc.SymbolCircuit(5)
+        sc.h(0)
+        sc.rx(0, theta=theta[0])
+        sc.cnot(0, 1)
+        sc.ry(1, theta=theta[1])
+        sc.h(2)
+        sc.rz(2, theta=theta[2])
+        sc.cnot(2, 3)
+        sc.rx(3, theta=theta[3])
+        sc.rx(4, theta=theta[4])
+        return sc, theta[:5], [0, 3]
+    if case == "interleaved":
+        sc = tc.SymbolCircuit(6)
+        sc.rx(2, theta=theta[0])
+        sc.cnot(2, 3)
+        sc.ry(3, theta=theta[1])
+        sc.cnot(1, 2)
+        sc.rz(1, theta=theta[2])
+        sc.h(4)
+        sc.cnot(4, 5)
+        return sc, theta[:3], [1]
+    raise ValueError(case)
+
+
+@pytest.mark.parametrize("case", ["chain", "two_observables", "interleaved"])
+def test_lightcone_compile_matches_full_value_and_gradient(SymbolCircuit, case):
+    sc, symbols, observables = _lightcone_case(case)
+    reduced, info = tc.compiler.lightcone_compile(sc, observables)
+    reduced_observables = info["observable_qubits"]
+    full_expr = sc.expectation_ps(z=observables)
+    reduced_expr = reduced.expectation_ps(z=reduced_observables)
+    values = {symbol: 0.13 * (i + 1) for i, symbol in enumerate(symbols)}
+
+    np.testing.assert_allclose(
+        complex(full_expr.subs(values)),
+        complex(reduced_expr.subs(values)),
+        atol=1e-7,
+        rtol=0.0,
+    )
+    for symbol in symbols:
+        full_gradient = sympy.diff(full_expr, symbol).subs(values)
+        reduced_gradient = sympy.diff(reduced_expr, symbol).subs(values)
+        np.testing.assert_allclose(
+            complex(full_gradient),
+            complex(reduced_gradient),
+            atol=1e-7,
+            rtol=0.0,
+        )
 
 
 # ── wavefunction / state ──────────────────────────────────────────────────────
@@ -591,6 +779,23 @@ def test_to_circuit_rejects_unbound_symbols(SymbolCircuit, sym):
         sc.to_circuit({theta: 0.5})  # phi is still unbound
 
 
+def test_to_circuit_rejects_channels(SymbolCircuit):
+    sc = SymbolCircuit(1)
+    sc.depolarizing(0, px=1.0, py=0.0, pz=0.0, status=0.5)
+
+    with pytest.raises(NotImplementedError, match="does not support channel"):
+        sc.to_circuit()
+
+
+def test_to_circuit_rejects_symbolic_binding(SymbolCircuit, sym):
+    theta, phi = sym["theta"], sym["phi"]
+    sc = SymbolCircuit(1)
+    sc.rx(0, theta=theta)
+
+    with pytest.raises(TypeError):
+        sc.to_circuit({theta: phi})
+
+
 # ── mixed symbolic and numeric parameters ─────────────────────────────────────
 
 
@@ -1023,6 +1228,120 @@ def test_to_circuit_none_param_dict(SymbolCircuit: Any) -> None:
             atol=1e-8,
             rtol=0.0,
         )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_to_circuit_uses_active_backend_tensor(backend, SymbolCircuit, sym):
+    """to_circuit() must use the active backend for bound values."""
+    theta = sym["theta"]
+    sc = SymbolCircuit(1)
+    sc.rx(0, theta=theta)
+
+    circuit = sc.to_circuit({theta: tc.backend.convert_to_tensor(0.4)})
+    value = tc.backend.real(circuit.expectation_ps(z=[0]))
+    np.testing.assert_allclose(
+        np.asarray(tc.backend.numpy(value)), np.cos(0.4), atol=1e-6, rtol=0.0
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_to_circuit_coerces_numeric_sympy_binding(backend, SymbolCircuit, sym):
+    theta = sym["theta"]
+    sc = SymbolCircuit(1)
+    sc.rx(0, theta=sympy.sin(theta))
+
+    circuit = sc.to_circuit({theta: sympy.pi / 2})
+    value = tc.backend.real(circuit.expectation_ps(z=[0]))
+
+    np.testing.assert_allclose(
+        np.asarray(tc.backend.numpy(value)), np.cos(1.0), atol=1e-6, rtol=0.0
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_to_circuit_lambdifies_expression_with_active_backend_tensor(
+    backend, SymbolCircuit, sym
+):
+    """Composite SymPy parameters must use active backend operations."""
+    theta = sym["theta"]
+    sc = SymbolCircuit(1)
+    sc.rx(0, theta=2 * theta + sympy.sin(theta) + sympy.pi / 4)
+
+    circuit = sc.to_circuit({theta: tc.backend.convert_to_tensor(0.4)})
+    value = tc.backend.real(circuit.expectation_ps(z=[0]))
+    angle = 2 * 0.4 + np.sin(0.4) + np.pi / 4
+    np.testing.assert_allclose(
+        np.asarray(tc.backend.numpy(value)), np.cos(angle), atol=1e-6, rtol=0.0
+    )
+
+
+def test_to_circuit_preserves_jax_tracer(jaxb, SymbolCircuit, sym):
+    """JAX tracers must survive to_circuit() inside jit and autodiff."""
+    theta = sym["theta"]
+    sc = SymbolCircuit(1)
+    sc.rx(0, theta=theta)
+
+    def loss(value):
+        circuit = sc.to_circuit({theta: value})
+        return tc.backend.real(circuit.expectation_ps(z=[0]))
+
+    value, gradient = tc.backend.jit(tc.backend.value_and_grad(loss))(
+        tc.backend.convert_to_tensor(0.4)
+    )
+    np.testing.assert_allclose(value, np.cos(0.4), atol=1e-6, rtol=0.0)
+    np.testing.assert_allclose(gradient, -np.sin(0.4), atol=1e-6, rtol=0.0)
+
+
+def test_to_circuit_lambdifies_nonlinear_expression_with_jax_ad(
+    jaxb, SymbolCircuit, sym
+):
+    theta = sym["theta"]
+    sc = SymbolCircuit(1)
+    sc.rx(0, theta=sympy.sin(theta))
+
+    def loss(value):
+        circuit = sc.to_circuit({theta: value})
+        return tc.backend.real(circuit.expectation_ps(z=[0]))
+
+    value, gradient = tc.backend.jit(tc.backend.value_and_grad(loss))(0.4)
+    expected_value = np.cos(np.sin(0.4))
+    expected_gradient = -np.sin(np.sin(0.4)) * np.cos(0.4)
+    np.testing.assert_allclose(value, expected_value, atol=1e-6, rtol=0.0)
+    np.testing.assert_allclose(gradient, expected_gradient, atol=1e-6, rtol=0.0)
+
+
+def test_to_circuit_rejects_unsupported_symbolic_function(jaxb, SymbolCircuit, sym):
+    theta = sym["theta"]
+    sc = SymbolCircuit(1)
+    sc.rx(0, theta=sympy.erf(theta))
+
+    with pytest.raises(NotImplementedError, match="does not implement 'erf'"):
+        sc.to_circuit({theta: tc.backend.convert_to_tensor(0.4)})
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_to_circuit_binds_symbolic_unitary_array(backend, SymbolCircuit, sym):
+    theta = sym["theta"]
+    sc = SymbolCircuit(1)
+    sc.any(0, unitary=np.array([[0, theta], [theta, 0]], dtype=object))
+
+    circuit = sc.to_circuit({theta: tc.backend.convert_to_tensor(1.0)})
+
+    np.testing.assert_allclose(
+        np.asarray(tc.backend.numpy(circuit.amplitude("1"))), 1.0, atol=1e-6
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_to_circuit_binds_symbolic_input_array(backend, SymbolCircuit, sym):
+    theta = sym["theta"]
+    sc = SymbolCircuit(1, inputs=np.array([theta, 1], dtype=object))
+
+    circuit = sc.to_circuit({theta: tc.backend.convert_to_tensor(0.4)})
+
+    np.testing.assert_allclose(
+        np.asarray(tc.backend.numpy(circuit.amplitude("0"))), 0.4, atol=1e-6
+    )
 
 
 # -- bind with fixed gates (line 439) -----------------------------------------

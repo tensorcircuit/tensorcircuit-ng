@@ -31,7 +31,7 @@ import sympy
 import tensornetwork as tn
 
 from .circuit import Circuit
-from .cons import contractor, runtime_backend, set_function_backend
+from .cons import backend, contractor, dtypestr, runtime_backend, set_function_backend
 from .gates import Gate
 from .quantum import QuOperator, _decode_basis_label
 from .symbolgates import SYM_SGATE_MAP, SYM_VGATE_MAP, sym_r
@@ -189,7 +189,7 @@ class SymbolCircuit(Circuit):
             localname = name if name is not None else defaultname
             sym_gatef = SYM_SGATE_MAP.get(localname)  # type: ignore
             if sym_gatef is None:
-                sym_gatef = SYM_SGATE_MAP.get(defaultname)
+                sym_gatef = SYM_SGATE_MAP.get(getattr(gatef, "n", defaultname))
             if sym_gatef is not None:
                 gate = sym_gatef()
             else:
@@ -239,7 +239,7 @@ class SymbolCircuit(Circuit):
 
             sym_gatef = SYM_VGATE_MAP.get(localname)  # type: ignore
             if sym_gatef is None:
-                sym_gatef = SYM_VGATE_MAP.get(name)  # type: ignore
+                sym_gatef = SYM_VGATE_MAP.get(getattr(gatef, "n", name))  # type: ignore
             if sym_gatef is not None:
                 gate = sym_gatef(**vars)  # type: ignore[operator]
             else:
@@ -664,25 +664,31 @@ class SymbolCircuit(Circuit):
                     syms |= v.free_symbols
         return syms
 
-    def _bind_scalar(self, k: str, v: Any, param_dict: Dict[sympy.Symbol, Any]) -> Any:
-        if hasattr(v, "subs"):
-            v = v.subs(param_dict)
-        if hasattr(v, "free_symbols") and v.free_symbols:
-            raise ValueError(
-                f"Parameter '{k}' still contains free symbols "
-                f"{v.free_symbols} after substitution. "
-                "Pass a complete param_dict to to_circuit()."
-            )
-        return complex(v) if hasattr(v, "free_symbols") else v
+    @staticmethod
+    def _backend_lambdify(expr: sympy.Basic) -> Callable[..., Any]:
+        """Create a backend-native callable for one symbolic expression."""
+        aliases = {"Abs": "abs", "conjugate": "conj", "re": "real", "im": "imag"}
+        backend_functions = {}
+        for function in expr.atoms(sympy.Function):
+            sympy_name = function.func.__name__
+            backend_name = aliases.get(sympy_name, sympy_name)
+            try:
+                backend_functions[sympy_name] = getattr(backend, backend_name)
+            except AttributeError as exc:
+                raise NotImplementedError(
+                    f"Backend '{backend.name}' does not implement '{sympy_name}'"
+                ) from exc
+        return sympy.lambdify(  # type: ignore[no-any-return]
+            sorted(expr.free_symbols, key=str),
+            expr,
+            modules=[backend_functions],
+        )
 
-    def _bind_array(
-        self, k: str, v: Any, param_dict: Dict[sympy.Symbol, Any]
-    ) -> np.ndarray:  # type: ignore[type-arg]
-        arr = np.asarray(v)
-        if arr.dtype != object:
-            return arr
-        bound = np.vectorize(lambda x: self._bind_scalar(k, x, param_dict))(arr)
-        return bound.astype(complex)  # type: ignore[no-any-return]
+    @staticmethod
+    def _coerce_binding(value: Any) -> Any:
+        if isinstance(value, sympy.Basic):
+            return backend.convert_to_tensor(complex(value))
+        return value
 
     def to_circuit(
         self, param_dict: Optional[Dict[sympy.Symbol, Any]] = None
@@ -692,26 +698,77 @@ class SymbolCircuit(Circuit):
 
         :param param_dict: Mapping from sympy Symbol to numerical value.
             Pass ``None`` (or ``{}``) only if the circuit has no free symbols.
+            Values may be tensors from the active backend, including tracers
+            created by ``jit`` or ``grad``.
         :type param_dict: Optional[Dict[sympy.Symbol, Any]]
         :return: A fully numerical :class:`Circuit`.
         :rtype: Circuit
+        :raises NotImplementedError: If the circuit contains channel instructions.
         """
+        if any(instruction.get("is_channel", False) for instruction in self._qir):
+            raise NotImplementedError(
+                "SymbolCircuit.to_circuit does not support channel instructions"
+            )
         if param_dict is None:
             param_dict = {}
-        c = Circuit(self._nqubits)
-        for d in self._qir:
-            gate_name = d["name"]
-            index = d["index"]
-            params = {
-                k: (
-                    self._bind_array(k, v, param_dict)
-                    if isinstance(v, (np.ndarray, list))
-                    else self._bind_scalar(k, v, param_dict)
-                )
-                for k, v in d.get("parameters", {}).items()
-            }
-            getattr(c, gate_name)(*index, **params)
+        inputs = (
+            self._bind_value("inputs", self.inputs, param_dict)
+            if self.inputs is not None
+            else None
+        )
+        c = Circuit(
+            self._nqubits,
+            inputs=inputs,
+            split=self.split,
+            dim=None if self._d == 2 else self._d,
+        )
+        c.append_from_qir(self._bound_qir(param_dict))
         return c
+
+    def _bind_value(
+        self, k: str, value: Any, param_dict: Dict[sympy.Symbol, Any]
+    ) -> Any:
+        if isinstance(value, (np.ndarray, list)):
+            arr = np.asarray(value)
+            if arr.dtype != object:
+                return backend.convert_to_tensor(arr)
+            bound = [
+                backend.convert_to_tensor(
+                    self._bind_value(k, item, param_dict), dtype=dtypestr
+                )
+                for item in arr.flat
+            ]
+            return backend.reshape(backend.stack(bound), arr.shape)
+
+        if not isinstance(value, sympy.Basic):
+            return value
+        free_symbols = value.free_symbols
+        missing_symbols = free_symbols.difference(param_dict)
+        if missing_symbols:
+            raise ValueError(
+                f"Parameter '{k}' still contains free symbols "
+                f"{missing_symbols} after substitution. "
+                "Pass a complete param_dict to to_circuit()."
+            )
+        if isinstance(value, sympy.Symbol):
+            return self._coerce_binding(param_dict[value])
+        if not free_symbols:
+            return complex(value)
+        args = sorted(free_symbols, key=str)
+        function = self._backend_lambdify(value)
+        return function(*(self._coerce_binding(param_dict[symbol]) for symbol in args))
+
+    def _bound_qir(self, param_dict: Dict[sympy.Symbol, Any]) -> List[Dict[str, Any]]:
+        bound_qir = []
+        for instruction in self._qir:
+            bound_instruction = dict(instruction)
+            if "parameters" in instruction:
+                bound_instruction["parameters"] = {
+                    k: self._bind_value(k, v, param_dict)
+                    for k, v in instruction["parameters"].items()
+                }
+            bound_qir.append(bound_instruction)
+        return bound_qir
 
     def bind(self, param_dict: Dict[sympy.Symbol, Any]) -> "SymbolCircuit":
         """
@@ -733,18 +790,16 @@ class SymbolCircuit(Circuit):
             split=self.split,
             dim=self._d,
         )
-        for d in self._qir:
-            gate_name = d["name"]
-            index = d["index"]
-            params = {}
-            for k, v in d.get("parameters", {}).items():
-                if hasattr(v, "subs"):
-                    v = sympy.simplify(v.subs(param_dict))
-                params[k] = v
-            if params:
-                getattr(sc, gate_name)(*index, **params)
-            else:
-                getattr(sc, gate_name)(*index)
+        bound_qir = []
+        for instruction in self._qir:
+            bound_instruction = dict(instruction)
+            if "parameters" in instruction:
+                bound_instruction["parameters"] = {
+                    k: sympy.simplify(v.subs(param_dict)) if hasattr(v, "subs") else v
+                    for k, v in instruction["parameters"].items()
+                }
+            bound_qir.append(bound_instruction)
+        sc.append_from_qir(bound_qir)
         return sc
 
     # ── Qiskit translation ────────────────────────────────────────────────────

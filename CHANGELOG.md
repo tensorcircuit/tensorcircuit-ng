@@ -10,6 +10,10 @@
 
 - Add `tc.quantum.anti_flatness` and `tc.quantum.entanglement_anti_flatness` for computing entanglement-spectrum anti-flatness from density matrices and subsystem states.
 
+- Add `SymbolCircuit.to_circuit` support for backend tensors.
+
+- Add `tc.compiler.lightcone_compile` for compiling a `SymbolCircuit` to the causal cone induced by a final observable's qubit support while preserving symbol bindings and returning qubit and observable-support mappings.
+
 - Add fixed-schedule Taylor exponential action via `expm_multiply_evol` and `estimate_expm_multiply_parameters` for JIT- and AD-compatible time evolution.
 
 - Add Tianyan cloud provider.

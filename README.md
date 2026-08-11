@@ -41,6 +41,8 @@ TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, Ten
 
 TensorCircuit-NG is the technical successor to TensorCircuit, led and maintained by the original TensorCircuit development team. This distribution has served as the primary home for the framework's evolution, addressing critical maintenance gaps (numpy > 2.0, qiskit > 1.0) and feature enhancements. As a fully compatible [drop-in replacement](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng), TensorCircuit-NG delivers next-gen capabilities—including stabilizer/qudit/analog/symmetric circuit simulation and multi-node multi-GPU distributed simulation.
 
+> **New companion project:** We recently launched [TenCirPauli](https://github.com/tensorcircuit/TenCirPauli), a Python-first, Rust-native companion that brings Pauli-native propagation and fixed-particle-number U(1) circuit execution to TensorCircuit-NG.
+
 
 ## Getting Started
 
@@ -425,6 +427,10 @@ Reference paper: https://arxiv.org/abs/2303.08154 (published in PRR as a Letter)
 [TenCirChem](https://github.com/tencent-quantum-lab/TenCirChem) is an efficient and versatile quantum computation package for molecular properties. TenCirChem is based on TensorCircuit and is optimized for chemistry applications. The latest version TenCirChem-NG is open source and available at [TenCirChem-NG](https://github.com/tensorcircuit/TenCirChem-NG).
 
 Reference paper: https://arxiv.org/abs/2303.10825 (published in JCTC).
+
+### TenCirPauli
+
+For Rust-native Pauli propagation, fixed-particle-number U(1) circuit execution, Pauli algebra, structured Hamiltonians, measurement planning, symmetry reduction, restricted sectors, and a backend matrix-vector product interface for TensorCircuit-NG, see [TenCirPauli](https://github.com/tensorcircuit/TenCirPauli). The project also provides structured operator algebra for fermionic, bosonic, qudit, Majorana, and hybrid systems, together with fermion-to-qubit mappings and chemistry interoperability.
 
 ### EMQAOA-DARBO
 

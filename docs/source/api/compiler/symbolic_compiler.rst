@@ -1,6 +1,6 @@
-tensorcircuit.symbolgates
+tensorcircuit.compiler.symbolic_compiler
 ================================================================================
-.. automodule:: tensorcircuit.symbolgates
+.. automodule:: tensorcircuit.compiler.symbolic_compiler
     :members:
     :undoc-members:
     :show-inheritance:
