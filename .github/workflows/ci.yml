@@ -45,3 +45,21 @@ jobs:
       - name: setup build
         run: |
           python3 -m build
+
+  minimal-install:
+    runs-on: ubuntu-22.04
+    name: minimal install smoke
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package with required dependencies only
+        run: |
+          python -m venv "${RUNNER_TEMP}/tensorcircuit-minimal"
+          "${RUNNER_TEMP}/tensorcircuit-minimal/bin/python" -m pip install --no-cache-dir .
+      - name: Smoke test installed package
+        working-directory: /tmp
+        run: |
+          "${RUNNER_TEMP}/tensorcircuit-minimal/bin/python" "${GITHUB_WORKSPACE}/.github/workflows/minimal_install_smoke.py"
