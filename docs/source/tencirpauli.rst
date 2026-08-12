@@ -1,5 +1,5 @@
-TenCirPauli
-===========
+TenCirPauli Plugin
+===================
 
 `TenCirPauli <https://github.com/tensorcircuit/TenCirPauli>`_ is a Python-first, Rust-native companion for TensorCircuit-NG. Its two main entry points are approximate circuit simulation with Pauli propagation and backpropagation, and fast fixed-particle-number circuit simulation.
 
@@ -28,8 +28,8 @@ Install the companion package alongside TensorCircuit-NG:
 
 The package complements TensorCircuit-NG rather than replacing its general-purpose circuit and tensor-network simulators. Use TensorCircuit-NG to construct circuits and work with its differentiable backend interface, then hand off suitable structured workloads to TenCirPauli.
 
-Pauli propagation and approximate circuit simulation
-----------------------------------------------------
+Pauli propagation
+------------------
 
 TenCirPauli provides approximate circuit simulation based on Pauli propagation. It can import a regular TensorCircuit circuit, propagate Pauli operators through the circuit, and return observable values together with gate-parameter gradients:
 
