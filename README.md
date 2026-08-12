@@ -56,6 +56,8 @@ For beginners, please refer to [quantum computing lectures with TC-NG](https://g
 
 TensorCircuit-NG is designed to give AI agents the context, rules, skills, and execution backends required for serious quantum research—not only code generation. To write TC-NG scripts and applications efficiently with AI coding agents (e.g., Claude Code, Cursor, CodeX), we strongly recommend **working directly within the local tensorcircuit-ng repository** rather than an empty folder.
 
+In the [ORBIT-Q benchmark](https://sxzgroup.github.io/ORBIT-Q/), TensorCircuit-NG leads the evaluated quantum software frameworks on agent solve success and artifact runtime.
+
 1.  **Rich Context:** The 100+ scripts in `examples/` and extensive test cases in `tests/` provide essential references that significantly reduce AI hallucinations.
 2.  **Built-in Rules:** We provide a dedicated [AGENTS.md](/AGENTS.md) file. It serves as the "handbook" (i.e. `CLAUDE.md`) for AI agents, defining coding standards and best practices to ensure the generated code is idiomatic.
 3.  **Specialized Agentic Skills:** The `.agents/skills/` directory contains workflows to guide AI assistants on complex, multi-step tasks.
@@ -496,7 +498,7 @@ Reference paper: https://arxiv.org/abs/2605.29557.
 
 ### ORBIT-Q
 
-For the benchmark framework and datasets of dual-axis evaluation on quantum software frameworks and agents, see the [project repo](https://github.com/sxzgroup/ORBIT-Q).
+The [ORBIT-Q](https://sxzgroup.github.io/ORBIT-Q/) benchmark evaluates autonomous agents on scientific quantum programming across framework capability, agent configuration, correctness, and artifact efficiency. In its reported framework-axis comparison, TensorCircuit-NG leads the evaluated frameworks with the highest agent solve success rate and the lowest artifact-runtime slowdown. See the [benchmark repository](https://github.com/sxzgroup/ORBIT-Q) and [accompanying paper](https://arxiv.org/abs/2607.03105).
 
 Reference paper: https://arxiv.org/abs/2607.03105.
 

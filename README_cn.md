@@ -31,8 +31,6 @@
 
 TensorCircuit-NG 是[下一代开源高性能量子软件框架](https://tensorcircuit-ng.readthedocs.io/en/latest/platform/index.html)，也是面向智能体量子科研的[AI 原生科研运行时](https://tensorcircuit-ng.readthedocs.io/en/latest/agent_landing/index.html)，帮助研究人员将科研问题转化为可执行、可优化、可验证的量子实验。
 
-从已发表的量子知识到可执行的科研基础设施，TensorCircuit-NG 的智能体工作流覆盖文献驱动的实现、论文复现、算法发现、性能优化、跨框架转换、结果验证和科研产物封装。
-
 TensorCircuit-NG 基于张量网络引擎构建，完美支持自动微分、即时编译、硬件加速、向量并行化和分布式训练，为量子编程提供统一的基础设施和接口。它可以无缝编织量子线路、神经网络和张量网络，具备极高的模拟效率和灵活性。
 
 TensorCircuit-NG 建立在现代机器学习框架 Jax, TensorFlow, PyTorch 之上，支持机器学习后端无关的统一界面。 其特别适用于理想情况、含噪声情况、稳定子情况、可控近似情况、连续动力学情况及费米子情况下，大规模量子经典混合范式和变分量子算法的高效模拟。其可以高效地编织和模拟量子线路、张量网络和神经网络组成的混合计算图。
@@ -52,6 +50,8 @@ TensorCircuit-NG 是 TensorCircuit 在技术与架构上的演进版本，由原
 ### 智能体量子科研 (推荐)
 
 TensorCircuit-NG 不只是用于生成代码，也为 AI Agent 提供开展量子科研所需的上下文、规则、技能和执行后端。若使用 AI 编程助手（如 Claude Code, Cursor, CodeX）编写 TC-NG 应用，我们强烈建议**直接在克隆的本地代码库中进行开发**，以便为 AI 提供更丰富的上下文。
+
+在 [ORBIT-Q 基准](https://sxzgroup.github.io/ORBIT-Q/)中，TensorCircuit-NG 在被评估的量子软件框架中取得了领先的 Agent 解题成功率和运行效率。
 
 1.  **丰富上下文：** `examples/` 中的 100 多个脚本和 `tests/` 中的大量测试用例提供了至关重要的参考，能显著减少 AI 幻觉。
 2.  **内置规则：** 我们提供了专门的 [AGENTS.md](/AGENTS.md) 文件。它是 AI 助手的“开发手册”（类似 `CLAUDE.md`），定义了编码标准和最佳实践，确保生成的代码符合 TC-NG 调用范式。
@@ -248,7 +248,7 @@ VQEX 在 MBL 相位识别上的应用见 [教程](/docs/source/tutorials/vqex_mb
 
 ### ORBIT-Q
 
-关于量子计算软件与智能体的双轴基准测试框架，见 [项目](https://github.com/sxzgroup/ORBIT-Q)。
+关于量子软件与智能体的双轴科研编程基准测试，请查看 [ORBIT-Q](https://sxzgroup.github.io/ORBIT-Q/)。在其报告的 framework-axis comparison 中，TensorCircuit-NG 在被评估框架中取得最高的 Agent 解题成功率和最低的科研产物运行时 slowdown。进一步参见[基准代码仓库](https://github.com/sxzgroup/ORBIT-Q)和[配套论文](https://arxiv.org/abs/2607.03105)。
 
 参考论文: https://arxiv.org/abs/2607.03105。
 

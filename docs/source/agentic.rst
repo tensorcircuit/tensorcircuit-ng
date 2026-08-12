@@ -28,6 +28,14 @@ From published quantum knowledge to executable research infrastructure, TensorCi
 
 
 
+Agentic evaluation
+------------------
+
+The `ORBIT-Q benchmark <https://sxzgroup.github.io/ORBIT-Q/>`_ is the evaluation layer for agentic quantum software: it tests autonomous agents on framework-constrained scientific programming, correctness, and artifact efficiency. It makes agent-friendliness measurable rather than treating it as a code-generation slogan, while also evaluating the runtime performance of the resulting scientific artifacts.
+
+In the reported framework-axis comparison, TensorCircuit-NG achieved the highest agent solve success rate and the lowest artifact-runtime slowdown among the evaluated quantum software frameworks. Together, the agentic skills and ORBIT-Q evaluation establish a measurable loop for building, testing, and improving AI-agent-compatible quantum software. See the `accompanying paper <https://arxiv.org/abs/2607.03105>`_ for the benchmark design and methodology.
+
+
 Why Work Within the Repository?
 ----------------------------------
 
