@@ -5,7 +5,13 @@ From published quantum knowledge to executable research infrastructure.
 
 The `Executable Research Hub <reproduce/index.html>`_ is the literature-to-artifact layer of TensorCircuit-NG's agentic research stack. It collects published quantum computing methods that have been translated into runnable, metadata-rich, and independently inspectable TensorCircuit-NG research artifacts.
 
-Browse the `Reproduce Papers Hub <reproduce/index.html>`_ to explore the paper-centered collection, or view the source implementations in the `examples/reproduce_papers directory <https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers>`_.
+.. card-carousel:: 1
+
+   .. card:: Open the Reproduce Papers Gallery
+      :link: reproduce/index.html
+      :shadow: md
+
+      Explore runnable paper reproductions.
 
 What each artifact contains
 ---------------------------

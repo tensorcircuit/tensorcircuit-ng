@@ -244,6 +244,7 @@ The following documentation sections briefly introduce TensorCircuit-NG to the u
    agentic.rst
    reproduce.rst
    advance.rst
+   tencirpauli.rst
    faq.rst
    sharpbits.rst
    infras.rst
