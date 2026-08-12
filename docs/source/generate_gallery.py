@@ -825,8 +825,8 @@ def render_page(records, tag_vocab, feature_vocab):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Paper Reproductions | TensorCircuit-NG</title>
-<meta name="description" content="A browsable gallery of quantum computing papers reproduced with TensorCircuit-NG, each with runnable source code and the figures it regenerates.">
+<title>Executable Quantum Research Hub | TensorCircuit-NG</title>
+<meta name="description" content="A curated hub of quantum papers translated into runnable, metadata-rich, and independently inspectable TensorCircuit-NG research artifacts.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -836,9 +836,9 @@ def render_page(records, tag_vocab, feature_vocab):
 
 <header class="hero">
   <div class="container">
-    <p class="eyebrow">TensorCircuit-NG</p>
-    <h1>Papers, <span class="gradient-text">Reproduced</span></h1>
-    <p class="lede">Every entry below is a self-contained script that regenerates a figure from a published quantum computing paper on a laptop. Read the paper, read the code, run it yourself.</p>
+    <p class="eyebrow">Executable Research Hub</p>
+    <h1>Quantum Research, <span class="gradient-text">Made Executable</span></h1>
+    <p class="lede"><strong>From published quantum knowledge to executable research infrastructure.</strong> This curated hub packages published methods as runnable, metadata-rich, and independently inspectable TensorCircuit-NG artifacts. Read the paper, inspect the implementation, and run the experiment yourself.</p>
     <p class="disclaimer"><strong>Please read:</strong> these are independent reimplementations by the TensorCircuit-NG project, not author-endorsed replications. Most are deliberately scaled down &mdash; fewer qubits, smaller bond dimensions, shorter training &mdash; so that they finish quickly on a single machine, and some make explicit modeling simplifications. Each entry documents what was changed. Treat them as executable illustrations of the physics, not as verification of the original results.</p>
   </div>
 </header>
@@ -879,11 +879,12 @@ def render_page(records, tag_vocab, feature_vocab):
 
 <footer>
   <div class="container">
-    <p>Want to add one? Pick a paper, follow
+    <p>This Hub is the literature-to-artifact layer of TensorCircuit-NG's agentic research stack. Want to add one? Pick a paper, follow
     <a href="{GITHUB_TREE}/examples/reproduce_papers">examples/reproduce_papers</a>,
     and open a pull request.
     &middot; <a href="../index.html">Documentation</a>
     &middot; <a href="../platform/index.html">Platform</a>
+    &middot; <a href="../agent_landing/index.html">Agentic Research</a>
     &middot; <a href="https://github.com/tensorcircuit/tensorcircuit-ng">GitHub</a></p>
   </div>
 </footer>

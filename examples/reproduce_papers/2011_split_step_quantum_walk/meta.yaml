@@ -1,0 +1,26 @@
+title: "Topological Phenomena in Quantum Walks"
+arxiv_id: "1112.1882"
+url: "https://arxiv.org/abs/1112.1882"
+year: 2011
+authors:
+  - "Takuya Kitagawa"
+tags:
+  - "topological-phase"
+  - "floquet-dynamics"
+  - "quantum-algorithm"
+tc_features:
+  - "jit"
+  - "scan"
+  - "backend-api"
+backend: "jax"
+hardware_requirements:
+  gpu: false
+  min_memory: "2GB"
+card_title: "Figure 6 · Topological quantum-walk edge state"
+contributor: "refraction-ray"
+summary: "A split-step quantum walk retains a localized interface probability only when the two sides have different winding numbers."
+description: "Reproduces Figure 6 with the paper's parameters theta1=-pi/2, theta2(-infinity)=3pi/4 and two choices of theta2(+infinity). This is a discrete Floquet exact-statevector calculation, so the natural implementation is dense tc.backend matrix-vector evolution with tc.backend.scan and jit rather than a gate-level circuit wrapper. The infinite lattice is truncated to 128 periodic positions and evolved for at most 60 steps, before a boundary can affect the central interface."
+outputs:
+  - target: "Figure 6: interface-localized versus delocalized probability"
+    path: "outputs/result.png"
+    script: "main.py"

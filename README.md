@@ -33,7 +33,7 @@
 
 <p align="center"> English | <a href="README_cn.md"> 简体中文 </a></p>
 
-TensorCircuit-NG is the [next-generation open-source high-performance quantum software framework](https://tensorcircuit-ng.readthedocs.io/en/latest/platform/index.html), and the world's first [AI-native quantum programming platform](https://tensorcircuit-ng.readthedocs.io/en/latest/agent_landing/index.html) purpose-built for agentic research and automated scientific discovery.
+TensorCircuit-NG is the [next-generation open-source high-performance quantum software framework](https://tensorcircuit-ng.readthedocs.io/en/latest/platform/index.html) and an [AI-native quantum research runtime](https://tensorcircuit-ng.readthedocs.io/en/latest/agent_landing/index.html) for turning research questions into executable, optimized, and validated quantum experiments.
 
 TensorCircuit-NG is built upon tensornetwork engines, supporting for automatic differentiation, just-in-time compiling, hardware acceleration, vectorized parallelism and distributed training, providing unified infrastructures and interfaces for quantum programming. It can compose quantum circuits, neural networks and tensor networks seamlessly with high simulation efficiency and flexibility.
 
@@ -52,9 +52,9 @@ For more information on software usage, sota algorithm implementation and engine
 
 For beginners, please refer to [quantum computing lectures with TC-NG](https://github.com/sxzgroup/qc_lecture) to learn both quantum computing basics and representative usage of TensorCircuit-NG.
 
-### AI-Native R&D (Recommended)
+### Agentic Quantum Research (Recommended)
 
-To write TC-NG scripts and applications efficiently with AI coding agents (e.g., Claude Code, Cursor, CodeX), we strongly recommend **working directly within the local tensorcircuit-ng repository** rather than an empty folder.
+TensorCircuit-NG is designed to give AI agents the context, rules, skills, and execution backends required for serious quantum research—not only code generation. To write TC-NG scripts and applications efficiently with AI coding agents (e.g., Claude Code, Cursor, CodeX), we strongly recommend **working directly within the local tensorcircuit-ng repository** rather than an empty folder.
 
 1.  **Rich Context:** The 100+ scripts in `examples/` and extensive test cases in `tests/` provide essential references that significantly reduce AI hallucinations.
 2.  **Built-in Rules:** We provide a dedicated [AGENTS.md](/AGENTS.md) file. It serves as the "handbook" (i.e. `CLAUDE.md`) for AI agents, defining coding standards and best practices to ensure the generated code is idiomatic.
@@ -62,7 +62,7 @@ To write TC-NG scripts and applications efficiently with AI coding agents (e.g.,
 <details>
 <summary> List of built-in agentic skills (click for details) </summary>
 
-  *   [`arxiv-reproduce`](/.agents/skills/arxiv-reproduce/README.md): Autonomously reproduces arXiv papers with standardized output and code quality validation.
+  *   [`arxiv-reproduce`](/.agents/skills/arxiv-reproduce/SKILL.md): Translates published methods into standardized, runnable, and validated research artifacts.
   *   [`performance-optimize`](/.agents/skills/performance-optimize/README.md): Scientific execution and memory optimization workflow (JAX scanning, vectorized parallelism, etc.).
   *   [`tc-rosetta`](/.agents/skills/tc-rosetta/README.md): End-to-end framework translation (from Qiskit, PennyLane, etc.) with intrinsic mathematical intent rewriting.
   *   [`tutorial-crafter`](/.agents/skills/tutorial-crafter/README.md): Transforms raw TC-NG scripts into comprehensive, narrative-driven Markdown or/and HTML educational tutorials.
@@ -80,7 +80,7 @@ To write TC-NG scripts and applications efficiently with AI coding agents (e.g.,
 2.  Switch to a local playground branch: `git checkout -b my-playground` in case messing up with the original repository.
 3.  Open the repository folder in your AI IDE. And you are ready to start writing TC-NG-based scripts.
 
-Now, enjoy implementing quantum algorithms entirely through natural language! By seamlessly integrating the extreme performance with an autonomous, intent-driven AI workflow (via embedded `.agents/skills/`), TC-NG empowers researchers to transition from manual coding to automated paper reproduction, intelligent performance squeezing, and cross-framework translation in seconds.
+Now, enjoy exploring quantum research through natural language. By combining extreme performance with an autonomous, intent-driven AI workflow (via embedded `.agents/skills/`), TC-NG helps researchers move from a research question to implementation, exploration, optimization, validation, and a reusable scientific artifact.
 
 ### Quick Demos
 
@@ -277,7 +277,7 @@ pip install tensorcircuit-nightly
 
   - Support hybrid workflows and pipelines with CPU/GPU/QPU hardware from local/cloud/hpc resources using tf/torch/jax/cupy/numpy frameworks all at the same time.
 
-  - Support **autonomous paper reproduction**.
+  - Support **agentic research workflows** from literature-grounded implementation to validated scientific artifacts.
 
   - Support **autonomous research discovery** for circuit architectures and optimization strategies.
 
@@ -388,11 +388,11 @@ TensorCircuit-NG is open source, released under the Apache License, Version 2.0.
 
 <!-- ALL-CONTRIBUTORS-LIST:END -->
 
-## Paper Reproductions
+## Executable Research Hub
 
-We maintain a growing gallery of quantum computing papers reproduced with TensorCircuit-NG. Each entry is a self-contained script that regenerates a figure from a published paper on a laptop, with its reproduction strategy documented alongside.
+The [Executable Research Hub](https://tensorcircuit-ng.readthedocs.io/en/latest/reproduce/index.html) is the literature-to-artifact layer of TensorCircuit-NG's agentic research stack. Each paper is packaged as a runnable, metadata-rich, and inspectable research artifact with its implementation, target figure, backend, scaling strategy, and validation context.
 
-**[Browse the gallery](https://tensorcircuit-ng.readthedocs.io/en/latest/reproduce/index.html)** or read the source in [examples/reproduce_papers](/examples/reproduce_papers).
+**[Browse the Hub](https://tensorcircuit-ng.readthedocs.io/en/latest/reproduce/index.html)** or read the source in [examples/reproduce_papers](/examples/reproduce_papers). For the broader agentic research workflow, see the [Agentic Quantum Research guide](https://tensorcircuit-ng.readthedocs.io/en/latest/agentic.html).
 
 Adding one is the most approachable way to make a first contribution: pick a paper, follow the conventions in [examples/reproduce_papers](/examples/reproduce_papers), and open a pull request.
 

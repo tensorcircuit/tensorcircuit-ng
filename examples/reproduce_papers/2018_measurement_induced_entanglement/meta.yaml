@@ -1,0 +1,28 @@
+title: "Measurement-Induced Phase Transitions in the Dynamics of Entanglement"
+arxiv_id: "1808.05953"
+url: "https://arxiv.org/abs/1808.05953"
+year: 2018
+authors:
+  - "Brian Skinner"
+  - "Jonathan Ruhman"
+  - "Adam Nahum"
+tags:
+  - "entanglement"
+  - "many-body-physics"
+  - "random-circuit"
+tc_features:
+  - "circuit"
+  - "jit"
+  - "vmap"
+backend: "jax"
+hardware_requirements:
+  gpu: false
+  min_memory: "4GB"
+card_title: "Figure 13(a) · Measurement-induced entanglement"
+contributor: "refraction-ray"
+summary: "Small monitored random circuits show volume-law to area-law entanglement across the measurement-induced transition."
+description: "Reproduces the qualitative content of Figure 13(a) using L=6,8,10,12 qubits and the paper's t=2L unitary layers. Odd and even bonds alternate, and after every layer the two spins on each active bond are subjected to the paper's sequential three-Kraus measurement channel. The original study averages 4000 random-circuit realizations and reaches L=24; this local exact-statevector reproduction uses twelve fixed random circuits, 32 Born-rule trajectories per circuit, and L<=12."
+outputs:
+  - target: "Figure 13(a): von Neumann entropy versus measurement rate"
+    path: "outputs/result.png"
+    script: "main.py"

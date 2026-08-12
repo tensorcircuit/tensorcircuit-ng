@@ -1,8 +1,10 @@
-Agentic Development
+Agentic Quantum Research
 ==========================
 
 
-TensorCircuit-NG is the world's first AI-native quantum programming platform, purpose-built for agentic research and automated scientific discovery. 
+TensorCircuit-NG is an AI-native quantum research runtime for agentic discovery, algorithm design, quantum simulation, execution optimization, validation, and research artifact generation.
+
+From published quantum knowledge to executable research infrastructure, TensorCircuit-NG connects AI agents to the context, rules, skills, and high-performance execution backends required for serious quantum research.
 
 .. grid:: 1 1 2 2
    :margin: 4
@@ -14,7 +16,7 @@ TensorCircuit-NG is the world's first AI-native quantum programming platform, pu
       :shadow: lg
       :class-card: sd-bg-light sd-text-primary sd-font-weight-bold
 
-      Click here to see how AI agents autonomously solve complex quantum problems in TensorCircuit-NG.
+      Explore how AI agents can discover, implement, optimize, validate, and communicate quantum research workflows in TensorCircuit-NG.
 
    .. grid-item-card:: Platform Overview
       :columns: 12 12 6 6
@@ -41,7 +43,7 @@ Specialized Agentic Skills
 
 TensorCircuit-NG includes built-in agentic skills that can be activated by compatible AI agents to perform advanced tasks:
 
-*   **arxiv-reproduce**: Autonomously reproduces arXiv papers with standardized output and code quality validation.
+*   **arxiv-reproduce**: Translates published methods into standardized, runnable, and validated research artifacts.
 *   **performance-optimize**: Scientific execution and memory optimization workflow (JAX scanning, vectorized parallelism, etc.).
 *   **tc-rosetta**: End-to-end framework translation (from Qiskit, PennyLane, etc.) with intrinsic mathematical intent rewriting.
 *   **tutorial-crafter**: Transforms raw scripts into comprehensive, narrative-driven educational tutorials.
@@ -67,7 +69,7 @@ Recommended Workflow
 
 3. **Open the repository folder in your AI IDE**: Start writing TC-NG-based scripts using natural language instructions.
 
-By integrating extreme performance with an autonomous, intent-driven AI workflow, TensorCircuit-NG empowers researchers to transition from manual coding to automated scientific discovery.
+By integrating extreme performance with an autonomous, intent-driven AI workflow, TensorCircuit-NG helps researchers move from a research question to implementation, exploration, optimization, validation, and a reusable scientific artifact.
 
 Initial Prompt for Empty Workspace Setup
 ----------------------------------------

@@ -406,6 +406,48 @@
     "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2018_qcbm"
   },
   {
+    "slug": "2018_measurement_induced_entanglement",
+    "title": "Measurement-Induced Phase Transitions in the Dynamics of Entanglement",
+    "card_title": "Figure 13(a) · Measurement-induced entanglement",
+    "summary": "Small monitored random circuits show volume-law to area-law entanglement across the measurement-induced transition.",
+    "description": "Reproduces the qualitative content of Figure 13(a) using L=6,8,10,12 qubits and the paper's t=2L unitary layers. Odd and even bonds alternate, and after every layer the two spins on each active bond are subjected to the paper's sequential three-Kraus measurement channel. The original study averages 4000 random-circuit realizations and reaches L=24; this local exact-statevector reproduction uses twelve fixed random circuits, 32 Born-rule trajectories per circuit, and L<=12.",
+    "authors": [
+      "Brian Skinner",
+      "Jonathan Ruhman",
+      "Adam Nahum"
+    ],
+    "contributor": "refraction-ray",
+    "year": 2018,
+    "arxiv_id": "1808.05953",
+    "url": "https://arxiv.org/abs/1808.05953",
+    "tags": [
+      "entanglement",
+      "many-body-physics",
+      "random-circuit"
+    ],
+    "tc_features": [
+      "circuit",
+      "jit",
+      "vmap"
+    ],
+    "backend": "jax",
+    "hardware": {
+      "gpu": false,
+      "min_memory": "4GB"
+    },
+    "figures": [
+      {
+        "target": "Figure 13(a): von Neumann entropy versus measurement rate",
+        "source": "outputs/result.png",
+        "figure": "figures/2018_measurement_induced_entanglement__result.webp",
+        "thumb": "thumbs/2018_measurement_induced_entanglement__result.webp",
+        "script": "main.py"
+      }
+    ],
+    "artifacts": [],
+    "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2018_measurement_induced_entanglement"
+  },
+  {
     "slug": "2018_qcnn",
     "title": "Quantum Convolutional Neural Networks",
     "card_title": "Figure 2(c) · QCNN phase recognition",
@@ -452,5 +494,88 @@
     ],
     "artifacts": [],
     "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2018_qcnn"
+  },
+  {
+    "slug": "2014_qaoa_maxcut",
+    "title": "A Quantum Approximate Optimization Algorithm",
+    "card_title": "Section IV · QAOA on a ring of disagrees",
+    "summary": "TensorCircuit QAOA improves the expected MaxCut ratio on an even ring toward the analytic (2p+1)/(2p+2) curve.",
+    "description": "Reproduces the ring-of-disagrees result from Section IV of the original QAOA paper. The even ring is represented by an exact 12-qubit statevector, and the two angles per layer are optimized by TensorCircuit autodiff with JAX. The original result is an asymptotic statement for n larger than the light cone; p=1,2,3,4 and n=12 are used here so the trend is visible on a laptop.",
+    "authors": [
+      "Edward Farhi",
+      "Jeffrey Goldstone",
+      "Sam Gutmann"
+    ],
+    "contributor": "refraction-ray",
+    "year": 2014,
+    "arxiv_id": "1411.4028",
+    "url": "https://arxiv.org/abs/1411.4028",
+    "tags": [
+      "combinatorial-optimization",
+      "quantum-algorithm",
+      "variational-algorithm"
+    ],
+    "tc_features": [
+      "circuit",
+      "jit",
+      "autodiff",
+      "expectation"
+    ],
+    "backend": "jax",
+    "hardware": {
+      "gpu": false,
+      "min_memory": "2GB"
+    },
+    "figures": [
+      {
+        "target": "Section IV: optimized approximation ratio versus QAOA depth",
+        "source": "outputs/result.png",
+        "figure": "figures/2014_qaoa_maxcut__result.webp",
+        "thumb": "thumbs/2014_qaoa_maxcut__result.webp",
+        "script": "main.py"
+      }
+    ],
+    "artifacts": [],
+    "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2014_qaoa_maxcut"
+  },
+  {
+    "slug": "2011_split_step_quantum_walk",
+    "title": "Topological Phenomena in Quantum Walks",
+    "card_title": "Figure 6 · Topological quantum-walk edge state",
+    "summary": "A split-step quantum walk retains a localized interface probability only when the two sides have different winding numbers.",
+    "description": "Reproduces Figure 6 with the paper's parameters theta1=-pi/2, theta2(-infinity)=3pi/4 and two choices of theta2(+infinity). This is a discrete Floquet exact-statevector calculation, so the natural implementation is dense tc.backend matrix-vector evolution with tc.backend.scan and jit rather than a gate-level circuit wrapper. The infinite lattice is truncated to 128 periodic positions and evolved for at most 60 steps, before a boundary can affect the central interface.",
+    "authors": [
+      "Takuya Kitagawa"
+    ],
+    "contributor": "refraction-ray",
+    "year": 2011,
+    "arxiv_id": "1112.1882",
+    "url": "https://arxiv.org/abs/1112.1882",
+    "tags": [
+      "topological-phase",
+      "floquet-dynamics",
+      "quantum-algorithm"
+    ],
+    "tc_features": [
+      "jit",
+      "scan",
+      "backend-api"
+    ],
+    "backend": "jax",
+    "hardware": {
+      "gpu": false,
+      "min_memory": "2GB"
+    },
+    "figures": [
+      {
+        "target": "Figure 6: interface-localized versus delocalized probability",
+        "source": "outputs/result.png",
+        "figure": "figures/2011_split_step_quantum_walk__result.webp",
+        "thumb": "thumbs/2011_split_step_quantum_walk__result.webp",
+        "script": "main.py"
+      }
+    ],
+    "artifacts": [],
+    "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2011_split_step_quantum_walk"
   }
 ]

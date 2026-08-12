@@ -29,7 +29,9 @@
 
 <p align="center"> <a href="README.md">English</a> |  简体中文 </p>
 
-TensorCircuit-NG 是[下一代开源高性能量子软件框架](https://tensorcircuit-ng.readthedocs.io/en/latest/platform/index.html)，也是全球首个专为智能体驱动研究和自动化科学发现而设计的[量子软件平台](https://tensorcircuit-ng.readthedocs.io/en/latest/agent_landing/index.html)。
+TensorCircuit-NG 是[下一代开源高性能量子软件框架](https://tensorcircuit-ng.readthedocs.io/en/latest/platform/index.html)，也是面向智能体量子科研的[AI 原生科研运行时](https://tensorcircuit-ng.readthedocs.io/en/latest/agent_landing/index.html)，帮助研究人员将科研问题转化为可执行、可优化、可验证的量子实验。
+
+从已发表的量子知识到可执行的科研基础设施，TensorCircuit-NG 的智能体工作流覆盖文献驱动的实现、论文复现、算法发现、性能优化、跨框架转换、结果验证和科研产物封装。
 
 TensorCircuit-NG 基于张量网络引擎构建，完美支持自动微分、即时编译、硬件加速、向量并行化和分布式训练，为量子编程提供统一的基础设施和接口。它可以无缝编织量子线路、神经网络和张量网络，具备极高的模拟效率和灵活性。
 
@@ -47,9 +49,9 @@ TensorCircuit-NG 是 TensorCircuit 在技术与架构上的演进版本，由原
 
 有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 200+ [示例脚本](/examples) 和 40+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
 
-### AI 原生开发 (推荐)
+### 智能体量子科研 (推荐)
 
-若使用 AI 编程助手（如 Claude Code, Cursor, CodeX）编写 TC-NG 应用，我们强烈建议**直接在克隆的本地代码库中进行开发**，以便为 AI 提供更丰富的上下文。
+TensorCircuit-NG 不只是用于生成代码，也为 AI Agent 提供开展量子科研所需的上下文、规则、技能和执行后端。若使用 AI 编程助手（如 Claude Code, Cursor, CodeX）编写 TC-NG 应用，我们强烈建议**直接在克隆的本地代码库中进行开发**，以便为 AI 提供更丰富的上下文。
 
 1.  **丰富上下文：** `examples/` 中的 100 多个脚本和 `tests/` 中的大量测试用例提供了至关重要的参考，能显著减少 AI 幻觉。
 2.  **内置规则：** 我们提供了专门的 [AGENTS.md](/AGENTS.md) 文件。它是 AI 助手的“开发手册”（类似 `CLAUDE.md`），定义了编码标准和最佳实践，确保生成的代码符合 TC-NG 调用范式。
@@ -62,7 +64,7 @@ TensorCircuit-NG 是 TensorCircuit 在技术与架构上的演进版本，由原
 2.  切换到本地实验分支：`git checkout -b my-playground`，以防弄乱原始仓库。
 3.  在 AI IDE 中打开仓库文件夹，即可开始开始基于 TC-NG 的应用和研究。
 
-现在，快来体验完全通过自然语言实现量子算法吧！通过将极致性能与全自动的意图驱动的 AI 工作流（`.agents/skills/`）无缝集成，TC-NG 赋能研究人员从繁琐的手动编码跨越到数秒内自动完成论文复现、性能极致优化以及跨框架代码翻译的新范式。
+现在，快来体验通过自然语言开展量子科研吧！通过将极致性能与意图驱动的智能体工作流（`.agents/skills/`）无缝集成，TC-NG 帮助研究人员从科研问题出发，完成实现、探索、优化、验证和可复用科研产物的生成。
 
 您可以参考相关的 AI 原生文档：[Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng), [Google Code Wiki](https://codewiki.google/github.com/tensorcircuit/tensorcircuit-ng) 和 [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
 
@@ -147,6 +149,12 @@ pip install tensorcircuit-nightly
   - 灵活性：自定义张量收缩、多种 ML 后端/接口选择、多种数值精度、多种量子硬件
 
   - API 设计：人类可理解的量子，更少的代码，更多的可能
+
+## 可执行科研 Hub
+
+[可执行科研 Hub](https://tensorcircuit-ng.readthedocs.io/en/latest/reproduce/index.html) 是 TensorCircuit-NG 智能体科研技术栈中的“文献到科研产物”层。每篇论文都被整理为包含实现代码、目标图表、后端、规模化策略和验证上下文的可运行、带元数据、可检查的科研资产。
+
+**[浏览可执行科研 Hub](https://tensorcircuit-ng.readthedocs.io/en/latest/reproduce/index.html)**，或查看 [examples/reproduce_papers](/examples/reproduce_papers) 中的源代码。更完整的智能体科研工作流请参阅[智能体量子科研文档](https://tensorcircuit-ng.readthedocs.io/en/latest/agentic.html)。
 
 ## 贡献
 

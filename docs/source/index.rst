@@ -113,11 +113,11 @@ We offer standardized engagement options, including one-time consultations, proj
       Performance, architecture, and adoption
 
 
-   .. card:: Paper Reproductions
+   .. card:: Executable Research Hub
       :link: reproduce/index.html
       :shadow: md
 
-      Published papers, rerun with TC-NG
+      Published runnable research artifacts
 
 
    .. card:: PyPI
@@ -242,6 +242,7 @@ The following documentation sections briefly introduce TensorCircuit-NG to the u
 
    quickstart.rst
    agentic.rst
+   reproduce.rst
    advance.rst
    faq.rst
    sharpbits.rst
