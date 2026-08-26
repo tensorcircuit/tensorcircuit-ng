@@ -1,0 +1,24 @@
+title: "A density-matrix renormalization group algorithm for simulating quantum circuits with a finite fidelity"
+arxiv_id: "2207.05612"
+url: "https://arxiv.org/abs/2207.05612"
+year: 2022
+authors:
+  - "Thomas Ayral"
+  - "Thibaud Louvet"
+  - "Yiqing Zhou"
+  - "Cyprien Lambert"
+  - "E. Miles Stoudenmire"
+  - "Xavier Waintal"
+tags:
+  - "DMRG"
+  - "MPS"
+  - "Quantum Circuit Simulation"
+  - "Fidelity"
+hardware_requirements:
+  gpu: False
+  min_memory: "8GB"
+description: "Reproduces Figure 2(a) showing the error (infidelity) scaling with bond dimension for Sycamore-like random quantum circuits."
+outputs:
+  - target: "Figure 2(a)"
+    path: "outputs/result.png"
+    script: "main.py"
