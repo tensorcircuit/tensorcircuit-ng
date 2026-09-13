@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Add the published Figure 5(a,b) NQS-tVMC reproduction with node-safe blurred-sampling estimators and exact small-system validation.
+
 ## v1.9.1
 
 ### Fixed

@@ -1,0 +1,52 @@
+title: "Removing Nodal and Support-Mismatch Pathologies in Variational Monte Carlo via Blurred Sampling"
+arxiv_id: "2603.18148"
+url: "https://arxiv.org/abs/2603.18148"
+year: 2026
+authors:
+  - "Zhou-Quan Wan"
+  - "Roeland Wiersema"
+  - "Shiwei Zhang"
+tags:
+  - "quantum-machine-learning"
+  - "variational-algorithm"
+  - "many-body-physics"
+tc_features:
+  - "circuit"
+  - "pauli-operator"
+  - "expectation"
+  - "jit"
+  - "vmap"
+  - "scan"
+  - "autodiff"
+backend: "jax"
+hardware_requirements:
+  gpu: false
+  min_memory: "4 GB recommended; not a measured minimum"
+card_title: "Figure 5(a,b) · Standard and blurred tVMC"
+summary: "Single-spin and four-spin quenches compare standard and blurred-sampling tVMC with exact dynamics."
+description: >-
+  Reproduces published Figure 5(a,b), without reducing system sizes, using
+  TensorCircuit-NG backend RBM/TDVP kernels and actual local MCMC. Direct
+  amplitude derivatives give node-safe blurred reweighting at q=0.5.
+  Both samplers and the exact reference share an independently regenerated
+  seed-1500 SR initial state (ground-energy error 0.003747, infidelity
+  0.001314). Panel (b) follows the author's single vertical bond and
+  t_physical/4 axis, and retains the source drivers' additional factor N
+  in force SNR. Panel (a) follows published Table II's adaptive RK5 and
+  sample count. Local proposals, warmup and random streams differ from
+  the reference framework. No NetKet dependency is needed. Independent
+  TC circuit, amplitude-inner-product and nodal MC checks are included;
+  dense exact evolution is restricted to reference and validation.
+outputs:
+  - target: "Published Figure 5(a,b)"
+    path: outputs/result.png
+    script: "main.py"
+  - target: "Trajectories and variational parameters"
+    path: outputs/results.npz
+    script: "main.py"
+  - target: "Runtime and numerical errors"
+    path: outputs/results.json
+    script: "main.py"
+  - target: "Physics and nodal-estimator validation"
+    path: outputs/validation.json
+    script: "validate.py"
