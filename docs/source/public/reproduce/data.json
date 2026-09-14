@@ -234,7 +234,7 @@
     "title": "Removing Nodal and Support-Mismatch Pathologies in Variational Monte Carlo via Blurred Sampling",
     "card_title": "Figure 5(a,b) · Standard and blurred tVMC",
     "summary": "Single-spin and four-spin quenches compare standard and blurred-sampling tVMC with exact dynamics.",
-    "description": "Reproduces published Figure 5(a,b), without reducing system sizes, using TensorCircuit-NG backend RBM/TDVP kernels and actual local MCMC. Direct amplitude derivatives give node-safe blurred reweighting at q=0.5. Both samplers and the exact reference share an independently regenerated seed-1500 SR initial state (ground-energy error 0.003747, infidelity 0.001314). Panel (b) follows the author's single vertical bond and t_physical/4 axis, and retains the source drivers' additional factor N in force SNR. Panel (a) follows published Table II's adaptive RK5 and sample count. Local proposals, warmup and random streams differ from the reference framework. No NetKet dependency is needed. Independent TC circuit, amplitude-inner-product and nodal MC checks are included; dense exact evolution is restricted to reference and validation.",
+    "description": "Reproduces published Figure 5(a,b), without reducing system sizes, using TensorCircuit-NG backend RBM/TDVP kernels and actual local MCMC. Direct amplitude derivatives give node-safe blurred reweighting at q=0.5. Both samplers and the exact reference share an independently regenerated seed-1500 SR initial state (ground-energy error 0.003747, infidelity 0.001314). Panel (b) follows the author's single vertical bond and t_physical/4 axis, and retains the source drivers' additional factor N in force SNR. Panel (a) uses the notebook's fixed-step RK45 at dt=0.001 and published Table II's sample count. Both trajectories use a backend scan; validation includes a step-halving check for panel (a). Local proposals, warmup and random streams differ from the reference framework. No NetKet dependency is needed. Independent TC circuit, amplitude-inner-product and nodal MC checks are included; dense exact evolution is restricted to reference and validation.",
     "authors": [
       "Zhou-Quan Wan",
       "Roeland Wiersema",
@@ -274,8 +274,7 @@
     ],
     "artifacts": [
       "outputs/results.npz",
-      "outputs/results.json",
-      "outputs/validation.json"
+      "outputs/results.json"
     ],
     "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2026_nqs_tvmc_blurred_sampling"
   },

@@ -32,8 +32,10 @@ description: >-
   seed-1500 SR initial state (ground-energy error 0.003747, infidelity
   0.001314). Panel (b) follows the author's single vertical bond and
   t_physical/4 axis, and retains the source drivers' additional factor N
-  in force SNR. Panel (a) follows published Table II's adaptive RK5 and
-  sample count. Local proposals, warmup and random streams differ from
+  in force SNR. Panel (a) uses the notebook's fixed-step RK45 at dt=0.001
+  and published Table II's sample count. Both trajectories use a backend
+  scan; validation includes a step-halving check for panel (a).
+  Local proposals, warmup and random streams differ from
   the reference framework. No NetKet dependency is needed. Independent
   TC circuit, amplitude-inner-product and nodal MC checks are included;
   dense exact evolution is restricted to reference and validation.
@@ -47,6 +49,3 @@ outputs:
   - target: "Runtime and numerical errors"
     path: outputs/results.json
     script: "main.py"
-  - target: "Physics and nodal-estimator validation"
-    path: outputs/validation.json
-    script: "validate.py"

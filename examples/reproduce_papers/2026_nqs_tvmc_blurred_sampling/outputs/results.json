@@ -1,4 +1,8 @@
 {
+  "seeds": {
+    "1": 100,
+    "4": 1500
+  },
   "initial_state": "independently regenerated author SR state",
   "precision": "complex128 / float64",
   "platform": "Linux",
@@ -13,7 +17,7 @@
     "scipy": "1.17.1",
     "matplotlib": "3.10.8"
   },
-  "peak_process_rss_mib": 766.05078125,
+  "peak_process_rss_mib": 733.21875,
   "runs": [
     {
       "nsites": 1,
@@ -22,17 +26,15 @@
       "seed": 100,
       "snr_cutoff": 2.0,
       "snr_convention": "author force-row normalization",
-      "dt_max": 0.01,
+      "integrator": "fixed RK45",
+      "dt": 0.001,
       "final_time": 2.0,
-      "steps": 659,
-      "rejected_steps": 788,
-      "accepted_above_tolerance_at_dt_min": 0,
-      "compile_and_first_step_seconds": 7.633562657982111,
-      "warm_step_seconds": 0.02940534707158804,
-      "trajectory_seconds": 42.723685801029205,
-      "max_observable_error": 1.746217970276419,
-      "rms_observable_error": 0.7223819081945517,
-      "max_infidelity": 0.8269708181294018
+      "steps": 2000,
+      "compile_and_first_trajectory_seconds": 54.87189081311226,
+      "trajectory_seconds": 47.97711706813425,
+      "max_observable_error": 1.75680248258063,
+      "rms_observable_error": 0.7226996917765626,
+      "max_infidelity": 0.8784533856117184
     },
     {
       "nsites": 1,
@@ -41,16 +43,14 @@
       "seed": 100,
       "snr_cutoff": 2.0,
       "snr_convention": "author force-row normalization",
-      "dt_max": 0.01,
+      "integrator": "fixed RK45",
+      "dt": 0.001,
       "final_time": 2.0,
-      "steps": 202,
-      "rejected_steps": 0,
-      "accepted_above_tolerance_at_dt_min": 0,
-      "compile_and_first_step_seconds": 7.981687638908625,
-      "warm_step_seconds": 0.03137505427002907,
-      "trajectory_seconds": 6.466197123751044,
-      "max_observable_error": 1.7763568394002505e-15,
-      "rms_observable_error": 9.085417885603967e-16,
+      "steps": 2000,
+      "compile_and_first_trajectory_seconds": 58.17070590239018,
+      "trajectory_seconds": 53.31405415851623,
+      "max_observable_error": 4.163336342344337e-15,
+      "rms_observable_error": 2.0382051402765728e-15,
       "max_infidelity": 1.1102230246251565e-15
     },
     {
@@ -60,17 +60,15 @@
       "seed": 1500,
       "snr_cutoff": 2.0,
       "snr_convention": "author force-row normalization",
-      "dt_max": 0.001,
+      "integrator": "Heun",
+      "dt": 0.001,
       "final_time": 6.0,
       "steps": 6000,
-      "rejected_steps": 0,
-      "accepted_above_tolerance_at_dt_min": 0,
-      "compile_and_first_step_seconds": 4.966318812221289,
-      "warm_step_seconds": 0.03755268082022667,
-      "trajectory_seconds": 238.68540195189416,
-      "max_observable_error": 0.4985720073150077,
-      "rms_observable_error": 0.23677231829138087,
-      "max_infidelity": 0.9999974428410001
+      "compile_and_first_trajectory_seconds": 227.16485853958875,
+      "trajectory_seconds": 221.46329662762582,
+      "max_observable_error": 0.49857200731500745,
+      "rms_observable_error": 0.2367723182913815,
+      "max_infidelity": 0.999997442841
     },
     {
       "nsites": 4,
@@ -79,22 +77,15 @@
       "seed": 1500,
       "snr_cutoff": 2.0,
       "snr_convention": "author force-row normalization",
-      "dt_max": 0.001,
+      "integrator": "Heun",
+      "dt": 0.001,
       "final_time": 6.0,
       "steps": 6000,
-      "rejected_steps": 0,
-      "accepted_above_tolerance_at_dt_min": 0,
-      "compile_and_first_step_seconds": 5.061500606127083,
-      "warm_step_seconds": 0.03262194152921438,
-      "trajectory_seconds": 241.21012771315873,
-      "max_observable_error": 4.4147008584904945e-06,
-      "rms_observable_error": 1.6685436801693077e-06,
+      "compile_and_first_trajectory_seconds": 208.35664605442435,
+      "trajectory_seconds": 222.27479286212474,
+      "max_observable_error": 4.414700861099519e-06,
+      "rms_observable_error": 1.6685436482223889e-06,
       "max_infidelity": 1.3539658161310086e-07
     }
-  ],
-  "seeds": {
-    "1": 100,
-    "4": 1500
-  },
-  "execution_note": "Panel (a) rerun with the notebook seed 100; panel (b) retained from main.py with seed 1500. Timings describe each actual trajectory; RSS is the original main process high-water mark."
+  ]
 }

@@ -26,6 +26,9 @@ contains the RBM, local sampler and estimators; `main.py` integrates and
 plots them. All evolution kernels use `tc.backend`, including JIT, vmap
 and scan. NumPy handles storage, reporting and plotting. `validate.py`
 uses TC autodiff and independent `tc.Circuit`/Pauli constructions.
+Both fixed-step trajectories carry parameters, chains, the random key and
+an output buffer through one JIT-compiled backend scan. Parameters and ESS
+are transferred to NumPy only after the complete trajectory.
 Dense operators and full-state sums are used only for reference evolution,
 measurement and validation; they never supply the MC evolution estimator.
 Repeated observed samples are losslessly grouped with their counts.
@@ -38,7 +41,7 @@ Repeated observed samples are losslessly grouped with their counts.
 | Ansatz | Two complex amplitudes | psi(x)=2 cosh(b + W.x), four complex weights, hidden bias, no visible biases |
 | Quench | Fixed H | S=Pauli/2; vertical J: +1 to -1, horizontal J=+1 |
 | Observable | Pauli Z; exact -sin(2t) | Single vertical bond S0.S1 |
-| Integrator | Adaptive Dormand–Prince RK5(4) | Heun, physical dt=0.001 |
+| Integrator | Fixed Dormand–Prince RK45, dt=0.001 | Heun, physical dt=0.001 |
 | Samples | 8192 independent chains | 16384 independent chains |
 | Blur | q=0.5 | q=0.5, uniformly selected nonzero off-diagonal H connection |
 
@@ -52,9 +55,11 @@ The following source conventions matter for interpreting the plot:
 - Panel (b) uses the notebook's single vertical bond and explicit
   `t_physical/4` axis. The paper's written sum of the two vertical bonds
   is twice the single-bond result for the symmetric exact trajectory.
-- Panel (a) follows published Table II's adaptive integration and sample
-  count; the notebook instead uses fixed dt=0.001 and 16384 samples.
-  Here rtol=1e-4, atol=1e-8, and dt is bounded by [1e-5, 0.01]. The Z=-1
+- Panel (a) uses the notebook's `RK45(1e-3, adaptive=False)` and published
+  Table II's 8192 samples; the notebook uses 16384 samples. Each RK stage
+  draws fresh MC samples. Fixed steps avoid interpreting sampling noise
+  in an embedded error estimate as integration error. Only the fifth-order
+  update is evaluated, without an embedded estimate or stage reuse. The Z=-1
   minimum is the computational ket(1), although the caption calls it ket(0).
 - Schmitt regularization uses relative cutoffs 1e-14 and 1e-10 and nominal
   SNR cutoff 2. Both author drivers sum force rows already divided by N
@@ -104,7 +109,7 @@ ordinary four-spin tVMC first exceeds absolute correlation error 0.05 at
 figure time 0.72525; the original author driver gives 0.7275. Blurred
 sampling's maximum correlation error is approximately 4.4e-6, versus
 9.3e-6 for the original driver. Separate seeds 100, 200 and 300 gave
-4.1e-6 to 4.8e-6. The single-spin blurred error is 1.8e-15. Our standard
+4.1e-6 to 4.8e-6. The fixed-step single-spin blurred error is 4.2e-15. Our standard
 four-spin trajectory remains near zero after the second maximum, whereas
 the published failed trajectory later resumes oscillating; this
 post-failure behavior depends on sampling and is not matched pointwise.
@@ -114,12 +119,17 @@ separately above. Failure onset and subsequent standard trajectories vary
 with the sampling seed.
 
 `outputs/results.json` records each actual run's errors, versions,
-synchronized first-step and warm-step timings, trajectory time and peak
-RSS. The runs used a Linux CPU server, four logical CPUs per job, Python
+synchronized compilation-plus-first-trajectory and warm-trajectory timings,
+and peak RSS. Timing repeats the full trajectory with identical initial
+parameters, chains and random key. The runs used a Linux CPU server with
+four logical CPUs per job, Python
 3.12.3, TC-NG 1.9.1, JAX/JAXlib 0.9.1, NumPy 2.4.3, SciPy 1.17.1 and
 Matplotlib 3.10.8. Four GB of RAM is recommended; no GPU is needed.
-The two four-spin trajectories took about 239 and 241 seconds after the
-timed warmup steps; the main process peaked at 766 MiB RSS.
+The two scanned four-spin trajectories took 221.5 and 222.3 seconds after
+compilation and the first full run; the process peaked at 733 MiB RSS.
+The previous host-loop records were about 239 and 241 seconds on the same
+server and software environment. These are individual timing measurements,
+not a controlled estimate of speedup under identical server load.
 
 `validate.py` checks local Hpsi, TC circuit states/observables/evolution,
 RBM derivatives against autodiff, and lossless sample aggregation. It
@@ -127,4 +137,12 @@ checks S/F against exact amplitude inner products at a strict single-spin
 node and an RBM cosh node, then checks MC and Eq. (11) estimates using 32
 independent replicas of 4096 samples, within five replica standard errors.
 The ordinary estimator demonstrably misses a finite contribution at the
-strict node. Results are saved to `outputs/validation.json`.
+strict node. Short scan trajectories are checked against explicit steps,
+including the final chains, random key and ESS. A full-interval single-spin
+blurred run compares dt=0.001 and dt=0.0005 with exact evolution and with
+each other at matching times, using absolute tolerance 1e-10. The standard
+trajectory intentionally fails near a node, so it is not used to measure
+integration convergence. Checks use `np.testing.assert_allclose` and print
+a brief step-halving report; no separate validation artifact is written.
+The measured maximum errors against the exact curve were 4.00e-15 and
+5.83e-15, respectively; the two curves differed by at most 2.55e-15.
