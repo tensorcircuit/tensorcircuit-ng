@@ -230,6 +230,46 @@
     "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2026_finite_temperature_lanczos"
   },
   {
+    "slug": "2026_chern_edge_fgs",
+    "title": "Real-Time Dynamics in Two Dimensions with Tensor Network States via Time-Dependent Variational Monte Carlo Method",
+    "card_title": "Figure 2(a) · Chern-insulator edge dynamics",
+    "summary": "FGSSimulator evolves a fixed-number Slater state to reproduce a chiral density pulse on the boundary of a 12 x 12 Chern insulator.",
+    "description": "Reproduces the exact free-fermion benchmark in published Figure 2(a) of PRX Quantum 7, 033035 (2026), DOI 10.1103/tggc-8fjx. Uses the original 12 x 12 open Hofstadter lattice, flux 2*pi/3, exactly 96 particles, and removal of a -1 corner potential. FGSSimulator evolves Gaussian correlations at physical times 0, 4, 8, 12; no lattice reduction, time discretization, PEPS, or Monte Carlo approximation is used. The published negative Peierls exponent and FGS's factor-of-two time convention are checked independently. The display uses the paper's 0..0.04 color scale; signed, unclipped densities are saved separately. Comparison to the paper is visual because the cited public data repository supplies no Figure 2 density arrays. Full correlations are verified against independent single-particle evolution and a small Fock-space calculation. This contribution demonstrates FGS dynamics and does not implement the paper's PEPS-tVMC method.",
+    "authors": [
+      "Yantao Wu",
+      "Jannes Nys"
+    ],
+    "contributor": "qingyunqian",
+    "year": 2026,
+    "arxiv_id": "2512.06768",
+    "url": "https://arxiv.org/abs/2512.06768",
+    "tags": [
+      "topological-phase",
+      "many-body-physics",
+      "classical-simulation"
+    ],
+    "tc_features": [
+      "fermionic-gaussian-state",
+      "jit"
+    ],
+    "backend": "jax",
+    "hardware": {
+      "gpu": false,
+      "min_memory": "1GB"
+    },
+    "figures": [
+      {
+        "target": "Figure 2(a): exact chiral edge-density propagation",
+        "source": "outputs/result.png",
+        "figure": "figures/2026_chern_edge_fgs__result.webp",
+        "thumb": "thumbs/2026_chern_edge_fgs__result.webp",
+        "script": "main.py"
+      }
+    ],
+    "artifacts": [],
+    "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2026_chern_edge_fgs"
+  },
+  {
     "slug": "2025_qntk_diagnostics",
     "title": "Towards Practical Quantum Neural Network Diagnostics with Neural Tangent Kernels",
     "card_title": "Figure 2 · QNTK diagnostics",
