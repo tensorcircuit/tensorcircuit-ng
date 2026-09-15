@@ -1,4 +1,4 @@
-# Chern-insulator edge dynamics with FGSSimulator
+# Chern-insulator dynamics with FGS and fermionic PEPS-tVMC
 
 This example reproduces **published Figure 2(a)** of Yantao Wu and Jannes Nys,
 [*Real-Time Dynamics in Two Dimensions with Tensor Network States via
@@ -6,12 +6,16 @@ Time-Dependent Variational Monte Carlo Method*](https://journals.aps.org/prxquan
 PRX Quantum **7**, 033035 (2026), published 19 August 2026
 ([arXiv:2512.06768](https://arxiv.org/abs/2512.06768)).
 
-The contribution is an **FGS example**: `tc.FGSSimulator` prepares and evolves
-a fixed-number fermionic Gaussian state using polynomial-size matrices.
-Figure 2(a) is the paper's exact free-fermion benchmark; its PEPS-tVMC
-algorithm and other panels are outside this example's scope.
+`main.py` reproduces the original 12 x 12 **FGS benchmark** using
+`tc.FGSSimulator`. The additional [fermionic PEPS-tVMC example](PEPS.md)
+implements sampled VMC preparation and real-time evolution for the same quench,
+using TensorCircuit-NG's contractors/backend and TenCirPauli's fermion operators.
+Its default 3 x 3, D=2 run takes about four minutes on a CPU, including
+ground-state preparation and evolution to t=1.
+Its small-system checks target the method behind Figure 2(b,c); they do not
+reproduce the paper's original-size PEPS accuracy or performance claims.
 
-## Run
+## Run the FGS benchmark
 
 Use an environment containing TensorCircuit-NG, JAX with CPU support, NumPy,
 SciPy, and Matplotlib. From the repository root:

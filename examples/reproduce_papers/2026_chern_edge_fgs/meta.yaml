@@ -9,30 +9,43 @@ tags:
   - "topological-phase"
   - "many-body-physics"
   - "classical-simulation"
+  - "tensor-network"
 tc_features:
   - "fermionic-gaussian-state"
   - "jit"
+  - "vmap"
+  - "scan"
+  - "autodiff"
+  - "contractor"
 backend: "jax"
 hardware_requirements:
   gpu: false
-  min_memory: "1GB"
-card_title: "Figure 2(a) · Chern-insulator edge dynamics"
-summary: "FGSSimulator evolves a fixed-number Slater state to reproduce a chiral density pulse on the boundary of a 12 x 12 Chern insulator."
+  min_memory: "2GB"
+card_title: "Figure 2 · FGS and small-system PEPS-tVMC"
+summary: "FGS reproduces the 12 x 12 benchmark; sampled fermionic PEPS-tVMC is independently validated on smaller lattices."
 description: >-
-  Reproduces the exact free-fermion benchmark in published Figure 2(a) of
-  PRX Quantum 7, 033035 (2026), DOI 10.1103/tggc-8fjx. Uses the original
-  12 x 12 open Hofstadter lattice, flux 2*pi/3, exactly 96 particles, and
-  removal of a -1 corner potential. FGSSimulator evolves Gaussian correlations
-  at physical times 0, 4, 8, 12; no lattice reduction, time discretization,
-  PEPS, or Monte Carlo approximation is used. The published negative Peierls
-  exponent and FGS's factor-of-two time convention are checked independently.
-  The display uses the paper's 0..0.04 color scale; signed, unclipped densities
-  are saved separately. Comparison to the paper is visual because the cited
-  public data repository supplies no Figure 2 density arrays. Full correlations
-  are verified against independent single-particle evolution and a small
-  Fock-space calculation. This contribution demonstrates FGS dynamics and does
-  not implement the paper's PEPS-tVMC method.
+  Reproduces published Figure 2(a) of PRX Quantum 7, 033035 (2026), DOI
+  10.1103/tggc-8fjx, with FGSSimulator on the original 12 x 12 open Hofstadter
+  lattice, flux 2*pi/3 and 96 particles. Adds the fermionic PEPS-tVMC workflow
+  behind Figure 2(b,c), validated on 2 x 3 and 3 x 3 lattices. The PEPS figure
+  uses 3 x 3 sites, 6 particles, D=2, exact sampled-network contraction,
+  1024 samples per SR stage, RK4 step 0.01 and final time 1. Its initial state
+  is prepared by 400 imaginary-time VMC steps with a -1 corner potential, independently
+  of the FGS reference. Reuses TensorCircuit contractors, the existing
+  boundary-MPS example, backend autodiff/linear algebra, and TenCirPauli's
+  fermion mapping. The compact gauge projection uses SVD and a dense Cholesky
+  solve rather than the paper's reduced/local QR construction. Boundary-cap,
+  sampling and time-step checks and 6 x 6 / 12 x 12 kernel profiles are
+  documented; no full-size PEPS trajectory or performance reproduction is
+  claimed. Small lattices cannot establish the original bulk/edge separation.
+  The FGS image retains the paper's 0..0.04 scale; the PEPS comparison uses a
+  symmetric signed scale and sampling-error bands. Signed arrays are preserved.
+  Comparison with the manuscript is visual; numerical validation uses
+  independent sector Hamiltonians and Gaussian evolution, not author arrays.
 outputs:
   - target: "Figure 2(a): exact chiral edge-density propagation"
     path: "outputs/result.png"
     script: "main.py"
+  - target: "Figure 2(b,c) method: small-system fermionic PEPS-tVMC"
+    path: "outputs/peps_result.png"
+    script: "run_peps.py"
