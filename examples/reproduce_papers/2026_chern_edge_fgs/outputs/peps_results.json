@@ -29,9 +29,9 @@
   "max_sampled_density_error_vs_fgs": 0.053666313846326474,
   "max_sampled_energy_drift": 0.025334935323112262,
   "max_sr_residual": 1.0681670979582099e-17,
-  "preparation_seconds_including_jit": 152.2047113692388,
-  "evolution_seconds_including_jit": 52.90975919738412,
-  "max_rss_mib": 755.26953125,
+  "preparation_seconds_including_jit": 155.36579538695514,
+  "evolution_seconds_including_jit": 55.90324038080871,
+  "max_rss_mib": 744.42578125,
   "tensorcircuit": "1.9.1",
   "tencirpauli": "0.5.0"
 }

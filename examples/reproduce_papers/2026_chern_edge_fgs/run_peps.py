@@ -19,9 +19,14 @@ import numpy as np
 import tencirpauli as tcp
 import tensorcircuit as tc
 
-from main import correlation_at_time, fixed_number_alpha
-from peps import FermionPEPS, Hofstadter
-from tvmc import MonteCarlo
+if __package__:
+    from .main import correlation_at_time, fixed_number_alpha
+    from .peps import FermionPEPS, Hofstadter
+    from .tvmc import MonteCarlo
+else:
+    from main import correlation_at_time, fixed_number_alpha
+    from peps import FermionPEPS, Hofstadter
+    from tvmc import MonteCarlo
 
 
 def peak_memory_mib():
@@ -66,46 +71,34 @@ def fgs_reference(problem, times):
     return tuple(np.asarray(K.numpy(x)) for x in (densities, background, ground_energy))
 
 
-def run_chunks(sampler, theta, chains, key, dt, steps, potential, imaginary):
-    """Keep fixed trajectories on device; transfer diagnostics only per chunk."""
+def run_trajectory(sampler, theta, chains, key, dt, steps, potential, imaginary):
+    """Stage the entire fixed-step trajectory and transfer diagnostics once."""
     K = tc.backend
-    chunk_size = min(20, steps)
     run = K.jit(
-        lambda p, s, k: sampler.trajectory(
-            p, s, k, dt, chunk_size, potential, imaginary
-        )
+        lambda p, s, k: sampler.trajectory(p, s, k, dt, steps, potential, imaginary)
     )
-    histories = []
     started = time.perf_counter()
-    for offset in range(0, steps, chunk_size):
-        count = min(chunk_size, steps - offset)
-        if count != chunk_size:
-            run = K.jit(
-                lambda p, s, k: sampler.trajectory(
-                    p, s, k, dt, count, potential, imaginary
-                )
-            )
-        theta, chains, key, history = run(theta, chains, key)
-        history = np.asarray(K.numpy(history))
-        if not np.all(np.isfinite(history)) or not np.all(np.isfinite(K.numpy(theta))):
-            raise FloatingPointError(
-                "Non-finite PEPS trajectory; inspect contraction and SR conditioning."
-            )
-        histories.append(history)
-        print(
-            json.dumps(
-                {
-                    "stage": "ground_state" if imaginary else "real_time",
-                    "steps": offset + count,
-                    "energy": float(history[-1, 0]),
-                    "variance": float(history[-1, 1]),
-                    "sr_residual": float(history[-1, 2]),
-                    "elapsed_seconds": time.perf_counter() - started,
-                }
-            ),
-            flush=True,
+    theta, chains, key, history = run(theta, chains, key)
+    history = np.asarray(K.numpy(history))
+    if not np.all(np.isfinite(history)) or not np.all(np.isfinite(K.numpy(theta))):
+        raise FloatingPointError(
+            "Non-finite PEPS trajectory; inspect contraction and SR conditioning."
         )
-    return theta, chains, key, np.concatenate(histories), time.perf_counter() - started
+    elapsed = time.perf_counter() - started
+    print(
+        json.dumps(
+            {
+                "stage": "ground_state" if imaginary else "real_time",
+                "steps": steps,
+                "energy": float(history[-1, 0]),
+                "variance": float(history[-1, 1]),
+                "sr_residual": float(history[-1, 2]),
+                "elapsed_seconds": elapsed,
+            }
+        ),
+        flush=True,
+    )
+    return theta, chains, key, history, elapsed
 
 
 def plot_result(times, density, errors, exact, background, peps, output):
@@ -285,7 +278,7 @@ def main():
         preparation = MonteCarlo(
             problem, args.chains, args.draws, args.sweeps, args.solver, regulator=1e-4
         )
-        theta, chains, key, prep_history, prep_seconds = run_chunks(
+        theta, chains, key, prep_history, prep_seconds = run_trajectory(
             preparation,
             theta,
             chains,
@@ -309,7 +302,7 @@ def main():
         columns=args.columns,
         bond_dim=args.bond_dim,
     )
-    theta, chains, key, history, evolve_seconds = run_chunks(
+    theta, chains, key, history, evolve_seconds = run_trajectory(
         sampler, theta, chains, key, args.dt, steps, 0.0, False
     )
     _, final, _, _ = K.jit(sampler.estimate)(theta, chains, key)

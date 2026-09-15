@@ -8,7 +8,10 @@ import numpy as np
 from scipy.linalg import eigh, expm
 import tensorcircuit as tc
 
-from main import fixed_number_alpha, hamiltonian, simulate
+if __package__:
+    from .main import fixed_number_alpha, hamiltonian, simulate
+else:
+    from main import fixed_number_alpha, hamiltonian, simulate
 
 
 def single_particle_hamiltonian(length, potential=0.0):

@@ -20,7 +20,7 @@ tc_features:
 backend: "jax"
 hardware_requirements:
   gpu: false
-  min_memory: "2GB"
+  min_memory: "1GB"
 card_title: "Figure 2 · FGS and small-system PEPS-tVMC"
 summary: "FGS reproduces the 12 x 12 benchmark; sampled fermionic PEPS-tVMC is independently validated on smaller lattices."
 description: >-

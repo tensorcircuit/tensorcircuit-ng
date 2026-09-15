@@ -16,8 +16,12 @@ from scipy.linalg import expm
 import tencirpauli as tcp
 import tensorcircuit as tc
 
-from peps import FermionPEPS, Hofstadter
-from tvmc import MonteCarlo, minsr_solve, sr_solve
+if __package__:
+    from .peps import FermionPEPS, Hofstadter
+    from .tvmc import MonteCarlo, minsr_solve, sr_solve
+else:
+    from peps import FermionPEPS, Hofstadter
+    from tvmc import MonteCarlo, minsr_solve, sr_solve
 
 
 def sector_reference(problem, potential=0.0):

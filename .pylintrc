@@ -4,11 +4,6 @@
 jobs=1
 
 
-[IMPORTS]
-# Keep standalone examples' dependency imports independent of the working directory.
-known-third-party=tensorcircuit
-
-
 [MESSAGES CONTROL]
 
 # Disable the message, report, category or checker with the given id(s).

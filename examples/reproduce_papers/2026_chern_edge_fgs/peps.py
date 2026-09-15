@@ -13,7 +13,11 @@ import math
 
 import tencirpauli as tcp
 import tensorcircuit as tc
-from peps_boundary_mps import apply_grid_row_dmrg, peps_partition_function
+
+if __package__:
+    from ...peps_boundary_mps import apply_grid_row_dmrg, peps_partition_function
+else:
+    from peps_boundary_mps import apply_grid_row_dmrg, peps_partition_function
 
 
 class FermionPEPS:
