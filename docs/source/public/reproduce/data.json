@@ -261,7 +261,7 @@
     "backend": "jax",
     "hardware": {
       "gpu": false,
-      "min_memory": "4 GB recommended; not a measured minimum"
+      "min_memory": "Not determined"
     },
     "figures": [
       {

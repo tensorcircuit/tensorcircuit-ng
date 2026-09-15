@@ -19,7 +19,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tensorcircuit as tc
 
-from physics import SpinProblem, schmitt_velocity
+if __package__:
+    from .physics import SpinProblem, schmitt_velocity
+else:
+    from physics import SpinProblem, schmitt_velocity
 
 matplotlib.use("Agg")
 OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
