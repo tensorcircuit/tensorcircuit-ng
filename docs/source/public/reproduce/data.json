@@ -261,7 +261,7 @@
     "backend": "jax",
     "hardware": {
       "gpu": false,
-      "min_memory": "Not determined"
+      "min_memory": "1 GB"
     },
     "figures": [
       {

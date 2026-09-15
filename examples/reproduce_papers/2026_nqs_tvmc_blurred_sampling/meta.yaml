@@ -21,7 +21,7 @@ tc_features:
 backend: "jax"
 hardware_requirements:
   gpu: false
-  min_memory: "Not determined"
+  min_memory: "1 GB"
 card_title: "Figure 5(a,b) · Standard and blurred tVMC"
 summary: "Single-spin and four-spin quenches compare standard and blurred-sampling tVMC with exact dynamics."
 description: >-
