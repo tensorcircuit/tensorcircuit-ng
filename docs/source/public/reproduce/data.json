@@ -230,6 +230,58 @@
     "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2026_finite_temperature_lanczos"
   },
   {
+    "slug": "2026_chern_edge_fgs",
+    "title": "Real-Time Dynamics in Two Dimensions with Tensor Network States via Time-Dependent Variational Monte Carlo Method",
+    "card_title": "Figure 2 · FGS and small-system PEPS-tVMC",
+    "summary": "FGS reproduces the 12 x 12 benchmark; sampled fermionic PEPS-tVMC is independently validated on smaller lattices.",
+    "description": "Reproduces published Figure 2(a) of PRX Quantum 7, 033035 (2026), DOI 10.1103/tggc-8fjx, with FGSSimulator on the original 12 x 12 open Hofstadter lattice, flux 2*pi/3 and 96 particles. Adds the fermionic PEPS-tVMC workflow behind Figure 2(b,c), validated on 2 x 3 and 3 x 3 lattices. The PEPS figure uses 3 x 3 sites, 6 particles, D=2, exact sampled-network contraction, 1024 samples per SR stage, RK4 step 0.01 and final time 1. Its initial state is prepared by 400 imaginary-time VMC steps with a -1 corner potential, independently of the FGS reference. Reuses TensorCircuit contractors, the existing boundary-MPS example, backend autodiff/linear algebra, and TenCirPauli's fermion mapping. The compact gauge projection uses SVD and a dense Cholesky solve rather than the paper's reduced/local QR construction. Boundary-cap, sampling and time-step checks and 6 x 6 / 12 x 12 kernel profiles are documented; no full-size PEPS trajectory or performance reproduction is claimed. Small lattices cannot establish the original bulk/edge separation. The FGS image retains the paper's 0..0.04 scale; the PEPS comparison uses a symmetric signed scale and sampling-error bands. Signed arrays are preserved. Comparison with the manuscript is visual; numerical validation uses independent sector Hamiltonians and Gaussian evolution, not author arrays.",
+    "authors": [
+      "Yantao Wu",
+      "Jannes Nys"
+    ],
+    "contributor": "qingyunqian",
+    "year": 2026,
+    "arxiv_id": "2512.06768",
+    "url": "https://arxiv.org/abs/2512.06768",
+    "tags": [
+      "topological-phase",
+      "many-body-physics",
+      "classical-simulation",
+      "tensor-network"
+    ],
+    "tc_features": [
+      "fermionic-gaussian-state",
+      "jit",
+      "vmap",
+      "scan",
+      "autodiff",
+      "contractor"
+    ],
+    "backend": "jax",
+    "hardware": {
+      "gpu": false,
+      "min_memory": "1GB"
+    },
+    "figures": [
+      {
+        "target": "Figure 2(a): exact chiral edge-density propagation",
+        "source": "outputs/result.png",
+        "figure": "figures/2026_chern_edge_fgs__result.webp",
+        "thumb": "thumbs/2026_chern_edge_fgs__result.webp",
+        "script": "main.py"
+      },
+      {
+        "target": "Figure 2(b,c) method: small-system fermionic PEPS-tVMC",
+        "source": "outputs/peps_result.png",
+        "figure": "figures/2026_chern_edge_fgs__peps_result.webp",
+        "thumb": "thumbs/2026_chern_edge_fgs__peps_result.webp",
+        "script": "run_peps.py"
+      }
+    ],
+    "artifacts": [],
+    "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2026_chern_edge_fgs"
+  },
+  {
     "slug": "2025_qntk_diagnostics",
     "title": "Towards Practical Quantum Neural Network Diagnostics with Neural Tangent Kernels",
     "card_title": "Figure 2 · QNTK diagnostics",
