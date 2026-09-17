@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Add `tensorcircuit.tnalg`: fixed-shape JAX MPS TEBD, one-site TDVP, and one-site DMRG with dense and Abelian block-buffer PyTree states, pure tensor Pauli-string MPO builders, checkpoints, and legacy MPS interoperability.
+
 ## v1.9.1
 
 ### Fixed

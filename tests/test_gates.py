@@ -31,6 +31,24 @@ def test_builtin_gate_registry_survives_jax_dtype_switch(jaxb):
         assert tc.backend.dtype(h.tensor) == "complex128"
 
 
+def test_circuit_fixed_gate_respects_runtime_dtype(npb):
+    with tc.runtime_dtype("complex128"):
+        c = tc.Circuit(1)
+        c.h(0)
+
+        state = np.asarray(c.state())
+        expected = np.ones(2, dtype=np.complex128) / np.sqrt(2)
+
+        assert state.dtype == np.complex128
+        np.testing.assert_allclose(state, expected, rtol=0.0, atol=1e-14)
+        np.testing.assert_allclose(
+            state, np.asarray(tc.gates.h().tensor)[:, 0], rtol=0.0, atol=1e-14
+        )
+        np.testing.assert_allclose(
+            np.vdot(state, state).real, 1.0, rtol=0.0, atol=1e-14
+        )
+
+
 def test_phase_gate():
     c = tc.Circuit(1)
     c.h(0)

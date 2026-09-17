@@ -33,6 +33,7 @@ tensorcircuit
     ./api/symbolgates.rst
     ./api/templates.rst
     ./api/timeevol.rst
+    ./api/tnalg.rst
     ./api/torchnn.rst
     ./api/translation.rst
     ./api/u1circuit.rst

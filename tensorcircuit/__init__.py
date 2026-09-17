@@ -80,6 +80,7 @@ FGSCircuit = FGSSimulator
 # lazy imports for heavy frameworks
 # name: (module_relative_path, is_module)
 _lazy_imports = {
+    "tnalg": (".tnalg", True),
     "keras": (".keras", True),
     "KerasLayer": (".keras", False),
     "KerasHardwareLayer": (".keras", False),

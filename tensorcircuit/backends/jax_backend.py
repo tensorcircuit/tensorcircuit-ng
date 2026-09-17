@@ -279,10 +279,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         return jnp.array(tensor, copy=True)
 
     def convert_to_tensor(self, tensor: Tensor, dtype: Optional[str] = None) -> Tensor:
-        result = jnp.asarray(tensor)
-        if dtype is not None:
-            result = self.cast(result, dtype)
-        return result
+        return jnp.asarray(tensor, dtype=dtype)
 
     def abs(self, a: Tensor) -> Tensor:
         return jnp.abs(a)

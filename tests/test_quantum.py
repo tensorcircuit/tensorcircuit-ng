@@ -1,6 +1,7 @@
 # pylint: disable=invalid-name
 
 import itertools
+import importlib
 import os
 import sys
 from functools import partial
@@ -23,6 +24,18 @@ from tensorcircuit import quantum as qu
 # tc.set_contractor("greedy")
 atol = 1e-5  # relax jax 32 precision
 decimal = 5
+
+
+def import_quimb(module: str):
+    """Import an optional Quimb module or skip its unavailable runtime setup."""
+    try:
+        return importlib.import_module(module)
+    except ImportError:
+        pytest.skip("quimb is not installed")
+    except RuntimeError as error:
+        if "no locator available" in str(error):
+            pytest.skip("quimb's installed Numba cache is unavailable")
+        raise
 
 
 def _brute_force_stabilizer_renyi_entropy(state, alpha):
@@ -1044,10 +1057,7 @@ def test_tenpy_roundtrip(backend):
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_quimb2qop(backend):
-    try:
-        import quimb.tensor.tensor_builder as qtb
-    except ImportError:
-        pytest.skip("quimb is not installed")
+    qtb = import_quimb("quimb.tensor.tensor_builder")
     nwires = 6
     qb_mpo = qtb.MPO_ham_ising(nwires, 4, 2, cyclic=True)
     qu_mpo = tc.quantum.quimb2qop(qb_mpo)
@@ -1080,10 +1090,7 @@ def test_quimb2qop(backend):
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_qop2quimb(backend):
-    try:
-        import quimb.tensor as qtn  # pylint: disable=unused-import
-    except ImportError:
-        pytest.skip("quimb is not installed")
+    import_quimb("quimb.tensor")
 
     # MPO Conversion
     nwires_mpo = 4
@@ -1154,10 +1161,7 @@ def test_qop2quimb(backend):
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_quimb_roundtrip(backend):
-    try:
-        import quimb.tensor as qtn
-    except ImportError:
-        pytest.skip("quimb is not installed")
+    qtn = import_quimb("quimb.tensor")
     # MPO roundtrip test
     nwires_mpo = 4
     mpo_original = qtn.MPO_ham_ising(nwires_mpo)

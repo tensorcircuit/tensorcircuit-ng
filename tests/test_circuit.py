@@ -1281,6 +1281,7 @@ def test_qir2qiskit(backend):
 def test_qiskit2tc():
     # there is a heisenbug in qiskit
     try:
+        import qiskit
         import qiskit.quantum_info as qi
         from qiskit import QuantumCircuit
         from qiskit.circuit.library import HamiltonianGate
@@ -1356,7 +1357,12 @@ def test_qiskit2tc():
     qis_unitary2 = np.reshape(qis_unitary2, [2**n, 2**n])
     # Note: the following assertion may fail intermittently due to non-deterministic behavior
     # in Qiskit's UnitaryGate.control() method as of Qiskit 0.46.3
-    np.testing.assert_allclose(qis_unitary2, qis_unitary, atol=1e-5)
+    try:
+        np.testing.assert_allclose(qis_unitary2, qis_unitary, atol=1e-5)
+    except AssertionError:
+        if qiskit.__version__ == "0.46.3":
+            pytest.xfail("Qiskit 0.46.3 UnitaryGate.control() is nondeterministic")
+        raise
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
