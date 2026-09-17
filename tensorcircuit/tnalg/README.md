@@ -34,6 +34,10 @@ TNALG is currently implemented directly with JAX primitives, including JAX PyTre
 
 Changing TensorCircuit's global backend does not make TNALG backend-agnostic. TensorFlow, PyTorch, NumPy, and other TensorCircuit backends are not currently supported by the TNALG algorithms.
 
+## Symmetry-aware accuracy trade-off
+
+The symmetry-aware algorithms are not guaranteed to be especially accurate in every problem. They require the bond-dimension fraction allocated to each symmetry sector to be specified in advance, and this fixed allocation may not match the manifold containing the target state. This is a trade-off made to retain a fixed structure for JAX just-in-time compilation; how to resolve the resulting tension between compilation-friendly static layouts and adaptive sector allocation remains an open issue.
+
 ## Development status and risk
 
 This module has been developed largely with AI assistance and is still under active development. APIs, tensor layouts, algorithm schedules, numerical behavior, and interoperability boundaries may change quickly. Backward compatibility is not guaranteed at this stage.

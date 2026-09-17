@@ -98,7 +98,7 @@ def save_checkpoint(path: Union[str, Path], mps: MPSState) -> None:
     :param mps: MPS state to serialize.
     :type mps: MPSState
     """
-    arrays = {
+    arrays: Dict[str, Any] = {
         f"buffer_{site}_{block}": np.asarray(buffer)
         for site, site_buffers in enumerate(mps.buffers)
         for block, buffer in enumerate(site_buffers)

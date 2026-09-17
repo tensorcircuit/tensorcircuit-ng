@@ -215,7 +215,7 @@ def validate_symmetric_operator_groups(
                 charge: np.linalg.qr(np.concatenate(chunks, axis=0), mode="r")  # type: ignore[misc]
                 for charge, chunks in joined.items()
             }
-            scale = max(
+            scale = max(  # type: ignore[type-var]
                 (np.linalg.norm(factor) for factor in factors.values()), default=0
             )
             if scale:
