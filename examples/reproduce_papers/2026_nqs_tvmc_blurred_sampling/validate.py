@@ -7,42 +7,24 @@ All exact sums here are validation references, never the MC evolution path.
 from pathlib import Path
 
 import numpy as np
-import tensorcircuit as tc
+from main import (
+    exact_operators,
+    exact_trajectory,
+    initial_parameters,
+    make_heun,
+    make_rhs,
+    make_rk45,
+    make_trajectory,
+)
+from physics import (
+    SpinProblem,
+    inner_product_moments,
+    reweighted_moments,
+    schmitt_velocity,
+    standard_moments,
+)
 
-if __package__:
-    from .main import (
-        exact_operators,
-        exact_trajectory,
-        initial_parameters,
-        make_heun,
-        make_rhs,
-        make_rk45,
-        make_trajectory,
-    )
-    from .physics import (
-        SpinProblem,
-        inner_product_moments,
-        reweighted_moments,
-        schmitt_velocity,
-        standard_moments,
-    )
-else:
-    from main import (
-        exact_operators,
-        exact_trajectory,
-        initial_parameters,
-        make_heun,
-        make_rhs,
-        make_rk45,
-        make_trajectory,
-    )
-    from physics import (
-        SpinProblem,
-        inner_product_moments,
-        reweighted_moments,
-        schmitt_velocity,
-        standard_moments,
-    )
+import tensorcircuit as tc
 
 
 def check_problem(nsites):
