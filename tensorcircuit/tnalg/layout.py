@@ -10,6 +10,126 @@ from typing import Iterable, Mapping, Optional, Tuple
 from .symmetry import AbelianSymmetry, Charge, SectorIndex
 
 
+def _u1_auto_bond_sectors(
+    nsites: int, total_charge: int, chi: int, cut: int
+) -> dict[int, int]:
+    """Allocate an empirical Gaussian-like U(1) sector profile."""
+    charge_min = max(0, total_charge - (nsites - cut))
+    charge_max = min(cut, total_charge)
+    center = cut * total_charge / nsites
+    radius = max(1, (chi.bit_length() - 1) // 2)
+    sigma = 0.95 + 0.075 * max(0.0, math.log2(chi) - 4.0)
+    lower = max(charge_min, math.ceil(center - radius))
+    upper = min(charge_max, math.floor(center + radius))
+    charges = list(range(lower, upper + 1))
+    capacities = [
+        min(math.comb(cut, charge), math.comb(nsites - cut, total_charge - charge))
+        for charge in charges
+    ]
+    target = min(chi, sum(capacities))
+    if target == 0:
+        return {}
+    weights = [
+        math.exp(-((charge - center) ** 2) / (2.0 * sigma**2)) for charge in charges
+    ]
+    desired = [target * weight / sum(weights) for weight in weights]
+    allocation = [0] * len(charges)
+    charge_positions = {charge: index for index, charge in enumerate(charges)}
+    symmetric = abs(2.0 * center - round(2.0 * center)) < 1e-12
+    if symmetric:
+        groups: list[tuple[int, ...]] = []
+        visited = set()
+        for index, charge in enumerate(charges):
+            if index in visited:
+                continue
+            mirror = int(round(2.0 * center - charge))
+            mirror_index = charge_positions.get(mirror)
+            if mirror_index is None or capacities[index] != capacities[mirror_index]:
+                symmetric = False
+                break
+            if mirror_index == index:
+                groups.append((index,))
+            else:
+                groups.append((index, mirror_index))
+                visited.add(mirror_index)
+            visited.add(index)
+    if symmetric:
+        for group in groups:
+            if len(group) == 1:
+                index = group[0]
+                allocation[index] = min(
+                    capacities[index], int(math.floor(desired[index]))
+                )
+            else:
+                value = min(
+                    capacities[group[0]],
+                    int(math.floor(min(desired[index] for index in group))),
+                )
+                for index in group:
+                    allocation[index] = value
+    else:
+        allocation = [
+            min(capacity, int(math.floor(value)))
+            for capacity, value in zip(capacities, desired)
+        ]
+    while sum(allocation) < target:
+        candidates = [
+            index
+            for index, capacity in enumerate(capacities)
+            if allocation[index] < capacity
+        ]
+        if symmetric and sum(allocation) + 1 < target:
+            pair_candidates = [
+                group
+                for group in groups
+                if len(group) == 2
+                and allocation[group[0]] < capacities[group[0]]
+                and allocation[group[1]] < capacities[group[1]]
+            ]
+            center_candidates = [
+                group
+                for group in groups
+                if len(group) == 1 and allocation[group[0]] + 1 < capacities[group[0]]
+            ]
+            double_candidates = pair_candidates + center_candidates
+            if double_candidates and sum(allocation) + 2 <= target:
+                group = max(
+                    double_candidates,
+                    key=lambda item: (
+                        (desired[item[0]] - allocation[item[0]])
+                        / (2 if len(item) == 1 else 1),
+                        -abs(charges[item[0]] - center),
+                        -charges[item[0]],
+                    ),
+                )
+                for index in group:
+                    allocation[index] += 2 if len(group) == 1 else 1
+                continue
+        if symmetric and sum(allocation) + 1 == target:
+            single_candidates = [
+                group[0]
+                for group in groups
+                if len(group) == 1 and allocation[group[0]] < capacities[group[0]]
+            ]
+            if single_candidates:
+                allocation[single_candidates[0]] += 1
+                continue
+        index = max(
+            candidates,
+            key=lambda item: (
+                desired[item] - allocation[item],
+                -abs(charges[item] - center),
+                -charges[item],
+            ),
+        )
+        allocation[index] += 1
+    return {
+        charge: degeneracy
+        for charge, degeneracy in zip(charges, allocation)
+        if degeneracy > 0
+    }
+
+
 @dataclass(frozen=True)
 class BlockLayout:
     """
@@ -168,15 +288,18 @@ class MPSSpec:
         chi: int,
         *,
         charge_sectors: Optional[int] = None,
+        bond_sectors: Optional[Tuple[Mapping[int, int], ...]] = None,
     ) -> "MPSSpec":
         """
         Construct a spin-1/2 U(1)-symmetric MPS specification.
 
         The local ``|0>`` and ``|1>`` states carry charges zero and one. Bond
-        quotas are distributed uniformly over a window of physically reachable
-        charges centered on the target charge density. ``charge_sectors`` sets
-        the maximum window width and can be varied to check convergence with
-        respect to the retained charge sectors.
+        quotas use an empirical center-enhanced profile when
+        ``charge_sectors`` is omitted. An explicit ``charge_sectors`` value
+        selects the legacy uniform quota over a centered charge window and can
+        be used to check convergence with respect to the retained sectors.
+        ``bond_sectors`` provides full control over the charge-to-dimension
+        map at every bond.
 
         :param nsites: Number of physical sites.
         :type nsites: int
@@ -187,6 +310,10 @@ class MPSSpec:
         :param charge_sectors: Maximum number of retained charge sectors per
             interior cut, or ``None`` for an automatic choice.
         :type charge_sectors: Optional[int]
+        :param bond_sectors: Explicit U(1) charge-to-dimension maps at every
+            bond, using integer charge keys. Mutually exclusive with
+            ``charge_sectors``.
+        :type bond_sectors: Optional[Tuple[Mapping[int, int], ...]]
         :return: The U(1)-symmetric MPS specification.
         :rtype: MPSSpec
         """
@@ -196,18 +323,40 @@ class MPSSpec:
             raise ValueError("total_charge must be between zero and nsites")
         if chi <= 0:
             raise ValueError("chi must be positive")
-        if charge_sectors is None:
-            charge_sectors = min(chi, max(2, 1 << ((chi.bit_length() - 1) // 2)))
-        if charge_sectors <= 0 or charge_sectors > chi:
-            raise ValueError("charge_sectors must be between one and chi")
+        if bond_sectors is not None and charge_sectors is not None:
+            raise ValueError("bond_sectors and charge_sectors are mutually exclusive")
+        if bond_sectors is not None and len(bond_sectors) != nsites + 1:
+            raise ValueError("bond_sectors must contain one entry per MPS cut")
+        automatic_profile = bond_sectors is None and charge_sectors is None
+        if bond_sectors is None:
+            if automatic_profile:
+                charge_sectors = min(chi, max(2, 1 << ((chi.bit_length() - 1) // 2)))
+            assert charge_sectors is not None
+            if charge_sectors <= 0 or charge_sectors > chi:
+                raise ValueError("charge_sectors must be between one and chi")
 
         symmetry = AbelianSymmetry((0,))
         physical = SectorIndex.from_basis(
             symmetry=symmetry, basis_charges=((0,), (1,)), flow=1
         )
+        if bond_sectors is not None:
+            if any(sum(sectors.values()) > chi for sectors in bond_sectors):
+                raise ValueError("bond_sectors exceed chi")
+            return cls.from_sectors(
+                physical_indices=(physical,) * nsites,
+                total_charge=(total_charge,),
+                bond_sectors=tuple(
+                    {(charge,): dimension for charge, dimension in sectors.items()}
+                    for sectors in bond_sectors
+                ),
+            )
+        assert charge_sectors is not None
         quota = chi // charge_sectors
         bonds: list[dict[int, int]] = []
         for cut in range(nsites + 1):
+            if automatic_profile:
+                bonds.append(_u1_auto_bond_sectors(nsites, total_charge, chi, cut))
+                continue
             center = cut * total_charge // nsites
             lower = max(
                 0,

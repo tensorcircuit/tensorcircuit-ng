@@ -194,6 +194,48 @@ def test_high_level_u1_and_z2_mps_specs(jaxb):
         tc.tnalg.MPSSpec.z2(4, chi=4, parity=2)
 
 
+def test_automatic_u1_profile_is_center_enhanced(jaxb):
+    """The automatic U(1) layout uses a centered nonuniform quota profile."""
+
+    spec = tc.tnalg.MPSSpec.u1(32, total_charge=16, chi=32)
+    assert spec.bond_sectors is not None
+    assert spec.bond_sectors[16] == (
+        ((6,), 2),
+        ((7,), 8),
+        ((8,), 12),
+        ((9,), 8),
+        ((10,), 2),
+    )
+    assert max(spec.bond_dims) == 32
+
+
+def test_u1_accepts_explicit_bond_sector_dimensions(jaxb):
+    """The U(1) convenience constructor accepts full per-bond quotas."""
+
+    spec = tc.tnalg.MPSSpec.u1(
+        4,
+        total_charge=2,
+        chi=8,
+        bond_sectors=(
+            {0: 1},
+            {0: 1, 1: 1},
+            {0: 1, 1: 2, 2: 1},
+            {1: 1, 2: 1},
+            {2: 1},
+        ),
+    )
+    assert spec.bond_sectors is not None
+    assert spec.bond_sectors[2] == (((0,), 1), ((1,), 2), ((2,), 1))
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        tc.tnalg.MPSSpec.u1(
+            4,
+            total_charge=2,
+            chi=8,
+            charge_sectors=3,
+            bond_sectors=({0: 1},) * 5,
+        )
+
+
 def test_cyclic_charge_and_invalid_sector_capacity(jaxb):
     """Z3 arithmetic normalizes charges and rejects unreachable quotas."""
 
