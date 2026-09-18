@@ -1,0 +1,91 @@
+{
+  "seeds": {
+    "1": 100,
+    "4": 1500
+  },
+  "initial_state": "independently regenerated author SR state",
+  "precision": "complex128 / float64",
+  "platform": "Linux",
+  "python": "3.12.3",
+  "backend": "jax",
+  "tensorcircuit": "1.9.1",
+  "device": "cpu",
+  "versions": {
+    "jax": "0.9.1",
+    "jaxlib": "0.9.1",
+    "numpy": "2.4.3",
+    "scipy": "1.17.1",
+    "matplotlib": "3.10.8"
+  },
+  "peak_process_rss_mib": 733.21875,
+  "runs": [
+    {
+      "nsites": 1,
+      "q": 0.0,
+      "samples": 8192,
+      "seed": 100,
+      "snr_cutoff": 2.0,
+      "snr_convention": "author force-row normalization",
+      "integrator": "fixed RK45",
+      "dt": 0.001,
+      "final_time": 2.0,
+      "steps": 2000,
+      "compile_and_first_trajectory_seconds": 54.87189081311226,
+      "trajectory_seconds": 47.97711706813425,
+      "max_observable_error": 1.75680248258063,
+      "rms_observable_error": 0.7226996917765626,
+      "max_infidelity": 0.8784533856117184
+    },
+    {
+      "nsites": 1,
+      "q": 0.5,
+      "samples": 8192,
+      "seed": 100,
+      "snr_cutoff": 2.0,
+      "snr_convention": "author force-row normalization",
+      "integrator": "fixed RK45",
+      "dt": 0.001,
+      "final_time": 2.0,
+      "steps": 2000,
+      "compile_and_first_trajectory_seconds": 58.17070590239018,
+      "trajectory_seconds": 53.31405415851623,
+      "max_observable_error": 4.163336342344337e-15,
+      "rms_observable_error": 2.0382051402765728e-15,
+      "max_infidelity": 1.1102230246251565e-15
+    },
+    {
+      "nsites": 4,
+      "q": 0.0,
+      "samples": 16384,
+      "seed": 1500,
+      "snr_cutoff": 2.0,
+      "snr_convention": "author force-row normalization",
+      "integrator": "Heun",
+      "dt": 0.001,
+      "final_time": 6.0,
+      "steps": 6000,
+      "compile_and_first_trajectory_seconds": 227.16485853958875,
+      "trajectory_seconds": 221.46329662762582,
+      "max_observable_error": 0.49857200731500745,
+      "rms_observable_error": 0.2367723182913815,
+      "max_infidelity": 0.999997442841
+    },
+    {
+      "nsites": 4,
+      "q": 0.5,
+      "samples": 16384,
+      "seed": 1500,
+      "snr_cutoff": 2.0,
+      "snr_convention": "author force-row normalization",
+      "integrator": "Heun",
+      "dt": 0.001,
+      "final_time": 6.0,
+      "steps": 6000,
+      "compile_and_first_trajectory_seconds": 208.35664605442435,
+      "trajectory_seconds": 222.27479286212474,
+      "max_observable_error": 4.414700861099519e-06,
+      "rms_observable_error": 1.6685436482223889e-06,
+      "max_infidelity": 1.3539658161310086e-07
+    }
+  ]
+}
