@@ -6,6 +6,14 @@
 
 - Add `tensorcircuit.tnalg`: fixed-shape JAX MPS TEBD, one-site TDVP, and one-site DMRG with dense and Abelian block-buffer PyTree states, pure tensor Pauli-string MPO builders, checkpoints, and legacy MPS interoperability.
 
+### Fixed
+
+- Fix exact-diagonalization evolution for complex Hermitian Hamiltonians.
+
+- Align ODE scalar-time and real-initial-state handling, and align the standard and scan-based Krylov implementations at the minimum subspace dimension.
+
+- Support complex arguments in the JAX Bessel recurrence and use the absolute time magnitude when estimating the Chebyshev expansion order.
+
 ## v1.9.1
 
 ### Fixed

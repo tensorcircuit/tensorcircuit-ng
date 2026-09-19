@@ -198,7 +198,10 @@ It provides exact results but is limited to small systems (typically <16 qubits)
 
 .. note::
 
-    For real time evolution, the time should be chosen as ``times = 1.j * tc.backend.convert_to_tensor([0.0, 0.5, 1.0, 2.0])``
+    Unlike the other evolution methods in this section, ``ed_evol`` evaluates
+    ``exp(-t * H)`` and normalizes each output state. Real-valued times therefore
+    produce imaginary-time evolution. For real-time evolution, use
+    ``times = 1.j * tc.backend.convert_to_tensor([0.0, 0.5, 1.0, 2.0])``.
 
 
 **Krylov Subspace Methods:**
@@ -241,6 +244,7 @@ The :py:func:`tensorcircuit.timeevol.krylov_evol` function implements this appro
         return tc.backend.real(mz)
 
 The Krylov method constructs a small subspace that captures the essential dynamics, making it possible to simulate larger systems efficiently. 
+It uses Hermitian Lanczos iteration and therefore requires a Hermitian Hamiltonian.
 It supports both standard and scan-based jit-friendly implementations:
 
 .. code-block:: python
@@ -308,7 +312,7 @@ autodiff:
 .. note::
 
     The Chebyshev method requires a backend with a Bessel function
-    implementation and is currently not supported on the TensorFlow backend.
+    implementation and is currently supported only on the NumPy and JAX backends.
     On JAX, autodiff of the evolution time uses an analytic Bessel derivative,
     including in the short-time / narrow-spectrum regime.
 

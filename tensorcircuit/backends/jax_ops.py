@@ -413,10 +413,14 @@ def _bessel_jv_scalar_rescaled(k: int, M: int, x_val: jnp.ndarray) -> jnp.ndarra
     Miller recurrence with dynamic rescaling for Jv(k, x_val).
     Operates elementwise on x_val (broadcasts over array inputs).
     """
+    x_val = jnp.asarray(x_val) * 1.0
+
     # ``1e250`` overflows to inf in float32, which disables the rescaling
     # branch entirely. Keep the established float64 threshold and use a safe
     # float32 value before the recurrence can overflow.
-    rescale_threshold = 1e20 if x_val.dtype == jnp.float32 else 1e250
+    real_dtype = jnp.real(x_val).dtype
+    rescale_threshold = 1e20 if real_dtype == jnp.float32 else 1e250
+    one = jnp.asarray(1.0, dtype=x_val.dtype)
 
     # Define the body of the recurrence loop
     def recurrence_body(i, state):  # type: ignore
@@ -445,7 +449,7 @@ def _bessel_jv_scalar_rescaled(k: int, M: int, x_val: jnp.ndarray) -> jnp.ndarra
                 f_m_val / scale_factor,
                 f_m_p1_val / scale_factor,
                 f_vals_arr / scale_factor,
-                1.0,
+                one,
             )
 
         def no_rescale_branch(vals):  # type: ignore
@@ -469,9 +473,9 @@ def _bessel_jv_scalar_rescaled(k: int, M: int, x_val: jnp.ndarray) -> jnp.ndarra
         return (f_m_m1_effective, f_m_rescaled, f_vals_updated)
 
     # Initial state for the recurrence loop
-    f_m_p1_init = 0.0
-    f_m_init = 1e-30  # Start with a very small number
-    f_vals_init = jnp.zeros(M + 1).at[M].set(f_m_init)
+    f_m_p1_init = jnp.asarray(0.0, dtype=x_val.dtype)
+    f_m_init = jnp.asarray(1e-30, dtype=x_val.dtype)
+    f_vals_init = jnp.zeros(M + 1, dtype=x_val.dtype).at[M].set(f_m_init)
 
     # Use jax.lax.fori_loop for the backward recurrence
     # Loop from i = 0 to M-1 (total M iterations)
@@ -486,12 +490,16 @@ def _bessel_jv_scalar_rescaled(k: int, M: int, x_val: jnp.ndarray) -> jnp.ndarra
     norm_const = f_vals[0] + 2.0 * even_sum
 
     # Handle division by near-zero normalization constant
-    norm_const_safe = jnp.where(jnp.abs(norm_const) < 1e-12, 1e-12, norm_const)
+    norm_const_safe = jnp.where(
+        jnp.abs(norm_const) < 1e-12,
+        jnp.asarray(1e-12, dtype=x_val.dtype),
+        norm_const,
+    )
 
     # Conditional logic for x_val close to zero
     def x_is_zero_case() -> jnp.ndarray:
         # For x=0, J_0(0)=1, J_k(0)=0 for k>0
-        return jnp.zeros(k).at[0].set(1.0)
+        return jnp.zeros(k, dtype=x_val.dtype).at[0].set(one)
 
     def x_is_not_zero_case() -> jnp.ndarray:
         return f_vals[:k] / norm_const_safe  # type: ignore

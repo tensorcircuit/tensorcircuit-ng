@@ -3,6 +3,7 @@ import os
 import pytest
 import numpy as np
 from pytest_lazyfixture import lazy_fixture as lf
+from scipy.linalg import expm
 from scipy.sparse.linalg import expm_multiply as scipy_expm_multiply
 
 thisfile = os.path.abspath(__file__)
@@ -265,6 +266,27 @@ def test_ode_evol_global_raw_mode(highp, jaxb):
         ode_backend="diffrax",
     )
     np.testing.assert_allclose(states_raw, states_hamiltonian, atol=1e-6)
+
+
+def test_ode_real_initial_state_and_scalar_circuit_time(highp, jaxb):
+    h_np = np.array([[0.0, 1.0], [1.0, 0.0]])
+    h = tc.backend.convert_to_tensor(h_np)
+
+    def hamiltonian_func(_):
+        return h
+
+    physical_time = 0.1
+    psi0 = tc.backend.convert_to_tensor([1.0, 0.0])
+    states = tc.timeevol.ode_evol_global(hamiltonian_func, psi0, [0.0, physical_time])
+    expected = expm(-1.0j * physical_time * h_np) @ np.array([1.0, 0.0])
+    np.testing.assert_allclose(states[-1], expected, atol=1e-8, rtol=1e-8)
+
+    circuit = tc.timeevol.evol_global(
+        tc.Circuit(1),
+        hamiltonian_func,
+        tc.backend.convert_to_tensor(physical_time),
+    )
+    np.testing.assert_allclose(circuit.state(), expected, atol=1e-8, rtol=1e-8)
 
 
 def test_ode_evol_jit_grad(highp, jaxb):
@@ -539,6 +561,71 @@ def test_hamiltonian_evol_imaginary_time(backend):
     np.testing.assert_allclose(states[-1], expected_ground_state, atol=1e-3)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+@pytest.mark.parametrize("imaginary_time", [False, True])
+def test_time_evolution_methods_agree(backend, highp, imaginary_time):
+    """Compare short real- and imaginary-time evolution with a direct exponential."""
+    h_np = np.array([[0.4, 0.2 - 0.3j], [0.2 + 0.3j, -0.1]], dtype=np.complex128)
+    psi_np = np.array([1.0, -0.2 + 0.4j], dtype=np.complex128)
+    psi_np /= np.linalg.norm(psi_np)
+    evolution_time = 1.0
+    h = tc.backend.convert_to_tensor(h_np)
+    psi0 = tc.backend.convert_to_tensor(psi_np)
+
+    if imaginary_time:
+        method_time = -1.0j * evolution_time
+        ed_time = evolution_time
+        expected = expm(-evolution_time * h_np) @ psi_np
+    else:
+        method_time = evolution_time
+        ed_time = 1.0j * evolution_time
+        expected = expm(-1.0j * evolution_time * h_np) @ psi_np
+
+    trace_h = np.trace(h_np)
+    shifted_h = h_np - trace_h / h_np.shape[0] * np.eye(h_np.shape[0])
+    taylor_degree, scaling_steps = tc.timeevol.estimate_expm_multiply_parameters(
+        abs(method_time), np.linalg.norm(shifted_h, ord=1)
+    )
+    eigenvalues = np.linalg.eigvalsh(h_np)
+    bounds = (float(eigenvalues[-1] + 0.1), float(eigenvalues[0] - 0.1))
+    chebyshev_terms = tc.timeevol.estimate_k(method_time, bounds)
+    bessel_iterations = tc.timeevol.estimate_M(method_time, bounds, chebyshev_terms)
+
+    ed_state = tc.timeevol.ed_evol(h, psi0, tc.backend.convert_to_tensor([ed_time]))[0]
+    states = {
+        "krylov": tc.timeevol.krylov_evol(
+            h,
+            psi0,
+            tc.backend.convert_to_tensor([method_time]),
+            subspace_dimension=2,
+            scan_impl=True,
+        )[0],
+        "expm_multiply": tc.timeevol.expm_multiply_evol(
+            h,
+            psi0,
+            method_time,
+            m=taylor_degree,
+            s=scaling_steps,
+            traceH=trace_h,
+        ),
+        "chebyshev": tc.timeevol.chebyshev_evol(
+            h,
+            psi0,
+            method_time,
+            bounds,
+            chebyshev_terms,
+            bessel_iterations,
+        ),
+    }
+
+    normalized_expected = expected / np.linalg.norm(expected)
+    np.testing.assert_allclose(ed_state, normalized_expected, atol=1e-12, rtol=1e-12)
+    for state in states.values():
+        np.testing.assert_allclose(state, expected, atol=1e-12, rtol=1e-12)
+        normalized_state = state / tc.backend.norm(state)
+        np.testing.assert_allclose(normalized_state, ed_state, atol=1e-12, rtol=1e-12)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_krylov_evol_heisenberg_6_sites(backend):
     """Test krylov_evol with Heisenberg Hamiltonian on 6 sites"""
@@ -632,6 +719,21 @@ def test_krylov_evol_mvp(backend):
     states_matrix = tc.timeevol.krylov_evol(h, psi0, times, subspace_dimension=2)
     states_mvp = tc.timeevol.krylov_evol(mvp, psi0, times, subspace_dimension=2)
     np.testing.assert_allclose(states_mvp, states_matrix, atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_krylov_evol_minimum_subspace(backend):
+    h = tc.backend.cast(tc.gates.z().tensor, tc.dtypestr)
+    psi0 = tc.backend.convert_to_tensor([1.0 + 0.0j, 1.0 + 0.0j])
+    psi0 = psi0 / tc.backend.norm(psi0)
+    times = tc.backend.convert_to_tensor([0.2])
+
+    state = tc.timeevol.krylov_evol(h, psi0, times, 1)
+    state_scan = tc.timeevol.krylov_evol(h, psi0, times, 1, scan_impl=True)
+    np.testing.assert_allclose(state, state_scan, atol=1e-6)
+
+    with pytest.raises(ValueError, match="subspace_dimension must be positive"):
+        tc.timeevol.krylov_evol(h, psi0, times, 0)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -1125,6 +1227,9 @@ def test_estimate_k():
     # a = 1.0, t = 300.0, tau = 300.0
     # max(int(1.1 * 300), int(300 + 20)) = max(330, 320) = 330
     assert tc.timeevol.estimate_k(300.0, (2.0, 0.0)) == 330
+
+    # Expansion order depends on the magnitude, not the direction, of time.
+    assert tc.timeevol.estimate_k(-100.0, (2.0, 0.0)) == 120
 
 
 def test_estimate_M():

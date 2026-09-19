@@ -165,6 +165,15 @@ def test_backend_jv_float32_large_recurrence(jaxb):
     np.testing.assert_allclose(f_vals, expected, atol=1e-5)
 
 
+@pytest.mark.parametrize("z", [-0.7j, 0.4 - 0.7j])
+def test_backend_jv_complex(jaxb, highp, z):
+    """The JAX Miller recurrence supports complex Bessel arguments."""
+    k = 20
+    f_vals = tc.backend.special_jv(k, tc.backend.convert_to_tensor(z), 80)
+    expected = scipy.special.jv(np.arange(k), z)
+    np.testing.assert_allclose(f_vals, expected, atol=1e-12, rtol=1e-12)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
 def test_backend_jaxy_scan(backend):
     def body_fun(carry, x):

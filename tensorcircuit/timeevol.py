@@ -66,8 +66,8 @@ def lanczos_iteration_scan(
     Use Lanczos algorithm to construct orthogonal basis and projected Hamiltonian
     of Krylov subspace, using `tc.backend.scan` for JIT compatibility.
 
-    :param hamiltonian: Sparse matrix, dense matrix, LinearOperator, or MVP callable
-        implementing ``H @ state``.
+    :param hamiltonian: Hermitian sparse matrix, dense matrix, LinearOperator, or
+        MVP callable implementing ``H @ state``.
     :type hamiltonian: Any
     :param initial_vector: Initial quantum state vector
     :type initial_vector: Tensor
@@ -76,6 +76,10 @@ def lanczos_iteration_scan(
     :return: Tuple containing (basis matrix, projected Hamiltonian)
     :rtype: Tuple[Tensor, Tensor]
     """
+    if subspace_dimension < 1:
+        raise ValueError("subspace_dimension must be positive.")
+
+    initial_vector = backend.cast(initial_vector, dtypestr)
     state_size = backend.shape_tuple(initial_vector)[0]
     hamiltonian = aslinearoperator(
         hamiltonian, shape=(state_size, state_size), dtype=dtypestr
@@ -190,8 +194,8 @@ def lanczos_iteration(
     Use Lanczos algorithm to construct orthogonal basis and projected Hamiltonian
     of Krylov subspace.
 
-    :param hamiltonian: Sparse matrix, dense matrix, LinearOperator, or MVP callable
-        implementing ``H @ state``.
+    :param hamiltonian: Hermitian sparse matrix, dense matrix, LinearOperator, or
+        MVP callable implementing ``H @ state``.
     :type hamiltonian: Any
     :param initial_vector: Initial quantum state vector
     :type initial_vector: Tensor
@@ -200,6 +204,9 @@ def lanczos_iteration(
     :return: Tuple containing (basis matrix, projected Hamiltonian)
     :rtype: Tuple[Tensor, Tensor]
     """
+    if subspace_dimension < 1:
+        raise ValueError("subspace_dimension must be positive.")
+
     vector = initial_vector
     vector = backend.cast(vector, dtypestr)
 
@@ -255,7 +262,11 @@ def lanczos_iteration(
     # Use vectorized method to construct tridiagonal matrix at once
     alphas_tensor = backend.stack(alphas)
     # Only use first krylov_dim-1 beta values to construct off-diagonal
-    betas_tensor = backend.stack(betas[:-1]) if len(betas) > 1 else backend.stack([])
+    betas_tensor = (
+        backend.stack(betas[:-1])
+        if len(betas) > 1
+        else backend.zeros([0], dtype=dtypestr)
+    )
 
     alphas_tensor = backend.cast(alphas_tensor, dtype=dtypestr)
     if len(betas_tensor) > 0:
@@ -284,12 +295,12 @@ def krylov_evol(
     """
     Perform quantum state time evolution using Krylov subspace method.
 
-    :param hamiltonian: Sparse matrix, dense matrix, LinearOperator, or MVP callable
-        implementing ``H @ state``.
+    :param hamiltonian: Hermitian sparse matrix, dense matrix, LinearOperator, or
+        MVP callable implementing ``H @ state``.
     :type hamiltonian: Any
     :param initial_state: Initial quantum state
     :type initial_state: Tensor
-    :param times: List of time points
+    :param times: List of time points. The propagator is ``exp(-1j * t * H)``.
     :type times: Tensor
     :param subspace_dimension: Krylov subspace dimension
     :type subspace_dimension: int
@@ -486,7 +497,10 @@ def hamiltonian_evol(
 ) -> Tensor:
     """
     Fast implementation of time independent Hamiltonian evolution using eigendecomposition.
-    By default, performs imaginary time evolution.
+
+    Unlike the other evolution methods in this module, this function evaluates
+    ``exp(-t * H)`` and normalizes every output state. Real ``t`` therefore means
+    imaginary-time evolution; use ``t=1j * time`` for real-time evolution.
 
     :param h: Time-independent Hamiltonian matrix
     :type h: Tensor
@@ -529,17 +543,17 @@ def hamiltonian_evol(
     psi0 = backend.cast(psi0, dtypestr)
     es, u = backend.eigh(h)
     u = backend.cast(u, dtypestr)
-    utpsi0 = backend.convert_to_tensor(
-        backend.transpose(u) @ backend.reshape(psi0, [-1, 1])
+    eigenbasis_psi0 = backend.convert_to_tensor(
+        backend.conj(backend.transpose(u)) @ backend.reshape(psi0, [-1, 1])
     )  # in case np.matrix...
-    utpsi0 = backend.reshape(utpsi0, [-1])
+    eigenbasis_psi0 = backend.reshape(eigenbasis_psi0, [-1])
     es = backend.cast(es, dtypestr)
     tlist = backend.cast(backend.convert_to_tensor(tlist), dtypestr)
 
     @backend.jit
     def _evol(t: Tensor) -> Tensor:
-        ebetah_utpsi0 = backend.exp(-t * es) * utpsi0
-        psi_exact = backend.conj(u) @ backend.reshape(ebetah_utpsi0, [-1, 1])
+        evolved_eigenbasis = backend.exp(-t * es) * eigenbasis_psi0
+        psi_exact = u @ backend.reshape(evolved_eigenbasis, [-1, 1])
         psi_exact = backend.reshape(psi_exact, [-1])
         psi_exact = psi_exact / backend.norm(psi_exact)
         if callback is None:
@@ -564,7 +578,10 @@ def _solve_ode(
     ode_backend = solver_kws.get("ode_backend", "jaxode")
     max_steps = solver_kws.get("max_steps", 4096)
 
+    s = backend.cast(s, dtype=dtypestr)
     ts = backend.convert_to_tensor(times)
+    if not backend.shape_tuple(ts):
+        ts = backend.stack([backend.zeros_like(ts), ts])
     ts = backend.cast(ts, dtype=rdtypestr)
 
     if ode_backend == "jaxode":
@@ -610,11 +627,11 @@ def _solve_ode(
         s1_real = diffrax.diffeqsolve(
             terms=term,
             solver=solver_obj,
-            t0=times[0],
-            t1=times[-1],
+            t0=ts[0],
+            t1=ts[-1],
             dt0=dt0,
             y0=s_real,
-            saveat=diffrax.SaveAt(ts=times),
+            saveat=diffrax.SaveAt(ts=ts),
             args=args,
             stepsize_controller=diffrax.PIDController(rtol=rtol, atol=atol),
             max_steps=max_steps,
@@ -629,11 +646,11 @@ def _solve_ode(
     s1 = diffrax.diffeqsolve(
         terms=term,
         solver=solver_obj,
-        t0=times[0],
-        t1=times[-1],
+        t0=ts[0],
+        t1=ts[-1],
         dt0=dt0,
         y0=s,
-        saveat=diffrax.SaveAt(ts=times),
+        saveat=diffrax.SaveAt(ts=ts),
         args=args,
         stepsize_controller=diffrax.PIDController(rtol=rtol, atol=atol),
         max_steps=max_steps,
@@ -664,7 +681,8 @@ def ode_evol_local(
     :type hamiltonian: Callable[..., Tensor]
     :param initial_state: The initial quantum state vector of the full system.
     :type initial_state: Tensor
-    :param times: Time points for which to compute the evolution. Should be a 1D array of times.
+    :param times: Real time points for which to compute the evolution. A scalar
+        denotes the final time of an interval starting at zero.
     :type times: Tensor
     :param index: Indices of qubits where the Hamiltonian is applied.
     :type index: Sequence[int]
@@ -752,7 +770,8 @@ def ode_evol_global(
     :type hamiltonian: Callable[..., Tensor]
     :param initial_state: The initial quantum state vector.
     :type initial_state: Tensor
-    :param times: Time points for which to compute the evolution. Should be a 1D array of times.
+    :param times: Real time points for which to compute the evolution. A scalar
+        denotes the final time of an interval starting at zero.
     :type times: Tensor
     :param callback: Optional function to apply to the state at each time step.
     :type callback: Optional[Callable[..., Tensor]]
@@ -836,8 +855,6 @@ def evol_local(
     # TODO(@refraction-ray): qubit-only; see `ode_evol_local` for the qudit
     # rework needed here (log2 site counting).
     n = int(np.log2(s.shape[-1]) + 1e-7)
-    if isinstance(t, float):
-        t = backend.stack([0.0, t])
     s1 = ode_evol_local(h_fun, s, t, index, None, *args, **solver_kws)
     return type(c)(n, inputs=s1[-1])
 
@@ -863,8 +880,6 @@ def evol_global(
     """
     s = c.state()
     n = c._nqubits
-    if isinstance(t, float):
-        t = backend.stack([0.0, t])
     s1 = ode_evol_global(h_fun, s, t, None, *args, **solver_kws)
     return type(c)(n, inputs=s1[-1])
 
@@ -899,7 +914,7 @@ def chebyshev_evol(
     :return: Evolved state
     :rtype: Tensor
     """
-    # TODO(@refraction-ray): no support for tf backend as bessel function has no implementation
+    # Only the NumPy and JAX backends implement the required Bessel function.
     E_max, E_min = spectral_bounds
     if E_max <= E_min:
         raise ValueError("E_max must be > E_min.")
@@ -979,7 +994,7 @@ def estimate_k(t: float, spectral_bounds: Tuple[float, float]) -> int:
     """
     estimate k for chebyshev expansion
 
-    :param t: time
+    :param t: time; its absolute magnitude determines the expansion order
     :type t: float
     :param spectral_bounds: spectral bounds (Emax, Emin)
     :type spectral_bounds: Tuple[float, float]
@@ -988,7 +1003,7 @@ def estimate_k(t: float, spectral_bounds: Tuple[float, float]) -> int:
     """
     E_max, E_min = spectral_bounds
     a = (E_max - E_min) / 2.0
-    tau = a * t  # tau is now a scalar
+    tau = abs(a * t)
     return max(int(1.1 * tau), int(tau + 20))
 
 
