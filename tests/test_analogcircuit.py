@@ -272,3 +272,62 @@ def test_analog_circuit_consistency(jaxb):
     ac5.rx(0, theta=tc.array_to_tensor(0.5))
     ac5.append(ac5.inverse())
     np.testing.assert_allclose(tc.backend.numpy(ac5.amplitude("00")), 1.0, atol=1e-4)
+
+
+@pytest.mark.parametrize("time", [1.0, [0.4, 1.3]])
+@pytest.mark.parametrize("index", [None, [0]])
+def test_analog_circuit_time_dependent_inverse(jaxb, highp, time, index):
+    x, z = tc.gates.x().tensor, tc.gates.z().tensor
+
+    def hamiltonian(t):
+        return (1 - t) * x + t * z
+
+    circuit = tc.AnalogCircuit(1)
+    circuit.add_analog_block(hamiltonian, time, index, rtol=1e-10, atol=1e-10)
+    circuit.append(circuit.inverse())
+    np.testing.assert_allclose(circuit.state(), [1.0, 0.0], atol=1e-8, rtol=1e-8)
+
+
+def test_analog_circuit_time_dependent_inverse_multiple_blocks(jaxb, highp):
+    x, y, z = tc.gates.x().tensor, tc.gates.y().tensor, tc.gates.z().tensor
+
+    def first_hamiltonian(t):
+        return (1 - t) * x + t * z
+
+    def second_hamiltonian(t):
+        return tc.backend.cos(t) * y + tc.backend.sin(t) * z
+
+    circuit = tc.AnalogCircuit(2)
+    circuit.h(0)
+    circuit.cnot(0, 1)
+    circuit.add_analog_block(first_hamiltonian, [0.2, 0.9], [1], rtol=1e-10, atol=1e-10)
+    circuit.rx(0, theta=0.3)
+    circuit.cnot(1, 0)
+    circuit.add_analog_block(
+        second_hamiltonian, [1.1, 1.6], [0], rtol=1e-10, atol=1e-10
+    )
+    circuit.s(1)
+    circuit.append(circuit.inverse())
+    np.testing.assert_allclose(
+        circuit.state(), [1.0, 0.0, 0.0, 0.0], atol=1e-8, rtol=1e-8
+    )
+
+
+def test_analog_circuit_time_dependent_inverse_ad_jit(jaxb, highp):
+    def cost_fn(strength):
+        def hamiltonian(t):
+            x, z = tc.gates.x().tensor, tc.gates.z().tensor
+            return strength * (1 - t) * x + t * z
+
+        circuit = tc.AnalogCircuit(1)
+        circuit.add_analog_block(hamiltonian, [0.2, 1.1], rtol=1e-9, atol=1e-9)
+        return tc.backend.real(circuit.inverse().expectation_ps(z=[0]))
+
+    strength = tc.backend.convert_to_tensor(0.7)
+    value, gradient = tc.backend.jit(tc.backend.value_and_grad(cost_fn))(strength)
+    epsilon = 1e-4
+    numerical_gradient = (cost_fn(strength + epsilon) - cost_fn(strength - epsilon)) / (
+        2 * epsilon
+    )
+    np.testing.assert_allclose(value, cost_fn(strength), atol=1e-8, rtol=1e-8)
+    np.testing.assert_allclose(gradient, numerical_gradient, atol=1e-6, rtol=1e-6)
