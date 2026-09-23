@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Check gate matrices before cancelling adjoint-named pairs in the simple compiler.
+
 - Fix time ordering in `AnalogCircuit.inverse()` for time-dependent Hamiltonians.
 
 - Fix exact-diagonalization evolution for complex Hermitian Hamiltonians.
