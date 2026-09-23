@@ -62,7 +62,7 @@ The same rule also applies to multi-qubit gates, such as ``c.cnot(0, 1)``.
 
 There are also highly customizable gates, two instances are:
 
-- ``c.exp1(0, 1, unitary=m, theta=0.2)`` which is for the exponential gate :math:`e^{i\theta m}` of any matrix m as long as :math:`m^2=1`.
+- ``c.exp1(0, 1, unitary=m, theta=0.2)`` which is for the exponential gate :math:`e^{-i\theta m}` of any matrix m as long as :math:`m^2=1`.
 
 - ``c.any(0, 1, unitary=m)`` which is for applying the unitary gate m on the circuit.
 
@@ -72,9 +72,9 @@ These two examples are flexible and support gates on any number of qubits.
 
 The most straightforward way to get the output from the circuit object is by getting the output wavefunction in vector form as ``c.state()``.
 
-For bitstring sampling, we have ``c.perfect_sampling()`` which returns the bitstring and the corresponding probability amplitude.
+For bitstring sampling, we have ``c.perfect_sampling()`` which returns the bitstring and the corresponding probability.
 
-To measure part of the qubits, we can use ``c.measure(0, 1)``, if we want to know the corresponding probability of the measurement output, try ``c.measure(0, 1, with_prob=True)``. The measure API is by default non-jittable, but we also have a jittable version as ``c.measure_jit(0, 1)``.
+To measure part of the qubits, we can use ``c.measure(0, 1)``, if we want to know the corresponding probability of the measurement output, try ``c.measure(0, 1, with_prob=True)``. ``measure`` is an alias of ``measure_jit``; both support JIT compilation.
 
 The measurement and sampling utilize advanced algorithms based on tensornetwork and thus require no knowledge or space for the full wavefunction.
 

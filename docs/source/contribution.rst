@@ -265,7 +265,7 @@ And from GitHub page choose draft a release from tag.
     export VERSION=0.x.y
     twine upload dist/tensorcircuit_ng-${VERSION}-py3-none-any.whl dist/tensorcircuit_ng-${VERSION}.tar.gz
 
-For upload authetication via token, please refer `this tutorial <https://kynan.github.io/blog/2020/05/23/how-to-upload-your-package-to-the-python-package-index-pypi-test-server>`__ .
+For upload authentication via token, please refer `this tutorial <https://kynan.github.io/blog/2020/05/23/how-to-upload-your-package-to-the-python-package-index-pypi-test-server>`__ .
 Latest version of twine direct accepts token.
 
 
@@ -283,5 +283,5 @@ Make sure the DockerHub account is logged in via ``docker login``.
 
 **Binder Release**
 
-One may need to update the tensorcirucit version for binder environment by pushing new commit in refraction-ray/tc-env repo with new version update in its ``requriements.txt``.
+One may need to update the tensorcircuit version for binder environment by pushing new commit in refraction-ray/tc-env repo with new version update in its ``requirements.txt``.
 See `mybind setup <https://discourse.jupyter.org/t/tip-speed-up-binder-launches-by-pulling-github-content-in-a-binder-link-with-nbgitpuller/922>`_ for speed up via nbgitpuller. 
