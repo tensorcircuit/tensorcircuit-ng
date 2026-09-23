@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Fix time ordering in `AnalogCircuit.inverse()` for time-dependent Hamiltonians.
+
 - Fix exact-diagonalization evolution for complex Hermitian Hamiltonians.
 
 - Align ODE scalar-time and real-initial-state handling, and align the standard and scan-based Krylov implementations at the minimum subspace dimension.

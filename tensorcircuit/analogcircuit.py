@@ -208,8 +208,8 @@ class AnalogCircuit:
     def inverse(self) -> "AnalogCircuit":
         """
         Inverse the hybrid circuit, including digital gate sequences and analog evolutions.
-        Analog blocks are inverted by negating the Hamiltonian (H -> -H), which gives
-        the physical inverse e^{+iHT} of the evolution e^{-iHT}.
+        Each analog block uses ``-H(t_start + t_end - t)`` on its original time
+        interval, reversing both the Hamiltonian sign and its time ordering.
 
         :return: The inversed AnalogCircuit.
         :rtype: AnalogCircuit
@@ -228,9 +228,10 @@ class AnalogCircuit:
         # 2. Iterate backwards through analog blocks and preceding digital circuits
         for i in range(len(self.analog_blocks) - 1, -1, -1):
             block = self.analog_blocks[i]
-            # Negate the Hamiltonian for the inverse evolution:
-            # e^{-iHT} is inverted by e^{+iHT} = e^{-i(-H)T}
-            neg_ham = lambda t, _orig=block.hamiltonian_func: -_orig(t)
+            time_sum = backend.sum(block.time)
+            neg_ham = lambda t, _orig=block.hamiltonian_func, _ts=time_sum: -_orig(
+                _ts - t
+            )
             inv_block = AnalogBlock(
                 hamiltonian_func=neg_ham,
                 time=block.time,
