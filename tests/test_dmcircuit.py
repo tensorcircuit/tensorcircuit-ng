@@ -505,6 +505,97 @@ def test_dm_channel_qir_roundtrip(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("circuit_cls", [tc.DMCircuit, tc.DMCircuit_reference])
+def test_dm_copy_preserves_channels(backend, circuit_cls):
+    c = circuit_cls(1, dminputs=np.diag([0.2, 0.8]))
+    c.amplitudedamping(0, gamma=0.25, p=1.0, name="relaxation")
+    copied = c.copy()
+    expected = np.diag([0.4, 0.6])
+    np.testing.assert_allclose(tc.backend.numpy(c.state()), expected, atol=1e-6)
+    np.testing.assert_allclose(tc.backend.numpy(copied.state()), expected, atol=1e-6)
+    assert copied.to_qir()[0]["is_channel"] is True
+    assert copied.to_qir()[0]["name"] == "relaxation"
+    copied.x(0)
+    np.testing.assert_allclose(tc.backend.numpy(c.state()), expected, atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("circuit_cls", [tc.DMCircuit, tc.DMCircuit_reference])
+@pytest.mark.parametrize("operation", ["append", "prepend"])
+def test_dm_composition_preserves_channels(backend, circuit_cls, operation):
+    first = circuit_cls(1)
+    first.x(0)
+    first.amplitudedamping(0, gamma=0.25, p=1.0)
+    second = circuit_cls(1)
+    second.depolarizing(0, px=0.2, py=0.0, pz=0.0)
+    if operation == "append":
+        result = first.append(second)
+        assert result is first
+    else:
+        result = second.prepend(first)
+        assert result is second
+    np.testing.assert_allclose(
+        tc.backend.numpy(result.state()), np.diag([0.35, 0.65]), atol=1e-6
+    )
+    assert [d["name"] for d in result.to_qir()] == [
+        "x",
+        "amplitude_damping",
+        "depolarizing",
+    ]
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("circuit_cls", [tc.DMCircuit, tc.DMCircuit_reference])
+def test_dm_append_remaps_channels(backend, circuit_cls):
+    c = circuit_cls(2)
+    c.x(0)
+    c.amplitudedamping(0, gamma=0.25, p=1.0)
+    other = circuit_cls(1)
+    other.x(0)
+    other.amplitudedamping(0, gamma=0.5, p=1.0)
+    c.append(other, indices=[1])
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.state()), np.diag([0.125, 0.125, 0.375, 0.375]), atol=1e-6
+    )
+    assert list(c.to_qir()[-1]["index"]) == [1]
+    assert list(other.to_qir()[-1]["index"]) == [0]
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("circuit_cls", [tc.DMCircuit, tc.DMCircuit_reference])
+def test_dm_from_qir_can_omit_channels(backend, circuit_cls):
+    c = circuit_cls(1)
+    c.x(0)
+    c.amplitudedamping(0, gamma=0.5, p=1.0)
+    for kwargs in ({}, {"allow_channel": False}):
+        noiseless = circuit_cls.from_qir(c.to_qir(), c.circuit_param, **kwargs)
+        np.testing.assert_allclose(
+            tc.backend.numpy(noiseless.state()), np.diag([0.0, 1.0]), atol=1e-6
+        )
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("circuit_cls", [tc.DMCircuit, tc.DMCircuit_reference])
+@pytest.mark.parametrize("operation", ["copy", "append", "prepend"])
+def test_dm_channel_composition_jit_grad(backend, circuit_cls, operation):
+    def expectation(gamma):
+        c = circuit_cls(1)
+        c.x(0)
+        c.amplitudedamping(0, gamma=gamma, p=1.0)
+        if operation == "copy":
+            c = c.copy()
+        else:
+            c = getattr(c, operation)(circuit_cls(1))
+        return tc.backend.real(c.expectation_ps(z=[0]))
+
+    value, gradient = tc.backend.jit(tc.backend.value_and_grad(expectation))(
+        tc.backend.convert_to_tensor(0.25)
+    )
+    np.testing.assert_allclose(tc.backend.numpy(value), -0.5, atol=1e-5)
+    np.testing.assert_allclose(tc.backend.numpy(gradient), 2.0, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_dm_sexpps(backend):
     c = tc.DMCircuit(1, inputs=1 / np.sqrt(2) * np.array([1.0, 1.0j]))
     y = c.sample_expectation_ps(y=[0])

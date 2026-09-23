@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Preserve density-matrix noise channels in `copy()`, `append()`, and `prepend()`.
+
 - Fix time ordering in `AnalogCircuit.inverse()` for time-dependent Hamiltonians.
 
 - Fix exact-diagonalization evolution for complex Hermitian Hamiltonians.
