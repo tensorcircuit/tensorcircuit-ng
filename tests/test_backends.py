@@ -175,6 +175,73 @@ def test_backend_jv_complex(jaxb, highp, z):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_backend_scaled_modified_bessel(backend):
+    k = 64
+    x = 100.0
+    values = tc.backend.special_ive(k, tc.backend.convert_to_tensor(x), k + 64)
+    expected = scipy.special.ive(np.arange(k), x)
+    np.testing.assert_allclose(
+        np.asarray(tc.backend.numpy(values)), expected, atol=2e-6, rtol=2e-6
+    )
+
+
+def test_backend_scaled_modified_bessel_near_zero_values_and_jacobian(jaxb, highp):
+    order = 4
+    recurrence_length = 64
+    for x in (0.0, 1.0e-12, 1.0e-9, 1.0e-6):
+        x_tensor = tc.backend.convert_to_tensor(x, dtype=tc.rdtypestr)
+        values = tc.backend.special_ive(order, x_tensor, recurrence_length)
+        np.testing.assert_allclose(
+            values,
+            scipy.special.ive(np.arange(order), x),
+            atol=2e-12,
+            rtol=2e-12,
+        )
+
+    def component(x, index):
+        return tc.backend.special_ive(order, x, recurrence_length)[index]
+
+    zero = tc.backend.convert_to_tensor(0.0, dtype=tc.rdtypestr)
+    s0_gradient = tc.backend.jit(tc.backend.grad(lambda x: component(x, 0)))(zero)
+    s1_gradient = tc.backend.jit(tc.backend.grad(lambda x: component(x, 1)))(zero)
+    np.testing.assert_allclose(s0_gradient, -1.0, atol=2e-12)
+    np.testing.assert_allclose(s1_gradient, 0.5, atol=2e-12)
+
+    for x in (1.0e-12, 1.0e-9, 1.0e-6):
+        x_tensor = tc.backend.convert_to_tensor(x, dtype=tc.rdtypestr)
+        values = tc.backend.special_ive(order, x_tensor, recurrence_length + 1)
+        for index in (0, 1, 2):
+            derivative = tc.backend.jit(
+                tc.backend.grad(lambda q, index=index: component(q, index))
+            )(x_tensor)
+            if index == 0:
+                expected = values[1] - values[0]
+            else:
+                expected = 0.5 * (values[index - 1] + values[index + 1]) - values[index]
+            np.testing.assert_allclose(derivative, expected, atol=2e-12, rtol=2e-12)
+
+
+def test_backend_scaled_modified_bessel_order_one_jacobian(jaxb, highp):
+    recurrence_length = 32
+
+    def component(x):
+        return tc.backend.special_ive(1, x, recurrence_length)[0]
+
+    for x in (0.0, 0.3):
+        x_tensor = tc.backend.convert_to_tensor(x, dtype=tc.rdtypestr)
+        values = tc.backend.special_ive(1, x_tensor, recurrence_length)
+        np.testing.assert_allclose(
+            values,
+            scipy.special.ive(np.arange(1), x),
+            atol=2e-12,
+            rtol=2e-12,
+        )
+        derivative = tc.backend.jit(tc.backend.grad(component))(x_tensor)
+        expected = -1.0 if x == 0.0 else scipy.special.ive(1, x) - values[0]
+        np.testing.assert_allclose(derivative, expected, atol=2e-12, rtol=2e-12)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
 def test_backend_jaxy_scan(backend):
     def body_fun(carry, x):
         counter, decrementor = carry

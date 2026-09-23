@@ -329,6 +329,9 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def eigvalsh(self, a: Tensor) -> Tensor:
         return jnp.linalg.eigvalsh(a)
 
+    def fft(self, a: Tensor) -> Tensor:
+        return jnp.fft.fft(a)
+
     def lobpcg_standard(
         self,
         a: Union[Tensor, Callable[[Tensor], Tensor]],
@@ -516,6 +519,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         from .jax_ops import bessel_jv_jax_rescaled
 
         return bessel_jv_jax_rescaled(v, z, M)
+
+    def special_ive(self, v: int, x: Tensor, M: int) -> Tensor:
+        from .jax_ops import modified_bessel_ive_jax
+
+        return modified_bessel_ive_jax(v, x, M)
 
     def searchsorted(self, a: Tensor, v: Tensor, side: str = "left") -> Tensor:
         if not self.is_tensor(a):

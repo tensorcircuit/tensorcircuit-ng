@@ -889,7 +889,7 @@ def test_estimate_expm_multiply_parameters():
         tc.timeevol.estimate_expm_multiply_parameters(1.0, -1.0)
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_expm_multiply_evol_dense(backend, highp):
     h_np = np.array([[0.3, 0.7 - 0.2j], [0.7 + 0.2j, -0.1]], dtype=np.complex128)
     psi_np = np.array([1.0 + 0.0j, -0.2 + 0.4j], dtype=np.complex128)
@@ -1243,3 +1243,57 @@ def test_estimate_M():
     # M1 = max(20, 0) + 15 * 0 = 20
     # M = max(20, 20 + 30) = 50
     assert tc.timeevol.estimate_M(0.0, (1.0, -1.0), 20) == 50
+
+
+def test_lanczos_iteration_compatibility_wrappers(npb):
+    hamiltonian = np.diag(np.array([-0.3, 0.7], dtype=np.complex64))
+    vector = np.array([1.0, 0.2j], dtype=np.complex64)
+    basis, projected = tc.timeevol.lanczos_iteration(
+        hamiltonian, vector, subspace_dimension=2
+    )
+    scan_basis, scan_projected = tc.timeevol.lanczos_iteration_scan(
+        hamiltonian, vector, subspace_dimension=2
+    )
+    assert tc.backend.shape_tuple(basis) == (2, 2)
+    assert tc.backend.shape_tuple(projected) == (2, 2)
+    np.testing.assert_allclose(basis, scan_basis, atol=2e-5)
+    np.testing.assert_allclose(projected, scan_projected, atol=2e-5)
+
+
+def test_shared_matrixfunc_configs_preserve_timeevol(npb):
+    h = np.array([[0.3, 0.1 - 0.2j], [0.1 + 0.2j, -0.4]], dtype=np.complex64)
+    state = np.array([1.0, 0.2 + 0.1j], dtype=np.complex64)
+    state /= np.linalg.norm(state)
+    times = np.array([0.0, 0.4])
+
+    legacy_krylov = tc.timeevol.krylov_evol(
+        h, state, times, subspace_dimension=2, scan_impl=False
+    )
+    config_krylov = tc.timeevol.krylov_evol(
+        h, state, times, config=tc.matrixfunc.KrylovConfig(2)
+    )
+    np.testing.assert_allclose(legacy_krylov, config_krylov, atol=2e-5)
+
+    legacy_chebyshev = tc.timeevol.chebyshev_evol(h, state, 0.4, (0.6, -0.7), 32, 64)
+    config_chebyshev = tc.timeevol.chebyshev_evol(
+        h,
+        state,
+        0.4,
+        config=tc.matrixfunc.ChebyshevConfig(32, (-0.7, 0.6)),
+    )
+    np.testing.assert_allclose(legacy_chebyshev, config_chebyshev, atol=2e-5)
+
+    legacy_taylor = tc.timeevol.expm_multiply_evol(h, state, 0.4, m=20, s=2)
+    config_taylor = tc.timeevol.expm_multiply_evol(
+        h, state, 0.4, config=tc.matrixfunc.TaylorConfig(20, 2)
+    )
+    np.testing.assert_allclose(legacy_taylor, config_taylor, atol=2e-5)
+
+    with pytest.raises(ValueError):
+        tc.timeevol.krylov_evol(
+            h,
+            state,
+            times,
+            subspace_dimension=2,
+            config=tc.matrixfunc.KrylovConfig(2),
+        )

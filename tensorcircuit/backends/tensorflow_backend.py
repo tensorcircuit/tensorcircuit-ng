@@ -517,6 +517,11 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def eigvalsh(self, a: Tensor) -> Tensor:
         return tf.linalg.eigvalsh(a)
 
+    def fft(self, a: Tensor) -> Tensor:
+        if not a.dtype.is_complex:
+            a = tf.cast(a, tf.complex128 if a.dtype == tf.float64 else tf.complex64)
+        return tf.signal.fft(a)
+
     def dtype(self, a: Tensor) -> str:
         return a.dtype.__repr__().split(".")[-1]  # type: ignore
 

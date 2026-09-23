@@ -170,6 +170,9 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
     def eigvalsh(self, a: Tensor) -> Tensor:
         return cp.linalg.eigvalsh(a)
 
+    def fft(self, a: Tensor) -> Tensor:
+        return cp.fft.fft(a)
+
     def kron(self, a: Tensor, b: Tensor) -> Tensor:
         return cp.kron(a, b)
 

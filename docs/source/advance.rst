@@ -152,13 +152,11 @@ We support two modes of analog simulation, where :py:func:`tensorcircuit.experim
 Time Evolution
 ------------------
 
-TensorCircuit-NG provides several methods for simulating quantum time evolution, including exact diagonalization, Krylov subspace methods, and ODE-based approaches. 
-These methods are essential for studying quantum dynamics, particularly in many-body systems, and all support automatic differentiation (AD) and JIT compilation for enhanced performance.
+TensorCircuit-NG provides several methods for simulating quantum time evolution, including exact diagonalization, Krylov subspace methods, and ODE-based approaches. These methods are essential for studying quantum dynamics, particularly in many-body systems, and all support automatic differentiation (AD) and JIT compilation for enhanced performance.
 
 **Exact Diagonalization:**
 
-For small systems where full diagonalization is feasible, the :py:func:`tensorcircuit.timeevol.ed_evol` method provides exact time evolution by directly computing matrix exponentials
-(alias :py:func:`tensorcircuit.timeevol.hamiltonian_evol`):
+For small systems where full diagonalization is feasible, the :py:func:`tensorcircuit.timeevol.ed_evol` method provides exact time evolution by directly computing matrix exponentials (alias :py:func:`tensorcircuit.timeevol.hamiltonian_evol`):
 
 .. code-block:: python
 
@@ -193,8 +191,7 @@ For small systems where full diagonalization is feasible, the :py:func:`tensorci
 
     evolve_and_measure(tc.backend.ones([3]))
 
-This method is particularly efficient for time-independent Hamiltonians as it uses eigendecomposition to compute the evolution. 
-It provides exact results but is limited to small systems (typically <16 qubits) due to the exponential growth of the Hilbert space.
+This method is particularly efficient for time-independent Hamiltonians as it uses eigendecomposition to compute the evolution. It provides exact results but is limited to small systems (typically <16 qubits) due to the exponential growth of the Hilbert space.
 
 .. note::
 
@@ -206,8 +203,7 @@ It provides exact results but is limited to small systems (typically <16 qubits)
 
 **Krylov Subspace Methods:**
 
-For larger systems where exact diagonalization becomes intractable, the Krylov subspace method provides an efficient approximation. 
-The :py:func:`tensorcircuit.timeevol.krylov_evol` function implements this approach:
+For larger systems where exact diagonalization becomes intractable, the Krylov subspace method provides an efficient approximation. The :py:func:`tensorcircuit.timeevol.krylov_evol` function implements this approach:
 
 .. code-block:: python
 
@@ -243,29 +239,15 @@ The :py:func:`tensorcircuit.timeevol.krylov_evol` function implements this appro
         mz = sum(circuit.expectation_ps(z=[i]) for i in range(n))
         return tc.backend.real(mz)
 
-The Krylov method constructs a small subspace that captures the essential dynamics, making it possible to simulate larger systems efficiently. 
-It uses Hermitian Lanczos iteration and therefore requires a Hermitian Hamiltonian.
-It supports both standard and scan-based jit-friendly implementations:
+The Krylov method constructs a small subspace that captures the essential dynamics, making it possible to simulate larger systems efficiently. It uses Hermitian Lanczos iteration and therefore requires a Hermitian Hamiltonian. The deprecated ``scan_impl`` argument is accepted for compatibility but no longer changes the calculation.
 
 .. code-block:: python
 
-    # Standard implementation (default)
-    states = tc.timeevol.krylov_evol(h, psi0, times, subspace_dimension=20, scan_impl=False)
-    
-    # Scan-based implementation for better JIT performance
-    states = tc.timeevol.krylov_evol(h, psi0, times, subspace_dimension=20, scan_impl=True)
+    states = tc.timeevol.krylov_evol(h, psi0, times, subspace_dimension=20)
 
 **Chebyshev Expansion:**
 
-For time-independent Hermitian Hamiltonians with a reliable spectral interval,
-the fixed-order Chebyshev expansion is a useful JIT-friendly alternative.
-It expands ``exp(-1j * t * H)`` in Chebyshev polynomials of the rescaled
-Hamiltonian, so it uses only repeated Hamiltonian-vector products and can be
-more economical than a fully reorthogonalized Krylov basis. The expansion order
-depends on ``t`` and the spectral width, so its parameters must be chosen
-outside the compiled evolution kernel while the kernel itself stays JIT- and
-AD-friendly. The :py:func:`tensorcircuit.timeevol.chebyshev_evol` function
-implements this approach:
+For time-independent Hermitian Hamiltonians with a reliable spectral interval, the fixed-order Chebyshev expansion is a useful JIT-friendly alternative. It expands ``exp(-1j * t * H)`` in Chebyshev polynomials of the rescaled Hamiltonian, so it uses only repeated Hamiltonian-vector products and can be more economical than a fully reorthogonalized Krylov basis. The expansion order depends on ``t`` and the spectral width, so its parameters must be chosen outside the compiled evolution kernel while the kernel itself stays JIT- and AD-friendly. The :py:func:`tensorcircuit.timeevol.chebyshev_evol` function implements this approach:
 
 .. code-block:: python
 
@@ -283,48 +265,46 @@ implements this approach:
 
     t = 2.0
 
-    # 1. Estimate spectral bounds (Emax, Emin) with a short Lanczos run.
-    #    This step is non-jittable and should run outside the kernel.
-    bounds = tc.timeevol.estimate_spectral_bounds(h, n_iter=30)
-    # Pad the bounds slightly so the true spectrum stays inside the interval.
-    bounds = (float(bounds[0]) + 1.0, float(bounds[1]) - 1.0)
+    # 1. Estimate ascending spectral bounds (emin, emax) with a short
+    #    Lanczos run. This step is non-jittable and runs outside the kernel.
+    ascending_bounds = tc.matrixfunc.estimate_spectral_bounds(
+        h, psi0, tc.matrixfunc.KrylovConfig(max_dim=30), padding=0.01
+    )
+    # chebyshev_evol expects bounds in (emax, emin) order.
+    bounds = (ascending_bounds[1], ascending_bounds[0])
 
-    # 2. Pick the expansion order k and the Bessel iteration count M.
+    # 2. Pick the expansion order k.
     k = tc.timeevol.estimate_k(t, bounds)
-    m = tc.timeevol.estimate_M(t, bounds, k)
 
     # 3. Evolve. The returned state is unnormalized; its norm being close to 1
-    #    is a convenient built-in accuracy check for the chosen k and M.
-    psi_t = tc.timeevol.chebyshev_evol(h, psi0, t, bounds, k, m)
+    #    is a convenient accuracy check for the chosen k.
+    psi_t = tc.timeevol.chebyshev_evol(h, psi0, t, bounds, k)
 
-The Hamiltonian may be a dense/sparse matrix, a ``LinearOperator``, or a
-matrix-free MVP callable such as :py:func:`tensorcircuit.quantum.PauliStringSum2MVP`.
-Because ``k`` and ``M`` are fixed Python integers, the evolution kernel is
-compatible with JIT compilation, ``vmap`` over evolution times, and reverse-mode
-autodiff:
+The Hamiltonian may be a dense/sparse matrix, a ``LinearOperator``, or a matrix-free MVP callable such as :py:func:`tensorcircuit.quantum.PauliStringSum2MVP`. Because ``k`` is a fixed Python integer, the evolution has a fixed computation schedule and is compatible with JIT compilation, ``vmap`` over evolution times, and reverse-mode autodiff:
 
 .. code-block:: python
 
     @tc.backend.jit
     def evolve(psi):
-        return tc.timeevol.chebyshev_evol(h, psi, t, bounds, k, m)
+        return tc.timeevol.chebyshev_evol(h, psi, t, bounds, k)
 
 .. note::
 
-    The Chebyshev method requires a backend with a Bessel function
-    implementation and is currently supported only on the NumPy and JAX backends.
-    On JAX, autodiff of the evolution time uses an analytic Bessel derivative,
-    including in the short-time / narrow-spectrum regime.
+    Chebyshev exponential routines, including ``chebyshev_evol`` and Chebyshev-based time-correlation and thermal calculations, support the NumPy and JAX backends. On TensorFlow, use Krylov or Taylor methods for exponential actions. SLQ, KPM DOS, resolvent, and FFT calculations are also available on TensorFlow.
+
+See ``examples/xxz_spectral_physics.py`` for a complete KPM, SLQ, and Krylov calculation of DOS, spectral, thermal-energy, and heat-capacity observables.
+
+**Matrix-function configuration and diagnostics:**
+
+``KrylovConfig(max_dim=...)`` sets the Lanczos width, ``ChebyshevConfig(order=..., bounds=(emin, emax))`` sets the polynomial order and spectral interval, and ``TaylorConfig`` sets the Taylor degree and scaling count. Pass these objects through the ``method=`` argument of spectral functions. Matrix-function APIs use bounds in ``(emin, emax)`` order; ``timeevol.chebyshev_evol`` uses ``(emax, emin)``.
+
+False entries in a Lanczos or SLQ ``active`` mask are padding after early convergence and are excluded automatically. Exact early breakdown is not differentiable when a perturbation changes the active subspace. ``with_std=True`` reports probe sampling uncertainty, not Krylov or Chebyshev truncation error; check truncation by increasing ``max_dim`` or ``order``.
+
+Large ``beta`` and loose spectral bounds can make a one-step Chebyshev imaginary-time calculation inaccurate even when ``order`` is increased. For half evolution with ``energy_shift`` near ``E_min``, use ``0.5 * beta * (E_min - bounds[0]) / scaling_steps <= 15`` as a complex128 starting heuristic; complex64 generally requires a smaller value. Tighten the bounds or increase ``scaling_steps``, whose cost is proportional to ``order * scaling_steps``, and verify convergence. Use Krylov/SLQ if the result underflows or the segmented calculation is too expensive.
 
 **Fixed-Schedule Taylor Exponential Action:**
 
-For a time-independent Hamiltonian represented by a sparse matrix or a matrix-free
-MVP, :py:func:`tensorcircuit.timeevol.expm_multiply_evol` applies the
-scaling-and-Taylor action ``exp(-1j * t * H) @ psi``. In contrast with SciPy's
-adaptive ``expm_multiply``, its Taylor degree and scaling count are fixed Python
-integers. This makes the evolution compatible with JIT compilation and
-reverse-mode autodiff. Choose them outside JIT for a maximum evolution time and
-a 1-norm upper bound, then close over them in the compiled function:
+For a time-independent Hamiltonian represented by a sparse matrix or a matrix-free MVP, :py:func:`tensorcircuit.timeevol.expm_multiply_evol` applies ``exp(-1j * t * H) @ psi`` with a fixed Taylor degree and scaling count. Choose both outside JIT from the maximum evolution time and a 1-norm upper bound; the resulting calculation supports JIT compilation and reverse-mode autodiff:
 
 .. code-block:: python
 
@@ -498,7 +478,7 @@ The methods integrate the time-dependent Schrödinger equation using JAX's ODE s
 +==========================+================+==================+==================+==================+
 | ED Evolution             | < 16 qubits    | Exact            | ✅               | ✅               |
 +--------------------------+----------------+------------------+------------------+------------------+
-| Krylov Evolution         | 16-30+ qubits  | Approximate      | ✅               | ✅ (JAX only)    |
+| Krylov Evolution         | 16-30+ qubits  | Approximate      | ✅               | ✅ NumPy/TF/JAX  |
 +--------------------------+----------------+------------------+------------------+------------------+
 | ODE Local Evolution      | Any size       | Solver-dependent | ✅ (JAX only)    | ✅ (JAX only)    |
 +--------------------------+----------------+------------------+------------------+------------------+

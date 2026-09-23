@@ -2,7 +2,7 @@
 Analog time evolution engines
 """
 
-from typing import Any, Tuple, Optional, Callable, List, Sequence, Dict
+from typing import Any, Tuple, Optional, Callable, Sequence, Dict
 from functools import partial
 import math
 import warnings
@@ -11,6 +11,7 @@ import numpy as np
 
 from .cons import backend, dtypestr, rdtypestr, contractor
 from .gates import Gate
+from . import matrixfunc
 from .quantum import aslinearoperator
 from .utils import arg_alias
 
@@ -59,238 +60,88 @@ _EXPM_MULTIPLY_THETA = {
 }
 
 
-def lanczos_iteration_scan(
-    hamiltonian: Any, initial_vector: Any, subspace_dimension: int
-) -> Tuple[Any, Any]:
-    """
-    Use Lanczos algorithm to construct orthogonal basis and projected Hamiltonian
-    of Krylov subspace, using `tc.backend.scan` for JIT compatibility.
-
-    :param hamiltonian: Hermitian sparse matrix, dense matrix, LinearOperator, or
-        MVP callable implementing ``H @ state``.
-    :type hamiltonian: Any
-    :param initial_vector: Initial quantum state vector
-    :type initial_vector: Tensor
-    :param subspace_dimension: Dimension of Krylov subspace
-    :type subspace_dimension: int
-    :return: Tuple containing (basis matrix, projected Hamiltonian)
-    :rtype: Tuple[Tensor, Tensor]
-    """
+def _legacy_lanczos_projection(
+    hamiltonian: Any, initial_vector: Tensor, subspace_dimension: int
+) -> Tuple[Tensor, Tensor]:
     if subspace_dimension < 1:
         raise ValueError("subspace_dimension must be positive.")
-
-    initial_vector = backend.cast(initial_vector, dtypestr)
-    state_size = backend.shape_tuple(initial_vector)[0]
-    hamiltonian = aslinearoperator(
-        hamiltonian, shape=(state_size, state_size), dtype=dtypestr
+    projection = matrixfunc.lanczos_project(
+        hamiltonian,
+        initial_vector,
+        matrixfunc.KrylovConfig(max_dim=subspace_dimension),
+    )
+    recurrence = projection.recurrence
+    diagonal = backend.cast(recurrence.diagonal, dtypestr)
+    if subspace_dimension == 1:
+        return projection.basis, backend.diagflat(diagonal)
+    connected = recurrence.active[:-1] & recurrence.active[1:]
+    off_diagonal = backend.cast(recurrence.off_diagonal, dtypestr)
+    off_diagonal = off_diagonal * backend.cast(connected, dtypestr)
+    upper = backend.diagflat(off_diagonal, k=1)
+    return projection.basis, backend.diagflat(diagonal) + upper + backend.adjoint(  # type: ignore[no-any-return]
+        upper
     )
 
-    # Main scan body for the outer loop (iterating j)
-    def lanczos_step(carry: Tuple[Any, ...], j: int) -> Tuple[Any, ...]:
-        v, basis, alphas, betas = carry
 
-        w = hamiltonian @ v
+def lanczos_iteration_scan(
+    hamiltonian: Any, initial_vector: Tensor, subspace_dimension: int
+) -> Tuple[Tensor, Tensor]:
+    """
+    Build a Lanczos basis and projected Hamiltonian.
 
-        alpha = backend.real(backend.sum(backend.conj(v) * w))
-        w = w - backend.cast(alpha, dtypestr) * v
+    This compatibility entry point now delegates to the shared fixed-shape
+    matrix-function Lanczos kernel. Use :func:`tensorcircuit.matrixfunc.lanczos_project`
+    for new code.
 
-        def ortho_step(w_carry: Any, elems_tuple: Tuple[Any, Any]) -> Any:
-            k, j_from_elems = elems_tuple
-
-            def do_projection() -> Any:
-                v_k = basis[:, k]
-                projection = backend.sum(backend.conj(v_k) * w_carry)
-                return w_carry - projection * v_k
-
-            def do_nothing() -> Any:
-                return backend.cast(w_carry, dtype=dtypestr)
-
-            w_new = backend.cond(k <= j_from_elems, do_projection, do_nothing)
-            return w_new
-
-        k_elems = backend.arange(subspace_dimension)
-        j_elems = backend.tile(backend.reshape(j, [1]), [subspace_dimension])
-        inner_elems = (k_elems, j_elems)
-        w_ortho = backend.scan(ortho_step, inner_elems, w)
-
-        beta = backend.norm(w_ortho)
-        beta = backend.real(beta)
-
-        # Update alphas and betas arrays
-        new_alphas = backend.scatter(
-            alphas, backend.reshape(j, [1, 1]), backend.reshape(alpha, [1])
-        )
-        new_betas = backend.scatter(
-            betas, backend.reshape(j, [1, 1]), backend.reshape(beta, [1])
-        )
-
-        def update_state_fn() -> Tuple[Any, Any]:
-            epsilon = 1e-15
-            next_v = w_ortho / backend.cast(beta + epsilon, dtypestr)
-
-            one_hot_update = backend.onehot(j + 1, subspace_dimension)
-            one_hot_update = backend.cast(one_hot_update, dtype=dtypestr)
-
-            # Create a mask to update only the (j+1)-th column
-            mask = 1.0 - backend.reshape(one_hot_update, [1, subspace_dimension])
-            new_basis = basis * mask + backend.reshape(
-                next_v, [-1, 1]
-            ) * backend.reshape(one_hot_update, [1, subspace_dimension])
-
-            return next_v, new_basis
-
-        def keep_state_fn() -> Tuple[Any, Any]:
-            return v, basis
-
-        next_v_carry, new_basis = backend.cond(
-            j < subspace_dimension - 1, update_state_fn, keep_state_fn
-        )
-
-        return (next_v_carry, new_basis, new_alphas, new_betas)
-
-    # Prepare initial state for the main scan
-    v0 = initial_vector / backend.norm(initial_vector)
-
-    init_basis = backend.zeros((state_size, subspace_dimension), dtype=dtypestr)
-    init_alphas = backend.zeros((subspace_dimension,), dtype=rdtypestr)
-    init_betas = backend.zeros((subspace_dimension,), dtype=rdtypestr)
-
-    one_hot_0 = backend.onehot(0, subspace_dimension)
-    one_hot_0 = backend.cast(one_hot_0, dtype=dtypestr)
-    init_basis = init_basis + backend.reshape(v0, [-1, 1]) * backend.reshape(
-        one_hot_0, [1, subspace_dimension]
-    )
-
-    init_carry = (v0, init_basis, init_alphas, init_betas)
-
-    # Run the main scan
-    final_carry = backend.scan(
-        lanczos_step, backend.arange(subspace_dimension), init_carry
-    )
-    basis_matrix, alphas_tensor, betas_tensor = (
-        final_carry[1],
-        final_carry[2],
-        final_carry[3],
-    )
-
-    betas_off_diag = betas_tensor[:-1]
-
-    diag_part = backend.diagflat(alphas_tensor)
-    if backend.shape_tuple(betas_off_diag)[0] > 0:
-        off_diag_part = backend.diagflat(betas_off_diag, k=1)
-        projected_hamiltonian = (
-            diag_part + off_diag_part + backend.conj(backend.transpose(off_diag_part))
-        )
-    else:
-        projected_hamiltonian = diag_part
-
-    return basis_matrix, projected_hamiltonian
+    :param hamiltonian: Hermitian matrix, linear operator, or matrix-vector-product callable.
+    :type hamiltonian: Any
+    :param initial_vector: Nonzero seed vector with shape ``(dimension,)``.
+    :type initial_vector: Tensor
+    :param subspace_dimension: Maximum Krylov basis size.
+    :type subspace_dimension: int
+    :return: Basis and fixed-size projected tridiagonal matrix. Zero padding may
+        remain after exact Lanczos breakdown; use
+        :func:`tensorcircuit.matrixfunc.lanczos_project` when the active mask is
+        required.
+    :rtype: Tuple[Tensor, Tensor]
+    """
+    return _legacy_lanczos_projection(hamiltonian, initial_vector, subspace_dimension)
 
 
 def lanczos_iteration(
     hamiltonian: Any, initial_vector: Tensor, subspace_dimension: int
 ) -> Tuple[Tensor, Tensor]:
     """
-    Use Lanczos algorithm to construct orthogonal basis and projected Hamiltonian
-    of Krylov subspace.
+    Build a Lanczos basis and projected Hamiltonian.
 
-    :param hamiltonian: Hermitian sparse matrix, dense matrix, LinearOperator, or
-        MVP callable implementing ``H @ state``.
+    This is the historical non-scan name retained as a thin compatibility
+    wrapper around the shared scan-based kernel. Use
+    :func:`tensorcircuit.matrixfunc.lanczos_project` for new code.
+
+    :param hamiltonian: Hermitian matrix, linear operator, or matrix-vector-product callable.
     :type hamiltonian: Any
-    :param initial_vector: Initial quantum state vector
+    :param initial_vector: Nonzero seed vector with shape ``(dimension,)``.
     :type initial_vector: Tensor
-    :param subspace_dimension: Dimension of Krylov subspace
+    :param subspace_dimension: Maximum Krylov basis size.
     :type subspace_dimension: int
-    :return: Tuple containing (basis matrix, projected Hamiltonian)
+    :return: Basis and fixed-size projected tridiagonal matrix. Zero padding may
+        remain after exact Lanczos breakdown; use
+        :func:`tensorcircuit.matrixfunc.lanczos_project` when the active mask is
+        required.
     :rtype: Tuple[Tensor, Tensor]
     """
-    if subspace_dimension < 1:
-        raise ValueError("subspace_dimension must be positive.")
-
-    vector = initial_vector
-    vector = backend.cast(vector, dtypestr)
-
-    basis_vectors: List[Any] = []
-
-    # alpha (diagonal) and beta (off-diagonal) of the projected tridiagonal Hamiltonian
-    alphas = []
-    betas = []
-
-    vector_norm = backend.norm(vector)
-    vector = vector / vector_norm
-
-    basis_vectors.append(vector)
-
-    hamiltonian = aslinearoperator(
-        hamiltonian, shape=(initial_vector.shape[0], initial_vector.shape[0])
-    )
-
-    # Lanczos iteration (fixed number of iterations for JIT compatibility)
-    for j in range(subspace_dimension):
-        # Calculate H|v_j>
-        w = hamiltonian @ vector
-
-        # Calculate alpha_j = <v_j|H|v_j>
-        alpha = backend.real(backend.sum(backend.conj(vector) * w))
-        alphas.append(alpha)
-
-        # w = H|v_j> - alpha_j|v_j> - beta_{j-1}|v_{j-1}>
-        # is not sufficient, require re-normalization
-        w = w - backend.cast(alpha, dtypestr) * vector
-
-        for k in range(j + 1):
-            v_k = basis_vectors[k]
-            projection = backend.sum(backend.conj(v_k) * w)
-            w = w - projection * v_k
-
-        # Calculate beta_{j+1} = ||w||
-        beta = backend.norm(w)
-        betas.append(beta)
-
-        # Use regularization technique to avoid division by zero error,
-        # adding small epsilon value to ensure numerical stability
-        epsilon = 1e-15
-        norm_factor = 1.0 / (beta + epsilon)
-
-        # Normalize w to get |v_{j+1}> (except for the last iteration)
-        if j < subspace_dimension - 1:
-            vector = w * backend.cast(norm_factor, dtypestr)
-            basis_vectors.append(vector)
-
-    basis_matrix = backend.stack(basis_vectors, axis=1)
-
-    # Use vectorized method to construct tridiagonal matrix at once
-    alphas_tensor = backend.stack(alphas)
-    # Only use first krylov_dim-1 beta values to construct off-diagonal
-    betas_tensor = (
-        backend.stack(betas[:-1])
-        if len(betas) > 1
-        else backend.zeros([0], dtype=dtypestr)
-    )
-
-    alphas_tensor = backend.cast(alphas_tensor, dtype=dtypestr)
-    if len(betas_tensor) > 0:
-        betas_tensor = backend.cast(betas_tensor, dtype=dtypestr)
-
-    diag_part = backend.diagflat(alphas_tensor)
-    if len(betas_tensor) > 0:
-        off_diag_part = backend.diagflat(betas_tensor, k=1)
-        projected_hamiltonian = (
-            diag_part + off_diag_part + backend.transpose(off_diag_part)
-        )
-    else:
-        projected_hamiltonian = diag_part
-
-    return basis_matrix, projected_hamiltonian
+    return _legacy_lanczos_projection(hamiltonian, initial_vector, subspace_dimension)
 
 
 def krylov_evol(
     hamiltonian: Any,
     initial_state: Tensor,
     times: Tensor,
-    subspace_dimension: int,
+    subspace_dimension: Optional[int] = None,
     callback: Optional[Callable[[Any], Any]] = None,
-    scan_impl: bool = False,
+    scan_impl: Optional[bool] = None,
+    *,
+    config: Optional[matrixfunc.KrylovConfig] = None,
 ) -> Any:
     """
     Perform quantum state time evolution using Krylov subspace method.
@@ -307,63 +158,50 @@ def krylov_evol(
     :param callback: Optional callback function applied to quantum state at
                   each evolution time point, return some observables
     :type callback: Optional[Callable[[Any], Any]], optional
-    :param scan_impl: whether use scan implementation, suitable for jit but may be slow on numpy
-        defaults False, True not work for tensorflow backend + jit, due to stupid issue of tensorflow
-        context separation and the notorious inaccesibletensor error
+    :param scan_impl: Deprecated compatibility flag. It no longer selects an
+        implementation; every call uses the fixed-shape scan kernel.
     :type scan_impl: bool, optional
+    :param config: Optional shared :class:`~tensorcircuit.matrixfunc.KrylovConfig`.
+        When supplied, ``subspace_dimension`` and ``scan_impl`` must be omitted;
+        its fixed ``max_dim`` controls the JIT-compatible matrix-function path.
+    :type config: Optional[matrixfunc.KrylovConfig]
     :return: List of evolved quantum states, or list of callback function results
         (if callback provided)
     :rtype: Any
     """
-    # TODO(@refraction-ray): stable and efficient AD is to be investigated
-    if not scan_impl:
-        basis_matrix, projected_hamiltonian = lanczos_iteration(
-            hamiltonian, initial_state, subspace_dimension
-        )
+    if config is None:
+        if subspace_dimension is None:
+            raise ValueError(
+                "subspace_dimension must be provided when config is absent."
+            )
+        if subspace_dimension < 1:
+            raise ValueError("subspace_dimension must be positive.")
+        config = matrixfunc.KrylovConfig(max_dim=subspace_dimension)
     else:
-        basis_matrix, projected_hamiltonian = lanczos_iteration_scan(
-            hamiltonian, initial_state, subspace_dimension
+        if subspace_dimension is not None or scan_impl is not None:
+            raise ValueError(
+                "config cannot be combined with subspace_dimension or scan_impl."
+            )
+        if not isinstance(config, matrixfunc.KrylovConfig):
+            raise TypeError("config must be a KrylovConfig.")
+
+    if scan_impl is not None:
+        warnings.warn(
+            "scan_impl is deprecated and ignored; the shared scan kernel is used.",
+            DeprecationWarning,
+            stacklevel=2,
         )
+    del scan_impl
     initial_state = backend.cast(initial_state, dtypestr)
-    # Project initial state to Krylov subspace: |psi_proj> = V_m^† |psi(0)>
-    projected_state = backend.matvec(
-        backend.conj(backend.transpose(basis_matrix)), initial_state
+    times = backend.convert_to_tensor(times, dtype=dtypestr)
+    states = matrixfunc.exponential_action(
+        hamiltonian, initial_state, -1.0j * times, config
     )
-
-    # Perform spectral decomposition of projected Hamiltonian: T_m = U D U^†
-    eigenvalues, eigenvectors = backend.eigh(projected_hamiltonian)
-    eigenvalues = backend.cast(eigenvalues, dtypestr)
-    eigenvectors = backend.cast(eigenvectors, dtypestr)
-    times = backend.convert_to_tensor(times)
-    times = backend.cast(times, dtypestr)
-
-    # Transform projected state to eigenbasis: |psi_coeff> = U^† |psi_proj>
-    eigenvectors_projected_state = backend.matvec(
-        backend.conj(backend.transpose(eigenvectors)), projected_state
-    )
-
-    results = []
-    for t in times:
-        # Calculate exp(-i*eigenvalues*t)
-        exp_diagonal = backend.exp(-1j * eigenvalues * t)
-
-        # Evolve state in eigenbasis: |psi_evolved_coeff> = exp(-i*D*t) |psi_coeff>
-        evolved_projected_coeff = exp_diagonal * eigenvectors_projected_state
-
-        # Transform back to eigenbasis: |psi_evolved_proj> = U |psi_evolved_coeff>
-        evolved_projected = backend.matvec(eigenvectors, evolved_projected_coeff)
-
-        # Transform back to original basis: |psi(t)> = V_m |psi_evolved_proj>
-        evolved_state = backend.matvec(basis_matrix, evolved_projected)
-
-        if callback is not None:
-            result = callback(evolved_state)
-        else:
-            result = evolved_state
-
-        results.append(result)
-
-    return backend.stack(results)
+    if backend.shape_tuple(times) == ():
+        states = backend.reshape(states, [1, backend.shape_tuple(initial_state)[0]])
+    if callback is not None:
+        return backend.stack([callback(state) for state in states])
+    return states
 
 
 def estimate_expm_multiply_parameters(
@@ -411,9 +249,10 @@ def expm_multiply_evol(
     initial_state: Tensor,
     t: Tensor,
     *,
-    m: int,
-    s: int,
+    m: Optional[int] = None,
+    s: Optional[int] = None,
     traceH: Optional[Tensor] = None,
+    config: Optional[matrixfunc.TaylorConfig] = None,
 ) -> Tensor:
     """
     Evolve a state with a fixed-schedule scaling-and-Taylor exponential action.
@@ -443,46 +282,37 @@ def expm_multiply_evol(
         trace shift exactly and can substantially reduce ``m * s``. Omitting it
         uses a zero shift and remains mathematically correct.
     :type traceH: Optional[Tensor]
+    :param config: Optional shared :class:`~tensorcircuit.matrixfunc.TaylorConfig`.
+        When supplied, ``m`` and ``s`` must be omitted; ``degree`` and
+        ``scaling_steps`` replace them as static schedule values. ``traceH``
+        remains a wrapper-level optional shift and is mapped to
+        ``energy_shift=traceH / dimension``.
+    :type config: Optional[matrixfunc.TaylorConfig]
     :return: The evolved state ``exp(-1j * t * H) @ initial_state``.
     :rtype: Tensor
     """
-    if m < 0:
-        raise ValueError("m must be non-negative.")
-    if s < 1:
-        raise ValueError("s must be positive.")
-
-    state_size = backend.shape_tuple(initial_state)[0]
-    hamiltonian = aslinearoperator(
-        hamiltonian, shape=(state_size, state_size), dtype=dtypestr
-    )
-    initial_state = backend.cast(initial_state, dtypestr)
-    t = backend.convert_to_tensor(t, dtype=dtypestr)
-
-    if traceH is None:
-        mu = backend.zeros((), dtype=dtypestr)
+    if config is None:
+        if m is None or s is None:
+            raise ValueError("m and s must be provided when config is absent.")
+        config = matrixfunc.TaylorConfig(degree=m, scaling_steps=s)
     else:
-        traceH = backend.convert_to_tensor(traceH, dtype=dtypestr)
-        mu = -1.0j * traceH / state_size
+        if m is not None or s is not None:
+            raise ValueError("config cannot be combined with m or s.")
+        if not isinstance(config, matrixfunc.TaylorConfig):
+            raise TypeError("config must be a TaylorConfig.")
 
-    if m == 0:
-        return backend.exp(t * mu) * initial_state
+    energy_shift = None
+    if traceH is not None:
+        state_size = backend.shape_tuple(initial_state)[0]
+        energy_shift = backend.convert_to_tensor(traceH, dtype=dtypestr) / state_size
 
-    def shifted_matvec(state: Tensor) -> Tensor:
-        return -1.0j * (hamiltonian @ state) - mu * state
-
-    def scaling_step(state: Tensor, _: Tensor) -> Tensor:
-        def taylor_step(
-            carry: Tuple[Tensor, Tensor], j: Tensor
-        ) -> Tuple[Tensor, Tensor]:
-            total, term = carry
-            denominator = backend.cast(s * (j + 1), dtypestr)
-            term = (t / denominator) * shifted_matvec(term)
-            return total + term, term
-
-        total, _ = backend.scan(taylor_step, backend.arange(m), (state, state))
-        return backend.exp(t * mu / s) * total
-
-    return backend.scan(scaling_step, backend.arange(s), initial_state)
+    return matrixfunc.exponential_action(
+        hamiltonian,
+        initial_state,
+        -1.0j * backend.convert_to_tensor(t, dtype=dtypestr),
+        config,
+        energy_shift=energy_shift,
+    )
 
 
 @partial(
@@ -888,15 +718,17 @@ def chebyshev_evol(
     hamiltonian: Any,
     initial_state: Tensor,
     t: float,
-    spectral_bounds: Tuple[float, float],
-    k: int,
-    M: int,
+    spectral_bounds: Optional[Tuple[float, float]] = None,
+    k: Optional[int] = None,
+    M: Optional[int] = None,
+    *,
+    config: Optional[matrixfunc.ChebyshevConfig] = None,
 ) -> Any:
     """
     Chebyshev evolution method by expanding the time evolution exponential operator
     in Chebyshev series.
     Note the state returned is not normalized. But the norm should be very close to 1 for
-    sufficiently large k and M, which can serve as a accuracy check of the final result.
+    sufficiently large ``k``, which can serve as an accuracy check of the final result.
 
     :param hamiltonian: Hamiltonian matrix, LinearOperator, or MVP callable
     :type hamiltonian: Any
@@ -908,97 +740,55 @@ def chebyshev_evol(
     :type spectral_bounds: Tuple[float, float]
     :param k: Number of Chebyshev coefficients, a good estimate is k > t*(Emax-Emin)/2
     :type k: int
-    :param M: Number of iterations to estimate Bessel function, a good estimate is given
-        by `estimate_M` helper method.
+    :param M: Deprecated compatibility parameter. It is accepted for historical
+        callers but is not used by the shared coefficient implementation; the
+        internal Bessel recurrence length is selected from ``k``.
     :type M: int
-    :return: Evolved state
+    :param config: Optional shared :class:`~tensorcircuit.matrixfunc.ChebyshevConfig`.
+        When supplied, the legacy ``spectral_bounds``, ``k``, and ``M`` arguments
+        must be omitted. The config always uses ascending ``(emin, emax)`` bounds,
+        while the legacy tuple remains ``(emax, emin)``.
+    :type config: Optional[matrixfunc.ChebyshevConfig]
+    :return: Evolved state ``exp(-1j * t * H) @ initial_state``.
     :rtype: Tensor
     """
-    # Only the NumPy and JAX backends implement the required Bessel function.
-    E_max, E_min = spectral_bounds
-    if E_max <= E_min:
-        raise ValueError("E_max must be > E_min.")
+    if config is None:
+        if spectral_bounds is None or k is None:
+            raise ValueError(
+                "spectral_bounds and k must be provided when config is absent."
+            )
+        if M is not None:
+            warnings.warn(
+                "M is deprecated and ignored; the shared coefficient kernel "
+                "chooses its internal recurrence length from k.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        emax, emin = spectral_bounds
+        config = matrixfunc.ChebyshevConfig(order=k, bounds=(emin, emax))
+    else:
+        if spectral_bounds is not None or k is not None or M is not None:
+            raise ValueError("config cannot be combined with spectral_bounds, k, or M.")
+        if not isinstance(config, matrixfunc.ChebyshevConfig):
+            raise TypeError("config must be a ChebyshevConfig.")
 
-    a = (E_max - E_min) / 2.0
-    b = (E_max + E_min) / 2.0
-    tau = a * t  # Rescaled time parameter
-
-    hamiltonian = aslinearoperator(
-        hamiltonian, shape=(initial_state.shape[0], initial_state.shape[0])
+    return matrixfunc.exponential_action(
+        hamiltonian,
+        initial_state,
+        -1.0j * backend.convert_to_tensor(t, dtype=dtypestr),
+        config,
     )
-
-    def apply_h_norm(psi: Any) -> Any:
-        return ((hamiltonian @ psi) - b * psi) / a
-
-    # Handle edge case where no evolution is needed.
-    if k < 1:
-        raise ValueError("k (number of Chebyshev terms) must be >= 1.")
-
-    # --- 2. Chebyshev Expansion Coefficients ---
-    k_indices = backend.arange(k)
-    bessel_vals = backend.special_jv(k, tau, M)
-
-    # Prefactor is 1 for k=0 and 2 for k>0.
-    prefactor = backend.ones([k])
-    if k > 1:
-        # Using concat for backend compatibility (vs. jax's .at[1:].set(2.0))
-        prefactor = backend.concat(
-            [backend.ones([1]), backend.ones([k - 1]) * 2.0], axis=0
-        )
-
-    ik_powers = backend.power(0 - 1j, k_indices)
-    coeffs = prefactor * ik_powers * bessel_vals
-
-    # --- 3. scan recurrence ---
-
-    # Handle the simple case of k=1 separately.
-    if k == 1:
-        psi_unphased = coeffs[0] * initial_state
-    else:  # k >= 2, use the scan operation.
-        # Initialize the first two Chebyshev vectors and the initial sum.
-        T0 = initial_state
-        T1 = apply_h_norm(T0)
-        initial_sum = coeffs[0] * T0 + coeffs[1] * T1
-
-        # The carry for the scan holds the state needed for the next iteration:
-        # (current vector T_k, previous vector T_{k-1}, and the running sum).
-        initial_carry = (T1, T0, initial_sum)
-
-        def scan_body(carry, i):  # type: ignore
-            Tk, Tkm1, current_sum = carry
-
-            # Calculate the next Chebyshev vector using the recurrence relation.
-            Tkp1 = 2 * apply_h_norm(Tk) - Tkm1
-
-            # Add its contribution to the running sum.
-            new_sum = current_sum + coeffs[i] * Tkp1
-
-            # Return the updated carry for the next step. No intermediate output is needed.
-            return (Tkp1, Tk, new_sum)
-
-        # Run the scan over the remaining coefficients (from index 2 to k-1).
-        final_carry = backend.scan(scan_body, backend.arange(2, k), initial_carry)
-
-        # The final result is the sum accumulated in the last carry state.
-        psi_unphased = final_carry[2]
-
-    # --- 4. phase correction ---
-    # This undoes the energy shift from the Hamiltonian normalization.
-    phase = backend.exp(-1j * b * t)
-    psi_final = phase * psi_unphased
-
-    return psi_final
 
 
 def estimate_k(t: float, spectral_bounds: Tuple[float, float]) -> int:
     """
-    estimate k for chebyshev expansion
+    Estimate the Chebyshev expansion order for a time interval.
 
-    :param t: time; its absolute magnitude determines the expansion order
+    :param t: Evolution time; its absolute magnitude determines the order.
     :type t: float
-    :param spectral_bounds: spectral bounds (Emax, Emin)
+    :param spectral_bounds: Historical bounds in the order ``(Emax, Emin)``.
     :type spectral_bounds: Tuple[float, float]
-    :return: k
+    :return: Estimated number of Chebyshev terms.
     :rtype: int
     """
     E_max, E_min = spectral_bounds
@@ -1009,15 +799,19 @@ def estimate_k(t: float, spectral_bounds: Tuple[float, float]) -> int:
 
 def estimate_M(t: float, spectral_bounds: Tuple[float, float], k: int) -> int:
     """
-    estimate M for Bessel function iterations
+    Estimate the historical Bessel recurrence length.
 
-    :param t: time
+    The returned value is retained for scripts that used the old Chebyshev
+    interface. ``chebyshev_evol`` now ignores it and chooses its internal
+    recurrence length from the shared configuration.
+
+    :param t: Evolution time.
     :type t: float
-    :param spectral_bounds: spectral bounds (Emax, Emin)
+    :param spectral_bounds: Historical bounds in the order ``(Emax, Emin)``.
     :type spectral_bounds: Tuple[float, float]
-    :param k: k
+    :param k: Chebyshev expansion order.
     :type k: int
-    :return: M
+    :return: Historical recurrence-length recommendation.
     :rtype: int
     """
     E_max, E_min = spectral_bounds
@@ -1048,57 +842,26 @@ def estimate_spectral_bounds(
     :param shape: Optional operator shape. Required when ``h`` is an MVP callable
         and ``psi0`` is not provided.
     :type shape: Optional[Sequence[int]]
-    :return: (E_max, E_min)
+    :return: Historical descending bounds ``(E_max, E_min)`` for ``chebyshev_evol``.
+    :rtype: Tuple[float, float]
     """
-    if shape is None:
-        if psi0 is not None:
-            D = backend.shape_tuple(psi0)[0]
-            shape = (D, D)
-        else:
-            shape = h.shape
-    D = shape[-1]
-    h = aslinearoperator(h, shape=shape, dtype=dtypestr)
+    if n_iter < 1:
+        raise ValueError("n_iter must be positive.")
     if psi0 is None:
-        psi0 = np.random.normal(size=[D])
+        if shape is None:
+            shape = getattr(h, "shape", None)
+        if shape is None:
+            raise ValueError("shape is required when psi0 is not provided.")
+        dimension = int(shape[-1])
+        psi0 = np.random.normal(size=[dimension])
+    else:
+        dimension = backend.shape_tuple(psi0)[0]
 
-    psi0 = backend.convert_to_tensor(psi0) / backend.norm(psi0)
-    psi0 = backend.cast(psi0, dtypestr)
-
-    # Lanczos
-    alphas = []
-    betas = []
-    q_prev = backend.zeros(psi0.shape, dtype=psi0.dtype)
-    q = psi0
-    beta = 0
-
-    for _ in range(n_iter):
-        r = h @ q
-        r = backend.convert_to_tensor(r)  # in case np.matrix
-        r = backend.reshape(r, [-1])
-        if beta != 0:
-            r -= backend.cast(beta, dtypestr) * q_prev
-
-        alpha = backend.real(backend.sum(backend.conj(q) * r))
-
-        alphas.append(alpha)
-
-        r -= backend.cast(alpha, dtypestr) * q
-
-        q_prev = q
-        beta = backend.norm(r)
-        betas.append(beta)
-        if beta < 1e-8:
-            break
-        q = r / beta
-
-    alphas = backend.stack(alphas)
-    betas = backend.stack(betas)
-    T = (
-        backend.diagflat(alphas)
-        + backend.diagflat(betas[:-1], k=1)
-        + backend.diagflat(betas[:-1], k=-1)
+    emin, emax = matrixfunc.estimate_spectral_bounds(
+        h,
+        backend.cast(backend.convert_to_tensor(psi0), dtypestr),
+        matrixfunc.KrylovConfig(max_dim=n_iter),
+        dimension=dimension,
+        padding=0.0,
     )
-
-    ritz_values, _ = backend.eigh(T)
-
-    return backend.max(ritz_values), backend.min(ritz_values)
+    return emax, emin

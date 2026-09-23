@@ -6,6 +6,12 @@
 
 - Add `tensorcircuit.tnalg`: fixed-shape JAX MPS TEBD, one-site TDVP, and one-site DMRG with dense and Abelian block-buffer PyTree states, pure tensor Pauli-string MPO builders, checkpoints, and legacy MPS interoperability.
 
+- Add the matrix-function and spectral foundation for reusable Krylov/SLQ, Chebyshev/KPM, and fixed-schedule Taylor calculations, with shared `KrylovConfig`, `ChebyshevConfig`, and `TaylorConfig` controls, static multi-step Chebyshev exponential actions, physical DOS/thermal/response APIs, JIT/AD-compatible query reuse, accuracy diagnostics, and documented NumPy/JAX full support plus TensorFlow non-Bessel support.
+
+### Changed
+
+- Unify the public time-evolution entry points with the matrix-function implementation.
+
 ### Fixed
 
 - Fix exact-diagonalization evolution for complex Hermitian Hamiltonians.
@@ -13,6 +19,8 @@
 - Align ODE scalar-time and real-initial-state handling, and align the standard and scan-based Krylov implementations at the minimum subspace dimension.
 
 - Support complex arguments in the JAX Bessel recurrence and use the absolute time magnitude when estimating the Chebyshev expansion order.
+
+- Add a configurable Chebyshev resolvent tail-decay diagnostic, report failing eager batch rows and query values, and propagate NaN for the same invalid queries under JIT.
 
 ## v1.9.1
 

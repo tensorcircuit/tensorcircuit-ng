@@ -11,7 +11,7 @@ import numpy as np
 
 import tensornetwork
 from scipy.linalg import expm, solve, schur
-from scipy.special import softmax, expit, jv
+from scipy.special import softmax, expit, ive, jv
 from scipy.sparse import coo_matrix, issparse
 from scipy.sparse.linalg import lobpcg, LinearOperator
 from tensornetwork.backends.numpy import numpy_backend
@@ -138,6 +138,12 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
 
     def eigvalsh(self, a: Tensor) -> Tensor:
         return np.linalg.eigvalsh(a)
+
+    def fft(self, a: Tensor) -> Tensor:
+        result = np.fft.fft(a)
+        if a.dtype == np.float32 or a.dtype == np.complex64:
+            return result.astype(np.complex64, copy=False)
+        return result
 
     def lobpcg_standard(
         self,
@@ -343,6 +349,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
 
     def special_jv(self, v: int, z: Tensor, M: int) -> Tensor:
         return jv(np.arange(v), z)
+
+    def special_ive(self, v: int, x: Tensor, M: int) -> Tensor:
+        return ive(np.arange(v), x)
 
     def searchsorted(self, a: Tensor, v: Tensor, side: str = "left") -> Tensor:
         return np.searchsorted(a, v, side=side)  # type: ignore

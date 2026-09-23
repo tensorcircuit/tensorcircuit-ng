@@ -67,6 +67,8 @@ from .quantum import (
     QuScalar,
     aslinearoperator,
 )
+from . import matrixfunc
+from . import spectral
 from . import compiler
 from . import cloud
 from . import fgs
