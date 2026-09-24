@@ -14,9 +14,10 @@
 
 ### Fixed
 
-- Correct the Quickstart exponential-gate sign, sampling probability and measurement JIT descriptions, and documentation typos, including the corresponding Chinese translations.
 - Correct the norm denominator in `MPSCircuit.expectation(normalize=True)` for unnormalized states and distinct bra/ket states.
+
 - Preserve density-matrix noise channels in `copy()`, `append()`, and `prepend()`.
+
 - Check gate matrices before cancelling adjoint-named pairs in the simple compiler.
 
 - Fix time ordering in `AnalogCircuit.inverse()` for time-dependent Hamiltonians.
@@ -26,8 +27,6 @@
 - Align ODE scalar-time and real-initial-state handling, and align the standard and scan-based Krylov implementations at the minimum subspace dimension.
 
 - Support complex arguments in the JAX Bessel recurrence and use the absolute time magnitude when estimating the Chebyshev expansion order.
-
-- Add a configurable Chebyshev resolvent tail-decay diagnostic, report failing eager batch rows and query values, and propagate NaN for the same invalid queries under JIT.
 
 ## v1.9.1
 
