@@ -68,6 +68,10 @@ def numpy_to_tensor(t: Array, backend: Any) -> Tensor:
     return backend.convert_to_tensor(t)
 
 
+def _prepare_dlpack(t: Tensor) -> Tensor:
+    return which_backend(t)._prepare_dlpack(t)
+
+
 def tensor_to_dlpack(t: Tensor) -> Any:
     return which_backend(t).to_dlpack(t)
 
@@ -126,6 +130,7 @@ def general_args_to_backend(
         args = numpy_args_to_backend(args, dtype, target_backend)
         return args
 
+    args = backend.tree_map(_prepare_dlpack, args)
     caps = backend.tree_map(tensor_to_dlpack, args)
     if target_backend is None:
         target_backend = backend

@@ -27,6 +27,77 @@ import tensorcircuit as tc
 
 
 @pytest.mark.skipif(is_torch is False, reason="torch not installed")
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
+@pytest.mark.parametrize("jit", [False, True])
+@pytest.mark.parametrize("enable_dlpack", [False, True])
+@pytest.mark.parametrize("case", ["real_input", "complex_input", "multiple"])
+def test_torch_interface_complex_vjp(backend, jit, enable_dlpack, case):
+    def f(x):
+        if case == "real_input":
+            return (1 + 2j) * tc.backend.cast(x, "complex64")
+        if case == "complex_input":
+            return tc.backend.real(x**2)
+        return x**2, tc.backend.conj(x)
+
+    wrapped = tc.interfaces.torch_interface(f, jit=jit, enable_dlpack=enable_dlpack)
+    if case == "real_input":
+        x = torch.tensor([1.0, -2.0], requires_grad=True)
+        loss = wrapped(x).imag.sum()
+        expected = [2.0, 2.0]
+    else:
+        x = torch.tensor([1 + 2j, -2 + 1j], requires_grad=True)
+        if case == "complex_input":
+            loss = wrapped(x).sum()
+            expected = [2 - 4j, -4 - 2j]
+        else:
+            y, z = wrapped(x)
+            loss = y.real.sum() + z.imag.sum()
+            expected = [2 - 5j, -4 - 3j]
+    loss.backward()
+    np.testing.assert_allclose(x.grad, expected, atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
+@pytest.mark.parametrize("jit", [False, True])
+@pytest.mark.parametrize("case", ["real_input", "complex_input", "multiple"])
+def test_tf_interface_complex_vjp(backend, jit, case):
+    def f(x):
+        if case == "real_input":
+            return (1 + 2j) * tc.backend.cast(x, "complex64")
+        if case == "complex_input":
+            return tc.backend.real(x**2)
+        return x**2, tc.backend.conj(x)
+
+    ydtype = {
+        "real_input": "complex64",
+        "complex_input": "float32",
+        "multiple": ("complex64", "complex64"),
+    }[case]
+    wrapped = tc.interfaces.tensorflow_interface(f, ydtype=ydtype, jit=jit)
+
+    def loss(x):
+        if case == "real_input":
+            return tf.reduce_sum(tf.math.imag(wrapped(x)))
+        if case == "complex_input":
+            return tf.reduce_sum(wrapped(x))
+        y, z = wrapped(x)
+        return tf.reduce_sum(tf.math.real(y) + tf.math.imag(z))
+
+    if jit:
+        loss = tf.function(loss)
+    if case == "real_input":
+        x = tf.constant([1.0, -2.0])
+        expected = [2.0, 2.0]
+    else:
+        x = tf.constant([1 + 2j, -2 + 1j], dtype=tf.complex64)
+        expected = [2 - 4j, -4 - 2j] if case == "complex_input" else [2 - 5j, -4 - 3j]
+    with tf.GradientTape() as tape:
+        tape.watch(x)
+        value = loss(x)
+    np.testing.assert_allclose(tape.gradient(value, x), expected, atol=1e-6)
+
+
+@pytest.mark.skipif(is_torch is False, reason="torch not installed")
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
 def test_torch_interface(backend):
     n = 4
@@ -430,6 +501,62 @@ def test_args_to_tensor(backend):
     assert tc.backend.shape_tuple(a[1]) == (2, 2, 2, 2)
     assert tc.backend.shape_tuple(b.eval()) == (2, 2, 2, 2, 2, 2)
     assert tc.backend.shape_tuple(c) == (2, 2, 2, 2)
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("torchb"), lf("jaxb")])
+@pytest.mark.parametrize("jit", [False, True])
+@pytest.mark.parametrize("enable_dlpack", [False, True])
+@pytest.mark.parametrize("case", ["real_input", "complex_input", "multiple"])
+def test_jax_interface_complex_vjp(backend, jit, enable_dlpack, case):
+    def f(x, *other):
+        if case == "real_input":
+            return (1 + 2j) * tc.backend.cast(x, "complex64")
+        if case == "complex_input":
+            return tc.backend.real(x**2)
+        return x**2, tc.backend.conj(other[0])
+
+    output_shape = ((2,), (2,)) if case == "multiple" else (2,)
+    output_dtype = {
+        "real_input": jnp.complex64,
+        "complex_input": jnp.float32,
+        "multiple": (jnp.complex64, jnp.complex64),
+    }[case]
+    wrapped = tc.interfaces.jax_interface(
+        f,
+        jit=jit,
+        enable_dlpack=enable_dlpack,
+        output_shape=output_shape,
+        output_dtype=output_dtype,
+    )
+
+    def loss(*args):
+        result = wrapped(*args)
+        if case == "real_input":
+            return jnp.sum(jnp.imag(result))
+        if case == "complex_input":
+            return jnp.sum(result)
+        return jnp.sum(jnp.real(result[0]) + jnp.imag(result[1]))
+
+    if case == "real_input":
+        args = (jnp.array([1.0, -2.0], dtype=jnp.float32),)
+        expected = ([2.0, 2.0],)
+        expected_value = -2.0
+    else:
+        args = (jnp.array([1 + 2j, -2 + 1j], dtype=jnp.complex64),)
+        expected = ([2 + 4j, -4 + 2j],)
+        expected_value = 0.0
+        if case == "multiple":
+            args += (jnp.array([0.3 - 0.7j, -0.2 + 0.5j], dtype=jnp.complex64),)
+            expected += ([1j, 1j],)
+            expected_value = 0.2
+
+    value_and_grad = jax.value_and_grad(loss, argnums=tuple(range(len(args))))
+    if jit:
+        value_and_grad = jax.jit(value_and_grad)
+    value, gradients = value_and_grad(*args)
+    np.testing.assert_allclose(value, expected_value, atol=1e-6)
+    for actual, reference in zip(gradients, expected):
+        np.testing.assert_allclose(actual, reference, atol=1e-6)
 
 
 def test_jax_interface_basic(tfb):

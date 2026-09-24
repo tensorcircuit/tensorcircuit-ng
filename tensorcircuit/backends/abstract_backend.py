@@ -1598,13 +1598,18 @@ class ExtendedBackend:
         """
         return _pure_tree_unflatten(treedef, leaves)
 
+    def _prepare_dlpack(self: Any, a: Tensor) -> Tensor:
+        """Return a tensor with a layout suitable for DLPack consumers."""
+        return a
+
     def to_dlpack(self: Any, a: Tensor) -> Any:
         """
         Transform the tensor ``a`` as a dlpack capsule
 
         :param a: tensor to export
         :type a: Tensor
-        :return: dlpack capsule sharing ``a``'s storage
+        :return: dlpack capsule sharing ``a``'s storage when its layout is supported;
+            backends may copy to a compatible layout before export
         :rtype: Any
         """
         raise NotImplementedError(

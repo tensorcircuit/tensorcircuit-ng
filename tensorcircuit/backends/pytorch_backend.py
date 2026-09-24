@@ -711,8 +711,17 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def from_dlpack(self, a: Any) -> Tensor:
         return torchlib.utils.dlpack.from_dlpack(a)
 
+    def _prepare_dlpack(self, a: Tensor) -> Tensor:
+        return a.contiguous()
+
     def to_dlpack(self, a: Tensor) -> Any:
-        return torchlib.utils.dlpack.to_dlpack(a)
+        """
+        Export contiguous storage for cross-backend DLPack compatibility.
+
+        Contiguous inputs share their storage; noncontiguous inputs are copied
+        on their existing device before export.
+        """
+        return torchlib.utils.dlpack.to_dlpack(self._prepare_dlpack(a))
 
     def cond(
         self,

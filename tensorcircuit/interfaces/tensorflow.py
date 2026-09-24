@@ -41,6 +41,9 @@ def tensorflow_interface(
     """
     Wrap a quantum function on different ML backend with a tensorflow interface.
 
+    Complex gradients follow TensorFlow's conjugate Wirtinger convention,
+    including when the wrapped function uses JAX.
+
     :Example:
 
     .. code-block:: python
@@ -92,7 +95,12 @@ def tensorflow_interface(
                 x = x[0]
             if len(v) == 1:
                 v = v[0]
-            return backend.vjp(fun, x, v)
+            if backend.name == "jax":
+                v = backend.tree_map(backend.conj, v)
+            y, g = backend.vjp(fun, x, v)
+            if backend.name == "jax":
+                g = backend.tree_map(backend.conj, g)
+            return y, g
 
         if jit is True:
             vjp_fun = backend.jit(vjp_fun)
