@@ -985,7 +985,8 @@ class MPSCircuit(AbstractCircuit):
         :type other: MPSCircuit, optional
         :param conj: Whether to conjugate the bra state
         :type conj: bool, defaults to be True
-        :param normalize: Whether to normalize the result by the MPS norm.
+        :param normalize: Whether to divide by the product of the bra and ket L2 norms.
+            For the same bra and ket, this is the squared state norm.
         :type normalize: bool, defaults to be False
         :param split: Truncation split
         :type split: Any
@@ -1044,7 +1045,7 @@ class MPSCircuit(AbstractCircuit):
                 norm2 = norm1
             else:
                 norm2 = other.get_norm()
-            norm = backend.sqrt(norm1 * norm2)
+            norm = norm1 * norm2
             value /= norm
         return value
 

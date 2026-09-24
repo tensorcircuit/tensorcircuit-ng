@@ -15,6 +15,7 @@
 ### Fixed
 
 - Correct the Quickstart exponential-gate sign, sampling probability and measurement JIT descriptions, and documentation typos, including the corresponding Chinese translations.
+- Correct the norm denominator in `MPSCircuit.expectation(normalize=True)` for unnormalized states and distinct bra/ket states.
 
 - Fix time ordering in `AnalogCircuit.inverse()` for time-dependent Hamiltonians.
 
