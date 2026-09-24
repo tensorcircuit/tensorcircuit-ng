@@ -26,6 +26,20 @@ def onehot_matrix(i: int, j: int, N: int) -> Tensor:
     return m
 
 
+def _local_evolution_coefficients(chi: Tensor) -> Tuple[Tensor, Tensor]:
+    r2 = backend.real(chi * backend.conj(chi)) / 4
+    small = r2 < 1e-4
+    radius = backend.sqrt(backend.where(small, backend.ones_like(r2), r2))
+    # Series in |chi|^2 keep both real and imaginary derivatives smooth at zero.
+    cosine = backend.where(
+        small, 1 - r2 / 2 + r2**2 / 24 - r2**3 / 720, backend.cos(radius)
+    )
+    sinc = backend.where(
+        small, 1 - r2 / 6 + r2**2 / 120 - r2**3 / 5040, backend.sin(radius) / radius
+    )
+    return backend.cast(cosine, dtypestr), chi * backend.cast(sinc / 2, dtypestr)
+
+
 # TODO(@refraction-ray): efficiency benchmark with jit
 # TODO(@refraction-ray): FGS mixed state support?
 # TODO(@refraction-ray): fermionic logarithmic negativity
@@ -607,7 +621,8 @@ class FGSSimulator:
         The evolution is governed by the Hamiltonian :math:`\chi c_i^\dagger c_j + h.c.`.
 
         This optimized implementation uses analytical 2x2 local unitaries
-        reducing complexity from O(L³) to O(L).
+        reducing complexity from O(L³) to O(L). The local coefficients retain
+        their derivatives at zero hopping strength.
 
         :param i: The index of the first site.
         :type i: int
@@ -618,17 +633,7 @@ class FGSSimulator:
         """
         chi = backend.convert_to_tensor(chi)
         chi = backend.cast(chi, dtypestr)
-        chi_abs = backend.abs(chi)
-        eps = backend.convert_to_tensor(1e-30)
-        eps = backend.cast(eps, rdtypestr)
-        chi_abs_safe = chi_abs + eps
-
-        cos_term = backend.cos(chi_abs / 2)
-        sin_term = backend.sin(chi_abs / 2)
-        # Cast to complex for TensorFlow compatibility
-        cos_term = backend.cast(cos_term, dtypestr)
-        sin_term = backend.cast(sin_term, dtypestr)
-        phase = chi / backend.cast(chi_abs_safe, dtypestr)
+        cos_term, sin_term = _local_evolution_coefficients(chi)
 
         # Extract rows i, j, j+L, i+L from alpha
         row_i = self.alpha[i, :]
@@ -636,16 +641,14 @@ class FGSSimulator:
         row_jL = self.alpha[j + self.L, :]
         row_iL = self.alpha[i + self.L, :]
 
-        # For (i,j) block: U = [[cos, -i*phase*sin], [-i*conj(phase)*sin, cos]]
-        new_row_i = cos_term * row_i + (-1.0j * phase * sin_term) * row_j
-        new_row_j = (-1.0j * backend.conj(phase) * sin_term) * row_i + cos_term * row_j
+        # For (i,j) block: U = [[cos, -i*sin], [-i*conj(sin), cos]]
+        new_row_i = cos_term * row_i + (-1.0j * sin_term) * row_j
+        new_row_j = (-1.0j * backend.conj(sin_term)) * row_i + cos_term * row_j
 
-        # For (j+L, i+L) block: U = [[cos, i*phase*sin], [i*conj(phase)*sin, cos]]
+        # For (j+L, i+L) block: U = [[cos, i*sin], [i*conj(sin), cos]]
         # (opposite sign due to -chi/2 in the Hamiltonian for particle-hole)
-        new_row_jL = cos_term * row_jL + (1.0j * phase * sin_term) * row_iL
-        new_row_iL = (
-            1.0j * backend.conj(phase) * sin_term
-        ) * row_jL + cos_term * row_iL
+        new_row_jL = cos_term * row_jL + (1.0j * sin_term) * row_iL
+        new_row_iL = (1.0j * backend.conj(sin_term)) * row_jL + cos_term * row_iL
 
         # Use scatter to update rows directly
         indices = backend.convert_to_tensor([[i], [j], [i + self.L], [j + self.L]])
@@ -708,7 +711,8 @@ class FGSSimulator:
         The evolution is governed by the Hamiltonian :math:`\chi c_i^\dagger c_j^\dagger + h.c.`.
 
         This optimized implementation uses analytical 4x4 local unitaries
-        reducing complexity from O(L³) to O(L).
+        reducing complexity from O(L³) to O(L). The local coefficients retain
+        their derivatives at zero pairing strength.
 
         :param i: The index of the first site.
         :type i: int
@@ -719,17 +723,7 @@ class FGSSimulator:
         """
         chi = backend.convert_to_tensor(chi)
         chi = backend.cast(chi, dtypestr)
-        chi_abs = backend.abs(chi)
-        eps = backend.convert_to_tensor(1e-30)
-        eps = backend.cast(eps, rdtypestr)
-        chi_abs_safe = chi_abs + eps
-
-        cos_term = backend.cos(chi_abs / 2)
-        sin_term = backend.sin(chi_abs / 2)
-        # Cast to complex for TensorFlow compatibility
-        cos_term = backend.cast(cos_term, dtypestr)
-        sin_term = backend.cast(sin_term, dtypestr)
-        phase = chi / backend.cast(chi_abs_safe, dtypestr)
+        cos_term, sin_term = _local_evolution_coefficients(chi)
 
         # Extract rows i, j, i+L, j+L from alpha
         row_i = self.alpha[i, :]
@@ -740,17 +734,15 @@ class FGSSimulator:
         # The pairing Hamiltonian couples (i, j+L) and (j, i+L)
         # H = chi/2 * (|i><j+L| - |j><i+L|) + h.c.
         # U = exp(-i H) in the 4x4 basis [i, j, i+L, j+L]
-        # U[i,i] = cos, U[i,j+L] = -i*phase*sin
-        # U[j,j] = cos, U[j,i+L] = i*phase*sin
-        # U[i+L,i+L] = cos, U[i+L,j] = i*conj(phase)*sin
-        # U[j+L,j+L] = cos, U[j+L,i] = -i*conj(phase)*sin
+        # U[i,i] = cos, U[i,j+L] = -i*sin
+        # U[j,j] = cos, U[j,i+L] = i*sin
+        # U[i+L,i+L] = cos, U[i+L,j] = i*conj(sin)
+        # U[j+L,j+L] = cos, U[j+L,i] = -i*conj(sin)
 
-        new_row_i = cos_term * row_i + (-1.0j * phase * sin_term) * row_jL
-        new_row_j = cos_term * row_j + (1.0j * phase * sin_term) * row_iL
-        new_row_iL = (1.0j * backend.conj(phase) * sin_term) * row_j + cos_term * row_iL
-        new_row_jL = (
-            -1.0j * backend.conj(phase) * sin_term
-        ) * row_i + cos_term * row_jL
+        new_row_i = cos_term * row_i + (-1.0j * sin_term) * row_jL
+        new_row_j = cos_term * row_j + (1.0j * sin_term) * row_iL
+        new_row_iL = (1.0j * backend.conj(sin_term)) * row_j + cos_term * row_iL
+        new_row_jL = (-1.0j * backend.conj(sin_term)) * row_i + cos_term * row_jL
 
         # Use scatter to update rows directly
         indices = backend.convert_to_tensor([[i], [j], [i + self.L], [j + self.L]])

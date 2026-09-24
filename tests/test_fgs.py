@@ -2,11 +2,7 @@ import numpy as np
 import pytest
 from pytest_lazyfixture import lazy_fixture as lf
 import tensorflow as tf
-
-try:
-    import openfermion as _
-except ModuleNotFoundError:
-    pytestmark = pytest.mark.skip("skip fgs test due to missing openfermion module")
+from scipy.linalg import expm
 
 import tensorcircuit as tc
 
@@ -14,7 +10,13 @@ F = tc.fgs.FGSSimulator
 FT = tc.fgs.FGSTestSimulator
 
 
+@pytest.fixture
+def requires_openfermion():
+    pytest.importorskip("openfermion")
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.usefixtures("requires_openfermion")
 def test_cmatrix(backend, highp):
     import openfermion
 
@@ -109,6 +111,7 @@ def test_entropy_stability_and_ad(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.usefixtures("requires_openfermion")
 def test_otoc(backend, highp):
     c = tc.FGSSimulator(4, [0, 1])
     c1 = tc.fgs.FGSTestSimulator(4, [0, 1])
@@ -156,6 +159,7 @@ def test_fgs_ad(backend, highp):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.usefixtures("requires_openfermion")
 def test_hamiltonian_generation(backend):
     hc = F.chemical_potential(0.8, 0, 3)
     h1 = FT.get_hmatrix(hc, 3) + 0.4 * tc.backend.eye(2**3)
@@ -175,6 +179,7 @@ def test_hamiltonian_generation(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.usefixtures("requires_openfermion")
 def test_ground_state(backend, highp):
     N = 3
     hc = (
@@ -193,6 +198,7 @@ def test_ground_state(backend, highp):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.usefixtures("requires_openfermion")
 def test_post_select(backend, highp):
     for ind in [0, 1, 2]:
         for keep in [0, 1]:
@@ -222,6 +228,7 @@ def test_post_select_cmatrix_refresh(backend, highp):
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+@pytest.mark.usefixtures("requires_openfermion")
 def test_post_select_jit(backend, highp):
     """Test that post_select works correctly within JIT compilation."""
 
@@ -255,6 +262,7 @@ def test_post_select_jit(backend, highp):
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+@pytest.mark.usefixtures("requires_openfermion")
 def test_jittable_measure(backend):
     @tc.backend.jit
     def get_cmatrix(status):
@@ -303,6 +311,7 @@ def test_exp_2body(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.usefixtures("requires_openfermion")
 def test_overlap(backend):
     def compute_overlap(FGScls):
         c = FGScls(3, filled=[0, 2])
@@ -322,6 +331,7 @@ def test_overlap(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.usefixtures("requires_openfermion")
 def test_entanglement_asymmetry(backend, highp):
     def discrete_c(c):
         c.evol_sp(0, 1, 0.3)
@@ -401,6 +411,7 @@ def test_fgs_entropy_dual_and_validation():
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.usefixtures("requires_openfermion")
 def test_exp_4body(backend, highp):
     # Cross-check the Wick's-theorem fast path ``FGSSimulator.expectation_4body``
     # against the brute-force openfermion reference ``FGSTestSimulator.expectation_4body``
@@ -433,3 +444,101 @@ def test_exp_4body(backend, highp):
         # already a numpy scalar and must not be routed through ``backend.numpy``.
         exact = np.asarray(c1.expectation_4body(i, j, k, l))
         np.testing.assert_allclose(fast, exact, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("precision", ["single", lf("highp")])
+@pytest.mark.parametrize("pairing", [False, True])
+@pytest.mark.parametrize("chi", [0.0, 1e-9, 0.0199, 0.0201, -0.3, 0.7j, 0.3 - 0.7j])
+def test_local_evolution_matches_exponential(backend, precision, pairing, chi):
+    filled = [] if pairing else [0]
+    actual = tc.FGSSimulator(3, filled=filled)
+    reference = tc.FGSSimulator(3, filled=filled)
+    if pairing:
+        actual.evol_sp(0, 2, chi)
+        h = reference.sc_pairing(chi, 0, 2, 3)
+    else:
+        actual.evol_hp(0, 2, chi)
+        h = reference.hopping(chi, 0, 2, 3)
+    expected = expm(-1j * tc.backend.numpy(h).astype(np.complex128)) @ tc.backend.numpy(
+        reference.alpha
+    )
+    atol = 1e-6 if tc.dtypestr == "complex64" else 1e-12
+    np.testing.assert_allclose(
+        tc.backend.numpy(actual.alpha),
+        expected,
+        atol=atol,
+        rtol=atol,
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("pairing", [False, True])
+@pytest.mark.parametrize("precision", ["single", lf("highp")])
+@pytest.mark.parametrize(
+    "parameters", [[0.0, 0.0], [1e-9, -1e-9], [0.0199, 0.0], [0.0201, 0.0], [0.3, -0.7]]
+)
+def test_local_evolution_gradient(backend, precision, pairing, parameters):
+    def loss(p):
+        sim = tc.FGSSimulator(2, filled=[] if pairing else [0])
+        chi = tc.backend.cast(p[0], tc.dtypestr) + 1j * tc.backend.cast(
+            p[1], tc.dtypestr
+        )
+        if pairing:
+            sim.evol_sp(0, 1, chi)
+        else:
+            sim.evol_hp(0, 1, chi)
+        c = sim.get_cmatrix()[0, 3 if pairing else 1]
+        return tc.backend.real(c) + tc.backend.imag(c)
+
+    p = tc.backend.convert_to_tensor(np.array(parameters, dtype=tc.rdtypestr))
+    atol = 1e-6 if tc.dtypestr == "complex64" else 1e-10
+    initial = tc.FGSSimulator(2, filled=[] if pairing else [0])
+    hamiltonian = initial.sc_pairing if pairing else initial.hopping
+    hx = tc.backend.numpy(hamiltonian(1.0, 0, 1, 2)).astype(np.complex128)
+    hy = tc.backend.numpy(hamiltonian(1.0j, 0, 1, 2)).astype(np.complex128)
+    alpha = tc.backend.numpy(initial.alpha)
+
+    def reference(p):
+        evolved = expm(-1j * (p[0] * hx + p[1] * hy)) @ alpha
+        c = (evolved @ evolved.conj().T)[0, 3 if pairing else 1]
+        return c.real + c.imag
+
+    point = tc.backend.numpy(p).astype(np.float64)
+    step = 1e-5
+    expected = np.array(
+        [
+            (reference(point + step * d) - reference(point - step * d)) / (2 * step)
+            for d in np.eye(2)
+        ]
+    )
+    actual = tc.backend.grad(loss)(p)
+    compiled = tc.backend.jit(tc.backend.grad(loss))(p)
+    np.testing.assert_allclose(tc.backend.numpy(actual), expected, atol=atol)
+    np.testing.assert_allclose(tc.backend.numpy(compiled), expected, atol=atol)
+    if parameters == [0.0, 0.0]:
+        np.testing.assert_allclose(
+            tc.backend.numpy(actual)[0], 0.5 if pairing else -0.5, atol=atol
+        )
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("pairing", [False, True])
+@pytest.mark.parametrize("direction", [1.0, 1j])
+def test_local_evolution_zero_curvature(backend, highp, pairing, direction):
+    def population(t):
+        sim = tc.FGSSimulator(2, filled=[] if pairing else [0])
+        chi = tc.backend.cast(t, tc.dtypestr) * direction
+        if pairing:
+            sim.evol_sp(0, 1, chi)
+        else:
+            sim.evol_hp(0, 1, chi)
+        return tc.backend.real(sim.get_cmatrix()[0, 0])
+
+    zero = tc.backend.convert_to_tensor(np.array(0.0))
+    second = tc.backend.grad(tc.backend.grad(population))
+    expected = -0.5 if pairing else 0.5
+    np.testing.assert_allclose(tc.backend.numpy(second(zero)), expected, atol=1e-10)
+    np.testing.assert_allclose(
+        tc.backend.numpy(tc.backend.jit(second)(zero)), expected, atol=1e-10
+    )
