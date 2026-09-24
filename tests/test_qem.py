@@ -14,7 +14,7 @@ from tensorcircuit.results.qem import (
     apply_dd,
     apply_rc,
 )
-from tensorcircuit.results.qem import benchmark_circuits
+from tensorcircuit.results.qem import benchmark_circuits, qem_methods
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
@@ -170,3 +170,97 @@ def test_rc(backend):
     rc_c = qem.rc_circuit(c)
     assert rc_c.circuit_param["nqubits"] == c.circuit_param["nqubits"]
     assert len(rc_c.to_qir()) > 0
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("double_precision", [False, True])
+@pytest.mark.parametrize("custom", [False, True])
+@pytest.mark.parametrize("warm_angle", [0.0, np.pi / 2])
+@pytest.mark.parametrize("separate_calls", [False, True])
+def test_rc_cache_matrix_equivalence(
+    backend, double_precision, custom, warm_angle, separate_calls, request, monkeypatch
+):
+    if double_precision:
+        request.getfixturevalue("highp")
+    monkeypatch.setattr(qem_methods, "candidate_dict", {})
+    paulis = [np.asarray(g.tensor) for g in tc.gates.pauli_gates]
+
+    def add_gate(circuit, angle, indices):
+        if custom:
+            matrix = np.diag(np.exp(-0.5j * angle * np.array([1, -1, -1, 1])))
+            h = np.kron(np.array([[1, 1], [1, -1]]) / np.sqrt(2), np.eye(2))
+            circuit.unitary(*indices, unitary=h @ matrix @ h, name="shared")
+        else:
+            circuit.rzz(*indices, theta=angle)
+        return tc.backend.numpy(
+            tc.backend.reshapem(circuit.to_qir()[-1]["gate"].tensor)
+        )
+
+    warm = tc.Circuit(2)
+    first = add_gate(warm, warm_angle, (1, 0))
+    target = tc.Circuit(2) if separate_calls else warm
+    second = add_gate(target, 0.37, (0, 1))
+    matrices = iter([first, second])
+
+    def choose(candidates):
+        matrix = next(matrices)
+        for a, b, c, d in candidates:
+            twirled = (
+                np.kron(paulis[c], paulis[d]) @ matrix @ np.kron(paulis[a], paulis[b])
+            )
+            phase = np.trace(matrix.conj().T @ twirled) / 4
+            np.testing.assert_allclose(abs(phase), 1, atol=2e-6)
+            np.testing.assert_allclose(twirled, phase * matrix, atol=2e-6)
+        return candidates[1]
+
+    monkeypatch.setattr(qem_methods, "choice", choose)
+    if separate_calls:
+        qem.rc_circuit(warm)
+    expected = tc.backend.numpy(target.matrix())
+    actual = tc.backend.numpy(qem.rc_circuit(target).matrix())
+    phase = np.trace(expected.conj().T @ actual) / 4
+    np.testing.assert_allclose(abs(phase), 1, atol=3e-6)
+    np.testing.assert_allclose(actual, phase * expected, atol=3e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("simplify", [False, True])
+def test_rc_cache_noiseless_expectation(backend, simplify, monkeypatch):
+    monkeypatch.setattr(qem_methods, "candidate_dict", {})
+    monkeypatch.setattr(qem_methods, "choice", lambda candidates: candidates[1])
+    warm = tc.Circuit(2)
+    warm.rzz(0, 1, theta=0)
+    qem.rc_circuit(warm)
+    target = tc.Circuit(2)
+    target.h(0)
+    target.rzz(0, 1, theta=np.pi / 4)
+    result, circuits = apply_rc(
+        target,
+        executor=lambda circuit: circuit.expectation_ps(y=[0]),
+        num_to_average=3,
+        simplify=simplify,
+    )
+    np.testing.assert_allclose(result, np.sqrt(0.5), atol=2e-6)
+    expected = tc.backend.numpy(target.state())
+    for circuit in circuits:
+        actual = tc.backend.numpy(circuit.state())
+        np.testing.assert_allclose(abs(np.vdot(expected, actual)) ** 2, 1, atol=3e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_rc_cache_reuses_identical_matrix(backend, monkeypatch):
+    monkeypatch.setattr(qem_methods, "candidate_dict", {})
+    original = qem_methods.rc_candidates
+    calls = []
+
+    def counted(gate):
+        calls.append(gate)
+        return original(gate)
+
+    monkeypatch.setattr(qem_methods, "rc_candidates", counted)
+    circuit = tc.Circuit(2)
+    circuit.rzz(0, 1, theta=0.37)
+    circuit.rzz(1, 0, theta=0.37)
+    qem.rc_circuit(circuit)
+    qem.rc_circuit(circuit)
+    assert len(calls) == 1

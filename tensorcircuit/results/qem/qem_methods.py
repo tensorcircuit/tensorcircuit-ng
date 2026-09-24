@@ -277,21 +277,38 @@ def _apply_gate(c: Any, i: int, j: int) -> Any:
     return c
 
 
-candidate_dict = {}  # type: ignore
+candidate_dict: Dict[str, Tuple[Any, List[Any]]] = {}
 
 
 def rc_circuit(c: Any) -> Any:
+    """
+    Apply Pauli twirling to the two-qubit gates of a circuit.
+
+    Cached candidates are reused only for an identical gate matrix and dtype.
+    Each gate name retains its most recent matrix, so parameter sweeps do not
+    accumulate one cache entry per angle. Candidate selection is an eager
+    compilation step on concrete gate matrices.
+
+    :param c: Input circuit.
+    :return: Randomized circuit.
+    """
     qir = c.to_qir()
     cnew = Circuit(c.circuit_param["nqubits"])
     for d in qir:
         if len(d["index"]) == 2:
-            if d["gate"].name in candidate_dict:
-                rc_cand = candidate_dict[d["gate"].name]
-                rc_list = choice(rc_cand)
-            else:
+            name = d["gate"].name
+            matrix = backend.numpy(backend.reshapem(d["gate"].tensor))
+            cached = candidate_dict.get(name)
+            if (
+                cached is None
+                or cached[0].dtype != matrix.dtype
+                or not np.array_equal(cached[0], matrix)
+            ):
                 rc_cand = rc_candidates(d["gate"])
-                rc_list = choice(rc_cand)
-                candidate_dict[d["gate"].name] = rc_cand
+                candidate_dict[name] = (matrix.copy(), rc_cand)
+            else:
+                rc_cand = cached[1]
+            rc_list = choice(rc_cand)
 
             cnew = _apply_gate(cnew, rc_list[0], d["index"][0])
             cnew = _apply_gate(cnew, rc_list[1], d["index"][1])
