@@ -52,7 +52,12 @@ class DMRGOptions:
     """
     Static one-site DMRG solver settings; evaluate variance separately.
 
-    :ivar krylov_dim: Maximum dimension of each local Krylov subspace.
+    At local Lanczos breakdown, gradients use an implicit, matrix-free ground
+    state response. This requires a nondegenerate local ground state; check
+    response convergence with ``krylov_dim`` as well as forward convergence.
+
+    :ivar krylov_dim: Maximum dimension of each local Krylov subspace and
+        iteration budget for the breakdown response solve.
     :ivar restarts: Number of local Krylov restarts at each site.
     :ivar reorthogonalize: Whether to reorthogonalize the Krylov basis.
     """

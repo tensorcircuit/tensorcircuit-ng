@@ -7,6 +7,7 @@ from typing import Any, Callable, Tuple
 
 import jax
 import jax.numpy as jnp
+from jax.scipy.sparse.linalg import cg
 
 Array = Any
 _TAYLOR_SUBSTEPS = 8
@@ -285,6 +286,109 @@ def expm_action_hermitian(
     return jnp.reshape(result, shape), report
 
 
+def _lanczos_eigenpair(
+    matvec: Callable[[Array], Array],
+    flat: Array,
+    max_dim: int,
+    reorthogonalize: bool,
+) -> Tuple[Array, Array, Array]:
+    """Return the lowest Ritz pair and whether the basis broke down."""
+    basis, basis_active, alphas, betas, _ = _lanczos_basis(
+        matvec, flat, max_dim, reorthogonalize
+    )
+    krylov_dim = alphas.shape[0]
+    projected = jnp.diag(alphas)
+    if krylov_dim > 1:
+        projected = projected + jnp.diag(betas, 1)
+        projected = projected + jnp.diag(betas, -1)
+    inactive_energy = jnp.sum(jnp.abs(alphas)) + 2 * jnp.sum(jnp.abs(betas)) + 1
+    # Distinct inactive roots keep the unused ordinary JVP finite under vmap.
+    projected = projected + jnp.diag(
+        jnp.where(basis_active, 0, inactive_energy * (1 + jnp.arange(krylov_dim)))
+    )
+    eigenvalues, eigenvectors = jnp.linalg.eigh(projected)
+    candidate = jnp.einsum("kd,k->d", basis, eigenvectors[:, 0])
+    candidate_norm = _safe_norm(candidate)
+    candidate = candidate / jnp.where(candidate_norm == 0, 1, candidate_norm)
+    return candidate, jnp.real(eigenvalues[0]), ~jnp.all(basis_active)
+
+
+@partial(jax.custom_jvp, nondiff_argnums=(0, 1, 2))
+def _eigenpair_with_response(
+    matvec: Any,
+    max_dim: int,
+    reorthogonalize: bool,
+    vector: Array,
+    constants: Any,
+) -> Any:
+    return _lanczos_eigenpair(
+        lambda value: matvec(value, *constants), vector, max_dim, reorthogonalize
+    )
+
+
+@_eigenpair_with_response.defjvp
+def _eigenpair_jvp(
+    matvec: Any, max_dim: int, reorthogonalize: bool, primals: Any, tangents: Any
+) -> Any:
+    vector, constants = primals
+    vector_tangent, constants_tangent = tangents
+    # Higher-order AD must reuse the response rule for the primal eigenpair.
+    primal = _eigenpair_with_response(matvec, max_dim, reorthogonalize, *primals)
+    candidate, eigenvalue, breakdown = primal
+
+    def project(value: Array) -> Array:
+        return value - candidate * jnp.vdot(candidate, value)
+
+    action_tangent = jax.jvp(
+        lambda parameters: matvec(candidate, *parameters),
+        (constants,),
+        (constants_tangent,),
+    )[1]
+    energy_tangent = jnp.real(jnp.vdot(candidate, action_tangent))
+
+    def shifted(value: Array) -> Array:
+        perpendicular = project(value)
+        return project(
+            matvec(perpendicular, *constants) - eigenvalue * perpendicular
+        ) + candidate * jnp.vdot(candidate, value)
+
+    def solve(action: Any, rhs: Array) -> Array:
+        return cg(
+            action,
+            rhs,
+            tol=8 * jnp.finfo(jnp.real(vector).dtype).eps,
+            maxiter=max_dim,
+        )[0]
+
+    # Keep RHS-dependent CG setup inside the linear differentiation boundary.
+    tangent = jax.lax.custom_linear_solve(
+        shifted,
+        jnp.where(breakdown, -project(action_tangent), 0),
+        solve=solve,
+        transpose_solve=solve,
+    )
+    tangent = project(tangent)
+    if jnp.issubdtype(vector.dtype, jnp.complexfloating):
+        # Lanczos fixes the phase through a real overlap with its seed.
+        overlap = jnp.real(jnp.vdot(vector, candidate))
+        phase = jnp.imag(
+            jnp.vdot(vector_tangent, candidate) + jnp.vdot(vector, tangent)
+        ) / jnp.where(overlap == 0, 1, overlap)
+        tangent = tangent - 1j * phase * candidate
+
+    def ordinary(initial: Array, parameters: Any) -> Any:
+        return _lanczos_eigenpair(
+            lambda value: matvec(value, *parameters), initial, max_dim, reorthogonalize
+        )
+
+    ordinary_tangent = jax.jvp(ordinary, primals, tangents)[1]
+    return primal, (
+        jnp.where(breakdown, tangent, ordinary_tangent[0]),
+        jnp.where(breakdown, energy_tangent, ordinary_tangent[1]),
+        jnp.zeros((), dtype=jax.dtypes.float0),
+    )
+
+
 def lowest_eigenvector_hermitian(
     matvec: Callable[[Array], Array],
     vector: Array,
@@ -295,11 +399,22 @@ def lowest_eigenvector_hermitian(
     """
     Find a lowest Ritz vector using a fixed-work Lanczos iteration.
 
+    Without breakdown, derivatives follow the finite Lanczos algorithm. At
+    numerical breakdown, use the implicit response of an isolated ground state
+    instead of differentiating singular basis coordinates. The matrix-free
+    response solve uses at most ``max_dim`` conjugate-gradient iterations;
+    check derivative convergence by increasing this budget. This rule requires
+    a nonzero gap in the supplied vector space, including a fixed symmetry
+    sector. It does not define derivatives at a degenerate ground state or
+    guarantee that an invariant starting subspace contains the ground state.
+    The complex vector's phase follows its real overlap with the initial vector.
+
     :param matvec: Hermitian matrix-vector product.
     :type matvec: Callable[[Array], Array]
     :param vector: Initial vector for the Lanczos iteration.
     :type vector: Array
-    :param max_dim: Maximum Lanczos basis dimension.
+    :param max_dim: Maximum Lanczos basis dimension and maximum number of
+        iterations in the breakdown response solve.
     :type max_dim: int
     :param reorthogonalize: Whether to reorthogonalize the basis.
     :type reorthogonalize: bool
@@ -309,30 +424,19 @@ def lowest_eigenvector_hermitian(
     :rtype: Any
     """
     flat = jnp.reshape(vector, (-1,))
-    basis, basis_active, alphas, betas, _ = _lanczos_basis(
-        matvec, flat, max_dim, reorthogonalize
+    converted, constants = jax.closure_convert(matvec, flat)
+    candidate, eigenvalue, breakdown = _eigenpair_with_response(
+        converted, max_dim, reorthogonalize, flat, constants
     )
-    krylov_dim = alphas.shape[0]
-    projected = jnp.diag(alphas)
-    if krylov_dim > 1:
-        projected = projected + jnp.diag(betas, 1)
-        projected = projected + jnp.diag(betas, -1)
-    inactive_energy = jnp.sum(jnp.abs(alphas)) + 2 * jnp.sum(jnp.abs(betas)) + 1
-    projected = projected + jnp.diag(jnp.where(basis_active, 0, inactive_energy))
-    eigenvalues, eigenvectors = jnp.linalg.eigh(projected)
-    candidate = jnp.einsum("kd,k->d", basis, eigenvectors[:, 0])
-    candidate = candidate / jnp.where(
-        jnp.linalg.norm(candidate) == 0, 1, jnp.linalg.norm(candidate)
-    )
+    result = jnp.reshape(candidate, vector.shape), eigenvalue
     if not return_report:
-        return jnp.reshape(candidate, vector.shape), jnp.real(eigenvalues[0])
-    residual_norm = jnp.linalg.norm(matvec(candidate) - eigenvalues[0] * candidate)
+        return result
+    residual_norm = _safe_norm(matvec(candidate) - eigenvalue * candidate)
     return (
-        jnp.reshape(candidate, vector.shape),
-        jnp.real(eigenvalues[0]),
+        *result,
         {
             "finite": jnp.all(jnp.isfinite(candidate)),
-            "breakdown": ~jnp.all(basis_active),
+            "breakdown": breakdown,
             "residual": residual_norm,
         },
     )
