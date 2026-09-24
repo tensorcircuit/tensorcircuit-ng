@@ -340,21 +340,30 @@ class ExtendedBackend:
         :param a: tensor in matrix form
         :type a: Tensor
         :param psd: whether the input ``a`` is guaranteed as a positive semidefinite matrix,
-            defaults False
+            defaults False. In this mode, negative roundoff eigenvalues are
+            clipped to zero. First derivatives use the square-root response
+            equation, with a zero response within the null space. This supports
+            fixed-rank PSD paths; rank-increasing directions at a singular matrix
+            need not have a finite derivative.
         :type psd: bool
         :return: sqrtm of ``a``
         :rtype: Tensor
         """
         # maybe friendly for AD and also considering that several backend has no support for native sqrtm
-        e, v = self.eigh(a)
         if psd:
-            e = self.relu(e)
+            return self._sqrtmh_psd(a)
+        e, v = self.eigh(a)
         e = self.sqrt(e)
         # ``eigh`` returns real eigenvalues; cast them to the (possibly complex)
         # eigenvector dtype so that ``diagflat(e)`` matches ``v`` for backends
         # that do not auto-promote mixed-dtype matmuls (e.g. pytorch).
         e = self.cast(e, self.dtype(v))
         return v @ self.diagflat(e) @ self.adjoint(v)
+
+    def _sqrtmh_psd(self: Any, a: Tensor) -> Tensor:
+        e, v = self.eigh(a)
+        e = self.sqrt(self.relu(self.real(e)))
+        return (v * self.cast(e, self.dtype(v))) @ self.adjoint(v)
 
     def eigvalsh(self: Any, a: Tensor) -> Tensor:
         """

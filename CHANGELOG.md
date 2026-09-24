@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Compute fidelity reliably for positive semidefinite states and preserve first-order PSD square-root responses on fixed-rank paths.
+
 - Preserve zero-strength gradients in the optimized FGS hopping and pairing evolutions.
 
 - Correct the norm denominator in `MPSCircuit.expectation(normalize=True)` for unnormalized states and distinct bra/ket states.

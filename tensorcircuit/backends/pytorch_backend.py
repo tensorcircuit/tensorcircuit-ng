@@ -397,6 +397,38 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def size(self, a: Tensor) -> Tensor:
         return a.size()
 
+    def _sqrtmh_psd(self, a: Tensor) -> Tensor:
+        class PSDSquareRoot(torchlib.autograd.Function):  # type: ignore[misc]
+            generate_vmap_rule = True
+
+            @staticmethod
+            def forward(value: Tensor) -> Tensor:
+                e, v = torchlib.linalg.eigh(value)
+                s = torchlib.sqrt(torchlib.clamp(e, min=0))
+                return (v * s) @ v.adjoint()
+
+            @staticmethod
+            def setup_context(ctx: Any, inputs: Any, output: Tensor) -> None:
+                ctx.save_for_backward(inputs[0])
+
+            @staticmethod
+            def backward(ctx: Any, gradient: Tensor) -> Tensor:
+                (value,) = ctx.saved_tensors
+                e, v = torchlib.linalg.eigh(value)
+                s = torchlib.sqrt(torchlib.clamp(e, min=0))
+                denominator = s[:, None] + s[None, :]
+                positive = denominator > 0
+                gradient = (gradient + gradient.adjoint()) / 2
+                projected = v.adjoint() @ gradient @ v
+                response = torchlib.where(
+                    positive,
+                    projected / torchlib.where(positive, denominator, 1),
+                    0,
+                )
+                return v @ response @ v.adjoint()
+
+        return PSDSquareRoot.apply(a)
+
     def eigvalsh(self, a: Tensor) -> Tensor:
         return torchlib.linalg.eigvalsh(a)
 
