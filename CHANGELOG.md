@@ -17,6 +17,7 @@
 - Correct the Quickstart exponential-gate sign, sampling probability and measurement JIT descriptions, and documentation typos, including the corresponding Chinese translations.
 - Correct the norm denominator in `MPSCircuit.expectation(normalize=True)` for unnormalized states and distinct bra/ket states.
 - Preserve density-matrix noise channels in `copy()`, `append()`, and `prepend()`.
+- Check gate matrices before cancelling adjoint-named pairs in the simple compiler.
 
 - Fix time ordering in `AnalogCircuit.inverse()` for time-dependent Hamiltonians.
 

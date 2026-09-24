@@ -93,16 +93,16 @@ def replace_u(circuit: AbstractCircuit, **kws: Any) -> AbstractCircuit:
     return c  # type: ignore
 
 
-def _get_matrix(qir_item: Dict[str, Any]) -> Any:
+def _get_matrix(qir_item: Dict[str, Any], to_numpy: bool = True) -> Any:
     if "gate" in qir_item:
         op = qir_item["gate"]
     else:
         op = qir_item["gatef"](**qir_item["parameters"])
     if isinstance(op, QuOperator):
-        m = backend.numpy(op.eval_matrix())
+        m = op.eval_matrix()
     else:
-        m = backend.numpy(backend.reshapem(op.tensor))
-    return m
+        m = backend.reshapem(op.tensor)
+    return backend.numpy(m) if to_numpy else m
 
 
 def prune(
@@ -231,9 +231,16 @@ def _merge(
                 qir[i]["gatef"].n == qir[j]["gatef"].n + "d"
                 or qir[i]["gatef"].n + "d" == qir[j]["gatef"].n
             ):
-                del qir[i]
-                del qir[j - 1]
-                flg = True
+                product = backend.numpy(
+                    backend.matmul(
+                        _get_matrix(qir[j], to_numpy=False),
+                        _get_matrix(qir[i], to_numpy=False),
+                    )
+                )
+                if np.allclose(product, np.eye(product.shape[0]), rtol=1e-5, atol=1e-7):
+                    del qir[i]
+                    del qir[j - 1]
+                    flg = True
         i += 1
     return qir, flg
 
@@ -243,6 +250,10 @@ def merge(
     rules: Optional[Dict[Tuple[str, ...], str]] = None,
     **kws: Any,
 ) -> Any:
+    """
+    Merge gates using the supplied rules and cancel adjoint-named pairs only
+    when their matrices multiply to the identity within numerical tolerance.
+    """
     merge_rules = copy(default_merge_rules)
     if rules is not None:
         merge_rules.update(rules)  # type: ignore
