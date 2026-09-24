@@ -161,9 +161,9 @@ msgstr "这些量子门也是高度可定制的，下面是两个例子"
 #, python-brace-format
 msgid ""
 "``c.exp1(0, 1, unitary=m, theta=0.2)`` which is for the exponential gate "
-":math:`e^{i\\theta m}` of any matrix m as long as :math:`m^2=1`."
+":math:`e^{-i\\theta m}` of any matrix m as long as :math:`m^2=1`."
 msgstr ""
-"``c.exp1(0, 1, unitary=m, theta=0.2)`` 用于任何矩阵 m 的指数门 :math:`e^{i\\theta "
+"``c.exp1(0, 1, unitary=m, theta=0.2)`` 用于任何矩阵 m 的指数门 :math:`e^{-i\\theta "
 "m}`，只要 m 满足 :math:`m^2=1`。"
 
 #: ../../source/quickstart.rst:67
@@ -189,19 +189,12 @@ msgstr "从电路对象中获取输出的最直接的方法是通过 ``c.state()
 #: ../../source/quickstart.rst:75
 msgid ""
 "For bitstring sampling, we have ``c.perfect_sampling()`` which returns "
-"the bitstring and the corresponding probability amplitude."
-msgstr "对于位串采样，我们有 ``c.perfect_sampling()`` ，它返回位串和相应的概率幅度。"
+"the bitstring and the corresponding probability."
+msgstr "对于位串采样，我们有 ``c.perfect_sampling()`` ，它返回位串和相应的概率。"
 
 #: ../../source/quickstart.rst:77
-msgid ""
-"To measure part of the qubits, we can use ``c.measure(0, 1)``, if we want"
-" to know the corresponding probability of the measurement output, try "
-"``c.measure(0, 1, with_prob=True)``. The measure API is by default non-"
-"jittable, but we also have a jittable version as ``c.measure_jit(0, 1)``."
-msgstr ""
-"要测量部分量子比特，我们可以使用 ``c.measure(0, 1)``，如果我们想知道测量的结果的对应概率，可以尝试 "
-"``c.measure(0, 1, with_prob=True)``。 测量 API 在默认情况下是不可即时编译的 "
-"，但我们也有一个可即时编译的版本，如 ``c.measure_jit(0, 1)``。"
+msgid "To measure part of the qubits, we can use ``c.measure(0, 1)``, if we want to know the corresponding probability of the measurement output, try ``c.measure(0, 1, with_prob=True)``. ``measure`` is an alias of ``measure_jit``; both support JIT compilation."
+msgstr "要测量部分量子比特，可以使用 ``c.measure(0, 1)``；如果还想获得测量结果的对应概率，可以使用 ``c.measure(0, 1, with_prob=True)`` 。 ``measure`` 是 ``measure_jit`` 的别名，两者都支持 JIT 编译。"
 
 #: ../../source/quickstart.rst:79
 msgid ""

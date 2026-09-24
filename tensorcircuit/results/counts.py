@@ -193,9 +193,9 @@ def expectation(
     :param z: if defaults as None, then ``diagonal_op`` must be set
         a list of qubit that we measure Z op on
     :type z: Optional[Sequence[int]]
-    :param diagoal_op: shape [n, 2], explicitly indicate the diagonal op on each qubit
+    :param diagonal_op: shape [n, 2], explicitly indicate the diagonal op on each qubit
         eg. [1, -1] for z [1, 1] for I, etc.
-    :type diagoal_op: Tensor
+    :type diagonal_op: Tensor
     :return: the expectation value
     :rtype: float
     """

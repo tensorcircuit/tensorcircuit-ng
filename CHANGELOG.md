@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Correct the Quickstart exponential-gate sign, sampling probability and measurement JIT descriptions, and documentation typos, including the corresponding Chinese translations.
+
 - Fix time ordering in `AnalogCircuit.inverse()` for time-dependent Hamiltonians.
 
 - Fix exact-diagonalization evolution for complex Hermitian Hamiltonians.
