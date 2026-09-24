@@ -1,5 +1,5 @@
 """
-Backend-aware matrix-function actions and spectral measures.
+Backend-aware matrix-function actions, Ritz eigenpairs, and spectral measures.
 
 The public routines in this module operate on dense, sparse, ``LinearOperator``
 and matrix-vector-product inputs.  Solver sizes are Python values so that the
@@ -86,10 +86,10 @@ class KrylovConfig:
     """
     Configuration for a fixed-shape Hermitian Lanczos recurrence.
 
-    A Lanczos run approximates ``f(H) @ vector`` by projecting the Hermitian
-    operator ``H`` onto at most ``max_dim`` basis vectors. The size is fixed
-    before tracing so the recurrence can be compiled by JAX and reused for
-    different vectors or function queries.
+    A Lanczos run approximates ``f(H) @ vector`` or the lowest Ritz eigenpair by
+    projecting the Hermitian operator ``H`` onto at most ``max_dim`` basis
+    vectors. The size is fixed before tracing so the recurrence can be compiled
+    by JAX and reused for different vectors or function queries.
 
     :ivar max_dim: Maximum number of Krylov basis vectors.
     :ivar reorthogonalization: Whether to apply full reorthogonalization or only
@@ -269,10 +269,11 @@ class LanczosMeasure(NamedTuple):
     """
     Spectral quadrature data retained for each stochastic probe.
 
-    ``nodes[r, j]`` and ``weights[r, j]`` form the discrete approximation
-    ``||probe_r||^2 * sum_j weights[r, j] f(nodes[r, j])``. ``active[r, j]``
-    says whether that node belongs to the actual Krylov projection; false
-    entries are fixed-shape padding and contribute nothing.
+    ``sum_j weights[r, j] f(nodes[r, j])`` approximates
+    ``<probe_r|f(H)|probe_r>``. Each weight already includes
+    ``||probe_r||^2``. ``active[r, j]`` says whether that node belongs to the
+    actual Krylov projection; false entries are fixed-shape padding and
+    contribute nothing.
 
     :ivar nodes: Ritz nodes with shape ``(num_probes, max_dim)``.
     :ivar weights: Quadrature weights with shape ``(num_probes, max_dim)``.
@@ -642,6 +643,36 @@ def lanczos_apply(
         )
     result = result * backend.cast(projection.recurrence.vector_norm, dtypestr)
     return backend.cast(result, dtypestr)
+
+
+def lanczos_lowest_eigenpair(
+    operator: Any,
+    vector: Tensor,
+    config: KrylovConfig,
+    *,
+    dimension: Optional[int] = None,
+) -> Tuple[Tensor, Tensor]:
+    """
+    Approximate the lowest Ritz eigenpair of a Hermitian operator by Lanczos.
+
+    The seed must overlap the desired eigenspace. Increase ``config.max_dim``
+    and check ``||H @ state - energy * state||`` to assess convergence.
+
+    :param operator: Hermitian dense or sparse operator, linear operator, or matrix-vector-product callable.
+    :type operator: Any
+    :param vector: Nonzero one-dimensional seed vector.
+    :type vector: Tensor
+    :param config: Static Krylov dimension and recurrence policy.
+    :type config: KrylovConfig
+    :param dimension: Optional dimension checked against the seed and operator.
+    :type dimension: Optional[int]
+    :return: Lowest Ritz energy and normalized Ritz vector.
+    :rtype: Tuple[Tensor, Tensor]
+    """
+    projection = lanczos_project(operator, vector, config, dimension=dimension)
+    nodes, eigenvectors, _, _ = _projection_spectral_data(projection)
+    state = backend.matvec(projection.basis, eigenvectors[:, 0])
+    return nodes[0], state / backend.cast(_safe_norm(state), dtypestr)
 
 
 def lanczos_quadrature(
@@ -1778,12 +1809,11 @@ def kernel_weights(config: ChebyshevConfig) -> Tensor:
         m = float(config.order)
         angle = math.pi / m
         return (
-            (m - n) * backend.cos(angle * n)
-            + backend.sin(angle * n) / backend.sin(angle) * backend.cos(angle)
+            (m - n) * backend.cos(angle * n) + backend.sin(angle * n) / math.tan(angle)
         ) / m
-    return backend.sinh(
-        config.lorentz_lambda * (1.0 - n / config.order)
-    ) / backend.sinh(config.lorentz_lambda)
+    return backend.sinh(config.lorentz_lambda * (1.0 - n / config.order)) / math.sinh(
+        config.lorentz_lambda
+    )
 
 
 def _taylor_action_scalar(
@@ -2003,18 +2033,15 @@ def estimate_spectral_bounds(
     *,
     dimension: Optional[int] = None,
     padding: float = 0.01,
-) -> Tuple[float, float]:
+) -> Tuple[Tensor, Tensor]:
     """
     Estimate ascending spectral bounds from an explicit Lanczos seed.
 
-    This eager helper diagonalizes only the small projected Lanczos matrix and
-    returns ``(emin, emax)`` as Python floats. The bounds describe the spectrum
-    visible from ``initial_vector``; increase ``max_dim`` or use a better seed
-    when a full-operator enclosure is required.
-
-    This helper is eager and returns Python floats. It uses only active Ritz
-    nodes and expands their interval by ``padding``; it is not called inside
-    JIT kernels.
+    This helper diagonalizes only the small projected Lanczos matrix. It
+    returns Python floats eagerly and backend scalars under JIT. The bounds
+    describe the spectrum visible from ``initial_vector``; increase
+    ``max_dim`` or use a better seed when a full-operator enclosure is required.
+    Construct a static :class:`ChebyshevConfig` from eager bounds outside JIT.
 
     :param operator: Hermitian square operator or matrix-vector-product callable.
     :type operator: Any
@@ -2024,23 +2051,23 @@ def estimate_spectral_bounds(
     :type config: KrylovConfig
     :param dimension: Optional operator dimension for a bare callable.
     :type dimension: Optional[int]
-    :param padding: Relative interval padding applied to the active Ritz range.
+    :param padding: Static Python relative padding applied to the active Ritz range.
     :type padding: float
     :return: Ascending spectral bounds ``(emin, emax)``.
-    :rtype: Tuple[float, float]
+    :rtype: Tuple[Tensor, Tensor]
     """
     if padding < 0 or not math.isfinite(float(padding)):
         raise ValueError("padding must be a finite non-negative number.")
     projection = lanczos_project(operator, initial_vector, config, dimension=dimension)
     values, _, _, active = _projection_spectral_data(projection)
     infinity = backend.convert_to_tensor(float("inf"), dtype=rdtypestr)
-    emin = _concrete_float(backend.min(backend.where(active, values, infinity)))
-    emax = _concrete_float(backend.max(backend.where(active, values, -infinity)))
-    if emin is None or emax is None:
-        raise ValueError("spectral bounds require an eager initial-vector evaluation.")
+    emin = backend.min(backend.where(active, values, infinity))
+    emax = backend.max(backend.where(active, values, -infinity))
     width = emax - emin
-    if width == 0:
-        margin = max(1.0, abs(emax)) * float(padding)
-    else:
-        margin = float(padding) * width
-    return emin - margin, emax + margin
+    scale = backend.where(backend.abs(emax) > 1.0, backend.abs(emax), 1.0)
+    margin = backend.where(width == 0, scale, width) * padding
+    lower, upper = emin - margin, emax + margin
+    concrete_lower, concrete_upper = _concrete_float(lower), _concrete_float(upper)
+    if concrete_lower is not None and concrete_upper is not None:
+        return concrete_lower, concrete_upper
+    return lower, upper

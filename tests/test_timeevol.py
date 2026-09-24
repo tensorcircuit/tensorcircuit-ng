@@ -324,9 +324,10 @@ def test_ode_evol_jit_grad(highp, jaxb):
             tc.backend.convert_to_tensor([0, 10.0]),
             None,
             *params,
-            atol=1.0e-10,
-            rtol=1.0e-10,
+            atol=1.0e-12,
+            rtol=1.0e-12,
             solver="Kvaerno5",
+            max_steps=16384,
             ode_backend="diffrax",
         )
         return tc.backend.real(zz_correlation(states[-1]))

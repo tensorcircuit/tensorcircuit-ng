@@ -281,6 +281,111 @@ def test_prepared_kpm_bounds_must_match(npb):
         )
 
 
+def test_kpm_dos_from_moments_inside_jax_jit(jaxb):
+    energies, hamiltonian, probes = _problem()
+    config = tc.matrixfunc.ChebyshevConfig(32, (-1.2, 1.2))
+    queries = tc.backend.convert_to_tensor([-0.8, 0.0, 0.8], dtype=tc.rdtypestr)
+
+    def dos(query):
+        moments = tc.matrixfunc.stochastic_chebyshev_moments(
+            hamiltonian, probes, config
+        )
+        prepared = tc.spectral.density_of_states_from_moments(
+            moments, query, config=config, normalization="states"
+        )
+        direct = tc.spectral.density_of_states(
+            hamiltonian, query, method=config, probes=probes, normalization="states"
+        )
+        return prepared, direct
+
+    prepared, direct = tc.backend.jit(dos)(queries)
+    expected = _kpm_reference(energies, np.asarray(queries), config)
+    np.testing.assert_allclose(prepared, expected, atol=4e-5)
+    np.testing.assert_allclose(direct, expected, atol=4e-5)
+
+    moments = tc.matrixfunc.stochastic_chebyshev_moments(hamiltonian, probes, config)
+    wrong_config = tc.matrixfunc.ChebyshevConfig(32, (-2.0, 2.0))
+    invalid = tc.backend.jit(
+        lambda prepared_moments: tc.spectral.density_of_states_from_moments(
+            prepared_moments, 0.0, config=wrong_config
+        )
+    )(moments)
+    assert np.isnan(np.asarray(invalid))
+
+
+def test_partition_free_energy_inside_jax_jit(jaxb):
+    energies, hamiltonian, probes = _problem()
+    config = tc.matrixfunc.KrylovConfig(3)
+
+    def thermodynamics(beta):
+        logz = tc.spectral.log_partition_function(
+            hamiltonian, beta, method=config, probes=probes
+        )
+        partition = tc.spectral.partition_function(
+            hamiltonian, beta, method=config, probes=probes
+        )
+        free = tc.spectral.free_energy(logz, beta)
+        return partition, free
+
+    beta = tc.backend.convert_to_tensor(0.4, dtype=tc.rdtypestr)
+    partition, free = tc.backend.jit(thermodynamics)(beta)
+    expected = np.sum(np.exp(-0.4 * energies))
+    np.testing.assert_allclose(partition, expected, atol=2e-5)
+    np.testing.assert_allclose(free, -np.log(expected) / 0.4, atol=2e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_random_trace_probes_explicit_status_inside_jit(backend):
+    generate = tc.backend.jit(
+        lambda status: tc.spectral.random_trace_probes(
+            num_probes=2, dimension=3, status=status
+        )
+    )
+    status_a = tc.backend.convert_to_tensor(
+        [[0.0, 0.125, 0.25], [0.375, 0.5, 0.625]], dtype=tc.rdtypestr
+    )
+    status_b = tc.backend.convert_to_tensor(
+        [[0.125, 0.25, 0.375], [0.5, 0.625, 0.75]], dtype=tc.rdtypestr
+    )
+    np.testing.assert_allclose(
+        generate(status_a),
+        tc.spectral.random_trace_probes(num_probes=2, dimension=3, status=status_a),
+    )
+    np.testing.assert_allclose(
+        generate(status_b),
+        tc.spectral.random_trace_probes(num_probes=2, dimension=3, status=status_b),
+    )
+    assert not np.allclose(generate(status_a), generate(status_b))
+
+
+def test_status_drives_compiled_spectral_estimate(jaxb):
+    hamiltonian = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.complex64)
+    config = tc.matrixfunc.KrylovConfig(2)
+
+    def estimate(status):
+        probes = tc.spectral.random_trace_probes(
+            num_probes=1, dimension=2, status=status
+        )
+        return tc.spectral.density_of_states(
+            hamiltonian,
+            0.5,
+            method=config,
+            probes=probes,
+            broadening=0.2,
+            normalization="states",
+        )
+
+    compiled = tc.backend.jit(estimate)
+    positive = tc.backend.convert_to_tensor([[0.0, 0.0]], dtype=tc.rdtypestr)
+    negative = tc.backend.convert_to_tensor([[0.0, 0.5]], dtype=tc.rdtypestr)
+    np.testing.assert_allclose(
+        compiled(positive), 2 * 0.2 / (np.pi * (0.5**2 + 0.2**2)), rtol=2e-5
+    )
+    np.testing.assert_allclose(
+        compiled(negative), 2 * 0.2 / (np.pi * (1.5**2 + 0.2**2)), rtol=2e-5
+    )
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_probe_batching_and_fft_match_unbatched_paths(backend):
     _, hamiltonian, probes = _problem()
@@ -811,22 +916,48 @@ def test_response_methods_and_fft_windows_match_direct_sums(npb):
         np.testing.assert_allclose(frequencies, expected_frequencies, atol=4e-5)
 
 
+def test_fft_spectrum_jax_jit_times(jaxb):
+    times = tc.backend.convert_to_tensor([0.0, 0.2, 0.4, 0.6])
+
+    def spectrum(time_grid):
+        correlation = tc.backend.exp(-0.4j * time_grid)
+        return tc.spectral.fft_spectrum(
+            correlation, time_grid, window="hann", zero_padding=2
+        )
+
+    frequencies, values = tc.backend.jit(spectrum)(times)
+    sample_times = np.asarray(times)
+    weights = 0.5 * (1.0 - np.cos(2.0 * np.pi * np.arange(4) / 3.0))
+    expected = np.fft.fftshift(
+        np.fft.ifft(np.pad(np.exp(-0.4j * sample_times) * weights, (0, 2))) * 6 * 0.2
+    )
+    np.testing.assert_allclose(values, expected, atol=4e-5)
+    np.testing.assert_allclose(
+        frequencies, 2.0 * np.pi * np.fft.fftshift(np.fft.fftfreq(6, d=0.2))
+    )
+
+
 def test_spectral_validation_and_probe_distributions(npb):
     with pytest.raises(ValueError):
-        tc.spectral.random_trace_probes(1, num_probes=0, dimension=2)
+        tc.spectral.random_trace_probes(num_probes=0, dimension=2)
     with pytest.raises(ValueError):
+        tc.spectral.random_trace_probes(num_probes=2, dimension=2, distribution="bad")
+    with pytest.raises(ValueError, match="status must have shape"):
         tc.spectral.random_trace_probes(
-            1, num_probes=2, dimension=2, distribution="bad"
+            num_probes=2, dimension=2, status=np.zeros((4,))
         )
+    status = np.linspace(0.0, 1.0, 32, endpoint=False).reshape(8, 4)
     rademacher = tc.spectral.random_trace_probes(
-        7, num_probes=8, dimension=4, distribution="rademacher"
+        num_probes=8, dimension=4, distribution="rademacher", status=status
     )
     np.testing.assert_allclose(np.abs(rademacher), 1.0, atol=0.0)
     phases = tc.spectral.random_trace_probes(
-        7, num_probes=8, dimension=4, distribution="random_phase"
+        num_probes=8, dimension=4, distribution="random_phase", status=status
     )
     np.testing.assert_allclose(np.abs(phases), 1.0, atol=2e-6)
     assert not np.allclose(rademacher, phases)
+    generated = tc.spectral.random_trace_probes(num_probes=8, dimension=4)
+    assert np.shape(generated) == (8, 4)
 
     energies, hamiltonian, probes = _problem()
     with pytest.raises(ValueError):

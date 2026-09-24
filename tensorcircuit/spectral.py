@@ -27,7 +27,6 @@ actions, projections, and moment contractions.
 """
 
 import math
-from numbers import Integral
 from typing import Any, Literal, Optional, Tuple, Union
 
 from .cons import backend, dtypestr, rdtypestr
@@ -147,27 +146,30 @@ def _log_statistics(samples: Tensor, with_std: bool = True) -> Tuple[Tensor, Ten
 
 
 def random_trace_probes(
-    key: Any,
-    *,
     num_probes: int,
     dimension: int,
+    *,
     distribution: Literal["rademacher", "random_phase"] = "random_phase",
+    status: Optional[Tensor] = None,
 ) -> Tensor:
     """
     Generate explicit Hutchinson probes.
 
-    ``key`` is a backend random key or an integer seed. The returned tensor has
-    shape ``(num_probes, dimension)``; both supported distributions have
-    ``E[r r^dagger] = I`` and therefore use unit ``probe_scale``.
+    The returned tensor has shape ``(num_probes, dimension)``; both supported
+    distributions have ``E[r r^dagger] = I`` and use unit ``probe_scale``.
+    Without ``status``, draw uniforms from the backend's implicit random state;
+    use this mode to prepare probes before JIT compilation. Pass explicit
+    uniform ``status`` when generating probes inside a compiled function.
 
-    :param key: Backend random key or integer seed.
-    :type key: Any
     :param num_probes: Number of probe rows to generate.
     :type num_probes: int
     :param dimension: Hilbert-space dimension of each probe.
     :type dimension: int
     :param distribution: Probe distribution, either ``"rademacher"`` or ``"random_phase"``.
     :type distribution: Literal["rademacher", "random_phase"]
+    :param status: Optional external uniform random tensor with shape
+        ``(num_probes, dimension)`` and values in ``[0, 1)``.
+    :type status: Optional[Tensor]
     :return: Probe matrix with shape ``(num_probes, dimension)``.
     :rtype: Tensor
     """
@@ -177,11 +179,12 @@ def random_trace_probes(
         raise ValueError("dimension must be a positive integer.")
     if distribution not in ("rademacher", "random_phase"):
         raise ValueError("distribution must be 'rademacher' or 'random_phase'.")
-    if isinstance(key, Integral):
-        key = backend.set_random_state(int(key), get_only=True)
-    uniform = backend.stateful_randu(
-        key, shape=[num_probes, dimension], dtype=rdtypestr
-    )
+    if status is None:
+        uniform = backend.implicit_randu(shape=[num_probes, dimension], dtype=rdtypestr)
+    else:
+        uniform = backend.cast(backend.convert_to_tensor(status), rdtypestr)
+        if backend.shape_tuple(uniform) != (num_probes, dimension):
+            raise ValueError("status must have shape (num_probes, dimension).")
     if distribution == "rademacher":
         one = backend.ones_like(uniform, dtype=rdtypestr)
         return backend.where(uniform < 0.5, one, -one)
@@ -190,31 +193,32 @@ def random_trace_probes(
     )
 
 
-def _chebyshev_config_from_moments(moments: ChebyshevMomentResult) -> ChebyshevConfig:
-    bounds = moments.bounds
-    emin = _concrete_float(bounds[0])
-    emax = _concrete_float(bounds[1])
-    if emin is None or emax is None:
-        raise ValueError("prepared moment bounds must be concrete host values.")
-    return ChebyshevConfig(
-        order=backend.shape_tuple(moments.moments)[-1], bounds=(emin, emax)
-    )
-
-
 def _validate_prepared_bounds(
     moments: ChebyshevMomentResult, bounds: Tuple[float, float]
-) -> None:
+) -> Tensor:
     """
-    Reject a prepared moment set evaluated with different spectral bounds.
+    Reject eager mismatches and mark traced mismatches for NaN coefficients.
+
+    JAX tracers cannot be compared on the host while tracing. In that case,
+    the returned tensor mask checks the bounds at execution time.
     """
-    prepared = _chebyshev_config_from_moments(moments).bounds
-    if not all(
-        math.isclose(left, right, rel_tol=1.0e-6, abs_tol=1.0e-6)
-        for left, right in zip(prepared, bounds)
+    lower = _concrete_float(moments.bounds[0])
+    upper = _concrete_float(moments.bounds[1])
+    if (
+        lower is not None
+        and upper is not None
+        and not (
+            math.isclose(lower, bounds[0], rel_tol=1.0e-6, abs_tol=1.0e-6)
+            and math.isclose(upper, bounds[1], rel_tol=1.0e-6, abs_tol=1.0e-6)
+        )
     ):
         raise ValueError(
             "prepared moments bounds do not match the evaluation configuration."
         )
+    expected = backend.convert_to_tensor(bounds, dtype=rdtypestr)
+    difference = backend.abs(backend.cast(moments.bounds, rdtypestr) - expected)
+    tolerance = 1.0e-6 * (1.0 + backend.abs(expected))
+    return backend.max(backend.cast(difference > tolerance, rdtypestr)) == 0.0
 
 
 def density_of_states_from_moments(
@@ -261,10 +265,15 @@ def density_of_states_from_moments(
         raise ValueError("DOS reconstruction requires at least two moments.")
     if backend.shape_tuple(moments.moments)[-1] != config.order:
         raise ValueError("moment order does not match ChebyshevConfig.order.")
-    _validate_prepared_bounds(moments, config.bounds)
+    bounds_match = _validate_prepared_bounds(moments, config.bounds)
     energies, _ = _check_query(energies, "energies")
     matrixfunc._validate_inside(energies, config.bounds, "energies")
     coefficients = matrixfunc.delta_coefficients(energies, config)
+    coefficients = backend.where(
+        bounds_match,
+        coefficients,
+        backend.cast(float("nan"), backend.dtype(coefficients)),
+    )
     result = matrixfunc.evaluate_chebyshev_trace(
         moments,
         coefficients,

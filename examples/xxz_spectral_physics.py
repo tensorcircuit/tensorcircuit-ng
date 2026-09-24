@@ -1,263 +1,241 @@
-"""
-Finite-size XXZ spectral observables with the matrix-function API.
+"""XXZ density of states, thermodynamics, and local response from MVPs."""
 
-The scan is deliberately small enough for exact diagonalization, so every
-matrix-function observable is also compared with a Lehmann reference. The
-exact diagonalization is used only for this validation, while KPM, SLQ, and
-Krylov methods produce the plotted approximate results.
-"""
-
-from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 import tensorcircuit as tc
 
-plt.rcParams.update(
-    {"font.size": 8, "axes.spines.top": False, "axes.spines.right": False}
-)
+_DOS_BROADENING = 0.15
+_GREEN_BROADENING = 0.10
+_CHEBYSHEV_ORDER = 256
+_NUM_PROBES = 256
+_KRYLOV_DIM = 128
 
 
-def xxz_hamiltonian(num_sites: int, delta: float) -> np.ndarray:
-    """
-    Build an open-boundary XXZ Hamiltonian with ``Jxy=1`` and ``Jz=delta``.
-    """
-    graph = tc.templates.graphs.Line1D(num_sites, pbc=False)
-    hamiltonian = tc.quantum.heisenberg_hamiltonian(
-        graph,
-        hxx=1.0,
-        hyy=1.0,
-        hzz=delta,
-        sparse=False,
-        numpy=True,
-    )
-    return np.asarray(hamiltonian, dtype=np.complex128)
+def _xxz_terms(num_sites: int, delta: Any) -> Tuple[List[List[int]], List[Any]]:
+    """Return Pauli strings and weights of an open XXZ chain."""
+    structures, weights = [], []
+    for site in range(num_sites - 1):
+        for pauli, weight in ((1, 1.0), (2, 1.0), (3, delta)):
+            term = [0] * num_sites
+            term[site] = term[site + 1] = pauli
+            structures.append(term)
+            weights.append(weight)
+    return structures, weights
 
 
-def local_z_operator(num_sites: int, site: int) -> np.ndarray:
-    """
-    Return the dense Pauli-Z operator acting on one site.
-    """
-    pauli_string = [0] * num_sites
-    pauli_string[site] = 3
-    operator = tc.quantum.PauliStringSum2Dense([pauli_string], [1.0], numpy=True)
-    return np.asarray(operator, dtype=np.complex128)
+def _central_z(num_sites: int) -> List[List[int]]:
+    """Return the Pauli string of Z on the central site."""
+    term = [0] * num_sites
+    term[num_sites // 2] = 3
+    return [term]
 
 
-def broadened_dos(
-    energies: np.ndarray, queries: np.ndarray, width: float
-) -> np.ndarray:
-    """
-    Evaluate the exact Lorentzian-broadened finite-size DOS.
-    """
-    difference = queries[:, None] - energies[None, :]
-    return np.sum(
-        width / (np.pi * (difference**2 + width**2)),
-        axis=1,
-    )
-
-
-def run_xxz_scan(
-    num_sites: int = 6,
-    deltas: Tuple[float, ...] = (-1.5, -0.5, 0.5, 1.5),
-    output_path: Optional[str] = None,
-) -> None:
-    """
-    Compute and plot XXZ observables with the matrix-function API.
-
-    :param num_sites: Number of sites in the open chain used for the main scan.
-    :param deltas: XXZ anisotropies shown in the observable panels.
-    :param output_path: Optional PNG path for the six-panel figure.
-    """
-    tc.set_dtype("complex128")
+def compute_with_spectral_api(
+    num_sites: int = 8, deltas: Tuple[float, ...] = (0.5, 1.0, 1.5)
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """Run the jitted matrix-free spectral calculations for an XXZ scan."""
     dimension = 2**num_sites
-    # Use a complete, rescaled computational basis here. This keeps the
-    # finite-size example deterministic: the stochastic interfaces reduce to
-    # exact traces, so the printed errors test the matrix-function truncation
-    # rather than typicality noise from a small random probe ensemble.
-    probes = np.sqrt(dimension) * np.eye(dimension, dtype=np.complex128)
-    # For this six-site chain, 20 vectors cover every magnetization sector
-    # (the largest sector has dimension 20) while keeping the example quick.
-    krylov = tc.matrixfunc.KrylovConfig(max_dim=min(20, dimension))
-    beta = np.linspace(0.05, 2.5, 24)
-    frequency = np.linspace(-4.0, 4.0, 400)
-    dos_width = 0.12
-    green_width = 0.10
-
-    hamiltonians: List[np.ndarray] = []
-    eigensystems = []
-    for delta in deltas:
-        hamiltonian = xxz_hamiltonian(num_sites, delta)
-        hamiltonians.append(hamiltonian)
-        eigensystems.append(np.linalg.eigh(hamiltonian))
-
-    lowest = min(float(values[0][0]) for values in eigensystems)
-    highest = max(float(values[0][-1]) for values in eigensystems)
-    padding = 0.08 * max(1.0, highest - lowest)
-    bounds = (lowest - padding, highest + padding)
-    energy = np.linspace(bounds[0] + 1.0e-5, bounds[1] - 1.0e-5, 500)
-    kpm = tc.matrixfunc.ChebyshevConfig(
-        order=128,
-        bounds=bounds,
-        kernel="jackson",
+    energy_bound = (num_sites - 1) * (2.0 + max(abs(delta) for delta in deltas))
+    grid = {
+        "num_sites": num_sites,
+        "energy_bound": energy_bound,
+        "energies": np.linspace(-energy_bound + 1e-5, energy_bound - 1e-5, 500),
+        "beta": np.linspace(0.05, 2.5, 32),
+        "frequencies": np.linspace(-4.0, 4.0, 400),
+    }
+    energies, beta, frequencies = (
+        tc.backend.convert_to_tensor(grid[key], dtype=tc.rdtypestr)
+        for key in ("energies", "beta", "frequencies")
     )
+    probes = tc.spectral.random_trace_probes(
+        num_probes=_NUM_PROBES, dimension=dimension
+    )
+    seed = tc.spectral.random_trace_probes(num_probes=1, dimension=dimension)[0]
+    krylov = tc.matrixfunc.KrylovConfig(max_dim=min(_KRYLOV_DIM, dimension))
+    chebyshev = tc.matrixfunc.ChebyshevConfig(
+        order=_CHEBYSHEV_ORDER, bounds=(-energy_bound, energy_bound), kernel="jackson"
+    )
+    central_z = tc.quantum.PauliStringSum2MVP(_central_z(num_sites), [1.0])
 
-    dos_kpm_values = []
-    dos_slq_values = []
-    exact_dos_values = []
-    thermal_values = []
-    exact_thermal_values = []
-    heat_values = []
-    exact_heat_values = []
-    spectral_values = []
-    exact_spectral_values = []
-
-    for delta, hamiltonian, (eigenvalues, eigenvectors) in zip(
-        deltas, hamiltonians, eigensystems
-    ):
+    @tc.backend.jit
+    def observables(delta: Any) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        hamiltonian = tc.quantum.PauliStringSum2MVP(*_xxz_terms(num_sites, delta))
         measure = tc.matrixfunc.slq_measure(
-            hamiltonian,
-            probes,
-            krylov,
-            probe_batch_size=4,
+            hamiltonian, probes, krylov, probe_batch_size=4
         )
-        dos_kpm = tc.spectral.density_of_states(
-            hamiltonian,
-            energy,
-            method=kpm,
-            probes=probes,
-            normalization="states",
-            probe_batch_size=4,
+        estimates = {
+            "dos_slq": tc.spectral.density_of_states_from_slq(
+                measure,
+                energies,
+                broadening=_DOS_BROADENING,
+                normalization="states",
+                with_std=True,
+            ),
+            "dos_kpm": tc.spectral.density_of_states(
+                hamiltonian,
+                energies,
+                method=chebyshev,
+                probes=probes,
+                normalization="states",
+                probe_batch_size=4,
+                with_std=True,
+            ),
+            "thermal_energy": tc.spectral.thermal_energy(measure, beta, with_std=True),
+            "heat_capacity": tc.spectral.heat_capacity(measure, beta, with_std=True),
+        }
+        ground_energy, ground_state = tc.matrixfunc.lanczos_lowest_eigenpair(
+            hamiltonian, seed, krylov
         )
-        dos_kpm_values.append(np.asarray(tc.backend.numpy(dos_kpm)))
-        dos_slq = tc.spectral.density_of_states(
-            hamiltonian,
-            energy,
-            method=krylov,
-            probes=probes,
-            broadening=dos_width,
-            normalization="states",
-            probe_batch_size=4,
-        )
-        dos_slq_values.append(np.asarray(tc.backend.numpy(dos_slq)))
-        exact_dos_values.append(broadened_dos(eigenvalues, energy, dos_width))
-
-        thermal = tc.spectral.thermal_energy(measure, beta)
-        heat = tc.spectral.heat_capacity(measure, beta)
-        thermal_values.append(np.asarray(tc.backend.numpy(thermal)))
-        heat_values.append(np.asarray(tc.backend.numpy(heat)))
-        boltzmann = np.exp(-beta[:, None] * eigenvalues[None, :])
-        exact_thermal = np.sum(boltzmann * eigenvalues[None, :], axis=1) / np.sum(
-            boltzmann, axis=1
-        )
-        exact_heat = beta**2 * (
-            np.sum(boltzmann * eigenvalues[None, :] ** 2, axis=1)
-            / np.sum(boltzmann, axis=1)
-            - exact_thermal**2
-        )
-        exact_thermal_values.append(exact_thermal)
-        exact_heat_values.append(exact_heat)
-
-        response = local_z_operator(num_sites, num_sites // 2) @ eigenvectors[:, 0]
+        residual = hamiltonian(ground_state) - ground_energy * ground_state
+        response_state = central_z(ground_state)
         green = tc.spectral.zero_temperature_greens_function(
             hamiltonian,
-            frequency,
-            ground_energy=eigenvalues[0],
-            particle_right=response,
-            particle_left=response,
-            broadening=green_width,
+            frequencies,
+            ground_energy=ground_energy,
+            particle_right=response_state,
+            particle_left=response_state,
+            broadening=_GREEN_BROADENING,
             method=krylov,
         )
-        spectral_values.append(
-            np.asarray(tc.backend.numpy(tc.spectral.spectral_function(green)))
+        values = {key: mean for key, (mean, _) in estimates.items()}
+        values.update(
+            ground_energy=ground_energy,
+            ground_residual=tc.backend.norm(residual),
+            spectral_response=tc.spectral.spectral_function(green),
         )
-        response_weights = np.abs(eigenvectors.conj().T @ response) ** 2
-        exact_green = np.sum(
-            response_weights[None, :]
-            / (
-                frequency[:, None]
-                + eigenvalues[0]
-                + 1.0j * green_width
-                - eigenvalues[None, :]
-            ),
-            axis=1,
-        )
-        exact_spectral_values.append(-np.imag(exact_green) / np.pi)
-        thermal_error = np.max(np.abs(thermal_values[-1] - exact_thermal))
-        heat_error = np.max(np.abs(heat_values[-1] - exact_heat))
-        dos_error = np.max(np.abs(dos_slq_values[-1] - exact_dos_values[-1]))
-        print(
-            f"Delta={delta:+.2f}: max thermal error={thermal_error:.3e}, "
-            f"max heat-capacity error={heat_error:.3e}, "
-            f"max broadened-DOS error={dos_error:.3e}"
-        )
+        return values, {key: stderr for key, (_, stderr) in estimates.items()}
 
-    colors = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#F0E442"]
-    figure, axes = plt.subplots(2, 2, figsize=(7.2, 5.0), constrained_layout=True)
-    for index, delta in enumerate(deltas):
-        color = colors[index % len(colors)]
-        labels = ("KPM", "SLQ", "Lehmann") if index == 0 else (None,) * 3
-        for values, style, label, alpha in (
-            (dos_kpm_values[index], "-", labels[0], 1.0),
-            (dos_slq_values[index], ":", labels[1], 0.8),
-            (exact_dos_values[index], "--", labels[2], 0.55),
-        ):
-            axes[0, 0].plot(
-                energy, values, style, color=color, alpha=alpha, label=label
+    results = []
+    for delta in deltas:
+        values, stderr = tc.backend.tree_map(
+            np.asarray,
+            observables(tc.backend.convert_to_tensor(delta, dtype=tc.rdtypestr)),
+        )
+        results.append({"delta": delta, "stderr": stderr, **values})
+    return grid, results
+
+
+def validate_with_ed(
+    grid: Dict[str, Any], results: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Check the estimates against exact diagonalization and return ED curves."""
+    num_sites, bound = grid["num_sites"], grid["energy_bound"]
+    energies, beta = grid["energies"], grid["beta"]
+    orders = np.arange(_CHEBYSHEV_ORDER)
+    scaled = energies[:, None] / bound
+    kpm_coefficients = (
+        np.where(orders == 0, 1.0, 2.0)
+        * np.cos(np.arccos(scaled) * orders)
+        / (np.pi * bound * np.sqrt(1.0 - scaled**2))
+    )
+    angle = np.pi / _CHEBYSHEV_ORDER
+    jackson = (
+        (_CHEBYSHEV_ORDER - orders) * np.cos(angle * orders)
+        + np.sin(angle * orders) / np.tan(angle)
+    ) / _CHEBYSHEV_ORDER
+    central_z = np.asarray(
+        tc.quantum.PauliStringSum2Dense(_central_z(num_sites), [1.0], numpy=True)
+    )
+
+    references = []
+    for result in results:
+        hamiltonian = np.asarray(
+            tc.quantum.PauliStringSum2Dense(
+                *_xxz_terms(num_sites, result["delta"]), numpy=True
             )
-        for axis, x_values, values, exact, label in (
-            (
-                axes[0, 1],
-                frequency,
-                spectral_values[index],
-                exact_spectral_values[index],
-                rf"$\Delta={delta:g}$",
-            ),
-            (
-                axes[1, 0],
-                beta,
-                thermal_values[index],
-                exact_thermal_values[index],
-                None,
-            ),
-            (axes[1, 1], beta, heat_values[index], exact_heat_values[index], None),
-        ):
-            axis.plot(x_values, values, color=color, label=label)
-            axis.plot(x_values, exact, "--", color=color, alpha=0.55)
-
-    for axis, xlabel, ylabel in (
-        (axes[0, 0], "Energy", r"$\rho(E)$"),
-        (axes[0, 1], "Frequency", r"$-\operatorname{Im}G^R/\pi$"),
-        (axes[1, 0], r"$\beta$", r"$\langle H\rangle_\beta$"),
-        (axes[1, 1], r"$\beta$", r"$C_\beta$"),
-    ):
-        axis.set_xlabel(xlabel)
-        axis.set_ylabel(ylabel)
-
-    axes[0, 0].legend(frameon=False, loc="upper left")
-    axes[0, 1].legend(frameon=False, loc="upper left")
-
-    panel_labels = "abcdef"
-    for axis, label in zip(axes.flat, panel_labels):
-        axis.text(
-            -0.16,
-            1.04,
-            f"({label})",
-            transform=axis.transAxes,
-            fontsize=10,
-            fontweight="bold",
-            va="bottom",
-            ha="right",
         )
-        axis.tick_params(direction="in", which="both")
+        eigenvalues, eigenvectors = np.linalg.eigh(hamiltonian)
+        moments = np.cos(np.arccos(eigenvalues[:, None] / bound) * orders).sum(axis=0)
+        boltzmann = np.exp(-np.outer(beta, eigenvalues))
+        boltzmann /= boltzmann.sum(axis=1, keepdims=True)
+        thermal = boltzmann @ eigenvalues
+        overlaps = eigenvectors.conj().T @ central_z @ eigenvectors[:, 0]
+        green = np.abs(overlaps) ** 2 / (
+            grid["frequencies"][:, None]
+            + eigenvalues[0]
+            + 1.0j * _GREEN_BROADENING
+            - eigenvalues
+        )
+        reference = {
+            "dos_slq": np.sum(
+                _DOS_BROADENING
+                / (
+                    np.pi
+                    * ((energies[:, None] - eigenvalues) ** 2 + _DOS_BROADENING**2)
+                ),
+                axis=1,
+            ),
+            "dos_kpm": kpm_coefficients @ (jackson * moments),
+            "thermal_energy": thermal,
+            "heat_capacity": beta**2 * (boltzmann @ eigenvalues**2 - thermal**2),
+            "ground_energy": eigenvalues[0],
+            "spectral_response": -np.imag(green.sum(axis=1)) / np.pi,
+        }
+        for key, stderr in result["stderr"].items():
+            np.testing.assert_array_less(
+                np.abs(result[key] - reference[key]), 4.0 * (stderr + 1e-8)
+            )
+        for key in ("ground_energy", "spectral_response"):
+            np.testing.assert_allclose(
+                result[key], reference[key], rtol=1e-8, atol=1e-8
+            )
+        np.testing.assert_allclose(result["ground_residual"], 0.0, atol=1e-8)
+        references.append(reference)
+    return references
 
-    if output_path is not None:
-        figure.savefig(output_path, dpi=300, bbox_inches="tight", pad_inches=0.02)
-        print(f"Saved figure to {output_path}")
+
+def plot_results(
+    grid: Dict[str, Any],
+    results: List[Dict[str, Any]],
+    references: List[Dict[str, Any]],
+) -> None:
+    """Plot the API estimates beside the exact finite-size references."""
+    figure, axes = plt.subplots(2, 2, figsize=(8.2, 5.8), constrained_layout=True)
+    beta_label = r"Inverse temperature $\beta$"
+    panels = (
+        (axes[0, 0], "energies", (("dos_kpm", "KPM"), ("dos_slq", "SLQ"))),
+        (axes[0, 1], "beta", (("heat_capacity", ""),)),
+        (axes[1, 0], "frequencies", (("spectral_response", ""),)),
+        (axes[1, 1], "beta", (("thermal_energy", ""),)),
+    )
+    labels = (
+        ("Energy", "Density of states"),
+        (beta_label, "Heat capacity"),
+        ("Frequency", r"$-\mathrm{Im}\,G^R/\pi$"),
+        (beta_label, "Thermal energy"),
+    )
+    styles = (("-", "--"), (":", "-."))
+    for (axis, grid_key, curves), (xlabel, ylabel) in zip(panels, labels):
+        x = grid[grid_key]
+        for (key, method), (style, ed_style) in zip(curves, styles):
+            for index, (result, reference) in enumerate(zip(results, references)):
+                color = f"C{index}"
+                label = rf"{method} $\Delta={result['delta']:g}$".strip()
+                axis.plot(x, result[key], style, color=color, label=label)
+                axis.plot(
+                    x,
+                    reference[key],
+                    ed_style,
+                    color=color,
+                    alpha=0.65,
+                    label=f"ED {method}".strip() if index == 0 else None,
+                )
+        axis.set(xlabel=xlabel, ylabel=ylabel)
+        axis.legend(frameon=False, fontsize=7)
+    figure.suptitle(f"Open XXZ chain, L={grid['num_sites']}")
     plt.show()
 
 
+def main() -> None:
+    tc.set_backend("jax")
+    tc.set_dtype("complex128")
+    tc.backend.set_random_state(2026)
+    grid, results = compute_with_spectral_api()
+    plot_results(grid, results, validate_with_ed(grid, results))
+
+
 if __name__ == "__main__":
-    run_xxz_scan(output_path=str(Path(__file__).with_name("xxz_spectral_physics.png")))
+    main()

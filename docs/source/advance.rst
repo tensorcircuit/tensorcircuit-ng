@@ -266,7 +266,7 @@ For time-independent Hermitian Hamiltonians with a reliable spectral interval, t
     t = 2.0
 
     # 1. Estimate ascending spectral bounds (emin, emax) with a short
-    #    Lanczos run. This step is non-jittable and runs outside the kernel.
+    #    Lanczos run. Run this eagerly to build the static Chebyshev config.
     ascending_bounds = tc.matrixfunc.estimate_spectral_bounds(
         h, psi0, tc.matrixfunc.KrylovConfig(max_dim=30), padding=0.01
     )
@@ -293,6 +293,8 @@ The Hamiltonian may be a dense/sparse matrix, a ``LinearOperator``, or a matrix-
     Chebyshev exponential routines, including ``chebyshev_evol`` and Chebyshev-based time-correlation and thermal calculations, support the NumPy and JAX backends. On TensorFlow, use Krylov or Taylor methods for exponential actions. SLQ, KPM DOS, resolvent, and FFT calculations are also available on TensorFlow.
 
 See ``examples/xxz_spectral_physics.py`` for a complete KPM, SLQ, and Krylov calculation of DOS, spectral, thermal-energy, and heat-capacity observables.
+
+Generate trace probes before compiling the estimator with ``tc.spectral.random_trace_probes(num_probes=256, dimension=dimension)`` and pass the resulting tensor as ``probes``. To generate probes inside JIT, pass a uniform tensor in ``[0, 1)`` through the ``status`` argument. The estimator itself takes explicit probes and performs no random draws.
 
 **Matrix-function configuration and diagnostics:**
 

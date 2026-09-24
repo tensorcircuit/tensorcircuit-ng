@@ -107,6 +107,126 @@ def test_matrixfunc_projection_reuse_and_trace(npb):
     )
 
 
+def test_lanczos_lowest_eigenpair_dense_sparse_mvp(npb):
+    matrix = np.array(
+        [[1.0, 0.2 - 0.1j, 0.0], [0.2 + 0.1j, -0.4, 0.3], [0.0, 0.3, 0.8]],
+        dtype=np.complex64,
+    )
+    vector = np.array([1.0, 0.2j, 0.4], dtype=np.complex64)
+    expected_energy, expected_vectors = np.linalg.eigh(matrix)
+    config = tc.matrixfunc.KrylovConfig(4)
+
+    for operator in (matrix, csr_matrix(matrix), lambda value: matrix @ value):
+        energy, state = tc.matrixfunc.lanczos_lowest_eigenpair(
+            operator, vector, config, dimension=3
+        )
+        np.testing.assert_allclose(energy, expected_energy[0], atol=2e-5)
+        np.testing.assert_allclose(np.linalg.norm(state), 1.0, atol=2e-5)
+        np.testing.assert_allclose(matrix @ state - energy * state, 0.0, atol=2e-5)
+        np.testing.assert_allclose(
+            np.abs(np.vdot(expected_vectors[:, 0], state)), 1.0, atol=2e-5
+        )
+
+
+def test_lanczos_lowest_eigenpair_breakdown_uses_seed_subspace(npb):
+    matrix = np.diag(np.array([2.0, -3.0, 4.0], dtype=np.complex64))
+    vector = np.array([2.0, 0.0, 0.0], dtype=np.complex64)
+    energy, state = tc.matrixfunc.lanczos_lowest_eigenpair(
+        matrix, vector, tc.matrixfunc.KrylovConfig(4)
+    )
+    np.testing.assert_allclose(energy, 2.0, atol=2e-5)
+    np.testing.assert_allclose(state, [1.0, 0.0, 0.0], atol=2e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("torchb")])
+def test_lanczos_lowest_eigenpair_backend_mvp(backend):
+    matrix = tc.backend.convert_to_tensor(
+        np.array([[0.5, 0.2], [0.2, -0.4]], dtype=np.complex64)
+    )
+    vector = tc.backend.convert_to_tensor(np.array([1.0, 0.3j], dtype=np.complex64))
+    operator = lambda value: tc.backend.matvec(matrix, value)
+    energy, state = tc.matrixfunc.lanczos_lowest_eigenpair(
+        operator, vector, tc.matrixfunc.KrylovConfig(3)
+    )
+    expected_energy = np.linalg.eigvalsh(np.asarray(tc.backend.numpy(matrix)))[0]
+    np.testing.assert_allclose(energy, expected_energy, atol=2e-5)
+    np.testing.assert_allclose(
+        operator(state) - tc.backend.cast(energy, tc.dtypestr) * state,
+        0.0,
+        atol=2e-5,
+    )
+
+
+def test_lanczos_lowest_eigenpair_jax_jit_mvp(jaxb):
+    matrix = tc.backend.convert_to_tensor(
+        np.array([[0.5, 0.2], [0.2, -0.4]], dtype=np.complex64)
+    )
+    vector = tc.backend.convert_to_tensor(np.array([1.0, 0.3j], dtype=np.complex64))
+    config = tc.matrixfunc.KrylovConfig(3)
+    energy, state = tc.backend.jit(
+        lambda seed: tc.matrixfunc.lanczos_lowest_eigenpair(
+            lambda value: tc.backend.matvec(matrix, value), seed, config
+        )
+    )(vector)
+    expected_energy = np.linalg.eigvalsh(np.asarray(tc.backend.numpy(matrix)))[0]
+    np.testing.assert_allclose(energy, expected_energy, atol=2e-5)
+    np.testing.assert_allclose(
+        tc.backend.matvec(matrix, state) - energy * state, 0.0, atol=2e-5
+    )
+
+
+def test_prepared_matrixfunc_queries_inside_jax_jit(jaxb):
+    energies = np.array([-0.4, 0.6], dtype=np.float32)
+    matrix = tc.backend.convert_to_tensor(np.diag(energies).astype(np.complex64))
+    vector = tc.backend.convert_to_tensor(np.array([1.0, 0.5j], dtype=np.complex64))
+    probes = tc.backend.convert_to_tensor(np.sqrt(2.0) * np.eye(2, dtype=np.complex64))
+    krylov = tc.matrixfunc.KrylovConfig(2)
+    chebyshev = tc.matrixfunc.ChebyshevConfig(64, (-1.0, 1.0))
+
+    def evaluate(beta):
+        projection = tc.matrixfunc.lanczos_project(matrix, vector, krylov)
+        quadratic = tc.matrixfunc.lanczos_quadrature(
+            projection, lambda nodes: tc.backend.exp(-beta * nodes)
+        )
+        measure = tc.matrixfunc.slq_measure(matrix, probes, krylov)
+        trace = tc.matrixfunc.evaluate_slq_trace(
+            measure, lambda nodes: tc.backend.exp(-beta * nodes)
+        )
+        moments = tc.matrixfunc.chebyshev_moments(matrix, vector, chebyshev)
+        coefficients = tc.matrixfunc.fermi_dirac_coefficients(beta, 0.0, chebyshev)
+        occupancy = tc.matrixfunc.evaluate_chebyshev_moments(moments, coefficients)
+        return quadratic, trace, occupancy
+
+    beta = 0.4
+    quadratic, trace, occupancy = tc.backend.jit(evaluate)(
+        tc.backend.convert_to_tensor(beta, dtype=tc.rdtypestr)
+    )
+    boltzmann = np.exp(-beta * energies)
+    np.testing.assert_allclose(quadratic, boltzmann @ [1.0, 0.25], atol=2e-5)
+    np.testing.assert_allclose(trace, np.sum(boltzmann), atol=2e-5)
+    np.testing.assert_allclose(
+        occupancy, [1.0, 0.25] @ (1.0 / (1.0 + np.exp(beta * energies))), atol=2e-5
+    )
+
+
+def test_estimate_spectral_bounds_inside_jax_jit(jaxb):
+    matrix = tc.backend.convert_to_tensor(
+        np.diag(np.array([-0.5, 0.9], dtype=np.complex64))
+    )
+    vector = tc.backend.convert_to_tensor(np.array([1.0, 1.0], dtype=np.complex64))
+    config = tc.matrixfunc.KrylovConfig(2)
+
+    def bounds(seed):
+        return tc.matrixfunc.estimate_spectral_bounds(
+            lambda value: tc.backend.matvec(matrix, value), seed, config, padding=0.1
+        )
+
+    eager = bounds(vector)
+    compiled = tc.backend.jit(bounds)(vector)
+    assert isinstance(eager[0], float) and isinstance(eager[1], float)
+    np.testing.assert_allclose(compiled, eager, atol=2e-5)
+
+
 def test_matrixfunc_jax_jit_and_gradient(jaxb):
     matrix = tc.backend.convert_to_tensor(
         np.array([[0.3, 0.2], [0.2, -0.4]], dtype=np.complex64)
@@ -482,6 +602,29 @@ def test_chebyshev_trace_kernels_and_query_broadcasting(npb):
             ).shape,
             (2, 16),
         )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_kernel_weights_backends_highp(backend, highp):
+    order, lorentz_lambda = 16, 3.0
+    n = np.arange(order)
+    angle = np.pi / order
+    expected = {
+        "dirichlet": np.ones(order),
+        "jackson": ((order - n) * np.cos(angle * n) + np.sin(angle * n) / np.tan(angle))
+        / order,
+        "lorentz": np.sinh(lorentz_lambda * (1.0 - n / order))
+        / np.sinh(lorentz_lambda),
+    }
+    for kernel, reference in expected.items():
+        config = tc.matrixfunc.ChebyshevConfig(
+            order, (-1.0, 1.0), kernel=kernel, lorentz_lambda=lorentz_lambda
+        )
+        weights = tc.matrixfunc.kernel_weights(config)
+        assert tc.backend.dtype(weights) == tc.backend.dtype(
+            tc.backend.ones([1], dtype=tc.rdtypestr)
+        )
+        np.testing.assert_allclose(tc.backend.numpy(weights), reference, atol=1e-12)
 
 
 def test_resolvent_coefficients_reject_nondecaying_tail(npb):
