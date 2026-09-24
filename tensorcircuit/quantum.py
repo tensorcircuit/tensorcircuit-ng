@@ -3401,6 +3401,10 @@ def fidelity(rho: Tensor, rho0: Tensor) -> Tensor:
     ----
     This returns the squared Uhlmann fidelity ``F**2``, not ``F`` itself.
     For the unsquared fidelity, take ``backend.sqrt`` of the result.
+    The implementation uses the equivalent squared trace norm of
+    ``sqrt(rho) @ sqrt(rho0)``, with PSD matrix square roots. At rank boundaries,
+    floating-point perturbations can cause errors of order the square root of
+    machine precision. Derivatives along rank-changing paths need not be finite.
 
     :param rho: The density matrix in form of Tensor.
     :type rho: Tensor
@@ -3409,8 +3413,9 @@ def fidelity(rho: Tensor, rho0: Tensor) -> Tensor:
     :return: The squared fidelity scalar between ``rho`` and ``rho0``.
     :rtype: Tensor
     """
-    rhosqrt = backend.sqrtmh(rho)
-    return backend.real(backend.trace(backend.sqrtmh(rhosqrt @ rho0 @ rhosqrt)) ** 2)
+    product = backend.sqrtmh(rho, psd=True) @ backend.sqrtmh(rho0, psd=True)
+    singular_values = backend.real(backend.svd(product)[1])
+    return backend.sum(singular_values) ** 2
 
 
 @op2tensor

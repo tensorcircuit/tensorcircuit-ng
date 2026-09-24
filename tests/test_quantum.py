@@ -1625,3 +1625,171 @@ def test_count_tuple2dict(backend):
         assert set(out_bin.keys()) == set(expected_keys)
         for k, c in zip(expected_keys, counts):
             assert out_bin[k] == int(c)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("double_precision", [False, True])
+@pytest.mark.parametrize("ranks", [(1, 1), (1, 4), (2, 3), (4, 4)])
+def test_fidelity_psd_states(backend, double_precision, ranks, request):
+    if double_precision:
+        request.getfixturevalue("highp")
+    rng = np.random.default_rng(0)
+    factors = []
+    for rank in ranks:
+        unitary, _ = np.linalg.qr(
+            rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4))
+        )
+        weights = np.arange(1, rank + 1, dtype=float)
+        weights /= weights.sum()
+        factors.append(unitary[:, :rank] * np.sqrt(weights))
+    left, right = factors
+    rho = tc.array_to_tensor(left @ left.conj().T)
+    sigma = tc.array_to_tensor(right @ right.conj().T)
+    reference = np.linalg.svd(left.conj().T @ right, compute_uv=False).sum() ** 2
+    # At a rank boundary, an O(eps) eigenvalue perturbation can change F by O(sqrt(eps)).
+    tolerance = 4e-8 if double_precision else 7e-4
+    for a, b in [(rho, sigma), (sigma, rho)]:
+        np.testing.assert_allclose(
+            tc.backend.numpy(qu.fidelity(a, b)), reference, rtol=0, atol=tolerance
+        )
+        np.testing.assert_allclose(
+            tc.backend.numpy(tc.backend.jit(qu.fidelity)(a, b)),
+            reference,
+            rtol=0,
+            atol=tolerance,
+        )
+    np.testing.assert_allclose(
+        tc.backend.numpy(qu.fidelity(rho, rho)),
+        1,
+        rtol=0,
+        atol=2e-12 if double_precision else 3e-6,
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("double_precision", [False, True])
+def test_fidelity_diagonal_limits(backend, double_precision, request):
+    if double_precision:
+        request.getfixturevalue("highp")
+    for p, q in [
+        ([1, 0, 0, 0], [0, 1, 0, 0]),
+        ([0.5, 0.5, 0, 0], [0.25] * 4),
+        ([1 - 1e-12, 1e-12, 0, 0], [0, 1, 0, 0]),
+    ]:
+        expected = np.sum(np.sqrt(np.array(p) * np.array(q))) ** 2
+        result = qu.fidelity(
+            tc.array_to_tensor(np.diag(p)), tc.array_to_tensor(np.diag(q))
+        )
+        np.testing.assert_allclose(
+            tc.backend.numpy(result), expected, rtol=2e-6, atol=1e-15
+        )
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize(
+    "kind,parameter",
+    [
+        ("pure", 0.0),
+        ("pure", 0.3),
+        ("pure", np.pi / 2),
+        ("fixed_rank", 0.3),
+        ("full_rank", 0.3),
+        ("degenerate", 0.0),
+    ],
+)
+@pytest.mark.parametrize("double_precision", [False, True])
+@pytest.mark.parametrize("swap", [False, True])
+def test_fidelity_gradients(backend, kind, parameter, swap, double_precision, request):
+    if double_precision:
+        request.getfixturevalue("highp")
+    k = tc.backend
+    rng = np.random.default_rng(7)
+    unitary, _ = np.linalg.qr(rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4)))
+    unitary = tc.array_to_tensor(unitary)
+    if kind == "degenerate":
+        weights = np.array([0.6, 0.3, 0.08, 0.02])
+        sigma = unitary @ tc.array_to_tensor(np.diag(weights)) @ k.adjoint(unitary)
+        direction = tc.array_to_tensor(np.diag([0.1, -0.1, 0.2, -0.2]))
+        reference = (
+            np.sqrt(weights).sum()
+            * np.trace(
+                k.numpy(direction)
+                @ (k.numpy(unitary) * np.sqrt(weights))
+                @ k.numpy(k.adjoint(unitary))
+            ).real
+        )
+        parameter = 0.0
+
+        def state(theta):
+            return (
+                tc.array_to_tensor(np.eye(4) / 4)
+                + k.cast(theta, tc.dtypestr) * direction
+            )
+
+    else:
+        p, q = (1.0, 1.0) if kind == "pure" else (0.8, 0.65)
+        weight = 0.7 if kind == "full_rank" else 1.0
+        sigma = (
+            unitary
+            @ tc.array_to_tensor(
+                np.diag(
+                    [
+                        weight * q,
+                        weight * (1 - q),
+                        (1 - weight) * 0.6,
+                        (1 - weight) * 0.4,
+                    ]
+                )
+            )
+            @ k.adjoint(unitary)
+        )
+        overlap = (
+            p * q
+            + (1 - p) * (1 - q)
+            + np.sin(parameter) ** 2 * (1 - 2 * p) * (2 * q - 1)
+        )
+        squared = overlap + 2 * np.sqrt(p * (1 - p) * q * (1 - q))
+        reference = (1 - 2 * p) * (2 * q - 1) * np.sin(2 * parameter)
+        if kind == "full_rank":
+            reference *= (
+                (weight * np.sqrt(squared) + 1 - weight) * weight / np.sqrt(squared)
+            )
+
+        def state(theta):
+            c, s = k.cos(theta), k.sin(theta)
+            zero, one = theta * 0, theta * 0 + 1
+            rotation = k.cast(
+                k.stack(
+                    [
+                        k.stack([c, -s, zero, zero]),
+                        k.stack([s, c, zero, zero]),
+                        k.stack([zero, zero, one, zero]),
+                        k.stack([zero, zero, zero, one]),
+                    ]
+                ),
+                tc.dtypestr,
+            )
+            spectrum = tc.array_to_tensor(
+                np.diag(
+                    [
+                        weight * p,
+                        weight * (1 - p),
+                        (1 - weight) * 0.6,
+                        (1 - weight) * 0.4,
+                    ]
+                )
+            )
+            return (
+                unitary @ rotation @ spectrum @ k.adjoint(rotation) @ k.adjoint(unitary)
+            )
+
+    def loss(theta):
+        rho = state(theta)
+        return qu.fidelity(sigma, rho) if swap else qu.fidelity(rho, sigma)
+
+    theta = k.convert_to_tensor(np.array(parameter, dtype=tc.rdtypestr))
+    tolerance = 3e-7 if double_precision else 1e-3
+    np.testing.assert_allclose(k.numpy(k.grad(loss)(theta)), reference, atol=tolerance)
+    np.testing.assert_allclose(
+        k.numpy(k.jit(k.grad(loss))(theta)), reference, atol=tolerance
+    )

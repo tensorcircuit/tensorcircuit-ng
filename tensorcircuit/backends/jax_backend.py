@@ -326,6 +326,31 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def size(self, a: Tensor) -> Tensor:
         return jnp.size(a)
 
+    def _sqrtmh_psd(self, a: Tensor) -> Tensor:
+        def factors(value: Tensor) -> Any:
+            e, v = jnp.linalg.eigh(value)
+            return jnp.sqrt(jnp.maximum(e, 0)), v
+
+        @libjax.custom_jvp  # type: ignore[misc]
+        def root(value: Tensor) -> Tensor:
+            s, v = factors(value)
+            return (v * s) @ jnp.conj(v.T)
+
+        @root.defjvp  # type: ignore[misc]
+        def root_jvp(primals: Any, tangents: Any) -> Any:
+            (value,), (direction,) = primals, tangents
+            s, v = factors(value)
+            denominator = s[:, None] + s[None, :]
+            positive = denominator > 0
+            direction = (direction + jnp.conj(direction.T)) / 2
+            projected = jnp.conj(v.T) @ direction @ v
+            response = jnp.where(
+                positive, projected / jnp.where(positive, denominator, 1), 0
+            )
+            return root(value), v @ response @ jnp.conj(v.T)
+
+        return root(a)
+
     def eigvalsh(self, a: Tensor) -> Tensor:
         return jnp.linalg.eigvalsh(a)
 

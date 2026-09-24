@@ -514,6 +514,26 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def size(self, a: Tensor) -> Tensor:
         return tf.size(a)
 
+    def _sqrtmh_psd(self, a: Tensor) -> Tensor:
+        @tf.custom_gradient  # type: ignore[misc]
+        def root(value: Tensor) -> Any:
+            e, v = tf.linalg.eigh(value)
+            s = tf.sqrt(tf.maximum(tf.math.real(e), 0))
+            result = (v * tf.cast(s, v.dtype)) @ tf.linalg.adjoint(v)
+
+            def backward(gradient: Tensor) -> Tensor:
+                denominator = s[:, None] + s[None, :]
+                positive = denominator > 0
+                denominator = tf.cast(tf.where(positive, denominator, 1), v.dtype)
+                gradient = (gradient + tf.linalg.adjoint(gradient)) / 2
+                projected = tf.linalg.adjoint(v) @ gradient @ v
+                response = tf.where(positive, projected / denominator, 0)
+                return v @ response @ tf.linalg.adjoint(v)
+
+            return result, backward
+
+        return root(a)
+
     def eigvalsh(self, a: Tensor) -> Tensor:
         return tf.linalg.eigvalsh(a)
 
