@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Return marginal outcome probabilities when measuring a subset of qubits in `U1Circuit`.
+
 - Preserve zero-strength gradients in the optimized FGS hopping and pairing evolutions.
 
 - Correct the norm denominator in `MPSCircuit.expectation(normalize=True)` for unnormalized states and distinct bra/ket states.
