@@ -8,6 +8,10 @@ sys.path.insert(0, modulepath)
 
 import numpy as np
 import pytest
+from pytest_lazyfixture import lazy_fixture as lf
+from scipy.linalg import expm
+
+import tensorcircuit as tc
 
 from tensorcircuit.applications.dqas import set_op_pool
 from tensorcircuit.applications.graphdata import get_graph
@@ -97,3 +101,125 @@ def test_QAOA_ansatz_errors(example_inputs, full_coupling, mixer):
         QAOA_ansatz_for_Ising(
             params, nlayers, pauli_terms, weights, full_coupling, mixer
         )
+
+
+def _ising_qaoa_reference(params, pauli_terms, weights):
+    n = len(pauli_terms[0])
+    basis = np.indices([2] * n).reshape(n, -1).T
+    spins = 1 - 2 * basis
+    diagonal = sum(
+        weight * np.prod(spins[:, np.flatnonzero(term)], axis=1)
+        for term, weight in zip(pauli_terms, weights)
+    )
+    mixer = np.zeros((2**n, 2**n))
+    for qubit in range(n):
+        operator = np.ones((1, 1))
+        for site in range(n):
+            operator = np.kron(
+                operator, np.array([[0, 1], [1, 0]]) if site == qubit else np.eye(2)
+            )
+        mixer += operator
+    state = np.ones(2**n, dtype=complex) / np.sqrt(2**n)
+    for gamma, beta in np.asarray(params).reshape(-1, 2):
+        state = np.exp(-1j * gamma * diagonal) * state
+        state = expm(-0.5j * beta * mixer) @ state
+    return state, diagonal
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("double_precision", [False, True])
+@pytest.mark.parametrize("nlayers", [1, 2])
+@pytest.mark.parametrize(
+    "pauli_terms, weights",
+    [
+        ([[1, 0, 0], [0, 0, 1]], [0.7, -0.4]),
+        ([[1, 1, 0], [1, 0, 1]], [-0.6, 0.9]),
+        ([[1, 0, 0], [0, 0, 1], [1, 0, 1]], [0.7, -0.4, 1.2]),
+    ],
+    ids=["Z", "ZZ", "mixed"],
+)
+def test_ising_qaoa_exact_evolution(
+    backend, double_precision, nlayers, pauli_terms, weights, request
+):
+    if double_precision:
+        request.getfixturevalue("highp")
+    params = np.array([0.37, -0.21, -0.43, 0.19][: 2 * nlayers], dtype=tc.rdtypestr)
+    expected, _ = _ising_qaoa_reference(params, pauli_terms, weights)
+    tensor_params = tc.backend.convert_to_tensor(params)
+
+    def state(parameters):
+        return QAOA_ansatz_for_Ising(parameters, nlayers, pauli_terms, weights).state()
+
+    tolerance = 1e-10 if double_precision else 5e-6
+    np.testing.assert_allclose(
+        tc.backend.numpy(state(tensor_params)), expected, atol=tolerance, rtol=0
+    )
+    if tc.backend.name in ("jax", "tensorflow"):
+        np.testing.assert_allclose(
+            tc.backend.numpy(tc.backend.jit(state)(tensor_params)),
+            expected,
+            atol=tolerance,
+            rtol=0,
+        )
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("nlayers", [1, 2])
+@pytest.mark.parametrize("gamma", [0.0, 0.37])
+def test_ising_qaoa_gradients(backend, nlayers, gamma, highp):
+    pauli_terms = [[1, 0, 0], [0, 0, 1], [1, 0, 1]]
+    params = np.array([gamma, 0.43, -0.21, 0.17][: 2 * nlayers])
+    weights = np.array([0.7, -0.4, 1.2])
+
+    def reference_energy(parameters, coefficients):
+        state, diagonal = _ising_qaoa_reference(parameters, pauli_terms, coefficients)
+        return np.dot(diagonal, np.abs(state) ** 2)
+
+    def energy(parameters, coefficients):
+        circuit = QAOA_ansatz_for_Ising(parameters, nlayers, pauli_terms, coefficients)
+        return sum(
+            coefficients[k]
+            * tc.backend.real(circuit.expectation_ps(z=np.flatnonzero(term).tolist()))
+            for k, term in enumerate(pauli_terms)
+        )
+
+    expected_gradients = []
+    step = 1e-5
+    for argnum, values in enumerate((params, weights)):
+        gradient = np.empty_like(values)
+        for index in range(len(values)):
+            plus = [params.copy(), weights.copy()]
+            minus = [params.copy(), weights.copy()]
+            plus[argnum][index] += step
+            minus[argnum][index] -= step
+            gradient[index] = (reference_energy(*plus) - reference_energy(*minus)) / (
+                2 * step
+            )
+        expected_gradients.append(gradient)
+
+    value_and_grad = tc.backend.value_and_grad(energy, argnums=(0, 1))
+    functions = [value_and_grad]
+    if tc.backend.name in ("jax", "tensorflow"):
+        functions.append(tc.backend.jit(value_and_grad))
+    for function in functions:
+        value, gradients = function(
+            tc.backend.convert_to_tensor(params), tc.backend.convert_to_tensor(weights)
+        )
+        np.testing.assert_allclose(
+            tc.backend.numpy(value), reference_energy(params, weights), atol=1e-10
+        )
+        for actual, expected in zip(gradients, expected_gradients):
+            np.testing.assert_allclose(
+                tc.backend.numpy(actual), expected, atol=2e-8, rtol=1e-6
+            )
+
+
+def test_ising_qaoa_qubo_cost(npb):
+    matrix = np.array([[1.0, 0.4, -0.2], [0.4, -0.7, 0.3], [-0.2, 0.3, 0.5]])
+    pauli_terms, weights, offset = tc.templates.conversions.QUBO_to_Ising(matrix)
+    gamma = 0.31
+    circuit = QAOA_ansatz_for_Ising([gamma, 0.0], 1, pauli_terms, weights)
+    basis = np.indices([2] * 3).reshape(3, -1).T
+    energies = np.einsum("bi,ij,bj->b", basis, matrix, basis)
+    expected = np.exp(-1j * gamma * (energies - offset)) / np.sqrt(8)
+    np.testing.assert_allclose(circuit.state(), expected, atol=1e-6, rtol=0)
