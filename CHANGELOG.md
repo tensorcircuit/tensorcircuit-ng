@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Apply qubit mappings to all analog and digital blocks in `AnalogCircuit.append`, including when embedding a smaller circuit.
+
 - Preserve zero-strength gradients in the optimized FGS hopping and pairing evolutions.
 
 - Correct the norm denominator in `MPSCircuit.expectation(normalize=True)` for unnormalized states and distinct bra/ket states.
