@@ -3,6 +3,7 @@ import sys
 
 import pytest
 import numpy as np
+from scipy.linalg import expm
 
 thisfile = os.path.abspath(__file__)
 modulepath = os.path.dirname(os.path.dirname(thisfile))
@@ -331,3 +332,130 @@ def test_analog_circuit_time_dependent_inverse_ad_jit(jaxb, highp):
     )
     np.testing.assert_allclose(value, cost_fn(strength), atol=1e-8, rtol=1e-8)
     np.testing.assert_allclose(gradient, numerical_gradient, atol=1e-6, rtol=1e-6)
+
+
+def _analog_mps_input(theta, scale=1.0):
+    coefficients = tc.backend.stack([tc.backend.cos(theta), 1j * tc.backend.sin(theta)])
+    left = tc.gates.Gate(scale * coefficients * tc.backend.eye(2))
+    right = tc.gates.x()
+    left[1] ^ right[0]
+    return tc.quantum.QuVector([left[0], right[1]])
+
+
+@pytest.mark.parametrize("theta", [0.0, 0.31])
+@pytest.mark.parametrize("scale", [1.0, 1.7])
+@pytest.mark.parametrize("single_tensor", [False, True])
+def test_analog_mps_initial_state(jaxb, theta, scale, single_tensor):
+    expected = scale * np.array([0, np.cos(theta), 1j * np.sin(theta), 0])
+    if single_tensor:
+        mps = tc.quantum.QuVector.from_tensor(
+            tc.backend.convert_to_tensor(expected.reshape(2, 2))
+        )
+    else:
+        mps = _analog_mps_input(theta, scale)
+    circuit = tc.AnalogCircuit(2, mps_inputs=mps)
+    for form, shape in [("default", (4,)), ("ket", (4, 1)), ("bra", (1, 4))]:
+        np.testing.assert_allclose(
+            circuit.state(form=form), expected.reshape(shape), atol=1e-6
+        )
+    np.testing.assert_allclose(circuit.amplitude("10"), expected[2], atol=1e-6)
+    np.testing.assert_allclose(
+        circuit.expectation_ps(z=[1]), -(scale**2) * np.cos(2 * theta), atol=1e-6
+    )
+    circuit.x(1)
+    np.testing.assert_allclose(circuit.state(), expected[[1, 0, 3, 2]], atol=1e-6)
+    np.testing.assert_allclose(
+        tc.backend.reshape(mps.copy().eval(), [-1]), expected, atol=1e-6
+    )
+
+
+@pytest.mark.parametrize("input_mode", ["default", "dense", "both"])
+def test_analog_mps_input_precedence(jaxb, input_mode):
+    expected = np.array([1, 0, 0, 0])
+    kwargs = {}
+    if input_mode != "default":
+        expected = np.array([0, 0, 1, 0])
+        kwargs["inputs"] = tc.backend.convert_to_tensor(expected)
+    if input_mode == "both":
+        kwargs["mps_inputs"] = _analog_mps_input(0.31)
+    circuit = tc.AnalogCircuit(2, **kwargs)
+    np.testing.assert_allclose(circuit.state(), expected, atol=1e-6)
+    replacement = tc.backend.convert_to_tensor(np.array([0, 0, 0, 1], dtype=complex))
+    circuit.current_digital_circuit.replace_inputs(replacement)
+    np.testing.assert_allclose(circuit.state(), replacement, atol=1e-6)
+
+
+@pytest.mark.parametrize("mode", ["global", "local", "mixed"])
+def test_analog_mps_hybrid_evolution(jaxb, highp, mode):
+    theta = 0.31
+    expected = np.array([0, np.cos(theta), 1j * np.sin(theta), 0])
+    circuit = tc.AnalogCircuit(2, mps_inputs=_analog_mps_input(theta))
+    x = np.array([[0, 1], [1, 0]])
+    z = np.diag([1, -1])
+    h = np.array([[1, 1], [1, -1]]) / np.sqrt(2)
+    local = 0.4 * x - 0.2 * z
+    global_h = 0.3 * np.kron(x, x) + 0.7 * np.kron(z, np.eye(2))
+    circuit.h(0)
+    expected = np.kron(h, np.eye(2)) @ expected
+    if mode == "local":
+        circuit.add_analog_block(
+            lambda t: tc.backend.convert_to_tensor(local),
+            0.23,
+            index=[1],
+            atol=1e-10,
+            rtol=1e-9,
+        )
+        expected = np.kron(np.eye(2), expm(-0.23j * local)) @ expected
+    else:
+        circuit.add_analog_block(
+            lambda t: tc.backend.convert_to_tensor(global_h),
+            0.23,
+            atol=1e-10,
+            rtol=1e-9,
+        )
+        expected = expm(-0.23j * global_h) @ expected
+    if mode == "mixed":
+        circuit.x(1)
+        expected = np.kron(np.eye(2), x) @ expected
+        circuit.add_analog_block(
+            lambda t: tc.backend.convert_to_tensor(local),
+            0.19,
+            index=[1],
+            atol=1e-10,
+            rtol=1e-9,
+        )
+        expected = np.kron(np.eye(2), expm(-0.19j * local)) @ expected
+    circuit.rz(0, theta=0.17)
+    expected = np.kron(expm(-0.085j * z), np.eye(2)) @ expected
+    np.testing.assert_allclose(circuit.state(), expected, atol=1e-7, rtol=0)
+    np.testing.assert_allclose(circuit.state(), expected, atol=1e-7, rtol=0)
+    np.testing.assert_allclose(circuit.effective_circuit.state(), expected, atol=1e-7)
+
+
+@pytest.mark.parametrize("evolve", [False, True])
+def test_analog_mps_initial_state_gradient(jaxb, highp, evolve):
+    def loss(params):
+        circuit = tc.AnalogCircuit(2, mps_inputs=_analog_mps_input(params[0]))
+        if evolve:
+            circuit.add_analog_block(
+                lambda t: tc.gates.x().tensor,
+                params[1],
+                index=[0],
+                atol=1e-10,
+                rtol=1e-9,
+            )
+        return tc.backend.real(circuit.expectation_ps(z=[0]))
+
+    theta, time = 0.31, 0.23
+    params = tc.backend.convert_to_tensor(np.array([theta, time]))
+    expected = np.cos(2 * theta)
+    gradient = np.array([-2 * np.sin(2 * theta), 0.0])
+    if evolve:
+        expected *= np.cos(2 * time)
+        gradient *= np.cos(2 * time)
+        gradient[1] = -2 * np.cos(2 * theta) * np.sin(2 * time)
+    value_and_grad = tc.backend.value_and_grad(loss)
+    for function in [value_and_grad, tc.backend.jit(value_and_grad)]:
+        actual, actual_gradient = function(params)
+        np.testing.assert_allclose(actual, expected, atol=1e-7, rtol=0)
+        np.testing.assert_allclose(actual_gradient, gradient, atol=1e-7, rtol=0)
