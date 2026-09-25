@@ -57,7 +57,8 @@ class AnalogCircuit:
         :param inputs: If not None, the initial state of the circuit is taken as ``inputs``
             instead of :math:`\vert 0 \rangle^n` qubits, defaults to None.
         :type inputs: Optional[Tensor], optional
-        :param mps_inputs: QuVector for a MPS like initial wavefunction.
+        :param mps_inputs: QuVector for a MPS like initial wavefunction, used when
+            ``inputs`` is None. Explicit ``inputs`` take precedence, as in ``Circuit``.
         :type mps_inputs: Optional[QuOperator]
         :param split: dict if two qubit gate is ready for split, including parameters for at least one of
             ``max_singular_values`` and ``max_truncation_err``.
@@ -85,11 +86,11 @@ class AnalogCircuit:
         else:
             self.inputs = inputs
 
-        # List of digital circuits, starting with one empty circuit.
+        # Keep dense placeholders for later blocks without overriding an MPS initial state.
         self.digital_circuits: List[Circuit] = [
             Circuit(
                 self.num_qubits,
-                inputs=self.inputs,
+                inputs=self.inputs if mps_inputs is None else inputs,
                 mps_inputs=mps_inputs,
                 split=split,
                 dim=dim,
