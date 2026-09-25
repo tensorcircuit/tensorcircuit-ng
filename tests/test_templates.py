@@ -85,6 +85,33 @@ def test_qft_block() -> None:
     np.testing.assert_allclose(mat, ref.T.conj(), atol=1e-7)
 
 
+@pytest.mark.parametrize("pbc", [False, True])
+@pytest.mark.parametrize(
+    "edge_weight, expected",
+    [(None, [1.0] * 4), (2.0, [2.0] * 4), ([1.0, 2.0, 3.0, 4.0], [1.0, 2.0, 3.0, 4.0])],
+)
+def test_line1d_edge_weights(pbc, edge_weight, expected):
+    graph = tc.templates.graphs.Line1D(4, edge_weight=edge_weight, pbc=pbc)
+    edges = [(0, 1), (1, 2), (2, 3)]
+    if pbc:
+        edges.append((3, 0))
+    assert set(graph.nodes) == {0, 1, 2, 3}
+    assert graph.number_of_edges() == len(edges)
+    np.testing.assert_allclose(
+        [graph[u][v]["weight"] for u, v in edges], expected[: len(edges)]
+    )
+
+
+@pytest.mark.parametrize("flip_first, expected", [(False, 10.0), (True, 0.0)])
+def test_line1d_periodic_ising_energy(npb, flip_first, expected):
+    graph = tc.templates.graphs.Line1D(4, edge_weight=[1.0, 2.0, 3.0, 4.0])
+    circuit = tc.Circuit(4)
+    if flip_first:
+        circuit.x(0)
+    energy = tc.templates.measurements.spin_glass_measurements(circuit, graph)
+    np.testing.assert_allclose(energy, expected, atol=1e-6)
+
+
 def test_grid_coord():
     cd = tc.templates.graphs.Grid2DCoord(3, 2)
     assert cd.all_cols() == [(0, 3), (1, 4), (2, 5)]
