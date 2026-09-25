@@ -1,0 +1,22 @@
+title: "The Reservoir Learning Power across Quantum Many-Boby Localization Transition"
+arxiv_id: "2104.02727"
+url: "https://arxiv.org/abs/2104.02727"
+year: 2021
+authors:
+  - "Wei Xia"
+  - "Jie Zou"
+  - "Xingze Qiu"
+  - "Xiaopeng Li"
+tags:
+  - "reservoir computing"
+  - "many-body localization"
+  - "quantum dynamics"
+  - "spin chains"
+hardware_requirements:
+  gpu: False
+  min_memory: "8GB"
+description: "Reproduces the critical time step $l_c$ (Fig 5b) for the Mackey-Glass chaotic sequence prediction across the MBL transition. The simulation is scaled down to N=6 qubits, with a reduced number of disorder samples (2), and shorter training/discard sequences ($K_1=100, K_2=300$) to make it computationally feasible while preserving the core physics."
+outputs:
+  - target: "Figure 5(b)"
+    path: outputs/result.png
+    script: "main.py"
