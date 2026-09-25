@@ -23,6 +23,9 @@ def Line1D(
 
     :param n: number of sites in the chain
     :type n: int
+    :param edge_weight: edge weights in chain order; for periodic boundaries,
+        entry ``n - 1`` weights the closing edge ``(n - 1, 0)``
+    :type edge_weight: Optional[Sequence[float]]
     :param pbc: whether to use periodic boundary conditions (close the chain into a ring), defaults to True
     :type pbc: bool, optional
     :return: the 1D chain as a networkx graph
@@ -43,7 +46,7 @@ def Line1D(
     for i in range(n - 1):
         g.add_edge(i, i + 1, weight=edge_weight[i])
     if pbc is True:
-        g.add_edge(n - 1, 0, weight=edge_weight[i])
+        g.add_edge(n - 1, 0, weight=edge_weight[n - 1])
     return g
 
 

@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Use the final edge weight for the closing bond in periodic `Line1D` graphs.
+
 - Preserve zero-strength gradients in the optimized FGS hopping and pairing evolutions.
 
 - Correct the norm denominator in `MPSCircuit.expectation(normalize=True)` for unnormalized states and distinct bra/ket states.
