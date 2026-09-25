@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Correct `QAOA_ansatz_for_Ising` cost evolution by doubling ZZ rotation angles so Z and ZZ terms both use the supplied Hamiltonian weights; mixer angles are unchanged.
+
 - Preserve zero-strength gradients in the optimized FGS hopping and pairing evolutions.
 
 - Correct the norm denominator in `MPSCircuit.expectation(normalize=True)` for unnormalized states and distinct bra/ket states.
