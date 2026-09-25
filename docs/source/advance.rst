@@ -1089,6 +1089,17 @@ For large quantum circuit simulations or expectation evaluations that exceed the
 2. **Multi-device Distribution**: The slice contractions are grouped, sharded, and mapped to multiple devices using JAX's ``NamedSharding`` mesh.
 3. **Execution & All-Reduce**: Each device computes its assigned slices sequentially (using JAX ``scan`` to minimize memory footprint and compile overhead). The results from different devices are then aggregated using a cross-device ``AllReduce`` operation.
 
+The ``op`` argument of ``value`` and ``value_and_grad`` acts on the globally
+summed contraction, after all slices and devices have been combined. For
+example, a probability must be computed as ``abs(sum(amplitudes))**2``, rather
+than ``sum(abs(amplitudes)**2)``, to retain interference between slices.
+``value_and_grad`` differentiates the complete sum-and-post-processing operation;
+its ``op`` must return a real scalar. Slice contractions are recomputed during
+reverse-mode differentiation to avoid retaining every slice's large intermediates.
+For a custom ``op``, sliced output indices are restored to their original
+positions, and the full output tensor is assembled before post-processing.
+The default element sum uses a scalar accumulator instead.
+
 Here is a quick example of running distributed simulation to calculate expectations and gradients:
 
 .. code-block:: python

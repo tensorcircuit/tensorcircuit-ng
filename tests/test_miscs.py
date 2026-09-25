@@ -4,6 +4,7 @@ import sys
 import os
 from functools import partial
 import numpy as np
+import jax
 import tensorflow as tf
 import pytest
 from pytest_lazyfixture import lazy_fixture as lf
@@ -272,6 +273,102 @@ def test_jax_function_load(jaxb, tmp_path):
     np.testing.assert_allclose(f_load(K.ones([3])), 0.5403, atol=1e-4)
 
 
+@pytest.mark.parametrize("sliced", [False, True])
+def test_distributed_contractor_interference(jaxb, highp, sliced):
+    K = tc.backend
+
+    def nodes_fn(theta):
+        a = tc.gates.Gate(K.stack([K.cos(theta), K.sin(theta)]))
+        b = tc.gates.Gate(K.ones([2]) / np.sqrt(2.0))
+        a[0] ^ b[0]
+        return [a, b]
+
+    def probability(amplitude):
+        return K.real(amplitude * K.conj(amplitude))
+
+    theta = K.convert_to_tensor(0.2)
+    dc = experimental.DistributedContractor(
+        nodes_fn,
+        theta,
+        tree_data={
+            "inputs": ["a", "a"],
+            "output": "",
+            "size_dict": {"a": 2},
+            "path": [(0, 1)],
+            "sliced_inds": {"a": 2} if sliced else {},
+        },
+    )
+    expected = (1.0 + np.sin(0.4)) / 2.0
+    value, grad = dc.value_and_grad(theta, op=probability)
+    np.testing.assert_allclose(value, expected, atol=1e-12)
+    np.testing.assert_allclose(grad, np.cos(0.4), atol=1e-12)
+    np.testing.assert_allclose(dc.value(theta, op=probability), expected, atol=1e-12)
+    np.testing.assert_allclose(dc.grad(theta, op=probability), grad, atol=1e-12)
+    np.testing.assert_allclose(
+        dc.value(theta), (np.cos(0.2) + np.sin(0.2)) / np.sqrt(2.0), atol=1e-12
+    )
+    with pytest.raises(TypeError, match="real-valued"):
+        dc.value_and_grad(theta, op=K.sum)
+
+
+@pytest.mark.parametrize("num_devices", [1, 2, 4])
+@pytest.mark.parametrize("sliced_inds", [{}, {"a": 3}, {"b": 2}, {"a": 3, "b": 2}])
+def test_distributed_contractor_complex_output(jaxb, highp, num_devices, sliced_inds):
+    if len(jax.devices()) < num_devices:
+        pytest.skip("requires additional JAX devices")
+    K = tc.backend
+    matrix = K.convert_to_tensor(
+        np.array([[1.0, 1.0j], [-0.5j, 0.3], [0.2, -1.0]], dtype=np.complex128)
+    )
+    params = {
+        "weights": K.convert_to_tensor(np.array([0.2 + 0.4j, -0.3j, 0.5])),
+        "scale": K.convert_to_tensor(0.7),
+    }
+
+    def nodes_fn(p):
+        a = tc.gates.Gate(p["weights"] * p["scale"])
+        b = tc.gates.Gate(matrix)
+        a[0] ^ b[0]
+        return [a, b]
+
+    def probability(output):
+        return K.real(K.sum(output * K.conj(output))) + 0.125
+
+    def amplitudes(p):
+        return K.einsum("a,ab->b", p["weights"] * p["scale"], matrix)
+
+    def reference(p):
+        return probability(amplitudes(p))
+
+    def identity(output):
+        return output
+
+    dc = experimental.DistributedContractor(
+        nodes_fn,
+        params,
+        devices=jax.devices()[:num_devices],
+        tree_data={
+            "inputs": ["a", "ab"],
+            "output": "b",
+            "size_dict": {"a": 3, "b": 2},
+            "path": [(0, 1)],
+            "sliced_inds": sliced_inds,
+        },
+    )
+    expected, expected_grad = K.value_and_grad(reference)(params)
+    value, grad = dc.value_and_grad(params, op=probability)
+    np.testing.assert_allclose(value, expected, atol=1e-12)
+    for key in params:
+        np.testing.assert_allclose(grad[key], expected_grad[key], atol=1e-12)
+    np.testing.assert_allclose(
+        dc.value(params, op=probability, output_dtype="float64"), expected, atol=1e-12
+    )
+    np.testing.assert_allclose(dc.value(params), K.sum(amplitudes(params)), atol=1e-12)
+    np.testing.assert_allclose(
+        dc.value(params, op=identity), amplitudes(params), atol=1e-12
+    )
+
+
 def test_distrubuted_contractor(jaxb):
     def nodes_fn(params):
         c = tc.Circuit(4)
@@ -302,6 +399,9 @@ def test_distrubuted_contractor(jaxb):
         return c.expectation_ps(z=[-1])
 
     np.testing.assert_allclose(value, baseline(params), atol=1e-6)
+    expected_grad = tc.backend.grad(lambda p: tc.backend.real(baseline(p)))(params)
+    for key in params:
+        np.testing.assert_allclose(grad[key], expected_grad[key], atol=1e-6)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
