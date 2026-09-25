@@ -991,11 +991,8 @@ class DistributedContractor:
         )
 
     def _get_single_slice_contraction_fn(
-        self, op: Optional[Callable[[Tensor], Tensor]] = None
+        self,
     ) -> Callable[[Any, Tensor, int], Tensor]:
-        if op is None:
-            op = backend.sum
-
         def single_slice_contraction(
             tree: ctg.ContractionTree, params: Tensor, slice_idx: int
         ) -> Tensor:
@@ -1005,82 +1002,39 @@ class DistributedContractor:
             )
             input_arrays = [node.tensor for node in standardized_nodes]
             sliced_arrays = tree.slice_arrays(input_arrays, slice_idx)
-            result = tree.contract_core(sliced_arrays, backend=self._backend)
-            return op(result)
+            return tree.contract_core(sliced_arrays, backend=self._backend)
 
         return single_slice_contraction
 
-    def _get_device_sum_vg_fn(
-        self,
-        op: Optional[Callable[[Tensor], Tensor]] = None,
-        output_dtype: Optional[str] = None,
-    ) -> Callable[[Any, Tensor, Tensor], Tuple[Tensor, Tensor]]:
-        post_processing = lambda x: backend.real(backend.sum(x))
-        if op is None:
-            op = post_processing
-        base_fn = self._get_single_slice_contraction_fn(op=op)
-        # to ensure the output is real so that can be differentiated
-        single_slice_vg_fn = jaxlib.value_and_grad(base_fn, argnums=1)
-
-        if output_dtype is None:
-            output_dtype = rdtypestr
-
-        def device_sum_fn(
-            tree: ctg.ContractionTree, params: Tensor, slice_indices_for_device: Tensor
-        ) -> Tuple[Tensor, Tensor]:
-            def scan_body(
-                carry: Tuple[Tensor, Tensor], slice_idx: Tensor
-            ) -> Tuple[Tuple[Tensor, Tensor], None]:
-                acc_value, acc_grads = carry
-
-                def compute_and_add() -> Tuple[Tensor, Tensor]:
-                    value_slice, grads_slice = single_slice_vg_fn(
-                        tree, params, slice_idx
-                    )
-                    new_value = acc_value + value_slice
-                    new_grads = jaxlib.tree_util.tree_map(
-                        jaxlib.numpy.add, acc_grads, grads_slice
-                    )
-                    return new_value, new_grads
-
-                def do_nothing() -> Tuple[Tensor, Tensor]:
-                    return acc_value, acc_grads
-
-                return (
-                    jaxlib.lax.cond(
-                        slice_idx == PADDING_VALUE, do_nothing, compute_and_add
-                    ),
-                    None,
-                )
-
-            initial_carry = (
-                backend.cast(backend.convert_to_tensor(0.0), dtype=output_dtype),
-                jaxlib.tree_util.tree_map(lambda x: jaxlib.numpy.zeros_like(x), params),
-            )
-            (final_value, final_grads), _ = jaxlib.lax.scan(
-                scan_body, initial_carry, slice_indices_for_device
-            )
-            return final_value, final_grads
-
-        return device_sum_fn
-
     def _get_device_sum_v_fn(
-        self,
-        op: Optional[Callable[[Tensor], Tensor]] = None,
-        output_dtype: Optional[str] = None,
+        self, sum_output: bool = False
     ) -> Callable[[Any, Tensor, Tensor], Tensor]:
-        base_fn = self._get_single_slice_contraction_fn(op=op)
-        if output_dtype is None:
-            output_dtype = dtypestr
+        base_fn = self._get_single_slice_contraction_fn()
 
         def device_sum_fn(
             tree: ctg.ContractionTree, params: Tensor, slice_indices_for_device: Tensor
         ) -> Tensor:
+            result_spec = jaxlib.eval_shape(lambda p: base_fn(tree, p, 0), params)
+            output_shape = (
+                () if sum_output else tuple(tree.size_dict[i] for i in tree.output)
+            )
+            sliced_output = any(i in tree.sliced_inds for i in tree.output)
+
             def scan_body(
                 carry_value: Tensor, slice_idx: Tensor
             ) -> Tuple[Tensor, None]:
                 def compute_and_add() -> Tensor:
-                    return carry_value + base_fn(tree, params, slice_idx)
+                    result = base_fn(tree, params, slice_idx)
+                    if sum_output:
+                        return carry_value + backend.sum(result)
+                    if sliced_output:
+                        locations = tree.slice_key(slice_idx)
+                        selection = tuple(
+                            locations[i] if i in locations else slice(None)
+                            for i in tree.output
+                        )
+                        return carry_value.at[selection].add(result)
+                    return carry_value + result
 
                 return (
                     jaxlib.lax.cond(
@@ -1089,11 +1043,10 @@ class DistributedContractor:
                     None,
                 )
 
-            initial_carry = backend.cast(
-                backend.convert_to_tensor(0.0), dtype=output_dtype
-            )
+            initial_carry = jaxlib.numpy.zeros(output_shape, dtype=result_spec.dtype)
+            # Include padding control flow when recomputing slice intermediates.
             final_value, _ = jaxlib.lax.scan(
-                scan_body, initial_carry, slice_indices_for_device
+                jaxlib.checkpoint(scan_body), initial_carry, slice_indices_for_device
             )
             return final_value
 
@@ -1105,22 +1058,22 @@ class DistributedContractor:
             Tuple[Callable[[Tensor], Tensor], str],
             Callable[[Any, Tensor, Tensor], Tensor],
         ],
-        fn_getter: Callable[..., Any],
         op: Optional[Callable[[Tensor], Tensor]],
         output_dtype: Optional[str],
         is_grad_fn: bool,
     ) -> Callable[[Any, Tensor, Tensor], Tensor]:
         """
-        Gets a compiled pmap-ed function from cache or compiles and caches it.
+        Get or compile a globally aggregated contraction and its post-processing.
 
         The cache key is a tuple of (op, output_dtype). Caution on lambda function!
 
         Returns:
-            The compiled, pmap-ed JAX function.
+            The compiled JAX function with replicated outputs.
         """
         cache_key = (op, output_dtype)
         if cache_key not in cache:
-            device_fn = fn_getter(op=op, output_dtype=output_dtype)
+            device_fn = self._get_device_sum_v_fn(sum_output=op is None)
+            dtype = output_dtype or (rdtypestr if is_grad_fn else dtypestr)
 
             def global_aggregated_fn(
                 tree: Any, params: Any, batched_slice_indices: Tensor
@@ -1133,23 +1086,27 @@ class DistributedContractor:
                 )
                 device_results = vmapped_device_fn(tree, params, batched_slice_indices)
 
-                # Now, `device_results` is a sharded PyTree (one result per device).
-                # We aggregate them using jnp.sum, which JAX automatically compiles
-                # into a cross-device AllReduce operation.
-
-                if is_grad_fn:
-                    # `device_results` is a (value, grad) tuple of sharded arrays
-                    device_values, device_grads = device_results
-
-                    # Replace psum with jnp.sum
-                    global_value = jaxlib.numpy.sum(device_values, axis=0)
-                    global_grad = jaxlib.tree_util.tree_map(
-                        lambda g: jaxlib.numpy.sum(g, axis=0), device_grads
-                    )
-                    return global_value, global_grad
+                # Sum amplitudes across devices before applying a nonlinear observable.
+                total = jaxlib.numpy.sum(device_results, axis=0)
+                if op is None:
+                    result = backend.sum(total)
+                    if is_grad_fn:
+                        result = backend.real(result)
                 else:
-                    # `device_results` is just the sharded values
-                    return jaxlib.numpy.sum(device_results, axis=0)
+                    result = op(total)
+                return result
+
+            if is_grad_fn:
+                global_aggregated_fn = jaxlib.value_and_grad(
+                    global_aggregated_fn, argnums=1
+                )
+
+            def output_fn(tree: Any, params: Any, batched_slice_indices: Tensor) -> Any:
+                result = global_aggregated_fn(tree, params, batched_slice_indices)
+                if is_grad_fn:
+                    value, grad = result
+                    return backend.cast(value, dtype=dtype), grad
+                return backend.cast(result, dtype=dtype)
 
             #  Compile the global function with jax.jit and specify shardings.
             # `params` are replicated (available everywhere).
@@ -1164,11 +1121,11 @@ class DistributedContractor:
                 sharding_for_grad = self.params_sharding
                 out_shardings = (sharding_for_value, sharding_for_grad)
             else:
-                # Returns a single scalar value -> P()
+                # Replicate the post-processed output on all devices.
                 out_shardings = NamedSharding(self.mesh, P())
 
             compiled_fn = jaxlib.jit(
-                global_aggregated_fn,
+                output_fn,
                 # `tree` is a static argument, its value is compiled into the function.
                 static_argnums=(0,),
                 # Specify how inputs are sharded.
@@ -1187,19 +1144,19 @@ class DistributedContractor:
         output_dtype: Optional[str] = None,
     ) -> Tuple[Tensor, Tensor]:
         """
-        Calculates the value and gradient, compiling the pmap function if needed for the first call.
+        Calculate the value and gradient after globally summing slice contractions.
 
         :param params: Parameters for the `nodes_fn` input
         :type params: Tensor
-        :param op: Optional post-processing function for the output, defaults to None (corresponding to `backend.real`)
-            op is a cache key, so dont directly pass lambda function for op
+        :param op: Real scalar post-processing of the globally summed contraction.
+            Defaults to the real part of its element sum. Applied once, after all
+            slices and devices are combined. Reuse the callable to reuse its cache.
         :type op: Optional[Callable[[Tensor], Tensor]], optional
-        :param output_dtype: dtype str for the output of `nodes_fn`, defaults to None (corresponding to `rdtypestr`)
+        :param output_dtype: dtype of the post-processed result, defaulting to `rdtypestr`
         :type output_dtype: Optional[str], optional
         """
         compiled_vg_fn = self._get_or_compile_fn(
             cache=self._compiled_vg_fns,
-            fn_getter=self._get_device_sum_vg_fn,
             op=op,
             output_dtype=output_dtype,
             is_grad_fn=True,
@@ -1218,19 +1175,19 @@ class DistributedContractor:
         output_dtype: Optional[str] = None,
     ) -> Tensor:
         """
-        Calculates the value, compiling the pmap function for the first call.
+        Calculate the value after globally summing slice contractions.
 
         :param params: Parameters for the `nodes_fn` input
         :type params: Tensor
-        :param op: Optional post-processing function for the output, defaults to None (corresponding to identity)
-            op is a cache key, so dont directly pass lambda function for op
+        :param op: Post-processing of the globally summed contraction, defaulting
+            to its element sum. Applied once, after all slices and devices are
+            combined. Reuse the callable to reuse its cache.
         :type op: Optional[Callable[[Tensor], Tensor]], optional
-        :param output_dtype: dtype str for the output of `nodes_fn`, defaults to None (corresponding to `dtypestr`)
+        :param output_dtype: dtype of the post-processed result, defaulting to `dtypestr`
         :type output_dtype: Optional[str], optional
         """
         compiled_v_fn = self._get_or_compile_fn(
             cache=self._compiled_v_fns,
-            fn_getter=self._get_device_sum_v_fn,
             op=op,
             output_dtype=output_dtype,
             is_grad_fn=False,

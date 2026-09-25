@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Apply `DistributedContractor` post-processing after globally summing slice contractions, preserving interference terms and their gradients.
+
 - Preserve zero-strength gradients in the optimized FGS hopping and pairing evolutions.
 
 - Correct the norm denominator in `MPSCircuit.expectation(normalize=True)` for unnormalized states and distinct bra/ket states.
