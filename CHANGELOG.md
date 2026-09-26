@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Invalidate ZX probability and sampling caches when gates or instructions are added to a `StabilizerTCircuit`.
+
 - Preserve zero-strength gradients in the optimized FGS hopping and pairing evolutions.
 
 - Correct the norm denominator in `MPSCircuit.expectation(normalize=True)` for unnormalized states and distinct bra/ket states.

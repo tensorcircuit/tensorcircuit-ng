@@ -1210,3 +1210,146 @@ def test_zx_mpp_detector(backend):
         rtol=0.0,
         err_msg=f"Expected ~0.1 detector rate, got {det_rate}",
     )
+
+
+@pytest.mark.parametrize(
+    "add_gate",
+    [
+        pytest.param(lambda c: c.x(0), id="x"),
+        pytest.param(lambda c: c.y(0), id="y"),
+        pytest.param(lambda c: c.rx(0, theta=np.pi), id="rotation"),
+        pytest.param(lambda c: c.apply(tc.gates.x(), 0), id="apply"),
+        pytest.param(lambda c: c.apply_general_gate(tc.gates.x(), 0), id="general"),
+        pytest.param(
+            lambda c: c.apply_general_gate(
+                tc.gates.x(), 0, ir_dict={"name": "X", "index": [0]}
+            ),
+            id="general-qir",
+        ),
+        pytest.param(lambda c: c.X(0), id="dynamic"),
+        pytest.param(lambda c: c.x_error(0, 1.0), id="noise"),
+        pytest.param(lambda c: c.pauli_instruction(0, 1.0, 0.0, 0.0), id="pauli"),
+        pytest.param(lambda c: c.depolarizing(0, 1.0, 0.0, 0.0), id="depolarizing"),
+    ],
+)
+def test_zx_cache_after_gate(jaxb, add_gate):
+    c = StabilizerTCircuit(1, seed=42)
+    one = jnp.array([1])
+    np.testing.assert_allclose(c.outcome_probability(one), [0.0], atol=1e-6)
+    np.testing.assert_array_equal(
+        c.sample_measurements(shots=8, batch_size=8), np.zeros((8, 1))
+    )
+
+    add_gate(c)
+    np.testing.assert_allclose(c.outcome_probability(one), [1.0], atol=1e-6)
+    np.testing.assert_allclose(c.outcome_probability(jnp.array([0])), [0.0], atol=1e-6)
+    np.testing.assert_array_equal(
+        c.sample_measurements(shots=8, batch_size=8), np.ones((8, 1))
+    )
+
+
+@pytest.mark.parametrize("reset", ["reset_z", "reset_instruction"])
+def test_zx_cache_after_reset(jaxb, reset):
+    c = StabilizerTCircuit(1)
+    c.x(0)
+    one = jnp.array([1])
+    np.testing.assert_allclose(c.outcome_probability(one), [1.0], atol=1e-6)
+    np.testing.assert_array_equal(
+        c.sample_measurements(shots=8, batch_size=8), np.ones((8, 1))
+    )
+    getattr(c, reset)(0)
+    np.testing.assert_allclose(c.outcome_probability(one), [0.0], atol=1e-6)
+    np.testing.assert_array_equal(
+        c.sample_measurements(shots=8, batch_size=8), np.zeros((8, 1))
+    )
+
+
+def test_zx_cache_after_entangling_gate(jaxb):
+    c = StabilizerTCircuit(2)
+    c.x(0)
+    np.testing.assert_allclose(
+        c.outcome_probability(jnp.array([1, 1])), [0.0], atol=1e-6
+    )
+    np.testing.assert_array_equal(
+        c.sample_measurements(shots=8, batch_size=8), np.tile([1, 0], (8, 1))
+    )
+    c.cnot(0, 1)
+    np.testing.assert_allclose(
+        c.outcome_probability(jnp.array([1, 1])), [1.0], atol=1e-6
+    )
+    np.testing.assert_array_equal(
+        c.sample_measurements(shots=8, batch_size=8), np.ones((8, 2))
+    )
+
+
+def test_zx_cache_after_measurement(jaxb):
+    c = StabilizerTCircuit(2)
+    c.x(0)
+    np.testing.assert_allclose(
+        c.outcome_probability(jnp.array([1, 0])), [1.0], atol=1e-6
+    )
+    np.testing.assert_array_equal(
+        c.sample_measurements(shots=8, batch_size=8), np.tile([1, 0], (8, 1))
+    )
+    c.measure_instruction(1)
+    np.testing.assert_allclose(c.outcome_probability(jnp.array([0])), [1.0], atol=1e-6)
+    np.testing.assert_array_equal(
+        c.sample_measurements(shots=8, batch_size=8), np.zeros((8, 1))
+    )
+    c.measure_instruction(0)
+    np.testing.assert_allclose(
+        c.outcome_probability(jnp.array([0, 1])), [1.0], atol=1e-6
+    )
+    np.testing.assert_array_equal(
+        c.sample_measurements(shots=8, batch_size=8), np.tile([0, 1], (8, 1))
+    )
+
+
+def test_zx_cache_after_detector_and_observable(jaxb):
+    c = StabilizerTCircuit(1)
+    c.measure_instruction(0)
+    c.detector_instruction([0])
+    c.observable_instruction([0])
+    np.testing.assert_array_equal(
+        c.sample_detectors(shots=8, batch_size=8), np.zeros((8, 2))
+    )
+    c.x(0)
+    c.measure_instruction(0)
+    np.testing.assert_array_equal(
+        c.sample_detectors(shots=8, batch_size=8), np.zeros((8, 2))
+    )
+    c.detector_instruction([1])
+    detectors, observables = c.sample_detectors(
+        shots=8, batch_size=8, separate_observables=True
+    )
+    np.testing.assert_array_equal(detectors, np.tile([0, 1], (8, 1)))
+    np.testing.assert_array_equal(observables, np.zeros((8, 1)))
+    c.observable_instruction([1], observable_index=1)
+    detectors, observables = c.sample_detectors(
+        shots=8, batch_size=8, separate_observables=True
+    )
+    np.testing.assert_array_equal(detectors, np.tile([0, 1], (8, 1)))
+    np.testing.assert_array_equal(observables, np.tile([0, 1], (8, 1)))
+
+
+def test_zx_cache_reused_without_mutation(jaxb):
+    c = StabilizerTCircuit(1)
+    c.measure_instruction(0)
+    c.detector_instruction([0])
+    c.observable_instruction([0])
+    c.outcome_probability(jnp.array([0]))
+    c.sample_measurements(shots=1, batch_size=1)
+    c.sample_detectors(shots=1, batch_size=1)
+    cache_names = (
+        "_compiled_probs",
+        "_channel_sampler_probs",
+        "_compiled_program_measurements",
+        "_channel_sampler_measurements",
+        "_compiled_program_detectors",
+        "_channel_sampler_detectors",
+    )
+    cached = [getattr(c, name) for name in cache_names]
+    c.sample_detectors(shots=1, batch_size=1)
+    c.sample_measurements(shots=1, batch_size=1)
+    c.outcome_probability(jnp.array([0]))
+    assert all(getattr(c, name) is old for name, old in zip(cache_names, cached))
