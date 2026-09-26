@@ -255,10 +255,8 @@ def test_zx_noisy_measurements(backend):
     # res2 shape (batch, 2)
     m0 = np.mean(res2[:, 0])  # result of MR
     m1 = np.mean(res2[:, 1])  # result of following M
-    # tsim's MR(p) applies noise twice: once in mr, once in m.
-    # Total flip probability = p(1-p) + (1-p)p = 2p - 2p^2
-    # For p=0.1, flip = 0.18. Since we start at 1 (X gate), m0 should be 1-0.18 = 0.82
-    expected_m0 = 1 - (2 * p - 2 * p**2)
+    # Starting at 1, a single readout flip gives 0 with probability p.
+    expected_m0 = 1 - p
     np.testing.assert_allclose(m0, expected_m0, atol=0.05, rtol=0.0)
 
     np.testing.assert_allclose(m1, 0.0, atol=0.01, rtol=0.0)
@@ -1210,3 +1208,179 @@ def test_zx_mpp_detector(backend):
         rtol=0.0,
         err_msg=f"Expected ~0.1 detector rate, got {det_rate}",
     )
+
+
+@pytest.mark.parametrize("observable_ids", [(0, 1), (2, 5)])
+@pytest.mark.parametrize("repeated", [False, True])
+def test_stim_import_observable_indices(jaxb, observable_ids, repeated):
+    stim = pytest.importorskip("stim")
+    first, second = observable_ids
+    if repeated:
+        program = (
+            f"X 0 1\nM 0 1\nOBSERVABLE_INCLUDE({second}) rec[-2]\n"
+            f"OBSERVABLE_INCLUDE({first}) rec[-2]\n"
+            f"OBSERVABLE_INCLUDE({first}) rec[-1]"
+        )
+    else:
+        program = (
+            f"X 0\nM 0 1\nOBSERVABLE_INCLUDE({second}) rec[-1]\n"
+            f"OBSERVABLE_INCLUDE({first}) rec[-2]"
+        )
+    source = stim.Circuit(program + "\nDETECTOR rec[-2] rec[-1]")
+    measurements = source.compile_sampler(seed=17).sample(8)
+    converter = source.compile_m2d_converter(skip_reference_sample=True)
+    expected_det, expected_obs = converter.convert(
+        measurements=measurements, separate_observables=True
+    )
+    c = StabilizerTCircuit.from_stim_circuit(source)
+    detectors, observables = c.sample_detectors(
+        shots=8, batch_size=8, seed=17, separate_observables=True
+    )
+    np.testing.assert_array_equal(detectors, expected_det)
+    np.testing.assert_array_equal(observables, expected_obs[:, list(observable_ids)])
+    referenced = source.compile_detector_sampler(seed=17).sample(
+        8, append_observables=True
+    )
+    np.testing.assert_array_equal(
+        c.sample_detectors(shots=8, batch_size=8, seed=17, use_reference=True),
+        referenced[:, [0, first + 1, second + 1]],
+    )
+
+
+@pytest.mark.parametrize("gate", ["M", "MZ", "MX", "MY", "MR", "MRZ", "MRX", "MRY"])
+@pytest.mark.parametrize("initial_bit", [0, 1])
+def test_stim_import_inverted_measurements(jaxb, gate, initial_bit):
+    stim = pytest.importorskip("stim")
+    basis = gate[-1] if gate[-1] in ("X", "Y") else "Z"
+    preparation = {"Z": "I 0 1", "X": "H 0 1", "Y": "H 0 1\nS 0 1"}[basis]
+    if initial_bit:
+        preparation += "\n" + ("X 0" if basis == "Z" else "Z 0")
+    source = stim.Circuit(f"{preparation}\n{gate} !0 1\nM{basis} 0 1")
+    expected = source.compile_sampler(seed=17).sample(8)
+    c = StabilizerTCircuit.from_stim_circuit(source)
+    np.testing.assert_array_equal(
+        c.sample_measurements(shots=8, batch_size=8, seed=17), expected
+    )
+    outcome = jnp.array(expected[0])
+    np.testing.assert_allclose(c.outcome_probability(outcome), [1.0], atol=1e-6)
+    np.testing.assert_allclose(
+        c.outcome_probability(outcome.at[0].set(~outcome[0])), [0.0], atol=1e-6
+    )
+
+
+def test_stim_import_inversion_preserves_collapse(jaxb):
+    stim = pytest.importorskip("stim")
+    source = stim.Circuit("H 0\nM !0\nM 0")
+    c = StabilizerTCircuit.from_stim_circuit(source)
+    samples = c.sample_measurements(shots=16, batch_size=16, seed=17)
+    np.testing.assert_array_equal(
+        np.logical_xor(samples[:, 0], samples[:, 1]), np.ones(16)
+    )
+    for outcome, expected in [
+        ([0, 1], 0.5),
+        ([1, 0], 0.5),
+        ([0, 0], 0.0),
+        ([1, 1], 0.0),
+    ]:
+        np.testing.assert_allclose(
+            c.outcome_probability(jnp.array(outcome)), [expected], atol=1e-6
+        )
+
+
+@pytest.mark.parametrize("basis", ["Z", "X", "Y"])
+def test_stim_import_inversion_with_readout_noise(jaxb, basis):
+    stim = pytest.importorskip("stim")
+    preparation = {"Z": "I 0", "X": "H 0", "Y": "H 0\nS 0"}[basis]
+    deterministic = stim.Circuit(f"{preparation}\nM{basis}(1) !0")
+    expected = deterministic.compile_sampler(seed=17).sample(8)
+    noisy = StabilizerTCircuit.from_stim_circuit(deterministic)
+    np.testing.assert_array_equal(
+        noisy.sample_measurements(shots=8, batch_size=8), expected
+    )
+
+
+@pytest.mark.parametrize(
+    "preparation,products",
+    [
+        ("I 0 1", "!Z0*Z1 Z0*!Z1 !Z0*!Z1 Z0*Z1"),
+        ("H 0 1", "!X0*X1 X0*!X1 !X0*!X1 X0*X1"),
+        ("H 0 1\nS 0 1", "!Y0*Y1 Y0*!Y1 !Y0*!Y1 Y0*Y1"),
+        ("H 0\nCX 0 1", "!X0*X1 !Z0*Z1 !X0*!X1"),
+    ],
+)
+def test_stim_import_inverted_pauli_products(jaxb, preparation, products):
+    stim = pytest.importorskip("stim")
+    source = stim.Circuit(f"{preparation}\nMPP {products}")
+    expected = source.compile_sampler(seed=17).sample(8)
+    c = StabilizerTCircuit.from_stim_circuit(source)
+    np.testing.assert_array_equal(
+        c.sample_measurements(shots=8, batch_size=8, seed=17), expected
+    )
+    np.testing.assert_allclose(
+        c.outcome_probability(jnp.array(expected[0])), [1.0], atol=1e-6
+    )
+
+
+def test_stim_import_inversion_in_detector_records(jaxb):
+    stim = pytest.importorskip("stim")
+    source = stim.Circuit(
+        "REPEAT 2 {\nM !0\nDETECTOR rec[-1]\n}\n"
+        "OBSERVABLE_INCLUDE(0) rec[-1]\nOBSERVABLE_INCLUDE(1) rec[-2] rec[-1]"
+    )
+    measurements = source.compile_sampler(seed=17).sample(8)
+    expected = source.compile_m2d_converter(skip_reference_sample=True).convert(
+        measurements=measurements, append_observables=True
+    )
+    c = StabilizerTCircuit.from_stim_circuit(source)
+    np.testing.assert_array_equal(
+        c.sample_detectors(shots=8, batch_size=8, seed=17), expected
+    )
+    reference = source.compile_detector_sampler(seed=17).sample(
+        8, append_observables=True
+    )
+    np.testing.assert_array_equal(
+        c.sample_detectors(shots=8, batch_size=8, seed=17, use_reference=True),
+        reference,
+    )
+
+
+@pytest.mark.parametrize("basis", ["Z", "X", "Y"])
+@pytest.mark.parametrize("p", [0, 1])
+def test_stim_import_inverted_reset_entanglement(jaxb, basis, p):
+    stim = pytest.importorskip("stim")
+    rotation = {"Z": "", "X": "H 0", "Y": "H 0\nS 0"}[basis]
+    source = stim.Circuit(
+        f"H 0\nCX 0 1\n{rotation}\nMR{basis}({p}) !0\nM{basis} 0\nM 1"
+    )
+    c = StabilizerTCircuit.from_stim_circuit(source)
+    samples = c.sample_measurements(shots=16, batch_size=16, seed=17)
+    np.testing.assert_array_equal(samples[:, 1], np.zeros(16))
+    np.testing.assert_array_equal(
+        np.logical_xor(samples[:, 0], samples[:, 2]), np.full(16, 1 - p)
+    )
+    for outcome in ([1 - p, 0, 0], [p, 0, 1]):
+        np.testing.assert_allclose(
+            c.outcome_probability(jnp.array(outcome)), [0.5], atol=1e-6
+        )
+
+
+@pytest.mark.parametrize("basis", ["Z", "X", "Y"])
+@pytest.mark.parametrize("invert", [False, True])
+@pytest.mark.parametrize("p", [0.0, 0.1, 0.3, 1.0])
+def test_stim_import_reset_readout_probability(jaxb, basis, invert, p):
+    stim = pytest.importorskip("stim")
+    preparation = {"Z": "I 0", "X": "H 0", "Y": "H 0\nS 0"}[basis]
+    target = "!0" if invert else "0"
+    source = stim.Circuit(f"{preparation}\nMR{basis}({p}) {target}\nM{basis} 0")
+    c = StabilizerTCircuit.from_stim_circuit(source)
+    c._seed = 17  # Fix the noise sampler's seed as well as the measurement seed.
+    shots = 8 if p in (0.0, 1.0) else 8192
+    expected = source.compile_sampler(seed=17).sample(shots)
+    samples = np.asarray(c.sample_measurements(shots=shots, batch_size=shots, seed=17))
+    np.testing.assert_array_equal(samples[:, 1], np.zeros(shots))
+    if p in (0.0, 1.0):
+        np.testing.assert_array_equal(samples, expected)
+    else:
+        rate = 1.0 - p if invert else p
+        np.testing.assert_allclose(samples[:, 0].mean(), rate, atol=0.025, rtol=0)
+        np.testing.assert_allclose(expected[:, 0].mean(), rate, atol=0.025, rtol=0)

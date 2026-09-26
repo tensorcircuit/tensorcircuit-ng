@@ -837,29 +837,23 @@ def y_error(b: GraphRepresentation, qubit: int, p: float) -> None:
 
 def mr(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -> None:
     """Z-basis demolition measurement (optionally noisy)."""
-    if p > 0:
-        x_error(b, qubit, p)
-    m(b, qubit, p=p, invert=invert)
+    if invert:
+        x_phase(b, qubit, Fraction(1, 1))
+    m(b, qubit, p=p)
     _r(b, qubit, perform_trace=False)
 
 
 def mrx(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -> None:
     """X-basis demolition measurement (optionally noisy)."""
     h_gate(b, qubit)
-    if p > 0:
-        x_error(b, qubit, p)
-    m(b, qubit, p=p, invert=invert)
-    _r(b, qubit, perform_trace=False)
+    mr(b, qubit, p=p, invert=invert)
     h_gate(b, qubit)
 
 
 def mry(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -> None:
     """Y-basis demolition measurement (optionally noisy)."""
     h_yz(b, qubit)
-    if p > 0:
-        x_error(b, qubit, p)
-    m(b, qubit, p=p, invert=invert)
-    _r(b, qubit, perform_trace=False)
+    mr(b, qubit, p=p, invert=invert)
     h_yz(b, qubit)
 
 
@@ -1209,9 +1203,7 @@ def circuit_to_zx(
                 chunk = index[i_target : i_target + num_qubits]
                 if name in [
                     "M",
-                    "R",
                     "MEASURE",
-                    "RESET",
                     "MR",
                     "MRX",
                     "MRY",
@@ -1220,6 +1212,8 @@ def circuit_to_zx(
                     "MY",
                     "MZ",
                 ]:
+                    func(b, *chunk, p=p, invert=d.get("invert", False))
+                elif name in ["R", "RESET"]:
                     func(b, *chunk, p=p)
                 elif name in ["R_X", "R_Y", "R_Z"]:
                     func(b, *chunk, theta)
