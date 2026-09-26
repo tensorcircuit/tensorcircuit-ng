@@ -1089,6 +1089,13 @@ GATE_TABLE: Dict[str, tuple[Callable[..., Any], int]] = {
 }
 
 
+def _zx_gate_name(instruction: Dict[str, Any]) -> str:
+    gate_name = getattr(instruction.get("gatef"), "n", None)
+    if isinstance(gate_name, str) and gate_name in ("rx", "ry", "rz"):
+        return "R_" + gate_name[-1].upper()
+    return str(instruction.get("name", "")).upper()
+
+
 def circuit_to_zx(
     c: AbstractCircuit, force_measure_all: bool = False
 ) -> GraphRepresentation:
@@ -1128,7 +1135,7 @@ def circuit_to_zx(
         merged_qir = [d for _, d in merged_qir_with_pos]
     for i, d in enumerate(merged_qir):
         name, index, params = (
-            str(d.get("name", "")).upper(),
+            _zx_gate_name(d),
             list(d.get("index", ())),
             d.get("parameters", {}),
         )
@@ -1192,6 +1199,8 @@ def circuit_to_zx(
             func, num_qubits = GATE_TABLE[name]
             if name in ["R_X", "R_Y", "R_Z"]:
                 theta = params.get("theta", params.get("phi", params.get("phase", 0.0)))
+                if getattr(d.get("gatef"), "n", None) in ("rx", "ry", "rz"):
+                    theta = float(theta)
                 if isinstance(theta, (float, int)):
                     theta = Fraction(theta) / np.pi
             elif name == "U3":

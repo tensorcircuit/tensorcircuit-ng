@@ -1,3 +1,4 @@
+from fractions import Fraction
 import random
 import pytest
 import numpy as np
@@ -1210,3 +1211,112 @@ def test_zx_mpp_detector(backend):
         rtol=0.0,
         err_msg=f"Expected ~0.1 detector rate, got {det_rate}",
     )
+
+
+@pytest.mark.parametrize("axis", ["x", "y", "z"])
+@pytest.mark.parametrize("theta", [None, 0.0, np.pi, -0.37])
+def test_from_circuit_preserves_rotations(jaxb, axis, theta):
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cnot(0, 1)
+    kwargs = {} if theta is None else {"theta": theta}
+    getattr(c, "r" + axis)(1, **kwargs)
+    c.h(0)
+    original_names = [d["name"] for d in c._qir]
+    converted = StabilizerTCircuit.from_circuit(c)
+    assert converted._qir[2]["name"] == "R_" + axis.upper()
+    assert [d["name"] for d in c._qir] == original_names
+    expected = np.asarray(c.state())
+    for i in range(4):
+        bitstring = format(i, "02b")
+        np.testing.assert_allclose(
+            converted.amplitude(bitstring), expected[i], atol=2e-6
+        )
+        np.testing.assert_allclose(
+            converted.outcome_probability(jnp.array([int(x) for x in bitstring])),
+            abs(expected[i]) ** 2,
+            atol=2e-6,
+        )
+    for graph in (circuit_to_zx(c), circuit_to_zx(converted)):
+        np.testing.assert_allclose(
+            get_zx_unitary(graph, 2), np.asarray(c.matrix()), atol=2e-6
+        )
+
+
+@pytest.mark.parametrize("axis", ["x", "y", "z"])
+@pytest.mark.parametrize(
+    "angle_type,backend",
+    [("numpy", lf("jaxb")), ("jax", lf("jaxb")), ("fraction", lf("npb"))],
+)
+def test_from_circuit_rotation_scalar_angles(backend, axis, angle_type):
+    theta = {
+        "numpy": np.float32(0.37),
+        "jax": jnp.array(0.37),
+        "fraction": Fraction(1, 2),
+    }[angle_type]
+    c = tc.Circuit(1)
+    c.h(0)
+    c.s(0)
+    getattr(c, "r" + axis)(0, theta=theta, name="pulse")
+    converted = StabilizerTCircuit.from_circuit(c)
+    assert converted._qir[-1]["name"] == "R_" + axis.upper()
+    assert c._qir[-1]["parameters"]["theta"] is theta
+    for graph in (circuit_to_zx(c), circuit_to_zx(converted)):
+        np.testing.assert_allclose(
+            get_zx_unitary(graph, 1), np.asarray(c.matrix()), atol=2e-6
+        )
+
+
+@pytest.mark.parametrize("axis", ["x", "y", "z"])
+@pytest.mark.parametrize("source", ["native", "stim"])
+def test_from_circuit_preserves_native_resets(jaxb, axis, source):
+    native = StabilizerTCircuit(1)
+    native.x(0)
+    getattr(native, "reset_" + axis)(0)
+    if axis == "y":
+        native.sd(0)
+    if axis != "z":
+        native.h(0)
+    native.measure_instruction(0)
+    if source == "stim":
+        stim = pytest.importorskip("stim")
+        readout = {"x": "H 0", "y": "S_DAG 0\nH 0", "z": ""}[axis]
+        native = StabilizerTCircuit.from_stim_circuit(
+            stim.Circuit(f"X 0\nR{axis.upper()} 0\n{readout}\nM 0")
+        )
+    converted = StabilizerTCircuit.from_circuit(native)
+    assert converted._qir[1]["name"] == native._qir[1]["name"]
+    np.testing.assert_array_equal(
+        converted.sample_measurements(shots=8, seed=7), np.zeros((8, 1))
+    )
+
+
+@pytest.mark.parametrize("axis", ["x", "y", "z"])
+def test_from_circuit_pi_rotation_samples(jaxb, axis):
+    c = tc.Circuit(1)
+    if axis == "z":
+        c.h(0)
+    getattr(c, "r" + axis)(0, theta=np.pi)
+    if axis == "z":
+        c.h(0)
+    c.measure_instruction(0)
+    converted = StabilizerTCircuit.from_circuit(c)
+    np.testing.assert_array_equal(
+        converted.sample_measurements(shots=8, seed=7), np.ones((8, 1))
+    )
+
+
+@pytest.mark.parametrize("axis", ["x", "y", "z"])
+def test_from_circuit_preserves_native_fraction_angles(jaxb, axis):
+    native = StabilizerTCircuit(1)
+    dense = tc.Circuit(1)
+    for c in (native, dense):
+        c.h(0)
+        c.s(0)
+    getattr(native, "r" + axis)(0, theta=Fraction(1, 2))
+    getattr(dense, "r" + axis)(0, theta=np.pi / 2)
+    converted = StabilizerTCircuit.from_circuit(native)
+    for bit in ("0", "1"):
+        np.testing.assert_allclose(
+            converted.amplitude(bit), dense.amplitude(bit), atol=2e-6
+        )
