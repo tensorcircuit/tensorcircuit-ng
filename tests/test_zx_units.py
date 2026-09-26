@@ -1,10 +1,13 @@
 from fractions import Fraction
 import pytest
 import numpy as np
+import jax
 import jax.numpy as jnp
 import pyzx_param as pyzx
+from pytest_lazyfixture import lazy_fixture as lf
 import tensorcircuit as tc
 
+from tensorcircuit.zx.evaluator import ExactScalarArray, evaluate
 from tensorcircuit.zx.noise_model import (
     correlated_error_probs,
     xor_convolve,
@@ -440,3 +443,61 @@ def test_stabilizertcircuit_one_liners():
 
     stc.apply(G(), 0)
     assert len(stc._qir) > 20
+
+
+@pytest.mark.parametrize("precision", [None, lf("highp")])
+@pytest.mark.parametrize(
+    "factor,count", [([2, 0, 0, 0], 80), ([-2, 0, 0, 0], 80), ([1, 0, 1, 0], 128)]
+)
+@pytest.mark.parametrize("axis", [0, -2])
+def test_exact_scalar_product_normalizes_powers(jaxb, precision, factor, count, axis):
+    coeffs = np.tile(factor, (2, count, 1))
+    coeffs[1, count // 2] = 0
+    powers = np.zeros((2, count), dtype=int)
+    powers[:, 0] = -count if factor[2] == 0 else -count // 2
+    if axis == 0:
+        coeffs = np.moveaxis(coeffs, 1, 0)
+        powers = np.moveaxis(powers, 1, 0)
+    values = ExactScalarArray.create(
+        jnp.array(coeffs, dtype=tc.idtypestr), jnp.array(powers, dtype=tc.idtypestr)
+    )
+    product = jax.jit(lambda x: x.prod(axis=axis))(values)
+    np.testing.assert_array_equal(product.coeffs, [[1, 0, 0, 0], [0, 0, 0, 0]])
+    np.testing.assert_allclose(product.to_complex(), [1, 0], atol=1e-6)
+
+
+@pytest.mark.parametrize("precision", [None, lf("highp")])
+def test_exact_scalar_multiply_normalizes_inputs(jaxb, precision):
+    exponent = 20 if tc.idtypestr == "int32" else 40
+    value = ExactScalarArray.create(
+        jnp.array([1 << exponent, 0, 0, 0], dtype=tc.idtypestr),
+        jnp.array(-exponent, dtype=tc.idtypestr),
+    )
+    product = jax.jit(lambda x: x * x)(value)
+    np.testing.assert_array_equal(product.coeffs, [1, 0, 0, 0])
+    np.testing.assert_allclose(product.to_complex(), 1, atol=1e-6)
+
+
+@pytest.mark.parametrize("precision", [None, lf("highp")])
+def test_exact_scalar_reduce_signed_boundaries(jaxb, precision):
+    bits = np.iinfo(tc.idtypestr).bits
+    minimum = -(1 << (bits - 1))
+    coeffs = jnp.array(
+        [[0, 0, 0, 0], [0, -8, 16, 0], [3, -6, 0, 0], [minimum, 0, 0, 0]],
+        dtype=tc.idtypestr,
+    )
+    original = ExactScalarArray.create(coeffs, jnp.full(4, -3, dtype=tc.idtypestr))
+    reduced = jax.jit(lambda x: x.reduce())(original)
+    np.testing.assert_array_equal(
+        reduced.coeffs, [[0, 0, 0, 0], [0, -1, 2, 0], [3, -6, 0, 0], [-1, 0, 0, 0]]
+    )
+    np.testing.assert_array_equal(reduced.power, [-3, 0, -3, bits - 4])
+
+
+@pytest.mark.parametrize("precision", [None, lf("highp")])
+def test_scalar_graph_negative_pi_pair_phase(jaxb, precision):
+    g = pyzx.Graph()
+    g.scalar.phasevars_pi_pair = [({"1"}, {"1"})]
+    compiled = compile_scalar_graphs([g], [])
+    values = evaluate(compiled, jnp.zeros((2, 0), dtype=jnp.uint8))
+    np.testing.assert_allclose(values, [-1, -1], atol=1e-6)

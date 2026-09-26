@@ -62,31 +62,21 @@ class ExactScalarArray(NamedTuple):
         return cls(coeffs, power)
 
     def __mul__(self, other: "ExactScalarArray") -> "ExactScalarArray":  # type: ignore[override]
-        new_coeffs = _scalar_mul(self.coeffs, other.coeffs)
-        new_power = self.power + other.power
-        return ExactScalarArray(new_coeffs, new_power)
+        left, right = self.reduce(), other.reduce()
+        new_coeffs = _scalar_mul(left.coeffs, right.coeffs)
+        new_power = left.power + right.power
+        return ExactScalarArray(new_coeffs, new_power).reduce()
 
     def reduce(self) -> "ExactScalarArray":
-        def cond_fun(carry: Tuple[Array, Array]) -> Any:
-            coeffs, _ = carry
-            reducible = jnp.all(coeffs % 2 == 0, axis=-1) & jnp.any(
-                coeffs != 0, axis=-1
-            )
-            return jnp.any(reducible)
-
-        def body_fun(carry: Tuple[Array, Array]) -> Tuple[Array, Array]:
-            coeffs, power = carry
-            reducible = jnp.all(coeffs % 2 == 0, axis=-1) & jnp.any(
-                coeffs != 0, axis=-1
-            )
-            coeffs = jnp.where(reducible[..., None], coeffs // 2, coeffs)
-            power = jnp.where(reducible, power + 1, power)
-            return coeffs, power
-
-        new_coeffs, new_power = jax.lax.while_loop(
-            cond_fun, body_fun, (self.coeffs, self.power)
+        # The OR has the common trailing zero bits of all four coefficients.
+        bits = jnp.bitwise_or.reduce(self.coeffs, axis=-1, dtype=self.coeffs.dtype)
+        lowest_bit = bits & -bits
+        shift = jnp.where(
+            bits == 0,
+            0,
+            jnp.iinfo(self.coeffs.dtype).bits - 1 - lax.clz(lowest_bit),
         )
-        return ExactScalarArray(new_coeffs, new_power)
+        return ExactScalarArray(self.coeffs >> shift[..., None], self.power + shift)
 
     def sum(self) -> "ExactScalarArray":
         min_power = jnp.min(self.power, keepdims=True, axis=-1)
@@ -109,16 +99,21 @@ class ExactScalarArray(NamedTuple):
 
             return ExactScalarArray(result_coeffs, result_power)
 
-        # Move the reduction axis to position 0 for sequential multiplication
-        coeffs_t = jnp.moveaxis(self.coeffs, axis, 0)
+        factors = self.reduce()
+        coeffs_t = jnp.moveaxis(factors.coeffs, axis, 0)
+        powers_t = jnp.moveaxis(factors.power, axis, 0)
 
-        def body_fn(carry: Array, x: Array) -> Tuple[Array, Any]:
-            return _scalar_mul(carry, x), None
+        def body_fn(
+            carry: ExactScalarArray, x: ExactScalarArray
+        ) -> Tuple[ExactScalarArray, Any]:
+            return carry * x, None
 
-        result_coeffs, _ = lax.scan(body_fn, coeffs_t[0], coeffs_t[1:])
-        result_power = jnp.sum(self.power, axis=axis)
-
-        return ExactScalarArray(result_coeffs, result_power)
+        result, _ = lax.scan(
+            body_fn,
+            ExactScalarArray(coeffs_t[0], powers_t[0]),
+            ExactScalarArray(coeffs_t[1:], powers_t[1:]),
+        )
+        return result
 
     def to_complex(self) -> jax.Array:
         """
@@ -225,7 +220,7 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
     ) % 2
 
     exponent_c = (rowsum_a_c * rowsum_b_c) % 2
-    sum_exponents_c = jnp.sum(exponent_c, axis=-1) % 2
+    sum_exponents_c = jnp.sum(exponent_c, axis=-1, dtype=idtypestr) % 2
 
     summands_c_exact = (1 - 2 * sum_exponents_c)[..., None] * identity
     summands_c = ExactScalarArray.create(summands_c_exact)

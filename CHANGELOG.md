@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Normalize ZX scalar powers of two during multiplication to prevent overflow in large-circuit probabilities and sampling.
+
 ### Added
 
 - Add `tensorcircuit.tnalg`: fixed-shape JAX MPS TEBD, one-site TDVP, and one-site DMRG with dense and Abelian block-buffer PyTree states, pure tensor Pauli-string MPO builders, checkpoints, and legacy MPS interoperability.
