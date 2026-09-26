@@ -750,6 +750,7 @@ class StabilizerTCircuit(AbstractCircuit):
     def from_stim_circuit(cls, stim_circuit: Any) -> "StabilizerTCircuit":
         """
         Create a StabilizerTCircuit from a stim.Circuit object.
+        Preserve logical observable indices and inverted measurement outcomes.
 
         :param stim_circuit: The stim circuit to convert.
         :type stim_circuit: Any
@@ -763,7 +764,8 @@ class StabilizerTCircuit(AbstractCircuit):
             if name in ["QUBIT_COORDS", "SHIFT_COORDS", "I_ERROR"]:
                 continue
 
-            targets = [t.value for t in instruction.targets_copy()]
+            stim_targets = instruction.targets_copy()
+            targets = [t.value for t in stim_targets]
             args = instruction.gate_args_copy()
 
             if name == "I" and instruction.tag:
@@ -792,7 +794,11 @@ class StabilizerTCircuit(AbstractCircuit):
 
             if name == "OBSERVABLE_INCLUDE":
                 inst._qir.append(
-                    {"name": "OBSERVABLE_INCLUDE", "index": targets, "p": int(args[0])}
+                    {
+                        "name": "OBSERVABLE_INCLUDE",
+                        "index": targets,
+                        "observable_index": int(args[0]),
+                    }
                 )
                 continue
 
@@ -803,15 +809,16 @@ class StabilizerTCircuit(AbstractCircuit):
                 # Example: MPP X0*X1 Y2*Y3 -> [X0, combiner, X1, Y2, combiner, Y3] (2 measurements)
                 # Example: MPP X0 X1 -> [X0, X1] (2 separate measurements)
 
-                targets = instruction.targets_copy()
                 mpp_groups = []
                 current_group = []
+                current_invert = False
 
-                for i, t in enumerate(targets):
+                for i, t in enumerate(stim_targets):
                     if t.is_combiner:
                         # Combiner joins the previous and next Pauli into a product
                         continue
 
+                    current_invert ^= t.is_inverted_result_target
                     # Add Pauli to current group
                     if t.is_x_target:
                         current_group.append(("X", t.value))
@@ -824,18 +831,22 @@ class StabilizerTCircuit(AbstractCircuit):
 
                     # Check if next target is a combiner
                     # If not (or we're at the end), this group is complete
-                    if i + 1 >= len(targets) or not targets[i + 1].is_combiner:
+                    if (
+                        i + 1 >= len(stim_targets)
+                        or not stim_targets[i + 1].is_combiner
+                    ):
                         if current_group:
-                            mpp_groups.append(current_group)
+                            mpp_groups.append((current_group, current_invert))
                             current_group = []
+                            current_invert = False
 
                 # Each MPP group is a separate measurement
-                for paulis in mpp_groups:
+                for paulis, invert in mpp_groups:
                     inst._qir.append(
                         {
                             "name": "MPP",
                             "targets": paulis,
-                            "invert": False,
+                            "invert": invert,
                         }
                     )
                 continue
@@ -898,6 +909,18 @@ class StabilizerTCircuit(AbstractCircuit):
                     if args:
                         qir_item["p"] = args[0]
 
+                if name in [
+                    "M",
+                    "MEASURE",
+                    "MZ",
+                    "MX",
+                    "MY",
+                    "MR",
+                    "MRX",
+                    "MRY",
+                    "MRZ",
+                ]:
+                    qir_item["invert"] = stim_targets[i].is_inverted_result_target
                 inst._qir.append(qir_item)
 
         return inst

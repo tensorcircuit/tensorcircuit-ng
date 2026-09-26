@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Preserve logical observable indices and inverted measurement results when importing Stim circuits into the ZX simulator, and apply measurement-reset readout noise only once.
+
 - Preserve zero-strength gradients in the optimized FGS hopping and pairing evolutions.
 
 - Correct the norm denominator in `MPSCircuit.expectation(normalize=True)` for unnormalized states and distinct bra/ket states.
