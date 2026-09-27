@@ -16,6 +16,10 @@
 
 - Invalidate ZX probability and sampling caches when gates or instructions are added to a `StabilizerTCircuit`.
 
+- Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
+
+- Use general trajectory sampling for Choi-reconstructed composed noise channels, preserving trajectory normalization.
+
 - Preserve zero-strength gradients in the optimized FGS hopping and pairing evolutions.
 
 - Correct the norm denominator in `MPSCircuit.expectation(normalize=True)` for unnormalized states and distinct bra/ket states.
