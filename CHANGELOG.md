@@ -14,7 +14,10 @@
 
 ### Fixed
 
-- Use the final edge weight for the closing bond in periodic `Line1D` graphs.
+- Correct periodic `Line1D` bond weights and support tuple/array weights. Preserve
+  reuse of the last weight when the closing-bond weight is omitted, and reject
+  chains with fewer than two sites. Two-site periodic chains now sum both bonds;
+  the default coupling changes from 1 to 2.
 
 - Preserve zero-strength gradients in the optimized FGS hopping and pairing evolutions.
 

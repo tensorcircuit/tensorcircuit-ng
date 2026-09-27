@@ -112,6 +112,98 @@ def test_line1d_periodic_ising_energy(npb, flip_first, expected):
     np.testing.assert_allclose(energy, expected, atol=1e-6)
 
 
+@pytest.mark.parametrize("pbc", [False, True])
+@pytest.mark.parametrize("flip_first", [False, True])
+@pytest.mark.parametrize(
+    "edge_weight, open_weight, periodic_weight",
+    [
+        (None, 1.0, 2.0),
+        (2.5, 2.5, 5.0),
+        (np.array(2.5), 2.5, 5.0),
+        ([1.0, 2.0], 1.0, 3.0),
+    ],
+)
+def test_line1d_two_sites(
+    npb, pbc, flip_first, edge_weight, open_weight, periodic_weight
+):
+    original = None if edge_weight is None else np.copy(edge_weight)
+    graph = tc.templates.graphs.Line1D(2, edge_weight=edge_weight, pbc=pbc)
+    if original is not None:
+        np.testing.assert_allclose(edge_weight, original)
+    expected = periodic_weight if pbc else open_weight
+    assert set(graph.edges) == {(0, 1)}
+    np.testing.assert_allclose(graph[0][1]["weight"], expected)
+    circuit = tc.Circuit(2)
+    if flip_first:
+        circuit.x(0)
+    energy = tc.templates.measurements.spin_glass_measurements(circuit, graph)
+    np.testing.assert_allclose(energy, -expected if flip_first else expected, atol=1e-6)
+
+
+@pytest.mark.parametrize("n", [-1, 0, 1])
+@pytest.mark.parametrize("pbc", [False, True])
+def test_line1d_rejects_too_few_sites(n, pbc):
+    with pytest.raises(ValueError, match="at least two sites"):
+        tc.templates.graphs.Line1D(n, pbc=pbc)
+
+
+@pytest.mark.parametrize("container", [list, tuple, np.asarray])
+@pytest.mark.parametrize("pbc", [False, True, np.bool_(False), np.bool_(True)])
+def test_line1d_weight_sequences(npb, container, pbc):
+    graph = tc.templates.graphs.Line1D(
+        3,
+        node_weight=container([-0.25, 0.5, 1.25, 99.0]),
+        edge_weight=container([1.0, 2.0, 3.0]),
+        pbc=pbc,
+    )
+    edges = [(0, 1), (1, 2), (2, 0)] if pbc else [(0, 1), (1, 2)]
+    assert graph.number_of_edges() == len(edges)
+    np.testing.assert_allclose(
+        [graph.nodes[q]["weight"] for q in range(3)], [-0.25, 0.5, 1.25]
+    )
+    np.testing.assert_allclose(
+        [graph[u][v]["weight"] for u, v in edges], [1, 2, 3] if pbc else [1, 2]
+    )
+    energy = tc.templates.measurements.spin_glass_measurements(tc.Circuit(3), graph)
+    assert np.ndim(energy) == 0
+    np.testing.assert_allclose(energy, 7.5 if pbc else 4.5, atol=1e-6)
+
+
+@pytest.mark.parametrize("container", [list, tuple, np.asarray])
+@pytest.mark.parametrize("pbc", [False, True])
+@pytest.mark.parametrize(
+    "weights, closing_weight",
+    [([1.0, 2.0, 3.0], 3.0), ([1.0, 2.0, 3.0, 4.0, 99.0], 4.0)],
+)
+def test_line1d_weight_lengths(npb, container, pbc, weights, closing_weight):
+    graph = tc.templates.graphs.Line1D(4, edge_weight=container(weights), pbc=pbc)
+    np.testing.assert_allclose(
+        [graph[q][q + 1]["weight"] for q in range(3)], [1.0, 2.0, 3.0]
+    )
+    if pbc:
+        np.testing.assert_allclose(graph[3][0]["weight"], closing_weight)
+    else:
+        assert not graph.has_edge(3, 0)
+    energy = tc.templates.measurements.spin_glass_measurements(tc.Circuit(4), graph)
+    np.testing.assert_allclose(energy, 6.0 + closing_weight if pbc else 6.0, atol=1e-6)
+
+
+@pytest.mark.parametrize("scalar", [float, np.float64, np.asarray])
+@pytest.mark.parametrize("pbc", [False, True])
+def test_line1d_scalar_weights(npb, scalar, pbc):
+    graph = tc.templates.graphs.Line1D(
+        3, node_weight=scalar(1.5), edge_weight=scalar(2.0), pbc=pbc
+    )
+    np.testing.assert_allclose([graph.nodes[q]["weight"] for q in range(3)], [1.5] * 3)
+    np.testing.assert_allclose(
+        [data["weight"] for _, _, data in graph.edges(data=True)],
+        [2.0] * (3 if pbc else 2),
+    )
+    energy = tc.templates.measurements.spin_glass_measurements(tc.Circuit(3), graph)
+    assert np.ndim(energy) == 0
+    np.testing.assert_allclose(energy, 10.5 if pbc else 8.5, atol=1e-6)
+
+
 def test_grid_coord():
     cd = tc.templates.graphs.Grid2DCoord(3, 2)
     assert cd.all_cols() == [(0, 3), (1, 4), (2, 5)]
