@@ -10,6 +10,7 @@ modulepath = os.path.dirname(os.path.dirname(thisfile))
 
 sys.path.insert(0, modulepath)
 import tensorcircuit as tc
+from tensorcircuit.noisemodel import NoiseConf, circuit_with_noise
 from tensorcircuit.channels import (
     depolarizingchannel,
     amplitudedampingchannel,
@@ -524,3 +525,47 @@ def test_composedkraus_m3_jit(jaxb):
     kk = [tc.backend.reshapem(g.tensor) for g in comp]
     s = sum(tc.backend.adjoint(k) @ k for k in kk)
     np.testing.assert_allclose(s, np.eye(D), atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+@pytest.mark.parametrize("count", [2, 3, 6])
+@pytest.mark.parametrize("superposition", [False, True])
+def test_composedkraus_normalized_trajectories(backend, count, superposition):
+    channel = tc.channels.depolarizingchannel(0.25, 0.25, 0.25)
+    combined = composedkraus(*([channel] * count))
+    initial = np.array([np.sqrt(0.7), 1j * np.sqrt(0.3)] if superposition else [1, 0])
+    initial = tc.array_to_tensor(initial)
+    noise = NoiseConf()
+    noise.add_noise("i", combined)
+    circuit = tc.Circuit(1, inputs=initial)
+    circuit.i(0)
+    density = tc.DMCircuit(1, inputs=initial)
+    density.i(0)
+    reference = tc.backend.numpy(circuit_with_noise(density, noise).densitymatrix())
+    sequential = np.outer(tc.backend.numpy(initial), tc.backend.numpy(initial).conj())
+    for _ in range(count):
+        sequential = tc.channels.evol_kraus(sequential, channel)
+    np.testing.assert_allclose(reference, tc.backend.numpy(sequential), atol=1e-6)
+
+    def trajectory(status):
+        return circuit_with_noise(circuit, noise, status).state()
+
+    compiled = tc.backend.jit(trajectory)
+    weights = [
+        np.linalg.norm(tc.backend.numpy(k.tensor) @ tc.backend.numpy(initial)) ** 2
+        for k in combined
+    ]
+    ensemble = np.zeros((2, 2), dtype=np.complex128)
+    cumulative = 0.0
+    for weight in weights:
+        if weight > 1e-7:
+            status = tc.backend.convert_to_tensor([cumulative + weight / 2])
+            state = tc.backend.numpy(trajectory(status))
+            np.testing.assert_allclose(np.vdot(state, state), 1, atol=1e-6)
+            compiled_state = tc.backend.numpy(compiled(status))
+            np.testing.assert_allclose(compiled_state, state, atol=1e-6)
+            ensemble += weight * np.outer(state, state.conj())
+        cumulative += weight
+    np.testing.assert_allclose(ensemble, reference, atol=1e-6)
+    assert combined.is_unitary is (count == 2)
+    assert not composedkraus(combined, tc.channels.resetchannel()).is_unitary

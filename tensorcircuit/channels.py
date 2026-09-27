@@ -1032,7 +1032,10 @@ def composedkraus(*kraus_lists: KrausList) -> KrausList:
 
     The m>=3 path fixes the output length at :math:`D^2` (the superoperator
     dimension) for JIT compatibility; the result may include zero operators
-    when rank-deficient but stays trace-preserving.
+    when rank-deficient but stays trace-preserving. The reconstructed operators
+    need not be proportional to unitaries, even when all input channels use
+    unitary Kraus operators, so this path returns ``is_unitary=False`` for
+    general state-dependent trajectory sampling.
 
     :param kraus_lists: Two or more noise channels to compose. The first
         argument is the outermost channel (applied last to the state); the last
@@ -1070,5 +1073,5 @@ def composedkraus(*kraus_lists: KrausList) -> KrausList:
     return KrausList(
         krausmatrix_to_krausgate(kraus_m),
         name=name,
-        is_unitary=is_unitary,
+        is_unitary=False,
     )
