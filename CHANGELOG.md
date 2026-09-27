@@ -16,6 +16,10 @@
 
 - Honor `AnalogCircuit(mps_inputs=...)` instead of overriding the supplied state with the default all-zero input; preserve explicit dense-input precedence.
 
+- Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
+
+- Use general trajectory sampling for Choi-reconstructed composed noise channels, preserving trajectory normalization.
+
 - Preserve zero-strength gradients in the optimized FGS hopping and pairing evolutions.
 
 - Correct the norm denominator in `MPSCircuit.expectation(normalize=True)` for unnormalized states and distinct bra/ket states.
