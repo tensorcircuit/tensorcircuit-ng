@@ -13,6 +13,40 @@ Array = Any  # torch Tensor
 qr_epsilon = 1e-8
 
 
+class _PSDSquareRoot(torch.autograd.Function):
+    """Differentiate the PSD square root using cached spectral factors."""
+
+    generate_vmap_rule = True
+
+    @staticmethod
+    def forward(value: Array, s: Array, v: Array) -> Array:
+        return (v * s[..., None, :]) @ v.adjoint()
+
+    @staticmethod
+    def setup_context(ctx: Any, inputs: Any, output: Array) -> None:
+        ctx.save_for_backward(inputs[1], inputs[2])
+
+    @staticmethod
+    def backward(ctx: Any, gradient: Array) -> Any:
+        s, v = ctx.saved_tensors
+        denominator = s[..., :, None] + s[..., None, :]
+        positive = denominator > 0
+        gradient = (gradient + gradient.adjoint()) / 2
+        projected = v.adjoint() @ gradient @ v
+        response = torch.where(
+            positive, projected / torch.where(positive, denominator, 1), 0
+        )
+        return v @ response @ v.adjoint(), None, None
+
+
+def sqrtmh_psd(value: Array) -> Array:
+    """PSD square root with a fixed-rank response at zero eigenvalues."""
+    # Keep factors in the graph for higher derivatives, without repeating eigh.
+    e, v = torch.linalg.eigh(value)
+    s = torch.sqrt(torch.clamp(e, min=0))
+    return _PSDSquareRoot.apply(value, s, v)
+
+
 def torchqr_grad(
     a: Array,
     q: Array,

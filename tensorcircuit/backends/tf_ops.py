@@ -13,6 +13,25 @@ Array = Any  # tensorflow Tensor
 qr_epsilon = 1e-8
 
 
+@tf.custom_gradient  # type: ignore[misc]
+def sqrtmh_psd(value: Array) -> Any:
+    """PSD square root with a fixed-rank response at zero eigenvalues."""
+    e, v = tf.linalg.eigh(value)
+    s = tf.sqrt(tf.maximum(tf.math.real(e), 0))
+    result = (v * tf.cast(s[..., None, :], v.dtype)) @ tf.linalg.adjoint(v)
+
+    def backward(gradient: Array) -> Array:
+        denominator = s[..., :, None] + s[..., None, :]
+        positive = denominator > 0
+        denominator = tf.cast(tf.where(positive, denominator, 1), v.dtype)
+        gradient = (gradient + tf.linalg.adjoint(gradient)) / 2
+        projected = tf.linalg.adjoint(v) @ gradient @ v
+        response = tf.where(positive, projected / denominator, 0)
+        return v @ response @ tf.linalg.adjoint(v)
+
+    return result, backward
+
+
 def tfqr_grad(a: Array, q: Array, r: Array, dq: Array, dr: Array) -> Array:
     """Get the gradient for Qr."""
 

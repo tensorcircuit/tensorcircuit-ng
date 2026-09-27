@@ -1861,3 +1861,90 @@ def test_backend_real_imag(backend):
     np.testing.assert_allclose(
         tc.backend.numpy(tc.backend.imag(rt)), np.zeros_like(r), atol=1e-6
     )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3)])
+@pytest.mark.parametrize("complex_input", [False, True])
+def test_sqrtmh_psd_batch(backend, highp, batch_shape, complex_input):
+    rng = np.random.default_rng(12)
+    factors = rng.normal(size=batch_shape + (4, 4))
+    if complex_input:
+        factors = factors + 1j * rng.normal(size=factors.shape)
+    unitary, _ = np.linalg.qr(factors)
+    spectrum = np.array([0.0, 0.0, 1.0, 4.0])
+    adjoint = unitary.conj().swapaxes(-1, -2)
+    matrix = (unitary * spectrum) @ adjoint
+    reference = (unitary * np.sqrt(spectrum)) @ adjoint
+    dtype = "complex128" if complex_input else "float64"
+    value = tc.array_to_tensor(matrix, dtype=dtype)
+    root = lambda a: tc.backend.sqrtmh(a, psd=True)
+    for evaluate in (root, tc.backend.jit(root)):
+        result = tc.backend.numpy(evaluate(value))
+        assert result.shape == matrix.shape
+        np.testing.assert_allclose(result, reference, atol=5e-8, rtol=0)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("batch_shape", [(3,), (2, 3)])
+@pytest.mark.parametrize("complex_input", [False, True])
+def test_sqrtmh_psd_batch_gradient(backend, highp, batch_shape, complex_input):
+    k = tc.backend
+    rng = np.random.default_rng(17)
+    factors = rng.normal(size=batch_shape + (3, 3))
+    if complex_input:
+        factors = factors + 1j * rng.normal(size=factors.shape)
+    unitary, _ = np.linalg.qr(factors)
+    spectrum = np.array([1.0, 2.0, 4.0])
+    adjoint = unitary.conj().swapaxes(-1, -2)
+    matrix = (unitary * spectrum) @ adjoint
+    roots = (unitary * np.sqrt(spectrum)) @ adjoint
+    value = tc.array_to_tensor(
+        matrix, dtype="complex128" if complex_input else "float64"
+    )
+    theta = k.convert_to_tensor(np.array(0.2))
+
+    def loss(parameter, a):
+        scaled = a * k.cast(1 + parameter, k.dtype(a))
+        return k.real(k.sum(k.sqrtmh(scaled, psd=True)))
+
+    reference = roots.real.sum() / (2 * np.sqrt(1.2))
+    for derivative in (k.grad(loss), k.jit(k.grad(loss))):
+        np.testing.assert_allclose(
+            k.numpy(derivative(theta, value)), reference, atol=1e-10
+        )
+    flat = k.reshape(value, (-1, 3, 3))
+    expected = roots.real.reshape(-1, 3, 3).sum(axis=(1, 2)) / (2 * np.sqrt(1.2))
+    mapped = k.vmap(k.grad(loss), vectorized_argnums=1)
+    np.testing.assert_allclose(k.numpy(mapped(theta, flat)), expected, atol=1e-10)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("torchb")])
+def test_sqrtmh_psd_reuses_eigendecomposition(backend, highp, monkeypatch):
+    k = tc.backend
+    lib = pytest.importorskip("jax.numpy" if k.name == "jax" else "torch")
+    original = lib.linalg.eigh
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(lib.linalg, "eigh", counted)
+    direction = tc.array_to_tensor(np.diag([1.0, 0.0]))
+    matrix = tc.array_to_tensor(np.diag([1.0, 4.0]))
+
+    def loss(theta):
+        value = matrix + k.cast(theta, tc.dtypestr) * direction
+        return k.real(k.trace(k.sqrtmh(value, psd=True)))
+
+    theta = k.convert_to_tensor(np.array(0.2))
+    np.testing.assert_allclose(
+        k.numpy(k.grad(loss)(theta)), 0.5 / np.sqrt(1.2), atol=1e-12
+    )
+    assert len(calls) == 1
+    calls.clear()
+    np.testing.assert_allclose(
+        k.numpy(k.grad(k.grad(loss))(theta)), -0.25 / 1.2**1.5, atol=1e-12
+    )
+    assert len(calls) == 1

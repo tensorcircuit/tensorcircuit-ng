@@ -5,6 +5,7 @@ Backend magic inherited from tensornetwork: pytorch backend
 # pylint: disable=invalid-name
 
 import logging
+from importlib import import_module
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 from operator import mul
 from functools import reduce, partial
@@ -17,6 +18,7 @@ from .abstract_backend import ExtendedBackend
 dtypestr: str
 rdtypestr: str
 Tensor = Any
+_sqrtmh_psd_op: Callable[[Tensor], Tensor]
 pytree = Any
 
 torchlib: Any
@@ -202,7 +204,9 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
                 "PyTorch not installed, please switch to a different "
                 "backend or install PyTorch."
             )
+        global _sqrtmh_psd_op
         torchlib = torch
+        _sqrtmh_psd_op = import_module(".pytorch_ops", package=__package__).sqrtmh_psd
         self.name = "pytorch"
 
     def eye(
@@ -398,36 +402,7 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         return a.size()
 
     def _sqrtmh_psd(self, a: Tensor) -> Tensor:
-        class PSDSquareRoot(torchlib.autograd.Function):  # type: ignore[misc]
-            generate_vmap_rule = True
-
-            @staticmethod
-            def forward(value: Tensor) -> Tensor:
-                e, v = torchlib.linalg.eigh(value)
-                s = torchlib.sqrt(torchlib.clamp(e, min=0))
-                return (v * s) @ v.adjoint()
-
-            @staticmethod
-            def setup_context(ctx: Any, inputs: Any, output: Tensor) -> None:
-                ctx.save_for_backward(inputs[0])
-
-            @staticmethod
-            def backward(ctx: Any, gradient: Tensor) -> Tensor:
-                (value,) = ctx.saved_tensors
-                e, v = torchlib.linalg.eigh(value)
-                s = torchlib.sqrt(torchlib.clamp(e, min=0))
-                denominator = s[:, None] + s[None, :]
-                positive = denominator > 0
-                gradient = (gradient + gradient.adjoint()) / 2
-                projected = v.adjoint() @ gradient @ v
-                response = torchlib.where(
-                    positive,
-                    projected / torchlib.where(positive, denominator, 1),
-                    0,
-                )
-                return v @ response @ v.adjoint()
-
-        return PSDSquareRoot.apply(a)
+        return _sqrtmh_psd_op(a)
 
     def eigvalsh(self, a: Tensor) -> Tensor:
         return torchlib.linalg.eigvalsh(a)

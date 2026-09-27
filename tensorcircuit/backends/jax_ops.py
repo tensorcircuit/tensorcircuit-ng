@@ -16,6 +16,31 @@ import jax.scipy as jsp
 Array = Any  # jnp.array
 
 
+def _sqrtmh_psd_factors(value: Array) -> Any:
+    e, v = jnp.linalg.eigh(value)
+    return jnp.sqrt(jnp.maximum(e, 0)), v
+
+
+@jax.custom_jvp
+def sqrtmh_psd(value: Array) -> Array:
+    """PSD square root with a fixed-rank response at zero eigenvalues."""
+    s, v = _sqrtmh_psd_factors(value)
+    return (v * s[..., None, :]) @ jnp.conj(jnp.swapaxes(v, -1, -2))
+
+
+@sqrtmh_psd.defjvp
+def _sqrtmh_psd_jvp(primals: Any, tangents: Any) -> Any:
+    (value,), (direction,) = primals, tangents
+    s, v = _sqrtmh_psd_factors(value)
+    vh = jnp.conj(jnp.swapaxes(v, -1, -2))
+    denominator = s[..., :, None] + s[..., None, :]
+    positive = denominator > 0
+    direction = (direction + jnp.conj(jnp.swapaxes(direction, -1, -2))) / 2
+    projected = vh @ direction @ v
+    response = jnp.where(positive, projected / jnp.where(positive, denominator, 1), 0)
+    return (v * s[..., None, :]) @ vh, v @ response @ vh
+
+
 @jax.custom_vjp
 def adaware_svd(A: Array) -> Any:
     # SvdAlgorithm was added in JAX 0.4.35, whose CPU lowering rejects

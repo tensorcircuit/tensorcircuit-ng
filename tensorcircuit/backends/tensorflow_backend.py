@@ -8,6 +8,7 @@ import os
 import re
 from functools import reduce, partial
 from operator import mul
+from importlib import import_module
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 from scipy.sparse import coo_matrix
@@ -18,6 +19,7 @@ from .abstract_backend import ExtendedBackend
 dtypestr: str
 rdtypestr: str
 Tensor = Any
+_sqrtmh_psd_op: Callable[[Tensor], Tensor]
 RGenerator = Any  # tf.random.Generator
 pytree = Any
 
@@ -421,7 +423,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
                 "Tensorflow not installed, please switch to a "
                 "different backend or install Tensorflow."
             )
+        global _sqrtmh_psd_op
         tf = tensorflow
+        _sqrtmh_psd_op = import_module(".tf_ops", package=__package__).sqrtmh_psd
         tf.sparse.SparseTensor.__add__ = tf.sparse.add
         tf.SparseTensor.__matmul__ = sparse_tensor_matmul
         self._densify_fn = None  # lazily built tf.function, cached for reuse
@@ -515,24 +519,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         return tf.size(a)
 
     def _sqrtmh_psd(self, a: Tensor) -> Tensor:
-        @tf.custom_gradient  # type: ignore[misc]
-        def root(value: Tensor) -> Any:
-            e, v = tf.linalg.eigh(value)
-            s = tf.sqrt(tf.maximum(tf.math.real(e), 0))
-            result = (v * tf.cast(s, v.dtype)) @ tf.linalg.adjoint(v)
-
-            def backward(gradient: Tensor) -> Tensor:
-                denominator = s[:, None] + s[None, :]
-                positive = denominator > 0
-                denominator = tf.cast(tf.where(positive, denominator, 1), v.dtype)
-                gradient = (gradient + tf.linalg.adjoint(gradient)) / 2
-                projected = tf.linalg.adjoint(v) @ gradient @ v
-                response = tf.where(positive, projected / denominator, 0)
-                return v @ response @ tf.linalg.adjoint(v)
-
-            return result, backward
-
-        return root(a)
+        return _sqrtmh_psd_op(a)
 
     def eigvalsh(self, a: Tensor) -> Tensor:
         return tf.linalg.eigvalsh(a)

@@ -337,7 +337,8 @@ class ExtendedBackend:
         """
         Return the sqrtm of a Hermitian matrix ``a``.
 
-        :param a: tensor in matrix form
+        :param a: Hermitian matrix; leading batch dimensions are supported
+            when ``psd=True``
         :type a: Tensor
         :param psd: whether the input ``a`` is guaranteed as a positive semidefinite matrix,
             defaults False. In this mode, negative roundoff eigenvalues are
@@ -363,7 +364,10 @@ class ExtendedBackend:
     def _sqrtmh_psd(self: Any, a: Tensor) -> Tensor:
         e, v = self.eigh(a)
         e = self.sqrt(self.relu(self.real(e)))
-        return (v * self.cast(e, self.dtype(v))) @ self.adjoint(v)
+        axes = list(range(len(self.shape_tuple(v))))
+        axes[-2:] = axes[-2:][::-1]
+        vh = self.conj(self.transpose(v, axes))
+        return (v * self.cast(e[..., None, :], self.dtype(v))) @ vh
 
     def eigvalsh(self: Any, a: Tensor) -> Tensor:
         """

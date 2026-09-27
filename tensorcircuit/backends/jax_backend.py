@@ -6,6 +6,7 @@ Backend magic inherited from tensornetwork: jax backend
 
 import logging
 from functools import partial
+from importlib import import_module
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 dtypestr: str
 rdtypestr: str
 Tensor = Any
+_sqrtmh_psd_op: Callable[[Tensor], Tensor]
 PRNGKeyArray = Any  # libjax.random.PRNGKeyArray
 pytree = Any
 
@@ -234,7 +236,9 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
             logger.warning(
                 "optax not installed, `optimizer` from jax backend cannot work"
             )
+        global _sqrtmh_psd_op
         libjax = jax
+        _sqrtmh_psd_op = import_module(".jax_ops", package=__package__).sqrtmh_psd
         jnp = libjax.numpy
         jsp = libjax.scipy
 
@@ -327,29 +331,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         return jnp.size(a)
 
     def _sqrtmh_psd(self, a: Tensor) -> Tensor:
-        def factors(value: Tensor) -> Any:
-            e, v = jnp.linalg.eigh(value)
-            return jnp.sqrt(jnp.maximum(e, 0)), v
-
-        @libjax.custom_jvp  # type: ignore[misc]
-        def root(value: Tensor) -> Tensor:
-            s, v = factors(value)
-            return (v * s) @ jnp.conj(v.T)
-
-        @root.defjvp  # type: ignore[misc]
-        def root_jvp(primals: Any, tangents: Any) -> Any:
-            (value,), (direction,) = primals, tangents
-            s, v = factors(value)
-            denominator = s[:, None] + s[None, :]
-            positive = denominator > 0
-            direction = (direction + jnp.conj(direction.T)) / 2
-            projected = jnp.conj(v.T) @ direction @ v
-            response = jnp.where(
-                positive, projected / jnp.where(positive, denominator, 1), 0
-            )
-            return root(value), v @ response @ jnp.conj(v.T)
-
-        return root(a)
+        return _sqrtmh_psd_op(a)
 
     def eigvalsh(self, a: Tensor) -> Tensor:
         return jnp.linalg.eigvalsh(a)
