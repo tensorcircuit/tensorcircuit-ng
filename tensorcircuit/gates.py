@@ -289,12 +289,6 @@ def num_to_tensor(*num: Union[float, Tensor], dtype: Optional[str] = None) -> An
 array_to_tensor = num_to_tensor
 
 
-def _cast_registered_gate(m: Tensor) -> Tensor:
-    if isinstance(m, np.ndarray):
-        return np.asarray(m, dtype=npdtype)
-    return m
-
-
 class GateF:
     def __init__(
         self, m: Tensor, n: Optional[str] = None, ctrl: Optional[List[int]] = None
@@ -306,8 +300,7 @@ class GateF:
         self.ctrl = ctrl
 
     def __call__(self, *args: Any, **kws: Any) -> Gate:
-        m1 = array_to_tensor(self.m)
-        m1 = backend.cast(m1, dtypestr)
+        m1 = backend.convert_to_tensor(self.m, dtype=dtypestr)
         return Gate(m1, name=self.n)
 
     def adjoint(self) -> "GateF":
@@ -506,7 +499,6 @@ def meta_gate() -> None:
                 m = np.reshape(m, (2, 2, 2, 2))
             if m.shape[0] == 8:
                 m = np.reshape(m, (2, 2, 2, 2, 2, 2))
-            m = _cast_registered_gate(m)
             temp = GateF(m, n)
             setattr(thismodule, n + "gate", temp)
             setattr(thismodule, n + "_gate", temp)

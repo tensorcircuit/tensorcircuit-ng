@@ -580,3 +580,72 @@ def test_mps_reduced_density_matrix_dual_and_validation(npb):
         mps.reduced_density_matrix(subsystem_to_keep=[n])
     with pytest.raises(ValueError, match="Must keep at least one"):
         mps.reduced_density_matrix(subsystems_to_trace_out=list(range(n)))
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("keep", [0, 1])
+def test_expectation_normalize_postselection(backend, keep):
+    c = tc.MPSCircuit(2)
+    c.h(0)
+    c.mid_measurement(0, keep=keep)
+    sign = 1.0 if keep == 0 else -1.0
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.expectation_ps(z=[0])), sign / 2, atol=1e-6
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.expectation_ps(z=[0], normalize=True)), sign, atol=1e-6
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize(
+    "ket_scale, bra_scale, use_other",
+    [(1.0, 1.0, False), (2.0, 1.0, False), (0.3, 1.0, False), (2.0, 3.0, True)],
+)
+@pytest.mark.parametrize("conj", [True, False])
+def test_expectation_normalize_dense_reference(
+    backend, ket_scale, bra_scale, use_other, conj
+):
+    ket = np.array([1.0, 0.4j, 0.3 + 0.7j, -0.2])
+    ket = ket / np.linalg.norm(ket)
+    c = tc.MPSCircuit(2, wavefunction=ket)
+    c.any(0, unitary=ket_scale * np.eye(2))
+    ket = ket_scale * ket
+    if use_other:
+        bra = np.array([0.3j, 1.0, -0.4 + 0.1j, 0.2])
+        bra = bra / np.linalg.norm(bra)
+        other = tc.MPSCircuit(2, wavefunction=bra)
+        other.any(0, unitary=bra_scale * np.eye(2))
+        bra = bra_scale * bra
+    else:
+        bra = ket
+        other = None
+    operator = np.kron(np.diag([1.0, -1.0]), np.array([[0.0, 1.0], [1.0, 0.0]]))
+    raw = (bra.conj() if conj else bra) @ operator @ ket
+    expected = raw / (np.linalg.norm(bra) * np.linalg.norm(ket))
+    ops = [(tc.gates.z(), [0]), (tc.gates.x(), [1])]
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.expectation(*ops, other=other, conj=conj)), raw, atol=1e-5
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.expectation(*ops, other=other, conj=conj, normalize=True)),
+        expected,
+        atol=1e-5,
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+def test_expectation_normalize_jit_grad(backend):
+    def expectation(theta):
+        c = tc.MPSCircuit(2)
+        c.ry(0, theta=theta)
+        c.ry(1, theta=theta)
+        c.mid_measurement(0, keep=0)
+        return tc.backend.real(c.expectation_ps(z=[1], normalize=True))
+
+    theta = 0.7
+    value, gradient = tc.backend.jit(tc.backend.value_and_grad(expectation))(
+        tc.backend.convert_to_tensor(theta)
+    )
+    np.testing.assert_allclose(tc.backend.numpy(value), np.cos(theta), atol=1e-5)
+    np.testing.assert_allclose(tc.backend.numpy(gradient), -np.sin(theta), atol=1e-5)

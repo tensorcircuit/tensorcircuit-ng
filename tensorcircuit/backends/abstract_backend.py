@@ -369,6 +369,12 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `eigvalsh`.".format(self.name)
         )
 
+    def fft(self: Any, a: Tensor) -> Tensor:
+        """Return the one-dimensional forward discrete Fourier transform."""
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `fft`.".format(self.name)
+        )
+
     def lobpcg_standard(
         self: Any,
         a: Union[Tensor, Callable[[Tensor], Tensor]],
@@ -1503,6 +1509,12 @@ class ExtendedBackend:
         """
         raise NotImplementedError(
             "Backend '{}' has not implemented `special_jv`.".format(self.name)
+        )
+
+    def special_ive(self: Any, v: int, x: Tensor, M: int) -> Tensor:
+        """Return the scaled modified-Bessel sequence for a non-negative argument."""
+        raise NotImplementedError(
+            "Backend '{}' has not implemented special_ive.".format(self.name)
         )
 
     def searchsorted(self: Any, a: Tensor, v: Tensor, side: str = "left") -> Tensor:

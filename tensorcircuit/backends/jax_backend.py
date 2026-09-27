@@ -279,10 +279,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         return jnp.array(tensor, copy=True)
 
     def convert_to_tensor(self, tensor: Tensor, dtype: Optional[str] = None) -> Tensor:
-        result = jnp.asarray(tensor)
-        if dtype is not None:
-            result = self.cast(result, dtype)
-        return result
+        return jnp.asarray(tensor, dtype=dtype)
 
     def abs(self, a: Tensor) -> Tensor:
         return jnp.abs(a)
@@ -331,6 +328,9 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
 
     def eigvalsh(self, a: Tensor) -> Tensor:
         return jnp.linalg.eigvalsh(a)
+
+    def fft(self, a: Tensor) -> Tensor:
+        return jnp.fft.fft(a)
 
     def lobpcg_standard(
         self,
@@ -519,6 +519,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         from .jax_ops import bessel_jv_jax_rescaled
 
         return bessel_jv_jax_rescaled(v, z, M)
+
+    def special_ive(self, v: int, x: Tensor, M: int) -> Tensor:
+        from .jax_ops import modified_bessel_ive_jax
+
+        return modified_bessel_ive_jax(v, x, M)
 
     def searchsorted(self, a: Tensor, v: Tensor, side: str = "left") -> Tensor:
         if not self.is_tensor(a):

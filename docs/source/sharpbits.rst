@@ -194,7 +194,7 @@ AD Consistency
 Gradients in terms of complex dtypes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-TF and JAX backend manage the differentiation rules differently for complex-valued function (actually up to a complex conjuagte). See issue discussion `tensorflow issue <https://github.com/tensorflow/tensorflow/issues/3348>`_.
+TF and JAX backend manage the differentiation rules differently for complex-valued function (actually up to a complex conjugate). See issue discussion `tensorflow issue <https://github.com/tensorflow/tensorflow/issues/3348>`_.
 
 In TensorCircuit-NG, currently we make the difference in AD transparent, namely, when switching the backend, the AD behavior and result for complex valued function can be different and determined by the nature behavior of the corresponding backend framework.
 All AD relevant ops such as ``grad`` or ``jacrev`` may be affected. Therefore, the user must be careful when dealing with AD on complex valued function in a backend agnostic way in TensorCircuit.

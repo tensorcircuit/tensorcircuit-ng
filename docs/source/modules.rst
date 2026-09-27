@@ -18,6 +18,7 @@ tensorcircuit
     ./api/gates.rst
     ./api/interfaces.rst
     ./api/keras.rst
+    ./api/matrixfunc.rst
     ./api/mps_base.rst
     ./api/mpscircuit.rst
     ./api/noisemodel.rst
@@ -28,11 +29,13 @@ tensorcircuit
     ./api/results.rst
     ./api/shadows.rst
     ./api/simplify.rst
+    ./api/spectral.rst
     ./api/stabilizercircuit.rst
     ./api/symbolcircuit.rst
     ./api/symbolgates.rst
     ./api/templates.rst
     ./api/timeevol.rst
+    ./api/tnalg.rst
     ./api/torchnn.rst
     ./api/translation.rst
     ./api/u1circuit.rst

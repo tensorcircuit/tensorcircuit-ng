@@ -17,7 +17,7 @@ Use this file for cross-cutting circuit invariants, serialization behavior, and 
 
 ## Analog circuit inversion
 
-- The inverse of analog evolution should negate the Hamiltonian while keeping the original forward time grid.
+- For an analog block on `[t0, t1]`, invert time-dependent evolution with `-H(t0 + t1 - t)` while keeping the original forward time grid. For time-independent or mutually commuting Hamiltonians, negating `H(t)` alone is sufficient.
 - Negating the time array instead tends to send ODE solvers through an invalid backward-time setup and can produce NaNs.
 
 ## QIR rules

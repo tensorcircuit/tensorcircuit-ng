@@ -16,7 +16,9 @@ import tensorcircuit as tc
 
 
 def _hubbard_terms() -> list[tuple[tuple[tuple[int, str], ...], complex]]:
-    """Return an open-boundary 2x2 spinful Fermi-Hubbard Hamiltonian."""
+    """
+    Return an open-boundary 2x2 spinful Fermi-Hubbard Hamiltonian.
+    """
     sites = 4
     bonds = ((0, 1), (0, 2), (1, 3), (2, 3))
     terms: list[tuple[tuple[tuple[int, str], ...], complex]] = []

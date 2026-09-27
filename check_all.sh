@@ -7,6 +7,7 @@ mypy tensorcircuit
 echo "pylint check"
 pylint tensorcircuit tests examples/*.py
 pylint --recursive=y examples/reproduce_papers
+pylint --recursive=y examples/challenge_suite
 echo "pytest check"
 pytest -n auto --cov=tensorcircuit -vv -W ignore::DeprecationWarning tests/
 # for test on gpu machine, please set `export TF_FORCE_GPU_ALLOW_GROWTH=true` for tf

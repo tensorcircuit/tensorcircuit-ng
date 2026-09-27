@@ -141,7 +141,7 @@ msgstr "关于复数数据类型的梯度"
 #: ../../source/sharpbits.rst:197
 msgid ""
 "TF and JAX backend manage the differentiation rules differently for "
-"complex-valued function (actually up to a complex conjuagte). See issue "
+"complex-valued function (actually up to a complex conjugate). See issue "
 "discussion `tensorflow issue "
 "<https://github.com/tensorflow/tensorflow/issues/3348>`_."
 msgstr "TensorFlow 和 JAX 后端对复值函数的微分规则管理不同（实际上相差一个复共轭）。请参阅相关讨论 `TensorFlow issue <https://github.com/tensorflow/tensorflow/issues/3348>`_ 。"

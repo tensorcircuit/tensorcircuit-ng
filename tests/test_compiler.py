@@ -2,9 +2,7 @@ import sys
 import os
 import pytest
 import numpy as np
-
-# from pytest_lazyfixture import lazy_fixture as lf
-
+from pytest_lazyfixture import lazy_fixture as lf
 
 thisfile = os.path.abspath(__file__)
 modulepath = os.path.dirname(os.path.dirname(thisfile))
@@ -176,3 +174,52 @@ def test_merge_two_qubit_rotation():
         getattr(ref, g)(0, 1, theta=0.7)
         np.testing.assert_allclose(c.matrix(), c1.matrix(), atol=1e-7)
         np.testing.assert_allclose(c.matrix(), ref.matrix(), atol=1e-7)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize(
+    "case", ["matching", "different_angle", "different_matrix", "both", "nonunitary"]
+)
+@pytest.mark.parametrize("reverse", [False, True])
+def test_merge_adjoint_requires_inverse(backend, case, reverse):
+    first = tc.Circuit(1)
+    second = tc.Circuit(1)
+    if case == "nonunitary":
+        first.any(0, unitary=np.diag([2.0, 1.0]))
+        second.any(0, unitary=np.diag([2.0, 1.0]))
+    else:
+        first.exp1(0, unitary=tc.gates.x().tensor, theta=0.2)
+        generator = (
+            tc.gates.z() if case in ("different_matrix", "both") else tc.gates.x()
+        )
+        theta = 0.7 if case in ("different_angle", "both") else 0.2
+        second.exp1(0, unitary=generator.tensor, theta=theta)
+    adjoint = second.inverse()
+    pair = adjoint.append(first) if reverse else first.append(adjoint)
+    c = tc.Circuit(1)
+    c.h(0)
+    c.append(pair)
+    expected = tc.backend.numpy(c.matrix())
+    compiled, _ = tc.compiler.simple_compiler.simple_compile(c)
+    merged = tc.compiler.simple_compiler.merge(c)
+    merged_qir = tc.compiler.simple_compiler.merge(c.to_qir())
+    reconstructed = tc.Circuit.from_qir(merged_qir, {"nqubits": 1})
+    for result in (compiled, merged, reconstructed):
+        np.testing.assert_allclose(
+            tc.backend.numpy(result.matrix()), expected, atol=1e-6
+        )
+        assert result.gate_count() == (1 if case == "matching" else 3)
+    assert c.gate_count() == 3
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("gate", ["s", "t"])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_merge_fixed_adjoint_pair(backend, gate, reverse):
+    c = tc.Circuit(1)
+    names = (gate + "d", gate) if reverse else (gate, gate + "d")
+    for name in names:
+        getattr(c, name)(0)
+    merged = tc.compiler.simple_compiler.merge(c)
+    assert merged.gate_count() == 0
+    np.testing.assert_allclose(tc.backend.numpy(c.matrix()), np.eye(2), atol=1e-6)

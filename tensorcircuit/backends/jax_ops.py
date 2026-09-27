@@ -11,6 +11,7 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
+import jax.scipy as jsp
 
 Array = Any  # jnp.array
 
@@ -370,6 +371,113 @@ def lobpcg_standard_jax(
 
 
 @partial(jax.jit, static_argnums=[0, 2])
+def _modified_bessel_ive_primal(k: int, x: jnp.ndarray, M: int) -> jnp.ndarray:
+    """Evaluate a scaled modified-Bessel sequence without differentiating it."""
+    if M <= k:
+        raise ValueError(
+            f"Recurrence length M ({M}) must be greater than the required order k ({k})."
+        )
+    threshold = 1.0e20 if x.dtype == jnp.float32 else 1.0e250
+
+    def small_argument_case() -> jnp.ndarray:
+        orders = jnp.arange(k, dtype=x.dtype)
+        half_x = x / 2.0
+
+        def first_term(index: int, values: jnp.ndarray) -> jnp.ndarray:
+            return values.at[index + 1].set(values[index] * half_x / (index + 1.0))
+
+        terms = jax.lax.fori_loop(
+            0, max(k - 1, 0), first_term, jnp.ones(k, dtype=x.dtype)
+        )
+        ratio = half_x * half_x
+
+        def add_term(
+            index: int, state: Tuple[jnp.ndarray, ...]
+        ) -> Tuple[jnp.ndarray, ...]:
+            term, total = state
+            denominator = (index + 1.0) * (orders + index + 1.0)
+            term = term * ratio / denominator
+            return term, total + term
+
+        _, values = jax.lax.fori_loop(0, 8, add_term, (terms, terms))
+        return values * jnp.exp(-x)  # type: ignore[no-any-return]
+
+    def positive_case() -> jnp.ndarray:
+        def body(index: int, state: Tuple[jnp.ndarray, ...]) -> Tuple[jnp.ndarray, ...]:
+            following, current, values = state
+            order = M - index
+            previous = following + 2.0 * order / x * current
+            magnitude = jnp.abs(previous)
+            needs_rescale = magnitude > threshold
+            factor = jnp.where(needs_rescale, magnitude, 1.0)
+            following = current / factor
+            previous = previous / factor
+            values = jax.lax.cond(
+                needs_rescale,
+                lambda array: array / factor,
+                lambda array: array,
+                values,
+            )
+            values = values.at[order - 1].set(previous)
+            return following, previous, values
+
+        values = jnp.zeros(M + 1, dtype=x.dtype).at[M].set(1.0)
+        _, _, values = jax.lax.fori_loop(
+            0,
+            M,
+            body,
+            (
+                jnp.asarray(0.0, dtype=x.dtype),
+                jnp.asarray(1.0, dtype=x.dtype),
+                values,
+            ),
+        )
+        return values[:k] / values[0] * jsp.special.i0e(x)
+
+    return jax.lax.cond(  # type: ignore[no-any-return]
+        jnp.abs(x) < 1.0e-3, small_argument_case, positive_case
+    )
+
+
+@partial(jax.custom_jvp, nondiff_argnums=(0, 2))
+def modified_bessel_ive_jax(k: int, x: jnp.ndarray, M: int) -> jnp.ndarray:
+    """Evaluate scaled modified Bessel values with an analytic JVP."""
+    return _modified_bessel_ive_primal(k, x, M)  # type: ignore[no-any-return]
+
+
+@modified_bessel_ive_jax.defjvp
+def _modified_bessel_ive_jvp(
+    k: int,
+    M: int,
+    primals: Tuple[jnp.ndarray, ...],
+    tangents: Tuple[jnp.ndarray, ...],
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    (x,) = primals
+    (x_dot,) = tangents
+    extended_M = max(M, k + 2)
+    extended = _modified_bessel_ive_primal(k + 1, x, extended_M)
+    if extended_M == M:
+        values = extended[:-1]
+    else:
+        values = _modified_bessel_ive_primal(k, x, M)
+    derivative = jnp.concatenate(
+        [
+            extended[1:2] - extended[0:1],
+            0.5 * (extended[:-2] + extended[2:]) - extended[1:-1],
+        ]
+    )
+    zero_derivative = jnp.concatenate(
+        [
+            jnp.asarray([-1.0], dtype=x.dtype),
+            jnp.asarray([0.5], dtype=x.dtype),
+            jnp.zeros(max(k - 2, 0), dtype=x.dtype),
+        ]
+    )[:k]
+    derivative = jnp.where(x == 0, zero_derivative, derivative)
+    return values, derivative * x_dot
+
+
+@partial(jax.jit, static_argnums=[0, 2])
 def _bessel_jv_jax_rescaled(k: int, x: jnp.ndarray, M: int) -> jnp.ndarray:
     """
     Computes Bessel function Jv using Miller's algorithm with dynamic rescaling,
@@ -413,10 +521,14 @@ def _bessel_jv_scalar_rescaled(k: int, M: int, x_val: jnp.ndarray) -> jnp.ndarra
     Miller recurrence with dynamic rescaling for Jv(k, x_val).
     Operates elementwise on x_val (broadcasts over array inputs).
     """
+    x_val = jnp.asarray(x_val) * 1.0
+
     # ``1e250`` overflows to inf in float32, which disables the rescaling
     # branch entirely. Keep the established float64 threshold and use a safe
     # float32 value before the recurrence can overflow.
-    rescale_threshold = 1e20 if x_val.dtype == jnp.float32 else 1e250
+    real_dtype = jnp.real(x_val).dtype
+    rescale_threshold = 1e20 if real_dtype == jnp.float32 else 1e250
+    one = jnp.asarray(1.0, dtype=x_val.dtype)
 
     # Define the body of the recurrence loop
     def recurrence_body(i, state):  # type: ignore
@@ -445,7 +557,7 @@ def _bessel_jv_scalar_rescaled(k: int, M: int, x_val: jnp.ndarray) -> jnp.ndarra
                 f_m_val / scale_factor,
                 f_m_p1_val / scale_factor,
                 f_vals_arr / scale_factor,
-                1.0,
+                one,
             )
 
         def no_rescale_branch(vals):  # type: ignore
@@ -469,9 +581,9 @@ def _bessel_jv_scalar_rescaled(k: int, M: int, x_val: jnp.ndarray) -> jnp.ndarra
         return (f_m_m1_effective, f_m_rescaled, f_vals_updated)
 
     # Initial state for the recurrence loop
-    f_m_p1_init = 0.0
-    f_m_init = 1e-30  # Start with a very small number
-    f_vals_init = jnp.zeros(M + 1).at[M].set(f_m_init)
+    f_m_p1_init = jnp.asarray(0.0, dtype=x_val.dtype)
+    f_m_init = jnp.asarray(1e-30, dtype=x_val.dtype)
+    f_vals_init = jnp.zeros(M + 1, dtype=x_val.dtype).at[M].set(f_m_init)
 
     # Use jax.lax.fori_loop for the backward recurrence
     # Loop from i = 0 to M-1 (total M iterations)
@@ -486,12 +598,16 @@ def _bessel_jv_scalar_rescaled(k: int, M: int, x_val: jnp.ndarray) -> jnp.ndarra
     norm_const = f_vals[0] + 2.0 * even_sum
 
     # Handle division by near-zero normalization constant
-    norm_const_safe = jnp.where(jnp.abs(norm_const) < 1e-12, 1e-12, norm_const)
+    norm_const_safe = jnp.where(
+        jnp.abs(norm_const) < 1e-12,
+        jnp.asarray(1e-12, dtype=x_val.dtype),
+        norm_const,
+    )
 
     # Conditional logic for x_val close to zero
     def x_is_zero_case() -> jnp.ndarray:
         # For x=0, J_0(0)=1, J_k(0)=0 for k>0
-        return jnp.zeros(k).at[0].set(1.0)
+        return jnp.zeros(k, dtype=x_val.dtype).at[0].set(one)
 
     def x_is_not_zero_case() -> jnp.ndarray:
         return f_vals[:k] / norm_const_safe  # type: ignore

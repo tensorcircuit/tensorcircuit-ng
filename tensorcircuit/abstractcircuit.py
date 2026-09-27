@@ -445,6 +445,9 @@ class AbstractCircuit:
         :type qir: List[Dict[str, Any]]
         :param circuit_params: Extra circuit parameters.
         :type circuit_params: Optional[Dict[str, Any]]
+        :param allow_channel: Whether to replay noise channels. If False, channel
+            entries are omitted, defaults to False.
+        :type allow_channel: bool, optional
         :return: The circuit have same gates in the qir.
         :rtype: Circuit
         """
@@ -1447,7 +1450,7 @@ class AbstractCircuit:
 
     def prepend(self, c: "AbstractCircuit") -> "AbstractCircuit":
         """
-        prepend circuit ``c`` before
+        Prepend circuit ``c`` in place, preserving channels for density-matrix circuits.
 
         :param c: The other circuit to be prepended
         :type c: BaseCircuit
@@ -1456,7 +1459,11 @@ class AbstractCircuit:
         """
         qir1 = self.to_qir()
         qir0 = c.to_qir()
-        newc = type(self).from_qir(qir0 + qir1, self.circuit_param)
+        newc = type(self).from_qir(
+            qir0 + qir1,
+            self.circuit_param,
+            allow_channel=getattr(self, "is_dm", False),
+        )
         self.__dict__.update(newc.__dict__)
         return self
 
@@ -1465,6 +1472,8 @@ class AbstractCircuit:
     ) -> "AbstractCircuit":
         """
         Append circuit ``c`` after this circuit in place.
+
+        Noise channels are preserved for density-matrix circuits.
 
         :example:
 
@@ -1500,13 +1509,22 @@ class AbstractCircuit:
                 d = d.copy()
                 d["index"] = [indices[i] for i in d["index"]]
                 qir2.append(d)
-        newc = type(self).from_qir(qir1 + qir2, self.circuit_param)
+        newc = type(self).from_qir(
+            qir1 + qir2,
+            self.circuit_param,
+            allow_channel=getattr(self, "is_dm", False),
+        )
         self.__dict__.update(newc.__dict__)
         return self
 
     def copy(self) -> "AbstractCircuit":
+        """
+        Copy the circuit, preserving noise channels for density-matrix circuits.
+        """
         qir = self.to_qir()
-        c = type(self).from_qir(qir, self.circuit_param)
+        c = type(self).from_qir(
+            qir, self.circuit_param, allow_channel=getattr(self, "is_dm", False)
+        )
         return c
 
     def expectation(

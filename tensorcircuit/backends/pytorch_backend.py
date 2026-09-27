@@ -400,6 +400,9 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def eigvalsh(self, a: Tensor) -> Tensor:
         return torchlib.linalg.eigvalsh(a)
 
+    def fft(self, a: Tensor) -> Tensor:
+        return torchlib.fft.fft(a)
+
     def lobpcg_standard(
         self,
         a: Union[Tensor, Callable[[Tensor], Tensor]],

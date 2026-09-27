@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+### Added
+
+- Add `tensorcircuit.tnalg`: fixed-shape JAX MPS TEBD, one-site TDVP, and one-site DMRG with dense and Abelian block-buffer PyTree states, pure tensor Pauli-string MPO builders, checkpoints, and legacy MPS interoperability.
+
+- Add the matrix-function and spectral foundation for reusable Krylov/SLQ, Chebyshev/KPM, and fixed-schedule Taylor calculations, with shared `KrylovConfig`, `ChebyshevConfig`, and `TaylorConfig` controls, static multi-step Chebyshev exponential actions, physical DOS/thermal/response APIs, JIT/AD-compatible query reuse, accuracy diagnostics, and documented NumPy/JAX full support plus TensorFlow non-Bessel support.
+
+### Changed
+
+- Unify the public time-evolution entry points with the matrix-function implementation.
+
+### Fixed
+
+- Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
+
+- Use general trajectory sampling for Choi-reconstructed composed noise channels, preserving trajectory normalization.
+
+- Preserve zero-strength gradients in the optimized FGS hopping and pairing evolutions.
+
+- Correct the norm denominator in `MPSCircuit.expectation(normalize=True)` for unnormalized states and distinct bra/ket states.
+
+- Preserve density-matrix noise channels in `copy()`, `append()`, and `prepend()`.
+
+- Check gate matrices before cancelling adjoint-named pairs in the simple compiler.
+
+- Fix time ordering in `AnalogCircuit.inverse()` for time-dependent Hamiltonians.
+
+- Fix exact-diagonalization evolution for complex Hermitian Hamiltonians.
+
+- Align ODE scalar-time and real-initial-state handling, and align the standard and scan-based Krylov implementations at the minimum subspace dimension.
+
+- Support complex arguments in the JAX Bessel recurrence and use the absolute time magnitude when estimating the Chebyshev expansion order.
+
 ## v1.9.1
 
 ### Fixed

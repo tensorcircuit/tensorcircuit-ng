@@ -67,6 +67,8 @@ from .quantum import (
     QuScalar,
     aslinearoperator,
 )
+from . import matrixfunc
+from . import spectral
 from . import compiler
 from . import cloud
 from . import fgs
@@ -80,6 +82,7 @@ FGSCircuit = FGSSimulator
 # lazy imports for heavy frameworks
 # name: (module_relative_path, is_module)
 _lazy_imports = {
+    "tnalg": (".tnalg", True),
     "keras": (".keras", True),
     "KerasLayer": (".keras", False),
     "KerasHardwareLayer": (".keras", False),
