@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Preserve custom initial states and tableau gate targets in stabilizer circuit replay, and exclude historical measurements from sampled Pauli expectations.
+
 - Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
 
 - Use general trajectory sampling for Choi-reconstructed composed noise channels, preserving trajectory normalization.

@@ -65,6 +65,8 @@ class StabilizerCircuit(AbstractCircuit):
             self.current_sim.set_state_from_stabilizers(inputs)
         if tableau_inputs:
             self.current_sim.set_inverse_tableau(tableau_inputs)
+        if inputs or tableau_inputs:
+            self._stim_circuit += self.current_tableau().to_circuit()
 
     def apply_general_gate(
         self,
@@ -132,11 +134,9 @@ class StabilizerCircuit(AbstractCircuit):
         :param recorded: Whether the gate is recorded in ``stim.Circuit``, defaults to False
         :type recorded: bool, optional
         """
-        m = len(index)
-        t = stim.Tableau.random(m)
-        self.current_sim.do_tableau(t, index)
-        if recorded:
-            self._stim_circuit += t.to_circuit()
+        self.tableau_gate(
+            *index, tableau=stim.Tableau.random(len(index)), recorded=recorded
+        )
 
     def tableau_gate(self, *index: int, tableau: Any, recorded: bool = False) -> None:
         """
@@ -152,7 +152,12 @@ class StabilizerCircuit(AbstractCircuit):
         """
         self.current_sim.do_tableau(tableau, index)
         if recorded:
-            self._stim_circuit += tableau.to_circuit()
+            for instruction in tableau.to_circuit():
+                self._stim_circuit.append(
+                    instruction.name,
+                    [index[target.value] for target in instruction.targets_copy()],
+                    instruction.gate_args_copy(),
+                )
 
     def measure(self, *index: int, with_prob: bool = False) -> Tensor:
         """
@@ -230,7 +235,9 @@ class StabilizerCircuit(AbstractCircuit):
         **kws: Any,
     ) -> Tensor:
         """
-        Sample measurements from the circuit.
+        Sample measurements by replaying the recorded circuit and initial state.
+        Noise and intermediate measurements are sampled independently per shot.
+        Unrecorded gates and post-selection on the live simulator are not replayed.
 
         :param batch: Number of samples to take, defaults to None (single sample)
         :type batch: Optional[int], optional
@@ -294,7 +301,10 @@ class StabilizerCircuit(AbstractCircuit):
         **kws: Any,
     ) -> float:
         """
-        Compute expectation value of Pauli string measurements.
+        Compute a Pauli expectation by replaying the recorded circuit and initial state.
+        Only the appended Pauli measurements contribute to the expectation;
+        earlier measurement records are excluded. Unrecorded gates and live
+        post-selection are not replayed.
 
         :param x: Indices for Pauli X measurements, defaults to None
         :type x: Optional[Sequence[int]], optional
@@ -311,6 +321,7 @@ class StabilizerCircuit(AbstractCircuit):
             shots = 1000  # Default number of shots
 
         circuit = self._stim_circuit.copy()
+        measurement_start = circuit.num_measurements
 
         # Add basis rotations for measurements
         if x:
@@ -335,7 +346,7 @@ class StabilizerCircuit(AbstractCircuit):
         # Sample and compute expectation using sampler
         sampler = circuit.compile_sampler()
         samples = sampler.sample(shots)
-        results = np.array(samples)
+        results = np.array(samples[:, measurement_start:])
 
         results = 1 - 2 * results
 
