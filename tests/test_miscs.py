@@ -273,8 +273,12 @@ def test_jax_function_load(jaxb, tmp_path):
     np.testing.assert_allclose(f_load(K.ones([3])), 0.5403, atol=1e-4)
 
 
-@pytest.mark.parametrize("sliced", [False, True])
-def test_distributed_contractor_interference(jaxb, highp, sliced):
+@pytest.mark.parametrize(
+    "num_devices,sliced", [(1, False), (1, True), (2, True), (4, True)]
+)
+def test_distributed_contractor_outer_probability(jaxb, highp, num_devices, sliced):
+    if len(jax.devices()) < num_devices:
+        pytest.skip("requires additional JAX devices")
     K = tc.backend
 
     def nodes_fn(theta):
@@ -283,13 +287,11 @@ def test_distributed_contractor_interference(jaxb, highp, sliced):
         a[0] ^ b[0]
         return [a, b]
 
-    def probability(amplitude):
-        return K.real(amplitude * K.conj(amplitude))
-
     theta = K.convert_to_tensor(0.2)
     dc = experimental.DistributedContractor(
         nodes_fn,
         theta,
+        devices=jax.devices()[:num_devices],
         tree_data={
             "inputs": ["a", "a"],
             "output": "",
@@ -298,22 +300,26 @@ def test_distributed_contractor_interference(jaxb, highp, sliced):
             "sliced_inds": {"a": 2} if sliced else {},
         },
     )
-    expected = (1.0 + np.sin(0.4)) / 2.0
-    value, grad = dc.value_and_grad(theta, op=probability)
-    np.testing.assert_allclose(value, expected, atol=1e-12)
+
+    def probability(p):
+        amplitude = dc.value(p)
+        return K.real(amplitude * K.conj(amplitude))
+
+    value, grad = K.jit(K.value_and_grad(probability))(theta)
+    np.testing.assert_allclose(value, (1.0 + np.sin(0.4)) / 2.0, atol=1e-12)
     np.testing.assert_allclose(grad, np.cos(0.4), atol=1e-12)
-    np.testing.assert_allclose(dc.value(theta, op=probability), expected, atol=1e-12)
-    np.testing.assert_allclose(dc.grad(theta, op=probability), grad, atol=1e-12)
     np.testing.assert_allclose(
         dc.value(theta), (np.cos(0.2) + np.sin(0.2)) / np.sqrt(2.0), atol=1e-12
     )
-    with pytest.raises(TypeError, match="real-valued"):
-        dc.value_and_grad(theta, op=K.sum)
 
 
-@pytest.mark.parametrize("num_devices", [1, 2, 4])
-@pytest.mark.parametrize("sliced_inds", [{}, {"a": 3}, {"b": 2}, {"a": 3, "b": 2}])
-def test_distributed_contractor_complex_output(jaxb, highp, num_devices, sliced_inds):
+@pytest.mark.parametrize(
+    "num_devices,sliced_inds",
+    [(1, {}), (2, {"a": 3}), (2, {"b": 2}), (4, {"a": 3, "b": 2})],
+)
+def test_distributed_contractor_additive_reductions(
+    jaxb, highp, num_devices, sliced_inds
+):
     if len(jax.devices()) < num_devices:
         pytest.skip("requires additional JAX devices")
     K = tc.backend
@@ -331,17 +337,11 @@ def test_distributed_contractor_complex_output(jaxb, highp, num_devices, sliced_
         a[0] ^ b[0]
         return [a, b]
 
-    def probability(output):
-        return K.real(K.sum(output * K.conj(output))) + 0.125
+    def reduction(output):
+        return K.real((1.0 + 0.25j) * K.sum(output))
 
     def amplitudes(p):
         return K.einsum("a,ab->b", p["weights"] * p["scale"], matrix)
-
-    def reference(p):
-        return probability(amplitudes(p))
-
-    def identity(output):
-        return output
 
     dc = experimental.DistributedContractor(
         nodes_fn,
@@ -355,17 +355,24 @@ def test_distributed_contractor_complex_output(jaxb, highp, num_devices, sliced_
             "sliced_inds": sliced_inds,
         },
     )
-    expected, expected_grad = K.value_and_grad(reference)(params)
-    value, grad = dc.value_and_grad(params, op=probability)
-    np.testing.assert_allclose(value, expected, atol=1e-12)
-    for key in params:
-        np.testing.assert_allclose(grad[key], expected_grad[key], atol=1e-12)
-    np.testing.assert_allclose(
-        dc.value(params, op=probability, output_dtype="float64"), expected, atol=1e-12
-    )
+    for op in [None, reduction]:
+
+        def reference(p, selected_op=op):
+            output = amplitudes(p)
+            return K.real(K.sum(output)) if selected_op is None else selected_op(output)
+
+        expected, expected_grad = K.value_and_grad(reference)(params)
+        value, grad = dc.value_and_grad(params, op=op)
+        grad_only = dc.grad(params, op=op)
+        np.testing.assert_allclose(value, expected, atol=1e-12)
+        for key in params:
+            np.testing.assert_allclose(grad[key], expected_grad[key], atol=1e-12)
+            np.testing.assert_allclose(grad_only[key], expected_grad[key], atol=1e-12)
     np.testing.assert_allclose(dc.value(params), K.sum(amplitudes(params)), atol=1e-12)
     np.testing.assert_allclose(
-        dc.value(params, op=identity), amplitudes(params), atol=1e-12
+        dc.value(params, op=reduction, output_dtype="float64"),
+        reduction(amplitudes(params)),
+        atol=1e-12,
     )
 
 

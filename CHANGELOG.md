@@ -10,11 +10,11 @@
 
 ### Changed
 
+- Clarify the additive per-slice `DistributedContractor.op` contract and document nonlinear processing of scalar amplitudes outside `value`.
+
 - Unify the public time-evolution entry points with the matrix-function implementation.
 
 ### Fixed
-
-- Apply `DistributedContractor` post-processing after globally summing slice contractions, preserving interference terms and their gradients.
 
 - Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
 

@@ -1089,16 +1089,31 @@ For large quantum circuit simulations or expectation evaluations that exceed the
 2. **Multi-device Distribution**: The slice contractions are grouped, sharded, and mapped to multiple devices using JAX's ``NamedSharding`` mesh.
 3. **Execution & All-Reduce**: Each device computes its assigned slices sequentially (using JAX ``scan`` to minimize memory footprint and compile overhead). The results from different devices are then aggregated using a cross-device ``AllReduce`` operation.
 
-The ``op`` argument of ``value`` and ``value_and_grad`` acts on the globally
-summed contraction, after all slices and devices have been combined. For
-example, a probability must be computed as ``abs(sum(amplitudes))**2``, rather
-than ``sum(abs(amplitudes)**2)``, to retain interference between slices.
-``value_and_grad`` differentiates the complete sum-and-post-processing operation;
-its ``op`` must return a real scalar. Slice contractions are recomputed during
-reverse-mode differentiation to avoid retaining every slice's large intermediates.
-For a custom ``op``, sliced output indices are restored to their original
-positions, and the full output tensor is assembled before post-processing.
-The default element sum uses a scalar accumulator instead.
+The ``op`` argument is applied to **each slice before aggregation**, so it must
+be additive: ``op(a + b) = op(a) + op(b)``. The default is ``backend.sum`` for
+``value`` and ``backend.real(backend.sum(output))`` for ``value_and_grad`` and
+``grad``. Reductions must return scalars, and gradient methods require a real
+scalar. This allows each slice to be reduced before combining device results,
+without assembling the full output tensor.
+
+For a contraction whose output is a **scalar amplitude**, ``dc.value(params)``
+returns the sum of its amplitude contributions. Apply nonlinear processing after
+this sum, and differentiate the outer function with JAX:
+
+.. code-block:: python
+
+    import jax
+    import jax.numpy as jnp
+
+    def probability(params):
+        amplitude = dc.value(params)
+        return jnp.abs(amplitude) ** 2
+
+    value, gradient = jax.jit(jax.value_and_grad(probability))(params)
+
+Do not pass squared magnitude as ``op``: the sum of squared slice amplitudes
+omits interference terms. This example assumes a scalar-amplitude contraction;
+for tensor outputs, the default ``value`` reduces all output entries to a scalar.
 
 Here is a quick example of running distributed simulation to calculate expectations and gradients:
 
