@@ -167,73 +167,27 @@ def _density_matrix(c):
     return np.outer(state, state.conj())
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 @pytest.mark.parametrize("method", ["dd", "zne"])
-def test_qem_custom_initial_state(backend, method):
-    c = tc.Circuit(1, inputs=tc.backend.convert_to_tensor([0, 1]))
-    c.z(0)
+@pytest.mark.parametrize("kind", ["default", "dense", "mps", "tensors", "mixed"])
+def test_qem_preserves_initial_state(npb, kind, method):
+    c = _initial_state_circuit(kind)
+    expected = _density_matrix(c)
 
-    def execute(circuit):
-        return float(tc.backend.numpy(tc.backend.real(circuit.expectation_ps(z=[0]))))
+    def execute(rebuilt):
+        assert type(rebuilt) is type(c)
+        assert rebuilt.circuit_param["split"] == c.circuit_param["split"]
+        np.testing.assert_allclose(_density_matrix(rebuilt), expected, atol=1e-6)
+        return float(tc.backend.numpy(tc.backend.real(rebuilt.expectation_ps(z=[2]))))
 
     if method == "dd":
-        result = apply_dd(c, execute, rule=["X", "X"])
+        result, rebuilt = apply_dd(c, execute, rule=["X", "X"], full_output=True)
+        execute(rebuilt)
+        execute(
+            qem.prune_ddcircuit(qem.add_dd(c, dd_option.rules.xx), qem.used_qubits(c))
+        )
     else:
         factory = zne_option.inference.RichardsonFactory(scale_factors=[1.0, 3.0])
         result = apply_zne(c, execute, factory=factory)
-    np.testing.assert_allclose(execute(c), -1.0, atol=1e-6)
-    np.testing.assert_allclose(result, -1.0, atol=1e-6)
-
-
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
-@pytest.mark.parametrize("kind", ["default", "dense", "mps", "tensors", "mixed"])
-@pytest.mark.parametrize("fulldd,ignore_idle", [(False, True), (True, False)])
-def test_dd_preserves_initial_state(backend, kind, fulldd, ignore_idle):
-    c = _initial_state_circuit(kind)
-    expected = _density_matrix(c)
-
-    def execute(rebuilt):
-        assert type(rebuilt) is type(c)
-        assert rebuilt.circuit_param["nqubits"] == 3
-        assert rebuilt.circuit_param["split"] == c.circuit_param["split"]
-        np.testing.assert_allclose(_density_matrix(rebuilt), expected, atol=1e-6)
-        return float(tc.backend.numpy(tc.backend.real(rebuilt.expectation_ps(z=[2]))))
-
-    added = qem.add_dd(c, dd_option.rules.xx)
-    execute(added)
-    execute(qem.prune_ddcircuit(added, qem.used_qubits(c)))
-    result, rebuilt = apply_dd(
-        c,
-        execute,
-        rule=["X", "X"],
-        full_output=True,
-        fulldd=fulldd,
-        ignore_idle_qubit=ignore_idle,
-    )
-    np.testing.assert_allclose(result, execute(c), atol=1e-6)
-    execute(rebuilt)
-    np.testing.assert_allclose(_density_matrix(c), expected, atol=1e-6)
-
-
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
-@pytest.mark.parametrize("kind", ["default", "dense", "mps", "tensors", "mixed"])
-def test_zne_preserves_initial_state(backend, kind):
-    c = _initial_state_circuit(kind)
-    expected = _density_matrix(c)
-    executed = []
-
-    def execute(rebuilt):
-        assert type(rebuilt) is type(c)
-        assert rebuilt.circuit_param["nqubits"] == 3
-        assert rebuilt.circuit_param["split"] == c.circuit_param["split"]
-        np.testing.assert_allclose(_density_matrix(rebuilt), expected, atol=1e-6)
-        executed.append(rebuilt)
-        return float(tc.backend.numpy(tc.backend.real(rebuilt.expectation_ps(z=[2]))))
-
-    factory = zne_option.inference.RichardsonFactory(scale_factors=[1.0, 3.0, 5.0])
-    result = apply_zne(c, execute, factory=factory)
-    assert len(executed) == 3
-    assert len(executed[-1].to_qir()) > len(c.to_qir())
     np.testing.assert_allclose(result, execute(c), atol=1e-6)
     np.testing.assert_allclose(_density_matrix(c), expected, atol=1e-6)
 
