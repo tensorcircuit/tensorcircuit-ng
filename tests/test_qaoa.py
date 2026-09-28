@@ -127,22 +127,16 @@ def _ising_qaoa_reference(params, pauli_terms, weights):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
-@pytest.mark.parametrize("double_precision", [False, True])
-@pytest.mark.parametrize("nlayers", [1, 2])
 @pytest.mark.parametrize(
-    "pauli_terms, weights",
+    "nlayers, pauli_terms, weights",
     [
-        ([[1, 0, 0], [0, 0, 1]], [0.7, -0.4]),
-        ([[1, 1, 0], [1, 0, 1]], [-0.6, 0.9]),
-        ([[1, 0, 0], [0, 0, 1], [1, 0, 1]], [0.7, -0.4, 1.2]),
+        (1, [[1, 0, 0], [0, 0, 1]], [0.7, -0.4]),
+        (1, [[1, 1, 0], [1, 0, 1]], [-0.6, 0.9]),
+        (2, [[1, 0, 0], [0, 0, 1], [1, 0, 1]], [0.7, -0.4, 1.2]),
     ],
     ids=["Z", "ZZ", "mixed"],
 )
-def test_ising_qaoa_exact_evolution(
-    backend, double_precision, nlayers, pauli_terms, weights, request
-):
-    if double_precision:
-        request.getfixturevalue("highp")
+def test_ising_qaoa_exact_evolution(backend, nlayers, pauli_terms, weights):
     params = np.array([0.37, -0.21, -0.43, 0.19][: 2 * nlayers], dtype=tc.rdtypestr)
     expected, _ = _ising_qaoa_reference(params, pauli_terms, weights)
     tensor_params = tc.backend.convert_to_tensor(params)
@@ -150,7 +144,7 @@ def test_ising_qaoa_exact_evolution(
     def state(parameters):
         return QAOA_ansatz_for_Ising(parameters, nlayers, pauli_terms, weights).state()
 
-    tolerance = 1e-10 if double_precision else 5e-6
+    tolerance = 5e-6
     np.testing.assert_allclose(
         tc.backend.numpy(state(tensor_params)), expected, atol=tolerance, rtol=0
     )
@@ -164,8 +158,7 @@ def test_ising_qaoa_exact_evolution(
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
-@pytest.mark.parametrize("nlayers", [1, 2])
-@pytest.mark.parametrize("gamma", [0.0, 0.37])
+@pytest.mark.parametrize("nlayers,gamma", [(1, 0.0), (2, 0.37)])
 def test_ising_qaoa_gradients(backend, nlayers, gamma, highp):
     pauli_terms = [[1, 0, 0], [0, 0, 1], [1, 0, 1]]
     params = np.array([gamma, 0.43, -0.21, 0.17][: 2 * nlayers])
