@@ -2,8 +2,6 @@
 
 ## Unreleased
 
-- Preserve TensorCircuit RX/RY/RZ rotations and their radian angles during ZX conversion instead of treating them as reset instructions.
-
 ### Added
 
 - Add `tensorcircuit.tnalg`: fixed-shape JAX MPS TEBD, one-site TDVP, and one-site DMRG with dense and Abelian block-buffer PyTree states, pure tensor Pauli-string MPO builders, checkpoints, and legacy MPS interoperability.
@@ -15,6 +13,8 @@
 - Unify the public time-evolution entry points with the matrix-function implementation.
 
 ### Fixed
+
+- Preserve TensorCircuit RX/RY/RZ rotations and their radian angles during ZX conversion instead of treating them as reset instructions.
 
 - Preserve zero-strength gradients in the optimized FGS hopping and pairing evolutions.
 
