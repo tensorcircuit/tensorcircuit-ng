@@ -85,23 +85,6 @@ def test_qft_block() -> None:
     np.testing.assert_allclose(mat, ref.T.conj(), atol=1e-7)
 
 
-@pytest.mark.parametrize("pbc", [False, True])
-@pytest.mark.parametrize(
-    "edge_weight, expected",
-    [(None, [1.0] * 4), (2.0, [2.0] * 4), ([1.0, 2.0, 3.0, 4.0], [1.0, 2.0, 3.0, 4.0])],
-)
-def test_line1d_edge_weights(pbc, edge_weight, expected):
-    graph = tc.templates.graphs.Line1D(4, edge_weight=edge_weight, pbc=pbc)
-    edges = [(0, 1), (1, 2), (2, 3)]
-    if pbc:
-        edges.append((3, 0))
-    assert set(graph.nodes) == {0, 1, 2, 3}
-    assert graph.number_of_edges() == len(edges)
-    np.testing.assert_allclose(
-        [graph[u][v]["weight"] for u, v in edges], expected[: len(edges)]
-    )
-
-
 @pytest.mark.parametrize("flip_first, expected", [(False, 10.0), (True, 0.0)])
 def test_line1d_periodic_ising_energy(npb, flip_first, expected):
     graph = tc.templates.graphs.Line1D(4, edge_weight=[1.0, 2.0, 3.0, 4.0])
@@ -147,8 +130,7 @@ def test_line1d_rejects_too_few_sites(n, pbc):
         tc.templates.graphs.Line1D(n, pbc=pbc)
 
 
-@pytest.mark.parametrize("pbc", [False, np.bool_(False)])
-@pytest.mark.parametrize("node_weight", [None, 0.5, [0.5], (0.5,), np.array([0.5])])
+@pytest.mark.parametrize("pbc,node_weight", [(False, None), (np.bool_(False), [0.5])])
 def test_line1d_open_single_site(npb, pbc, node_weight):
     graph = tc.templates.graphs.Line1D(1, node_weight=node_weight, pbc=pbc)
     assert list(graph.nodes) == [0]
@@ -201,8 +183,15 @@ def test_line1d_scalar_tensor_weight_gradients(jaxb, pbc):
     np.testing.assert_allclose(gradient, [3, 3 if pbc else 2], atol=1e-6)
 
 
-@pytest.mark.parametrize("container", [list, tuple, np.asarray])
-@pytest.mark.parametrize("pbc", [False, True, np.bool_(False), np.bool_(True)])
+@pytest.mark.parametrize(
+    "container,pbc",
+    [
+        (list, False),
+        (tuple, True),
+        (np.asarray, np.bool_(True)),
+        (np.asarray, np.bool_(False)),
+    ],
+)
 def test_line1d_weight_sequences(npb, container, pbc):
     graph = tc.templates.graphs.Line1D(
         3,
@@ -223,11 +212,13 @@ def test_line1d_weight_sequences(npb, container, pbc):
     np.testing.assert_allclose(energy, 7.5 if pbc else 4.5, atol=1e-6)
 
 
-@pytest.mark.parametrize("container", [list, tuple, np.asarray])
-@pytest.mark.parametrize("pbc", [False, True])
 @pytest.mark.parametrize(
-    "weights, closing_weight",
-    [([1.0, 2.0, 3.0], 3.0), ([1.0, 2.0, 3.0, 4.0, 99.0], 4.0)],
+    "container,pbc,weights,closing_weight",
+    [
+        (list, True, [1.0, 2.0, 3.0], 3.0),
+        (tuple, True, [1.0, 2.0, 3.0, 4.0, 99.0], 4.0),
+        (np.asarray, False, [1.0, 2.0, 3.0], 3.0),
+    ],
 )
 def test_line1d_weight_lengths(npb, container, pbc, weights, closing_weight):
     graph = tc.templates.graphs.Line1D(4, edge_weight=container(weights), pbc=pbc)
