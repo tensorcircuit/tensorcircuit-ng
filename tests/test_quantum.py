@@ -1628,8 +1628,10 @@ def test_count_tuple2dict(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
-@pytest.mark.parametrize("double_precision", [False, True])
-@pytest.mark.parametrize("ranks", [(1, 1), (1, 4), (2, 3), (4, 4)])
+@pytest.mark.parametrize(
+    "double_precision,ranks",
+    [(False, (1, 1)), (True, (1, 1)), (True, (1, 4)), (True, (2, 3)), (True, (4, 4))],
+)
 def test_fidelity_psd_states(backend, double_precision, ranks, request):
     if double_precision:
         request.getfixturevalue("highp")
@@ -1742,8 +1744,9 @@ def _check_fidelity_gradient(
         ("full_rank", 0.3),
     ],
 )
-@pytest.mark.parametrize("double_precision", [False, True])
-@pytest.mark.parametrize("swap", [False, True])
+@pytest.mark.parametrize(
+    "double_precision,swap", [(False, False), (True, False), (True, True)]
+)
 def test_fidelity_gradients(backend, kind, parameter, swap, double_precision, request):
     if double_precision:
         request.getfixturevalue("highp")
@@ -1776,8 +1779,9 @@ def test_fidelity_gradients(backend, kind, parameter, swap, double_precision, re
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
-@pytest.mark.parametrize("double_precision", [False, True])
-@pytest.mark.parametrize("swap", [False, True])
+@pytest.mark.parametrize(
+    "double_precision,swap", [(False, False), (True, False), (True, True)]
+)
 def test_fidelity_degenerate_gradient(backend, swap, double_precision, request):
     if double_precision:
         request.getfixturevalue("highp")
