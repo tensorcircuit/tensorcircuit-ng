@@ -157,12 +157,11 @@ class StabilizerCircuit(AbstractCircuit):
             if index == tuple(range(len(index))):
                 self._stim_circuit += circuit
             else:
-                # Default tableau synthesis emits H, S and CX with qubit targets.
-                program = []
-                for line in str(circuit).splitlines():
-                    name, *targets = line.split()
-                    mapped = " ".join(str(index[int(t)]) for t in targets)
-                    program.append(f"{name} {mapped}")
+                program = [
+                    f"{inst.name} "
+                    + " ".join(str(index[t.value]) for t in inst.targets_copy())
+                    for inst in circuit
+                ]
                 self._stim_circuit.append_from_stim_program_text("\n".join(program))
 
     def measure(self, *index: int, with_prob: bool = False) -> Tensor:
@@ -247,17 +246,19 @@ class StabilizerCircuit(AbstractCircuit):
 
         :param batch: Number of samples to take, defaults to None (single sample)
         :type batch: Optional[int], optional
-        :return: Measurement results
+        :return: Final Z-basis measurements with shape ``(batch, nqubits)``;
+            historical measurement columns are excluded.
         :rtype: Tensor
         """
         if batch is None:
             batch = 1
         c = self.current_circuit().copy()
+        measurement_start = c.num_measurements
         for i in range(self._nqubits):
             c.append("M", [i])
         sampler = c.compile_sampler()
         samples = sampler.sample(batch)
-        return np.array(samples)
+        return np.array(samples[:, measurement_start:])
 
     def expectation_ps(  # type: ignore
         self,
@@ -408,7 +409,11 @@ class StabilizerCircuit(AbstractCircuit):
         The preparation prefix is synthesized only on the first replay access.
         """
         if self._initial_inverse_tableau is not None:
-            circuit = self._initial_inverse_tableau.inverse().to_circuit()
+            sim = stim.TableauSimulator()
+            sim.set_inverse_tableau(self._initial_inverse_tableau)
+            circuit = stim.Tableau.from_stabilizers(
+                sim.canonical_stabilizers()
+            ).to_circuit()
             circuit += self._stim_circuit
             self._stim_circuit = circuit
             self._initial_inverse_tableau = None
