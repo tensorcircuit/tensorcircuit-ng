@@ -442,3 +442,87 @@ def test_replay_preserves_noise_sampling(npb, monkeypatch):
         c.sample_expectation_ps(z=[0], shots=256), np.mean(1 - 2 * expected.astype(int))
     )
     assert c.current_circuit().num_measurements == 0
+
+
+@pytest.mark.parametrize("input_kind", ["stabilizers", "tableau"])
+@pytest.mark.parametrize("first_access", ["sample", "expectation", "circuit"])
+def test_replay_lazy_preparation(npb, monkeypatch, input_kind, first_access):
+    original = stim.Tableau.to_circuit
+    calls = []
+
+    def counted(tableau, *args, **kwargs):
+        calls.append(tableau.copy())
+        return original(tableau, *args, **kwargs)
+
+    monkeypatch.setattr(stim.Tableau, "to_circuit", counted)
+    kwargs = (
+        {"inputs": [stim.PauliString("-Z")]}
+        if input_kind == "stabilizers"
+        else {"tableau_inputs": stim.Tableau.from_named_gate("X")}
+    )
+    c = tc.StabilizerCircuit(1, **kwargs)
+    np.testing.assert_allclose(c.expectation_ps(z=[0]), -1)
+    c.x(0)
+    np.testing.assert_allclose(c.expectation_ps(z=[0]), 1)
+    np.testing.assert_array_equal(c.measure(0), [0])
+    assert not calls
+    if first_access == "sample":
+        np.testing.assert_array_equal(c.sample(batch=4), np.zeros((4, 1)))
+    elif first_access == "expectation":
+        np.testing.assert_allclose(c.sample_expectation_ps(z=[0], shots=4), 1)
+    else:
+        c.current_circuit()
+    assert len(calls) == 1
+    expected = original(calls[0]) + stim.Circuit("X 0")
+    recorded = c.current_circuit()
+    assert recorded == expected
+    c.x(0)
+    assert c.current_circuit() is recorded
+    assert recorded == expected + stim.Circuit("X 0")
+    np.testing.assert_array_equal(c.sample(batch=4), np.ones((4, 1)))
+    np.testing.assert_allclose(c.sample_expectation_ps(z=[0], shots=4), -1)
+    assert len(calls) == 1
+
+
+def test_replay_lazy_preparation_preserves_unrecorded_operations(npb):
+    c = tc.StabilizerCircuit(1, inputs=[stim.PauliString("-Z")])
+    c.tableau_gate(0, tableau=stim.Tableau.from_named_gate("X"))
+    np.testing.assert_allclose(c.expectation_ps(z=[0]), 1)
+    np.testing.assert_allclose(c.sample_expectation_ps(z=[0], shots=4), -1)
+
+
+@pytest.mark.parametrize("indices", [(0, 1, 2), (2, 1, 0), (4, 0, 2)])
+def test_replay_batched_tableau_mapping(npb, indices):
+    tableau = stim.Tableau.from_circuit(stim.Circuit("H 0\nS 1\nCX 0 2\nCX 2 1"))
+    c = tc.StabilizerCircuit(
+        5,
+        inputs=[
+            stim.PauliString("-ZIIII"),
+            stim.PauliString("IZIII"),
+            stim.PauliString("IIZII"),
+            stim.PauliString("IIIZI"),
+            stim.PauliString("IIIIZ"),
+        ],
+    )
+    expected = c.current_tableau().to_circuit() + stim.Circuit("H 3")
+    c.h(3)
+    for instruction in tableau.to_circuit():
+        expected.append(
+            instruction.name,
+            [indices[target.value] for target in instruction.targets_copy()],
+            instruction.gate_args_copy(),
+        )
+    c.tableau_gate(*indices, tableau=tableau, recorded=True)
+    assert c.current_circuit() == expected
+    reference = stim.TableauSimulator()
+    reference.do(expected)
+    assert reference.canonical_stabilizers() == c.current_sim.canonical_stabilizers()
+
+
+def test_replay_lazy_preparation_order(npb):
+    c = tc.StabilizerCircuit(1, inputs=[stim.PauliString("-Z")])
+    c.h(0)
+    np.testing.assert_allclose(c.expectation_ps(x=[0]), -1)
+    np.testing.assert_allclose(c.sample_expectation_ps(x=[0], shots=4), -1)
+    c.h(0)
+    np.testing.assert_array_equal(c.sample(batch=4), np.ones((4, 1)))

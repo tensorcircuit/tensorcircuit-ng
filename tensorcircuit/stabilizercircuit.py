@@ -65,8 +65,9 @@ class StabilizerCircuit(AbstractCircuit):
             self.current_sim.set_state_from_stabilizers(inputs)
         if tableau_inputs:
             self.current_sim.set_inverse_tableau(tableau_inputs)
+        self._initial_inverse_tableau: Optional[stim.Tableau] = None
         if inputs or tableau_inputs:
-            self._stim_circuit += self.current_tableau().to_circuit()
+            self._initial_inverse_tableau = self.current_inverse_tableau()
 
     def apply_general_gate(
         self,
@@ -152,12 +153,17 @@ class StabilizerCircuit(AbstractCircuit):
         """
         self.current_sim.do_tableau(tableau, index)
         if recorded:
-            for instruction in tableau.to_circuit():
-                self._stim_circuit.append(
-                    instruction.name,
-                    [index[target.value] for target in instruction.targets_copy()],
-                    instruction.gate_args_copy(),
-                )
+            circuit = tableau.to_circuit()
+            if index == tuple(range(len(index))):
+                self._stim_circuit += circuit
+            else:
+                # Default tableau synthesis emits H, S and CX with qubit targets.
+                program = []
+                for line in str(circuit).splitlines():
+                    name, *targets = line.split()
+                    mapped = " ".join(str(index[int(t)]) for t in targets)
+                    program.append(f"{name} {mapped}")
+                self._stim_circuit.append_from_stim_program_text("\n".join(program))
 
     def measure(self, *index: int, with_prob: bool = False) -> Tensor:
         """
@@ -320,7 +326,7 @@ class StabilizerCircuit(AbstractCircuit):
         if shots is None:
             shots = 1000  # Default number of shots
 
-        circuit = self._stim_circuit.copy()
+        circuit = self.current_circuit().copy()
         measurement_start = circuit.num_measurements
 
         # Add basis rotations for measurements
@@ -398,8 +404,14 @@ class StabilizerCircuit(AbstractCircuit):
 
     def current_circuit(self) -> stim.Circuit:
         """
-        Return the current stim circuit representation of the circuit.
+        Return the recorded Stim circuit, including the initial-state preparation.
+        The preparation prefix is synthesized only on the first replay access.
         """
+        if self._initial_inverse_tableau is not None:
+            circuit = self._initial_inverse_tableau.inverse().to_circuit()
+            circuit += self._stim_circuit
+            self._stim_circuit = circuit
+            self._initial_inverse_tableau = None
         return self._stim_circuit
 
     def current_tableau(self) -> stim.Tableau:
