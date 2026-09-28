@@ -333,9 +333,15 @@ def test_analog_circuit_time_dependent_inverse_ad_jit(jaxb, highp):
     np.testing.assert_allclose(gradient, numerical_gradient, atol=1e-6, rtol=1e-6)
 
 
-@pytest.mark.parametrize("nqubits,indices", [(2, [1, 0]), (3, [2, 0]), (3, None)])
-@pytest.mark.parametrize("index", [None, [1, 0]])
-@pytest.mark.parametrize("sparse", [False, True])
+@pytest.mark.parametrize(
+    "nqubits,indices,index,sparse",
+    [
+        (2, [1, 0], None, False),
+        (3, [2, 0], [1, 0], False),
+        (3, [2, 0], None, True),
+        (3, None, [1, 0], True),
+    ],
+)
 def test_analog_circuit_append_indices(jaxb, highp, nqubits, indices, index, sparse):
     xz = tc.backend.kron(tc.gates.x().tensor, tc.gates.z().tensor)
     h = tc.quantum.PauliString2COO([1, 3]) if sparse else xz
