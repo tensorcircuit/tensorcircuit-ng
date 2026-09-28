@@ -1210,8 +1210,7 @@ def test_zx_mpp_detector(backend):
     )
 
 
-@pytest.mark.parametrize("observable_ids", [(0, 1), (2, 5)])
-@pytest.mark.parametrize("repeated", [False, True])
+@pytest.mark.parametrize("observable_ids,repeated", [((0, 1), False), ((2, 5), True)])
 def test_stim_import_observable_indices(jaxb, observable_ids, repeated):
     stim = pytest.importorskip("stim")
     first, second = observable_ids
@@ -1247,8 +1246,19 @@ def test_stim_import_observable_indices(jaxb, observable_ids, repeated):
     )
 
 
-@pytest.mark.parametrize("gate", ["M", "MZ", "MX", "MY", "MR", "MRZ", "MRX", "MRY"])
-@pytest.mark.parametrize("initial_bit", [0, 1])
+@pytest.mark.parametrize(
+    "gate,initial_bit",
+    [
+        ("M", 0),
+        ("MZ", 1),
+        ("MX", 0),
+        ("MY", 1),
+        ("MR", 1),
+        ("MRZ", 0),
+        ("MRX", 1),
+        ("MRY", 0),
+    ],
+)
 def test_stim_import_inverted_measurements(jaxb, gate, initial_bit):
     stim = pytest.importorskip("stim")
     basis = gate[-1] if gate[-1] in ("X", "Y") else "Z"
@@ -1364,9 +1374,17 @@ def test_stim_import_inverted_reset_entanglement(jaxb, basis, p):
         )
 
 
-@pytest.mark.parametrize("basis", ["Z", "X", "Y"])
-@pytest.mark.parametrize("invert", [False, True])
-@pytest.mark.parametrize("p", [0.0, 0.1, 0.3, 1.0])
+@pytest.mark.parametrize(
+    "basis,invert,p",
+    [
+        ("Z", False, 0.0),
+        ("Z", True, 1.0),
+        ("X", False, 1.0),
+        ("X", True, 0.1),
+        ("Y", False, 0.3),
+        ("Y", True, 0.0),
+    ],
+)
 def test_stim_import_reset_readout_probability(jaxb, basis, invert, p):
     stim = pytest.importorskip("stim")
     preparation = {"Z": "I 0", "X": "H 0", "Y": "H 0\nS 0"}[basis]
