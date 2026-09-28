@@ -14,7 +14,7 @@
 
 ### Fixed
 
-- Apply qubit mappings to all analog and digital blocks in `AnalogCircuit.append`, including when embedding a smaller circuit.
+- Map digital and explicitly local analog blocks in `AnalogCircuit.append`; reject permutation or embedding of global analog blocks while preserving equal-width identity mappings.
 
 - Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
 

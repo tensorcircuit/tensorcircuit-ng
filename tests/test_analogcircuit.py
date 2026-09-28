@@ -336,9 +336,9 @@ def test_analog_circuit_time_dependent_inverse_ad_jit(jaxb, highp):
 @pytest.mark.parametrize(
     "nqubits,indices,index,sparse",
     [
-        (2, [1, 0], None, False),
+        (2, [0, 1], None, False),
         (3, [2, 0], [1, 0], False),
-        (3, [2, 0], None, True),
+        (2, None, None, True),
         (3, None, [1, 0], True),
     ],
 )
@@ -388,14 +388,13 @@ def test_analog_circuit_append_indices(jaxb, highp, nqubits, indices, index, spa
     assert source.analog_blocks[0].index == index
 
 
-@pytest.mark.parametrize("index", [None, [0]])
-def test_analog_circuit_append_indices_ad_jit(jaxb, highp, index):
+def test_analog_circuit_append_indices_ad_jit(jaxb, highp):
     def cost_fn(strength):
         def hamiltonian(t):
             return strength * (1 + t) * tc.gates.x().tensor
 
         source = tc.AnalogCircuit(1)
-        source.add_analog_block(hamiltonian, 0.4, index, rtol=1e-10, atol=1e-10)
+        source.add_analog_block(hamiltonian, 0.4, [0], rtol=1e-10, atol=1e-10)
         source.rx(0, theta=0.3)
         circuit = tc.AnalogCircuit(2)
         circuit.x(0)
@@ -408,3 +407,35 @@ def test_analog_circuit_append_indices_ad_jit(jaxb, highp, index):
     angle = 0.96 * 0.7 + 0.3
     np.testing.assert_allclose(value, np.cos(angle), atol=1e-8, rtol=1e-8)
     np.testing.assert_allclose(gradient, -0.96 * np.sin(angle), atol=1e-8, rtol=1e-8)
+
+
+@pytest.mark.parametrize("nqubits,indices", [(2, [1, 0]), (3, [2, 0]), (3, None)])
+def test_analog_append_rejects_global_mapping(jaxb, nqubits, indices):
+    source = tc.AnalogCircuit(2)
+    source.x(0)
+    source.add_analog_block(lambda t: tc.gates.z().tensor, 0.1, [0])
+    source.add_analog_block(lambda t: tc.quantum.PauliString2COO([1, 3]), 0.1)
+    destination = tc.AnalogCircuit(nqubits)
+    destination.h(0)
+    before = destination.state()
+    with pytest.raises(NotImplementedError, match="Global analog blocks"):
+        destination.append(source, indices=indices)
+    assert len(destination.analog_blocks) == 0
+    np.testing.assert_allclose(destination.state(), before, atol=1e-6)
+
+
+def test_analog_append_global_raw(jaxb, highp):
+    source = tc.AnalogCircuit(1)
+    source.add_analog_block(
+        lambda state, t: -1j * tc.gates.x().tensor @ state,
+        0.2,
+        mode="raw",
+        rtol=1e-10,
+        atol=1e-10,
+    )
+    source.z(0)
+    destination = tc.AnalogCircuit(1)
+    destination.append(source)
+    np.testing.assert_allclose(
+        destination.state(), [np.cos(0.2), 1j * np.sin(0.2)], atol=1e-8
+    )
