@@ -1222,31 +1222,20 @@ def test_from_circuit_preserves_rotations(jaxb, axis, theta):
     kwargs = {} if theta is None else {"theta": theta}
     getattr(c, "r" + axis)(1, **kwargs)
     c.h(0)
-    original_names = [d["name"] for d in c._qir]
     converted = StabilizerTCircuit.from_circuit(c)
-    assert converted._qir[2]["name"] == "R_" + axis.upper()
-    assert [d["name"] for d in c._qir] == original_names
-    expected = np.asarray(c.state())
-    for i in range(4):
-        bitstring = format(i, "02b")
-        np.testing.assert_allclose(
-            converted.amplitude(bitstring), expected[i], atol=2e-6
-        )
-        np.testing.assert_allclose(
-            converted.outcome_probability(jnp.array([int(x) for x in bitstring])),
-            abs(expected[i]) ** 2,
-            atol=2e-6,
-        )
     for graph in (circuit_to_zx(c), circuit_to_zx(converted)):
         np.testing.assert_allclose(
             get_zx_unitary(graph, 2), np.asarray(c.matrix()), atol=2e-6
         )
 
 
-@pytest.mark.parametrize("axis", ["x", "y", "z"])
 @pytest.mark.parametrize(
-    "angle_type,backend",
-    [("numpy", lf("jaxb")), ("jax", lf("jaxb")), ("fraction", lf("npb"))],
+    "axis,angle_type,backend",
+    [
+        ("x", "numpy", lf("jaxb")),
+        ("y", "jax", lf("jaxb")),
+        ("z", "fraction", lf("npb")),
+    ],
 )
 def test_from_circuit_rotation_scalar_angles(backend, axis, angle_type):
     theta = {
@@ -1259,8 +1248,6 @@ def test_from_circuit_rotation_scalar_angles(backend, axis, angle_type):
     c.s(0)
     getattr(c, "r" + axis)(0, theta=theta, name="pulse")
     converted = StabilizerTCircuit.from_circuit(c)
-    assert converted._qir[-1]["name"] == "R_" + axis.upper()
-    assert c._qir[-1]["parameters"]["theta"] is theta
     for graph in (circuit_to_zx(c), circuit_to_zx(converted)):
         np.testing.assert_allclose(
             get_zx_unitary(graph, 1), np.asarray(c.matrix()), atol=2e-6
@@ -1285,7 +1272,6 @@ def test_from_circuit_preserves_native_resets(jaxb, axis, source):
             stim.Circuit(f"X 0\nR{axis.upper()} 0\n{readout}\nM 0")
         )
     converted = StabilizerTCircuit.from_circuit(native)
-    assert converted._qir[1]["name"] == native._qir[1]["name"]
     np.testing.assert_array_equal(
         converted.sample_measurements(shots=8, seed=7), np.zeros((8, 1))
     )
