@@ -141,10 +141,64 @@ def test_line1d_two_sites(
 
 
 @pytest.mark.parametrize("n", [-1, 0, 1])
-@pytest.mark.parametrize("pbc", [False, True])
+@pytest.mark.parametrize("pbc", [True, np.bool_(True)])
 def test_line1d_rejects_too_few_sites(n, pbc):
     with pytest.raises(ValueError, match="at least two sites"):
         tc.templates.graphs.Line1D(n, pbc=pbc)
+
+
+@pytest.mark.parametrize("pbc", [False, np.bool_(False)])
+@pytest.mark.parametrize("node_weight", [None, 0.5, [0.5], (0.5,), np.array([0.5])])
+def test_line1d_open_single_site(npb, pbc, node_weight):
+    graph = tc.templates.graphs.Line1D(1, node_weight=node_weight, pbc=pbc)
+    assert list(graph.nodes) == [0]
+    assert graph.number_of_edges() == 0
+    expected = 0.0 if node_weight is None else 0.5
+    np.testing.assert_allclose(graph.nodes[0]["weight"], expected)
+    circuit = tc.Circuit(1)
+    circuit.x(0)
+    energy = tc.templates.measurements.spin_glass_measurements(circuit, graph)
+    np.testing.assert_allclose(energy, -expected, atol=1e-6)
+
+
+@pytest.mark.parametrize("pbc", [False, True])
+@pytest.mark.parametrize("container", [list, tuple, None])
+def test_line1d_tensor_weight_gradients(jaxb, pbc, container):
+    def energy(weights):
+        nodes = weights[:3]
+        edges = weights[3:]
+        if container is not None:
+            nodes, edges = container(nodes), container(edges)
+        graph = tc.templates.graphs.Line1D(
+            3, node_weight=nodes, edge_weight=edges, pbc=pbc
+        )
+        circuit = tc.Circuit(3)
+        circuit.x(0)
+        return tc.backend.real(
+            tc.templates.measurements.spin_glass_measurements(circuit, graph)
+        )
+
+    weights = tc.backend.convert_to_tensor(np.arange(1, 7, dtype=np.float32))
+    expected_grad = np.array([-1, 1, 1, -1, 1, -1 if pbc else 0])
+    value, gradient = tc.backend.jit(tc.backend.value_and_grad(energy))(weights)
+    np.testing.assert_allclose(value, np.dot(np.arange(1, 7), expected_grad), atol=1e-6)
+    np.testing.assert_allclose(gradient, expected_grad, atol=1e-6)
+
+
+@pytest.mark.parametrize("pbc", [False, True])
+def test_line1d_scalar_tensor_weight_gradients(jaxb, pbc):
+    def energy(weights):
+        graph = tc.templates.graphs.Line1D(
+            3, node_weight=weights[0], edge_weight=weights[1], pbc=pbc
+        )
+        return tc.backend.real(
+            tc.templates.measurements.spin_glass_measurements(tc.Circuit(3), graph)
+        )
+
+    weights = tc.backend.convert_to_tensor(np.array([1.5, 2.0], dtype=np.float32))
+    value, gradient = tc.backend.jit(tc.backend.value_and_grad(energy))(weights)
+    np.testing.assert_allclose(value, 10.5 if pbc else 8.5, atol=1e-6)
+    np.testing.assert_allclose(gradient, [3, 3 if pbc else 2], atol=1e-6)
 
 
 @pytest.mark.parametrize("container", [list, tuple, np.asarray])

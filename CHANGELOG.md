@@ -16,8 +16,9 @@
 
 - Correct periodic `Line1D` bond weights and support tuple/array weights. Preserve
   reuse of the last weight when the closing-bond weight is omitted, and reject
-  chains with fewer than two sites. Two-site periodic chains now sum both bonds;
-  the default coupling changes from 1 to 2.
+  periodic chains with fewer than two sites while preserving open single-site
+  chains and JIT/gradient support for tensor-weight sequences. Two-site periodic
+  chains now sum both bonds; the default coupling changes from 1 to 2.
 
 - Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
 

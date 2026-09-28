@@ -22,7 +22,7 @@ def Line1D(
     """
     1D chain with ``n`` sites
 
-    :param n: number of sites in the chain, at least 2
+    :param n: number of sites in the chain; periodic chains require at least 2
     :type n: int
     :param node_weight: scalar weight broadcast to all sites, or a sequence or
         one-dimensional array with at least ``n`` weights in site order.
@@ -39,25 +39,25 @@ def Line1D(
     :type pbc: bool, optional
     :return: the 1D chain as a networkx graph
     :rtype: Graph
-    :raises ValueError: if ``n < 2``
+    :raises ValueError: if ``pbc`` is true and ``n < 2``
     """
 
-    if n < 2:
-        raise ValueError("Line1D requires at least two sites")
+    if pbc and n < 2:
+        raise ValueError("Periodic Line1D requires at least two sites")
 
     g = nx.Graph()
     if edge_weight is None:
         edge_weight = 1.0
-    if np.ndim(edge_weight) == 0:
-        edge_weights = [edge_weight] * n
-    else:
+    if isinstance(edge_weight, Sequence) or np.ndim(edge_weight) != 0:
         edge_weights = list(edge_weight)  # type: ignore[arg-type]
+    else:
+        edge_weights = [edge_weight] * n
     if node_weight is None:
         node_weight = 0.0
-    if np.ndim(node_weight) == 0:
-        node_weights = [node_weight] * n
-    else:
+    if isinstance(node_weight, Sequence) or np.ndim(node_weight) != 0:
         node_weights = list(node_weight)  # type: ignore[arg-type]
+    else:
+        node_weights = [node_weight] * n
     for i in range(n):
         g.add_node(i, weight=node_weights[i])
     for i in range(n - 1):
