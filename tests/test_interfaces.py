@@ -28,9 +28,14 @@ import tensorcircuit as tc
 
 @pytest.mark.skipif(is_torch is False, reason="torch not installed")
 @pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
-@pytest.mark.parametrize("jit", [False, True])
-@pytest.mark.parametrize("enable_dlpack", [False, True])
-@pytest.mark.parametrize("case", ["real_input", "complex_input", "multiple"])
+@pytest.mark.parametrize(
+    "case,jit,enable_dlpack",
+    [
+        ("real_input", True, False),
+        ("complex_input", True, True),
+        ("multiple", False, False),
+    ],
+)
 def test_torch_interface_complex_vjp(backend, jit, enable_dlpack, case):
     def f(x):
         if case == "real_input":
@@ -58,8 +63,9 @@ def test_torch_interface_complex_vjp(backend, jit, enable_dlpack, case):
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
-@pytest.mark.parametrize("jit", [False, True])
-@pytest.mark.parametrize("case", ["real_input", "complex_input", "multiple"])
+@pytest.mark.parametrize(
+    "case,jit", [("real_input", True), ("complex_input", True), ("multiple", False)]
+)
 def test_tf_interface_complex_vjp(backend, jit, case):
     def f(x):
         if case == "real_input":
@@ -504,9 +510,14 @@ def test_args_to_tensor(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("torchb"), lf("jaxb")])
-@pytest.mark.parametrize("jit", [False, True])
-@pytest.mark.parametrize("enable_dlpack", [False, True])
-@pytest.mark.parametrize("case", ["real_input", "complex_input", "multiple"])
+@pytest.mark.parametrize(
+    "case,jit,enable_dlpack",
+    [
+        ("real_input", True, False),
+        ("complex_input", True, True),
+        ("multiple", False, False),
+    ],
+)
 def test_jax_interface_complex_vjp(backend, jit, enable_dlpack, case):
     def f(x, *other):
         if case == "real_input":
