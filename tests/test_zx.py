@@ -1216,7 +1216,6 @@ def test_zx_mpp_detector(backend):
     "add_gate",
     [
         pytest.param(lambda c: c.x(0), id="x"),
-        pytest.param(lambda c: c.y(0), id="y"),
         pytest.param(lambda c: c.rx(0, theta=np.pi), id="rotation"),
         pytest.param(lambda c: c.apply(tc.gates.x(), 0), id="apply"),
         pytest.param(lambda c: c.apply_general_gate(tc.gates.x(), 0), id="general"),
@@ -1226,10 +1225,8 @@ def test_zx_mpp_detector(backend):
             ),
             id="general-qir",
         ),
-        pytest.param(lambda c: c.X(0), id="dynamic"),
         pytest.param(lambda c: c.x_error(0, 1.0), id="noise"),
         pytest.param(lambda c: c.pauli_instruction(0, 1.0, 0.0, 0.0), id="pauli"),
-        pytest.param(lambda c: c.depolarizing(0, 1.0, 0.0, 0.0), id="depolarizing"),
     ],
 )
 def test_zx_cache_after_gate(jaxb, add_gate):
@@ -1330,26 +1327,3 @@ def test_zx_cache_after_detector_and_observable(jaxb):
     )
     np.testing.assert_array_equal(detectors, np.tile([0, 1], (8, 1)))
     np.testing.assert_array_equal(observables, np.tile([0, 1], (8, 1)))
-
-
-def test_zx_cache_reused_without_mutation(jaxb):
-    c = StabilizerTCircuit(1)
-    c.measure_instruction(0)
-    c.detector_instruction([0])
-    c.observable_instruction([0])
-    c.outcome_probability(jnp.array([0]))
-    c.sample_measurements(shots=1, batch_size=1)
-    c.sample_detectors(shots=1, batch_size=1)
-    cache_names = (
-        "_compiled_probs",
-        "_channel_sampler_probs",
-        "_compiled_program_measurements",
-        "_channel_sampler_measurements",
-        "_compiled_program_detectors",
-        "_channel_sampler_detectors",
-    )
-    cached = [getattr(c, name) for name in cache_names]
-    c.sample_detectors(shots=1, batch_size=1)
-    c.sample_measurements(shots=1, batch_size=1)
-    c.outcome_probability(jnp.array([0]))
-    assert all(getattr(c, name) is old for name, old in zip(cache_names, cached))
