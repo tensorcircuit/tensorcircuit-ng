@@ -1089,12 +1089,7 @@ For large quantum circuit simulations or expectation evaluations that exceed the
 2. **Multi-device Distribution**: The slice contractions are grouped, sharded, and mapped to multiple devices using JAX's ``NamedSharding`` mesh.
 3. **Execution & All-Reduce**: Each device computes its assigned slices sequentially (using JAX ``scan`` to minimize memory footprint and compile overhead). The results from different devices are then aggregated using a cross-device ``AllReduce`` operation.
 
-The ``op`` argument is applied to **each slice before aggregation**, so it must
-be additive: ``op(a + b) = op(a) + op(b)``. The default is ``backend.sum`` for
-``value`` and ``backend.real(backend.sum(output))`` for ``value_and_grad`` and
-``grad``. Reductions must return scalars, and gradient methods require a real
-scalar. This allows each slice to be reduced before combining device results,
-without assembling the full output tensor.
+The ``op`` argument is applied to **each slice before aggregation**, so it must be additive: ``op(a + b) = op(a) + op(b)``. The default is ``backend.sum`` for ``value`` and ``backend.real(backend.sum(output))`` for ``value_and_grad`` and ``grad``. Reductions must return scalars, and gradient methods require a real scalar. This allows each slice to be reduced before combining device results, without assembling the full output tensor.
 
 Here is a quick example of running distributed simulation to calculate expectations and gradients:
 
