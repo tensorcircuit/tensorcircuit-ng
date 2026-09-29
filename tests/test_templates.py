@@ -143,14 +143,16 @@ def test_line1d_open_single_site(npb, pbc, node_weight):
     np.testing.assert_allclose(energy, -expected, atol=1e-6)
 
 
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
 @pytest.mark.parametrize("pbc", [False, True])
 @pytest.mark.parametrize("container", [list, tuple, None])
-def test_line1d_tensor_weight_gradients(jaxb, pbc, container):
+def test_line1d_tensor_weight_gradients(backend, pbc, container):
     def energy(weights):
         nodes = weights[:3]
         edges = weights[3:]
         if container is not None:
-            nodes, edges = container(nodes), container(edges)
+            nodes = container(nodes[i] for i in range(3))
+            edges = container(edges[i] for i in range(3))
         graph = tc.templates.graphs.Line1D(
             3, node_weight=nodes, edge_weight=edges, pbc=pbc
         )
@@ -163,12 +165,15 @@ def test_line1d_tensor_weight_gradients(jaxb, pbc, container):
     weights = tc.backend.convert_to_tensor(np.arange(1, 7, dtype=np.float32))
     expected_grad = np.array([-1, 1, 1, -1, 1, -1 if pbc else 0])
     value, gradient = tc.backend.jit(tc.backend.value_and_grad(energy))(weights)
-    np.testing.assert_allclose(value, np.dot(np.arange(1, 7), expected_grad), atol=1e-6)
-    np.testing.assert_allclose(gradient, expected_grad, atol=1e-6)
+    np.testing.assert_allclose(
+        tc.backend.numpy(value), np.dot(np.arange(1, 7), expected_grad), atol=1e-6
+    )
+    np.testing.assert_allclose(tc.backend.numpy(gradient), expected_grad, atol=1e-6)
 
 
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
 @pytest.mark.parametrize("pbc", [False, True])
-def test_line1d_scalar_tensor_weight_gradients(jaxb, pbc):
+def test_line1d_scalar_tensor_weight_gradients(backend, pbc):
     def energy(weights):
         graph = tc.templates.graphs.Line1D(
             3, node_weight=weights[0], edge_weight=weights[1], pbc=pbc
@@ -179,8 +184,10 @@ def test_line1d_scalar_tensor_weight_gradients(jaxb, pbc):
 
     weights = tc.backend.convert_to_tensor(np.array([1.5, 2.0], dtype=np.float32))
     value, gradient = tc.backend.jit(tc.backend.value_and_grad(energy))(weights)
-    np.testing.assert_allclose(value, 10.5 if pbc else 8.5, atol=1e-6)
-    np.testing.assert_allclose(gradient, [3, 3 if pbc else 2], atol=1e-6)
+    np.testing.assert_allclose(tc.backend.numpy(value), 10.5 if pbc else 8.5, atol=1e-6)
+    np.testing.assert_allclose(
+        tc.backend.numpy(gradient), [3, 3 if pbc else 2], atol=1e-6
+    )
 
 
 @pytest.mark.parametrize(

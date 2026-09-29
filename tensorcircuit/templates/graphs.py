@@ -48,22 +48,18 @@ def Line1D(
     g = nx.Graph()
     if edge_weight is None:
         edge_weight = 1.0
-    if isinstance(edge_weight, Sequence) or np.ndim(edge_weight) != 0:
-        edge_weights = list(edge_weight)  # type: ignore[arg-type]
-    else:
-        edge_weights = [edge_weight] * n
+    if not isinstance(edge_weight, Sequence) and np.ndim(edge_weight) == 0:
+        edge_weight = [edge_weight] * n  # type: ignore[list-item]
     if node_weight is None:
         node_weight = 0.0
-    if isinstance(node_weight, Sequence) or np.ndim(node_weight) != 0:
-        node_weights = list(node_weight)  # type: ignore[arg-type]
-    else:
-        node_weights = [node_weight] * n
+    if not isinstance(node_weight, Sequence) and np.ndim(node_weight) == 0:
+        node_weight = [node_weight] * n  # type: ignore[list-item]
     for i in range(n):
-        g.add_node(i, weight=node_weights[i])
+        g.add_node(i, weight=node_weight[i])  # type: ignore[index]
     for i in range(n - 1):
-        g.add_edge(i, i + 1, weight=edge_weights[i])
+        g.add_edge(i, i + 1, weight=edge_weight[i])  # type: ignore[index]
     if pbc:
-        weight = edge_weights[min(n, len(edge_weights)) - 1]
+        weight = edge_weight[min(n, len(edge_weight)) - 1]  # type: ignore[index, arg-type]
         if g.has_edge(n - 1, 0):
             g[n - 1][0]["weight"] = g[n - 1][0]["weight"] + weight
         else:
