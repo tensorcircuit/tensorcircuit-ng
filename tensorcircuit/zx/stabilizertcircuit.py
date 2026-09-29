@@ -176,8 +176,10 @@ class StabilizerTCircuit(AbstractCircuit):
         """
         Create a StabilizerTCircuit from an existing TensorCircuit AbstractCircuit.
 
-        TensorCircuit rotation gates retain their angles in radians and remain
-        distinct from the Stim-style RX/RY/RZ reset instructions.
+        TensorCircuit r/rx/ry/rz rotations retain their angles in radians and
+        remain distinct from Stim-style resets. Parameters must have concrete
+        real values when the ZX graph is built; zero-imaginary complex storage
+        is supported, but graph construction with dynamic JIT angles is not.
 
         :param circuit: The source circuit to convert.
         :type circuit: AbstractCircuit

@@ -14,7 +14,7 @@
 
 ### Fixed
 
-- Preserve TensorCircuit RX/RY/RZ rotations and their radian angles during ZX conversion instead of treating them as reset instructions.
+- Preserve TensorCircuit R/RX/RY/RZ rotations and real radian angles, including zero-imaginary complex storage, during ZX conversion instead of treating them as reset instructions.
 
 - Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
 

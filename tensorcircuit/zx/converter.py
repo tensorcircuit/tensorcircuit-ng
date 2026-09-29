@@ -7,6 +7,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
+from numbers import Real
 from typing import Any, Dict, List, Optional, cast, Callable, Sequence
 
 import numpy as np
@@ -16,6 +17,7 @@ from pyzx_param.graph.graph_s import GraphS
 from pyzx_param.utils import VertexType, EdgeType
 
 from ..abstractcircuit import AbstractCircuit
+from ..cons import backend
 from .. import gates as tcgates
 from .utils import find_basis
 from .noise_model import (
@@ -564,6 +566,21 @@ def r_y(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
     h_yz(b, qubit)
 
 
+def r_axis(
+    b: GraphRepresentation,
+    qubit: int,
+    theta: Fraction,
+    alpha: Fraction,
+    phi: Fraction,
+) -> None:
+    """Apply TensorCircuit's axis-angle rotation, with angles in units of pi."""
+    r_z(b, qubit, -phi)
+    r_y(b, qubit, -alpha)
+    r_z(b, qubit, 2 * theta)
+    r_y(b, qubit, alpha)
+    r_z(b, qubit, phi)
+
+
 def u3(
     b: GraphRepresentation,
     qubit: int,
@@ -1062,6 +1079,7 @@ GATE_TABLE: Dict[str, tuple[Callable[..., Any], int]] = {
     "R_Z": (r_z, 1),
     "R_X": (r_x, 1),
     "R_Y": (r_y, 1),
+    "R_AXIS": (r_axis, 1),
     "U3": (u3, 1),
     # ---- Two-qubit gates ------------------------------------------------------
     "CNOT": (lambda b, c, t: _cx_cz(b, True, c, t), 2),
@@ -1093,7 +1111,18 @@ def _zx_gate_name(instruction: Dict[str, Any]) -> str:
     gate_name = getattr(instruction.get("gatef"), "n", None)
     if isinstance(gate_name, str) and gate_name in ("rx", "ry", "rz"):
         return "R_" + gate_name[-1].upper()
+    if gate_name == "r":
+        return "R_AXIS"
     return str(instruction.get("name", "")).upper()
+
+
+def _real_rotation_angle(angle: Any) -> float:
+    if isinstance(angle, Real):
+        return float(angle)
+    angle = backend.convert_to_tensor(angle)
+    if float(backend.imag(angle)) != 0:
+        raise ValueError("ZX conversion requires real-valued rotation angles")
+    return float(backend.real(angle))
 
 
 def circuit_to_zx(
@@ -1101,6 +1130,10 @@ def circuit_to_zx(
 ) -> GraphRepresentation:
     """
     Convert a TensorCircuit AbstractCircuit to a ZX-calculus GraphRepresentation.
+
+    Rotation parameters must have concrete real values; complex storage with zero
+    imaginary part is supported. Graph construction is not JIT-traceable with
+    dynamic angles.
 
     :param c: The source circuit.
     :type c: AbstractCircuit
@@ -1200,9 +1233,14 @@ def circuit_to_zx(
             if name in ["R_X", "R_Y", "R_Z"]:
                 theta = params.get("theta", params.get("phi", params.get("phase", 0.0)))
                 if getattr(d.get("gatef"), "n", None) in ("rx", "ry", "rz"):
-                    theta = float(theta)
+                    theta = _real_rotation_angle(theta)
                 if isinstance(theta, (float, int)):
                     theta = Fraction(theta) / np.pi
+            elif name == "R_AXIS":
+                theta, alpha, phi = (
+                    _real_rotation_angle(params.get(key, 0.0)) / np.pi
+                    for key in ("theta", "alpha", "phi")
+                )
             elif name == "U3":
                 theta = params.get("theta", 0.0)
                 phi = params.get("phi", 0.0)
@@ -1232,6 +1270,8 @@ def circuit_to_zx(
                     func(b, *chunk, p=p)
                 elif name in ["R_X", "R_Y", "R_Z"]:
                     func(b, *chunk, theta)
+                elif name == "R_AXIS":
+                    func(b, *chunk, theta, alpha, phi)
                 elif name == "U3":
                     func(b, *chunk, theta, phi, lam)
                 else:
