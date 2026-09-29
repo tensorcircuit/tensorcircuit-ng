@@ -1,3 +1,4 @@
+from fractions import Fraction
 import random
 import pytest
 import numpy as np
@@ -1210,3 +1211,143 @@ def test_zx_mpp_detector(backend):
         rtol=0.0,
         err_msg=f"Expected ~0.1 detector rate, got {det_rate}",
     )
+
+
+@pytest.mark.parametrize("axis", ["x", "y", "z"])
+@pytest.mark.parametrize("theta", [None, 0.0, np.pi, -0.37])
+def test_from_circuit_preserves_rotations(jaxb, axis, theta):
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cnot(0, 1)
+    kwargs = {} if theta is None else {"theta": theta}
+    getattr(c, "r" + axis)(1, **kwargs)
+    c.h(0)
+    converted = StabilizerTCircuit.from_circuit(c)
+    for graph in (circuit_to_zx(c), circuit_to_zx(converted)):
+        np.testing.assert_allclose(
+            get_zx_unitary(graph, 2), np.asarray(c.matrix()), atol=2e-6
+        )
+
+
+@pytest.mark.parametrize(
+    "axis,angle_type,backend",
+    [
+        ("x", "numpy", lf("jaxb")),
+        ("y", "jax", lf("jaxb")),
+        ("z", "fraction", lf("npb")),
+        ("x", "complex", lf("npb")),
+        ("x", "tensor", lf("jaxb")),
+        ("y", "tensor", lf("tfb")),
+        ("z", "tensor", lf("torchb")),
+    ],
+)
+def test_from_circuit_rotation_scalar_angles(backend, axis, angle_type):
+    theta = {
+        "numpy": np.float32(0.37),
+        "jax": jnp.array(0.37),
+        "fraction": Fraction(1, 2),
+        "complex": np.complex128(0.37),
+        "tensor": tc.array_to_tensor(0.37),
+    }[angle_type]
+    c = tc.Circuit(1)
+    c.h(0)
+    c.s(0)
+    getattr(c, "r" + axis)(0, theta=theta, name="pulse")
+    converted = StabilizerTCircuit.from_circuit(c)
+    for graph in (circuit_to_zx(c), circuit_to_zx(converted)):
+        np.testing.assert_allclose(
+            get_zx_unitary(graph, 1), np.asarray(c.matrix()), atol=2e-6
+        )
+
+
+@pytest.mark.parametrize("axis", ["x", "y", "z"])
+@pytest.mark.parametrize("source", ["native", "stim"])
+def test_from_circuit_preserves_native_resets(jaxb, axis, source):
+    native = StabilizerTCircuit(1)
+    native.x(0)
+    if axis == "z":
+        native.r(0)
+    else:
+        getattr(native, "reset_" + axis)(0)
+    if axis == "y":
+        native.sd(0)
+    if axis != "z":
+        native.h(0)
+    native.measure_instruction(0)
+    if source == "stim":
+        stim = pytest.importorskip("stim")
+        readout = {"x": "H 0", "y": "S_DAG 0\nH 0", "z": ""}[axis]
+        reset = "R" if axis == "z" else "R" + axis.upper()
+        native = StabilizerTCircuit.from_stim_circuit(
+            stim.Circuit(f"X 0\n{reset} 0\n{readout}\nM 0")
+        )
+    converted = StabilizerTCircuit.from_circuit(native)
+    np.testing.assert_array_equal(
+        converted.sample_measurements(shots=8, seed=7), np.zeros((8, 1))
+    )
+
+
+@pytest.mark.parametrize("axis", ["x", "y", "z"])
+def test_from_circuit_pi_rotation_samples(jaxb, axis):
+    c = tc.Circuit(1)
+    if axis == "z":
+        c.h(0)
+    getattr(c, "r" + axis)(0, theta=np.pi)
+    if axis == "z":
+        c.h(0)
+    c.measure_instruction(0)
+    converted = StabilizerTCircuit.from_circuit(c)
+    np.testing.assert_array_equal(
+        converted.sample_measurements(shots=8, seed=7), np.ones((8, 1))
+    )
+
+
+@pytest.mark.parametrize("axis", ["x", "y", "z"])
+def test_from_circuit_preserves_native_fraction_angles(jaxb, axis):
+    native = StabilizerTCircuit(1)
+    dense = tc.Circuit(1)
+    for c in (native, dense):
+        c.h(0)
+        c.s(0)
+    getattr(native, "r" + axis)(0, theta=Fraction(1, 2))
+    getattr(dense, "r" + axis)(0, theta=np.pi / 2)
+    converted = StabilizerTCircuit.from_circuit(native)
+    for bit in ("0", "1"):
+        np.testing.assert_allclose(
+            converted.amplitude(bit), dense.amplitude(bit), atol=2e-6
+        )
+
+
+@pytest.mark.parametrize(
+    "theta,alpha,phi", [(np.pi, 0.0, 0.0), (0.0, 0.6, -0.2), (0.37, 0.61, -0.29)]
+)
+def test_from_circuit_axis_angle_rotation(jaxb, theta, alpha, phi):
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cnot(0, 1)
+    c.r(1, theta=tc.array_to_tensor(theta), alpha=alpha, phi=phi)
+    converted = StabilizerTCircuit.from_circuit(c)
+    for graph in (circuit_to_zx(c), circuit_to_zx(converted)):
+        np.testing.assert_allclose(
+            get_zx_unitary(graph, 2), np.asarray(c.matrix()), atol=2e-6
+        )
+
+
+def test_from_circuit_rejects_nonreal_angle(npb):
+    c = tc.Circuit(1)
+    c.rx(0, theta=np.complex128(0.3 + 0.1j))
+    for source in (c, StabilizerTCircuit.from_circuit(c)):
+        with pytest.raises(ValueError, match="real-valued rotation angles"):
+            circuit_to_zx(source)
+
+
+def test_from_circuit_static_rotation_jit(jaxb):
+    c = tc.Circuit(1)
+    c.rx(0, theta=0.3)
+
+    @tc.backend.jit
+    def converted_matrix():
+        graph = circuit_to_zx(StabilizerTCircuit.from_circuit(c))
+        return tc.backend.convert_to_tensor(get_zx_unitary(graph, 1))
+
+    np.testing.assert_allclose(converted_matrix(), c.matrix(), atol=2e-6)

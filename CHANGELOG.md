@@ -30,6 +30,8 @@
 
 - Reject mid-circuit measurement/reset instructions in the simple compiler and preserve the input circuit when relocating terminal instructions.
 
+- Preserve TensorCircuit R/RX/RY/RZ rotations and real radian angles, including zero-imaginary complex storage, during ZX conversion instead of treating them as reset instructions.
+
 - Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
 
 - Use general trajectory sampling for Choi-reconstructed composed noise channels, preserving trajectory normalization.
