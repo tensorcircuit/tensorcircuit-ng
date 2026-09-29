@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Return marginal outcome probabilities when measuring a subset of qubits in `U1Circuit`.
+
 - Map digital and explicitly local analog blocks in `AnalogCircuit.append`; reject permutation or embedding of global analog blocks while preserving equal-width identity mappings.
 
 - Fix `AnalogCircuit.append` when appending a circuit to itself, which previously duplicated the first digital block into the last one.
