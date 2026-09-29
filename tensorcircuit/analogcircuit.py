@@ -176,17 +176,45 @@ class AnalogCircuit:
         :param c: The circuit to append.
         :type c: Union[Circuit, AnalogCircuit]
         :param indices: Optional qubit indices to map the appended circuit to.
+            Source qubit ``i`` maps to ``indices[i]`` in every digital block and
+            analog block with explicit local indices. Global analog blocks require
+            equal circuit widths and the identity mapping. If omitted, source
+            qubit indices are preserved.
         :type indices: Optional[Sequence[int]]
         :return: The updated AnalogCircuit.
         :rtype: AnalogCircuit
+        :raises NotImplementedError: If a global analog block would be permuted
+            or embedded. Its opaque callable cannot be remapped without assumptions
+            about its representation or memory requirements.
         """
         if isinstance(c, AnalogCircuit):
+            qubit_map = list(range(c._nqubits)) if indices is None else list(indices)
+            if (
+                c._nqubits != self._nqubits or qubit_map != list(range(c._nqubits))
+            ) and any(block.index is None for block in c.analog_blocks):
+                raise NotImplementedError(
+                    "Global analog blocks require equal circuit widths and an identity "
+                    "qubit mapping; permutation and embedding are not supported."
+                )
             # 1. Concatenate the first digital circuit of c to our current digital circuit
             self.current_digital_circuit.append(c.digital_circuits[0], indices=indices)
             # 2. Append all subsequent analog blocks and their corresponding digital circuits
             for i in range(len(c.analog_blocks)):
-                self.analog_blocks.append(c.analog_blocks[i])
-                self.digital_circuits.append(c.digital_circuits[i + 1])
+                block = c.analog_blocks[i]
+                index = block.index
+                if index is not None:
+                    index = [qubit_map[j] for j in index]
+                self.analog_blocks.append(
+                    AnalogBlock(
+                        hamiltonian_func=block.hamiltonian_func,
+                        time=block.time,
+                        index=index,
+                        solver_options=block.solver_options,
+                    )
+                )
+                digital_circuit = Circuit(self._nqubits, inputs=self.inputs)
+                digital_circuit.append(c.digital_circuits[i + 1], indices=indices)
+                self.digital_circuits.append(digital_circuit)
         elif isinstance(c, Circuit):
             self.current_digital_circuit.append(c, indices=indices)
         else:
