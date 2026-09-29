@@ -196,15 +196,16 @@ class AnalogCircuit:
                     "Global analog blocks require equal circuit widths and an identity "
                     "qubit mapping; permutation and embedding are not supported."
                 )
-            # 1. Concatenate the first digital circuit of c to our current digital circuit
-            self.current_digital_circuit.append(c.digital_circuits[0], indices=indices)
-            # 2. Append all subsequent analog blocks and their corresponding digital circuits
+            # 1. Map all analog blocks of c and their subsequent digital circuits,
+            # before modifying self in case c is self
+            analog_blocks = []
+            digital_circuits = []
             for i in range(len(c.analog_blocks)):
                 block = c.analog_blocks[i]
                 index = block.index
                 if index is not None:
                     index = [qubit_map[j] for j in index]
-                self.analog_blocks.append(
+                analog_blocks.append(
                     AnalogBlock(
                         hamiltonian_func=block.hamiltonian_func,
                         time=block.time,
@@ -214,7 +215,12 @@ class AnalogCircuit:
                 )
                 digital_circuit = Circuit(self._nqubits, inputs=self.inputs)
                 digital_circuit.append(c.digital_circuits[i + 1], indices=indices)
-                self.digital_circuits.append(digital_circuit)
+                digital_circuits.append(digital_circuit)
+            # 2. Concatenate the first digital circuit of c to our current digital circuit
+            self.current_digital_circuit.append(c.digital_circuits[0], indices=indices)
+            # 3. Append the mapped analog blocks and digital circuits
+            self.analog_blocks.extend(analog_blocks)
+            self.digital_circuits.extend(digital_circuits)
         elif isinstance(c, Circuit):
             self.current_digital_circuit.append(c, indices=indices)
         else:

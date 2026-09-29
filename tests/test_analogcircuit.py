@@ -439,3 +439,30 @@ def test_analog_append_global_raw(jaxb, highp):
     np.testing.assert_allclose(
         destination.state(), [np.cos(0.2), 1j * np.sin(0.2)], atol=1e-8
     )
+
+
+@pytest.mark.parametrize("indices", [None, [1, 0]])
+def test_analog_circuit_self_append(jaxb, highp, indices):
+    circuit = tc.AnalogCircuit(2)
+    circuit.rx(0, theta=0.3)
+    circuit.h(1)
+    circuit.add_analog_block(
+        lambda t: tc.gates.x().tensor, 0.2, [0], rtol=1e-10, atol=1e-10
+    )
+    circuit.rz(0, theta=0.5)
+    circuit.cnot(0, 1)
+    circuit.append(circuit, indices=indices)
+
+    reference = tc.Circuit(2)
+    for q0, q1 in ((0, 1), (0, 1) if indices is None else indices):
+        reference.rx(q0, theta=0.3)
+        reference.h(q1)
+        reference.rx(q0, theta=0.4)
+        reference.rz(q0, theta=0.5)
+        reference.cnot(q0, q1)
+    assert [len(c.to_qir()) for c in circuit.digital_circuits] == [2, 4, 2]
+    np.testing.assert_allclose(circuit.state(), reference.state(), atol=1e-8)
+
+    circuit.x(0)
+    reference.x(0)
+    np.testing.assert_allclose(circuit.state(), reference.state(), atol=1e-8)

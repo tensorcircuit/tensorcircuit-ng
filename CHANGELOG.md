@@ -16,6 +16,8 @@
 
 - Map digital and explicitly local analog blocks in `AnalogCircuit.append`; reject permutation or embedding of global analog blocks while preserving equal-width identity mappings.
 
+- Fix `AnalogCircuit.append` when appending a circuit to itself, which previously duplicated the first digital block into the last one.
+
 - Preserve custom initial states and tableau gate targets in stabilizer circuit replay. Exclude historical measurements from sampled Pauli expectations and from `sample()`, which now returns only the final `nqubits` columns.
 
 - Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
