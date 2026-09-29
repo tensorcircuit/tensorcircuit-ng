@@ -18,6 +18,10 @@
 
 - Fix `AnalogCircuit.append` when appending a circuit to itself, which previously duplicated the first digital block into the last one.
 
+- Correct periodic `Line1D` bond weights and support tuple/array weights. Preserve reuse of the last weight when the closing-bond weight is omitted, and reject periodic chains with fewer than two sites while preserving open single-site chains and JIT/gradient support for tensor-weight sequences. Two-site periodic chains now sum both bonds; the default coupling changes from 1 to 2.
+
+- Preserve TensorFlow JIT and gradients for tensor-valued graph weights by avoiding symbolic tensor iteration and casting spin-glass weights to the circuit dtype.
+
 - Preserve custom initial states and tableau gate targets in stabilizer circuit replay. Exclude historical measurements from sampled Pauli expectations and from `sample()`, which now returns only the final `nqubits` columns.
 
 - Correct `QAOA_ansatz_for_Ising` cost evolution by doubling ZZ rotation angles so Z and ZZ terms both use the supplied Hamiltonian weights; mixer angles are unchanged.
