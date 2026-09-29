@@ -1096,25 +1096,6 @@ be additive: ``op(a + b) = op(a) + op(b)``. The default is ``backend.sum`` for
 scalar. This allows each slice to be reduced before combining device results,
 without assembling the full output tensor.
 
-For a contraction whose output is a **scalar amplitude**, ``dc.value(params)``
-returns the sum of its amplitude contributions. Apply nonlinear processing after
-this sum, and differentiate the outer function with JAX:
-
-.. code-block:: python
-
-    import jax
-    import jax.numpy as jnp
-
-    def probability(params):
-        amplitude = dc.value(params)
-        return jnp.abs(amplitude) ** 2
-
-    value, gradient = jax.jit(jax.value_and_grad(probability))(params)
-
-Do not pass squared magnitude as ``op``: the sum of squared slice amplitudes
-omits interference terms. This example assumes a scalar-amplitude contraction;
-for tensor outputs, the default ``value`` reduces all output entries to a scalar.
-
 Here is a quick example of running distributed simulation to calculate expectations and gradients:
 
 .. code-block:: python

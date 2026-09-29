@@ -10,8 +10,6 @@
 
 ### Changed
 
-- Clarify the additive per-slice `DistributedContractor.op` contract and document nonlinear processing of scalar amplitudes outside `value`.
-
 - Unify the public time-evolution entry points with the matrix-function implementation.
 
 ### Fixed

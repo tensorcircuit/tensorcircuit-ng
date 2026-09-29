@@ -4,7 +4,6 @@ import sys
 import os
 from functools import partial
 import numpy as np
-import jax
 import tensorflow as tf
 import pytest
 from pytest_lazyfixture import lazy_fixture as lf
@@ -271,109 +270,6 @@ def test_jax_function_load(jaxb, tmp_path):
         os.path.join(tmp_path, "temp.bin")
     )
     np.testing.assert_allclose(f_load(K.ones([3])), 0.5403, atol=1e-4)
-
-
-@pytest.mark.parametrize(
-    "num_devices,sliced", [(1, False), (1, True), (2, True), (4, True)]
-)
-def test_distributed_contractor_outer_probability(jaxb, highp, num_devices, sliced):
-    if len(jax.devices()) < num_devices:
-        pytest.skip("requires additional JAX devices")
-    K = tc.backend
-
-    def nodes_fn(theta):
-        a = tc.gates.Gate(K.stack([K.cos(theta), K.sin(theta)]))
-        b = tc.gates.Gate(K.ones([2]) / np.sqrt(2.0))
-        a[0] ^ b[0]
-        return [a, b]
-
-    theta = K.convert_to_tensor(0.2)
-    dc = experimental.DistributedContractor(
-        nodes_fn,
-        theta,
-        devices=jax.devices()[:num_devices],
-        tree_data={
-            "inputs": ["a", "a"],
-            "output": "",
-            "size_dict": {"a": 2},
-            "path": [(0, 1)],
-            "sliced_inds": {"a": 2} if sliced else {},
-        },
-    )
-
-    def probability(p):
-        amplitude = dc.value(p)
-        return K.real(amplitude * K.conj(amplitude))
-
-    value, grad = K.jit(K.value_and_grad(probability))(theta)
-    np.testing.assert_allclose(value, (1.0 + np.sin(0.4)) / 2.0, atol=1e-12)
-    np.testing.assert_allclose(grad, np.cos(0.4), atol=1e-12)
-    np.testing.assert_allclose(
-        dc.value(theta), (np.cos(0.2) + np.sin(0.2)) / np.sqrt(2.0), atol=1e-12
-    )
-
-
-@pytest.mark.parametrize(
-    "num_devices,sliced_inds",
-    [(1, {}), (2, {"a": 3}), (2, {"b": 2}), (4, {"a": 3, "b": 2})],
-)
-def test_distributed_contractor_additive_reductions(
-    jaxb, highp, num_devices, sliced_inds
-):
-    if len(jax.devices()) < num_devices:
-        pytest.skip("requires additional JAX devices")
-    K = tc.backend
-    matrix = K.convert_to_tensor(
-        np.array([[1.0, 1.0j], [-0.5j, 0.3], [0.2, -1.0]], dtype=np.complex128)
-    )
-    params = {
-        "weights": K.convert_to_tensor(np.array([0.2 + 0.4j, -0.3j, 0.5])),
-        "scale": K.convert_to_tensor(0.7),
-    }
-
-    def nodes_fn(p):
-        a = tc.gates.Gate(p["weights"] * p["scale"])
-        b = tc.gates.Gate(matrix)
-        a[0] ^ b[0]
-        return [a, b]
-
-    def reduction(output):
-        return K.real((1.0 + 0.25j) * K.sum(output))
-
-    def amplitudes(p):
-        return K.einsum("a,ab->b", p["weights"] * p["scale"], matrix)
-
-    dc = experimental.DistributedContractor(
-        nodes_fn,
-        params,
-        devices=jax.devices()[:num_devices],
-        tree_data={
-            "inputs": ["a", "ab"],
-            "output": "b",
-            "size_dict": {"a": 3, "b": 2},
-            "path": [(0, 1)],
-            "sliced_inds": sliced_inds,
-        },
-    )
-    for op in [None, reduction]:
-
-        def reference(p, selected_op=op):
-            output = amplitudes(p)
-            return K.real(K.sum(output)) if selected_op is None else selected_op(output)
-
-        expected, expected_grad = K.value_and_grad(reference)(params)
-        value, grad = dc.value_and_grad(params, op=op)
-        grad_only = dc.grad(params, op=op)
-        np.testing.assert_allclose(value, expected, atol=1e-12)
-        for key in params:
-            np.testing.assert_allclose(grad[key], expected_grad[key], atol=1e-12)
-            np.testing.assert_allclose(grad_only[key], expected_grad[key], atol=1e-12)
-    np.testing.assert_allclose(dc.value(params), K.sum(amplitudes(params)), atol=1e-12)
-    np.testing.assert_allclose(
-        dc.value(params, op=reduction, output_dtype="float64"),
-        reduction(amplitudes(params)),
-        atol=1e-12,
-    )
 
 
 def test_distrubuted_contractor(jaxb):

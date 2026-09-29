@@ -1193,10 +1193,8 @@ class DistributedContractor:
         :type params: Tensor
         :param op: Additive real-scalar reduction applied to each slice before
             aggregation. It must satisfy ``op(a + b) = op(a) + op(b)``.
-            Defaults to ``backend.real(backend.sum(output))``. Apply nonlinear
-            functions of a scalar amplitude outside :meth:`value` and differentiate
-            that outer function with JAX. The callable is a cache key; reuse it
-            instead of passing a newly created lambda on each call.
+            Defaults to ``backend.real(backend.sum(output))``. The callable is a
+            cache key; reuse it instead of passing a newly created lambda on each call.
         :type op: Optional[Callable[[Tensor], Tensor]], optional
         :param output_dtype: dtype of the accumulated scalar, defaults to ``rdtypestr``
         :type output_dtype: Optional[str], optional
@@ -1228,10 +1226,8 @@ class DistributedContractor:
         :type params: Tensor
         :param op: Additive scalar reduction applied to each slice before
             aggregation. It must satisfy ``op(a + b) = op(a) + op(b)``.
-            Defaults to ``backend.sum``. For a scalar-amplitude contraction, apply
-            nonlinear functions such as ``abs(amplitude)**2`` to the returned
-            value, not as ``op``. The callable is a cache key; reuse it instead
-            of passing a newly created lambda on each call.
+            Defaults to ``backend.sum``. The callable is a cache key; reuse it
+            instead of passing a newly created lambda on each call.
         :type op: Optional[Callable[[Tensor], Tensor]], optional
         :param output_dtype: dtype of the accumulated scalar, defaults to ``dtypestr``
         :type output_dtype: Optional[str], optional
