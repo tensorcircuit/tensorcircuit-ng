@@ -1351,3 +1351,31 @@ def test_from_circuit_static_rotation_jit(jaxb):
         return tc.backend.convert_to_tensor(get_zx_unitary(graph, 1))
 
     np.testing.assert_allclose(converted_matrix(), c.matrix(), atol=2e-6)
+
+
+def test_zx_noisy_expectation_highp(jaxb, highp):
+    c = StabilizerTCircuit(2, seed=0)
+    c.h(0)
+    c.cnot(0, 1)
+    c.depolarizing(0, px=0.1, py=0.05, pz=0.02)
+    np.testing.assert_allclose(c.expectation_ps(x=[0, 1], nmc=2000), 0.86, atol=0.05)
+
+
+def test_zx_noisy_outcome_probability(jaxb):
+    c = StabilizerTCircuit(2, seed=1)
+    dm = tc.DMCircuit(2)
+    for circuit in (c, dm):
+        circuit.h(0)
+        circuit.rx(0, theta=0.7)
+    c.x_error(0, 0.2)
+    c.x_error(1, 0.1)
+    dm.depolarizing(0, px=0.2, py=0, pz=0)
+    dm.depolarizing(1, px=0.1, py=0, pz=0)
+    for circuit in (c, dm):
+        circuit.cnot(0, 1)
+        circuit.t(1)
+        circuit.ry(1, theta=0.4)
+    c.measure_instruction(0)
+    c.measure_instruction(1)
+    prob = jnp.mean(c.outcome_probability(jnp.array([1, 1]), shots=4000))
+    np.testing.assert_allclose(prob, jnp.real(dm.densitymatrix()[3, 3]), atol=0.03)

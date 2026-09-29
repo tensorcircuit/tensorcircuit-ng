@@ -32,6 +32,8 @@
 
 - Preserve TensorCircuit R/RX/RY/RZ rotations and real radian angles, including zero-imaginary complex storage, during ZX conversion instead of treating them as reset instructions.
 
+- Fix `StabilizerTCircuit` noisy expectations under complex128 and `outcome_probability` for noisy circuits with measurement-free components.
+
 - Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
 
 - Use general trajectory sampling for Choi-reconstructed composed noise channels, preserving trajectory normalization.

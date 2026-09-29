@@ -363,7 +363,7 @@ class StabilizerTCircuit(AbstractCircuit):
             p_norm = p_norm * jnp.abs(evaluate(norm_circuit, f_selected))
 
             # Joint probability: f-params + state
-            component_state = state[jnp.array(component.output_indices)]
+            component_state = state[jnp.array(component.output_indices, dtype=int)]
             tiled_state = jnp.tile(component_state, (shots, 1))
             joint_params = jnp.hstack([f_selected, tiled_state])
             p_joint = p_joint * jnp.abs(evaluate(joint_circuit, joint_params))
