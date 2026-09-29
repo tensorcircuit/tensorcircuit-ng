@@ -28,6 +28,8 @@
 
 - Preserve custom initial states and circuit types when rebuilding circuits for DD and ZNE.
 
+- Reject mid-circuit measurement/reset instructions in the simple compiler and preserve the input circuit when relocating terminal instructions.
+
 - Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
 
 - Use general trajectory sampling for Choi-reconstructed composed noise channels, preserving trajectory normalization.
