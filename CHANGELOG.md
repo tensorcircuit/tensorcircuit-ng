@@ -20,6 +20,8 @@
 
 - Preserve custom initial states and tableau gate targets in stabilizer circuit replay. Exclude historical measurements from sampled Pauli expectations and from `sample()`, which now returns only the final `nqubits` columns.
 
+- Correct `QAOA_ansatz_for_Ising` cost evolution by doubling ZZ rotation angles so Z and ZZ terms both use the supplied Hamiltonian weights; mixer angles are unchanged.
+
 - Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
 
 - Use general trajectory sampling for Choi-reconstructed composed noise channels, preserving trajectory normalization.
