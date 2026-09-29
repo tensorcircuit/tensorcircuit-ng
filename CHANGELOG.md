@@ -22,6 +22,8 @@
 
 - Correct `QAOA_ansatz_for_Ising` cost evolution by doubling ZZ rotation angles so Z and ZZ terms both use the supplied Hamiltonian weights; mixer angles are unchanged.
 
+- Preserve custom initial states and circuit types when rebuilding circuits for DD and ZNE.
+
 - Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
 
 - Use general trajectory sampling for Choi-reconstructed composed noise channels, preserving trajectory normalization.
