@@ -1341,13 +1341,91 @@ def test_from_circuit_rejects_nonreal_angle(npb):
             circuit_to_zx(source)
 
 
-def test_from_circuit_static_rotation_jit(jaxb):
-    c = tc.Circuit(1)
-    c.rx(0, theta=0.3)
+@pytest.mark.parametrize("theta", [0.3, 0.3 + 0j])
+def test_from_circuit_static_rotation_jit(jaxb, theta):
+    for angle in (theta, tc.array_to_tensor(theta)):
+        c = tc.Circuit(1)
+        c.rx(0, theta=angle)
 
+        @tc.backend.jit
+        def converted_matrix():
+            graph = circuit_to_zx(StabilizerTCircuit.from_circuit(c))
+            return tc.backend.convert_to_tensor(graph.to_tensor())
+
+        np.testing.assert_allclose(converted_matrix(), c.matrix(), atol=2e-6)
+
+
+@pytest.mark.parametrize(
+    "readout", ["unitary", "amplitude", "expectation", "probability"]
+)
+def test_from_circuit_dynamic_rotations(jaxb, readout):
+    def result(p, use_zx):
+        c = tc.Circuit(2)
+        c.h(0)
+        c.ry(1, theta=0.17)
+        c.cnot(0, 1)
+        c.rx(0, theta=tc.array_to_tensor(p[0]))
+        c.ry(1, theta=p[1])
+        c.rz(0, theta=p[2])
+        c.r(1, theta=p[3], alpha=p[4], phi=p[5])
+        if readout == "unitary":
+            return circuit_to_zx(c).to_tensor().reshape(4, 4) if use_zx else c.matrix()
+        circuit = StabilizerTCircuit.from_circuit(c) if use_zx else c
+        if readout == "amplitude":
+            return circuit.amplitude("10")
+        if readout == "expectation":
+            return circuit.expectation_ps(x=[0], z=[1])
+        if use_zx:
+            return circuit.outcome_probability(jnp.array([1, 0]))
+        return jnp.abs(circuit.amplitude("10"))[None] ** 2
+
+    def loss(p, use_zx):
+        return jnp.real(jnp.sum((1 + 0.3j) * result(p, use_zx)))
+
+    points = jnp.array([[0.0] * 6, [0.3, -0.4, 0.5, 0.7, -0.2, 0.6], [np.pi] * 6])
+    dense = tc.backend.jit(tc.backend.vmap(lambda p: result(p, False)))
+    converted = tc.backend.jit(tc.backend.vmap(lambda p: result(p, True)))
+    np.testing.assert_allclose(converted(points), dense(points), atol=4e-6)
+    dense_grad = tc.backend.jit(
+        tc.backend.vmap(tc.backend.grad(lambda p: loss(p, False)))
+    )
+    converted_grad = tc.backend.jit(
+        tc.backend.vmap(tc.backend.grad(lambda p: loss(p, True)))
+    )
+    np.testing.assert_allclose(converted_grad(points), dense_grad(points), atol=5e-6)
+    # Reuse the compiled graph with different angles, including zero crossings.
+    np.testing.assert_allclose(converted(-points), dense(-points), atol=4e-6)
+
+
+def test_from_circuit_dynamic_sampling(jaxb):
     @tc.backend.jit
-    def converted_matrix():
-        graph = circuit_to_zx(StabilizerTCircuit.from_circuit(c))
-        return tc.backend.convert_to_tensor(get_zx_unitary(graph, 1))
+    def sample(theta):
+        c = tc.Circuit(1)
+        c.rx(0, theta=theta)
+        return StabilizerTCircuit.from_circuit(c).sample_measurements(
+            shots=16, batch_size=16, seed=0
+        )
 
-    np.testing.assert_allclose(converted_matrix(), c.matrix(), atol=2e-6)
+    np.testing.assert_array_equal(sample(jnp.array(0.0)), np.zeros((16, 1)))
+    np.testing.assert_array_equal(sample(jnp.array(np.pi)), np.ones((16, 1)))
+
+
+def test_from_circuit_nonreal_dynamic_angle(jaxb):
+    @tc.backend.jit
+    def expectation(theta):
+        c = tc.Circuit(1)
+        c.rx(0, theta=theta)
+        return StabilizerTCircuit.from_circuit(c).expectation_ps(z=[0])
+
+    np.testing.assert_equal(np.isfinite(expectation(jnp.array(0.3 + 0.1j))), False)
+
+
+def test_zx_dynamic_u3_phase(jaxb):
+    @tc.backend.jit
+    def converted(p):
+        c = StabilizerTCircuit(1)
+        c.u3(0, theta=p[0], phi=p[1], lam=p[2])
+        return circuit_to_zx(c).to_tensor()
+
+    for p in (jnp.zeros(3), jnp.array([0.3, -0.4, 0.5])):
+        np.testing.assert_allclose(converted(p), tc.gates.u(*p).tensor, atol=2e-6)

@@ -16,6 +16,8 @@
 
 - Preserve TensorCircuit R/RX/RY/RZ rotations and real radian angles, including zero-imaginary complex storage, during ZX conversion instead of treating them as reset instructions.
 
+- Support differentiable JAX-traced ZX rotation angles with runtime phase-port contraction, preserving the existing concrete-angle evaluation path.
+
 - Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
 
 - Use general trajectory sampling for Choi-reconstructed composed noise channels, preserving trajectory normalization.

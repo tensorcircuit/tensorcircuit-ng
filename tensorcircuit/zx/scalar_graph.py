@@ -16,6 +16,7 @@ from pyzx_param.simulate import DecompositionStrategy
 
 from ..cons import dtypestr, idtypestr
 from .utils import get_params, connected_components
+from .tensor_graph import TensorGraph, compile_tensor_graph
 
 
 class CompiledScalarGraphs(NamedTuple):
@@ -225,7 +226,7 @@ def compile_scalar_graphs(g_list: list[Any], params: list[str]) -> CompiledScala
 class CompiledComponent(NamedTuple):
     output_indices: list[int]
     f_selection: list[int]
-    compiled_scalar_graphs: list[CompiledScalarGraphs]
+    compiled_scalar_graphs: list[CompiledScalarGraphs | TensorGraph]
 
 
 class CompiledProgram(NamedTuple):
@@ -310,6 +311,7 @@ def _compile_component(
     f_indices_global: list[int],
     mode: str,
     strategy: DecompositionStrategy = "cat5",
+    phase_weights: Sequence[Any] = (),
 ) -> CompiledComponent:
     graph = component.graph
     output_indices = component.output_indices
@@ -325,7 +327,7 @@ def _compile_component(
         outputs_to_plug = [0, num_component_outputs]
 
     # Plug outputs and compile each graph
-    compiled_graphs: list[CompiledScalarGraphs] = []
+    compiled_graphs: list[CompiledScalarGraphs | TensorGraph] = []
 
     component_m_chars = [f"m{i}" for i in output_indices]
     plugged_graphs = _plug_outputs(graph, component_m_chars, outputs_to_plug)
@@ -334,6 +336,13 @@ def _compile_component(
     power2_base: int | None = None
 
     for num_m_plugged, plugged_graph in zip(outputs_to_plug, plugged_graphs):
+        if phase_weights:
+            names = [f"f{i}" for i in f_selection]
+            names += [f"m{output_indices[j]}" for j in range(num_m_plugged)]
+            compiled_graphs.append(
+                compile_tensor_graph(plugged_graph, phase_weights, names)
+            )
+            continue
         g_copy = plugged_graph.copy()
         if hasattr(plugged_graph, "track_phases"):
             g_copy.track_phases = plugged_graph.track_phases
@@ -448,6 +457,7 @@ def compile_program(
             f_indices_global=f_indices_global,
             mode=mode,
             strategy=strategy,
+            phase_weights=prepared.phase_weights,
         )
         compiled_components.append(compiled)
         output_order.extend(component.output_indices)

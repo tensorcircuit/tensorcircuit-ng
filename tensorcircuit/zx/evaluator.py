@@ -10,6 +10,7 @@ import jax.numpy as jnp
 from jax import Array, lax
 
 from ..cons import dtypestr, idtypestr
+from .tensor_graph import TensorGraph
 
 # ==============================================================================
 # Exact Scalar arithmetic
@@ -172,6 +173,14 @@ def _matmul_gf2(a: Array, b: Array) -> Array:
 
 @jax.jit
 def evaluate(circuit: Any, param_vals: Array) -> Array:
+    """Evaluate exact scalar graphs or a graph with runtime phase inputs."""
+    if isinstance(circuit, TensorGraph):
+        return circuit.evaluate(param_vals)  # type: ignore[no-any-return]
+    return _evaluate_exact(circuit, param_vals)  # type: ignore[no-any-return]
+
+
+@jax.jit
+def _evaluate_exact(circuit: Any, param_vals: Array) -> Array:
     """
     Evaluate a compiled scalar graph circuit with batched parameter values.
 

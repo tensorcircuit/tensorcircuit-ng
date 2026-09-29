@@ -7,9 +7,10 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
-from numbers import Real
+from numbers import Complex
 from typing import Any, Dict, List, Optional, cast, Callable, Sequence
 
+import jax
 import numpy as np
 import pyzx_param as pyzx
 from pyzx_param.graph.scalar import Scalar
@@ -17,8 +18,9 @@ from pyzx_param.graph.graph_s import GraphS
 from pyzx_param.utils import VertexType, EdgeType
 
 from ..abstractcircuit import AbstractCircuit
-from ..cons import backend
+from ..cons import backend, dtypestr
 from .. import gates as tcgates
+from .tensor_graph import compile_tensor_graph
 from .utils import find_basis
 from .noise_model import (
     pauli_channel_1_probs,
@@ -53,6 +55,7 @@ class SamplingGraph:
     num_detectors: int
     num_error_bits: int
     observables: list[int] = field(default_factory=list)
+    phase_weights: list[Any] = field(default_factory=list)
 
 
 @dataclass
@@ -68,6 +71,7 @@ class GraphRepresentation:
     correlated_error_probs: List[float] = field(default_factory=list)
     num_error_bits: int = 0
     num_correlated_error_bits: int = 0
+    phase_weights: list[Any] = field(default_factory=list)
 
     @property
     def observables(self) -> list[int]:
@@ -220,6 +224,10 @@ class GraphRepresentation:
         return self.graph.neighbors(v)
 
     def to_tensor(self) -> Any:
+        """Contract the graph with its bound runtime phases, preserving JIT and AD."""
+        if self.phase_weights:
+            compiled = compile_tensor_graph(self.graph, self.phase_weights)
+            return compiled.evaluate(backend.zeros((1, 0)))[0]
         return self.graph.to_tensor()
 
     def types(self) -> Any:
@@ -547,16 +555,29 @@ def y_phase(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
     h_yz(b, qubit)
 
 
+def _rotation_phase(b: GraphRepresentation, qubit: int, phase: Any, apply: Any) -> None:
+    if isinstance(phase, jax.core.Tracer) or backend.is_tensor(phase):
+        ensure_lane(b, qubit)
+        vertex = b.last_vertex[qubit]
+        apply(b, qubit, 0)
+        b.graph.set_vdata(vertex, "tensor_phase", len(b.phase_weights))
+        factors = backend.convert_to_tensor(
+            [-0.5j * np.pi, 0.5j * np.pi], dtype=dtypestr
+        )
+        b.phase_weights.append(backend.exp(factors * phase))
+    else:
+        apply(b, qubit, phase)
+        b.graph.scalar.add_phase(-phase / 2)
+
+
 def r_z(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
     """Apply R_Z rotation gate with given phase (in units of π)."""
-    z_phase(b, qubit, phase)
-    b.graph.scalar.add_phase(-phase / 2)
+    _rotation_phase(b, qubit, phase, z_phase)
 
 
 def r_x(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
     """Apply R_X rotation gate with given phase (in units of π)."""
-    x_phase(b, qubit, phase)
-    b.graph.scalar.add_phase(-phase / 2)
+    _rotation_phase(b, qubit, phase, x_phase)
 
 
 def r_y(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
@@ -589,10 +610,17 @@ def u3(
     lambda_: Fraction,
 ) -> None:
     """Apply U3 gate: U3(θ,φ,λ) = R_Z(φ)·R_Y(θ)·R_Z(λ)."""
+    first_phase = len(b.phase_weights)
     r_z(b, qubit, lambda_)
     r_y(b, qubit, theta)
     r_z(b, qubit, phi)
-    b.graph.scalar.add_phase((phi + lambda_) / 2)
+    phase = (phi + lambda_) / 2
+    if isinstance(phase, jax.core.Tracer):
+        b.phase_weights[first_phase] = b.phase_weights[first_phase] * backend.exp(
+            1j * np.pi * phase
+        )
+    else:
+        b.graph.scalar.add_phase(phase)
 
 
 def _cx_cz(b: GraphRepresentation, is_cx: bool, control: int, target: int) -> None:
@@ -1116,13 +1144,24 @@ def _zx_gate_name(instruction: Dict[str, Any]) -> str:
     return str(instruction.get("name", "")).upper()
 
 
-def _real_rotation_angle(angle: Any) -> float:
-    if isinstance(angle, Real):
-        return float(angle)
+def _real_rotation_angle(angle: Any) -> Any:
+    if isinstance(angle, Complex):
+        if angle.imag != 0:
+            raise ValueError("ZX conversion requires real-valued rotation angles")
+        return float(angle.real)
     angle = backend.convert_to_tensor(angle)
-    if float(backend.imag(angle)) != 0:
+    real, imag = backend.real(angle), backend.imag(angle)
+    if isinstance(real, jax.core.Tracer):
+        return backend.where(imag == 0, real, float("nan"))
+    if float(imag) != 0:
         raise ValueError("ZX conversion requires real-valued rotation angles")
-    return float(backend.real(angle))
+    return float(real)
+
+
+def _rotation_phase_units(angle: Any) -> Any:
+    if isinstance(angle, Fraction):
+        return angle
+    return _real_rotation_angle(angle) / np.pi
 
 
 def circuit_to_zx(
@@ -1131,9 +1170,11 @@ def circuit_to_zx(
     """
     Convert a TensorCircuit AbstractCircuit to a ZX-calculus GraphRepresentation.
 
-    Rotation parameters must have concrete real values; complex storage with zero
-    imaginary part is supported. Graph construction is not JIT-traceable with
-    dynamic angles.
+    Real-valued rotation parameters support complex storage and JAX tracing.
+    Runtime rotations bind phase-port tensors to a static ZX graph; use the
+    returned representation's ``to_tensor()`` to include these bindings.
+    Nonreal concrete angles raise ValueError; nonreal traced angles produce NaN.
+    The raw ``graph`` contains the static structure, not the runtime bindings.
 
     :param c: The source circuit.
     :type c: AbstractCircuit
@@ -1234,8 +1275,7 @@ def circuit_to_zx(
                 theta = params.get("theta", params.get("phi", params.get("phase", 0.0)))
                 if getattr(d.get("gatef"), "n", None) in ("rx", "ry", "rz"):
                     theta = _real_rotation_angle(theta)
-                if isinstance(theta, (float, int)):
-                    theta = Fraction(theta) / np.pi
+                theta = _rotation_phase_units(theta)
             elif name == "R_AXIS":
                 theta, alpha, phi = (
                     _real_rotation_angle(params.get(key, 0.0)) / np.pi
@@ -1245,12 +1285,9 @@ def circuit_to_zx(
                 theta = params.get("theta", 0.0)
                 phi = params.get("phi", 0.0)
                 lam = params.get("lambda", params.get("lam", 0.0))
-                if isinstance(theta, (float, int)):
-                    theta = Fraction(theta) / np.pi
-                if isinstance(phi, (float, int)):
-                    phi = Fraction(phi) / np.pi
-                if isinstance(lam, (float, int)):
-                    lam = Fraction(lam) / np.pi
+                theta = _rotation_phase_units(theta)
+                phi = _rotation_phase_units(phi)
+                lam = _rotation_phase_units(lam)
 
             for i_target in range(0, len(index), num_qubits):
                 chunk = index[i_target : i_target + num_qubits]
@@ -1329,6 +1366,10 @@ def build_sampling_graph(
 
     # Graph doubling: composed with adjoint
     g_adj = g.adjoint()
+    if built.phase_weights:
+        for v in g_adj.vertices():
+            if g_adj.vdata(v, "tensor_phase", None) is not None:
+                g_adj.set_vdata(v, "conjugate_phase", True)
 
     if pauli is not None:
         # Insert Pauli operators at the junction
@@ -1588,10 +1629,11 @@ def prepare_graph(
     """
     built = circuit_to_zx(circuit, force_measure_all=force_measure_all)
     graph = build_sampling_graph(built, sample_detectors=sample_detectors, pauli=pauli)
-    pyzx.full_reduce(graph, paramSafe=True)
-    squash_graph(graph)
+    if not built.phase_weights:
+        pyzx.full_reduce(graph, paramSafe=True)
+        squash_graph(graph)
     graph, error_transform = transform_error_basis(graph, num_e=built.num_error_bits)
-    if reset_scalar:
+    if reset_scalar and not built.phase_weights:
         graph.scalar = Scalar()
     return SamplingGraph(
         graph,
@@ -1601,4 +1643,5 @@ def prepare_graph(
         len(built.detectors),
         built.num_error_bits,
         built.observables,
+        built.phase_weights,
     )

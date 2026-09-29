@@ -16,12 +16,14 @@ from pyzx_param.simulate import DecompositionStrategy
 from ..cons import rdtypestr
 
 from .evaluator import evaluate
+from .tensor_graph import TensorGraph, compile_tensor_graph
 from .scalar_graph import (
     compile_program,
     CompiledProgram,
     CompiledComponent,
     find_stab,
     compile_scalar_graphs,
+    CompiledScalarGraphs,
 )
 from .converter import (
     prepare_graph,
@@ -177,9 +179,9 @@ class StabilizerTCircuit(AbstractCircuit):
         Create a StabilizerTCircuit from an existing TensorCircuit AbstractCircuit.
 
         TensorCircuit r/rx/ry/rz rotations retain their angles in radians and
-        remain distinct from Stim-style resets. Parameters must have concrete
-        real values when the ZX graph is built; zero-imaginary complex storage
-        is supported, but graph construction with dynamic JIT angles is not.
+        remain distinct from Stim-style resets. Real-valued angles support
+        complex storage and JAX tracing. Traced rotations use differentiable
+        phase-port contraction; concrete angles retain stabilizer decomposition.
 
         :param circuit: The source circuit to convert.
         :type circuit: AbstractCircuit
@@ -387,9 +389,13 @@ class StabilizerTCircuit(AbstractCircuit):
             raise ValueError("amplitude() only supported for noiseless circuits.")
 
         graph = build_amplitude_graph(built, state)  # type: ignore[arg-type]
-        pyzx.full_reduce(graph, paramSafe=True)
-        graphs = find_stab(graph, strategy=self.strategy)
-        compiled = compile_scalar_graphs(graphs, [])
+        compiled: TensorGraph | CompiledScalarGraphs
+        if built.phase_weights:
+            compiled = compile_tensor_graph(graph, built.phase_weights)
+        else:
+            pyzx.full_reduce(graph, paramSafe=True)
+            graphs = find_stab(graph, strategy=self.strategy)
+            compiled = compile_scalar_graphs(graphs, [])
         dummy_f = jnp.zeros((1, 0), dtype=jnp.bool_)
         amp = evaluate(compiled, dummy_f)
         # Divide by sqrt(2)^n due to ZX boundary conventions
@@ -447,7 +453,8 @@ class StabilizerTCircuit(AbstractCircuit):
             pauli=pauli_dict,
             reset_scalar=False,
         )
-        graphs = find_stab(prepared.graph, strategy=self.strategy)
+        if not prepared.phase_weights:
+            graphs = find_stab(prepared.graph, strategy=self.strategy)
         param_names = sorted(
             [
                 p
@@ -456,7 +463,13 @@ class StabilizerTCircuit(AbstractCircuit):
             ],
             key=lambda p: (p[0], int(p[1:])),
         )
-        compiled = compile_scalar_graphs(graphs, param_names)
+        compiled: TensorGraph | CompiledScalarGraphs
+        if prepared.phase_weights:
+            compiled = compile_tensor_graph(
+                prepared.graph, prepared.phase_weights, param_names
+            )
+        else:
+            compiled = compile_scalar_graphs(graphs, param_names)
 
         if prepared.num_error_bits == 0:
             vals = evaluate(compiled, jnp.zeros((1, 0), dtype=jnp.bool_))
