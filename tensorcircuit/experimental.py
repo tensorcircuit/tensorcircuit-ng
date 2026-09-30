@@ -1191,10 +1191,12 @@ class DistributedContractor:
 
         :param params: Parameters for the `nodes_fn` input
         :type params: Tensor
-        :param op: Optional post-processing function for the output, defaults to None (corresponding to `backend.real`)
-            op is a cache key, so dont directly pass lambda function for op
+        :param op: Additive real-scalar reduction applied to each slice before
+            aggregation. It must satisfy ``op(a + b) = op(a) + op(b)``.
+            Defaults to ``backend.real(backend.sum(output))``. The callable is a
+            cache key; reuse it instead of passing a newly created lambda on each call.
         :type op: Optional[Callable[[Tensor], Tensor]], optional
-        :param output_dtype: dtype str for the output of `nodes_fn`, defaults to None (corresponding to `rdtypestr`)
+        :param output_dtype: dtype of the accumulated scalar, defaults to ``rdtypestr``
         :type output_dtype: Optional[str], optional
         """
         compiled_vg_fn = self._get_or_compile_fn(
@@ -1222,10 +1224,12 @@ class DistributedContractor:
 
         :param params: Parameters for the `nodes_fn` input
         :type params: Tensor
-        :param op: Optional post-processing function for the output, defaults to None (corresponding to identity)
-            op is a cache key, so dont directly pass lambda function for op
+        :param op: Additive scalar reduction applied to each slice before
+            aggregation. It must satisfy ``op(a + b) = op(a) + op(b)``.
+            Defaults to ``backend.sum``. The callable is a cache key; reuse it
+            instead of passing a newly created lambda on each call.
         :type op: Optional[Callable[[Tensor], Tensor]], optional
-        :param output_dtype: dtype str for the output of `nodes_fn`, defaults to None (corresponding to `dtypestr`)
+        :param output_dtype: dtype of the accumulated scalar, defaults to ``dtypestr``
         :type output_dtype: Optional[str], optional
         """
         compiled_v_fn = self._get_or_compile_fn(
@@ -1245,5 +1249,9 @@ class DistributedContractor:
         op: Optional[Callable[[Tensor], Tensor]] = None,
         output_dtype: Optional[str] = None,
     ) -> Tensor:
+        """
+        Return the gradient of additive real-scalar slice reductions.
+        See :meth:`value_and_grad` for the ``op`` contract.
+        """
         _, grad = self.value_and_grad(params, op=op, output_dtype=output_dtype)
         return grad

@@ -28,6 +28,7 @@ from .converter import (
     circuit_to_zx,
     build_amplitude_graph,
     GATE_TABLE,
+    _zx_gate_name,
 )
 from .noise_model import ChannelSampler
 from .utils import get_params
@@ -175,6 +176,11 @@ class StabilizerTCircuit(AbstractCircuit):
         """
         Create a StabilizerTCircuit from an existing TensorCircuit AbstractCircuit.
 
+        TensorCircuit r/rx/ry/rz rotations retain their angles in radians and
+        remain distinct from Stim-style resets. Parameters must have concrete
+        real values when the ZX graph is built; zero-imaginary complex storage
+        is supported, but graph construction with dynamic JIT angles is not.
+
         :param circuit: The source circuit to convert.
         :type circuit: AbstractCircuit
         :param strategy: Decomposition strategy for T gates, defaults to "cat5".
@@ -195,8 +201,7 @@ class StabilizerTCircuit(AbstractCircuit):
                         new_d["name"] = gatef.name.upper()
                     elif hasattr(gatef, "__name__"):
                         new_d["name"] = gatef.__name__.upper()
-            if "name" in new_d:
-                new_d["name"] = new_d["name"].upper()
+            new_d["name"] = _zx_gate_name(new_d)
             qir.append(new_d)
 
         extra_qir = []
@@ -358,7 +363,7 @@ class StabilizerTCircuit(AbstractCircuit):
             p_norm = p_norm * jnp.abs(evaluate(norm_circuit, f_selected))
 
             # Joint probability: f-params + state
-            component_state = state[jnp.array(component.output_indices)]
+            component_state = state[jnp.array(component.output_indices, dtype=int)]
             tiled_state = jnp.tile(component_state, (shots, 1))
             joint_params = jnp.hstack([f_selected, tiled_state])
             p_joint = p_joint * jnp.abs(evaluate(joint_circuit, joint_params))

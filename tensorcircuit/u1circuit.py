@@ -779,7 +779,8 @@ class U1Circuit(AbstractCircuit):
 
         :param index: Qubit indices to measure
         :type index: int
-        :param with_prob: If true, return the probability of the outcome
+        :param with_prob: If true, return the marginal probability of the measured
+            outcome, summed over unmeasured qubits
         :type with_prob: bool, optional
         :param status: External randomness tensor, shape [1]
         :type status: Optional[Tensor]
@@ -797,18 +798,22 @@ class U1Circuit(AbstractCircuit):
 
         # Extract bits at the specified indices (using TC ordering)
         outcomes = []
+        measured_mask = 0
         for i in index:
             if i < 0 or i >= self._nqubits:
                 raise ValueError(f"Index {i} is out of range for measurement")
             bp = self._bit_position(i)
+            measured_mask |= 1 << bp
             bit = backend.bitwise_and(backend.right_shift(full_state, bp), 1)
             outcomes.append(backend.cast(bit, rdtypestr))
 
         outcome_tensor = backend.stack(outcomes)
 
         if with_prob:
-            # Get the probability of this outcome
-            prob = backend.gather1d(p, u1_idx[None])[0]
+            matching = backend.bitwise_and(
+                self._basis_tensor, measured_mask
+            ) == backend.bitwise_and(full_state, measured_mask)
+            prob = backend.sum(backend.where(matching, p, 0.0))
             return outcome_tensor, prob
         else:
             return outcome_tensor, -1.0
