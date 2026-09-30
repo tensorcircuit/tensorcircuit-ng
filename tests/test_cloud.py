@@ -168,6 +168,20 @@ def test_batch_exp_ps():
     )
 
 
+def test_batch_exp_ps_with_idle_qubit():
+    c = tc.Circuit(2)
+    c.h(0)
+    result = wrapper.batch_expectation_ps(
+        c,
+        [[0, 3]],
+        device="local::default",
+        with_rem=False,
+        shots=100,
+        compile_func=lambda circuit: (circuit, {}),
+    )
+    np.testing.assert_allclose(result, [1])
+
+
 def test_batch_submit_template():
     run = tc.cloud.wrapper.batch_submit_template(
         device="simulator:tc", batch_limit=2, prior=10

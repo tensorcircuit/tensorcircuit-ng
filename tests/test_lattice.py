@@ -20,6 +20,7 @@ from tensorcircuit.templates.lattice import (
     LiebLattice,
     RectangularLattice,
     SquareLattice,
+    TILattice,
     TriangularLattice,
     get_compatible_layers,
 )
@@ -1143,6 +1144,15 @@ class TestTILattice:
     A dedicated class for testing the Translationally Invariant Lattice (TILattice)
     and its subclasses like SquareLattice.
     """
+
+    @pytest.mark.parametrize(
+        "backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")]
+    )
+    def test_fractional_translation_with_integer_basis(self, backend):
+        lattice = TILattice(1, [[0.5]], [[0]], size=(3,), pbc=False)
+        np.testing.assert_allclose(
+            [lattice.get_coordinates(i)[0] for i in range(3)], [0, 0.5, 1]
+        )
 
     def test_init_with_mismatched_shapes_raises_error(self):
         """
