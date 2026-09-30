@@ -44,6 +44,8 @@ def apply_zne(
     """
     Apply zero-noise extrapolation (ZNE) and return the mitigated results.
 
+    Reconstructed circuits retain the input circuit's type and initial state.
+
     :param circuit: The aim circuit.
     :type circuit: Any
     :param executor: A executor that executes a single circuit or a batch of circuits and return results.
@@ -61,8 +63,13 @@ def apply_zne(
     if scale_noise is None:
         scale_noise = fold_gates_at_random
 
+    circuit_type = type(circuit)
+    circuit_params = circuit.circuit_param.copy()
+
     def executortc(c):  # type: ignore
-        c = Circuit.from_qiskit(c, c.num_qubits)
+        c = circuit_type.from_qiskit(
+            c, c.num_qubits, circuit_params=circuit_params.copy()
+        )
         return executor(c)
 
     circuit = circuit.to_qiskit(enable_instruction=True)
@@ -90,7 +97,7 @@ def prune_ddcircuit(c: Any, qlist: List[int]) -> Any:
     :rtype: Any
     """
     qir = c.to_qir()
-    cnew = Circuit(c.circuit_param["nqubits"])
+    cnew = type(c)(**c.circuit_param)
     for d in qir:
         if d["index"][0] in qlist:
             if_iden = np.sum(abs(np.array([[1, 0], [0, 1]]) - d["gate"].get_tensor()))
@@ -138,7 +145,9 @@ def add_dd(c: Any, rule: Callable[[int], Any]) -> Any:
     nqubit = c.circuit_param["nqubits"]
     input_circuit = c.to_qiskit()
     circuit_dd = dd_option.insert_ddd_sequences(input_circuit, rule=rule)
-    circuit_dd = Circuit.from_qiskit(circuit_dd, nqubit)
+    circuit_dd = type(c).from_qiskit(
+        circuit_dd, nqubit, circuit_params=c.circuit_param.copy()
+    )
     return circuit_dd
 
 
@@ -158,6 +167,7 @@ def apply_dd(
     """
     Apply dynamic decoupling (DD) and return the mitigated results.
 
+    Reconstructed circuits retain the input circuit's type and initial state.
 
     :param circuit: The aim circuit.
     :type circuit: Any
