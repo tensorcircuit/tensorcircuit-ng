@@ -333,6 +333,19 @@ def test_analog_circuit_time_dependent_inverse_ad_jit(jaxb, highp):
     np.testing.assert_allclose(gradient, numerical_gradient, atol=1e-6, rtol=1e-6)
 
 
+def test_analog_mps_initial_state(jaxb):
+    state = tc.backend.convert_to_tensor([0, 0.6, 0.8j, 0])
+    mps = tc.quantum.QuVector.from_tensor(tc.backend.reshape(state, [2, 2]))
+    circuit = tc.AnalogCircuit(2, mps_inputs=mps)
+    np.testing.assert_allclose(circuit.state(), state, atol=1e-6)
+    circuit.x(1)
+    np.testing.assert_allclose(circuit.state(), [0.6, 0, 0, 0.8j], atol=1e-6)
+    dense = tc.backend.convert_to_tensor([1, 0, 0, 0])
+    np.testing.assert_allclose(
+        tc.AnalogCircuit(2, inputs=dense, mps_inputs=mps).state(), dense, atol=1e-6
+    )
+
+
 @pytest.mark.parametrize(
     "nqubits,indices,index,sparse",
     [
