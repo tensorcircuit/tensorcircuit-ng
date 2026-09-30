@@ -8,6 +8,9 @@ sys.path.insert(0, modulepath)
 
 import numpy as np
 import pytest
+from pytest_lazyfixture import lazy_fixture as lf
+
+import tensorcircuit as tc
 
 from tensorcircuit.applications.dqas import set_op_pool
 from tensorcircuit.applications.graphdata import get_graph
@@ -97,3 +100,16 @@ def test_QAOA_ansatz_errors(example_inputs, full_coupling, mixer):
         QAOA_ansatz_for_Ising(
             params, nlayers, pauli_terms, weights, full_coupling, mixer
         )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_ising_qaoa_cost_weights(backend):
+    gamma, beta = 0.37, -0.21
+    circuit = QAOA_ansatz_for_Ising([gamma, beta], 1, [[1, 0], [1, 1]], [0.7, -1.2])
+    # H = 0.7 Z0 - 1.2 Z0 Z1 has diagonal [-0.5, 1.9, 0.5, -1.9].
+    cost_state = np.exp(-1j * gamma * np.array([-0.5, 1.9, 0.5, -1.9])) / 2
+    mixer = np.cos(beta / 2) * np.eye(2) - 1j * np.sin(beta / 2) * np.array(
+        [[0, 1], [1, 0]]
+    )
+    expected = np.kron(mixer, mixer) @ cost_state
+    np.testing.assert_allclose(tc.backend.numpy(circuit.state()), expected, atol=1e-6)

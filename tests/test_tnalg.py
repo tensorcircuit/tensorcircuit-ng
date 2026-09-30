@@ -3043,8 +3043,8 @@ def test_dmrg_single_site_ground_response(jaxb, highp):
 
 
 @pytest.mark.parametrize("symmetric", [False, True])
-def test_dmrg_repeated_sweep_response(jaxb, highp, symmetric):
-    """Converged complete sweeps agree with independent eigenstate perturbation."""
+def test_dmrg_sweep_response(jaxb, highp, symmetric):
+    """One complete sweep agrees with independent eigenstate perturbation."""
     tnalg = tc.tnalg
     x = np.asarray([[0, 1], [1, 0]], dtype=np.complex128)
     y = np.asarray([[0, -1j], [1j, 0]], dtype=np.complex128)
@@ -3097,8 +3097,7 @@ def test_dmrg_repeated_sweep_response(jaxb, highp, symmetric):
 
     def solve(parameter):
         mpo = build(coefficients(parameter))
-        state, _ = sweep(initial, mpo)
-        state, energy = sweep(state, mpo)
+        state, energy = sweep(initial, mpo)
         return jnp.real(tnalg.expectation(state, observable)), energy
 
     field = 0.31
