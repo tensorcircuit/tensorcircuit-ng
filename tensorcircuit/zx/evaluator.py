@@ -220,7 +220,7 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
     ) % 2
 
     exponent_c = (rowsum_a_c * rowsum_b_c) % 2
-    sum_exponents_c = jnp.sum(exponent_c, axis=-1, dtype=idtypestr) % 2
+    sum_exponents_c = (jnp.sum(exponent_c, axis=-1) % 2).astype(idtypestr)
 
     summands_c_exact = (1 - 2 * sum_exponents_c)[..., None] * identity
     summands_c = ExactScalarArray.create(summands_c_exact)
