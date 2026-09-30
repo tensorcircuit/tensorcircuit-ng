@@ -852,6 +852,7 @@ class StabilizerTCircuit(AbstractCircuit):
                             "name": "MPP",
                             "targets": paulis,
                             "invert": invert,
+                            "p": args[0] if args else 0.0,
                         }
                     )
                 continue

@@ -1571,3 +1571,17 @@ def test_stim_import_reset_readout_probability(jaxb, basis, invert, p):
         rate = 1.0 - p if invert else p
         np.testing.assert_allclose(samples[:, 0].mean(), rate, atol=0.025, rtol=0)
         np.testing.assert_allclose(expected[:, 0].mean(), rate, atol=0.025, rtol=0)
+
+
+@pytest.mark.parametrize(
+    "program",
+    ["M(1) 0\nM 0", "H 0\nMX(1) 0\nMX 0", "H 0\nS 0\nMY(1) 0\nMY 0", "MPP(1) Z0\nM 0"],
+)
+def test_stim_import_readout_noise_flips_record_only(jaxb, program):
+    stim = pytest.importorskip("stim")
+    source = stim.Circuit(program)
+    c = StabilizerTCircuit.from_stim_circuit(source)
+    np.testing.assert_array_equal(
+        c.sample_measurements(shots=8, batch_size=8),
+        source.compile_sampler().sample(8),
+    )
