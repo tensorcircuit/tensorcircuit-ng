@@ -44,6 +44,8 @@ def apply_zne(
     """
     Apply zero-noise extrapolation (ZNE) and return the mitigated results.
 
+    Reconstructed circuits retain the input circuit's type and initial state.
+
     :param circuit: The aim circuit.
     :type circuit: Any
     :param executor: A executor that executes a single circuit or a batch of circuits and return results.
@@ -61,8 +63,13 @@ def apply_zne(
     if scale_noise is None:
         scale_noise = fold_gates_at_random
 
+    circuit_type = type(circuit)
+    circuit_params = circuit.circuit_param.copy()
+
     def executortc(c):  # type: ignore
-        c = Circuit.from_qiskit(c, c.num_qubits)
+        c = circuit_type.from_qiskit(
+            c, c.num_qubits, circuit_params=circuit_params.copy()
+        )
         return executor(c)
 
     circuit = circuit.to_qiskit(enable_instruction=True)
@@ -90,7 +97,7 @@ def prune_ddcircuit(c: Any, qlist: List[int]) -> Any:
     :rtype: Any
     """
     qir = c.to_qir()
-    cnew = Circuit(c.circuit_param["nqubits"])
+    cnew = type(c)(**c.circuit_param)
     for d in qir:
         if d["index"][0] in qlist:
             if_iden = np.sum(abs(np.array([[1, 0], [0, 1]]) - d["gate"].get_tensor()))
@@ -138,7 +145,9 @@ def add_dd(c: Any, rule: Callable[[int], Any]) -> Any:
     nqubit = c.circuit_param["nqubits"]
     input_circuit = c.to_qiskit()
     circuit_dd = dd_option.insert_ddd_sequences(input_circuit, rule=rule)
-    circuit_dd = Circuit.from_qiskit(circuit_dd, nqubit)
+    circuit_dd = type(c).from_qiskit(
+        circuit_dd, nqubit, circuit_params=c.circuit_param.copy()
+    )
     return circuit_dd
 
 
@@ -158,6 +167,7 @@ def apply_dd(
     """
     Apply dynamic decoupling (DD) and return the mitigated results.
 
+    Reconstructed circuits retain the input circuit's type and initial state.
 
     :param circuit: The aim circuit.
     :type circuit: Any
@@ -277,7 +287,10 @@ def _apply_gate(c: Any, i: int, j: int) -> Any:
     return c
 
 
-candidate_dict: Dict[str, Tuple[Any, List[Any]]] = {}
+_RC_CACHE_MAXSIZE = 1_000_000
+candidate_dict: collections.OrderedDict[Tuple[str, bytes], List[Any]] = (
+    collections.OrderedDict()
+)
 
 
 def rc_circuit(c: Any) -> Any:
@@ -285,9 +298,9 @@ def rc_circuit(c: Any) -> Any:
     Apply Pauli twirling to the two-qubit gates of a circuit.
 
     Cached candidates are reused only for an identical gate matrix and dtype.
-    Each gate name retains its most recent matrix, so parameter sweeps do not
-    accumulate one cache entry per angle. Candidate selection is an eager
-    compilation step on concrete gate matrices.
+    The cache retains at most 1,000,000 matrices, evicting the least recently
+    used entry when full. Candidate selection is an eager compilation step
+    on concrete gate matrices.
 
     :param c: Input circuit.
     :return: Randomized circuit.
@@ -296,18 +309,16 @@ def rc_circuit(c: Any) -> Any:
     cnew = Circuit(c.circuit_param["nqubits"])
     for d in qir:
         if len(d["index"]) == 2:
-            name = d["gate"].name
             matrix = backend.numpy(backend.reshapem(d["gate"].tensor))
-            cached = candidate_dict.get(name)
-            if (
-                cached is None
-                or cached[0].dtype != matrix.dtype
-                or not np.array_equal(cached[0], matrix)
-            ):
+            key = (matrix.dtype.str, matrix.tobytes())
+            rc_cand = candidate_dict.get(key)
+            if rc_cand is None:
                 rc_cand = rc_candidates(d["gate"])
-                candidate_dict[name] = (matrix.copy(), rc_cand)
+                candidate_dict[key] = rc_cand
+                if len(candidate_dict) > _RC_CACHE_MAXSIZE:
+                    candidate_dict.popitem(last=False)
             else:
-                rc_cand = cached[1]
+                candidate_dict.move_to_end(key)
             rc_list = choice(rc_cand)
 
             cnew = _apply_gate(cnew, rc_list[0], d["index"][0])

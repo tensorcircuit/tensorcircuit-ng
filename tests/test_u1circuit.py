@@ -456,6 +456,83 @@ def test_u1circuit_measure(backend):
         assert np.sum(outcome_np) == k
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_u1circuit_measure_certain_marginal(backend):
+    K = tc.backend
+    c = U1Circuit(3, 1, inputs=K.convert_to_tensor(np.array([1, 1, 0]) / np.sqrt(2)))
+    for status in [0.1, 0.9]:
+        outcome, prob = c.measure(
+            0, with_prob=True, status=K.convert_to_tensor([status])
+        )
+        np.testing.assert_allclose(K.numpy(outcome), [0])
+        np.testing.assert_allclose(K.numpy(prob), 1.0, atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+@pytest.mark.parametrize("indices", [(0,), (0, 2), (3, 1), (2, 0, 3, 1)])
+def test_u1circuit_measure_marginal(backend, indices):
+    K = tc.backend
+    weights = np.array([0.05, 0.1, 0.15, 0.2, 0.25, 0.25])
+    inputs = np.sqrt(weights) * np.exp(1j * np.arange(6))
+    c = U1Circuit(4, 2, inputs=K.convert_to_tensor(inputs))
+    dense_prob = np.zeros(16)
+    dense_prob[[3, 5, 6, 9, 10, 12]] = weights
+    remaining = tuple(i for i in range(4) if i not in indices)
+    marginal = (
+        dense_prob.reshape([2] * 4)
+        .transpose(indices + remaining)
+        .reshape([2] * len(indices) + [-1])
+        .sum(axis=-1)
+    )
+    for status in 1 - (np.cumsum(weights) - weights / 2):
+        random = K.convert_to_tensor([status])
+        outcome, prob = c.measure(*indices, with_prob=True, status=random)
+        bits = tuple(K.numpy(outcome).astype(int))
+        np.testing.assert_allclose(K.numpy(prob), marginal[bits], atol=1e-6)
+        outcome_without_prob, sentinel = c.measure(*indices, status=random)
+        np.testing.assert_allclose(K.numpy(outcome_without_prob), K.numpy(outcome))
+        assert sentinel == -1.0
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
+@pytest.mark.parametrize("status, bit", [(0.1, 1), (0.9, 0)])
+def test_u1circuit_measure_marginal_gradient(backend, status, bit):
+    K = tc.backend
+    random = K.convert_to_tensor([status])
+
+    def probability(theta):
+        inputs = K.stack(
+            [K.cos(theta), K.sin(theta) / np.sqrt(2), K.sin(theta) / np.sqrt(2)]
+        )
+        c = U1Circuit(3, 1, inputs=inputs)
+        return c.measure(0, with_prob=True, status=random)[1]
+
+    theta = K.convert_to_tensor(0.7)
+    expected = np.sin(0.7) ** 2 / 2
+    expected_grad = np.sin(0.7) * np.cos(0.7)
+    if bit == 0:
+        expected, expected_grad = 1 - expected, -expected_grad
+    evaluate = K.value_and_grad(probability)
+    value, grad = evaluate(theta)
+    np.testing.assert_allclose(K.numpy(value), expected, atol=1e-6)
+    np.testing.assert_allclose(K.numpy(grad), expected_grad, atol=1e-6)
+    if K.name in ("jax", "tensorflow"):
+        value, grad = K.jit(evaluate)(theta)
+        np.testing.assert_allclose(K.numpy(value), expected, atol=1e-6)
+        np.testing.assert_allclose(K.numpy(grad), expected_grad, atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_u1circuit_measure_marginal_large_index(backend, highp):
+    K = tc.backend
+    inputs = np.zeros(33)
+    inputs[:2] = 1 / np.sqrt(2)
+    c = U1Circuit(33, 1, inputs=K.convert_to_tensor(inputs))
+    outcome, prob = c.measure(0, with_prob=True, status=K.convert_to_tensor([0.1]))
+    np.testing.assert_allclose(K.numpy(outcome), [0])
+    np.testing.assert_allclose(K.numpy(prob), 1.0, atol=1e-12)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_u1circuit_dtype_agnostic(backend, highp):
     """Test that U1Circuit works with complex128 dtype."""

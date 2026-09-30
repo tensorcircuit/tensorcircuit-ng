@@ -302,6 +302,9 @@ def test_distrubuted_contractor(jaxb):
         return c.expectation_ps(z=[-1])
 
     np.testing.assert_allclose(value, baseline(params), atol=1e-6)
+    expected_grad = tc.backend.grad(lambda p: tc.backend.real(baseline(p)))(params)
+    for key in params:
+        np.testing.assert_allclose(grad[key], expected_grad[key], atol=1e-6)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
