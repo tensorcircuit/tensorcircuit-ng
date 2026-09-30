@@ -3800,7 +3800,8 @@ def measurement_counts(
     if is_prob:
         pi = state / backend.sum(state)
     else:
-        if len(state.shape) == 2:
+        shape = backend.shape_tuple(state)
+        if len(shape) == 2 and shape[0] == shape[1]:
             state = state / backend.trace(state)
             pi = backend.abs(backend.diagonal(state))
         else:

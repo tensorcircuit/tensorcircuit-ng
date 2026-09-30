@@ -534,7 +534,9 @@ class SymbolCircuit(Circuit):
         :param reuse: Cache the contracted state vector for repeated calls,
             defaults to True.
         :type reuse: bool
-        :param enable_lightcone: whether enable light cone simplification, defaults to False
+        :param enable_lightcone: whether to simplify the light cone. This requires
+            default product inputs and unitary gates; otherwise the result may be
+            incorrect. Defaults to False.
         :type enable_lightcone: bool
         :return: Sympy expression for the expectation value.
         """

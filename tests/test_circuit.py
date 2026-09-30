@@ -536,6 +536,15 @@ def test_postselection(backend):
     np.testing.assert_allclose(tc.backend.numpy(s[3]).real, 0.5)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_mid_measurement_invalidates_expectation_cache(backend):
+    c = tc.Circuit(1)
+    c.h(0)
+    np.testing.assert_allclose(c.expectation_ps(z=[0]), 0, atol=1e-5)
+    c.mid_measurement(0)
+    np.testing.assert_allclose(c.expectation_ps(z=[0]), 0.5, atol=1e-5)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("cpb")])
 def test_unitary(backend):
     c = tc.Circuit(2, inputs=np.eye(4))
@@ -701,6 +710,16 @@ def test_circuit_add_demo():
     c3.X(0)
     c3.replace_mps_inputs(c.quvector())
     np.testing.assert_allclose(c3.wavefunction(), answer, atol=1e-4)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_replace_mps_inputs_invalidates_expectation_cache(backend):
+    c = tc.Circuit(1)
+    np.testing.assert_allclose(c.expectation_ps(z=[0]), 1)
+    source = tc.Circuit(1)
+    source.x(0)
+    c.replace_mps_inputs(source.quvector())
+    np.testing.assert_allclose(c.expectation_ps(z=[0]), -1)
 
 
 def test_circuit_replace_inputs():
