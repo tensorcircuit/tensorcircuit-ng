@@ -2,6 +2,7 @@
 
 import sys
 import os
+import subprocess
 from functools import partial
 import numpy as np
 import tensorflow as tf
@@ -552,3 +553,34 @@ def test_utils_extra():
         return x + 1
 
     utils.benchmark(h, 1.0, tries=2)
+
+
+@pytest.mark.parametrize(
+    "stmt",
+    [
+        "import tensorcircuit.zx",
+        "import tensorcircuit.applications.vqes",
+        "import tensorcircuit.tnalg",
+        "tc.tnalg",
+    ],
+)
+def test_experimental_module_warning(stmt):
+    script = (
+        "import warnings\n"
+        "with warnings.catch_warnings(record=True) as w:\n"
+        "    warnings.simplefilter('always')\n"
+        "    import tensorcircuit as tc\n"
+        "    n0 = len([r for r in w if r.category is tc.utils.ExperimentalWarning])\n"
+        f"    {stmt}\n"
+        f"    {stmt}\n"
+        "    n1 = len([r for r in w if r.category is tc.utils.ExperimentalWarning])\n"
+        "print(n0, n1)\n"
+    )
+    r = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=modulepath,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert r.stdout.split()[-2:] == ["0", "1"]

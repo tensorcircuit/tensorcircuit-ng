@@ -14,8 +14,15 @@ explicit legacy MPS/MPO conversions are available at the I/O boundary. The
 benchmark examples compare one complete step or sweep with TeNPy and report
 lowering, compilation, first execution, steady execution, and numerical
 agreement separately.
+
+.. warning::
+
+    This module is experimental: its API may change and the whole module may be
+    removed at any time without deprecation. Importing it emits
+    :py:class:`tensorcircuit.utils.ExperimentalWarning`.
 """
 
+from ..utils import experimental_module_warning
 from .environment import EnvironmentState
 from .layout import (
     BlockLayout,
@@ -119,3 +126,5 @@ __all__ = [
     "transpose",
     "unfuse_array",
 ]
+
+experimental_module_warning(__name__)
