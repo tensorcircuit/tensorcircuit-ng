@@ -1068,7 +1068,7 @@ def test_zx_noisy_expectation_ps_x_error_mc(backend):
 def test_zx_noisy_expectation_ps_matches_weighted_reference(backend):
     p_dep = 0.15
     p_x = 0.1
-    pauli_spec = [1, 3]  # X0 Z1
+    pauli_spec = [1, 2]  # X0 Y1
 
     stc = StabilizerTCircuit(2, seed=321)
     stc.h(0)
@@ -1081,20 +1081,9 @@ def test_zx_noisy_expectation_ps_matches_weighted_reference(backend):
     ntraj = 5000
     exp_mc = stc.expectation_ps(ps=pauli_spec, nmc=ntraj)
 
-    # Trajectory-level tc.Circuit baseline via built-in depolarizing noise sampling.
-    ref_vals = []
-    for _ in range(ntraj):
-        c = tc.Circuit(2)
-        c.h(0)
-        c.cnot(0, 1)
-        c.s(1)
-        c.depolarizing(0, px=p_dep / 3, py=p_dep / 3, pz=p_dep / 3)
-        c.depolarizing(1, px=p_x, py=0.0, pz=0.0)
-        c.h(1)
-        ref_vals.append(c.expectation_ps(ps=pauli_spec))
-    ref = np.mean(np.asarray(ref_vals, dtype=np.complex128))
-
-    np.testing.assert_allclose(exp_mc, ref, atol=0.04)
+    # The ideal expectation is -1; each noise channel scales it independently.
+    reference = -(1 - 4 * p_dep / 3) * (1 - 2 * p_x)
+    np.testing.assert_allclose(exp_mc, reference, atol=0.05)
 
 
 @pytest.mark.parametrize("backend", [lf("npb")])

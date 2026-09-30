@@ -124,7 +124,7 @@ def test_adaptive_vmap_mul_io(backend):
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
 def test_qng(backend):
-    n = 6
+    n = 3
 
     def f(params):
         params = tc.backend.reshape(params, [4, n])
@@ -135,7 +135,9 @@ def test_qng(backend):
     params = tc.backend.ones([4 * n])
     fim = experimental.qng(f)(params)
     assert tc.backend.shape_tuple(fim) == (4 * n, 4 * n)
-    print(experimental.dynamics_matrix(f)(params))
+    dynamics = experimental.dynamics_matrix(f)(params)
+    assert tc.backend.shape_tuple(dynamics) == (4 * n, 4 * n)
+    assert np.all(np.isfinite(tc.backend.numpy(dynamics)))
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
@@ -162,7 +164,7 @@ def test_dynamic_rhs(backend):
 
 @pytest.mark.parametrize("backend", ["tensorflow", "jax"])
 def test_two_qng_approaches(backend):
-    n = 6
+    n = 3
     nlayers = 2
     with tc.runtime_backend(backend) as K:
         with tc.runtime_dtype("complex128"):

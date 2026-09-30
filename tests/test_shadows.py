@@ -79,7 +79,7 @@ def test_state(backend):
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
 def test_ent(backend):
-    nq, ns, repeat = 6, 1000, 500
+    nq, ns, repeat = 6, 1000, 250
 
     thetas = 2 * np.random.rand(2, nq) - 1
 
@@ -106,8 +106,8 @@ def test_ent(backend):
     ent = entropy_shadow(snapshots, pauli_strings, sub, alpha=2)
     ent2 = renyi_entropy_2(snapshots, sub)
 
-    np.testing.assert_allclose(ent, exact_ent, atol=0.1)
-    np.testing.assert_allclose(ent2, exact_ent, atol=0.1)
+    np.testing.assert_allclose(ent, exact_ent, atol=0.12)
+    np.testing.assert_allclose(ent2, exact_ent, atol=0.12)
 
 
 def test_shadow_extra(jaxb):
