@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Invalidate ZX probability and sampling caches when gates or instructions are added to a `StabilizerTCircuit`.
+
 - Preserve logical observable indices and inverted measurement results when importing Stim circuits into the ZX simulator, and apply measurement-reset readout noise only once. Measurement readout noise now flips only the recorded result instead of the post-measurement state, and `MPP(p)` keeps its readout noise.
 
 - Honor `AnalogCircuit(mps_inputs=...)` instead of overriding the supplied state with the default all-zero input; preserve explicit dense-input precedence.

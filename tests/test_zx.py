@@ -1574,3 +1574,82 @@ def test_stim_import_readout_noise_flips_record_only(jaxb, program):
         c.sample_measurements(shots=8, batch_size=8),
         source.compile_sampler().sample(8),
     )
+
+
+def test_zx_cache_after_gate(jaxb):
+    c = StabilizerTCircuit(1, seed=42)
+    one = jnp.array([1])
+    np.testing.assert_allclose(c.outcome_probability(one), [0.0], atol=1e-6)
+    np.testing.assert_array_equal(
+        c.sample_measurements(shots=8, batch_size=8), np.zeros((8, 1))
+    )
+
+    c.x(0)
+    np.testing.assert_allclose(c.outcome_probability(one), [1.0], atol=1e-6)
+    np.testing.assert_allclose(c.outcome_probability(jnp.array([0])), [0.0], atol=1e-6)
+    np.testing.assert_array_equal(
+        c.sample_measurements(shots=8, batch_size=8), np.ones((8, 1))
+    )
+
+
+def test_zx_cache_after_detector_and_observable(jaxb):
+    c = StabilizerTCircuit(1)
+    c.measure_instruction(0)
+    c.detector_instruction([0])
+    c.observable_instruction([0])
+    np.testing.assert_array_equal(
+        c.sample_detectors(shots=8, batch_size=8), np.zeros((8, 2))
+    )
+    c.x(0)
+    c.measure_instruction(0)
+    np.testing.assert_array_equal(
+        c.sample_detectors(shots=8, batch_size=8), np.zeros((8, 2))
+    )
+    c.detector_instruction([1])
+    detectors, observables = c.sample_detectors(
+        shots=8, batch_size=8, separate_observables=True
+    )
+    np.testing.assert_array_equal(detectors, np.tile([0, 1], (8, 1)))
+    np.testing.assert_array_equal(observables, np.zeros((8, 1)))
+    c.observable_instruction([1], observable_index=1)
+    detectors, observables = c.sample_detectors(
+        shots=8, batch_size=8, separate_observables=True
+    )
+    np.testing.assert_array_equal(detectors, np.tile([0, 1], (8, 1)))
+    np.testing.assert_array_equal(observables, np.tile([0, 1], (8, 1)))
+
+
+@pytest.mark.parametrize("method", ["sample_measurements", "sample_detectors"])
+def test_zx_seed_independent_of_cache(jaxb, method):
+    c = StabilizerTCircuit(1, seed=42)
+    c.h(0)
+    c.measure_instruction(0)
+    c.detector_instruction([0])
+    sample = getattr(c, method)
+    first = sample(shots=32, batch_size=32, seed=17)
+    np.testing.assert_array_equal(first, sample(shots=32, batch_size=32, seed=17))
+    c.tick_instruction()
+    np.testing.assert_array_equal(first, sample(shots=32, batch_size=32, seed=17))
+
+
+@pytest.mark.parametrize("probability", [False, True])
+def test_zx_cache_rebuild_advances_noise_rng(jaxb, probability):
+    def sample_pair():
+        circuit = StabilizerTCircuit(1, seed=42)
+        circuit.x_error(0, 0.5)
+        circuit.measure_instruction(0)
+
+        def sample():
+            if probability:
+                return circuit.outcome_probability(jnp.array([1]), shots=32)
+            return circuit.sample_measurements(shots=32, batch_size=32)
+
+        first = sample()
+        circuit.tick_instruction()
+        return first, sample()
+
+    first, second = sample_pair()
+    repeated_first, repeated_second = sample_pair()
+    assert np.any(np.asarray(first) != np.asarray(second))
+    np.testing.assert_array_equal(first, repeated_first)
+    np.testing.assert_array_equal(second, repeated_second)
