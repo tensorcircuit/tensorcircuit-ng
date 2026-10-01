@@ -120,6 +120,44 @@ class TestRydbergHamiltonian:
         assert np.allclose(h_generated_dense, h_expected)
 
     @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+    def test_include_identity_matches_physical_hamiltonian(self, backend):
+        lattice = ChainLattice(size=(2,), pbc=False, lattice_constant=1.5)
+        omega, delta, c6 = 1.0, -0.5, 10.0
+        h = rydberg_hamiltonian(lattice, omega, delta, c6, include_identity=True)
+
+        number = (PAULI_I - PAULI_Z) / 2.0
+        interaction = c6 / 1.5**6
+        expected = (omega / 2.0) * (
+            np.kron(PAULI_X, PAULI_I) + np.kron(PAULI_I, PAULI_X)
+        )
+        expected -= delta * (np.kron(number, PAULI_I) + np.kron(PAULI_I, number))
+        expected += interaction * np.kron(number, number)
+        np.testing.assert_allclose(tc.backend.to_dense(h), expected, atol=1e-5)
+
+    @pytest.mark.usefixtures("jaxb")
+    def test_include_identity_geometry_gradient(self):
+        omega, delta, c6 = 1.0, 0.5, 10.0
+
+        def ground_energy(a, include_identity):
+            lattice = ChainLattice(size=(2,), pbc=False, lattice_constant=a)
+            h = rydberg_hamiltonian(
+                lattice, omega, delta, c6, include_identity=include_identity
+            )
+            return tc.backend.eigh(tc.backend.to_dense(h))[0][0]
+
+        a = tc.backend.convert_to_tensor(1.5)
+        full_grad = tc.backend.jit(tc.backend.grad(lambda x: ground_energy(x, True)))(a)
+        shifted_grad = tc.backend.jit(
+            tc.backend.grad(lambda x: ground_energy(x, False))
+        )(a)
+        np.testing.assert_allclose(
+            full_grad - shifted_grad,
+            -6.0 * c6 / (4.0 * 1.5**7),
+            rtol=1e-4,
+            atol=1e-4,
+        )
+
+    @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
     def test_anisotropic_heisenberg(self, backend):
         """
         Test the anisotropic Heisenberg model with different Jx, Jy, Jz.
