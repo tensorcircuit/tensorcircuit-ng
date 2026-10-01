@@ -634,8 +634,12 @@ def _cx_cz(b: GraphRepresentation, is_cx: bool, control: int, target: int) -> No
 
 
 def _m(b: GraphRepresentation, qubit: int, p: float = 0, silent: bool = False) -> None:
+    # The same error bit flips before and after measurement: only the record flips.
+    error_var = f"e{b.num_error_bits}"
     if p > 0:
-        x_error(b, qubit, p)
+        b.channel_probs.append(error_probs(p))
+        _error(b, qubit, VertexType.X, error_var)
+        b.num_error_bits += 1
     ensure_lane(b, qubit)
     v1 = b.last_vertex[qubit]
     b.graph.set_type(v1, VertexType.Z)
@@ -647,17 +651,18 @@ def _m(b: GraphRepresentation, qubit: int, p: float = 0, silent: bool = False) -
         b.silent_rec.append(v1)
     v2 = add_dummy(b, qubit)
     b.graph.add_edge((v1, v2), EdgeType.SIMPLE)
+    if p > 0:
+        _error(b, qubit, VertexType.X, error_var)
     b.graph.scalar.add_power(-1)
 
 
-def _r(b: GraphRepresentation, qubit: int, perform_trace: bool) -> None:
+def _r(b: GraphRepresentation, qubit: int) -> None:
     if qubit not in b.last_vertex:
         v1 = add_lane(b, qubit)
         b.graph.set_type(v1, VertexType.X)
         b.graph.scalar.add_power(-1)
     else:
-        if perform_trace:
-            _m(b, qubit, silent=True)
+        _m(b, qubit, silent=True)
         row = last_row(b, qubit)
         v1 = b.last_vertex[qubit]
         b.graph.set_type(v1, VertexType.X)
@@ -854,29 +859,23 @@ def y_error(b: GraphRepresentation, qubit: int, p: float) -> None:
 
 def mr(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -> None:
     """Z-basis demolition measurement (optionally noisy)."""
-    if p > 0:
-        x_error(b, qubit, p)
-    m(b, qubit, p=p, invert=invert)
-    _r(b, qubit, perform_trace=False)
+    if invert:
+        x_phase(b, qubit, Fraction(1, 1))
+    m(b, qubit, p=p)
+    _r(b, qubit)
 
 
 def mrx(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -> None:
     """X-basis demolition measurement (optionally noisy)."""
     h_gate(b, qubit)
-    if p > 0:
-        x_error(b, qubit, p)
-    m(b, qubit, p=p, invert=invert)
-    _r(b, qubit, perform_trace=False)
+    mr(b, qubit, p=p, invert=invert)
     h_gate(b, qubit)
 
 
 def mry(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -> None:
     """Y-basis demolition measurement (optionally noisy)."""
     h_yz(b, qubit)
-    if p > 0:
-        x_error(b, qubit, p)
-    m(b, qubit, p=p, invert=invert)
-    _r(b, qubit, perform_trace=False)
+    mr(b, qubit, p=p, invert=invert)
     h_yz(b, qubit)
 
 
@@ -934,7 +933,7 @@ def reset_z(b: GraphRepresentation, qubit: int, p: float = 0) -> None:
     """
     if p > 0:
         x_error(b, qubit, p)
-    _r(b, qubit, perform_trace=True)
+    _r(b, qubit)
 
 
 def reset_x(b: GraphRepresentation, qubit: int) -> None:
@@ -1010,6 +1009,7 @@ def mpp(
     b: GraphRepresentation,
     paulis: list[tuple[str, int]],
     invert: bool = False,
+    p: float = 0,
 ) -> None:
     """Measure a multi-Pauli product.
 
@@ -1020,6 +1020,7 @@ def mpp(
         paulis: List of (pauli_type, qubit) pairs defining the Pauli product.
                 pauli_type should be 'X', 'Y', or 'Z'.
         invert: Whether to invert the measurement result.
+        p: Measurement flip error probability.
     """
     aux = -2
     reset_z(b, aux)
@@ -1039,7 +1040,7 @@ def mpp(
             raise ValueError(f"Invalid Pauli operator: {pauli_type}")
 
     h_gate(b, aux)
-    m(b, aux, invert=invert)
+    m(b, aux, p=p, invert=invert)
 
 
 # NOTE on Gate Naming Convention:
@@ -1225,7 +1226,7 @@ def circuit_to_zx(
                     paulis.append((target[0], target[1]))
             if paulis:
                 invert = d.get("invert", False)
-                mpp(b, paulis, invert=invert)
+                mpp(b, paulis, invert=invert, p=p)
         elif name in ["QUBIT_COORDS", "SHIFT_COORDS", "TICK"]:
             continue
         elif name in GATE_TABLE:
@@ -1256,9 +1257,7 @@ def circuit_to_zx(
                 chunk = index[i_target : i_target + num_qubits]
                 if name in [
                     "M",
-                    "R",
                     "MEASURE",
-                    "RESET",
                     "MR",
                     "MRX",
                     "MRY",
@@ -1267,6 +1266,8 @@ def circuit_to_zx(
                     "MY",
                     "MZ",
                 ]:
+                    func(b, *chunk, p=p, invert=d.get("invert", False))
+                elif name in ["R", "RESET"]:
                     func(b, *chunk, p=p)
                 elif name in ["R_X", "R_Y", "R_Z"]:
                     func(b, *chunk, theta)

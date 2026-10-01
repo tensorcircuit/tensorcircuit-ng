@@ -98,6 +98,10 @@ Overview of Modules
 
 - :py:mod:`tensorcircuit.applications`: most code here is not maintained and deprecated, use at your own risk.
 
+**Experimental Modules:**
+
+- :py:mod:`tensorcircuit.tnalg`, :py:mod:`tensorcircuit.zx`, and :py:mod:`tensorcircuit.applications` are experimental: their APIs may change and the modules may be removed at any time without deprecation. Importing them emits :py:class:`tensorcircuit.utils.ExperimentalWarning`, which can be silenced by ``warnings.filterwarnings("ignore", category=tc.utils.ExperimentalWarning)``.
+
 .. note::
 
     Recommend reading order -- only read the part of code you care about for your purpose. 

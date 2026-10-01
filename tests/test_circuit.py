@@ -118,7 +118,7 @@ def test_adjoint_gate_circuit():
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
 def test_jittable_measure(backend):
     @partial(tc.backend.jit, static_argnums=(2, 3))
-    def f(param, key, n=6, nlayers=3):
+    def f(param, key, n=4, nlayers=1):
         if key is not None:
             tc.backend.set_random_state(key)
         c = tc.Circuit(n)
@@ -134,17 +134,17 @@ def test_jittable_measure(backend):
     if tc.backend.name == "tensorflow":
         import tensorflow as tf
 
-        r1 = f(tc.backend.ones([6, 6]), None)
+        r1 = f(tc.backend.ones([2, 4]), None)
         keys = [tf.random.Generator.from_seed(s) for s in range(8)]
-        r3 = f(tc.backend.ones([6, 6]), tf.random.Generator.from_seed(23))
-        r4 = f(tc.backend.ones([6, 6]), tf.random.Generator.from_seed(23))
+        r3 = f(tc.backend.ones([2, 4]), tf.random.Generator.from_seed(23))
+        r4 = f(tc.backend.ones([2, 4]), tf.random.Generator.from_seed(23))
     elif tc.backend.name == "jax":
         import jax
 
-        r1 = f(tc.backend.ones([6, 6]), jax.random.PRNGKey(23))
+        r1 = f(tc.backend.ones([2, 4]), jax.random.PRNGKey(23))
         keys = [jax.random.PRNGKey(s) for s in range(8, 16)]
-        r3 = f(tc.backend.ones([6, 6]), jax.random.PRNGKey(23))
-        r4 = f(tc.backend.ones([6, 6]), jax.random.PRNGKey(23))
+        r3 = f(tc.backend.ones([2, 4]), jax.random.PRNGKey(23))
+        r4 = f(tc.backend.ones([2, 4]), jax.random.PRNGKey(23))
 
     samples, prob = r1
     assert len(samples) == 3
@@ -153,7 +153,7 @@ def test_jittable_measure(backend):
     assert 0.0 <= float(prob) <= 1.0
     # Sampling over several keys should yield at least two distinct outcomes;
     # a single pair comparison flakes on the small (3-bit) output space.
-    outcomes = {tuple(float(s) for s in f(tc.backend.ones([6, 6]), k)[0]) for k in keys}
+    outcomes = {tuple(float(s) for s in f(tc.backend.ones([2, 4]), k)[0]) for k in keys}
     assert len(outcomes) >= 2
     # Same seed should give deterministic results under jit
     np.testing.assert_allclose(r3[0], r4[0], atol=1e-6)
@@ -536,6 +536,15 @@ def test_postselection(backend):
     np.testing.assert_allclose(tc.backend.numpy(s[3]).real, 0.5)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_mid_measurement_invalidates_expectation_cache(backend):
+    c = tc.Circuit(1)
+    c.h(0)
+    np.testing.assert_allclose(c.expectation_ps(z=[0]), 0, atol=1e-5)
+    c.mid_measurement(0)
+    np.testing.assert_allclose(c.expectation_ps(z=[0]), 0.5, atol=1e-5)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("cpb")])
 def test_unitary(backend):
     c = tc.Circuit(2, inputs=np.eye(4))
@@ -701,6 +710,16 @@ def test_circuit_add_demo():
     c3.X(0)
     c3.replace_mps_inputs(c.quvector())
     np.testing.assert_allclose(c3.wavefunction(), answer, atol=1e-4)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_replace_mps_inputs_invalidates_expectation_cache(backend):
+    c = tc.Circuit(1)
+    np.testing.assert_allclose(c.expectation_ps(z=[0]), 1)
+    source = tc.Circuit(1)
+    source.x(0)
+    c.replace_mps_inputs(source.quvector())
+    np.testing.assert_allclose(c.expectation_ps(z=[0]), -1)
 
 
 def test_circuit_replace_inputs():

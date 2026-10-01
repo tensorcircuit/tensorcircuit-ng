@@ -619,6 +619,25 @@ def test_bind_full(SymbolCircuit, sym):
     assert sc2.free_symbols() == set()
 
 
+def test_bind_array_parameter(SymbolCircuit, sym):
+    theta = sym["theta"]
+    sc = SymbolCircuit(1)
+    sc.any(0, unitary=np.array([[0, theta], [theta, 0]], dtype=object))
+    assert sc.free_symbols() == {theta}
+    bound = sc.bind({theta: 1})
+    assert bound.free_symbols() == set()
+    np.testing.assert_allclose(bound.to_circuit({}).state(), [0, 1])
+
+
+def test_bind_symbolic_inputs(SymbolCircuit, sym):
+    theta = sym["theta"]
+    sc = SymbolCircuit(1, inputs=np.array([theta, 0], dtype=object))
+    assert sc.free_symbols() == {theta}
+    bound = sc.bind({theta: 1})
+    assert bound.free_symbols() == set()
+    np.testing.assert_allclose(bound.to_circuit({}).state(), [1, 0])
+
+
 # ── Qiskit translation ─────────────────────────────────────────────────────────
 
 

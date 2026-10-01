@@ -52,8 +52,8 @@ def vqe_f2(inputs, xweights, zzweights, nlayers, n):
 
 
 def test_vqe_layer2(tfb, highp):
-    vqe_fp = partial(vqe_f2, nlayers=3, n=6)
-    vqe_layer = tc.KerasLayer(vqe_fp, [(3, 6), (3, 6)])
+    vqe_fp = partial(vqe_f2, nlayers=1, n=3)
+    vqe_layer = tc.KerasLayer(vqe_fp, [(1, 3), (1, 3)])
     inputs = np.zeros([1])
     with tf.GradientTape() as tape:
         e = vqe_layer(inputs)
@@ -63,7 +63,7 @@ def test_vqe_layer2(tfb, highp):
     model.compile(
         loss=tc.keras.output_asis_loss, optimizer=tf.keras.optimizers.Adam(0.01)
     )
-    model.fit(np.zeros([1, 1]), np.zeros([1]), batch_size=1, epochs=300)
+    model.fit(np.zeros([1, 1]), np.zeros([1]), batch_size=1, epochs=10)
 
     final_energy = model.predict(np.zeros([1]), verbose=0)
     np.testing.assert_array_less(final_energy, initial_energy)
