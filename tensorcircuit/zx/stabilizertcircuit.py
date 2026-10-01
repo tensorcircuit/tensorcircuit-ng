@@ -234,8 +234,6 @@ class StabilizerTCircuit(AbstractCircuit):
         :return: Array of measurement samples with shape (shots, num_measurements).
         :rtype: jax.Array
         """
-        if seed is not None:
-            self._key = jax.random.key(seed)
         has_m = any(
             d.get("name", "").upper()
             in ["MEASURE", "M", "MR", "MRX", "MRY", "MRZ", "MX", "MY", "MZ", "MPP"]
@@ -248,6 +246,8 @@ class StabilizerTCircuit(AbstractCircuit):
                 _,
                 _,
             ) = self._compile(sample_detectors=False, force_measure_all=not has_m)
+        if seed is not None:
+            self._key = jax.random.key(seed)
         return self._sample_batches(
             shots,
             batch_size,
@@ -279,8 +279,6 @@ class StabilizerTCircuit(AbstractCircuit):
         :return: Array of samples or tuple of (detectors, observables) arrays.
         :rtype: Union[jax.Array, Tuple[jax.Array, jax.Array]]
         """
-        if seed is not None:
-            self._key = jax.random.key(seed)
         if self._compiled_program_detectors is None:
             (
                 self._compiled_program_detectors,
@@ -289,6 +287,8 @@ class StabilizerTCircuit(AbstractCircuit):
                 self._num_observables,
             ) = self._compile(sample_detectors=True)
 
+        if seed is not None:
+            self._key = jax.random.key(seed)
         samples = self._sample_batches(
             shots,
             batch_size,

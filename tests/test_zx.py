@@ -1619,6 +1619,19 @@ def test_zx_cache_after_detector_and_observable(jaxb):
     np.testing.assert_array_equal(observables, np.tile([0, 1], (8, 1)))
 
 
+@pytest.mark.parametrize("method", ["sample_measurements", "sample_detectors"])
+def test_zx_seed_independent_of_cache(jaxb, method):
+    c = StabilizerTCircuit(1, seed=42)
+    c.h(0)
+    c.measure_instruction(0)
+    c.detector_instruction([0])
+    sample = getattr(c, method)
+    first = sample(shots=32, batch_size=32, seed=17)
+    np.testing.assert_array_equal(first, sample(shots=32, batch_size=32, seed=17))
+    c.tick_instruction()
+    np.testing.assert_array_equal(first, sample(shots=32, batch_size=32, seed=17))
+
+
 @pytest.mark.parametrize("probability", [False, True])
 def test_zx_cache_rebuild_advances_noise_rng(jaxb, probability):
     def sample_pair():
