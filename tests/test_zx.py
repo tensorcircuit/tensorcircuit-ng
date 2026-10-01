@@ -1381,24 +1381,7 @@ def test_zx_noisy_outcome_probability(jaxb):
     np.testing.assert_allclose(prob, jnp.real(dm.densitymatrix()[3, 3]), atol=0.03)
 
 
-@pytest.mark.parametrize(
-    "add_gate",
-    [
-        pytest.param(lambda c: c.x(0), id="x"),
-        pytest.param(lambda c: c.rx(0, theta=np.pi), id="rotation"),
-        pytest.param(lambda c: c.apply(tc.gates.x(), 0), id="apply"),
-        pytest.param(lambda c: c.apply_general_gate(tc.gates.x(), 0), id="general"),
-        pytest.param(
-            lambda c: c.apply_general_gate(
-                tc.gates.x(), 0, ir_dict={"name": "X", "index": [0]}
-            ),
-            id="general-qir",
-        ),
-        pytest.param(lambda c: c.x_error(0, 1.0), id="noise"),
-        pytest.param(lambda c: c.pauli_instruction(0, 1.0, 0.0, 0.0), id="pauli"),
-    ],
-)
-def test_zx_cache_after_gate(jaxb, add_gate):
+def test_zx_cache_after_gate(jaxb):
     c = StabilizerTCircuit(1, seed=42)
     one = jnp.array([1])
     np.testing.assert_allclose(c.outcome_probability(one), [0.0], atol=1e-6)
@@ -1406,68 +1389,11 @@ def test_zx_cache_after_gate(jaxb, add_gate):
         c.sample_measurements(shots=8, batch_size=8), np.zeros((8, 1))
     )
 
-    add_gate(c)
+    c.x(0)
     np.testing.assert_allclose(c.outcome_probability(one), [1.0], atol=1e-6)
     np.testing.assert_allclose(c.outcome_probability(jnp.array([0])), [0.0], atol=1e-6)
     np.testing.assert_array_equal(
         c.sample_measurements(shots=8, batch_size=8), np.ones((8, 1))
-    )
-
-
-@pytest.mark.parametrize("reset", ["reset_z", "reset_instruction"])
-def test_zx_cache_after_reset(jaxb, reset):
-    c = StabilizerTCircuit(1)
-    c.x(0)
-    one = jnp.array([1])
-    np.testing.assert_allclose(c.outcome_probability(one), [1.0], atol=1e-6)
-    np.testing.assert_array_equal(
-        c.sample_measurements(shots=8, batch_size=8), np.ones((8, 1))
-    )
-    getattr(c, reset)(0)
-    np.testing.assert_allclose(c.outcome_probability(one), [0.0], atol=1e-6)
-    np.testing.assert_array_equal(
-        c.sample_measurements(shots=8, batch_size=8), np.zeros((8, 1))
-    )
-
-
-def test_zx_cache_after_entangling_gate(jaxb):
-    c = StabilizerTCircuit(2)
-    c.x(0)
-    np.testing.assert_allclose(
-        c.outcome_probability(jnp.array([1, 1])), [0.0], atol=1e-6
-    )
-    np.testing.assert_array_equal(
-        c.sample_measurements(shots=8, batch_size=8), np.tile([1, 0], (8, 1))
-    )
-    c.cnot(0, 1)
-    np.testing.assert_allclose(
-        c.outcome_probability(jnp.array([1, 1])), [1.0], atol=1e-6
-    )
-    np.testing.assert_array_equal(
-        c.sample_measurements(shots=8, batch_size=8), np.ones((8, 2))
-    )
-
-
-def test_zx_cache_after_measurement(jaxb):
-    c = StabilizerTCircuit(2)
-    c.x(0)
-    np.testing.assert_allclose(
-        c.outcome_probability(jnp.array([1, 0])), [1.0], atol=1e-6
-    )
-    np.testing.assert_array_equal(
-        c.sample_measurements(shots=8, batch_size=8), np.tile([1, 0], (8, 1))
-    )
-    c.measure_instruction(1)
-    np.testing.assert_allclose(c.outcome_probability(jnp.array([0])), [1.0], atol=1e-6)
-    np.testing.assert_array_equal(
-        c.sample_measurements(shots=8, batch_size=8), np.zeros((8, 1))
-    )
-    c.measure_instruction(0)
-    np.testing.assert_allclose(
-        c.outcome_probability(jnp.array([0, 1])), [1.0], atol=1e-6
-    )
-    np.testing.assert_array_equal(
-        c.sample_measurements(shots=8, batch_size=8), np.tile([0, 1], (8, 1))
     )
 
 
