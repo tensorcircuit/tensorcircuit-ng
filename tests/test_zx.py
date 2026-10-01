@@ -175,16 +175,9 @@ def test_zx_outcome_probability(backend):
     stc.measure_instruction(0)
     p1 = stc.outcome_probability(jnp.array([1]), shots=10)
     assert p1.shape == (10,)
-    # For a specific error realization, it's either 0 or 1.
-    # But since x_error adds a parameter 'e0', and outcome_probability
-    # computes P(state | error_i), it should correctly reflect the error bit.
-    # Actually, outcome_probability in tsim computes P(state | error).
-    # If the error bit e0=1, then P(1|e0=1) = 1.0. If e0=0, P(1|e0=0) = 0.
+    # Each sampled error realization gives a conditional probability of 0 or 1.
     assert np.all(jnp.logical_or(jnp.isclose(p1, 0.0), jnp.isclose(p1, 1.0)))
-    # Average should be around 0.1
-    np.testing.assert_allclose(
-        np.mean(p1), 0.1, atol=0.3, rtol=0.0
-    )  # low shots, just checking shape/range
+    # Distributional behavior is checked separately with larger sample counts.
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])
