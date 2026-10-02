@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Normalize ZX scalar powers of two during multiplication to prevent overflow in large-circuit probabilities and sampling.
+
 ## v1.10.0
 
 ### Added

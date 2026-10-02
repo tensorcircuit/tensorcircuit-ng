@@ -1646,3 +1646,33 @@ def test_zx_cache_rebuild_advances_noise_rng(jaxb, probability):
     assert np.any(np.asarray(first) != np.asarray(second))
     np.testing.assert_array_equal(first, repeated_first)
     np.testing.assert_array_equal(second, repeated_second)
+
+
+@pytest.mark.parametrize("precision", [None, lf("highp")])
+@pytest.mark.parametrize("nqubits", [32, 33, 65])
+def test_zx_large_ghz_probabilities(jaxb, precision, nqubits):
+    c = StabilizerTCircuit(nqubits)
+    c.h(0)
+    for i in range(1, nqubits):
+        c.cnot(0, i)
+    for i in range(nqubits):
+        c.measure_instruction(i)
+    zeros = jnp.zeros(nqubits, dtype=jnp.uint8)
+    ones = jnp.ones(nqubits, dtype=jnp.uint8)
+    np.testing.assert_allclose(c.outcome_probability(zeros), 0.5, atol=1e-6)
+    np.testing.assert_allclose(c.outcome_probability(ones), 0.5, atol=1e-6)
+    np.testing.assert_allclose(c.outcome_probability(zeros.at[-1].set(1)), 0, atol=1e-6)
+
+
+def test_zx_large_ghz_samples_stay_in_support(jaxb):
+    nqubits = 40
+    c = StabilizerTCircuit(nqubits)
+    c.h(0)
+    for i in range(1, nqubits):
+        c.cnot(0, i)
+    for i in range(nqubits):
+        c.measure_instruction(i)
+    samples = np.asarray(c.sample_measurements(shots=16, seed=7))
+    np.testing.assert_array_equal(
+        samples, np.broadcast_to(samples[:, :1], samples.shape)
+    )
