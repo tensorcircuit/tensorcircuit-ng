@@ -312,3 +312,54 @@ def test_rc_cache_reuse_and_eviction(npb, monkeypatch):
     qem.rc_circuit(cold)
     assert len(cache) == 2
     assert keys[0] in cache and keys[1] not in cache
+
+
+def test_rc_candidates_follow_circuit_order(npb, monkeypatch):
+    source = tc.Circuit(2)
+    source.cnot(0, 1)
+    source.h(0)
+    circuit = tc.Circuit(2)
+    circuit.unitary(0, 1, unitary=source.matrix(), name="composite")
+    candidates = qem_methods.rc_candidates(circuit.to_qir()[0]["gate"])
+    assert (1, 0, 3, 1) in candidates
+    assert (3, 1, 1, 0) not in candidates
+
+    monkeypatch.setattr(qem_methods, "candidate_dict", OrderedDict())
+    choices = iter(candidates)
+    monkeypatch.setattr(qem_methods, "choice", lambda _: next(choices))
+    expected = tc.backend.numpy(circuit.matrix())
+    for _ in candidates:
+        actual = tc.backend.numpy(qem.rc_circuit(circuit).matrix())
+        phase = np.trace(expected.conj().T @ actual) / 4
+        np.testing.assert_allclose(abs(phase), 1, atol=1e-6)
+        np.testing.assert_allclose(actual, phase * expected, atol=1e-6)
+
+
+def test_rc_candidates_reject_near_identity_twirls(npb):
+    circuit = tc.Circuit(2)
+    circuit.rzz(0, 1, theta=2e-6)
+    candidates = qem_methods.rc_candidates(circuit.to_qir()[0]["gate"])
+    assert (0, 1, 0, 1) not in candidates
+
+
+@pytest.mark.parametrize("kind", ["default", "dense", "mps", "tensors", "mixed"])
+def test_rc_preserves_initial_state(npb, kind, monkeypatch):
+    circuit = _initial_state_circuit(kind)
+    circuit.cnot(0, 2)
+    expected = _density_matrix(circuit)
+
+    def choose_identity(candidates):
+        assert (0, 0, 0, 0) in candidates
+        return (0, 0, 0, 0)
+
+    def check_rebuilt(rebuilt):
+        assert type(rebuilt) is type(circuit)
+        assert rebuilt.circuit_param["split"] == circuit.circuit_param["split"]
+        np.testing.assert_allclose(_density_matrix(rebuilt), expected, atol=1e-6)
+        return 0.0
+
+    monkeypatch.setattr(qem_methods, "choice", choose_identity)
+    check_rebuilt(qem.rc_circuit(circuit))
+    for simplify in (False, True):
+        _, rebuilt = apply_rc(circuit, check_rebuilt, simplify=simplify)
+        check_rebuilt(rebuilt[0])

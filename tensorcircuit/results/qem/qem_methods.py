@@ -26,7 +26,6 @@ except ModuleNotFoundError:
     zne_option = None
     dd_option = None
 
-from ... import Circuit
 from ... import backend, gates
 from ...compiler import simple_compiler
 
@@ -264,13 +263,13 @@ def rc_candidates(gate: Gate) -> List[Any]:
     r = []
     for combo in product(*[range(4) for _ in range(4)]):
         i = (
-            np.kron(pauli[combo[0]], pauli[combo[1]])
+            np.kron(pauli[combo[2]], pauli[combo[3]])
             @ gatem
-            @ np.kron(pauli[combo[2]], pauli[combo[3]])
+            @ np.kron(pauli[combo[0]], pauli[combo[1]])
         )
-        if np.allclose(i, gatem, atol=1e-4):
+        if np.allclose(i, gatem, rtol=0.0, atol=1e-7):
             r.append(combo)
-        elif np.allclose(i, -gatem, atol=1e-4):
+        elif np.allclose(i, -gatem, rtol=0.0, atol=1e-7):
             r.append(combo)
     return r
 
@@ -306,7 +305,7 @@ def rc_circuit(c: Any) -> Any:
     :return: Randomized circuit.
     """
     qir = c.to_qir()
-    cnew = Circuit(c.circuit_param["nqubits"])
+    cnew = type(c)(**c.circuit_param)
     for d in qir:
         if len(d["index"]) == 2:
             matrix = backend.numpy(backend.reshapem(d["gate"].tensor))
