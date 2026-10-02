@@ -731,8 +731,7 @@ For ``TorchLayer``, ``use_interface=True`` is by default, which natively allow t
 Similar rules apply similar as torch interface. The interface can even be used within jit environment outside.
 See :py:func:`tensorcircuit.interfaces.tensorflow.tensorflow_interface`.
 
-We also provider ``enable_dlpack=True`` option in torch and tf interfaces, which allow the tensor transformation happen without memory transfer via dlpack,
-higher version of tf or torch package required.
+The torch and TensorFlow interfaces offer ``enable_dlpack=True`` for efficient tensor transfer. Compatible layouts can share storage; noncontiguous PyTorch tensors are copied when transferred to JAX or TensorFlow.
 
 We also provider wrapper of quantum function for keras layer as :py:class:`tensorcircuit.KerasLayer` alias to :py:class:`tensorcircuit.keras.KerasLayer`.
 
@@ -794,7 +793,7 @@ Some advanced features:
 
 .. code-block:: python
 
-    # Enable DLPack for zero-copy tensor conversion
+    # Enable DLPack for efficient tensor conversion
     jax_circuit = tc.interfaces.jax_interface(circuit, 
                                             jit=True, 
                                             enable_dlpack=True)

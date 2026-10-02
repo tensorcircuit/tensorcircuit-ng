@@ -793,6 +793,36 @@ def test_dlpack(backend):
     np.testing.assert_allclose(a, a1, atol=1e-5)
 
 
+@pytest.mark.parametrize("target", ["jax", "tensorflow", "pytorch"])
+@pytest.mark.parametrize(
+    "layout",
+    ["contiguous", "offset", "real", "imag", "slice", "transpose", "broadcast"],
+)
+def test_torch_dlpack_layout(torchb, target, layout):
+    values = np.arange(6, dtype=np.float32)
+    tensor = tc.backend.convert_to_tensor(values + 1j * (values + 1))
+    views = {
+        "contiguous": tensor,
+        "offset": tensor[1:],
+        "real": tensor.real,
+        "imag": tensor.imag,
+        "slice": tensor[::2],
+        "transpose": tensor.reshape(2, 3).T,
+        "broadcast": tensor[:1].expand(4),
+    }
+    source = views[layout]
+    expected = tc.backend.numpy(source).copy()
+    target_backend = tc.get_backend(target)
+    result = tc.interfaces.general_args_to_backend(
+        source, target_backend=target_backend, enable_dlpack=True
+    )
+    np.testing.assert_array_equal(target_backend.numpy(result), expected)
+    np.testing.assert_array_equal(tc.backend.numpy(source), expected)
+    assert target_backend.dtype(result) == tc.backend.dtype(source)
+    if target == "pytorch":
+        assert result.data_ptr() == source.data_ptr()
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_reshaped_basic(backend):
     a1 = tc.backend.convert_to_tensor(np.arange(27))

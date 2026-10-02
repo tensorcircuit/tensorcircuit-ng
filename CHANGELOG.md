@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Match the target framework's complex gradient convention when wrapping functions between JAX and PyTorch or TensorFlow in either direction, and support noncontiguous PyTorch tensors when transferring to JAX or TensorFlow via DLPack.
+
 - Invalidate ZX probability and sampling caches when gates or instructions are added to a `StabilizerTCircuit`.
 
 - Preserve logical observable indices and inverted measurement results when importing Stim circuits into the ZX simulator, and apply measurement-reset readout noise only once. Measurement readout noise now flips only the recorded result instead of the post-measurement state, and `MPP(p)` keeps its readout noise.
