@@ -501,3 +501,15 @@ def test_scalar_graph_negative_pi_pair_phase(jaxb, precision):
     compiled = compile_scalar_graphs([g], [])
     values = evaluate(compiled, jnp.zeros((2, 0), dtype=jnp.uint8))
     np.testing.assert_allclose(values, [-1, -1], atol=1e-6)
+
+
+@pytest.mark.parametrize("precision", [None, lf("highp")])
+def test_scalar_graph_combined_unit_phases(jaxb, precision):
+    g = pyzx.Graph()
+    g.scalar.phase = Fraction(1, 4)
+    g.scalar.phasevars_halfpi = {1: [{"b"}], 3: [{"c"}]}
+    g.scalar.phasevars_pi_pair = [({"b"}, {"c"})]
+    compiled = compile_scalar_graphs([g], ["b", "c"])
+    params = jnp.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=jnp.uint8)
+    expected = np.exp(1j * np.pi / 4 * np.array([1, 7, 3, 13]))
+    np.testing.assert_allclose(evaluate(compiled, params), expected, atol=1e-6)

@@ -2,7 +2,6 @@
 Evaluation of compiled scalar graphs using exact arithmetic.
 """
 
-import functools
 from typing import Any, NamedTuple, Tuple, cast
 
 import jax
@@ -62,10 +61,13 @@ class ExactScalarArray(NamedTuple):
         return cls(coeffs, power)
 
     def __mul__(self, other: "ExactScalarArray") -> "ExactScalarArray":  # type: ignore[override]
-        left, right = self.reduce(), other.reduce()
-        new_coeffs = _scalar_mul(left.coeffs, right.coeffs)
-        new_power = left.power + right.power
-        return ExactScalarArray(new_coeffs, new_power).reduce()
+        return self.reduce()._mul_reduced(other.reduce())
+
+    def _mul_reduced(self, other: "ExactScalarArray") -> "ExactScalarArray":
+        """Multiply operands whose common powers of two are already extracted."""
+        return ExactScalarArray(
+            _scalar_mul(self.coeffs, other.coeffs), self.power + other.power
+        ).reduce()
 
     def reduce(self) -> "ExactScalarArray":
         # The OR has the common trailing zero bits of all four coefficients.
@@ -100,20 +102,23 @@ class ExactScalarArray(NamedTuple):
             return ExactScalarArray(result_coeffs, result_power)
 
         factors = self.reduce()
-        coeffs_t = jnp.moveaxis(factors.coeffs, axis, 0)
-        powers_t = jnp.moveaxis(factors.power, axis, 0)
-
-        def body_fn(
-            carry: ExactScalarArray, x: ExactScalarArray
-        ) -> Tuple[ExactScalarArray, Any]:
-            return carry * x, None
-
-        result, _ = lax.scan(
-            body_fn,
-            ExactScalarArray(coeffs_t[0], powers_t[0]),
-            ExactScalarArray(coeffs_t[1:], powers_t[1:]),
+        # Reduce the four coefficients and exponent together.
+        operands = tuple(factors.coeffs[..., i] for i in range(4)) + (factors.power,)
+        initial = tuple(
+            jnp.asarray(i == 0, dtype=self.coeffs.dtype) for i in range(4)
+        ) + (
+            jnp.asarray(0, dtype=factors.power.dtype),
         )
-        return result
+
+        def multiply(left: Any, right: Any) -> Any:
+            result = ExactScalarArray(
+                _scalar_mul(jnp.stack(left[:4]), jnp.stack(right[:4])),
+                left[4] + right[4],
+            ).reduce()
+            return tuple(result.coeffs[i] for i in range(4)) + (result.power,)
+
+        result = lax.reduce(operands, initial, multiply, (axis,))
+        return ExactScalarArray(jnp.stack(result[:4], axis=-1), result[4])
 
     def to_complex(self) -> jax.Array:
         """
@@ -206,9 +211,6 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
 
     sum_phases_b = jnp.sum(phase_idx_b, axis=-1) % 8
 
-    summands_b_exact = unit_phases[sum_phases_b]
-    summands_b = ExactScalarArray.create(summands_b_exact)
-
     # ====================================================================
     # TYPE C: Pi-Pair Terms, (-1)^(Psi*Phi)
     # ====================================================================
@@ -221,9 +223,6 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
 
     exponent_c = (rowsum_a_c * rowsum_b_c) % 2
     sum_exponents_c = (jnp.sum(exponent_c, axis=-1) % 2).astype(idtypestr)
-
-    summands_c_exact = (1 - 2 * sum_exponents_c)[..., None] * identity
-    summands_c = ExactScalarArray.create(summands_c_exact)
 
     # ====================================================================
     # TYPE D: Phase Pairs (1 + e^a + e^b - e^g)
@@ -251,12 +250,15 @@ def evaluate(circuit: Any, param_vals: Array) -> Array:
     # ====================================================================
     # FINAL COMBINATION
     # ====================================================================
-    static_phases = ExactScalarArray.create(unit_phases[circuit.phase_indices])
-    float_factor = ExactScalarArray.create(circuit.floatfactor)
-
-    total_summands = functools.reduce(
-        lambda a, b: a * b,
-        [summands_a, summands_b, summands_c, summands_d, static_phases, float_factor],
+    phase_indices = (
+        sum_phases_b.astype(idtypestr) + 4 * sum_exponents_c + circuit.phase_indices
+    ) % 8
+    float_factor = ExactScalarArray.create(circuit.floatfactor).reduce()
+    total_summands = summands_a._mul_reduced(summands_d)._mul_reduced(float_factor)
+    # A unit phase only permutes coefficients and changes their signs.
+    total_summands = ExactScalarArray(
+        _scalar_mul(total_summands.coeffs, unit_phases[phase_indices]),
+        total_summands.power,
     )
 
     def res_exact() -> Array:
