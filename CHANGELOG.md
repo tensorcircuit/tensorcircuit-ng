@@ -20,6 +20,8 @@
 
 - Honor `AnalogCircuit(mps_inputs=...)` instead of overriding the supplied state with the default all-zero input; preserve explicit dense-input precedence.
 
+- Preserve DMRG ground-state response gradients at Lanczos breakdown using an implicit matrix-free derivative.
+
 - Return marginal outcome probabilities when measuring a subset of qubits in `U1Circuit`.
 
 - Map digital and explicitly local analog blocks in `AnalogCircuit.append`; reject permutation or embedding of global analog blocks while preserving equal-width identity mappings.
