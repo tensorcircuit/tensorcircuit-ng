@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from functools import partial
 import pytest
 from pytest_lazyfixture import lazy_fixture as lf
@@ -14,7 +15,7 @@ from tensorcircuit.results.qem import (
     apply_dd,
     apply_rc,
 )
-from tensorcircuit.results.qem import benchmark_circuits
+from tensorcircuit.results.qem import benchmark_circuits, qem_methods
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
@@ -230,3 +231,135 @@ def test_rc(backend):
     rc_c = qem.rc_circuit(c)
     assert rc_c.circuit_param["nqubits"] == c.circuit_param["nqubits"]
     assert len(rc_c.to_qir()) > 0
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize(
+    "double_precision,custom,warm_angle,separate_calls",
+    [
+        (False, False, 0.0, False),
+        (False, False, np.pi / 2, True),
+        (True, True, 0.0, True),
+        (True, True, np.pi / 2, False),
+    ],
+)
+def test_rc_cache_matrix_equivalence(
+    backend, double_precision, custom, warm_angle, separate_calls, request, monkeypatch
+):
+    if double_precision:
+        request.getfixturevalue("highp")
+    monkeypatch.setattr(qem_methods, "candidate_dict", OrderedDict())
+    paulis = [np.asarray(g.tensor) for g in tc.gates.pauli_gates]
+
+    def add_gate(circuit, angle, indices):
+        if custom:
+            matrix = np.diag(np.exp(-0.5j * angle * np.array([1, -1, -1, 1])))
+            h = np.kron(np.array([[1, 1], [1, -1]]) / np.sqrt(2), np.eye(2))
+            circuit.unitary(*indices, unitary=h @ matrix @ h, name="shared")
+        else:
+            circuit.rzz(*indices, theta=angle)
+        return tc.backend.numpy(
+            tc.backend.reshapem(circuit.to_qir()[-1]["gate"].tensor)
+        )
+
+    warm = tc.Circuit(2)
+    first = add_gate(warm, warm_angle, (1, 0))
+    target = tc.Circuit(2) if separate_calls else warm
+    second = add_gate(target, 0.37, (0, 1))
+    matrices = iter([first, second])
+
+    def choose(candidates):
+        matrix = next(matrices)
+        for a, b, c, d in candidates:
+            twirled = (
+                np.kron(paulis[c], paulis[d]) @ matrix @ np.kron(paulis[a], paulis[b])
+            )
+            phase = np.trace(matrix.conj().T @ twirled) / 4
+            np.testing.assert_allclose(abs(phase), 1, atol=2e-6)
+            np.testing.assert_allclose(twirled, phase * matrix, atol=2e-6)
+        return candidates[1]
+
+    monkeypatch.setattr(qem_methods, "choice", choose)
+    if separate_calls:
+        qem.rc_circuit(warm)
+    expected = tc.backend.numpy(target.matrix())
+    actual = tc.backend.numpy(qem.rc_circuit(target).matrix())
+    phase = np.trace(expected.conj().T @ actual) / 4
+    np.testing.assert_allclose(abs(phase), 1, atol=3e-6)
+    np.testing.assert_allclose(actual, phase * expected, atol=3e-6)
+
+
+def test_rc_cache_reuse_and_eviction(npb, monkeypatch):
+    cache = OrderedDict()
+    monkeypatch.setattr(qem_methods, "candidate_dict", cache)
+    monkeypatch.setattr(qem_methods, "_RC_CACHE_MAXSIZE", 2)
+    circuit = tc.Circuit(2)
+    circuit.rzz(0, 1, theta=0.0)
+    circuit.rzz(0, 1, theta=0.37)
+    qem.rc_circuit(circuit)
+    keys = list(cache)
+    candidates = list(cache.values())
+    apply_rc(circuit, lambda c: 0.0, num_to_average=3, simplify=False)
+    assert list(cache) == keys
+    assert all(cache[key] is value for key, value in zip(keys, candidates))
+
+    warm = tc.Circuit(2)
+    warm.rzz(0, 1, theta=0.0)
+    qem.rc_circuit(warm)
+    assert list(cache) == keys[::-1]
+    cold = tc.Circuit(2)
+    cold.rzz(0, 1, theta=0.71)
+    qem.rc_circuit(cold)
+    assert len(cache) == 2
+    assert keys[0] in cache and keys[1] not in cache
+
+
+def test_rc_candidates_follow_circuit_order(npb, monkeypatch):
+    source = tc.Circuit(2)
+    source.cnot(0, 1)
+    source.h(0)
+    circuit = tc.Circuit(2)
+    circuit.unitary(0, 1, unitary=source.matrix(), name="composite")
+    candidates = qem_methods.rc_candidates(circuit.to_qir()[0]["gate"])
+    assert (1, 0, 3, 1) in candidates
+    assert (3, 1, 1, 0) not in candidates
+
+    monkeypatch.setattr(qem_methods, "candidate_dict", OrderedDict())
+    choices = iter(candidates)
+    monkeypatch.setattr(qem_methods, "choice", lambda _: next(choices))
+    expected = tc.backend.numpy(circuit.matrix())
+    for _ in candidates:
+        actual = tc.backend.numpy(qem.rc_circuit(circuit).matrix())
+        phase = np.trace(expected.conj().T @ actual) / 4
+        np.testing.assert_allclose(abs(phase), 1, atol=1e-6)
+        np.testing.assert_allclose(actual, phase * expected, atol=1e-6)
+
+
+def test_rc_candidates_reject_near_identity_twirls(npb):
+    circuit = tc.Circuit(2)
+    circuit.rzz(0, 1, theta=2e-6)
+    candidates = qem_methods.rc_candidates(circuit.to_qir()[0]["gate"])
+    assert (0, 1, 0, 1) not in candidates
+
+
+@pytest.mark.parametrize("kind", ["default", "dense", "mps", "tensors", "mixed"])
+def test_rc_preserves_initial_state(npb, kind, monkeypatch):
+    circuit = _initial_state_circuit(kind)
+    circuit.cnot(0, 2)
+    expected = _density_matrix(circuit)
+
+    def choose_identity(candidates):
+        assert (0, 0, 0, 0) in candidates
+        return (0, 0, 0, 0)
+
+    def check_rebuilt(rebuilt):
+        assert type(rebuilt) is type(circuit)
+        assert rebuilt.circuit_param["split"] == circuit.circuit_param["split"]
+        np.testing.assert_allclose(_density_matrix(rebuilt), expected, atol=1e-6)
+        return 0.0
+
+    monkeypatch.setattr(qem_methods, "choice", choose_identity)
+    check_rebuilt(qem.rc_circuit(circuit))
+    for simplify in (False, True):
+        _, rebuilt = apply_rc(circuit, check_rebuilt, simplify=simplify)
+        check_rebuilt(rebuilt[0])

@@ -22,6 +22,10 @@
 
 - Preserve DMRG ground-state response gradients at Lanczos breakdown using an implicit matrix-free derivative.
 
+- Key randomized-compiling candidates by concrete gate matrix and dtype to preserve equivalence for same-named gates with different parameters, and retain reusable entries in a bounded LRU cache.
+
+- Preserve circuit type and initial state in randomized compiling, validate Pauli insertions in execution order, and tighten candidate equivalence tolerance.
+
 - Return marginal outcome probabilities when measuring a subset of qubits in `U1Circuit`.
 
 - Map digital and explicitly local analog blocks in `AnalogCircuit.append`; reject permutation or embedding of global analog blocks while preserving equal-width identity mappings.
