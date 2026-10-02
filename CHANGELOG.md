@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- Compute fidelity reliably for positive semidefinite states and preserve first-order PSD square-root responses on fixed-rank paths.
+- Compute fidelity reliably for positive semidefinite states and preserve first-order matrix square-root responses on fixed-rank paths. `sqrtmh` now clips negative eigenvalues regardless of the retained `psd` argument.
 
 ## v1.10.0
 

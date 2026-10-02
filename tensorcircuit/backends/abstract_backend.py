@@ -335,33 +335,24 @@ class ExtendedBackend:
 
     def sqrtmh(self: Any, a: Tensor, psd: bool = False) -> Tensor:
         """
-        Return the sqrtm of a Hermitian matrix ``a``.
+        Return the square root of a positive semidefinite Hermitian matrix ``a``.
 
-        :param a: Hermitian matrix; leading batch dimensions are supported
-            when ``psd=True``
+        The input is assumed positive semidefinite but is not validated. All
+        negative eigenvalues are clipped to zero, regardless of ``psd``. Leading
+        batch dimensions are supported. First derivatives use the square-root
+        response equation, with a zero response within the null space on
+        differentiable backends. This supports fixed-rank PSD paths;
+        rank-increasing directions at a singular matrix need not have a finite
+        derivative.
+
+        :param a: positive semidefinite Hermitian matrix
         :type a: Tensor
-        :param psd: whether the input ``a`` is guaranteed as a positive semidefinite matrix,
-            defaults False. In this mode, negative roundoff eigenvalues are
-            clipped to zero. First derivatives use the square-root response
-            equation, with a zero response within the null space. This supports
-            fixed-rank PSD paths; rank-increasing directions at a singular matrix
-            need not have a finite derivative.
+        :param psd: ignored; retained for compatibility with existing calls,
+            whether True or False
         :type psd: bool
         :return: sqrtm of ``a``
         :rtype: Tensor
         """
-        # maybe friendly for AD and also considering that several backend has no support for native sqrtm
-        if psd:
-            return self._sqrtmh_psd(a)
-        e, v = self.eigh(a)
-        e = self.sqrt(e)
-        # ``eigh`` returns real eigenvalues; cast them to the (possibly complex)
-        # eigenvector dtype so that ``diagflat(e)`` matches ``v`` for backends
-        # that do not auto-promote mixed-dtype matmuls (e.g. pytorch).
-        e = self.cast(e, self.dtype(v))
-        return v @ self.diagflat(e) @ self.adjoint(v)
-
-    def _sqrtmh_psd(self: Any, a: Tensor) -> Tensor:
         e, v = self.eigh(a)
         e = self.sqrt(self.relu(self.real(e)))
         axes = list(range(len(self.shape_tuple(v))))

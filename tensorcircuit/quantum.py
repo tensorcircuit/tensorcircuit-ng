@@ -3416,7 +3416,7 @@ def fidelity(rho: Tensor, rho0: Tensor) -> Tensor:
     :return: The squared fidelity scalar between ``rho`` and ``rho0``.
     :rtype: Tensor
     """
-    product = backend.sqrtmh(rho, psd=True) @ backend.sqrtmh(rho0, psd=True)
+    product = backend.sqrtmh(rho) @ backend.sqrtmh(rho0)
     singular_values = backend.real(backend.svd(product)[1])
     return backend.sum(singular_values) ** 2
 

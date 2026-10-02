@@ -6,7 +6,6 @@ Backend magic inherited from tensornetwork: jax backend
 
 import logging
 from functools import partial
-from importlib import import_module
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -23,7 +22,6 @@ logger = logging.getLogger(__name__)
 dtypestr: str
 rdtypestr: str
 Tensor = Any
-_sqrtmh_psd_op: Callable[[Tensor], Tensor]
 PRNGKeyArray = Any  # libjax.random.PRNGKeyArray
 pytree = Any
 
@@ -236,9 +234,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
             logger.warning(
                 "optax not installed, `optimizer` from jax backend cannot work"
             )
-        global _sqrtmh_psd_op
         libjax = jax
-        _sqrtmh_psd_op = import_module(".jax_ops", package=__package__).sqrtmh_psd
         jnp = libjax.numpy
         jsp = libjax.scipy
 
@@ -330,8 +326,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def size(self, a: Tensor) -> Tensor:
         return jnp.size(a)
 
-    def _sqrtmh_psd(self, a: Tensor) -> Tensor:
-        return _sqrtmh_psd_op(a)
+    def sqrtmh(self, a: Tensor, psd: bool = False) -> Tensor:
+        """Return the PSD Hermitian matrix square root; ``psd`` is ignored."""
+        from .jax_ops import adaware_sqrtmh
+
+        return adaware_sqrtmh(a)
 
     def eigvalsh(self, a: Tensor) -> Tensor:
         return jnp.linalg.eigvalsh(a)

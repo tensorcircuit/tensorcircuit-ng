@@ -14,7 +14,7 @@ qr_epsilon = 1e-8
 
 
 @tf.custom_gradient  # type: ignore[misc]
-def sqrtmh_psd(value: Array) -> Any:
+def adaware_sqrtmh(value: Array) -> Any:
     """PSD square root with a fixed-rank response at zero eigenvalues."""
     e, v = tf.linalg.eigh(value)
     s = tf.sqrt(tf.maximum(tf.math.real(e), 0))

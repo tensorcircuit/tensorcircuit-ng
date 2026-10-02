@@ -39,7 +39,7 @@ class _PSDSquareRoot(torch.autograd.Function):
         return v @ response @ v.adjoint(), None, None
 
 
-def sqrtmh_psd(value: Array) -> Array:
+def adaware_sqrtmh(value: Array) -> Array:
     """PSD square root with a fixed-rank response at zero eigenvalues."""
     # Keep factors in the graph for higher derivatives, without repeating eigh.
     e, v = torch.linalg.eigh(value)

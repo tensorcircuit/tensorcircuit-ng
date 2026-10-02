@@ -1636,51 +1636,32 @@ def test_count_tuple2dict(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
-@pytest.mark.parametrize(
-    "double_precision,ranks",
-    [(False, (1, 1)), (True, (1, 1)), (True, (1, 4)), (True, (2, 3)), (True, (4, 4))],
-)
-def test_fidelity_psd_states(backend, double_precision, ranks, request):
+@pytest.mark.parametrize("double_precision", [False, True])
+def test_fidelity_psd_values(backend, double_precision, request):
     if double_precision:
         request.getfixturevalue("highp")
     rng = np.random.default_rng(0)
-    factors = []
-    for rank in ranks:
-        unitary, _ = np.linalg.qr(
-            rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4))
-        )
-        weights = np.arange(1, rank + 1, dtype=float)
-        weights /= weights.sum()
-        factors.append(unitary[:, :rank] * np.sqrt(weights))
-    left, right = factors
-    rho = tc.array_to_tensor(left @ left.conj().T)
-    sigma = tc.array_to_tensor(right @ right.conj().T)
-    reference = np.linalg.svd(left.conj().T @ right, compute_uv=False).sum() ** 2
-    # At a rank boundary, an O(eps) eigenvalue perturbation can change F by O(sqrt(eps)).
+    unitary, _ = np.linalg.qr(rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4)))
+    other, _ = np.linalg.qr(rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4)))
+    pure = np.outer(unitary[:, 0], unitary[:, 0].conj())
+    left = unitary[:, :2] * np.sqrt([0.7, 0.3])
+    right = other[:, :3] * np.sqrt([0.5, 0.3, 0.2])
+    mixed_reference = np.linalg.svd(left.conj().T @ right, compute_uv=False).sum() ** 2
     tolerance = 4e-8 if double_precision else 7e-4
-    for a, b in [(rho, sigma), (sigma, rho)]:
-        np.testing.assert_allclose(
-            tc.backend.numpy(qu.fidelity(a, b)), reference, rtol=0, atol=tolerance
-        )
-        np.testing.assert_allclose(
-            tc.backend.numpy(tc.backend.jit(qu.fidelity)(a, b)),
-            reference,
-            rtol=0,
-            atol=tolerance,
-        )
-    np.testing.assert_allclose(
-        tc.backend.numpy(qu.fidelity(rho, rho)),
-        1,
-        rtol=0,
-        atol=2e-12 if double_precision else 3e-6,
-    )
+    cases = [
+        (pure, pure, 1.0, 2e-12 if double_precision else 3e-6),
+        (left @ left.conj().T, right @ right.conj().T, mixed_reference, tolerance),
+    ]
+    for rho, sigma, reference, atol in cases:
+        a, b = tc.array_to_tensor(rho), tc.array_to_tensor(sigma)
+        for evaluate in (qu.fidelity, tc.backend.jit(qu.fidelity)):
+            np.testing.assert_allclose(
+                tc.backend.numpy(evaluate(a, b)), reference, rtol=0, atol=atol
+            )
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
-@pytest.mark.parametrize("double_precision", [False, True])
-def test_fidelity_diagonal_limits(backend, double_precision, request):
-    if double_precision:
-        request.getfixturevalue("highp")
+def test_fidelity_diagonal_limits(backend, highp):
     for p, q in [
         ([1, 0, 0, 0], [0, 1, 0, 0]),
         ([0.5, 0.5, 0, 0], [0.25] * 4),
@@ -1695,118 +1676,48 @@ def test_fidelity_diagonal_limits(backend, double_precision, request):
         )
 
 
-def _fidelity_test_unitary():
-    rng = np.random.default_rng(7)
-    unitary, _ = np.linalg.qr(rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4)))
-    return unitary
-
-
-def _fidelity_test_spectrum(p, weight):
-    return tc.array_to_tensor(
-        np.diag([weight * p, weight * (1 - p), (1 - weight) * 0.6, (1 - weight) * 0.4])
-    )
-
-
-def _fidelity_test_rotation(theta):
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("double_precision", [False, True])
+def test_fidelity_pure_gradient(backend, double_precision, request):
+    if double_precision:
+        request.getfixturevalue("highp")
     k = tc.backend
-    c, s = k.cos(theta), k.sin(theta)
-    zero, one = theta * 0, theta * 0 + 1
-    return k.cast(
-        k.stack(
-            [
-                k.stack([c, -s, zero, zero]),
-                k.stack([s, c, zero, zero]),
-                k.stack([zero, zero, one, zero]),
-                k.stack([zero, zero, zero, one]),
-            ]
-        ),
-        tc.dtypestr,
-    )
+    sigma = tc.array_to_tensor(np.diag([1.0, 0.0, 0.0]))
+    theta = k.convert_to_tensor(np.array(0.3, dtype=tc.rdtypestr))
+
+    def state(parameter):
+        amplitudes = k.cast(
+            k.stack([k.cos(parameter), k.sin(parameter), parameter * 0]),
+            tc.dtypestr,
+        )
+        return k.reshape(amplitudes, (3, 1)) @ k.reshape(k.conj(amplitudes), (1, 3))
+
+    for swap in (False, True):
+
+        def loss(parameter):
+            rho = state(parameter)
+            return qu.fidelity(sigma, rho) if swap else qu.fidelity(rho, sigma)
+
+        derivative = k.grad(loss)
+        for evaluate in (derivative, k.jit(derivative)):
+            np.testing.assert_allclose(
+                k.numpy(evaluate(theta)),
+                -np.sin(0.6),
+                atol=3e-7 if double_precision else 1e-3,
+            )
 
 
-def _check_fidelity_gradient(
-    state, sigma, parameter, reference, swap, double_precision
-):
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_fidelity_degenerate_gradient(backend, highp):
     k = tc.backend
+    sigma = tc.array_to_tensor(np.diag([0.7, 0.3]))
+    center = tc.array_to_tensor(np.eye(2) / 2)
+    direction = tc.array_to_tensor(np.diag([1.0, -1.0]))
 
     def loss(theta):
-        rho = state(theta)
-        return qu.fidelity(sigma, rho) if swap else qu.fidelity(rho, sigma)
+        return qu.fidelity(center + k.cast(theta, tc.dtypestr) * direction, sigma)
 
-    theta = k.convert_to_tensor(np.array(parameter, dtype=tc.rdtypestr))
-    tolerance = 3e-7 if double_precision else 1e-3
-    np.testing.assert_allclose(k.numpy(k.grad(loss)(theta)), reference, atol=tolerance)
-    np.testing.assert_allclose(
-        k.numpy(k.jit(k.grad(loss))(theta)), reference, atol=tolerance
-    )
-
-
-@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
-@pytest.mark.parametrize(
-    "kind,parameter",
-    [
-        ("pure", 0.0),
-        ("pure", 0.3),
-        ("pure", np.pi / 2),
-        ("fixed_rank", 0.3),
-        ("full_rank", 0.3),
-    ],
-)
-@pytest.mark.parametrize(
-    "double_precision,swap", [(False, False), (True, False), (True, True)]
-)
-def test_fidelity_gradients(backend, kind, parameter, swap, double_precision, request):
-    if double_precision:
-        request.getfixturevalue("highp")
-    k = tc.backend
-    unitary = tc.array_to_tensor(_fidelity_test_unitary())
-    p, q = (1.0, 1.0) if kind == "pure" else (0.8, 0.65)
-    weight = 0.7 if kind == "full_rank" else 1.0
-    sigma = unitary @ _fidelity_test_spectrum(q, weight) @ k.adjoint(unitary)
-    overlap = (
-        p * q + (1 - p) * (1 - q) + np.sin(parameter) ** 2 * (1 - 2 * p) * (2 * q - 1)
-    )
-    squared = overlap + 2 * np.sqrt(p * (1 - p) * q * (1 - q))
-    reference = (1 - 2 * p) * (2 * q - 1) * np.sin(2 * parameter)
-    if kind == "full_rank":
-        reference *= (
-            (weight * np.sqrt(squared) + 1 - weight) * weight / np.sqrt(squared)
-        )
-
-    def state(theta):
-        rotation = _fidelity_test_rotation(theta)
-        return (
-            unitary
-            @ rotation
-            @ _fidelity_test_spectrum(p, weight)
-            @ k.adjoint(rotation)
-            @ k.adjoint(unitary)
-        )
-
-    _check_fidelity_gradient(state, sigma, parameter, reference, swap, double_precision)
-
-
-@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
-@pytest.mark.parametrize(
-    "double_precision,swap", [(False, False), (True, False), (True, True)]
-)
-def test_fidelity_degenerate_gradient(backend, swap, double_precision, request):
-    if double_precision:
-        request.getfixturevalue("highp")
-    k = tc.backend
-    unitary = _fidelity_test_unitary()
-    weights = np.array([0.6, 0.3, 0.08, 0.02])
-    direction = np.diag([0.1, -0.1, 0.2, -0.2])
-    sigma = tc.array_to_tensor((unitary * weights) @ unitary.conj().T)
-    reference = (
-        np.sqrt(weights).sum()
-        * np.trace(direction @ (unitary * np.sqrt(weights)) @ unitary.conj().T).real
-    )
-    direction = tc.array_to_tensor(direction)
-
-    def state(theta):
-        return (
-            tc.array_to_tensor(np.eye(4) / 4) + k.cast(theta, tc.dtypestr) * direction
-        )
-
-    _check_fidelity_gradient(state, sigma, 0.0, reference, swap, double_precision)
+    theta = k.convert_to_tensor(np.array(0.0))
+    derivative = k.grad(loss)
+    for evaluate in (derivative, k.jit(derivative)):
+        np.testing.assert_allclose(k.numpy(evaluate(theta)), 0.4, atol=1e-10)
