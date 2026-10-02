@@ -159,8 +159,10 @@ class StabilizerTCircuit(AbstractCircuit):
             self, sample_detectors=sample_detectors, force_measure_all=force_measure_all
         )
         program = compile_program(prepared, mode="sequential", strategy=self.strategy)
+        self._key, subkey = jax.random.split(self._key)
+        seed = int(jax.random.randint(subkey, (), 0, 2**30))
         channel_sampler = ChannelSampler(
-            prepared.channel_probs, prepared.error_transform, seed=self._seed
+            prepared.channel_probs, prepared.error_transform, seed=seed
         )
         return (
             program,
@@ -232,8 +234,6 @@ class StabilizerTCircuit(AbstractCircuit):
         :return: Array of measurement samples with shape (shots, num_measurements).
         :rtype: jax.Array
         """
-        if seed is not None:
-            self._key = jax.random.key(seed)
         has_m = any(
             d.get("name", "").upper()
             in ["MEASURE", "M", "MR", "MRX", "MRY", "MRZ", "MX", "MY", "MZ", "MPP"]
@@ -246,6 +246,8 @@ class StabilizerTCircuit(AbstractCircuit):
                 _,
                 _,
             ) = self._compile(sample_detectors=False, force_measure_all=not has_m)
+        if seed is not None:
+            self._key = jax.random.key(seed)
         return self._sample_batches(
             shots,
             batch_size,
@@ -277,8 +279,6 @@ class StabilizerTCircuit(AbstractCircuit):
         :return: Array of samples or tuple of (detectors, observables) arrays.
         :rtype: Union[jax.Array, Tuple[jax.Array, jax.Array]]
         """
-        if seed is not None:
-            self._key = jax.random.key(seed)
         if self._compiled_program_detectors is None:
             (
                 self._compiled_program_detectors,
@@ -287,6 +287,8 @@ class StabilizerTCircuit(AbstractCircuit):
                 self._num_observables,
             ) = self._compile(sample_detectors=True)
 
+        if seed is not None:
+            self._key = jax.random.key(seed)
         samples = self._sample_batches(
             shots,
             batch_size,
@@ -339,8 +341,10 @@ class StabilizerTCircuit(AbstractCircuit):
             self._compiled_probs = compile_program(
                 prepared, mode="joint", strategy=self.strategy
             )
+            self._key, subkey = jax.random.split(self._key)
+            seed = int(jax.random.randint(subkey, (), 0, 2**30))
             self._channel_sampler_probs = ChannelSampler(
-                prepared.channel_probs, prepared.error_transform, seed=self._seed
+                prepared.channel_probs, prepared.error_transform, seed=seed
             )
 
         assert self._channel_sampler_probs is not None
@@ -526,12 +530,25 @@ class StabilizerTCircuit(AbstractCircuit):
             batches.append(samples)
         return jnp.concatenate(batches, axis=0)[:shots]
 
+    def _append_instruction(self, instruction: Dict[str, Any]) -> None:
+        self._qir.append(instruction)
+        self._compiled_program_measurements = None
+        self._channel_sampler_measurements = None
+        self._compiled_program_detectors = None
+        self._channel_sampler_detectors = None
+        self._num_detectors = 0
+        self._num_observables = 0
+        self._compiled_probs = None
+        self._channel_sampler_probs = None
+
     def apply(self, gate: Any, *index: int, **kwargs: Any) -> None:
         if hasattr(gate, "name"):
             name = gate.name.upper()
         else:
             name = ""
-        self._qir.append({"name": name, "index": list(index), "parameters": kwargs})
+        self._append_instruction(
+            {"name": name, "index": list(index), "parameters": kwargs}
+        )
 
     def apply_general_gate(
         self,
@@ -544,11 +561,11 @@ class StabilizerTCircuit(AbstractCircuit):
         ir_dict: Optional[Dict[str, Any]] = None,
     ) -> None:
         if ir_dict:
-            self._qir.append(ir_dict)
+            self._append_instruction(ir_dict)
         else:
             if name is None and hasattr(gate, "name"):
                 name = gate.name
-            self._qir.append(
+            self._append_instruction(
                 {"name": name.upper() if name else "", "index": list(index)}
             )
 
@@ -556,7 +573,7 @@ class StabilizerTCircuit(AbstractCircuit):
         if name.upper() in GATE_TABLE:
 
             def wrapper(*index: int, **kwargs: Any) -> None:
-                self._qir.append(
+                self._append_instruction(
                     {"name": name.upper(), "index": list(index), "parameters": kwargs}
                 )
 
@@ -566,60 +583,60 @@ class StabilizerTCircuit(AbstractCircuit):
         )
 
     def h(self, q: int) -> None:
-        self._qir.append({"name": "H", "index": [q]})
+        self._append_instruction({"name": "H", "index": [q]})
 
     def cnot(self, c: int, t: int) -> None:
-        self._qir.append({"name": "CNOT", "index": [c, t]})
+        self._append_instruction({"name": "CNOT", "index": [c, t]})
 
     def cx(self, c: int, t: int) -> None:
         self.cnot(c, t)
 
     def cz(self, c: int, t: int) -> None:
-        self._qir.append({"name": "CZ", "index": [c, t]})
+        self._append_instruction({"name": "CZ", "index": [c, t]})
 
     def x(self, q: int) -> None:
-        self._qir.append({"name": "X", "index": [q]})
+        self._append_instruction({"name": "X", "index": [q]})
 
     def y(self, q: int) -> None:
-        self._qir.append({"name": "Y", "index": [q]})
+        self._append_instruction({"name": "Y", "index": [q]})
 
     def z(self, q: int) -> None:
-        self._qir.append({"name": "Z", "index": [q]})
+        self._append_instruction({"name": "Z", "index": [q]})
 
     def s(self, q: int) -> None:
-        self._qir.append({"name": "S", "index": [q]})
+        self._append_instruction({"name": "S", "index": [q]})
 
     def sd(self, q: int) -> None:
-        self._qir.append({"name": "S_DAG", "index": [q]})
+        self._append_instruction({"name": "S_DAG", "index": [q]})
 
     def sdg(self, q: int) -> None:
         self.sd(q)
 
     def t(self, q: int) -> None:
-        self._qir.append({"name": "T", "index": [q]})
+        self._append_instruction({"name": "T", "index": [q]})
 
     def td(self, q: int) -> None:
-        self._qir.append({"name": "T_DAG", "index": [q]})
+        self._append_instruction({"name": "T_DAG", "index": [q]})
 
     def tdg(self, q: int) -> None:
         self.td(q)
 
     def swap(self, q1: int, q2: int) -> None:
-        self._qir.append({"name": "SWAP", "index": [q1, q2]})
+        self._append_instruction({"name": "SWAP", "index": [q1, q2]})
 
     def detector_instruction(  # type: ignore[override]
         self,
         lookback_indices: list[int],
         coords: Optional[list[float]] = None,
     ) -> None:
-        self._qir.append(
+        self._append_instruction(
             {"name": "DETECTOR", "index": lookback_indices, "coords": coords}
         )
 
     def observable_instruction(
         self, lookback_indices: list[int], observable_index: int = 0
     ) -> None:
-        self._qir.append(
+        self._append_instruction(
             {
                 "name": "OBSERVABLE_INCLUDE",
                 "index": lookback_indices,
@@ -628,16 +645,18 @@ class StabilizerTCircuit(AbstractCircuit):
         )
 
     def qubit_coords_instruction(self, qubit: int, coords: list[float]) -> None:
-        self._qir.append({"name": "QUBIT_COORDS", "index": [qubit], "coords": coords})
+        self._append_instruction(
+            {"name": "QUBIT_COORDS", "index": [qubit], "coords": coords}
+        )
 
     def reset_z(self, q: int, p: float = 0) -> None:
-        self._qir.append({"name": "RZ", "index": [q], "parameters": {"p": p}})
+        self._append_instruction({"name": "RZ", "index": [q], "parameters": {"p": p}})
 
     def reset_x(self, q: int) -> None:
-        self._qir.append({"name": "RX", "index": [q]})
+        self._append_instruction({"name": "RX", "index": [q]})
 
     def reset_y(self, q: int) -> None:
-        self._qir.append({"name": "RY", "index": [q]})
+        self._append_instruction({"name": "RY", "index": [q]})
 
     def r(self, q: int, p: float = 0) -> None:
         self.reset_z(q, p)
@@ -646,31 +665,37 @@ class StabilizerTCircuit(AbstractCircuit):
         self.reset_z(q)
 
     def tick_instruction(self) -> None:
-        self._qir.append({"name": "TICK"})
+        self._append_instruction({"name": "TICK"})
 
     def measure_instruction(self, q: int, p: float = 0) -> None:  # type: ignore[override]
-        self._qir.append({"name": "MEASURE", "index": [q], "p": p})
+        self._append_instruction({"name": "MEASURE", "index": [q], "p": p})
 
     def mr_instruction(self, q: int, p: float = 0) -> None:  # type: ignore[override]
-        self._qir.append({"name": "MR", "index": [q], "p": p})
+        self._append_instruction({"name": "MR", "index": [q], "p": p})
 
     def mrx_instruction(self, q: int, p: float = 0) -> None:
-        self._qir.append({"name": "MRX", "index": [q], "p": p})
+        self._append_instruction({"name": "MRX", "index": [q], "p": p})
 
     def mry_instruction(self, q: int, p: float = 0) -> None:
-        self._qir.append({"name": "MRY", "index": [q], "p": p})
+        self._append_instruction({"name": "MRY", "index": [q], "p": p})
 
     def mrz_instruction(self, q: int, p: float = 0) -> None:
-        self._qir.append({"name": "MRZ", "index": [q], "p": p})
+        self._append_instruction({"name": "MRZ", "index": [q], "p": p})
 
     def rx(self, q: int, theta: float = 0) -> None:
-        self._qir.append({"name": "R_X", "index": [q], "parameters": {"theta": theta}})
+        self._append_instruction(
+            {"name": "R_X", "index": [q], "parameters": {"theta": theta}}
+        )
 
     def ry(self, q: int, theta: float = 0) -> None:
-        self._qir.append({"name": "R_Y", "index": [q], "parameters": {"theta": theta}})
+        self._append_instruction(
+            {"name": "R_Y", "index": [q], "parameters": {"theta": theta}}
+        )
 
     def rz(self, q: int, theta: float = 0) -> None:
-        self._qir.append({"name": "R_Z", "index": [q], "parameters": {"theta": theta}})
+        self._append_instruction(
+            {"name": "R_Z", "index": [q], "parameters": {"theta": theta}}
+        )
 
     def depolarizing(
         self,
@@ -686,7 +711,7 @@ class StabilizerTCircuit(AbstractCircuit):
             px = px if px is not None else 0.0
             py = py if py is not None else 0.0
             pz = pz if pz is not None else 0.0
-        self._qir.append(
+        self._append_instruction(
             {
                 "name": "DEPOLARIZE1",
                 "index": [q],
@@ -695,7 +720,7 @@ class StabilizerTCircuit(AbstractCircuit):
         )
 
     def depolarizing2(self, q1: int, q2: int, p: float) -> None:
-        self._qir.append(
+        self._append_instruction(
             {"name": "DEPOLARIZE2", "index": [q1, q2], "parameters": {"p": p}}
         )
 
@@ -725,7 +750,7 @@ class StabilizerTCircuit(AbstractCircuit):
             px = px if px is not None else 0.0
             py = py if py is not None else 0.0
             pz = pz if pz is not None else 0.0
-        self._qir.append(
+        self._append_instruction(
             {
                 "name": "PAULI_CHANNEL_1",
                 "index": [q],
@@ -743,18 +768,25 @@ class StabilizerTCircuit(AbstractCircuit):
         self.pauli_instruction(q, px, py, pz)
 
     def x_error(self, q: int, p: float) -> None:
-        self._qir.append({"name": "X_ERROR", "index": [q], "parameters": {"p": p}})
+        self._append_instruction(
+            {"name": "X_ERROR", "index": [q], "parameters": {"p": p}}
+        )
 
     def y_error(self, q: int, p: float) -> None:
-        self._qir.append({"name": "Y_ERROR", "index": [q], "parameters": {"p": p}})
+        self._append_instruction(
+            {"name": "Y_ERROR", "index": [q], "parameters": {"p": p}}
+        )
 
     def z_error(self, q: int, p: float) -> None:
-        self._qir.append({"name": "Z_ERROR", "index": [q], "parameters": {"p": p}})
+        self._append_instruction(
+            {"name": "Z_ERROR", "index": [q], "parameters": {"p": p}}
+        )
 
     @classmethod
     def from_stim_circuit(cls, stim_circuit: Any) -> "StabilizerTCircuit":
         """
         Create a StabilizerTCircuit from a stim.Circuit object.
+        Preserve logical observable indices and inverted measurement outcomes.
 
         :param stim_circuit: The stim circuit to convert.
         :type stim_circuit: Any
@@ -768,7 +800,8 @@ class StabilizerTCircuit(AbstractCircuit):
             if name in ["QUBIT_COORDS", "SHIFT_COORDS", "I_ERROR"]:
                 continue
 
-            targets = [t.value for t in instruction.targets_copy()]
+            stim_targets = instruction.targets_copy()
+            targets = [t.value for t in stim_targets]
             args = instruction.gate_args_copy()
 
             if name == "I" and instruction.tag:
@@ -797,7 +830,11 @@ class StabilizerTCircuit(AbstractCircuit):
 
             if name == "OBSERVABLE_INCLUDE":
                 inst._qir.append(
-                    {"name": "OBSERVABLE_INCLUDE", "index": targets, "p": int(args[0])}
+                    {
+                        "name": "OBSERVABLE_INCLUDE",
+                        "index": targets,
+                        "observable_index": int(args[0]),
+                    }
                 )
                 continue
 
@@ -808,15 +845,16 @@ class StabilizerTCircuit(AbstractCircuit):
                 # Example: MPP X0*X1 Y2*Y3 -> [X0, combiner, X1, Y2, combiner, Y3] (2 measurements)
                 # Example: MPP X0 X1 -> [X0, X1] (2 separate measurements)
 
-                targets = instruction.targets_copy()
                 mpp_groups = []
                 current_group = []
+                current_invert = False
 
-                for i, t in enumerate(targets):
+                for i, t in enumerate(stim_targets):
                     if t.is_combiner:
                         # Combiner joins the previous and next Pauli into a product
                         continue
 
+                    current_invert ^= t.is_inverted_result_target
                     # Add Pauli to current group
                     if t.is_x_target:
                         current_group.append(("X", t.value))
@@ -829,18 +867,23 @@ class StabilizerTCircuit(AbstractCircuit):
 
                     # Check if next target is a combiner
                     # If not (or we're at the end), this group is complete
-                    if i + 1 >= len(targets) or not targets[i + 1].is_combiner:
+                    if (
+                        i + 1 >= len(stim_targets)
+                        or not stim_targets[i + 1].is_combiner
+                    ):
                         if current_group:
-                            mpp_groups.append(current_group)
+                            mpp_groups.append((current_group, current_invert))
                             current_group = []
+                            current_invert = False
 
                 # Each MPP group is a separate measurement
-                for paulis in mpp_groups:
+                for paulis, invert in mpp_groups:
                     inst._qir.append(
                         {
                             "name": "MPP",
                             "targets": paulis,
-                            "invert": False,
+                            "invert": invert,
+                            "p": args[0] if args else 0.0,
                         }
                     )
                 continue
@@ -903,6 +946,18 @@ class StabilizerTCircuit(AbstractCircuit):
                     if args:
                         qir_item["p"] = args[0]
 
+                if name in [
+                    "M",
+                    "MEASURE",
+                    "MZ",
+                    "MX",
+                    "MY",
+                    "MR",
+                    "MRX",
+                    "MRY",
+                    "MRZ",
+                ]:
+                    qir_item["invert"] = stim_targets[i].is_inverted_result_target
                 inst._qir.append(qir_item)
 
         return inst

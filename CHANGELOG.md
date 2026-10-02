@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- Compute fidelity reliably for positive semidefinite states and preserve first-order PSD square-root responses on fixed-rank paths.
+
+## v1.10.0
+
 ### Added
 
 - Add `tensorcircuit.tnalg`: fixed-shape JAX MPS TEBD, one-site TDVP, and one-site DMRG with dense and Abelian block-buffer PyTree states, pure tensor Pauli-string MPO builders, checkpoints, and legacy MPS interoperability.
@@ -14,7 +20,19 @@
 
 ### Fixed
 
-- Compute fidelity reliably for positive semidefinite states and preserve first-order PSD square-root responses on fixed-rank paths.
+- Match the target framework's complex gradient convention when wrapping functions between JAX and PyTorch or TensorFlow in either direction, and support noncontiguous PyTorch tensors when transferring to JAX or TensorFlow via DLPack.
+
+- Invalidate ZX probability and sampling caches when gates or instructions are added to a `StabilizerTCircuit`.
+
+- Preserve logical observable indices and inverted measurement results when importing Stim circuits into the ZX simulator, and apply measurement-reset readout noise only once. Measurement readout noise now flips only the recorded result instead of the post-measurement state, and `MPP(p)` keeps its readout noise.
+
+- Honor `AnalogCircuit(mps_inputs=...)` instead of overriding the supplied state with the default all-zero input; preserve explicit dense-input precedence.
+
+- Preserve DMRG ground-state response gradients at Lanczos breakdown using an implicit matrix-free derivative.
+
+- Key randomized-compiling candidates by concrete gate matrix and dtype to preserve equivalence for same-named gates with different parameters, and retain reusable entries in a bounded LRU cache.
+
+- Preserve circuit type and initial state in randomized compiling, validate Pauli insertions in execution order, and tighten candidate equivalence tolerance.
 
 - Return marginal outcome probabilities when measuring a subset of qubits in `U1Circuit`.
 

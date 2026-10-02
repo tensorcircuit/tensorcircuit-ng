@@ -1206,6 +1206,29 @@ def test_chebyshev_evol_ad_on_small_t(jaxb, highp, t):
     np.testing.assert_allclose(gradient, -2.0 * np.sin(2.0 * t), atol=1e-14, rtol=1e-11)
 
 
+def test_chebyshev_evol_ad_at_zero(jaxb):
+    backend = tc.backend
+    h = tc.gates.x().tensor
+    psi0 = backend.convert_to_tensor([1.0 + 0.0j, 0.0 + 0.0j])
+    y = tc.gates.y().tensor
+
+    def y_expectation(t):
+        psi = tc.timeevol.chebyshev_evol(h, psi0, t, (1.0, -1.0), 20)
+        return backend.real(backend.sum(backend.conj(psi) * backend.matvec(y, psi)))
+
+    def imaginary_time_amplitude(beta):
+        psi = tc.matrixfunc.exponential_action(
+            h, psi0, -beta, tc.matrixfunc.ChebyshevConfig(20, (-1.0, 1.0))
+        )
+        return backend.real(psi[1])
+
+    zero = backend.convert_to_tensor(0.0)
+    np.testing.assert_allclose(backend.jit(backend.grad(y_expectation))(zero), -2)
+    np.testing.assert_allclose(
+        backend.jit(backend.grad(imaginary_time_amplitude))(zero), -1
+    )
+
+
 def test_estimate_k():
     # Case 1: tau = 0
     # a = (1.0 - (-1.0)) / 2.0 = 1.0

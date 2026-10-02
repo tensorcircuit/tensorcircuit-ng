@@ -7,7 +7,43 @@ from functools import wraps
 import os
 import platform
 import re
+import sys
 import time
+import warnings
+
+
+class ExperimentalWarning(UserWarning):
+    """
+    Warning emitted when importing an experimental module, whose API may change
+    and which may be removed at any time without a deprecation period.
+    """
+
+
+def experimental_module_warning(name: str) -> None:
+    """
+    Warn that the module ``name`` is experimental, call it at the end of the
+    experimental package ``__init__.py``. The warning is attributed to the first
+    frame outside tensorcircuit and importlib, i.e. the user code triggering the import.
+
+    :param name: Full name of the experimental module.
+    :type name: str
+    """
+    frame = sys._getframe(1)  # pylint: disable=protected-access
+    while frame.f_back is not None and frame.f_globals.get("__name__", "").startswith(
+        ("tensorcircuit", "importlib", "_frozen_importlib")
+    ):
+        frame = frame.f_back
+    warnings.warn_explicit(
+        f"{name} is an experimental module: its API may change and the whole module "
+        "may be removed at any time without deprecation, and it is not guaranteed "
+        "to be bug-free. Use at your own risk. Silence this warning via "
+        "`warnings.filterwarnings('ignore', category=tc.utils.ExperimentalWarning)`.",
+        ExperimentalWarning,
+        frame.f_code.co_filename,
+        frame.f_lineno,
+        module=frame.f_globals.get("__name__"),
+        registry=frame.f_globals.setdefault("__warningregistry__", {}),
+    )
 
 
 def gpu_memory_share(flag: bool = True) -> None:

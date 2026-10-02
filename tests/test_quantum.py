@@ -416,6 +416,14 @@ def test_measurement_counts(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_measurement_counts_column_ket(backend):
+    c = tc.Circuit(1)
+    c.h(0)
+    probabilities = qu.measurement_counts(c.state(form="ket"), counts=None)
+    np.testing.assert_allclose(probabilities, [0.5, 0.5], atol=atol)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_extract_from_measure(backend):
     np.testing.assert_allclose(
         qu.spin_by_basis(2, 1), np.array([1, -1, 1, -1]), atol=atol

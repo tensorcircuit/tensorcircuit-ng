@@ -14,6 +14,9 @@ def lightcone_compile(
     Compile a SymbolCircuit to the causal cone induced by a final observable's
     qubit support.
 
+    Assumes all gates are unitary. Nonunitary gates outside the cone can change
+    the expectation value and are not supported.
+
     The compiled circuit retains the original SymPy symbols, so callers may
     pass the complete symbol-to-value binding dictionary to ``to_circuit``;
     bindings for removed gates are ignored.

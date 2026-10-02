@@ -2891,17 +2891,20 @@ def reduced_density_matrix(
     If both ``cut`` and one of the new arguments are given, the new argument
     takes precedence and ``cut`` is ignored (a ``UserWarning`` is emitted).
 
-    :param state: The quantum state in form of Tensor or QuOperator.
+    :param state: The normalized quantum state in form of Tensor or QuOperator.
     :type state: Union[Tensor, QuOperator]
     :param cut: legacy trace-out specification (int = ``list(range(cut))``,
         i.e. ``[0, cut)``; or an explicit site list). Prefer
         ``subsystem_to_keep``/``subsystems_to_trace_out``.
     :type cut: Union[int, List[int], Tuple[int, ...], None]
-    :param p: probability decoration, default is None.
+    :param p: Optional diagonal weights on the traced-out subsystem, applied
+        before the partial trace. Not supported for ``QuOperator`` inputs.
     :type p: Optional[Tensor]
     :return: The reduced density matrix.
     :rtype: Union[Tensor, QuOperator]
-    :param normalize: if True, returns a trace 1 density matrix. Otherwise, does not normalize.
+    :param normalize: If ``p`` is given, whether to renormalize the weighted
+        reduced state to trace one. With ``p=None`` and a normalized input,
+        this has no effect.
     :type normalize: bool
     :param dim: dimension of qudit system
     :type dim: int
@@ -3802,7 +3805,8 @@ def measurement_counts(
     if is_prob:
         pi = state / backend.sum(state)
     else:
-        if len(state.shape) == 2:
+        shape = backend.shape_tuple(state)
+        if len(shape) == 2 and shape[0] == shape[1]:
             state = state / backend.trace(state)
             pi = backend.abs(backend.diagonal(state))
         else:

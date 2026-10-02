@@ -28,6 +28,7 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 
 ## Where To Look First
 
+- Check for `AGENTS.local.md` in the repository root and read it if present, even though it is ignored by git.
 - Search before guessing file locations.
 - Treat `tests/test_*.py` as the source of truth for intended behavior.
 - Core library code lives in `tensorcircuit/`.
