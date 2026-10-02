@@ -105,13 +105,21 @@ msgstr "致力于稳定性和性能。 **长期支持** ，并经过广泛的研
 
 #: ../../source/index.rst:52
 msgid ""
-"Please cite our published `whitepaper <https://quantum-"
-"journal.org/papers/q-2023-02-02-912/>`_ when using TensorCircuit or "
-"TensorCircuit-NG in your research. The bibtex information is provided by "
-"``tc.cite()``."
+"Please cite both software papers when using TensorCircuit or "
+"TensorCircuit-NG in your research: `TensorCircuit: a Quantum Software "
+"Framework for the NISQ Era <https://quantum-journal.org/papers/"
+"q-2023-02-02-912/>`_ (Quantum 7, 912 (2023), DOI: "
+"10.22331/q-2023-02-02-912) and `TensorCircuit-NG: A Universal, "
+"Composable, and Scalable Platform for Quantum Computing and Quantum "
+"Simulation <https://arxiv.org/abs/2602.14167>`_ (arXiv:2602.14167, "
+"2026). BibTeX information is provided by ``tc.cite()``."
 msgstr ""
-"在研究中使用 TensorCircuit 或 TensorCircuit-NG 时，请引用我们已发表的 `白皮书 <https"
-"://quantum-journal.org/papers/q-2023-02-02-912/>`_。BibTeX 信息可通过 "
+"在研究中使用 TensorCircuit 或 TensorCircuit-NG 时，请同时引用这两篇软件论文："
+"`TensorCircuit: a Quantum Software Framework for the NISQ Era <https://quantum-"
+"journal.org/papers/q-2023-02-02-912/>`_（Quantum 7, 912 (2023), DOI: "
+"10.22331/q-2023-02-02-912）以及 `TensorCircuit-NG: A Universal, Composable, "
+"and Scalable Platform for Quantum Computing and Quantum Simulation "
+"<https://arxiv.org/abs/2602.14167>`_（arXiv:2602.14167, 2026）。BibTeX 信息可通过 "
 "``tc.cite()`` 获取。"
 
 #: ../../source/index.rst:55
@@ -407,4 +415,3 @@ msgstr "给仓库点亮 Star 以保持关注！⭐"
 
 #~ msgid "``docker pull``"
 #~ msgstr "``docker pull``"
-
