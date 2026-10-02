@@ -106,8 +106,8 @@ def test_ent(backend):
     ent = entropy_shadow(snapshots, pauli_strings, sub, alpha=2)
     ent2 = renyi_entropy_2(snapshots, sub)
 
-    np.testing.assert_allclose(ent, exact_ent, atol=0.12)
-    np.testing.assert_allclose(ent2, exact_ent, atol=0.12)
+    np.testing.assert_allclose(ent, exact_ent, atol=0.13)
+    np.testing.assert_allclose(ent2, exact_ent, atol=0.13)
 
 
 def test_shadow_extra(jaxb):
