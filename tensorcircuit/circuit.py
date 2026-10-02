@@ -184,6 +184,7 @@ class Circuit(BaseCircuit):
         self.coloring_nodes(new_nodes, flag="inputs")
         self._nodes = new_nodes + self._nodes[self._start_index :]
         self._start_index = len(new_nodes)
+        self.state_tensor = None
 
     # TODO(@refraction-ray): add noise support in IR
     # TODO(@refraction-ray): unify mid measure to basecircuit
@@ -226,6 +227,7 @@ class Circuit(BaseCircuit):
         self._front[index] = mg2.get_edge(0)
         self._nodes.append(mg1)
         self._nodes.append(mg2)
+        self.state_tensor = None
         r = backend.convert_to_tensor(keep)
         r = backend.cast(r, "int32")
         return r
@@ -873,7 +875,9 @@ class Circuit(BaseCircuit):
         :param reuse: If True, then the wavefunction tensor is cached for further expectation evaluation,
             defaults to be true.
         :type reuse: bool, optional
-        :param enable_lightcone: whether enable light cone simplification, defaults to False
+        :param enable_lightcone: whether to simplify the light cone. This requires
+            default product inputs and unitary gates; otherwise the result may be
+            incorrect. Defaults to False.
         :type enable_lightcone: bool, optional
         :param noise_conf: Noise Configuration, defaults to None
         :type noise_conf: Optional[NoiseConf], optional

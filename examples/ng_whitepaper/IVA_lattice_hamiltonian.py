@@ -116,7 +116,7 @@ def demo_ad_optimization():
     nx, ny = 2, 4
 
     # Physical parameters for Rydberg Hamiltonian
-    # H = Omega/2 * sum(X) - Delta/2 * sum(Z) + sum(V_ij * n_i * n_j)
+    # H = Omega/2 * sum(X) - Delta * sum(n) + sum(V_ij * n_i * n_j)
     omega = 1.0
     delta = 1.0
     c6 = 10.0  # Interaction strength coefficient V_ij = C6 / R^6
@@ -139,7 +139,7 @@ def demo_ad_optimization():
 
         # 2. Generate Rydberg Hamiltonian using the library function
         ham_sparse = tc.templates.hamiltonians.rydberg_hamiltonian(
-            lattice, omega=omega, delta=delta, c6=c6
+            lattice, omega=omega, delta=delta, c6=c6, include_identity=True
         )
 
         # 3. Convert to dense for eigendecomposition
@@ -151,7 +151,8 @@ def demo_ad_optimization():
 
     # Wrapper to optimize towards a target energy value
     # This creates a well-defined minimum for 'a' regularizing the problem.
-    target_energy = -20.0
+    # The target must lie within the reachable range of E0(a), about (-9.65, -3).
+    target_energy = -7.0
 
     def get_loss_val(a):
         H_mat = get_rydberg_hamiltonian_dense(a)

@@ -793,6 +793,36 @@ def test_dlpack(backend):
     np.testing.assert_allclose(a, a1, atol=1e-5)
 
 
+@pytest.mark.parametrize("target", ["jax", "tensorflow", "pytorch"])
+@pytest.mark.parametrize(
+    "layout",
+    ["contiguous", "offset", "real", "imag", "slice", "transpose", "broadcast"],
+)
+def test_torch_dlpack_layout(torchb, target, layout):
+    values = np.arange(6, dtype=np.float32)
+    tensor = tc.backend.convert_to_tensor(values + 1j * (values + 1))
+    views = {
+        "contiguous": tensor,
+        "offset": tensor[1:],
+        "real": tensor.real,
+        "imag": tensor.imag,
+        "slice": tensor[::2],
+        "transpose": tensor.reshape(2, 3).T,
+        "broadcast": tensor[:1].expand(4),
+    }
+    source = views[layout]
+    expected = tc.backend.numpy(source).copy()
+    target_backend = tc.get_backend(target)
+    result = tc.interfaces.general_args_to_backend(
+        source, target_backend=target_backend, enable_dlpack=True
+    )
+    np.testing.assert_array_equal(target_backend.numpy(result), expected)
+    np.testing.assert_array_equal(tc.backend.numpy(source), expected)
+    assert target_backend.dtype(result) == tc.backend.dtype(source)
+    if target == "pytorch":
+        assert result.data_ptr() == source.data_ptr()
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_reshaped_basic(backend):
     a1 = tc.backend.convert_to_tensor(np.arange(27))
@@ -1562,16 +1592,20 @@ def test_hessian(backend):
     param = tc.backend.ones([2, 2])
     assert list(hf(param).shape) == [2, 2, 2, 2]  # possible tf retracing?
 
-    g = tc.templates.graphs.Line1D(5)
-
     def circuit_f(param):
-        c = tc.Circuit(5)
-        c = tc.templates.blocks.example_block(c, param, nlayers=1)
-        return tc.templates.measurements.heisenberg_measurements(c, g)
+        c = tc.Circuit(2)
+        c.rx(0, theta=param[0])
+        c.ry(1, theta=param[1])
+        c.cnot(0, 1)
+        return tc.backend.real(c.expectation_ps(z=[1]))
 
-    param = tc.backend.ones([10])
-    hf = tc.backend.hessian(circuit_f)
-    print(hf(param))  # still upto a conjugate for jax and tf backend.
+    param = tc.backend.convert_to_tensor([1.0, 0.7])
+    diagonal = -np.cos(1.0) * np.cos(0.7)
+    offdiagonal = np.sin(1.0) * np.sin(0.7)
+    expected = [[diagonal, offdiagonal], [offdiagonal, diagonal]]
+    np.testing.assert_allclose(
+        tc.backend.hessian(circuit_f)(param), expected, atol=1e-5
+    )
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])

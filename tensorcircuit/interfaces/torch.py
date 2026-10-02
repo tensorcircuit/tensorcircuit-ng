@@ -20,6 +20,9 @@ def torch_interface(
     """
     Wrap a quantum function on different ML backend with a pytorch interface.
 
+    Complex gradients follow PyTorch's conjugate Wirtinger convention,
+    including when the wrapped function uses JAX.
+
     :Example:
 
     .. code-block:: python
@@ -58,7 +61,12 @@ def torch_interface(
     import torch
 
     def vjp_fun(x: Tensor, v: Tensor) -> Tuple[Tensor, Tensor]:
-        return backend.vjp(fun, x, v)
+        if backend.name == "jax":
+            v = backend.tree_map(backend.conj, v)
+        y, g = backend.vjp(fun, x, v)
+        if backend.name == "jax":
+            g = backend.tree_map(backend.conj, g)
+        return y, g
 
     if jit is True:
         fun = backend.jit(fun)
@@ -153,8 +161,8 @@ def torch_interface_kws(
     :type f: Callable[..., Any]
     :param jit: whether to JIT compile the wrapped function, defaults to True
     :type jit: bool, optional
-    :param enable_dlpack: whether to use dlpack for zero-copy tensor transfer
-        between backends, defaults to False
+    :param enable_dlpack: whether to use DLPack for tensor transfer between
+        backends, avoiding copies when layouts are compatible; defaults to False
     :type enable_dlpack: bool, optional
     :return: a wrapper that dispatches to a cached ``torch_interface`` instance
         keyed by the keyword-argument tuple
