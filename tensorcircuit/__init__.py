@@ -14,7 +14,7 @@ software papers:
 Use ``tensorcircuit.cite()`` for BibTeX or APS-formatted references.
 """
 
-__version__ = "1.9.1"
+__version__ = "1.10.0"
 __author__ = "TensorCircuit-NG Authors"
 __creator__ = "refraction-ray"
 
