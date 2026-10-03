@@ -40,9 +40,9 @@ class DMCircuit(BaseCircuit):
     ) -> None:
         """
         The density matrix simulator based on tensornetwork engine.
-        Do not use this class with d!=2 directly
+        Supports unitary evolution with a uniform local dimension ``dim >= 2``.
 
-        :param nqubits: Number of qubits
+        :param nqubits: Number of sites (qubits when ``dim=2``).
         :type nqubits: int
         :param empty: if True, nothing initialized, only for internal use, defaults to False
         :type empty: bool, optional
@@ -60,6 +60,8 @@ class DMCircuit(BaseCircuit):
         :param split: dict if two qubit gate is ready for split, including parameters for at least one of
             ``max_singular_values`` and ``max_truncation_err``.
         :type split: Optional[Dict[str, Any]]
+        :param dim: Local Hilbert space dimension, defaults to 2.
+        :type dim: Optional[int]
         """
         self._d = 2 if dim is None else dim
         if not empty:
@@ -71,7 +73,7 @@ class DMCircuit(BaseCircuit):
                 and (tensors is None)
             ):
                 # Get nodes on the interior
-                self._nodes = self.all_zero_nodes(nqubits)
+                self._nodes = self.all_zero_nodes(nqubits, dim=self._d)
                 self._front = [n.get_edge(0) for n in self._nodes]
                 self.coloring_nodes(self._nodes)
                 self._double_nodes_front()
@@ -400,10 +402,15 @@ class DMCircuit2(DMCircuit):
     ) -> None:
         # incompatible API for now
         kraus = [
-            (
-                k
-                if isinstance(k, tn.Node)
-                else Gate(backend.cast(backend.convert_to_tensor(k), dtypestr))
+            Gate(
+                backend.cast(
+                    (
+                        k.tensor
+                        if isinstance(k, tn.Node)
+                        else backend.convert_to_tensor(k)
+                    ),
+                    dtypestr,
+                )
             )
             for k in kraus
         ]

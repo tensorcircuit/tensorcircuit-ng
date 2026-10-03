@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Support qudit density-matrix simulation with `tc.DMCircuit(n, dim=d)` for `d > 2`, including explicit single- and multi-site `unitary` gates and Kraus channels via `apply_general_kraus`.
+
 ### Fixed
 
 - Compute fidelity reliably for positive semidefinite states and preserve first-order matrix square-root responses on fixed-rank paths. `sqrtmh` now clips negative eigenvalues regardless of the retained `psd` argument.
