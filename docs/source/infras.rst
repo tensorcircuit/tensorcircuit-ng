@@ -40,7 +40,9 @@ Overview of Modules
 
 **MPS and MPO Utiliy Modules:**
 
-- :py:mod:`tensorcircuit.quantum`: Provide definition and classes for Matrix Product States as well as Matrix Product Operators, we also include various quantum physics and quantum information quantities in this module.
+- :py:mod:`tensorcircuit.quantum`: Provide Matrix Product State and Matrix Product Operator classes, conversions, Hamiltonian construction, and measurement utilities. Quantum information quantities remain available here for compatibility.
+
+- :py:mod:`tensorcircuit.quantities`: Compute quantum information quantities such as entropy, reduced density matrices, fidelity, and mutual information.
 
 **MPS Based Simulator Modules:**
 

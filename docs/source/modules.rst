@@ -23,6 +23,7 @@ tensorcircuit
     ./api/mpscircuit.rst
     ./api/noisemodel.rst
     ./api/pauliprop.rst
+    ./api/quantities.rst
     ./api/quantum.rst
     ./api/quditcircuit.rst
     ./api/quditgates.rst

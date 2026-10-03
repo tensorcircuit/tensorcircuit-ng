@@ -255,7 +255,9 @@ pip install tensorcircuit-nightly
 
   - **Machine learning interface/layer/model** abstraction in both TensorFlow, PyTorch and Jax for both numerical simulation and real QPU experiments.
 
-  - Support time evolution simulation with **exact, ODE, Krylov, Trotter, Chebyshev solvers**.
+  - Support time evolution simulation with **exact, ODE, Krylov, Trotter, Chebyshev, and fixed-schedule Taylor methods**.
+
+  - Support matrix-free spectral calculations using **stochastic Lanczos quadrature (SLQ)** and **kernel polynomial methods (KPM)** for density of states, thermodynamics, and response functions.
 
   - Support **symmetry-enforced circuit simulation** with `U1Circuit` for charge conservation.
 
@@ -269,7 +271,7 @@ pip install tensorcircuit-nightly
 
   - Observables are supported in measurement, sparse matrix, dense matrix and MPO format.
 
-  - Super fast weighted sum Pauli string Hamiltonian matrix generation.
+  - Construct weighted Pauli-string Hamiltonians as **sparse matrices or matrix-free operators** for expectation and iterative spectral calculations.
 
   - Reusable common circuit/measurement/problem templates and patterns.
 
