@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://github.com/tensorcircuit/tensorcircuit-ng">
-    <img width=90% src="docs/source/statics/logong.png">
+    <img width=90% src="https://raw.githubusercontent.com/tensorcircuit/tensorcircuit-ng/master/docs/source/statics/logong.png">
   </a>
 </p>
 
@@ -26,12 +26,12 @@
     <img src="https://img.shields.io/pypi/v/tensorcircuit-ng.svg?logo=pypi"/>
   </a>
   <!-- License -->
-  <a href="./LICENSE">
+  <a href="https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/LICENSE">
     <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?logo=apache"/>
   </a>
 </p>
 
-<p align="center"> English | <a href="README_cn.md"> 简体中文 </a></p>
+<p align="center"> English | <a href="https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/README_cn.md"> 简体中文 </a></p>
 
 TensorCircuit-NG is the [next-generation open-source high-performance quantum software framework](https://tensorcircuit-ng.readthedocs.io/en/latest/platform/index.html) and an [AI-native quantum research runtime](https://tensorcircuit-ng.readthedocs.io/en/latest/agent_landing/index.html) for turning research questions into executable, optimized, and validated quantum experiments.
 
@@ -46,9 +46,9 @@ TensorCircuit-NG is the technical successor to TensorCircuit, led and maintained
 
 ## Getting Started
 
-Please begin with [Quick Start](/docs/source/quickstart.rst) in the [full documentation](https://tensorcircuit-ng.readthedocs.io/).
+Please begin with [Quick Start](https://tensorcircuit-ng.readthedocs.io/en/latest/quickstart.html) in the [full documentation](https://tensorcircuit-ng.readthedocs.io/).
 
-For more information on software usage, sota algorithm implementation and engineer paradigm demonstration, please refer to 200+ [example scripts](/examples) and 40+ [tutorial notebooks](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials). API docstrings and test cases in [tests](/tests) are also informative. One can also refer to AI-native docs for tensorcircuit-ng: [Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng), [Google Code Wiki](https://codewiki.google/github.com/tensorcircuit/tensorcircuit-ng), and [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
+For more information on software usage, sota algorithm implementation and engineer paradigm demonstration, please refer to 200+ [example scripts](https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples) and 40+ [tutorial notebooks](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials). API docstrings and test cases in [tests](https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/tests) are also informative. One can also refer to AI-native docs for tensorcircuit-ng: [Devin Deepwiki](https://deepwiki.com/tensorcircuit/tensorcircuit-ng), [Google Code Wiki](https://codewiki.google/github.com/tensorcircuit/tensorcircuit-ng), and [Context7 MCP](https://context7.com/tensorcircuit/tensorcircuit-ng).
 
 For beginners, please refer to [quantum computing lectures with TC-NG](https://github.com/sxzgroup/qc_lecture) to learn both quantum computing basics and representative usage of TensorCircuit-NG.
 
@@ -59,19 +59,19 @@ TensorCircuit-NG is designed to give AI agents the context, rules, skills, and e
 In the [ORBIT-Q benchmark](https://sxzgroup.github.io/ORBIT-Q/), TensorCircuit-NG leads the evaluated quantum software frameworks on agent solve success and artifact runtime.
 
 1.  **Rich Context:** The 100+ scripts in `examples/` and extensive test cases in `tests/` provide essential references that significantly reduce AI hallucinations.
-2.  **Built-in Rules:** We provide a dedicated [AGENTS.md](/AGENTS.md) file. It serves as the "handbook" (i.e. `CLAUDE.md`) for AI agents, defining coding standards and best practices to ensure the generated code is idiomatic.
+2.  **Built-in Rules:** We provide a dedicated [AGENTS.md](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/AGENTS.md) file. It serves as the "handbook" (i.e. `CLAUDE.md`) for AI agents, defining coding standards and best practices to ensure the generated code is idiomatic.
 3.  **Specialized Agentic Skills:** The `.agents/skills/` directory contains workflows to guide AI assistants on complex, multi-step tasks.
 <details>
 <summary> List of built-in agentic skills (click for details) </summary>
 
-  *   [`arxiv-reproduce`](/.agents/skills/arxiv-reproduce/SKILL.md): Translates published methods into standardized, runnable, and validated research artifacts.
-  *   [`performance-optimize`](/.agents/skills/performance-optimize/README.md): Scientific execution and memory optimization workflow (JAX scanning, vectorized parallelism, etc.).
-  *   [`tc-rosetta`](/.agents/skills/tc-rosetta/README.md): End-to-end framework translation (from Qiskit, PennyLane, etc.) with intrinsic mathematical intent rewriting.
-  *   [`tutorial-crafter`](/.agents/skills/tutorial-crafter/README.md): Transforms raw TC-NG scripts into comprehensive, narrative-driven Markdown or/and HTML educational tutorials.
-  *   [`demo-generator`](/.agents/skills/demo-generator/README.md): Transforms TC-NG scripts into interactive, sleek, and high-performance Streamlit GUI applications.
-  *   [`code-reviewer`](/.agents/skills/code-reviewer/README.md): Autonomously reviews and refactors TC-NG code for mathematical correctness, JAX-native performance, and engineering rigor.
-  *   [`sanity-checker`](/.agents/skills/sanity-checker/README.md): Systematic audit and refactoring to reduce technical debt, improve abstractions, and ensure codebase health.
-  *   [`meta-explorer`](/.agents/skills/meta-explorer/README.md): High-intensity autonomous research agent for circuit architecture and optimization strategy discovery (VQE, QML, QAOA, etc.).
+  *   [`arxiv-reproduce`](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/.agents/skills/arxiv-reproduce/SKILL.md): Translates published methods into standardized, runnable, and validated research artifacts.
+  *   [`performance-optimize`](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/.agents/skills/performance-optimize/README.md): Scientific execution and memory optimization workflow (JAX scanning, vectorized parallelism, etc.).
+  *   [`tc-rosetta`](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/.agents/skills/tc-rosetta/README.md): End-to-end framework translation (from Qiskit, PennyLane, etc.) with intrinsic mathematical intent rewriting.
+  *   [`tutorial-crafter`](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/.agents/skills/tutorial-crafter/README.md): Transforms raw TC-NG scripts into comprehensive, narrative-driven Markdown or/and HTML educational tutorials.
+  *   [`demo-generator`](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/.agents/skills/demo-generator/README.md): Transforms TC-NG scripts into interactive, sleek, and high-performance Streamlit GUI applications.
+  *   [`code-reviewer`](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/.agents/skills/code-reviewer/README.md): Autonomously reviews and refactors TC-NG code for mathematical correctness, JAX-native performance, and engineering rigor.
+  *   [`sanity-checker`](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/.agents/skills/sanity-checker/README.md): Systematic audit and refactoring to reduce technical debt, improve abstractions, and ensure codebase health.
+  *   [`meta-explorer`](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/.agents/skills/meta-explorer/README.md): High-intensity autonomous research agent for circuit architecture and optimization strategy discovery (VQE, QML, QAOA, etc.).
 
 </details>
 
@@ -293,7 +293,7 @@ pip install tensorcircuit-nightly
 
 ### Status
 
-This project is created and maintained by [Shi-Xin Zhang](https://github.com/refraction-ray) with current core authors [Shi-Xin Zhang](https://github.com/refraction-ray) and [Yu-Qin Chen](https://github.com/yutuer21) (see the [brief history](/HISTORY.md) of TensorCircuit and TensorCircuit-NG). We also thank [contributions](https://github.com/tensorcircuit/tensorcircuit-ng/graphs/contributors) from the open source community.
+This project is created and maintained by [Shi-Xin Zhang](https://github.com/refraction-ray) with current core authors [Shi-Xin Zhang](https://github.com/refraction-ray) and [Yu-Qin Chen](https://github.com/yutuer21) (see the [brief history](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/HISTORY.md) of TensorCircuit and TensorCircuit-NG). We also thank [contributions](https://github.com/tensorcircuit/tensorcircuit-ng/graphs/contributors) from the open source community.
 
 ### Citation
 
@@ -309,7 +309,7 @@ Research works citing TensorCircuit-NG can be highlighted in [Research and Appli
 
 ### Guidelines
 
-For contribution guidelines and notes, see [CONTRIBUTING](/CONTRIBUTING.md).
+For contribution guidelines and notes, see [CONTRIBUTING](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/CONTRIBUTING.md).
 
 We welcome [issues](https://github.com/tensorcircuit/tensorcircuit-ng/issues), [PRs](https://github.com/tensorcircuit/tensorcircuit-ng/pulls), and [discussions](https://github.com/tensorcircuit/tensorcircuit-ng/discussions) from everyone, and these are all hosted on GitHub.
 
@@ -397,7 +397,7 @@ TensorCircuit-NG is open source, released under the Apache License, Version 2.0.
 
 The [Executable Research Hub](https://tensorcircuit-ng.readthedocs.io/en/latest/reproduce/index.html) is the literature-to-artifact layer of TensorCircuit-NG's agentic research stack. Each paper is packaged as a runnable, metadata-rich, and inspectable research artifact with its implementation, target figure, backend, scaling strategy, and validation context.
 
-Adding one paper is the most approachable way to make a first contribution: pick a paper, follow the conventions in [examples/reproduce_papers](/examples/reproduce_papers), and open a pull request.
+Adding one paper is the most approachable way to make a first contribution: pick a paper, follow the conventions in [examples/reproduce_papers](https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers), and open a pull request.
 
 ## Research and Applications
 
@@ -405,25 +405,25 @@ TensorCircuit-NG is a powerful framework for driving research and applications i
 
 ### DQAS
 
-For the application of Differentiable Quantum Architecture Search, see [applications](/tensorcircuit/applications).
+For the application of Differentiable Quantum Architecture Search, see [applications](https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/tensorcircuit/applications).
 
 Reference paper: https://arxiv.org/abs/2010.08561 (published in QST).
 
 ### VQNHE
 
-For the application of Variational Quantum-Neural Hybrid Eigensolver, see [applications](/tensorcircuit/applications).
+For the application of Variational Quantum-Neural Hybrid Eigensolver, see [applications](https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/tensorcircuit/applications).
 
 Reference paper: https://arxiv.org/abs/2106.05105 (published in PRL) and https://arxiv.org/abs/2112.10380 (published in AQT).
 
 ### VQEX-MBL
 
-For the application of VQEX on MBL phase identification, see the [tutorial](/docs/source/tutorials/vqex_mbl.ipynb).
+For the application of VQEX on MBL phase identification, see the [tutorial](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/docs/source/tutorials/vqex_mbl.ipynb).
 
 Reference paper: https://arxiv.org/abs/2111.13719 (published in PRB).
 
 ### Stark-DTC
 
-For the numerical demosntration of discrete time crystal enabled by Stark many-body localization, see the Floquet simulation [demo](/examples/timeevolution_trotter.py).
+For the numerical demosntration of discrete time crystal enabled by Stark many-body localization, see the Floquet simulation [demo](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/timeevolution_trotter.py).
 
 Reference paper: https://arxiv.org/abs/2208.02866 (published in PRL).
 
@@ -451,13 +451,13 @@ Reference paper: https://arxiv.org/abs/2303.14877 (published in Communications P
 
 ### NN-VQA
 
-For the setup and simulation code of neural network encoded variational quantum eigensolver, see the [demo](/docs/source/tutorials/nnvqe.ipynb).
+For the setup and simulation code of neural network encoded variational quantum eigensolver, see the [demo](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/docs/source/tutorials/nnvqe.ipynb).
 
 Reference paper: https://arxiv.org/abs/2308.01068 (published in PRApplied).
 
 ### FLDC
 
-Absence of barren plateaus in finite local-depth circuits with long-range entanglement, see the [demo](/examples/vqe_toric_code.py).
+Absence of barren plateaus in finite local-depth circuits with long-range entanglement, see the [demo](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/vqe_toric_code.py).
 
 Reference paper: https://arxiv.org/abs/2311.01393 (published in PRL).
 
@@ -583,7 +583,7 @@ If you want to highlight your research work or projects here, feel free to add b
 Our users, developers, and partners:
 
 <p align="center">
-    <img width=90% src="docs/source/statics/user_logo.png">
+    <img width=90% src="https://raw.githubusercontent.com/tensorcircuit/tensorcircuit-ng/master/docs/source/statics/user_logo.png">
 </p>
 
-*For detailed copyright, disclaimers, and origin information, please refer to the [NOTICE](NOTICE) file.*
+*For detailed copyright, disclaimers, and origin information, please refer to the [NOTICE](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/NOTICE) file.*

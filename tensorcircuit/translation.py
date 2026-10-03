@@ -34,13 +34,6 @@ except ImportError:
         "Please first ``pip install -U sympy symengine`` to enable `qiskit2tc` in translation module"
     )
 
-try:
-    import cirq
-except ImportError:
-    logger.info(
-        "Please first ``pip install -U cirq`` to enable related functionality in translation module"
-    )
-
 from . import gates
 from .circuit import Circuit
 from .cons import backend, rdtypestr
@@ -142,6 +135,7 @@ def qir2cirq(
     :return: A ``cirq.Circuit`` object.
     :rtype: Any
     """
+    import cirq
 
     class CustomizedCirqGate(cirq.Gate):  # type: ignore
         def __init__(self, uMatrix: Any, name: str, nqubit: int):
@@ -1033,6 +1027,7 @@ def cirq2tc(
     :return: the converted tensorcircuit circuit
     :rtype: Any
     """
+    import cirq
 
     if circuit_constructor is not None:
         Circ = circuit_constructor

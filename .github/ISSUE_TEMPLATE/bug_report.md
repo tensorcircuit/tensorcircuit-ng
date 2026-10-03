@@ -8,7 +8,7 @@ assignees: ""
 
 ## Issue Description
 
-<--! Insert a short description of the bug here, along with what you expected the behavior to be. -->
+<!-- Insert a short description of the bug here, along with what you expected the behavior to be. -->
 
 ## How to Reproduce
 
@@ -24,6 +24,6 @@ assignees: ""
 
 ## Environment Context
 
-<--! Please report your OS version, Python environment and version, TensorCircuit version and necessary dependent package (NumPy, TensorFlow, Jax, Jaxlib, PyTorch) version here. -->
+<!-- Please report your OS version, Python environment and version, TensorCircuit version and necessary dependent package (NumPy, TensorFlow, Jax, Jaxlib, PyTorch) version here. -->
 
 Output of `tc.about()` and `tc.__version__`.

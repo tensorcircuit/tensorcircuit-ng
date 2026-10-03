@@ -37,28 +37,29 @@ To keep the repository organized, please strictly follow this folder structure:
 Please provide the content for the `meta.yaml` file that will be placed in the folder. 
 
 **Contributors/AI:** Copy and fill this block directly into the `meta.yaml` file.
+Choose `tags` and `tc_features` from `examples/reproduce_papers/taxonomy.yaml`. The gallery requires every field shown below and a git-tracked image under `outputs/`.
 
 ```yaml
-title: ""
-arxiv_id: ""
-url: ""
-year: 
-authors: 
-  - ""
-  - ""
+title: "[Paper title]"
+arxiv_id: "[arXiv ID]"
+url: "https://arxiv.org/abs/[arXiv ID]"
+year: [YYYY]
+authors:
+  - "[Author name]"
 tags:
-  - ""
-  - ""
+  - "[tag from taxonomy.yaml]"
+tc_features:
+  - "[feature from taxonomy.yaml used in the script]"
+backend: "[jax | tensorflow | pytorch | numpy | cupy]"
 hardware_requirements:
-  gpu: False
-  min_memory: ""
-description: ""
+  gpu: false
+  min_memory: "[estimated memory]"
+card_title: "[Figure and short result, at most 60 characters]"
+summary: "[One sentence describing the result, at most 140 characters]"
+description: "[Reproduction strategy, scaling choices, and any simplifications]"
 outputs:
   - target: "Figure 3(a)"
-    path: result.png
-    script: "main.py"
-  - target: "Figure 3(b)"
-    path: comparison.csv
+    path: outputs/result.png
     script: "main.py"
 ```
 

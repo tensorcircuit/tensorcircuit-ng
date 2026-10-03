@@ -82,6 +82,9 @@ See the example below:
 
 .. code-block:: python
 
+    import jax
+    import tensorcircuit as tc
+
     K = tc.set_backend("jax")
     @K.jit
     def sam(key):

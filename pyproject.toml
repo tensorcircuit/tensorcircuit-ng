@@ -8,6 +8,7 @@ description = "High performance unified quantum computing framework for the NISQ
 readme = "README.md"
 license =  "Apache-2.0"
 requires-python = ">=3.9"
+keywords = ["quantum computing", "quantum simulation", "tensor networks", "automatic differentiation", "variational quantum algorithms"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
@@ -31,6 +32,10 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/tensorcircuit/tensorcircuit-ng"
 Repository = "https://github.com/tensorcircuit/tensorcircuit-ng"
+Documentation = "https://tensorcircuit-ng.readthedocs.io/"
+Examples = "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples"
+"Research Hub" = "https://tensorcircuit-ng.readthedocs.io/en/latest/reproduce/index.html"
+Issues = "https://github.com/tensorcircuit/tensorcircuit-ng/issues"
 
 [project.optional-dependencies]
 tensorflow = ["tensorflow"]
