@@ -46,6 +46,7 @@ Use this file for algebraic contraction invariants, cotengra/OMECO path search a
 ## Benchmark interpretation and tuning
 
 - If cotengra imports fail because `autoray.get_namespace` is unavailable, diagnose the cotengra/autoray dependency mismatch before TensorCircuit contraction code. Process-pool failures during hyper-optimization can also be execution-environment artifacts rather than search bugs.
+- Compare supported public workflows on the same scientific task; verify outputs, precision, and measured phases, and keep benchmark scripts minimal and reproducible. Describe unsupported capabilities directly instead of replacing them with extensive custom code.
 - Use `parallel="auto"` for realistic cotengra end-to-end baselines, but report search separately from compile and steady execution.
 - Judge paths with measured execution, peak memory, FLOPs, total write, and maximum intermediate width. FLOPs alone is insufficient: write can dominate steady runtime, while width and allocator behavior often dominate forward peak memory.
 - Tune OMECO `rw_weight` empirically. Zero can produce acceptable FLOPs but poor write/width and OOM-prone execution; excessive write penalties can increase width or FLOPs. Rank repeated candidates by actual post-compile runtime and memory, not a single stochastic metric result.

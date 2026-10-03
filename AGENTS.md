@@ -48,9 +48,15 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 - Backend-agnostic, autodiff-friendly, and JIT-friendly patterns are preferred throughout the codebase.
 - When a sandbox needs writable cache or config directories for local validation, set those in the shell command or test harness rather than hardcoding them into repo files.
 
+## Review and Performance Rules
+
+- When reviewing a fix, identify a realistic affected use case and explain the behavior before and after the change. Compare the proposal with the smallest correct alternative, including runtime, memory, API, and maintenance costs where relevant.
+- For a fix that changes a common or performance-sensitive path, compare the old and new implementations on a representative case that is correct in both versions. Check memory as well as runtime when sparse data, batching, or materialization may change.
+
 ## Testing Rules
 
 - Use fixtures from `tests/conftest.py`.
+- Add regression cases to the existing test module for the affected feature. Keep each case tied to a distinct behavior or failure; avoid duplicate coverage and oversized test inputs. Create a new test module only for a genuinely new test area.
 - In tests, never call `tc.set_backend()` or `tc.set_dtype()` directly.
 - Use backend fixtures such as `npb`, `tfb`, `jaxb`, `torchb`, and `cpb` instead of manual backend switching.
 - Use the `highp` fixture when a test requires `complex128` precision.
