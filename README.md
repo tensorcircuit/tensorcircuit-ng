@@ -39,7 +39,7 @@ TensorCircuit-NG is built upon tensornetwork engines, supporting for automatic d
 
 TensorCircuit-NG is built on top of modern machine learning frameworks: Jax, TensorFlow, and PyTorch. It is specifically suitable for large-scale simulations of quantum-classical hybrid paradigm and variational quantum algorithms in ideal (`Circuit`), noisy (`DMCircuit`), Clifford (`StabilizerCircuit`), qudit (`QuditCircuit`), approximate (`MPSCircuit`), analog (`AnalogCircuit`), symmetric (`U1Circuit`) and fermionic (`FGSCircuit`) cases. It also supports quantum hardware access and provides CPU/GPU/QPU hybrid deployment solutions.
 
-TensorCircuit-NG is the technical successor to TensorCircuit, led and maintained by the original TensorCircuit development team. This distribution has served as the primary home for the framework's evolution, addressing critical maintenance gaps (numpy > 2.0, qiskit > 1.0) and feature enhancements. As a fully compatible [drop-in replacement](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng), TensorCircuit-NG delivers next-gen capabilities—including stabilizer/qudit/analog/symmetric circuit simulation and multi-node multi-GPU distributed simulation.
+TensorCircuit-NG is the technical successor to TensorCircuit, led and maintained by the original TensorCircuit development team. As a fully compatible [drop-in replacement](https://tensorcircuit-ng.readthedocs.io/en/latest/faq.html#what-is-the-relation-between-tensorcircuit-and-tensorcircuit-ng), TensorCircuit-NG delivers next-gen capabilities—including stabilizer/qudit/analog/symmetric circuit simulation and multi-node multi-GPU distributed simulation.
 
 > **New companion project:** We recently launched [TenCirPauli](https://github.com/tensorcircuit/TenCirPauli), a Python-first, Rust-native companion that brings Pauli-native propagation and fixed-particle-number U(1) circuit execution to TensorCircuit-NG.
 
@@ -399,7 +399,7 @@ Adding one paper is the most approachable way to make a first contribution: pick
 
 ## Research and Applications
 
-TensorCircuit-NG is a powerful framework for driving research and applications in quantum computing. Below are examples of published academic works (190+ in total) and open-source projects that utilize TensorCircuit and TensorCircuit-NG.
+TensorCircuit-NG is a powerful framework for driving research and applications in quantum computing. Below are examples of published academic works (200+ in total) and open-source projects that utilize TensorCircuit and TensorCircuit-NG.
 
 ### DQAS
 
