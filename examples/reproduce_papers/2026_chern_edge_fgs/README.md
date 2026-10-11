@@ -2,7 +2,7 @@
 
 This example reproduces **published Figure 2(a)** of Yantao Wu and Jannes Nys, [*Real-Time Dynamics in Two Dimensions with Tensor Network States via Time-Dependent Variational Monte Carlo Method*](https://journals.aps.org/prxquantum/abstract/10.1103/tggc-8fjx), PRX Quantum **7**, 033035 (2026), published 19 August 2026 ([arXiv:2512.06768](https://arxiv.org/abs/2512.06768)).
 
-`main.py` reproduces the original 12 x 12 **FGS benchmark** using `tc.FGSSimulator`. The [fermionic PEPS-tVMC example](PEPS.md) now follows the corner quench on **6 x 6 sites with 24 particles and D=4**, with independent VMC preparation and evolution to t=8. The real-time evolution and independent measurements use cached exact single-layer PEPS contractions. PEPS and FGS share the same 0–0.04 color scale. The residual row and saved signed arrays expose the remaining error.
+`main.py` reproduces the original 12 x 12 **FGS benchmark** using `tc.FGSSimulator`. The [fermionic PEPS-tVMC example](PEPS.md) now follows the corner quench on **6 x 6 sites with 24 particles and D=4**, with independent VMC preparation and evolution to t=8. The real-time evolution and independent measurements use cached exact single-layer PEPS contractions. PEPS and FGS share the same 0–0.04 color scale. Signed arrays and quantitative accuracy measurements are included.
 
 ![6 x 6 PEPS-tVMC compared with the exact Gaussian solution](outputs/6x6/peps_6x6.png)
 

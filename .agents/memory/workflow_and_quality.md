@@ -36,5 +36,3 @@ Use this file for public-feature integration, examples, tests, and validation de
 - Wrapper smoke tests should assert behavior against the underlying backend API; never suppress adapter failures with `except Exception: pass`.
 - Match algorithms, precision, and settings before comparing external libraries, and verify numerical outputs before interpreting timings.
 - Sanity-check automation should favor high-confidence, repo-aware rules: scan git-tracked Python, separate test bootstrap conventions from library import hygiene, and reserve subjective duplication or comment-quality judgments for review.
-
-- Check individual documentation-build results before trusting a shell success footer: `set -e` does not abort for a failed non-final command in an `&&` list. In `check_all.sh`, a failed first Sphinx build can therefore be followed by the final success message. After adding missing Pandoc or notebook-kernel dependencies, verify both Sphinx exit codes directly.

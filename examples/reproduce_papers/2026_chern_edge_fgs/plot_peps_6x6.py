@@ -22,48 +22,33 @@ def plot_measurements(trajectory, measurements, output_dir):
     np.testing.assert_allclose(density.sum(axis=1), 24.0, atol=1e-10)
     np.testing.assert_allclose(exact.sum(axis=1), 24.0, atol=1e-10)
     difference = density - exact
-    error_limit = max(0.004, float(np.max(np.abs(difference))))
-    fig, axes = plt.subplots(3, len(times), figsize=(10.2, 7.5), squeeze=False)
+    fig, axes = plt.subplots(2, len(times), figsize=(10.2, 5.2), squeeze=False)
     fig.subplots_adjust(
-        left=0.10, right=0.86, bottom=0.07, top=0.89, hspace=0.18, wspace=0.12
+        left=0.10, right=0.86, bottom=0.08, top=0.82, hspace=0.16, wspace=0.12
     )
     for column, physical_time in enumerate(times):
-        for row, values in enumerate(
-            (exact - background, density - background, difference)
-        ):
+        for row, values in enumerate((exact - background, density - background)):
             ax = axes[row, column]
-            image = ax.imshow(
+            ax.imshow(
                 values[column].reshape(6, 6),
                 origin="lower",
                 interpolation="nearest",
-                cmap="RdBu_r" if row == 2 else "viridis_r",
-                vmin=-error_limit if row == 2 else 0.0,
-                vmax=error_limit if row == 2 else 0.04,
+                cmap="viridis_r",
+                vmin=0.0,
+                vmax=0.04,
             )
             ax.set_xticks([0, 5])
             ax.set_yticks([0, 5])
             ax.tick_params(labelsize=8, length=2)
             if row == 0:
                 ax.set_title(f"t = {physical_time:g}", fontsize=12)
-            if row == 2:
-                ax.set_xlabel(
-                    f"RMSE {np.sqrt(np.mean(difference[column]**2)):.4f}", fontsize=9
-                )
             if column == 0:
-                ax.set_ylabel(
-                    ("Exact (FGS)", "PEPS-tVMC", "PEPS − exact")[row], fontsize=11
-                )
-        if column == 0:
-            density_image = axes[0, 0].images[0]
-            error_image = image
+                ax.set_ylabel(("Exact (FGS)", "PEPS-tVMC")[row], fontsize=11)
     fig.colorbar(
-        density_image,
-        cax=fig.add_axes([0.885, 0.38, 0.018, 0.49]),
+        axes[0, 0].images[0],
+        cax=fig.add_axes([0.885, 0.08, 0.018, 0.74]),
         label="Density excess δn",
         extend="both",
-    )
-    fig.colorbar(
-        error_image, cax=fig.add_axes([0.885, 0.09, 0.018, 0.20]), label="Density error"
     )
     fig.suptitle(
         "6 × 6 corner quench · 24 fermions · D = 4\nIndependent PEPS measurements; shared 0–0.04 color scale",

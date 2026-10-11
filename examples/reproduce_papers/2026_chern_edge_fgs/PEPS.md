@@ -103,7 +103,7 @@ Fidelity is estimated independently as `|mean(r)|² / mean(|r|²)`. The Gaussian
 
 Delete-block jackknife errors quantify independent measurement noise. They do not include preparation error, boundary truncation, ansatz bias, or accumulated stochastic integration error. Effective sample size and maximum normalized weight are saved to expose importance-sampling problems. A small sampled SR residual alone is not an accuracy certificate.
 
-The PEPS and FGS maps share the paper's fixed **0 to 0.04** `viridis_r` color scale. Negative density excess and peaks above 0.04 saturate on this display; the saved arrays remain signed and unmodified. A separate residual row shows the density difference without subtracting any sampling-noise estimate.
+The PEPS and FGS maps share the paper's fixed **0 to 0.04** `viridis_r` color scale. Negative density excess and peaks above 0.04 saturate on this display; the saved arrays remain signed and unmodified.
 
 ## Recorded 6 x 6 accuracy
 

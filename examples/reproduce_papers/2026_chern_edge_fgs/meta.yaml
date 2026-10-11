@@ -34,7 +34,7 @@ description: >-
   proposals and exact single-layer PEPS amplitudes give raw self-normalized
   importance estimates of the PEPS density, with jackknife errors and
   effective sample sizes. Both density rows use viridis_r over 0..0.04;
-  signed arrays and a separate error row are retained. TensorCircuit
+  signed arrays are retained. TensorCircuit
   contractors, boundary-MPS contractions, backend transformations and
   TenCirPauli fermion operators are reused. Matrix-free CG and a thin-gauge
   dense reference are checked independently. Recorded settings, convergence
