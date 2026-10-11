@@ -234,7 +234,7 @@
     "title": "Real-Time Dynamics in Two Dimensions with Tensor Network States via Time-Dependent Variational Monte Carlo Method",
     "card_title": "Figure 2 · 6 x 6 PEPS versus exact dynamics",
     "summary": "Independent PEPS-tVMC and Gaussian densities share one color scale for a 6 x 6 corner quench.",
-    "description": "Reproduces published Figure 2(a) of PRX Quantum 7, 033035 (2026), DOI 10.1103/tggc-8fjx, with FGSSimulator on the original 12 x 12 open Hofstadter lattice. The main PEPS comparison scales the Figure 2(b,c) method to 6 x 6 sites, 24 particles and D=4, with independent imaginary-time VMC preparation and real-time SR/RK4 evolution to t=8 using cached exact single-layer PEPS contractions. The Gaussian solution supplies no training loss or parameter updates. Independent Gaussian Born proposals and exact single-layer PEPS amplitudes give raw self-normalized importance estimates of the PEPS density, with jackknife errors and effective sample sizes. Both density rows use viridis_r over 0..0.04; signed arrays are retained. TensorCircuit contractors, boundary-MPS contractions, backend transformations and TenCirPauli fermion operators are reused. Matrix-free CG and a thin-gauge dense reference are checked independently. Recorded settings, convergence comparisons, checkpoints and hardware measurements are documented in PEPS.md. The original paper's 12 x 12 PEPS accuracy and performance are not claimed. A 3 x 3 CPU demonstration remains available. Numerical comparisons use independent sector and Gaussian solutions, not author density arrays.",
+    "description": "Scales the Figure 2(b,c) method of PRX Quantum 7, 033035 (2026), DOI 10.1103/tggc-8fjx, to 6 x 6 open Hofstadter sites, 24 particles and D=4. The script prepares a PEPS from random tensors using independent imaginary-time VMC, then evolves it to t=8 with SR/RK4. OMECO plans exact single-layer contractions once per topology. Centering and scalar regularization handle gauge nulls implicitly; a matrix-free CG alternative avoids the dense Fisher metric. Gaussian Born proposals and exactly contracted PEPS amplitudes supply independent raw density and fidelity estimates, with jackknife uncertainty. The Gaussian state supplies no training loss or parameter update. Both density rows use the fixed 0..0.04 scale; signed arrays are retained. The submitted main.py generates summary.npz and result.png from scratch. Independent sector, derivative, sampling and integration checks are in verify.py. This reduced-size demonstration does not establish the original 12 x 12 PEPS accuracy or performance, and exact contraction does not remove finite-D, preparation or stochastic-integration errors.",
     "authors": [
       "Yantao Wu",
       "Jannes Nys"
@@ -265,27 +265,15 @@
     "figures": [
       {
         "target": "Figure 2(b,c) method: 6 x 6 PEPS-tVMC versus exact dynamics",
-        "source": "outputs/6x6/peps_6x6.png",
-        "figure": "figures/2026_chern_edge_fgs__peps_6x6.webp",
-        "thumb": "thumbs/2026_chern_edge_fgs__peps_6x6.webp",
-        "script": "plot_peps_6x6.py"
-      },
-      {
-        "target": "Figure 2(a): exact chiral edge-density propagation",
         "source": "outputs/result.png",
         "figure": "figures/2026_chern_edge_fgs__result.webp",
         "thumb": "thumbs/2026_chern_edge_fgs__result.webp",
         "script": "main.py"
-      },
-      {
-        "target": "Figure 2(b,c) method: small-system fermionic PEPS-tVMC",
-        "source": "outputs/peps_result.png",
-        "figure": "figures/2026_chern_edge_fgs__peps_result.webp",
-        "thumb": "thumbs/2026_chern_edge_fgs__peps_result.webp",
-        "script": "run_peps.py"
       }
     ],
-    "artifacts": [],
+    "artifacts": [
+      "outputs/summary.npz"
+    ],
     "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2026_chern_edge_fgs"
   },
   {

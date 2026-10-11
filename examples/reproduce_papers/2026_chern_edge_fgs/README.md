@@ -1,61 +1,38 @@
-# Chern-insulator dynamics with FGS and fermionic PEPS-tVMC
+# Fermionic PEPS-tVMC
 
-This example reproduces **published Figure 2(a)** of Yantao Wu and Jannes Nys, [*Real-Time Dynamics in Two Dimensions with Tensor Network States via Time-Dependent Variational Monte Carlo Method*](https://journals.aps.org/prxquantum/abstract/10.1103/tggc-8fjx), PRX Quantum **7**, 033035 (2026), published 19 August 2026 ([arXiv:2512.06768](https://arxiv.org/abs/2512.06768)).
+A scaled reproduction of Figure 2(b,c) in **Yantao Wu and Jannes Nys, “Real-Time Dynamics in Two Dimensions with Tensor Network States via Time-Dependent Variational Monte Carlo Method”**, [arXiv:2512.06768](https://arxiv.org/abs/2512.06768), [PRX Quantum 7, 033035 (2026), DOI: 10.1103/tggc-8fjx](https://doi.org/10.1103/tggc-8fjx).
 
-`main.py` reproduces the original 12 x 12 **FGS benchmark** using `tc.FGSSimulator`. The [fermionic PEPS-tVMC example](PEPS.md) now follows the corner quench on **6 x 6 sites with 24 particles and D=4**, with independent VMC preparation and evolution to t=8. The real-time evolution and independent measurements use cached exact single-layer PEPS contractions. PEPS and FGS share the same 0–0.04 color scale. Signed arrays and quantitative accuracy measurements are included.
+The example uses a **6 × 6 open Hofstadter lattice, 24 fermions and D=4**, evolved to t=8. The paper uses 12 × 12 sites and reaches t=12; this example does not claim that original-size PEPS calculation.
 
-![6 x 6 PEPS-tVMC compared with the exact Gaussian solution](outputs/6x6/peps_6x6.png)
+## Run
 
-See [PEPS.md](PEPS.md) for the preparation checkpoint, numerical settings, independent uncertainties, solver comparisons and reproduction commands. This is a scaled method reproduction of Figure 2(b,c); it does not reproduce the paper's original 12 x 12 PEPS trajectory or performance. `run_peps.py` retains the small 3 x 3 CPU demonstration.
-
-## Run the FGS benchmark
-
-Use an environment containing TensorCircuit-NG, JAX with CPU support, NumPy, SciPy, and Matplotlib. From the repository root:
+Use an environment with TensorCircuit-NG, JAX, NumPy, Matplotlib, TenCirPauli and OMECO; verification also uses SciPy. From the repository root:
 
 ```bash
-PYTHONPATH=. python examples/reproduce_papers/2026_chern_edge_fgs/main.py
-PYTHONPATH=. python examples/reproduce_papers/2026_chern_edge_fgs/validate.py
+example=examples/reproduce_papers/2026_chern_edge_fgs
+CUDA_VISIBLE_DEVICES=0,1,2,3 PYTHONPATH=. python "$example/main.py"
+PYTHONPATH=. python "$example/main.py" --plot-only
+PYTHONPATH=. python "$example/verify.py" --output "$example/outputs"
 ```
 
-Both scripts use JAX and `complex128`. Their default output directory is relative to the script, so an installed checkout can also run them from another working directory. `--output-dir <directory>` overrides that location; pass the same location to both scripts.
+Select the visible devices for the available machine. Independent chains are shared across them; their count must be divisible by the device count. The default calculation targets GPUs. `--output <directory>` selects another output directory; otherwise paths are relative to the script.
 
-The outputs are `result.png`, `densities.npz` (times, densities, the reference density, and signed density deviations), and `results.json`. `validate.py` checks the results with NumPy assertions and prints a success message; it exits with an assertion failure if a numerical check fails.
+The default run took **21 min 18 s on four NVIDIA A800 GPUs**, from process launch through the saved data and figure, including compilation, VMC preparation, evolution and all four independent measurements.
 
-![Reproduced Figure 2(a)](outputs/result.png)
+`main.py` generates both `outputs/summary.npz` and `outputs/result.png`. It starts from seeded random D=2 tensors, performs 100 imaginary-time VMC updates, enlarges the bond to D=4, then performs 100 coarse and 60 refinement updates. All preparation steps use dt=0.05. Real-time evolution uses 40 RK4 steps with dt=0.2, 10,240 chains and one Metropolis sweep per stage. A sweep proposes 36 uniformly selected occupied/empty site swaps, accepted by the PEPS Born weight. No external checkpoint or Gaussian-state fit is required.
 
-## Model and conventions
+Each displayed frame uses 4,194,304 independent Gaussian Born proposals, weighted by its own exactly contracted PEPS amplitude. The raw self-normalized estimate, jackknife uncertainty, infidelity and effective sample size are saved in `summary.npz`. `--plot-only` redraws that file without resimulation.
 
-The lattice is the original **12 x 12** open square with **96 particles**, unit hopping, and flux magnitude $2\pi/3$. With $x$ increasing rightward and $y$ upward, site $(x,y)$ has index $12y+x$. The physical Hamiltonian is
+All four density-excess peak positions match the exact solution. At t=8, the density RMSE is 0.000853 and the maximum site error is 0.00210; the RMS measurement standard error is about 0.00022.
 
-$$
-\widehat H_0=-\sum_{x,y}\left(c^\dagger_{x,y}c_{x+1,y}
-+e^{-i2\pi x/3}c^\dagger_{x,y}c_{x,y+1}+\mathrm{H.c.}\right),
-$$
+## Conventions and scope
 
-where only bonds inside the square are included. The initial state is the 96-particle ground state of $\widehat H_0-n_{0,11}$. At $t=0$ the corner potential is removed. The plotted observable is $\delta n_i(t)=\langle n_i(t)\rangle-\langle n_i\rangle_{\mathrm{gs}}$, where the reference is the **96-particle ground state of $\widehat H_0$**. The negative Peierls exponent follows the **published** Sec. IV A; arXiv v2 instead prints a positive exponent.
+- Sites are ordered i=y×6+x, with y increasing upward. Vertical hopping has phase exp(-2πix/3); the upper-left pinning potential is -1 during preparation and removed for real time.
+- Particle number is fixed by occupation-conserving sampling. PEPS tensor parity and physical/virtual swap signs follow [arXiv:2506.20106](https://arxiv.org/abs/2506.20106). Arithmetic is complex128.
+- OMECO searches once per topology. The resulting exact single-layer path is reused for sampled states, connected states and derivatives, without enumerating the Hilbert space.
+- Centered SR has exact gauge-null directions. Positive scalar regularization handles them without an explicit gauge decomposition or projector. The default dense solver stores the covariance; `--solver cg` instead uses matrix-free Fisher products with O(NP) storage and checks the true regularized residual. Dense SR is intended for this 6 × 6 calculation; exact contraction and CG storage alone do not establish 12 × 12 performance.
+- Both rows use the same density-excess color scale, 0–0.04. Values outside it saturate visually; saved arrays remain signed and unmodified. Exact contraction does not eliminate preparation, finite-D or stochastic-integration errors.
 
-Three FGS conventions matter:
+`verify.py` retains independent charge-sector Hamiltonians, explicit fermionic swap sums, finite-difference derivatives, dense/CG comparisons, Born-distribution checks, Gaussian sampling checks and comparison of RK4 with exact matrix-exponential evolution.
 
-1. `hopping` and `chemical_potential` produce $h_{\mathrm{FGS}}=\tfrac12\operatorname{diag}(h,-h^T)$ for $\widehat H=c^\dagger h c$, up to a constant. Physical time $t$ therefore requires `sim.evol_hamiltonian(2 * t * h_fgs)`.
-2. `get_cmatrix()` returns $C=\langle(c,c^\dagger)(c^\dagger,c)\rangle$. Its lower-right block is $\langle c_i^\dagger c_j\rangle$; its diagonal gives the particle density.
-3. `fixed_number_alpha` diagonalizes the single-particle initial Hamiltonian and explicitly fills its lowest 96 orbitals. If $U_o$ and $U_e$ contain occupied and empty eigenvectors, respectively, it supplies $\alpha=\operatorname{diag}(U_e,U_o^*)$ to `FGSSimulator`. This rectangular block matrix has shape $288\times144$ and satisfies $C=\alpha\alpha^\dagger$.
-
-The simulation evolves this Gaussian representation with `tc.backend.jit`. It never constructs a $2^{144}$-component state vector. Each requested time is evaluated directly from the same initial state by a matrix exponential, without a time-step approximation. NumPy and SciPy are used for file/plot handling and the independent validation; the FGS workflow uses `tc.backend`.
-
-## Validation and comparison
-
-`validate.py` independently assembles a $144\times144$ single-particle Hamiltonian, fills 96 orbitals with SciPy, and evolves $\rho(t)=e^{-iht}\rho(0)e^{iht}$. It compares **all entries** of the Nambu correlation matrix, the reference density, and the saved plotted arrays. It also checks the oriented plaquette phase, particle number, energy, Hermiticity, and pure-state projector identity $C^2=C$.
-
-A separate four-mode check constructs fermionic operators in Fock space, finds the fixed-number ground state, and evolves a `tc.Circuit`. Its complete one-body correlations test complex hopping and basis conventions. An analytic two-mode $\sin^2(t)$ oscillation checks the physical time factor explicitly.
-
-In the recorded CPU run, the full-size correlation difference from SciPy was $1.42\times10^{-14}$, particle-number error $2.84\times10^{-14}$, energy drift $8.53\times10^{-14}$, and projector error $1.67\times10^{-15}$. The four-mode Fock-space comparison differed by $1.11\times10^{-15}$.
-
-At $t=0,4,8,12$, the peak positions (zero-based site coordinates) are $(0,11)$, $(5,11)$, $(11,11)$, and $(11,6)$: along the upper edge to the right, then down the right edge, matching the published figure's propagation pattern. The original system size, filling, pinning strength, and times are retained.
-
-The figure deliberately uses the paper's common **0 to 0.04** color range. Negative deviations and peaks exceeding 0.04 saturate on this display; `densities.npz` preserves them without clipping. In particular, the initial corner excess is approximately 0.14038, with compensating negative density elsewhere and zero net excess particle number. Axis labels and the color-bar placement differ from the manuscript, and its site markers for panel (c) are omitted.
-
-The [author's cited public data directory](https://github.com/yantaow/open_data/tree/main/wu2025real-time) contains linear-solver comparison data, with no Figure 2 density arrays found at the time of reproduction. Agreement with the manuscript is therefore a **visual comparison**; the numerical errors above compare independent calculations, not unpublished author arrays.
-
-The final four-core CPU run took about 8 seconds for calculation including JIT compilation, about 16 seconds including process startup and plotting, and about 0.51 GiB peak resident memory. Timing is environment dependent. The recorded environment used Python 3.12.3, TensorCircuit-NG 1.9.1, JAX/JAXlib 0.9.1, NumPy 2.4.3, SciPy 1.17.1, and Matplotlib 3.10.8.
-
-Both example scripts passed Black and the repository's Pylint rules. The existing `tests/test_fgs.py` suite passed all 41 tests in the separate test environment. Pylint passes from both the repository root and the example directory under the repository's unchanged configuration. The gallery taxonomy adds `fermionic-gaussian-state` because it previously had no feature identifying `tc.FGSSimulator`.
+![6 × 6 PEPS and exact density](outputs/result.png)

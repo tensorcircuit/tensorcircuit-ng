@@ -120,25 +120,9 @@ def precompute_L_envs(mps_new, mps_prev, grid_row, L_env_init):
 # =====================================================================
 
 
-def equilibrated_qr(matrix):
-    """
-    Balance column scales for QR, then restore them in the right factor.
-
-    Padded boundary bonds can produce nearly null columns. Equilibration avoids
-    underflow in batched GPU QR without truncating these columns.
-    """
-    K = tc.backend
-    scales = K.max(K.abs(matrix), axis=0)
-    scales = K.where(scales > 0, scales, 1.0)
-    q, r = K.qr(matrix / scales[None, :])
-    return q, r * scales[None, :]
-
-
-def sweep_right(mps_new, mps_prev, grid_row, L_env_init, R_envs, return_envs=False):
+def sweep_right(mps_new, mps_prev, grid_row, L_env_init, R_envs):
     """
     Update MPS by sweeping from left to right.
-
-    With the static flag return_envs, also return each site's left environment.
     """
     chi_max = mps_new.shape[1]
     D_down = grid_row.shape[2]
@@ -151,34 +135,29 @@ def sweep_right(mps_new, mps_prev, grid_row, L_env_init, R_envs, return_envs=Fal
         E_mat = E.reshape(chi_max * D_down, chi_max)
 
         # Use tc.backend.qr as plain jnp.linalg.qr fails AD for complex matrices (NaN gradients)
-        Q, R_mat = equilibrated_qr(E_mat)
+        Q, R_mat = tc.backend.qr(E_mat)
         Q_node = Q.reshape(chi_max, D_down, chi_max)
 
         L_env_next = update_L(L_env_curr, Q_node, prev_node, grid_node)
 
-        return L_env_next, (Q_node, R_mat, L_env_curr)
+        return L_env_next, (Q_node, R_mat)
 
     inputs = (R_envs, mps_prev, grid_row)
     init_carry = L_env_init
 
-    _, (Q_nodes_stack, R_mat_stack, L_envs) = jax.lax.scan(
-        scan_step, init_carry, inputs
-    )
+    _, (Q_nodes_stack, R_mat_stack) = jax.lax.scan(scan_step, init_carry, inputs)
 
     # Right boundary handling: absorb residual R_mat back into the last node.
     last_Q = Q_nodes_stack[-1]
     last_R = R_mat_stack[-1]
     last_node = jnp.tensordot(last_Q, last_R, axes=[[2], [0]])
 
-    result = Q_nodes_stack.at[-1].set(last_node)
-    return (result, L_envs) if return_envs else result
+    return Q_nodes_stack.at[-1].set(last_node)
 
 
-def sweep_left(mps_new, mps_prev, grid_row, L_envs, R_env_init, return_envs=False):
+def sweep_left(mps_new, mps_prev, grid_row, L_envs, R_env_init):
     """
     Update MPS by sweeping from right to left.
-
-    With the static flag return_envs, also return each site's right environment.
     """
     chi_max = mps_new.shape[1]
     D_down = grid_row.shape[2]
@@ -191,18 +170,18 @@ def sweep_left(mps_new, mps_prev, grid_row, L_envs, R_env_init, return_envs=Fals
 
         # LQ decomposition via QR on transpose (stabilized tc.backend)
         E_mat = E.reshape(chi_max, D_down * chi_max)
-        Q, R_mat = equilibrated_qr(E_mat.T)
+        Q, R_mat = tc.backend.qr(E_mat.T)
         L_mat = R_mat.T
         Q_node = (Q.T).reshape(chi_max, D_down, chi_max)
 
         R_env_next = update_R(R_env_curr, Q_node, prev_node, grid_node)
 
-        return R_env_next, (Q_node, L_mat, R_env_curr)
+        return R_env_next, (Q_node, L_mat)
 
     inputs = (L_envs, mps_prev, grid_row)
     init_carry = R_env_init
 
-    _, (Q_nodes_stack, L_mat_stack, R_envs) = jax.lax.scan(
+    _, (Q_nodes_stack, L_mat_stack) = jax.lax.scan(
         scan_step, init_carry, inputs, reverse=True
     )
 
@@ -211,8 +190,7 @@ def sweep_left(mps_new, mps_prev, grid_row, L_envs, R_env_init, return_envs=Fals
     first_L = L_mat_stack[0]
     first_node = jnp.tensordot(first_L, first_Q, axes=[[1], [0]])
 
-    result = Q_nodes_stack.at[0].set(first_node)
-    return (result, R_envs) if return_envs else result
+    return Q_nodes_stack.at[0].set(first_node)
 
 
 # =====================================================================
@@ -231,7 +209,7 @@ def right_orthogonalize(mps):
         L_mat_prev = carry
         node_updated = jnp.tensordot(node, L_mat_prev, axes=[[2], [0]])
         mat = node_updated.reshape(chi, D * chi)
-        Q, R = equilibrated_qr(mat.T)
+        Q, R = tc.backend.qr(mat.T)
         L_mat = R.T
         Q_mat = Q.T
         Q_node = Q_mat.reshape(chi, D, chi)
@@ -272,16 +250,12 @@ def apply_grid_row_dmrg(mps_prev, grid_row, chi_max, key, num_sweeps=2):
     L_env_init = L_env_init.at[0, 0, 0].set(1.0)
     R_env_init = R_env_init.at[0, 0, 0].set(1.0)
 
-    R_envs = precompute_R_envs(mps_new, mps_prev, grid_row, R_env_init)
     for _ in range(num_sweeps):
-        # Sweep carries already contain the environments for the reverse sweep.
-        # The absorbed boundary factor lies outside every retained environment.
-        mps_new, L_envs = sweep_right(
-            mps_new, mps_prev, grid_row, L_env_init, R_envs, return_envs=True
-        )
-        mps_new, R_envs = sweep_left(
-            mps_new, mps_prev, grid_row, L_envs, R_env_init, return_envs=True
-        )
+        R_envs = precompute_R_envs(mps_new, mps_prev, grid_row, R_env_init)
+        mps_new = sweep_right(mps_new, mps_prev, grid_row, L_env_init, R_envs)
+
+        L_envs = precompute_L_envs(mps_new, mps_prev, grid_row, L_env_init)
+        mps_new = sweep_left(mps_new, mps_prev, grid_row, L_envs, R_env_init)
 
     # After sweep_left, the MPS is canonicalized to the first node.
     # We extract the complex 'weight' (scale + phase) using the maximum-amplitude element.
