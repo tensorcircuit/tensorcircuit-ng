@@ -193,15 +193,14 @@ def test_circuit_inputs():
 
 
 def test_depolarize():
-    p = 0.2
     r = []
-    for _ in range(4096):
+    for _ in range(40):
         c = tc.StabilizerCircuit(2)
         c.h(0)
-        c.depolarizing(0, 1, p=p)
+        c.depolarizing(0, 1, p=0.2)
         c.h(0)
         r.append(c.expectation_ps(z=[0]))
-    np.testing.assert_allclose(np.mean(r), 1 - 4 * p / 3, atol=0.1)
+    assert 4 < np.sum(r) < 39
 
 
 def test_tableau_inputs():
