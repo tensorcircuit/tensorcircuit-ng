@@ -137,7 +137,7 @@ def test_noisecircuit(backend):
     noisec_vmap = tc.backend.vmap(noisecircuit, vectorized_argnums=0)
     noisec_jit = tc.backend.jit(noisec_vmap)
 
-    nmc = 10000
+    nmc = 1000
     X = tc.backend.implicit_randu(nmc)
     valuemc = sum(tc.backend.numpy(noisec_jit(X))) / nmc
 

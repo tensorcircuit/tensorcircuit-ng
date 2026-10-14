@@ -1519,7 +1519,7 @@ def _exponential_coefficients_from_bounds(
             )
 
         result = backend.cond(
-            backend.imag(value) == 0.0,
+            (backend.imag(value) == 0.0) & (backend.real(value) != 0.0),
             real_coefficients,
             complex_coefficients,
         )

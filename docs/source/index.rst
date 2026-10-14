@@ -49,7 +49,7 @@ It is designed for researchers and engineers who demand **Speed, Flexibility, an
 
 
 .. important::
-   Please cite our published `whitepaper <https://quantum-journal.org/papers/q-2023-02-02-912/>`_ when using TensorCircuit or TensorCircuit-NG in your research. The bibtex information is provided by ``tc.cite()``.
+   Please cite both software papers when using TensorCircuit or TensorCircuit-NG in your research: `TensorCircuit: a Quantum Software Framework for the NISQ Era <https://quantum-journal.org/papers/q-2023-02-02-912/>`_ (Quantum 7, 912 (2023), DOI: 10.22331/q-2023-02-02-912) and `TensorCircuit-NG: A Universal, Composable, and Scalable Platform for Quantum Computing and Quantum Simulation <https://arxiv.org/abs/2602.14167>`_ (arXiv:2602.14167, 2026). BibTeX information is provided by ``tc.cite()``.
 
 .. note::
    TensorCircuit-NG is the active continuation of TensorCircuit project.

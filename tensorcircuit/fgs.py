@@ -6,11 +6,6 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
-try:
-    import openfermion
-except ModuleNotFoundError:
-    pass
-
 from .cons import backend, dtypestr, rdtypestr, get_backend
 from .circuit import Circuit
 from . import quantum
@@ -1029,6 +1024,17 @@ class FGSSimulator:
 
 
 npb = get_backend("numpy")
+
+
+class _LazyOpenFermion:
+    def __getattr__(self, name: str) -> Any:
+        import openfermion
+
+        globals()["openfermion"] = openfermion
+        return getattr(openfermion, name)
+
+
+openfermion = _LazyOpenFermion()
 
 
 class FGSTestSimulator:

@@ -1,4 +1,20 @@
-__version__ = "1.9.1"
+"""
+TensorCircuit-NG is a Python framework for quantum computing and simulation.
+
+Citation
+If you use TensorCircuit or TensorCircuit-NG in research, please cite both
+software papers:
+
+- Shi-Xin Zhang et al., "TensorCircuit: a Quantum Software Framework for the
+  NISQ Era," Quantum 7, 912 (2023), doi:10.22331/q-2023-02-02-912.
+- Shi-Xin Zhang et al., "TensorCircuit-NG: A Universal, Composable, and
+  Scalable Platform for Quantum Computing and Quantum Simulation,"
+  arXiv:2602.14167 (2026).
+
+Use ``tensorcircuit.cite()`` for BibTeX or APS-formatted references.
+"""
+
+__version__ = "1.10.0"
 __author__ = "TensorCircuit-NG Authors"
 __creator__ = "refraction-ray"
 

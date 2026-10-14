@@ -327,9 +327,11 @@ def spin_glass_measurements(c: Circuit, g: Graph, reuse: bool = True) -> Tensor:
     """
     loss = 0
     for e1, e2 in g.edges:
-        loss += g[e1][e2].get("weight", 1.0) * c.expectation(
+        w = backend.cast(g[e1][e2].get("weight", 1.0), dtypestr)
+        loss += w * c.expectation(
             (G.z(), [e1]), (G.z(), [e2]), reuse=reuse  # type: ignore
         )
     for n in g.nodes:
-        loss += g.nodes[n].get("weight", 0.0) * c.expectation((G.z(), [n]), reuse=reuse)  # type: ignore
+        w = backend.cast(g.nodes[n].get("weight", 0.0), dtypestr)
+        loss += w * c.expectation((G.z(), [n]), reuse=reuse)  # type: ignore
     return backend.real(loss)

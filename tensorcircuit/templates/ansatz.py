@@ -22,7 +22,14 @@ def QAOA_ansatz_for_Ising(
     Construct the QAOA ansatz for the Ising Model.
     The number of qubits is determined by `pauli_terms`.
 
-    :param params: A list of parameter values used in the QAOA ansatz.
+    Each cost layer implements ``exp(-1j * gamma * H_C)``, where
+    ``H_C = sum(weights[k] * Z_term[k])`` and ``gamma = params[2*j]``.
+    Both Z and ZZ terms use rotation angles ``2 * gamma * weights[k]``.
+    Mixer parameters are rotation angles passed directly to the mixer gates;
+    the X mixer implements ``exp(-1j * beta * sum(X_i) / 2)``.
+
+    :param params: Alternating cost evolution times and mixer rotation angles,
+        ``[gamma_0, beta_0, gamma_1, beta_1, ...]``.
     :param nlayers: The number of layers in the QAOA ansatz.
     :param pauli_terms: A list of Pauli terms, where each term is represented as a list of 0/1 series.
     :param weights: A list of weights corresponding to each Pauli term.
@@ -48,7 +55,7 @@ def QAOA_ansatz_for_Ising(
                 c.rzz(
                     index_of_ones[0],
                     index_of_ones[1],
-                    theta=weights[k] * params[2 * j],
+                    theta=2 * weights[k] * params[2 * j],
                 )
             else:
                 raise ValueError("Invalid number of Z terms")

@@ -287,6 +287,9 @@ def simple_compile(
     Returns ``(circuit, info)`` — a tuple, not a bare circuit. ``info`` is the
     caller-supplied dict passed through unchanged. Unpack: ``c, info = simple_compile(c)``.
 
+    Measurement/reset instructions are supported only after all gates. Compilation
+    leaves the input circuit's instruction positions unchanged.
+
     :param circuit: circuit to compile
     :param info: optional dict, returned unchanged
     :param output: output format (``"tc"`` etc.)
@@ -297,13 +300,13 @@ def simple_compile(
         compiled_options = {}
     len0 = len(circuit.to_qir())
     for d in circuit._extra_qir:
-        if d["pos"] < len0 - 1:
+        if d["pos"] < len0:
             raise ValueError(
                 "TC's simple compiler doesn't support measurement/reset "
                 f"instructions in the middle of the circuit: found a "
                 f"{d.get('name', 'measurement/reset')!r} instruction at "
                 f"position {d.get('pos')} (qir length={len0}, only the final "
-                f"position {len0 - 1} is allowed for such instructions)."
+                f"position {len0} is allowed for such instructions)."
             )
 
     c = replace_r(circuit, **compiled_options)
@@ -324,6 +327,5 @@ def simple_compile(
     c = type(circuit).from_qir(qir, circuit.circuit_param)
 
     for d in circuit._extra_qir:
-        d["pos"] = len1
-        c._extra_qir.append(d)
+        c._extra_qir.append({**d, "pos": len(qir)})
     return (c, info)

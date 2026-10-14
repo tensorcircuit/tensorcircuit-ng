@@ -1,4 +1,5 @@
 .tmp
+AGENTS.local.md
 examples/challenge_suite/CHALLENGE_SUITE.md
 data
 .conda

@@ -718,12 +718,18 @@ class TILattice(AbstractLattice):
             all_cell_coords, self.lattice_vectors, axes=[[1], [0]]
         )
 
-        cell_vectors = backend.cast(cell_vectors, self.basis_coords.dtype)
+        basis_coords = self.basis_coords
+        if "int" in backend.dtype(basis_coords) and "float" in backend.dtype(
+            cell_vectors
+        ):
+            basis_coords = backend.cast(basis_coords, cell_vectors.dtype)
+        else:
+            cell_vectors = backend.cast(cell_vectors, basis_coords.dtype)
 
         # Combine cell vectors with basis coordinates to get all site positions
         # via broadcasting: (num_cells, 1, D) + (1, num_basis, D) -> (num_cells, num_basis, D)
         all_coords = backend.expand_dims(cell_vectors, 1) + backend.expand_dims(
-            self.basis_coords, 0
+            basis_coords, 0
         )
 
         self._coordinates = backend.reshape(all_coords, (-1, self.dimensionality))

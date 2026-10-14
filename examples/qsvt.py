@@ -41,8 +41,8 @@ def block_encode(matrix: object) -> object:
     identity = tc.backend.eye(
         tc.backend.shape_tuple(matrix_tensor)[0], dtype=tc.dtypestr
     )
-    sqrt_right = tc.backend.sqrtmh(identity - matrix_tensor @ matrix_dag, psd=True)
-    sqrt_left = tc.backend.sqrtmh(identity - matrix_dag @ matrix_tensor, psd=True)
+    sqrt_right = tc.backend.sqrtmh(identity - matrix_tensor @ matrix_dag)
+    sqrt_left = tc.backend.sqrtmh(identity - matrix_dag @ matrix_tensor)
     top = tc.backend.concat([matrix_tensor, sqrt_right], axis=1)
     bottom = tc.backend.concat([sqrt_left, -matrix_dag], axis=1)
     return tc.backend.concat([top, bottom], axis=0)

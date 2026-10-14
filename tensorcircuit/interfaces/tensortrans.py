@@ -126,11 +126,20 @@ def general_args_to_backend(
         args = numpy_args_to_backend(args, dtype, target_backend)
         return args
 
-    caps = backend.tree_map(tensor_to_dlpack, args)
     if target_backend is None:
         target_backend = backend
     elif isinstance(target_backend, str):
         target_backend = get_backend(target_backend)
+    if target_backend.name in ("jax", "tensorflow"):
+        args = backend.tree_map(
+            lambda a: (
+                a.contiguous()
+                if which_backend(a, return_backend=False) == "pytorch"
+                else a
+            ),
+            args,
+        )
+    caps = backend.tree_map(tensor_to_dlpack, args)
     try:
         t = backend.tree_map(target_backend.from_dlpack, caps)
     except TypeError:

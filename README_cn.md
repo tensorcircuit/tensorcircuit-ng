@@ -22,12 +22,12 @@
     <img src="https://img.shields.io/pypi/v/tensorcircuit-ng.svg?logo=pypi"/>
   </a>
   <!-- License -->
-  <a href="./LICENSE">
+  <a href="https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/LICENSE">
     <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?logo=apache"/>
   </a>
 </p>
 
-<p align="center"> <a href="README.md">English</a> |  简体中文 </p>
+<p align="center"> <a href="https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/README.md">English</a> |  简体中文 </p>
 
 TensorCircuit-NG 是[下一代开源高性能量子软件框架](https://tensorcircuit-ng.readthedocs.io/en/latest/platform/index.html)，也是面向智能体量子科研的[AI 原生运行时](https://tensorcircuit-ng.readthedocs.io/en/latest/agent_landing/index.html)。
 
@@ -43,9 +43,9 @@ TensorCircuit-NG 是 TensorCircuit 在技术与架构上的演进版本，由原
 
 ## 入门
 
-请从 [完整文档](https://tensorcircuit-ng.readthedocs.io/) 中的 [快速上手](/docs/source/quickstart.rst) 开始。
+请从 [完整文档](https://tensorcircuit-ng.readthedocs.io/) 中的 [快速上手](https://tensorcircuit-ng.readthedocs.io/en/latest/quickstart.html) 开始。
 
-有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 200+ [示例脚本](/examples) 和 40+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](/tests) 用例和 API docstring 也提供了丰富的使用信息。
+有关软件用法，算法实现和工程范式演示的更多信息和介绍，请参阅 200+ [示例脚本](https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples) 和 40+ [案例教程](https://tensorcircuit-ng.readthedocs.io/en/latest/#tutorials)。 [测试](https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/tests) 用例和 API docstring 也提供了丰富的使用信息。
 
 ### 智能体量子科研 (推荐)
 
@@ -54,7 +54,7 @@ TensorCircuit-NG 不只是用于生成代码，也为 AI Agent 提供开展量�
 在 [ORBIT-Q 基准](https://sxzgroup.github.io/ORBIT-Q/)中，TensorCircuit-NG 在被评估的量子软件框架中取得了领先的 Agent 解题成功率和运行效率。
 
 1.  **丰富上下文：** `examples/` 中的 100 多个脚本和 `tests/` 中的大量测试用例提供了至关重要的参考，能显著减少 AI 幻觉。
-2.  **内置规则：** 我们提供了专门的 [AGENTS.md](/AGENTS.md) 文件。它是 AI 助手的“开发手册”（类似 `CLAUDE.md`），定义了编码标准和最佳实践，确保生成的代码符合 TC-NG 调用范式。
+2.  **内置规则：** 我们提供了专门的 [AGENTS.md](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/AGENTS.md) 文件。它是 AI 助手的“开发手册”（类似 `CLAUDE.md`），定义了编码标准和最佳实践，确保生成的代码符合 TC-NG 调用范式。
 3.  **专用智能体技能 (Agentic Skills)：** `.agents/skills/` 目录包含了一系列工作流，引导 AI 助手完成复杂的跨步骤任务.
 
 
@@ -154,7 +154,7 @@ pip install tensorcircuit-nightly
 
 [可执行科研 Hub](https://tensorcircuit-ng.readthedocs.io/en/latest/reproduce/index.html) 是 TensorCircuit-NG 智能体科研技术栈中的“文献到科研产物”层。每篇论文都被整理为包含实现代码、目标图表、后端、规模化策略和验证上下文的可运行、带元数据、可检查的科研资产。
 
-**[浏览可执行科研 Hub](https://tensorcircuit-ng.readthedocs.io/en/latest/reproduce/index.html)**，或查看 [examples/reproduce_papers](/examples/reproduce_papers) 中的源代码。更完整的智能体科研工作流请参阅[智能体量子科研文档](https://tensorcircuit-ng.readthedocs.io/en/latest/agentic.html)。
+**[浏览可执行科研 Hub](https://tensorcircuit-ng.readthedocs.io/en/latest/reproduce/index.html)**，或查看 [examples/reproduce_papers](https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers) 中的源代码。更完整的智能体科研工作流请参阅[智能体量子科研文档](https://tensorcircuit-ng.readthedocs.io/en/latest/agentic.html)。
 
 ## 贡献
 
@@ -172,7 +172,7 @@ pip install tensorcircuit-nightly
 
 ### 说明
 
-有关贡献指南和说明，请参阅 [贡献](/CONTRIBUTING.md)。
+有关贡献指南和说明，请参阅 [贡献](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/CONTRIBUTING.md)。
 
 我们欢迎大家提出 [issues](https://github.com/tensorcircuit/tensorcircuit-ng/issues), [PR](https://github.com/tensorcircuit/tensorcircuit-ng/pulls), 和 [讨论](https://github.com/tensorcircuit/tensorcircuit-ng/discussions)，这些都托管在 GitHub 上。
 
@@ -184,25 +184,25 @@ TensorCircuit-NG 是基于 Apache License 2.0 的开源软件。
 
 ### DQAS
 
-可微量子架构搜索的应用见 [应用](/tensorcircuit/applications)。
+可微量子架构搜索的应用见 [应用](https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/tensorcircuit/applications)。
 
 参考论文：https://arxiv.org/abs/2010.08561 (QST)。
 
 ### VQNHE
 
-关于变分量子神经混合本征求解器的应用，请参见 [应用](tensorcircuit/applications)。
+关于变分量子神经混合本征求解器的应用，请参见 [应用](https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/tensorcircuit/applications)。
 
 参考论文：https://arxiv.org/abs/2106.05105 (PRL) 和 https://arxiv.org/abs/2112.10380 。
 
 ### VQEX-MBL
 
-VQEX 在 MBL 相位识别上的应用见 [教程](/docs/source/tutorials/vqex_mbl.ipynb)。
+VQEX 在 MBL 相位识别上的应用见 [教程](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/docs/source/tutorials/vqex_mbl.ipynb)。
 
 参考论文: https://arxiv.org/abs/2111.13719 (PRB)。
 
 ### Stark-DTC
 
-数值验证 Stark 多体局域化稳定的离散时间晶体，类似的 Floquet 系统模拟请参考 [例子](/examples/timeevolution_trotter.py)。
+数值验证 Stark 多体局域化稳定的离散时间晶体，类似的 Floquet 系统模拟请参考 [例子](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/examples/timeevolution_trotter.py)。
 
 参考论文: https://arxiv.org/abs/2208.02866 (PRL)。
 
@@ -230,7 +230,7 @@ VQEX 在 MBL 相位识别上的应用见 [教程](/docs/source/tutorials/vqex_mb
 
 ### NN-VQA
 
-关于神经网络编码的变分量子算法的实现和工作流, 见 [教程](/docs/source/tutorials/nnvqe.ipynb)。
+关于神经网络编码的变分量子算法的实现和工作流, 见 [教程](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/docs/source/tutorials/nnvqe.ipynb)。
 
 参考论文: https://arxiv.org/abs/2308.01068 (PRApplied)。
 
@@ -257,8 +257,8 @@ VQEX 在 MBL 相位识别上的应用见 [教程](/docs/source/tutorials/vqex_mb
 我们的用户，开发者和合作伙伴：
 
 <p align="center">
-    <img width=90% src="docs/source/statics/user_logo.png">
+    <img width=90% src="https://raw.githubusercontent.com/tensorcircuit/tensorcircuit-ng/master/docs/source/statics/user_logo.png">
 </p>
 
 
-*关于版权和免责信息，请参阅 [NOTICE](NOTICE) 文件。*
+*关于版权和免责信息，请参阅 [NOTICE](https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/NOTICE) 文件。*

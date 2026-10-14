@@ -4,6 +4,16 @@
 
 ### Added
 
+- Support qudit density-matrix simulation with `tc.DMCircuit(n, dim=d)` for `d > 2`, including explicit single- and multi-site `unitary` gates and Kraus channels via `apply_general_kraus`.
+
+### Fixed
+
+- Compute fidelity reliably for positive semidefinite states and preserve first-order matrix square-root responses on fixed-rank paths. `sqrtmh` now clips negative eigenvalues regardless of the retained `psd` argument.
+
+## v1.10.0
+
+### Added
+
 - Add `tensorcircuit.tnalg`: fixed-shape JAX MPS TEBD, one-site TDVP, and one-site DMRG with dense and Abelian block-buffer PyTree states, pure tensor Pauli-string MPO builders, checkpoints, and legacy MPS interoperability.
 
 - Add the matrix-function and spectral foundation for reusable Krylov/SLQ, Chebyshev/KPM, and fixed-schedule Taylor calculations, with shared `KrylovConfig`, `ChebyshevConfig`, and `TaylorConfig` controls, static multi-step Chebyshev exponential actions, physical DOS/thermal/response APIs, JIT/AD-compatible query reuse, accuracy diagnostics, and documented NumPy/JAX full support plus TensorFlow non-Bessel support.
@@ -13,6 +23,42 @@
 - Unify the public time-evolution entry points with the matrix-function implementation.
 
 ### Fixed
+
+- Match the target framework's complex gradient convention when wrapping functions between JAX and PyTorch or TensorFlow in either direction, and support noncontiguous PyTorch tensors when transferring to JAX or TensorFlow via DLPack.
+
+- Invalidate ZX probability and sampling caches when gates or instructions are added to a `StabilizerTCircuit`.
+
+- Preserve logical observable indices and inverted measurement results when importing Stim circuits into the ZX simulator, and apply measurement-reset readout noise only once. Measurement readout noise now flips only the recorded result instead of the post-measurement state, and `MPP(p)` keeps its readout noise.
+
+- Honor `AnalogCircuit(mps_inputs=...)` instead of overriding the supplied state with the default all-zero input; preserve explicit dense-input precedence.
+
+- Preserve DMRG ground-state response gradients at Lanczos breakdown using an implicit matrix-free derivative.
+
+- Key randomized-compiling candidates by concrete gate matrix and dtype to preserve equivalence for same-named gates with different parameters, and retain reusable entries in a bounded LRU cache.
+
+- Preserve circuit type and initial state in randomized compiling, validate Pauli insertions in execution order, and tighten candidate equivalence tolerance.
+
+- Return marginal outcome probabilities when measuring a subset of qubits in `U1Circuit`.
+
+- Map digital and explicitly local analog blocks in `AnalogCircuit.append`; reject permutation or embedding of global analog blocks while preserving equal-width identity mappings.
+
+- Fix `AnalogCircuit.append` when appending a circuit to itself, which previously duplicated the first digital block into the last one.
+
+- Correct periodic `Line1D` bond weights and support tuple/array weights. Preserve reuse of the last weight when the closing-bond weight is omitted, and reject periodic chains with fewer than two sites while preserving open single-site chains and JIT/gradient support for tensor-weight sequences. Two-site periodic chains now sum both bonds; the default coupling changes from 1 to 2.
+
+- Preserve TensorFlow JIT and gradients for tensor-valued graph weights by avoiding symbolic tensor iteration and casting spin-glass weights to the circuit dtype.
+
+- Preserve custom initial states and tableau gate targets in stabilizer circuit replay. Exclude historical measurements from sampled Pauli expectations and from `sample()`, which now returns only the final `nqubits` columns.
+
+- Correct `QAOA_ansatz_for_Ising` cost evolution by doubling ZZ rotation angles so Z and ZZ terms both use the supplied Hamiltonian weights; mixer angles are unchanged.
+
+- Preserve custom initial states and circuit types when rebuilding circuits for DD and ZNE.
+
+- Reject mid-circuit measurement/reset instructions in the simple compiler and preserve the input circuit when relocating terminal instructions.
+
+- Preserve TensorCircuit R/RX/RY/RZ rotations and real radian angles, including zero-imaginary complex storage, during ZX conversion instead of treating them as reset instructions.
+
+- Fix `StabilizerTCircuit` noisy expectations under complex128 and `outcome_probability` for noisy circuits with measurement-free components.
 
 - Normalize low-probability general Kraus trajectories without dividing by zero for impossible outcomes.
 

@@ -18,7 +18,6 @@ import tensornetwork as tn
 
 from .gates import Gate
 from .utils import arg_alias
-from .basecircuit import BaseCircuit
 from .circuit import Circuit
 from .quantum import QuOperator, QuVector
 from .quditgates import SINGLE_BUILDERS, TWO_BUILDERS
@@ -389,7 +388,6 @@ class QuditCircuit:
     quoperator = get_quoperator
 
     get_circuit_as_quoperator = get_quoperator
-    get_state_as_quvector = BaseCircuit.quvector
 
     def matrix(self) -> Tensor:
         """
@@ -602,6 +600,7 @@ class QuditCircuit:
         return self._circ.quvector()
 
     quvector = get_quvector
+    get_state_as_quvector = get_quvector
 
     def replace_mps_inputs(self, mps_inputs: QuOperator) -> None:
         """

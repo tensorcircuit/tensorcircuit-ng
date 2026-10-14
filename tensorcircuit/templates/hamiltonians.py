@@ -84,7 +84,12 @@ def heisenberg_hamiltonian(
 
 
 def rydberg_hamiltonian(
-    lattice: AbstractLattice, omega: float, delta: float, c6: float
+    lattice: AbstractLattice,
+    omega: float,
+    delta: float,
+    c6: float,
+    *,
+    include_identity: bool = False,
 ) -> Any:
     r"""
     Generates the sparse matrix of the Rydberg atom array Hamiltonian.
@@ -99,11 +104,14 @@ def rydberg_hamiltonian(
       = \sum_i \frac{\Omega}{2} X_i
         + \sum_i \frac{\delta}{2} Z_i
         + \sum_{i<j} \frac{V_{ij}}{4}\,\bigl(Z_i Z_j - Z_i - Z_j \bigr)
+        + E_{\mathrm{offset}} I
 
-    where :math:`V_{ij} = C6 / |r_i - r_j|^6`.
+    where :math:`V_{ij} = C6 / |r_i - r_j|^6` and
+    :math:`E_{\mathrm{offset}} = -N\delta/2 + \sum_{i<j}V_{ij}/4`.
 
-    Note: Constant energy offset terms (proportional to the identity operator)
-    are ignored in this implementation.
+    By default, the returned matrix omits this identity term. Set
+    ``include_identity=True`` when absolute energies or derivatives with
+    respect to parameters entering the offset are needed.
 
     :param lattice: An instance of a class derived from AbstractLattice,
         which provides site coordinates and the distance matrix.
@@ -114,6 +122,9 @@ def rydberg_hamiltonian(
     :type delta: float
     :param c6: The Van der Waals interaction coefficient (C6).
     :type c6: float
+    :param include_identity: Include the full, potentially geometry-dependent
+        energy offset. Defaults to False for compatibility.
+    :type include_identity: bool
     :return: The Hamiltonian as a backend-agnostic sparse matrix.
     :rtype: Any
     """
@@ -123,7 +134,7 @@ def rydberg_hamiltonian(
 
     pauli_map = gates.PAULI_CHAR_TO_INDEX
     ls: List[List[int]] = []
-    weights: List[float] = []
+    weights: List[Any] = []
 
     for i in range(num_sites):
         x_string = [0] * num_sites
@@ -136,6 +147,7 @@ def rydberg_hamiltonian(
     for i in range(num_sites):
         z_coefficients[i] += delta / 2.0
 
+    energy_offset: Any = -delta * num_sites / 2.0
     dist_matrix = lattice.distance_matrix
 
     for i in range(num_sites):
@@ -144,6 +156,8 @@ def rydberg_hamiltonian(
 
             interaction_strength = c6 / (distance**6)
             coefficient = interaction_strength / 4.0
+            if include_identity:
+                energy_offset += coefficient
 
             zz_string = [0] * num_sites
             zz_string[i] = pauli_map["Z"]
@@ -164,6 +178,10 @@ def rydberg_hamiltonian(
         z_string[i] = pauli_map["Z"]
         ls.append(z_string)
         weights.append(z_coefficients[i])  # type: ignore
+
+    if include_identity:
+        ls.append([pauli_map["I"]] * num_sites)
+        weights.append(energy_offset)
 
     hamiltonian_matrix = PauliStringSum2COO(ls, weight=weights, numpy=False)
 

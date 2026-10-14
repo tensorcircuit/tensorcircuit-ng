@@ -534,7 +534,9 @@ class SymbolCircuit(Circuit):
         :param reuse: Cache the contracted state vector for repeated calls,
             defaults to True.
         :type reuse: bool
-        :param enable_lightcone: whether enable light cone simplification, defaults to False
+        :param enable_lightcone: whether to simplify the light cone. This requires
+            default product inputs and unitary gates; otherwise the result may be
+            incorrect. Defaults to False.
         :type enable_lightcone: bool
         :return: Sympy expression for the expectation value.
         """
@@ -652,16 +654,26 @@ class SymbolCircuit(Circuit):
 
     def free_symbols(self) -> Set[sympy.Symbol]:
         """
-        Return the set of all free sympy Symbols used as gate parameters.
+        Return the free sympy Symbols in the inputs and gate parameters.
 
         :return: Set of sympy Symbols.
         :rtype: Set[sympy.Symbol]
         """
         syms: Set[sympy.Symbol] = set()
+
+        def collect(value: Any) -> None:
+            if isinstance(value, (np.ndarray, list)):
+                array = np.asarray(value)
+                if array.dtype == object:
+                    for item in array.flat:
+                        collect(item)
+            elif hasattr(value, "free_symbols"):
+                syms.update(value.free_symbols)
+
+        collect(self.inputs)
         for d in self._qir:
             for v in d.get("parameters", {}).values():
-                if hasattr(v, "free_symbols"):
-                    syms |= v.free_symbols
+                collect(v)
         return syms
 
     @staticmethod
@@ -781,12 +793,24 @@ class SymbolCircuit(Circuit):
         :return: New :class:`SymbolCircuit` with substituted parameters.
         :rtype: SymbolCircuit
         """
+
+        def substitute(value: Any) -> Any:
+            if isinstance(value, (np.ndarray, list)):
+                array = np.asarray(value)
+                if array.dtype == object:
+                    return np.array(
+                        [substitute(item) for item in array.flat], dtype=object
+                    ).reshape(array.shape)
+            elif isinstance(value, sympy.Basic):
+                return sympy.simplify(value.subs(param_dict))
+            return value
+
         # Propagate construction state (inputs/split/dim) so the bound circuit
         # starts from the same initial state as ``self``; otherwise ``bind``
         # silently resets the input to ``|0>``.
         sc = SymbolCircuit(
             self._nqubits,
-            inputs=self.inputs,
+            inputs=substitute(self.inputs),
             split=self.split,
             dim=self._d,
         )
@@ -795,8 +819,7 @@ class SymbolCircuit(Circuit):
             bound_instruction = dict(instruction)
             if "parameters" in instruction:
                 bound_instruction["parameters"] = {
-                    k: sympy.simplify(v.subs(param_dict)) if hasattr(v, "subs") else v
-                    for k, v in instruction["parameters"].items()
+                    k: substitute(v) for k, v in instruction["parameters"].items()
                 }
             bound_qir.append(bound_instruction)
         sc.append_from_qir(bound_qir)

@@ -137,6 +137,8 @@ class AbstractCircuit:
                     vars["dim"] = self._d
                 if name in ["rzm", "cmz"] and "n" not in vars:
                     vars["n"] = len(index)
+            if name == "any" and self._d != 2 and vars.get("dim") is None:
+                vars["dim"] = self._d
 
             gate = gatef(**vars)
 

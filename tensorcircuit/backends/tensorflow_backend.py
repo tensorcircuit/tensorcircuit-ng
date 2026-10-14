@@ -514,6 +514,12 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def size(self, a: Tensor) -> Tensor:
         return tf.size(a)
 
+    def sqrtmh(self, a: Tensor, psd: bool = False) -> Tensor:
+        """Return the PSD Hermitian matrix square root; ``psd`` is ignored."""
+        from .tf_ops import adaware_sqrtmh
+
+        return adaware_sqrtmh(a)
+
     def eigvalsh(self, a: Tensor) -> Tensor:
         return tf.linalg.eigvalsh(a)
 

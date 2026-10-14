@@ -76,6 +76,9 @@ def jax_interface(
     """
     Wrap a function on different ML backend with a jax interface.
 
+    Complex gradients follow JAX's VJP convention, converting the conjugate
+    convention used by TensorFlow and PyTorch source functions.
+
     :Example:
 
     .. code-block:: python
@@ -155,10 +158,14 @@ def create_jax_function(
         if jit:
             vjp_fun = backend.jit(vjp_fun)  # type: ignore
 
-        def vjp_wrapped(args: Any) -> Any:
+        def vjp_wrapped(args: Any, cotangent: Any) -> Any:
             args = general_args_to_backend(args, enable_dlpack=enable_dlpack)
-            gb = general_args_to_backend(g, enable_dlpack=enable_dlpack)
+            gb = general_args_to_backend(cotangent, enable_dlpack=enable_dlpack)
+            if backend.name in ("tensorflow", "pytorch"):
+                gb = backend.tree_map(backend.conj, gb)
             r = vjp_fun(args, gb)[1]
+            if backend.name in ("tensorflow", "pytorch"):
+                r = backend.tree_map(backend.conj, r)
             r = general_args_to_backend(
                 r, target_backend="jax", enable_dlpack=enable_dlpack
             )
@@ -175,6 +182,7 @@ def create_jax_function(
             vjp_wrapped,
             grad_shape,
             x,
+            g,
         )
 
         if not isinstance(dx, tuple):

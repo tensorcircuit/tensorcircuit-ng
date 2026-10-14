@@ -7,6 +7,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
+from numbers import Real
 from typing import Any, Dict, List, Optional, cast, Callable, Sequence
 
 import numpy as np
@@ -16,6 +17,7 @@ from pyzx_param.graph.graph_s import GraphS
 from pyzx_param.utils import VertexType, EdgeType
 
 from ..abstractcircuit import AbstractCircuit
+from ..cons import backend
 from .. import gates as tcgates
 from .utils import find_basis
 from .noise_model import (
@@ -564,6 +566,21 @@ def r_y(b: GraphRepresentation, qubit: int, phase: Fraction) -> None:
     h_yz(b, qubit)
 
 
+def r_axis(
+    b: GraphRepresentation,
+    qubit: int,
+    theta: Fraction,
+    alpha: Fraction,
+    phi: Fraction,
+) -> None:
+    """Apply TensorCircuit's axis-angle rotation, with angles in units of pi."""
+    r_z(b, qubit, -phi)
+    r_y(b, qubit, -alpha)
+    r_z(b, qubit, 2 * theta)
+    r_y(b, qubit, alpha)
+    r_z(b, qubit, phi)
+
+
 def u3(
     b: GraphRepresentation,
     qubit: int,
@@ -617,8 +634,12 @@ def _cx_cz(b: GraphRepresentation, is_cx: bool, control: int, target: int) -> No
 
 
 def _m(b: GraphRepresentation, qubit: int, p: float = 0, silent: bool = False) -> None:
+    # The same error bit flips before and after measurement: only the record flips.
+    error_var = f"e{b.num_error_bits}"
     if p > 0:
-        x_error(b, qubit, p)
+        b.channel_probs.append(error_probs(p))
+        _error(b, qubit, VertexType.X, error_var)
+        b.num_error_bits += 1
     ensure_lane(b, qubit)
     v1 = b.last_vertex[qubit]
     b.graph.set_type(v1, VertexType.Z)
@@ -630,17 +651,18 @@ def _m(b: GraphRepresentation, qubit: int, p: float = 0, silent: bool = False) -
         b.silent_rec.append(v1)
     v2 = add_dummy(b, qubit)
     b.graph.add_edge((v1, v2), EdgeType.SIMPLE)
+    if p > 0:
+        _error(b, qubit, VertexType.X, error_var)
     b.graph.scalar.add_power(-1)
 
 
-def _r(b: GraphRepresentation, qubit: int, perform_trace: bool) -> None:
+def _r(b: GraphRepresentation, qubit: int) -> None:
     if qubit not in b.last_vertex:
         v1 = add_lane(b, qubit)
         b.graph.set_type(v1, VertexType.X)
         b.graph.scalar.add_power(-1)
     else:
-        if perform_trace:
-            _m(b, qubit, silent=True)
+        _m(b, qubit, silent=True)
         row = last_row(b, qubit)
         v1 = b.last_vertex[qubit]
         b.graph.set_type(v1, VertexType.X)
@@ -837,29 +859,23 @@ def y_error(b: GraphRepresentation, qubit: int, p: float) -> None:
 
 def mr(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -> None:
     """Z-basis demolition measurement (optionally noisy)."""
-    if p > 0:
-        x_error(b, qubit, p)
-    m(b, qubit, p=p, invert=invert)
-    _r(b, qubit, perform_trace=False)
+    if invert:
+        x_phase(b, qubit, Fraction(1, 1))
+    m(b, qubit, p=p)
+    _r(b, qubit)
 
 
 def mrx(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -> None:
     """X-basis demolition measurement (optionally noisy)."""
     h_gate(b, qubit)
-    if p > 0:
-        x_error(b, qubit, p)
-    m(b, qubit, p=p, invert=invert)
-    _r(b, qubit, perform_trace=False)
+    mr(b, qubit, p=p, invert=invert)
     h_gate(b, qubit)
 
 
 def mry(b: GraphRepresentation, qubit: int, p: float = 0, invert: bool = False) -> None:
     """Y-basis demolition measurement (optionally noisy)."""
     h_yz(b, qubit)
-    if p > 0:
-        x_error(b, qubit, p)
-    m(b, qubit, p=p, invert=invert)
-    _r(b, qubit, perform_trace=False)
+    mr(b, qubit, p=p, invert=invert)
     h_yz(b, qubit)
 
 
@@ -917,7 +933,7 @@ def reset_z(b: GraphRepresentation, qubit: int, p: float = 0) -> None:
     """
     if p > 0:
         x_error(b, qubit, p)
-    _r(b, qubit, perform_trace=True)
+    _r(b, qubit)
 
 
 def reset_x(b: GraphRepresentation, qubit: int) -> None:
@@ -993,6 +1009,7 @@ def mpp(
     b: GraphRepresentation,
     paulis: list[tuple[str, int]],
     invert: bool = False,
+    p: float = 0,
 ) -> None:
     """Measure a multi-Pauli product.
 
@@ -1003,6 +1020,7 @@ def mpp(
         paulis: List of (pauli_type, qubit) pairs defining the Pauli product.
                 pauli_type should be 'X', 'Y', or 'Z'.
         invert: Whether to invert the measurement result.
+        p: Measurement flip error probability.
     """
     aux = -2
     reset_z(b, aux)
@@ -1022,7 +1040,7 @@ def mpp(
             raise ValueError(f"Invalid Pauli operator: {pauli_type}")
 
     h_gate(b, aux)
-    m(b, aux, invert=invert)
+    m(b, aux, p=p, invert=invert)
 
 
 # NOTE on Gate Naming Convention:
@@ -1062,6 +1080,7 @@ GATE_TABLE: Dict[str, tuple[Callable[..., Any], int]] = {
     "R_Z": (r_z, 1),
     "R_X": (r_x, 1),
     "R_Y": (r_y, 1),
+    "R_AXIS": (r_axis, 1),
     "U3": (u3, 1),
     # ---- Two-qubit gates ------------------------------------------------------
     "CNOT": (lambda b, c, t: _cx_cz(b, True, c, t), 2),
@@ -1089,11 +1108,33 @@ GATE_TABLE: Dict[str, tuple[Callable[..., Any], int]] = {
 }
 
 
+def _zx_gate_name(instruction: Dict[str, Any]) -> str:
+    gate_name = getattr(instruction.get("gatef"), "n", None)
+    if isinstance(gate_name, str) and gate_name in ("rx", "ry", "rz"):
+        return "R_" + gate_name[-1].upper()
+    if gate_name == "r":
+        return "R_AXIS"
+    return str(instruction.get("name", "")).upper()
+
+
+def _real_rotation_angle(angle: Any) -> float:
+    if isinstance(angle, Real):
+        return float(angle)
+    angle = backend.convert_to_tensor(angle)
+    if float(backend.imag(angle)) != 0:
+        raise ValueError("ZX conversion requires real-valued rotation angles")
+    return float(backend.real(angle))
+
+
 def circuit_to_zx(
     c: AbstractCircuit, force_measure_all: bool = False
 ) -> GraphRepresentation:
     """
     Convert a TensorCircuit AbstractCircuit to a ZX-calculus GraphRepresentation.
+
+    Rotation parameters must have concrete real values; complex storage with zero
+    imaginary part is supported. Graph construction is not JIT-traceable with
+    dynamic angles.
 
     :param c: The source circuit.
     :type c: AbstractCircuit
@@ -1128,7 +1169,7 @@ def circuit_to_zx(
         merged_qir = [d for _, d in merged_qir_with_pos]
     for i, d in enumerate(merged_qir):
         name, index, params = (
-            str(d.get("name", "")).upper(),
+            _zx_gate_name(d),
             list(d.get("index", ())),
             d.get("parameters", {}),
         )
@@ -1185,15 +1226,22 @@ def circuit_to_zx(
                     paulis.append((target[0], target[1]))
             if paulis:
                 invert = d.get("invert", False)
-                mpp(b, paulis, invert=invert)
+                mpp(b, paulis, invert=invert, p=p)
         elif name in ["QUBIT_COORDS", "SHIFT_COORDS", "TICK"]:
             continue
         elif name in GATE_TABLE:
             func, num_qubits = GATE_TABLE[name]
             if name in ["R_X", "R_Y", "R_Z"]:
                 theta = params.get("theta", params.get("phi", params.get("phase", 0.0)))
+                if getattr(d.get("gatef"), "n", None) in ("rx", "ry", "rz"):
+                    theta = _real_rotation_angle(theta)
                 if isinstance(theta, (float, int)):
                     theta = Fraction(theta) / np.pi
+            elif name == "R_AXIS":
+                theta, alpha, phi = (
+                    _real_rotation_angle(params.get(key, 0.0)) / np.pi
+                    for key in ("theta", "alpha", "phi")
+                )
             elif name == "U3":
                 theta = params.get("theta", 0.0)
                 phi = params.get("phi", 0.0)
@@ -1209,9 +1257,7 @@ def circuit_to_zx(
                 chunk = index[i_target : i_target + num_qubits]
                 if name in [
                     "M",
-                    "R",
                     "MEASURE",
-                    "RESET",
                     "MR",
                     "MRX",
                     "MRY",
@@ -1220,9 +1266,13 @@ def circuit_to_zx(
                     "MY",
                     "MZ",
                 ]:
+                    func(b, *chunk, p=p, invert=d.get("invert", False))
+                elif name in ["R", "RESET"]:
                     func(b, *chunk, p=p)
                 elif name in ["R_X", "R_Y", "R_Z"]:
                     func(b, *chunk, theta)
+                elif name == "R_AXIS":
+                    func(b, *chunk, theta, alpha, phi)
                 elif name == "U3":
                     func(b, *chunk, theta, phi, lam)
                 else:

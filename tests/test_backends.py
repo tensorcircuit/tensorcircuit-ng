@@ -481,12 +481,13 @@ def test_backend_methods(backend):
     ansp = tc.backend.sqrtmh(tc.array_to_tensor(ans2))
     # print(ansp @ ansp, ans @ ans)
     np.testing.assert_allclose(ansp @ ansp, ans @ ans, atol=1e-4)
-    singularm = np.array([[4.0, 0], [0, -1e-3]])
-    np.testing.assert_allclose(
-        tc.backend.sqrtmh(tc.array_to_tensor(singularm, dtype="float32"), psd=True),
-        np.array([[2.0, 0], [0, 0]]),
-        atol=1e-5,
-    )
+    singularm = tc.array_to_tensor(np.diag([4.0, -1e-3]), dtype="float32")
+    for psd in (False, True):
+        np.testing.assert_allclose(
+            tc.backend.sqrtmh(singularm, psd=psd),
+            np.diag([2.0, 0.0]),
+            atol=1e-5,
+        )
 
     np.testing.assert_allclose(
         tc.backend.sum(tc.array_to_tensor(np.arange(4))), 6, atol=1e-4
@@ -791,6 +792,36 @@ def test_dlpack(backend):
     cap = tc.backend.to_dlpack(a)
     a1 = tc.backend.from_dlpack(cap)
     np.testing.assert_allclose(a, a1, atol=1e-5)
+
+
+@pytest.mark.parametrize("target", ["jax", "tensorflow", "pytorch"])
+@pytest.mark.parametrize(
+    "layout",
+    ["contiguous", "offset", "real", "imag", "slice", "transpose", "broadcast"],
+)
+def test_torch_dlpack_layout(torchb, target, layout):
+    values = np.arange(6, dtype=np.float32)
+    tensor = tc.backend.convert_to_tensor(values + 1j * (values + 1))
+    views = {
+        "contiguous": tensor,
+        "offset": tensor[1:],
+        "real": tensor.real,
+        "imag": tensor.imag,
+        "slice": tensor[::2],
+        "transpose": tensor.reshape(2, 3).T,
+        "broadcast": tensor[:1].expand(4),
+    }
+    source = views[layout]
+    expected = tc.backend.numpy(source).copy()
+    target_backend = tc.get_backend(target)
+    result = tc.interfaces.general_args_to_backend(
+        source, target_backend=target_backend, enable_dlpack=True
+    )
+    np.testing.assert_array_equal(target_backend.numpy(result), expected)
+    np.testing.assert_array_equal(tc.backend.numpy(source), expected)
+    assert target_backend.dtype(result) == tc.backend.dtype(source)
+    if target == "pytorch":
+        assert result.data_ptr() == source.data_ptr()
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
@@ -1562,16 +1593,20 @@ def test_hessian(backend):
     param = tc.backend.ones([2, 2])
     assert list(hf(param).shape) == [2, 2, 2, 2]  # possible tf retracing?
 
-    g = tc.templates.graphs.Line1D(5)
-
     def circuit_f(param):
-        c = tc.Circuit(5)
-        c = tc.templates.blocks.example_block(c, param, nlayers=1)
-        return tc.templates.measurements.heisenberg_measurements(c, g)
+        c = tc.Circuit(2)
+        c.rx(0, theta=param[0])
+        c.ry(1, theta=param[1])
+        c.cnot(0, 1)
+        return tc.backend.real(c.expectation_ps(z=[1]))
 
-    param = tc.backend.ones([10])
-    hf = tc.backend.hessian(circuit_f)
-    print(hf(param))  # still upto a conjugate for jax and tf backend.
+    param = tc.backend.convert_to_tensor([1.0, 0.7])
+    diagonal = -np.cos(1.0) * np.cos(0.7)
+    offdiagonal = np.sin(1.0) * np.sin(0.7)
+    expected = [[diagonal, offdiagonal], [offdiagonal, diagonal]]
+    np.testing.assert_allclose(
+        tc.backend.hessian(circuit_f)(param), expected, atol=1e-5
+    )
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
@@ -1861,3 +1896,37 @@ def test_backend_real_imag(backend):
     np.testing.assert_allclose(
         tc.backend.numpy(tc.backend.imag(rt)), np.zeros_like(r), atol=1e-6
     )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_sqrtmh_psd_values(backend, highp):
+    rng = np.random.default_rng(12)
+    factors = rng.normal(size=(2, 4, 4)) + 1j * rng.normal(size=(2, 4, 4))
+    unitary, _ = np.linalg.qr(factors)
+    spectrum = np.array([0.0, 0.0, 1.0, 4.0])
+    adjoint = unitary.conj().swapaxes(-1, -2)
+    matrix = (unitary * spectrum) @ adjoint
+    reference = (unitary * np.sqrt(spectrum)) @ adjoint
+    value = tc.array_to_tensor(matrix, dtype="complex128")
+    root = tc.backend.sqrtmh
+
+    for evaluate in (root, tc.backend.jit(root)):
+        np.testing.assert_allclose(
+            tc.backend.numpy(evaluate(value)), reference, atol=5e-8, rtol=0
+        )
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_sqrtmh_fixed_rank_gradient(backend, highp):
+    k = tc.backend
+    observable = tc.array_to_tensor(np.diag([1.0, 0.0, 0.0]))
+
+    def loss(theta):
+        amplitudes = k.stack([k.cos(theta), k.sin(theta), theta * 0])
+        rho = k.reshape(amplitudes, (3, 1)) @ k.reshape(amplitudes, (1, 3))
+        return k.real(k.trace(k.sqrtmh(k.cast(rho, tc.dtypestr)) @ observable))
+
+    theta = k.convert_to_tensor(np.array(0.3))
+    derivative = k.grad(loss)
+    for evaluate in (derivative, k.jit(derivative)):
+        np.testing.assert_allclose(k.numpy(evaluate(theta)), -np.sin(0.6), atol=1e-7)

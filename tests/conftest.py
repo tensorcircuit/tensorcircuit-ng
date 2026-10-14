@@ -13,6 +13,12 @@ sys.path.insert(0, modulepath)
 import tensorcircuit as tc
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "filterwarnings", "ignore::tensorcircuit.utils.ExperimentalWarning"
+    )
+
+
 @pytest.fixture(scope="function")
 def npb():
     tc.set_backend("numpy")

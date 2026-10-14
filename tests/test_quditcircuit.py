@@ -37,6 +37,12 @@ def test_basics(backend):
     np.testing.assert_allclose(tc.backend.numpy(c.amplitude("21")), np.array(1.0))
 
 
+def test_get_state_as_quvector_alias(npb):
+    c = tc.QuditCircuit(1, 3)
+    c.x(0)
+    np.testing.assert_allclose(c.get_state_as_quvector().eval(), [0, 1, 0])
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("cpb")])
 def test_u8_gate(backend):
     c = tc.QuditCircuit(1, dim=3)

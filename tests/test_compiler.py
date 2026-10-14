@@ -223,3 +223,72 @@ def test_merge_fixed_adjoint_pair(backend, gate, reverse):
     merged = tc.compiler.simple_compiler.merge(c)
     assert merged.gate_count() == 0
     np.testing.assert_allclose(tc.backend.numpy(c.matrix()), np.eye(2), atol=1e-6)
+
+
+@pytest.mark.parametrize("instruction", ["measure_instruction", "reset_instruction"])
+@pytest.mark.parametrize("gate_count,position", [(1, 0), (3, 1), (3, 2)])
+def test_simple_compile_rejects_midcircuit_instruction(
+    npb, instruction, gate_count, position
+):
+    c = tc.Circuit(1)
+    for i in range(gate_count):
+        if i == position:
+            getattr(c, instruction)(0)
+        c.x(0)
+    original = [dict(d) for d in c._extra_qir]
+    with pytest.raises(ValueError, match=f"only the final position {gate_count}"):
+        tc.compiler.simple_compiler.simple_compile(c)
+    assert c._extra_qir == original
+    assert c.gate_count() == gate_count
+
+
+@pytest.mark.parametrize("program", ["empty", "single", "cancel", "reduce", "expand"])
+def test_simple_compile_preserves_terminal_instructions(npb, program):
+    c = tc.Circuit(2)
+    if program == "single":
+        c.x(0)
+    elif program == "cancel":
+        c.x(0)
+        c.x(0)
+    elif program == "reduce":
+        c.h(0)
+        c.h(0)
+        c.x(0)
+    elif program == "expand":
+        c.rx(0, theta=0.3)
+    c.measure_instruction(1, 0)
+    c.reset_instruction(0)
+    c.measure_instruction(0)
+    original = [dict(d) for d in c._extra_qir]
+    expected = tc.backend.numpy(c.state())
+    compiled, _ = tc.compiler.simple_compiler.simple_compile(c)
+    assert c._extra_qir == original
+    assert compiled._extra_qir == [
+        {**d, "pos": compiled.gate_count()} for d in original
+    ]
+    compiled._extra_qir[0]["index"] = [0]
+    assert c._extra_qir == original
+    np.testing.assert_allclose(tc.backend.numpy(compiled.state()), expected, atol=1e-6)
+    repeated, _ = tc.compiler.simple_compiler.simple_compile(c)
+    assert c._extra_qir == original
+    assert repeated._extra_qir == [
+        {**d, "pos": repeated.gate_count()} for d in original
+    ]
+
+
+def test_simple_compile_preserves_measurement_export(npb):
+    qiskit = pytest.importorskip("qiskit")
+    c = tc.Circuit(1)
+    c.h(0)
+    c.h(0)
+    c.x(0)
+    c.measure_instruction(0)
+    original = c.to_qiskit(enable_instruction=True)
+    compiled, _ = tc.compiler.simple_compiler.simple_compile(c)
+    assert c.to_qiskit(enable_instruction=True) == original
+    assert compiled.gate_count() == 1
+    for qc in (original, compiled.to_qiskit(enable_instruction=True)):
+        state = qiskit.quantum_info.Statevector.from_instruction(
+            qc.remove_final_measurements(inplace=False)
+        )
+        np.testing.assert_allclose(state.probabilities(), [0, 1], atol=1e-6)

@@ -5,45 +5,65 @@ Some common graphs and lattices
 # pylint: disable=invalid-name
 
 from functools import partial
-from typing import Any, Optional, Sequence, Tuple
+from typing import Any, Optional, Sequence, Tuple, Union
 
 import networkx as nx
+import numpy as np
 
 Graph = Any
 
 
 def Line1D(
     n: int,
-    node_weight: Optional[Sequence[float]] = None,
-    edge_weight: Optional[Sequence[float]] = None,
+    node_weight: Optional[Union[float, Sequence[float], np.ndarray[Any, Any]]] = None,
+    edge_weight: Optional[Union[float, Sequence[float], np.ndarray[Any, Any]]] = None,
     pbc: bool = True,
 ) -> Graph:
     """
     1D chain with ``n`` sites
 
-    :param n: number of sites in the chain
+    :param n: number of sites in the chain; periodic chains require at least 2
     :type n: int
+    :param node_weight: scalar weight broadcast to all sites, or a sequence or
+        one-dimensional array with at least ``n`` weights in site order.
+        Extra entries are ignored; defaults to zero.
+    :type node_weight: Optional[Union[float, Sequence[float], numpy.ndarray]]
+    :param edge_weight: scalar weight broadcast to all bonds, or a sequence or
+        one-dimensional array with at least ``n - 1`` weights in chain order.
+        For periodic boundaries, entry ``n - 1`` weights the closing bond
+        ``(n - 1, 0)``; if only ``n - 1`` entries are supplied, the last weight
+        is reused. Extra entries are ignored; defaults to one. For a two-site
+        periodic chain, the two bond weights are summed on its single edge.
+    :type edge_weight: Optional[Union[float, Sequence[float], numpy.ndarray]]
     :param pbc: whether to use periodic boundary conditions (close the chain into a ring), defaults to True
     :type pbc: bool, optional
     :return: the 1D chain as a networkx graph
     :rtype: Graph
+    :raises ValueError: if ``pbc`` is true and ``n < 2``
     """
+
+    if pbc and n < 2:
+        raise ValueError("Periodic Line1D requires at least two sites")
 
     g = nx.Graph()
     if edge_weight is None:
-        edge_weight = 1.0  # type: ignore
-    if not isinstance(edge_weight, list):
-        edge_weight = [edge_weight] * n  # type: ignore
+        edge_weight = 1.0
+    if not isinstance(edge_weight, Sequence) and np.ndim(edge_weight) == 0:
+        edge_weight = [edge_weight] * n  # type: ignore[list-item]
     if node_weight is None:
-        node_weight = 0.0  # type: ignore
-    if not isinstance(node_weight, list):
-        node_weight = [node_weight] * n  # type: ignore
+        node_weight = 0.0
+    if not isinstance(node_weight, Sequence) and np.ndim(node_weight) == 0:
+        node_weight = [node_weight] * n  # type: ignore[list-item]
     for i in range(n):
-        g.add_node(i, weight=node_weight[i])
+        g.add_node(i, weight=node_weight[i])  # type: ignore[index]
     for i in range(n - 1):
-        g.add_edge(i, i + 1, weight=edge_weight[i])
-    if pbc is True:
-        g.add_edge(n - 1, 0, weight=edge_weight[i])
+        g.add_edge(i, i + 1, weight=edge_weight[i])  # type: ignore[index]
+    if pbc:
+        weight = edge_weight[min(n, len(edge_weight)) - 1]  # type: ignore[index, arg-type]
+        if g.has_edge(n - 1, 0):
+            g[n - 1][0]["weight"] = g[n - 1][0]["weight"] + weight
+        else:
+            g.add_edge(n - 1, 0, weight=weight)
     return g
 
 

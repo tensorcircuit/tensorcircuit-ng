@@ -678,3 +678,58 @@ def test_dm_sexpps_jittable_vamppable_tf(tfb):
     assert np.abs(r[0] - r[1]) > 1e-5
     assert np.abs(r[0] - r1[0]) > 1e-5
     print(r, r1)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb")])
+def test_qutrit_dm_unitary(backend):
+    d = 3
+    c = tc.DMCircuit(2, dim=d)
+    c.unitary(0, unitary=tc.quditgates.h_matrix_func(d))
+    c.unitary(0, 1, unitary=tc.quditgates.csum_matrix_func(d))
+    bell = np.zeros(d**2, dtype=complex)
+    bell[[0, 4, 8]] = 1 / np.sqrt(d)
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.densitymatrix()), np.outer(bell, bell.conj()), atol=1e-6
+    )
+
+    rho = np.diag([0.2, 0.3, 0.5])
+    shift = tc.quditgates.x_matrix_func(d)
+    mixed = tc.DMCircuit(1, dim=d, dminputs=rho)
+    mixed.unitary(0, unitary=shift)
+    np.testing.assert_allclose(
+        tc.backend.numpy(mixed.densitymatrix()), np.diag([0.5, 0.2, 0.3]), atol=1e-6
+    )
+
+
+def test_qutrit_dm_unitary_jit_grad(jaxb):
+    projector = np.diag([1.0, 0.0, 0.0])
+
+    def population(theta):
+        c = tc.DMCircuit(1, dim=3)
+        c.unitary(0, unitary=tc.quditgates.rx_matrix_func(3, theta))
+        return tc.backend.real(c.expectation((projector, [0])))
+
+    theta = tc.backend.convert_to_tensor(0.4)
+    value, gradient = tc.backend.jit(tc.backend.value_and_grad(population))(theta)
+    np.testing.assert_allclose(tc.backend.numpy(value), np.cos(0.2) ** 2, atol=1e-6)
+    np.testing.assert_allclose(tc.backend.numpy(gradient), -np.sin(0.4) / 2, atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb")])
+@pytest.mark.parametrize("nsites", [1, 2])
+def test_qutrit_dm_general_kraus(backend, nsites):
+    d = 3
+    p = 0.7
+    size = d**nsites
+    shift = tc.backend.numpy(tc.quditgates.x_matrix_func(d))
+    if nsites == 2:
+        shift = np.kron(np.eye(d), shift)
+    k0 = tc.gates.Gate(np.sqrt(p) * np.eye(size))
+    k1 = np.sqrt(1 - p) * shift
+    c = tc.DMCircuit(nsites, dim=d)
+    c.apply_general_kraus([k0, k1], *range(nsites))
+    diagonal = np.zeros(size)
+    diagonal[:2] = [p, 1 - p]
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.densitymatrix()), np.diag(diagonal), atol=1e-6
+    )
