@@ -40,6 +40,9 @@ description: >-
   verify.py. This reduced-size demonstration does not establish the original
   12 x 12 PEPS accuracy or performance, and exact contraction does not remove
   finite-D, preparation or stochastic-integration errors.
+  At flux 1/3, the 6 x 6 lattice spans only two magnetic unit cells across;
+  agreement after the corner quench does not establish separated edge and
+  bulk behavior or chiral edge propagation at the paper's scale.
 parameters:
   rows: 6
   columns: 6
@@ -54,6 +57,7 @@ parameters:
   solver: dense
   regulator: 1.0e-5
   measurement_samples: 4194304
+  bond_seed: 7109
   measurement_seed: 9147
   measurement_batch_per_device: 2048
   preparation:

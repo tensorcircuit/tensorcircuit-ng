@@ -1,10 +1,10 @@
-"""
-Reproduction of "Real-Time Dynamics in Two Dimensions with Tensor Network States
+"""Reproduction of "Real-Time Dynamics in Two Dimensions with Tensor Network States
 via Time-Dependent Variational Monte Carlo Method"
 Link: https://arxiv.org/abs/2512.06768
 Description:
-Figure 2(b,c) method on a 6 x 6, 24-particle fermionic PEPS: independent VMC
-preparation, real-time SR/RK4 evolution, and comparison with an exact Gaussian state.
+This script reproduces the Figure 2(b,c) method from the paper using TensorCircuit-NG.
+A scaled 6 x 6 corner quench compares independent PEPS-tVMC with exact Gaussian
+densities; it does not establish chiral edge propagation at the paper's scale.
 """
 
 import argparse
@@ -20,6 +20,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tencirpauli as tcp
 import tensorcircuit as tc
+
+DEFAULT_SEED = 17
 
 
 class FermionPEPS:
@@ -590,7 +592,7 @@ class MonteCarlo:
         return K.scan(step, K.arange(steps), (theta, chains, key, history))
 
 
-def enlarge_bond(theta, source, target, noise=0.05):
+def enlarge_bond(theta, source, target, seed, noise=0.05):
     """Embed parity blocks exactly, then activate the new entries with seeded noise."""
     K = tc.backend
     positions = []
@@ -605,7 +607,7 @@ def enlarge_bond(theta, source, target, noise=0.05):
         theta,
     )
     return target.normalize(
-        enlarged + noise * target.random_parameters(K.get_random_state(7109))
+        enlarged + noise * target.random_parameters(K.get_random_state(seed))
     )
 
 
@@ -851,9 +853,14 @@ def advance_phase(engine, state, dt, steps, imaginary, label):
     return state
 
 
-def simulate(samples=10240, measurement_samples=4194304, seed=17, solver="dense"):
+def simulate(
+    samples=10240, measurement_samples=4194304, seed=DEFAULT_SEED, solver="dense"
+):
     """Prepare from random tensors, evolve to t=8, and independently measure four frames."""
     K = tc.backend
+    # Preserve the published default streams while letting --seed shift every stage.
+    bond_seed = 7109 + (seed - DEFAULT_SEED)
+    measurement_seed = 9147 + (seed - DEFAULT_SEED)
     batch = min(samples, 2560 * len(jax.devices()))
     small = FermionPEPS(6, 6, 2)
     _, draw = K.random_split(K.get_random_state(seed))
@@ -869,7 +876,7 @@ def simulate(samples=10240, measurement_samples=4194304, seed=17, solver="dense"
     theta, _, _ = advance_phase(engine, state, 0.05, 100, True, "prepare D=2")
     peps = FermionPEPS(6, 6, 4)
     theta = enlarge_bond(
-        jax.device_put(np.asarray(theta), jax.devices()[0]), small, peps
+        jax.device_put(np.asarray(theta), jax.devices()[0]), small, peps, seed=bond_seed
     )
     problem = Hofstadter(peps, 24)
     for phase, (count, steps, ridge) in enumerate(
@@ -900,7 +907,7 @@ def simulate(samples=10240, measurement_samples=4194304, seed=17, solver="dense"
             state[0],
             physical_time,
             samples=measurement_samples,
-            seed=9147,
+            seed=measurement_seed,
             batch_size=2048 * len(jax.devices()),
         )
         print(
@@ -985,7 +992,7 @@ def main():
     parser.add_argument("--plot-only", action="store_true")
     parser.add_argument("--samples", type=int, default=10240)
     parser.add_argument("--measurement-samples", type=int, default=4194304)
-    parser.add_argument("--seed", type=int, default=17)
+    parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--solver", choices=("dense", "cg"), default="dense")
     args = parser.parse_args()
     if args.samples < 2 or args.measurement_samples < 64:

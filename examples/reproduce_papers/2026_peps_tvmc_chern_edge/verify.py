@@ -420,10 +420,15 @@ def check_preparation():
     problem = Hofstadter(peps, 4)
     engine = ExactMoments(problem)
     theta = peps.random_parameters(K.get_random_state(141))
-    grown = enlarge_bond(theta, peps, larger, noise=0.0)
+    grown = enlarge_bond(theta, peps, larger, seed=142, noise=0.0)
     before = np.asarray(K.jit(peps.batch_amplitude)(theta, engine.basis))
     after = np.asarray(K.jit(larger.batch_amplitude)(grown, engine.basis))
     np.testing.assert_allclose(after, before, rtol=1e-11, atol=1e-14)
+    noisy = np.asarray(enlarge_bond(theta, peps, larger, seed=142))
+    repeated = np.asarray(enlarge_bond(theta, peps, larger, seed=142))
+    different = np.asarray(enlarge_bond(theta, peps, larger, seed=143))
+    np.testing.assert_array_equal(noisy, repeated)
+    np.testing.assert_array_less(1e-4, np.linalg.norm(noisy - different))
     chains = engine.initial_chains(K.get_random_state(143))
     key = K.get_random_state(149)
     final, _, _, _ = K.jit(
@@ -515,6 +520,13 @@ def check_small():
     exact_density = np.abs(psi) ** 2 @ basis / np.vdot(psi, psi).real
     np.testing.assert_array_less(
         np.abs(arrays["density"] - exact_density), 6 * arrays["density_stderr"] + 0.002
+    )
+    _, first = measure(problem, theta, 0.0, samples=256, seed=31, batch_size=128)
+    _, repeated = measure(problem, theta, 0.0, samples=256, seed=31, batch_size=128)
+    _, different = measure(problem, theta, 0.0, samples=256, seed=32, batch_size=128)
+    np.testing.assert_array_equal(first["density"], repeated["density"])
+    np.testing.assert_array_less(
+        1e-4, np.linalg.norm(first["density"] - different["density"])
     )
     return {
         **report,
