@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Improved
+
+- Vectorize formatted, batched tensor-network sampling for qubit circuits while preserving explicit sampling status.
+
 ### Added
 
 - Support qudit density-matrix simulation with `tc.DMCircuit(n, dim=d)` for `d > 2`, including explicit single- and multi-site `unitary` gates and Kraus channels via `apply_general_kraus`.

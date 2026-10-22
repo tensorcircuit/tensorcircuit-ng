@@ -1455,10 +1455,9 @@ class BaseCircuit(AbstractCircuit):
         # 1. efficiency in different use case
         # 2. randomness interaction with jit when no explicit status
         if not allow_state:
-            if random_generator is None:
-                random_generator = backend.get_random_state()
-
             if batch is None:
+                if random_generator is None:
+                    random_generator = backend.get_random_state()
                 seed = backend.stateful_randu(random_generator, shape=[self._nqubits])
                 r = self.perfect_sampling(seed)
                 if format is None:  # batch=None, format=None, backward compatibility
@@ -1467,6 +1466,8 @@ class BaseCircuit(AbstractCircuit):
             else:
                 r = []  # type: ignore
                 if status is None:
+                    if random_generator is None:
+                        random_generator = backend.get_random_state()
                     # materialize the randomness as explicit `status` tensors
                     # so that the per-shot call stays jit-safe (no host-side
                     # random state mutation / tracer leakage inside jit).
@@ -1475,6 +1476,20 @@ class BaseCircuit(AbstractCircuit):
                     )
                 else:
                     assert backend.shape_tuple(status)[0] == batch
+
+                if format is not None and self._d == 2:
+
+                    def sample_one(seed: Tensor) -> Tensor:
+                        return self.perfect_sampling(seed)[0]
+
+                    samples = backend.jit(backend.vmap(sample_one))(status)
+                    return sample2all(
+                        backend.cast(samples, "int32"),
+                        self._nqubits,
+                        format=format,
+                        jittable=jittable and self._nqubits <= 35,
+                        dim=self._d,
+                    )
 
                 @backend.jit
                 def perfect_sampling(seed: Tensor) -> Any:

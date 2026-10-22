@@ -1667,6 +1667,43 @@ def test_sexpps(backend):
     np.testing.assert_allclose(y2, y, atol=0.01)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_formatted_sample_status(backend):
+    status = tc.backend.convert_to_tensor(
+        np.array([[0.1, 0.2, 0.3], [0.9, 0.8, 0.7], [0.4, 0.6, 0.2]], dtype=np.float32)
+    )
+    for circuit_type in (tc.Circuit, tc.DMCircuit):
+        circuit = circuit_type(3)
+        circuit.ry(0, theta=0.7)
+        circuit.h(1)
+        circuit.cnot(0, 2)
+        expected = np.stack(
+            [tc.backend.numpy(circuit.perfect_sampling(status[i])[0]) for i in range(3)]
+        )
+        samples = tc.backend.jit(
+            lambda s: circuit.sample(batch=3, status=s, format="sample_bin")
+        )(status)
+        np.testing.assert_array_equal(tc.backend.numpy(samples), expected)
+        integers = tc.backend.jit(
+            lambda s: circuit.sample(batch=3, status=s, format="sample_int")
+        )(status)
+        np.testing.assert_array_equal(
+            tc.backend.numpy(integers), expected @ np.array([4, 2, 1])
+        )
+        indices, counts = tc.backend.jit(
+            lambda s: circuit.sample(batch=3, status=s, format="count_tuple")
+        )(status)
+        actual_counts = {
+            int(i): int(v)
+            for i, v in zip(tc.backend.numpy(indices), tc.backend.numpy(counts))
+            if i >= 0
+        }
+        expected_indices, expected_values = np.unique(
+            expected @ np.array([4, 2, 1]), return_counts=True
+        )
+        assert actual_counts == dict(zip(expected_indices, expected_values))
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_sample_format(backend):
     c = tc.Circuit(2)
