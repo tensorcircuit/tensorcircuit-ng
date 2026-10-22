@@ -259,22 +259,40 @@ def heisenberg_measurements(
     :rtype: Tensor
     """
     loss = 0.0
+    skip_zero_couplings = any(
+        not isinstance(h, (int, float, complex)) or h != 0 for h in (hzz, hxx, hyy)
+    ) or any(isinstance(h, (int, float, complex)) and h != 0 for h in (hz, hx, hy))
     for e in g.edges:
-        loss += (
-            g[e[0]][e[1]]["weight"]
-            * hzz
-            * c.expectation((G.z(), [e[0]]), (G.z(), [e[1]]), reuse=reuse)  # type: ignore
-        )
-        loss += (
-            g[e[0]][e[1]]["weight"]
-            * hyy
-            * c.expectation((G.y(), [e[0]]), (G.y(), [e[1]]), reuse=reuse)  # type: ignore
-        )
-        loss += (
-            g[e[0]][e[1]]["weight"]
-            * hxx
-            * c.expectation((G.x(), [e[0]]), (G.x(), [e[1]]), reuse=reuse)  # type: ignore
-        )
+        if (
+            not skip_zero_couplings
+            or not isinstance(hzz, (int, float, complex))
+            or hzz != 0
+        ):
+            loss += (
+                g[e[0]][e[1]]["weight"]
+                * hzz
+                * c.expectation((G.z(), [e[0]]), (G.z(), [e[1]]), reuse=reuse)  # type: ignore
+            )
+        if (
+            not skip_zero_couplings
+            or not isinstance(hyy, (int, float, complex))
+            or hyy != 0
+        ):
+            loss += (
+                g[e[0]][e[1]]["weight"]
+                * hyy
+                * c.expectation((G.y(), [e[0]]), (G.y(), [e[1]]), reuse=reuse)  # type: ignore
+            )
+        if (
+            not skip_zero_couplings
+            or not isinstance(hxx, (int, float, complex))
+            or hxx != 0
+        ):
+            loss += (
+                g[e[0]][e[1]]["weight"]
+                * hxx
+                * c.expectation((G.x(), [e[0]]), (G.x(), [e[1]]), reuse=reuse)  # type: ignore
+            )
     if hx != 0:
         for n in g.nodes:
             loss += hx * c.expectation((G.x(), [n]), reuse=reuse)  # type: ignore

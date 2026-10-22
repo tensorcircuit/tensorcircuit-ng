@@ -313,6 +313,80 @@ def test_heisenberg_measurements_noncontiguous_graph():
     np.testing.assert_allclose(tc.backend.numpy(energy), -3.0, atol=1e-5)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_heisenberg_zero_couplings(backend):
+    state = np.array([1, 2j, 3 + 1j, -4 + 2j], dtype=np.complex64)
+    state /= np.linalg.norm(state)
+    circuit = tc.Circuit(2, inputs=tc.backend.convert_to_tensor(state))
+    graph = tc.templates.graphs.Line1D(2, node_weight=1.0, edge_weight=1.7, pbc=False)
+    x = np.array([[0, 1], [1, 0]])
+    y = np.array([[0, -1j], [1j, 0]])
+    z = np.diag([1, -1])
+    for hzz, hxx, hyy, hz in [
+        (1, 0, 0, 0),
+        (0, 0, 0, 1),
+        (0.2, 0.3, 0.4, 0.1),
+        (0, 0, 0, 0),
+    ]:
+        hamiltonian = 1.7 * (
+            hzz * np.kron(z, z) + hxx * np.kron(x, x) + hyy * np.kron(y, y)
+        )
+        hamiltonian += hz * (np.kron(z, np.eye(2)) + np.kron(np.eye(2), z))
+        actual = tc.templates.measurements.heisenberg_measurements(
+            circuit, graph, hzz=hzz, hxx=hxx, hyy=hyy, hz=hz
+        )
+        np.testing.assert_allclose(
+            tc.backend.numpy(actual),
+            np.vdot(state, hamiltonian @ state).real,
+            atol=1e-6,
+        )
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_heisenberg_zero_coupling_gradients(backend):
+    graph = tc.templates.graphs.Line1D(2, node_weight=1.0, edge_weight=1.7, pbc=False)
+
+    def energy(parameters, trainable):
+        circuit = tc.Circuit(2)
+        circuit.ry(0, theta=parameters[0])
+        circuit.ry(1, theta=0.2)
+        return tc.templates.measurements.heisenberg_measurements(
+            circuit,
+            graph,
+            hzz=0,
+            hyy=0,
+            hxx=tc.backend.cast(parameters[1], tc.dtypestr) if trainable else 0,
+        )
+
+    parameters = tc.backend.convert_to_tensor(np.array([0.4, 0.0], dtype=np.float32))
+    for trainable in (False, True):
+        value, gradient = tc.backend.jit(
+            tc.backend.value_and_grad(lambda p: energy(p, trainable))
+        )(parameters)
+        expected = [0.0, 1.7 * np.sin(0.4) * np.sin(0.2) if trainable else 0.0]
+        np.testing.assert_allclose(tc.backend.numpy(value), 0.0, atol=1e-6)
+        np.testing.assert_allclose(tc.backend.numpy(gradient), expected, atol=1e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("torchb")])
+def test_heisenberg_zero_tensor_field(backend):
+    graph = tc.templates.graphs.Line1D(2, pbc=False)
+    field = tc.backend.convert_to_tensor(np.array(0.0, dtype=np.float32))
+
+    def energy(theta):
+        circuit = tc.Circuit(2)
+        circuit.ry(0, theta=theta)
+        return tc.templates.measurements.heisenberg_measurements(
+            circuit, graph, hzz=0, hxx=0, hyy=0, hx=field
+        )
+
+    value, gradient = tc.backend.value_and_grad(energy)(
+        tc.backend.convert_to_tensor(np.array(0.4, dtype=np.float32))
+    )
+    np.testing.assert_allclose(tc.backend.numpy(value), 0.0, atol=1e-6)
+    np.testing.assert_allclose(tc.backend.numpy(gradient), 0.0, atol=1e-6)
+
+
 def test_state_wrapper():
     Bell_pair_block_state = tc.templates.blocks.state_centric(
         tc.templates.blocks.Bell_pair_block

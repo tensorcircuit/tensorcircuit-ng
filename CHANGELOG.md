@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Improved
+
+- Skip static zero XX, YY, and ZZ couplings in Heisenberg measurements while preserving tensor-valued couplings and the all-zero computation.
+
 ### Added
 
 - Support qudit density-matrix simulation with `tc.DMCircuit(n, dim=d)` for `d > 2`, including explicit single- and multi-site `unitary` gates and Kraus channels via `apply_general_kraus`.
