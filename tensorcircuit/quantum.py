@@ -2732,7 +2732,8 @@ def count_vector2dict(
 
     dim = 2 if dim is None else dim
     b = which_backend(count)
-    out_int = {i: b.numpy(count[i]).item() for i in range(dim**n)}
+    values = b.numpy(count).tolist()
+    out_int = {i: values[i] for i in range(dim**n)}
     if key == "int":
         return out_int
     else:
@@ -2761,11 +2762,9 @@ def count_tuple2dict(
     :rtype: Dict[Any, int]
     """
     dim = 2 if dim is None else dim
-    out_int = {
-        backend.numpy(i).item(): backend.numpy(j).item()
-        for i, j in zip(count[0], count[1])
-        if i >= 0
-    }
+    indices = backend.numpy(count[0]).tolist()
+    values = backend.numpy(count[1]).tolist()
+    out_int = {i: j for i, j in zip(indices, values) if i >= 0}
     if key == "int":
         return out_int
     else:
