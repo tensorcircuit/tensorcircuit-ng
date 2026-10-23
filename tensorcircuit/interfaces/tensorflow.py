@@ -84,29 +84,25 @@ def tensorflow_interface(
 
     ydtype = backend.tree_map(tf_dtype, ydtype)
 
+    def vjp_fun(x: Tensor, v: Tensor) -> Tuple[Tensor, Tensor]:
+        if len(x) == 1:
+            x = x[0]
+        if len(v) == 1:
+            v = v[0]
+        if backend.name == "jax":
+            v = backend.tree_map(backend.conj, v)
+        y, g = backend.vjp(fun, x, v)
+        if backend.name == "jax":
+            g = backend.tree_map(backend.conj, g)
+        return y, g
+
+    if jit is True:
+        vjp_fun = backend.jit(vjp_fun)
+
+    vjp_fun_tf = return_partial(tf_wrapper(vjp_fun), 1)
+
     @tf.custom_gradient  # type: ignore
     def fun_wrap(*x: Any) -> Any:
-        nx = len(x)
-
-        def vjp_fun(*xv: Tensor) -> Tuple[Tensor, Tensor]:
-            x = xv[:nx]
-            v = xv[nx:]
-            if len(x) == 1:
-                x = x[0]
-            if len(v) == 1:
-                v = v[0]
-            if backend.name == "jax":
-                v = backend.tree_map(backend.conj, v)
-            y, g = backend.vjp(fun, x, v)
-            if backend.name == "jax":
-                g = backend.tree_map(backend.conj, g)
-            return y, g
-
-        if jit is True:
-            vjp_fun = backend.jit(vjp_fun)
-
-        vjp_fun_tf = return_partial(tf_wrapper(vjp_fun), 1)
-
         xdtype = backend.tree_map(lambda x: x.dtype, x)
         # (x, )
         if len(xdtype) == 1:
@@ -114,7 +110,11 @@ def tensorflow_interface(
         y = tf.py_function(func=fun_tf, inp=x, Tout=ydtype)
 
         def grad(*dy: Any, **kws: Any) -> Any:
-            g = tf.py_function(func=vjp_fun_tf, inp=x + dy, Tout=xdtype)
+            g = tf.py_function(
+                func=lambda *xv: vjp_fun_tf(xv[: len(x)], xv[len(x) :]),
+                inp=x + dy,
+                Tout=xdtype,
+            )
 
             return g
 
