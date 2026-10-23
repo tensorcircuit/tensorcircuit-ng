@@ -1628,7 +1628,7 @@ class BaseCircuit(AbstractCircuit):
                 mc = measurement_counts(
                     p,
                     counts=shots,
-                    format="sample_bin",
+                    format="sample_int",
                     random_generator=random_generator,
                     status=status,
                     jittable=True,
