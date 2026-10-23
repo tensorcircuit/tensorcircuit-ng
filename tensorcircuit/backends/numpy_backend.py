@@ -273,9 +273,10 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
 
     def onehot(self, a: Tensor, num: int) -> Tensor:
         a = np.asarray(a)
-        res = np.eye(num)[a.reshape([-1])]
+        indices = np.arange(num, dtype=np.intp)[a.reshape([-1])]
+        res = np.zeros((indices.size, num))
+        res[np.arange(indices.size), indices] = 1
         return res.reshape(list(a.shape) + [num])
-        # https://stackoverflow.com/questions/38592324/one-hot-encoding-using-numpy
 
     def cumsum(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
         return np.cumsum(a, axis)
