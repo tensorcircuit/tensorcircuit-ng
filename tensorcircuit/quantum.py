@@ -2996,12 +2996,20 @@ def correlation_from_samples(index: Sequence[int], results: Tensor, n: int) -> T
     :rtype: Tensor
     """
     if len(backend.shape_tuple(results)) == 1:
+        if isinstance(index, (list, tuple, range, np.ndarray)) and all(
+            isinstance(i, (int, np.integer)) for i in index
+        ):
+            positions = range(n - 1, -1, -1)
+            shifts = [positions[i] for i in index]
+            r = backend.right_shift(results, shifts[0])
+            for shift in shifts[1:]:
+                r = backend.bitwise_xor(r, backend.right_shift(results, shift))
+            r = 1 - 2 * backend.cast(backend.bitwise_and(r, 1), rdtypestr)
+            return backend.mean(r)
         results = sample_int2bin(results, n)
-    results = 1 - results * 2
-    r = results[:, index[0]]
+    r = 1 - 2 * backend.cast(results[:, index[0]], rdtypestr)
     for i in index[1:]:
-        r *= results[:, i]
-    r = backend.cast(r, rdtypestr)
+        r = r * (1 - 2 * backend.cast(results[:, i], rdtypestr))
     return backend.mean(r)
 
 

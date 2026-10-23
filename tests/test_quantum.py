@@ -1721,3 +1721,38 @@ def test_fidelity_degenerate_gradient(backend, highp):
     derivative = k.grad(loss)
     for evaluate in (derivative, k.jit(derivative)):
         np.testing.assert_allclose(k.numpy(evaluate(theta)), 0.4, atol=1e-10)
+
+
+def test_correlation_selected_bits(npb):
+    samples = np.array([0, 1, 3, 17, 31], dtype=np.uint8)
+    bits = np.array(
+        [
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1],
+            [0, 0, 0, 1, 1],
+            [1, 0, 0, 0, 1],
+            [1, 1, 1, 1, 1],
+        ],
+        dtype=np.uint8,
+    )
+    for values in (samples, bits):
+        original = values.copy()
+        tensor = tc.backend.convert_to_tensor(values)
+        result = qu.correlation_from_samples([0, -1, 0], tensor, 5)
+        np.testing.assert_allclose(result, -0.6, atol=1e-6)
+        np.testing.assert_array_equal(tensor, original)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
+def test_correlation_selected_bits_dynamic_indices(backend):
+    samples = tc.backend.convert_to_tensor(np.array([0, 1, 3, 17, 31], dtype=np.int32))
+
+    def correlation(indices, values):
+        return qu.correlation_from_samples(indices, values, 5)
+
+    correlation = tc.backend.jit(correlation)
+    for indices, expected in [([0, 4], 0.2), ([1, 4], -0.2)]:
+        value = correlation(
+            tc.backend.convert_to_tensor(np.array(indices, dtype=np.int32)), samples
+        )
+        np.testing.assert_allclose(tc.backend.numpy(value), expected, atol=1e-6)
