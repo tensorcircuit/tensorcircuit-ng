@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Compute classical-shadow Pauli expectations directly from raw measurement snapshots without constructing local density matrices.
+
 ### Added
 
 - Support qudit density-matrix simulation with `tc.DMCircuit(n, dim=d)` for `d > 2`, including explicit single- and multi-site `unitary` gates and Kraus channels via `apply_general_kraus`.
