@@ -247,14 +247,10 @@ def expectation_ps_shadow(
             raise ValueError(
                 f"snapshots should be 3-d if pauli_strings is not None, got {len(snapshots.shape)}-d instead."
             )
-        lss_states = local_snapshot_states(
-            snapshots, pauli_strings
-        )  # (ns, repeat, nq, 2, 2)
+        ns, repeat, nq = snapshots.shape
     else:
-        lss_states = snapshots  # (ns, repeat, nq, 2, 2)
-    ns, repeat, nq, _, _ = lss_states.shape
+        ns, repeat, nq, _, _ = snapshots.shape
     ns *= repeat
-    ss_states = backend.reshape(lss_states, (ns, nq, 2, 2))
 
     if ps is None:
         ps = [0] * nq
@@ -271,7 +267,28 @@ def expectation_ps_shadow(
         raise ValueError(
             f"The number of qubits of the shadow state is {nq}, but got a {len(ps)}-qubit pauli string observable."
         )
-    ps = backend.cast(backend.convert_to_tensor(ps), dtype="int32")  # (nq,)
+    ps_tensor = backend.cast(backend.convert_to_tensor(ps), dtype="int32")  # (nq,)
+
+    if pauli_strings is not None:
+        pauli_strings = backend.cast(pauli_strings, "int32")
+        if len(pauli_strings.shape) == 2:
+            pauli_strings = pauli_strings[:, None, :]
+        signs = 1 - 2 * backend.cast(snapshots, rdtypestr)
+        factors = backend.where(
+            ps_tensor == 0,
+            backend.ones_like(signs),
+            backend.where(
+                pauli_strings == ps_tensor, 3 * signs, backend.zeros_like(signs)
+            ),
+        )
+        factors = backend.reshape(factors, (ns, nq))
+        products = backend.ones((ns,), dtype=rdtypestr)
+        for i in range(nq):
+            products = products * factors[:, i]
+        batch = int(np.ceil(ns / k))
+        return [backend.mean(products[i : i + batch]) for i in range(0, ns, batch)]
+
+    ss_states = backend.reshape(snapshots, (ns, nq, 2, 2))
 
     paulis = backend.convert_to_tensor(
         backend.cast(
@@ -293,7 +310,7 @@ def expectation_ps_shadow(
     v = backend.vmap(trace_paulis_prod, vectorized_argnums=(0, 1))  # (nq,)
 
     def prod(dm: Tensor) -> Tensor:
-        return backend.shape_prod(v(dm, ps))
+        return backend.shape_prod(v(dm, ps_tensor))
 
     vv = backend.vmap(prod, vectorized_argnums=0)  # (ns,)
 
