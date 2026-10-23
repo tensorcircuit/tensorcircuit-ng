@@ -27,7 +27,7 @@ actions, projections, and moment contractions.
 """
 
 import math
-from typing import Any, Literal, Optional, Tuple, Union
+from typing import Any, Callable, Literal, Optional, Tuple, Union
 
 from .cons import backend, dtypestr, rdtypestr
 from . import matrixfunc
@@ -1102,6 +1102,24 @@ def thermal_expectation(
     return _format_estimate(value, standard_error, with_std)
 
 
+def _lanczos_bilinear(
+    projection: matrixfunc.KrylovProjection,
+    function: Callable[[Tensor], Tensor],
+    left_vector: Tensor,
+) -> Tensor:
+    _, eigenvectors, _, _, values = matrixfunc._projection_function_values(
+        projection, function
+    )
+    projected_left = backend.tensordot(
+        backend.conj(left_vector), projection.basis, axes=([0], [0])
+    )
+    weights = backend.tensordot(projected_left, eigenvectors, axes=1)
+    weights = weights * backend.conj(eigenvectors[0, :])
+    return backend.tensordot(
+        weights, backend.cast(values, dtypestr), axes=([-1], [-1])
+    ) * backend.cast(projection.recurrence.vector_norm, dtypestr)
+
+
 def _resolvent_bilinear_krylov(
     operator: Any,
     right_vector: Tensor,
@@ -1116,18 +1134,15 @@ def _resolvent_bilinear_krylov(
     z = backend.cast(z, dtypestr)
     if left_vector is None:
         return matrixfunc.lanczos_resolvent(projection, z)
-    result = matrixfunc.lanczos_apply(
+    return _lanczos_bilinear(
         projection,
         lambda nodes: (
             1.0 / (z[..., None] - backend.cast(nodes, dtypestr))
             if _rank(z) == 1
             else 1.0 / (z - backend.cast(nodes, dtypestr))
         ),
+        backend.cast(_as_tensor(left_vector), dtypestr),
     )
-    left_vector = backend.cast(_as_tensor(left_vector), dtypestr)
-    if _rank(result) == 1:
-        return backend.sum(backend.conj(left_vector) * result)
-    return backend.tensordot(backend.conj(left_vector), result, axes=([0], [1]))
 
 
 def resolvent_bilinear(
@@ -1325,6 +1340,21 @@ def time_correlation(
         method = _DEFAULT_KRYLOV_CONFIG
     right_vector = backend.cast(_as_tensor(right_vector), dtypestr)
     left_vector = backend.cast(_as_tensor(left_vector), dtypestr)
+    if isinstance(method, KrylovConfig):
+        projection = matrixfunc.lanczos_project(
+            operator, right_vector, method, dimension=dimension
+        )
+        coefficient = -1.0j * backend.cast(times, dtypestr)
+        result = _lanczos_bilinear(
+            projection,
+            lambda nodes: backend.exp(
+                coefficient[..., None] * backend.cast(nodes, dtypestr)
+            ),
+            left_vector,
+        )
+        shift = backend.cast(_as_tensor(energy_shift), dtypestr)
+        phase = backend.cast(1.0j, dtypestr) * shift * backend.cast(times, dtypestr)
+        return result * backend.exp(phase)
     action = matrixfunc.exponential_action(
         operator,
         right_vector,
