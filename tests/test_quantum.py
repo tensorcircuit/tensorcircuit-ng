@@ -317,6 +317,14 @@ def test_trace_product(backend):
     np.testing.assert_allclose(qu.trace_product(o, hq), 2, atol=atol)
 
 
+def test_renyi_entropy_sparse_to_dense(npb, highp):
+    indices = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
+    values = tc.backend.convert_to_tensor([0.5, 0.2j, -0.2j, 0.5], dtype=tc.dtypestr)
+    rho = tc.backend.to_dense(tc.backend.coo_sparse_matrix(indices, values, (2, 2)))
+
+    np.testing.assert_allclose(qu.renyi_entropy(rho), -np.log(0.58), atol=1e-12)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_anti_flatness(backend):
     probability = 0.2
