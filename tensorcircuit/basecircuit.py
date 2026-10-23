@@ -1686,11 +1686,11 @@ class BaseCircuit(AbstractCircuit):
                 ]
             )
         readoutlist = backend.cast(
-            backend.convert_to_tensor(readoutlist), dtype=dtypestr
+            backend.convert_to_tensor(readoutlist), dtype=rdtypestr
         )
 
         ms = [Gate(readoutlist[i]) for i in range(nqubit)]
-        p = backend.cast(p, dtypestr)
+        p = backend.cast(p, rdtypestr)
         p = Gate(backend.reshape2(p))
         for i in range(nqubit):
             ms[i][1] ^ p[i]
