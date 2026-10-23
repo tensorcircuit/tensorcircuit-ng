@@ -95,13 +95,15 @@ def jaxsvd_bwd(r: Sequence[Array], tangents: Sequence[Array]) -> Tuple[Array]:
     grad_a = dAv + dAu + dAs + dAc
 
     if m > n:
-        grad_a += (du - jnp.conj(u) @ jnp.transpose(u) @ du) @ Sinv @ jnp.transpose(v)
+        grad_a += (du - jnp.conj(u) @ (jnp.transpose(u) @ du)) @ Sinv @ jnp.transpose(v)
     elif m < n:
         grad_a += (
             jnp.conj(u)
             @ Sinv
-            @ jnp.transpose(jnp.conj(dv))
-            @ (jnp.eye(n) - jnp.conj(v) @ jnp.transpose(v))
+            @ (
+                jnp.transpose(jnp.conj(dv))
+                - (jnp.transpose(jnp.conj(dv)) @ jnp.conj(v)) @ jnp.transpose(v)
+            )
         )
     # m=n do nothing
 
