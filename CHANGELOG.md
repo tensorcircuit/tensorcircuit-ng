@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Avoid allocating a full identity matrix when constructing NumPy one-hot vectors.
 - Compute classical-shadow Pauli expectations directly from raw measurement snapshots without constructing local density matrices.
 - Compute finite-shot correlations from selected sample bits without materializing a complete bit matrix.
 
