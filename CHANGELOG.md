@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Evaluate Krylov time correlations and bilinear resolvents in the projected space without materializing full state batches.
 - Compute classical-shadow Pauli expectations directly from raw measurement snapshots without constructing local density matrices.
 - Compute finite-shot correlations from selected sample bits without materializing a complete bit matrix.
 
