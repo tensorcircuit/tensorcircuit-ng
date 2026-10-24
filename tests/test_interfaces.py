@@ -64,9 +64,14 @@ def test_torch_interface_complex_vjp(backend, jit, enable_dlpack, case):
 
 @pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
 @pytest.mark.parametrize(
-    "case,jit", [("real_input", True), ("complex_input", True), ("multiple", False)]
+    "case,jit,enable_dlpack",
+    [
+        ("real_input", True, False),
+        ("complex_input", True, True),
+        ("multiple", False, False),
+    ],
 )
-def test_tf_interface_complex_vjp(backend, jit, case):
+def test_tf_interface_complex_vjp(backend, jit, enable_dlpack, case):
     def f(x):
         if case == "real_input":
             return (1 + 2j) * tc.backend.cast(x, "complex64")
@@ -79,7 +84,9 @@ def test_tf_interface_complex_vjp(backend, jit, case):
         "complex_input": "float32",
         "multiple": ("complex64", "complex64"),
     }[case]
-    wrapped = tc.interfaces.tensorflow_interface(f, ydtype=ydtype, jit=jit)
+    wrapped = tc.interfaces.tensorflow_interface(
+        f, ydtype=ydtype, jit=jit, enable_dlpack=enable_dlpack
+    )
 
     def loss(x):
         if case == "real_input":

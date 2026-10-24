@@ -80,7 +80,7 @@ def tensorflow_interface(
     if jit is True:
         fun = backend.jit(fun)
 
-    fun_tf = tf_wrapper(fun)
+    fun_tf = tf_wrapper(fun, enable_dlpack=enable_dlpack)
 
     ydtype = backend.tree_map(tf_dtype, ydtype)
 
@@ -99,7 +99,7 @@ def tensorflow_interface(
     if jit is True:
         vjp_fun = backend.jit(vjp_fun)
 
-    vjp_fun_tf = return_partial(tf_wrapper(vjp_fun), 1)
+    vjp_fun_tf = return_partial(tf_wrapper(vjp_fun, enable_dlpack=enable_dlpack), 1)
 
     @tf.custom_gradient  # type: ignore
     def fun_wrap(*x: Any) -> Any:
