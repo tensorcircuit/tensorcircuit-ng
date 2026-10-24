@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Import Qiskit initialization states by reversing tensor axes instead of allocating a dense permutation matrix.
 - Compute classical-shadow Pauli expectations directly from raw measurement snapshots without constructing local density matrices.
 - Compute finite-shot correlations from selected sample bits without materializing a complete bit matrix.
 
