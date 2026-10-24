@@ -16,15 +16,18 @@ from .quantum import aslinearoperator
 Tensor = Any
 
 
-def _as_tensor(value: Any) -> Tensor:
+def _as_tensor(value: Any, dtype: Optional[str] = None) -> Tensor:
     """
     Convert scalars and simple Python sequences through the active backend.
+
+    Pass ``dtype`` to convert Python numbers directly at the target precision
+    instead of through the backend's default single-precision dtype.
     """
     try:
-        return backend.convert_to_tensor(value)
+        return backend.convert_to_tensor(value, dtype=dtype)
     except (TypeError, ValueError):
         if isinstance(value, (list, tuple)):
-            return backend.stack([_as_tensor(v) for v in value])
+            return backend.stack([_as_tensor(v, dtype) for v in value])
         raise
 
 
@@ -64,8 +67,10 @@ def _concrete_query_failure_details(mask: Tensor, query: Tensor) -> str:
     )
 
 
-def _check_query(value: Any, name: str) -> Tuple[Tensor, bool]:
-    tensor = _as_tensor(value)
+def _check_query(
+    value: Any, name: str, dtype: Optional[str] = None
+) -> Tuple[Tensor, bool]:
+    tensor = _as_tensor(value, dtype)
     rank = _rank(tensor)
     if rank not in (0, 1):
         raise ValueError(f"{name} must be a scalar or rank-one tensor.")
@@ -643,6 +648,25 @@ def lanczos_apply(
         )
     result = result * backend.cast(projection.recurrence.vector_norm, dtypestr)
     return backend.cast(result, dtypestr)
+
+
+def _lanczos_bilinear(
+    projection: KrylovProjection,
+    function: Callable[[Tensor], Tensor],
+    left_vector: Tensor,
+) -> Tensor:
+    """
+    Evaluate ``<left|f(H)|vector>`` without materializing ``f(H) @ vector``.
+    """
+    _, eigenvectors, _, _, values = _projection_function_values(projection, function)
+    projected_left = backend.tensordot(
+        backend.conj(left_vector), projection.basis, axes=([0], [0])
+    )
+    weights = backend.tensordot(projected_left, eigenvectors, axes=1)
+    weights = weights * backend.conj(eigenvectors[0, :])
+    return backend.tensordot(
+        weights, backend.cast(values, dtypestr), axes=([-1], [-1])
+    ) * backend.cast(projection.recurrence.vector_norm, dtypestr)
 
 
 def lanczos_lowest_eigenpair(

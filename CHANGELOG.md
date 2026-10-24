@@ -6,6 +6,7 @@
 
 - Import Qiskit initialization states by reversing tensor axes instead of allocating a dense permutation matrix.
 - Compute second-order Rényi entropy directly from dense matrix entries, avoiding a cubic-cost matrix product.
+- Evaluate Krylov time correlations and bilinear resolvents in the projected space without materializing full state batches.
 - Compute classical-shadow Pauli expectations directly from raw measurement snapshots without constructing local density matrices.
 - Compute finite-shot correlations from selected sample bits without materializing a complete bit matrix.
 
@@ -17,6 +18,7 @@
 
 - Return `numpy.ndarray` instead of `numpy.matrix` from the NumPy backend `to_dense` and `PauliStringSum2Dense(..., numpy=True)`, so elementwise products and reshapes on dense results follow array semantics.
 - Compute fidelity reliably for positive semidefinite states and preserve first-order matrix square-root responses on fixed-rank paths. `sqrtmh` now clips negative eigenvalues regardless of the retained `psd` argument.
+- Preserve double precision for Python scalar inputs of `time_correlation`, `resolvent_bilinear`, and `zero_temperature_greens_function`, and for `convert_to_tensor(..., dtype=...)` on the PyTorch backend.
 
 ## v1.10.0
 

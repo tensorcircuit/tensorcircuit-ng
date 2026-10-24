@@ -251,6 +251,8 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def convert_to_tensor(self, tensor: Tensor, dtype: Optional[str] = None) -> Tensor:
         if self.is_tensor(tensor):
             result = tensor
+        elif dtype is not None:
+            return torchlib.tensor(tensor, dtype=getattr(torchlib, dtype))
         else:
             result = torchlib.tensor(tensor)
         if dtype is not None:
