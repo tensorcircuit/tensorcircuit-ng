@@ -1372,6 +1372,7 @@ def test_sparse_methods(backend):
         da,
         atol=1e-5,
     )
+    assert tc.backend.reshape(tc.backend.to_dense(spa), [-1]).shape == (16,)
     np.testing.assert_allclose(
         tc.backend.sparse_dense_matmul(spa, vec),
         np.array([[1], [2], [0], [0]], dtype=np.complex64),
