@@ -24,6 +24,9 @@ from .utils import gpu_memory_share
 
 gpu_memory_share()
 
+# ``cite`` must be bound before any submodule imports tensornetwork:
+# tensornetwork-ng treats a ``tensorcircuit`` module without ``cite`` as the
+# legacy TensorCircuit package and warns users to upgrade.
 from .about import about, cite
 from .cons import (
     backend,
