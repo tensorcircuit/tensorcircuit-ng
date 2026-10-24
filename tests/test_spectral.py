@@ -188,6 +188,57 @@ def test_krylov_resolvent_without_left_skips_state_materialization(npb, monkeypa
     np.testing.assert_allclose(result, expected, atol=2e-5)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_krylov_bilinear_responses_match_dense_reference(backend, highp):
+    rng = np.random.default_rng(7)
+    raw = rng.normal(size=(6, 6)) + 1.0j * rng.normal(size=(6, 6))
+    hamiltonian = (raw + raw.conj().T) / 2.0
+    left = rng.normal(size=6) + 1.0j * rng.normal(size=6)
+    right = rng.normal(size=6) + 1.0j * rng.normal(size=6)
+    energies, vectors = np.linalg.eigh(hamiltonian)
+    overlaps = (vectors.conj().T @ left).conj() * (vectors.conj().T @ right)
+    operator = tc.backend.convert_to_tensor(hamiltonian)
+    config = tc.matrixfunc.KrylovConfig(6)
+
+    times = np.array([0.0, 0.4, 1.3])
+    expected = np.exp(-1.0j * (energies[None, :] - 0.3) * times[:, None]) @ overlaps
+    np.testing.assert_allclose(
+        tc.spectral.time_correlation(
+            operator, left, right, times, method=config, energy_shift=0.3
+        ),
+        expected,
+        rtol=0.0,
+        atol=1e-10,
+    )
+    np.testing.assert_allclose(
+        tc.spectral.time_correlation(
+            operator, left, right, 0.7, method=config, energy_shift=0.3
+        ),
+        np.exp(-1.0j * (energies - 0.3) * 0.7) @ overlaps,
+        rtol=0.0,
+        atol=1e-10,
+    )
+
+    z = np.array([-0.9 + 0.2j, 0.4 + 0.3j])
+    expected = (1.0 / (z[:, None] - energies[None, :])) @ overlaps
+    np.testing.assert_allclose(
+        tc.spectral.resolvent_bilinear(
+            operator, right, z, left_vector=left, method=config
+        ),
+        expected,
+        rtol=0.0,
+        atol=1e-10,
+    )
+    np.testing.assert_allclose(
+        tc.spectral.resolvent_bilinear(
+            operator, right, 0.4 + 0.3j, left_vector=left, method=config
+        ),
+        expected[1],
+        rtol=0.0,
+        atol=1e-10,
+    )
+
+
 def test_time_correlation_and_fft_conventions(npb):
     energies, hamiltonian, probes = _problem()
     times = np.array([0.0, 0.1, 0.2])
