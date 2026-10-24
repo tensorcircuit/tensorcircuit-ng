@@ -468,7 +468,7 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         return coo.tocsr()
 
     def to_dense(self, sp_a: Tensor) -> Tensor:
-        return sp_a.todense()
+        return sp_a.toarray()
 
     def is_sparse(self, a: Tensor) -> bool:
         return issparse(a)  # type: ignore

@@ -2363,7 +2363,7 @@ def PauliStringSum2Dense(
 ) -> Tensor:
     """
     Generate dense matrix from Pauli string sum.
-    Works with any backend; set ``numpy=True`` to obtain a ``numpy`` matrix.
+    Works with any backend; set ``numpy=True`` to obtain a ``numpy`` array.
 
 
     :param ls: 2D Tensor, each row is for a Pauli string,
@@ -2380,10 +2380,9 @@ def PauliStringSum2Dense(
     """
     sparsem = PauliStringSum2COO_numpy(ls, weight)
     if numpy:
-        return sparsem.todense()
+        return sparsem.toarray()
     sparsem = backend.coo_sparse_matrix_from_numpy(sparsem)
-    densem = backend.to_dense(sparsem)
-    return backend.convert_to_tensor(densem)
+    return backend.to_dense(sparsem)
 
 
 def PauliStringSum2COO(

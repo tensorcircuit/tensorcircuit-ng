@@ -14,6 +14,7 @@
 
 ### Fixed
 
+- Return `numpy.ndarray` instead of `numpy.matrix` from the NumPy backend `to_dense` and `PauliStringSum2Dense(..., numpy=True)`, so elementwise products and reshapes on dense results follow array semantics.
 - Compute fidelity reliably for positive semidefinite states and preserve first-order matrix square-root responses on fixed-rank paths. `sqrtmh` now clips negative eigenvalues regardless of the retained `psd` argument.
 
 ## v1.10.0
