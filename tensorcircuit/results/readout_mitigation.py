@@ -135,17 +135,17 @@ class ReadoutMit:
                 qubits = self.cal_qubits
 
         if self.local is False:
-            lbs = [marginal_count(i, qubits) for i in self.global_cal]
             calmatrix = np.zeros((2 ** len(qubits), 2 ** len(qubits)))
 
             m = 0
-            for i in range(len(lbs)):
+            for i, count in enumerate(self.global_cal):
                 vv = self.ubs(i, qubits)
 
                 if vv == 0:
-                    for s in lbs[i]:
+                    marginal = marginal_count(count, qubits)
+                    for s in marginal:
                         calmatrix[int(s, 2)][self.newrange(m, qubits)] = (
-                            lbs[i][s] / self.cal_shots
+                            marginal[s] / self.cal_shots
                         )
                     m += 1
             self.calmatrix = calmatrix
