@@ -2,7 +2,7 @@
 Stabilizer circuit simulator using Stim backend
 """
 
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 import stim
 
@@ -53,6 +53,14 @@ class StabilizerCircuit(AbstractCircuit):
         self.tableau_inputs = tableau_inputs
         self._extra_qir: List[Dict[str, Any]] = []
         self._measure_counter = 0
+        self._sampler_cache: Optional[
+            Tuple[
+                stim.Circuit,
+                Tuple[Tuple[int, ...], ...],
+                int,
+                stim.CompiledMeasurementSampler,
+            ]
+        ] = None
         self.current_sim = stim.TableauSimulator()
 
         self.circuit_param = {
@@ -234,6 +242,28 @@ class StabilizerCircuit(AbstractCircuit):
 
         return m
 
+    def _measurement_sampler(
+        self, x: Sequence[int] = (), y: Sequence[int] = (), z: Sequence[int] = ()
+    ) -> Tuple[int, stim.CompiledMeasurementSampler]:
+        source = self.current_circuit()
+        key = (tuple(x), tuple(y), tuple(z))
+        if self._sampler_cache is not None:
+            previous, previous_key, start, sampler = self._sampler_cache
+            if key == previous_key and source == previous:
+                return start, sampler
+        circuit = source.copy()
+        start = circuit.num_measurements
+        for i in x:
+            circuit.append("H", [i])
+        for i in y:
+            circuit.append("S_DAG", [i])
+            circuit.append("H", [i])
+        for i in key[0] + key[1] + key[2]:
+            circuit.append("M", [i])
+        sampler = circuit.compile_sampler()
+        self._sampler_cache = (source.copy(), key, start, sampler)
+        return start, sampler
+
     def sample(
         self,
         batch: Optional[int] = None,
@@ -252,11 +282,7 @@ class StabilizerCircuit(AbstractCircuit):
         """
         if batch is None:
             batch = 1
-        c = self.current_circuit().copy()
-        measurement_start = c.num_measurements
-        for i in range(self._nqubits):
-            c.append("M", [i])
-        sampler = c.compile_sampler()
+        measurement_start, sampler = self._measurement_sampler(z=range(self._nqubits))
         samples = sampler.sample(batch)
         return np.array(samples[:, measurement_start:])
 
@@ -327,31 +353,9 @@ class StabilizerCircuit(AbstractCircuit):
         if shots is None:
             shots = 1000  # Default number of shots
 
-        circuit = self.current_circuit().copy()
-        measurement_start = circuit.num_measurements
-
-        # Add basis rotations for measurements
-        if x:
-            for i in x:
-                circuit.append("H", [i])
-        if y:
-            for i in y:
-                circuit.append("S_DAG", [i])
-                circuit.append("H", [i])
-
-        measured_qubits: List[int] = []
-        if x:
-            measured_qubits.extend(x)
-        if y:
-            measured_qubits.extend(y)
-        if z:
-            measured_qubits.extend(z)
-
-        for i in measured_qubits:
-            circuit.append("M", [i])
-
-        # Sample and compute expectation using sampler
-        sampler = circuit.compile_sampler()
+        measurement_start, sampler = self._measurement_sampler(
+            x=x or (), y=y or (), z=z or ()
+        )
         samples = sampler.sample(shots)
         results = np.array(samples[:, measurement_start:])
 

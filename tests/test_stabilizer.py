@@ -432,3 +432,31 @@ def test_replay_lazy_preparation(npb, monkeypatch):
     np.testing.assert_array_equal(c.sample(batch=4), np.ones((4, 1)))
     np.testing.assert_allclose(c.sample_expectation_ps(z=[0], shots=4), -1)
     assert len(calls) == 1
+
+
+def test_sampler_reuse_and_recorded_mutations(npb):
+    c = tc.StabilizerCircuit(1)
+    c.x(0)
+    np.testing.assert_array_equal(c.sample(batch=4), np.ones((4, 1)))
+    np.testing.assert_array_equal(c.sample(batch=3), np.ones((3, 1)))
+    c.current_circuit().clear()
+    c.current_circuit().append("Z", [0])
+    np.testing.assert_array_equal(c.sample(batch=4), np.zeros((4, 1)))
+    c.depolarizing(0, p=0.75)
+    samples = c.sample(batch=1000)
+    assert 350 < np.count_nonzero(samples) < 650
+
+
+def test_sampler_reuse_basis_and_history(npb):
+    c = tc.StabilizerCircuit(2)
+    c.x(1)
+    c.cond_measurement(1)
+    c.h(0)
+    for shots in [20, 30]:
+        np.testing.assert_allclose(
+            c.sample_expectation_ps(x=[0], z=[1], shots=shots), -1
+        )
+    np.testing.assert_allclose(c.sample_expectation_ps(z=[1], shots=20), -1)
+    np.testing.assert_allclose(c.sample_expectation_ps(shots=20), 1)
+    c.x(1)
+    np.testing.assert_allclose(c.sample_expectation_ps(z=[1], shots=20), 1)
