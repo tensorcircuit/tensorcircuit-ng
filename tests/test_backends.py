@@ -12,6 +12,7 @@ from pytest_lazyfixture import lazy_fixture as lf
 import scipy
 import scipy.sparse
 import tensorflow as tf
+import tensornetwork as tn
 
 thisfile = os.path.abspath(__file__)
 modulepath = os.path.dirname(os.path.dirname(thisfile))
@@ -1320,6 +1321,49 @@ def test_vvag_has_aux(backend):
     fvvag = tc.backend.vvag(f, has_aux=True)
     (_, v1), _ = fvvag(tc.backend.ones([10, 2]))
     np.testing.assert_allclose(v1, 2 * tc.backend.ones([10]))
+
+
+def test_torch_svd_complex(torchb, highp):
+    matrix = tc.array_to_tensor(
+        np.array([[1 + 2j, 3 - 1j, 2 + 0.5j], [-2 + 1j, 0.3 - 2j, 1 + 1j]])
+    )
+    u, s, vh, discarded = tc.backend.svd(matrix)
+    np.testing.assert_allclose((u * s) @ vh, matrix, atol=1e-12)
+    assert discarded.shape == (0,)
+
+    def loss(a):
+        u, s, vh, _ = tc.backend.svd(a)
+        return tc.backend.sum(tc.backend.real((u * s) @ vh) ** 2)
+
+    np.testing.assert_allclose(
+        tc.backend.grad(loss)(matrix), 2 * tc.backend.real(matrix), atol=1e-12
+    )
+    node = tn.Node(matrix, backend="pytorch")
+    left, singular, right, _ = tn.split_node_full_svd(node, [node[0]], [node[1]])
+    np.testing.assert_allclose(
+        left.tensor @ singular.tensor @ right.tensor, matrix, atol=1e-12
+    )
+
+
+def test_torch_svd_truncation(torchb):
+    tensor = tc.array_to_tensor(
+        np.array([[5j, 0, 0], [0, 3, 0], [0, 0, 1], [0, 0, 0]]).reshape(2, 2, 3)
+    )
+    for options, keep in [
+        ({"max_singular_values": 2}, 2),
+        ({"max_truncation_error": 1.1}, 2),
+        ({"max_truncation_error": 0.22, "relative": True}, 2),
+        ({"max_singular_values": 1, "max_truncation_error": 1.1}, 1),
+    ]:
+        u, s, vh, discarded = tc.backend.svd(tensor, pivot_axis=2, **options)
+        assert u.shape == (2, 2, keep)
+        assert vh.shape == (keep, 3)
+        assert s.dtype == tensor.dtype
+        np.testing.assert_allclose(s, np.array([5, 3, 1])[:keep])
+        np.testing.assert_allclose(discarded, np.array([5, 3, 1])[keep:])
+        expected = np.zeros((4, 3), dtype=np.complex64)
+        expected[np.arange(keep), np.arange(keep)] = np.array([5j, 3, 1])[:keep]
+        np.testing.assert_allclose(u.reshape(4, keep) @ (s[:, None] * vh), expected)
 
 
 def test_jax_svd(jaxb, highp):
