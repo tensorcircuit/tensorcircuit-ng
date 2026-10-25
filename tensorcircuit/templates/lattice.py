@@ -792,10 +792,11 @@ class TILattice(AbstractLattice):
 
         pbc_mask = backend.convert_to_tensor(self.pbc)
 
-        # Generate all 3^d possible image shifts (-1, 0, 1) for all dimensions
+        # Statically open directions contribute only the unshifted image.
         shift_options = [
-            backend.convert_to_tensor([-1.0, 0.0, 1.0])
-        ] * self.dimensionality
+            backend.convert_to_tensor([0.0] if periodic is False else [-1.0, 0.0, 1.0])
+            for periodic in self.pbc
+        ]
         shifts_grid = backend.meshgrid(*shift_options, indexing="ij")
         all_shifts = backend.reshape(
             backend.stack(shifts_grid, axis=-1), (-1, self.dimensionality)
