@@ -217,15 +217,15 @@ def batch_expectation_ps(
         for j, i in enumerate(ps):
             if i == 1:
                 c2.H(info["logical_physical_mapping"][j])  # type: ignore
-                c2, _ = simple_compile(c2)
                 exp.append(j)
 
             elif i == 2:
                 c2.rx(info["logical_physical_mapping"][j], theta=np.pi / 2)  # type: ignore
-                c2, _ = simple_compile(c2)
                 exp.append(j)
             elif i == 3:
                 exp.append(j)
+        if any(i in (1, 2) for i in ps):
+            c2, _ = simple_compile(c2)
         for i in range(c._nqubits):
             c2.measure_instruction(info["logical_physical_mapping"][i])
         # TODO(@refraction-ray): two steps compiling with pre compilation:
