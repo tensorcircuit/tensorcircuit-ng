@@ -1051,16 +1051,11 @@ class MPSCircuit(AbstractCircuit):
 
     def get_quvector(self) -> QuVector:
         """
-        Get an independent ``QuVector`` representation of the output state.
-
-        Qubit states retain their MPS network without materializing the full
-        wavefunction. Other local dimensions retain the qubit-axis convention.
+        Get an independent ``QuVector`` retaining the MPS network and site dimensions.
 
         :return: ``QuVector`` representation of the output state from the circuit
         :rtype: QuVector
         """
-        if self._d != 2:
-            return QuVector.from_tensor(backend.reshape2(self.wavefunction()))
         nodes = [
             tn.Node(backend.copy(tensor), backend=backend.name)
             for tensor in self._mps.tensors

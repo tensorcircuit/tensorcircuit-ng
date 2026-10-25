@@ -391,7 +391,7 @@ def test_circuits(backend, dtype):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
-@pytest.mark.parametrize("n, dim", [(1, 2), (3, 2), (2, 4)])
+@pytest.mark.parametrize("n, dim", [(1, 2), (3, 2), (2, 3), (2, 4)])
 def test_get_quvector_snapshot_and_axes(backend, highp, n, dim):
     rng = np.random.default_rng(18)
     bonds = [1] + [2] * (n - 1) + [1]
@@ -403,8 +403,14 @@ def test_get_quvector_snapshot_and_axes(backend, highp, n, dim):
         for i in range(n)
     ]
     circuit = tc.MPSCircuit(n, dim=dim, tensors=tensors, center_position=0)
-    expected = tc.backend.numpy(tc.backend.reshape2(circuit.wavefunction()))
+    expected = tc.backend.numpy(circuit.wavefunction()).reshape([dim] * n)
     vector = circuit.get_quvector()
+    assert [edge.dimension for edge in vector.out_edges] == [dim] * n
+    local_state = expected.reshape(-1, dim)
+    rho = vector.reduced_density(subsystem_to_keep=[n - 1]).eval_matrix()
+    np.testing.assert_allclose(
+        tc.backend.numpy(rho), local_state.T @ local_state.conj(), atol=1e-10
+    )
     circuit.unitary(0, unitary=np.roll(np.eye(dim), 1, axis=0))
     np.testing.assert_allclose(tc.backend.numpy(vector.eval()), expected, atol=1e-10)
 
