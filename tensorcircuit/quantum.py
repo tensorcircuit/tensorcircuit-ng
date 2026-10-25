@@ -399,15 +399,19 @@ def _reachable(nodes: List[AbstractNode]) -> List[AbstractNode]:
     node_que = []
     node_que.extend(nodes)
     seen_nodes = []
+    seen_set = set()
+    discovered = set(nodes)
     i = 0
     while i < len(node_que):
         node = node_que[i]
-        if node not in seen_nodes:
+        if node not in seen_set:
             seen_nodes.append(node)
+            seen_set.add(node)
         for e in sorted(node.edges, key=id):  # Sort edges by id for deterministic order
             for n in sorted([n for n in e.get_nodes() if n is not None], key=id):
-                if n not in seen_nodes and n not in node_que[i + 1 :]:
+                if n not in discovered:
                     node_que.append(n)
+                    discovered.add(n)
         i += 1
     return sorted(seen_nodes, key=lambda node: getattr(node, "_stable_id_", -1))
 
