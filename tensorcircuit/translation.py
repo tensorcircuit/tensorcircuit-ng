@@ -330,7 +330,8 @@ def qir2qiskit(
             unitary = backend.numpy(backend.convert_to_tensor(parameters["unitary"]))
             k = int(np.log(unitary.shape[-1]) / np.log(2) + 1e-7)
             ctrl_str = "".join(map(str, parameters["ctrl"]))[::-1]
-            unitary = perm_matrix(k) @ unitary @ perm_matrix(k)
+            axes = list(range(k - 1, -1, -1)) + list(range(2 * k - 1, k - 1, -1))
+            unitary = unitary.reshape([2] * (2 * k)).transpose(axes).reshape(2**k, 2**k)
             gate = UnitaryGate(unitary, label=qis_name).control(
                 len(ctrl_str), ctrl_state=ctrl_str
             )

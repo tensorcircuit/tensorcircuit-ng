@@ -2569,3 +2569,19 @@ def test_qsim_roundtrip(backend, tmp_path):
     # unknown gate name raises NotImplementedError (fail-fast contract).
     with pytest.raises(NotImplementedError):
         tc.Circuit._apply_qsim(tc.Circuit(2), ["2", "0 bogus 0"])
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_qiskit_export_complex_inputs_and_control(backend, highp):
+    qi = pytest.importorskip("qiskit.quantum_info")
+    rng = np.random.default_rng(45)
+    inputs = rng.normal(size=16) + 1j * rng.normal(size=16)
+    inputs /= np.linalg.norm(inputs)
+    matrix = rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4))
+    unitary, _ = np.linalg.qr(matrix)
+    c = tc.Circuit(4, inputs=tc.backend.convert_to_tensor(inputs))
+    c.multicontrol(3, 1, 0, ctrl=[0], unitary=tc.backend.convert_to_tensor(unitary))
+    c.rx(2, theta=0.31)
+    actual = qi.Statevector(c.to_qiskit(enable_inputs=True)).data
+    expected = tc.backend.numpy(c.state()).reshape([2] * 4).transpose().reshape(-1)
+    np.testing.assert_allclose(actual, expected, atol=1e-10)

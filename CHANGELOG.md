@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Export Qiskit initialization states and controlled unitaries by reversing tensor axes instead of allocating dense permutation matrices.
 - Copy only the operator span when evaluating local MPS expectations.
 - Evaluate pure-state entanglement anti-flatness on the smaller subsystem.
 - Compute default-order truncated free energy in quadratic time using trace contractions.
