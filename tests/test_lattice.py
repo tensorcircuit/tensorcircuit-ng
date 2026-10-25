@@ -2680,3 +2680,17 @@ class TestPrivateHelpers:
         lat_large_dist._build_neighbors(max_k=2, use_kdtree=False)
 
         assert lat_large_kdtree._neighbor_maps == lat_large_dist._neighbor_maps
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_distance_shell_reduction_tolerance(backend):
+    lattice = ChainLattice((2,))
+    roots = np.array([0.0, 1e-7, 1.0, 1.0 + 0.75e-6, 1.0 + 1.5e-6, 2.0, 2.0, 3.0])
+    for max_k in [0, 1, 2, 5]:
+        expected = [roots[2] ** 2, roots[4] ** 2, 4.0, 9.0][: max(1, max_k)]
+        actual = lattice._identify_distance_shells(roots[::-1] ** 2, max_k)
+        np.testing.assert_allclose(
+            [tc.backend.numpy(x) for x in actual], expected, atol=1e-7
+        )
+    assert lattice._identify_distance_shells([], 2) == []
+    assert lattice._identify_distance_shells([0.0, 1e-14], 2) == []

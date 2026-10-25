@@ -509,9 +509,8 @@ class AbstractLattice(abc.ABC):
     ) -> List[float]:
         """Identifies unique distance shells from a list of squared distances.
 
-        This helper function takes a flat list of squared distances, sorts them,
-        and identifies the first `max_k` unique distance shells based on a
-        numerical tolerance.
+        Find the first distance shells by successive minimum reductions,
+        grouping distances within the given tolerance.
 
         :param all_distances_sq: A list or array
             of all squared distances between pairs of sites.
@@ -531,22 +530,17 @@ class AbstractLattice(abc.ABC):
         if backend.sizen(all_distances_sq) == 0:
             return []
 
-        # Filter out self-distances and sort the remaining squared distances.
-        sorted_dist = backend.sort(
-            all_distances_sq[all_distances_sq > ZERO_THRESHOLD_SQ]
-        )
-
-        if backend.sizen(sorted_dist) == 0:
-            return []
-
-        dist_shells = [sorted_dist[0]]
-
-        for d_sq in sorted_dist[1:]:
-            if len(dist_shells) >= max_k:
+        remaining = all_distances_sq[all_distances_sq > ZERO_THRESHOLD_SQ]
+        dist_shells = []
+        for i in range(max(1, max_k)):
+            if backend.sizen(remaining) == 0:
                 break
-            if backend.sqrt(d_sq) - backend.sqrt(dist_shells[-1]) > tol:
-                dist_shells.append(d_sq)
-
+            shell = backend.min(remaining)
+            dist_shells.append(shell)
+            if i + 1 < max_k:
+                remaining = remaining[
+                    backend.sqrt(remaining) - backend.sqrt(shell) > tol
+                ]
         return dist_shells
 
     def _build_neighbors_by_distance_matrix(
