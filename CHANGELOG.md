@@ -5,6 +5,7 @@
 ### Changed
 
 - Evaluate pure-state entanglement anti-flatness on the smaller subsystem.
+- Reduce dense higher-order Rényi entropy matrix products through shared half powers.
 - Avoid signed tableau inversion and reduce the smaller bipartition when computing stabilizer entanglement entropy.
 - Compute dense trace products without forming the final matrix product, which also makes dense second-order Rényi entropy quadratic-cost.
 - Apply local readout calibration inverses as tensor products without materializing a dense calibration matrix.

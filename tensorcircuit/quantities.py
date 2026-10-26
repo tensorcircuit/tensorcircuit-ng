@@ -503,6 +503,20 @@ def renyi_entropy(rho: Union[Tensor, QuOperator], k: int = 2) -> Tensor:
     :return: The :math:`k` th order of Renyi entropy.
     :rtype: Tensor
     """
+    if (
+        k > 3
+        and not isinstance(rho, QuOperator)
+        and len(rho.shape) == 2
+        and not backend.is_sparse(rho)
+        and rho.shape[0] == rho.shape[1]
+    ):
+        half = rho
+        for bit in bin(k // 2)[3:]:
+            half = backend.matmul(half, half)
+            if bit == "1":
+                half = backend.matmul(half, rho)
+        other = half if k % 2 == 0 else backend.matmul(half, rho)
+        return backend.real(backend.log(trace_product(half, other))) / (1 - k)
     s = 1 / (1 - k) * backend.real(backend.log(trace_product(*[rho] * k)))
     return s
 
