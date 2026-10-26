@@ -1056,10 +1056,7 @@ class MPSCircuit(AbstractCircuit):
         :return: ``QuVector`` representation of the output state from the circuit
         :rtype: QuVector
         """
-        nodes = [
-            tn.Node(backend.copy(tensor), backend=backend.name)
-            for tensor in self._mps.tensors
-        ]
+        nodes = [tn.Node(tensor, backend=backend.name) for tensor in self._mps.tensors]
         for left, right in zip(nodes, nodes[1:]):
             left[2] ^ right[0]
         for node, axis in [(nodes[0], 0), (nodes[-1], 2)]:
