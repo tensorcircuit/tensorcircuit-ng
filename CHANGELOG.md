@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Avoid allocating a full identity matrix when constructing NumPy one-hot vectors and respect the configured real dtype.
 - Reduce JAX SVD backward memory and computation for rectangular matrices by avoiding full-size projection matrices.
 - Import Qiskit initialization states by reversing tensor axes instead of allocating a dense permutation matrix.
 - Compute second-order Rényi entropy directly from dense matrix entries, avoiding a cubic-cost matrix product.

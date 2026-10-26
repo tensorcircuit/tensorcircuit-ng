@@ -458,6 +458,12 @@ def test_backend_scatter(backend):
     )
 
 
+@pytest.mark.parametrize("precision", [None, lf("highp")])
+def test_numpy_onehot_dtype(npb, precision):
+    result = tc.backend.onehot(np.array([0, 2]), 3)
+    assert result.dtype == np.dtype(tc.rdtypestr)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_methods(backend):
     # TODO(@refraction-ray): add more methods
