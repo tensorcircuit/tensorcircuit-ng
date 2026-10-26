@@ -7,7 +7,7 @@ Constants and setups
 import logging
 import sys
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from contextlib import contextmanager
 from functools import partial, reduce, wraps, lru_cache
 from operator import mul
@@ -656,6 +656,10 @@ class OMEOptimizer:
     ``omeco`` stays an optional dependency and is imported lazily only when this
     adapter is actually used.
 
+    Retain up to ``cache_size`` paths in least-recently-used order; zero disables
+    caching. The optimizer is fixed for this adapter's lifetime; create a new
+    adapter or call ``set_contractor`` again to change it.
+
     Example:
 
     >>> import omeco
@@ -663,8 +667,23 @@ class OMEOptimizer:
     >>> tc.set_contractor("custom", optimizer=opt, preprocessing=True)
     """
 
-    def __init__(self, optimizer: Optional[Any] = None):
-        self.optimizer = optimizer
+    def __init__(self, optimizer: Optional[Any] = None, cache_size: int = 128):
+        if cache_size < 0:
+            raise ValueError("cache_size must be nonnegative.")
+        self._optimizer = optimizer
+        self._cache_size = cache_size
+        self._path_cache: OrderedDict[Tuple[Any, ...], Tuple[Tuple[int, int], ...]] = (
+            OrderedDict()
+        )
+
+    @property
+    def optimizer(self) -> Optional[Any]:
+        """The optimizer fixed for this adapter's lifetime."""
+        return self._optimizer
+
+    def clear_cache(self) -> None:
+        """Release all retained contraction paths."""
+        self._path_cache.clear()
 
     def __call__(
         self,
@@ -683,11 +702,25 @@ class OMEOptimizer:
         inputs, output, sizes = _normalize_omeco_topology(
             input_sets, output_set, size_dict
         )
+        key = (
+            tuple(tuple(term) for term in inputs),
+            tuple(output),
+            tuple(sizes[i] for i in range(len(sizes))),
+        )
+        cached = self._path_cache.get(key)
+        if cached is not None:
+            self._path_cache.move_to_end(key)
+            return list(cached)
         if self.optimizer is None:
             tree = omeco.optimize_code(inputs, output, sizes)
         else:
             tree = omeco.optimize_code(inputs, output, sizes, self.optimizer)
-        return _omeco_tree_to_path(tree.to_dict(), len(inputs))
+        path = _omeco_tree_to_path(tree.to_dict(), len(inputs))
+        if self._cache_size:
+            self._path_cache[key] = tuple(path)
+            if len(self._path_cache) > self._cache_size:
+                self._path_cache.popitem(last=False)
+        return path
 
 
 def _wrap_omeco_optimizer(optimizer: Any) -> Any:
