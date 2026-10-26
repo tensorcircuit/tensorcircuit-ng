@@ -431,20 +431,16 @@ def renyi_entropy_2(
     snapshots = backend.cast(snapshots, dtype="int32")
     ns, repeat, nq = snapshots.shape
 
-    count = {}
-    for i, ss in enumerate(snapshots):
-        for s in ss:
-            s = tuple(backend.numpy(s))
-            if s not in count:
-                count[s] = np.zeros(ns)
-            count[s][i] += 1
-
-    # Vectorized evaluation of tr = sum_{x,y} pp_mean(x,y) * (-2)^(-h(x,y)).
-    # `keys` and `values` share dict insertion order, so row m of `bits` and
-    # `counts` correspond to the same bitstring.
-    keys = list(count.keys())
-    bits = np.asarray(keys, dtype=np.uint8)  # (M, nq)
-    counts = np.asarray(list(count.values()), dtype=np.float64)  # (M, ns)
+    host = backend.numpy(snapshots)
+    if nq:
+        packed = np.packbits(host.reshape(-1, nq), axis=1)
+        packed, inverse = np.unique(packed, axis=0, return_inverse=True)
+        bits = np.unpackbits(packed, axis=1, count=nq)
+    else:
+        bits = np.zeros((1, 0), dtype=np.uint8)
+        inverse = np.zeros(ns * repeat, dtype=np.intp)
+    counts = np.zeros((len(bits), ns), dtype=np.float64)
+    np.add.at(counts, (inverse, np.repeat(np.arange(ns), repeat)), 1)
 
     # Hamming distance matrix H (M, M) via packed-bit XOR + popcount lookup,
     # removing the per-pair nq Python factor.
