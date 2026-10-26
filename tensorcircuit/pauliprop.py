@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 Tensor = Any
 SPARSE_WORD_QUBITS = 31
+_CLIFFORD_GATES = ("x", "y", "z", "h", "s", "sd", "cnot", "cz", "swap")
 
 
 class PauliPropagationEngine:
@@ -750,8 +751,43 @@ class SparsePauliPropagationEngine:
 
         indices, coeffs = state
         K = backend
+        gate_name = gate_name.lower()
+        gate_name = {"cx": "cnot", "sdg": "sd"}.get(gate_name, gate_name)
         ptm = self._get_ptm(gate_name, wires, params)
         ptm_complex = K.cast(ptm, "complex64")
+
+        if gate_name in _CLIFFORD_GATES:
+            current = 0
+            for q in wires:
+                word, bit = q // SPARSE_WORD_QUBITS, (q % SPARSE_WORD_QUBITS) * 2
+                current = current * 4 + K.where(
+                    indices[:, word] != -1, (indices[:, word] >> bit) & 3, 0
+                )
+            target = K.gather1d(
+                K.cast(K.argmax(K.abs(ptm_complex), axis=0), "int64"), current
+            )
+            factors = K.gather1d(
+                K.reshape(K.transpose(ptm_complex), [-1]),
+                current * (4 ** len(wires)) + target,
+            )
+            flat_coeffs = coeffs * factors
+            cols = [indices[:, i] for i in range(self.W)]
+            for j, q in enumerate(wires):
+                word, bit = q // SPARSE_WORD_QUBITS, (q % SPARSE_WORD_QUBITS) * 2
+                mask = ~(K.convert_to_tensor(3, dtype="int64") << bit)
+                op = (target >> (2 * (len(wires) - j - 1))) & 3
+                for i in range(self.W):
+                    cols[i] = K.where(
+                        K.convert_to_tensor(i == word),
+                        (cols[i] & mask) | (op << bit),
+                        cols[i],
+                    )
+            flat_indices = K.stack(cols, axis=1)
+            if self.k < self.N:
+                flat_coeffs = K.where(
+                    self._get_weight(flat_indices) <= self.k, flat_coeffs, 0.0
+                )
+            return self._aggregate_and_truncate(flat_indices, flat_coeffs)
 
         if len(wires) == 1:
             q = wires[0]

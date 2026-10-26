@@ -9,6 +9,7 @@
 - Reduce dense higher-order Rényi entropy matrix products through shared half powers.
 - Avoid signed tableau inversion and reduce the smaller bipartition when computing stabilizer entanglement entropy.
 - Compute dense trace products without forming the final matrix product, which also makes dense second-order Rényi entropy quadratic-cost.
+- Propagate sparse Clifford gates through one signed Pauli branch, sharing packed-word updates across one- and two-qubit gates.
 - Apply local readout calibration inverses as tensor products without materializing a dense calibration matrix.
 - Preserve the MPS tensor network and physical site dimensions when exporting states as `QuVector`, avoiding full wavefunctions for local reduced states and MPO expectations.
 - Avoid allocating a full identity matrix when constructing NumPy one-hot vectors and respect the configured real dtype.

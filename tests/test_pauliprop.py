@@ -317,6 +317,35 @@ def test_sparse_engine_scan_match(request, backend, highp):
     assert np.allclose(K.numpy(val_scan_sparse), K.numpy(val_scan_dense), atol=1e-5)
 
 
+@pytest.mark.parametrize(
+    "gate_name", ["x", "y", "z", "h", "s", "sd", "sdg", "cnot", "cx", "cz", "swap"]
+)
+def test_sparse_clifford_dynamic_wires(jaxb, highp, gate_name):
+    K = tc.backend
+    n = SPARSE_WORD_QUBITS + 1
+    arity = 2 if gate_name in ("cnot", "cx", "cz", "swap") else 1
+    engine = SparsePauliPropagationEngine(n, arity, buffer_size=4**arity + 2)
+    paulis = K.numpy(engine.pauli_mats)
+    if arity == 2:
+        paulis = np.array([np.kron(a, b) for a in paulis for b in paulis])
+    name = {"cx": "cnot", "sdg": "sd"}.get(gate_name, gate_name)
+    unitary = K.numpy(getattr(tc.gates, name)().tensor).reshape(2**arity, 2**arity)
+    rotated = unitary.conj().T @ paulis @ unitary
+    reference = np.einsum("aij,bji->ab", paulis, rotated).real / 2**arity
+    labels = np.indices((4,) * arity).reshape(arity, -1).T
+    weights = np.linspace(0.1, 1.0, 4**arity)
+    apply = K.jit(lambda state, wires: engine.apply_gate(state, gate_name, wires))
+    layouts = [(0,), (n - 1,)] if arity == 1 else [(0, 1), (0, n - 1), (n - 1, 0)]
+    for wires in layouts:
+        structures = np.zeros((4**arity, n), dtype=np.int32)
+        structures[:, wires] = labels
+        state = engine.get_initial_state(structures, weights)
+        actual = apply(state, K.convert_to_tensor(np.array(wires, dtype=np.int32)))
+        expected = engine.get_initial_state(structures, reference @ weights)
+        np.testing.assert_array_equal(K.numpy(actual[0]), K.numpy(expected[0]))
+        np.testing.assert_allclose(K.numpy(actual[1]), K.numpy(expected[1]), atol=1e-6)
+
+
 @pytest.mark.parametrize("backend", ["npb", "jaxb"])
 def test_truncation_analytical(request, backend, highp):
     """
