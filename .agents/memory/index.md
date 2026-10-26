@@ -15,7 +15,7 @@ This directory stores short, durable notes for future development. Read this ind
 - `contraction_and_benchmarking.md`: Algebraic contraction invariants, path search and slicing semantics, gradient checkpointing of contraction trees, and contraction benchmark interpretation.
 - `autodiff_and_stochastic.md`: Complex AD conventions, gradient debugging workflow, stochastic-gradient rules, and real-loss requirements.
 - `circuit_models_and_api.md`: Circuit hierarchy, inverse semantics, analog evolution inversion, and QIR reconstruction rules.
-- `simulation_patterns.md`: U(1) subspace work, qudit/sparse-model guidance, and Heisenberg-style operator evolution.
+- `simulation_patterns.md`: U(1) subspace work, qudit/sparse-model guidance, Heisenberg-style operator evolution, and light-cone batching for many-term objectives.
 - `symbolic_and_translation.md`: `SymbolCircuit` construction rules, SymPy-to-JAX lambdify usage, and translation/interoperability boundaries.
 - `noise_and_qec.md`: Noise API behavior, readout-error conventions, detector sampling, and QEC post-selection patterns.
 
