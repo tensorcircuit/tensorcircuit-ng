@@ -183,9 +183,10 @@ default_merge_rules = {
 
 def _find_next(qir: List[Dict[str, Any]], i: int) -> Optional[int]:
     index = qir[i]["index"]
-    for j, item in enumerate(qir[i + 1 :]):
+    for j in range(i + 1, len(qir)):
+        item = qir[j]
         if item["index"] == index:
-            return j + i + 1
+            return j
         for ind in item["index"]:
             if ind in index:
                 return None
