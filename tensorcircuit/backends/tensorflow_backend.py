@@ -840,6 +840,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
             a = tf.reverse(tf.reshape(a, (pre, shape[axis], post)), axis=[1])
         return tf.reshape(a, shape)
 
+    def gather(self, operand: Tensor, indices: Tensor, axis: int = 0) -> Tensor:
+        return tf.gather(operand, indices, axis=axis)
+
     def scatter(
         self, operand: Tensor, indices: Tensor, updates: Tensor, mode: str = "update"
     ) -> Tensor:
@@ -987,6 +990,12 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
                     g = t.gradient(y[0], x)
                 else:
                     g = t.gradient(y, x)
+            g = self.tree_map(
+                lambda gi: (
+                    tf.convert_to_tensor(gi) if isinstance(gi, tf.IndexedSlices) else gi
+                ),
+                g,
+            )
             if has_aux:
                 return (g, y[1:])
             return g
@@ -1017,6 +1026,12 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
                     g = t.gradient(y[0], x)
                 else:
                     g = t.gradient(y, x)
+            g = self.tree_map(
+                lambda gi: (
+                    tf.convert_to_tensor(gi) if isinstance(gi, tf.IndexedSlices) else gi
+                ),
+                g,
+            )
             return y, g
 
         return wrapper

@@ -25,6 +25,7 @@
 
 ### Added
 
+- Add backend `gather` for axis-based indexing with scalar or multidimensional indices, including JIT and gradient support.
 - Add `PauliStringSum2CSR` and the backend method `csr_sparse_matrix`.
 - Support qudit density-matrix simulation with `tc.DMCircuit(n, dim=d)` for `d > 2`, including explicit single- and multi-site `unitary` gates and Kraus channels via `apply_general_kraus`.
 

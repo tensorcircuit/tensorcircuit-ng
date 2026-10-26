@@ -2037,3 +2037,54 @@ def test_sqrtmh_fixed_rank_gradient(backend, highp):
     derivative = k.grad(loss)
     for evaluate in (derivative, k.jit(derivative)):
         np.testing.assert_allclose(k.numpy(evaluate(theta)), -np.sin(0.6), atol=1e-7)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_gather(backend):
+    data = (1 + 1j) * np.arange(24, dtype=np.float32).reshape(2, 3, 4)
+    operand = tc.backend.convert_to_tensor(data)
+    for axis, index in [(1, [[2, 0], [2, 1]]), (-1, 2), (0, np.empty((2, 0)))]:
+        indices = tc.backend.convert_to_tensor(np.asarray(index, dtype=np.int32))
+
+        select = partial(tc.backend.gather, axis=axis)
+
+        expected = np.take(data, np.asarray(index, dtype=np.int32), axis=axis)
+        for fn in (select, tc.backend.jit(select)):
+            result = fn(operand, indices)
+            assert result.shape == expected.shape
+            assert result.dtype == operand.dtype
+            assert tc.backend.device(result) == tc.backend.device(operand)
+            np.testing.assert_allclose(tc.backend.numpy(result), expected)
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_gather_vmap_grad(backend):
+    K = tc.backend
+    data = np.arange(24, dtype=np.float32).reshape(2, 3, 4)
+    operand = K.convert_to_tensor(data)
+    for axis in (0, 1):
+        last = data.shape[axis] - 1
+        indices = K.convert_to_tensor(np.array([last, 0, last], dtype=np.int32))
+
+        def loss(x, i, axis=axis):
+            return K.sum(K.gather(x, i, axis=axis))
+
+        weights = np.zeros(data.shape[axis])
+        weights[0], weights[-1] = 1, 2
+        shape = [1, 1, 1]
+        shape[axis] = len(weights)
+        expected = np.broadcast_to(weights.reshape(shape), data.shape)
+        for differentiate in (K.grad, K.value_and_grad):
+            derivative = differentiate(loss)
+            for evaluate in (derivative, K.jit(derivative)):
+                gradient = evaluate(operand, indices)
+                if isinstance(gradient, tuple):
+                    gradient = gradient[1]
+                np.testing.assert_allclose(K.numpy(gradient), expected)
+
+    def select(x, i):
+        return tc.backend.gather(x, i, axis=0)
+
+    paired = tc.backend.vmap(select, vectorized_argnums=(0, 1))
+    result = tc.backend.jit(paired)(operand, indices[:2])
+    np.testing.assert_allclose(tc.backend.numpy(result), data[[0, 1], [2, 0]])
