@@ -162,9 +162,7 @@ def trace_product(*o: Union[Tensor, QuOperator]) -> Tensor:
             and prod.shape[0] == o[-1].shape[1]  # type: ignore[union-attr]
             and prod.shape[1] == o[-1].shape[0]  # type: ignore[union-attr]
         ):
-            left = backend.convert_to_tensor(prod)
-            right = backend.convert_to_tensor(o[-1])
-            return backend.sum(left * backend.transpose(right))
+            return backend.sum(prod * backend.transpose(o[-1]))
         return backend.trace(matmul(prod, o[-1]))
     prod = reduce(matmul, o)
     if isinstance(prod, QuOperator):
@@ -501,14 +499,6 @@ def renyi_entropy(rho: Union[Tensor, QuOperator], k: int = 2) -> Tensor:
     :return: The :math:`k` th order of Renyi entropy.
     :rtype: Tensor
     """
-    if (
-        k == 2
-        and not isinstance(rho, QuOperator)
-        and len(rho.shape) == 2
-        and rho.shape[0] == rho.shape[1]
-    ):
-        purity = backend.sum(rho * backend.transpose(rho))
-        return -backend.real(backend.log(purity))
     s = 1 / (1 - k) * backend.real(backend.log(trace_product(*[rho] * k)))
     return s
 

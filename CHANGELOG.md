@@ -4,12 +4,11 @@
 
 ### Changed
 
-- Compute dense trace products without forming the final matrix product.
+- Compute dense trace products without forming the final matrix product, which also makes dense second-order Rényi entropy quadratic-cost.
 - Preserve the MPS tensor network and physical site dimensions when exporting states as `QuVector`, avoiding full wavefunctions for local reduced states and MPO expectations.
 - Avoid allocating a full identity matrix when constructing NumPy one-hot vectors and respect the configured real dtype.
 - Reduce JAX SVD backward memory and computation for rectangular matrices by avoiding full-size projection matrices.
 - Import Qiskit initialization states by reversing tensor axes instead of allocating a dense permutation matrix.
-- Compute second-order Rényi entropy directly from dense matrix entries, avoiding a cubic-cost matrix product.
 - Evaluate Krylov time correlations and bilinear resolvents in the projected space without materializing full state batches.
 - Compute classical-shadow Pauli expectations directly from raw measurement snapshots without constructing local density matrices.
 - Compute finite-shot correlations from selected sample bits without materializing a complete bit matrix.
