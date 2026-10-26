@@ -150,6 +150,22 @@ def trace_product(*o: Union[Tensor, QuOperator]) -> Tensor:
     :return: The trace of several inputs.
     :rtype: Tensor
     """
+    if len(o) > 1 and all(
+        not isinstance(op, QuOperator)
+        and len(op.shape) == 2
+        and not backend.is_sparse(op)
+        for op in o
+    ):
+        prod = reduce(matmul, o[:-1])
+        if (
+            all(d is not None for d in prod.shape)  # type: ignore[union-attr]
+            and prod.shape[0] == o[-1].shape[1]  # type: ignore[union-attr]
+            and prod.shape[1] == o[-1].shape[0]  # type: ignore[union-attr]
+        ):
+            left = backend.convert_to_tensor(prod)
+            right = backend.convert_to_tensor(o[-1])
+            return backend.sum(left * backend.transpose(right))
+        return backend.trace(matmul(prod, o[-1]))
     prod = reduce(matmul, o)
     if isinstance(prod, QuOperator):
         return prod.trace().eval_matrix()
