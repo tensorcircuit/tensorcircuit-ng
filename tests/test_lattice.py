@@ -27,6 +27,20 @@ from tensorcircuit.templates.lattice import (
 import tensorcircuit as tc
 
 
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
+def test_dynamic_periodic_boundaries_jit(backend):
+    def distances(flags):
+        return SquareLattice(size=(3, 3), pbc=(flags[0], flags[1])).distance_matrix
+
+    evaluate = tc.backend.jit(distances)
+    for flags in [(False, False), (True, False), (False, True), (True, True)]:
+        expected = SquareLattice(size=(3, 3), pbc=flags).distance_matrix
+        actual = evaluate(tc.backend.convert_to_tensor(np.array(flags)))
+        np.testing.assert_allclose(
+            tc.backend.numpy(actual), tc.backend.numpy(expected), atol=1e-6
+        )
+
+
 @pytest.fixture
 def simple_square_lattice():
     """
