@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Group Pauli terms with shared flip masks before sparse matrix assembly, reducing intermediate memory.
 - Apply local readout calibration inverses as tensor products without materializing a dense calibration matrix.
 - Preserve the MPS tensor network and physical site dimensions when exporting states as `QuVector`, avoiding full wavefunctions for local reduced states and MPO expectations.
 - Avoid allocating a full identity matrix when constructing NumPy one-hot vectors and respect the configured real dtype.

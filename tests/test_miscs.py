@@ -48,13 +48,14 @@ def test_ps2coo(tfb):
         np.testing.assert_allclose(tc.backend.to_dense(r1), a, atol=1e-5)
 
 
-def test_pss2coo(tfb):
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("torchb")])
+def test_pss2coo(backend):
     l = [t[0] for t in check_pairs[:4]]
     a = sum([t[1] for t in check_pairs[:4]])
-    r1 = PauliStringSum2COO(tf.constant(l, dtype=tf.int64))
+    r1 = PauliStringSum2COO(tc.backend.convert_to_tensor(l))
     np.testing.assert_allclose(tc.backend.to_dense(r1), a, atol=1e-5)
     l = [t[0] for t in check_pairs[4:]]
-    r1 = PauliStringSum2COO(tf.constant(l, dtype=tf.int64), weight=[0.5, 1])
+    r1 = PauliStringSum2COO(tc.backend.convert_to_tensor(l), weight=[0.5, 1])
     a = check_pairs[4][1] * 0.5 + check_pairs[5][1] * 1.0
     np.testing.assert_allclose(tc.backend.to_dense(r1), a, atol=1e-5)
 

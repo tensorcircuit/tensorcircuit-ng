@@ -24,6 +24,7 @@ from typing import (
 )
 
 import numpy as np
+from scipy.sparse import coo_matrix
 import tensornetwork as tn
 from tensornetwork.network_components import AbstractNode, CopyNode, Edge, Node, connect
 from tensornetwork.network_operations import (
@@ -2438,14 +2439,35 @@ def PauliStringSum2COO(
         rsparse = rsparses.sum(axis=0)  # Sum over the batch dimension (terms)
 
     else:
-        rsparses = [
-            backend.numpy(PauliString2COO_jit[backend.name](ls[i], weight[i]))  # type: ignore
-            for i in range(nterms)
-        ]
-        rsparse = _dc_sum(rsparses)
+        strings = np.asarray(backend.numpy(ls)).real.astype(np.int32)
+        weights = np.asarray(backend.numpy(weight))
+        n = strings.shape[1]
+        positions = 1 << np.arange(n - 1, -1, -1, dtype=np.int64)
+        flips = ((strings == 1) | (strings == 2)) @ positions
+        phases = ((strings == 2) | (strings == 3)) @ positions
+        ny = np.sum(strings == 2, axis=1) % 4
+        index_dtype = np.int32 if n < 31 else np.int64
+        idx1 = np.arange(1 << n, dtype=index_dtype)
+        flips = flips.astype(index_dtype)
+        phases = phases.astype(index_dtype)
+        groups, group_indices = np.unique(flips, return_inverse=True)
+        values = np.zeros((len(groups), len(idx1)), dtype=weights.dtype)
+        for term, group in enumerate(group_indices):
+            parity = idx1 & phases[term]
+            for shift in (32, 16, 8, 4, 2, 1) if n >= 31 else (16, 8, 4, 2, 1):
+                parity ^= parity >> shift
+            parity &= 1
+            values[group] += (1 - 2 * parity) * ((-1j) ** ny[term]) * weights[term]
+        columns = idx1[None, :] ^ groups[:, None]
+        rows = np.broadcast_to(idx1, columns.shape).ravel()
+        rsparse = coo_matrix(
+            (values.ravel(), (rows, columns.ravel())), shape=(1 << n, 1 << n)
+        )
+        if nterms > 1:
+            rsparse.eliminate_zeros()
     # auto transformed into csr format!!
-    if (backend.is_tensor(rsparse) or backend.is_sparse(rsparse)) and not hasattr(
-        rsparse, "tocoo"
+    if not hasattr(rsparse, "tocoo") and (
+        backend.is_tensor(rsparse) or backend.is_sparse(rsparse)
     ):
         if numpy:
             return backend.numpy(rsparse)
