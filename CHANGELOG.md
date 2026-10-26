@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Copy only the operator span when evaluating local MPS expectations.
 - Evaluate pure-state entanglement anti-flatness on the smaller subsystem.
 - Compute default-order truncated free energy in quadratic time using trace contractions.
 - Reduce dense higher-order Rényi entropy matrix products through shared half powers.

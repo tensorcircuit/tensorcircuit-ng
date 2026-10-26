@@ -1019,7 +1019,11 @@ class MPSCircuit(AbstractCircuit):
             assert isinstance(other, MPSCircuit), "the bra has to be a MPSCircuit"
 
         # apply the gate
-        mps = self.copy()
+        if other is None:
+            mps = self.slice(site_begin, site_end)
+            ops = [(gate, [i - site_begin for i in index]) for gate, index in ops]  # type: ignore
+        else:
+            mps = self.copy()
         # when the truncation split is None (which is the default),
         # it is guaranteed that the result is a real number
         # since the calculation is exact, otherwise there's no guarantee
@@ -1031,7 +1035,7 @@ class MPSCircuit(AbstractCircuit):
             assert (self._mps.center_position >= site_begin) and (
                 self._mps.center_position <= site_end
             )
-            ket = mps.slice(site_begin, site_end)
+            ket = mps
             bra = self.slice(site_begin, site_end)
         else:
             ket = mps
