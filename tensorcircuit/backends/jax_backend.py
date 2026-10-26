@@ -11,7 +11,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union
 import numpy as np
 
 import tensornetwork
-from scipy.sparse import coo_matrix
+from scipy.sparse import coo_matrix, csr_matrix
 from tensornetwork.backends.jax import jax_backend
 
 from .abstract_backend import ExtendedBackend
@@ -357,6 +357,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
 
     def numpy(self, a: Tensor) -> Tensor:
         if self.is_sparse(a):
+            if isinstance(a, sparse.BCSR):  # type: ignore
+                return csr_matrix(
+                    (np.array(a.data), np.array(a.indices), np.array(a.indptr)),
+                    shape=a.shape,
+                )
             return coo_matrix(
                 (a.data, (a.indices[:, 0], a.indices[:, 1])), shape=a.shape
             )
@@ -786,6 +791,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         self, indices: Tensor, values: Tensor, shape: Tensor
     ) -> Tensor:
         return sparse.BCOO((values, indices), shape=shape)  # type: ignore
+
+    def csr_sparse_matrix(
+        self, indptr: Tensor, indices: Tensor, values: Tensor, shape: Tensor
+    ) -> Tensor:
+        return sparse.BCSR((values, indices, indptr), shape=shape)  # type: ignore
 
     def sparse_dense_matmul(
         self,

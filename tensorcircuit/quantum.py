@@ -25,6 +25,7 @@ from typing import (
 
 import numpy as np
 import tensornetwork as tn
+from scipy.sparse import csr_matrix
 from tensornetwork.network_components import AbstractNode, CopyNode, Edge, Node, connect
 from tensornetwork.network_operations import (
     copy,
@@ -36,6 +37,7 @@ from .cons import (
     backend,
     contractor,
     dtypestr,
+    get_backend,
     idtypestr,
     npdtype,
     rdtypestr,
@@ -94,6 +96,36 @@ class LinearOperator:
         return self.matvec(vector)
 
 
+def _sparse_matvec_format(operator: Tensor) -> Tensor:
+    """
+    Convert a sparse matrix to the faster matvec format of the current backend.
+    """
+    if backend.name == "tensorflow":
+        # COO is the only sparse format
+        return operator
+    if backend.name == "jax":
+        import jax
+        from jax.experimental.sparse import BCOO, BCSR
+
+        if not isinstance(operator, (BCOO, BCSR)):
+            return operator
+        if isinstance(operator.data, jax.core.Tracer):
+            # the placement is unknown while tracing; use the default platform
+            platform = jax.default_backend()
+        else:
+            platform = backend.device(operator.data).split(":")[0]
+        if platform == "cpu":
+            # jax>=0.10 lowers BCSR matvec to a dedicated CPU kernel, several times
+            # faster than the generic BCOO lowering
+            if isinstance(operator, BCSR):
+                return operator
+            return backend.sparse_csr_from_coo(operator)
+        # on GPU the cuSPARSE BCSR path is much slower than BCOO
+        return operator.to_bcoo() if isinstance(operator, BCSR) else operator
+    # scipy, torch: CSR matvec is several times faster than COO
+    return backend.sparse_csr_from_coo(operator)
+
+
 def aslinearoperator(
     operator: Any, shape: Optional[Sequence[int]] = None, dtype: Any = None
 ) -> LinearOperator:
@@ -138,7 +170,7 @@ def aslinearoperator(
     operator_dtype = dtype if dtype is not None else getattr(operator, "dtype", None)
 
     if backend.is_sparse(operator):
-        sparse_operator = backend.sparse_csr_from_coo(operator)
+        sparse_operator = _sparse_matvec_format(operator)
 
         def sparse_matvec(vector: Tensor) -> Tensor:
             return backend.sparse_dense_matmul(sparse_operator, vector)
@@ -2229,9 +2261,9 @@ def PauliStringSum2MVP(
     """
     Generate a matrix-vector product function for a given Pauli string sum.
     The returned function `mvp(psi)` computes sum(w_i * P_i * psi).
-    This implementation efficiently handles the operation by using backend-agnostic
-    slicing (for X/Y flips) and broadcasting (for Z/Y phases), avoiding explicit
-    matrix construction.
+    Pure Z/I terms are merged into one precomputed diagonal; each remaining term
+    is applied with backend flips (for X/Y) and broadcasting (for Z/Y phases),
+    avoiding explicit matrix construction.
 
     :param structures: List of Pauli strings, e.g. [[1, 0, 3], [0, 2, 0]] for X0 Z2 and Y1.
         (0: I, 1: X, 2: Y, 3: Z)
@@ -2257,50 +2289,33 @@ def PauliStringSum2MVP(
 
     n = len(structures[0])
 
-    # Cache TensorFlow module if needed for axis flipping workaround
-    tf_module = None
-    if backend.name == "tensorflow":
-        import tensorflow as tf
-
-        tf_module = tf
-
-    # Pre-process terms into separate lists for type safety
-    term_flip_slices: List[Optional[Tuple[slice, ...]]] = []
+    # Pre-process off-diagonal terms into separate lists for type safety
     term_flip_axes: List[Tuple[int, ...]] = []
     term_mask_indices: List[Tuple[int, ...]] = []
-    term_weights: List[complex] = []
+    term_weights: List[Tensor] = []
+    diagonal_terms: List[int] = []
 
-    for s, w in zip(structures, weights):
+    for i, (s, w) in enumerate(zip(structures, weights)):
         s_arr = np.array(s)
         x_indices = np.where(s_arr == 1)[0].tolist()
         y_indices = np.where(s_arr == 2)[0].tolist()
         z_indices = np.where(s_arr == 3)[0].tolist()
+        if not x_indices and not y_indices:
+            diagonal_terms.append(i)
+            continue
 
         # Z mask comes from Z terms AND Y terms (Y = i * X * Z)
-        mask_indices = tuple(sorted(z_indices + y_indices))
+        term_mask_indices.append(tuple(sorted(z_indices + y_indices)))
         # Flip axes come from X terms AND Y terms
-        # Sorted order required for TF reshape workaround
-        flip_axes = tuple(sorted(x_indices + y_indices))
-        # Global phase: each Y contributes 1j
-        phase_c = w * (1j) ** len(y_indices)
-
-        # Pre-compute slice object for flipping
-        if flip_axes:
-            sl: List[slice] = [slice(None)] * n
-            for k in flip_axes:
-                sl[k] = slice(None, None, -1)
-            flip_slice: Optional[Tuple[slice, ...]] = tuple(sl)
-        else:
-            flip_slice = None
-
-        term_flip_slices.append(flip_slice)
-        term_flip_axes.append(flip_axes)
-        term_mask_indices.append(mask_indices)
-        term_weights.append(phase_c)
+        term_flip_axes.append(tuple(sorted(x_indices + y_indices)))
+        # Global phase: each Y contributes 1j; weights follow the global dtype
+        term_weights.append(
+            backend.convert_to_tensor(w, dtype=dtypestr) * (1j) ** len(y_indices)
+        )
 
     # Pre-fuse per-axis Z masks into a single broadcastable mask per term.
-    # Built once at setup (amortized over many mvp calls); stored as backend
-    # tensors so the call path only needs a dtype-aligned broadcast multiply.
+    # Built once at setup (amortized over many mvp calls) in the global dtype,
+    # so the call path is a single broadcast multiply.
     term_fused_masks: List[Optional[Tensor]] = []
     for mask_indices in term_mask_indices:
         if not mask_indices:
@@ -2310,7 +2325,23 @@ def PauliStringSum2MVP(
         for a in mask_indices:
             z_k = np.array([1.0, -1.0]).reshape([1] * a + [2] + [1] * (n - a - 1))
             m = m * z_k
-        term_fused_masks.append(backend.convert_to_tensor(m))
+        # cast on the host: a device-side conversion compiles per mask shape
+        term_fused_masks.append(backend.convert_to_tensor(m.astype(npdtype)))
+
+    # Pure Z/I terms are merged into a single precomputed diagonal in the global
+    # dtype; weights are stacked as backend tensors to keep their autodiff graph.
+    diagonal: Optional[Tensor] = None
+    if diagonal_terms:
+        diag_w = backend.stack(
+            [
+                backend.convert_to_tensor(weights[i], dtype=dtypestr)
+                for i in diagonal_terms
+            ]
+        )
+        _, _, values = _pauli_sum_diagonals(
+            [structures[i] for i in diagonal_terms], diag_w, False
+        )
+        diagonal = backend.reshape(values[0], (2,) * n)
 
     def mvp(psi: Tensor) -> Tensor:
         psi_shape = backend.shape_tuple(psi)
@@ -2320,10 +2351,13 @@ def PauliStringSum2MVP(
             psi_tensor = backend.reshape(psi, (2,) * n)
         else:
             psi_tensor = psi
+        # everything is computed in the global dtype, as the merged diagonal is
+        psi_tensor = backend.cast(psi_tensor, dtypestr)
 
-        dtype = backend.dtype(psi_tensor)
-
-        total_res = backend.zeros_like(psi_tensor)
+        if diagonal is None:
+            total_res = backend.zeros_like(psi_tensor)
+        else:
+            total_res = psi_tensor * diagonal
 
         for i in range(len(term_weights)):
             term_psi = psi_tensor
@@ -2331,24 +2365,10 @@ def PauliStringSum2MVP(
             # 1. Apply fused Z mask via a single broadcast multiply
             fused = term_fused_masks[i]
             if fused is not None:
-                term_psi = term_psi * backend.cast(fused, dtype)
+                term_psi = term_psi * fused
 
-            # 2. Apply flips via slicing
-            flip_slice = term_flip_slices[i]
-            if flip_slice is not None:
-                if tf_module is not None:
-                    # TF workaround: reshape to rank 3, flip, reshape back
-                    curr_psi = term_psi
-                    for axis in term_flip_axes[i]:
-                        pre_shape = 2**axis
-                        post_shape = 2 ** (n - 1 - axis)
-                        curr_psi = tf_module.reshape(
-                            curr_psi, (pre_shape, 2, post_shape)
-                        )
-                        curr_psi = tf_module.reverse(curr_psi, axis=[1])
-                    term_psi = tf_module.reshape(curr_psi, (2,) * n)
-                else:
-                    term_psi = term_psi[flip_slice]
+            # 2. Apply X/Y flips
+            term_psi = backend.flip(term_psi, term_flip_axes[i])
 
             # 3. Apply weight
             total_res = total_res + (term_psi * term_weights[i])
@@ -2376,17 +2396,206 @@ def PauliStringSum2Dense(
     :param weight: 1D Tensor, each element corresponds the weight for each Pauli string
         defaults to None (all Pauli strings weight 1.0)
     :type weight: Optional[Sequence[float]], optional
-    :param numpy: default False. If True, return numpy coo
-        else return backend compatible sparse tensor
+    :param numpy: default False. If True, return a numpy array
+        else return a backend tensor
     :type numpy: bool
-    :return: the tensorflow dense matrix
+    :return: the dense matrix
     :rtype: Tensor
     """
-    sparsem = PauliStringSum2COO_numpy(ls, weight)
+    if not numpy and backend.name == "jax":
+        return backend.to_dense(PauliStringSum2COO(ls, weight))
+    dense = _pauli_sum_scipy(ls, weight).toarray()
     if numpy:
-        return sparsem.toarray()
-    sparsem = backend.coo_sparse_matrix_from_numpy(sparsem)
-    return backend.to_dense(sparsem)
+        return dense
+    return backend.convert_to_tensor(dense)
+
+
+# Pauli string sum to matrix. Grouping terms by their X/Y flip mask f gives
+# H = sum_f diag(v_f) X^f, i.e. one stored entry per group per row.
+# ``_pauli_sum_diagonals`` computes (f, v_f); ``_pauli_sum_scipy`` (host) and
+# ``_pauli_sum_sparse`` (dispatch, device assembly) build the sparse matrix used
+# by PauliStringSum2COO / PauliStringSum2CSR / PauliStringSum2Dense.
+
+_PAULI_Y_PHASES = np.array([1, -1j, -1, 1j])
+
+
+def _pauli_parity_signs(b: Any, rows: Tensor, zmask: Any, n: int) -> Tensor:
+    """
+    Integer signs ``(-1)^popcount(rows & zmask)`` on backend ``b`` (XOR folding).
+    """
+    p = b.bitwise_and(rows, zmask)
+    shift = 1
+    while shift < n:
+        p = b.bitwise_xor(p, b.right_shift(p, shift))
+        shift *= 2
+    return 1 - 2 * b.bitwise_and(p, 1)
+
+
+def _pauli_sum_diagonals_jax_kernel(
+    n: int, ngroups: int, dtype: str, group_index: Tensor, zmask: Tensor, coef: Tensor
+) -> Tensor:
+    """
+    Jitted term accumulation of ``_pauli_sum_diagonals`` on jax. It is kept at
+    module level so the jit cache is reused across eager calls.
+    """
+    rows = backend.cast(backend.arange(1 << n), "int32")
+
+    def step(values: Tensor, x: Tuple[Tensor, Tensor, Tensor]) -> Tensor:
+        g, z, c = x
+        term = c * backend.cast(_pauli_parity_signs(backend, rows, z, n), dtype)
+        return backend.scatter(
+            values,
+            backend.reshape(g, [1, 1]),
+            backend.reshape(term, [1, -1]),
+            mode="add",
+        )
+
+    init = backend.zeros([ngroups, 1 << n], dtype=dtype)
+    return backend.scan(step, (group_index, zmask, coef), init)
+
+
+def _pauli_sum_diagonals(
+    ls: Any, weight: Optional[Sequence[float]], host: bool
+) -> Tuple[int, Any, Tensor]:
+    """
+    Decompose a Pauli string sum as ``H = sum_f diag(values[f]) X^flips[f]``.
+    Terms are grouped on the host by flip mask. ``values`` of shape ``[G, 2**n]``
+    in the global dtype is accumulated in numpy if ``host``, else on the active
+    backend: by a jittable and weight-differentiable scan on jax and by an eager
+    loop over terms otherwise.
+
+    :return: ``(n, flips, values)`` with ``flips`` the sorted distinct flip masks
+        as a numpy array
+    :rtype: Tuple[int, Any, Tensor]
+    """
+    if backend.is_tensor(ls):
+        ls = backend.numpy(ls)
+    strings = np.asarray(ls).real.astype(np.int64)
+    n = strings.shape[1]
+    positions = 1 << np.arange(n - 1, -1, -1, dtype=np.int64)
+    flips, group_index = np.unique(
+        ((strings == 1) | (strings == 2)) @ positions, return_inverse=True
+    )
+    group_index = group_index.reshape(-1)
+    zmask = ((strings == 2) | (strings == 3)) @ positions
+    ny = np.sum(strings == 2, axis=1) % 4
+
+    b = get_backend("numpy") if host else backend
+    if weight is None:
+        weight = [1.0] * len(group_index)
+    phases = b.convert_to_tensor(_PAULI_Y_PHASES[ny], dtype=dtypestr)
+    coef = b.convert_to_tensor(weight, dtype=dtypestr) * phases
+    if b.name == "jax":
+        kernel = b.jit(_pauli_sum_diagonals_jax_kernel, static_argnums=(0, 1, 2))
+        values = kernel(
+            n,
+            len(flips),
+            dtypestr,
+            b.convert_to_tensor(group_index.astype(np.int32)),
+            b.convert_to_tensor(zmask.astype(np.int32)),
+            coef,
+        )
+        return n, flips, values
+    rows = b.cast(b.arange(1 << n), "int32" if n < 31 else "int64")
+    acc: List[Any] = [None] * len(flips)
+    for t, g in enumerate(group_index):
+        term = coef[t] * b.cast(
+            _pauli_parity_signs(b, rows, int(zmask[t]), n), dtypestr
+        )
+        acc[g] = term if acc[g] is None else acc[g] + term
+    return n, flips, b.stack(acc)
+
+
+def _pauli_sum_scipy(ls: Any, weight: Optional[Sequence[float]]) -> Any:
+    """
+    Canonical scipy CSR matrix of a Pauli string sum, built on the host with exact
+    zeros removed. A separate function so the dense diagonals are freed before
+    the caller converts the result to a backend format.
+    """
+    if backend.is_tensor(weight):
+        weight = backend.numpy(weight)
+    n, flips, values = _pauli_sum_diagonals(ls, weight, True)
+    dim, ngroups = 1 << n, len(flips)
+    index_dtype = "int32" if dim * ngroups < 2**31 else "int64"
+    rows = np.arange(dim, dtype=index_dtype)
+    m = csr_matrix(
+        (
+            values.T.ravel(),
+            (rows[:, None] ^ flips.astype(index_dtype)[None, :]).ravel(),
+            np.arange(dim + 1, dtype=index_dtype) * ngroups,
+        ),
+        shape=(dim, dim),
+    )
+    # in-place row sort, lighter than the argsort used on device
+    m.sort_indices()
+    m.eliminate_zeros()
+    return m
+
+
+def _pauli_sum_sparse(
+    ls: Sequence[Sequence[int]],
+    weight: Optional[Sequence[float]],
+    numpy: bool,
+    csr: bool,
+) -> Tensor:
+    """
+    Shared implementation of ``PauliStringSum2COO`` and ``PauliStringSum2CSR``.
+
+    - traced ``ls`` (jax): sum of per-term ``PauliString2COO`` matrices, since
+      grouping needs concrete strings;
+    - ``numpy=True``, numpy, tensorflow, cupy: ``_pauli_sum_scipy``, converted
+      to the backend format;
+    - jax, pytorch: assembled on device, keeping exact zeros.
+    """
+    if backend.name == "jax" and not numpy:
+        from jax.core import Tracer
+
+        if any(isinstance(x, Tracer) for x in backend.tree_flatten(ls)[0]):
+            strings = num_to_tensor(ls)
+            weight = [1.0] * strings.shape[0] if weight is None else weight
+            batch_f = backend.vmap(PauliString2COO, vectorized_argnums=(0, 1))
+            rsparse = batch_f(strings, num_to_tensor(weight)).sum(axis=0)
+            return backend.sparse_csr_from_coo(rsparse) if csr else rsparse
+
+    if numpy or backend.name not in ("jax", "pytorch"):
+        m = _pauli_sum_scipy(ls, weight)
+        if not csr:
+            m = m.tocoo()
+        if numpy or backend.name == "numpy":
+            return m
+        if csr:
+            return backend.csr_sparse_matrix_from_numpy(m)
+        return backend.coo_sparse_matrix_from_numpy(m)
+
+    n, flips, values = _pauli_sum_diagonals(ls, weight, False)
+    dim, ngroups = 1 << n, len(flips)
+    index_dtype = "int32" if dim * ngroups < 2**31 else "int64"
+    rows = backend.cast(backend.arange(dim), index_dtype)
+    flips_t = backend.cast(backend.convert_to_tensor(flips), index_dtype)
+    if csr or backend.name == "pytorch":
+        # row-major CSR with sorted columns; for torch, a COO converted from it
+        # is flagged coalesced, which torch sparse matmul needs for its fast path
+        cols = backend.bitwise_xor(
+            backend.reshape(rows, [-1, 1]), backend.reshape(flips_t, [1, -1])
+        )
+        order = backend.cast(backend.argsort(cols, axis=1), index_dtype)
+        flat = backend.reshape(order + backend.reshape(rows, [-1, 1]) * ngroups, [-1])
+        m = backend.csr_sparse_matrix(
+            backend.cast(backend.arange(dim + 1), index_dtype) * ngroups,
+            backend.gather1d(backend.reshape(cols, [-1]), flat),
+            backend.gather1d(backend.reshape(backend.transpose(values), [-1]), flat),
+            (dim, dim),
+        )
+        return m if csr else m.to_sparse_coo()
+    # jax COO stays group-major: row-sorted BCOO matvec is much slower on GPU
+    cols = backend.bitwise_xor(
+        backend.reshape(rows, [1, -1]), backend.reshape(flips_t, [-1, 1])
+    )
+    rows = backend.tile(backend.reshape(rows, [1, -1]), [ngroups, 1])
+    indices = backend.stack(
+        [backend.reshape(rows, [-1]), backend.reshape(cols, [-1])], axis=1
+    )
+    return backend.coo_sparse_matrix(indices, backend.reshape(values, [-1]), (dim, dim))
 
 
 def PauliStringSum2COO(
@@ -2404,11 +2613,24 @@ def PauliStringSum2COO(
     :param weight: 1D Tensor, each element corresponds the weight for each Pauli string
         defaults to None (all Pauli strings weight 1.0)
     :type weight: Optional[Sequence[float]], optional
-    :param numpy: default False. If True, return numpy coo
+    :param numpy: default False. If True, return scipy coo
         else return backend compatible sparse tensor
     :type numpy: bool
-    :return: the scipy coo sparse matrix
+    :return: the COO sparse matrix
     :rtype: Tensor
+
+    .. note::
+        Host-built matrices (``numpy=True`` and the numpy, tensorflow and cupy
+        backends) are in canonical row-major order with explicit zeros removed.
+        The jax and pytorch backends assemble the matrix on device: it stores
+        one entry per distinct X/Y flip pattern per row, keeping exact
+        cancellations as explicit zeros. With jax, both construction paths are
+        jittable and differentiable with respect to ``weight``: concrete ``ls``
+        is grouped on the host as above, while a traced ``ls`` sums one matrix
+        per term, which is faster to rebuild inside ``jit`` but stores one entry
+        per term per row and is slower for matvec. With pytorch, the matrix is
+        built on the default device and is not differentiable with respect to
+        ``weight``.
 
     .. note::
         For structured operators beyond qubit Pauli strings, see `TenCirPauli
@@ -2416,66 +2638,43 @@ def PauliStringSum2COO(
         includes fermionic, bosonic, qudit, and hybrid operators, with sparse
         and matrix-free targets.
     """
-    # numpy version is 3* faster!
-
-    nterms = len(ls)
-    if weight is None:
-        weight = [1.0] * nterms
-    weight = num_to_tensor(weight)
-    ls = num_to_tensor(ls)
-    global PauliString2COO_jit
-    if backend.name not in PauliString2COO_jit:
-        PauliString2COO_jit[backend.name] = backend.jit(
-            PauliString2COO, jit_compile=True
-        )
-    if backend.name == "jax" and not numpy:
-        # Use vmap to generate batched BCOO and then sum reduction
-        # This keeps everything in JAX/tracers and avoids backend.numpy()
-        batch_f = backend.vmap(
-            PauliString2COO_jit[backend.name], vectorized_argnums=(0, 1)
-        )
-        rsparses = batch_f(ls, weight)
-        rsparse = rsparses.sum(axis=0)  # Sum over the batch dimension (terms)
-
-    else:
-        rsparses = [
-            backend.numpy(PauliString2COO_jit[backend.name](ls[i], weight[i]))  # type: ignore
-            for i in range(nterms)
-        ]
-        rsparse = _dc_sum(rsparses)
-    # auto transformed into csr format!!
-    if (backend.is_tensor(rsparse) or backend.is_sparse(rsparse)) and not hasattr(
-        rsparse, "tocoo"
-    ):
-        if numpy:
-            return backend.numpy(rsparse)
-        return rsparse
-
-    rsparse = rsparse.tocoo()
-    if numpy:
-        return rsparse
-    return backend.coo_sparse_matrix_from_numpy(rsparse)
-
-
-def _dc_sum(l: List[Any]) -> Any:
-    """
-    For the sparse sum, the speed is determined by the non zero terms,
-    so the DC way to do the sum can indeed bring some speed advantage (several times)
-
-    :param l: list of sparse matrices to sum elementwise
-    :type l: List[Any]
-    :return: the elementwise sum of the matrices, computed via divide-and-conquer
-        recursion for sparse-matrix efficiency
-    :rtype: Any
-    """
-    n = len(l)
-    if n > 2:
-        return _dc_sum(l[: n // 2]) + _dc_sum(l[n // 2 :])
-    else:
-        return sum(l)
+    return _pauli_sum_sparse(ls, weight, numpy, csr=False)
 
 
 PauliStringSum2COO_numpy = partial(PauliStringSum2COO, numpy=True)
+
+
+def PauliStringSum2CSR(
+    ls: Sequence[Sequence[int]],
+    weight: Optional[Sequence[float]] = None,
+    numpy: bool = False,
+) -> Tensor:
+    """
+    Generate CSR sparse matrix from Pauli string sum.
+    Works with any backend; set ``numpy=True`` to obtain a ``scipy`` CSR matrix.
+    TensorFlow has no CSR format, so a COO ``tf.SparseTensor`` is returned with a warning.
+
+    :param ls: 2D Tensor, each row is for a Pauli string,
+        e.g. [1, 0, 0, 3, 2] is for :math:`X_0Z_3Y_4`
+    :type ls: Sequence[Sequence[int]]
+    :param weight: 1D Tensor, each element corresponds the weight for each Pauli string
+        defaults to None (all Pauli strings weight 1.0)
+    :type weight: Optional[Sequence[float]], optional
+    :param numpy: default False. If True, return scipy csr
+        else return backend compatible sparse tensor
+    :type numpy: bool
+    :return: the CSR sparse matrix
+    :rtype: Tensor
+    """
+    if backend.name == "tensorflow" and not numpy:
+        warnings.warn(
+            "TensorFlow has no CSR sparse format; returning a COO SparseTensor."
+        )
+        return _pauli_sum_sparse(ls, weight, numpy, csr=False)
+    return _pauli_sum_sparse(ls, weight, numpy, csr=True)
+
+
+PauliStringSum2CSR_numpy = partial(PauliStringSum2CSR, numpy=True)
 
 
 def PauliStringSum2COO_tf(
@@ -2546,9 +2745,6 @@ def PauliString2COO(l: Sequence[int], weight: Optional[float] = None) -> Tensor:
     return ps2coo_core(idx_x, idx_y, idx_z, weight, n)
 
 
-PauliString2COO_jit = {"numpy": PauliString2COO}
-
-
 def ps2coo_core(
     idx_x: Tensor, idx_y: Tensor, idx_z: Tensor, weight: Tensor, nqubits: int
 ) -> Tuple[Tensor, Tensor]:
@@ -2556,19 +2752,14 @@ def ps2coo_core(
     idx1 = num_to_tensor(backend.arange(s), dtype=idtypestr)
     idx2 = (idx1 ^ idx_x) ^ (idx_y)
     indices = backend.transpose(backend.stack([idx1, idx2]))
-    tmp = idx1 & (idx_y | idx_z)
-    e = idx1 * 0
+    signs = _pauli_parity_signs(backend, idx1, idx_y | idx_z, nqubits)
     ny = 0
     for i in range(nqubits):
-        # if tmp[i] is power of 2 (non zero), then e[i] = 1
-        e ^= backend.right_shift(tmp, i) & 0b1
         # how many 1 contained in idx_y
         ny += backend.right_shift(idx_y, i) & 0b1
     ny = backend.mod(ny, 4)
     values = (
-        num_to_tensor(1 - 2 * e)
-        * ((num_to_tensor(-1.0j) ** num_to_tensor(ny)))
-        * weight
+        num_to_tensor(signs) * ((num_to_tensor(-1.0j) ** num_to_tensor(ny))) * weight
     )
     return backend.coo_sparse_matrix(indices=indices, values=values, shape=(s, s))  # type: ignore
 

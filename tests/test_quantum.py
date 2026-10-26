@@ -1542,7 +1542,7 @@ def test_sample_bin2int(backend):
         np.testing.assert_array_equal(ints, expected)
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_PauliStringSum2MVP(backend):
     # Test 1: Compare with PauliStringSum2Dense for random Hamiltonian
     n = 4
@@ -1559,7 +1559,7 @@ def test_PauliStringSum2MVP(backend):
     H_dense = qu.PauliStringSum2Dense(structures, weights)
 
     psi = np.random.randn(2**n) + 1j * np.random.randn(2**n)
-    psi = tc.backend.convert_to_tensor(psi)
+    psi = tc.backend.cast(tc.backend.convert_to_tensor(psi), "complex64")
 
     result_mvp = mvp(psi)
     result_dense = tc.backend.tensordot(H_dense, psi, axes=1)
@@ -1586,6 +1586,32 @@ def test_PauliStringSum2MVP(backend):
     psi3 = tc.backend.convert_to_tensor(psi3)
     result_id = mvp_id(psi3)
     np.testing.assert_allclose(result_id, 2.0 * psi3, atol=1e-5)
+
+
+def test_PauliStringSum2MVP_diagonal_dtype(npb):
+    # the MVP computes in the global dtype, so a real input with a complex
+    # weight on a merged Z/I term still gives the complex result
+    mvp = qu.PauliStringSum2MVP([[0], [3]], [1j, 1.0])
+    np.testing.assert_allclose(mvp(np.array([1.0, 2.0])), [1 + 1j, -2 + 2j])
+
+
+def test_PauliStringSum2MVP_weight_dtype(tfb):
+    # off-diagonal weights also follow the global dtype, so tensors of another
+    # precision do not clash with the converted input
+    w = tc.backend.cast(tc.backend.convert_to_tensor(0.5), "complex128")
+    psi = tc.backend.cast(tc.backend.convert_to_tensor([1.0, 2.0]), "complex128")
+    np.testing.assert_allclose(qu.PauliStringSum2MVP([[1]], [w])(psi), [1.0, 0.5])
+
+
+def test_PauliStringSum2MVP_torch_weight_grad(torchb):
+    import torch
+
+    w = torch.tensor([0.7, 0.3], requires_grad=True)
+    mvp = qu.PauliStringSum2MVP([[3, 0], [1, 3]], [w[0], w[1]])
+    psi = torch.tensor([1.0, 2.0, 3.0, 4.0], dtype=torch.complex64)
+    torch.real(mvp(psi)).sum().backward()
+    # Z0 gives [1, 2, -3, -4]; X0 Z1 gives [3, -4, 1, -2]
+    np.testing.assert_allclose(w.grad.numpy(), [-4.0, -2.0], atol=1e-6)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])

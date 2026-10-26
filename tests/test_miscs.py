@@ -3,6 +3,7 @@
 import sys
 import os
 import subprocess
+import warnings
 from functools import partial
 import numpy as np
 import tensorflow as tf
@@ -57,6 +58,107 @@ def test_pss2coo(tfb):
     r1 = PauliStringSum2COO(tf.constant(l, dtype=tf.int64), weight=[0.5, 1])
     a = check_pairs[4][1] * 0.5 + check_pairs[5][1] * 1.0
     np.testing.assert_allclose(tc.backend.to_dense(r1), a, atol=1e-5)
+    # eager to_dense validates the canonical row-major index order
+    np.testing.assert_allclose(tf.sparse.to_dense(r1), a, atol=1e-5)
+    # the deprecated tf-native builder stays differentiable in the weights;
+    # each gradient is the sum of all entries of the Pauli matrix
+    wv = tf.Variable([0.5, 1.0])
+    with tf.GradientTape() as tape:
+        r2 = tc.quantum.PauliStringSum2COO_tf(l, tf.cast(wv, tf.complex64))
+        e = tf.math.real(tf.reduce_sum(r2.values))
+    np.testing.assert_allclose(tape.gradient(e, wv), [0.0, 16.0], atol=1e-5)
+
+
+def _pauli_sum_case():
+    rng = np.random.default_rng(7)
+    ls = rng.integers(0, 4, size=(8, 4)).tolist()
+    ls += [[1, 1, 0, 0], [2, 2, 0, 0], [3, 3, 0, 0], [0, 3, 0, 3], ls[0]]
+    w = rng.normal(size=len(ls)) + 0.5j * rng.normal(size=len(ls))
+    w[-5:-3] = 1.0
+    a = 0
+    for s, wi in zip(ls, w):
+        m = np.eye(1)
+        for p in s:
+            m = np.kron(m, [i, x, y, z][p])
+        a = a + wi * m
+    return ls, w, a
+
+
+def _sparse_to_numpy(m):
+    if hasattr(m, "toarray"):
+        return m.toarray()
+    return tc.backend.numpy(tc.backend.to_dense(m))
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+@pytest.mark.parametrize("fmt", ["coo", "csr"])
+def test_pss2sparse_backends(backend, fmt):
+    ls, w, a = _pauli_sum_case()
+    f = tc.quantum.PauliStringSum2COO if fmt == "coo" else tc.quantum.PauliStringSum2CSR
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "TensorFlow has no CSR")
+        r = f(ls, tc.backend.convert_to_tensor(w))
+    np.testing.assert_allclose(_sparse_to_numpy(r), a, atol=1e-5)
+    rnp = f(ls, w, numpy=True)
+    np.testing.assert_allclose(rnp.toarray(), a, atol=1e-5)
+    np.testing.assert_allclose(
+        tc.backend.numpy(tc.quantum.PauliStringSum2Dense(ls, w)), a, atol=1e-5
+    )
+    # [1, 1, 0, 0] + [2, 2, 0, 0] cancels exactly; host matrices drop the zeros
+    assert rnp.nnz == np.count_nonzero(np.abs(a) > 1e-6)
+    if fmt == "coo":
+        rows, cols = rnp.row.astype(np.int64), rnp.col.astype(np.int64)
+        assert np.all(np.diff(rows * a.shape[1] + cols) > 0)
+        if tc.backend.name == "pytorch":
+            assert r.is_coalesced()
+
+
+def test_pss2csr_tf_warns(tfb):
+    ls, w, a = _pauli_sum_case()
+    with pytest.warns(UserWarning):
+        r = tc.quantum.PauliStringSum2CSR(ls, w)
+    np.testing.assert_allclose(tf.sparse.to_dense(r), a, atol=1e-5)
+
+
+def test_pss2coo_jax_jit_grad(jaxb):
+    ls, w, _ = _pauli_sum_case()
+    w = np.real(w).astype(np.float32)
+    v = np.random.default_rng(3).normal(size=16).astype(np.complex64)
+
+    def energy(weights, structures):
+        h = tc.quantum.PauliStringSum2COO(structures, weights)
+        return tc.backend.real(tc.backend.sum(np.conj(v) * (h @ v)))
+
+    grad_ref = np.array(
+        [np.real(np.vdot(v, PauliStringSum2COO([s], numpy=True) @ v)) for s in ls]
+    )
+    # static structures take the grouped path, traced ones the per-term path
+    f_traced = tc.backend.jit(tc.backend.value_and_grad(energy))
+    f_static = tc.backend.jit(tc.backend.value_and_grad(lambda p: energy(p, ls)))
+    for e, g in (f_static(w), f_traced(w, tc.backend.convert_to_tensor(np.array(ls)))):
+        np.testing.assert_allclose(e, grad_ref @ w, rtol=1e-4)
+        np.testing.assert_allclose(g, grad_ref, rtol=1e-4, atol=1e-4)
+    h = tc.quantum.PauliStringSum2COO(ls, w)
+    ngroups = len({tuple(p in (1, 2) for p in s) for s in ls})
+    assert h.nse == ngroups * 16
+    # nested lists of traced entries also take the per-term path
+    f_nested = tc.backend.jit(
+        lambda s, p: tc.quantum.PauliStringSum2COO(s, p).todense()
+    )
+    np.testing.assert_allclose(
+        f_nested(ls, w), PauliStringSum2COO(ls, w, numpy=True).toarray(), atol=1e-5
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("torchb")])
+def test_pss_weight_precision(backend, highp):
+    # weights become global-dtype tensors directly, without a float32 detour
+    a = _sparse_to_numpy(PauliStringSum2COO([[3]], [1.0000000001]))
+    np.testing.assert_allclose(np.diag(a) - [1, -1], [1e-10, -1e-10], atol=1e-14)
+    mvp = tc.quantum.PauliStringSum2MVP([[0], [1]], [1.0000000001, 1.0])
+    psi = tc.backend.convert_to_tensor(np.array([1.0, 0.0], dtype=np.complex128))
+    r = tc.backend.numpy(mvp(psi))
+    np.testing.assert_allclose(r - [1, 1], [1e-10, 0], atol=1e-14)
 
 
 def test_sparse(benchmark, tfb):

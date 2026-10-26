@@ -403,6 +403,18 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
         indices = self.convert_to_tensor(indices).T
         return cp.sparse.coo_matrix((values, indices), shape=shape)
 
+    def csr_sparse_matrix(
+        self, indptr: Tensor, indices: Tensor, values: Tensor, shape: Tensor
+    ) -> Tensor:
+        return cp.sparse.csr_matrix(
+            (
+                self.convert_to_tensor(values),
+                self.convert_to_tensor(indices),
+                self.convert_to_tensor(indptr),
+            ),
+            shape=shape,
+        )
+
     def sparse_dense_matmul(
         self,
         sp_a: Tensor,

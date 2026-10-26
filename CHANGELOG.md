@@ -14,13 +14,18 @@
 - Evaluate Krylov time correlations and bilinear resolvents in the projected space without materializing full state batches.
 - Compute classical-shadow Pauli expectations directly from raw measurement snapshots without constructing local density matrices.
 - Compute finite-shot correlations from selected sample bits without materializing a complete bit matrix.
+- Build Pauli string sum matrices by grouping terms with the same X/Y flip pattern, reducing construction memory and matvec cost.
+- Merge pure Z/I terms of `PauliStringSum2MVP` into one precomputed diagonal.
+- `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators and uses BCSR only on CPU.
 
 ### Added
 
+- Add `PauliStringSum2CSR` and the backend method `csr_sparse_matrix`.
 - Support qudit density-matrix simulation with `tc.DMCircuit(n, dim=d)` for `d > 2`, including explicit single- and multi-site `unitary` gates and Kraus channels via `apply_general_kraus`.
 
 ### Fixed
 
+- Fix `PauliStringSum2COO`, `PauliStringSum2MVP` and one-dimensional `sparse_dense_matmul` on the PyTorch backend.
 - Return `numpy.ndarray` instead of `numpy.matrix` from the NumPy backend `to_dense` and `PauliStringSum2Dense(..., numpy=True)`, so elementwise products and reshapes on dense results follow array semantics.
 - Compute fidelity reliably for positive semidefinite states and preserve first-order matrix square-root responses on fixed-rank paths. `sqrtmh` now clips negative eigenvalues regardless of the retained `psd` argument.
 - Preserve double precision for Python scalar inputs of `time_correlation`, `resolvent_bilinear`, and `zero_temperature_greens_function`, and for `convert_to_tensor(..., dtype=...)` on the PyTorch backend.
