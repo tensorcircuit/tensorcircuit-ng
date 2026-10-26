@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Preserve the MPS tensor network and physical site dimensions when exporting states as `QuVector`, avoiding full wavefunctions for local reduced states and MPO expectations.
 - Avoid allocating a full identity matrix when constructing NumPy one-hot vectors and respect the configured real dtype.
 - Reduce JAX SVD backward memory and computation for rectangular matrices by avoiding full-size projection matrices.
 - Import Qiskit initialization states by reversing tensor axes instead of allocating a dense permutation matrix.

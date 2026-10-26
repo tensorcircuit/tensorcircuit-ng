@@ -1051,13 +1051,20 @@ class MPSCircuit(AbstractCircuit):
 
     def get_quvector(self) -> QuVector:
         """
-        Get the representation of the output state in the form of ``QuVector``
-            has to be full contracted in MPS
+        Get an independent ``QuVector`` retaining the MPS network and site dimensions.
 
         :return: ``QuVector`` representation of the output state from the circuit
         :rtype: QuVector
         """
-        return QuVector.from_tensor(backend.reshape2(self.wavefunction()))
+        nodes = [tn.Node(tensor, backend=backend.name) for tensor in self._mps.tensors]
+        for left, right in zip(nodes, nodes[1:]):
+            left[2] ^ right[0]
+        for node, axis in [(nodes[0], 0), (nodes[-1], 2)]:
+            boundary = tn.Node(
+                backend.ones((1,), dtype=node.tensor.dtype), backend=backend.name
+            )
+            node[axis] ^ boundary[0]
+        return QuVector([node[1] for node in nodes])
 
     def measure(
         self,
