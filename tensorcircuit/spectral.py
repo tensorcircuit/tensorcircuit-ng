@@ -1065,8 +1065,55 @@ def thermal_expectation(
     observable_operator, _ = matrixfunc._prepare_operator(
         observable, dimension=dimension
     )
+    shift = 0.0
+    if energy_shift is not None:
+        shift, shift_scalar = _check_query(energy_shift, "energy_shift")
+        if not shift_scalar:
+            raise ValueError("energy_shift must be a scalar.")
+        shift = backend.cast(shift, dtypestr)
 
     def one(probe: Tensor) -> Tensor:
+        if (
+            isinstance(method, KrylovConfig)
+            and not scalar
+            and backend.shape_tuple(beta)[0] > method.max_dim
+        ):
+            projection = matrixfunc.lanczos_project(
+                hamiltonian, probe, method, dimension=dimension
+            )
+            coefficient = backend.cast(-0.5 * beta, dtypestr)
+            coefficients = matrixfunc._lanczos_coefficients(
+                projection,
+                lambda nodes: backend.exp(
+                    coefficient[..., None] * (backend.cast(nodes, dtypestr) - shift)
+                ),
+            )
+            basis = projection.basis
+            observed_basis = backend.transpose(
+                backend.vmap(lambda item: observable_operator @ item)(
+                    backend.transpose(basis)
+                )
+            )
+            observed = backend.tensordot(backend.adjoint(basis), observed_basis, axes=1)
+            # Retain the actual Gram matrix, including loss of orthogonality.
+            gram = backend.tensordot(backend.adjoint(basis), basis, axes=1)
+            numerator = backend.real(
+                backend.sum(
+                    backend.conj(coefficients)
+                    * backend.tensordot(
+                        coefficients, backend.transpose(observed), axes=1
+                    ),
+                    axis=-1,
+                )
+            )
+            denominator = backend.real(
+                backend.sum(
+                    backend.conj(coefficients)
+                    * backend.tensordot(coefficients, backend.transpose(gram), axes=1),
+                    axis=-1,
+                )
+            )
+            return backend.stack([numerator, denominator], axis=0)
         state = matrixfunc._exponential_action(
             hamiltonian,
             probe,

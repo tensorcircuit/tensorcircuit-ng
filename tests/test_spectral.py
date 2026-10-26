@@ -114,6 +114,43 @@ def test_dos_prepared_forms_and_lineshapes(npb):
         )
 
 
+def test_thermal_expectation_projected_queries(jaxb, highp):
+    hamiltonian = tc.backend.convert_to_tensor(
+        np.array([[0.2, 0.1j, 0.3], [-0.1j, 0.5, 0.2], [0.3, 0.2, 1.1]])
+        - 100.0 * np.eye(3)
+    )
+    observable = tc.backend.convert_to_tensor(
+        np.array([[1.0, 0.4, 0.2j], [0.4, -0.3, 0.1], [-0.2j, 0.1, 0.7]])
+    )
+    probes = tc.backend.convert_to_tensor(np.diag([0.7, 1.0, 1.3]).astype("complex128"))
+    method = tc.matrixfunc.KrylovConfig(4, reorthogonalization="none")
+    beta = np.linspace(0.0, 20.0, 6)
+    shift = tc.backend.convert_to_tensor(-100.0)
+
+    def evaluate(query, reference):
+        return tc.spectral.thermal_expectation(
+            hamiltonian,
+            observable,
+            query,
+            probes=probes,
+            method=method,
+            probe_batch_size=2,
+            energy_shift=reference,
+            with_std=True,
+        )
+
+    # Scalar queries use the state-vector path, including early Lanczos termination.
+    expected = np.array(
+        [
+            [tc.backend.numpy(value) for value in evaluate(query, shift)]
+            for query in beta
+        ]
+    ).T
+    actual = tc.backend.jit(evaluate)(tc.backend.convert_to_tensor(beta), shift)
+    for value, reference in zip(actual, expected):
+        np.testing.assert_allclose(tc.backend.numpy(value), reference, atol=1e-9)
+
+
 def test_thermal_expectation_and_green_function(npb):
     energies, hamiltonian, probes = _problem()
     observable = np.diag([1.0, 2.0, 3.0]).astype(np.complex64)

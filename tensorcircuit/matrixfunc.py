@@ -606,6 +606,19 @@ def _projection_function_values(
     return nodes, eigenvectors, weights, active, _mask_active(values, active)
 
 
+def _lanczos_coefficients(
+    projection: KrylovProjection,
+    function: Callable[[Tensor], Tensor],
+) -> Tensor:
+    """Evaluate a function in the Lanczos basis, including the seed norm."""
+    _, eigenvectors, _, _, values = _projection_function_values(projection, function)
+    coefficients = backend.cast(values, dtypestr) * backend.conj(eigenvectors[0, :])
+    transformed = backend.tensordot(
+        coefficients, backend.transpose(eigenvectors), axes=1
+    )
+    return transformed * backend.cast(projection.recurrence.vector_norm, dtypestr)
+
+
 def lanczos_apply(
     projection: KrylovProjection,
     function: Callable[[Tensor], Tensor],
@@ -633,20 +646,13 @@ def lanczos_apply(
     """
     if not isinstance(projection, KrylovProjection):
         raise TypeError("projection must be a KrylovProjection.")
-    _, eigenvectors, _, _, values = _projection_function_values(projection, function)
-    values = backend.cast(values, dtypestr)
-    first_component = backend.conj(eigenvectors[0, :])
-    coefficients = values * first_component
-    transformed = backend.tensordot(
-        coefficients, backend.transpose(eigenvectors), axes=1
-    )
-    if _rank(values) == 1:
+    transformed = _lanczos_coefficients(projection, function)
+    if _rank(transformed) == 1:
         result = backend.matvec(projection.basis, transformed)
     else:
         result = backend.tensordot(
             transformed, backend.transpose(projection.basis), axes=1
         )
-    result = result * backend.cast(projection.recurrence.vector_norm, dtypestr)
     return backend.cast(result, dtypestr)
 
 
