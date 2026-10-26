@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Compute pure-state entanglement entropy and mutual information using the smaller subsystem while preserving entropy regularization.
 - Copy only the operator span when evaluating local MPS expectations.
 - Evaluate pure-state entanglement anti-flatness on the smaller subsystem.
 - Compute default-order truncated free energy in quadratic time using trace contractions.
@@ -33,6 +34,7 @@
 
 ### Fixed
 
+- Preserve PyTorch entropy gradients by avoiding in-place spectrum normalization.
 - Fix `PauliStringSum2COO`, `PauliStringSum2MVP` and one-dimensional `sparse_dense_matmul` on the PyTorch backend.
 - Propagate circuits in `pauli_propagation` and the Pauli propagation `compute_expectation_scan` methods with the gate matrices recorded in the circuit instead of rebuilding gates from display names, so renamed gates such as `c.h(0, name="x")` and adjoint gates from `Circuit.inverse()` (e.g. inverted `unitary` or `wroot`) propagate correctly; `apply_gate` of both Pauli propagation engines now accepts circuit gate aliases such as `cx` and `sdg`.
 - Return the conjugate-transposed right factor in PyTorch SVD, restoring complex tensor reconstruction and phase-invariant gradients even with older TensorNetwork dependencies.

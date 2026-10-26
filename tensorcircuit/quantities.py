@@ -80,17 +80,24 @@ def entropy(rho: Union[Tensor, QuOperator], eps: Optional[float] = None) -> Tens
     :return: Entropy on the given density matrix.
     :rtype: Tensor
     """
+    return _entropy(rho, eps)
+
+
+def _entropy(rho: Tensor, eps: Optional[float] = None, nzeros: int = 0) -> Tensor:
+    """Compute entropy including any additional zero eigenvalues of the density matrix."""
     eps_env = os.environ.get("TC_QUANTUM_ENTROPY_EPS")
-    if eps is None and eps_env is None:
-        eps = 1e-12
-    elif eps is None and eps_env is not None:
-        eps = 10 ** (-int(eps_env))
-    rho = rho + eps * backend.cast(backend.eye(rho.shape[-1]), rho.dtype)  # type: ignore
-    lbd = backend.real(backend.eigh(rho)[0])
+    if eps is None:
+        eps = 1e-12 if eps_env is None else 10 ** (-int(eps_env))
+    rho = rho + eps * backend.cast(backend.eye(rho.shape[-1]), rho.dtype)
+    lbd = backend.real(backend.eigvalsh(rho))
     lbd = backend.relu(lbd)
-    lbd /= backend.sum(lbd)
-    # we need the matrix anyway for AD.
+    normalization = backend.sum(lbd) + nzeros * eps
+    lbd = lbd / normalization
     entropy = -backend.sum(lbd * backend.log(lbd + eps))
+    if nzeros:
+        # Preserve the regularization of the original, larger reduced density matrix.
+        pzero = eps / normalization
+        entropy = entropy - nzeros * pzero * backend.log(pzero + eps)
     return backend.real(entropy)
 
 
@@ -205,15 +212,20 @@ def entanglement_entropy(
     :rtype: Tensor
     """
     d = 2 if dim is None else dim
-    if len(state.shape) == 2 and state.shape[0] == state.shape[1]:
+    is_density_matrix = len(state.shape) == 2 and state.shape[0] == state.shape[1]
+    if is_density_matrix:
         n = _infer_num_sites(state.shape[0], d)
     else:
         n = _infer_num_sites(int(backend.sizen(state)), d)
     traceout = _resolve_cut_or_subsystem(
         n, cut, subsystem_to_keep, subsystems_to_trace_out, name="entanglement_entropy"
     )
+    nzeros = 0
+    if not is_density_matrix and len(traceout) < n - len(traceout):
+        nzeros = d ** (n - len(traceout)) - d ** len(traceout)
+        traceout = [i for i in range(n) if i not in traceout]
     rho = reduced_density_matrix(state, subsystems_to_trace_out=traceout, dim=dim)
-    return entropy(rho)
+    return _entropy(rho, nzeros=nzeros)
 
 
 @op2tensor
@@ -992,7 +1004,6 @@ def mutual_information(
             name="mutual_information",
         )
         hab = 0.0
-        rhoa = reduced_density_matrix(s, subsystems_to_trace_out=traceout, dim=dim)
-        ha = hb = entropy(rhoa)
+        ha = hb = entanglement_entropy(s, subsystems_to_trace_out=traceout, dim=dim)
 
     return ha + hb - hab
