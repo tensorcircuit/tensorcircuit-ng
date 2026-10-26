@@ -828,7 +828,7 @@ def log_negativity(
 @partial(op2tensor, op_argnums=(0, 1))
 def trace_distance(rho: Tensor, rho0: Tensor, eps: float = 1e-12) -> Tensor:
     """
-    Compute the trace distance between two density matrix ``rho`` and ``rho0``.
+    Compute the smoothed trace distance between Hermitian density matrices.
 
     :param rho: The density matrix in form of Tensor.
     :type rho: Tensor
@@ -839,11 +839,8 @@ def trace_distance(rho: Tensor, rho0: Tensor, eps: float = 1e-12) -> Tensor:
     :return: The trace distance between two density matrix ``rho`` and ``rho2``.
     :rtype: Tensor
     """
-    d2 = rho - rho0
-    d2 = backend.adjoint(d2) @ d2
-    lbds = backend.real(backend.eigh(d2)[0])
-    lbds = backend.relu(lbds)
-    return 0.5 * backend.sum(backend.sqrt(lbds + eps))
+    lbds = backend.real(backend.eigvalsh(rho - rho0))
+    return 0.5 * backend.sum(backend.sqrt(lbds * lbds + eps))
 
 
 @partial(op2tensor, op_argnums=(0, 1))
