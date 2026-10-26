@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Avoid signed tableau inversion and reduce the smaller bipartition when computing stabilizer entanglement entropy.
 - Compute dense trace products without forming the final matrix product, which also makes dense second-order Rényi entropy quadratic-cost.
 - Apply local readout calibration inverses as tensor products without materializing a dense calibration matrix.
 - Preserve the MPS tensor network and physical site dimensions when exporting states as `QuVector`, avoiding full wavefunctions for local reduced states and MPO expectations.
