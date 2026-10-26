@@ -243,7 +243,8 @@ def entanglement_anti_flatness(
     :rtype: Tensor
     """
     d = 2 if dim is None else dim
-    if len(state.shape) == 2 and state.shape[0] == state.shape[1]:
+    is_dm = len(state.shape) == 2 and state.shape[0] == state.shape[1]
+    if is_dm:
         n = _infer_num_sites(state.shape[0], d)
     else:
         n = _infer_num_sites(int(backend.sizen(state)), d)
@@ -254,6 +255,9 @@ def entanglement_anti_flatness(
         subsystems_to_trace_out,
         name="entanglement_anti_flatness",
     )
+    if not is_dm and len(traceout) < n - len(traceout):
+        traced = set(traceout)
+        traceout = [i for i in range(n) if i not in traced]
     rho = reduced_density_matrix(state, subsystems_to_trace_out=traceout, dim=dim)
     return anti_flatness(rho)
 

@@ -374,19 +374,29 @@ def test_entanglement_anti_flatness_qudit(backend, highp):
     )
 
 
+def test_entanglement_anti_flatness_mixed_partition(npb):
+    mixed = np.diag(np.arange(1, 9, dtype=np.complex64) / 36)
+    rho = qu.reduced_density_matrix(mixed, subsystem_to_keep=[2, 0])
+    expected = np.trace(rho @ rho @ rho) - np.trace(rho @ rho) ** 2
+    np.testing.assert_allclose(
+        qu.entanglement_anti_flatness(mixed, subsystem_to_keep=[2, 0]),
+        expected.real,
+        atol=atol,
+    )
+
+
 def test_entanglement_anti_flatness_jit_and_grad(jaxb):
     @partial(tc.backend.jit, static_argnums=())
     def anti_flatness_fn(theta):
-        state = tc.backend.stack(
-            [tc.backend.cos(theta), 0.0, 0.0, tc.backend.sin(theta)]
-        )
-        return qu.entanglement_anti_flatness(state, subsystem_to_keep=[0])
+        c, s = tc.backend.cos(theta), tc.backend.sin(theta)
+        state = tc.backend.stack([c, 0.0, 0.0, 0.0, 0.0, 0.0, s, 0.0])
+        return qu.entanglement_anti_flatness(state, subsystem_to_keep=[2, 0])
 
     result = anti_flatness_fn(0.23)
-    assert np.isfinite(tc.backend.numpy(result))
+    np.testing.assert_allclose(result, np.sin(4 * 0.23) ** 2 / 16, atol=atol)
 
     gradient = tc.backend.grad(anti_flatness_fn)(0.23)
-    assert np.isfinite(tc.backend.numpy(gradient))
+    np.testing.assert_allclose(gradient, np.sin(8 * 0.23) / 4, atol=atol)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
