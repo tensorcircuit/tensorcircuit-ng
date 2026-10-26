@@ -409,6 +409,40 @@ def test_free_energy(backend):
     np.testing.assert_allclose(qu.free_energy(rho, hq, 0.5), -1, atol=atol)
 
 
+def test_truncated_free_energy_orders(jaxb, highp):
+    rho = np.array([[0.4 + 0.01j, 0.03j], [0.02, 0.6 - 0.01j]])
+    h = np.diag([0.3, -0.2]).astype(np.complex128)
+    delta = rho - np.eye(2)
+    parts = tc.backend.convert_to_tensor(np.stack([rho.real, rho.imag]))
+    for order in (1, 2, 5):
+
+        def loss(x):
+            matrix = tc.backend.cast(x[0], "complex128") + 1j * tc.backend.cast(
+                x[1], "complex128"
+            )
+            return qu.truncated_free_energy(
+                matrix, tc.backend.convert_to_tensor(h), 1.3, order
+            )
+
+        polynomial = np.zeros_like(rho)
+        derivative = h.copy()
+        for i in range(1, order):
+            coefficient = (-1) ** (i + 1) / i
+            power = np.linalg.matrix_power(delta, i)
+            polynomial += coefficient * power
+            derivative += (
+                coefficient
+                / 1.3
+                * ((i + 1) * power + i * np.linalg.matrix_power(delta, i - 1))
+            )
+        expected = np.trace(rho @ h).real + np.trace(rho @ polynomial).real / 1.3
+        value, gradient = tc.backend.jit(tc.backend.value_and_grad(loss))(parts)
+        np.testing.assert_allclose(value, expected, atol=1e-12)
+        np.testing.assert_allclose(
+            gradient, np.stack([derivative.T.real, -derivative.T.imag]), atol=1e-12
+        )
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_measurement_counts(backend):
     state = np.ones([4])

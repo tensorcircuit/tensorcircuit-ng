@@ -707,14 +707,14 @@ def taylorlnm(x: Tensor, k: int) -> Tensor:
     :return: The :math:`k` th order of Taylor expansion of :math:`ln(x+1)`.
     :rtype: Tensor
     """
+    if k == 0:
+        return backend.zeros_like(x)
     dtype = x.dtype
     s = x.shape[-1]
     eye = backend.eye(s, dtype=dtype)
-    y = 1 / k * (-1) ** (k + 1) * eye
-    for i in reversed(range(k)):
-        y = y @ x
-        if i > 0:
-            y += 1 / (i) * (-1) ** (i + 1) * eye
+    y = 1 / k * (-1) ** (k + 1) * x
+    for i in reversed(range(1, k)):
+        y = (y + 1 / i * (-1) ** (i + 1) * eye) @ x
     return y
 
 
@@ -730,15 +730,15 @@ def truncated_free_energy(
     :type h: Tensor
     :param beta: Constant for the optimization, default is 1.
     :type beta: float, optional
-    :param k: The :math:`k` th order, defaults to 2
+    :param k: Positive truncation order, defaults to 2. Order 1 keeps only the energy.
     :type k: int, optional
     :return: The :math:`k` th order of the truncated free energy.
     :rtype: Tensor
     """
     dtype = rho.dtype
     s = rho.shape[-1]
-    tyexpand = rho @ taylorlnm(rho - backend.eye(s, dtype=dtype), k - 1)
-    renyi = -backend.real(backend.trace(tyexpand))
+    log_rho = taylorlnm(rho - backend.eye(s, dtype=dtype), k - 1)
+    renyi = -backend.real(trace_product(rho, log_rho))
     energy = backend.real(trace_product(rho, h))
     return energy - renyi / beta
 
