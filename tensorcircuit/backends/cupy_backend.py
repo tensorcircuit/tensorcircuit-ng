@@ -50,6 +50,12 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
         cp = cupy
         cpx = cupyx
         self.name = "cupy"
+        self._onehot_kernel = cp.ElementwiseKernel(
+            "T index, int64 num",
+            "float64 output",
+            "output = (i % num == (index % num + num) % num);",
+            "tensorcircuit_onehot",
+        )
 
     def convert_to_tensor(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
         if not isinstance(a, cp.ndarray) and not cp.isscalar(a):
@@ -241,9 +247,9 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
         return cpx.scipy.special.softmax(a, axis=axis)
 
     def onehot(self, a: Tensor, num: int) -> Tensor:
-        res = cp.eye(num)[a.reshape([-1])]
-        return res.reshape(list(a.shape) + [num])
-        # https://stackoverflow.com/questions/38592324/one-hot-encoding-using-numpy
+        a = cp.asarray(a)
+        res = cp.empty(a.shape + (num,), dtype=cp.float64)
+        return self._onehot_kernel(a[..., None], num, res)
 
     def cumsum(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
         return cp.cumsum(a, axis)

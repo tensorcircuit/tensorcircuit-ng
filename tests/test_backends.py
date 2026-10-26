@@ -515,6 +515,18 @@ def test_numpy_onehot_dtype(npb, precision):
     assert result.dtype == np.dtype(tc.rdtypestr)
 
 
+def test_cupy_onehot(cpb):
+    result = tc.backend.onehot(2, 4)
+    assert result.dtype == np.dtype("float64")
+    np.testing.assert_array_equal(tc.backend.numpy(result), [0, 0, 1, 0])
+
+    indices = tc.backend.convert_to_tensor([[0, -1], [1, 1]], dtype="int32")
+    result = tc.backend.onehot(indices, 4)
+    np.testing.assert_array_equal(
+        tc.backend.numpy(result), np.eye(4)[[[0, -1], [1, 1]]]
+    )
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_methods(backend):
     # TODO(@refraction-ray): add more methods
