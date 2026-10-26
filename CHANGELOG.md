@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Apply local readout calibration inverses as tensor products without materializing a dense calibration matrix.
 - Preserve the MPS tensor network and physical site dimensions when exporting states as `QuVector`, avoiding full wavefunctions for local reduced states and MPO expectations.
 - Avoid allocating a full identity matrix when constructing NumPy one-hot vectors and respect the configured real dtype.
 - Reduce JAX SVD backward memory and computation for rectangular matrices by avoiding full-size projection matrices.
