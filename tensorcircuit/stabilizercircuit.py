@@ -466,7 +466,7 @@ class StabilizerCircuit(AbstractCircuit):
         :return: Entanglement entropy
         :rtype: float
         """
-        tableau = self.current_tableau()
+        tableau = self.current_inverse_tableau()
         N = len(tableau)
 
         # `cut` is legacy keep semantics (the subsystem whose entropy is computed);
@@ -479,6 +479,13 @@ class StabilizerCircuit(AbstractCircuit):
             name="StabilizerCircuit.entanglement_entropy",
         )
 
+        if len(keep) > N // 2:
+            keep_set = set(keep)
+            keep = [i for i in range(N) if i not in keep_set]
+        if not keep:
+            return 0.0
+
+        tableau = tableau.inverse(unsigned=True)
         _, _, z2x, z2z, _, _ = tableau.to_numpy()
         binary_matrix = np.concatenate([z2x, z2z], axis=1)
         # Get reduced matrix for the cut using boolean indexing
