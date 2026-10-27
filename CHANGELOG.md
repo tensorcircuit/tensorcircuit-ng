@@ -11,6 +11,7 @@
 - Avoid signed tableau inversion and reduce the smaller bipartition when computing stabilizer entanglement entropy.
 - Batch host transfer and outcome counting in second-order shadow Rényi entropy estimation.
 - Compute dense trace products without forming the final matrix product, which also makes dense second-order Rényi entropy quadratic-cost.
+- Propagate fixed Clifford gates in `SparsePauliPropagationEngine` through one signed Pauli branch instead of expanding all local Pauli branches, sharing one packed-word update path with generic one- and two-qubit gates.
 - Apply local readout calibration inverses as tensor products without materializing a dense calibration matrix.
 - Preserve the MPS tensor network and physical site dimensions when exporting states as `QuVector`, avoiding full wavefunctions for local reduced states and MPO expectations.
 - Avoid allocating a full identity matrix when constructing NumPy one-hot vectors and respect the configured real dtype.
@@ -32,6 +33,7 @@
 ### Fixed
 
 - Fix `PauliStringSum2COO`, `PauliStringSum2MVP` and one-dimensional `sparse_dense_matmul` on the PyTorch backend.
+- Propagate circuits in `pauli_propagation` and the Pauli propagation `compute_expectation_scan` methods with the gate matrices recorded in the circuit instead of rebuilding gates from display names, so renamed gates such as `c.h(0, name="x")` and adjoint gates from `Circuit.inverse()` (e.g. inverted `unitary` or `wroot`) propagate correctly; `apply_gate` of both Pauli propagation engines now accepts circuit gate aliases such as `cx` and `sdg`.
 - Return the conjugate-transposed right factor in PyTorch SVD, restoring complex tensor reconstruction and phase-invariant gradients even with older TensorNetwork dependencies.
 - Return `numpy.ndarray` instead of `numpy.matrix` from the NumPy backend `to_dense` and `PauliStringSum2Dense(..., numpy=True)`, so elementwise products and reshapes on dense results follow array semantics.
 - Compute fidelity reliably for positive semidefinite states and preserve first-order matrix square-root responses on fixed-rank paths. `sqrtmh` now clips negative eigenvalues regardless of the retained `psd` argument.
