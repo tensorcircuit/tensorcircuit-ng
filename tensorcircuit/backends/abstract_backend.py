@@ -2471,32 +2471,20 @@ class ExtendedBackend:
             return t
 
         def wrapper(*args: Any, **kws: Any) -> Any:
-            pf = partial(f, **kws)
             jjs = []
             for argnum in argnums:  # type: ignore
-                jj = self.vmap(jvp1, vectorized_argnums=2)(
-                    pf,
-                    args,
-                    tuple(
-                        [
-                            (
-                                self.reshape(
-                                    self.eye(self.sizen(arg), dtype=arg.dtype),
-                                    [-1] + list(self.shape_tuple(arg)),
-                                )
-                                if i == argnum
-                                else self.reshape(
-                                    self.zeros(
-                                        [self.sizen(args[argnum]), self.sizen(arg)],
-                                        dtype=arg.dtype,
-                                    ),
-                                    [-1] + list(self.shape_tuple(arg)),
-                                )
-                            )
-                            for i, arg in enumerate(args)
-                        ]
-                    ),
+
+                def pf(arg: Tensor, position: int = argnum) -> Any:
+                    selected_args = list(args)
+                    selected_args[position] = arg
+                    return f(*selected_args, **kws)
+
+                arg = args[argnum]
+                tangents = self.reshape(
+                    self.eye(self.sizen(arg), dtype=arg.dtype),
+                    [-1] + list(self.shape_tuple(arg)),
                 )
+                jj = self.vmap(jvp1, vectorized_argnums=2)(pf, (arg,), (tangents,))
                 jj = self.tree_map(
                     partial(
                         _transform, input_shape=list(self.shape_tuple(args[argnum]))
@@ -2529,7 +2517,14 @@ class ExtendedBackend:
             argnums = (argnums,)
 
         def wrapper(*args: Any, **kws: Any) -> Any:
-            pf = partial(f, **kws)
+            selected = tuple(i for i in range(len(args)) if i in argnums)
+
+            def pf(*differentiated: Any) -> Any:
+                selected_args = list(args)
+                for i, value in zip(selected, differentiated):
+                    selected_args[i] = value
+                return f(*selected_args, **kws)
+
             values = f(*args, **kws)  # TODO(@refraction-ray): any way to save this?
             collect = tuple
             if isinstance(values, list):
@@ -2547,7 +2542,7 @@ class ExtendedBackend:
             for k in range(len(values)):
                 jj = self.vmap(vjp1, vectorized_argnums=2)(
                     pf,
-                    args,
+                    tuple(args[i] for i in selected),
                     collect(
                         [
                             (
@@ -2575,7 +2570,7 @@ class ExtendedBackend:
                     ),
                     jj,
                 )
-                jj = [jji for ind, jji in enumerate(jj) if ind in argnums]
+                jj = list(jj)
                 if len(jj) == 1:
                     jj = jj[0]
                 jjs.append(jj)
