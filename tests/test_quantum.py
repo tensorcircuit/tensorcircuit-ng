@@ -374,19 +374,29 @@ def test_entanglement_anti_flatness_qudit(backend, highp):
     )
 
 
+def test_entanglement_anti_flatness_mixed_partition(npb):
+    mixed = np.diag(np.arange(1, 9, dtype=np.complex64) / 36)
+    rho = qu.reduced_density_matrix(mixed, subsystem_to_keep=[2, 0])
+    expected = np.trace(rho @ rho @ rho) - np.trace(rho @ rho) ** 2
+    np.testing.assert_allclose(
+        qu.entanglement_anti_flatness(mixed, subsystem_to_keep=[2, 0]),
+        expected.real,
+        atol=atol,
+    )
+
+
 def test_entanglement_anti_flatness_jit_and_grad(jaxb):
     @partial(tc.backend.jit, static_argnums=())
     def anti_flatness_fn(theta):
-        state = tc.backend.stack(
-            [tc.backend.cos(theta), 0.0, 0.0, tc.backend.sin(theta)]
-        )
-        return qu.entanglement_anti_flatness(state, subsystem_to_keep=[0])
+        c, s = tc.backend.cos(theta), tc.backend.sin(theta)
+        state = tc.backend.stack([c, 0.0, 0.0, 0.0, 0.0, 0.0, s, 0.0])
+        return qu.entanglement_anti_flatness(state, subsystem_to_keep=[2, 0])
 
     result = anti_flatness_fn(0.23)
-    assert np.isfinite(tc.backend.numpy(result))
+    np.testing.assert_allclose(result, np.sin(4 * 0.23) ** 2 / 16, atol=atol)
 
     gradient = tc.backend.grad(anti_flatness_fn)(0.23)
-    assert np.isfinite(tc.backend.numpy(gradient))
+    np.testing.assert_allclose(gradient, np.sin(8 * 0.23) / 4, atol=atol)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -397,6 +407,40 @@ def test_free_energy(backend):
     np.testing.assert_allclose(qu.renyi_free_energy(rho, h, 0.5), -1, atol=atol)
     hq = qu.QuOperator.from_tensor(h)
     np.testing.assert_allclose(qu.free_energy(rho, hq, 0.5), -1, atol=atol)
+
+
+def test_truncated_free_energy_orders(jaxb, highp):
+    rho = np.array([[0.4 + 0.01j, 0.03j], [0.02, 0.6 - 0.01j]])
+    h = np.diag([0.3, -0.2]).astype(np.complex128)
+    delta = rho - np.eye(2)
+    parts = tc.backend.convert_to_tensor(np.stack([rho.real, rho.imag]))
+    for order in (1, 2, 5):
+
+        def loss(x):
+            matrix = tc.backend.cast(x[0], "complex128") + 1j * tc.backend.cast(
+                x[1], "complex128"
+            )
+            return qu.truncated_free_energy(
+                matrix, tc.backend.convert_to_tensor(h), 1.3, order
+            )
+
+        polynomial = np.zeros_like(rho)
+        derivative = h.copy()
+        for i in range(1, order):
+            coefficient = (-1) ** (i + 1) / i
+            power = np.linalg.matrix_power(delta, i)
+            polynomial += coefficient * power
+            derivative += (
+                coefficient
+                / 1.3
+                * ((i + 1) * power + i * np.linalg.matrix_power(delta, i - 1))
+            )
+        expected = np.trace(rho @ h).real + np.trace(rho @ polynomial).real / 1.3
+        value, gradient = tc.backend.jit(tc.backend.value_and_grad(loss))(parts)
+        np.testing.assert_allclose(value, expected, atol=1e-12)
+        np.testing.assert_allclose(
+            gradient, np.stack([derivative.T.real, -derivative.T.imag]), atol=1e-12
+        )
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -1375,6 +1419,8 @@ def test_counts_2(backend):
     np.testing.assert_allclose(y, np.array([0.1, -0.3]))
     z = tc.quantum.count_s2d((x, y), 2)
     np.testing.assert_allclose(z, z0)
+    x, y = qu.count_d2s(z0, eps=1.0)
+    assert x.shape == y.shape == (0,)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -1542,7 +1588,7 @@ def test_sample_bin2int(backend):
         np.testing.assert_array_equal(ints, expected)
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_PauliStringSum2MVP(backend):
     # Test 1: Compare with PauliStringSum2Dense for random Hamiltonian
     n = 4
@@ -1559,7 +1605,7 @@ def test_PauliStringSum2MVP(backend):
     H_dense = qu.PauliStringSum2Dense(structures, weights)
 
     psi = np.random.randn(2**n) + 1j * np.random.randn(2**n)
-    psi = tc.backend.convert_to_tensor(psi)
+    psi = tc.backend.cast(tc.backend.convert_to_tensor(psi), "complex64")
 
     result_mvp = mvp(psi)
     result_dense = tc.backend.tensordot(H_dense, psi, axes=1)
@@ -1586,6 +1632,32 @@ def test_PauliStringSum2MVP(backend):
     psi3 = tc.backend.convert_to_tensor(psi3)
     result_id = mvp_id(psi3)
     np.testing.assert_allclose(result_id, 2.0 * psi3, atol=1e-5)
+
+
+def test_PauliStringSum2MVP_diagonal_dtype(npb):
+    # the MVP computes in the global dtype, so a real input with a complex
+    # weight on a merged Z/I term still gives the complex result
+    mvp = qu.PauliStringSum2MVP([[0], [3]], [1j, 1.0])
+    np.testing.assert_allclose(mvp(np.array([1.0, 2.0])), [1 + 1j, -2 + 2j])
+
+
+def test_PauliStringSum2MVP_weight_dtype(tfb):
+    # off-diagonal weights also follow the global dtype, so tensors of another
+    # precision do not clash with the converted input
+    w = tc.backend.cast(tc.backend.convert_to_tensor(0.5), "complex128")
+    psi = tc.backend.cast(tc.backend.convert_to_tensor([1.0, 2.0]), "complex128")
+    np.testing.assert_allclose(qu.PauliStringSum2MVP([[1]], [w])(psi), [1.0, 0.5])
+
+
+def test_PauliStringSum2MVP_torch_weight_grad(torchb):
+    import torch
+
+    w = torch.tensor([0.7, 0.3], requires_grad=True)
+    mvp = qu.PauliStringSum2MVP([[3, 0], [1, 3]], [w[0], w[1]])
+    psi = torch.tensor([1.0, 2.0, 3.0, 4.0], dtype=torch.complex64)
+    torch.real(mvp(psi)).sum().backward()
+    # Z0 gives [1, 2, -3, -4]; X0 Z1 gives [3, -4, 1, -2]
+    np.testing.assert_allclose(w.grad.numpy(), [-4.0, -2.0], atol=1e-6)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -1756,3 +1828,71 @@ def test_correlation_selected_bits_dynamic_indices(backend):
             tc.backend.convert_to_tensor(np.array(indices, dtype=np.int32)), samples
         )
         np.testing.assert_allclose(tc.backend.numpy(value), expected, atol=1e-6)
+
+
+def test_trace_distance_degenerate_hermitian_gradient(jaxb, highp):
+    k = tc.backend
+    rng = np.random.default_rng(51)
+    unitary, _ = np.linalg.qr(rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4)))
+    reference = k.convert_to_tensor(np.eye(4, dtype=np.complex128) / 4)
+    eps = 1e-4
+
+    def loss(parts):
+        matrix = k.cast(parts[0], "complex128") + 1j * k.cast(parts[1], "complex128")
+        delta = (matrix + k.adjoint(matrix)) / 2
+        return qu.trace_distance(reference + delta, reference, eps)
+
+    evaluate = k.jit(k.value_and_grad(loss))
+    for eigenvalues in (np.zeros(4), np.array([0.05, 0.05, -0.05, -0.05])):
+        delta = (unitary * eigenvalues) @ unitary.conj().T
+        value, gradient = evaluate(
+            k.convert_to_tensor(np.stack([delta.real, delta.imag]))
+        )
+        weights = eigenvalues / (2 * np.sqrt(eigenvalues**2 + eps))
+        expected_gradient = (unitary * weights) @ unitary.conj().T
+        np.testing.assert_allclose(
+            value, 0.5 * np.sqrt(eigenvalues**2 + eps).sum(), atol=1e-12
+        )
+        np.testing.assert_allclose(
+            gradient,
+            np.stack([expected_gradient.real, expected_gradient.imag]),
+            atol=1e-12,
+        )
+
+
+def test_renyi_half_power_gradient(jaxb, highp):
+    k = tc.backend
+    rho = np.array([[0.4 + 0.01j, 0.03j], [0.02, 0.6 - 0.01j]])
+    x = k.convert_to_tensor(np.stack([rho.real, rho.imag]))
+    for order in (4, 13):
+
+        def loss(parts):
+            matrix = k.cast(parts[0], "complex128") + 1j * k.cast(
+                parts[1], "complex128"
+            )
+            return qu.renyi_entropy(matrix, order)
+
+        value, gradient = k.jit(k.value_and_grad(loss))(x)
+        moment = np.trace(np.linalg.matrix_power(rho, order))
+        derivative = (
+            order * np.linalg.matrix_power(rho, order - 1).T / ((1 - order) * moment)
+        )
+        np.testing.assert_allclose(value, np.log(moment).real / (1 - order), atol=1e-12)
+        np.testing.assert_allclose(
+            gradient, np.stack([derivative.real, -derivative.imag]), atol=1e-12
+        )
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("torchb")])
+def test_count_d2s_preserves_gradient(backend):
+    def loss(values):
+        _, selected = qu.count_d2s(values)
+        return tc.backend.sum(selected**2)
+
+    values = tc.backend.convert_to_tensor([0.2, 0.0, -0.3, 0.4])
+    grad = tc.backend.grad(loss)(values)
+    np.testing.assert_allclose(
+        tc.backend.numpy(tc.backend.convert_to_tensor(grad)),
+        [0.4, 0.0, -0.6, 0.8],
+        atol=1e-6,
+    )

@@ -9,10 +9,10 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union
 from operator import mul
 from functools import reduce, partial
 
-from scipy.sparse import coo_matrix
+from scipy.sparse import coo_matrix, csr_matrix
 import tensornetwork
 from tensornetwork.backends.pytorch import pytorch_backend
-from .abstract_backend import ExtendedBackend
+from .abstract_backend import ExtendedBackend, normalize_axes
 
 dtypestr: str
 rdtypestr: str
@@ -65,6 +65,38 @@ def _sum_torch(
     if axis is None:
         axis = tuple([i for i in range(len(tensor.shape))])
     return torchlib.sum(tensor, dim=axis, keepdim=keepdims)
+
+
+def _svd_torch(
+    self: Any,
+    tensor: Tensor,
+    pivot_axis: int = -1,
+    max_singular_values: Optional[int] = None,
+    max_truncation_error: Optional[float] = None,
+    relative: Optional[bool] = False,
+) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+    left_dims = list(tensor.shape[:pivot_axis])
+    right_dims = list(tensor.shape[pivot_axis:])
+    matrix = torchlib.reshape(
+        tensor, [reduce(mul, left_dims, 1), reduce(mul, right_dims, 1)]
+    )
+    u, s, vh = torchlib.linalg.svd(matrix, full_matrices=False)
+    if max_singular_values is None:
+        max_singular_values = s.numel()
+    if max_truncation_error is not None:
+        trunc_errs = torchlib.sqrt(torchlib.cumsum(torchlib.flip(s, [0]) ** 2, 0))
+        threshold = max_truncation_error * s[0] if relative else max_truncation_error
+        num_sing_vals_err = torchlib.nonzero(trunc_errs > threshold).numel()
+        num_sing_vals_keep = min(max_singular_values, num_sing_vals_err)
+    else:
+        num_sing_vals_keep = max_singular_values
+    s = s.to(dtype=tensor.dtype)
+    s_rest = s[num_sing_vals_keep:]
+    s = s[:num_sing_vals_keep]
+    dim_s = s.shape[0]
+    u = torchlib.reshape(u[:, :num_sing_vals_keep], left_dims + [dim_s])
+    vh = torchlib.reshape(vh[:num_sing_vals_keep, :], [dim_s] + right_dims)
+    return u, s, vh, s_rest
 
 
 def _qr_torch(
@@ -171,6 +203,7 @@ def _rq_torch(
 
 tensornetwork.backends.pytorch.pytorch_backend.PyTorchBackend.sum = _sum_torch
 tensornetwork.backends.pytorch.pytorch_backend.PyTorchBackend.conj = _conj_torch
+tensornetwork.backends.pytorch.pytorch_backend.PyTorchBackend.svd = _svd_torch
 tensornetwork.backends.pytorch.pytorch_backend.PyTorchBackend.qr = _qr_torch
 tensornetwork.backends.pytorch.pytorch_backend.PyTorchBackend.rq = _rq_torch
 
@@ -438,8 +471,19 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
 
     def numpy(self, a: Tensor) -> Tensor:
         if self.is_sparse(a):
+            if a.is_sparse_csr:
+                return csr_matrix(
+                    (
+                        self.numpy(a.values()),
+                        self.numpy(a.col_indices()),
+                        self.numpy(a.crow_indices()),
+                    ),
+                    shape=a.shape,
+                )
             a = a.coalesce()
-            return coo_matrix((a.values().numpy(), a.indices().numpy()), shape=a.shape)
+            return coo_matrix(
+                (self.numpy(a.values()), self.numpy(a.indices())), shape=a.shape
+            )
         a = a.cpu()
         if a.is_conj():
             return a.resolve_conj().numpy()
@@ -665,6 +709,9 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def reverse(self, a: Tensor) -> Tensor:
         return torchlib.flip(a, dims=(-1,))
 
+    def flip(self, a: Tensor, axes: Sequence[int]) -> Tensor:
+        return torchlib.flip(a, dims=normalize_axes(axes, a.dim()))
+
     def coo_sparse_matrix(
         self, indices: Tensor, values: Tensor, shape: Tensor
     ) -> Tensor:
@@ -672,12 +719,23 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         indices = self.convert_to_tensor(indices)
         return torchlib.sparse_coo_tensor(self.transpose(indices), values, shape)
 
+    def csr_sparse_matrix(
+        self, indptr: Tensor, indices: Tensor, values: Tensor, shape: Tensor
+    ) -> Tensor:
+        return torchlib.sparse_csr_tensor(
+            self.convert_to_tensor(indptr),
+            self.convert_to_tensor(indices),
+            self.convert_to_tensor(values),
+            size=tuple(shape),
+        )
+
     def sparse_dense_matmul(
         self,
         sp_a: Tensor,
         b: Tensor,
     ) -> Tensor:
-        # Matrix multiplication between sparse and dense tensor
+        if b.dim() == 1:
+            return torchlib.sparse.mm(sp_a, b[:, None])[:, 0]
         return torchlib.sparse.mm(sp_a, b)
 
     def sparse_csr_from_coo(self, coo: Tensor, strict: bool = False) -> Tensor:
@@ -695,8 +753,7 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         return sp_a.to_dense()
 
     def is_sparse(self, a: Tensor) -> bool:
-        # Check if tensor is sparse
-        return a.is_sparse or a.is_sparse_csr  # type: ignore
+        return isinstance(a, torchlib.Tensor) and (a.is_sparse or a.is_sparse_csr)
 
     def tree_map(self, f: Callable[..., Any], *pytrees: Any) -> Any:
         # torch native tree_map not support multiple pytree args

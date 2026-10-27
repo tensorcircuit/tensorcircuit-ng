@@ -135,17 +135,17 @@ class ReadoutMit:
                 qubits = self.cal_qubits
 
         if self.local is False:
-            lbs = [marginal_count(i, qubits) for i in self.global_cal]
             calmatrix = np.zeros((2 ** len(qubits), 2 ** len(qubits)))
 
             m = 0
-            for i in range(len(lbs)):
+            for i, count in enumerate(self.global_cal):
                 vv = self.ubs(i, qubits)
 
                 if vv == 0:
-                    for s in lbs[i]:
+                    marginal = marginal_count(count, qubits)
+                    for s in marginal:
                         calmatrix[int(s, 2)][self.newrange(m, qubits)] = (
-                            lbs[i][s] / self.cal_shots
+                            marginal[s] / self.cal_shots
                         )
                     m += 1
             self.calmatrix = calmatrix
@@ -364,11 +364,24 @@ class ReadoutMit:
         :return: mitigated probability
         :rtype: Tensor
         """
+        if method == "inverse" and self.local is not False:
+            qubits = self.use_qubits if self.use_qubits is not None else self.cal_qubits
+            probability = np.asarray(probability_noise)
+            if probability.ndim > 1:
+                probability = np.moveaxis(probability, -2, 0)
+            shape = probability.shape
+            probability = probability.reshape([2] * len(qubits) + list(shape[1:]))  # type: ignore[arg-type]
+            for axis, qubit in enumerate(qubits):  # type: ignore[var-annotated, arg-type]
+                inverse = np.linalg.inv(self.single_qubit_cals[qubit])  # type: ignore[index]
+                probability = np.tensordot(inverse, probability, axes=([1], [axis]))
+                probability = np.moveaxis(probability, 0, axis)
+            probability = probability.reshape(shape)
+            if probability.ndim > 1:
+                probability = np.moveaxis(probability, 0, -2)
+            return probability
         calmatrix = self.get_matrix()
         if method == "inverse":
-            X = np.linalg.inv(calmatrix)
-            Y = probability_noise
-            probability_cali = X @ Y
+            probability_cali = np.linalg.solve(calmatrix, probability_noise)
         else:  # method="square"
 
             def fun(x: Any) -> Any:

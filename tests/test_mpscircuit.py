@@ -390,6 +390,31 @@ def test_circuits(backend, dtype):
     do_test_mpo_explicit()
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("n, dim", [(1, 2), (3, 2), (2, 3), (2, 4)])
+def test_get_quvector_snapshot_and_axes(backend, highp, n, dim):
+    rng = np.random.default_rng(18)
+    bonds = [1] + [2] * (n - 1) + [1]
+    tensors = [
+        tc.backend.convert_to_tensor(
+            rng.normal(size=(bonds[i], dim, bonds[i + 1]))
+            + 1j * rng.normal(size=(bonds[i], dim, bonds[i + 1]))
+        )
+        for i in range(n)
+    ]
+    circuit = tc.MPSCircuit(n, dim=dim, tensors=tensors, center_position=0)
+    expected = tc.backend.numpy(circuit.wavefunction()).reshape([dim] * n)
+    vector = circuit.get_quvector()
+    assert [edge.dimension for edge in vector.out_edges] == [dim] * n
+    local_state = expected.reshape(-1, dim)
+    rho = vector.reduced_density(subsystem_to_keep=[n - 1]).eval_matrix()
+    np.testing.assert_allclose(
+        tc.backend.numpy(rho), local_state.T @ local_state.conj(), atol=1e-10
+    )
+    circuit.unitary(0, unitary=np.roll(np.eye(dim), 1, axis=0))
+    np.testing.assert_allclose(tc.backend.numpy(vector.eval()), expected, atol=1e-10)
+
+
 def test_mps_quvector_fallback_qudit(highp, npb):
     # A non-MPS QuVector over a qudit state hits the wavefunction_to_tensors
     # fallback in MPSCircuit.__init__; that fallback must forward dim_phys=self._d

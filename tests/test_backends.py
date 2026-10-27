@@ -10,7 +10,9 @@ import numpy as np
 import pytest
 from pytest_lazyfixture import lazy_fixture as lf
 import scipy
+import scipy.sparse
 import tensorflow as tf
+import tensornetwork as tn
 
 thisfile = os.path.abspath(__file__)
 modulepath = os.path.dirname(os.path.dirname(thisfile))
@@ -96,6 +98,56 @@ def test_sparse_csr_from_coo(backend):
     coo_dense = tc.backend.to_dense(coo_matrix)
     csr_dense = tc.backend.to_dense(csr_matrix)
     np.testing.assert_allclose(coo_dense, csr_dense, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_flip(backend):
+    a = np.arange(2**10).reshape([2] * 10)
+    np.testing.assert_allclose(
+        tc.backend.flip(tc.backend.convert_to_tensor(a), (0, 3, -1)),
+        np.flip(a, (0, 3, -1)),
+    )
+    with pytest.raises(IndexError):
+        tc.backend.flip(tc.backend.convert_to_tensor(a), (10,))
+    with pytest.raises(IndexError):
+        tc.backend.flip(tc.backend.convert_to_tensor(a), (-11,))
+    with pytest.raises(ValueError):
+        tc.backend.flip(tc.backend.convert_to_tensor(a), (0, -10))
+
+
+def test_sparse_numpy_requires_grad(torchb):
+    import torch
+
+    values = torch.tensor([1.0, 2.0], requires_grad=True)
+    coo = torch.sparse_coo_tensor(torch.tensor([[0, 1], [1, 0]]), values, (2, 2))
+    np.testing.assert_allclose(tc.backend.numpy(coo).toarray(), [[0, 1], [2, 0]])
+
+
+def test_flip_tf_dynamic_shape(tfb):
+    f = tf.function(
+        lambda x: tc.backend.flip(x, (1,)),
+        input_signature=[tf.TensorSpec((None, 3), tf.int32)],
+    )
+    a = np.arange(6, dtype=np.int32).reshape(2, 3)
+    np.testing.assert_allclose(f(a), np.flip(a, 1))
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("torchb")])
+def test_csr_sparse_matrix(backend):
+    a = np.array([[1.0, 0, 2.0], [0, 0, 3.0], [4.0, 5.0, 0]], dtype=np.complex64)
+    m = tc.backend.csr_sparse_matrix_from_numpy(scipy.sparse.csr_matrix(a))
+    assert tc.backend.is_sparse(m)
+    np.testing.assert_allclose(tc.backend.to_dense(m), a, atol=1e-6)
+    np.testing.assert_allclose(tc.backend.numpy(m).toarray(), a, atol=1e-6)
+    v = np.array([1.0, 2.0, 3.0], dtype=np.complex64)
+    np.testing.assert_allclose(
+        tc.backend.sparse_dense_matmul(m, tc.backend.convert_to_tensor(v)),
+        a @ v,
+        atol=1e-5,
+    )
+    assert tc.backend.is_sparse(scipy.sparse.csr_matrix(a)) == (
+        tc.backend.name == "numpy"
+    )
 
 
 def test_sparse_tensor_matmul_monkey_patch(tfb):
@@ -456,6 +508,12 @@ def test_backend_scatter(backend):
         answer,
         atol=1e-4,
     )
+
+
+@pytest.mark.parametrize("precision", [None, lf("highp")])
+def test_numpy_onehot_dtype(npb, precision):
+    result = tc.backend.onehot(np.array([0, 2]), 3)
+    assert result.dtype == np.dtype(tc.rdtypestr)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
@@ -1263,6 +1321,49 @@ def test_vvag_has_aux(backend):
     fvvag = tc.backend.vvag(f, has_aux=True)
     (_, v1), _ = fvvag(tc.backend.ones([10, 2]))
     np.testing.assert_allclose(v1, 2 * tc.backend.ones([10]))
+
+
+def test_torch_svd_complex(torchb, highp):
+    matrix = tc.array_to_tensor(
+        np.array([[1 + 2j, 3 - 1j, 2 + 0.5j], [-2 + 1j, 0.3 - 2j, 1 + 1j]])
+    )
+    u, s, vh, discarded = tc.backend.svd(matrix)
+    np.testing.assert_allclose((u * s) @ vh, matrix, atol=1e-12)
+    assert discarded.shape == (0,)
+
+    def loss(a):
+        u, s, vh, _ = tc.backend.svd(a)
+        return tc.backend.sum(tc.backend.real((u * s) @ vh) ** 2)
+
+    np.testing.assert_allclose(
+        tc.backend.grad(loss)(matrix), 2 * tc.backend.real(matrix), atol=1e-12
+    )
+    node = tn.Node(matrix, backend="pytorch")
+    left, singular, right, _ = tn.split_node_full_svd(node, [node[0]], [node[1]])
+    np.testing.assert_allclose(
+        left.tensor @ singular.tensor @ right.tensor, matrix, atol=1e-12
+    )
+
+
+def test_torch_svd_truncation(torchb):
+    tensor = tc.array_to_tensor(
+        np.array([[5j, 0, 0], [0, 3, 0], [0, 0, 1], [0, 0, 0]]).reshape(2, 2, 3)
+    )
+    for options, keep in [
+        ({"max_singular_values": 2}, 2),
+        ({"max_truncation_error": 1.1}, 2),
+        ({"max_truncation_error": 0.22, "relative": True}, 2),
+        ({"max_singular_values": 1, "max_truncation_error": 1.1}, 1),
+    ]:
+        u, s, vh, discarded = tc.backend.svd(tensor, pivot_axis=2, **options)
+        assert u.shape == (2, 2, keep)
+        assert vh.shape == (keep, 3)
+        assert s.dtype == tensor.dtype
+        np.testing.assert_allclose(s, np.array([5, 3, 1])[:keep])
+        np.testing.assert_allclose(discarded, np.array([5, 3, 1])[keep:])
+        expected = np.zeros((4, 3), dtype=np.complex64)
+        expected[np.arange(keep), np.arange(keep)] = np.array([5j, 3, 1])[:keep]
+        np.testing.assert_allclose(u.reshape(4, keep) @ (s[:, None] * vh), expected)
 
 
 def test_jax_svd(jaxb, highp):

@@ -13,7 +13,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union
 from scipy.sparse import coo_matrix
 import tensornetwork
 from tensornetwork.backends.tensorflow import tensorflow_backend
-from .abstract_backend import ExtendedBackend
+from .abstract_backend import ExtendedBackend, normalize_axes
 
 dtypestr: str
 rdtypestr: str
@@ -829,6 +829,16 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
 
     def gather1d(self, operand: Tensor, indices: Tensor) -> Tensor:
         return tf.gather(operand, indices)
+
+    def flip(self, a: Tensor, axes: Sequence[int]) -> Tensor:
+        # tf.reverse is limited in rank, so each axis is reversed on a rank-3 view;
+        # unknown static sizes are read from the dynamic shape
+        shape = [d if d is not None else tf.shape(a)[i] for i, d in enumerate(a.shape)]
+        for axis in normalize_axes(axes, len(shape)):
+            pre = reduce(mul, shape[:axis], 1)
+            post = reduce(mul, shape[axis + 1 :], 1)
+            a = tf.reverse(tf.reshape(a, (pre, shape[axis], post)), axis=[1])
+        return tf.reshape(a, shape)
 
     def scatter(
         self, operand: Tensor, indices: Tensor, updates: Tensor, mode: str = "update"

@@ -16,6 +16,17 @@ from ..utils import return_partial
 Tensor = Any
 
 
+def normalize_axes(axes: Sequence[int], ndim: int) -> List[int]:
+    """
+    Normalize axes to non-negative values; out-of-range axes raise ``IndexError``
+    and repeated axes raise ``ValueError``.
+    """
+    normalized = [range(ndim)[axis] for axis in axes]
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("Repeated axis in {}".format(tuple(axes)))
+    return normalized
+
+
 class _TreeDef:
     """
     A JAX-compatible treedef that records pytree structure for unflattening.
@@ -1378,6 +1389,22 @@ class ExtendedBackend:
         """
         return a[::-1]
 
+    def flip(self: Any, a: Tensor, axes: Sequence[int]) -> Tensor:
+        """
+        Reverse ``a`` along each axis in ``axes``.
+
+        :param a: input tensor
+        :type a: Tensor
+        :param axes: axes to reverse, each at most once
+        :type axes: Sequence[int]
+        :return: the flipped tensor
+        :rtype: Tensor
+        """
+        index = [slice(None)] * len(a.shape)
+        for axis in normalize_axes(axes, len(a.shape)):
+            index[axis] = slice(None, None, -1)
+        return a[tuple(index)]
+
     def right_shift(self: Any, x: Tensor, y: Tensor) -> Tensor:
         """
         Shift the bits of an integer x to the right y bits.
@@ -1953,6 +1980,40 @@ class ExtendedBackend:
             indices=np.array([a.row, a.col]).T,
             values=a.data,
             shape=a.shape,
+        )
+
+    def csr_sparse_matrix(
+        self: Any, indptr: Tensor, indices: Tensor, values: Tensor, shape: Tensor
+    ) -> Tensor:
+        """
+        Generate the csr format sparse matrix from row pointers, column indices and values.
+
+        :param indptr: shape [m + 1] row pointers for an [m, k] matrix
+        :type indptr: Tensor
+        :param indices: shape [n] column indices for n stored values
+        :type indices: Tensor
+        :param values: shape [n]
+        :type values: Tensor
+        :param shape: Tuple[int, ...]
+        :type shape: Tensor
+        :return: the CSR sparse matrix
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `csr_sparse_matrix`.".format(self.name)
+        )
+
+    def csr_sparse_matrix_from_numpy(self: Any, a: Tensor) -> Tensor:
+        """
+        Generate the csr format sparse matrix from scipy csr sparse matrix.
+
+        :param a: Scipy csr format sparse matrix
+        :type a: Tensor
+        :return: CSR sparse matrix in backend format
+        :rtype: Tensor
+        """
+        return self.csr_sparse_matrix(
+            indptr=a.indptr, indices=a.indices, values=a.data, shape=a.shape
         )
 
     def sparse_dense_matmul(

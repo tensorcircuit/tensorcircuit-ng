@@ -12,7 +12,7 @@ import numpy as np
 import tensornetwork
 from scipy.linalg import expm, solve, schur
 from scipy.special import softmax, expit, ive, jv
-from scipy.sparse import coo_matrix, issparse
+from scipy.sparse import coo_matrix, csr_matrix, issparse
 from scipy.sparse.linalg import lobpcg, LinearOperator
 from tensornetwork.backends.numpy import numpy_backend
 from .abstract_backend import ExtendedBackend
@@ -273,9 +273,10 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
 
     def onehot(self, a: Tensor, num: int) -> Tensor:
         a = np.asarray(a)
-        res = np.eye(num)[a.reshape([-1])]
+        indices = a.reshape(-1)
+        res = np.zeros((indices.size, num), dtype=rdtypestr)
+        res[np.arange(indices.size), indices] = 1
         return res.reshape(list(a.shape) + [num])
-        # https://stackoverflow.com/questions/38592324/one-hot-encoding-using-numpy
 
     def cumsum(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
         return np.cumsum(a, axis)
@@ -456,6 +457,11 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         self, indices: Tensor, values: Tensor, shape: Tensor
     ) -> Tensor:
         return coo_matrix((values, (indices[:, 0], indices[:, 1])), shape=shape)
+
+    def csr_sparse_matrix(
+        self, indptr: Tensor, indices: Tensor, values: Tensor, shape: Tensor
+    ) -> Tensor:
+        return csr_matrix((values, indices, indptr), shape=shape)
 
     def sparse_dense_matmul(
         self,

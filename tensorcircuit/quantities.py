@@ -150,6 +150,20 @@ def trace_product(*o: Union[Tensor, QuOperator]) -> Tensor:
     :return: The trace of several inputs.
     :rtype: Tensor
     """
+    if len(o) > 1 and all(
+        not isinstance(op, QuOperator)
+        and len(op.shape) == 2
+        and not backend.is_sparse(op)
+        for op in o
+    ):
+        prod = reduce(matmul, o[:-1])
+        if (
+            all(d is not None for d in prod.shape)  # type: ignore[union-attr]
+            and prod.shape[0] == o[-1].shape[1]  # type: ignore[union-attr]
+            and prod.shape[1] == o[-1].shape[0]  # type: ignore[union-attr]
+        ):
+            return backend.sum(prod * backend.transpose(o[-1]))
+        return backend.trace(matmul(prod, o[-1]))
     prod = reduce(matmul, o)
     if isinstance(prod, QuOperator):
         return prod.trace().eval_matrix()
@@ -229,7 +243,8 @@ def entanglement_anti_flatness(
     :rtype: Tensor
     """
     d = 2 if dim is None else dim
-    if len(state.shape) == 2 and state.shape[0] == state.shape[1]:
+    is_dm = len(state.shape) == 2 and state.shape[0] == state.shape[1]
+    if is_dm:
         n = _infer_num_sites(state.shape[0], d)
     else:
         n = _infer_num_sites(int(backend.sizen(state)), d)
@@ -240,6 +255,9 @@ def entanglement_anti_flatness(
         subsystems_to_trace_out,
         name="entanglement_anti_flatness",
     )
+    if not is_dm and len(traceout) < n - len(traceout):
+        traced = set(traceout)
+        traceout = [i for i in range(n) if i not in traced]
     rho = reduced_density_matrix(state, subsystems_to_trace_out=traceout, dim=dim)
     return anti_flatness(rho)
 
@@ -486,13 +504,19 @@ def renyi_entropy(rho: Union[Tensor, QuOperator], k: int = 2) -> Tensor:
     :rtype: Tensor
     """
     if (
-        k == 2
+        k > 3
         and not isinstance(rho, QuOperator)
         and len(rho.shape) == 2
+        and not backend.is_sparse(rho)
         and rho.shape[0] == rho.shape[1]
     ):
-        purity = backend.sum(rho * backend.transpose(rho))
-        return -backend.real(backend.log(purity))
+        half = rho
+        for bit in bin(k // 2)[3:]:
+            half = backend.matmul(half, half)
+            if bit == "1":
+                half = backend.matmul(half, rho)
+        other = half if k % 2 == 0 else backend.matmul(half, rho)
+        return backend.real(backend.log(trace_product(half, other))) / (1 - k)
     s = 1 / (1 - k) * backend.real(backend.log(trace_product(*[rho] * k)))
     return s
 
@@ -690,21 +714,21 @@ def taylorlnm(x: Tensor, k: int) -> Tensor:
     """
     Taylor expansion of :math:`ln(x+1)`.
 
-    :param x: The density matrix in form of Tensor.
+    :param x: The matrix :math:`x` in form of Tensor.
     :type x: Tensor
-    :param k: The :math:`k` th order, default is 2.
-    :type k: int, optional
+    :param k: The :math:`k` th order. Order 0 returns the zero matrix.
+    :type k: int
     :return: The :math:`k` th order of Taylor expansion of :math:`ln(x+1)`.
     :rtype: Tensor
     """
+    if k == 0:
+        return backend.zeros_like(x)
     dtype = x.dtype
     s = x.shape[-1]
     eye = backend.eye(s, dtype=dtype)
-    y = 1 / k * (-1) ** (k + 1) * eye
-    for i in reversed(range(k)):
-        y = y @ x
-        if i > 0:
-            y += 1 / (i) * (-1) ** (i + 1) * eye
+    y = 1 / k * (-1) ** (k + 1) * x
+    for i in reversed(range(1, k)):
+        y = (y + 1 / i * (-1) ** (i + 1) * eye) @ x
     return y
 
 
@@ -720,15 +744,15 @@ def truncated_free_energy(
     :type h: Tensor
     :param beta: Constant for the optimization, default is 1.
     :type beta: float, optional
-    :param k: The :math:`k` th order, defaults to 2
+    :param k: Positive truncation order, defaults to 2. Order 1 keeps only the energy.
     :type k: int, optional
     :return: The :math:`k` th order of the truncated free energy.
     :rtype: Tensor
     """
     dtype = rho.dtype
     s = rho.shape[-1]
-    tyexpand = rho @ taylorlnm(rho - backend.eye(s, dtype=dtype), k - 1)
-    renyi = -backend.real(backend.trace(tyexpand))
+    log_rho = taylorlnm(rho - backend.eye(s, dtype=dtype), k - 1)
+    renyi = -backend.real(trace_product(rho, log_rho))
     energy = backend.real(trace_product(rho, h))
     return energy - renyi / beta
 
@@ -822,7 +846,7 @@ def log_negativity(
 @partial(op2tensor, op_argnums=(0, 1))
 def trace_distance(rho: Tensor, rho0: Tensor, eps: float = 1e-12) -> Tensor:
     """
-    Compute the trace distance between two density matrix ``rho`` and ``rho0``.
+    Compute the smoothed trace distance between Hermitian density matrices.
 
     :param rho: The density matrix in form of Tensor.
     :type rho: Tensor
@@ -833,11 +857,8 @@ def trace_distance(rho: Tensor, rho0: Tensor, eps: float = 1e-12) -> Tensor:
     :return: The trace distance between two density matrix ``rho`` and ``rho2``.
     :rtype: Tensor
     """
-    d2 = rho - rho0
-    d2 = backend.adjoint(d2) @ d2
-    lbds = backend.real(backend.eigh(d2)[0])
-    lbds = backend.relu(lbds)
-    return 0.5 * backend.sum(backend.sqrt(lbds + eps))
+    lbds = backend.real(backend.eigvalsh(rho - rho0))
+    return 0.5 * backend.sum(backend.sqrt(lbds * lbds + eps))
 
 
 @partial(op2tensor, op_argnums=(0, 1))

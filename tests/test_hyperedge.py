@@ -736,3 +736,36 @@ def test_qir_fallback(contractor_setup, backend):
     qir = c.to_qir()
     c2 = tc.Circuit.from_qir(qir, circuit_params={"nqubits": n})
     np.testing.assert_allclose(c.state(), c2.state(), atol=1e-5)
+
+
+def test_omeco_bounded_cache(npb, monkeypatch):
+    omeco = pytest.importorskip("omeco")
+    optimize = omeco.optimize_code
+    calls = []
+
+    def search(*args):
+        calls.append(args)
+        return optimize(*args)
+
+    monkeypatch.setattr(omeco, "optimize_code", search)
+    optimizer = cons.OMEOptimizer(omeco.GreedyMethod(), cache_size=2)
+    inputs, output = [["a", "b"], ["b", "c"], ["c", "d"]], ["a", "d"]
+    sizes = {label: 2 for label in "abcd"}
+    path = optimizer(inputs, output, sizes)
+    path.clear()
+    assert len(optimizer(inputs, output, dict(reversed(list(sizes.items()))))) == 2
+    assert len(calls) == 1
+    optimizer(inputs, output, {**sizes, "b": 3})
+    optimizer(inputs, output, sizes)
+    optimizer(inputs, output, {**sizes, "b": 4})
+    optimizer(inputs, output, sizes)
+    assert len(calls) == 3
+    optimizer(inputs, output, {**sizes, "b": 3})
+    assert len(calls) == 4
+    optimizer.clear_cache()
+    optimizer(inputs, output, sizes)
+    assert len(calls) == 5
+    uncached = cons.OMEOptimizer(omeco.GreedyMethod(), cache_size=0)
+    uncached(inputs, output, sizes)
+    uncached(inputs, output, sizes)
+    assert len(calls) == 7

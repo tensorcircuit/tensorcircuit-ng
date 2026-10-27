@@ -233,7 +233,7 @@ def test_rc(backend):
     assert len(rc_c.to_qir()) > 0
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 @pytest.mark.parametrize(
     "double_precision,custom,warm_angle,separate_calls",
     [

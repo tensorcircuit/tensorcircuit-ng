@@ -33,3 +33,9 @@ Use this file for model-specific performance patterns that are broader than one 
 - Sparse Pauli initial-state construction should follow the same aggregate-then-top-k rule as gate propagation; never truncate initial terms by input order before duplicate aggregation.
 - Sparse Pauli bit-packing uses signed `int64` words, so keep 31 qubits per word rather than 32. The 32nd two-bit Pauli slot would occupy the sign bit and can overflow or corrupt sentinel handling.
 - Current Pauli propagation supports only one- and two-qubit gates. Unsupported higher-arity gates should fail fast instead of being silently ignored or routed through a two-qubit PTM path.
+
+## Light-cone evaluation of many-term objectives
+
+- The static gate-order light cone `tc.compiler.lightcone_compile` does not use commutation inside a layer. For QAOA cost layers it chains through commuting `rzz` gates and over-includes qubits (3-regular p=1: up to 17 qubits instead of 6). Extract QAOA cones per layer instead: keep only edges touching the current active set, then grow the set.
+- For objectives with hundreds of terms, unrolling one light-cone contraction per term inside a single `jit` is compile-bound: compile time grows linearly in the term count and steeply with cone size, while steady steps take milliseconds. Batch the terms with one shared program instead, for example by padding cones to a fixed width and `vmap`ping a data-driven kernel, or by grouping isomorphic cones.
+- In such data-driven statevector kernels, Python loops over qubits with reshapes make XLA compilation very slow at about 14 qubits. Pass gather permutation tables as data and loop with `lax.scan` so the body compiles once.

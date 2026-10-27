@@ -30,6 +30,32 @@ logger = logging.getLogger(__name__)
 
 Tensor = Any
 SPARSE_WORD_QUBITS = 31
+_CLIFFORD_1Q_GATES = ("i", "x", "y", "z", "h", "s", "sd")
+_CLIFFORD_2Q_GATES = ("cnot", "cz", "cy", "swap", "ox", "oy", "oz")
+_CLIFFORD_GATES = _CLIFFORD_1Q_GATES + _CLIFFORD_2Q_GATES
+
+
+def _gate_unitary(gate_name: str, n_wires: int, params: Any) -> Any:
+    gate_func = getattr(gates, gate_name)
+    if params is None:
+        params = {}
+    if isinstance(params, dict):
+        u = gate_func(**params).tensor
+    else:
+        try:
+            u = gate_func(params).tensor
+        except TypeError:
+            u = gate_func(theta=params).tensor
+    u = backend.convert_to_tensor(u)
+    return backend.reshape(u, [2**n_wires, 2**n_wires])
+
+
+def _qir_gate_args(op: Dict[str, Any]) -> Tuple[str, Any, Any]:
+    # Gate names only select the Clifford path; other gates use the recorded matrix.
+    gate_name = getattr(op.get("gatef"), "n", None)
+    if gate_name in _CLIFFORD_GATES:
+        return gate_name, op["index"], None
+    return "any", op["index"], {"unitary": op["gate"].tensor}
 
 
 class PauliPropagationEngine:
@@ -273,7 +299,8 @@ class PauliPropagationEngine:
 
         :param state: Current observable state vector.
         :type state: Any
-        :param gate_name: Name of the gate (e.g., 'rx', 'cnot').
+        :param gate_name: Name of the gate (e.g., 'rx', 'cnot'); circuit gate aliases
+            such as 'cx' are accepted.
         :type gate_name: str
         :param wires: List of qubit indices the gate acts on.
         :type wires: Any
@@ -287,23 +314,7 @@ class PauliPropagationEngine:
                 "PauliPropagationEngine only supports one- and two-qubit gates."
             )
 
-        gate_name = gate_name.lower()
-        gate_func = getattr(gates, gate_name)
-
-        if params is not None:
-            if isinstance(params, dict):
-                u = gate_func(**params).tensor
-            else:
-                try:
-                    u = gate_func(params).tensor
-                except TypeError:
-                    u = gate_func(theta=params).tensor
-        else:
-            u = gate_func().tensor
-
-        u = backend.convert_to_tensor(u)
-        dim = 2 ** len(wires)
-        u = backend.reshape(u, [dim, dim])
+        u = _gate_unitary(Circuit.standardize_gate(gate_name), len(wires), params)
 
         if len(wires) == 1:
             ptm = self.get_ptm_1q(u)  # (4, 4)
@@ -436,11 +447,7 @@ class PauliPropagationEngine:
             ops = c_layer.to_qir()
 
             for op in reversed(ops):
-                gate_name = op["name"]
-                wires = op["index"]
-                p_dict = op.get("parameters", {})
-                param_val = p_dict if p_dict else None
-                state = self.apply_gate(state, gate_name, wires, param_val)
+                state = self.apply_gate(state, *_qir_gate_args(op))
 
             return state
 
@@ -533,11 +540,7 @@ def pauli_propagation(
 
     ops = c.to_qir()
     for op in reversed(ops):
-        gate_name = op["name"]
-        wires = op["index"]
-        params_dict = op.get("parameters", {})
-        param_val = params_dict if params_dict else None
-        state = pp.apply_gate(state, gate_name, wires, param_val)
+        state = pp.apply_gate(state, *_qir_gate_args(op))
 
     return pp.expectation(state)
 
@@ -734,7 +737,8 @@ class SparsePauliPropagationEngine:
 
         :param state: Current sparse observable state (codes, weights).
         :type state: Any
-        :param gate_name: Name of the gate.
+        :param gate_name: Name of the gate (e.g., 'rx', 'cnot'); circuit gate aliases
+            such as 'cx' are accepted.
         :type gate_name: str
         :param wires: List of qubit indices the gate acts on.
         :type wires: Any
@@ -750,96 +754,51 @@ class SparsePauliPropagationEngine:
 
         indices, coeffs = state
         K = backend
-        ptm = self._get_ptm(gate_name, wires, params)
-        ptm_complex = K.cast(ptm, "complex64")
+        gate_name = Circuit.standardize_gate(gate_name)
+        m = len(wires)
+        ptm_complex = K.cast(self._get_ptm(gate_name, wires, params), "complex64")
 
-        if len(wires) == 1:
-            q = wires[0]
-            w_idx, b_pos = q // SPARSE_WORD_QUBITS, (q % SPARSE_WORD_QUBITS) * 2
-
-            # 1. Extract current ops (S,)
-            curr_ops = K.where(
-                indices[:, w_idx] != -1, (indices[:, w_idx] >> b_pos) & 3, 0
+        current = 0
+        for q in wires:
+            word, bit = q // SPARSE_WORD_QUBITS, (q % SPARSE_WORD_QUBITS) * 2
+            current = current * 4 + K.where(
+                indices[:, word] != -1, (indices[:, word] >> bit) & 3, 0
             )
 
-            # 2. Get multipliers (S, 4)
-            ptm_t = K.transpose(ptm_complex)
-            multipliers = K.gather1d(ptm_t, curr_ops)
-
-            # 3. New coeffs (S*4,)
+        # Clifford gates map each local Pauli to one signed Pauli; others to all 4**m.
+        cols = [indices[:, i] for i in range(self.W)]
+        if gate_name in _CLIFFORD_GATES:
+            target = K.gather1d(
+                K.cast(K.argmax(K.abs(ptm_complex), axis=0), "int64"), current
+            )
+            flat_coeffs = coeffs * K.gather1d(
+                K.reshape(K.transpose(ptm_complex), [-1]), current * 4**m + target
+            )
+        else:
+            target = K.convert_to_tensor(
+                np.tile(np.arange(4**m), K.shape_tuple(indices)[0]), dtype="int64"
+            )
+            multipliers = K.gather1d(K.transpose(ptm_complex), current)
             flat_coeffs = K.reshape(coeffs[:, None] * multipliers, [-1])
+            cols = [K.repeat(col, 4**m, axis=0) for col in cols]
 
-            # 4. New indices (S*4, W)
-            mask = ~(K.convert_to_tensor(3, dtype="int64") << b_pos)
-            t_ops = K.convert_to_tensor(np.arange(4), dtype="int64")
-            new_words = (indices[:, w_idx, None] & mask) | (t_ops[None, :] << b_pos)
-            flat_new_words = K.reshape(new_words, [-1])
-
-            cols = []
+        for j, q in enumerate(wires):
+            word, bit = q // SPARSE_WORD_QUBITS, (q % SPARSE_WORD_QUBITS) * 2
+            mask = ~(K.convert_to_tensor(3, dtype="int64") << bit)
+            op = (target >> (2 * (m - j - 1))) & 3
             for i in range(self.W):
-                # Use K.repeat for correct alignment during expansion [T0, T1] -> [T0, T0, T0, T0, T1, T1, T1, T1]
-                col = K.where(
-                    i == w_idx, flat_new_words, K.repeat(indices[:, i], 4, axis=0)
+                cols[i] = K.where(
+                    K.convert_to_tensor(i == word),
+                    (cols[i] & mask) | (op << bit),
+                    cols[i],
                 )
-                cols.append(col)
-            flat_indices = K.stack(cols, axis=1)
+        flat_indices = K.stack(cols, axis=1)
 
-            if self.k < self.N:
-                w = self._get_weight(flat_indices)
-                flat_coeffs = K.where(w <= self.k, flat_coeffs, 0.0)
-
-            return self._aggregate_and_truncate(flat_indices, flat_coeffs)
-
-        elif len(wires) == 2:
-            q1, q2 = wires
-            w1, b1 = q1 // SPARSE_WORD_QUBITS, (q1 % SPARSE_WORD_QUBITS) * 2
-            w2, b2 = q2 // SPARSE_WORD_QUBITS, (q2 % SPARSE_WORD_QUBITS) * 2
-
-            o1 = K.where(indices[:, w1] != -1, (indices[:, w1] >> b1) & 3, 0)
-            o2 = K.where(indices[:, w2] != -1, (indices[:, w2] >> b2) & 3, 0)
-            curr_ops12 = o1 * 4 + o2
-
-            ptm_t = K.transpose(ptm_complex)
-            multipliers = K.gather1d(ptm_t, curr_ops12)
-            flat_coeffs = K.reshape(coeffs[:, None] * multipliers, [-1])
-
-            t12 = K.convert_to_tensor(np.arange(16), dtype="int64")
-            t1, t2 = t12 // 4, t12 % 4
-            mask1, mask2 = ~(K.convert_to_tensor(3, dtype="int64") << b1), ~(
-                K.convert_to_tensor(3, dtype="int64") << b2
+        if self.k < self.N:
+            flat_coeffs = K.where(
+                self._get_weight(flat_indices) <= self.k, flat_coeffs, 0.0
             )
-
-            # All possible target words regardless of w1==w2
-            new_words1 = (indices[:, w1, None] & mask1) | (t1[None, :] << b1)
-            new_words2 = (indices[:, w2, None] & mask2) | (t2[None, :] << b2)
-            new_words_both = (
-                (indices[:, w1, None] & mask1 & mask2)
-                | (t1[None, :] << b1)
-                | (t2[None, :] << b2)
-            )
-
-            flat_w1 = K.reshape(new_words1, [-1])
-            flat_w2 = K.reshape(new_words2, [-1])
-            flat_both = K.reshape(new_words_both, [-1])
-
-            cols = []
-            for i in range(self.W):
-                # Use K.repeat for correct alignment [T0, T1] -> [T0... (16 times), T1... (16 times)]
-                target_word = K.repeat(indices[:, i], 16, axis=0)
-                # Correctly handle overlapping vs distinct word indices
-                target_word = K.where(
-                    i == w1, K.where(w1 == w2, flat_both, flat_w1), target_word
-                )
-                target_word = K.where((i == w2) & (w1 != w2), flat_w2, target_word)
-                cols.append(target_word)
-            flat_indices = K.stack(cols, axis=1)
-
-            if self.k < self.N:
-                w = self._get_weight(flat_indices)
-                flat_coeffs = K.where(w <= self.k, flat_coeffs, 0.0)
-
-            return self._aggregate_and_truncate(flat_indices, flat_coeffs)
-        return state
+        return self._aggregate_and_truncate(flat_indices, flat_coeffs)
 
     def _get_ptm(self, gate_name: str, wires: Sequence[int], params: Any) -> Any:
         if len(wires) not in (1, 2):
@@ -848,18 +807,7 @@ class SparsePauliPropagationEngine:
             )
 
         K = backend
-        gate_func = getattr(gates, gate_name.lower())
-        if params is None:
-            params = {}
-        if isinstance(params, dict):
-            u = gate_func(**params).tensor
-        else:
-            try:
-                u = gate_func(params).tensor
-            except TypeError:
-                u = gate_func(theta=params).tensor
-        u = K.convert_to_tensor(u)
-        u = K.reshape(u, [2 ** len(wires), 2 ** len(wires)])
+        u = _gate_unitary(gate_name, len(wires), params)
         u_dag = K.conj(K.transpose(u))
         s1 = self.pauli_mats
         if len(wires) == 1:
@@ -907,7 +855,7 @@ class SparsePauliPropagationEngine:
             c = Circuit(self.N)
             layer(c, p)
             for op in reversed(c.to_qir()):
-                s = self.apply_gate(s, op["name"], op["index"], op.get("parameters"))
+                s = self.apply_gate(s, *_qir_gate_args(op))
             return s
 
         final_state = K.scan(step, params[::-1], state)

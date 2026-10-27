@@ -3,7 +3,6 @@ quantum error mitigation functionalities
 """
 
 from typing import Any, List, Union, Optional, Dict, Tuple, Callable, Sequence
-from itertools import product
 import functools
 from functools import partial
 import collections
@@ -256,22 +255,27 @@ def apply_dd(
 
 
 def rc_candidates(gate: Gate) -> List[Any]:
-    pauli = [m.tensor for m in gates.pauli_gates]
     if isinstance(gate, gates.Gate):
         gate = gate.tensor
-    gatem = backend.reshapem(gate)
-    r = []
-    for combo in product(*[range(4) for _ in range(4)]):
-        i = (
-            np.kron(pauli[combo[2]], pauli[combo[3]])
-            @ gatem
-            @ np.kron(pauli[combo[0]], pauli[combo[1]])
+    matrix = backend.numpy(backend.reshapem(gate))
+    paulis = [g.tensor for g in gates.pauli_gates]
+    products = np.stack([np.kron(p, q) for p in paulis for q in paulis])
+    left = products @ matrix
+    right = matrix @ products
+    matches = np.all(
+        np.isclose(left[:, None], right[None, :], rtol=0, atol=1e-7), axis=(-2, -1)
+    ) | np.all(
+        np.isclose(left[:, None], -right[None, :], rtol=0, atol=1e-7), axis=(-2, -1)
+    )
+    return [
+        (
+            int(right_index // 4),
+            int(right_index % 4),
+            int(left_index // 4),
+            int(left_index % 4),
         )
-        if np.allclose(i, gatem, rtol=0.0, atol=1e-7):
-            r.append(combo)
-        elif np.allclose(i, -gatem, rtol=0.0, atol=1e-7):
-            r.append(combo)
-    return r
+        for right_index, left_index in np.argwhere(matches.T)
+    ]
 
 
 def _apply_gate(c: Any, i: int, j: int) -> Any:
