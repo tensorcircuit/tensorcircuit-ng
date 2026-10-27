@@ -530,17 +530,18 @@ class AbstractLattice(abc.ABC):
         if backend.sizen(all_distances_sq) == 0:
             return []
 
-        remaining = all_distances_sq[all_distances_sq > ZERO_THRESHOLD_SQ]
+        remaining = all_distances_sq > ZERO_THRESHOLD_SQ
+        distances_sq = backend.where(remaining, all_distances_sq, 0)
+        maximum = backend.max(distances_sq)
+        distances = backend.sqrt(distances_sq)
         dist_shells = []
         for i in range(max(1, max_k)):
-            if backend.sizen(remaining) == 0:
+            if not backend.any(remaining):
                 break
-            shell = backend.min(remaining)
+            shell = backend.min(backend.where(remaining, distances_sq, maximum))
             dist_shells.append(shell)
             if i + 1 < max_k:
-                remaining = remaining[
-                    backend.sqrt(remaining) - backend.sqrt(shell) > tol
-                ]
+                remaining = remaining & (distances - backend.sqrt(shell) > tol)
         return dist_shells
 
     def _build_neighbors_by_distance_matrix(

@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Find lattice distance shells with fixed-shape minimum reductions instead of sorting and scanning backend scalars.
 - Copy only the operator span when evaluating local MPS expectations.
 - Evaluate pure-state entanglement anti-flatness on the smaller subsystem.
 - Compute default-order truncated free energy in quadratic time using trace contractions.
