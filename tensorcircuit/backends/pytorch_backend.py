@@ -881,6 +881,36 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         # https://github.com/renmengye/tensorflow-forward-ad/issues/2
         return torchlib.autograd.functional.jvp(f, inputs, v)  # type: ignore
 
+    def _jacobian_vjp(
+        self,
+        f: Callable[..., Any],
+        inputs: Union[Tensor, Sequence[Tensor]],
+        v: Union[Tensor, Sequence[Tensor]],
+    ) -> Tuple[Union[Tensor, Sequence[Tensor]], Union[Tensor, Sequence[Tensor]]]:
+        single_input = not isinstance(inputs, (tuple, list))
+        if single_input:
+            inputs = (inputs,)
+        elif isinstance(inputs, list):
+            inputs = tuple(inputs)
+        value, pullback = torchlib.func.vjp(f, *inputs)
+        v = self.tree_unflatten(self.tree_flatten(value)[1], self.tree_flatten(v)[0])
+        gradients = pullback(v)
+        return value, gradients[0] if single_input else gradients
+
+    def _jacobian_jvp(
+        self,
+        f: Callable[..., Any],
+        inputs: Union[Tensor, Sequence[Tensor]],
+        v: Union[Tensor, Sequence[Tensor]],
+    ) -> Tuple[Union[Tensor, Sequence[Tensor]], Union[Tensor, Sequence[Tensor]]]:
+        inputs = tuple(inputs) if isinstance(inputs, (tuple, list)) else (inputs,)
+        v = tuple(v) if isinstance(v, (tuple, list)) else (v,)
+        # Reverse-over-reverse also supports operators with only a custom backward.
+        value, pullback = torchlib.func.vjp(f, *inputs)
+        zeros = self.tree_map(torchlib.zeros_like, value)
+        _, pushforward = torchlib.func.vjp(pullback, zeros)
+        return value, pushforward(v)[0]
+
     def vmap(
         self,
         f: Callable[..., Any],

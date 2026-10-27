@@ -1235,10 +1235,9 @@ def test_jvp_pytree(backend):
     np.testing.assert_allclose(tc.backend.numpy(g[1]), np.ones([2]), atol=1e-5)
 
 
-@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
 @pytest.mark.parametrize("mode", ["jacfwd", "jacrev"])
 def test_jac(backend, mode):
-    # make no sense for torch backend when you have no real vmap interface
     backend_jac = getattr(tc.backend, mode)
 
     def f(x):
@@ -1687,7 +1686,7 @@ def test_optimizers(backend):
     assert loss < -0.7
 
 
-@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_hessian(backend):
     # hessian support is now very fragile and especially has potential issues on tf backend
     def f(param):

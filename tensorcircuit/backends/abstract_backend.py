@@ -2417,6 +2417,12 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `vjp`.".format(self.name)
         )
 
+    def _jacobian_jvp(self: Any, *args: Any, **kws: Any) -> Any:
+        return self.jvp(*args, **kws)
+
+    def _jacobian_vjp(self: Any, *args: Any, **kws: Any) -> Any:
+        return self.vjp(*args, **kws)
+
     def jacfwd(
         self: Any, f: Callable[..., Any], argnums: Union[int, Sequence[int]] = 0
     ) -> Tensor:
@@ -2431,7 +2437,7 @@ class ExtendedBackend:
         :rtype: Tensor
         """
         # TODO(@refraction-ray): support pytree for input and output
-        jvp1 = return_partial(self.jvp, return_argnums=1)
+        jvp1 = return_partial(self._jacobian_jvp, return_argnums=1)
         if isinstance(argnums, int):
             argnums = (argnums,)
 
@@ -2496,7 +2502,7 @@ class ExtendedBackend:
         :rtype: Tensor
         """
         # not that stable API
-        vjp1 = return_partial(self.vjp, return_argnums=1)
+        vjp1 = return_partial(self._jacobian_vjp, return_argnums=1)
         if isinstance(argnums, int):
             argnums = (argnums,)
 
