@@ -28,6 +28,7 @@
 ### Fixed
 
 - Fix `PauliStringSum2COO`, `PauliStringSum2MVP` and one-dimensional `sparse_dense_matmul` on the PyTorch backend.
+- Return the conjugate-transposed right factor in PyTorch SVD, restoring complex tensor reconstruction and phase-invariant gradients even with older TensorNetwork dependencies.
 - Return `numpy.ndarray` instead of `numpy.matrix` from the NumPy backend `to_dense` and `PauliStringSum2Dense(..., numpy=True)`, so elementwise products and reshapes on dense results follow array semantics.
 - Compute fidelity reliably for positive semidefinite states and preserve first-order matrix square-root responses on fixed-rank paths. `sqrtmh` now clips negative eigenvalues regardless of the retained `psd` argument.
 - Preserve double precision for Python scalar inputs of `time_correlation`, `resolvent_bilinear`, and `zero_temperature_greens_function`, and for `convert_to_tensor(..., dtype=...)` on the PyTorch backend.

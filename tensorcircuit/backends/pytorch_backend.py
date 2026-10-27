@@ -67,6 +67,38 @@ def _sum_torch(
     return torchlib.sum(tensor, dim=axis, keepdim=keepdims)
 
 
+def _svd_torch(
+    self: Any,
+    tensor: Tensor,
+    pivot_axis: int = -1,
+    max_singular_values: Optional[int] = None,
+    max_truncation_error: Optional[float] = None,
+    relative: Optional[bool] = False,
+) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+    left_dims = list(tensor.shape[:pivot_axis])
+    right_dims = list(tensor.shape[pivot_axis:])
+    matrix = torchlib.reshape(
+        tensor, [reduce(mul, left_dims, 1), reduce(mul, right_dims, 1)]
+    )
+    u, s, vh = torchlib.linalg.svd(matrix, full_matrices=False)
+    if max_singular_values is None:
+        max_singular_values = s.numel()
+    if max_truncation_error is not None:
+        trunc_errs = torchlib.sqrt(torchlib.cumsum(torchlib.flip(s, [0]) ** 2, 0))
+        threshold = max_truncation_error * s[0] if relative else max_truncation_error
+        num_sing_vals_err = torchlib.nonzero(trunc_errs > threshold).numel()
+        num_sing_vals_keep = min(max_singular_values, num_sing_vals_err)
+    else:
+        num_sing_vals_keep = max_singular_values
+    s = s.to(dtype=tensor.dtype)
+    s_rest = s[num_sing_vals_keep:]
+    s = s[:num_sing_vals_keep]
+    dim_s = s.shape[0]
+    u = torchlib.reshape(u[:, :num_sing_vals_keep], left_dims + [dim_s])
+    vh = torchlib.reshape(vh[:num_sing_vals_keep, :], [dim_s] + right_dims)
+    return u, s, vh, s_rest
+
+
 def _qr_torch(
     self: Any,
     tensor: Tensor,
@@ -171,6 +203,7 @@ def _rq_torch(
 
 tensornetwork.backends.pytorch.pytorch_backend.PyTorchBackend.sum = _sum_torch
 tensornetwork.backends.pytorch.pytorch_backend.PyTorchBackend.conj = _conj_torch
+tensornetwork.backends.pytorch.pytorch_backend.PyTorchBackend.svd = _svd_torch
 tensornetwork.backends.pytorch.pytorch_backend.PyTorchBackend.qr = _qr_torch
 tensornetwork.backends.pytorch.pytorch_backend.PyTorchBackend.rq = _rq_torch
 
