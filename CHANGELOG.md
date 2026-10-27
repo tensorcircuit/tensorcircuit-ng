@@ -22,6 +22,7 @@
 - Build Pauli string sum matrices by grouping terms with the same X/Y flip pattern, reducing construction memory and matvec cost.
 - Merge pure Z/I terms of `PauliStringSum2MVP` into one precomputed diagonal.
 - `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators and uses BCSR only on CPU.
+- Mark `tensorcircuit.results.qem` and the CuPy backend as experimental: importing the former or setting the latter via `tc.set_backend("cupy")` emits `tc.utils.ExperimentalWarning`.
 
 ### Added
 

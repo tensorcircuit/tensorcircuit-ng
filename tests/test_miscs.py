@@ -666,9 +666,13 @@ def test_utils_extra():
         "import tensorcircuit.applications.vqes",
         "import tensorcircuit.tnalg",
         "tc.tnalg",
+        "import tensorcircuit.results.qem",
+        "tc.set_backend('cupy')",
     ],
 )
 def test_experimental_module_warning(stmt):
+    if "cupy" in stmt:
+        pytest.importorskip("cupy")
     script = (
         "import warnings\n"
         "with warnings.catch_warnings(record=True) as w:\n"

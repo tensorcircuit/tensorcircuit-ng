@@ -102,7 +102,7 @@ Overview of Modules
 
 **Experimental Modules:**
 
-- :py:mod:`tensorcircuit.tnalg`, :py:mod:`tensorcircuit.zx`, and :py:mod:`tensorcircuit.applications` are experimental: their APIs may change and the modules may be removed at any time without deprecation. Importing them emits :py:class:`tensorcircuit.utils.ExperimentalWarning`, which can be silenced by ``warnings.filterwarnings("ignore", category=tc.utils.ExperimentalWarning)``.
+- :py:mod:`tensorcircuit.tnalg`, :py:mod:`tensorcircuit.zx`, :py:mod:`tensorcircuit.applications`, and :py:mod:`tensorcircuit.results.qem` are experimental: their APIs may change and the modules may be removed at any time without deprecation. Importing them emits :py:class:`tensorcircuit.utils.ExperimentalWarning`, which can be silenced by ``warnings.filterwarnings("ignore", category=tc.utils.ExperimentalWarning)``. The CuPy backend is experimental as well and emits the same warning when set via ``tc.set_backend("cupy")``.
 
 .. note::
 
