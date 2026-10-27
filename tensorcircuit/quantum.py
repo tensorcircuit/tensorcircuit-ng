@@ -2797,7 +2797,7 @@ counts_v2t = count_s2d
 def count_d2s(drepr: Tensor, eps: float = 1e-7) -> Tuple[Tensor, Tensor]:
     """
     measurement shots results, dense representation to sparse tuple representation
-    non-jittable due to the non fixed return shape
+    The output length depends on input values, so this function is not JIT-compatible.
     count_tuple to count_vector
 
     :Example:
@@ -2812,17 +2812,12 @@ def count_d2s(drepr: Tensor, eps: float = 1e-7) -> Tuple[Tensor, Tensor]:
     :return: (indices, values) of entries with absolute value greater than eps
     :rtype: Tuple[Tensor, Tensor]
     """
-    # unjittable since the return shape is not fixed
-    # tf.boolean_mask is better but no jax counterpart
-    xl = []
-    cl = []
-    for i, j in enumerate(drepr):
-        if backend.abs(j) > eps:
-            xl.append(i)
-            cl.append(j)
-    xl = backend.convert_to_tensor(xl)
-    cl = backend.stack(cl)
-    return xl, cl
+    drepr = backend.convert_to_tensor(drepr)
+    mask = backend.abs(drepr) > eps
+    indices = backend.where(mask)[0]
+    if backend.name == "tensorflow":
+        indices = backend.cast(indices, "int32")
+    return indices, drepr[mask]
 
 
 count_t2v = count_d2s
