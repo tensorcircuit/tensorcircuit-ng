@@ -202,6 +202,17 @@ def expectation(
     if z is None and diagonal_op is None:
         raise ValueError("One of `z` and `diagonal_op` must be set")
     n = len(list(count.keys())[0])
+    if len(count) >= 128 and z is not None:
+        labels = "".join(count)
+        if labels.isascii() and all(len(key) == n for key in count):
+            bits = np.frombuffer(labels.encode("ascii"), dtype=np.uint8)
+            bits = bits.reshape(len(count), n)
+            if bits.min() >= ord("0") and bits.max() <= ord("1"):
+                sites = [i for i in range(n) if i in z]
+                parity = np.bitwise_xor.reduce(bits[:, sites], axis=1) % 2
+                values = np.fromiter(count.values(), dtype=float, count=len(count))
+                numerator: float = np.sum((1.0 - 2.0 * parity) * values).item()
+                return numerator / sum(count.values())
     if z is not None:
         diagonal_op = [[1, -1] if i in z else [1, 1] for i in range(n)]
     r = 0
