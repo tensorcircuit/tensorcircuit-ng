@@ -700,10 +700,10 @@ def taylorlnm(x: Tensor, k: int) -> Tensor:
     """
     Taylor expansion of :math:`ln(x+1)`.
 
-    :param x: The density matrix in form of Tensor.
+    :param x: The matrix :math:`x` in form of Tensor.
     :type x: Tensor
-    :param k: The :math:`k` th order, default is 2.
-    :type k: int, optional
+    :param k: The :math:`k` th order. Order 0 returns the zero matrix.
+    :type k: int
     :return: The :math:`k` th order of Taylor expansion of :math:`ln(x+1)`.
     :rtype: Tensor
     """
