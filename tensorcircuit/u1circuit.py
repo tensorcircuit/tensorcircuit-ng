@@ -12,7 +12,7 @@ import numpy as np
 
 from .abstractcircuit import AbstractCircuit
 from .cons import backend, dtypestr, rdtypestr, idtypestr
-from .quantum import sample2all, _resolve_subsystem
+from .quantum import sample2all, _resolve_subsystem, LinearOperator
 from .utils import arg_alias
 
 logger = logging.getLogger(__name__)
@@ -179,6 +179,141 @@ class U1Operator:
         else:
             self.off_diagonal_targets = np.empty((0, dim), dtype=np.int64)
             self.off_diagonal_phases = np.empty((0, dim), dtype=np.complex128)
+
+
+class U1PauliSum:
+    """
+    Plan a particle-conserving Pauli sum in a fixed U(1) sector.
+    Construct outside JIT and bind differentiable block weights with
+    ``linear_operator``. ``basis`` follows the ``quantum.u1_project`` ordering.
+
+    :param nqubits: Number of qubits, at most 63.
+    :param k: Number of occupied sites.
+    :param blocks: Static ``(pauli_string, coefficient)`` pairs grouped into
+        independently conserving sums, such as ``XX + YY``, using codes 0,1,2,3.
+    """
+
+    def __init__(
+        self,
+        nqubits: int,
+        k: int,
+        blocks: Sequence[Sequence[Tuple[Sequence[int], complex]]],
+    ) -> None:
+        if not 0 <= k <= nqubits <= 63:
+            raise ValueError("Require 0 <= k <= nqubits <= 63")
+        self.nqubits = nqubits
+        self.k = k
+        self._nblocks = len(blocks)
+        blocks = tuple(
+            tuple((tuple(term), complex(coefficient)) for term, coefficient in block)
+            for block in blocks
+        )
+        for block in blocks:
+            commutator: Dict[Tuple[int, ...], complex] = {}
+            scale = sum(abs(coefficient) for _, coefficient in block)
+            for term, coefficient in block:
+                if len(term) != nqubits or any(
+                    code not in (0, 1, 2, 3) for code in term
+                ):
+                    raise ValueError(
+                        "Pauli strings must contain nqubits codes from 0,1,2,3"
+                    )
+                for site, code in enumerate(term):
+                    if code in (1, 2):
+                        transformed = list(term)
+                        transformed[site] = 3 - code
+                        key = tuple(transformed)
+                        commutator[key] = commutator.get(key, 0.0) + coefficient * (
+                            2j if code == 1 else -2j
+                        )
+            if any(abs(value) > 1e-12 * scale for value in commutator.values()):
+                raise ValueError("Each block must conserve total particle number")
+
+        self.basis = _get_subsystem_basis_static(nqubits, k).copy()
+        self.dimension = len(self.basis)
+        self._stride = 1 << (self.dimension - 1).bit_length()
+        self._diagonal: List[Tuple[int, np.ndarray[Any, Any], np.ndarray[Any, Any]]] = (
+            []
+        )
+        self._off_diagonal: List[
+            Tuple[int, np.ndarray[Any, Any], np.ndarray[Any, Any]]
+        ] = []
+        for block_index, block in enumerate(blocks):
+            groups: Dict[int, np.ndarray[Any, Any]] = {}
+            for term, coefficient in block:
+                mask = sum(
+                    1 << (nqubits - 1 - q)
+                    for q, code in enumerate(term)
+                    if code in (1, 2)
+                )
+                source = self.basis ^ mask
+                phase = np.full(self.dimension, coefficient, dtype=np.complex128)
+                for q, code in enumerate(term):
+                    if code in (2, 3):
+                        phase *= 1 - 2 * ((source >> (nqubits - 1 - q)) & 1)
+                        if code == 2:
+                            phase *= 1j
+                if mask in groups:
+                    groups[mask] += phase
+                else:
+                    groups[mask] = phase
+            for mask, phase in groups.items():
+                if mask == 0:
+                    values, codes = np.unique(phase, return_inverse=True)
+                    self._diagonal.append((block_index, codes.astype(np.int32), values))
+                    continue
+                source = self.basis ^ mask
+                indices = np.searchsorted(self.basis, source)
+                valid = (indices < self.dimension) & (
+                    self.basis[np.minimum(indices, self.dimension - 1)] == source
+                )
+                phase[~valid] = 0
+                indices[~valid] = 0
+                values, codes = np.unique(phase, return_inverse=True)
+                packed = indices + self._stride * codes
+                if packed.max() >= 2**31:
+                    raise ValueError("Packed sector map exceeds signed int32 range")
+                self._off_diagonal.append(
+                    (block_index, packed.astype(np.int32), values)
+                )
+
+    def linear_operator(self, weights: Sequence[Tensor]) -> LinearOperator:
+        """
+        Bind block weights using the active backend and complex dtype.
+
+        :param weights: One scalar weight for each static block.
+        :return: A ``LinearOperator`` acting on vectors of length ``dimension``.
+        """
+        if len(weights) != self._nblocks:
+            raise ValueError("Provide one weight for each static block")
+        diagonal = backend.zeros([self.dimension], dtype=dtypestr)
+        for block, codes, values in self._diagonal:
+            value = backend.gather1d(
+                backend.convert_to_tensor(values.astype(dtypestr)),
+                backend.convert_to_tensor(codes),
+            )
+            diagonal = diagonal + backend.cast(weights[block], dtypestr) * value
+        terms = [
+            (
+                backend.convert_to_tensor(packed),
+                backend.cast(weights[block], dtypestr)
+                * backend.convert_to_tensor(values.astype(dtypestr)),
+            )
+            for block, packed, values in self._off_diagonal
+        ]
+
+        def matvec(vector: Tensor) -> Tensor:
+            vector = backend.cast(vector, dtypestr)
+            result = diagonal * vector
+            for packed, values in terms:
+                source = packed % self._stride
+                codes = packed // self._stride
+                result = result + backend.gather1d(values, codes) * backend.gather1d(
+                    vector, source
+                )
+            return result
+
+        return LinearOperator((self.dimension, self.dimension), matvec, dtypestr)
 
 
 class U1Circuit(AbstractCircuit):

@@ -28,6 +28,7 @@
 
 ### Added
 
+- Add `U1PauliSum` for matrix-free evolution within a fixed particle-number sector, with differentiable weights on separately conserving Pauli blocks.
 - Add `PauliStringSum2CSR` and the backend method `csr_sparse_matrix`.
 - Support qudit density-matrix simulation with `tc.DMCircuit(n, dim=d)` for `d > 2`, including explicit single- and multi-site `unitary` gates and Kraus channels via `apply_general_kraus`.
 

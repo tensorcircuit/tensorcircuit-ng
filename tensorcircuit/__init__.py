@@ -50,7 +50,7 @@ from .gates import Gate
 from .quditcircuit import QuditCircuit
 from .analogcircuit import AnalogCircuit
 from .circuit import Circuit, expectation
-from .u1circuit import U1Circuit
+from .u1circuit import U1Circuit, U1PauliSum
 
 try:
     from .symbolcircuit import SymbolCircuit

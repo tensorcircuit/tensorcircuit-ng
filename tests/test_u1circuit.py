@@ -1175,3 +1175,33 @@ def test_u1_expectation_pss_vs_exact_circuit(backend):
         tc.backend.numpy(tc.backend.real(exact_energy)),
         atol=1e-5,
     )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_conserving_pauli_linear_operator(backend):
+    K = tc.backend
+    plan = tc.U1PauliSum(2, 1, [[([1, 1], 1.0), ([2, 2], 1.0)]])
+    x = tc.backend.convert_to_tensor(np.array([0.6, 0.8j], dtype=np.complex64))
+    w = tc.backend.convert_to_tensor(np.array([0.7], dtype=np.float32))
+    np.testing.assert_allclose(
+        tc.backend.numpy(plan.linear_operator(w)(x)),
+        1.4 * np.array([0.8j, 0.6]),
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        K.numpy(plan.linear_operator(w)(K.real(x))), [0.0, 0.84], atol=1e-6
+    )
+    for k in (0, 2):
+        edge = tc.U1PauliSum(2, k, [[([1, 1], 1.0), ([2, 2], 1.0)]])
+        np.testing.assert_allclose(
+            tc.backend.numpy(edge.linear_operator(w)(x[:1])), [0.0], atol=1e-6
+        )
+    with pytest.raises(ValueError, match="conserve"):
+        tc.U1PauliSum(2, 1, [[([1, 1], 1.0)]])
+    if K.name != "numpy":
+
+        def norm(weight):
+            result = plan.linear_operator(weight)(x)
+            return K.real(K.sum(K.conj(result) * result))
+
+        np.testing.assert_allclose(K.numpy(K.grad(norm)(w)), [5.6], atol=1e-5)
