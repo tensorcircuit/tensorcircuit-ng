@@ -1792,3 +1792,33 @@ def test_correlation_selected_bits_dynamic_indices(backend):
             tc.backend.convert_to_tensor(np.array(indices, dtype=np.int32)), samples
         )
         np.testing.assert_allclose(tc.backend.numpy(value), expected, atol=1e-6)
+
+
+def test_trace_distance_degenerate_hermitian_gradient(jaxb, highp):
+    k = tc.backend
+    rng = np.random.default_rng(51)
+    unitary, _ = np.linalg.qr(rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4)))
+    reference = k.convert_to_tensor(np.eye(4, dtype=np.complex128) / 4)
+    eps = 1e-4
+
+    def loss(parts):
+        matrix = k.cast(parts[0], "complex128") + 1j * k.cast(parts[1], "complex128")
+        delta = (matrix + k.adjoint(matrix)) / 2
+        return qu.trace_distance(reference + delta, reference, eps)
+
+    evaluate = k.jit(k.value_and_grad(loss))
+    for eigenvalues in (np.zeros(4), np.array([0.05, 0.05, -0.05, -0.05])):
+        delta = (unitary * eigenvalues) @ unitary.conj().T
+        value, gradient = evaluate(
+            k.convert_to_tensor(np.stack([delta.real, delta.imag]))
+        )
+        weights = eigenvalues / (2 * np.sqrt(eigenvalues**2 + eps))
+        expected_gradient = (unitary * weights) @ unitary.conj().T
+        np.testing.assert_allclose(
+            value, 0.5 * np.sqrt(eigenvalues**2 + eps).sum(), atol=1e-12
+        )
+        np.testing.assert_allclose(
+            gradient,
+            np.stack([expected_gradient.real, expected_gradient.imag]),
+            atol=1e-12,
+        )
