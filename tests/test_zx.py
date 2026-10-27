@@ -1646,3 +1646,16 @@ def test_zx_cache_rebuild_advances_noise_rng(jaxb, probability):
     assert np.any(np.asarray(first) != np.asarray(second))
     np.testing.assert_array_equal(first, repeated_first)
     np.testing.assert_array_equal(second, repeated_second)
+
+
+def test_zx_expectation_cache_normalization_and_mutation(jaxb):
+    c = StabilizerTCircuit(2, seed=31)
+    c.h(0)
+    c.cnot(0, 1)
+    np.testing.assert_allclose(c.expectation_ps(z=[1, 0]), 1, atol=1e-5)
+    np.testing.assert_allclose(c.expectation_ps(ps=[3, 3]), 1, atol=1e-5)
+    c.x(0)
+    np.testing.assert_allclose(c.expectation_ps(z=[0, 1]), -1, atol=1e-5)
+    c.x_error(0, 0.2)
+    for nmc in [1000, 2000]:
+        np.testing.assert_allclose(c.expectation_ps(z=[0, 1], nmc=nmc), -0.6, atol=0.1)
