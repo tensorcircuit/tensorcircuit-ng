@@ -569,3 +569,43 @@ def test_composedkraus_normalized_trajectories(backend, count, superposition):
     np.testing.assert_allclose(ensemble, reference, atol=1e-6)
     assert combined.is_unitary is (count == 2)
     assert not composedkraus(combined, tc.channels.resetchannel()).is_unitary
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_trajectory_state_cache(backend):
+    K = tc.backend
+    outputs = []
+    for enabled in (False, True):
+        c = tc.Circuit(
+            2, inputs=np.array([1.0, 0.0, 0.0, 0.0]), trajectory_cache=enabled
+        )
+        c.h(0)
+        c.cnot(0, 1)
+        c.general_kraus(tc.channels.phasedampingchannel(0.2), 0, status=0.3)
+        c.cnot(0, 1, split={"max_singular_values": 2})
+        c.rx(1, theta=0.4)
+        c.general_kraus(tc.channels.phasedampingchannel(0.2), 1, status=0.3)
+        first = c.state()
+        c.replace_inputs(
+            K.convert_to_tensor(np.array([0.0, 0.0, 1.0, 0.0], dtype=np.complex64))
+        )
+        c.rx(0, theta=0.2)
+        c.general_kraus(tc.channels.phasedampingchannel(0.2), 0, status=0.3)
+        outputs.append((first, c.state(), c.copy().state()))
+    for reference, actual in zip(*outputs):
+        np.testing.assert_allclose(
+            tc.backend.numpy(actual), tc.backend.numpy(reference), atol=1e-6
+        )
+    if K.name != "numpy":
+        gradients = []
+        for enabled in (False, True):
+
+            def loss(theta):
+                c = tc.Circuit(2, trajectory_cache=enabled)
+                c.ry(0, theta=theta)
+                c.general_kraus(tc.channels.phasedampingchannel(0.2), 0, status=0.3)
+                c.rx(0, theta=theta)
+                return K.real(c.expectation_ps(z=[0]))
+
+            gradients.append(K.numpy(K.grad(loss)(K.convert_to_tensor(0.4))))
+        np.testing.assert_allclose(gradients[0], gradients[1], atol=1e-6)

@@ -6,7 +6,7 @@ For string-encoded samples/counts, digits use 0-9A-Z where A=10, ..., Z=35.
 
 # pylint: disable=invalid-name
 
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 from functools import reduce
 from operator import add
 
@@ -40,6 +40,8 @@ class Circuit(BaseCircuit):
     """
 
     is_dm = False
+    trajectory_cache = False
+    state_tensor: Optional[tn.Node]
 
     def __init__(
         self,
@@ -49,6 +51,7 @@ class Circuit(BaseCircuit):
         tensors: Optional[Sequence[Tensor]] = None,
         split: Optional[Dict[str, Any]] = None,
         dim: Optional[int] = None,
+        trajectory_cache: bool = False,
     ) -> None:
         r"""
         Circuit object based on state simulator.
@@ -69,11 +72,16 @@ class Circuit(BaseCircuit):
         :param split: dict if two qubit gate is ready for split, including parameters for at least one of
             ``max_singular_values`` and ``max_truncation_err``.
         :type split: Optional[Dict[str, Any]]
+        :param trajectory_cache: Keep a dense state after the first general channel
+            and update it through subsequent gates. Defaults to False.
+            Requires space proportional to the full Hilbert space per trajectory.
+        :type trajectory_cache: bool
         """
         self._d = 2 if dim is None else dim
         self.inputs = inputs
         self.mps_inputs = mps_inputs
         self.split = split
+        self.trajectory_cache = trajectory_cache
         self._nqubits = nqubits
 
         self.circuit_param = {
@@ -83,6 +91,7 @@ class Circuit(BaseCircuit):
             "tensors": tensors,
             "split": split,
             "dim": dim,
+            "trajectory_cache": trajectory_cache,
         }
         if (inputs is None) and (mps_inputs is None) and (tensors is None):
             nodes = self.all_zero_nodes(nqubits, dim=self._d)
@@ -129,6 +138,58 @@ class Circuit(BaseCircuit):
         self._qir: List[Dict[str, Any]] = []
         self._extra_qir: List[Dict[str, Any]] = []
         self._measure_counter = 0
+
+    def apply_general_gate(
+        self,
+        gate: Union[Gate, QuOperator],
+        *index: int,
+        name: Optional[str] = None,
+        split: Optional[Dict[str, Any]] = None,
+        mpo: bool = False,
+        diagonal: bool = False,
+        ir_dict: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        state = getattr(self, "state_tensor", None) if self.trajectory_cache else None
+        cached_gate = gate.copy() if state is not None else gate
+        super().apply_general_gate(
+            gate,
+            *index,
+            name=name,
+            split=split,
+            mpo=mpo,
+            diagonal=diagonal,
+            ir_dict=ir_dict,
+        )
+        split_conf = self.split if split is None else split
+        if state is not None and not (mpo or diagonal or split_conf is not None):
+            axes = tuple(i % self._nqubits for i in index)
+            order = axes + tuple(i for i in range(self._nqubits) if i not in axes)
+            updated = backend.tensordot(
+                cached_gate.tensor,  # type: ignore[union-attr]
+                state.tensor,
+                axes=(tuple(range(len(axes), 2 * len(axes))), axes),
+            )
+            self.state_tensor = Gate(
+                backend.transpose(
+                    updated, tuple(order.index(i) for i in range(self._nqubits))
+                )
+            )
+        elif state is not None:
+            temporary = Circuit(
+                self._nqubits, inputs=state.tensor, dim=self._d, split=self.split
+            )
+            temporary.apply_general_gate(
+                cached_gate,
+                *index,
+                name=name,
+                split=split,
+                mpo=mpo,
+                diagonal=diagonal,
+            )
+            nodes, front = temporary._copy()
+            self.state_tensor = contractor(nodes, output_edge_order=front)
+
+    apply = apply_general_gate
 
     def replace_mps_inputs(self, mps_inputs: QuOperator) -> None:
         """
@@ -532,15 +593,26 @@ class Circuit(BaseCircuit):
         kraus_tensor = [k.tensor if isinstance(k, tn.Node) else k for k in kraus]
         kraus_tensor = [gates.array_to_tensor(k) for k in kraus_tensor]
 
-        # tn with hole
-        newnodes, newfront = self._copy()
-        lnewnodes, lnewfront = self._copy(conj=True)
-        des = [newfront[j] for j in index] + [lnewfront[j] for j in index]
-        for j in range(self._nqubits):
-            if j not in index:
-                newfront[j] ^ lnewfront[j]
-        ns = contractor(newnodes + lnewnodes, output_edge_order=des)
-        ntensor = ns.tensor
+        if self.trajectory_cache:
+            nodes, _ = self._copy_state_tensor()
+            order = tuple(index) + tuple(
+                i for i in range(self._nqubits) if i not in index
+            )
+            state = backend.reshape(
+                backend.transpose(nodes[0].tensor, order), [self._d**sites, -1]
+            )
+            ntensor = backend.reshape(
+                state @ backend.adjoint(state), [self._d] * (2 * sites)
+            )
+        else:
+            newnodes, newfront = self._copy()
+            lnewnodes, lnewfront = self._copy(conj=True)
+            des = [newfront[j] for j in index] + [lnewfront[j] for j in index]
+            for j in range(self._nqubits):
+                if j not in index:
+                    newfront[j] ^ lnewfront[j]
+            ns = contractor(newnodes + lnewnodes, output_edge_order=des)
+            ntensor = ns.tensor
         # ns, des
 
         def calculate_kraus_p(i: int) -> Tensor:

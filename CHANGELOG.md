@@ -28,6 +28,7 @@
 
 ### Added
 
+- Add optional `Circuit(..., trajectory_cache=True)` to reuse a dense state during Monte Carlo trajectories while retaining the original circuit network.
 - Add `PauliStringSum2CSR` and the backend method `csr_sparse_matrix`.
 - Support qudit density-matrix simulation with `tc.DMCircuit(n, dim=d)` for `d > 2`, including explicit single- and multi-site `unitary` gates and Kraus channels via `apply_general_kraus`.
 
