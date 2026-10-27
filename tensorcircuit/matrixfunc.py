@@ -1082,6 +1082,44 @@ def chebyshev_action(
     return backend.cast(result, dtypestr)
 
 
+def _chebyshev_bilinear(
+    operator: Any,
+    left_vector: Tensor,
+    right_vector: Tensor,
+    coefficients: Tensor,
+    config: ChebyshevConfig,
+    *,
+    dimension: Optional[int] = None,
+) -> Tensor:
+    adapted, dimension = _prepare_operator(
+        operator, vector=right_vector, dimension=dimension
+    )
+    apply_scaled = _scaled_hamiltonian(adapted, config)
+    left = backend.conj(left_vector)
+    moment_zero = backend.sum(left * right_vector)
+    if config.order == 1:
+        return coefficients[..., 0] * moment_zero
+    current = apply_scaled(right_vector)
+    moment_one = backend.sum(left * current)
+    moments = backend.stack([moment_zero, moment_one])
+
+    def recurrence(
+        carry: Tuple[Tensor, Tensor], index: Tensor
+    ) -> Tuple[Tuple[Tensor, Tensor], Tensor]:
+        previous, current = carry
+        following = backend.cast(2.0, dtypestr) * apply_scaled(current) - previous
+        return (current, following), following
+
+    if config.order > 2:
+        _, vectors = backend.jaxy_scan(
+            recurrence, (right_vector, current), backend.arange(2, config.order)
+        )
+        moments = backend.concat(
+            [moments, backend.tensordot(vectors, left, axes=1)], axis=0
+        )
+    return backend.tensordot(coefficients, moments, axes=1)
+
+
 def chebyshev_moments(
     operator: Any,
     right_vector: Tensor,
