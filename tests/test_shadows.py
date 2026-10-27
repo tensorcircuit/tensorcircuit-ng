@@ -110,6 +110,31 @@ def test_ent(backend):
     np.testing.assert_allclose(ent2, exact_ent, atol=0.13)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_renyi_entropy_2_pairwise_reference(backend):
+    rng = np.random.default_rng(7)
+    ns, repeat, nq = 3, 6, 5
+    probs = 0.4 * rng.random((ns, 1, nq))
+    snapshots = (rng.random((ns, repeat, nq)) < probs).astype(np.int32)
+    keep = [3, 0, 4]
+
+    tr = 0.0
+    for ss in snapshots[:, :, keep]:
+        for r in range(repeat):
+            for rp in range(repeat):
+                if r != rp:
+                    tr += (-2.0) ** (-np.sum(ss[r] != ss[rp]))
+    tr *= 2 ** len(keep) / (ns * repeat * (repeat - 1))
+
+    ent = renyi_entropy_2(
+        tc.backend.convert_to_tensor(snapshots), subsystem_to_keep=keep
+    )
+    np.testing.assert_allclose(ent, -np.log(tr), atol=1e-10)
+
+    with pytest.raises(ValueError, match="repeat >= 2"):
+        renyi_entropy_2(tc.backend.convert_to_tensor(snapshots[:, :1]))
+
+
 def test_shadow_extra(jaxb):
 
     ps = [1, 2, 3]  # X, Y, Z
@@ -130,7 +155,7 @@ def test_shadow_extra(jaxb):
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_entropy_shadow_dual_and_validation(backend):
-    nq, ns, repeat = 4, 2000, 1
+    nq, ns, repeat = 4, 2000, 2
     c = tc.Circuit(nq)
     c.h(0)
     c.rx(1, theta=0.7)
