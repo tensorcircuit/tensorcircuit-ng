@@ -756,7 +756,7 @@ class BaseCircuit(AbstractCircuit):
             name = str(d.get("name", "")).upper()
             if d.get("is_channel", False):
                 q = int(d["index"][0])
-                if not active[q]:
+                if any(not active[int(i)] for i in d["index"]):
                     raise NotImplementedError(
                         "Noise after measure requires reset first."
                     )
@@ -844,14 +844,15 @@ class BaseCircuit(AbstractCircuit):
             status_i += 1
             return s
 
-        def on_channel(d: Dict[str, Any], name: str, q: int) -> None:
+        def on_channel(d: Dict[str, Any], name: str, _: int) -> None:
             if name in ["DEPOLARIZING", "PAULI"]:
-                params = d.get("channel_parameters", {})
-                px = float(params.get("px", 0.0))
-                py = float(params.get("py", 0.0))
-                pz = float(params.get("pz", 0.0))
-                c.depolarizing(q, px=px, py=py, pz=pz, status=next_status())  # type: ignore
-                return
+                d = {
+                    **d,
+                    "channel_parameters": {
+                        **d.get("channel_parameters", {}),
+                        "status": next_status(),
+                    },
+                }
             self._apply_qir(c, [d], allow_channel=True)  # type: ignore[arg-type]
 
         def on_gate(d: Dict[str, Any]) -> None:
