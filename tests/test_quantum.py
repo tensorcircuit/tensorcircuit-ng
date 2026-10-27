@@ -1856,3 +1856,26 @@ def test_trace_distance_degenerate_hermitian_gradient(jaxb, highp):
             np.stack([expected_gradient.real, expected_gradient.imag]),
             atol=1e-12,
         )
+
+
+def test_renyi_half_power_gradient(jaxb, highp):
+    k = tc.backend
+    rho = np.array([[0.4 + 0.01j, 0.03j], [0.02, 0.6 - 0.01j]])
+    x = k.convert_to_tensor(np.stack([rho.real, rho.imag]))
+    for order in (4, 13):
+
+        def loss(parts):
+            matrix = k.cast(parts[0], "complex128") + 1j * k.cast(
+                parts[1], "complex128"
+            )
+            return qu.renyi_entropy(matrix, order)
+
+        value, gradient = k.jit(k.value_and_grad(loss))(x)
+        moment = np.trace(np.linalg.matrix_power(rho, order))
+        derivative = (
+            order * np.linalg.matrix_power(rho, order - 1).T / ((1 - order) * moment)
+        )
+        np.testing.assert_allclose(value, np.log(moment).real / (1 - order), atol=1e-12)
+        np.testing.assert_allclose(
+            gradient, np.stack([derivative.real, -derivative.imag]), atol=1e-12
+        )
