@@ -9,6 +9,7 @@
 - Reduce dense higher-order Rényi entropy matrix products through shared half powers.
 - Reuse OMECO contraction paths with a bounded instance cache and explicit cache controls.
 - Avoid signed tableau inversion and reduce the smaller bipartition when computing stabilizer entanglement entropy.
+- Batch host transfer and outcome counting in second-order shadow Rényi entropy estimation.
 - Compute dense trace products without forming the final matrix product, which also makes dense second-order Rényi entropy quadratic-cost.
 - Apply local readout calibration inverses as tensor products without materializing a dense calibration matrix.
 - Preserve the MPS tensor network and physical site dimensions when exporting states as `QuVector`, avoiding full wavefunctions for local reduced states and MPO expectations.
@@ -34,6 +35,7 @@
 - Return `numpy.ndarray` instead of `numpy.matrix` from the NumPy backend `to_dense` and `PauliStringSum2Dense(..., numpy=True)`, so elementwise products and reshapes on dense results follow array semantics.
 - Compute fidelity reliably for positive semidefinite states and preserve first-order matrix square-root responses on fixed-rank paths. `sqrtmh` now clips negative eigenvalues regardless of the retained `psd` argument.
 - Preserve double precision for Python scalar inputs of `time_correlation`, `resolvent_bilinear`, and `zero_temperature_greens_function`, and for `convert_to_tensor(..., dtype=...)` on the PyTorch backend.
+- Exclude same-shot pairs in `shadows.renyi_entropy_2`, removing the `2**n / repeat` bias of the purity estimate. `repeat >= 2` is now required.
 
 ## v1.10.0
 

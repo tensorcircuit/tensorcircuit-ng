@@ -415,14 +415,21 @@ def renyi_entropy_2(
 
     .. note::
 
-        The estimator ``tr = sum pp[x,y] * (-2)**(-h)`` is a signed sum that
-        only converges to a positive ``Tr(rho**2)`` with sufficient snapshots.
+        Pairs formed by a shot with itself are excluded from the estimator,
+        which makes ``tr`` unbiased for ``Tr(rho**2)`` (Elben et al.,
+        Phys. Rev. A 99, 052323 (2019)), so ``repeat >= 2`` is required.
+        ``tr`` is a signed sum that only converges to a positive value
+        with sufficient snapshots.
         When ``ns``/``repeat`` is too small (or the subsystem is near-maximally
         mixed, so the true value is ~= 0), finite-sample noise can drive ``tr``
         to zero or negative, and this function returns ``NaN``/``+inf``. This
         is the correct "estimate failed" signal — increase ``ns``/``repeat``
         rather than interpreting such a return as a finite entropy.
     """
+    if snapshots.shape[1] < 2:
+        raise ValueError(
+            f"renyi_entropy_2 requires repeat >= 2, got {snapshots.shape[1]}."
+        )
     nq_full = snapshots.shape[2]
     keep = _resolve_keep_or_subsystem(
         nq_full, sub, subsystem_to_keep, subsystems_to_trace_out, name="renyi_entropy_2"
@@ -430,34 +437,32 @@ def renyi_entropy_2(
     snapshots = slice_sub(snapshots, keep)
     snapshots = backend.cast(snapshots, dtype="int32")
     ns, repeat, nq = snapshots.shape
+    if nq == 0:
+        return np.float64(0.0)
 
-    count = {}
-    for i, ss in enumerate(snapshots):
-        for s in ss:
-            s = tuple(backend.numpy(s))
-            if s not in count:
-                count[s] = np.zeros(ns)
-            count[s][i] += 1
-
-    # Vectorized evaluation of tr = sum_{x,y} pp_mean(x,y) * (-2)^(-h(x,y)).
-    # `keys` and `values` share dict insertion order, so row m of `bits` and
-    # `counts` correspond to the same bitstring.
-    keys = list(count.keys())
-    bits = np.asarray(keys, dtype=np.uint8)  # (M, nq)
-    counts = np.asarray(list(count.values()), dtype=np.float64)  # (M, ns)
+    # rows sorted by lexsort over packed byte columns; packed: (M, ceil(nq/8))
+    packed = np.packbits(backend.numpy(snapshots).reshape(ns * repeat, nq), axis=1)
+    perm = np.lexsort(packed.T[::-1])
+    packed = packed[perm]
+    new = np.ones(len(packed), dtype=bool)
+    new[1:] = np.any(packed[1:] != packed[:-1], axis=1)
+    inverse = np.empty(len(packed), dtype=np.intp)
+    inverse[perm] = np.cumsum(new) - 1
+    packed = packed[new]
+    counts = np.zeros((len(packed), ns), dtype=np.float64)
+    np.add.at(counts, (inverse, np.repeat(np.arange(ns), repeat)), 1)
 
     # Hamming distance matrix H (M, M) via packed-bit XOR + popcount lookup,
     # removing the per-pair nq Python factor.
-    packed = np.packbits(bits, axis=1)  # (M, nbytes) uint8, nbytes = ceil(nq/8)
     _popcount_table = np.array([bin(i).count("1") for i in range(256)], dtype=np.uint8)
     h = np.zeros((packed.shape[0], packed.shape[0]), dtype=np.int32)
     for b in range(packed.shape[1]):
         h += _popcount_table[packed[:, None, b] ^ packed[None, :, b]]
 
-    # pp_mean(x, y) = mean_i(count[x, i] * count[y, i]) / repeat^2
-    #               = (counts @ counts^T)[x, y] / (ns * repeat^2)
-    pp = (counts @ counts.T) / (ns * repeat * repeat)
-    tr = np.sum(pp * (-2.0) ** (-h))
+    # sum_{r != r'} over shot pairs within each setting: the ns * repeat
+    # same-shot pairs have h = 0 and weight 1, so they are subtracted.
+    pairs = np.sum((counts @ counts.T) * (-2.0) ** (-h)) - ns * repeat
+    tr = pairs / (ns * repeat * (repeat - 1))
     return -np.log(tr * 2**nq)
 
 
