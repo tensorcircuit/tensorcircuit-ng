@@ -21,7 +21,6 @@ from networkx.utils import UnionFind
 
 from .backends.numpy_backend import NumpyBackend
 from .backends import get_backend
-from .simplify import _multi_remove
 
 logger = logging.getLogger(__name__)
 
@@ -403,7 +402,7 @@ def experimental_contractor(
                     _sizen(new_node, is_log=True),
                 )
                 nodes[i] = new_node
-                nodes = _multi_remove(nodes, [i + 1])
+                del nodes[i + 1]
                 i += 1
 
     logger.info("length of remaining nodes after dq fusion: %s" % len(nodes))
@@ -411,7 +410,7 @@ def experimental_contractor(
 
     while len(nodes) > 1:
         new_node = tn.contract_between(nodes[-1], nodes[-2], allow_outer_product=True)
-        nodes = _multi_remove(nodes, [len(nodes) - 2, len(nodes) - 1])
+        del nodes[-2:]
         nodes.append(new_node)
         logger.debug(_sizen(new_node, is_log=True))
         total_size += _sizen(new_node)
@@ -448,7 +447,7 @@ def plain_contractor(
 
     while len(nodes) > 1:
         new_node = tn.contract_between(nodes[-1], nodes[-2], allow_outer_product=True)
-        nodes = _multi_remove(nodes, [len(nodes) - 2, len(nodes) - 1])
+        del nodes[-2:]
         nodes.append(new_node)
         im_size = _sizen(new_node, is_log=True)
         logger.debug(im_size)
@@ -910,11 +909,13 @@ def _base(
     # ORIGINAL EXECUTION PATH (100% Backward Compatible)
     # ==========================================
 
+    nodes = list(nodes)
     for edge in edges:
         if not edge.is_disabled:  # if its disabled we already contracted it
             if edge.is_trace():
                 idx = [i for i, n in enumerate(nodes) if id(n) == id(edge.node1)]
-                nodes = _multi_remove(nodes, idx)
+                for i in reversed(idx):
+                    del nodes[i]
                 nodes.append(tn.contract_parallel(edge))
 
     if len(nodes) == 1:
@@ -946,8 +947,9 @@ def _base(
             new_node = pseudo_contract_between(nodes[a], nodes[b])
         else:
             new_node = tn.contract_between(nodes[a], nodes[b], allow_outer_product=True)
+        del nodes[max(a, b)]
+        del nodes[min(a, b)]
         nodes.append(new_node)
-        nodes = _multi_remove(nodes, [a, b])
 
         logger.debug(_sizen(new_node, is_log=True))
         total_size += _sizen(new_node)
