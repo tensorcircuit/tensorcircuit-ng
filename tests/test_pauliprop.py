@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 import tensorcircuit as tc
 from tensorcircuit.pauliprop import (
+    _CLIFFORD_GATES,
     PauliPropagationEngine,
     SPARSE_WORD_QUBITS,
     SparsePauliPropagationEngine,
@@ -317,19 +318,21 @@ def test_sparse_engine_scan_match(request, backend, highp):
     assert np.allclose(K.numpy(val_scan_sparse), K.numpy(val_scan_dense), atol=1e-5)
 
 
-@pytest.mark.parametrize(
-    "gate_name", ["x", "y", "z", "h", "s", "sd", "sdg", "cnot", "cx", "cz", "swap"]
-)
-def test_sparse_clifford_dynamic_wires(jaxb, highp, gate_name):
+@pytest.mark.parametrize("backend", ["npb", "jaxb"])
+@pytest.mark.parametrize("gate_name", list(_CLIFFORD_GATES) + ["cx", "sdg"])
+def test_sparse_clifford_gates(request, backend, highp, gate_name):
+    request.getfixturevalue(backend)
     K = tc.backend
     n = SPARSE_WORD_QUBITS + 1
-    arity = 2 if gate_name in ("cnot", "cx", "cz", "swap") else 1
+    unitary = K.numpy(
+        getattr(tc.gates, tc.Circuit.standardize_gate(gate_name))().tensor
+    )
+    arity = unitary.ndim // 2
+    unitary = unitary.reshape(2**arity, 2**arity)
     engine = SparsePauliPropagationEngine(n, arity, buffer_size=4**arity + 2)
     paulis = K.numpy(engine.pauli_mats)
     if arity == 2:
         paulis = np.array([np.kron(a, b) for a in paulis for b in paulis])
-    name = {"cx": "cnot", "sdg": "sd"}.get(gate_name, gate_name)
-    unitary = K.numpy(getattr(tc.gates, name)().tensor).reshape(2**arity, 2**arity)
     rotated = unitary.conj().T @ paulis @ unitary
     reference = np.einsum("aij,bji->ab", paulis, rotated).real / 2**arity
     labels = np.indices((4,) * arity).reshape(arity, -1).T
@@ -340,10 +343,59 @@ def test_sparse_clifford_dynamic_wires(jaxb, highp, gate_name):
         structures = np.zeros((4**arity, n), dtype=np.int32)
         structures[:, wires] = labels
         state = engine.get_initial_state(structures, weights)
-        actual = apply(state, K.convert_to_tensor(np.array(wires, dtype=np.int32)))
         expected = engine.get_initial_state(structures, reference @ weights)
-        np.testing.assert_array_equal(K.numpy(actual[0]), K.numpy(expected[0]))
-        np.testing.assert_allclose(K.numpy(actual[1]), K.numpy(expected[1]), atol=1e-6)
+        for actual in [
+            engine.apply_gate(state, gate_name, wires),
+            apply(state, K.convert_to_tensor(np.array(wires, dtype=np.int32))),
+        ]:
+            np.testing.assert_array_equal(K.numpy(actual[0]), K.numpy(expected[0]))
+            np.testing.assert_allclose(
+                K.numpy(actual[1]), K.numpy(expected[1]), atol=1e-6
+            )
+
+
+@pytest.mark.parametrize("backend", ["npb", "jaxb"])
+def test_pauliprop_follows_circuit_gates(request, backend, highp):
+    request.getfixturevalue(backend)
+    K = tc.backend
+
+    def layer(c, params):
+        c.h(0, name="x")
+        c.cx(0, 1)
+        c.unitary(1, unitary=np.array([[0.0, 1.0], [1.0, 0.0]]), name="flip")
+        sub = tc.Circuit(2)
+        sub.unitary(0, unitary=np.diag([1.0, 1j]))
+        sub.wroot(1)
+        c.append(sub.inverse())
+
+    c = tc.Circuit(2)
+    layer(c, None)
+    exact = K.real(
+        c.expectation_ps(z=[0, 1])
+        + 0.5 * c.expectation_ps(z=[0])
+        + 0.25 * c.expectation_ps(x=[0], y=[1])
+    )
+    structures = np.array([[3, 3], [3, 0], [1, 2]])
+    weights = np.array([1.0, 0.5, 0.25])
+    params = K.convert_to_tensor(np.zeros((1, 1)))
+    results = [
+        pauli_propagation(c, [(1.0, "ZZ"), (0.5, "ZI"), (0.25, "XY")], k=2),
+        PauliPropagationEngine(2, 2).compute_expectation_scan(
+            structures, weights, layer, params
+        ),
+        SparsePauliPropagationEngine(2, 2, 16).compute_expectation_scan(
+            structures, weights, layer, params
+        ),
+    ]
+    for result in results:
+        np.testing.assert_allclose(K.numpy(result), K.numpy(exact), atol=1e-5)
+
+    dense = PauliPropagationEngine(2, 2)
+    state = dense.get_initial_state([[0, 3]], [1.0])
+    np.testing.assert_allclose(
+        K.numpy(dense.apply_gate(state, "CX", (0, 1))),
+        K.numpy(dense.apply_gate(state, "cnot", (0, 1))),
+    )
 
 
 @pytest.mark.parametrize("backend", ["npb", "jaxb"])
