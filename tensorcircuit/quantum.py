@@ -185,13 +185,14 @@ def aslinearoperator(
 
 def get_all_nodes(edges: Iterable[Edge]) -> List[Node]:
     """Return the set of nodes connected to edges."""
-    nodes = []
-    for edge in edges:
-        if edge.node1 is not None and edge.node1 not in nodes:
-            nodes.append(edge.node1)
-        if edge.node2 is not None and edge.node2 not in nodes:
-            nodes.append(edge.node2)
-    return nodes
+    return list(
+        dict.fromkeys(
+            node
+            for edge in edges
+            for node in (edge.node1, edge.node2)
+            if node is not None
+        )
+    )
 
 
 def onehot_d_tensor(_k: Union[int, Tensor], d: int = 2) -> Tensor:
@@ -532,20 +533,18 @@ def reachable(
     if isinstance(inputs, Edge):
         inputs = [inputs.node1]
 
-    processed_inputs = []
+    processed_inputs: Dict[AbstractNode, None] = {}
     for inp in inputs:
         if isinstance(inp, AbstractNode):
-            if inp not in processed_inputs:
-                processed_inputs.append(inp)
+            processed_inputs[inp] = None
         elif isinstance(inp, Edge):
-            if inp.node1 not in processed_inputs:
-                processed_inputs.append(inp.node1)
+            processed_inputs[inp.node1] = None
         else:
             raise TypeError(
                 f"input to `reachable` has to be an iterable of "
                 f"Nodes or Edges, got {type(inp)} instead."
             )
-    return _reachable(processed_inputs)
+    return _reachable(list(processed_inputs))
 
 
 # Edge ordering convention: out_edges first, in_edges second.
