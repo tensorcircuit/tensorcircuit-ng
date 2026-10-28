@@ -72,6 +72,13 @@ def test_normalized_count():
     assert normalized_d == {"00": 0.25, "01": 0.75}
 
 
+def test_count2vec_label_parsing():
+    for label, dim in [("0b1", 2), ("0o1", 8), ("0x1", 16)]:
+        with pytest.raises(ValueError):
+            counts.count2vec({label: 1}, dim=dim)
+    np.testing.assert_allclose(counts.count2vec({"0B": 1}, dim=16)[11], 1)
+
+
 def test_count2vec():
     assert counts.vec2count(counts.count2vec(d, normalization=False), prune=True) == d
     assert (

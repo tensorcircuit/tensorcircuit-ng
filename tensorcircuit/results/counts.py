@@ -129,9 +129,14 @@ def count2vec(
         return prob
 
     powers = [dim**p for p in range(n)][::-1]
+    parse = n > 0 and 2 <= dim <= 36
     for k, v in count.items():
-        digits = _decode_basis_label(k, n, dim)
-        idx = sum(dig * p for dig, p in zip(digits, powers))
+        label = k.upper()
+        if parse and len(label) == n and label.isascii() and label.isalnum():
+            idx = int("0" + label, dim)
+        else:
+            digits = _decode_basis_label(k, n, dim)
+            idx = sum(dig * p for dig, p in zip(digits, powers))
         prob[idx] = (v / shots) if normalization else v
 
     return prob
