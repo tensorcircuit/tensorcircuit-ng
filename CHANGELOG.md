@@ -26,6 +26,7 @@
 - Merge pure Z/I terms of `PauliStringSum2MVP` into one precomputed diagonal.
 - Build `U1Operator` source indices with sorted searches and share one gather among terms with the same X/Y flip pattern, speeding up `U1Circuit.expectation_pss`.
 - `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators and uses BCSR only on CPU.
+- Batch fixed-layout MPO updates by block, reducing eager builder overhead in time-dependent tensor-network simulations.
 - Mark `tensorcircuit.results.qem` and the CuPy backend as experimental: importing the former or setting the latter via `tc.set_backend("cupy")` emits `tc.utils.ExperimentalWarning`.
 
 ### Added
