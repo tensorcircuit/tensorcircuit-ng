@@ -1419,6 +1419,8 @@ def test_counts_2(backend):
     np.testing.assert_allclose(y, np.array([0.1, -0.3]))
     z = tc.quantum.count_s2d((x, y), 2)
     np.testing.assert_allclose(z, z0)
+    x, y = qu.count_d2s(z0, eps=1.0)
+    assert x.shape == y.shape == (0,)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -1879,3 +1881,18 @@ def test_renyi_half_power_gradient(jaxb, highp):
         np.testing.assert_allclose(
             gradient, np.stack([derivative.real, -derivative.imag]), atol=1e-12
         )
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("torchb")])
+def test_count_d2s_preserves_gradient(backend):
+    def loss(values):
+        _, selected = qu.count_d2s(values)
+        return tc.backend.sum(selected**2)
+
+    values = tc.backend.convert_to_tensor([0.2, 0.0, -0.3, 0.4])
+    grad = tc.backend.grad(loss)(values)
+    np.testing.assert_allclose(
+        tc.backend.numpy(tc.backend.convert_to_tensor(grad)),
+        [0.4, 0.0, -0.6, 0.8],
+        atol=1e-6,
+    )

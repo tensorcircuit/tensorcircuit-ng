@@ -1,5 +1,11 @@
 """
 CuPy backend. Not in the tensornetwork package and highly experimental.
+
+.. warning::
+
+    This backend is experimental: its API may change and the whole backend may be
+    removed at any time without deprecation. Setting it via ``tc.set_backend("cupy")``
+    emits :py:class:`tensorcircuit.utils.ExperimentalWarning`.
 """
 
 # pylint: disable=invalid-name
@@ -22,6 +28,7 @@ except ImportError:
     tnbackend = abstract_backend.AbstractBackend
 
 
+from ..utils import experimental_module_warning
 from .abstract_backend import ExtendedBackend
 
 logger = logging.getLogger(__name__)
@@ -50,6 +57,7 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
         cp = cupy
         cpx = cupyx
         self.name = "cupy"
+        experimental_module_warning(__name__)
 
     def convert_to_tensor(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
         if not isinstance(a, cp.ndarray) and not cp.isscalar(a):
