@@ -20,6 +20,7 @@ Python-first companion to TensorCircuit-NG.
 from typing import Any, Callable, Dict, List, Optional, Tuple, Sequence
 import itertools
 import logging
+from math import comb
 import numpy as np
 
 from . import gates
@@ -139,36 +140,35 @@ class PauliPropagationEngine:
             (self.dim + 1, self.N, 4), self.dim, dtype=np.int32
         )
 
-        for i, (qubits, codes) in enumerate(self.basis):
-            q_to_code = dict(zip(qubits, codes))
-
-            for q in range(self.N):
-                # We want to know what happens if we change the base at q
-                # Existing code at q
-                current_code = q_to_code.get(q, 0)
-
-                for target_code in range(4):
-                    if target_code == current_code:
-                        self.neighbor_map_np[i, q, target_code] = i
-                        continue
-
-                    # Construct new string
-                    new_q_to_code = q_to_code.copy()
-                    if target_code == 0:
-                        del new_q_to_code[q]
-                    else:
-                        new_q_to_code[q] = target_code
-
-                    if len(new_q_to_code) > self.k:
-                        self.neighbor_map_np[i, q, target_code] = self.dim  # SINK
-                    else:
-                        # Canonicalize
-                        new_qubits = tuple(sorted(new_q_to_code.keys()))
-                        new_codes = tuple(new_q_to_code[q_] for q_ in new_qubits)
-                        new_s = (new_qubits, new_codes)
-                        self.neighbor_map_np[i, q, target_code] = self.string_to_idx[
-                            new_s
-                        ]
+        self.neighbor_map_np[: self.dim, :, 0] = np.arange(self.dim)[:, None]
+        max_loc = min(self.N, self.k)
+        binomial = np.array(
+            [[comb(n, r) for r in range(max_loc + 1)] for n in range(self.N + 1)]
+        )
+        offset, previous_offset = 1, 0
+        for loc in range(1, max_loc + 1):
+            qubits = np.array(list(itertools.combinations(range(self.N), loc)))
+            code_count = 3**loc
+            codes = np.arange(code_count)
+            indices = offset + np.arange(len(qubits))[:, None] * code_count + codes
+            for position in range(loc):
+                rank = np.full(len(qubits), comb(self.N, loc - 1) - 1)
+                for j, column in enumerate(c for c in range(loc) if c != position):
+                    rank -= binomial[self.N - 1 - qubits[:, column], loc - 1 - j]
+                stride = 3 ** (loc - 1 - position)
+                digit = (codes // stride) % 3
+                lower_codes = (codes // (3 * stride)) * stride + codes % stride
+                lower = (
+                    previous_offset + rank[:, None] * (code_count // 3) + lower_codes
+                )
+                wire = qubits[:, position, None]
+                self.neighbor_map_np[indices, wire, 0] = lower
+                for target in range(3):
+                    self.neighbor_map_np[indices, wire, target + 1] = (
+                        indices + (target - digit) * stride
+                    )
+                self.neighbor_map_np[lower, wire, digit + 1] = indices
+            previous_offset, offset = offset, offset + len(qubits) * code_count
 
         # SINK row already initialized to point to SINK for all operations
         # Convert to backend tensor

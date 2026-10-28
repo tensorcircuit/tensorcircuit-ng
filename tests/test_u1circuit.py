@@ -4,7 +4,7 @@ from pytest_lazyfixture import lazy_fixture as lf
 import tensorcircuit as tc
 
 # We will implement this soon
-from tensorcircuit.u1circuit import U1Circuit
+from tensorcircuit.u1circuit import U1Circuit, U1Operator
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -1175,3 +1175,60 @@ def test_u1_expectation_pss_vs_exact_circuit(backend):
         tc.backend.numpy(tc.backend.real(exact_energy)),
         atol=1e-5,
     )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_u1_operator_mvp(backend):
+    n, k = 5, 2
+    ps_list = [
+        [0, 0, 0, 0, 0],
+        [3, 0, 0, 0, 0],
+        [0, 3, 0, 3, 0],
+        [1, 1, 0, 0, 0],  # shares the flip mask with Y0Y1
+        [2, 2, 0, 0, 0],
+        [0, 1, 3, 1, 0],
+        [0, 2, 3, 2, 0],
+        {"x": [2], "y": [4]},  # shares the flip mask with Y2X4
+        [0, 0, 2, 0, 1],
+        [1, 0, 0, 0, 1],  # not conserving alone, gives P_k H P_k
+        [1, 0, 0, 0, 0],  # odd number of flips, zero in the subspace
+    ]
+    weights = np.array(
+        [0.3, 0.5, -0.7, 1.0, 0.4, 0.8, -0.6, 0.2, -0.9, 0.35, 0.45], dtype=np.float32
+    )
+    op = U1Operator(n, k, ps_list)
+    inds = [s for s in range(2**n) if bin(s).count("1") == k]
+    terms = [
+        np.array(tc.quantum.PauliStringSum2Dense([ps], [1.0], numpy=True))[
+            np.ix_(inds, inds)
+        ]
+        for ps in op.ps_tuple
+    ]
+    h = sum(w * t for w, t in zip(weights, terms))
+    rng = np.random.default_rng(42)
+    v = rng.normal(size=len(inds)) + 1j * rng.normal(size=len(inds))
+
+    w = tc.backend.convert_to_tensor(weights)
+    np.testing.assert_allclose(
+        tc.backend.numpy(op.mvp(w)(tc.backend.convert_to_tensor(v))), h @ v, atol=1e-5
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(op.mvp(w)(tc.backend.convert_to_tensor(v.real))),
+        h @ v.real,
+        atol=1e-5,
+    )
+    if tc.backend.name != "numpy":
+
+        def energy(weights):
+            x = tc.backend.cast(tc.backend.convert_to_tensor(v), tc.dtypestr)
+            return tc.backend.real(
+                tc.backend.sum(tc.backend.conj(x) * op.mvp(weights)(x))
+            )
+
+        # tensorflow returns IndexedSlices for gradients through gather
+        grad = tc.backend.convert_to_tensor(tc.backend.grad(energy)(w))
+        np.testing.assert_allclose(
+            tc.backend.numpy(grad),
+            [np.real(np.vdot(v, t @ v)) for t in terms],
+            atol=1e-4,
+        )
