@@ -449,7 +449,8 @@ def reduced_density_matrix(
         if p is None:
             rho = w @ backend.adjoint(w)
         else:
-            rho = w @ backend.diagflat(p) @ backend.adjoint(w)
+            p = backend.reshape(p, [1, dim ** len(traceout)])
+            rho = (w * p) @ backend.adjoint(w)
             if normalize:
                 rho /= backend.trace(rho)
 

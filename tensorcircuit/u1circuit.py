@@ -12,7 +12,7 @@ import numpy as np
 
 from .abstractcircuit import AbstractCircuit
 from .cons import backend, dtypestr, rdtypestr, idtypestr
-from .quantum import sample2all, _resolve_subsystem
+from .quantum import sample2all, _resolve_subsystem, LinearOperator
 from .utils import arg_alias
 
 logger = logging.getLogger(__name__)
@@ -87,7 +87,25 @@ _u1_operator_cache: Dict[Tuple[int, int, Tuple[Tuple[int, ...], ...]], "U1Operat
 
 class U1Operator:
     """
-    Operator helper class for fast expectation calculation in the U(1) subspace.
+    Static structure of a Pauli string sum restricted to a U(1) subspace.
+    The Pauli strings are fixed at construction, while the coefficients are
+    supplied at runtime and remain differentiable.
+    Subspace vectors follow the same basis ordering as ``U1Circuit.state()``.
+
+    :Example:
+
+    >>> op = tc.u1circuit.U1Operator(2, 1, [[1, 1], [2, 2]])
+    >>> h = op.mvp([0.5, 0.5])
+    >>> h(tc.backend.convert_to_tensor([1.0, 0.0]))
+    array([0.+0.j, 1.+0.j], dtype=complex64)
+
+    :param nqubits: Number of qubits.
+    :type nqubits: int
+    :param k: Number of particles (excitations) in the subspace.
+    :type k: int
+    :param ps_list: A sequence of Pauli strings. Each can be represented as a list of
+        integers of length nqubits (0=I, 1=X, 2=Y, 3=Z) or a dict with 'x', 'y', 'z' keys.
+    :type ps_list: Sequence[Any]
     """
 
     def __init__(
@@ -103,15 +121,18 @@ class U1Operator:
 
         basis = _get_subsystem_basis_static(nqubits, k)
         dim = len(basis)
-        basis_index = {int(state): i for i, state in enumerate(basis)}
+        self.dimension = dim
         occupied = (basis[:, None] >> (nqubits - 1 - np.arange(nqubits)[None, :])) & 1
 
         diagonal_indices = []
         diagonal_vectors = []
 
         off_diagonal_indices = []
-        off_diagonal_targets = []
+        off_diagonal_groups = []
+        off_diagonal_sources: List[Any] = []
         off_diagonal_phases = []
+        # terms with the same flip mask share one source index array
+        mask_groups: Dict[int, int] = {}
 
         for term_idx, ps in enumerate(self.ps_tuple):
             x_indices = []
@@ -141,29 +162,32 @@ class U1Operator:
                 swap_mask = 0
                 for idx in x_indices + y_indices:
                     swap_mask |= 1 << (nqubits - 1 - idx)
-                target_s_arr = basis ^ swap_mask
-                target_idx_arr = np.array(
-                    [basis_index.get(ts, -1) for ts in target_s_arr],
-                    dtype=np.int64,
-                )
-                valid = target_idx_arr != -1
-                target_idx_safe = np.where(valid, target_idx_arr, 0)
+                source_s_arr = basis ^ swap_mask
+                source_idx_arr = np.searchsorted(basis, source_s_arr)
+                valid = basis[np.minimum(source_idx_arr, dim - 1)] == source_s_arr
 
                 # Keep numpy-based cache in high precision (complex128) to avoid precision loss during
                 # pre-computation. The cache is dtype-agnostic and will be cast to the backend's active
-                # `dtypestr` dynamically at run-time in `expectation_pss`.
+                # `dtypestr` dynamically at run-time in `mvp`.
                 phase = np.ones(dim, dtype=np.complex128)
                 if len(z_indices) > 0:
                     phase = phase * np.prod(1.0 - 2.0 * occupied[:, z_indices], axis=1)
                 if len(y_indices) > 0:
+                    source_occupied = (
+                        source_s_arr[:, None]
+                        >> (nqubits - 1 - np.array(y_indices))[None, :]
+                    ) & 1
                     phase = phase * np.prod(
-                        1j * (1.0 - 2.0 * occupied[target_idx_safe][:, y_indices]),
+                        1j * (1.0 - 2.0 * source_occupied),
                         axis=1,
                     )
                 phase = np.where(valid, phase, 0.0)  # type: ignore
 
+                if swap_mask not in mask_groups:
+                    mask_groups[swap_mask] = len(off_diagonal_sources)
+                    off_diagonal_sources.append(np.where(valid, source_idx_arr, 0))
                 off_diagonal_indices.append(term_idx)
-                off_diagonal_targets.append(target_idx_safe)
+                off_diagonal_groups.append(mask_groups[swap_mask])
                 off_diagonal_phases.append(phase)
 
         self.diagonal_indices = np.array(diagonal_indices, dtype=np.int64)
@@ -173,12 +197,76 @@ class U1Operator:
             self.diagonal_vectors = np.empty((0, dim), dtype=np.float64)
 
         self.off_diagonal_indices = np.array(off_diagonal_indices, dtype=np.int64)
-        if len(off_diagonal_targets) > 0:
-            self.off_diagonal_targets = np.stack(off_diagonal_targets, axis=0)
+        self.off_diagonal_groups = np.array(off_diagonal_groups, dtype=np.int64)
+        if len(off_diagonal_sources) > 0:
+            self.off_diagonal_sources = np.stack(off_diagonal_sources, axis=0)
             self.off_diagonal_phases = np.stack(off_diagonal_phases, axis=0)
         else:
-            self.off_diagonal_targets = np.empty((0, dim), dtype=np.int64)
+            self.off_diagonal_sources = np.empty((0, dim), dtype=np.int64)
             self.off_diagonal_phases = np.empty((0, dim), dtype=np.complex128)
+
+    def mvp(self, weights: Any) -> LinearOperator:
+        """
+        Bind the Pauli string weights and return the matrix-free operator
+        :math:`P_k H P_k` acting on vectors in the U(1) subspace,
+        where :math:`H=\\sum_i w_i P_i` and :math:`P_k` projects onto the subspace.
+        For a particle-number-conserving :math:`H`, this is exactly the
+        restriction of :math:`H` to the subspace. Use real weights for a
+        Hermitian operator, e.g., in ``tc.timeevol.krylov_evol``.
+
+        :param weights: The weights for each Pauli string. Can be a list of floats
+            or a backend tensor, which stays differentiable.
+        :type weights: Any
+        :return: A linear operator of shape ``[dimension, dimension]``.
+        :rtype: LinearOperator
+        """
+        dim = self.dimension
+        weights = backend.cast(backend.convert_to_tensor(weights), dtype=dtypestr)
+
+        diagonal = None
+        if len(self.diagonal_indices) > 0:
+            weights_diag = backend.gather1d(
+                weights, backend.convert_to_tensor(self.diagonal_indices)
+            )
+            diag_vecs = backend.cast(
+                backend.convert_to_tensor(self.diagonal_vectors), dtype=dtypestr
+            )
+            diagonal = backend.reshape(
+                backend.matmul(
+                    backend.transpose(diag_vecs), backend.reshape(weights_diag, [-1, 1])
+                ),
+                [-1],
+            )
+
+        phases = None
+        sources = None
+        groups = None
+        if len(self.off_diagonal_indices) > 0:
+            weights_off = backend.gather1d(
+                weights, backend.convert_to_tensor(self.off_diagonal_indices)
+            )
+            phases = backend.cast(
+                backend.convert_to_tensor(self.off_diagonal_phases), dtype=dtypestr
+            ) * backend.reshape(weights_off, [-1, 1])
+            sources = backend.convert_to_tensor(self.off_diagonal_sources.reshape([-1]))
+            if self.off_diagonal_sources.shape[0] < len(self.off_diagonal_indices):
+                groups = backend.convert_to_tensor(self.off_diagonal_groups)
+
+        def matvec(vector: Tensor) -> Tensor:
+            vector = backend.cast(vector, dtype=dtypestr)
+            if diagonal is None:
+                result = backend.zeros_like(vector)
+            else:
+                result = diagonal * vector
+            if phases is not None:
+                # one gather per flip mask, then broadcast rows to the terms
+                gathered = backend.reshape(backend.gather1d(vector, sources), [-1, dim])
+                if groups is not None:
+                    gathered = backend.gather1d(gathered, groups)
+                result = result + backend.sum(phases * gathered, axis=0)
+            return result
+
+        return LinearOperator((dim, dim), matvec, dtype=dtypestr)
 
 
 class U1Circuit(AbstractCircuit):
@@ -1080,49 +1168,8 @@ class U1Circuit(AbstractCircuit):
 
         op = _u1_operator_cache[key]
         state = self._state
-        coefs = backend.cast(backend.convert_to_tensor(coefficients), dtype=dtypestr)
-
-        total_energy = backend.cast(backend.convert_to_tensor(0.0), dtypestr)
-
-        # A. Diagonal energy
-        if len(op.diagonal_indices) > 0:
-            coefs_diag = backend.gather1d(
-                coefs, backend.convert_to_tensor(op.diagonal_indices)
-            )
-            diag_vecs = backend.cast(
-                backend.convert_to_tensor(op.diagonal_vectors), dtype=dtypestr
-            )
-            coefs_diag_2d = backend.reshape(coefs_diag, [-1, 1])
-            diag_vector_2d = backend.matmul(backend.transpose(diag_vecs), coefs_diag_2d)
-            diag_vector = backend.reshape(diag_vector_2d, [-1])
-            diagonal_energy = backend.tensordot(
-                backend.conj(state), diag_vector * state, 1
-            )
-            total_energy = total_energy + diagonal_energy
-
-        # B. Off-diagonal energy
-        if len(op.off_diagonal_indices) > 0:
-            coefs_off = backend.gather1d(
-                coefs, backend.convert_to_tensor(op.off_diagonal_indices)
-            )
-            targets = backend.convert_to_tensor(op.off_diagonal_targets)
-            phases = backend.cast(
-                backend.convert_to_tensor(op.off_diagonal_phases), dtype=dtypestr
-            )
-
-            weighted_phases = phases * backend.reshape(coefs_off, [-1, 1])
-
-            def term_expectation(target_idx: Tensor, phase_fact: Tensor) -> Tensor:
-                target_state = backend.gather1d(state, target_idx)
-                return backend.tensordot(
-                    backend.conj(state), phase_fact * target_state, 1
-                )
-
-            vmapped_expect = backend.vmap(term_expectation, vectorized_argnums=(0, 1))
-            off_diagonal_energy = backend.sum(vmapped_expect(targets, weighted_phases))
-            total_energy = total_energy + off_diagonal_energy
-
-        return backend.real(total_energy)
+        hstate = op.mvp(coefficients)(state)
+        return backend.real(backend.tensordot(backend.conj(state), hstate, 1))
 
 
 # Register gates via _meta_apply
