@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+from pytest_lazyfixture import lazy_fixture as lf
 
 
 import tensorcircuit as tc
@@ -99,6 +100,31 @@ def test_kl_zero_key():
 def test_expectation():
     assert counts.expectation(d, [0, 1]) == -5 / 9
     assert counts.expectation(d, None, [[1, -1], [1, 0], [1, 1]]) == -5 / 9
+    complex_counts = {format(i, "07b"): complex(i + 1, i % 3) for i in range(128)}
+    np.testing.assert_allclose(
+        counts.expectation(complex_counts, z=[0]),
+        counts.expectation(complex_counts, diagonal_op=[[1, -1]] + [[1, 1]] * 6),
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("torchb")])
+def test_expectation_tensor_values(backend):
+    K = tc.backend
+    values = np.arange(1, 129, dtype=np.float32)
+    signs = np.repeat([1.0, -1.0], 64)
+    expected = np.sum(signs * values) / np.sum(values)
+
+    def loss(weights):
+        histogram = {format(i, "07b"): weights[i] for i in range(128)}
+        return counts.expectation(histogram, z=[0])
+
+    weights = K.convert_to_tensor(values)
+    for evaluate in (K.value_and_grad(loss), K.jit(K.value_and_grad(loss))):
+        value, gradient = evaluate(weights)
+        np.testing.assert_allclose(K.numpy(value), expected, rtol=1e-5)
+        np.testing.assert_allclose(
+            K.numpy(gradient), (signs - expected) / np.sum(values), rtol=1e-5
+        )
 
 
 def test_plot_histogram():
