@@ -1166,6 +1166,41 @@ def test_vjp_complex(backend):
         np.testing.assert_allclose(tc.backend.numpy(g), 2 - 2j, atol=1e-5)
 
 
+def test_vjp_vmap_torch(torchb):
+    K = tc.backend
+    x = K.convert_to_tensor([1.0, 2.0])
+    cotangents = K.eye(2, dtype="float32")
+    values, gradients = K.vmap(lambda v: K.vjp(lambda y: y**3, x, v))(cotangents)
+    np.testing.assert_allclose(K.numpy(values), [[1.0, 8.0], [1.0, 8.0]])
+    np.testing.assert_allclose(K.numpy(gradients), np.diag([3.0, 12.0]))
+
+
+@pytest.mark.parametrize("mode", ["jvp", "vjp"])
+def test_derivative_higher_order_torch(torchb, mode):
+    K = tc.backend
+    x = K.convert_to_tensor([1.0, 2.0])
+
+    def derivative(y):
+        return K.sum(getattr(K, mode)(lambda z: z**3, y, K.ones_like(y))[1])
+
+    np.testing.assert_allclose(K.numpy(K.grad(derivative)(x)), [6.0, 12.0])
+
+
+def test_jac_sqrtmh_torch(torchb):
+    K = tc.backend
+    x = K.convert_to_tensor([1.0, 4.0])
+
+    def root(y):
+        return K.sqrtmh(K.diagflat(y), psd=True)
+
+    forward = K.jacfwd(root)(x)
+    reverse = K.jacrev(root)(x)
+    np.testing.assert_allclose(K.numpy(forward), K.numpy(reverse), atol=1e-6)
+    expected = np.zeros((2, 2, 2))
+    expected[0, 0, 0], expected[1, 1, 1] = 0.5, 0.25
+    np.testing.assert_allclose(K.numpy(forward), expected, atol=1e-6)
+
+
 # TODO(@refraction-ray): consistent and unified pytree utils for pytorch backend?
 
 
