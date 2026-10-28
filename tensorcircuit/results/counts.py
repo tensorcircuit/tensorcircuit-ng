@@ -6,7 +6,8 @@ from typing import Any, Dict, Optional, Sequence
 
 import numpy as np
 
-from ..quantum import _decode_basis_label
+from ..interfaces import which_backend
+from ..quantum import _decode_basis_label, _infer_num_sites, count_vector2dict
 
 Tensor = Any
 ct = Dict[str, int]
@@ -147,17 +148,20 @@ def vec2count(vec: Tensor, prune: bool = False, dim: Optional[int] = None) -> ct
     :param dim: Dimensionality of the vector, defaults to 2
     :return: {base-d string key: value}, key length n
     """
-    from ..quantum import count_vector2dict, _infer_num_sites
-
     dim = 2 if dim is None else dim
     if isinstance(vec, list):
         vec = np.array(vec)
     n = _infer_num_sites(int(vec.shape[0]), dim)
-    c: ct = count_vector2dict(vec, n, key="bin", dim=dim)  # type: ignore
     if prune:
-        c = {k: v for k, v in c.items() if np.abs(v) >= 1e-8}
-
-    return c
+        values = which_backend(vec).numpy(vec).tolist()
+        if dim > 36:
+            raise ValueError("Bases greater than 36 not handled in base_repr.")
+        return {
+            np.base_repr(i, base=dim).zfill(n): v
+            for i, v in enumerate(values)
+            if np.abs(v) >= 1e-8
+        }
+    return count_vector2dict(vec, n, key="bin", dim=dim)  # type: ignore
 
 
 def kl_divergence(c1: ct, c2: ct) -> float:

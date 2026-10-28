@@ -82,6 +82,20 @@ def test_count2vec():
     )
 
 
+def test_vec2count_prune():
+    assert counts.vec2count(np.array([1e-8, -1e-8], dtype=np.float32), prune=True) == {}
+    assert counts.vec2count([1e-8, -1e-8, float("nan"), 0], prune=True) == {
+        "00": 1e-8,
+        "01": -1e-8,
+    }
+    assert list(counts.vec2count([0, 1j, -2], prune=True, dim=3).items()) == [
+        ("1", 1j),
+        ("2", -2),
+    ]
+    with pytest.raises(ValueError):
+        counts.vec2count([0], prune=True, dim=37)
+
+
 def test_kl():
     a = {"00": 512, "11": 512}
     assert counts.kl_divergence(a, a) == 0
