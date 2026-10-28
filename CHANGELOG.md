@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Compute pure-state entanglement entropy and mutual information using the smaller subsystem while preserving entropy regularization.
+- Compute pure-state entanglement entropy and mutual information using the smaller subsystem. Values change slightly because omitted zero eigenvalues no longer contribute a dimension-dependent regularization bias.
 - Copy only the operator span when evaluating local MPS expectations.
 - Evaluate pure-state entanglement anti-flatness on the smaller subsystem.
 - Compute default-order truncated free energy in quadratic time using trace contractions.
