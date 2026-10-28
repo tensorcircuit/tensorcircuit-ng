@@ -1459,6 +1459,19 @@ def test_measurement_results(backend):
         np.testing.assert_allclose(sum(r.values()), expected_total, atol=1e-5)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_sample_count_vector(backend):
+    for dim in (2, 3):
+        for values in ([0, dim**2 - 1, dim**2 - 1], []):
+            sample = tc.backend.convert_to_tensor(np.array(values, dtype=np.int32))
+            expected = np.bincount(values, minlength=dim**2)
+            digits = np.array([[v // dim, v % dim] for v in values], dtype=np.int32)
+            for data in (sample, tc.backend.convert_to_tensor(digits.reshape([-1, 2]))):
+                result = tc.quantum.sample2all(data, 2, jittable=True, dim=dim)
+                np.testing.assert_array_equal(tc.backend.numpy(result), expected)
+                assert result.dtype == tc.backend.unique_with_counts(sample)[1].dtype
+
+
 def test_ps2xyz():
     xyz = {"x": [1], "z": [2]}
     assert tc.quantum.xyz2ps(xyz) == [0, 1, 3]

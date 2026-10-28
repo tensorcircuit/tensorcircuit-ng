@@ -3114,23 +3114,36 @@ def sample2all(
 
     if len(backend.shape_tuple(sample)) == 1:
         sample_int = sample
-        sample_bin = sample_int2bin(sample, n, dim=dim)
+        if format == "sample_bin":
+            return sample_int2bin(sample, n, dim=dim)
     elif len(backend.shape_tuple(sample)) == 2:
+        if format == "sample_bin":
+            return sample
         sample_int = sample_bin2int(sample, n, dim=dim)
-        sample_bin = sample
     else:
         raise ValueError("unrecognized tensor shape for sample")
 
     if format == "sample_int":
         return sample_int
-    elif format == "sample_bin":
-        return sample_bin
+    elif format == "count_vector":
+        if backend.name == "tensorflow":
+            return count_s2d(
+                sample2count(sample_int, n, jittable=jittable, dim=dim), n, dim=dim
+            )
+        count_dtype = backend.arange(1).dtype
+        zero = backend.zeros_like(
+            backend.sum(sample_int[:0], keepdims=True), dtype=count_dtype
+        )
+        return backend.scatter(
+            backend.tile(zero, [dim**n]),
+            backend.reshape(sample_int, [-1, 1]),
+            backend.ones_like(sample_int, dtype=count_dtype),
+            mode="add",
+        )
     else:
         count_tuple = sample2count(sample_int, n, jittable=jittable, dim=dim)
         if format == "count_tuple":
             return count_tuple
-        elif format == "count_vector":
-            return count_s2d(count_tuple, n, dim=dim)
         elif format == "count_dict_bin":
             return count_tuple2dict(count_tuple, n, key="bin", dim=dim)
         elif format == "count_dict_int":
