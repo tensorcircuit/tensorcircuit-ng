@@ -2598,9 +2598,7 @@ def test_qiskit_export_complex64_initialization(npb, monkeypatch):
 
     monkeypatch.setattr(qiskit.QuantumCircuit, "initialize", checked_initialize)
     n = 12
-    rng = np.random.default_rng(0)
-    inputs = rng.normal(size=2**n) + 1j * rng.normal(size=2**n)
-    inputs = (inputs / np.linalg.norm(inputs)).astype(np.complex64)
+    inputs = np.tile([1, 1j, -1, -1j], 2 ** (n - 2)).astype(np.complex64) / 64
     circuit = tc.Circuit(n, inputs=inputs)
     exported = circuit.to_qiskit(enable_inputs=True)
     expected = inputs.reshape([2] * n).transpose().reshape(-1)
