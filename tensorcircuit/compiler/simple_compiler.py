@@ -181,18 +181,6 @@ default_merge_rules = {
 }
 
 
-def _find_next(qir: List[Dict[str, Any]], i: int) -> Optional[int]:
-    index = qir[i]["index"]
-    for j in range(i + 1, len(qir)):
-        item = qir[j]
-        if item["index"] == index:
-            return j
-        for ind in item["index"]:
-            if ind in index:
-                return None
-    return None
-
-
 def _get_theta(qir_item: Dict[str, Any]) -> float:
     theta = qir_item["parameters"].get("theta", 0.0)
     if is_sequence(theta) and len(theta) == 1:
@@ -200,20 +188,59 @@ def _get_theta(qir_item: Dict[str, Any]) -> float:
     return theta  # type: ignore
 
 
+def _find_next(
+    qir: List[Dict[str, Any]],
+    i: int,
+    successors: Dict[int, List[int]],
+    removed: List[bool],
+) -> Optional[int]:
+    """Find the next gate on the same support, stopping at an overlap barrier."""
+    index = qir[i]["index"]
+    if not index:
+        return next(
+            (
+                j
+                for j in range(i + 1, len(qir))
+                if not removed[j] and qir[j]["index"] == index
+            ),
+            None,
+        )
+    first = len(qir)
+    for wire in index:
+        pending = successors[wire]
+        while pending and (pending[-1] <= i or removed[pending[-1]]):
+            pending.pop()
+        if pending:
+            first = min(first, pending[-1])
+    if first < len(qir) and qir[first]["index"] == index:
+        return first
+    return None
+
+
 def _merge(
     qir: List[Dict[str, Any]], rules: Dict[Tuple[str, ...], str]
 ) -> Tuple[List[Dict[str, Any]], bool]:
-    i = 0
+    successors: Dict[int, List[int]] = {}
+    for i in range(len(qir) - 1, -1, -1):
+        for wire in qir[i]["index"]:
+            successors.setdefault(wire, []).append(i)
+    removed = [False] * len(qir)
+    skip = False
     flg = False
-    while i < len(qir) - 1:
-        j = _find_next(qir, i)
-
+    for i in range(len(qir)):
+        if removed[i]:
+            continue
+        if skip:
+            # Compatibility shim for the former deletion-based traversal.
+            skip = False
+            continue
+        j = _find_next(qir, i, successors, removed)
         if j is not None:
             if (qir[i]["gatef"].n, qir[j]["gatef"].n) in rules:
                 nn = rules[(qir[i]["gatef"].n, qir[j]["gatef"].n)]
                 if nn == "i":
-                    del qir[i]
-                    del qir[j - 1]
+                    removed[i] = removed[j] = True
+                    skip = True
                 else:
                     param = {}
                     if nn.startswith("r") or nn.startswith("cr"):
@@ -226,7 +253,7 @@ def _merge(
                         "parameters": param,
                         "index": qir[i]["index"],
                     }
-                    del qir[j]
+                    removed[j] = True
                 flg = True
             elif (
                 qir[i]["gatef"].n == qir[j]["gatef"].n + "d"
@@ -239,10 +266,10 @@ def _merge(
                     )
                 )
                 if np.allclose(product, np.eye(product.shape[0]), rtol=1e-5, atol=1e-7):
-                    del qir[i]
-                    del qir[j - 1]
+                    removed[i] = removed[j] = True
+                    skip = True
                     flg = True
-        i += 1
+    qir[:] = [item for i, item in enumerate(qir) if not removed[i]]
     return qir, flg
 
 
