@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Accumulate charge-sector capacities when preparing symmetric MPS layouts to avoid repeated sector scans.
 - Export Qiskit initialization states and controlled unitaries by reversing tensor axes instead of allocating dense permutation matrices.
 - Compute pure-state entanglement entropy and mutual information using the smaller subsystem. Values change slightly because omitted zero eigenvalues no longer contribute a dimension-dependent regularization bias.
 - Find lattice distance shells with fixed-shape minimum reductions instead of sorting and scanning backend scalars.
