@@ -23,11 +23,13 @@
 - Compute finite-shot correlations from selected sample bits without materializing a complete bit matrix.
 - Build Pauli string sum matrices by grouping terms with the same X/Y flip pattern, reducing construction memory and matvec cost.
 - Merge pure Z/I terms of `PauliStringSum2MVP` into one precomputed diagonal.
+- Build `U1Operator` source indices with sorted searches and share one gather among terms with the same X/Y flip pattern, speeding up `U1Circuit.expectation_pss`.
 - `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators and uses BCSR only on CPU.
 - Mark `tensorcircuit.results.qem` and the CuPy backend as experimental: importing the former or setting the latter via `tc.set_backend("cupy")` emits `tc.utils.ExperimentalWarning`.
 
 ### Added
 
+- Add `U1Operator.mvp` for matrix-free products of a Pauli string sum restricted to a U(1) subspace, with differentiable weights, e.g., for `krylov_evol` within a fixed particle-number sector.
 - Add `PauliStringSum2CSR` and the backend method `csr_sparse_matrix`.
 - Support qudit density-matrix simulation with `tc.DMCircuit(n, dim=d)` for `d > 2`, including explicit single- and multi-site `unitary` gates and Kraus channels via `apply_general_kraus`.
 
