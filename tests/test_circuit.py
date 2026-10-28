@@ -2585,3 +2585,23 @@ def test_qiskit_export_complex_inputs_and_control(backend, highp):
     actual = qi.Statevector(c.to_qiskit(enable_inputs=True)).data
     expected = tc.backend.numpy(c.state()).reshape([2] * 4).transpose().reshape(-1)
     np.testing.assert_allclose(actual, expected, atol=1e-10)
+
+
+def test_qiskit_export_complex64_initialization(npb, monkeypatch):
+    qi = pytest.importorskip("qiskit.quantum_info")
+    qiskit = pytest.importorskip("qiskit")
+    initialize = qiskit.QuantumCircuit.initialize
+
+    def checked_initialize(self, params, *args, **kwargs):
+        assert params.dtype == np.complex128
+        return initialize(self, params, *args, **kwargs)
+
+    monkeypatch.setattr(qiskit.QuantumCircuit, "initialize", checked_initialize)
+    n = 12
+    rng = np.random.default_rng(0)
+    inputs = rng.normal(size=2**n) + 1j * rng.normal(size=2**n)
+    inputs = (inputs / np.linalg.norm(inputs)).astype(np.complex64)
+    circuit = tc.Circuit(n, inputs=inputs)
+    exported = circuit.to_qiskit(enable_inputs=True)
+    expected = inputs.reshape([2] * n).transpose().reshape(-1)
+    np.testing.assert_allclose(qi.Statevector(exported).data, expected, atol=1e-10)

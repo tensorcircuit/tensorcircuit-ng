@@ -1049,7 +1049,12 @@ class AbstractCircuit:
             inputs = (
                 np.asarray(inputs) if is_sequence(inputs) else tensor_to_numpy(inputs)
             )
-            initialization = inputs.reshape([2] * self._nqubits).transpose().reshape(-1)
+            initialization = (
+                inputs.astype(np.complex128)
+                .reshape([2] * self._nqubits)
+                .transpose()
+                .reshape(-1)
+            )
         else:
             initialization = None
         return qir2qiskit(
