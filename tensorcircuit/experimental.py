@@ -631,7 +631,7 @@ def broadcast_py_object_jax(obj: Any) -> Any:
         send_arr_uint8 = np.pad(  # type: ignore
             send_arr_uint8, (0, padded_length - send_arr_uint8.size), mode="constant"
         )
-    send_arr_int32 = send_arr_uint8.astype(np.int32)
+    send_arr_int32 = send_arr_uint8.view("<i4").astype(np.int32, copy=False)
     # send_arr_int32 = jaxlib.numpy.array(send_arr_int32, dtype=np.int32)
     send_arr_int32 = jaxlib.device_put(send_arr_int32)
 
@@ -640,7 +640,7 @@ def broadcast_py_object_jax(obj: Any) -> Any:
     received_arr = multihost_utils.broadcast_one_to_all(send_arr_int32)
 
     received_arr = np.array(received_arr)
-    received_arr_uint8 = received_arr.astype(np.uint8)
+    received_arr_uint8 = received_arr.astype("<i4", copy=False).view(np.uint8)
 
     # Step 3: Reconstruct the object from the received bytes.
     # Convert the NumPy array back to bytes, truncate any padding, and unpickle.
