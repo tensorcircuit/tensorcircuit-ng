@@ -64,7 +64,7 @@ def jax_wrapper(
                 for t in jax.tree_util.tree_leaves(x)
             ):
                 return jax.tree_util.tree_map(
-                    lambda y, spec: jax.numpy.asarray(y, dtype=spec.dtype),
+                    lambda y, spec: jax.numpy.array(y, dtype=spec.dtype, copy=True),
                     test_out,
                     out_shape,
                 )
