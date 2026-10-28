@@ -25,16 +25,15 @@ def get_ps(qo: Any, n: int) -> Tuple[Tensor, Tensor]:
     """
     value = gates.PAULI_CHAR_TO_INDEX
     terms = qo.terms
-    res = []
+    if not terms:
+        return np.array([]), np.array([])
+    res: Tensor = np.zeros((len(terms), n), dtype=int if n else float)
     wts = []
-    for key in terms:
-        bit = np.zeros(n, dtype=int)
-        for i in range(len(key)):
-            bit[key[i][0]] = value[key[i][1]]
-        w = terms[key]
-        res.append(tuple(bit))
-        wts.append(w)
-    return np.array(res), np.array(wts)
+    for row, (key, weight) in enumerate(terms.items()):
+        for qubit, pauli in key:
+            res[row, qubit] = value[pauli]
+        wts.append(weight)
+    return res, np.array(wts)
 
 
 def QUBO_to_Ising(Q: Tensor) -> Tuple[Tensor, List[float], float]:
