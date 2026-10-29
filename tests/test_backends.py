@@ -2081,6 +2081,10 @@ def test_gather_vmap_grad(backend):
                 if isinstance(gradient, tuple):
                     gradient = gradient[1]
                 np.testing.assert_allclose(K.numpy(gradient), expected)
+        vvag = K.vvag(loss, argnums=0, vectorized_argnums=1)
+        for evaluate in (vvag, K.jit(vvag)):
+            _, gradient = evaluate(operand, K.stack([indices, indices]))
+            np.testing.assert_allclose(K.numpy(gradient), 2 * expected)
 
     def select(x, i):
         return tc.backend.gather(x, i, axis=0)
