@@ -1916,6 +1916,34 @@ class ExtendedBackend:
         """
         return operand[indices]
 
+    def gather(self: Any, operand: Tensor, indices: Tensor, axis: int = 0) -> Tensor:
+        """
+        Select slices along one axis, preserving their order and duplicates.
+
+        The output shape is ``operand.shape[:axis] + indices.shape +
+        operand.shape[axis + 1:]`` after normalizing a negative axis.
+        Scalar indices remove the selected axis; empty indices produce an
+        empty output. All operand batch dimensions share the same indices;
+        use ``vmap`` for paired batches of operands and indices.
+
+        The result retains the operand's dtype and device. Gradients with
+        respect to the operand accumulate at repeated indices. The operation
+        supports JIT with a static axis on backends that support compilation.
+
+        :param operand: tensor of rank at least one
+        :type operand: Tensor
+        :param indices: int32 or int64 tensor of any rank on the operand's device;
+            entries must lie in ``[0, operand.shape[axis])``
+        :type indices: Tensor
+        :param axis: axis to select, in ``[-operand.ndim, operand.ndim)``
+        :type axis: int
+        :return: selected slices with the index dimensions inserted at ``axis``
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `gather`.".format(self.name)
+        )
+
     def scatter(
         self: Any,
         operand: Tensor,

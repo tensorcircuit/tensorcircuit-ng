@@ -429,6 +429,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
             shape = (shape,)
         return g.choice(a, size=shape, replace=True, p=p)
 
+    def gather(self, operand: Tensor, indices: Tensor, axis: int = 0) -> Tensor:
+        return np.take(operand, indices, axis=axis)
+
     def scatter(
         self, operand: Tensor, indices: Tensor, updates: Tensor, mode: str = "update"
     ) -> Tensor:

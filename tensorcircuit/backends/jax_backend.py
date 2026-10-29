@@ -773,6 +773,9 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     ) -> Tensor:
         return libjax.lax.scan(f, init, xs)
 
+    def gather(self, operand: Tensor, indices: Tensor, axis: int = 0) -> Tensor:
+        return jnp.take(operand, indices, axis=axis)
+
     def scatter(
         self, operand: Tensor, indices: Tensor, updates: Tensor, mode: str = "update"
     ) -> Tensor:

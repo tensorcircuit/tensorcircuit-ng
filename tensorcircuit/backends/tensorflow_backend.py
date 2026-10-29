@@ -78,6 +78,14 @@ def _promote_tf(a: Tensor, b: Tensor) -> Tuple[Tensor, Tensor]:
     return a, b
 
 
+def _densify_gradient(g: pytree) -> pytree:
+    # tape.gradient returns IndexedSlices for gather-like ops; expose dense tensors
+    return tf.nest.map_structure(
+        lambda gi: tf.convert_to_tensor(gi) if isinstance(gi, tf.IndexedSlices) else gi,
+        g,
+    )
+
+
 def _tensordot_tf(
     self: Any, a: Tensor, b: Tensor, axes: Union[int, Sequence[Sequence[int]]]
 ) -> Tensor:
@@ -844,6 +852,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
             a = tf.reverse(tf.reshape(a, (pre, shape[axis], post)), axis=[1])
         return tf.reshape(a, shape)
 
+    def gather(self, operand: Tensor, indices: Tensor, axis: int = 0) -> Tensor:
+        return tf.gather(operand, indices, axis=axis)
+
     def scatter(
         self, operand: Tensor, indices: Tensor, updates: Tensor, mode: str = "update"
     ) -> Tensor:
@@ -991,6 +1002,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
                     g = t.gradient(y[0], x)
                 else:
                     g = t.gradient(y, x)
+            g = _densify_gradient(g)
             if has_aux:
                 return (g, y[1:])
             return g
@@ -1021,6 +1033,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
                     g = t.gradient(y[0], x)
                 else:
                     g = t.gradient(y, x)
+            g = _densify_gradient(g)
             return y, g
 
         return wrapper
@@ -1069,16 +1082,10 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
             t.watch(inputs)
             y = f(*inputs)
         g = t.gradient(y, inputs, v)
-        g = list(g)
-        for i, gi in enumerate(g):
-            if gi is None:
-                g[i] = tf.zeros_like(inputs[i])
-            if isinstance(gi, tf.IndexedSlices):
-                # gradient can return sth weird
-                # TODO(@refraction-ray): check whether other AD tf methods have such issues
-                # shape is still unkown, dense_shape attr doesn't work?
-                g[i] = tf.convert_to_tensor(gi)
-        g = tuple(g)
+        g = tuple(
+            tf.zeros_like(inputs[i]) if gi is None else gi for i, gi in enumerate(g)
+        )
+        g = _densify_gradient(g)
         if one_input:
             g = g[0]
         return y, g
@@ -1160,6 +1167,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
                 grad = tape.gradient(vs[0], x)
             else:
                 grad = tape.gradient(vs, x)
+            grad = _densify_gradient(grad)
             return vs, grad
 
         return wrapper

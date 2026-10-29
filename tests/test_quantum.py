@@ -1952,7 +1952,7 @@ def test_count_d2s_preserves_gradient(backend):
     values = tc.backend.convert_to_tensor([0.2, 0.0, -0.3, 0.4])
     grad = tc.backend.grad(loss)(values)
     np.testing.assert_allclose(
-        tc.backend.numpy(tc.backend.convert_to_tensor(grad)),
+        tc.backend.numpy(grad),
         [0.4, 0.0, -0.6, 0.8],
         atol=1e-6,
     )

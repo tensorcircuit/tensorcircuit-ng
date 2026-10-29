@@ -1225,8 +1225,7 @@ def test_u1_operator_mvp(backend):
                 tc.backend.sum(tc.backend.conj(x) * op.mvp(weights)(x))
             )
 
-        # tensorflow returns IndexedSlices for gradients through gather
-        grad = tc.backend.convert_to_tensor(tc.backend.grad(energy)(w))
+        grad = tc.backend.grad(energy)(w)
         np.testing.assert_allclose(
             tc.backend.numpy(grad),
             [np.real(np.vdot(v, t @ v)) for t in terms],

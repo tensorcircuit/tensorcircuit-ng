@@ -694,6 +694,13 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         assert x is not None and y is not None
         return torchlib.where(condition, x, y)
 
+    def gather(self, operand: Tensor, indices: Tensor, axis: int = 0) -> Tensor:
+        ndim = len(operand.shape)
+        selected = torchlib.index_select(operand, axis, indices.reshape(-1).long())
+        axis = axis + ndim if axis < 0 else axis
+        shape = operand.shape[:axis] + indices.shape + operand.shape[axis + 1 :]
+        return selected.reshape(shape)
+
     def scatter(
         self, operand: Tensor, indices: Tensor, updates: Tensor, mode: str = "update"
     ) -> Tensor:
