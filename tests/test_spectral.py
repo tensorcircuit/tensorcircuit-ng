@@ -988,6 +988,29 @@ def test_fft_spectrum_jax_jit_times(jaxb):
     )
 
 
+def test_fft_spectrum_tf_function_times(tfb):
+    times = tc.backend.convert_to_tensor([0.0, 0.2, 0.4, 0.6])
+
+    def spectrum(time_grid):
+        return tc.spectral.fft_spectrum(
+            tc.backend.cast(time_grid, "complex64"), time_grid
+        )
+
+    _, values = tc.backend.jit(spectrum)(times)
+    expected = np.fft.fftshift(np.fft.ifft(np.asarray(times)) * 4 * 0.2)
+    np.testing.assert_allclose(values, expected, atol=4e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_fft_spectrum_float32_uniform_times(backend):
+    times = np.arange(4096, dtype=np.float32) * np.float32(0.02)
+    frequencies, _ = tc.spectral.fft_spectrum(np.ones(4096, dtype=np.complex64), times)
+    assert np.shape(frequencies) == (4096,)
+    times[2048] += np.float32(1.0e-3)
+    with pytest.raises(ValueError, match="uniformly spaced"):
+        tc.spectral.fft_spectrum(np.ones(4096, dtype=np.complex64), times)
+
+
 def test_spectral_validation_and_probe_distributions(npb):
     with pytest.raises(ValueError):
         tc.spectral.random_trace_probes(num_probes=0, dimension=2)

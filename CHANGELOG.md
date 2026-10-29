@@ -56,6 +56,7 @@
 - Preserve double precision for Python scalar inputs of `time_correlation`, `resolvent_bilinear`, and `zero_temperature_greens_function`, and for `convert_to_tensor(..., dtype=...)` on the PyTorch backend.
 - Exclude same-shot pairs in `shadows.renyi_entropy_2`, removing the `2**n / repeat` bias of the purity estimate. `repeat >= 2` is now required.
 - Return dense tensors instead of `IndexedSlices` from TensorFlow backend `grad`, `value_and_grad` and `vectorized_value_and_grad`, e.g., for gradients through `gather`, consistent with `vjp`.
+- Accept single-precision uniform time grids in `spectral.fft_spectrum` by scaling the uniformity tolerance with the input precision, and fix `fft_spectrum` inside TensorFlow `tf.function`.
 
 ## v1.10.0
 
