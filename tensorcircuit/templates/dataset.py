@@ -58,6 +58,8 @@ def mnist_pair_data(
         loader = tf.keras.datasets.mnist
 
     (x_train, y_train), (x_test, y_test) = loader.load_data()
+    x_train, y_train = filter_pair(x_train, y_train, a, b)
+    x_test, y_test = filter_pair(x_test, y_test, a, b)
     x_train, x_test = x_train[..., np.newaxis] / 255.0, x_test[..., np.newaxis] / 255.0
 
     if binarize:
@@ -66,6 +68,4 @@ def mnist_pair_data(
         x_test[x_test > threshold] = 1.0
         x_test[x_test <= threshold] = 0.0
 
-    x_train, y_train = filter_pair(x_train, y_train, a, b)
-    x_test, y_test = filter_pair(x_test, y_test, a, b)
     return (x_train, y_train), (x_test, y_test)
