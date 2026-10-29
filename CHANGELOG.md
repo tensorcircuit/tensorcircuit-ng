@@ -41,6 +41,7 @@
 
 ### Fixed
 
+- Normalize ZX scalar powers of two during multiplication to prevent overflow in large-circuit probabilities and sampling.
 - Fix finite-shot `count_vector` results on the JAX backend dropping the counts of the last basis state with `jittable=True`.
 - Fix `sample_bin` results for int64 samples on the TensorFlow backend and for qudits on the PyTorch backend, and `count_dict_bin` keys for large systems on the TensorFlow and PyTorch backends.
 - Preserve PyTorch entropy gradients by avoiding in-place spectrum normalization.
