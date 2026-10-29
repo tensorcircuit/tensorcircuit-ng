@@ -1401,7 +1401,7 @@ def fft_spectrum(
         raise ValueError("times must not be empty.")
     concrete_times = None
     try:
-        concrete_times = [float(x) for x in backend.numpy(times)]
+        concrete_times = backend.numpy(times).astype("float64", copy=False)
     except (TypeError, ValueError, RuntimeError):
         pass
     if concrete_times is not None:
@@ -1411,9 +1411,9 @@ def fft_spectrum(
             spacing = concrete_times[1] - concrete_times[0]
             if spacing <= 0:
                 raise ValueError("times must be strictly increasing.")
-            for left, right in zip(concrete_times[1:-1], concrete_times[2:]):
-                if abs((right - left) - spacing) > 1.0e-6 * max(1.0, abs(spacing)):
-                    raise ValueError("times must be uniformly spaced.")
+            differences = concrete_times[2:] - concrete_times[1:-1]
+            if (abs(differences - spacing) > 1.0e-6 * max(1.0, abs(spacing))).any():
+                raise ValueError("times must be uniformly spaced.")
     if length > 1:
         dt = times[1] - times[0]
     else:
