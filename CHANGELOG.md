@@ -5,6 +5,7 @@
 ### Changed
 
 - Export Qiskit initialization states and controlled unitaries by reversing tensor axes instead of allocating dense permutation matrices.
+- Compute pure-state entanglement entropy and mutual information using the smaller subsystem. Values change slightly because omitted zero eigenvalues no longer contribute a dimension-dependent regularization bias.
 - Find lattice distance shells with fixed-shape minimum reductions instead of sorting and scanning backend scalars.
 - Copy only the operator span when evaluating local MPS expectations.
 - Evaluate pure-state entanglement anti-flatness on the smaller subsystem.
@@ -40,6 +41,7 @@
 
 - Fix finite-shot `count_vector` results on the JAX backend dropping the counts of the last basis state with `jittable=True`.
 - Fix `sample_bin` results for int64 samples on the TensorFlow backend and for qudits on the PyTorch backend, and `count_dict_bin` keys for large systems on the TensorFlow and PyTorch backends.
+- Preserve PyTorch entropy gradients by avoiding in-place spectrum normalization.
 - Fix `PauliStringSum2COO`, `PauliStringSum2MVP` and one-dimensional `sparse_dense_matmul` on the PyTorch backend.
 - Propagate circuits in `pauli_propagation` and the Pauli propagation `compute_expectation_scan` methods with the gate matrices recorded in the circuit instead of rebuilding gates from display names, so renamed gates such as `c.h(0, name="x")` and adjoint gates from `Circuit.inverse()` (e.g. inverted `unitary` or `wroot`) propagate correctly; `apply_gate` of both Pauli propagation engines now accepts circuit gate aliases such as `cx` and `sdg`.
 - Return the conjugate-transposed right factor in PyTorch SVD, restoring complex tensor reconstruction and phase-invariant gradients even with older TensorNetwork dependencies.

@@ -305,6 +305,27 @@ def test_rm_state_vs_mps(backend):
     np.testing.assert_allclose(rm1, rm2, atol=atol)
 
 
+def test_entanglement_entropy_complement(npb, highp):
+    state = np.zeros(2**8, dtype="complex128")
+    state[0] = state[3 * 2**6] = 1 / np.sqrt(2)
+    traced = qu.entanglement_entropy(state, subsystems_to_trace_out=[0])
+    kept = qu.entanglement_entropy(state, subsystem_to_keep=[0])
+    np.testing.assert_allclose(traced, kept, atol=1e-12, rtol=0)
+    np.testing.assert_allclose(traced, np.log(2), atol=3e-12, rtol=0)
+
+
+def test_entropy_pytorch_gradient(torchb, highp):
+    def loss(p):
+        rho = tc.backend.diagflat(tc.backend.stack([p, 1.0 - p]))
+        return qu.entropy(rho)
+
+    probability = tc.backend.convert_to_tensor(0.3, dtype="float64")
+    gradient = tc.backend.grad(loss)(probability)
+    np.testing.assert_allclose(
+        tc.backend.numpy(gradient), np.log(0.7 / 0.3), atol=1e-10
+    )
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_trace_product(backend):
     o = np.ones([2, 2])
