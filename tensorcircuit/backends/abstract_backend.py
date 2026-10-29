@@ -2504,6 +2504,11 @@ class ExtendedBackend:
         """
         Compute the Jacobian of ``f`` using reverse mode AD.
 
+        For complex-valued ``f``, the result follows the backend ``vjp``
+        convention: the TensorFlow and PyTorch results are the complex
+        conjugate of the JAX result. For holomorphic ``f``, the JAX result
+        equals the ``jacfwd`` result.
+
         :param f: The function whose Jacobian is required
         :type f: Callable[..., Any]
         :param argnums: the position of the arg as Jacobian input, defaults to 0
@@ -2517,7 +2522,7 @@ class ExtendedBackend:
             argnums = (argnums,)
 
         def wrapper(*args: Any, **kws: Any) -> Any:
-            selected = tuple(i for i in range(len(args)) if i in argnums)
+            selected = tuple(sorted({range(len(args))[i] for i in argnums}))
 
             def pf(*differentiated: Any) -> Any:
                 selected_args = list(args)
@@ -2553,7 +2558,8 @@ class ExtendedBackend:
                                 if i == k
                                 else self.reshape(
                                     self.zeros(
-                                        [self.sizen(v), self.sizen(v)], dtype=v.dtype
+                                        [self.sizen(values[k]), self.sizen(v)],
+                                        dtype=v.dtype,
                                     ),
                                     [-1] + list(self.shape_tuple(v)),
                                 )
