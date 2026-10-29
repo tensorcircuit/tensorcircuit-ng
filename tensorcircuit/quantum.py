@@ -2784,10 +2784,13 @@ def count_s2d(
     :rtype: Tensor
     """
     dim = 2 if dim is None else dim
+    # ``mode="add"``: jittable ``sample2count`` pads with index -1 and count 0,
+    # which must not overwrite the last entry
     return backend.scatter(
         backend.cast(backend.zeros([dim**n]), srepr[1].dtype),
         backend.reshape(srepr[0], [-1, 1]),
         srepr[1],
+        mode="add",
     )
 
 

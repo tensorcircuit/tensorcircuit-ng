@@ -1576,6 +1576,16 @@ def test_count_s2d(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_count_vector_keeps_highest_bin(backend):
+    s = tc.backend.convert_to_tensor(np.array([7, 7, 0], dtype=np.int32))
+    expected = np.array([1, 0, 0, 0, 0, 0, 0, 2])
+    r = tc.quantum.sample2all(s, 3, format="count_vector", jittable=True)
+    np.testing.assert_array_equal(tc.backend.numpy(r), expected)
+    r = tc.quantum.count_s2d(tc.quantum.sample2count(s, 3, jittable=True), 3)
+    np.testing.assert_array_equal(tc.backend.numpy(r), expected)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_sample_bin2int(backend):
     for n, dim in [(3, 2), (3, 3), (4, 5), (4, 10), (5, 36)]:
         trials = 10
