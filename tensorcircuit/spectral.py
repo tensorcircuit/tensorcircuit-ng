@@ -1331,6 +1331,24 @@ def time_correlation(
             ),
             left_vector,
         )
+    if (
+        isinstance(method, ChebyshevConfig)
+        and method.scaling_steps == 1
+        and not scalar
+        and backend.shape_tuple(times)[0] >= 4 * method.order
+        and backend.shape_tuple(right_vector)[0] >= 2048
+    ):
+        coefficients = matrixfunc.exponential_coefficients(
+            -1.0j * complex_times, method
+        )
+        return phase * matrixfunc._chebyshev_bilinear(
+            operator,
+            left_vector,
+            right_vector,
+            coefficients,
+            method,
+            dimension=dimension,
+        )
     action = matrixfunc.exponential_action(
         operator,
         right_vector,
