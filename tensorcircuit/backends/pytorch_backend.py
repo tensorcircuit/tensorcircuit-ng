@@ -869,11 +869,15 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         inputs: Union[Tensor, Sequence[Tensor]],
         v: Union[Tensor, Sequence[Tensor]],
     ) -> Tuple[Union[Tensor, Sequence[Tensor]], Union[Tensor, Sequence[Tensor]]]:
-        if isinstance(inputs, list):
+        single_input = not isinstance(inputs, (tuple, list))
+        if single_input:
+            inputs = (inputs,)
+        elif isinstance(inputs, list):
             inputs = tuple(inputs)
-        if isinstance(v, list):
-            v = tuple(v)
-        return torchlib.autograd.functional.vjp(f, inputs, v)  # type: ignore
+        value, pullback = torchlib.func.vjp(f, *inputs)
+        v = self.tree_unflatten(self.tree_flatten(value)[1], self.tree_flatten(v)[0])
+        gradients = pullback(v)
+        return value, gradients[0] if single_input else gradients
 
     def jvp(
         self,
@@ -881,15 +885,13 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         inputs: Union[Tensor, Sequence[Tensor]],
         v: Union[Tensor, Sequence[Tensor]],
     ) -> Tuple[Union[Tensor, Sequence[Tensor]], Union[Tensor, Sequence[Tensor]]]:
-        if isinstance(inputs, list):
-            inputs = tuple(inputs)
-        if isinstance(v, list):
-            v = tuple(v)
-        # for both tf and torch
-        # behind the scene: https://j-towns.github.io/2017/06/12/A-new-trick.html
-        # to be investigate whether the overhead issue remains as in
-        # https://github.com/renmengye/tensorflow-forward-ad/issues/2
-        return torchlib.autograd.functional.jvp(f, inputs, v)  # type: ignore
+        inputs = tuple(inputs) if isinstance(inputs, (tuple, list)) else (inputs,)
+        v = tuple(v) if isinstance(v, (tuple, list)) else (v,)
+        # Reverse-over-reverse also supports operators with only a custom backward.
+        value, pullback = torchlib.func.vjp(f, *inputs)
+        zeros = self.tree_map(torchlib.zeros_like, value)
+        _, pushforward = torchlib.func.vjp(pullback, zeros)
+        return value, pushforward(v)[0]
 
     def vmap(
         self,
