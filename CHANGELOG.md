@@ -41,6 +41,7 @@
 
 ### Fixed
 
+- Fix contracting hyperedge networks whose hyperedge carries several open legs or no tensor, e.g., `Circuit.matrix()` with an idle qubit, on an empty circuit or with a `diagonal` gate.
 - Fix finite-shot `count_vector` results on the JAX backend dropping the counts of the last basis state with `jittable=True`.
 - Fix `sample_bin` results for int64 samples on the TensorFlow backend and for qudits on the PyTorch backend, and `count_dict_bin` keys for large systems on the TensorFlow and PyTorch backends.
 - Preserve PyTorch entropy gradients by avoiding in-place spectrum normalization.

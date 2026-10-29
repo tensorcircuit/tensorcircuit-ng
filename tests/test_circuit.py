@@ -743,6 +743,28 @@ def test_circuit_matrix(backend):
     np.testing.assert_allclose(c.state(), np.array([0, 1.0, 0, 0]), atol=1e-5)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_circuit_matrix_idle_wire_and_diagonal(backend):
+    x = np.array([[0, 1.0], [1.0, 0]])
+    c = tc.Circuit(2)
+    c.x(0)
+    np.testing.assert_allclose(c.matrix(), np.kron(x, np.eye(2)), atol=1e-5)
+    np.testing.assert_allclose(
+        c.quoperator().eval_matrix(), np.kron(x, np.eye(2)), atol=1e-5
+    )
+    m = tc.Circuit(2).matrix()
+    assert m.dtype == c.state().dtype
+    np.testing.assert_allclose(m, np.eye(4), atol=1e-5)
+
+    diag = np.array([1.0, 1j])
+    c = tc.Circuit(2)
+    c.x(0)
+    c.diagonal(1, diag=tc.backend.convert_to_tensor(diag.astype(tc.dtypestr)))
+    m = c.matrix()
+    assert m.dtype == c.state().dtype
+    np.testing.assert_allclose(m, np.kron(x, np.diag(diag)), atol=1e-5)
+
+
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
 def test_circuit_split(backend):
     n = 4

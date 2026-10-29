@@ -529,15 +529,36 @@ def _extract_topology(
         raw_tensors.append(node.tensor)
 
     dangling_edges = sorted_edges(tn.get_subgraph_dangling(nodes))
-    output_set = []
+    # rank-2 deltas below keep the network dtype; a network of CopyNodes only
+    # takes the dtype declared by its CopyNodes
+    dtype = None
+    if raw_tensors:
+        dtype = raw_tensors[0].dtype
+    elif copy_nodes:
+        dtype = np.result_type(*[n.copy_node_dtype for n in copy_nodes]).name
+    input_symbols = set("".join(input_sets))
+    open_sizes = {}
+    output_set: List[str] = []
     for edge in dangling_edges:
         root = uf[edge]
         if root not in mapping_dict:
             mapping_dict[root] = get_symbol(symbol_counter)
             symbol_counter += 1
-        output_set.append(mapping_dict[root])
+        symbol = mapping_dict[root]
+        if symbol in output_set or symbol not in input_symbols:
+            # einsum cannot write a diagonal (``i->ii``) or create an index
+            # (``->i``), so tie this open leg to its hyperedge by a rank-2 delta
+            open_symbol = get_symbol(symbol_counter)
+            symbol_counter += 1
+            input_sets.append(symbol + open_symbol)
+            raw_tensors.append(backend.eye(edge.dimension, dtype=dtype))
+            input_symbols.add(symbol)
+            open_sizes[open_symbol] = edge.dimension
+            symbol = open_symbol
+        output_set.append(symbol)
 
     size_dict = {symbol: root.dimension for root, symbol in mapping_dict.items()}
+    size_dict.update(open_sizes)
     return (
         raw_tensors,
         input_sets,
