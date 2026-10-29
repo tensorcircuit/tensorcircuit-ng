@@ -358,7 +358,6 @@ class U1Circuit(AbstractCircuit):
         assert k is not None
         self._dim = comb(nqubits, k)
         self._basis_np = _get_subsystem_basis_static(nqubits, k)
-        self._basis = self._basis_np.tolist()
 
         self._idtypestr = "int64" if nqubits > 30 else idtypestr
 
@@ -822,7 +821,7 @@ class U1Circuit(AbstractCircuit):
         u1_indices = backend.probability_sample(nbatch, p, status, random_generator)
 
         # Map U(1) indices to full basis integers
-        # u1_indices are indices into self._basis
+        # u1_indices are indices into the U(1) basis
         full_indices = backend.gather1d(self._basis_tensor, u1_indices)
 
         if format is None:
