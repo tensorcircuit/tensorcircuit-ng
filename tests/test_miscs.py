@@ -550,20 +550,23 @@ def test_jax_jitted_function_save_load_v2(backend, tmp_path):
     np.testing.assert_allclose(f_load(x), f(x), atol=1e-5)
 
 
-@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
 def test_qng_options(backend):
     def f(params):
-        c = tc.Circuit(1)
+        c = tc.Circuit(2)
         c.rx(0, theta=params[0])
+        c.ry(1, theta=params[1])
+        c.cnot(0, 1)
+        c.rz(1, theta=params[2])
         return c.state()
 
-    params = tc.backend.ones([1])
+    params = tc.backend.convert_to_tensor(np.array([0.1, 0.4, 0.9]))
     # test different options in qng to hit more lines
     qng_fn = experimental.qng(f, mode="fwd")
-    qng_fn(params)
+    fim = qng_fn(params)
 
     qng_fn2 = experimental.qng(f, mode="rev")
-    qng_fn2(params)
+    np.testing.assert_allclose(qng_fn2(params), fim, atol=1e-5)
 
     qng_fn3 = experimental.qng(f, kernel="dynamics", postprocess=None)
     qng_fn3(params)

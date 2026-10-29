@@ -1309,6 +1309,13 @@ def test_jac(backend, mode):
     np.testing.assert_allclose(jacf4(x, x)[1][1], np.eye(3), atol=1e-5)
     np.testing.assert_allclose(jacf4(x, x)[0][1], np.zeros([3, 3]), atol=1e-5)
 
+    def f5(x, y):
+        return x**2, y * tc.backend.sum(x)
+
+    jacf5 = backend_jac(f5, argnums=-1)(x, tc.backend.ones([2]))
+    np.testing.assert_allclose(jacf5[0], np.zeros([3, 2]), atol=1e-5)
+    np.testing.assert_allclose(jacf5[1], 3 * np.eye(2), atol=1e-5)
+
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
 @pytest.mark.parametrize("mode", ["jacfwd", "jacrev"])

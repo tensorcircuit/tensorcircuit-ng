@@ -30,6 +30,7 @@
 - `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators and uses BCSR only on CPU.
 - Mark `tensorcircuit.results.qem` and the CuPy backend as experimental: importing the former or setting the latter via `tc.set_backend("cupy")` emits `tc.utils.ExperimentalWarning`.
 - Unify measurement result format conversions: finite-shot `count_vector` is counted by one histogram on all backends, and basis labels are encoded and decoded by one vectorized helper (ideas from #232, #237, #238 and #242).
+- Differentiate only the selected arguments in generic `jacfwd`, `jacrev` and `hessian`, so non-selected arguments need not be tensors. TensorFlow `jvp` returns zero tangents for outputs disconnected from the inputs instead of `None`.
 
 ### Added
 
@@ -44,6 +45,8 @@
 - Fix `sample_bin` results for int64 samples on the TensorFlow backend and for qudits on the PyTorch backend, and `count_dict_bin` keys for large systems on the TensorFlow and PyTorch backends.
 - Preserve PyTorch entropy gradients by avoiding in-place spectrum normalization.
 - Fix PyTorch generic Jacobian and Hessian transforms by using composable derivative primitives; public `vjp` and `jvp` retain their derivative graphs for higher-order differentiation.
+- Fix generic `jacfwd` returning zero Jacobians and `jacrev`/`hessian` returning empty results for negative `argnums`; `jacrev` now raises `IndexError` for out-of-range `argnums` like `jacfwd`, and supports multiple outputs of different sizes.
+- Fix `experimental.qng(..., mode="rev")` on the TensorFlow and PyTorch backends, which built the metric from the conjugated Jacobian returned by their `jacrev`.
 - Fix `PauliStringSum2COO`, `PauliStringSum2MVP` and one-dimensional `sparse_dense_matmul` on the PyTorch backend.
 - Propagate circuits in `pauli_propagation` and the Pauli propagation `compute_expectation_scan` methods with the gate matrices recorded in the circuit instead of rebuilding gates from display names, so renamed gates such as `c.h(0, name="x")` and adjoint gates from `Circuit.inverse()` (e.g. inverted `unitary` or `wroot`) propagate correctly; `apply_gate` of both Pauli propagation engines now accepts circuit gate aliases such as `cx` and `sdg`.
 - Return the conjugate-transposed right factor in PyTorch SVD, restoring complex tensor reconstruction and phase-invariant gradients even with older TensorNetwork dependencies.

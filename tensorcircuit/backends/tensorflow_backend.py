@@ -1059,7 +1059,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
             v = tuple([tf.identity(vi) for vi in v])
         with tf.autodiff.ForwardAccumulator(inputs, v) as t:
             y = f(*inputs)
-        g = t.jvp(y)
+        g = t.jvp(y, unconnected_gradients=tf.UnconnectedGradients.ZERO)
         return y, g
 
     def vjp(
