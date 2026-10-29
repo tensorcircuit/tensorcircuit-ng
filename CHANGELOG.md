@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Export Qiskit initialization states and controlled unitaries by reversing tensor axes instead of allocating dense permutation matrices.
 - Find lattice distance shells with fixed-shape minimum reductions instead of sorting and scanning backend scalars.
 - Copy only the operator span when evaluating local MPS expectations.
 - Evaluate pure-state entanglement anti-flatness on the smaller subsystem.

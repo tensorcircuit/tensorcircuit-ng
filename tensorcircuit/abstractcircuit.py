@@ -26,6 +26,7 @@ import tensornetwork as tn
 from . import gates
 from .cons import backend, dtypestr
 from .quantum import QuOperator
+from .interfaces.tensortrans import tensor_to_numpy
 from .utils import is_sequence
 from .vis import qir2tex
 
@@ -1036,7 +1037,7 @@ class AbstractCircuit:
         :type enable_inputs: bool, defaults to False
         :return: A qiskit object of this circuit.
         """
-        from .translation import perm_matrix, qir2qiskit
+        from .translation import qir2qiskit
 
         qir = self.to_qir()
         if enable_instruction:
@@ -1044,7 +1045,16 @@ class AbstractCircuit:
         else:
             extra_qir = None
         if enable_inputs and self.circuit_param.get("inputs") is not None:
-            initialization = perm_matrix(self._nqubits).T @ self.circuit_param["inputs"]
+            inputs = self.circuit_param["inputs"]
+            inputs = (
+                np.asarray(inputs) if is_sequence(inputs) else tensor_to_numpy(inputs)
+            )
+            initialization = (
+                inputs.astype(np.complex128)
+                .reshape([2] * self._nqubits)
+                .transpose()
+                .reshape(-1)
+            )
         else:
             initialization = None
         return qir2qiskit(
