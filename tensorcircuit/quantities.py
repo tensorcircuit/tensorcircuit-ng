@@ -211,7 +211,8 @@ def entanglement_entropy(
         n, cut, subsystem_to_keep, subsystems_to_trace_out, name="entanglement_entropy"
     )
     if not is_density_matrix and len(traceout) < n - len(traceout):
-        traceout = [i for i in range(n) if i not in traceout]
+        traced = set(traceout)
+        traceout = [i for i in range(n) if i not in traced]
     rho = reduced_density_matrix(state, subsystems_to_trace_out=traceout, dim=dim)
     return entropy(rho)
 
