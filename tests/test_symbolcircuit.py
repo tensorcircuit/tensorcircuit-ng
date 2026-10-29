@@ -1317,14 +1317,16 @@ def test_to_circuit_lambdifies_nonlinear_expression_with_jax_ad(
     theta = sym["theta"]
     sc = SymbolCircuit(1)
     sc.rx(0, theta=sympy.sin(theta))
+    sc.rx(0, theta=sympy.sin(theta))
 
     def loss(value):
         circuit = sc.to_circuit({theta: value})
         return tc.backend.real(circuit.expectation_ps(z=[0]))
 
+    np.testing.assert_allclose(loss(0.1), np.cos(2 * np.sin(0.1)), atol=1e-6)
     value, gradient = tc.backend.jit(tc.backend.value_and_grad(loss))(0.4)
-    expected_value = np.cos(np.sin(0.4))
-    expected_gradient = -np.sin(np.sin(0.4)) * np.cos(0.4)
+    expected_value = np.cos(2 * np.sin(0.4))
+    expected_gradient = -2 * np.sin(2 * np.sin(0.4)) * np.cos(0.4)
     np.testing.assert_allclose(value, expected_value, atol=1e-6, rtol=0.0)
     np.testing.assert_allclose(gradient, expected_gradient, atol=1e-6, rtol=0.0)
 

@@ -771,13 +771,21 @@ class SymbolCircuit(Circuit):
         return function(*(self._coerce_binding(param_dict[symbol]) for symbol in args))
 
     def _bound_qir(self, param_dict: Dict[sympy.Symbol, Any]) -> List[Dict[str, Any]]:
+        cache: Dict[sympy.Basic, Any] = {}
+
+        def bind_value(k: str, value: Any) -> Any:
+            if not isinstance(value, sympy.Basic):
+                return self._bind_value(k, value, param_dict)
+            if value not in cache:
+                cache[value] = self._bind_value(k, value, param_dict)
+            return cache[value]
+
         bound_qir = []
         for instruction in self._qir:
             bound_instruction = dict(instruction)
             if "parameters" in instruction:
                 bound_instruction["parameters"] = {
-                    k: self._bind_value(k, v, param_dict)
-                    for k, v in instruction["parameters"].items()
+                    k: bind_value(k, v) for k, v in instruction["parameters"].items()
                 }
             bound_qir.append(bound_instruction)
         return bound_qir
