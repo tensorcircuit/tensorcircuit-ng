@@ -640,6 +640,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         return tf.math.floor(a)
 
     def floor_divide(self, x: Tensor, y: Tensor) -> Tensor:
+        x, y = _promote_tf(x, y)
         return tf.math.floordiv(x, y)
 
     def concat(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
@@ -714,12 +715,15 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         return tf.range(start=start, limit=stop, delta=step)
 
     def mod(self, x: Tensor, y: Tensor) -> Tensor:
+        x, y = _promote_tf(x, y)
         return tf.math.mod(x, y)
 
     def right_shift(self, x: Tensor, y: Tensor) -> Tensor:
+        x, y = _promote_tf(x, y)
         return tf.bitwise.right_shift(x, y)
 
     def left_shift(self, x: Tensor, y: Tensor) -> Tensor:
+        x, y = _promote_tf(x, y)
         return tf.bitwise.left_shift(x, y)
 
     def bitwise_and(self, x: Tensor, y: Tensor) -> Tensor:

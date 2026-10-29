@@ -1585,6 +1585,35 @@ def test_count_vector_keeps_highest_bin(backend):
     np.testing.assert_array_equal(tc.backend.numpy(r), expected)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_sample2all_formats(backend):
+    for n, dim in [(3, 2), (2, 3)]:
+        s = np.array([0, dim**n - 1, 4, dim**n - 1, 4, 4])
+        digits = np.array(
+            [[v // dim ** (n - 1 - j) % dim for j in range(n)] for v in s]
+        )
+        labels = ["".join(str(d) for d in row) for row in digits]
+        for dtype in [np.int32, np.int64]:
+            st = tc.backend.convert_to_tensor(s.astype(dtype))
+            r = tc.quantum.sample2all(st, n, format="sample_bin", dim=dim)
+            np.testing.assert_array_equal(tc.backend.numpy(r), digits)
+            r = tc.quantum.sample2all(st, n, format="count_vector", dim=dim)
+            np.testing.assert_array_equal(
+                tc.backend.numpy(r), np.bincount(s, minlength=dim**n)
+            )
+            r = tc.quantum.sample2all(st, n, format="count_dict_bin", dim=dim)
+            assert r == {k: labels.count(k) for k in labels}
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_sample2all_large_n_count_dict(backend):
+    s = np.array([[0] * 33 + [1], [1] * 34, [0] * 33 + [1]], dtype=np.int32)
+    r = tc.quantum.sample2all(
+        tc.backend.convert_to_tensor(s), 34, format="count_dict_bin"
+    )
+    assert r == {"0" * 33 + "1": 2, "1" * 34: 1}
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_sample_bin2int(backend):
     for n, dim in [(3, 2), (3, 3), (4, 5), (4, 10), (5, 36)]:

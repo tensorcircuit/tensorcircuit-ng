@@ -27,6 +27,7 @@
 - Build `U1Operator` source indices with sorted searches and share one gather among terms with the same X/Y flip pattern, speeding up `U1Circuit.expectation_pss`.
 - `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators and uses BCSR only on CPU.
 - Mark `tensorcircuit.results.qem` and the CuPy backend as experimental: importing the former or setting the latter via `tc.set_backend("cupy")` emits `tc.utils.ExperimentalWarning`.
+- Unify measurement result format conversions: finite-shot `count_vector` is counted by one histogram on all backends, and basis labels are encoded and decoded by one vectorized helper (ideas from #232, #237, #238 and #242).
 
 ### Added
 
@@ -37,6 +38,7 @@
 ### Fixed
 
 - Fix finite-shot `count_vector` results on the JAX backend dropping the counts of the last basis state with `jittable=True`.
+- Fix `sample_bin` results for int64 samples on the TensorFlow backend and for qudits on the PyTorch backend, and `count_dict_bin` keys for large systems on the TensorFlow and PyTorch backends.
 - Fix `PauliStringSum2COO`, `PauliStringSum2MVP` and one-dimensional `sparse_dense_matmul` on the PyTorch backend.
 - Propagate circuits in `pauli_propagation` and the Pauli propagation `compute_expectation_scan` methods with the gate matrices recorded in the circuit instead of rebuilding gates from display names, so renamed gates such as `c.h(0, name="x")` and adjoint gates from `Circuit.inverse()` (e.g. inverted `unitary` or `wroot`) propagate correctly; `apply_gate` of both Pauli propagation engines now accepts circuit gate aliases such as `cx` and `sdg`.
 - Return the conjugate-transposed right factor in PyTorch SVD, restoring complex tensor reconstruction and phase-invariant gradients even with older TensorNetwork dependencies.

@@ -6,7 +6,13 @@ from typing import Any, Dict, Optional, Sequence
 
 import numpy as np
 
-from ..quantum import _decode_basis_label
+from ..interfaces import which_backend
+from ..quantum import (
+    _decode_basis_labels,
+    _encode_basis_labels,
+    _infer_num_sites,
+    count_vector2dict,
+)
 
 Tensor = Any
 ct = Dict[str, int]
@@ -122,17 +128,17 @@ def count2vec(
 
     dim = 2 if dim is None else dim
 
-    n = len(next(iter(count)).upper())
+    labels = list(count)
+    n = len(labels[0])
     prob = np.zeros(dim**n, dtype=float)
     shots = float(sum(count.values())) if normalization else 1.0
     if shots == 0:
         return prob
 
-    powers = [dim**p for p in range(n)][::-1]
-    for k, v in count.items():
-        digits = _decode_basis_label(k, n, dim)
-        idx = sum(dig * p for dig, p in zip(digits, powers))
-        prob[idx] = (v / shots) if normalization else v
+    idx = np.zeros(len(labels), dtype=np.int64)
+    for digit in _decode_basis_labels(labels, n, dim).T:
+        idx = idx * dim + digit
+    prob[idx] = np.array(list(count.values()), dtype=float) / shots
 
     return prob
 
@@ -147,17 +153,19 @@ def vec2count(vec: Tensor, prune: bool = False, dim: Optional[int] = None) -> ct
     :param dim: Dimensionality of the vector, defaults to 2
     :return: {base-d string key: value}, key length n
     """
-    from ..quantum import count_vector2dict, _infer_num_sites
-
     dim = 2 if dim is None else dim
     if isinstance(vec, list):
         vec = np.array(vec)
     n = _infer_num_sites(int(vec.shape[0]), dim)
-    c: ct = count_vector2dict(vec, n, key="bin", dim=dim)  # type: ignore
-    if prune:
-        c = {k: v for k, v in c.items() if np.abs(v) >= 1e-8}
-
-    return c
+    if not prune:
+        return count_vector2dict(vec, n, key="bin", dim=dim)  # type: ignore
+    values = which_backend(vec).numpy(vec)
+    # compare in float64 as the Python scalars of the unpruned path
+    idx = np.flatnonzero(
+        np.abs(values.astype(np.result_type(values, np.float64))) >= 1e-8
+    )
+    labels = _encode_basis_labels(idx, n, dim)
+    return dict(zip(labels, values[idx].tolist()))
 
 
 def kl_divergence(c1: ct, c2: ct) -> float:
@@ -201,18 +209,23 @@ def expectation(
     """
     if z is None and diagonal_op is None:
         raise ValueError("One of `z` and `diagonal_op` must be set")
-    n = len(list(count.keys())[0])
+    keys = list(count)
+    n = len(keys[0])
+    dim = 2 if z is not None else 36
+    digits = (
+        _decode_basis_labels(keys, n, dim)
+        if isinstance(keys[0], str)
+        else np.asarray(keys)
+    )
     if z is not None:
-        diagonal_op = [[1, -1] if i in z else [1, 1] for i in range(n)]
-    r = 0
-    shots = 0
-    for k, v in count.items():
-        cr = 1.0
-        for i in range(n):
-            cr *= diagonal_op[i][int(k[i])]  # type: ignore
-        r += cr * v  # type: ignore
-        shots += v
-    return r / shots
+        parity = digits[:, np.isin(np.arange(n), z)].sum(axis=1) % 2
+        weights = (1.0 - 2.0 * parity).tolist()
+    else:
+        weights = [1.0] * len(keys)
+        for op, column in zip(diagonal_op, digits.T):  # type: ignore
+            weights = [w * op[d] for w, d in zip(weights, column.tolist())]
+    values = list(count.values())
+    return sum(w * v for w, v in zip(weights, values)) / sum(values)  # type: ignore
 
 
 def merge_count(*counts: ct) -> ct:

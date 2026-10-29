@@ -123,6 +123,12 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
             dtype = dtypestr
         return cp.zeros(shape, dtype=dtype)
 
+    def zeros_like(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
+        return cp.zeros_like(a, dtype=dtype)
+
+    def ones_like(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
+        return cp.ones_like(a, dtype=dtype)
+
     def copy(self, a: Tensor) -> Tensor:
         return a.copy()
 
@@ -131,6 +137,9 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
 
     def abs(self, a: Tensor) -> Tensor:
         return cp.abs(a)
+
+    def power(self, a: Tensor, b: Union[Tensor, float]) -> Tensor:
+        return cp.power(a, b)
 
     def sin(self, a: Tensor) -> Tensor:
         return cp.sin(a)

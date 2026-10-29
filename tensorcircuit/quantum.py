@@ -213,6 +213,23 @@ def onehot_d_tensor(_k: Union[int, Tensor], d: int = 2) -> Tensor:
     return backend.cast(vec, dtypestr)
 
 
+_LABEL_CODES = np.array([ord(ch) for ch in _ALPHABET], dtype=np.uint32)
+# int8 digit of each code point below 256, -1 for characters out of 0-9A-Za-z
+_LABEL_DIGITS = np.full(256, -1, dtype=np.int8)
+_LABEL_DIGITS[_LABEL_CODES] = np.arange(len(_ALPHABET))
+_LABEL_DIGITS[[ord(ch) for ch in _ALPHABET.lower()]] = np.arange(len(_ALPHABET))
+# labels are encoded in chunks to bound the temporary digit and code arrays
+_LABEL_CHUNK = 2**14
+
+
+def _check_label_dim(dim: int) -> None:
+    if dim > 36:
+        raise NotImplementedError(
+            f"String basis label supports d<=36 (0-9A-Z). Got dim={dim}. "
+            "Use an integer array/tensor of length n instead."
+        )
+
+
 def _decode_basis_label(label: str, n: int, dim: int) -> List[int]:
     """
     Decode a string basis label into a list of integer digits.
@@ -233,27 +250,74 @@ def _decode_basis_label(label: str, n: int, dim: int) -> List[int]:
     :raises ValueError: if the label length mismatches ``n``,
                         or contains invalid/out-of-range characters
     """
-    if dim > 36:
-        raise NotImplementedError(
-            f"String basis label supports d<=36 (0-9A-Z). Got dim={dim}. "
-            "Use an integer array/tensor of length n instead."
+    return _decode_basis_labels([label], n, dim)[0].tolist()  # type: ignore
+
+
+def _decode_basis_labels(labels: Sequence[str], n: int, dim: int) -> Tensor:
+    """
+    Vectorized :py:func:`_decode_basis_label` for many labels, case-insensitive.
+
+    :param labels: basis label strings, each of length ``n``
+    :type labels: Sequence[str]
+    :param n: number of sites
+    :type n: int
+    :param dim: local dimension (2 <= dim <= 36)
+    :type dim: int
+    :return: digits in shape ``[len(labels), n]``
+    :rtype: np.ndarray
+    """
+    _check_label_dim(dim)
+    arr = np.asarray(labels, dtype=str).reshape([-1])
+    lengths = np.char.str_len(arr)
+    if np.any(lengths != n):
+        bad = int(lengths[np.argmax(lengths != n)])
+        raise ValueError(f"Basis label length mismatch: expect {n}, got {bad}")
+    width = max(n, 1)
+    codes = arr.astype(f"U{width}", copy=False).view(np.uint32).reshape([-1, width])
+    digits = np.empty([codes.shape[0], n], dtype=np.int8)
+    # column-wise lookups keep the intp index temporaries small
+    for j in range(n):
+        digits[:, j] = np.take(_LABEL_DIGITS, codes[:, j], mode="clip")
+    if np.any(digits < 0):
+        i, j = np.argwhere(digits < 0)[0]
+        raise ValueError(
+            f"Invalid character '{arr[i][j]}' in basis label (allowed 0-9A-Z)."
         )
-    s = label.upper()
-    if len(s) != n:
-        raise ValueError(f"Basis label length mismatch: expect {n}, got {len(s)}")
-    digits = []
-    for ch in s:
-        if ch not in _ALPHABET:
-            raise ValueError(
-                f"Invalid character '{ch}' in basis label (allowed 0-9A-Z)."
-            )
-        v = _ALPHABET.index(ch)
-        if v >= dim:
-            raise ValueError(
-                f"Digit '{ch}' (= {v}) out of range for base-d with dim={dim}."
-            )
-        digits.append(v)
+    if np.any(digits >= dim):
+        i, j = np.argwhere(digits >= dim)[0]
+        raise ValueError(
+            f"Digit '{_ALPHABET[digits[i, j]]}' (= {digits[i, j]}) "
+            f"out of range for base-d with dim={dim}."
+        )
     return digits
+
+
+def _encode_basis_labels(states: Tensor, n: int, dim: int) -> List[str]:
+    """
+    Encode basis states as base-``dim`` label strings (0-9A-Z) on the host.
+
+    :param states: linear basis indices in shape ``[m]``
+        or per-site digits in shape ``[m, n]``
+    :type states: np.ndarray
+    :param n: number of sites
+    :type n: int
+    :param dim: local dimension (2 <= dim <= 36)
+    :type dim: int
+    :return: ``m`` label strings of length ``n``
+    :rtype: List[str]
+    """
+    _check_label_dim(dim)
+    states = np.asarray(states)
+    powers = dim ** np.arange(n - 1, -1, -1, dtype=np.int64)
+    width = max(n, 1)
+    labels: List[str] = []
+    for start in range(0, states.shape[0], _LABEL_CHUNK):
+        block = states[start : start + _LABEL_CHUNK]
+        digits = block if block.ndim == 2 else block[:, None] // powers % dim
+        codes = np.zeros([digits.shape[0], width], dtype=np.uint32)
+        codes[:, :n] = _LABEL_CODES[digits.astype(np.int64)]
+        labels += codes.view(f"U{width}").reshape([-1]).tolist()
+    return labels
 
 
 def _infer_num_sites(D: int, dim: int) -> int:
@@ -2925,15 +2989,10 @@ def count_vector2dict(
     dim = 2 if dim is None else dim
     b = which_backend(count)
     values = b.numpy(count).tolist()
-    out_int = {i: values[i] for i in range(dim**n)}
     if key == "int":
-        return out_int
-    else:
-        out_str = {}
-        for k, v in out_int.items():
-            kn = np.base_repr(k, base=dim).zfill(n)
-            out_str[kn] = v
-        return out_str
+        return dict(enumerate(values))
+    labels = _encode_basis_labels(np.arange(dim**n), n, dim)
+    return dict(zip(labels, values))
 
 
 def count_tuple2dict(
@@ -2959,12 +3018,9 @@ def count_tuple2dict(
     out_int = {i: j for i, j in zip(indices, values) if i >= 0}
     if key == "int":
         return out_int
-    else:
-        out_str = {}
-        for k, v in out_int.items():
-            kn = np.base_repr(k, base=dim).zfill(n)
-            out_str[kn] = v
-        return out_str
+    index = np.array(list(out_int), dtype=np.int64)
+    labels = _encode_basis_labels(index, n, dim)
+    return dict(zip(labels, out_int.values()))
 
 
 @partial(arg_alias, alias_dict={"counts": ["shots"], "format": ["format_"]})
@@ -3095,7 +3151,8 @@ def sample2all(
     :type n: int
     :param format: see :py:func:`tensorcircuit.quantum.measurement_results`, defaults to "count_vector"
     :type format: str, optional
-    :param jittable: only applicable to count transformation in jax backend, defaults to False
+    :param jittable: if True, jax backend returns ``count_tuple`` padded to the fixed size ``d**n``
+        so that it can be jitted, defaults to False; ``count_vector`` is always jittable
     :type jittable: bool, optional
     :param dim: local dimension (2 for qubit; >2 for qudit), defaults to 2
     :type dim: Optional[int]
@@ -3111,29 +3168,36 @@ def sample2all(
         if format == "sample_bin":
             return sample
         if format == "count_dict_bin":
-            binary_strings = ["".join(map(str, shot)) for shot in sample]
-            return dict(Counter(binary_strings))
+            labels = _encode_basis_labels(backend.numpy(sample), n, dim)
+            return dict(Counter(labels))
         raise ValueError(f"n={n} is too large for measurement representaion: {format}")
 
     if len(backend.shape_tuple(sample)) == 1:
+        if format == "sample_bin":
+            return sample_int2bin(sample, n, dim=dim)
         sample_int = sample
-        sample_bin = sample_int2bin(sample, n, dim=dim)
     elif len(backend.shape_tuple(sample)) == 2:
+        if format == "sample_bin":
+            return sample
         sample_int = sample_bin2int(sample, n, dim=dim)
-        sample_bin = sample
     else:
         raise ValueError("unrecognized tensor shape for sample")
 
     if format == "sample_int":
         return sample_int
-    elif format == "sample_bin":
-        return sample_bin
+    elif format == "count_vector":
+        # the backend default integer dtype, as the counts of ``sample2count``
+        count_dtype = backend.dtype(backend.arange(1))
+        return backend.scatter(
+            backend.zeros([dim**n], dtype=count_dtype),
+            backend.reshape(sample_int, [-1, 1]),
+            backend.ones_like(sample_int, dtype=count_dtype),
+            mode="add",
+        )
     else:
         count_tuple = sample2count(sample_int, n, jittable=jittable, dim=dim)
         if format == "count_tuple":
             return count_tuple
-        elif format == "count_vector":
-            return count_s2d(count_tuple, n, dim=dim)
         elif format == "count_dict_bin":
             return count_tuple2dict(count_tuple, n, key="bin", dim=dim)
         elif format == "count_dict_int":

@@ -82,6 +82,18 @@ def test_count2vec():
     )
 
 
+def test_count_labels():
+    c = counts.count2vec({"0a": 2, "Z0": 3}, normalization=False, dim=36)
+    assert counts.vec2count(c, prune=True, dim=36) == {"0A": 2.0, "Z0": 3.0}
+    for label, dim in [("B1", 2), ("X6", 16), ("0b1", 2), (" 1", 2), ("12", 2)]:
+        with pytest.raises(ValueError):
+            counts.count2vec({label: 1}, dim=dim)
+    with pytest.raises(NotImplementedError):
+        counts.vec2count(np.ones(37), dim=37)
+    v = np.array([0, 1e-8, 0.5, 0], dtype=np.float32)
+    assert counts.vec2count(v, prune=True) == {"10": 0.5}
+
+
 def test_kl():
     a = {"00": 512, "11": 512}
     assert counts.kl_divergence(a, a) == 0
@@ -99,6 +111,17 @@ def test_kl_zero_key():
 def test_expectation():
     assert counts.expectation(d, [0, 1]) == -5 / 9
     assert counts.expectation(d, None, [[1, -1], [1, 0], [1, 1]]) == -5 / 9
+    assert counts.expectation(d, [0, 0, 2]) == counts.expectation(d, [0, 2])
+    dt = {tuple(int(b) for b in k): v for k, v in d.items()}
+    assert counts.expectation(dt, [0, 2]) == counts.expectation(d, [0, 2])
+
+
+def test_expectation_differentiable_counts(jaxb):
+    def f(p):
+        return counts.expectation({"0": p[0], "1": p[1]}, z=[0])
+
+    g = tc.backend.grad(f)(tc.backend.convert_to_tensor(np.array([0.3, 0.7])))
+    np.testing.assert_allclose(g, [1.4, -0.6], atol=1e-5)
 
 
 def test_plot_histogram():

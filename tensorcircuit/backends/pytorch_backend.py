@@ -260,6 +260,9 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def log(self, tensor: Tensor) -> Tensor:
         return torchlib.log(tensor)
 
+    def power(self, a: Tensor, b: Union[Tensor, float]) -> Tensor:
+        return torchlib.pow(a, b)
+
     def zeros(self, shape: Tuple[int, ...], dtype: Optional[str] = None) -> Tensor:
         if dtype is None:
             dtype = dtypestr
