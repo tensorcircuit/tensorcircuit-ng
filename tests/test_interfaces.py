@@ -577,6 +577,24 @@ def test_jax_interface_complex_vjp(backend, jit, enable_dlpack, case):
         np.testing.assert_allclose(actual, reference, atol=1e-6)
 
 
+@pytest.mark.parametrize("enable_dlpack", [False, True])
+def test_jax_interface_eager_output_ownership(torchb, enable_dlpack):
+    buffer = torch.ones(4)
+    calls = 0
+
+    def f(x):
+        nonlocal calls
+        calls += 1
+        return buffer
+
+    wrapped = tc.interfaces.jax_interface(f, enable_dlpack=enable_dlpack)
+    result = wrapped(jnp.ones(2))
+    result.block_until_ready()
+    assert calls == 1
+    buffer.add_(1)
+    np.testing.assert_allclose(result, np.ones(4))
+
+
 def test_jax_interface_basic(tfb):
     def f(params):
         c = tc.Circuit(1)

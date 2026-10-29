@@ -21,16 +21,16 @@ def jax_wrapper(
 ) -> Callable[..., Any]:
     import jax
 
+    def wrapped_fun(*args: Any) -> Any:
+        args = general_args_to_backend(args, enable_dlpack=enable_dlpack)
+        y = fun(*args)
+        y = general_args_to_backend(
+            y, target_backend="jax", enable_dlpack=enable_dlpack
+        )
+        return y
+
     @wraps(fun)
     def fun_jax(*x: Any) -> Any:
-        def wrapped_fun(*args: Any) -> Any:
-            args = general_args_to_backend(args, enable_dlpack=enable_dlpack)
-            y = fun(*args)
-            y = general_args_to_backend(
-                y, target_backend="jax", enable_dlpack=enable_dlpack
-            )
-            return y
-
         # Use provided shape and dtype if available, otherwise run test
         if output_shape is not None and output_dtype is not None:
             if (
@@ -58,6 +58,15 @@ def jax_wrapper(
                 out_shape = jax.ShapeDtypeStruct(  # type: ignore
                     test_out.shape if hasattr(test_out, "shape") else (),
                     test_out.dtype if hasattr(test_out, "dtype") else x[0].dtype,
+                )
+            if not any(
+                isinstance(t, jax.core.Tracer) or getattr(t, "committed", False)
+                for t in jax.tree_util.tree_leaves(x)
+            ):
+                return jax.tree_util.tree_map(
+                    lambda y, spec: jax.numpy.array(y, dtype=spec.dtype, copy=True),
+                    test_out,
+                    out_shape,
                 )
 
         result = jax.pure_callback(wrapped_fun, out_shape, *x)
@@ -140,6 +149,23 @@ def create_jax_function(
         output_dtype=output_dtype,
     )
 
+    vjp_fun = partial(backend.vjp, fun)
+    if jit:
+        vjp_fun = backend.jit(vjp_fun)  # type: ignore
+
+    def vjp_wrapped(args: Any, cotangent: Any) -> Any:
+        args = general_args_to_backend(args, enable_dlpack=enable_dlpack)
+        gb = general_args_to_backend(cotangent, enable_dlpack=enable_dlpack)
+        if backend.name in ("tensorflow", "pytorch"):
+            gb = backend.tree_map(backend.conj, gb)
+        r = vjp_fun(args, gb)[1]
+        if backend.name in ("tensorflow", "pytorch"):
+            r = backend.tree_map(backend.conj, r)
+        r = general_args_to_backend(
+            r, target_backend="jax", enable_dlpack=enable_dlpack
+        )
+        return r
+
     @custom_vjp
     def f(*x: Any) -> Any:
         return wrapped(*x)
@@ -153,23 +179,6 @@ def create_jax_function(
 
         if len(x) == 1:
             x = x[0]
-
-        vjp_fun = partial(backend.vjp, fun)
-        if jit:
-            vjp_fun = backend.jit(vjp_fun)  # type: ignore
-
-        def vjp_wrapped(args: Any, cotangent: Any) -> Any:
-            args = general_args_to_backend(args, enable_dlpack=enable_dlpack)
-            gb = general_args_to_backend(cotangent, enable_dlpack=enable_dlpack)
-            if backend.name in ("tensorflow", "pytorch"):
-                gb = backend.tree_map(backend.conj, gb)
-            r = vjp_fun(args, gb)[1]
-            if backend.name in ("tensorflow", "pytorch"):
-                r = backend.tree_map(backend.conj, r)
-            r = general_args_to_backend(
-                r, target_backend="jax", enable_dlpack=enable_dlpack
-            )
-            return r
 
         # Handle gradient shape for both single input and tuple inputs
         if isinstance(x, tuple):
