@@ -295,24 +295,24 @@ def test_global_shadow_state2_matches(jaxb):
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
 def test_raw_shadow_expectation(backend):
-    k = tc.backend
-    samples = k.convert_to_tensor(
+    K = tc.backend
+    samples = K.convert_to_tensor(
         np.array(
             [[[0, 1, 0]], [[1, 0, 1]], [[0, 1, 0]], [[0, 1, 1]], [[0, 0, 0]]],
             dtype=np.uint8,
         )
     )
     bases = np.array([[1, 3, 2], [1, 2, 2], [3, 1, 2], [1, 1, 2], [1, 2, 2]])
-    observable = k.convert_to_tensor(np.array([1, 0, 2], dtype=np.int32))
+    observable = K.convert_to_tensor(np.array([1, 0, 2], dtype=np.int32))
 
     def evaluate(samples, bases, observable):
         return expectation_ps_shadow(samples, bases, ps=observable, k=2)
 
-    if k.name in ("jax", "tensorflow"):
-        evaluate = k.jit(evaluate)
+    if K.name in ("jax", "tensorflow"):
+        evaluate = K.jit(evaluate)
     for basis in (bases, bases[:, None, :]):
-        actual = evaluate(samples, k.convert_to_tensor(basis), observable)
-        np.testing.assert_allclose([k.numpy(v) for v in actual], [6.0, 0.0], atol=1e-6)
+        actual = evaluate(samples, K.convert_to_tensor(basis), observable)
+        np.testing.assert_allclose([K.numpy(v) for v in actual], [6.0, 0.0], atol=1e-6)
 
 
 def test_pytorch_shadow_subsystem(torchb):
