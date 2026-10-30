@@ -120,29 +120,27 @@ def _random_choice_tf(
     # for stateless random module, tf has corresponding categorical function similar to choice
     # however, such utility is not implemented with ``tf.random.Generator``
     # part of the code below is inspired by corresponding implementation in jax (Apache 2.0)
-    if isinstance(a, int):
-        assert a > 0
-        a = tf.range(a)
-    if not (isinstance(a, tf.Tensor) or isinstance(a, tf.Variable)):
-        a = tf.constant(a)
-    assert len(a.shape) == 1
     if isinstance(shape, int):
         shape = (shape,)
+    if isinstance(a, int):
+        assert a > 0
+        n = a
+    else:
+        if not (isinstance(a, tf.Tensor) or isinstance(a, tf.Variable)):
+            a = tf.constant(a)
+        assert len(a.shape) == 1
+        n = tf.shape(a)[0]
     if p is None:
-        dtype = tf.float32
-        p = tf.ones_like(a)
-        p = tf.cast(p, dtype=dtype)
-        p /= tf.reduce_sum(p)
+        ind = g.uniform(shape, minval=0, maxval=n, dtype=tf.int32)
     else:
         if not (isinstance(p, tf.Tensor) or isinstance(p, tf.Variable)):
             p = tf.constant(p)
-        dtype = p.dtype
-    shape1 = reduce(mul, shape)
-    p_cuml = tf.cumsum(p)
-    r = p_cuml[-1] * (1 - g.uniform([shape1], dtype=dtype))
-    ind = tf.searchsorted(p_cuml, r)
-    res = tf.gather(a, ind)
-    return tf.reshape(res, shape)
+        p_cuml = tf.cumsum(p)
+        r = p_cuml[-1] * (1 - g.uniform([reduce(mul, shape, 1)], dtype=p.dtype))
+        ind = tf.reshape(tf.searchsorted(p_cuml, r), shape)
+    if isinstance(a, int):
+        return ind
+    return tf.gather(a, ind)
 
 
 def _qr_tf(
