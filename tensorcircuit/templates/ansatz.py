@@ -5,6 +5,8 @@ Shortcuts for reusable circuit ansatz
 from typing import Any, List
 
 from ..circuit import Circuit as Circ
+from ..cons import backend, dtypestr
+from ..quantum import _pauli_sum_diagonals
 
 Tensor = Any
 Circuit = Any
@@ -17,6 +19,7 @@ def QAOA_ansatz_for_Ising(
     weights: List[float],
     full_coupling: bool = False,
     mixer: str = "X",
+    diagonal_cost: bool = False,
 ) -> Circuit:
     """
     Construct the QAOA ansatz for the Ising Model.
@@ -35,6 +38,7 @@ def QAOA_ansatz_for_Ising(
     :param weights: A list of weights corresponding to each Pauli term.
     :param full_coupling (optional): A flag indicating whether to use all-to-all coupling in mixers. Default is False.
     :param mixer: The mixer operator to use. Default is "X". The other options are "XY" and "ZZ".
+    :param diagonal_cost: Merge the ideal cost layer into a dense diagonal, using O(2**n) storage. Default is False.
     :return: QAOA ansatz for Ising model.
     """
     nqubits = len(pauli_terms[0])
@@ -42,23 +46,48 @@ def QAOA_ansatz_for_Ising(
     for i in range(nqubits):
         c.h(i)
 
+    cost_diagonal: Tensor = None
+    if diagonal_cost and nlayers > 0:
+        for term in pauli_terms:
+            if sum(value == 1 for value in term) not in (1, 2):
+                raise ValueError("Invalid number of Z terms")
+        _, _, diagonals = _pauli_sum_diagonals(
+            [[3 if value == 1 else 0 for value in term] for term in pauli_terms],
+            backend.stack(
+                [
+                    backend.convert_to_tensor(weights[i], dtype=dtypestr)
+                    for i in range(len(pauli_terms))
+                ]
+            ),
+            False,
+        )
+        cost_diagonal = diagonals[0]
+
     for j in range(nlayers):
         # cost terms
-        for k, term in enumerate(pauli_terms):
-            index_of_ones = []
-            for l in range(len(term)):
-                if term[l] == 1:
-                    index_of_ones.append(l)
-            if len(index_of_ones) == 1:
-                c.rz(index_of_ones[0], theta=2 * weights[k] * params[2 * j])
-            elif len(index_of_ones) == 2:
-                c.rzz(
-                    index_of_ones[0],
-                    index_of_ones[1],
-                    theta=2 * weights[k] * params[2 * j],
-                )
-            else:
-                raise ValueError("Invalid number of Z terms")
+        if diagonal_cost:
+            c.diagonal(
+                *range(nqubits),
+                diag=backend.exp(
+                    -1.0j * backend.cast(params[2 * j], dtypestr) * cost_diagonal
+                ),
+            )
+        else:
+            for k, term in enumerate(pauli_terms):
+                index_of_ones = []
+                for l in range(len(term)):
+                    if term[l] == 1:
+                        index_of_ones.append(l)
+                if len(index_of_ones) == 1:
+                    c.rz(index_of_ones[0], theta=2 * weights[k] * params[2 * j])
+                elif len(index_of_ones) == 2:
+                    c.rzz(
+                        index_of_ones[0],
+                        index_of_ones[1],
+                        theta=2 * weights[k] * params[2 * j],
+                    )
+                else:
+                    raise ValueError("Invalid number of Z terms")
 
         # prepare the coupling map for mixer terms
         pairs = []

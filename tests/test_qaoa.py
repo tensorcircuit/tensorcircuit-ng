@@ -103,9 +103,12 @@ def test_QAOA_ansatz_errors(example_inputs, full_coupling, mixer):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
-def test_ising_qaoa_cost_weights(backend):
+@pytest.mark.parametrize("diagonal_cost", [False, True])
+def test_ising_qaoa_cost_weights(backend, diagonal_cost):
     gamma, beta = 0.37, -0.21
-    circuit = QAOA_ansatz_for_Ising([gamma, beta], 1, [[1, 0], [1, 1]], [0.7, -1.2])
+    circuit = QAOA_ansatz_for_Ising(
+        [gamma, beta], 1, [[1, 0], [1, 1]], [0.7, -1.2], diagonal_cost=diagonal_cost
+    )
     # H = 0.7 Z0 - 1.2 Z0 Z1 has diagonal [-0.5, 1.9, 0.5, -1.9].
     cost_state = np.exp(-1j * gamma * np.array([-0.5, 1.9, 0.5, -1.9])) / 2
     mixer = np.cos(beta / 2) * np.eye(2) - 1j * np.sin(beta / 2) * np.array(

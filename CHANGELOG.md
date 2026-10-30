@@ -36,6 +36,7 @@
 
 ### Added
 
+- Add optional dense diagonal cost layers to the Ising QAOA ansatz.
 - Add backend `gather` for axis-based indexing with scalar or multidimensional indices, including JIT and gradient support.
 - Add `U1Operator.mvp` for matrix-free products of a Pauli string sum restricted to a U(1) subspace, with differentiable weights, e.g., for `krylov_evol` within a fixed particle-number sector.
 - Add `PauliStringSum2CSR` and the backend method `csr_sparse_matrix`.
