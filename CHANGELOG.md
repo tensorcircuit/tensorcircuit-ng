@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Accumulate charge-sector capacities when preparing symmetric MPS layouts to avoid repeated sector scans.
 - Sample uniform TensorFlow choices directly with integer indices instead of building a population CDF.
 - Deduplicate quantum-operator boundary nodes in linear time while preserving traversal order.
 - Export Qiskit initialization states and controlled unitaries by reversing tensor axes instead of allocating dense permutation matrices.
