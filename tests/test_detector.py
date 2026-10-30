@@ -75,6 +75,49 @@ def test_detector_depolarizing_channel_seed_reproducible(backend):
     np.testing.assert_array_equal(r0, r1)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_detector_depolarize2_pauli_branches(backend):
+    c = tc.Circuit(2)
+    c.isotropicdepolarizing(1, 0, p=15 / 16, num_qubits=2)
+    for q in range(2):
+        c.measure_instruction(q)
+        c.detector_instruction([q])
+    status = np.full((16, 3), 0.5, dtype=np.float32)
+    status[:, 0] = (np.arange(16) + 0.5) / 16
+    expected = [[i % 4 in (1, 2), i // 4 in (1, 2)] for i in range(16)]
+    actual = tc.backend.numpy(c.sample_detector(shots=16, status=status))
+    np.testing.assert_array_equal(actual, expected)
+
+
+def test_detector_stim_depolarize2_surface_code(npb):
+    stim = pytest.importorskip("stim")
+    surface = stim.Circuit.generated(
+        "surface_code:rotated_memory_z", distance=3, rounds=1
+    )
+    noisy = stim.Circuit()
+    for instruction in surface:
+        if instruction.name == "MR":
+            noisy.append("DEPOLARIZE2", [1, 9], 15 / 16)
+        noisy.append(instruction)
+
+    # 17 resets precede the noise, followed by 8 measure/reset pairs and 9 measurements.
+    # Uniform Pauli weights let these statuses select II, IX, XI and XX.
+    status = np.full((4, 43), 0.5, dtype=np.float32)
+    status[:, 17] = (np.array([0, 1, 4, 5]) + 0.5) / 16
+    c = tc.translation.stim2tc(noisy)
+    actual = tc.backend.numpy(c.sample_detector(shots=4, status=status))
+
+    expected = []
+    for error_qubits in [[], [9], [1], [1, 9]]:
+        reference = stim.Circuit()
+        for instruction in surface:
+            if instruction.name == "MR" and error_qubits:
+                reference.append("X_ERROR", error_qubits, 1.0)
+            reference.append(instruction)
+        expected.append(reference.compile_detector_sampler().sample(shots=1)[0])
+    np.testing.assert_array_equal(actual, expected)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_detector_invalid_lookback_raises(backend):
     c = tc.Circuit(1)
@@ -85,11 +128,14 @@ def test_detector_invalid_lookback_raises(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
-def test_detector_measure_then_gate_without_reset_raises(backend):
-    c = tc.Circuit(1)
-    c.x(0)
-    c.measure_instruction(0)
-    c.x(0)
+@pytest.mark.parametrize("noise", [False, True])
+def test_detector_measure_then_operation_without_reset_raises(backend, noise):
+    c = tc.Circuit(2)
+    c.measure_instruction(1)
+    if noise:
+        c.isotropicdepolarizing(0, 1, p=0.1, num_qubits=2)
+    else:
+        c.x(1)
     c.detector_instruction([-1])
     with pytest.raises(NotImplementedError):
         c.sample_detector(batch_size=1)

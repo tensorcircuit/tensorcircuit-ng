@@ -481,7 +481,7 @@ class Circuit(BaseCircuit):
                 for k, p in zip(kraus, prob)
             ]
         if not backend.is_tensor(prob):
-            prob = backend.convert_to_tensor(prob)
+            prob = backend.stack([backend.convert_to_tensor(p) for p in prob])
         prob_cumsum = backend.cumsum(prob)
         l = int(prob.shape[0])  # type: ignore
 
@@ -656,7 +656,7 @@ class Circuit(BaseCircuit):
     @classmethod
     def _meta_apply_channels(cls) -> None:
         for k in channels.channels:
-            if k in ["depolarizing", "generaldepolarizing"]:
+            if k in ["depolarizing", "generaldepolarizing", "isotropicdepolarizing"]:
                 is_unitary = True
             else:
                 is_unitary = False
