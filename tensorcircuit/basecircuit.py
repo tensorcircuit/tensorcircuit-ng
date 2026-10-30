@@ -744,7 +744,7 @@ class BaseCircuit(AbstractCircuit):
     def _walk_detector_trajectory_qir(
         self,
         merged_qir: Sequence[Dict[str, Any]],
-        on_channel: Optional[Callable[[Dict[str, Any], str, int], None]] = None,
+        on_channel: Optional[Callable[[Dict[str, Any], str], None]] = None,
         on_gate: Optional[Callable[[Dict[str, Any]], None]] = None,
         on_measure: Optional[Callable[[Dict[str, Any], int], None]] = None,
         on_mr: Optional[Callable[[Dict[str, Any], int], None]] = None,
@@ -755,13 +755,12 @@ class BaseCircuit(AbstractCircuit):
         for d in merged_qir:
             name = str(d.get("name", "")).upper()
             if d.get("is_channel", False):
-                q = int(d["index"][0])
                 if any(not active[int(i)] for i in d["index"]):
                     raise NotImplementedError(
                         "Noise after measure requires reset first."
                     )
                 if on_channel is not None:
-                    on_channel(d, name, q)
+                    on_channel(d, name)
                 continue
 
             if not d.get("instruction", False):
@@ -844,7 +843,10 @@ class BaseCircuit(AbstractCircuit):
             status_i += 1
             return s
 
-        def on_channel(d: Dict[str, Any], name: str, _: int) -> None:
+        def on_channel(d: Dict[str, Any], name: str) -> None:
+            # TODO(@refraction-ray): inject status into every channel and count each one
+            # in `_count_detector_random_events`; other channels still draw implicit
+            # randomness, so seed/status do not control them.
             if name in ["DEPOLARIZING", "PAULI"]:
                 d = {
                     **d,

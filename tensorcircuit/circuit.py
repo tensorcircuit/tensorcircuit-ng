@@ -656,7 +656,7 @@ class Circuit(BaseCircuit):
     @classmethod
     def _meta_apply_channels(cls) -> None:
         for k in channels.channels:
-            if k in ["depolarizing", "generaldepolarizing"]:
+            if k in ["depolarizing", "generaldepolarizing", "isotropicdepolarizing"]:
                 is_unitary = True
             else:
                 is_unitary = False
