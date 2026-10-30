@@ -11,7 +11,18 @@ from collections import OrderedDict, deque
 from contextlib import contextmanager
 from functools import partial, reduce, wraps, lru_cache
 from operator import mul
-from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Set, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+)
 
 import numpy as np
 import opt_einsum
@@ -64,8 +75,26 @@ def _get_edge_stable_key(edge: tn.Edge) -> Tuple[int, int, int, int]:
     return (id1, ax1, id2, ax2)
 
 
-def sorted_edges(edges: Iterator[tn.Edge]) -> List[tn.Edge]:
+def sorted_edges(edges: Iterable[tn.Edge]) -> List[tn.Edge]:
     return sorted(edges, key=_get_edge_stable_key)
+
+
+def get_subgraph_dangling(nodes: Iterable[tn.AbstractNode]) -> Set[tn.Edge]:
+    """
+    Linear-time replacement of ``tn.get_subgraph_dangling``: return edges that
+    are dangling or connect ``nodes`` to nodes outside of the collection.
+    """
+    nodes_set = set(nodes)
+    output = set()
+    for node in nodes_set:
+        for edge in node.edges:
+            if (
+                edge.is_dangling()
+                or edge.node1 not in nodes_set
+                or edge.node2 not in nodes_set
+            ):
+                output.add(edge)
+    return output
 
 
 package_name = "tensorcircuit"
@@ -528,7 +557,7 @@ def _extract_topology(
         input_sets.append("".join(node_symbols))
         raw_tensors.append(node.tensor)
 
-    dangling_edges = sorted_edges(tn.get_subgraph_dangling(nodes))
+    dangling_edges = sorted_edges(get_subgraph_dangling(nodes))
     # rank-2 deltas below keep the network dtype; a network of CopyNodes only
     # takes the dtype declared by its CopyNodes
     dtype = None
@@ -795,7 +824,7 @@ def _algebraic_base_contraction(
     final_node = tn.Node(final_raw_tensor, backend=be)
 
     # Resolve dangling edges in the same order as in _extract_topology
-    dangling_edges = sorted_edges(tn.get_subgraph_dangling(nodes))
+    dangling_edges = sorted_edges(get_subgraph_dangling(nodes))
 
     # Update the edges to point to the new final_node
     nodes_set = set(nodes)
@@ -843,7 +872,7 @@ def _get_path_cache_friendly(
 
     input_sets = [list([mapping_dict[id(e)] for e in node.edges]) for node in nodes_new]
     output_set = list(
-        [mapping_dict[id(e)] for e in sorted_edges(tn.get_subgraph_dangling(nodes_new))]
+        [mapping_dict[id(e)] for e in sorted_edges(get_subgraph_dangling(nodes_new))]
     )
     size_dict = {mapping_dict[id(edge)]: edge.dimension for edge in all_edges_sorted}
     logger.debug("input_sets: %s" % input_sets)
@@ -934,7 +963,7 @@ def _base(
 
     if not ignore_edge_order:
         if output_edge_order is None:
-            output_edge_order = list(tn.get_subgraph_dangling(nodes))
+            output_edge_order = list(get_subgraph_dangling(nodes))
             if len(output_edge_order) > 1:
                 raise ValueError(
                     "The final node after contraction has more than "
@@ -942,7 +971,7 @@ def _base(
                     "has to be provided."
                 )
 
-        if set(output_edge_order) != tn.get_subgraph_dangling(nodes):
+        if set(output_edge_order) != get_subgraph_dangling(nodes):
             raise ValueError(
                 "output edges are not equal to the remaining "
                 "non-contracted edges of the final node."

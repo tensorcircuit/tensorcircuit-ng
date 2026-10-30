@@ -29,7 +29,6 @@ from scipy.sparse import csr_matrix
 from tensornetwork.network_components import AbstractNode, CopyNode, Edge, Node, connect
 from tensornetwork.network_operations import (
     copy,
-    get_subgraph_dangling,
     remove_node,
 )
 
@@ -38,6 +37,7 @@ from .cons import (
     contractor,
     dtypestr,
     get_backend,
+    get_subgraph_dangling,
     idtypestr,
     npdtype,
     rdtypestr,

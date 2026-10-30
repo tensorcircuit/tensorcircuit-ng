@@ -7,6 +7,7 @@ import warnings
 from functools import partial
 import numpy as np
 import tensorflow as tf
+import tensornetwork as tn
 import pytest
 from pytest_lazyfixture import lazy_fixture as lf
 
@@ -620,6 +621,20 @@ def test_cons_extra(jaxb):
 
     assert g() == "complex128"
     assert tc.dtypestr == outer_dtype
+
+
+def test_get_subgraph_dangling():
+    a = tn.Node(np.ones([2, 2, 2]))
+    b = tn.Node(np.ones([2, 2, 2]))
+    c = tn.Node(np.ones([2, 2]))
+    a[0] ^ b[0]
+    b[1] ^ b[2]
+    a[1] ^ c[0]
+    nodes = [a, b]
+    expected = {a[1], a[2]}
+    assert tc.cons.get_subgraph_dangling(nodes) == expected
+    assert tc.cons.get_subgraph_dangling(nodes) == tn.get_subgraph_dangling(nodes)
+    assert tc.cons.get_subgraph_dangling([a, b, c]) == {a[2], c[1]}
 
 
 def test_ascii_art():

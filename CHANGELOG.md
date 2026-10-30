@@ -8,6 +8,7 @@
 - Accumulate charge-sector capacities when preparing symmetric MPS layouts to avoid repeated sector scans.
 - Sample uniform TensorFlow choices directly with integer indices instead of building a population CDF.
 - Deduplicate quantum-operator boundary nodes in linear time while preserving traversal order.
+- Find relatively dangling subgraph edges in linear time instead of rebuilding the node set per edge, speeding up `QuOperator` network checks and contraction setup on large networks.
 - Export Qiskit initialization states and controlled unitaries by reversing tensor axes instead of allocating dense permutation matrices.
 - Compute pure-state entanglement entropy and mutual information using the smaller subsystem. Values change slightly because omitted zero eigenvalues no longer contribute a dimension-dependent regularization bias.
 - Find lattice distance shells with fixed-shape minimum reductions instead of sorting and scanning backend scalars.
