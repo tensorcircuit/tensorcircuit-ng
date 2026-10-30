@@ -796,6 +796,47 @@ def test_backend_methods_2(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_probability_sample_two_level(backend):
+    n, shots = 2**18, 20000
+    rng = np.random.default_rng(7)
+    delta = 5e-3
+    p = np.full([n], delta / (n - 1), dtype=np.float32)
+    p[0] = 1 - delta
+    status = np.stack(
+        [rng.uniform(0, delta / 2, size=shots), rng.uniform(size=shots)], axis=1
+    ).astype(np.float32)
+    f = tc.backend.jit(lambda p, s: tc.backend.probability_sample(shots, p, s))
+    r = tc.backend.numpy(
+        f(tc.backend.convert_to_tensor(p), tc.backend.convert_to_tensor(status))
+    )
+    # the low tail of status[:, 0] maps to the upper half of the tiny-probability outcomes,
+    # which float32 single-level sampling cannot resolve next to p[0];
+    # 20000 uniform draws over 2**17 outcomes give about 18500 distinct ones
+    assert r.min() > 0 and r.max() < n
+    assert len(np.unique(r)) > 17500
+
+    n = 5001
+    p = rng.exponential(size=[n])
+    p[rng.uniform(size=[n]) < 0.2] = 0
+    p[-51:] = 0
+    p = (p / p.sum()).astype(np.float32)
+    shots = 200000
+    r = tc.backend.numpy(
+        tc.backend.probability_sample(
+            shots, tc.backend.convert_to_tensor(p), g=tc.backend.get_random_state(42)
+        )
+    )
+    counts = np.bincount(r, minlength=n)
+    assert len(counts) == n
+    assert counts[p == 0].sum() == 0
+    np.testing.assert_allclose(
+        counts[:-1].reshape([50, 100]).sum(axis=1) / shots,
+        p[:-1].reshape([50, 100]).sum(axis=1),
+        atol=3e-3,
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_floor(backend):
     """Test floor method (element-wise, dtype/device preservation, integers unchanged)."""
     a = tc.backend.convert_to_tensor([-1.7, -0.0, 0.0, 0.2, 3.9])
