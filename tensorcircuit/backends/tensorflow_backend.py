@@ -777,7 +777,11 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         if seed is None:
             g = tf.random.Generator.from_non_deterministic_state()
         elif isinstance(seed, int):
-            g = tf.random.Generator.from_seed(seed)
+            # ``from_seed`` puts the seed into the Philox counter with key 0, so adjacent
+            # seeds give shifted copies of one stream; use the seed as the key instead
+            g = tf.random.Generator.from_key_counter(
+                key=seed, counter=[0, 0], alg="philox"
+            )
         else:
             g = seed
         if get_only is False:

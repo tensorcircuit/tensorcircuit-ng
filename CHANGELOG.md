@@ -44,6 +44,7 @@
 ### Fixed
 
 - Fix biased `probability_sample` (and thus `sample(allow_state=True)`) for large float32 distributions, where a single float32 cumulative sum and uniform number cannot resolve individual outcomes (about 2% total variation at 20 qubits, about 30% at 24 qubits). With more than `2**12` outcomes, internally drawn randomness now uses two-level block sampling with two uniform numbers per shot; external `status` may also be given with shape `[shots, 2]` for this mode, while `[shots]` keeps the previous single-level behavior.
+- Fix correlated TensorFlow random streams for adjacent integer seeds: `set_random_state(seed)` and `get_random_state(seed)` now use the seed as the Philox key instead of the counter, so seeds `s` and `s + 1` no longer produce the same stream shifted by four numbers.
 - Fix contracting hyperedge networks whose hyperedge carries several open legs or no tensor, e.g., `Circuit.matrix()` with an idle qubit, on an empty circuit or with a `diagonal` gate.
 - Fix finite-shot `count_vector` results on the JAX backend dropping the counts of the last basis state with `jittable=True`.
 - Fix `sample_bin` results for int64 samples on the TensorFlow backend and for qudits on the PyTorch backend, and `count_dict_bin` keys for large systems on the TensorFlow and PyTorch backends.

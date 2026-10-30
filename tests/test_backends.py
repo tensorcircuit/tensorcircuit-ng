@@ -1589,6 +1589,14 @@ def test_backend_randoms_v2(backend):
     assert tuple(r[0]) != tuple(r[1])
 
 
+def test_tf_adjacent_seeds_independent(tfb):
+    r0 = tc.backend.stateful_randu(tc.backend.get_random_state(0), shape=[8])
+    r1 = tc.backend.stateful_randu(tc.backend.get_random_state(1), shape=[8])
+    # Philox emits four numbers per counter step, so a counter-only seed shift
+    # would make r1 a copy of r0 shifted by four
+    assert not np.allclose(r1[:4], r0[4:])
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_randoms_v3(backend):
     tc.backend.set_random_state(42)
