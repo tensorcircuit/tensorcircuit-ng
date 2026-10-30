@@ -2043,6 +2043,22 @@ def test_backend_methods_3(backend):
     np.testing.assert_allclose(tc.backend.numpy(res), [2, 3, 0, 1])
 
 
+@pytest.mark.parametrize(
+    "dtype, values, expected",
+    [
+        ("int8", [-128, -1], [57, 64]),
+        ("uint64", [1 << 63, (1 << 64) - 1], [1, 64]),
+    ],
+)
+def test_tensorflow_popc_word_width(tfb, dtype, values, expected):
+    K = tc.backend
+    a = K.convert_to_tensor(values, dtype=dtype)
+    for f in (K.popc, K.jit(K.popc)):
+        result = f(a)
+        assert K.dtype(result) == "int32"
+        np.testing.assert_array_equal(K.numpy(result), expected)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_random_dtype_highp(backend, highp):
     # default dtype=None behavior
