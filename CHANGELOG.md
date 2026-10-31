@@ -33,6 +33,7 @@
 - Merge pure Z/I terms of `PauliStringSum2MVP` into one precomputed diagonal.
 - Build `U1Operator` source indices with sorted searches and share one gather among terms with the same X/Y flip pattern, speeding up `U1Circuit.expectation_pss`.
 - `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators and uses BCSR only on CPU.
+- Batch fixed-layout MPO updates by block, reducing eager builder overhead in time-dependent tensor-network simulations.
 - Mark `tensorcircuit.results.qem` and the CuPy backend as experimental: importing the former or setting the latter via `tc.set_backend("cupy")` emits `tc.utils.ExperimentalWarning`.
 - Unify measurement result format conversions: finite-shot `count_vector` is counted by one histogram on all backends, and basis labels are encoded and decoded by one vectorized helper (ideas from #232, #237, #238 and #242).
 - Differentiate only the selected arguments in generic `jacfwd`, `jacrev` and `hessian`, so non-selected arguments need not be tensors. TensorFlow `jvp` returns zero tangents for outputs disconnected from the inputs instead of `None`.
