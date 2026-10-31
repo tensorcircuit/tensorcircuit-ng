@@ -2115,18 +2115,18 @@ def test_sqrtmh_psd_values(backend, highp):
 
 @pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
 def test_sqrtmh_fixed_rank_gradient(backend, highp):
-    k = tc.backend
+    K = tc.backend
     observable = tc.array_to_tensor(np.diag([1.0, 0.0, 0.0]))
 
     def loss(theta):
-        amplitudes = k.stack([k.cos(theta), k.sin(theta), theta * 0])
-        rho = k.reshape(amplitudes, (3, 1)) @ k.reshape(amplitudes, (1, 3))
-        return k.real(k.trace(k.sqrtmh(k.cast(rho, tc.dtypestr)) @ observable))
+        amplitudes = K.stack([K.cos(theta), K.sin(theta), theta * 0])
+        rho = K.reshape(amplitudes, (3, 1)) @ K.reshape(amplitudes, (1, 3))
+        return K.real(K.trace(K.sqrtmh(K.cast(rho, tc.dtypestr)) @ observable))
 
-    theta = k.convert_to_tensor(np.array(0.3))
-    derivative = k.grad(loss)
-    for evaluate in (derivative, k.jit(derivative)):
-        np.testing.assert_allclose(k.numpy(evaluate(theta)), -np.sin(0.6), atol=1e-7)
+    theta = K.convert_to_tensor(np.array(0.3))
+    derivative = K.grad(loss)
+    for evaluate in (derivative, K.jit(derivative)):
+        np.testing.assert_allclose(K.numpy(evaluate(theta)), -np.sin(0.6), atol=1e-7)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
