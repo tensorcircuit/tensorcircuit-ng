@@ -4,37 +4,9 @@
 
 ### Changed
 
-- Use backend gather for classical-shadow subsystem selection and local snapshot construction.
-- Accumulate charge-sector capacities when preparing symmetric MPS layouts to avoid repeated sector scans.
-- Sample uniform TensorFlow choices directly with integer indices instead of building a population CDF.
-- Deduplicate quantum-operator boundary nodes in linear time while preserving traversal order.
-- Find relatively dangling subgraph edges in linear time instead of rebuilding the node set per edge, speeding up `QuOperator` network checks and contraction setup on large networks.
-- Export Qiskit initialization states and controlled unitaries by reversing tensor axes instead of allocating dense permutation matrices.
-- Compute pure-state entanglement entropy and mutual information using the smaller subsystem. Values change slightly because omitted zero eigenvalues no longer contribute a dimension-dependent regularization bias.
-- Find lattice distance shells with fixed-shape minimum reductions instead of sorting and scanning backend scalars.
-- Copy only the operator span when evaluating local MPS expectations.
-- Evaluate pure-state entanglement anti-flatness on the smaller subsystem.
-- Compute default-order truncated free energy in quadratic time using trace contractions.
-- Reduce dense higher-order Rényi entropy matrix products through shared half powers.
-- Reuse OMECO contraction paths with a bounded instance cache and explicit cache controls.
-- Avoid signed tableau inversion and reduce the smaller bipartition when computing stabilizer entanglement entropy.
-- Batch host transfer and outcome counting in second-order shadow Rényi entropy estimation.
-- Compute dense trace products without forming the final matrix product, which also makes dense second-order Rényi entropy quadratic-cost.
-- Propagate fixed Clifford gates in `SparsePauliPropagationEngine` through one signed Pauli branch instead of expanding all local Pauli branches, sharing one packed-word update path with generic one- and two-qubit gates.
-- Apply local readout calibration inverses as tensor products without materializing a dense calibration matrix.
-- Preserve the MPS tensor network and physical site dimensions when exporting states as `QuVector`, avoiding full wavefunctions for local reduced states and MPO expectations.
-- Avoid allocating a full identity matrix when constructing NumPy one-hot vectors and respect the configured real dtype.
-- Reduce JAX SVD backward memory and computation for rectangular matrices by avoiding full-size projection matrices.
-- Import Qiskit initialization states by reversing tensor axes instead of allocating a dense permutation matrix.
-- Evaluate Krylov time correlations and bilinear resolvents in the projected space without materializing full state batches.
-- Compute classical-shadow Pauli expectations directly from raw measurement snapshots without constructing local density matrices.
-- Compute finite-shot correlations from selected sample bits without materializing a complete bit matrix.
-- Build Pauli string sum matrices by grouping terms with the same X/Y flip pattern, reducing construction memory and matvec cost.
-- Merge pure Z/I terms of `PauliStringSum2MVP` into one precomputed diagonal.
-- Build `U1Operator` source indices with sorted searches and share one gather among terms with the same X/Y flip pattern, speeding up `U1Circuit.expectation_pss`.
+- Compute pure-state entanglement entropy, mutual information and entanglement anti-flatness on the smaller subsystem. Entropy values change slightly because omitted zero eigenvalues no longer contribute a dimension-dependent regularization bias.
 - `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators and uses BCSR only on CPU.
 - Mark `tensorcircuit.results.qem` and the CuPy backend as experimental: importing the former or setting the latter via `tc.set_backend("cupy")` emits `tc.utils.ExperimentalWarning`.
-- Unify measurement result format conversions: finite-shot `count_vector` is counted by one histogram on all backends, and basis labels are encoded and decoded by one vectorized helper (ideas from #232, #237, #238 and #242).
 - Differentiate only the selected arguments in generic `jacfwd`, `jacrev` and `hessian`, so non-selected arguments need not be tensors. TensorFlow `jvp` returns zero tangents for outputs disconnected from the inputs instead of `None`.
 
 ### Added
@@ -43,6 +15,7 @@
 - Add `U1Operator.mvp` for matrix-free products of a Pauli string sum restricted to a U(1) subspace, with differentiable weights, e.g., for `krylov_evol` within a fixed particle-number sector.
 - Add `PauliStringSum2CSR` and the backend method `csr_sparse_matrix`.
 - Support qudit density-matrix simulation with `tc.DMCircuit(n, dim=d)` for `d > 2`, including explicit single- and multi-site `unitary` gates and Kraus channels via `apply_general_kraus`.
+- Add `cache_size` and `clear_cache()` to `OMEOptimizer`, which reuses contraction paths through a bounded per-instance LRU cache.
 
 ### Fixed
 
@@ -65,6 +38,18 @@
 - Exclude same-shot pairs in `shadows.renyi_entropy_2`, removing the `2**n / repeat` bias of the purity estimate. `repeat >= 2` is now required.
 - Return dense tensors instead of `IndexedSlices` from TensorFlow backend `grad`, `value_and_grad` and `vectorized_value_and_grad`, e.g., for gradients through `gather`, consistent with `vjp`.
 - Accept single-precision uniform time grids in `spectral.fft_spectrum` by scaling the uniformity tolerance with the input precision, and fix `fft_spectrum` inside TensorFlow `tf.function`.
+- Respect the configured real dtype when constructing NumPy backend one-hot vectors.
+- Unify measurement result format conversions: finite-shot `count_vector` is counted by one histogram on all backends, and basis labels are encoded and decoded by one vectorized helper (ideas from #232, #237, #238 and #242).
+- Reduce memory of Qiskit import and export of initialization states and controlled unitaries by reversing tensor axes instead of allocating dense permutation matrices.
+- Reduce memory of readout error mitigation by applying local calibration inverses as tensor products without materializing a dense calibration matrix.
+- Reduce memory of MPS states exported as `QuVector` by preserving the tensor network and physical site dimensions, avoiding full wavefunctions for local reduced states and MPO expectations; local MPS expectations copy only the operator span.
+- Reduce JAX SVD backward memory and computation for rectangular matrices by avoiding full-size projection matrices.
+- Reduce memory of Krylov time correlations and bilinear resolvents by evaluating them in the projected space without materializing full state batches.
+- Speed up Pauli string sum matrices by grouping terms with the same X/Y flip pattern and merging pure Z/I terms of `PauliStringSum2MVP` into one diagonal; `U1Operator` shares one gather per flip pattern, speeding up `U1Circuit.expectation_pss`.
+- Speed up fixed Clifford gates in `SparsePauliPropagationEngine` by propagating one signed Pauli branch instead of expanding all local Pauli branches.
+- Speed up classical-shadow Pauli expectations by computing them directly from raw measurement snapshots, and finite-shot correlations by reading only the selected sample bits.
+- Speed up the default-order truncated free energy to quadratic time with trace contractions, and dense Rényi entropies by computing trace products without the final matrix product and sharing half powers for higher orders.
+- Speed up `QuOperator` network checks and contraction setup on large networks with linear-time dangling-edge and boundary-node searches.
 
 ## v1.10.0
 

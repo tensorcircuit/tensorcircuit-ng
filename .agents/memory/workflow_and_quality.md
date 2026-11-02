@@ -13,6 +13,7 @@ Use this file for public-feature integration, examples, tests, and validation de
 ## Public features and optional integrations
 
 - A new top-level peer API normally needs its package export and convenience alias, a realistic example, the docs index under `docs/source/`, and a changelog entry.
+- Changelog `### Changed` is only for removed or renamed APIs and user-visible semantic changes, such as different defaults, return types, or numerical results. Notable speedups or memory reductions go to `### Fixed`, phrased as "Speed up ..." or "Reduce memory of ...", after the correctness fixes; new parameters or methods introduced along the way go to `### Added`. Minor or purely internal optimizations get no entry.
 - Prefer a clear documented input contract and an explicit rejection of unsupported cases when broader semantics would add substantial complexity or hidden conversion costs.
 - Keep optional subsystems lazy at the package boundary so importing `tensorcircuit` does not require their extras; gate their tests with `pytest.importorskip(...)`.
 - Demonstrate optional contractor integrations through the real public entrypoint, such as `tc.set_contractor("custom", optimizer=...)`; keep search-only benchmarks separate from end-to-end contraction examples.
