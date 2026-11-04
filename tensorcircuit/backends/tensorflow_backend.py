@@ -611,9 +611,11 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         return tf.repeat(a, repeats, axis=axis)
 
     def popc(self, a: Any) -> Any:
-        # TF bit manipulation popcount fallback
         c = tf.cast(a, tf.uint64)
         m1 = tf.cast(0x5555555555555555, tf.uint64)
+        # PopulationCount has no GPU kernel; retain the active device placement.
+        if "CPU:" in c.device and "CPU:" in m1.device:
+            return tf.cast(tf.raw_ops.PopulationCount(x=c), tf.int32)
         m2 = tf.cast(0x3333333333333333, tf.uint64)
         m4 = tf.cast(0x0F0F0F0F0F0F0F0F, tf.uint64)
         h01 = tf.cast(0x0101010101010101, tf.uint64)
