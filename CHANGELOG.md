@@ -6,6 +6,7 @@
 
 - Compute pure-state entanglement entropy, mutual information and entanglement anti-flatness on the smaller subsystem. Entropy values change slightly because omitted zero eigenvalues no longer contribute a dimension-dependent regularization bias.
 - `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators and uses BCSR only on CPU.
+- Batch fixed-layout MPO updates by block, reducing eager builder overhead in time-dependent tensor-network simulations.
 - Mark `tensorcircuit.results.qem` and the CuPy backend as experimental: importing the former or setting the latter via `tc.set_backend("cupy")` emits `tc.utils.ExperimentalWarning`.
 - Differentiate only the selected arguments in generic `jacfwd`, `jacrev` and `hessian`, so non-selected arguments need not be tensors. TensorFlow `jvp` returns zero tangents for outputs disconnected from the inputs instead of `None`.
 

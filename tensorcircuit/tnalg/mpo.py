@@ -328,6 +328,30 @@ def _compile_mpo_paths(
                     )
                 )
 
+    grouped_edges: dict[tuple[int, int], list[tuple[int, int, NumpyArray, int]]] = {}
+    for site, position, left, right, matrix, edge_coefficient in edges:
+        grouped_edges.setdefault((site, position), []).append(
+            (
+                left,
+                right,
+                matrix,
+                ncoefficients if edge_coefficient is None else edge_coefficient,
+            )
+        )
+    block_updates = tuple(
+        (
+            site,
+            position,
+            np.asarray([edge[0] for edge in group], dtype=np.int32),
+            np.asarray([edge[1] for edge in group], dtype=np.int32),
+            np.stack([edge[2] for edge in group]),
+            np.asarray([edge[3] for edge in group], dtype=np.int32),
+        )
+        for (site, position), group in grouped_edges.items()
+    )
+    batch_updates = len(edges) > len(block_updates)
+    single_updates = tuple(edges) if not batch_updates else ()
+
     def build_mpo(weights: Array) -> MPOState:
         """
         Build an MPO from one dynamic value per coefficient group.
@@ -341,17 +365,38 @@ def _compile_mpo_paths(
         if weights.ndim != 1 or weights.shape[0] != ncoefficients:
             raise ValueError(f"weights must have shape ({ncoefficients},)")
         dtype = jnp.result_type(weights, site_tables[0])
+        scales = (
+            jnp.concatenate((weights, jnp.ones((1,), dtype=weights.dtype)))
+            if batch_updates
+            else weights
+        )
         buffers = [
             [jnp.zeros(shape, dtype=dtype) for shape in layout.block_shapes]
             for layout in final_layouts
         ]
-        for site, position, left_offset, right_offset, matrix, coefficient in edges:
-            scale = weights[coefficient] if coefficient is not None else 1
-            buffers[site][position] = (
-                buffers[site][position]
-                .at[left_offset, :, :, right_offset]
-                .add(scale * jnp.asarray(matrix, dtype=dtype))
-            )
+        if batch_updates:
+            for site, position, left, right, matrices, coefficients in block_updates:
+                updates = scales[coefficients, None, None] * jnp.asarray(
+                    matrices, dtype=dtype
+                )
+                buffers[site][position] = (
+                    buffers[site][position].at[left, :, :, right].add(updates)
+                )
+        else:
+            for (
+                site,
+                position,
+                left_offset,
+                right_offset,
+                matrix,
+                coefficient,
+            ) in single_updates:
+                scale = weights[coefficient] if coefficient is not None else 1
+                buffers[site][position] = (
+                    buffers[site][position]
+                    .at[left_offset, :, :, right_offset]
+                    .add(scale * jnp.asarray(matrix, dtype=dtype))
+                )
         if dense:
             return MPOState(spec, tuple(tuple(site) for site in buffers))
         return MPOState(
