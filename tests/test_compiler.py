@@ -2,6 +2,7 @@ import sys
 import os
 import pytest
 import numpy as np
+import networkx as nx
 from pytest_lazyfixture import lazy_fixture as lf
 
 thisfile = os.path.abspath(__file__)
@@ -292,3 +293,400 @@ def test_simple_compile_preserves_measurement_export(npb):
             qc.remove_final_measurements(inplace=False)
         )
         np.testing.assert_allclose(state.probabilities(), [0, 1], atol=1e-6)
+
+
+def _routing_error(circuit, routed, info, seed=0):
+    """Compare seeded random-input amplitudes, including global phase."""
+    n = circuit._nqubits
+    rng = np.random.default_rng(seed)
+    state = rng.normal(size=2**n) + 1j * rng.normal(size=2**n)
+    state /= np.linalg.norm(state)
+    physical_input = (
+        state.reshape([2] * n).transpose(np.argsort(info["initial_layout"])).reshape(-1)
+    )
+    original = tc.Circuit.from_qir(
+        circuit.to_qir(),
+        dict(circuit.circuit_param, inputs=state, mps_inputs=None, tensors=None),
+    )
+    compiled = tc.Circuit.from_qir(
+        routed.to_qir(),
+        dict(
+            routed.circuit_param, inputs=physical_input, mps_inputs=None, tensors=None
+        ),
+    )
+    expected = (
+        tc.backend.numpy(original.state())
+        .reshape([2] * n)
+        .transpose(np.argsort(info["final_layout"]))
+        .reshape(-1)
+    )
+    actual = tc.backend.numpy(compiled.state())
+    return float(np.max(np.abs(actual - expected)))
+
+
+def _routing_circuit():
+    rng = np.random.default_rng(19)
+    unitary, _ = np.linalg.qr(rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4)))
+    c = tc.Circuit(4)
+    c.rx(0, theta=0.31, name="rz")
+    c.cx(3, 0)
+    c.rxx(0, 2, theta=-0.4)
+    c.any(3, 1, unitary=unitary)
+    c.rz(0, theta=0.7)
+    c.rzz(3, 1, theta=-0.2)
+    c.rzz(3, 1, theta=0.8)
+    c.cphase(1, 3, theta=0.3)
+    c.crz(2, 0, theta=0.6)
+    c.cz(0, 3)
+    c.diagonal(3, 0, diag=np.exp(1j * np.array([0.1, 0.4, -0.2, 0.8])))
+    c.s(2)
+    c.td(1)
+    c.ry(3, theta=-0.1)
+    c.any(2, 0, unitary=unitary)
+    c.rz(-1, theta=0.5)
+    c.cx(-1, 0)
+    return c
+
+
+def _permuted_routing_matrix(circuit, info):
+    n = circuit._nqubits
+    initial = np.argsort(info["initial_layout"])
+    final = np.argsort(info["final_layout"])
+    return (
+        tc.backend.numpy(circuit.matrix())
+        .reshape([2] * (2 * n))
+        .transpose(list(final) + list(n + initial))
+        .reshape(2**n, 2**n)
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+@pytest.mark.parametrize("strategy", ["greedy", "swap_network", "auto"])
+@pytest.mark.parametrize(
+    "commute,fuse", [(False, False), (False, True), (True, False), (True, True)]
+)
+def test_linear_route_operator(backend, strategy, commute, fuse):
+    c = _routing_circuit()
+    original = [(d["index"], d["name"], d["gatef"]) for d in c.to_qir()]
+    routed, info = tc.compiler.linear_route(
+        c,
+        initial_layout=[2, 0, 3, 1],
+        strategy=strategy,
+        commute_diagonal=commute,
+        fuse=fuse,
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(routed.matrix()), _permuted_routing_matrix(c, info), atol=2e-6
+    )
+    np.testing.assert_allclose(_routing_error(c, routed, info), 0, atol=2e-6)
+    assert all(
+        len(d["index"]) == 1 or abs(d["index"][1] - d["index"][0]) == 1
+        for d in routed.to_qir()
+    )
+    assert sorted(info["final_layout"]) == list(range(4))
+    assert sorted(i for origins in info["origins"] for i in origins) == list(
+        range(len(original))
+    )
+    assert [(d["index"], d["name"], d["gatef"]) for d in c.to_qir()] == original
+    if not commute and not fuse:
+        assert [i for origins in info["origins"] for i in origins] == list(
+            range(len(original))
+        )
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("torchb")])
+def test_linear_route_backend_tensors(backend):
+    c = _routing_circuit()
+    routed, info = tc.compiler.linear_route(c)
+    np.testing.assert_allclose(_routing_error(c, routed, info), 0, atol=2e-6)
+    assert all(tc.backend.is_tensor(d["gate"].tensor) for d in routed.to_qir())
+
+
+def test_linear_route_mapping_and_pipeline(npb):
+    c = _routing_circuit()
+    previous = {"logical_physical_mapping": {7: 2, 9: 0}, "tag": "retained"}
+    compile_pass = tc.compiler.Compiler(
+        tc.compiler.linear_route,
+        {"initial_layout": [2, 0, 3, 1], "strategy": "greedy"},
+    )
+    routed, first = compile_pass(c, previous)
+    assert previous == {"logical_physical_mapping": {7: 2, 9: 0}, "tag": "retained"}
+    assert first["tag"] == "retained"
+    assert first["logical_physical_mapping"] == {
+        7: first["final_layout"][2],
+        9: first["final_layout"][0],
+    }
+    second_routed, second = tc.compiler.linear_route(
+        routed, first, initial_layout=[1, 3, 0, 2]
+    )
+    assert second["logical_physical_mapping"] == {
+        q: second["final_layout"][p]
+        for q, p in first["logical_physical_mapping"].items()
+    }
+    np.testing.assert_allclose(
+        _routing_error(routed, second_routed, second), 0, atol=2e-6
+    )
+    broken = dict(first, final_layout=first["final_layout"][::-1])
+    assert _routing_error(c, routed, broken) > 0.01
+
+
+def test_linear_route_fusion_and_phase(npb):
+    c = tc.Circuit(4)
+    c.cz(0, 1)
+    c.rx(3, theta=0.3)
+    c.cx(1, 0)
+    c.rzz(0, 3, theta=0.6)
+    c.rzz(0, 3, theta=-0.4)
+    kwargs = {"initial_layout": list(range(4)), "commute_diagonal": False}
+    raw, raw_info = tc.compiler.linear_route(c, fuse=False, **kwargs)
+    fused, info = tc.compiler.linear_route(c, **kwargs)
+    assert info["num_swaps"] > 0
+    assert info["num_two_qubit_gates"] < raw_info["num_two_qubit_gates"]
+    assert (0, 2) in info["origins"]
+    np.testing.assert_allclose(_routing_error(c, fused, info), 0, atol=2e-6)
+    np.testing.assert_allclose(_routing_error(c, raw, raw_info), 0, atol=2e-6)
+    phased = tc.Circuit.from_qir(fused.to_qir(), {"nqubits": 4})
+    phased.any(0, unitary=1j * np.eye(2))
+    assert _routing_error(c, phased, info) > 0.1
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+@pytest.mark.parametrize("fuse", [False, True])
+def test_linear_route_preserves_unmerged_gates(backend, fuse):
+    split = {"max_singular_values": 2}
+    c = tc.Circuit(2)
+    c.cx(1, 0)
+    c.rz(0, theta=0.2)
+    c.exp1(1, 0, unitary=tc.gates._zz_matrix, theta=0.3, split=split)
+    routed, info = tc.compiler.linear_route(c, initial_layout=[0, 1], fuse=fuse)
+    before, after = c.to_qir(), routed.to_qir()
+    assert info["num_swaps"] == 0
+    assert [d["index"] for d in after] == [(1, 0), (0,), (1, 0)]
+    assert [d["name"] for d in after] == ["cnot", "rz", "exp1"]
+    assert [d["gatef"] for d in after] == [d["gatef"] for d in before]
+    assert after[2]["split"] == split
+    assert len(routed._nodes) == len(c._nodes)
+    for original, compiled in zip(before, after):
+        for key, value in original.get("parameters", {}).items():
+            np.testing.assert_allclose(
+                tc.backend.numpy(compiled["parameters"][key]), tc.backend.numpy(value)
+            )
+    np.testing.assert_allclose(_routing_error(c, routed, info), 0, atol=2e-6)
+
+
+def test_linear_route_preserves_reversed_gate_export(npb):
+    pytest.importorskip("qiskit")
+    c = tc.Circuit(2)
+    c.cx(1, 0)
+    routed, _ = tc.compiler.linear_route(c, initial_layout=[0, 1], fuse=False)
+    assert routed.to_qiskit() == c.to_qiskit()
+    assert routed.to_openqasm() == c.to_openqasm()
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+@pytest.mark.parametrize("first", [(0, 1), (1, 0)])
+@pytest.mark.parametrize("second", [(0, 1), (1, 0)])
+def test_linear_route_fuses_both_orientations(backend, first, second):
+    c = tc.Circuit(3)
+    c.cx(*first)
+    c.ry(2, theta=0.4)
+    c.crx(*second, theta=0.3)
+    routed, info = tc.compiler.linear_route(c, initial_layout=[0, 1, 2])
+    assert info["num_two_qubit_gates"] == 1
+    assert info["origins"] == [(0, 2), (1,)]
+    assert routed.to_qir()[0]["index"] == (0, 1)
+    np.testing.assert_allclose(
+        tc.backend.numpy(routed.matrix()), tc.backend.numpy(c.matrix()), atol=2e-6
+    )
+
+
+@pytest.mark.parametrize("gate", ["oz", "orz"])
+def test_linear_route_open_control_diagonal(npb, gate):
+    c = tc.Circuit(4)
+    getattr(c, gate)(3, 0, **({"theta": 0.37} if gate == "orz" else {}))
+    c.cz(1, 2)
+    routed, info = tc.compiler.linear_route(
+        c, initial_layout=list(range(4)), strategy="greedy", fuse=False
+    )
+    assert info["origins"][0] == (1,)
+    np.testing.assert_allclose(_routing_error(c, routed, info), 0, atol=2e-6)
+
+
+def test_linear_route_auto_and_layout(npb):
+    labels = [4, 0, 3, 1, 5, 2]
+    c = tc.Circuit(6)
+    for i, j in zip(labels[:-1], labels[1:]):
+        c.rzz(i, j, theta=0.2)
+    routed, info = tc.compiler.linear_route(c)
+    assert info["bandwidth"]["initial"] == 1
+    assert info["cutwidth"]["initial"] == 1
+    assert info["num_swaps"] == 0
+    assert info["num_two_qubit_gates"] == 5
+    np.testing.assert_allclose(_routing_error(c, routed, info), 0, atol=2e-6)
+    c = _routing_circuit()
+    _, greedy = tc.compiler.linear_route(c, strategy="greedy")
+    _, network = tc.compiler.linear_route(c, strategy="swap_network")
+    _, auto = tc.compiler.linear_route(c)
+    assert auto["num_two_qubit_gates"] == min(
+        greedy["num_two_qubit_gates"], network["num_two_qubit_gates"]
+    )
+    assert auto["strategy"] == (
+        "greedy"
+        if greedy["num_two_qubit_gates"] <= network["num_two_qubit_gates"]
+        else "swap_network"
+    )
+    _, repeated = tc.compiler.linear_route(c)
+    assert repeated == auto
+
+
+@pytest.mark.parametrize("case", ["disabled", "no_diagonal"])
+def test_linear_route_auto_skips_identical_candidate(npb, monkeypatch, case):
+    c = tc.Circuit(4)
+    c.cx(3, 0)
+    c.crx(1, 3, theta=0.2)
+    if case == "disabled":
+        c.rzz(0, 2, theta=0.3)
+    created = []
+    router_type = tc.compiler.linear_routing._Router
+    original_init = router_type.__init__
+
+    def counted_init(self, layout, fuse):
+        created.append(layout)
+        original_init(self, layout, fuse)
+
+    monkeypatch.setattr(router_type, "__init__", counted_init)
+    routed, info = tc.compiler.linear_route(c, commute_diagonal=case != "disabled")
+    assert len(created) == 1
+    assert info["strategy"] == "greedy"
+    np.testing.assert_allclose(_routing_error(c, routed, info), 0, atol=2e-6)
+
+
+@pytest.mark.parametrize("n", [3, 6, 7])
+def test_linear_route_swap_network_all_pairs(npb, n):
+    c = tc.Circuit(n)
+    for i in range(n):
+        for j in range(i + 1, n):
+            c.crz(j, i, theta=0.1 * (i + 2 * j))
+    routed, info = tc.compiler.linear_route(
+        c, strategy="swap_network", initial_layout=list(range(n)), fuse=False
+    )
+    assert info["num_swaps"] <= n * (n - 1) // 2
+    assert info["origins"][-1]
+    np.testing.assert_allclose(_routing_error(c, routed, info), 0, atol=2e-6)
+
+
+@pytest.mark.parametrize("n", [1, 4])
+def test_linear_route_empty_and_onsite(npb, n):
+    c = tc.Circuit(n)
+    routed, info = tc.compiler.linear_route(c)
+    assert info["num_swaps"] == 0
+    np.testing.assert_allclose(_routing_error(c, routed, info), 0, atol=1e-7)
+    c.rz(0, theta=0.3)
+    c.diagonal(n - 1, diag=np.array([1, 1j]))
+    routed, info = tc.compiler.linear_route(c)
+    np.testing.assert_allclose(_routing_error(c, routed, info), 0, atol=2e-6)
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "arity",
+        "mpo",
+        "channel",
+        "measure",
+        "reset",
+        "inputs",
+        "mps_inputs",
+        "tensors",
+        "qudit",
+        "symbolic",
+    ],
+)
+def test_linear_route_unsupported(npb, case):
+    c = tc.Circuit(3)
+    if case == "arity":
+        c.toffoli(0, 1, 2)
+    elif case == "mpo":
+        c.mpo(0, 1, mpo=tc.Circuit(2).quoperator())
+    elif case == "channel":
+        c.depolarizing(0, px=0.1, py=0.1, pz=0.1, status=0.5)
+    elif case in ("measure", "reset"):
+        getattr(c, case + "_instruction")(0)
+    elif case == "inputs":
+        c = tc.Circuit(3, inputs=np.eye(1, 8).reshape(-1))
+    elif case == "mps_inputs":
+        c = tc.Circuit(3, mps_inputs=c.quvector())
+    elif case == "tensors":
+        c = tc.Circuit(3, tensors=[np.array([1, 0]).reshape(1, 2, 1)] * 3)
+    elif case == "qudit":
+        c = tc.Circuit(3, dim=3)
+    elif case == "symbolic":
+        c = tc.SymbolCircuit(3)
+    with pytest.raises((NotImplementedError, TypeError)):
+        tc.compiler.linear_route(c)
+
+
+@pytest.mark.parametrize("layout", [[0, 0], [0], [1, 2], [0.0, 1.0]])
+def test_linear_route_invalid_layout(npb, layout):
+    with pytest.raises(ValueError, match="permutation"):
+        tc.compiler.linear_route(tc.Circuit(2), initial_layout=layout)
+
+
+def test_linear_route_invalid_options(npb):
+    with pytest.raises(ValueError, match="strategy"):
+        tc.compiler.linear_route(tc.Circuit(2), strategy="unknown")
+    with pytest.raises(ValueError, match="unknown routing options"):
+        tc.compiler.linear_route(tc.Circuit(2), compiled_options={"typo": True})
+    with pytest.raises(ValueError, match="previous mapping"):
+        tc.compiler.linear_route(tc.Circuit(2), {"logical_physical_mapping": {0: 2}})
+
+
+def test_linear_route_qaoa_mps(npb):
+    n = 12
+    rng = np.random.default_rng(7)
+    edges = list(nx.random_regular_graph(3, n, seed=8).edges())
+    h, weights = rng.normal(size=n), rng.normal(size=len(edges))
+    c = tc.Circuit(n)
+    for q in range(n):
+        c.h(q)
+    for gamma, beta in [(0.3, 0.2), (0.4, 0.1)]:
+        for q in range(n):
+            c.rz(q, theta=2 * gamma * h[q])
+        for (i, j), w in zip(edges, weights):
+            c.rzz(i, j, theta=2 * gamma * w)
+        for q in range(n):
+            c.rx(q, theta=2 * beta)
+    routed, info = tc.compiler.linear_route(c)
+    mps = tc.MPSCircuit.from_qir(
+        routed.to_qir(), {"nqubits": n, "split": {"max_singular_values": 64}}
+    )
+    expected = (
+        tc.backend.numpy(c.state())
+        .reshape([2] * n)
+        .transpose(np.argsort(info["final_layout"]))
+        .reshape(-1)
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(mps.wavefunction()), expected, atol=4e-6
+    )
+    np.testing.assert_allclose(mps.get_fidelity(), 1, atol=1e-6)
+
+
+def test_linear_route_gradient(jaxb):
+    def state(theta, route):
+        c = tc.Circuit(3)
+        c.h(0)
+        c.rzz(2, 0, theta=theta)
+        c.cphase(0, 2, theta=theta * 0.4)
+        c.rx(1, theta=theta * 0.2)
+        if route:
+            c, info = tc.compiler.linear_route(c, initial_layout=[1, 2, 0])
+            logical = info["final_layout"][0]
+        else:
+            logical = 0
+        return tc.backend.real(c.expectation_ps(x=[logical]))
+
+    theta = tc.backend.convert_to_tensor(0.37)
+    reference = tc.backend.jit(tc.backend.value_and_grad(lambda t: state(t, False)))
+    routed = tc.backend.jit(tc.backend.value_and_grad(lambda t: state(t, True)))
+    np.testing.assert_allclose(routed(theta), reference(theta), atol=2e-6)

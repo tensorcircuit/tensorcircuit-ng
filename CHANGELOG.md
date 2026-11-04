@@ -11,6 +11,7 @@
 
 ### Added
 
+- Add `compiler.linear_route` for permutation-aware routing to a qubit chain, with diagonal reordering, SWAP fusion, and layout metadata.
 - Add `MPSCircuit.get_fidelity()` to expose the cumulative fraction of weight retained by MPS truncations.
 - Add `tc.templates.diagonal` with Pauli/support encoders, fast Walsh-Hadamard Z-polynomial diagonals, and elementwise diagonal or exponential action, including dynamic-structure JIT/vmap and weight gradients.
 - Add backend `gather` for axis-based indexing with scalar or multidimensional indices, including JIT and gradient support.
