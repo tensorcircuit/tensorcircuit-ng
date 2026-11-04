@@ -1,0 +1,73 @@
+title: "Real-Time Dynamics in Two Dimensions with Tensor Network States via Time-Dependent Variational Monte Carlo Method"
+arxiv_id: "2512.06768"
+url: "https://arxiv.org/abs/2512.06768"
+year: 2026
+authors:
+  - "Yantao Wu"
+  - "Jannes Nys"
+tags:
+  - "topological-phase"
+  - "many-body-physics"
+  - "classical-simulation"
+  - "tensor-network"
+tc_features:
+  - "fermionic-gaussian-state"
+  - "jit"
+  - "vmap"
+  - "scan"
+  - "autodiff"
+  - "contractor"
+backend: "jax"
+hardware_requirements:
+  gpu: true
+  min_memory: "64GB"
+card_title: "Figure 2 · 6 x 6 PEPS versus exact dynamics"
+summary: "Independent PEPS-tVMC and Gaussian densities share one color scale for a 6 x 6 corner quench."
+description: >-
+  Scales the Figure 2(b,c) method of PRX Quantum 7, 033035 (2026),
+  DOI 10.1103/tggc-8fjx, to 6 x 6 open Hofstadter sites, 24 particles and
+  D=4. The script prepares a PEPS from random tensors using independent
+  imaginary-time VMC, then evolves it to t=8 with SR/RK4. OMECO plans
+  exact single-layer contractions once per topology. Centering and scalar
+  regularization handle gauge nulls implicitly; a matrix-free CG alternative
+  avoids the dense Fisher metric.
+  Gaussian Born proposals and exactly contracted PEPS amplitudes supply
+  independent raw density and fidelity estimates, with jackknife uncertainty.
+  The Gaussian state supplies no training loss or parameter update.
+  Both density rows use the fixed 0..0.04 scale; signed arrays are retained.
+  The submitted main.py generates summary.npz and result.png from scratch.
+  Independent sector, derivative, sampling and integration checks are in
+  verify.py. This reduced-size demonstration does not establish the original
+  12 x 12 PEPS accuracy or performance, and exact contraction does not remove
+  finite-D, preparation or stochastic-integration errors.
+  At flux 1/3, the 6 x 6 lattice spans only two magnetic unit cells across;
+  agreement after the corner quench does not establish separated edge and
+  bulk behavior or chiral edge propagation at the paper's scale.
+parameters:
+  rows: 6
+  columns: 6
+  particles: 24
+  bond_dim: 4
+  dtype: complex128
+  seed: 17
+  samples: 10240
+  sweeps: 1
+  time_step: 0.2
+  time_steps: 40
+  solver: dense
+  regulator: 1.0e-5
+  measurement_samples: 4194304
+  bond_seed: 7109
+  measurement_seed: 9147
+  measurement_batch_per_device: 2048
+  preparation:
+    - {bond_dim: 2, samples: 2048, steps: 100, time_step: 0.05, regulator: 1.0e-3}
+    - {bond_dim: 4, samples: 4096, steps: 100, time_step: 0.05, regulator: 1.0e-3}
+    - {bond_dim: 4, samples: 10240, steps: 60, time_step: 0.05, regulator: 1.0e-4}
+outputs:
+  - target: "Figure 2(b,c) method: 6 x 6 PEPS-tVMC versus exact dynamics"
+    path: "outputs/result.png"
+    script: "main.py"
+  - target: "Independent PEPS and exact density summary"
+    path: "outputs/summary.npz"
+    script: "main.py"
