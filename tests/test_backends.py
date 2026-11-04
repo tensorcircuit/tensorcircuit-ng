@@ -44,6 +44,24 @@ def test_vmap_jax(jaxb):
     assert tc.backend.numpy(r)[0, 0] == 3.0
 
 
+def test_jax_is_tensor_traced(jaxb):
+    K = tc.backend
+    data = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+    tensor = K.convert_to_tensor(data)
+    assert K.is_tensor(tensor)
+    for host_value in (data, [1.0, 2.0], 1.0, np.float32(1.0)):
+        assert not K.is_tensor(host_value)
+
+    def loss(x):
+        assert K.is_tensor(x)
+        return K.sum(x**2)
+
+    np.testing.assert_allclose(K.numpy(K.jit(loss)(tensor)), np.sum(data**2))
+    np.testing.assert_allclose(K.numpy(K.jit(K.grad(loss))(tensor)), 2 * data)
+    batched = K.jit(K.vmap(loss))(tensor)
+    np.testing.assert_allclose(K.numpy(batched), np.sum(data**2, axis=1))
+
+
 def test_vmap_tf(tfb):
     r = universal_vmap()
     assert r.numpy()[0, 0] == 3.0
@@ -2010,6 +2028,31 @@ def test_scatter(backend):
     expected = np.zeros([2, 2], dtype=np.complex64)
     expected[0, 1] = 1.0 + 2.0j
     np.testing.assert_allclose(tc.backend.numpy(res), expected)
+
+
+@pytest.mark.parametrize("index_dtype", ["int32", "int64"])
+@pytest.mark.parametrize("mode", ["update", "add", "sub"])
+def test_scatter_torch_vmap(torchb, index_dtype, mode):
+    K = tc.backend
+    operand = K.ones([4], dtype="float32")
+    indices = K.convert_to_tensor([[[0], [2]], [[1], [3]]], dtype=index_dtype)
+    updates = K.convert_to_tensor([[0.5, 0.7], [-0.3, 0.2]], dtype="float32")
+    scatter = K.vmap(
+        lambda i, u: K.scatter(operand, i, u, mode=mode), vectorized_argnums=(0, 1)
+    )
+    result = scatter(indices, updates)
+    if mode == "update":
+        expected = [[0.5, 1.0, 0.7, 1.0], [1.0, -0.3, 1.0, 0.2]]
+    elif mode == "add":
+        expected = [[1.5, 1.0, 1.7, 1.0], [1.0, 0.7, 1.0, 1.2]]
+    else:
+        expected = [[0.5, 1.0, 0.3, 1.0], [1.0, 1.3, 1.0, 0.8]]
+    np.testing.assert_allclose(K.numpy(result), expected, atol=1e-7)
+    np.testing.assert_array_equal(K.numpy(operand), np.ones(4))
+    gradient = K.grad(lambda u: K.sum(scatter(indices, u)))(updates)
+    np.testing.assert_allclose(
+        K.numpy(gradient), np.full((2, 2), -1.0 if mode == "sub" else 1.0)
+    )
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])

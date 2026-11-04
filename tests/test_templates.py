@@ -14,6 +14,146 @@ sys.path.insert(0, modulepath)
 import tensorcircuit as tc
 
 
+def _zpoly_reference(structures, weights):
+    n = structures.shape[1]
+    bits = (np.arange(2**n)[:, None] >> np.arange(n - 1, -1, -1)) & 1
+    return (-1.0) ** (bits @ (structures == 3).T) @ weights
+
+
+def test_zpoly_masks(npb):
+    diagonal = tc.templates.diagonal
+    masks = diagonal.zpoly_masks([[3, 0, 0], [0, 0, 3], [3, 0, 3], [0, 0, 0]])
+    assert tc.backend.dtype(masks) == "int32"
+    np.testing.assert_array_equal(masks, [4, 1, 5, 0])
+    np.testing.assert_array_equal(
+        diagonal.zpoly_masks([[np.int64(0)], [2], [0, 2], []], 3, encoding="supports"),
+        masks,
+    )
+    for structures, options in [
+        ([[1, 0]], {}),
+        ([[0, 0]], {"n": 3, "encoding": "supports"}),
+        ([[3]], {"n": 3, "encoding": "supports"}),
+        ([], {"n": 31, "encoding": "supports"}),
+    ]:
+        with pytest.raises(ValueError):
+            diagonal.zpoly_masks(structures, **options)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_zpoly_diagonal(backend):
+    K = tc.backend
+    diagonal = tc.templates.diagonal
+    supports = [[], [0], [1, 4], [0, 2, 4], [0, 1, 3, 4], [0], []]
+    structures = np.zeros((len(supports), 5), dtype=np.int32)
+    for row, support in zip(structures, supports):
+        row[support] = 3
+    weights = np.array([0.2, 0.7, -0.3, 1.1, -0.6, 0.4, 0.0], dtype=np.float64)
+    result = diagonal.zpoly_diagonal(diagonal.zpoly_masks(structures), weights, 5)
+    assert K.dtype(result) == "float32"
+    np.testing.assert_allclose(
+        K.numpy(result), _zpoly_reference(structures, weights), atol=1e-6
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_zpoly_jit_vmap(backend):
+    K = tc.backend
+    diagonal = tc.templates.diagonal
+    traces = []
+
+    def evaluate(structures, weights):
+        traces.append(None)
+        return diagonal.zpoly_diagonal(diagonal.zpoly_masks(structures), weights, 3)
+
+    structures = np.array(
+        [[[3, 0, 0], [3, 0, 3], [0, 0, 0]], [[0, 0, 3], [0, 3, 3], [3, 3, 3]]],
+        dtype=np.int32,
+    )
+    weights = np.array([[0.7, -0.2, 0.1], [0.3, 0.5, -0.8]], dtype=np.float32)
+    expected = np.stack([_zpoly_reference(s, w) for s, w in zip(structures, weights)])
+    compiled = K.jit(evaluate)
+    for s, w, reference in zip(structures, weights, expected):
+        result = compiled(K.convert_to_tensor(s), K.convert_to_tensor(w))
+        np.testing.assert_allclose(K.numpy(result), reference, atol=2e-7)
+    if K.name == "jax":
+        assert len(traces) == 1
+    batched = K.jit(K.vmap(evaluate, vectorized_argnums=(0, 1)))
+    result = batched(K.convert_to_tensor(structures), K.convert_to_tensor(weights))
+    np.testing.assert_allclose(K.numpy(result), expected, atol=2e-7)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_zpoly_gradients(backend):
+    K = tc.backend
+    diagonal = tc.templates.diagonal
+    structures = np.array([[3, 0, 0], [0, 3, 3], [0, 0, 0]], dtype=np.int32)
+    masks = diagonal.zpoly_masks(structures)
+    state = np.exp(1j * np.arange(8)) / np.sqrt(8)
+    parameters = np.array([0.7, -0.3, 0.1, 0.31], dtype=np.float64)
+
+    def loss(p):
+        energies = diagonal.zpoly_diagonal(masks, p[:-1], 3)
+        return K.real(K.sum(diagonal.apply_diagonal(state, energies, theta=p[-1])))
+
+    def reference(p):
+        energies = _zpoly_reference(structures, p[:-1])
+        return np.real(np.sum(state * np.exp(-1j * p[-1] * energies)))
+
+    eps = 1e-4
+    expected = [
+        (reference(parameters + step) - reference(parameters - step)) / (2 * eps)
+        for step in eps * np.eye(len(parameters))
+    ]
+    result = K.jit(K.grad(loss))(K.convert_to_tensor(parameters, dtype="float32"))
+    np.testing.assert_allclose(K.numpy(result), expected, atol=2e-6)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_apply_diagonal(backend):
+    K = tc.backend
+    apply = tc.templates.diagonal.apply_diagonal
+    state = np.linspace(0.1, 0.9, 27).reshape(3, 3, 3)
+    energies = np.linspace(-0.7, 1.3, 27)
+    result = apply(state, energies)
+    assert K.dtype(result) == "complex64"
+    np.testing.assert_allclose(
+        K.numpy(result), state * energies.reshape(state.shape), atol=2e-7
+    )
+    phases = np.exp(-0.37j * energies)
+    np.testing.assert_allclose(
+        K.numpy(apply(state, phases)), state * phases.reshape(state.shape), atol=2e-7
+    )
+    times = np.array([0.0, 0.37, -0.2], dtype=np.float32)
+    evolve = K.jit(K.vmap(lambda t: apply(state, energies, theta=t)))
+    result = K.numpy(evolve(K.convert_to_tensor(times)))
+    expected = state.reshape(1, -1) * np.exp(-1j * times[:, None] * energies)
+    np.testing.assert_allclose(result.reshape(3, -1), expected, atol=2e-7)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_zpoly_cost_layer(backend, highp):
+    K = tc.backend
+    diagonal = tc.templates.diagonal
+    n, gamma = 4, 0.123456789123
+    supports = [[i] for i in range(n)] + [
+        [i, j] for i in range(n) for j in range(i + 1, n)
+    ]
+    weights = np.random.default_rng(43).normal(size=len(supports))
+    circuit = tc.Circuit(n)
+    for i in range(n):
+        circuit.h(i)
+    for support, weight in zip(supports, weights):
+        gate = circuit.rz if len(support) == 1 else circuit.rzz
+        gate(*support, theta=2 * gamma * weight)
+    masks = diagonal.zpoly_masks(supports, n, encoding="supports")
+    energies = diagonal.zpoly_diagonal(masks, weights, n)
+    state = np.ones(1 << n, dtype=np.complex64) / 4
+    result = diagonal.apply_diagonal(state, energies, theta=gamma)
+    assert K.dtype(energies) == "float64"
+    assert K.dtype(result) == "complex128"
+    np.testing.assert_allclose(K.numpy(result), K.numpy(circuit.state()), atol=1e-14)
+
+
 def test_any_measurement():
     c = tc.Circuit(2)
     c.H(0)

@@ -4,6 +4,8 @@ Use this file for backend-wrapper semantics, tracing and vectorization, XLA exec
 
 ## Backend wrapper semantics
 
+- JAX backend `is_tensor` should use `jnp.ndarray`, which also recognizes tracers, and exclude host NumPy arrays. Checking private storage such as `_value` rejects tracers; an explicit `jax.core.Tracer` check is unnecessary. Verified on JAX 0.4.35, 0.6.2, 0.7.0, 0.7.1, 0.9.0, 0.10.0, and 0.10.1 with jit, vmap, and grad.
+- PyTorch `index_put` accepts int32 indices eagerly but its vmap path can require int64. Normalize int32 scatter indices in the backend, preserving int64 inputs, and check batched values and update gradients.
 - Add a missing tensor primitive to the backend abstraction and cover it with backend-fixture tests instead of introducing a backend-specific call in core logic.
 - `tc.backend.vmap` selects batched arguments with `vectorized_argnums`, not JAX-style `in_axes`; use a tuple such as `vectorized_argnums=(0, 1)` for multiple batched arguments.
 - `lexsort(keys)` follows NumPy semantics: the last key is primary. Test every custom backend implementation against that ordering.

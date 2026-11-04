@@ -704,6 +704,8 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
     def scatter(
         self, operand: Tensor, indices: Tensor, updates: Tensor, mode: str = "update"
     ) -> Tensor:
+        if indices.dtype == torchlib.int32:
+            indices = indices.long()
         operand_new = operand.clone()
         index_depth = indices.shape[-1]
         idx_tuple = tuple(indices[..., i] for i in range(index_depth))

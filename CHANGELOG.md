@@ -11,6 +11,7 @@
 
 ### Added
 
+- Add `tc.templates.diagonal` with Pauli/support encoders, fast Walsh-Hadamard Z-polynomial diagonals, and elementwise diagonal or exponential action, including dynamic-structure JIT/vmap and weight gradients.
 - Add backend `gather` for axis-based indexing with scalar or multidimensional indices, including JIT and gradient support.
 - Add `U1Operator.mvp` for matrix-free products of a Pauli string sum restricted to a U(1) subspace, with differentiable weights, e.g., for `krylov_evol` within a fixed particle-number sector.
 - Add `PauliStringSum2CSR` and the backend method `csr_sparse_matrix`.
@@ -19,6 +20,8 @@
 
 ### Fixed
 
+- Recognize traced JAX arrays in backend `is_tensor`, including values inside JIT, vmap, and gradient transformations, without relying on private array storage.
+- Support int32 scatter indices under PyTorch vmap by normalizing them to the int64 indexing dtype.
 - Preserve two-qubit depolarizing noise when sampling detector trajectories from Stim circuits.
 - Fix biased `probability_sample` (and thus `sample(allow_state=True)`) for large float32 distributions, where a single float32 cumulative sum and uniform number cannot resolve individual outcomes (about 2% total variation at 20 qubits, about 30% at 24 qubits). With more than `2**12` outcomes, internally drawn randomness now uses two-level block sampling with two uniform numbers per shot; external `status` may also be given with shape `[shots, 2]` for this mode, while `[shots]` keeps the previous single-level behavior.
 - Fix correlated TensorFlow random streams for adjacent integer seeds: `set_random_state(seed)` and `get_random_state(seed)` now use the seed as the Philox key instead of the counter, so seeds `s` and `s + 1` no longer produce the same stream shifted by four numbers.

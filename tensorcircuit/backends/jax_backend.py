@@ -516,12 +516,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         return jnp.cumsum(a, axis)
 
     def is_tensor(self, a: Any) -> bool:
-        if not isinstance(a, jnp.ndarray):
-            return False
-        # isinstance(np.eye(1), jax.numpy.ndarray) = True!
-        if getattr(a, "_value", None) is not None:
-            return True
-        return False
+        return not isinstance(a, np.ndarray) and isinstance(a, jnp.ndarray)
 
     def solve(self, A: Tensor, b: Tensor, assume_a: str = "gen") -> Tensor:  # type: ignore
         return jsp.linalg.solve(A, b, assume_a=assume_a)
