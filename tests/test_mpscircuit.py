@@ -120,7 +120,7 @@ def do_test_truncation(
     real_fedility = (
         np.abs(tc.backend.numpy(w_mps).conj().dot(tc.backend.numpy(w_c))) ** 2
     )
-    estimated_fedility = tc.backend.numpy(mps._fidelity)
+    estimated_fedility = tc.backend.numpy(mps.get_fidelity())
     print(real_fedility, estimated_fedility)
     if real_fedility_ref is not None:
         np.testing.assert_allclose(real_fedility, real_fedility_ref, atol=1e-5)
@@ -305,6 +305,247 @@ def do_test_sample(test_circuits: type_test_circuits):
     assert len(s[0]) == N
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("n, dim", [(6, 2), (3, 3)])
+def test_sampling_conditional_distribution(backend, n, dim):
+    rng = np.random.default_rng(62)
+    state = rng.normal(size=dim**n) + 1j * rng.normal(size=dim**n)
+    c = tc.MPSCircuit(
+        n,
+        dim=dim,
+        wavefunction=tc.backend.cast(tc.backend.convert_to_tensor(state), tc.dtypestr),
+        split={"max_singular_values": 3},
+    )
+    c.position(n - 1)
+    before = [tc.backend.numpy(t).copy() for t in c.get_tensors()]
+    probabilities = np.abs(tc.backend.numpy(c.wavefunction())) ** 2
+    probabilities /= probabilities.sum()
+    status = rng.uniform(0.01, 0.99, size=(50, n)).astype(np.float32)
+    expected = []
+    for st in status:
+        remaining = probabilities.reshape([dim] * n)
+        shot = []
+        for u in st:
+            weights = remaining.reshape(dim, -1).sum(axis=1)
+            outcome = np.searchsorted(np.cumsum(weights / weights.sum()), u)
+            shot.append(outcome)
+            remaining = remaining[outcome]
+        expected.append(shot)
+    status = tc.backend.convert_to_tensor(status)
+    actual = c.sample(batch=50, status=status)
+    np.testing.assert_allclose(tc.backend.numpy(actual), expected, atol=0)
+    shot, probability = c.measure(*range(n), status=status[0], with_prob=True)
+    idx = np.ravel_multi_index(expected[0], [dim] * n)
+    np.testing.assert_allclose(tc.backend.numpy(shot), expected[0], atol=0)
+    np.testing.assert_allclose(
+        tc.backend.numpy(probability), probabilities[idx], rtol=2e-5
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.sample(status=status[0], format="sample_bin")),
+        [expected[0]],
+        atol=0,
+    )
+    assert c.get_center_position() == n - 1
+    for original, tensor in zip(before, c.get_tensors()):
+        np.testing.assert_array_equal(tc.backend.numpy(tensor), original)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_sampling_zero_probability_endpoints(backend):
+    c = tc.MPSCircuit(4)
+    c.x(0)
+    status = tc.backend.convert_to_tensor(
+        np.array([[0.0] * 4, [1e-10] * 4, [1.0] * 4], dtype=np.float32)
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.sample(batch=3, status=status)), [[1, 0, 0, 0]] * 3, atol=0
+    )
+    shot, probability = c.measure(3, 0, status=status[0, :2], with_prob=True)
+    np.testing.assert_allclose(tc.backend.numpy(shot), [0, 1], atol=0)
+    np.testing.assert_allclose(tc.backend.numpy(probability), 1.0)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_measure_long_chain_normalization(backend, reverse):
+    n = 160
+    c = tc.MPSCircuit(n)
+    for i in range(n):
+        c.h(i)
+    order = tuple(reversed(range(n))) if reverse else tuple(range(n))
+    status = tc.backend.convert_to_tensor(np.full(n, 0.75, dtype=np.float32))
+    measure = tc.backend.jit(lambda st: c.measure(*order, status=st, with_prob=True))
+    shot, probability = measure(status)
+    np.testing.assert_allclose(tc.backend.numpy(shot), np.ones(n), atol=0)
+    assert np.isfinite(tc.backend.numpy(probability))
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("normalize", [False, True])
+def test_fidelity_multiple_truncations(backend, highp, normalize):
+    rng = np.random.default_rng(91)
+    c = tc.MPSCircuit(8, split={"max_singular_values": 2})
+    np.testing.assert_allclose(tc.backend.numpy(c.get_fidelity()), 1.0)
+    expected = 1.0
+    for _ in range(3):
+        for i in range(8):
+            c.ry(i, theta=0.8 + 0.5 * rng.normal())
+            c.rz(i, theta=0.4 + 0.5 * rng.normal())
+        for i in range(7):
+            before = np.linalg.norm(tc.backend.numpy(c.wavefunction())) ** 2
+            c.rxx(i, i + 1, theta=0.8 + 0.5 * rng.normal())
+            after = np.linalg.norm(tc.backend.numpy(c.wavefunction())) ** 2
+            expected *= after / before
+            if normalize:
+                c.normalize()
+    assert expected < 0.95
+    np.testing.assert_allclose(tc.backend.numpy(c.get_fidelity()), expected, rtol=1e-9)
+    c.normalize()
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.copy().get_fidelity()), expected, rtol=1e-9
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.conj().get_fidelity()), expected, rtol=1e-9
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_fidelity_zero_norm_postselection(backend):
+    def run(theta):
+        c = tc.MPSCircuit(3, split={"max_singular_values": 1})
+        c.rxx(1, 2, theta=theta)
+        before = c.get_fidelity()
+        c.mid_measurement(0, keep=1)
+        c.cnot(0, 1)
+        c.cnot(1, 2)
+        return before, c.get_fidelity(), c.get_norm()
+
+    run = tc.backend.jit(run)
+    for theta in [0.0, 0.8]:
+        before, after, norm = run(tc.backend.convert_to_tensor(np.float32(theta)))
+        expected = np.cos(theta / 2) ** 2
+        np.testing.assert_allclose(tc.backend.numpy(before), expected, atol=2e-6)
+        np.testing.assert_allclose(tc.backend.numpy(after), expected, atol=2e-6)
+        np.testing.assert_allclose(tc.backend.numpy(norm), 0.0, atol=0)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("target", [0, 1])
+@pytest.mark.parametrize("truncate", [False, True])
+def test_reversed_double_gate_split_override(backend, target, truncate):
+    truncation = {"max_singular_values": 1}
+    c = tc.MPSCircuit(3, split={} if truncate else truncation)
+    c.ry(2, theta=0.8)
+    c.cnot(2, target, split=truncation if truncate else {})
+    expected = np.zeros(8)
+    expected[0] = np.cos(0.4)
+    if not truncate:
+        expected[1 + 2 ** (2 - target)] = np.sin(0.4)
+    np.testing.assert_allclose(tc.backend.numpy(c.wavefunction()), expected, atol=2e-6)
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.get_fidelity()),
+        np.cos(0.4) ** 2 if truncate else 1.0,
+        atol=2e-6,
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("method", ["bond", "gate", "mpo_left", "mpo_right"])
+@pytest.mark.parametrize(
+    "split, expected",
+    [
+        ({"max_singular_values": 1}, np.cos(0.4) ** 2),
+        ({"max_singular_values": 8}, 1.0),
+        ({"max_truncation_err": 0.4}, np.cos(0.4) ** 2),
+        ({"max_truncation_err": 0.4, "relative": True}, 1.0),
+    ],
+)
+def test_fidelity_bond_and_mpo(backend, method, split, expected):
+    original_split = split.copy()
+    c = tc.MPSCircuit(3, split=split)
+    c.ry(0, theta=0.8)
+    if method == "bond":
+        c.cnot(0, 1, split={})
+        c.reduce_dimension(0)
+    else:
+        reference = tc.Circuit(3)
+        reference.cnot(0, 1)
+        reference.cnot(1, 2)
+        gate = tc.gates.any(reference.matrix())
+        if method == "gate":
+            c.apply(gate, 0, 1, 2)
+        else:
+            tensors, left = c.gate_to_MPO(gate, 0, 1, 2)
+            c.apply_MPO(tensors, left, center_left=method == "mpo_left")
+    assert split == original_split
+    np.testing.assert_allclose(tc.backend.numpy(c.get_fidelity()), expected, atol=2e-6)
+    norm_squared = np.linalg.norm(tc.backend.numpy(c.wavefunction())) ** 2
+    np.testing.assert_allclose(
+        tc.backend.numpy(c.get_fidelity()), norm_squared, atol=2e-6
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_fidelity_nonunitary_scale(backend):
+    c = tc.MPSCircuit(2, split={"max_singular_values": 1})
+    c.h(0)
+    c.apply(tc.gates.any(3 * tc.gates.cnot().tensor), 0, 1)
+    np.testing.assert_allclose(tc.backend.numpy(c.get_fidelity()), 0.5, atol=2e-6)
+
+
+def test_sampling_fidelity_jit_vmap(jaxb):
+    traces = []
+
+    def run(params, status):
+        traces.append(None)
+        c = tc.MPSCircuit(6, split={"max_singular_values": 2})
+        for layer in range(2):
+            for i in range(6):
+                c.ry(i, theta=params[layer] + 0.1 * i)
+            for i in range(5):
+                c.rxx(i, i + 1, theta=params[layer])
+        return c.sample(batch=5, status=status), c.get_fidelity()
+
+    rng = np.random.default_rng(12)
+    status = tc.backend.convert_to_tensor(rng.uniform(0.01, 0.99, size=(2, 5, 6)))
+    params = tc.backend.convert_to_tensor(np.array([[0.7, 1.1], [1.2, 0.8]]))
+    compiled = tc.backend.jit(run)
+    first = compiled(params[0], status[0])
+    second = compiled(params[1], status[1])
+    assert len(traces) == 1
+    for actual, p, st in [
+        (first, params[0], status[0]),
+        (second, params[1], status[1]),
+    ]:
+        expected = run(p, st)
+        for a, e in zip(actual, expected):
+            np.testing.assert_allclose(
+                tc.backend.numpy(a), tc.backend.numpy(e), atol=2e-6
+            )
+    batched = tc.backend.jit(tc.backend.vmap(run, vectorized_argnums=(0, 1)))
+    actual = batched(params, status)
+    for i, expected in enumerate([first, second]):
+        for a, e in zip(actual, expected):
+            np.testing.assert_allclose(
+                tc.backend.numpy(a[i]), tc.backend.numpy(e), atol=2e-6
+            )
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_fidelity_gradient(backend, highp):
+    def fidelity(theta):
+        c = tc.MPSCircuit(2, split={"max_singular_values": 1})
+        c.rxx(0, 1, theta=theta)
+        return c.get_fidelity()
+
+    theta = tc.backend.convert_to_tensor(np.array(0.8, dtype=np.float64))
+    value, gradient = tc.backend.jit(tc.backend.value_and_grad(fidelity))(theta)
+    np.testing.assert_allclose(tc.backend.numpy(value), np.cos(0.4) ** 2, atol=1e-9)
+    np.testing.assert_allclose(
+        tc.backend.numpy(gradient), -0.5 * np.sin(0.8), atol=1e-9
+    )
+
+
 def do_test_rdm(test_circuits: type_test_circuits):
     (
         c,
@@ -377,7 +618,7 @@ def test_circuits(backend, dtype):
     circuits = get_test_circuits()
     do_test_canonical(circuits)
     do_test_wavefunction(circuits)
-    do_test_truncation(circuits, 0.902663090851, 0.910305380327)
+    do_test_truncation(circuits, 0.902663090851, 0.898676413143)
     do_test_amplitude(circuits)
     do_test_expectation(circuits)
     external = external_wavefunction()

@@ -40,7 +40,7 @@ def energy(param, mpsd=None):
     e = tfi_energy(c, n)
     e = tc.backend.real(e)
     if mpsd is not None:
-        fidelity = c._fidelity
+        fidelity = c.get_fidelity()
     else:
         fidelity = None
     return e, c.state(), fidelity

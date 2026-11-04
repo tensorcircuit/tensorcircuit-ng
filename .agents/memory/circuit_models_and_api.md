@@ -26,3 +26,9 @@ Use this file for cross-cutting circuit invariants, serialization behavior, and 
 - New gates should record enough information in `gatef` and `parameters` for reconstruction without hidden context.
 - For noise or channel instructions, store an explicit channel marker and replay them through the same delayed-channel application path during reconstruction. Do not rely on `TypeError` probing or method-name heuristics to distinguish gates from channels.
 - Cross-class `from_qir(...)` is expected to work only when the destination class supports the gates in the serialized program and the caller supplies any model-specific constructor arguments through `circuit_params`.
+
+## MPS measurement and truncation diagnostics
+
+- Normalize the conditional state after each sampled outcome, not only the probability vector. Center moves with `normalize=False` otherwise retain the probability of the measured prefix in the state scale and can underflow on long chains. Complete left-to-right sampling can propagate a bond vector through right-canonical tensors without QR; arbitrary measurement orders still need the general center-moving path.
+- Track truncation at every state-reduction route, including `reduce_dimension` used by MPO and multi-site gates. Use discarded weight relative to the same post-operator decomposition; a pre-gate norm is not the denominator for nonunitary operators. `get_fidelity()` tracks truncations after input construction, survives normalization, and is not an exact overlap or a postselection probability.
+- Zero-norm reductions leave accumulated fidelity unchanged. Protect the denominator before division; masking a `0/0` result afterward can still contaminate gradients under JIT.

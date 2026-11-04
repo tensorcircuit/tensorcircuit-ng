@@ -47,21 +47,33 @@ def split_tensor(
     :return: Two tensors after splitting
     :rtype: Tuple[Tensor, Tensor]
     """
-    # The behavior is a little bit different from tn.split_node because it explicitly requires a center
+    left, right, _ = _split_tensor(tensor, center_left, split)
+    return left, right
+
+
+def _split_tensor(
+    tensor: Tensor,
+    center_left: bool,
+    split: Optional[Dict[str, Any]],
+) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
     if split is None:
         split = {}
     svd = len(split) > 0
     if svd:
-        U, S, VH, _ = backend.svd(tensor, **split)
+        if "max_truncation_err" in split:
+            split = split.copy()
+            split["max_truncation_error"] = split.pop("max_truncation_err")
+        U, S, VH, discarded = backend.svd(tensor, **split)
         if center_left:
-            return U * backend.reshape(S, (1, -1)), VH
+            return U * backend.reshape(S, (1, -1)), VH, discarded
         else:
-            return U, backend.reshape(S, (-1, 1)) * VH
+            return U, backend.reshape(S, (-1, 1)) * VH, discarded
     else:
         if center_left:
-            return backend.rq(tensor)  # type: ignore
+            left, right = backend.rq(tensor)
         else:
-            return backend.qr(tensor)  # type: ignore
+            left, right = backend.qr(tensor)
+        return left, right, None
 
 
 # AD + MPS can lead to numerical stability issue
@@ -81,6 +93,12 @@ class MPSCircuit(AbstractCircuit):
         mps.CNOT(0, 1)
         mps.rx(2, theta=tc.num_to_tensor(1.))
         mps.expectation((tc.gates.z(), 2))
+
+    With a static gate structure and ``split={"max_singular_values": chi}``
+    (without ``max_truncation_err``), circuit construction, gate application,
+    sampling with explicit ``status``, and :meth:`get_fidelity` can be placed
+    inside one JIT-compiled function. Compilation depends on the gate structure
+    and tensor shapes; this is intended for repeated runs of the same structure.
 
     """
 
@@ -224,6 +242,37 @@ class MPSCircuit(AbstractCircuit):
         """
         return self._mps.center_position
 
+    def get_fidelity(self) -> Tensor:
+        """
+        Return the cumulative estimate of fidelity retained by truncation.
+
+        Each truncation contributes ``1 - discarded_weight / total_weight``,
+        where weights are sums of squared singular values before truncation.
+        This includes two-site gates, explicit bond reduction, and reductions
+        during MPO or multi-site gate application. The constructed input MPS
+        is the reference: truncation during input construction is not included.
+
+        This is an estimate, not the overlap with an exact untruncated state.
+        For normalized input followed only by unitary gates and truncations,
+        without intermediate normalization, it equals the final norm squared
+        up to rounding. Normalization and postselection do not reset it.
+        Truncating a zero-norm state leaves the estimate unchanged.
+
+        :return: Real scalar tensor; one if no truncation has occurred.
+        :rtype: Tensor
+        """
+        return backend.cast(backend.convert_to_tensor(self._fidelity), rdtypestr)
+
+    def _record_truncation(self, discarded: Optional[Tensor]) -> None:
+        if discarded is None or backend.shape_tuple(discarded)[0] == 0:
+            return
+        center = self._mps.tensors[self._mps.center_position]
+        retained = backend.real(backend.sum(center * backend.conj(center)))
+        lost = backend.real(backend.sum(discarded * backend.conj(discarded)))
+        total = retained + lost
+        denominator = backend.where(total == 0, backend.ones_like(total), total)
+        self._fidelity = self._fidelity * (1 - lost / denominator)
+
     def set_split_rules(self, split: Dict[str, Any]) -> None:
         """
         Set truncation split when double qubit gates are applied.
@@ -304,7 +353,11 @@ class MPSCircuit(AbstractCircuit):
             center_position=center_position,
             **split,
         )
-        self._fidelity *= 1 - backend.real(backend.sum(err**2))
+        if (
+            split.get("max_singular_values") is not None
+            or split.get("max_truncation_err") is not None
+        ):
+            self._record_truncation(err)
 
     def consecutive_swap(
         self,
@@ -361,7 +414,7 @@ class MPSCircuit(AbstractCircuit):
         assert index1 != index2
         if index1 > index2:
             newgate = Gate(backend.transpose(gate.tensor, [1, 0, 3, 2]))
-            self.apply_double_gate(newgate, index2, index1)
+            self.apply_double_gate(newgate, index2, index1, split=split)
             return
         if split is None:
             split = self.split
@@ -488,18 +541,31 @@ class MPSCircuit(AbstractCircuit):
         """
         Reduce the bond dimension between two general tensors by SVD
         """
+        left, right, _ = cls._reduce_tensor_dimension(
+            tensor_left, tensor_right, center_left, split
+        )
+        return left, right
+
+    @classmethod
+    def _reduce_tensor_dimension(
+        cls,
+        tensor_left: Tensor,
+        tensor_right: Tensor,
+        center_left: bool,
+        split: Optional[Dict[str, Any]],
+    ) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
         if split is None:
             split = {}
         ni, di = tensor_left.shape[0], tensor_right.shape[1]
         nk, dk = tensor_right.shape[-1], tensor_right.shape[-2]
         T = backend.einsum("iaj,jbk->iabk", tensor_left, tensor_right)
         T = backend.reshape(T, (ni * di, nk * dk))
-        new_tensor_left, new_tensor_right = split_tensor(
+        new_tensor_left, new_tensor_right, discarded = _split_tensor(
             T, center_left=center_left, split=split
         )
         new_tensor_left = backend.reshape(new_tensor_left, (ni, di, -1))
         new_tensor_right = backend.reshape(new_tensor_right, (-1, dk, nk))
-        return new_tensor_left, new_tensor_right
+        return new_tensor_left, new_tensor_right, discarded
 
     def reduce_dimension(
         self,
@@ -524,7 +590,7 @@ class MPSCircuit(AbstractCircuit):
         assert self._mps.center_position in [index_left, index_right]
         tensor_left = self._mps.tensors[index_left]
         tensor_right = self._mps.tensors[index_right]
-        new_tensor_left, new_tensor_right = self.reduce_tensor_dimension(
+        new_tensor_left, new_tensor_right, discarded = self._reduce_tensor_dimension(
             tensor_left, tensor_right, center_left=center_left, split=split
         )
         self._mps.tensors[index_left] = new_tensor_left
@@ -533,6 +599,7 @@ class MPSCircuit(AbstractCircuit):
             self._mps.center_position = index_left
         else:
             self._mps.center_position = index_right
+        self._record_truncation(discarded)
 
     def apply_MPO(
         self,
@@ -1089,35 +1156,29 @@ class MPSCircuit(AbstractCircuit):
         :rtype: Tuple[Tensor, Tensor]
         """
         mps = self.copy()
+        if index == tuple(range(self._nqubits)):
+            mps.position(0)
+            return self._measure_mps(mps.get_tensors(), status, with_prob)
 
-        p = 1.0
-        p = backend.convert_to_tensor(p)
-        p = backend.cast(p, dtype=rdtypestr)
+        p = backend.ones((), dtype=rdtypestr)
         sample: Tensor = []
         basis = backend.convert_to_tensor(np.eye(self._d).astype(dtypestr))
         for k, site in enumerate(index):
             mps.position(site)
-            # TODO(@refraction-ray): potential performance issue, position might be saved
             tensor = mps._mps.tensors[site]
-            ps = backend.real(
+            weights = backend.real(
                 backend.einsum("iaj,iaj->a", tensor, backend.conj(tensor))
             )
-            ps /= backend.sum(ps)
-            if status is None:
-                outcome = backend.implicit_randc(
-                    self._d, shape=1, p=backend.cast(ps, rdtypestr)
-                )[0]
-            else:
-                one_r = backend.cast(backend.convert_to_tensor(1.0), rdtypestr)
-                st = backend.cast(status[k : k + 1], rdtypestr)
-                ind = backend.probability_sample(
-                    shots=1, p=backend.cast(ps, rdtypestr), status=one_r - st
-                )
-                outcome = backend.cast(ind[0], "int32")
-
-            p = p * ps[outcome]
+            st = None if status is None else status[k : k + 1]
+            outcome, probability = self._measurement_outcome(weights, st)
+            if with_prob:
+                p = p * probability
             m = basis[outcome]
-            mps._mps.tensors[site] = backend.einsum("iaj,a->ij", tensor, m)[:, None, :]
+            projected = backend.einsum("iaj,a->ij", tensor, m)[:, None, :]
+            norm = backend.cast(
+                backend.sqrt(weights[outcome]), backend.dtype(projected)
+            )
+            mps._mps.tensors[site] = projected / norm
             sample.append(outcome)
         sample = backend.stack(sample)
         sample = backend.real(sample)
@@ -1125,6 +1186,49 @@ class MPSCircuit(AbstractCircuit):
             return sample, p
         else:
             return sample, -1.0
+
+    def _measurement_outcome(
+        self, weights: Tensor, status: Optional[Tensor]
+    ) -> Tuple[Tensor, Tensor]:
+        probabilities = backend.cast(weights / backend.sum(weights), rdtypestr)
+        if status is None:
+            outcome = backend.implicit_randc(self._d, shape=1, p=probabilities)[0]
+        else:
+            st = backend.cast(status, rdtypestr)
+            randomness = 1 - st
+            outcome = backend.probability_sample(
+                shots=1, p=probabilities, status=randomness
+            )[0]
+            # The left CDF endpoint must skip leading zero-probability outcomes.
+            first = backend.argmax(backend.cast(probabilities > 0, "int32"))
+            outcome = backend.where(randomness[0] == 1, first, outcome)
+        outcome = backend.cast(outcome, "int32")
+        return outcome, probabilities[outcome]
+
+    def _measure_mps(
+        self,
+        tensors: Sequence[Tensor],
+        status: Optional[Tensor],
+        with_prob: bool = False,
+    ) -> Tuple[Tensor, Tensor]:
+        env = backend.ones((1,), dtype=backend.dtype(tensors[0]))
+        p = backend.ones((), dtype=rdtypestr)
+        sample = []
+        for site, tensor in enumerate(tensors):
+            conditional = backend.einsum("l,lar->ar", env, tensor)
+            weights = backend.real(
+                backend.sum(conditional * backend.conj(conditional), axis=1)
+            )
+            st = None if status is None else status[site : site + 1]
+            outcome, probability = self._measurement_outcome(weights, st)
+            sample.append(outcome)
+            if with_prob:
+                p = p * probability
+            norm = backend.cast(
+                backend.sqrt(weights[outcome]), backend.dtype(conditional)
+            )
+            env = conditional[outcome] / norm
+        return backend.stack(sample), p if with_prob else -1.0
 
     def reduced_density_matrix(
         self,
@@ -1260,31 +1364,64 @@ class MPSCircuit(AbstractCircuit):
         status: Optional[Tensor] = None,
         jittable: bool = True,
     ) -> Any:
+        """
+        Sample complete computational-basis strings without changing the MPS.
+
+        The state is right-canonicalized once per call. Each shot propagates a
+        normalized conditional environment from left to right without further
+        QR decompositions. Shots are evaluated sequentially to limit working
+        memory to a canonical MPS copy and ``O(d * chi)`` sampling workspace;
+        randomness and returned strings additionally occupy ``O(batch * n)``.
+
+        For JAX throughput, apply ``jit`` and ``vmap`` to single-shot sampling,
+        passing independent explicit randomness with shape ``[shots, n]``::
+
+            def one_shot(st):
+                return mps.sample(status=st)
+
+            sample_many = tc.backend.jit(tc.backend.vmap(one_shot))
+            samples = sample_many(status)
+
+        Here ``mps`` must remain fixed; for changing states, pass their tensors
+        into the transformed function and construct the circuit inside it.
+        Use fixed-size shot chunks to bound vectorized working memory and
+        reuse compiled shapes. Dictionary output formats are not JIT-compatible.
+
+        :param batch: Number of shots, or None for one string of shape ``[n]``.
+        :param allow_state: Must be False; no full state vector is constructed.
+        :param readout_error: Reserved for interface compatibility; unused.
+        :param format: Output format accepted by ``sample2all``. None returns
+            integer strings of shape ``[batch, n]``, or ``[n]`` if batch is None.
+        :param random_generator: Backend random generator used without status.
+        :param status: Uniform randomness of shape ``[batch, n]`` or ``[n]``.
+            Entry ``status[b, k]`` determines shot b at site k.
+        :param jittable: Whether output count conversion uses static shapes.
+            This flag does not compile the sampling function.
+        :return: Samples or counts in the requested format.
+        :rtype: Any
+        """
         if allow_state:
             raise ValueError("MPSCircuit.sample does not support allow_state=True")
 
-        if random_generator is None:
-            random_generator = backend.get_random_state()
+        if status is None:
+            if random_generator is None:
+                random_generator = backend.get_random_state()
+            shape = [self._nqubits] if batch is None else [batch, self._nqubits]
+            status = backend.stateful_randu(random_generator, shape=shape)
+
+        mps = self.copy()
+        mps.position(0)
+        tensors = mps.get_tensors()
 
         if batch is None:
-            if status is None:
-                status = backend.stateful_randu(random_generator, shape=[self._nqubits])
-            r = self.measure(*range(self._nqubits), status=status)[0]
+            r = self._measure_mps(tensors, status)[0]
             if format is None:  # batch=None, format=None, backward compatibility
                 return r
             ch = backend.cast(backend.reshape(r, [1, -1]), "int32")
         else:
-            if status is None:
-                status = backend.stateful_randu(
-                    random_generator, shape=[batch, self._nqubits]
-                )
-
-            def measure_all(st: Tensor) -> Tensor:
-                return self.measure(*range(self._nqubits), status=st)[0]
-
             r = []
             for i in range(batch):
-                r.append(measure_all(status[i]))
+                r.append(self._measure_mps(tensors, status[i])[0])
             r = backend.stack(r)
             if format is None:
                 return r

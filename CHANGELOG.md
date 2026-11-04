@@ -11,6 +11,7 @@
 
 ### Added
 
+- Add `MPSCircuit.get_fidelity()` to expose the cumulative fraction of weight retained by MPS truncations.
 - Add `tc.templates.diagonal` with Pauli/support encoders, fast Walsh-Hadamard Z-polynomial diagonals, and elementwise diagonal or exponential action, including dynamic-structure JIT/vmap and weight gradients.
 - Add backend `gather` for axis-based indexing with scalar or multidimensional indices, including JIT and gradient support.
 - Add `U1Operator.mvp` for matrix-free products of a Pauli string sum restricted to a U(1) subspace, with differentiable weights, e.g., for `krylov_evol` within a fixed particle-number sector.
@@ -20,6 +21,9 @@
 
 ### Fixed
 
+- Fix MPS truncation fidelity estimates to use relative discarded weights and include bond reductions during MPO and multi-site gate application; preserve accumulated fidelity for zero-norm states.
+- Preserve per-gate MPS split overrides for reversed two-site gate indices and accept `max_truncation_err` consistently during bond, MPO, and multi-site reductions.
+- Prevent underflow during MPS measurement by normalizing conditional states at each site, and handle zero-probability outcomes at the left sampling endpoint.
 - Recognize traced JAX arrays in backend `is_tensor`, including values inside JIT, vmap, and gradient transformations, without relying on private array storage.
 - Support int32 scatter indices under PyTorch vmap by normalizing them to the int64 indexing dtype.
 - Preserve two-qubit depolarizing noise when sampling detector trajectories from Stim circuits.
@@ -48,6 +52,7 @@
 - Reduce memory of MPS states exported as `QuVector` by preserving the tensor network and physical site dimensions, avoiding full wavefunctions for local reduced states and MPO expectations; local MPS expectations copy only the operator span.
 - Reduce JAX SVD backward memory and computation for rectangular matrices by avoiding full-size projection matrices.
 - Reduce memory of Krylov time correlations and bilinear resolvents by evaluating them in the projected space without materializing full state batches.
+- Speed up MPS sampling by sharing right-canonical tensors across sequential shots and propagating single-shot conditional environments without repeated QR decompositions.
 - Speed up Pauli string sum matrices by grouping terms with the same X/Y flip pattern and merging pure Z/I terms of `PauliStringSum2MVP` into one diagonal; `U1Operator` shares one gather per flip pattern, speeding up `U1Circuit.expectation_pss`.
 - Speed up fixed Clifford gates in `SparsePauliPropagationEngine` by propagating one signed Pauli branch instead of expanding all local Pauli branches.
 - Speed up classical-shadow Pauli expectations by computing them directly from raw measurement snapshots, and finite-shot correlations by reading only the selected sample bits.
