@@ -7,7 +7,8 @@ accept an explicitly prepared plan when it needs to be inspected or reused.
 Wrap the returned step or sweep in ``jax.jit`` and reuse it with tensors that
 match the static physical, bond, and sector layout. ``symmetry=None`` is the
 dense case; Abelian layouts use fixed sector quotas and never densify in the
-numerical hot path.
+numerical hot path. Gate programs execute concrete adjacent-gate circuits of
+differing structure with one compiled runner and export to ``MPSCircuit``.
 
 MPS, MPO, and environment data are tensor-only PyTrees. Checkpoints and
 explicit legacy MPS/MPO conversions are available at the I/O boundary. The
@@ -75,6 +76,14 @@ from .algorithms.dmrg import (
     make_dmrg_sweep_from_plan,
     prepare_dmrg,
 )
+from .algorithms.gate_program import (
+    GateProgram,
+    GateProgramResult,
+    gate_program_to_mpscircuit,
+    prepare_gate_program,
+    run_gate_program,
+    stack_gate_programs,
+)
 
 __all__ = [
     "DMRGOptions",
@@ -82,6 +91,8 @@ __all__ = [
     "BlockLayout",
     "EnvironmentState",
     "GateSpec",
+    "GateProgram",
+    "GateProgramResult",
     "FusionPlan",
     "MPOSpec",
     "MPOState",
@@ -100,6 +111,7 @@ __all__ = [
     "variance",
     "conjugate",
     "from_dense",
+    "gate_program_to_mpscircuit",
     "fuse_array",
     "fuse_indices",
     "inner",
@@ -115,8 +127,11 @@ __all__ = [
     "prepare_tebd",
     "prepare_tdvp",
     "prepare_dmrg",
+    "prepare_gate_program",
     "product_state",
     "random_mps",
+    "run_gate_program",
+    "stack_gate_programs",
     "to_mpscircuit",
     "to_tn_mpo",
     "site_view",
