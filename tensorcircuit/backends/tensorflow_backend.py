@@ -185,8 +185,9 @@ def _qr_tf(
     q, r = tfqr(tensor)
     if non_negative_diagonal:
         phases = tf.math.sign(tf.linalg.diag_part(r))
+        phases = tf.where(phases == 0, tf.ones_like(phases), phases)
         q = q * phases
-        r = phases[:, None] * r
+        r = tf.math.conj(phases)[:, None] * r
     center_dim = tf.shape(q)[1]
     q = tf.reshape(q, tf.concat([left_dims, [center_dim]], axis=-1))
     r = tf.reshape(r, tf.concat([[center_dim], right_dims], axis=-1))
@@ -235,8 +236,9 @@ def _rq_tf(
     q, r = tfqr(tf.math.conj(tf.transpose(tensor)))
     if non_negative_diagonal:
         phases = tf.math.sign(tf.linalg.diag_part(r))
+        phases = tf.where(phases == 0, tf.ones_like(phases), phases)
         q = q * phases
-        r = phases[:, None] * r
+        r = tf.math.conj(phases)[:, None] * r
     r, q = (
         tf.math.conj(tf.transpose(r)),
         tf.math.conj(tf.transpose(q)),
