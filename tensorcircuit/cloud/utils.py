@@ -9,6 +9,7 @@ import logging
 import os
 import sys
 import time
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 
@@ -54,6 +55,21 @@ def set_proxy(proxy: Optional[str] = None) -> None:
         setattr(thismodule, "proxy", None)
 
 
+def redact_url(url: str) -> str:
+    """
+    Hide the ``user:password@`` part of a URL, e.g., for logging proxies.
+
+    :param url: URL possibly carrying credentials
+    :type url: str
+    :return: URL with the credentials replaced by ``***``
+    :rtype: str
+    """
+    parts = urlsplit(url)
+    if "@" not in parts.netloc:
+        return url
+    return urlunsplit(parts._replace(netloc="***@" + parts.netloc.rsplit("@", 1)[1]))
+
+
 def reconnect(tries: int = 5, timeout: int = 12) -> Callable[..., Any]:
     # wrapper originally designed in xalpha by @refraction-ray
     # https://github.com/refraction-ray/xalpha
@@ -65,7 +81,7 @@ def reconnect(tries: int = 5, timeout: int = 12) -> Callable[..., Any]:
                     "http": getattr(thismodule, "proxy"),
                     "https": getattr(thismodule, "proxy"),
                 }
-                logger.debug("Using proxy %s" % getattr(thismodule, "proxy"))
+                logger.debug("Using proxy %s", redact_url(getattr(thismodule, "proxy")))
             kws["timeout"] = timeout
             if args:
                 url = args[0]
@@ -96,7 +112,7 @@ def reconnect(tries: int = 5, timeout: int = 12) -> Callable[..., Any]:
                             "Still wrong at fetching url: %s. after %s tries."
                             % (url, tries)
                         )
-                        logger.error("Fails due to %s" % e.args[0])
+                        logger.error("Fails due to %r", e)
                         raise e
                     time.sleep(0.5 * count)
 

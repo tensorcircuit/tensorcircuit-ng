@@ -1,6 +1,11 @@
 import sys
 import os
+import copy
+import json
+import logging
+import stat
 import time
+from types import SimpleNamespace
 import pytest
 import numpy as np
 
@@ -10,20 +15,74 @@ modulepath = os.path.dirname(os.path.dirname(thisfile))
 sys.path.insert(0, modulepath)
 import tensorcircuit as tc
 from tensorcircuit.cloud import apis, wrapper
+from tensorcircuit.cloud.abstraction import Task, TaskFailed
+from tensorcircuit.cloud.config import tencent_base_url
 from tensorcircuit.results import counts
 
-if "TC_CLOUD_TEST" not in os.environ:
-    pytest.skip(allow_module_level=True)
-    # skip on CI due to no token
+requires_cloud = pytest.mark.skipif(
+    os.getenv("TC_CLOUD_TEST") != "1",
+    reason="set TC_CLOUD_TEST=1 and a tencent token to run cloud tests",
+)
 
 
+@pytest.fixture(autouse=True)
+def restore_cloud_defaults():
+    yield
+    apis.set_provider("tencent")
+    apis.set_device("tencent::simulator:tc")
+
+
+@pytest.fixture
+def token_store(tmp_path, monkeypatch):
+    path = tmp_path / "auth.json"
+    monkeypatch.setenv("TC_AUTH_PATH", str(path))
+    for k in list(os.environ):
+        if k.startswith("TC_TOKEN"):
+            monkeypatch.delenv(k)
+    monkeypatch.setattr(apis, "saved_token", {})
+    return path
+
+
+class FakeTencent:
+    """
+    Record requests posted to tencent endpoints and reply canned responses,
+    a response can be a callable of the request json.
+    """
+
+    def __init__(self):
+        self.responses = {}
+        self.calls = []
+
+    def __call__(self, url, json=None, headers=None, **kws):
+        endpoint = url[len(tencent_base_url) :].split("?")[0]
+        self.calls.append({"endpoint": endpoint, "json": json, "headers": headers})
+        response = self.responses[endpoint]
+        if callable(response):
+            response = response(json)
+        response = copy.deepcopy(response)
+        return SimpleNamespace(status_code=200, json=lambda: response)
+
+    def requests_to(self, endpoint):
+        return [call["json"] for call in self.calls if call["endpoint"] == endpoint]
+
+
+@pytest.fixture
+def fake_tencent(token_store, monkeypatch):
+    requests = pytest.importorskip("requests")
+    server = FakeTencent()
+    monkeypatch.setattr(requests, "post", server)
+    return server
+
+
+@requires_cloud
 def test_get_token():
-    print(apis.get_token(provider="Tencent"))
+    assert apis.get_token(provider="Tencent") is not None
     p = apis.get_provider("tencent")
-    print(p.get_token())
-    print(p.get_device("simulator:tc").get_token())
+    assert p.get_token() is not None
+    assert p.get_device("simulator:tc").get_token() is not None
 
 
+@requires_cloud
 def test_list_devices():
     print(apis.list_devices())
     p = apis.get_provider()
@@ -60,6 +119,7 @@ def test_get_device_cache():
     assert id(d4) != id(d1)
 
 
+@requires_cloud
 def test_list_properties():
     d = apis.get_device(device="simulator:aer")
     print(d.list_properties())
@@ -68,6 +128,7 @@ def test_list_properties():
         apis.list_properties(device="hell")
 
 
+@requires_cloud
 def test_submit_task():
     c = tc.Circuit(3)
     c.H(0)
@@ -80,6 +141,7 @@ def test_submit_task():
     assert t.get_logical_physical_mapping() == {0: 0, 1: 1, 2: 2}
 
 
+@requires_cloud
 def test_resubmit_task():
     c = tc.Circuit(3)
     c.H(0)
@@ -91,6 +153,7 @@ def test_resubmit_task():
     print(t1.details(wait=True))
 
 
+@requires_cloud
 def test_get_task():
     apis.set_device("simulator:tcn1")
     c = tc.Circuit(2)
@@ -104,6 +167,7 @@ def test_get_task():
     apis.set_device()
 
 
+@requires_cloud
 def test_list_tasks():
     d = apis.get_device(device="simulator:aer")
     print(d.list_tasks())
@@ -147,6 +211,7 @@ def test_local_batch_submit():
     apis.set_provider("tencent")
 
 
+@requires_cloud
 def test_batch_exp_ps():
     pss = [[1, 0], [0, 3]]
     c = tc.Circuit(2)
@@ -182,6 +247,7 @@ def test_batch_exp_ps_with_idle_qubit():
     np.testing.assert_allclose(result, [1])
 
 
+@requires_cloud
 def test_batch_submit_template():
     run = tc.cloud.wrapper.batch_submit_template(
         device="simulator:tc", batch_limit=2, prior=10
@@ -198,6 +264,7 @@ def test_batch_submit_template():
     assert len(rs) == 4
 
 
+@requires_cloud
 def test_allz_batch():
     n = 5
 
@@ -231,3 +298,225 @@ def test_allz_batch():
     params = np.ones([2, n])
     print(qmlf(inputs, params, device="9gmon"))
     print(qmlf(inputs, params))
+
+
+def test_token_default_in_memory_only(token_store):
+    apis.set_token("tok-tencent", provider="tencent")
+    apis.get_provider("local").set_token("tok-local")
+    apis.get_device("local::testing").set_token("tok-testing")
+    assert not token_store.exists()
+    assert apis.get_token(provider="tencent") == "tok-tencent"
+    assert apis.get_device("local::testing").get_token() == "tok-testing"
+    assert apis.get_token(provider="local", device="other") == "tok-local"
+
+
+def test_token_cached_file(token_store):
+    token_store.write_text(json.dumps({"tencent::": apis.b64encode_s("tok-legacy")}))
+    assert apis.get_token(provider="tencent") == "tok-legacy"
+
+    apis.set_token("tok-device", provider="tencent", device="20xmon", cached=True)
+    on_disk = json.loads(token_store.read_text())
+    assert apis.b64decode_s(on_disk["tencent::"]) == "tok-legacy"
+    assert apis.b64decode_s(on_disk["tencent::20xmon"]) == "tok-device"
+    if os.name == "posix":
+        assert stat.S_IMODE(token_store.stat().st_mode) == 0o600
+
+    apis.saved_token.clear()  # as in a new process
+    assert apis.get_token(provider="tencent", device="20xmon") == "tok-device"
+    assert apis.get_token(provider="tencent", device="9gmon") == "tok-legacy"
+
+
+def test_token_lookup_order(token_store, monkeypatch):
+    apis.set_token("tok-file", provider="tencent", cached=True)
+    apis.saved_token.clear()
+    monkeypatch.setenv("TC_TOKEN", "tok-generic")
+    assert apis.get_token(provider="tencent") == "tok-file"
+    monkeypatch.setenv("TC_TOKEN_TENCENT", "tok-env")
+    assert apis.get_token(provider="tencent") == "tok-env"
+    apis.set_token("tok-session", provider="tencent")
+    assert apis.get_token(provider="tencent") == "tok-session"
+    assert apis.get_token(provider="tencent", device="9gmon") == "tok-session"
+    apis.set_token("tok-9gmon", provider="tencent", device="9gmon")
+    assert apis.get_token(provider="tencent", device="9gmon") == "tok-9gmon"
+
+
+def test_token_clear(token_store):
+    apis.set_token("tok-tencent", provider="tencent", cached=True)
+    apis.set_token("tok-9gmon", provider="tencent", device="9gmon", cached=True)
+    apis.set_token("tok-local", provider="local", cached=True)
+
+    apis.set_token(provider="tencent", device="9gmon", clear=True)
+    assert apis.get_token(provider="tencent", device="9gmon") == "tok-tencent"
+    apis.set_token("tok-9gmon", provider="tencent", device="9gmon", cached=True)
+    apis.set_token(provider="tencent", clear=True)
+    assert apis.get_token(provider="tencent", device="9gmon") is None
+    apis.saved_token.clear()
+    assert apis.get_token(provider="local") == "tok-local"
+
+    apis.set_token(clear=True)
+    assert apis.get_token(provider="local") is None
+    assert not token_store.exists()
+
+
+@pytest.mark.parametrize("token", [123, "", "  ", "tok-secret\n", "tok\r-secret"])
+def test_token_rejects_invalid_input(token_store, token):
+    with pytest.raises((TypeError, ValueError)) as e:
+        apis.set_token(token, provider="tencent")
+    assert "secret" not in str(e.value)
+    assert apis.saved_token == {}
+
+
+def test_token_save_failure_warns(token_store, tmp_path, monkeypatch, caplog):
+    blocker = tmp_path / "blocker"
+    blocker.write_text("")
+    monkeypatch.setenv("TC_AUTH_PATH", str(blocker / "auth.json"))
+    with caplog.at_level(logging.WARNING):
+        apis.set_token("tok-secret", provider="tencent", cached=True)
+    assert "failure" in caplog.text
+    assert "tok-secret" not in caplog.text
+    assert apis.get_token(provider="tencent") == "tok-secret"
+
+
+def test_tencent_list_devices_redacts_proxy(fake_tencent, monkeypatch, caplog):
+    cloud_utils = pytest.importorskip("tensorcircuit.cloud.utils")
+    monkeypatch.setattr(
+        cloud_utils, "proxy", "http://user:pass-secret@proxy.local:8080", raising=False
+    )
+    fake_tencent.responses["device/find"] = {"devices": [{"id": "20xmon"}]}
+    with caplog.at_level(logging.DEBUG, logger="tensorcircuit.cloud"):
+        ds = apis.list_devices(provider="tencent", token="tok-secret")
+    assert [str(d) for d in ds] == ["tencent::20xmon"]
+    assert fake_tencent.calls[0]["headers"]["Authorization"] == "Bearer tok-secret"
+    assert "proxy.local" in caplog.text
+    assert "pass-secret" not in caplog.text and "tok-secret" not in caplog.text
+
+
+def test_tencent_submit_contract(fake_tencent):
+    fake_tencent.responses["task/submit"] = {"tasks": [{"id": "t1"}]}
+    apis.set_token("tok-tencent", provider="tencent")
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cx(0, 1)
+
+    t = apis.submit_task(circuit=c, shots=100)
+    assert isinstance(t, Task)
+    assert str(t) == "tencent::simulator:tc~~t1"
+    call = fake_tencent.calls[-1]
+    assert call["endpoint"] == "task/submit"
+    assert call["headers"]["Authorization"] == "Bearer tok-tencent"
+    assert call["json"] == {
+        "device": "simulator:tc?o=3",
+        "shots": 100,
+        "source": c.to_openqasm(),
+        "version": "1",
+        "lang": "OPENQASM",
+        "prior": 1,
+        "remarks": None,
+        "group": None,
+    }
+
+    apis.submit_task(
+        circuit=c,
+        enable_qos_qubit_mapping=False,
+        enable_qos_gate_decomposition=False,
+        qos_dry_run=True,
+    )
+    assert fake_tencent.calls[-1]["json"]["device"] == "simulator:tc?o=0&dry"
+    assert fake_tencent.calls[-1]["json"]["shots"] == 1024
+
+
+def test_tencent_batch_submit_contract(fake_tencent):
+    c = tc.Circuit(1)
+    c.x(0)
+    fake_tencent.responses["task/submit"] = {
+        "tasks": [{"id": "t1"}, {"err": "quota exceeded"}, {"id": "t3"}]
+    }
+    ts = apis.submit_task(device="tencent::20xmon", circuit=[c, c, c], shots=10)
+    assert [t.id_ for t in ts] == ["t1", "t3"]
+    payload = fake_tencent.calls[-1]["json"]
+    assert [p["shots"] for p in payload] == [10, 10, 10]
+    assert {p["device"] for p in payload} == {"20xmon?o=3"}
+
+    fake_tencent.responses["task/submit"] = {"tasks": [{"err": "quota exceeded"}]}
+    with pytest.raises(ValueError, match="All tasks submitted failed"):
+        apis.submit_task(device="tencent::20xmon", circuit=[c])
+    fake_tencent.responses["task/submit"] = {"err": "invalid token"}
+    with pytest.raises(ValueError, match="invalid token"):
+        apis.submit_task(circuit=c)
+
+
+def test_tencent_task_details_contract(fake_tencent):
+    fake_tencent.responses["task/detail"] = {
+        "task": {
+            "id": "t1",
+            "state": "completed",
+            "shots": 100,
+            "device": "20xmon",
+            "result": {"counts": {"00": 30, "11": 70}},
+            "optimization": {"pairs": {"0": "3", "1": "4"}},
+        }
+    }
+    t = apis.get_task("tencent::20xmon~~t1")
+    assert t.details()["results"] == {"00": 30, "11": 70}
+    assert t.get_logical_physical_mapping() == {0: 3, 1: 4}
+    assert list(t.results().items()) == [("11", 70), ("00", 30)]
+    assert fake_tencent.calls[-1]["json"] == {"id": "t1"}
+    assert fake_tencent.calls[-1]["headers"]["Authorization"] == "Bearer ANY;0"
+
+    fake_tencent.responses["task/detail"] = {
+        "task": {"id": "t1", "state": "failed", "err": "chip offline"}
+    }
+    with pytest.raises(TaskFailed, match="chip offline"):
+        t.results()
+    fake_tencent.responses["task/detail"] = {"err": "no such task"}
+    with pytest.raises(ValueError, match="no such task"):
+        t.details()
+
+
+def test_tencent_batch_expectation_ps_contract(fake_tencent):
+    pytest.importorskip("qiskit")
+    submitted = {}
+
+    def submit(payload):
+        tasks = []
+        for p in payload:
+            submitted[str(len(submitted))] = p
+            tasks.append({"id": str(len(submitted) - 1)})
+        return {"tasks": tasks}
+
+    def detail(payload):
+        p = submitted[payload["id"]]
+        c = tc.Circuit.from_openqasm(p["source"])
+        probs = np.real(tc.backend.numpy(c.probability()))
+        n = c._nqubits
+        result = {
+            format(i, "0%db" % n): int(round(pr * p["shots"]))
+            for i, pr in enumerate(probs)
+            if pr > 1e-6
+        }
+        task = {"id": payload["id"], "state": "completed", "result": {"counts": result}}
+        return {"task": {**p, **task}}
+
+    fake_tencent.responses["task/submit"] = submit
+    fake_tencent.responses["task/detail"] = detail
+    fake_tencent.responses["device/detail"] = {
+        "device": {
+            "id": "2xmon",
+            "qubits": 2,
+            "links": [{"A": 0, "B": 1, "CZErrRate": 0.01}],
+            "bits": [{"Qubit": 0, "T1": 30.0}, {"Qubit": 1, "T1": 30.0}],
+        }
+    }
+    c = tc.Circuit(2)
+    c.h(0)
+    c.x(1)
+    r = wrapper.batch_expectation_ps(
+        c, [[1, 0], [0, 3]], device="tencent::2xmon", shots=1000
+    )
+    np.testing.assert_allclose(r, [1, -1], atol=1e-6)
+    batches = fake_tencent.requests_to("task/submit")
+    # two measurement circuits, then two readout calibration circuits
+    assert [len(b) for b in batches] == [2, 2]
+    assert {(p["device"], p["shots"]) for b in batches for p in b} == {
+        ("2xmon?o=0", 1000)
+    }

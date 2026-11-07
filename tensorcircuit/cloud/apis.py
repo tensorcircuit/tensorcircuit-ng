@@ -194,14 +194,38 @@ def _write_auth_file(path: str, tokens: Dict[str, str]) -> None:
             pass
 
 
-# Process-local session token overrides (key -> token), where key is
-# ``"<provider>::"`` or ``"<provider>::<device>"``. This is the session layer
-# on top of the disk-backed auth file: it holds only tokens explicitly set via
-# ``set_token`` in this process (including ``cached=False`` writes), never a
-# mirror of disk. Readers must not rebind this global; ``get_token`` falls back
-# to disk when a key is absent here, so in-place mutations (e.g. ``patch.dict``
-# in tests) survive across ``get_token`` calls.
+# Process-local tokens (key -> token), where key is ``"<provider>::"`` or
+# ``"<provider>::<device>"``. It holds only tokens set via ``set_token`` in this
+# process, never a mirror of the auth file, and is only mutated in place.
 saved_token: Dict[str, Any] = {}
+
+
+def _token_key(
+    provider: Optional[Union[str, Provider]] = None,
+    device: Optional[Union[str, Device]] = None,
+) -> str:
+    if isinstance(provider, str):
+        provider = Provider.from_name(provider)
+    if device is None:
+        if provider is None:
+            provider = default_provider
+        return provider.name + sep
+    device = Device.from_name(device)
+    if provider is None:
+        provider = device.provider
+    if provider is None:
+        provider = default_provider
+    return provider.name + sep + device.name
+
+
+def _check_token(token: Any) -> None:
+    # never echo the token itself in the error message
+    if not isinstance(token, str):
+        raise TypeError("token must be a str, got %s" % type(token).__name__)
+    if not token.strip():
+        raise ValueError("token must be non-empty")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in token):
+        raise ValueError("token must not contain control characters such as newlines")
 
 
 def _preprocess(
@@ -240,63 +264,71 @@ def set_token(
     token: Optional[str] = None,
     provider: Optional[Union[str, Provider]] = None,
     device: Optional[Union[str, Device]] = None,
-    cached: bool = True,
+    cached: bool = False,
     clear: bool = False,
 ) -> Dict[str, Any]:
     """
-    Set API token for given provider or specifically to given device
+    Set API token for given provider or specifically to given device.
+    The token is only kept in the current process unless ``cached=True``,
+    which also saves it to the auth file ``~/.tc.auth.json`` (or the path in
+    ``TC_AUTH_PATH``). The file is base64 encoded, not encrypted, and is
+    readable by the owner only on POSIX.
 
-    :param token: the API token, defaults to None
+    :Example:
+
+    >>> apis.set_token("my-token", provider="tencent")  # this process only
+    >>> apis.set_token("my-token", provider="tencent", cached=True)  # also on disk
+    >>> apis.set_token(provider="tencent", clear=True)  # remove tencent tokens
+
+    :param token: the API token, defaults to None, which returns all tokens
+        saved in memory and on the disk
     :type token: Optional[str], optional
     :param provider: provider scope of the token; defaults to None
     :type provider: Optional[Union[str, Provider]], optional
     :param device: device scope of the token (more specific than provider);
         defaults to None
     :type device: Optional[Union[str, Device]], optional
-    :param cached: whether save on the disk, defaults to True
+    :param cached: whether also save the token on the disk, defaults to False
     :type cached: bool, optional
-    :param clear: if True, clear all token saved, defaults to False
+    :param clear: if True, remove saved tokens both in memory and on the disk:
+        the given device token, all tokens of the given provider,
+        or all tokens if no scope is given, defaults to False
     :type clear: bool, optional
-    :return: the session-level saved_token dict
+    :return: the tokens saved in memory of this process
     :rtype: Dict[str, Any]
     """
-    global saved_token
     authpath = _auth_path()
     if clear is True:
-        saved_token = {}
-        if cached and os.path.exists(authpath):
-            try:
-                os.remove(authpath)
-            except OSError as e:
-                logger.warning("token file removal failure: %s", e)
+        if provider is None and device is None:
+            saved_token.clear()
+            if os.path.exists(authpath):
+                try:
+                    os.remove(authpath)
+                except OSError as e:
+                    logger.warning("token file removal failure: %s", e)
+            return saved_token
+        key = _token_key(provider, device)
+
+        def in_scope(k: str) -> bool:
+            return k == key or (device is None and k.startswith(key))
+
+        for k in [k for k in saved_token if in_scope(k)]:
+            del saved_token[k]
+        file_token = _read_auth_file(authpath)
+        kept = {k: v for k, v in file_token.items() if not in_scope(k)}
+        if len(kept) < len(file_token):
+            _write_auth_file(authpath, kept)
         return saved_token
     if token is None:
-        # pure read: return the merged view of disk + session overrides.
-        # Never write back to disk here: writing back on import / get_token is
-        # what used to truncate the auth file under multiprocessing (each
-        # worker re-dumped a stale snapshot).
+        # pure read, never write back: rewriting a stale snapshot on import
+        # used to truncate the auth file under multiprocessing
         file_token = _read_auth_file(authpath)
         file_token.update(saved_token)
         return file_token
-    # with token: write the session override layer first (so get_token can read
-    # it even when cached=False), then optionally persist to disk.
-    if isinstance(provider, str):
-        provider = Provider.from_name(provider)
-    if device is None:
-        if provider is None:
-            provider = default_provider
-        key = provider.name + sep
-    else:
-        device = Device.from_name(device)
-        if provider is None:
-            provider = device.provider  # type: ignore
-        if provider is None:
-            provider = default_provider
-        key = provider.name + sep + device.name  # type: ignore
+    _check_token(token)
+    key = _token_key(provider, device)
     saved_token[key] = token
     if cached:
-        # merge the new entry into the freshest on-disk state and persist
-        # atomically, so concurrent processes can't clobber each other.
         file_token = _read_auth_file(authpath)
         file_token[key] = token
         _write_auth_file(authpath, file_token)
@@ -311,11 +343,11 @@ def get_token(
     device: Optional[Union[str, Device]] = None,
 ) -> Optional[str]:
     """
-    Get API token setted for given provider or device,
-    if no device token saved, the corresponding provider tken is returned.
-    Environment variables take precedence and are never persisted: a single
-    token can be supplied via ``TC_TOKEN``, or a per-provider token via
-    ``TC_TOKEN_<PROVIDER_NAME>`` (uppercased), e.g. ``TC_TOKEN_TENCENT``.
+    Get API token set for given provider or device.
+    The lookup order is: tokens set by ``set_token`` in this process,
+    the ``TC_TOKEN_<PROVIDER_NAME>`` environment variable (uppercased,
+    e.g. ``TC_TOKEN_TENCENT``), and the auth file. Within the process and
+    the auth file, a device token takes precedence over the provider token.
 
     :param provider: provider scope to look up; defaults to the current
         default provider
@@ -328,27 +360,20 @@ def get_token(
     if provider is None:
         provider = get_provider()
     provider = Provider.from_name(provider)
-    target = provider.name + sep
+    keys = [provider.name + sep]
     if device is not None:
         device = Device.from_name(device, provider)
-        target = target + device.name
-    # 1. env var override (process-scoped, never persisted): single token,
-    #    or per-provider token.
-    env_token = os.environ.get("TC_TOKEN")
-    if env_token is None:
-        env_token = os.environ.get("TC_TOKEN_" + provider.name.upper())
-    if env_token is not None:
+        keys.insert(0, provider.name + sep + device.name)
+    for key in keys:
+        if key in saved_token:
+            return saved_token[key]  # type: ignore
+    env_token = os.environ.get("TC_TOKEN_" + provider.name.upper())
+    if env_token:
         return env_token
-    # 2. session override (in-memory, process-scoped, set via set_token).
-    #    Read-only here: never rebind the global, so in-place mutations
-    #    (e.g. patch.dict in tests) survive across get_token calls, and
-    #    cached=False writes remain visible to readers.
-    if target in saved_token:
-        return saved_token[target]  # type: ignore
-    # 3. disk (persistent, shared across processes); read-only.
     file_token = _read_auth_file(_auth_path())
-    if target in file_token:
-        return file_token[target]  # type: ignore
+    for key in keys:
+        if key in file_token:
+            return file_token[key]
     return None
 
 

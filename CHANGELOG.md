@@ -4,6 +4,8 @@
 
 ### Changed
 
+- **Migration:** cloud `set_token`, `Provider.set_token` and `Device.set_token` keep the token in the current process by default; pass `cached=True` to also save it to the auth file as before. Existing auth files are still read. `set_token(clear=True)` removes tokens both in memory and on disk, restricted to the given provider or device if any.
+- **Migration:** cloud tokens are looked up from `set_token` in the current process first, then the `TC_TOKEN_<PROVIDER>` environment variable, then the auth file, with device tokens falling back to the provider token. The generic `TC_TOKEN` variable is no longer read since it would be sent to every provider; use e.g. `TC_TOKEN_TENCENT` instead. `set_token` rejects non-string, empty, or control-character tokens.
 - Compute pure-state entanglement entropy, mutual information and entanglement anti-flatness on the smaller subsystem. Entropy values change slightly because omitted zero eigenvalues no longer contribute a dimension-dependent regularization bias.
 - `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators and uses BCSR only on CPU.
 - Mark `tensorcircuit.results.qem` and the CuPy backend as experimental: importing the former or setting the latter via `tc.set_backend("cupy")` emits `tc.utils.ExperimentalWarning`.
@@ -23,6 +25,7 @@
 
 ### Fixed
 
+- Hide proxy credentials in cloud request debug logs, and raise the original `HttpStatusError` instead of an `IndexError` after the last failed cloud request retry.
 - Fix MPS truncation fidelity estimates to use relative discarded weights and include bond reductions during MPO and multi-site gate application; preserve accumulated fidelity for zero-norm states.
 - Preserve per-gate MPS split overrides for reversed two-site gate indices and accept `max_truncation_err` consistently during bond, MPO, and multi-site reductions.
 - Prevent underflow during MPS measurement by normalizing conditional states at each site, and handle zero-probability outcomes at the left sampling endpoint.

@@ -76,7 +76,7 @@ class Provider:
             )
         return p
 
-    def set_token(self, token: str, cached: bool = True) -> Any:
+    def set_token(self, token: str, cached: bool = False) -> Any:
         from .apis import set_token
 
         return set_token(token, self, cached=cached)
@@ -173,7 +173,7 @@ class Device:
 
         return d
 
-    def set_token(self, token: str, cached: bool = True) -> Any:
+    def set_token(self, token: str, cached: bool = False) -> Any:
         from .apis import set_token
 
         return set_token(token, provider=self.provider, device=self, cached=cached)
@@ -181,11 +181,7 @@ class Device:
     def get_token(self) -> Optional[str]:
         from .apis import get_token
 
-        s = get_token(provider=self.provider, device=self)
-        if s is not None:
-            return s
-        # fallback to provider default
-        return get_token(provider=self.provider)
+        return get_token(provider=self.provider, device=self)
 
     def list_properties(self) -> Dict[str, Any]:
         """
