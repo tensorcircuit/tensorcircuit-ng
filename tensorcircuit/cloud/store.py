@@ -131,7 +131,8 @@ class TaskStore:
     """
     Local record of cloud tasks in a directory with a SQLite index ``tasks.sqlite``
     and one gzip JSON record ``records/<local_id>.json.gz`` per submitted circuit.
-    Records are never deleted automatically.
+    Records are never deleted automatically, except the submission intents of
+    circuits certainly not submitted.
 
     :Example:
 
@@ -249,6 +250,47 @@ class TaskStore:
         record.update(fields)
         self.save([record])
 
+    def delete(self, local_ids: Sequence[str]) -> None:
+        """
+        Delete records, e.g. the submission intents of circuits that are
+        certainly not submitted.
+
+        :param local_ids: local ids of the records
+        :type local_ids: Sequence[str]
+        """
+        if not local_ids or not os.path.exists(self.index_path):
+            return
+        conn = self._connect()
+        try:
+            with conn:
+                conn.executemany(
+                    "DELETE FROM tasks WHERE local_id = ?", [[i] for i in local_ids]
+                )
+        finally:
+            conn.close()
+        for i in local_ids:
+            if os.path.exists(self._body_path(i)):
+                os.remove(self._body_path(i))
+
+    def bind(self, local_id: str, remote_id: str) -> Any:
+        """
+        Bind the remote task id to a record, e.g. a submission of ``unknown``
+        status that is found on the provider, and recover the task.
+
+        :param local_id: local id of the record
+        :type local_id: str
+        :param remote_id: remote task id on the provider
+        :type remote_id: str
+        :return: the task bound to this store
+        :rtype: Task
+        """
+        self.update(
+            local_id,
+            remote_id=remote_id,
+            submission={"status": "submitted", "error": None},
+        )
+        return self.task(local_id)
+
     def _load(self, row: Dict[str, Any]) -> Dict[str, Any]:
         try:
             with open(self._body_path(row["local_id"]), "rb") as f:
@@ -321,6 +363,7 @@ class TaskStore:
         device: Optional[str] = None,
         state: Optional[str] = None,
         batch_id: Optional[str] = None,
+        submission_status: Optional[str] = None,
         since: Optional[Union[float, str, datetime]] = None,
         until: Optional[Union[float, str, datetime]] = None,
         limit: Optional[int] = None,
@@ -336,6 +379,9 @@ class TaskStore:
         :type state: Optional[str], optional
         :param batch_id: circuits submitted in one ``submit_task`` call share the batch id
         :type batch_id: Optional[str], optional
+        :param submission_status: ``submitted``, or ``unknown`` when the submission
+            may have been accepted without returning the task id, see :py:meth:`bind`
+        :type submission_status: Optional[str], optional
         :param since: earliest creation time, as a timestamp, datetime or ISO string
         :type since: Optional[Union[float, str, datetime]], optional
         :param until: latest creation time, as a timestamp, datetime or ISO string
@@ -354,6 +400,7 @@ class TaskStore:
             ("device", device),
             ("state", state),
             ("batch_id", batch_id),
+            ("submission_status", submission_status),
         ]:
             if v is not None:
                 conds.append("%s = ?" % k)

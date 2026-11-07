@@ -18,8 +18,10 @@ from .store import (
     as_store,
     circuit_record,
     make_records,
+    store_errors,
     try_store,
 )
+from .utils import unknown_submission_errors
 from ..abstractcircuit import AbstractCircuit
 from ..utils import is_sequence
 
@@ -606,48 +608,82 @@ def submit_task(
     items = task_kws.get("circuit") if source is None else source
     batch = is_sequence(items)
     items = list(items) if batch else [items]  # type: ignore
-    mappings = [
-        c.get_positional_logical_mapping() if isinstance(c, AbstractCircuit) else None
-        for c in items
-    ]
+    if provider.name == "tencent":
+        # compile locally first, so the intents hold the mappings of the sent circuits
+        sent_kws, mappings = tencent.prepare_task(device, **task_kws)
+    else:
+        sent_kws = task_kws
+        mappings = [
+            (
+                c.get_positional_logical_mapping()
+                if isinstance(c, AbstractCircuit)
+                else None
+            )
+            for c in items
+        ]
     records = []
     if ts is not None:
-        # save the submission intent before the request is sent
         records = make_records(
             provider.name, device.name, _task_requests(items, task_kws), batch
         )
+    return _send_tasks(  # type: ignore
+        ts, records, mappings, lambda: submit(device, token, **sent_kws)
+    )
+
+
+def _send_tasks(
+    ts: Optional[TaskStore],
+    records: List[Dict[str, Any]],
+    mappings: List[Optional[Dict[int, int]]],
+    send: Callable[[], Any],
+) -> Any:
+    """
+    Send paid tasks once, recording them in the store if any: the submission
+    intents are saved before sending, kept as ``unknown`` if the tasks may have
+    been accepted, and deleted for the tasks certainly not submitted.
+    Once the request is sent, ``send`` returns the accepted tasks, where each
+    missing circuit is explicitly rejected, or raises ``SubmissionRejected``
+    or ``SubmissionUnknown``; any other failure happens before sending.
+    """
+    for rec, mapping in zip(records, mappings):
+        rec["positional_logical_mapping"] = mapping
+    if ts is not None:
         try_store(ts.save, records)
     try:
-        r = submit(device, token, **task_kws)
-    except Exception as e:
+        r = send()
+    except unknown_submission_errors as e:
         if ts is not None:
-            # the provider may have accepted the tasks anyway
             for rec in records:
                 rec["submission"] = {"status": "unknown", "error": repr(e)}
             try_store(ts.save, records)
+        raise
+    except Exception:
+        if ts is not None:
+            try_store(ts.delete, [rec["local_id"] for rec in records])
         raise
     tasks = r if isinstance(r, list) else [r]
     for i, t in enumerate(tasks):
         if t.circuit_index is None:
             t.circuit_index = i
-        # the circuit is sent as is unless the provider compiles it
         if t._positional_logical_mapping is None:
             t._positional_logical_mapping = mappings[t.circuit_index]
     if ts is not None:
         bound = {t.circuit_index: t for t in tasks}
-        for rec in records:
-            t = bound.get(rec["circuit_index"])
-            if t is None:
-                rec["state"] = "failed"
-                rec["submission"] = {"status": "rejected", "error": None}
-            else:
-                rec["remote_id"] = t.id_
-                rec["positional_logical_mapping"] = t._positional_logical_mapping
-                rec["submission"] = {"status": "submitted", "error": None}
-        error = try_store(ts.save, records)
-        for t in tasks:
-            t._bind_store(ts, records[t.circuit_index]["local_id"], error)
-    return r  # type: ignore
+        accepted = [rec for rec in records if rec["circuit_index"] in bound]
+        for rec in accepted:
+            t = bound[rec["circuit_index"]]
+            rec["remote_id"] = t.id_
+            rec["positional_logical_mapping"] = t._positional_logical_mapping
+            rec["submission"] = {"status": "submitted", "error": None}
+        # circuits explicitly rejected by the provider in a batch
+        try_store(
+            ts.delete,
+            [rec["local_id"] for rec in records if rec["circuit_index"] not in bound],
+        )
+        error = try_store(ts.save, accepted)
+        for rec in accepted:
+            bound[rec["circuit_index"]]._bind_store(ts, rec["local_id"], error)
+    return r
 
 
 def _provider_submit(provider: Provider) -> Callable[..., Any]:
@@ -697,33 +733,69 @@ def _task_requests(items: List[Any], task_kws: Dict[str, Any]) -> List[Dict[str,
 def resubmit_task(
     task: Optional[Union[str, Task]],
     token: Optional[str] = None,
+    store: Optional[Union[bool, PathLike, TaskStore]] = None,
 ) -> Task:
     """
-    Rerun the given task
+    Rerun the given task on the provider as a new paid task, which is sent once
+    and recorded with the original record as its parent if a store is active
 
     :param task: task id string or Task object to rerun
     :type task: Optional[Union[str, Task]]
     :param token: API token for the provider; defaults to None which uses
         the saved token
     :type token: Optional[str], optional
+    :param store: the task store, see :py:func:`submit_task`; defaults to None,
+        i.e. the store of ``task`` if any, otherwise the global store
+    :type store: Optional[Union[bool, PathLike, TaskStore]], optional
     :return: the newly submitted Task
     :rtype: Task
     """
     if isinstance(task, str):
-        task = Task(task)
+        task = get_task(task)
     device = task.get_device()  # type: ignore
     if token is None:
         token = device.get_token()
     provider = device.provider
 
     if provider.name == "tencent":  # type: ignore
-        return tencent.resubmit_task(task, token)  # type: ignore
+        resubmit = tencent.resubmit_task
     elif provider.name == "tianyan":  # type: ignore
-        return tianyan.resubmit_task(task, token)  # type: ignore
+        resubmit = tianyan.resubmit_task
     elif provider.name == "local":
         raise ValueError("Unsupported method for local backend")
     else:
         raise ValueError("Unsupported provider: %s" % provider.name)  # type: ignore
+    # the rerun is recorded where the original task is, unless specified
+    ts = as_store(store) if store is not None else (task._store or default_store)  # type: ignore
+    parent = None if ts is None else _parent_record(ts, task, provider.name)  # type: ignore
+    mapping = task._positional_logical_mapping  # type: ignore
+    records = []
+    if ts is not None:
+        request = dict(parent["request"] or {}) if parent else {}
+        request["resubmit_of"] = task.id_  # type: ignore
+        records = make_records(provider.name, device.name, [request], False)
+        if parent:
+            records[0]["parent_id"] = parent["local_id"]
+            mapping = mapping or parent.get("positional_logical_mapping")
+    return _send_tasks(  # type: ignore
+        ts, records, [mapping], lambda: resubmit(task, token)  # type: ignore
+    )
+
+
+def _parent_record(
+    ts: TaskStore, task: Task, provider: str
+) -> Optional[Dict[str, Any]]:
+    # the record of the task to rerun, a store failure never blocks the rerun
+    try:
+        record = ts.get(task.local_id) if task.local_id is not None else None
+        if record is None:
+            record = ts.get(remote_id=task.id_, provider=provider)
+    except store_errors as e:
+        logger.warning("task store read failure: %s", e)
+        return None
+    if record is None or record["integrity"] not in ["complete", "pending"]:
+        return None
+    return record
 
 
 def remove_task(

@@ -19,6 +19,7 @@ import tensorcircuit as tc
 from tensorcircuit.cloud import apis, store, wrapper
 from tensorcircuit.cloud.abstraction import Task, TaskFailed
 from tensorcircuit.cloud.config import tencent_base_url
+from tensorcircuit.cloud.utils import SubmissionUnknown
 from tensorcircuit.results import counts
 
 requires_cloud = pytest.mark.skipif(
@@ -57,7 +58,14 @@ class FakeTencent:
 
     def __call__(self, url, json=None, headers=None, **kws):
         endpoint = url[len(tencent_base_url) :].split("?")[0]
-        self.calls.append({"endpoint": endpoint, "json": json, "headers": headers})
+        self.calls.append(
+            {
+                "endpoint": endpoint,
+                "json": json,
+                "headers": headers,
+                "timeout": kws.get("timeout"),
+            }
+        )
         response = self.responses[endpoint]
         if callable(response):
             response = response(json)
@@ -572,13 +580,12 @@ def test_tencent_store_and_measurement_metadata(fake_tencent, tmp_path):
     assert meta["positional_logical_mapping"] == {0: 4, 1: 3, 2: 4}
     assert meta["archive"]["saved"]
 
-    accepted, rejected = s.find(device="tencent::20xmon")
+    # the circuit rejected in the batch is certainly not submitted
+    (accepted,) = s.find(device="tencent::20xmon")
     assert accepted["local_id"] == t.local_id and accepted["state"] == "completed"
     assert s.get(t.local_id)["tensorcircuit"] == {
         k: v for k, v in meta.items() if k != "archive"
     }
-    assert rejected["submission_status"] == "rejected"
-    assert rejected["remote_id"] is None
 
     # the raw details are queried for archival only once the state changed
     n_queries = len(fake_tencent.requests_to("task/detail"))
@@ -674,3 +681,118 @@ def test_tencent_frontend_compiling_mapping_end_to_end(fake_tencent, tmp_path):
             "positional_logical_mapping",
             "archive",
         }
+
+
+def lost_request(json):
+    requests = pytest.importorskip("requests")
+    raise requests.exceptions.Timeout("read timed out")
+
+
+def test_tencent_paid_submission_sent_once(fake_tencent, tmp_path):
+    pytest.importorskip("qiskit")
+    c = tc.Circuit(2)
+    c.x(0)
+    c.measure_instruction(0)
+    s = store.TaskStore(tmp_path / "tasks")
+    fake_tencent.responses["task/submit"] = lost_request
+    with pytest.raises(SubmissionUnknown, match="read timed out"):
+        # the frontend compiling swaps the qubits
+        apis.submit_task(
+            device="tencent::20xmon",
+            circuit=c,
+            compiled=True,
+            compiled_options={
+                "basis_gates": ["x", "cx"],
+                "optimization_level": 0,
+                "coupling_map": [[0, 1], [1, 0]],
+                "initial_layout": [1, 0],
+            },
+            store=s,
+        )
+    (call,) = fake_tencent.calls
+    assert call["endpoint"] == "task/submit" and call["timeout"] == 60
+    assert "measure q[1] -> c[0];" in call["json"]["source"]
+    # the task may run on the provider, so its record is kept with the mapping
+    # of the sent circuit
+    (row,) = s.find(submission_status="unknown")
+    r = s.get(row["local_id"])
+    assert r["remote_id"] is None and "read timed out" in r["submission"]["error"]
+    assert r["positional_logical_mapping"] == {0: 1}
+
+    # bind the task found on the provider; queries are still retried
+    responses = [
+        {
+            "task": {
+                "id": "t1",
+                "state": "completed",
+                "result": {"counts": {"1": 10}},
+                "optimization": {"pairs": {"0": "3", "1": "4"}},
+            }
+        }
+    ]
+    fake_tencent.responses["task/detail"] = lambda json: (
+        responses.pop() if len(fake_tencent.calls) > 2 else lost_request(json)
+    )
+    t = s.bind(row["local_id"], "t1")
+    assert str(t) == "tencent::20xmon~~t1"
+    assert t.details()["tensorcircuit"]["positional_logical_mapping"] == {0: 4}
+    assert len(fake_tencent.requests_to("task/detail")) == 2
+    r = s.get(t.local_id)
+    assert r["submission"]["status"] == "submitted" and r["state"] == "completed"
+
+    # explicitly rejected, so certainly not submitted
+    fake_tencent.responses["task/submit"] = {"err": "invalid token"}
+    with pytest.raises(ValueError, match="invalid token"):
+        apis.submit_task(device="tencent::20xmon", circuit=c, store=s)
+    assert [x["local_id"] for x in s.find()] == [t.local_id]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        [],
+        {"tasks": []},
+        {"tasks": [{"id": "t1"}]},
+        {"tasks": [{"id": "t1"}, {}]},
+        {"tasks": [{"err": "quota exceeded"}, "t2"]},
+    ],
+)
+def test_tencent_unclear_answer_keeps_tasks_unknown(fake_tencent, tmp_path, response):
+    s = store.TaskStore(tmp_path / "tasks")
+    fake_tencent.responses["task/submit"] = response
+    circuits = [tc.Circuit(1), tc.Circuit(1)]
+    with pytest.raises(SubmissionUnknown):
+        apis.submit_task(device="tencent::20xmon", circuit=circuits, store=s)
+    assert len(fake_tencent.calls) == 1
+    rows = s.find(submission_status="unknown")
+    assert len(rows) == 2
+    for row in rows:
+        assert json.dumps(response) in s.get(row["local_id"])["submission"]["error"]
+
+
+def test_tencent_resubmit_recorded_with_parent(fake_tencent, tmp_path):
+    c = tc.Circuit(2)
+    c.measure_instruction(1)
+    s = store.TaskStore(tmp_path / "tasks")
+    fake_tencent.responses["task/submit"] = {"tasks": [{"id": "t1"}]}
+    fake_tencent.responses["task/start"] = {"tasks": [{"id": "t2"}]}
+    t = apis.submit_task(device="tencent::20xmon", circuit=c, shots=100, store=s)
+    t2 = t.resubmit()
+    assert str(t2) == "tencent::20xmon~~t2"
+    call = fake_tencent.calls[-1]
+    assert call["endpoint"] == "task/start" and call["timeout"] == 60
+    assert call["json"] == {"id": "t1"}
+    parent, r = s.get(t.local_id), s.get(t2.local_id)
+    assert r["parent_id"] == t.local_id and r["remote_id"] == "t2"
+    assert r["request"] == dict(parent["request"], resubmit_of="t1")
+    assert r["positional_logical_mapping"] == {0: 1}
+    assert t2._positional_logical_mapping == {0: 1}
+
+    # the parent is found by the remote id
+    fake_tencent.responses["task/start"] = lost_request
+    with pytest.raises(SubmissionUnknown):
+        apis.resubmit_task("tencent::20xmon~~t1", store=s)
+    assert len(fake_tencent.requests_to("task/start")) == 2
+    (row,) = s.find(submission_status="unknown")
+    r = s.get(row["local_id"])
+    assert r["parent_id"] == t.local_id and r["positional_logical_mapping"] == {0: 1}

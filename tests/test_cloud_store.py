@@ -158,20 +158,13 @@ def test_store_unserializable_circuit_still_submits(task_store, caplog):
     assert r["request"]["circuit_error"]
 
 
-def test_store_provider_failure_is_unknown(task_store):
+def test_store_drops_tasks_certainly_not_submitted(task_store):
     with pytest.raises(ValueError, match="Unsupported provider"):
         apis.submit_task(device="nowhere::qpu", circuit=bell(), store=task_store)
-    assert task_store.find() == []
     with pytest.raises(ValueError, match="Unsupported device"):
         apis.submit_task(device="local::nowhere", circuit=bell(), store=task_store)
-    (row,) = task_store.find()
-    r = task_store.get(row["local_id"])
-    assert r["submission"]["status"] == "unknown"
-    assert "Unsupported device" in r["submission"]["error"]
-    with pytest.raises(
-        ValueError, match="no remote task id, submission status: unknown"
-    ):
-        task_store.task(row["local_id"])
+    assert task_store.find() == []
+    assert os.listdir(task_store.records_path) == []
 
 
 def test_store_interrupted_and_corrupt_records(task_store, monkeypatch):

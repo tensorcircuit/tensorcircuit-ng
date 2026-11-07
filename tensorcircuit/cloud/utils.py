@@ -27,6 +27,24 @@ class HttpStatusError(Exception):
     pass
 
 
+class SubmissionUnknown(Exception):
+    """
+    Raised when a request creating paid tasks fails after it may have reached
+    the server, so the tasks may have been accepted; it is never retried
+    """
+
+    pass
+
+
+class SubmissionRejected(ValueError):
+    """
+    Raised when the provider explicitly rejects a request creating paid tasks,
+    so the tasks are certainly not submitted
+    """
+
+    pass
+
+
 # TODO(@refraction-ray): whether an exception hierarchy for tc is necessary?
 connection_errors = (
     ConnectionResetError,
@@ -106,7 +124,6 @@ def reconnect(tries: int = 5, timeout: int = 12) -> Callable[..., Any]:
                         raise HttpStatusError
                     return r
                 except connection_errors as e:
-                    logger.warning("Fails at fetching url: %s. Try again." % url)
                     if count == tries - 1:
                         logger.error(
                             "Still wrong at fetching url: %s. after %s tries."
@@ -114,6 +131,7 @@ def reconnect(tries: int = 5, timeout: int = 12) -> Callable[..., Any]:
                         )
                         logger.error("Fails due to %r", e)
                         raise e
+                    logger.warning("Fails at fetching url: %s. Try again." % url)
                     time.sleep(0.5 * count)
 
         return wrapper
@@ -135,3 +153,30 @@ def rget_json(*args: Any, **kws: Any) -> Any:
 def rpost_json(*args: Any, **kws: Any) -> Any:
     r = requests.post(*args, **kws)
     return r.json()
+
+
+@reconnect(tries=1, timeout=60)
+def _rpost_json_once(*args: Any, **kws: Any) -> Any:
+    r = requests.post(*args, **kws)
+    return r.json()
+
+
+def rpost_json_once(*args: Any, **kws: Any) -> Any:
+    """
+    Post a request creating paid tasks only once with a longer timeout.
+    Any failure of the request itself raises :py:class:`SubmissionUnknown`,
+    while an error in a parsed response is left to the caller.
+    """
+    try:
+        return _rpost_json_once(*args, **kws)
+    except connection_errors as e:
+        raise SubmissionUnknown(repr(e)) from e
+
+
+# failures after which submitted tasks may have been accepted
+unknown_submission_errors = (
+    SubmissionUnknown,
+    requests.exceptions.RequestException,
+    ConnectionError,
+    TimeoutError,
+)
