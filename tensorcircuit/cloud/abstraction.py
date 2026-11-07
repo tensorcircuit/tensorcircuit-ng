@@ -8,6 +8,7 @@ import time
 
 import networkx as nx
 
+from .store import try_store
 from ..results import readout_mitigation as rem
 from ..results import counts
 from ..utils import arg_alias
@@ -287,6 +288,22 @@ class Device:
 
 sep2 = "~~"
 
+# providers whose ``results`` are the observed counts without any correction
+raw_count_providers = ["tencent", "local", "tianyan"]
+# providers that run the submitted circuit without remapping the qubits
+unmapped_providers = ["local", "tianyan"]
+
+
+def _mapping_from_details(d: Dict[str, Any]) -> Optional[Dict[int, int]]:
+    try:
+        mp = d["optimization"]["pairs"]
+    except KeyError:
+        if "qubits" in d and isinstance(d["qubits"], int):
+            mp = {i: i for i in range(d["qubits"])}
+        else:
+            mp = None
+    return mp  # type: ignore
+
 
 class Task:
     """
@@ -297,11 +314,44 @@ class Task:
         self.id_ = id_
         self.device = device
         self.more_details: Dict[str, Any] = {}
+        # local id in the task store and the index of the circuit in its submission
+        self.local_id: Optional[str] = None
+        self.circuit_index: Optional[int] = None
+        # positional_logical_mapping of the circuit sent to the provider,
+        # None if unknown
+        self._positional_logical_mapping: Optional[Dict[int, int]] = None
+        self._store: Any = None
+        self._stored_state: Optional[str] = None
+        self._archive: Dict[str, Any] = {
+            "requested": False,
+            "saved": False,
+            "local_id": None,
+            "error": None,
+        }
 
     def __repr__(self) -> str:
         return self.device.__repr__() + sep2 + self.id_
 
     __str__ = __repr__
+
+    def _bind_store(
+        self,
+        store: Any,
+        local_id: str,
+        error: Optional[str] = None,
+        state: Optional[str] = None,
+    ) -> None:
+        # bind to the saved record, or only report the failure if not saved
+        saved = error is None
+        self._store = store if saved else None
+        self.local_id = local_id if saved else None
+        self._stored_state = state
+        self._archive = {
+            "requested": True,
+            "saved": saved,
+            "local_id": self.local_id,
+            "error": error,
+        }
 
     def get_device(self) -> Device:
         """
@@ -318,19 +368,51 @@ class Task:
     @partial(arg_alias, alias_dict={"blocked": ["wait"]})
     def details(self, blocked: bool = False, **kws: Any) -> Dict[str, Any]:
         """
-        Get the current task details
+        Get the current task details. Besides the provider fields, the
+        ``"tensorcircuit"`` entry holds provider-independent metadata,
+        where unknown values are None:
 
+        - ``raw_counts``: observed counts without any correction
+        - ``positional_logical_mapping``: from the position in the result bitstring,
+          i.e. the classical bit, to the measured qubit of the circuit as executed
+          on the device, i.e. the physical qubit, composing the frontend compiling
+          and the provider qubit mapping. It is the
+          :py:meth:`get_positional_logical_mapping` of the submitted circuit
+          when neither remaps the qubits, and can be directly passed to
+          :py:meth:`tensorcircuit.results.rem.ReadoutMit.apply_correction`
+          with qubits on the device
+        - ``archive``: whether the task is saved in the local task store
 
         :param blocked: whether return until task is finished, defaults to False
         :type blocked: bool
-        :return: _description_
+        :return: the task details
         :rtype: Dict[str, Any]
         """
         from .apis import get_task_details
 
         if blocked is False:
-            dt = get_task_details(self, **kws)
+            # copy since providers such as local return their cached dict
+            dt = dict(get_task_details(self, **kws))
             dt.update(self.more_details)
+            meta = self._metadata(dt)
+            if self._store is not None and dt.get("state") != self._stored_state:
+                raw = dt
+                if kws.get("prettify", False):
+                    # prettified details hold python objects, archive the raw ones
+                    raw = dict(get_task_details(self, **dict(kws, prettify=False)))
+                    raw.update(self.more_details)
+                error = try_store(
+                    self._store.update,
+                    self.local_id,
+                    state=raw.get("state"),
+                    details=raw,
+                    tensorcircuit=self._metadata(raw),
+                )
+                self._archive.update(saved=error is None, error=error)
+                if error is None:
+                    self._stored_state = raw.get("state")
+            meta["archive"] = dict(self._archive)
+            dt["tensorcircuit"] = meta
             return dt
         s = self.state()
         tries = 0
@@ -340,16 +422,28 @@ class Task:
             s = self.state()
         return self.details(**kws)  # type: ignore
 
-    def get_logical_physical_mapping(self) -> Optional[Dict[int, int]]:
-        d = self.details()
-        try:
-            mp = d["optimization"]["pairs"]
-        except KeyError:
-            if "qubits" in d and isinstance(d["qubits"], int):
-                mp = {i: i for i in range(d["qubits"])}
+    def _metadata(self, d: Dict[str, Any]) -> Dict[str, Any]:
+        provider = self.device.provider.name if self.device is not None else None
+        raw_counts = None
+        if provider in raw_count_providers and d.get("state") == "completed":
+            raw_counts = d.get("results")
+        mapping = self._positional_logical_mapping
+        if mapping is not None and provider not in unmapped_providers:
+            # compose the provider mapping from the qubits sent to physical ones
+            pairs = (d.get("optimization") or {}).get("pairs")
+            if pairs is None or any(q not in pairs for q in mapping.values()):
+                mapping = None
             else:
-                mp = None
-        return mp  # type: ignore
+                mapping = {i: pairs[q] for i, q in mapping.items()}
+        return {
+            "schema_version": 1,
+            "raw_counts": raw_counts,
+            "memory": None,
+            "positional_logical_mapping": mapping,
+        }
+
+    def get_logical_physical_mapping(self) -> Optional[Dict[int, int]]:
+        return _mapping_from_details(self.details())
 
     def add_details(self, **kws: Any) -> None:
         self.more_details.update(kws)

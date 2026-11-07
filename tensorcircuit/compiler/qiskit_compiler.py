@@ -70,12 +70,13 @@ def _comment_dict(d: Dict[int, int], name: str = "logical_physical_mapping") -> 
 
 
 def _get_positional_logical_mapping_from_qiskit(qc: Any) -> Dict[int, int]:
-    i = 0
+    # the position in the result bitstring is the classical bit index
     positional_logical_mapping = {}
     for inst in qc.data:
         if inst[0].name == "measure":
-            positional_logical_mapping[i] = qc.find_bit(inst[1][0]).index
-            i += 1
+            positional_logical_mapping[qc.find_bit(inst[2][0]).index] = qc.find_bit(
+                inst[1][0]
+            ).index
 
     return positional_logical_mapping
 
@@ -138,7 +139,10 @@ def qiskit_compile(
     :type output: str, optional
     :param compiled_options: ``qiskit.transpile`` options in a dict, defaults to None
     :type compiled_options: Optional[Dict[str, Any]], optional
-    :return: Tuple containing the output circuit and the qubit mapping info dict
+    :return: Tuple containing the output circuit and the qubit mapping info dict.
+        ``positional_logical_mapping`` in the info refers to the original circuit,
+        keyed by the classical bit; the output circuit keeps the classical bits,
+        so its own ``get_positional_logical_mapping`` gives the compiled qubits.
     :rtype: Any
     """
     from qiskit.compiler import transpile

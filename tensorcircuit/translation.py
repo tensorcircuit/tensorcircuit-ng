@@ -3,7 +3,6 @@ Circuit object translation in different packages
 """
 
 import logging
-from copy import deepcopy
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -34,7 +33,7 @@ except ImportError:
         "Please first ``pip install -U sympy symengine`` to enable `qiskit2tc` in translation module"
     )
 
-from . import gates
+from . import channels, gates
 from .circuit import Circuit
 from .cons import backend, rdtypestr
 from .densitymatrix import DMCircuit2
@@ -237,7 +236,7 @@ def qir2qiskit(
     :param n: # of qubits
     :type n: int
     :param extra_qir: The extra quantum IR of tc circuit including measure and reset on hardware,
-        defaults to None
+        defaults to None. Each measurement is written to the classical bit of its ``record_index``.
     :type extra_qir: Optional[List[Dict[str, Any]]]
     :param initialization: Circuit initial state in qiskit format
     :type initialization: Optional[Tensor]
@@ -246,7 +245,11 @@ def qir2qiskit(
     """
     if extra_qir is not None and len(extra_qir) > 0:
         qir = _merge_extra_qir(qir, extra_qir)
-        qiskit_circ = QuantumCircuit(n, n)
+        records = [
+            d.get("record_index", i)
+            for i, d in enumerate(d for d in extra_qir if d["name"] == "measure")
+        ]
+        qiskit_circ = QuantumCircuit(n, max([n] + [r + 1 for r in records]))
     else:
         qiskit_circ = QuantumCircuit(n)
     if initialization is not None:
@@ -345,7 +348,7 @@ def qir2qiskit(
             )
             qiskit_circ.unitary(qop, index[::-1], label=qis_name)
         elif gate_name == "measure":
-            qiskit_circ.measure(index[0], measure_cbit)
+            qiskit_circ.measure(index[0], gate_info.get("record_index", measure_cbit))
             measure_cbit += 1
         elif gate_name == "reset":
             qiskit_circ.reset(index[0])
@@ -571,6 +574,10 @@ def qiskit2tc(
                 )
         elif gate_name == "measure":
             tc_circuit.measure_instruction(*idx)
+            # the classical bit identifies the measurement record
+            tc_circuit._extra_qir[-1]["record_index"] = qc.find_bit(
+                gate_info.clbits[0]
+            ).index
         elif gate_name == "reset":
             tc_circuit.reset_instruction(*idx)
         elif gate_name == "barrier":
@@ -593,6 +600,12 @@ def qiskit2tc(
         else:  # unitary gate
             idx_inverse = (x for x in idx[::-1])
             tc_circuit.any(*idx_inverse, unitary=gate_info[0].to_matrix())
+    records = [
+        d["record_index"] for d in tc_circuit._extra_qir if d["name"] == "measure"
+    ]
+    if records:
+        # later measurements never reuse an imported classical bit
+        tc_circuit._measure_counter = max(records) + 1
     return tc_circuit
 
 
@@ -625,94 +638,102 @@ def json_to_tensor(a: Any) -> Any:
         return ar + 1.0j * ai
 
 
+def _value_to_json(v: Any) -> Any:
+    if v is None or isinstance(v, (bool, int, float, str)):
+        return v
+    return tensor_to_json(v)
+
+
+def _json_to_value(v: Any) -> Any:
+    if isinstance(v, list):
+        return json_to_tensor(v)
+    return v
+
+
 def qir2json(
     qir: List[Dict[str, Any]], simplified: bool = False
 ) -> List[Dict[str, Any]]:
     """
-    transform qir to json compatible list of dict where array is replaced by real and imaginary list
+    Transform qir to a json compatible list of dicts, one per gate or noise channel,
+    where tensors are replaced by real and imaginary lists.
+    Each gate dict has ``name``, ``qubits``, optional ``parameters``, ``mpo``,
+    ``diagonal``, ``gatef`` (the gate function name if different from ``name``)
+    and ``tensor``, the gate tensor; a channel dict has ``is_channel``,
+    ``channel`` (the channel function name), ``unitary`` and ``parameters``.
 
     :param qir: the quantum intermediate representation of a circuit
     :type qir: List[Dict[str, Any]]
-    :param simplified: If False, keep all info for each gate, defaults to be False.
-        If True, suitable for IO since less information is required
+    :param simplified: if True, omit the gate tensors, which are not needed to
+        restore the circuit, defaults to False
     :type simplified: bool
-    :return: json-compatible list of dicts (complex arrays split into real/imaginary lists)
+    :return: json compatible list of dicts
     :rtype: List[Dict[str, Any]]
     """
-    logger.warning(
-        "experimental feature subject to fast protocol and implementation change, try on your own risk"
-    )
-    qir = deepcopy(qir)
-    tcqasm = []
+    records = []
     for r in qir:
-        if r.get("is_channel", False):
-            continue
-        if r["mpo"] is True:
-            nm = backend.reshapem(r["gate"].eval())
-        else:
-            nm = backend.reshapem(r["gate"].tensor)
-        nmr, nmi = tensor_to_json(nm)
-        if backend.shape_tuple(nm)[0] == backend.shape_tuple(nm)[1] == 2:
-            uparams = [float(p) for p in gates.get_u_parameter(backend.numpy(nm))]
-        else:
-            uparams = []
-        params = r.get("parameters", {})
-        for k, v in params.items():
-            params[k] = tensor_to_json(v)
-
-        ditem = {
-            "name": r["gatef"].n,
-            "qubits": list(r["index"]),
+        item: Dict[str, Any] = {
+            "name": r["name"],
+            "qubits": [int(q) for q in r["index"]],
         }
-        unsupport_list = ["any", "unitary", "mpo", "exp", "exp1", "r", "cr"]
-        if not simplified:
-            ditem.update(
-                {
-                    "matrix": [nmr, nmi],
-                    "uparams": uparams,
-                    "parameters": params,
-                    "mpo": r["mpo"],
-                }
+        if r.get("is_channel", False):
+            item.update(
+                is_channel=True,
+                channel=r["channel_f"].__name__,
+                unitary=r.get("channel_unitary", False),
+                parameters={
+                    k: _value_to_json(v)
+                    for k, v in r.get("channel_parameters", {}).items()
+                },
             )
-        else:  # update only when necessary: simplified=True
-            if ditem["name"] in unsupport_list and uparams:
-                ditem.update({"uparams": uparams})
-            elif ditem["name"] in unsupport_list:
-                ditem.update({"matrix": [nmr, nmi]})
-            if params:
-                ditem.update({"parameters": params})
-            if r["mpo"]:
-                ditem.update({"mpo": r["mpo"]})
-        tcqasm.append(ditem)
-    return tcqasm
+            records.append(item)
+            continue
+        gatef = getattr(r["gatef"], "n", None) or r["gatef"].__name__
+        if gatef != item["name"]:
+            item["gatef"] = gatef
+        if r.get("parameters"):
+            item["parameters"] = {
+                k: _value_to_json(v) for k, v in r["parameters"].items()
+            }
+        for k in ["mpo", "diagonal"]:
+            if r.get(k, False):
+                item[k] = True
+        if not simplified:
+            tensor = r["gate"].eval() if r.get("mpo", False) else r["gate"].tensor
+            item["tensor"] = tensor_to_json(tensor)
+        records.append(item)
+    return records
 
 
 def json2qir(tcqasm: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    logger.warning(
-        "experimental feature subject to fast protocol and implementation change, try on your own risk"
-    )
-    tcqasm = deepcopy(tcqasm)
+    """
+    Transform the output of :py:func:`qir2json` back to qir, gates are
+    restored from the gate function and parameters.
+
+    :param tcqasm: json compatible list of dicts
+    :type tcqasm: List[Dict[str, Any]]
+    :return: qir which can be used by ``Circuit.from_qir``
+    :rtype: List[Dict[str, Any]]
+    """
     qir = []
     for d in tcqasm:
-        param = d.get("parameters", {})
-        for k, v in param.items():
-            # tree_map doesn't work here since the end leaves are list
-            param[k] = json_to_tensor(v)
-        if "matrix" in d:
-            gatem = json_to_tensor(d["matrix"])
+        params = {k: _json_to_value(v) for k, v in d.get("parameters", {}).items()}
+        item: Dict[str, Any] = {"name": d["name"], "index": tuple(d["qubits"])}
+        if d.get("is_channel", False):
+            item.update(
+                is_channel=True,
+                channel_f=getattr(channels, d["channel"]),
+                channel_parameters=params,
+                channel_unitary=d.get("unitary", False),
+            )
         else:
-            gatem = getattr(gates, d["name"])(**param)
-        qir.append(
-            {
-                "gate": gatem,
-                "index": tuple(d["qubits"]),
-                "mpo": d.get("mpo", False),
-                "split": {},
-                "parameters": param,
-                "gatef": getattr(gates, d["name"]),
-                "name": d["name"],
-            }
-        )
+            item.update(
+                gatef=getattr(gates, d.get("gatef", d["name"])),
+                parameters=params,
+                mpo=d.get("mpo", False),
+                diagonal=d.get("diagonal", False),
+                split={},
+            )
+        qir.append(item)
     return qir
 
 

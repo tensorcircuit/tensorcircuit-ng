@@ -72,6 +72,28 @@ def test_qsikit_compiler():
     print(c2.draw())
 
 
+def test_qiskit_compile_positions_follow_classical_bits():
+    qiskit = pytest.importorskip("qiskit")
+    from tensorcircuit.compiler.qiskit_compiler import qiskit_compile
+
+    qc = qiskit.QuantumCircuit(3, 2)
+    qc.x(0)
+    qc.measure(0, 1)
+    qc.measure(2, 0)
+    c1, info = qiskit_compile(
+        qc,
+        output="tc",
+        compiled_options={
+            "basis_gates": ["x", "h", "rz", "cx"],
+            "coupling_map": [[0, 1], [1, 0], [1, 2], [2, 1]],
+            "initial_layout": [2, 1, 0],
+        },
+    )
+    assert info["positional_logical_mapping"] == {1: 0, 0: 2}
+    # the compiled circuit keeps the classical bits on the compiled qubits
+    assert c1.get_positional_logical_mapping() == {1: 2, 0: 0}
+
+
 def test_composed_compiler():
     from tensorcircuit.compiler import DefaultCompiler
 

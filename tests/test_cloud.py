@@ -3,10 +3,12 @@ import os
 import copy
 import json
 import logging
+import re
 import stat
 import time
 from types import SimpleNamespace
 import pytest
+from pytest_lazyfixture import lazy_fixture as lf
 import numpy as np
 
 thisfile = os.path.abspath(__file__)
@@ -14,7 +16,7 @@ modulepath = os.path.dirname(os.path.dirname(thisfile))
 
 sys.path.insert(0, modulepath)
 import tensorcircuit as tc
-from tensorcircuit.cloud import apis, wrapper
+from tensorcircuit.cloud import apis, store, wrapper
 from tensorcircuit.cloud.abstraction import Task, TaskFailed
 from tensorcircuit.cloud.config import tencent_base_url
 from tensorcircuit.results import counts
@@ -193,6 +195,25 @@ def test_local_submit_task():
 
 def test_local_list_tasks():
     print(apis.list_tasks(provider="local"))
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_local_measurement_semantics(backend):
+    c = tc.Circuit(3)
+    c.x(0)
+    c.measure_instruction(2)
+    c.measure_instruction(0)
+    c.measure_instruction(0)
+    t = apis.submit_task(device="local::testing", circuit=c, shots=10)
+    # bit i is the i-th measurement, unmeasured q1 is not in the result
+    assert t.results() == {"011": 10}
+    # unwritten classical bits are 0
+    c._extra_qir[1]["record_index"] = 3
+    t = apis.submit_task(device="local::testing", circuit=c, shots=10)
+    assert t.results() == {"0011": 10}
+    c.h(0)
+    with pytest.raises(ValueError, match="gates after a measurement"):
+        apis.submit_task(device="local::testing", circuit=c, shots=10)
 
 
 def test_local_batch_submit():
@@ -520,3 +541,136 @@ def test_tencent_batch_expectation_ps_contract(fake_tencent):
     assert {(p["device"], p["shots"]) for b in batches for p in b} == {
         ("2xmon?o=0", 1000)
     }
+
+
+def test_tencent_store_and_measurement_metadata(fake_tencent, tmp_path):
+    # q1 is measured twice, so there are more classical bits than qubits
+    c = tc.Circuit(2)
+    c.x(0)
+    c.measure_instruction(1)
+    c.measure_instruction(0)
+    c.h(1)
+    c.measure_instruction(1)
+    fake_tencent.responses["task/submit"] = {
+        "tasks": [{"id": "t1"}, {"err": "quota exceeded"}]
+    }
+    fake_tencent.responses["task/detail"] = {
+        "task": {
+            "id": "t1",
+            "state": "completed",
+            "result": {"counts": {"010": 6, "011": 4}},
+            "optimization": {"pairs": {"0": "3", "1": "4"}},
+        }
+    }
+    s = store.TaskStore(tmp_path / "tasks")
+    (t,) = apis.submit_task(device="tencent::20xmon", circuit=[c, c], store=s)
+    source = fake_tencent.requests_to("task/submit")[0][0]["source"]
+    assert "creg c[3];" in source and "measure q[1] -> c[2];" in source
+
+    meta = t.details(prettify=True)["tensorcircuit"]
+    assert meta["raw_counts"] == {"010": 6, "011": 4}
+    assert meta["positional_logical_mapping"] == {0: 4, 1: 3, 2: 4}
+    assert meta["archive"]["saved"]
+
+    accepted, rejected = s.find(device="tencent::20xmon")
+    assert accepted["local_id"] == t.local_id and accepted["state"] == "completed"
+    assert s.get(t.local_id)["tensorcircuit"] == {
+        k: v for k, v in meta.items() if k != "archive"
+    }
+    assert rejected["submission_status"] == "rejected"
+    assert rejected["remote_id"] is None
+
+    # the raw details are queried for archival only once the state changed
+    n_queries = len(fake_tencent.requests_to("task/detail"))
+    assert n_queries == 2
+    t.details(prettify=True)
+    assert len(fake_tencent.requests_to("task/detail")) == n_queries + 1
+
+
+def test_tencent_source_takes_precedence_in_records(fake_tencent, tmp_path):
+    fake_tencent.responses["task/submit"] = {"tasks": [{"id": "t1"}, {"id": "t2"}]}
+    s = store.TaskStore(tmp_path / "tasks")
+    sources = [tc.Circuit(1).to_openqasm(), tc.Circuit(2).to_openqasm()]
+    ts = apis.submit_task(
+        device="tencent::20xmon", circuit=tc.Circuit(3), source=sources, store=s
+    )
+    assert [t.id_ for t in ts] == ["t1", "t2"]
+    records = [s.get(t.local_id) for t in ts]
+    assert [r["request"]["source"] for r in records] == sources
+    assert all(r["request"]["circuit"] is None for r in records)
+    assert ts[0]._positional_logical_mapping is None
+
+
+def test_tencent_frontend_compiling_mapping_end_to_end(fake_tencent, tmp_path):
+    pytest.importorskip("qiskit")
+    # q0 = q1 = 1 and q2 = 0, routing cx(0, 2) on a line needs a swap;
+    # q1 is not measured and q2 is measured twice
+    c = tc.Circuit(3)
+    c.x(0)
+    c.x(1)
+    c.x(2)
+    c.cx(0, 2)
+    c.measure_instruction(2)
+    c.measure_instruction(0)
+    c.measure_instruction(2)
+    ideal = {0: "1", 1: "1", 2: "0"}
+    pairs = {0: 5, 1: 3, 2: 4}
+
+    def run_sent():
+        # run the circuit sent to the provider, counts are in classical bit order
+        source = fake_tencent.requests_to("task/submit")[0]["source"]
+        measures = {
+            int(b): int(q)
+            for q, b in re.findall(r"measure q\[(\d+)\] -> \w+\[(\d+)\];", source)
+        }
+        unitary = "\n".join(
+            line for line in source.split("\n") if not line.startswith("measure")
+        )
+        state = tc.Circuit.from_openqasm(unitary).state()
+        bits = format(int(np.argmax(np.abs(state))), "03b")
+        return "".join(bits[measures[i]] for i in sorted(measures)), measures
+
+    fake_tencent.responses["task/submit"] = {"tasks": [{"id": "t1"}]}
+    fake_tencent.responses["task/detail"] = lambda json: {
+        "task": {
+            "id": "t1",
+            "state": "completed",
+            "result": {"counts": {run_sent()[0]: 100}},
+            "optimization": {"pairs": {str(k): str(v) for k, v in pairs.items()}},
+        }
+    }
+    s = store.TaskStore(tmp_path / "tasks")
+    t = apis.submit_task(
+        device="tencent::20xmon",
+        circuit=c,
+        compiled=True,
+        compiled_options={
+            "basis_gates": ["x", "h", "rz", "cx"],
+            "optimization_level": 0,
+            "coupling_map": [[0, 1], [1, 0], [1, 2], [2, 1]],
+            "initial_layout": [0, 1, 2],
+            "seed_transpiler": 42,
+        },
+        store=s,
+    )
+    result, measures = run_sent()
+    assert fake_tencent.requests_to("task/submit")[0]["source"].count("cx") >= 4
+    for task in [t, s.task(t.local_id)]:
+        meta = task.details()["tensorcircuit"]
+        assert meta["raw_counts"] == {result: 100}
+        # positions are fixed by the submitted circuit, compiling changes qubits only
+        positional_logical = c.get_positional_logical_mapping()
+        assert positional_logical == {0: 2, 1: 0, 2: 2}
+        assert {i: result[i] for i in range(3)} == {
+            i: ideal[q] for i, q in positional_logical.items()
+        }
+        assert meta["positional_logical_mapping"] == {
+            i: pairs[q] for i, q in measures.items()
+        }
+        assert set(meta) == {
+            "schema_version",
+            "raw_counts",
+            "memory",
+            "positional_logical_mapping",
+            "archive",
+        }

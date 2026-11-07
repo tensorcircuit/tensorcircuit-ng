@@ -2,7 +2,7 @@
 Cloud provider from Tencent
 """
 
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from datetime import datetime
 from json import dumps
 import logging
@@ -14,7 +14,7 @@ from .abstraction import Device, sep, Task
 from ..abstractcircuit import AbstractCircuit
 from ..utils import is_sequence, arg_alias
 from ..circuit import Circuit
-from ..translation import eqasm2tc
+from ..translation import eqasm2tc, get_qiskit_qasm
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +178,7 @@ def submit_task(
     :return: Task object or List of Task for batch submission
     :rtype: List[Task]
     """
+    mappings = None
     if source is None:
         if compiled_options is None and compiling is True:
             links = device.topology()
@@ -196,26 +197,35 @@ def submit_task(
                 "coupling_map": coupling_map,
             }
 
-        def c2qasm(c: Any, compiling: bool) -> str:
-            from ..compiler.qiskit_compiler import qiskit_compile
+        def c2qasm(c: Any, compiling: bool) -> Tuple[str, Optional[Dict[int, int]]]:
+            from ..compiler.qiskit_compiler import (
+                qiskit_compile,
+                _get_positional_logical_mapping_from_qiskit,
+            )
             from qiskit.circuit import QuantumCircuit
 
+            mapping = None
             if compiling is True:
-                s, _ = qiskit_compile(
-                    c, output="qasm", info=None, compiled_options=compiled_options
+                qc, _ = qiskit_compile(
+                    c, output="qiskit", info=None, compiled_options=compiled_options
                 )
+                s = get_qiskit_qasm(qc)
+                mapping = _get_positional_logical_mapping_from_qiskit(qc)
             else:
                 if isinstance(c, QuantumCircuit):
                     s = c.qasm()
                 else:
                     s = c.to_openqasm()
             s = _replace_rz_to_st(s)
-            return s  # type: ignore
+            return s, mapping  # type: ignore
 
         if is_sequence(circuit):
-            source = [c2qasm(c, compiling) for c in circuit]  # type: ignore
+            compiled = [c2qasm(c, compiling) for c in circuit]  # type: ignore
+            source = [s for s, _ in compiled]
         else:
-            source = c2qasm(circuit, compiling)
+            compiled = [c2qasm(circuit, compiling)]
+            source = compiled[0][0]
+        mappings = [p for _, p in compiled]
         lang = "OPENQASM"
 
     if len(device.name.split("?")) > 1:
@@ -267,7 +277,7 @@ def submit_task(
     )
     r = error_handling(r)
     rtn = []
-    for t in r["tasks"]:
+    for i, t in enumerate(r["tasks"]):
         if "err" in t or "id" not in t:
             if "err" in t:
                 logger.warning(t["err"])
@@ -275,6 +285,9 @@ def submit_task(
                 logger.warning("unsuccessful submission of the task:\n" + dumps(r))
         else:
             ti = Task(id_=t["id"], device=device)
+            ti.circuit_index = i
+            if mappings is not None:
+                ti._positional_logical_mapping = mappings[i]
             rtn.append(ti)
     if not is_sequence(source):
         return rtn[0]  # type: ignore

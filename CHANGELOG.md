@@ -6,6 +6,7 @@
 
 - **Migration:** cloud `set_token`, `Provider.set_token` and `Device.set_token` keep the token in the current process by default; pass `cached=True` to also save it to the auth file as before. Existing auth files are still read. `set_token(clear=True)` removes tokens both in memory and on disk, restricted to the given provider or device if any.
 - **Migration:** cloud tokens are looked up from `set_token` in the current process first, then the `TC_TOKEN_<PROVIDER>` environment variable, then the auth file, with device tokens falling back to the provider token. The generic `TC_TOKEN` variable is no longer read since it would be sent to every provider; use e.g. `TC_TOKEN_TENCENT` instead. `set_token` rejects non-string, empty, or control-character tokens.
+- **Migration:** the `local` cloud provider follows measure instructions like hardware providers: bit `i` of the result is the measurement with record index `i`, so partially measured circuits return only the measured bits. Circuits without measure instructions still return all qubits, and gates after a measurement on the same qubit raise `ValueError` instead of being silently ignored.
 - Compute pure-state entanglement entropy, mutual information and entanglement anti-flatness on the smaller subsystem. Entropy values change slightly because omitted zero eigenvalues no longer contribute a dimension-dependent regularization bias.
 - `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators and uses BCSR only on CPU.
 - Mark `tensorcircuit.results.qem` and the CuPy backend as experimental: importing the former or setting the latter via `tc.set_backend("cupy")` emits `tc.utils.ExperimentalWarning`.
@@ -13,6 +14,8 @@
 
 ### Added
 
+- Add the local cloud task store `tc.cloud.store.TaskStore`, disabled by default: enable it globally with `tc.cloud.apis.set_store(True)` (or a directory) or per call with `submit_task(..., store=...)`. Each submitted circuit is recorded in `~/.tensorcircuit/tasks` with a SQLite index and a gzip JSON record holding the circuit, shots, options, provider details and results, from the submission intent to the final state; `get`, `find`, `task` and `export` query, recover and export the records. Store failures only emit warnings.
+- Add provider-independent metadata to cloud `task.details()["tensorcircuit"]`: raw counts, the `positional_logical_mapping` of the circuit as executed on the device, i.e. from each result bit (classical bit) to the physical qubit where it is read out, composing frontend compiling and the provider qubit mapping, and the archive status; unknown values are None. Without qubit remapping it equals the submitted circuit's `get_positional_logical_mapping()`, and it can be passed directly to `ReadoutMit` with device qubits.
 - Add JAX-native TNALG MPS gate programs: circuits become pytree programs with one gate per record, structures of equal length share one JIT executable, `stack_gate_programs` batches different structures for vmap, with SVD or Gram/eigh truncation and canonical export to `MPSCircuit` carrying the retained-weight fidelity.
 - Add `compiler.linear_route` for permutation-aware routing to a qubit chain, with diagonal reordering, SWAP fusion, and layout metadata.
 - Add `MPSCircuit.get_fidelity()` to expose the cumulative fraction of weight retained by MPS truncations.
@@ -25,7 +28,9 @@
 
 ### Fixed
 
+- `Circuit.to_json` / `from_json` keep noise channels, diagonal and custom-named gates, the measure / reset / barrier instructions and the circuit size; previously channels were silently dropped and diagonal gates raised. The JSON layout of `to_json` and `translation.qir2json` changes accordingly, and the experimental-feature warning is removed.
 - Hide proxy credentials in cloud request debug logs, and raise the original `HttpStatusError` instead of an `IndexError` after the last failed cloud request retry.
+- The `record_index` of a measure instruction is its classical bit, i.e. its position in the result bitstring, across all boundaries: `get_positional_logical_mapping` and `qiskit_compile` key positions by it, the qiskit / OpenQASM export writes each measurement to that classical bit with enough classical bits for more measurements than qubits (which previously raised), and the qiskit / OpenQASM import restores it from the classical bit, so a compiled circuit's own `get_positional_logical_mapping()` gives the compiled qubits of each result bit. Previously positions followed the instruction order, which differs for imported circuits measuring into classical bits out of order and can change when external tools reorder independent measurements.
 - Fix MPS truncation fidelity estimates to use relative discarded weights and include bond reductions during MPO and multi-site gate application; preserve accumulated fidelity for zero-norm states.
 - Preserve per-gate MPS split overrides for reversed two-site gate indices and accept `max_truncation_err` consistently during bond, MPO, and multi-site reductions.
 - Prevent underflow during MPS measurement by normalizing conditional states at each site, and handle zero-probability outcomes at the left sampling endpoint.

@@ -1774,6 +1774,29 @@ def test_circuit_to_json(backend):
     np.testing.assert_allclose(c.state(), c2.state(), atol=1e-5)
 
 
+@pytest.mark.parametrize("simplified", [False, True])
+def test_circuit_to_json_full_instructions(simplified):
+    c = tc.DMCircuit(3)
+    c.h(0)
+    c.diagonal(0, 2, diag=np.array([1, 1j, -1, 1]))
+    c.any(1, 2, unitary=tc.gates._swap_matrix, name="myswap")
+    c.measure_instruction(1)
+    c.depolarizing(1, px=0.1, py=0.05, pz=0.0)
+    c.reset_instruction(0)
+    c.measure_instruction(1)
+    c2 = tc.DMCircuit.from_json(c.to_json(simplified=simplified))
+    assert [d["name"] for d in c2.to_qir()] == [
+        "h",
+        "diagonal",
+        "myswap",
+        "depolarizing",
+    ]
+    assert c2._extra_qir == c._extra_qir
+    np.testing.assert_allclose(c.state(), c2.state(), atol=1e-5)
+    c2.measure_instruction(2)
+    assert c2._extra_qir[-1]["record_index"] == 2
+
+
 def test_gate_count():
     c = tc.Circuit(3)
     c.x(0)
@@ -1829,6 +1852,28 @@ measure q[0] -> c[0];"""
     # that ordering in the internal circuit state.
     assert measures_default == [1, 0]
     assert measures_ordered == [1, 0]
+    # positions follow the classical bits rather than the instruction order
+    assert c.get_positional_logical_mapping() == {0: 0, 1: 1}
+
+
+def test_measure_records_follow_classical_bits():
+    qiskit = pytest.importorskip("qiskit")
+    qc = qiskit.QuantumCircuit(2, 4)
+    qc.x(0)
+    qc.measure(0, 2)
+    qc.measure(1, 0)
+    qc.measure(0, 1)
+    c = tc.Circuit.from_qiskit(qc)
+    assert c.get_positional_logical_mapping() == {0: 1, 1: 0, 2: 0}
+    c.measure_instruction(1)
+    assert c.get_positional_logical_mapping() == {0: 1, 1: 0, 2: 0, 3: 1}
+    qc2 = c.to_qiskit(enable_instruction=True)
+    assert qc2.num_clbits == 4
+    assert [
+        (qc2.find_bit(i.qubits[0]).index, qc2.find_bit(i.clbits[0]).index)
+        for i in qc2.data
+        if i.operation.name == "measure"
+    ] == [(0, 2), (1, 0), (0, 1), (1, 3)]
 
 
 def test_initial_mapping():

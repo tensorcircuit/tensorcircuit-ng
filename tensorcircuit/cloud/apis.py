@@ -2,7 +2,7 @@
 main entrypoints of cloud module
 """
 
-from typing import Any, List, Optional, Dict, Union, Tuple
+from typing import Any, Callable, List, Optional, Dict, Union, Tuple
 from base64 import b64decode, b64encode
 from functools import partial
 import json
@@ -12,6 +12,16 @@ import tempfile
 import logging
 
 from .abstraction import Provider, Device, Task, sep, sep2
+from .store import (
+    PathLike,
+    TaskStore,
+    as_store,
+    circuit_record,
+    make_records,
+    try_store,
+)
+from ..abstractcircuit import AbstractCircuit
+from ..utils import is_sequence
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +145,43 @@ def set_device(
 
 set_device()
 get_device = partial(set_device, set_global=False)
+
+default_store: Optional[TaskStore] = None
+
+
+def set_store(
+    store: Optional[Union[bool, PathLike, TaskStore]] = True,
+) -> Optional[TaskStore]:
+    """
+    Set the default local task store for all following submissions,
+    including those inside wrappers such as ``batch_expectation_ps``.
+    The ``store`` argument of :py:func:`submit_task` overrides it per call.
+
+    :Example:
+
+    >>> apis.set_store(True)  # record tasks in ~/.tensorcircuit/tasks
+    >>> apis.set_store("./my_tasks")  # record tasks in a given directory
+    >>> apis.set_store(False)  # stop recording, the default
+
+    :param store: ``True`` for the default directory, a path for a given
+        directory, ``False`` or None for no store, defaults to True
+    :type store: Optional[Union[bool, PathLike, TaskStore]], optional
+    :return: the default task store, None if disabled
+    :rtype: Optional[TaskStore]
+    """
+    global default_store
+    default_store = as_store(store)
+    return default_store
+
+
+def get_store() -> Optional[TaskStore]:
+    """
+    Get the default local task store set by :py:func:`set_store`
+
+    :return: the default task store, None if disabled
+    :rtype: Optional[TaskStore]
+    """
+    return default_store
 
 
 def b64encode_s(s: str) -> str:
@@ -518,6 +565,7 @@ def submit_task(
     provider: Optional[Union[str, Provider]] = None,
     device: Optional[Union[str, Device]] = None,
     token: Optional[str] = None,
+    store: Optional[Union[bool, PathLike, TaskStore]] = None,
     **task_kws: Any,
 ) -> List[Task]:
     """
@@ -534,6 +582,10 @@ def submit_task(
     :param token: API token for the provider; defaults to None which uses
         the saved token
     :type token: Optional[str], optional
+    :param store: whether record the tasks in a local task store: ``True`` for
+        the default directory, a path for a given directory, or ``False``;
+        defaults to None, which follows :py:func:`set_store`
+    :type store: Optional[Union[bool, PathLike, TaskStore]], optional
     :param task_kws: all necessary keywords arguments for task submission,
         see detailed API in each provider backend:
         1. tencent - :py:func:`tensorcircuit.cloud.tencent.submit_task`
@@ -543,19 +595,103 @@ def submit_task(
     :rtype: List[Task]
     """
     provider, device = _preprocess(provider, device)
-
+    # resolve the provider before recording anything in the store
+    submit = _provider_submit(provider)
     if token is None:
         token = device.get_token()  # type: ignore
-    if provider.name == "tencent":  # type: ignore
-        return tencent.submit_task(device, token, **task_kws)  # type: ignore
-    elif provider.name == "tianyan":  # type: ignore
-        return tianyan.submit_task(device, token, **task_kws)  # type: ignore
-    elif provider.name == "local":  # type: ignore
-        return local.submit_task(device, token, **task_kws)  # type: ignore
-    elif provider.name == "quafu":  # type: ignore
-        return quafu_provider.submit_task(device, token, **task_kws)  # type: ignore
-    else:
-        raise ValueError("Unsupported provider: %s" % provider.name)  # type: ignore
+    ts = default_store if store is None else as_store(store)
+
+    # providers take an explicit source over the circuit, except local which only runs circuits
+    source = None if provider.name == "local" else task_kws.get("source")
+    items = task_kws.get("circuit") if source is None else source
+    batch = is_sequence(items)
+    items = list(items) if batch else [items]  # type: ignore
+    mappings = [
+        c.get_positional_logical_mapping() if isinstance(c, AbstractCircuit) else None
+        for c in items
+    ]
+    records = []
+    if ts is not None:
+        # save the submission intent before the request is sent
+        records = make_records(
+            provider.name, device.name, _task_requests(items, task_kws), batch
+        )
+        try_store(ts.save, records)
+    try:
+        r = submit(device, token, **task_kws)
+    except Exception as e:
+        if ts is not None:
+            # the provider may have accepted the tasks anyway
+            for rec in records:
+                rec["submission"] = {"status": "unknown", "error": repr(e)}
+            try_store(ts.save, records)
+        raise
+    tasks = r if isinstance(r, list) else [r]
+    for i, t in enumerate(tasks):
+        if t.circuit_index is None:
+            t.circuit_index = i
+        # the circuit is sent as is unless the provider compiles it
+        if t._positional_logical_mapping is None:
+            t._positional_logical_mapping = mappings[t.circuit_index]
+    if ts is not None:
+        bound = {t.circuit_index: t for t in tasks}
+        for rec in records:
+            t = bound.get(rec["circuit_index"])
+            if t is None:
+                rec["state"] = "failed"
+                rec["submission"] = {"status": "rejected", "error": None}
+            else:
+                rec["remote_id"] = t.id_
+                rec["positional_logical_mapping"] = t._positional_logical_mapping
+                rec["submission"] = {"status": "submitted", "error": None}
+        error = try_store(ts.save, records)
+        for t in tasks:
+            t._bind_store(ts, records[t.circuit_index]["local_id"], error)
+    return r  # type: ignore
+
+
+def _provider_submit(provider: Provider) -> Callable[..., Any]:
+    if provider.name == "tencent":
+        return tencent.submit_task  # type: ignore
+    elif provider.name == "tianyan":
+        return tianyan.submit_task  # type: ignore
+    elif provider.name == "local":
+        return local.submit_task  # type: ignore
+    elif provider.name == "quafu":
+        return quafu_provider.submit_task  # type: ignore
+    raise ValueError("Unsupported provider: %s" % provider.name)
+
+
+def _circuit_record(c: Any) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    # a circuit that cannot be archived must never block a valid submission
+    if not isinstance(c, AbstractCircuit):
+        return None, None
+    try:
+        return circuit_record(c), None
+    except Exception as e:
+        logger.warning("task store cannot serialize the circuit: %r", e)
+        return None, repr(e)
+
+
+def _task_requests(items: List[Any], task_kws: Dict[str, Any]) -> List[Dict[str, Any]]:
+    shots = task_kws.get("shots")
+    options = {
+        k: v for k, v in task_kws.items() if k not in ["circuit", "source", "shots"]
+    }
+    requests = []
+    for i, c in enumerate(items):
+        circuit, error = _circuit_record(c)
+        requests.append(
+            {
+                "circuit": circuit,
+                "circuit_error": error,
+                "circuit_type": None if c is None else type(c).__name__,
+                "source": c if isinstance(c, str) else None,
+                "shots": shots[i] if is_sequence(shots) else shots,  # type: ignore
+                "options": options,
+            }
+        )
+    return requests
 
 
 def resubmit_task(
