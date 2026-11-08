@@ -24,6 +24,11 @@ def list_devices(token: Optional[str] = None, **kws: Any) -> List[Device]:
     return rs
 
 
+# the prepared circuit runs on its qubits as they are
+def task_metadata(details: Dict[str, Any], prepared: Dict[str, Any]) -> Dict[str, Any]:
+    return {"positional_logical_mapping": prepared.get("positional_logical_mapping")}
+
+
 def get_task_details(
     task: Task, device: Device, token: str, prettify: bool
 ) -> Dict[str, Any]:
@@ -40,6 +45,9 @@ def submit_task(
     circuit: Optional[Union[AbstractCircuit, Sequence[AbstractCircuit]]] = None,
     **kws: Any,
 ) -> List[Task]:
+    if kws.get("source") is not None:
+        raise ValueError("Local provider only runs circuits, `source` is unsupported")
+
     def _circuit2result(c: AbstractCircuit) -> Dict[str, Any]:
         if device.name not in ["testing", "default"]:
             raise ValueError("Unsupported device from local provider: %s" % device.name)

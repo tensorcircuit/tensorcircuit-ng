@@ -766,6 +766,11 @@ def list_tasks(device: Device, token: str, **filter_kws: Any) -> List[Task]:
     )
 
 
+# the prepared circuit runs on its qubits as they are
+def task_metadata(details: Dict[str, Any], prepared: Dict[str, Any]) -> Dict[str, Any]:
+    return {"positional_logical_mapping": prepared.get("positional_logical_mapping")}
+
+
 def get_task_details(
     task: Task, device: Device, token: str, prettify: bool
 ) -> Dict[str, Any]:

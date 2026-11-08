@@ -288,10 +288,8 @@ class Device:
 
 sep2 = "~~"
 
-# providers whose ``results`` are the observed counts without any correction
-raw_count_providers = ["tencent", "local", "tianyan"]
-# providers that run the submitted circuit without remapping the qubits
-unmapped_providers = ["local", "tianyan"]
+# the provider-independent metadata given by providers, see ``apis.get_task_metadata``
+metadata_keys = ["positional_logical_mapping"]
 
 
 def _mapping_from_details(d: Dict[str, Any]) -> Optional[Dict[int, int]]:
@@ -307,7 +305,16 @@ def _mapping_from_details(d: Dict[str, Any]) -> Optional[Dict[int, int]]:
 
 class Task:
     """
-    Task abstraction for quantum jobs on the cloud
+    Task abstraction for quantum jobs on the cloud.
+
+    ``prepared`` holds what TensorCircuit prepared for sending the circuit, None
+    if unknown, which is not necessarily the request the provider receives: the
+    prepared program, e.g. the ``source`` of ``tencent`` or the ``compilation`` of
+    ``lqcloud``, and its ``positional_logical_mapping`` from the classical bit to
+    the measured qubit of the prepared circuit, None if unknown, which is derived
+    and never sent. A provider may also keep the request actually sent if it can
+    capture it, e.g. the ``payload`` of ``lqcloud``. It is recorded in the task
+    store and used to rerun the task.
     """
 
     def __init__(self, id_: str, device: Optional[Device] = None):
@@ -317,9 +324,7 @@ class Task:
         # local id in the task store and the index of the circuit in its submission
         self.local_id: Optional[str] = None
         self.circuit_index: Optional[int] = None
-        # positional_logical_mapping of the circuit sent to the provider,
-        # None if unknown
-        self._positional_logical_mapping: Optional[Dict[int, int]] = None
+        self.prepared: Optional[Dict[str, Any]] = None
         self._store: Any = None
         self._stored_state: Optional[str] = None
         self._archive: Dict[str, Any] = {
@@ -368,11 +373,14 @@ class Task:
     @partial(arg_alias, alias_dict={"blocked": ["wait"]})
     def details(self, blocked: bool = False, **kws: Any) -> Dict[str, Any]:
         """
-        Get the current task details. Besides the provider fields, the
-        ``"tensorcircuit"`` entry holds provider-independent metadata,
+        Get the current task details. Every provider gives ``state``, i.e.
+        ``pending``, ``completed`` or ``failed``, ``results``, i.e. the observed
+        counts without any correction once completed, where bit ``i`` of each
+        bitstring is the classical bit ``i``, ``memory``, i.e. the bitstring of
+        each shot, if returned, and ``err`` if failed, besides its own fields.
+        The ``"tensorcircuit"`` entry holds what TensorCircuit adds,
         where unknown values are None:
 
-        - ``raw_counts``: observed counts without any correction
         - ``positional_logical_mapping``: from the position in the result bitstring,
           i.e. the classical bit, to the measured qubit of the circuit as executed
           on the device, i.e. the physical qubit, composing the frontend compiling
@@ -382,6 +390,9 @@ class Task:
           :py:meth:`tensorcircuit.results.rem.ReadoutMit.apply_correction`
           with qubits on the device
         - ``archive``: whether the task is saved in the local task store
+
+        See :py:func:`tensorcircuit.cloud.apis.get_task_metadata` for how
+        providers give them.
 
         :param blocked: whether return until task is finished, defaults to False
         :type blocked: bool
@@ -423,24 +434,9 @@ class Task:
         return self.details(**kws)  # type: ignore
 
     def _metadata(self, d: Dict[str, Any]) -> Dict[str, Any]:
-        provider = self.device.provider.name if self.device is not None else None
-        raw_counts = None
-        if provider in raw_count_providers and d.get("state") == "completed":
-            raw_counts = d.get("results")
-        mapping = self._positional_logical_mapping
-        if mapping is not None and provider not in unmapped_providers:
-            # compose the provider mapping from the qubits sent to physical ones
-            pairs = (d.get("optimization") or {}).get("pairs")
-            if pairs is None or any(q not in pairs for q in mapping.values()):
-                mapping = None
-            else:
-                mapping = {i: pairs[q] for i, q in mapping.items()}
-        return {
-            "schema_version": 1,
-            "raw_counts": raw_counts,
-            "memory": None,
-            "positional_logical_mapping": mapping,
-        }
+        from .apis import get_task_metadata
+
+        return get_task_metadata(self, d)
 
     def get_logical_physical_mapping(self) -> Optional[Dict[int, int]]:
         return _mapping_from_details(self.details())

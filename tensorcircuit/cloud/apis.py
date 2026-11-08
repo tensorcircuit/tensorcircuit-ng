@@ -2,16 +2,18 @@
 main entrypoints of cloud module
 """
 
-from typing import Any, Callable, List, Optional, Dict, Union, Tuple
+from typing import Any, Callable, List, Optional, Dict, Sequence, Union, Tuple
 from base64 import b64decode, b64encode
+from copy import copy
 from functools import partial
+import importlib
 import json
 import os
 import sys
 import tempfile
 import logging
 
-from .abstraction import Provider, Device, Task, sep, sep2
+from .abstraction import Provider, Device, Task, metadata_keys, sep, sep2
 from .store import (
     PathLike,
     TaskStore,
@@ -27,33 +29,48 @@ from ..utils import is_sequence
 
 logger = logging.getLogger(__name__)
 
-
-try:
-    from . import tencent  # type: ignore
-except (ImportError, ModuleNotFoundError):
-    logger.info("fail to load cloud provider module: tencent")
-
-try:
-    from . import local
-except (ImportError, ModuleNotFoundError):
-    logger.info("fail to load cloud provider module: local")
-
-try:
-    from . import quafu_provider
-except (ImportError, ModuleNotFoundError):
-    logger.info("fail to load cloud provider module: quafu")
-
-try:
-    from . import tianyan
-except (ImportError, ModuleNotFoundError):
-    logger.info("fail to load cloud provider module: tianyan")
-
 package_name = "tensorcircuit"
 thismodule = sys.modules[__name__]
 
+# provider name -> the module implementing the provider interface, see
+# ``_provider_api``, and the vendor SDKs it needs, recorded in the task store
+_provider_modules = {
+    "tencent": ("tencent", []),
+    "local": ("local", []),
+    "quafu": ("quafu_provider", ["quafu"]),
+    "tianyan": ("tianyan", ["cqlib"]),
+    "lqcloud": ("lqcloud", ["lqcloud"]),
+}
 
 default_provider = Provider.from_name("tencent")
-avail_providers = ["tencent", "local", "quafu", "tianyan"]
+avail_providers = list(_provider_modules)
+
+
+def _provider_module(provider: Provider) -> Any:
+    if provider.name not in _provider_modules:
+        raise ValueError("Unsupported provider: %s" % provider.name)
+    return importlib.import_module(
+        "." + _provider_modules[provider.name][0], __package__
+    )
+
+
+def _provider_api(provider: Provider, name: str) -> Callable[..., Any]:
+    """
+    Get a function of the provider interface implemented by each provider module:
+    ``list_devices(token, **kws)``, ``list_properties(device, token)``,
+    ``submit_task(device, token, **task_kws)``,
+    ``get_task_details(task, device, token, prettify)``,
+    ``resubmit_task(task, token)``, ``remove_task(task, token)``,
+    ``list_tasks(device, token, **filter_kws)``, and optionally
+    ``prepare_task(device, token, **task_kws)``, see :py:func:`submit_task`, and
+    ``task_metadata(details, prepared)``, see :py:func:`get_task_metadata`.
+    """
+    f = getattr(_provider_module(provider), name, None)
+    if f is None:
+        raise NotImplementedError(
+            "%s provider does not support %s" % (provider.name, name)
+        )
+    return f  # type: ignore
 
 
 def list_providers() -> List[Provider]:
@@ -451,14 +468,7 @@ def list_devices(
     provider = Provider.from_name(provider)
     if token is None:
         token = provider.get_token()
-    if provider.name == "tencent":
-        return tencent.list_devices(token, **kws)  # type: ignore
-    elif provider.name == "tianyan":
-        return tianyan.list_devices(token, **kws)
-    elif provider.name == "local":
-        return local.list_devices(token, **kws)
-    else:
-        raise ValueError("Unsupported provider: %s" % provider.name)
+    return _provider_api(provider, "list_devices")(token, **kws)  # type: ignore
 
 
 def list_properties(
@@ -483,14 +493,7 @@ def list_properties(
 
     if token is None:
         token = device.get_token()  # type: ignore
-    if provider.name == "tencent":  # type: ignore
-        return tencent.list_properties(device, token)  # type: ignore
-    elif provider.name == "tianyan":
-        return tianyan.list_properties(device, token)
-    elif provider.name == "local":
-        raise ValueError("Unsupported method for local backend")
-    else:
-        raise ValueError("Unsupported provider: %s" % provider.name)  # type: ignore
+    return _provider_api(provider, "list_properties")(device, token)  # type: ignore
 
 
 def get_task(
@@ -548,19 +551,31 @@ def get_task_details(
         device = default_device
     if token is None:
         token = device.get_token()
-    provider = device.provider
+    details = _provider_api(device.provider, "get_task_details")
+    return details(task, device, token, prettify)  # type: ignore
 
-    if provider.name == "tencent":
-        return tencent.get_task_details(task, device, token, prettify)  # type: ignore
-    elif provider.name == "tianyan":
-        return tianyan.get_task_details(task, device, token, prettify)  # type: ignore
-    elif provider.name == "local":
-        return local.get_task_details(task, device, token, prettify)  # type: ignore
-    elif provider.name == "quafu":
-        return quafu_provider.get_task_details(task, device, token, prettify)  # type: ignore
 
-    else:
-        raise ValueError("Unsupported provider: %s" % provider.name)  # type: ignore
+def get_task_metadata(task: Task, details: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Get the provider-independent metadata of the task details, i.e.
+    ``task.details()["tensorcircuit"]`` without the archive status, see
+    :py:meth:`Task.details`. The provider module gives the values it knows from
+    its own details and :py:attr:`Task.prepared`, empty if unknown, by
+    ``task_metadata(details, prepared)``, and the other values are None.
+
+    :param task: the task
+    :type task: Task
+    :param details: the task details by :py:func:`get_task_details`
+    :type details: Dict[str, Any]
+    :return: the metadata
+    :rtype: Dict[str, Any]
+    """
+    meta: Dict[str, Any] = dict.fromkeys(metadata_keys)
+    if task.device is not None:
+        f = getattr(_provider_module(task.device.provider), "task_metadata", None)
+        if f is not None:
+            meta.update(f(details, task.prepared or {}))
+    return dict(schema_version=1, **meta)
 
 
 def submit_task(
@@ -592,49 +607,55 @@ def submit_task(
         see detailed API in each provider backend:
         1. tencent - :py:func:`tensorcircuit.cloud.tencent.submit_task`
         2. tianyan - :py:func:`tensorcircuit.cloud.tianyan.submit_task`
+        3. lqcloud - :py:func:`tensorcircuit.cloud.lqcloud.submit_task`
     :type task_kws: Any
     :return: Task object or list of Task for batch submission
     :rtype: List[Task]
     """
     provider, device = _preprocess(provider, device)
     # resolve the provider before recording anything in the store
-    submit = _provider_submit(provider)
+    submit = _provider_api(provider, "submit_task")
     if token is None:
         token = device.get_token()  # type: ignore
     ts = default_store if store is None else as_store(store)
 
-    # providers take an explicit source over the circuit, except local which only runs circuits
-    source = None if provider.name == "local" else task_kws.get("source")
+    # providers take an explicit source over the circuit
+    source = task_kws.get("source")
     items = task_kws.get("circuit") if source is None else source
     batch = is_sequence(items)
     items = list(items) if batch else [items]  # type: ignore
-    if provider.name == "tencent":
-        # compile locally first, so the intents hold the mappings of the sent circuits
-        sent_kws, mappings = tencent.prepare_task(device, **task_kws)
+    prepare = getattr(_provider_module(provider), "prepare_task", None)
+    if prepare is None:
+        send_kws, prepared = task_kws, [_prepared(c) for c in items]
     else:
-        sent_kws = task_kws
-        mappings = [
-            (
-                c.get_positional_logical_mapping()
-                if isinstance(c, AbstractCircuit)
-                else None
-            )
-            for c in items
-        ]
+        # compile locally first, so the intents hold what is prepared for each circuit
+        send_kws, prepared = prepare(device, token, **task_kws)
     records = []
     if ts is not None:
         records = make_records(
-            provider.name, device.name, _task_requests(items, task_kws), batch
+            provider.name,
+            device.name,
+            _task_requests(items, task_kws),
+            batch,
+            _provider_modules[provider.name][1],
         )
     return _send_tasks(  # type: ignore
-        ts, records, mappings, lambda: submit(device, token, **sent_kws)
+        ts, records, prepared, lambda: submit(device, token, **send_kws)
     )
+
+
+def _prepared(c: Any) -> Dict[str, Any]:
+    # what is prepared for a circuit by providers without ``prepare_task``
+    mapping = (
+        c.get_positional_logical_mapping() if isinstance(c, AbstractCircuit) else None
+    )
+    return {"positional_logical_mapping": mapping}
 
 
 def _send_tasks(
     ts: Optional[TaskStore],
     records: List[Dict[str, Any]],
-    mappings: List[Optional[Dict[int, int]]],
+    prepared: Sequence[Optional[Dict[str, Any]]],
     send: Callable[[], Any],
 ) -> Any:
     """
@@ -644,9 +665,10 @@ def _send_tasks(
     Once the request is sent, ``send`` returns the accepted tasks, where each
     missing circuit is explicitly rejected, or raises ``SubmissionRejected``
     or ``SubmissionUnknown``; any other failure happens before sending.
+    ``prepared`` holds what is prepared for each circuit, see :py:attr:`Task.prepared`.
     """
-    for rec, mapping in zip(records, mappings):
-        rec["positional_logical_mapping"] = mapping
+    for rec, p in zip(records, prepared):
+        rec["prepared"] = p
     if ts is not None:
         try_store(ts.save, records)
     try:
@@ -665,15 +687,15 @@ def _send_tasks(
     for i, t in enumerate(tasks):
         if t.circuit_index is None:
             t.circuit_index = i
-        if t._positional_logical_mapping is None:
-            t._positional_logical_mapping = mappings[t.circuit_index]
+        if t.prepared is None:
+            t.prepared = prepared[t.circuit_index]
     if ts is not None:
         bound = {t.circuit_index: t for t in tasks}
         accepted = [rec for rec in records if rec["circuit_index"] in bound]
         for rec in accepted:
             t = bound[rec["circuit_index"]]
             rec["remote_id"] = t.id_
-            rec["positional_logical_mapping"] = t._positional_logical_mapping
+            rec["prepared"] = t.prepared
             rec["submission"] = {"status": "submitted", "error": None}
         # circuits explicitly rejected by the provider in a batch
         try_store(
@@ -684,18 +706,6 @@ def _send_tasks(
         for rec in accepted:
             bound[rec["circuit_index"]]._bind_store(ts, rec["local_id"], error)
     return r
-
-
-def _provider_submit(provider: Provider) -> Callable[..., Any]:
-    if provider.name == "tencent":
-        return tencent.submit_task  # type: ignore
-    elif provider.name == "tianyan":
-        return tianyan.submit_task  # type: ignore
-    elif provider.name == "local":
-        return local.submit_task  # type: ignore
-    elif provider.name == "quafu":
-        return quafu_provider.submit_task  # type: ignore
-    raise ValueError("Unsupported provider: %s" % provider.name)
 
 
 def _circuit_record(c: Any) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
@@ -756,29 +766,33 @@ def resubmit_task(
     if token is None:
         token = device.get_token()
     provider = device.provider
-
-    if provider.name == "tencent":  # type: ignore
-        resubmit = tencent.resubmit_task
-    elif provider.name == "tianyan":  # type: ignore
-        resubmit = tianyan.resubmit_task
-    elif provider.name == "local":
-        raise ValueError("Unsupported method for local backend")
-    else:
-        raise ValueError("Unsupported provider: %s" % provider.name)  # type: ignore
+    resubmit = _provider_api(provider, "resubmit_task")
     # the rerun is recorded where the original task is, unless specified
     ts = as_store(store) if store is not None else (task._store or default_store)  # type: ignore
     parent = None if ts is None else _parent_record(ts, task, provider.name)  # type: ignore
-    mapping = task._positional_logical_mapping  # type: ignore
+    prepared = task.prepared  # type: ignore
+    if prepared is None and parent:
+        # the rerun sends the same, e.g. the compiled program, which the record holds
+        prepared = parent.get("prepared")
     records = []
     if ts is not None:
         request = dict(parent["request"] or {}) if parent else {}
         request["resubmit_of"] = task.id_  # type: ignore
-        records = make_records(provider.name, device.name, [request], False)
+        records = make_records(
+            provider.name,
+            device.name,
+            [request],
+            False,
+            _provider_modules[provider.name][1],
+        )
         if parent:
             records[0]["parent_id"] = parent["local_id"]
-            mapping = mapping or parent.get("positional_logical_mapping")
+    if prepared is not None and task.prepared is None:  # type: ignore
+        # the provider reruns from what the task holds, without changing the given one
+        task = copy(task)
+        task.prepared = prepared  # type: ignore
     return _send_tasks(  # type: ignore
-        ts, records, [mapping], lambda: resubmit(task, token)  # type: ignore
+        ts, records, [prepared], lambda: resubmit(task, token)
     )
 
 
@@ -807,16 +821,7 @@ def remove_task(
     device = task.get_device()  # type: ignore
     if token is None:
         token = device.get_token()
-    provider = device.provider
-
-    if provider.name == "tencent":  # type: ignore
-        return tencent.remove_task(task, token)  # type: ignore
-    elif provider.name == "tianyan":  # type: ignore
-        return tianyan.remove_task(task, token)  # type: ignore
-    elif provider.name == "local":
-        raise ValueError("Unsupported method for local backend")
-    else:
-        raise ValueError("Unsupported provider: %s" % provider.name)  # type: ignore
+    return _provider_api(device.provider, "remove_task")(task, token)  # type: ignore
 
 
 def list_tasks(
@@ -845,11 +850,4 @@ def list_tasks(
         token = provider.get_token()  # type: ignore
     if device is not None:
         device = Device.from_name(device)
-    if provider.name == "tencent":  # type: ignore
-        return tencent.list_tasks(device, token, **filter_kws)  # type: ignore
-    elif provider.name == "tianyan":  # type: ignore
-        return tianyan.list_tasks(device, token, **filter_kws)  # type: ignore
-    elif provider.name == "local":  # type: ignore
-        return local.list_tasks(device, token, **filter_kws)  # type: ignore
-    else:
-        raise ValueError("Unsupported provider: %s" % provider.name)  # type: ignore
+    return _provider_api(provider, "list_tasks")(device, token, **filter_kws)  # type: ignore

@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 from datetime import datetime
 import gzip
 import hashlib
+import importlib
 import json
 import logging
 import os
@@ -92,11 +93,18 @@ def _timestamp(t: Union[float, str, datetime]) -> float:
     return float(t)
 
 
-def _versions() -> Dict[str, Optional[str]]:
+def _versions(sdks: Sequence[str]) -> Dict[str, Optional[str]]:
     from .. import __version__
 
     versions: Dict[str, Optional[str]] = {"tensorcircuit": __version__}
-    for name in ["qiskit", "cqlib", "lqcloud", "quafu"]:
+    for name in sdks:
+        # providers import their SDK lazily, possibly only after the intent is made
+        try:
+            importlib.import_module(name)
+        except ImportError:
+            pass  # reported by the provider
+    # qiskit compiles circuits locally for any provider
+    for name in ["qiskit", *sdks]:
         if name in sys.modules:
             versions[name] = getattr(sys.modules[name], "__version__", None)
     return versions
@@ -139,7 +147,7 @@ class TaskStore:
     >>> tc.cloud.apis.set_store(True)  # record every submission from now on
     >>> t = tc.cloud.apis.submit_task(device="local::testing", circuit=c)
     >>> s = tc.cloud.store.TaskStore()
-    >>> s.get(t.local_id)["tensorcircuit"]["raw_counts"]
+    >>> s.get(t.local_id)["details"]["results"]
     >>> s.find(provider="local", state="completed", limit=10)
     """
 
@@ -305,7 +313,7 @@ class TaskStore:
             record = json.loads(gzip.decompress(data).decode("utf-8"))
         except (OSError, EOFError, ValueError):
             return dict(row, integrity="corrupt")
-        for d in [record, record.get("tensorcircuit") or {}]:
+        for d in [record.get("prepared") or {}, record.get("tensorcircuit") or {}]:
             if d.get("positional_logical_mapping") is not None:
                 d["positional_logical_mapping"] = _int_keys(
                     d["positional_logical_mapping"]
@@ -445,7 +453,7 @@ class TaskStore:
             Device.from_name(record["provider"] + sep + record["device"]),
         )
         t.circuit_index = record.get("circuit_index")
-        t._positional_logical_mapping = record.get("positional_logical_mapping")
+        t.prepared = record.get("prepared")
         t._bind_store(self, local_id, state=record.get("state"))
         return t
 
@@ -473,6 +481,7 @@ def make_records(
     device: str,
     requests: Sequence[Dict[str, Any]],
     batch: bool,
+    sdks: Sequence[str] = (),
 ) -> List[Dict[str, Any]]:
     """
     Build the records of one ``submit_task`` call in the submission intent state,
@@ -486,12 +495,15 @@ def make_records(
     :type requests: Sequence[Dict[str, Any]]
     :param batch: whether the circuits are submitted in a batch, sharing a batch id
     :type batch: bool
+    :param sdks: the vendor SDK modules of the provider, whose versions are recorded,
+        defaults to ()
+    :type sdks: Sequence[str], optional
     :return: the records
     :rtype: List[Dict[str, Any]]
     """
     now = time.time()
     batch_id = uuid4().hex if batch else None
-    versions = _versions()
+    versions = _versions(sdks)
     return [
         {
             "schema_version": schema_version,
@@ -507,7 +519,7 @@ def make_records(
             "updated_at": now,
             "submission": {"status": "intent", "error": None},
             "request": req,
-            "positional_logical_mapping": None,
+            "prepared": None,
             "details": None,
             "tensorcircuit": None,
             "versions": versions,

@@ -127,11 +127,13 @@ def qiskit_compile(
     info: Optional[Dict[str, Any]] = None,
     output: str = "tc",
     compiled_options: Optional[Dict[str, Any]] = None,
+    remove_barriers: bool = True,
 ) -> Any:
     """
     compile the circuit using ``qiskit.transpile`` method with some tricks and hacks
 
-    :param circuit: circuit in ``tc.Circuit`` or ``qiskit.QuantumCircuit`` form
+    :param circuit: circuit in ``tc.Circuit`` or ``qiskit.QuantumCircuit`` form,
+        where the ``inputs`` state of ``tc.Circuit`` is prepared by ``initialize``
     :type circuit: Any
     :param info: info for qubit mappings, defaults to None
     :type info: Optional[Dict[str, Any]], optional
@@ -139,6 +141,9 @@ def qiskit_compile(
     :type output: str, optional
     :param compiled_options: ``qiskit.transpile`` options in a dict, defaults to None
     :type compiled_options: Optional[Dict[str, Any]], optional
+    :param remove_barriers: whether remove the barriers after compiling,
+        defaults to True
+    :type remove_barriers: bool, optional
     :return: Tuple containing the output circuit and the qubit mapping info dict.
         ``positional_logical_mapping`` in the info refers to the original circuit,
         keyed by the classical bit; the output circuit keeps the classical bits,
@@ -149,7 +154,7 @@ def qiskit_compile(
     from qiskit.transpiler.passes import RemoveBarriers
 
     if isinstance(circuit, AbstractCircuit):
-        circuit = circuit.to_qiskit(enable_instruction=True)
+        circuit = circuit.to_qiskit(enable_instruction=True, enable_inputs=True)
     elif isinstance(circuit, str):
         circuit = qiskit_from_qasm_str_ordered_measure(circuit)
     # else qiskit circuit
@@ -160,7 +165,8 @@ def qiskit_compile(
             "optimization_level": 2,  # 3 can induce bugs...
         }
     ncircuit = transpile(circuit, **compiled_options)
-    ncircuit = RemoveBarriers()(ncircuit)
+    if remove_barriers:
+        ncircuit = RemoveBarriers()(ncircuit)
 
     if output.lower() in ["qasm", "openqasm"]:
         r0 = get_qiskit_qasm(ncircuit)

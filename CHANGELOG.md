@@ -4,72 +4,93 @@
 
 ### Changed
 
-- **Migration:** cloud `set_token`, `Provider.set_token` and `Device.set_token` keep the token in the current process by default; pass `cached=True` to also save it to the auth file as before. Existing auth files are still read. `set_token(clear=True)` removes tokens both in memory and on disk, restricted to the given provider or device if any.
-- **Migration:** cloud requests that create paid tasks, i.e. Tencent and TianYan submissions and reruns, are sent once with a 60 s timeout instead of being retried, since a retry after a lost response could run and charge the tasks twice. A failure after which the tasks may have been accepted, including a response that does not account for each sent circuit, raises `tc.cloud.utils.SubmissionUnknown`, while an explicit rejection by the provider raises `tc.cloud.utils.SubmissionRejected`, a `ValueError`; queries are still retried.
-- **Migration:** cloud tokens are looked up from `set_token` in the current process first, then the `TC_TOKEN_<PROVIDER>` environment variable, then the auth file, with device tokens falling back to the provider token. The generic `TC_TOKEN` variable is no longer read since it would be sent to every provider; use e.g. `TC_TOKEN_TENCENT` instead. `set_token` rejects non-string, empty, or control-character tokens.
-- **Migration:** the `local` cloud provider follows measure instructions like hardware providers: bit `i` of the result is the measurement with record index `i`, so partially measured circuits return only the measured bits. Circuits without measure instructions still return all qubits, and gates after a measurement on the same qubit raise `ValueError` instead of being silently ignored.
-- Compute pure-state entanglement entropy, mutual information and entanglement anti-flatness on the smaller subsystem. Entropy values change slightly because omitted zero eigenvalues no longer contribute a dimension-dependent regularization bias.
-- `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators and uses BCSR only on CPU.
-- Mark `tensorcircuit.results.qem` and the CuPy backend as experimental: importing the former or setting the latter via `tc.set_backend("cupy")` emits `tc.utils.ExperimentalWarning`.
-- Differentiate only the selected arguments in generic `jacfwd`, `jacrev` and `hessian`, so non-selected arguments need not be tensors. TensorFlow `jvp` returns zero tangents for outputs disconnected from the inputs instead of `None`.
+- **Migration:** cloud `set_token` keeps tokens in the current process unless `cached=True`. Tokens are looked up from `set_token`, then `TC_TOKEN_<PROVIDER>`, then the auth file; the generic `TC_TOKEN` is no longer read.
+
+- **Migration:** paid cloud submissions are sent once instead of retried, raising `tc.cloud.utils.SubmissionUnknown` if the tasks may have been accepted and `SubmissionRejected` if rejected.
+
+- **Migration:** the `local` cloud provider returns only the measured bits, like hardware providers.
+
+- **Migration:** cloud provider modules are imported on first use, so use `import tensorcircuit.cloud.tencent` before `tc.cloud.tencent`. Provider APIs that are not implemented raise `NotImplementedError`.
+
+- Compute pure-state entanglement entropy, mutual information and anti-flatness on the smaller subsystem, which slightly changes entropy values.
+
+- `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators.
+
+- Mark `tensorcircuit.results.qem` and the CuPy backend as experimental with `tc.utils.ExperimentalWarning`.
+
+- Generic `jacfwd`, `jacrev` and `hessian` differentiate only the selected arguments; TensorFlow `jvp` returns zero tangents instead of `None` for disconnected outputs.
 
 ### Added
 
-- Add the local cloud task store `tc.cloud.store.TaskStore`, disabled by default: enable it globally with `tc.cloud.apis.set_store(True)` (or a directory) or per call with `submit_task(..., store=...)`. Each submitted circuit is recorded in `~/.tensorcircuit/tasks` with a SQLite index and a gzip JSON record holding the circuit, shots, options, provider details and results, from the submission intent to the final state; `get`, `find`, `task` and `export` query, recover and export the records. Store failures only emit warnings. Submissions that may have been accepted are kept with the `unknown` submission status and the `positional_logical_mapping` of the sent circuit, i.e. after the frontend compiling, found by `find(submission_status="unknown")` and recovered by `bind(local_id, remote_id)`, while records of circuits certainly not submitted, i.e. failed before sending or explicitly rejected by the provider, are deleted. Reruns by `resubmit_task` / `Task.resubmit` are recorded with the original record as `parent_id`, in the store of the original task by default.
-- Add provider-independent metadata to cloud `task.details()["tensorcircuit"]`: raw counts, the `positional_logical_mapping` of the circuit as executed on the device, i.e. from each result bit (classical bit) to the physical qubit where it is read out, composing frontend compiling and the provider qubit mapping, and the archive status; unknown values are None. Without qubit remapping it equals the submitted circuit's `get_positional_logical_mapping()`, and it can be passed directly to `ReadoutMit` with device qubits.
-- Add JAX-native TNALG MPS gate programs: circuits become pytree programs with one gate per record, structures of equal length share one JIT executable, `stack_gate_programs` batches different structures for vmap, with SVD or Gram/eigh truncation and canonical export to `MPSCircuit` carrying the retained-weight fidelity.
-- Add `compiler.linear_route` for permutation-aware routing to a qubit chain, with diagonal reordering, SWAP fusion, and layout metadata.
-- Add `MPSCircuit.get_fidelity()` to expose the cumulative fraction of weight retained by MPS truncations.
-- Add `tc.templates.diagonal` with Pauli/support encoders, fast Walsh-Hadamard Z-polynomial diagonals, and elementwise diagonal or exponential action, including dynamic-structure JIT/vmap and weight gradients.
-- Add backend `gather` for axis-based indexing with scalar or multidimensional indices, including JIT and gradient support.
-- Add `U1Operator.mvp` for matrix-free products of a Pauli string sum restricted to a U(1) subspace, with differentiable weights, e.g., for `krylov_evol` within a fixed particle-number sector.
-- Add `PauliStringSum2CSR` and the backend method `csr_sparse_matrix`.
-- Support qudit density-matrix simulation with `tc.DMCircuit(n, dim=d)` for `d > 2`, including explicit single- and multi-site `unitary` gates and Kraus channels via `apply_general_kraus`.
-- Add `cache_size` and `clear_cache()` to `OMEOptimizer`, which reuses contraction paths through a bounded per-instance LRU cache.
+- Add the LQCloud (逻辑比特) cloud provider `lqcloud`, compiling circuits locally to native gates; install the `lqcloud` SDK separately.
+
+- Add the opt-in local cloud task store `tc.cloud.store.TaskStore`, recording each submission from intent to result and recovering uncertain submissions by `bind`.
+
+- Add provider-independent cloud metadata in `task.details()["tensorcircuit"]`, including the `positional_logical_mapping` to physical qubits for `ReadoutMit`.
+
+- Add JAX-native TNALG MPS gate programs, sharing JIT executables across structures, batched by `stack_gate_programs` and exported to `MPSCircuit`.
+
+- Add `compiler.linear_route` for permutation-aware routing on a qubit chain, and the `remove_barriers` option of `qiskit_compile`.
+
+- Add `MPSCircuit.get_fidelity()` for the weight retained by MPS truncations.
+
+- Add `tc.templates.diagonal` for differentiable, JIT/vmap-friendly Pauli and Z-polynomial diagonals.
+
+- Add `U1Operator.mvp` for matrix-free Pauli string sums in a U(1) subspace.
+
+- Add backend `gather` and `csr_sparse_matrix`, and `PauliStringSum2CSR`.
+
+- Support qudit density-matrix simulation with `tc.DMCircuit(n, dim=d)`.
+
+- Add `cache_size` and `clear_cache()` to the contraction path cache of `OMEOptimizer`.
 
 ### Fixed
 
-- `Circuit.to_json` / `from_json` keep noise channels, diagonal and custom-named gates, the measure / reset / barrier instructions and the circuit size; previously channels were silently dropped and diagonal gates raised. The JSON layout of `to_json` and `translation.qir2json` changes accordingly, and the experimental-feature warning is removed.
-- Hide proxy credentials in cloud request debug logs, and raise the original `HttpStatusError` instead of an `IndexError` after the last failed cloud request retry.
-- Tencent `resubmit_task` returns the new task bound to its device, and `resubmit_task` resolves `"provider::device~~id"` task strings like `get_task`. A single Tencent submission rejected by the server raises `SubmissionRejected("All tasks submitted failed ...")`, a `ValueError`, instead of an `IndexError`.
-- The `record_index` of a measure instruction is its classical bit, i.e. its position in the result bitstring, across all boundaries: `get_positional_logical_mapping` and `qiskit_compile` key positions by it, the qiskit / OpenQASM export writes each measurement to that classical bit with enough classical bits for more measurements than qubits (which previously raised), and the qiskit / OpenQASM import restores it from the classical bit, so a compiled circuit's own `get_positional_logical_mapping()` gives the compiled qubits of each result bit. Previously positions followed the instruction order, which differs for imported circuits measuring into classical bits out of order and can change when external tools reorder independent measurements.
-- Fix MPS truncation fidelity estimates to use relative discarded weights and include bond reductions during MPO and multi-site gate application; preserve accumulated fidelity for zero-norm states.
-- Preserve per-gate MPS split overrides for reversed two-site gate indices and accept `max_truncation_err` consistently during bond, MPO, and multi-site reductions.
-- Prevent underflow during MPS measurement by normalizing conditional states at each site, and handle zero-probability outcomes at the left sampling endpoint.
-- Recognize traced JAX arrays in backend `is_tensor`, including values inside JIT, vmap, and gradient transformations, without relying on private array storage.
-- Support int32 scatter indices under PyTorch vmap by normalizing them to the int64 indexing dtype.
-- Preserve two-qubit depolarizing noise when sampling detector trajectories from Stim circuits.
-- Fix biased `probability_sample` (and thus `sample(allow_state=True)`) for large float32 distributions, where a single float32 cumulative sum and uniform number cannot resolve individual outcomes (about 2% total variation at 20 qubits, about 30% at 24 qubits). With more than `2**12` outcomes, internally drawn randomness now uses two-level block sampling with two uniform numbers per shot; external `status` may also be given with shape `[shots, 2]` for this mode, while `[shots]` keeps the previous single-level behavior.
-- Fix correlated TensorFlow random streams for adjacent integer seeds: `set_random_state(seed)` and `get_random_state(seed)` now use the seed as the Philox key instead of the counter, so seeds `s` and `s + 1` no longer produce the same stream shifted by four numbers.
-- Fix contracting hyperedge networks whose hyperedge carries several open legs or no tensor, e.g., `Circuit.matrix()` with an idle qubit, on an empty circuit or with a `diagonal` gate.
-- Fix finite-shot `count_vector` results on the JAX backend dropping the counts of the last basis state with `jittable=True`.
-- Fix `sample_bin` results for int64 samples on the TensorFlow backend and for qudits on the PyTorch backend, and `count_dict_bin` keys for large systems on the TensorFlow and PyTorch backends.
-- Preserve PyTorch entropy gradients by avoiding in-place spectrum normalization.
-- Fix PyTorch generic Jacobian and Hessian transforms by using composable derivative primitives; public `vjp` and `jvp` retain their derivative graphs for higher-order differentiation.
-- Fix generic `jacfwd` returning zero Jacobians and `jacrev`/`hessian` returning empty results for negative `argnums`; `jacrev` now raises `IndexError` for out-of-range `argnums` like `jacfwd`, and supports multiple outputs of different sizes.
-- Fix `experimental.qng(..., mode="rev")` on the TensorFlow and PyTorch backends, which built the metric from the conjugated Jacobian returned by their `jacrev`.
-- Fix `PauliStringSum2COO`, `PauliStringSum2MVP` and one-dimensional `sparse_dense_matmul` on the PyTorch backend.
-- Propagate circuits in `pauli_propagation` and the Pauli propagation `compute_expectation_scan` methods with the gate matrices recorded in the circuit instead of rebuilding gates from display names, so renamed gates such as `c.h(0, name="x")` and adjoint gates from `Circuit.inverse()` (e.g. inverted `unitary` or `wroot`) propagate correctly; `apply_gate` of both Pauli propagation engines now accepts circuit gate aliases such as `cx` and `sdg`.
-- Return the conjugate-transposed right factor in PyTorch SVD, restoring complex tensor reconstruction and phase-invariant gradients even with older TensorNetwork dependencies.
-- Return `numpy.ndarray` instead of `numpy.matrix` from the NumPy backend `to_dense` and `PauliStringSum2Dense(..., numpy=True)`, so elementwise products and reshapes on dense results follow array semantics.
-- Compute fidelity reliably for positive semidefinite states and preserve first-order matrix square-root responses on fixed-rank paths. `sqrtmh` now clips negative eigenvalues regardless of the retained `psd` argument.
-- Preserve double precision for Python scalar inputs of `time_correlation`, `resolvent_bilinear`, and `zero_temperature_greens_function`, and for `convert_to_tensor(..., dtype=...)` on the PyTorch backend.
-- Exclude same-shot pairs in `shadows.renyi_entropy_2`, removing the `2**n / repeat` bias of the purity estimate. `repeat >= 2` is now required.
-- Return dense tensors instead of `IndexedSlices` from TensorFlow backend `grad`, `value_and_grad` and `vectorized_value_and_grad`, e.g., for gradients through `gather`, consistent with `vjp`.
-- Accept single-precision uniform time grids in `spectral.fft_spectrum` by scaling the uniformity tolerance with the input precision, and fix `fft_spectrum` inside TensorFlow `tf.function`.
-- Respect the configured real dtype when constructing NumPy backend one-hot vectors.
-- Unify measurement result format conversions: finite-shot `count_vector` is counted by one histogram on all backends, and basis labels are encoded and decoded by one vectorized helper (ideas from #232, #237, #238 and #242).
-- Reduce memory of Qiskit import and export of initialization states and controlled unitaries by reversing tensor axes instead of allocating dense permutation matrices.
-- Reduce memory of readout error mitigation by applying local calibration inverses as tensor products without materializing a dense calibration matrix.
-- Reduce memory of MPS states exported as `QuVector` by preserving the tensor network and physical site dimensions, avoiding full wavefunctions for local reduced states and MPO expectations; local MPS expectations copy only the operator span.
-- Reduce JAX SVD backward memory and computation for rectangular matrices by avoiding full-size projection matrices.
-- Reduce memory of Krylov time correlations and bilinear resolvents by evaluating them in the projected space without materializing full state batches.
-- Speed up MPS sampling by sharing right-canonical tensors across sequential shots and propagating single-shot conditional environments without repeated QR decompositions.
-- Speed up Pauli string sum matrices by grouping terms with the same X/Y flip pattern and merging pure Z/I terms of `PauliStringSum2MVP` into one diagonal; `U1Operator` shares one gather per flip pattern, speeding up `U1Circuit.expectation_pss`.
-- Speed up fixed Clifford gates in `SparsePauliPropagationEngine` by propagating one signed Pauli branch instead of expanding all local Pauli branches.
-- Speed up classical-shadow Pauli expectations by computing them directly from raw measurement snapshots, and finite-shot correlations by reading only the selected sample bits.
-- Speed up the default-order truncated free energy to quadratic time with trace contractions, and dense Rényi entropies by computing trace products without the final matrix product and sharing half powers for higher orders.
-- Speed up `QuOperator` network checks and contraction setup on large networks with linear-time dangling-edge and boundary-node searches.
+- `qiskit_compile` keeps the `inputs` state.
+
+- `Circuit.to_json` / `from_json` keep noise channels, diagonal and custom-named gates, measure / reset / barrier instructions and the circuit size; the JSON layout changes accordingly.
+
+- Hide proxy credentials in cloud debug logs; Tencent `resubmit_task` returns a task bound to its device.
+
+- Result bits follow the `record_index` (classical bit) of measure instructions instead of their order, in `get_positional_logical_mapping`, `qiskit_compile` and the qiskit / OpenQASM translation.
+
+- Fix MPS truncation fidelity estimates, per-gate split overrides and `max_truncation_err`, and underflow in MPS measurement.
+
+- Fix biased `probability_sample` for large float32 distributions (about 30% total variation at 24 qubits); external `status` may have shape `[shots, 2]` for the new two-level sampling.
+
+- Fix correlated TensorFlow random streams for adjacent integer seeds.
+
+- Fix finite-shot `count_vector` on JAX with `jittable=True`, `sample_bin` for int64 on TensorFlow and qudits on PyTorch, and `count_dict_bin` keys for large systems; result format conversions now share one implementation (ideas from #232, #237, #238 and #242).
+
+- Fix contracting hyperedge networks with several open legs or no tensor, e.g., `Circuit.matrix()` with an idle qubit.
+
+- Fix generic `jacfwd`, `jacrev` and `hessian` for negative `argnums`, and `jacrev` for outputs of different sizes.
+
+- Fix PyTorch Jacobian and Hessian transforms, entropy gradients, complex SVD, int32 scatter indices under vmap, `PauliStringSum2COO`, `PauliStringSum2MVP` and 1D `sparse_dense_matmul`.
+
+- Fix `experimental.qng(..., mode="rev")` on TensorFlow and PyTorch.
+
+- Recognize traced JAX arrays in backend `is_tensor`.
+
+- TensorFlow backend `grad` and its variants return dense tensors instead of `IndexedSlices`.
+
+- NumPy backend `to_dense` and `PauliStringSum2Dense(..., numpy=True)` return `ndarray` instead of `matrix`; NumPy one-hot vectors respect the configured dtype.
+
+- Pauli propagation uses the gate matrices recorded in the circuit, so renamed and inverted gates propagate correctly, and `apply_gate` accepts aliases such as `cx`.
+
+- Preserve two-qubit depolarizing noise when sampling Stim detector trajectories.
+
+- Compute fidelity reliably for positive semidefinite states; `sqrtmh` always clips negative eigenvalues.
+
+- Preserve double precision of Python scalar inputs in `time_correlation`, `resolvent_bilinear`, `zero_temperature_greens_function` and PyTorch `convert_to_tensor`.
+
+- Remove the bias of `shadows.renyi_entropy_2` by excluding same-shot pairs; `repeat >= 2` is now required.
+
+- Fix `spectral.fft_spectrum` for single-precision time grids and inside `tf.function`.
+
+- Reduce memory of Qiskit translation of initial states and controlled unitaries, readout error mitigation, MPS `QuVector` export, JAX SVD backward and Krylov time correlations by avoiding dense intermediates.
+
+- Speed up MPS sampling, Pauli string sum matrices and `U1Circuit.expectation_pss`, Clifford gates in `SparsePauliPropagationEngine`, classical-shadow expectations and finite-shot correlations, truncated free energies and Rényi entropies, and `QuOperator` network checks.
 
 ## v1.10.0
 

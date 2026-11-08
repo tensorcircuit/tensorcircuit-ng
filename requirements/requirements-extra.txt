@@ -13,5 +13,6 @@ openfermion
 stim
 pylatexenc
 cotengra
+lqcloud==0.5.1
 pyzx-param==0.9.3
 omeco

@@ -515,11 +515,15 @@ def test_tencent_batch_expectation_ps_contract(fake_tencent):
 
     def detail(payload):
         p = submitted[payload["id"]]
-        c = tc.Circuit.from_openqasm(p["source"])
-        probs = np.real(tc.backend.numpy(c.probability()))
+        # counts are indexed by the classical bits, whatever qubits qiskit chose
+        c = tc.Circuit.from_openqasm(p["source"], keep_measure_order=True)
+        order = list(c.get_positional_logical_mapping().values())
         n = c._nqubits
+        probs = np.real(tc.backend.numpy(c.probability())).reshape([2] * n)
+        probs = probs.sum(axis=tuple(q for q in range(n) if q not in order))
+        probs = probs.transpose([sorted(order).index(q) for q in order]).reshape(-1)
         result = {
-            format(i, "0%db" % n): int(round(pr * p["shots"]))
+            format(i, "0%db" % len(order)): int(round(pr * p["shots"]))
             for i, pr in enumerate(probs)
             if pr > 1e-6
         }
@@ -575,8 +579,9 @@ def test_tencent_store_and_measurement_metadata(fake_tencent, tmp_path):
     source = fake_tencent.requests_to("task/submit")[0][0]["source"]
     assert "creg c[3];" in source and "measure q[1] -> c[2];" in source
 
-    meta = t.details(prettify=True)["tensorcircuit"]
-    assert meta["raw_counts"] == {"010": 6, "011": 4}
+    d = t.details(prettify=True)
+    meta = d["tensorcircuit"]
+    assert d["results"] == {"010": 6, "011": 4}
     assert meta["positional_logical_mapping"] == {0: 4, 1: 3, 2: 4}
     assert meta["archive"]["saved"]
 
@@ -605,7 +610,9 @@ def test_tencent_source_takes_precedence_in_records(fake_tencent, tmp_path):
     records = [s.get(t.local_id) for t in ts]
     assert [r["request"]["source"] for r in records] == sources
     assert all(r["request"]["circuit"] is None for r in records)
-    assert ts[0]._positional_logical_mapping is None
+    assert [t.prepared for t in ts] == [
+        {"positional_logical_mapping": None, "source": s} for s in sources
+    ]
 
 
 def test_tencent_frontend_compiling_mapping_end_to_end(fake_tencent, tmp_path):
@@ -663,8 +670,9 @@ def test_tencent_frontend_compiling_mapping_end_to_end(fake_tencent, tmp_path):
     result, measures = run_sent()
     assert fake_tencent.requests_to("task/submit")[0]["source"].count("cx") >= 4
     for task in [t, s.task(t.local_id)]:
-        meta = task.details()["tensorcircuit"]
-        assert meta["raw_counts"] == {result: 100}
+        d = task.details()
+        meta = d["tensorcircuit"]
+        assert d["results"] == {result: 100}
         # positions are fixed by the submitted circuit, compiling changes qubits only
         positional_logical = c.get_positional_logical_mapping()
         assert positional_logical == {0: 2, 1: 0, 2: 2}
@@ -676,8 +684,6 @@ def test_tencent_frontend_compiling_mapping_end_to_end(fake_tencent, tmp_path):
         }
         assert set(meta) == {
             "schema_version",
-            "raw_counts",
-            "memory",
             "positional_logical_mapping",
             "archive",
         }
@@ -717,7 +723,8 @@ def test_tencent_paid_submission_sent_once(fake_tencent, tmp_path):
     (row,) = s.find(submission_status="unknown")
     r = s.get(row["local_id"])
     assert r["remote_id"] is None and "read timed out" in r["submission"]["error"]
-    assert r["positional_logical_mapping"] == {0: 1}
+    assert r["prepared"]["positional_logical_mapping"] == {0: 1}
+    assert "measure q[1] -> c[0];" in r["prepared"]["source"]
 
     # bind the task found on the provider; queries are still retried
     responses = [
@@ -785,8 +792,8 @@ def test_tencent_resubmit_recorded_with_parent(fake_tencent, tmp_path):
     parent, r = s.get(t.local_id), s.get(t2.local_id)
     assert r["parent_id"] == t.local_id and r["remote_id"] == "t2"
     assert r["request"] == dict(parent["request"], resubmit_of="t1")
-    assert r["positional_logical_mapping"] == {0: 1}
-    assert t2._positional_logical_mapping == {0: 1}
+    assert r["prepared"] == parent["prepared"] == t2.prepared
+    assert t2.prepared["positional_logical_mapping"] == {0: 1}
 
     # the parent is found by the remote id
     fake_tencent.responses["task/start"] = lost_request
@@ -795,4 +802,4 @@ def test_tencent_resubmit_recorded_with_parent(fake_tencent, tmp_path):
     assert len(fake_tencent.requests_to("task/start")) == 2
     (row,) = s.find(submission_status="unknown")
     r = s.get(row["local_id"])
-    assert r["parent_id"] == t.local_id and r["positional_logical_mapping"] == {0: 1}
+    assert r["parent_id"] == t.local_id and r["prepared"] == parent["prepared"]

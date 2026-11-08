@@ -12,7 +12,7 @@ modulepath = os.path.dirname(os.path.dirname(thisfile))
 
 sys.path.insert(0, modulepath)
 import tensorcircuit as tc
-from tensorcircuit.cloud import apis, store, wrapper
+from tensorcircuit.cloud import apis, local, store, wrapper
 from tensorcircuit.cloud.store import TaskStore
 
 
@@ -40,10 +40,26 @@ def test_store_disabled_by_default(task_store, tmp_path):
         "local_id": None,
         "error": None,
     }
-    assert sum(meta["raw_counts"].values()) == 10
     assert meta["positional_logical_mapping"] == {0: 0, 1: 1}
     assert not os.path.exists(tmp_path / "default")
     assert not os.path.exists(task_store.path)
+
+
+def test_metadata_unknown_without_provider_metadata(task_store, monkeypatch):
+    # e.g. quafu, which does not tell whether it remaps the qubits
+    monkeypatch.delattr(local, "task_metadata")
+    t = apis.submit_task(device="local::testing", circuit=bell(), shots=10)
+    meta = t.details()["tensorcircuit"]
+    assert meta["schema_version"] == 1 and meta["archive"]["requested"] is False
+    assert meta["positional_logical_mapping"] is None
+
+
+def test_local_rejects_source(task_store):
+    with pytest.raises(ValueError, match="source"):
+        apis.submit_task(
+            device="local::testing", source=bell().to_openqasm(), store=task_store
+        )
+    assert task_store.find() == []
 
 
 def test_store_records_submission_and_result(task_store):
@@ -60,6 +76,8 @@ def test_store_records_submission_and_result(task_store):
     assert r["remote_id"] == t.id_ and r["state"] is None
     assert r["request"]["shots"] == 20
     assert r["versions"]["tensorcircuit"] == tc.__version__
+    # only the SDKs of the provider are recorded besides qiskit
+    assert set(r["versions"]) <= {"tensorcircuit", "qiskit"}
     qir = r["request"]["circuit"]["qir"]
     assert [g["name"] for g in qir] == ["multicontrol", "rx", "depolarizing"]
     assert qir[2]["is_channel"] and qir[2]["parameters"] == {
@@ -74,9 +92,9 @@ def test_store_records_submission_and_result(task_store):
     assert counts == {"0": 20}
     r = task_store.get(remote_id=t.id_, provider="local")
     assert r["state"] == "completed"
-    assert r["tensorcircuit"]["raw_counts"] == counts
+    assert r["details"]["results"] == counts
     assert r["tensorcircuit"]["positional_logical_mapping"] == {0: 0}
-    assert r["positional_logical_mapping"] == {0: 0}
+    assert r["prepared"]["positional_logical_mapping"] == {0: 0}
 
     t1 = task_store.task(t.local_id)
     assert t1.id_ == t.id_ and t1.local_id == t.local_id
