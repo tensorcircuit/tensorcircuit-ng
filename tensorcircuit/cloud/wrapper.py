@@ -139,6 +139,7 @@ def batch_expectation_ps(
     compile_func: Optional[Callable[[Circuit], Tuple[Circuit, Dict[str, Any]]]] = None,
     batch_limit: int = 64,
     batch_submit_func: Optional[Callable[..., List[counts.ct]]] = None,
+    readout_cals: str = "api",
 ) -> Union[Any, List[Any]]:
     """
     Unified interface to compute the Pauli string expectation lists or sums via simulation or on real qpu.
@@ -173,6 +174,10 @@ def batch_expectation_ps(
     :type shots: int, optional
     :param with_rem: whether enable readout error mitigation for the result, defaults to True
     :type with_rem: bool, optional
+    :param readout_cals: where the readout errors of the measured physical qubits
+        are from, "api" for the device properties, raising if any is missing, or
+        "system" for two calibration circuits run on each call, defaults to "api"
+    :type readout_cals: str, optional
     :return: List of Pauli string expectation or a weighted sum float for Pauli strings, depending on ``ws``
     :rtype: Union[Any, List[Any]]
     """
@@ -220,6 +225,8 @@ def batch_expectation_ps(
                 exp.append(j)
 
             elif i == 2:
+                # sd then H also measures Y, with one physical pulse fewer when
+                # the float32 angle is not compiled as pi/2, no better on hardware
                 c2.rx(info["logical_physical_mapping"][j], theta=np.pi / 2)  # type: ignore
                 exp.append(j)
             elif i == 3:
@@ -235,29 +242,33 @@ def batch_expectation_ps(
         exps.append(exp)
 
     if batch_submit_func is None:
+        # the circuits are already on the physical qubits, not to be remapped
         run = batch_submit_template(
             device,
             batch_limit,
             enable_qos_qubit_mapping=False,
             enable_qos_gate_decomposition=False,
+            compiling=False,
         )
     else:
         run = batch_submit_func
 
+    mit: Optional[ReadoutMit] = None
+    if with_rem:
+        mit = ReadoutMit(run)
+        qubits = sorted(
+            {info["logical_physical_mapping"][i] for i in range(c._nqubits)}
+        )
+        if readout_cals == "api":
+            mit.cals_from_api(qubits, device)
+        elif readout_cals == "system":
+            mit.cals_from_system(qubits, shots=shots)
+        else:
+            raise ValueError("Unknown readout_cals: %s" % readout_cals)
+
     raw_counts = reduce_and_evaluate(cs, shots, run)  # type: ignore
 
-    if with_rem:
-        if getattr(device, "readout_mit", None) is None:
-            mit = ReadoutMit(run)
-            # TODO(@refraction-ray) only work for tencent provider
-            nq = device.list_properties().get("qubits", None)
-            if nq is None:
-                nq = c._nqubits
-            mit.cals_from_system(nq, shots=shots)
-            device.readout_mit = mit
-        else:
-            mit = device.readout_mit
-
+    if mit is not None:
         results = [
             mit.expectation(raw_counts[i], exps[i], **infos[i])
             for i in range(len(raw_counts))

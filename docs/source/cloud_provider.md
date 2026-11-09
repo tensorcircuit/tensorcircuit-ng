@@ -41,7 +41,7 @@ When the provider compiles locally, compile against these standardized propertie
 
 `apis.submit_task` records a submission intent in the task store, then calls the provider `submit_task` once. Paid requests must never be retried blindly, since a retry after a lost response may run and charge the tasks twice. The provider must therefore classify every failure:
 
-- **Local failures** before anything is sent, e.g. an unsupported circuit, invalid shots or unknown options: raise them as they are, typically `ValueError`. The intent is deleted.
+- **Local failures** before anything is sent, e.g. an unsupported circuit or invalid shots: raise them as they are, typically `ValueError`. The intent is deleted.
 - **Explicit rejection** by the server, e.g. HTTP 4xx such as invalid credentials or circuits: raise `utils.SubmissionRejected`. The intent is deleted.
 - **Anything after which the tasks may have been accepted**, e.g. timeouts, connection errors, HTTP 5xx and 408, idempotency conflicts, malformed responses, or a response without a task id: raise `utils.SubmissionUnknown`. The intent is kept as `unknown`, to be bound later by `TaskStore.bind(local_id, remote_id)`.
 - **After the server accepts the tasks, never raise**: the paid task id would be lost. Return the tasks even if some optional bookkeeping fails.
@@ -49,6 +49,8 @@ When the provider compiles locally, compile against these standardized propertie
 To keep the classification sharp, fetch everything the submission needs, e.g. the device configuration, before sending, so that the send itself is the only request that can fail ambiguously. If the vendor SDK retries internally, make sure it uses an idempotency key that the server deduplicates.
 
 For batches, return the accepted tasks with `task.circuit_index` set to their circuit in the batch; a circuit without a returned task counts as explicitly rejected. A response that does not account for every circuit is `SubmissionUnknown`.
+
+Ignore the options of other providers, since generic callers pass one set of options to every provider. `wrapper.batch_expectation_ps` submits circuits already compiled onto the physical qubits with `compiling=False`, `enable_qos_qubit_mapping=False` and `enable_qos_gate_decomposition=False`; with these, qubit `i` of a circuit must run on physical qubit `i`, whose readout errors are taken from `bits` for the mitigation.
 
 ### What is prepared: `task.prepared`
 

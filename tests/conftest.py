@@ -1,5 +1,6 @@
 import sys
 import os
+import numpy as np
 import pytest
 
 # NOTE: If Intel OpenMP abort occurs on Windows (PyTorch + scipy DLL conflict),
@@ -75,3 +76,17 @@ def highp():
     tc.set_dtype("complex128")
     yield
     tc.set_dtype("complex64")
+
+
+@pytest.fixture
+def with_readout_errors():
+    def apply(probs, qubits, errors):
+        # the readout distribution of the classical bits, bit k reading qubits[k]
+        p = probs.reshape([2] * len(qubits))
+        for k, q in enumerate(qubits):
+            e0, e1 = errors[q]
+            m = np.array([[1 - e0, e1], [e0, 1 - e1]])
+            p = np.moveaxis(np.tensordot(m, p, axes=[[1], [k]]), 0, k)
+        return p.reshape(-1)
+
+    return apply

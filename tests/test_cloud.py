@@ -502,9 +502,13 @@ def test_tencent_task_details_contract(fake_tencent):
         t.details()
 
 
-def test_tencent_batch_expectation_ps_contract(fake_tencent):
+@pytest.mark.parametrize("readout_cals, nbatches", [("api", 1), ("system", 2)])
+def test_tencent_batch_expectation_ps_contract(
+    fake_tencent, with_readout_errors, readout_cals, nbatches
+):
     pytest.importorskip("qiskit")
     submitted = {}
+    errors = {0: (0.02, 0.08), 1: (0.04, 0.12)}
 
     def submit(payload):
         tasks = []
@@ -522,6 +526,7 @@ def test_tencent_batch_expectation_ps_contract(fake_tencent):
         probs = np.real(tc.backend.numpy(c.probability())).reshape([2] * n)
         probs = probs.sum(axis=tuple(q for q in range(n) if q not in order))
         probs = probs.transpose([sorted(order).index(q) for q in order]).reshape(-1)
+        probs = with_readout_errors(probs, order, errors)
         result = {
             format(i, "0%db" % len(order)): int(round(pr * p["shots"]))
             for i, pr in enumerate(probs)
@@ -537,21 +542,29 @@ def test_tencent_batch_expectation_ps_contract(fake_tencent):
             "id": "2xmon",
             "qubits": 2,
             "links": [{"A": 0, "B": 1, "CZErrRate": 0.01}],
-            "bits": [{"Qubit": 0, "T1": 30.0}, {"Qubit": 1, "T1": 30.0}],
+            "bits": [
+                {"Qubit": q, "T1": 30.0, "ReadoutF0Err": e0, "ReadoutF1Err": e1}
+                for q, (e0, e1) in errors.items()
+            ],
         }
     }
     c = tc.Circuit(2)
     c.h(0)
     c.x(1)
     r = wrapper.batch_expectation_ps(
-        c, [[1, 0], [0, 3]], device="tencent::2xmon", shots=1000
+        c,
+        [[1, 0], [0, 3]],
+        device="tencent::2xmon",
+        shots=10000,
+        readout_cals=readout_cals,
     )
-    np.testing.assert_allclose(r, [1, -1], atol=1e-6)
+    # the readout errors are mitigated on the measured physical qubits
+    np.testing.assert_allclose(r, [1, -1], atol=1e-3)
     batches = fake_tencent.requests_to("task/submit")
-    # two measurement circuits, then two readout calibration circuits
-    assert [len(b) for b in batches] == [2, 2]
+    # the system calibration runs two more circuits
+    assert [len(b) for b in batches] == [2] * nbatches
     assert {(p["device"], p["shots"]) for b in batches for p in b} == {
-        ("2xmon?o=0", 1000)
+        ("2xmon?o=0", 10000)
     }
 
 

@@ -12,6 +12,8 @@
 
 - **Migration:** cloud provider modules are imported on first use, so use `import tensorcircuit.cloud.tencent` before `tc.cloud.tencent`. Provider APIs that are not implemented raise `NotImplementedError`.
 
+- **Migration:** `cloud.wrapper.batch_expectation_ps` mitigates readout errors with the device properties of the measured qubits by default; `readout_cals="system"` runs the calibration circuits on each call instead of caching them on the device.
+
 - Compute pure-state entanglement entropy, mutual information and anti-flatness on the smaller subsystem, which slightly changes entropy values.
 
 - `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators.
@@ -22,7 +24,7 @@
 
 ### Added
 
-- Add the LQCloud (逻辑比特) cloud provider `lqcloud`, compiling circuits locally to native gates; install the `lqcloud` SDK separately.
+- Add the LQCloud (逻辑比特) cloud provider `lqcloud`, compiling circuits locally to native gates, with native batch submission and `batch_expectation_ps`; install the `lqcloud` SDK separately.
 
 - Add the opt-in local cloud task store `tc.cloud.store.TaskStore`, recording each submission from intent to result and recovering uncertain submissions by `bind`.
 

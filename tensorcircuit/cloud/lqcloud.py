@@ -3,7 +3,7 @@ Cloud provider from LQCloud (逻辑比特量子云)
 https://cloud.logicalqubit.com
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import gzip
 import json
 import logging
@@ -133,9 +133,11 @@ def _properties(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
             "ReadoutF1Err": _error_rate(m.get("measure_f1")),
             "SingleQubitErrRate": _error_rate(m.get("xeb_fidelity")),
         }
+    # some couplers are listed without their qubits, e.g. on AGate-100
     cz_fidelity = {
         tuple(sorted(m["qubits"])): m.get("cz_fidelity")
         for m in calibration.get("coupler_metrics") or []
+        if "qubits" in m
     }
     links = {}
     for q1, q2 in config["topology"]["coupling_map"]:
@@ -328,7 +330,8 @@ def compile_circuit(
             seed_transpiler=default_seed,
         )
     else:
-        options["optimization_level"] = 0
+        # without a coupling map, level 1 keeps the qubits and merges single qubit gates
+        options["optimization_level"] = 1
     options.update(compiled_options or {})
     compiled, _ = qiskit_compile(
         _logical_qiskit(circuit, records),
@@ -375,60 +378,66 @@ def _mapping(compilation: Dict[str, Any]) -> Dict[int, int]:
 def prepare_task(
     device: Device,
     token: Optional[str],
-    circuit: Optional[AbstractCircuit] = None,
+    circuit: Optional[Union[AbstractCircuit, Sequence[AbstractCircuit]]] = None,
     source: Optional[str] = None,
-    shots: int = 1024,
+    shots: Union[int, Sequence[int]] = 1024,
     compiling: bool = True,
-    compiled_options: Optional[Dict[str, Any]] = None,
+    compiled_options: Optional[
+        Union[Dict[str, Any], Sequence[Optional[Dict[str, Any]]]]
+    ] = None,
     **kws: Any,
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """
-    Locally compile the circuit into the program sent by :py:func:`submit_task`.
+    Locally compile the circuits into the program sent by :py:func:`submit_task`.
 
     :param device: the device
     :type device: Device
     :param token: the LQCloud API key
     :type token: Optional[str]
-    :param circuit: the circuit, defaults to None
-    :type circuit: Optional[AbstractCircuit], optional
+    :param circuit: the circuit, or a list of circuits for a batch, defaults to None
+    :type circuit: Optional[Union[AbstractCircuit, Sequence[AbstractCircuit]]], optional
     :param source: unsupported, raises if given, defaults to None
     :type source: Optional[str], optional
-    :param shots: number of shots, defaults to 1024
-    :type shots: int, optional
+    :param shots: number of shots, or one per circuit with the same value for
+        a batch, defaults to 1024
+    :type shots: Union[int, Sequence[int]], optional
     :param compiling: whether choose the layout and route on the device topology,
         see :py:func:`submit_task`, defaults to True
     :type compiling: bool, optional
     :param compiled_options: ``qiskit.transpile`` options overriding the defaults,
-        defaults to None
-    :type compiled_options: Optional[Dict[str, Any]], optional
-    :param kws: other options are unsupported and raise an error
+        or one per circuit, defaults to None
+    :type compiled_options: Optional[Union[Dict[str, Any], Sequence[Optional[Dict[str, Any]]]]], optional
+    :param kws: options of other providers, ignored
     :type kws: Any
     :return: the keyword arguments of :py:func:`submit_task` with the compilation
-        to send, and what is prepared for the circuit, i.e. its ``compilation`` and
-        ``positional_logical_mapping``
+        to send, a list for a batch, and what is prepared for each circuit, i.e.
+        its ``compilation`` and ``positional_logical_mapping``
     :rtype: Tuple[Dict[str, Any], List[Dict[str, Any]]]
     """
-    _check_options(kws)
     if source is not None:
         raise ValueError("LQCloud provider does not support `source`, use `circuit`")
     if circuit is None:
         raise ValueError("`circuit` must be provided")
-    if is_sequence(circuit) or is_sequence(shots):
-        raise ValueError(
-            "LQCloud provider does not support batch submission yet, "
-            "submit the circuits one by one"
+    circuits = list(circuit) if is_sequence(circuit) else [circuit]  # type: ignore
+    properties = list_properties(device, token)
+    compilations = [
+        compile_circuit(c, properties, s, compiling, o)[1]
+        for c, s, o in zip(
+            circuits,
+            _per_circuit(shots, len(circuits), "shots"),
+            _per_circuit(compiled_options, len(circuits), "compiled_options"),
         )
-    _, compilation = compile_circuit(
-        circuit, list_properties(device, token), shots, compiling, compiled_options
-    )
-    return {"compilation": compilation}, [_prepared(compilation)]
+    ]
+    send = compilations if is_sequence(circuit) else compilations[0]
+    return {"compilation": send}, [_prepared(c) for c in compilations]
 
 
-def _check_options(kws: Dict[str, Any]) -> None:
-    if kws:
-        raise ValueError(
-            "Unsupported options for the LQCloud provider: %s" % ", ".join(sorted(kws))
-        )
+def _per_circuit(value: Any, n: int, name: str) -> List[Any]:
+    if not is_sequence(value):
+        return [value] * n
+    if len(value) != n:
+        raise ValueError("`%s` has %d entries for %d circuits" % (name, len(value), n))
+    return list(value)
 
 
 def _prepared(compilation: Dict[str, Any]) -> Dict[str, Any]:
@@ -438,8 +447,9 @@ def _prepared(compilation: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _lq_circuit(compilation: Dict[str, Any]) -> Any:
-    index = {q: i for i, q in enumerate(compilation["physical_qubits"])}
+def _lq_circuit(compilation: Dict[str, Any], layout: List[int]) -> Any:
+    # the circuit on the qubits of ``layout``, the initial_layout given to the SDK
+    index = {q: i for i, q in enumerate(layout)}
     qc = _lqcloud().QuantumCircuit(len(index), compilation["n_clbits"])
     for op in compilation["instructions"]:
         qubits = [index[q] for q in op["qubits"]]
@@ -452,13 +462,19 @@ def _lq_circuit(compilation: Dict[str, Any]) -> Any:
     return qc
 
 
-def _capture_posts(session: Any) -> List[Any]:
+def _capture_posts(session: Any, batch: bool) -> List[Any]:
     # the requests posted by the session, as sent to the server
     posts: List[Any] = []
 
     def hook(r: Any, *args: Any, **kws: Any) -> None:
         if r.request.method == "POST":
             posts.append(r.request)
+            # the SDK takes any 400 on a batch for an old server and silently
+            # submits each circuit as a separate task, which costs more
+            if batch and r.status_code == 400:
+                raise SubmissionRejected(
+                    "LQCloud rejected the batch submission (HTTP 400): %s" % r.text
+                )
 
     session.hooks["response"].append(hook)
     return posts
@@ -469,6 +485,12 @@ def _payload(request: Any) -> Any:
     if request.headers.get("Content-Encoding") == "gzip":
         body = gzip.decompress(body)
     return json.loads(body)
+
+
+def _circuit_payload(body: Dict[str, Any], i: int) -> Dict[str, Any]:
+    # the batch request body with only the entry of circuit ``i``
+    command = body["command"]
+    return dict(body, command=dict(command, circuits=[command["circuits"][i]]))
 
 
 def _send(backend: Any, qc: Any, shots: int, initial_layout: List[int]) -> Any:
@@ -508,13 +530,15 @@ def _send(backend: Any, qc: Any, shots: int, initial_layout: List[int]) -> Any:
 def submit_task(
     device: Device,
     token: str,
-    shots: int = 1024,
-    circuit: Optional[AbstractCircuit] = None,
+    shots: Union[int, Sequence[int]] = 1024,
+    circuit: Optional[Union[AbstractCircuit, Sequence[AbstractCircuit]]] = None,
     compiling: bool = True,
-    compiled_options: Optional[Dict[str, Any]] = None,
-    compilation: Optional[Dict[str, Any]] = None,
+    compiled_options: Optional[
+        Union[Dict[str, Any], Sequence[Optional[Dict[str, Any]]]]
+    ] = None,
+    compilation: Optional[Union[Dict[str, Any], Sequence[Dict[str, Any]]]] = None,
     **kws: Any,
-) -> Task:
+) -> Union[Task, List[Task]]:
     """
     Submit a circuit to LQCloud. The circuit is compiled locally with qiskit into
     the native gates ``rz``, ``xhalf`` (i.e. ``sx``), ``x`` and ``cz`` on the
@@ -524,8 +548,15 @@ def submit_task(
     i.e. with the rewrites by the SDK such as the readout pulses before
     measurements, in ``task.prepared["payload"]``, both also in the task store.
 
-    Only terminal measurements are supported for now; noise channels, resets,
-    batch submissions and readout correction by the provider are unsupported.
+    A list of circuits is submitted as one LQCloud batch task, with one Task per
+    circuit, whose id is ``"<batch task id>#<circuit index>"`` and whose payload
+    holds only its own entry of the batch request. The circuits of a batch share
+    the shots, while each may have its own ``compiled_options``, e.g. its
+    ``initial_layout``. If LQCloud rejects the batch, the SDK fallback to a
+    separate task per circuit is not used.
+
+    Only terminal measurements are supported for now; noise channels, resets
+    and readout correction by the provider are unsupported.
     A state vector ``inputs`` is synthesized by qiskit into a state preparation
     circuit, whose depth grows exponentially with the number of qubits, so it is
     only practical on a few qubits; prepare basis states with ``x`` gates instead.
@@ -534,58 +565,75 @@ def submit_task(
     :type device: Device
     :param token: the LQCloud API key
     :type token: str
-    :param shots: number of shots, defaults to 1024
-    :type shots: int, optional
-    :param circuit: the circuit, optionally with a state vector ``inputs``
-    :type circuit: Optional[AbstractCircuit], optional
+    :param shots: number of shots, or one per circuit with the same value for
+        a batch, defaults to 1024
+    :type shots: Union[int, Sequence[int]], optional
+    :param circuit: the circuit, optionally with a state vector ``inputs``, or
+        a list of circuits for a batch
+    :type circuit: Optional[Union[AbstractCircuit, Sequence[AbstractCircuit]]], optional
     :param compiling: whether choose the layout and route on the device topology;
         if False, qubit ``i`` of the circuit runs on physical qubit ``i``,
         defaults to True
     :type compiling: bool, optional
     :param compiled_options: ``qiskit.transpile`` options overriding the defaults,
-        e.g. ``{"initial_layout": [5, 6]}``, defaults to None
-    :type compiled_options: Optional[Dict[str, Any]], optional
-    :param compilation: a compilation to send directly, e.g. by
-        :py:func:`prepare_task`, defaults to None
-    :type compilation: Optional[Dict[str, Any]], optional
-    :param kws: other options are unsupported and raise an error
+        e.g. ``{"initial_layout": [5, 6]}``, or one per circuit, defaults to None
+    :type compiled_options: Optional[Union[Dict[str, Any], Sequence[Optional[Dict[str, Any]]]]], optional
+    :param compilation: a compilation to send directly, or a list for a batch,
+        e.g. by :py:func:`prepare_task`, defaults to None
+    :type compilation: Optional[Union[Dict[str, Any], Sequence[Dict[str, Any]]]], optional
+    :param kws: options of other providers, ignored
     :type kws: Any
-    :return: the task
-    :rtype: Task
+    :return: the task, or a list of tasks for a batch
+    :rtype: Union[Task, List[Task]]
     """
     # billing by the LQCloud docs for SDK 0.5.1: (¥5 + ¥0.005 × shots) × multiplier
-    # per task, where the multiplier depends on the device and the subscription;
-    # failed tasks are free, and the charged cost is in ``details()["lqcloud"]``
-    _check_options(kws)
+    # per task, and (¥3 × circuits + ¥0.005 × total shots) × multiplier per batch,
+    # where the multiplier depends on the device and the subscription; failed
+    # tasks are free, and the charged cost is in ``details()["lqcloud"]``
     if compilation is None:
-        _, (prepared,) = prepare_task(
+        send_kws, _ = prepare_task(
             device, token, circuit, None, shots, compiling, compiled_options
         )
-        compilation = prepared["compilation"]
+        compilation = send_kws["compilation"]
+    batch = is_sequence(compilation)
+    compilations = list(compilation) if batch else [compilation]  # type: ignore
+    batch_shots = {c["shots"] for c in compilations}
+    if len(batch_shots) > 1:
+        raise ValueError(
+            "The circuits of an LQCloud batch share the shots, got %s"
+            % sorted(batch_shots)
+        )
+    # the circuits of a batch share the initial_layout given to the SDK, i.e.
+    # all their physical qubits, on which each runs as compiled
+    layout = sorted({q for c in compilations for q in c["physical_qubits"]})
     backend = _backend(device, token)
-    posts = _capture_posts(backend.provider.session)
-    job = _send(
-        backend,
-        _lq_circuit(compilation),
-        compilation["shots"],
-        compilation["physical_qubits"],
-    )
-    task = Task(job.job_id, device=device)
-    # the task is accepted, so a missing or unreadable payload must not lose it
-    payload = None
+    posts = _capture_posts(backend.provider.session, batch)
+    qcs = [_lq_circuit(c, layout) for c in compilations]
+    job = _send(backend, qcs if batch else qcs[0], compilations[0]["shots"], layout)
+    # the tasks are accepted, so a missing or unreadable payload must not lose them
+    payloads: List[Any] = [None] * len(compilations)
     if posts:
         try:
-            payload = _payload(posts[-1])
-        except (ValueError, OSError, TypeError) as e:
+            body = _payload(posts[-1])
+            if batch:
+                payloads = [_circuit_payload(body, i) for i in range(len(qcs))]
+            else:
+                payloads = [body]
+        except (ValueError, OSError, TypeError, KeyError, IndexError) as e:
             logger.warning("cannot read the request body sent: %r", e)
-    task.prepared = dict(_prepared(compilation), payload=payload)
-    return task
+    tasks = []
+    for i, (c, payload) in enumerate(zip(compilations, payloads)):
+        task = Task("%s#%d" % (job.job_id, i) if batch else job.job_id, device=device)
+        task.circuit_index = i
+        task.prepared = dict(_prepared(c), payload=payload)
+        tasks.append(task)
+    return tasks if batch else tasks[0]
 
 
 def resubmit_task(task: Task, token: str) -> Task:
     """
     Run the compilation of the task, i.e. ``task.prepared["compilation"]``,
-    again as a new task.
+    again as a new task, which is a single task also for a circuit of a batch.
 
     :param task: the task to rerun
     :type task: Task
@@ -599,21 +647,28 @@ def resubmit_task(task: Task, token: str) -> Task:
             "The compilation of task %s is unknown, resubmit the circuit instead"
             % task.id_
         )
-    return submit_task(
+    return submit_task(  # type: ignore
         task.get_device(), token, compilation=task.prepared["compilation"]
     )
 
 
-def _job(task: Task, device: Device, token: Optional[str]) -> Any:
+def _job(job_id: str, device: Device, token: Optional[str]) -> Any:
     provider = _provider(token)
     return _lqcloud().job.Job(
-        task.id_, provider, device.name, base_url=provider.url, use_async=True
+        job_id, provider, device.name, base_url=provider.url, use_async=True
     )
+
+
+def _split_id(task: Task) -> Tuple[str, Optional[int]]:
+    # the LQCloud task id, and the circuit index for a circuit of a batch
+    job_id, _, index = task.id_.partition("#")
+    return job_id, int(index) if index else None
 
 
 def remove_task(task: Task, token: str) -> Any:
     """
-    Cancel a queued task, while a running task cannot be cancelled.
+    Cancel a queued task, while a running task cannot be cancelled. Cancelling
+    a circuit of a batch cancels the whole batch.
 
     :param task: the task
     :type task: Task
@@ -622,7 +677,7 @@ def remove_task(task: Task, token: str) -> Any:
     :return: the cancellation response of the SDK
     :rtype: Any
     """
-    return _job(task, task.get_device(), token).cancel()
+    return _job(_split_id(task)[0], task.get_device(), token).cancel()
 
 
 # the compiled circuit is already on the physical qubits, which run as they are
@@ -637,6 +692,8 @@ def get_task_details(
     Get the task details by a single query, with the unified ``state``
     (``pending``, ``completed`` or ``failed``), the raw counts as ``results``,
     the per-shot ``memory`` if returned, and the provider fields in ``lqcloud``.
+    For a circuit of a batch, the state and results are its own, while the
+    provider fields, e.g. ``cost``, are the ones of the whole batch task.
 
     :param task: the task
     :type task: Task
@@ -649,7 +706,8 @@ def get_task_details(
     :return: the task details
     :rtype: Dict[str, Any]
     """
-    info = _job(task, device, token).status_info()
+    job_id, index = _split_id(task)
+    info = _job(job_id, device, token).status_info()
     status = info.get("status")
     if status not in _states:
         raise ValueError("Unknown LQCloud task status: %s" % status)
@@ -669,9 +727,21 @@ def get_task_details(
             raise ValueError(
                 "Unsupported LQCloud result of task %s: %r" % (task.id_, data)
             )
+        batch = data.get("result_format") == "batch" or "results" in data
+        if batch != (index is not None):
+            raise ValueError(
+                "LQCloud task %s is %s, query a circuit of a batch as `<id>#<index>`"
+                % (job_id, "a batch" if batch else "not a batch")
+            )
+        if batch:
+            data = data["results"][index]
+            if not data.get("success", True):
+                details["state"] = "failed"
+                details["err"] = data.get("error") or "failed"
+                return details
         result = _lqcloud().Result(device.name, task.id_, status, data, info)
         details["results"] = result.get_raw_counts()
-        details["shots"] = data.get("shots")
+        details["shots"] = data.get("shots", info["result"].get("shots"))
         if result.result_format == "memory":
             details["memory"] = result.get_memory()
         details["lqcloud"]["result_format"] = result.result_format

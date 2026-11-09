@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 
 import tensorcircuit as tc
-from tensorcircuit.cloud import apis, lqcloud, store
+from tensorcircuit.cloud import apis, lqcloud, store, wrapper
 from tensorcircuit.cloud.abstraction import Device, TaskFailed
 from tensorcircuit.cloud.config import lqcloud_base_url
 from tensorcircuit.cloud.utils import SubmissionRejected, SubmissionUnknown
@@ -91,8 +91,9 @@ def response(body, status=200):
 class FakeLQCloud:
     """
     Fake LQCloud server behind ``requests.adapters.HTTPAdapter.send``, recording the
-    requests as sent. ``submission`` is the response of the task submission, or an
-    exception to raise.
+    requests as sent. ``submission`` is the response of the task submission, an
+    exception to raise, or a function of the request body, and ``info`` is the task
+    status, or a function of the task id.
     """
 
     def __init__(self):
@@ -124,9 +125,13 @@ class FakeLQCloud:
         if method == "POST" and path == "/api/v1/tasks/async":
             if isinstance(self.submission, Exception):
                 raise self.submission
+            if callable(self.submission):
+                return self.submission(self.requests[-1]["body"])
             return self.submission
         if method == "GET" and path.startswith("/api/v1/tasks/async/"):
-            return response(dict(self.info, task_id=path.split("/")[-1]))
+            task_id = path.split("/")[-1]
+            info = self.info(task_id) if callable(self.info) else self.info
+            return response(dict(info, task_id=task_id))
         if method == "POST" and path.endswith("/cancel"):
             return response({"status": "cancelled"})
         raise AssertionError("unexpected request %s %s" % (method, url))
@@ -484,10 +489,8 @@ def test_local_failures_are_not_submitted(fake_lqcloud, tmp_path):
     s = store.TaskStore(tmp_path / "tasks")
     with pytest.raises(ValueError, match="shots"):
         apis.submit_task(device=DEVICE, circuit=c, shots=0, store=s)
-    with pytest.raises(ValueError, match="batch"):
-        apis.submit_task(device=DEVICE, circuit=[c, c], store=s)
-    with pytest.raises(ValueError, match="Unsupported options.*foo"):
-        apis.submit_task(device=DEVICE, circuit=c, foo=1, store=s)
+    with pytest.raises(ValueError, match="share the shots"):
+        apis.submit_task(device=DEVICE, circuit=[c, c], shots=[100, 200], store=s)
     assert fake_lqcloud.submissions() == [] and s.find() == []
 
 
@@ -505,6 +508,156 @@ def test_unreadable_payload_keeps_the_accepted_task(
     t = apis.submit_task(device=DEVICE, circuit=c, store=s)
     assert t.prepared["payload"] is None and "compilation" in t.prepared
     assert s.get(t.local_id)["remote_id"] == t.id_
+
+
+@requires_sdk
+def test_batch_is_one_task_with_a_task_per_circuit(fake_lqcloud, tmp_path):
+    c0 = tc.Circuit(3)
+    c0.x(2)
+    c0.measure_instruction(2)
+    c0.measure_instruction(0)
+    c1 = tc.Circuit(2)
+    c1.h(0)
+    c1.cx(0, 1)
+    s = store.TaskStore(tmp_path / "tasks")
+    ts = apis.submit_task(
+        device=DEVICE,
+        circuit=[c0, c1],
+        shots=[100, 100],
+        compiled_options=[{"initial_layout": [0, 1, 2]}, {"initial_layout": [4, 5]}],
+        store=s,
+    )
+    (sent,) = fake_lqcloud.submissions()
+    command = sent["body"]["command"]
+    assert command["action"] == "run_circuit_batch" and command["shots"] == 100
+    assert [t.id_ for t in ts] == ["task_0001#0", "task_0001#1"]
+    comps = [t.prepared["compilation"] for t in ts]
+    assert comps[0]["physical_qubits"] == [0, 2] and comps[1]["physical_qubits"] == [
+        4,
+        5,
+    ]
+    for t, section in zip(ts, command["circuits"]):
+        # each circuit runs on its own physical qubits within the shared layout
+        assert section["initial_layout"] == [0, 2, 4, 5]
+        assert t.prepared["payload"]["command"]["circuits"] == [section]
+        measures = [op for op in section["instructions"] if op["name"] == "measure"]
+        assert {op["clbits"][0]: op["qubits"][0] for op in measures} == t.prepared[
+            "positional_logical_mapping"
+        ]
+        assert s.get(t.local_id)["remote_id"] == t.id_
+
+    fake_lqcloud.info = {
+        "status": "completed",
+        "cost": 4.0,
+        "result": {
+            "result_format": "batch",
+            "shots": 100,
+            "results": [
+                {"counts": {"10": 100}, "shots": 100, "success": True},
+                {"success": False, "error": "readout fault"},
+            ],
+        },
+    }
+    assert ts[0].results() == {"10": 100}
+    assert ts[0].details()["lqcloud"]["cost"] == 4.0
+    with pytest.raises(TaskFailed, match="readout fault"):
+        ts[1].results(blocked=True)
+    with pytest.raises(ValueError, match="is a batch"):
+        apis.get_task_details(apis.get_task("task_0001", device=DEVICE))
+    # a circuit of a batch reruns alone
+    fake_lqcloud.submission = response({"task_id": "task_0002", "status": "queued"})
+    t2 = apis.resubmit_task(ts[0])
+    assert (
+        t2.id_ == "task_0002"
+        and "circuit" in fake_lqcloud.submissions()[-1]["body"]["command"]
+    )
+
+
+@requires_sdk
+def test_rejected_batch_does_not_fall_back(fake_lqcloud, tmp_path):
+    fake_lqcloud.submission = response(
+        {"detail": "batch is not allowed", "error_type": "validation_error"}, 400
+    )
+    c = tc.Circuit(2)
+    c.x(0)
+    s = store.TaskStore(tmp_path / "tasks")
+    with pytest.raises(SubmissionRejected, match="batch is not allowed"):
+        apis.submit_task(device=DEVICE, circuit=[c, c], store=s)
+    assert len(fake_lqcloud.submissions()) == 1 and s.find() == []
+
+
+@requires_sdk
+@pytest.mark.parametrize("readout_cals, nposts", [("api", 1), ("system", 2)])
+def test_batch_expectation_ps_mitigates_the_measured_qubits(
+    fake_lqcloud, monkeypatch, with_readout_errors, readout_cals, nposts
+):
+    errors = {q: (0.01 * (q + 1), 0.03 * (q + 1)) for q in range(6)}
+    for m in fake_lqcloud.config["properties"]["qubit_metrics"]:
+        m["measure_f0"], m["measure_f1"] = [1 - e for e in errors[m["id"]]]
+    commands = {}
+
+    def submit(body):
+        task_id = "task_%04d" % len(commands)
+        commands[task_id] = body["command"]
+        return response({"task_id": task_id, "status": "queued"})
+
+    def info(task_id):
+        command = commands[task_id]
+        results = []
+        for section in command["circuits"]:
+            measures = {
+                op["clbits"][0]: op["qubits"][0]
+                for op in section["instructions"]
+                if op["name"] == "measure"
+            }
+            qubits = [measures[i] for i in range(len(measures))]
+            program = dict(section, physical_qubits=section["initial_layout"])
+            probs = with_readout_errors(
+                simulate(dict(program, n_clbits=len(qubits))), qubits, errors
+            )
+            counts = {
+                format(i, "0%db" % len(qubits)): int(round(p * command["shots"]))
+                for i, p in enumerate(probs)
+            }
+            results.append({"counts": counts, "success": True})
+        return {
+            "status": "completed",
+            "result": {"result_format": "batch", "results": results},
+        }
+
+    fake_lqcloud.submission = submit
+    fake_lqcloud.info = info
+    compiling = []
+    compile_circuit = lqcloud.compile_circuit
+
+    def record(c, properties, shots, flag, options):
+        compiling.append(flag)
+        return compile_circuit(c, properties, shots, flag, options)
+
+    monkeypatch.setattr(lqcloud, "compile_circuit", record)
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cx(0, 1)
+    r = wrapper.batch_expectation_ps(
+        c,
+        [[3, 3], [1, 1], [2, 2]],
+        device=DEVICE,
+        shots=10000,
+        readout_cals=readout_cals,
+    )
+    np.testing.assert_allclose(r, [1, 1, -1], atol=1e-3)
+    # one batch each, on the qubits of the wrapper, the options of tencent ignored
+    assert len(fake_lqcloud.submissions()) == nposts
+    assert set(compiling) == {False}
+
+
+@requires_sdk
+def test_missing_readout_error_raises_before_submission(fake_lqcloud):
+    c = tc.Circuit(2)
+    c.h(0)
+    with pytest.raises(ValueError, match="No readout error"):
+        wrapper.batch_expectation_ps(c, [[3, 0]], device=DEVICE)
+    assert fake_lqcloud.submissions() == []
 
 
 @requires_sdk
@@ -526,6 +679,10 @@ def test_resubmit_sends_the_stored_compilation(fake_lqcloud, tmp_path):
 
 @requires_sdk
 def test_list_properties_and_cancel(fake_lqcloud):
+    # a coupler without its qubits is skipped
+    fake_lqcloud.config["properties"]["coupler_metrics"].append(
+        {"id": 7, "cz_fidelity": 0.99}
+    )
     d = Device.from_name(DEVICE)
     p = apis.list_properties(device=d)
     assert p["native_gates"] == ["cz", "rz", "sx", "x"]
@@ -616,3 +773,44 @@ def test_hardware_memory_format():
     _, r, d = _hardware_run(c)
     assert len(d["memory"]) == 1000
     assert max(r, key=r.get) == "10" * 6
+
+
+@requires_hardware
+def test_hardware_batch_layouts_and_bit_order():
+    # each circuit on its own qubits, overlapping on qubit 30
+    c0 = tc.Circuit(3)
+    c0.x(2)
+    c0.measure_instruction(2)
+    c0.measure_instruction(0)
+    c0.measure_instruction(1)
+    c1 = tc.Circuit(2)
+    c1.x(0)
+    c1.cx(0, 1)
+    c2 = tc.Circuit(1)
+    c2.x(0)
+    ts = apis.submit_task(
+        provider="lqcloud",
+        device="QZ03",
+        circuit=[c0, c1, c2],
+        shots=1000,
+        compiled_options=[
+            {"initial_layout": [30, 17, 1]},
+            {"initial_layout": [24, 30]},
+            {"initial_layout": [5]},
+        ],
+    )
+    rs = [t.results() for t in ts]
+    print([t.id_ for t in ts], ts[0].details()["lqcloud"]["cost"], rs)
+    assert [max(r, key=r.get) for r in rs] == ["100", "11", "1"]
+
+
+@requires_hardware
+def test_hardware_batch_expectation_ps():
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cx(0, 1)
+    r = wrapper.batch_expectation_ps(
+        c, [[3, 3], [1, 1], [2, 2]], device="lqcloud::QZ03", shots=1000
+    )
+    print(r)
+    np.testing.assert_allclose(r, [1, 1, -1], atol=0.2)
