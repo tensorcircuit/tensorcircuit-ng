@@ -388,7 +388,7 @@ class Task:
           :py:meth:`get_positional_logical_mapping` of the submitted circuit
           when neither remaps the qubits, and can be directly passed to
           :py:meth:`tensorcircuit.results.rem.ReadoutMit.apply_correction`
-          with qubits on the device
+          with qubits on the device, unless a qubit is measured more than once
         - ``archive``: whether the task is saved in the local task store
 
         See :py:func:`tensorcircuit.cloud.apis.get_task_metadata` for how
@@ -439,6 +439,15 @@ class Task:
         return get_task_metadata(self, d)
 
     def get_logical_physical_mapping(self) -> Optional[Dict[int, int]]:
+        """
+        Get the mapping from the logical qubit to the physical qubit returned by
+        the server, which is only available on the ``tencent`` provider for now.
+        The provider-independent mapping from the classical bit to the physical
+        qubit is ``details()["tensorcircuit"]["positional_logical_mapping"]``.
+
+        :return: the mapping, None if unknown
+        :rtype: Optional[Dict[int, int]]
+        """
         return _mapping_from_details(self.details())
 
     def add_details(self, **kws: Any) -> None:

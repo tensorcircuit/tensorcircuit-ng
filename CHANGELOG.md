@@ -28,6 +28,8 @@
 
 - Add noise aware layout by default for the `lqcloud` provider and `batch_expectation_ps`, via `compiler.qiskit_compiler.properties_to_target` and `DefaultCompiler(properties=...)`; qubits and couplers of unknown errors are not used.
 
+- Add mid-circuit and repeated measurements and resets to the `lqcloud` provider, each measurement to its own classical bit, the measured qubit going on without reset unless a `reset_instruction` is given, with `x21` added after the two-state readout; pass other SDK options, e.g. `dynamic_decoupling`, by `run_options`.
+
 - Add `Circuit.sample_measurements` and `DMCircuit.sample_measurements` for the records of all measurement instructions. `sample_detector`, `detector_probabilities` and `sample_measurements` support gates, noise and measurements after a `measure_instruction` without reset, the measured qubit staying in the measured state. Measurement records follow the order of the measurement instructions in all sampling modes, not the classical bits `record_index` from `from_qiskit`.
 
 - Add the readout flip probability `p` of `measure_instruction` and `mr_instruction` in detector and measurement sampling, flipping only the record; `stim2tc` keeps the flip probabilities of stim measurements, e.g. `M(0.01)`, which were dropped.

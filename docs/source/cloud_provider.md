@@ -64,7 +64,9 @@ Ignore the options of other providers, since generic callers pass one set of opt
 
 Without `prepare_task`, it holds the mapping of each circuit's `get_positional_logical_mapping()`. Implement `prepare_task(device, token, **task_kws) -> (send_kws, prepared)` when the provider compiles locally: it returns the keyword arguments for `submit_task`, e.g. the compiled program, and one `prepared` dict per circuit, so that the intent recorded before sending already holds the exact program. `submit_task` may also set `task.prepared` itself, e.g. to add the request body captured after sending; it then replaces the dict from `prepare_task`, so it must be the full dict.
 
-Record facts, not predictions. If an SDK rewrites the program before sending, e.g. by adding resets or readout pulses, capture what it actually sends, e.g. with a `requests` response hook on the session of the provider instance created for this submission, instead of re-implementing or calling its private logic.
+Keep every option needed to send the program again in the prepared program, e.g. the shots and the SDK run options in the `lqcloud` compilation, since `submit_task` and `resubmit_task` only get the prepared program. Pass vendor run options as one dict, e.g. `run_options` of `lqcloud`, rather than one argument each, and allow only the options known to be read, if the SDK silently ignores unknown ones.
+
+Record facts, not predictions. If an SDK rewrites the program before sending, e.g. by adding resets or readout pulses, capture what it actually sends, e.g. with a `requests` response hook on the session of the provider instance created for this submission, instead of re-implementing or calling its private logic. Where the compilation itself depends on such a decision, e.g. the two-state readout of `lqcloud` deciding the `x21` restores after mid-circuit measurements, call the SDK rule rather than re-implementing it, record the decision in the prepared program, and check it again when sending.
 
 ### Task details
 
@@ -87,8 +89,9 @@ Add a key to `metadata_keys` only when it means the same thing on different prov
 
 ## Circuits and compilation
 
-- Raise on what the hardware cannot run, e.g. mid-circuit measurements, resets, noise channels, MPS or density-matrix inputs, or batch submissions, instead of dropping it silently. A state vector `inputs` can be run by synthesizing a state preparation circuit, e.g. by `compiler.qiskit_compile`, whose depth grows exponentially with the number of qubits; document this cost.
-- When compiling locally with `compiler.qiskit_compile`, keep the barrier separating the gates from the final measurements (`remove_barriers=False`) so the optimizer cannot move the measurements, and pass a fixed `seed_transpiler` so recompiling gives the same program.
+- Raise on what the hardware cannot run, e.g. mid-circuit measurements or resets on hardware without them, noise channels, MPS or density-matrix inputs, or batch submissions, instead of dropping it silently. A state vector `inputs` can be run by synthesizing a state preparation circuit, e.g. by `compiler.qiskit_compile`, whose depth grows exponentially with the number of qubits; document this cost.
+- With mid-circuit measurements, each measurement writes its own classical bit, i.e. its `record_index`, and the measured qubit goes on in the measured state unless a `reset_instruction` follows; reject circuits writing a classical bit twice, and add what the hardware needs to keep this meaning, e.g. `x21` after the two-state readout of `lqcloud`.
+- When compiling locally with `compiler.qiskit_compile`, separate each readout window, i.e. the final measurements and each run of mid-circuit measurements, from the gates by barriers (`remove_barriers=False`) so the optimizer cannot move the measurements, and pass a fixed `seed_transpiler` so recompiling gives the same program.
 - When renaming gates to the vendor's native gates, check their conventions. With only `rz`, `sx`, `x`, `cz`, |0> inputs and Z-basis readout, flipping the rotation sense of `rz` or `sx` is unobservable, since it amounts to the complex conjugation of the circuit, and any basis change is built from the same gates. The angle scale, e.g. `rz(theta)` rotating by `theta / 2`, is observable and must be confirmed on hardware with circuits of arbitrary angles. A second non-diagonal native gate, or gates decomposed by the vendor, make the sign observable as well.
 
 ## Credentials

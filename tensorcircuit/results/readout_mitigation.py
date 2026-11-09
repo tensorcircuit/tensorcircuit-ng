@@ -457,6 +457,12 @@ class ReadoutMit:
             logical_positional_mapping = {
                 v: k for k, v in positional_logical_mapping.items()
             }
+            if len(logical_positional_mapping) < len(positional_logical_mapping):
+                raise ValueError(
+                    "Readout mitigation does not support a qubit measured more than "
+                    "once, got positional_logical_mapping %s"
+                    % positional_logical_mapping
+                )
             use_position_qubits = [logical_positional_mapping[lq] for lq in qubits]
 
         if logical_physical_mapping is None:

@@ -311,25 +311,137 @@ def test_compile_without_compiling_keeps_qubits():
     np.testing.assert_allclose(simulate(comp), ideal(c), atol=1e-5)
 
 
-def _mid_circuit():
-    c = tc.Circuit(2)
-    c.measure_instruction(0)
-    c.x(0)
+def program(compilation):
+    # the native program as a circuit, where x21 restores the measured |1>
+    index = {q: i for i, q in enumerate(compilation["physical_qubits"])}
+    c = tc.Circuit(len(index))
+    for op in compilation["instructions"]:
+        qubits = [index[q] for q in op["qubits"]]
+        if op["name"] == "measure":
+            c.measure_instruction(qubits[0])
+            c._extra_qir[-1]["record_index"] = op["clbits"][0]
+        elif op["name"] == "reset":
+            c.reset_instruction(qubits[0])
+        elif op["name"] == "rz":
+            c.rz(qubits[0], theta=op["params"][0])
+        elif op["name"] == "xhalf":
+            c.unitary(qubits[0], unitary=XHALF)
+        elif op["name"] in ["x", "cz"]:
+            getattr(c, op["name"])(*qubits)
     return c
 
 
-def _repeated():
-    c = tc.Circuit(2)
-    c.x(0)
+def record_distribution(c):
+    # the exact joint distribution of the measurement records by classical bits
+    clbits = [d["record_index"] for d in c._extra_qir if d["name"] == "measure"]
+    for i in range(len(clbits)):
+        c.detector_instruction([i])
+    p = np.real(tc.backend.numpy(c.detector_probabilities()))
+    return p.reshape([2] * len(clbits)).transpose(np.argsort(clbits)).reshape(-1)
+
+
+def mid_circuit():
+    c = tc.Circuit(3)
+    c.h(0)
+    c.cx(0, 2)
     c.measure_instruction(0)
+    c.measure_instruction(2)
+    # the measured qubits go on without a reset, unless one is given
+    c.rx(0, theta=0.8)
+    c.cx(2, 1)
+    c.reset_instruction(2)
+    c.ry(2, theta=0.7)
     c.measure_instruction(0)
+    c.measure_instruction(2)
+    c.measure_instruction(1)
     return c
 
 
-def _reset():
-    c = tc.Circuit(2)
-    c.x(0)
-    c.reset_instruction(0)
+@requires_sdk
+@pytest.mark.parametrize("types, n_x21", [(["measure", "measure2"], 0), (["2"], 2)])
+# the second layout routes the measured qubit 2 by a swap after the readout
+@pytest.mark.parametrize("layout", [None, [0, 5, 1]])
+def test_compile_mid_circuit_measurements(types, n_x21, layout):
+    config = fake_config()
+    config["supported_measurement_types"] = types
+    properties = lqcloud._properties("FAKE6", config)
+    c = mid_circuit()
+    mapping, comp = lqcloud.compile_circuit(
+        c, properties, compiled_options=layout and {"initial_layout": layout}
+    )
+    assert comp["two_state_readout"] == bool(n_x21)
+    assert comp["windows"] == [
+        {"kind": "mid", "records": [0, 1]},
+        {"kind": "final", "records": [2, 3, 4]},
+    ]
+    ops = comp["instructions"]
+    names = [op["name"] for op in ops]
+    assert names.count("measure") == 5 and len(mapping) == 5
+    assert names.count("reset") == 1 and names.count("x21") == n_x21
+    # the mid-circuit window is between barriers over the physical qubits holding
+    # the circuit qubits at that time, here 3, so not a routing ancilla, e.g. the
+    # qubit 4 by the second layout
+    first, last = names.index("measure"), names.index("measure") + 1
+    assert names[last] == "measure"
+    for i in [first - 1, last + 1]:
+        assert ops[i]["name"] == "barrier" and len(ops[i]["qubits"]) == 3
+        assert {op["qubits"][0] for op in ops[first : last + 1]} <= set(
+            ops[i]["qubits"]
+        )
+    if n_x21:
+        # x21 restores the measured qubits before their next operation
+        restored = [op["qubits"][0] for op in ops if op["name"] == "x21"]
+        assert sorted(restored) == sorted(
+            op["qubits"][0] for op in ops[first : last + 1]
+        )
+        assert names.index("x21") > last + 1
+    np.testing.assert_allclose(
+        record_distribution(program(comp)), record_distribution(c), atol=1e-5
+    )
+
+
+@requires_sdk
+@pytest.mark.parametrize(
+    "ops, names",
+    [
+        ("xMRM", ["x", "barrier", "measure", "barrier", "reset", "barrier", "measure"]),
+        ("xMM", ["x", "barrier", "measure", "barrier", "x21", "measure"]),
+        (
+            "xMMxM",
+            ["x", "barrier", "measure", "x21", "measure", "barrier"]
+            + ["x21", "x", "barrier", "measure"],
+        ),
+    ],
+)
+def test_compile_restores_after_two_state_readout(ops, names):
+    # x21 before each operation after a measurement but a reset
+    c = tc.Circuit(1)
+    for op in ops:
+        {"x": c.x, "M": c.measure_instruction, "R": c.reset_instruction}[op](0)
+    _, comp = lqcloud.compile_circuit(c, fake_properties(), compiling=False)
+    assert [op["name"] for op in comp["instructions"]] == names
+
+
+def _same_clbit():
+    from qiskit import QuantumCircuit
+
+    qc = QuantumCircuit(1, 1)
+    qc.measure(0, 0)
+    qc.x(0)
+    qc.measure(0, 0)
+    return tc.Circuit.from_qiskit(qc)
+
+
+def _readout_flip():
+    c = tc.Circuit(1)
+    c.measure_instruction(0, p=0.1)
+    return c
+
+
+def _detector():
+    c = tc.Circuit(1)
+    c.measure_instruction(0)
+    c.detector_instruction([0])
     return c
 
 
@@ -344,9 +456,9 @@ def _channel():
 @pytest.mark.parametrize(
     "circuit, message",
     [
-        (_mid_circuit, "Mid-circuit"),
-        (_repeated, "repeated"),
-        (_reset, "reset"),
+        (_same_clbit, "Classical bits \\[0\\]"),
+        (_readout_flip, "Readout flip"),
+        (_detector, "detector"),
         (_channel, "Noise channels"),
         (lambda: "OPENQASM 2.0;", "TensorCircuit circuits"),
     ],
@@ -426,6 +538,56 @@ def test_sent_payload_is_the_request_body(fake_lqcloud, types, n_x21):
         op["name"] for op in t.prepared["payload"]["command"]["circuit"]["instructions"]
     ]
     assert names.count("x21") == n_x21
+
+
+@requires_sdk
+def test_mid_circuit_payload_and_run_options(fake_lqcloud):
+    dd = {"enabled": True, "m": 4, "dd_type": "CPMG", "qubits": [5]}
+    t = apis.submit_task(
+        device=DEVICE,
+        circuit=mid_circuit(),
+        compiling=False,
+        compiled_options={"initial_layout": [3, 5, 4]},
+        run_options={"dynamic_decoupling": dd},
+        store=False,
+    )
+    (sent,) = fake_lqcloud.submissions()
+    section = sent["body"]["command"]["circuit"]
+    comp = t.prepared["compilation"]
+    assert comp["run_options"] == {"dynamic_decoupling": dd}
+    # the physical qubit 5, sent as its position 2 in the initial_layout [3, 4, 5],
+    # which the SDK maps back in the request, and would reject 5 as out of range
+    assert section["initial_layout"] == [3, 4, 5]
+    assert section["dynamic_decoupling"]["qubits"] == [5]
+    assert section["dynamic_decoupling"]["m"] == 4
+    # the restores by TensorCircuit, then the readout pulses by the SDK
+    names = [op["name"] for op in section["instructions"]]
+    assert names.count("x21") == 2 + 5 and names.count("measure") == 5
+    info = {"num_windows": 1, "insertions": []}
+    fake_lqcloud.info = {
+        "status": "completed",
+        "result": {
+            "counts": {"00000": 10},
+            "shots": 10,
+            "dynamic_decoupling_info": info,
+        },
+    }
+    result = t.details()["lqcloud"]["result"]
+    assert result["dynamic_decoupling_info"] == info and "counts" not in result
+
+    # the rerun sends the run options again
+    apis.resubmit_task(t)
+    assert fake_lqcloud.submissions()[-1]["body"]["command"]["circuit"] == section
+    device = Device.from_name(DEVICE)
+    with pytest.raises(ValueError, match="share the run options"):
+        lqcloud.submit_task(
+            device, "tc-key", compilation=[comp, dict(comp, run_options={})]
+        )
+    # the x21 restores are compiled for the two-state readout
+    fake_lqcloud.config["supported_measurement_types"] = ["measure"]
+    with pytest.raises(ValueError, match="current readout"):
+        apis.resubmit_task(t)
+    assert len(fake_lqcloud.submissions()) == 2
 
 
 @requires_sdk
@@ -527,6 +689,11 @@ def test_local_failures_are_not_submitted(fake_lqcloud, tmp_path):
         apis.submit_task(device=DEVICE, circuit=c, shots=0, store=s)
     with pytest.raises(ValueError, match="share the shots"):
         apis.submit_task(device=DEVICE, circuit=[c, c], shots=[100, 200], store=s)
+    # the SDK would ignore a misspelled option silently
+    with pytest.raises(ValueError, match="Unsupported LQCloud run options"):
+        apis.submit_task(
+            device=DEVICE, circuit=c, run_options={"dynamic_decouplng": {}}, store=s
+        )
     assert fake_lqcloud.submissions() == [] and s.find() == []
 
 
@@ -882,6 +1049,24 @@ def test_hardware_batch_expectation_ps():
     )
     print(r)
     np.testing.assert_allclose(r, [1, 1, -1], atol=0.2)
+
+
+@requires_hardware
+def test_hardware_mid_circuit_measurement():
+    cs = [tc.Circuit(1), tc.Circuit(1)]
+    for c in cs:
+        c.x(0)
+        c.measure_instruction(0)
+    cs[0].x(0)
+    cs[1].reset_instruction(0)
+    for c in cs:
+        c.measure_instruction(0)
+    ts = apis.submit_task(provider="lqcloud", device="MQ02", circuit=cs, shots=1000)
+    rs = [t.results() for t in ts]
+    print([t.id_ for t in ts], ts[0].details()["lqcloud"]["cost"], rs)
+    # the x21 restore before the x leaves 30-40% of the measured |1> in |2>,
+    # and the reset leaves 1-6%, depending on the qubit
+    assert rs[0]["10"] > 500 and rs[1]["10"] > 850
 
 
 @requires_hardware

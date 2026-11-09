@@ -470,3 +470,12 @@ def test_readout_expv_map():
     np.testing.assert_allclose(idea_value, mit_value, atol=3 * 1e-2)
     np.testing.assert_allclose(idea_value, mit_value1, atol=3 * 1e-2)
     np.testing.assert_allclose(idea_value, mit_value2, atol=3 * 1e-2)
+
+
+def test_readout_mit_rejects_repeated_measurements():
+    # e.g. a qubit measured twice in a circuit with mid-circuit measurements
+    mit = ReadoutMit(execute=run)
+    with pytest.raises(ValueError, match="more than once"):
+        mit.mapping_preprocess(
+            {"01": 50, "10": 50}, [0], positional_logical_mapping={0: 0, 1: 0}
+        )

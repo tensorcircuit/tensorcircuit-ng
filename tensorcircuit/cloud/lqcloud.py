@@ -3,7 +3,7 @@ Cloud provider from LQCloud (逻辑比特量子云)
 https://cloud.logicalqubit.com
 """
 
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import gzip
 import json
 import logging
@@ -29,6 +29,9 @@ native_gates = ["cz", "rz", "sx", "x"]
 _lq_gates = {"cz": "cz", "rz": "rz", "sx": "xhalf", "x": "x"}
 default_seed = 42
 compilation_schema_version = 1
+# the options of the SDK ``backend.run`` allowed in run_options, since the SDK
+# ignores unknown options silently
+_run_options = {"dynamic_decoupling", "result_format"}
 
 # LQCloud task states to the unified ones
 _states = {
@@ -156,6 +159,16 @@ def _properties(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
     return properties
 
 
+def _two_state(properties: Dict[str, Any]) -> bool:
+    # whether the SDK reads out by ``x21`` then ``measure`` on the device, by the
+    # rule of ``CloudBackend._resolve_measurement_kind`` in the SDK
+    backend = _lqcloud().provider.cloud_provider.CloudBackend
+    types = backend._normalize_supported_measurement_types(
+        properties.get("supported_measurement_types")
+    )
+    return "measure" not in types
+
+
 def _check_circuit(circuit: Any) -> None:
     if not isinstance(circuit, AbstractCircuit):
         raise ValueError(
@@ -164,11 +177,20 @@ def _check_circuit(circuit: Any) -> None:
         )
     if any(d.get("is_channel", False) for d in circuit.to_qir()):
         raise ValueError("Noise channels cannot be submitted to the LQCloud hardware")
-    instructions = {d["name"] for d in circuit._extra_qir} - {"measure", "barrier"}
+    instructions = {d["name"] for d in circuit._extra_qir} - {
+        "measure",
+        "reset",
+        "barrier",
+    }
     if instructions:
         raise ValueError(
             "Unsupported instructions for the LQCloud provider: %s"
             % ", ".join(sorted(instructions))
+        )
+    if any(d.get("parameters", {}).get("p") for d in circuit._extra_qir):
+        raise ValueError(
+            "Readout flip probabilities of measurements are for simulation only "
+            "and cannot be submitted to the LQCloud hardware"
         )
     params = getattr(circuit, "circuit_param", {})
     if params.get("dim") not in [None, 2]:
@@ -185,82 +207,114 @@ def _check_circuit(circuit: Any) -> None:
         )
 
 
-def _readout_windows(circuit: AbstractCircuit) -> List[Dict[str, Any]]:
+def _logical_qiskit(circuit: AbstractCircuit) -> Tuple[Any, List[Dict[str, Any]]]:
     """
-    Group the measurements into readout windows, each a set of measurements read
-    out together after a barrier. A measurement followed by no gate on its qubit is
-    terminal and belongs to the final window after all gates, which is the only
-    window supported now; all qubits are measured in it if no measurement is given.
+    Arrange the circuit into readout windows, each a set of measurements read out
+    together between barriers over all qubits. A measurement followed by no other
+    operation on its qubit is terminal and read out in the final window after all
+    gates, where all qubits are measured if no measurement is given. The other
+    measurements are read out in mid-circuit windows, one for each run of them
+    with no other operation in between, after which the measured qubits go on in
+    the measured states without a reset, unless one is given.
 
-    :return: the windows in time order, each with its ``kind`` and ``records``,
-        i.e. ``{record_index: qubit}`` of its measurements
-    :rtype: List[Dict[str, Any]]
+    :return: the qiskit circuit, and the windows in time order, each with its
+        ``kind``, ``"mid"`` or ``"final"``, and ``records``, i.e. the classical
+        bits of its measurements
+    :rtype: Tuple[Any, List[Dict[str, Any]]]
     """
-    qir = circuit.to_qir()
-    last_gate: Dict[int, int] = {}
-    for i, d in enumerate(qir):
-        for q in d["index"]:
-            last_gate[q] = i
-    measured = set()
-    for d in circuit._extra_qir:
-        if d["name"] != "measure":
-            continue
-        q = d["index"][0]
-        if q in measured or d.get("pos", len(qir)) <= last_gate.get(q, -1):
-            raise ValueError(
-                "Mid-circuit or repeated measurement on qubit %s is not supported "
-                "by the LQCloud provider yet" % q
-            )
-        measured.add(q)
-    return [{"kind": "final", "records": circuit.get_positional_logical_mapping()}]
-
-
-def _logical_qiskit(circuit: AbstractCircuit, records: Dict[int, int]) -> Any:
-    # the gates and barriers, then the final window: a barrier over all qubits,
-    # so that no operation is placed after any measurement, and the measurements
     from qiskit import QuantumCircuit
 
+    # Whether mid-circuit measurements run depends on the device and the qubits, and
+    # the task fails with ``internal_error`` otherwise. The check is left to the
+    # cloud on purpose, without any local check or layout around it.
     qc = circuit.to_qiskit(enable_instruction=True, enable_inputs=True)
-    lqc = QuantumCircuit(qc.num_qubits, max(records) + 1)
-    for inst in qc.data:
-        if inst.operation.name != "measure":
-            lqc.append(inst.operation, [qc.find_bit(q).index for q in inst.qubits])
-    lqc.barrier()
-    for r, q in records.items():
-        lqc.measure(q, r)
-    return lqc
+    data = [
+        (
+            inst.operation,
+            [qc.find_bit(q).index for q in inst.qubits],
+            [qc.find_bit(c).index for c in inst.clbits],
+        )
+        for inst in qc.data
+    ]
+    clbits = [c[0] for op, _, c in data if op.name == "measure"]
+    repeated = sorted({c for c in clbits if clbits.count(c) > 1})
+    if repeated:
+        raise ValueError(
+            "Classical bits %s are written by more than one measurement" % repeated
+        )
+    terminal = set()
+    later = set()
+    for i in reversed(range(len(data))):
+        op, qubits, _ = data[i]
+        if op.name == "barrier":
+            continue
+        if op.name == "measure" and qubits[0] not in later:
+            terminal.add(i)
+        later.update(qubits)
+    final = {data[i][2][0]: data[i][1][0] for i in terminal}
+    if not clbits:
+        final = {q: q for q in range(qc.num_qubits)}
+    lqc = QuantumCircuit(qc.num_qubits, max(clbits + list(final)) + 1)
+    windows: List[Dict[str, Any]] = []
+    window: Optional[Dict[str, Any]] = None
+    for i, (op, qubits, cs) in enumerate(data):
+        if i in terminal:
+            continue
+        if op.name == "measure":
+            if window is None:
+                window = {"kind": "mid", "records": []}
+                windows.append(window)
+                lqc.barrier()
+            window["records"].append(cs[0])
+            lqc.measure(qubits[0], cs[0])
+            continue
+        if window is not None:
+            lqc.barrier()
+            window = None
+        lqc.append(op, qubits)
+    if final:
+        # the barrier also closes a mid-circuit window followed only by final readouts
+        lqc.barrier()
+        for r, q in sorted(final.items()):
+            lqc.measure(q, r)
+        windows.append({"kind": "final", "records": sorted(final)})
+    return lqc, windows
 
 
-def _native_instructions(qc: Any) -> Tuple[List[Dict[str, Any]], List[int]]:
+def _native_instructions(
+    qc: Any, two_state: bool
+) -> Tuple[List[Dict[str, Any]], List[int]]:
     """
     Translate the compiled qiskit circuit into native instructions on the active
     physical qubits, i.e. those with any operation besides barriers. The resets
     before any operation, e.g. from the state preparation, are dropped since the
-    SDK resets every qubit at the beginning.
+    SDK resets every qubit at the beginning. With the two-state readout, i.e.
+    ``x21`` then ``measure`` by the SDK, a measured |1> is left in |2>, so
+    ``x21`` is added before the next operation on the qubit unless it is a reset.
     """
     ops: List[Dict[str, Any]] = []
     dropped = []
     started = set()
-    measured = set()
+    shelved: Set[int] = set()
     for inst in qc.data:
         name = inst.operation.name
         qubits = [qc.find_bit(q).index for q in inst.qubits]
         if name == "barrier":
             ops.append({"name": "barrier", "qubits": qubits})
             continue
-        if any(q in measured for q in qubits):
-            raise ValueError(
-                "Compiled circuit has operation %s after a measurement on qubits %s"
-                % (name, qubits)
-            )
-        if name == "reset":
-            if qubits[0] in started:
-                raise ValueError("Reset after operations is unsupported on LQCloud")
+        if name == "reset" and qubits[0] not in started:
             dropped.append(qubits[0])
             continue
+        for q in sorted(shelved.intersection(qubits)):
+            shelved.remove(q)
+            if name != "reset":
+                ops.append({"name": "x21", "qubits": [q]})
         started.update(qubits)
-        if name == "measure":
-            measured.add(qubits[0])
+        if name == "reset":
+            ops.append({"name": "reset", "qubits": qubits})
+        elif name == "measure":
+            if two_state:
+                shelved.add(qubits[0])
             ops.append(
                 {
                     "name": "measure",
@@ -295,11 +349,22 @@ def compile_circuit(
     """
     Compile the circuit locally into native gates on the physical qubits of the
     device, since LQCloud runs the submitted gates as they are.
-    All measurements are read out in the final window after all gates, in the
-    order of the classical bits, and the result bitstring is indexed by the
-    classical bit, i.e. the ``record_index`` of the measurement.
+    The terminal measurements are read out in the final window after all gates, in
+    the order of the classical bits, and the others in mid-circuit windows, see
+    below. The result bitstring is indexed by the classical bit, i.e. the
+    ``record_index`` of the measurement, which must differ for each measurement.
 
-    :param circuit: the circuit, with terminal measurements only
+    A measured qubit goes on in the measured state, and is reset only by a
+    ``reset_instruction``, which runs as the native reset. On a device with only the
+    two-state readout, where a measured |1> is left in |2>, ``x21`` is added before
+    the next operation on the qubit unless it is a reset. This restore is imperfect,
+    so prefer a reset when the state after the measurement is not needed. Whether
+    mid-circuit measurements run depends on the device and the qubits, e.g. on the
+    measurements of the other qubits sharing a readout line, and a circuit that
+    cannot run fails with the ``internal_error`` of the task, so it may depend on
+    the layout chosen.
+
+    :param circuit: the circuit
     :type circuit: AbstractCircuit
     :param properties: the device properties by :py:func:`list_properties`, whose
         ``native_gates`` and ``links`` are compiled to
@@ -328,8 +393,7 @@ def compile_circuit(
     import qiskit
 
     _check_circuit(circuit)
-    windows = _readout_windows(circuit)
-    records = windows[-1]["records"]
+    logical, windows = _logical_qiskit(circuit)
     options: Dict[str, Any] = {"basis_gates": list(properties["native_gates"])}
     # the coupling_map or basis_gates given by the user is kept
     noise_aware = noise_aware and not {"coupling_map", "basis_gates"} & set(
@@ -348,12 +412,13 @@ def compile_circuit(
         options["optimization_level"] = 1
     options.update(compiled_options or {})
     compiled, _ = qiskit_compile(
-        _logical_qiskit(circuit, records),
+        logical,
         output="qiskit",
         compiled_options=options,
         remove_barriers=False,
     )
-    instructions, dropped = _native_instructions(compiled)
+    two_state = _two_state(properties)
+    instructions, dropped = _native_instructions(compiled, two_state)
     physical_qubits = sorted(
         {q for op in instructions if op["name"] != "barrier" for q in op["qubits"]}
     )
@@ -361,12 +426,12 @@ def compile_circuit(
         "schema_version": compilation_schema_version,
         "shots": shots,
         "physical_qubits": physical_qubits,
-        "n_clbits": max(records) + 1,
+        "n_clbits": logical.num_clbits,
         "instructions": instructions,
-        "windows": [
-            {"kind": w["kind"], "records": sorted(w["records"])} for w in windows
-        ],
+        "windows": windows,
         "dropped_resets": dropped,
+        # the readout the x21 restores are compiled for, checked when sending
+        "two_state_readout": two_state,
         "compiler": {
             "name": "qiskit",
             "version": qiskit.__version__,
@@ -418,6 +483,7 @@ def prepare_task(
         Union[Dict[str, Any], Sequence[Optional[Dict[str, Any]]]]
     ] = None,
     noise_aware: bool = True,
+    run_options: Optional[Dict[str, Any]] = None,
     **kws: Any,
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """
@@ -443,6 +509,10 @@ def prepare_task(
     :param noise_aware: whether choose the layout by the error rates of the device,
         see :py:func:`compile_circuit`, defaults to True
     :type noise_aware: bool, optional
+    :param run_options: the options of the SDK ``backend.run`` for all circuits,
+        kept in the compilation as ``run_options``, see :py:func:`submit_task`,
+        defaults to None
+    :type run_options: Optional[Dict[str, Any]], optional
     :param kws: options of other providers, ignored
     :type kws: Any
     :return: the keyword arguments of :py:func:`submit_task` with the compilation
@@ -457,7 +527,10 @@ def prepare_task(
     circuits = list(circuit) if is_sequence(circuit) else [circuit]  # type: ignore
     properties = list_properties(device, token)
     compilations = [
-        compile_circuit(c, properties, s, compiling, o, noise_aware)[1]
+        dict(
+            compile_circuit(c, properties, s, compiling, o, noise_aware)[1],
+            run_options=dict(run_options or {}),
+        )
         for c, s, o in zip(
             circuits,
             _per_circuit(shots, len(circuits), "shots"),
@@ -529,14 +602,20 @@ def _circuit_payload(body: Dict[str, Any], i: int) -> Dict[str, Any]:
     return dict(body, command=dict(command, circuits=[command["circuits"][i]]))
 
 
-def _send(backend: Any, qc: Any, shots: int, initial_layout: List[int]) -> Any:
+def _send(
+    backend: Any,
+    qc: Any,
+    shots: int,
+    initial_layout: List[int],
+    run_options: Dict[str, Any],
+) -> Any:
     """
     Run the circuit once, where the SDK retries the request with an idempotency
     key. Local validation failures before the request are raised as they are.
     """
     lq = _lqcloud()
     try:
-        job = backend.run(qc, shots=shots, initial_layout=initial_layout)
+        job = backend.run(qc, shots=shots, initial_layout=initial_layout, **run_options)
     except lq.AuthenticationError as e:
         raise SubmissionRejected(str(e)) from e
     except lq.JobError as e:
@@ -574,6 +653,7 @@ def submit_task(
     ] = None,
     compilation: Optional[Union[Dict[str, Any], Sequence[Dict[str, Any]]]] = None,
     noise_aware: bool = True,
+    run_options: Optional[Dict[str, Any]] = None,
     **kws: Any,
 ) -> Union[Task, List[Task]]:
     """
@@ -593,8 +673,9 @@ def submit_task(
     ``initial_layout``. If LQCloud rejects the batch, the SDK fallback to a
     separate task per circuit is not used.
 
-    Only terminal measurements are supported for now; noise channels, resets
-    and readout correction by the provider are unsupported.
+    Measurements may be mid-circuit or repeated, each to its own classical bit,
+    and resets run as the native reset, see :py:func:`compile_circuit`; noise
+    channels and readout correction by the provider are unsupported.
     A state vector ``inputs`` is synthesized by qiskit into a state preparation
     circuit, whose depth grows exponentially with the number of qubits, so it is
     only practical on a few qubits; prepare basis states with ``x`` gates instead.
@@ -622,6 +703,13 @@ def submit_task(
     :param noise_aware: whether choose the layout by the error rates of the device,
         see :py:func:`compile_circuit`, defaults to True
     :type noise_aware: bool, optional
+    :param run_options: options of the SDK ``backend.run``, shared by the circuits
+        of a batch and kept in the compilation, only ``dynamic_decoupling`` and
+        ``result_format`` for now, e.g.
+        ``{"dynamic_decoupling": {"enabled": True, "m": 4, "dd_type": "CPMG"}}`` to
+        fill idle windows such as mid-circuit readouts, with its ``qubits``, if
+        given, on the physical qubits, defaults to None
+    :type run_options: Optional[Dict[str, Any]], optional
     :param kws: options of other providers, ignored
     :type kws: Any
     :return: the task, or a list of tasks for a batch
@@ -641,6 +729,7 @@ def submit_task(
             compiling,
             compiled_options,
             noise_aware,
+            run_options,
         )
         compilation = send_kws["compilation"]
     batch = is_sequence(compilation)
@@ -651,13 +740,41 @@ def submit_task(
             "The circuits of an LQCloud batch share the shots, got %s"
             % sorted(batch_shots)
         )
+    options = [c.get("run_options", {}) for c in compilations]
+    if any(o != options[0] for o in options):
+        raise ValueError(
+            "The circuits of an LQCloud batch share the run options, got %s" % options
+        )
+    unknown = sorted(set(options[0]) - _run_options)
+    if unknown:
+        raise ValueError(
+            "Unsupported LQCloud run options %s, only %s"
+            % (unknown, sorted(_run_options))
+        )
     # the circuits of a batch share the initial_layout given to the SDK, i.e.
     # all their physical qubits, on which each runs as compiled
     layout = sorted({q for c in compilations for q in c["physical_qubits"]})
     backend = _backend(device, token)
+    two_state = _two_state(backend.config)
+    if any(c["two_state_readout"] != two_state for c in compilations):
+        raise ValueError(
+            "The compilation does not match the current readout of %s, compile "
+            "the circuit again" % device.name
+        )
+    sdk_options = options[0]
+    dd = sdk_options.get("dynamic_decoupling")
+    if isinstance(dd, dict) and dd.get("qubits") is not None:
+        # physical qubits to their positions in the initial_layout, as the SDK takes
+        index = {q: i for i, q in enumerate(layout)}
+        sdk_options = dict(
+            sdk_options,
+            dynamic_decoupling=dict(dd, qubits=[index[q] for q in dd["qubits"]]),
+        )
     posts = _capture_posts(backend.provider.session, batch)
     qcs = [_lq_circuit(c, layout) for c in compilations]
-    job = _send(backend, qcs if batch else qcs[0], compilations[0]["shots"], layout)
+    job = _send(
+        backend, qcs if batch else qcs[0], compilations[0]["shots"], layout, sdk_options
+    )
     # the tasks are accepted, so a missing or unreadable payload must not lose them
     payloads: List[Any] = [None] * len(compilations)
     if posts:
@@ -739,9 +856,11 @@ def get_task_details(
     """
     Get the task details by a single query, with the unified ``state``
     (``pending``, ``completed`` or ``failed``), the raw counts as ``results``,
-    the per-shot ``memory`` if returned, and the provider fields in ``lqcloud``.
-    For a circuit of a batch, the state and results are its own, while the
-    provider fields, e.g. ``cost``, are the ones of the whole batch task.
+    the per-shot ``memory`` if returned, and the provider fields in ``lqcloud``,
+    with the other fields of the result as returned in ``lqcloud["result"]``.
+    For a circuit of a batch, the state, results and ``lqcloud["result"]`` are
+    its own, while the other provider fields, e.g. ``cost``, are the ones of the
+    whole batch task.
 
     :param task: the task
     :type task: Task
@@ -793,4 +912,8 @@ def get_task_details(
         if result.result_format == "memory":
             details["memory"] = result.get_memory()
         details["lqcloud"]["result_format"] = result.result_format
+        # the other fields of the result as returned, e.g. dynamic_decoupling_info
+        details["lqcloud"]["result"] = {
+            k: v for k, v in data.items() if k not in ["counts", "raw_counts", "memory"]
+        }
     return details
