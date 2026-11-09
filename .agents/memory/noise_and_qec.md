@@ -15,8 +15,9 @@ Use this file for noise APIs, detector sampling, and stabilizer/QEC workflows.
 - Do not emulate repeated trials by rebuilding circuits with explicit sampled Pauli gates; that produces one deterministic error pattern copied across shots.
 - Detector sampling on dense `Circuit` uses trajectory semantics (`allow_state=False`): each shot consumes its own randomness in circuit order. Do not substitute averaged `DMCircuit` evolution when detector statistics depend on per-shot stochastic history.
 - If the same measurement record feeds multiple detectors, the detector tensor network must insert an explicit classical fan-out `CopyNode`. A single `tn.Edge` cannot be connected into multiple detector parity branches directly.
-- In dense detector tensor-network semantics, `measure_instruction` makes that qubit line inactive. If later gates or noise should act on that site, the QIR must contain `reset_instruction` first so the forward-time worldline is reopened explicitly.
+- In dense detector tensor-network semantics, `measure_instruction` is a 5-leg copy tensor (ket/bra in, ket/bra out, record): the line is dephased and stays open, so later gates, noise and measurements act on the measured state without `reset_instruction`; the trajectory path collapses with `cond_measurement` and goes on likewise.
 - `detector_instruction(...)` and `observable_instruction(...)` index the absolute measurement record with zero-based positions, not Stim-style negative `rec(...)` offsets.
+- In dense simulation, measurement records are numbered by the order of the measurement instructions in every sampling path; `record_index` is the classical bit for export (`to_qiskit`, cloud results) and may be permuted or sparse after `from_qiskit`, so never use it as the simulator record id.
 - Use `sample_measurements` for raw readout and `sample_detectors` when the QIR includes detector or observable annotations.
 
 ## Post-selection workflow

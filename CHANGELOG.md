@@ -28,6 +28,8 @@
 
 - Add noise aware layout by default for the `lqcloud` provider and `batch_expectation_ps`, via `compiler.qiskit_compiler.properties_to_target` and `DefaultCompiler(properties=...)`; qubits and couplers of unknown errors are not used.
 
+- Add `Circuit.sample_measurements` and `DMCircuit.sample_measurements` for the records of all measurement instructions. `sample_detector`, `detector_probabilities` and `sample_measurements` support gates, noise and measurements after a `measure_instruction` without reset, the measured qubit staying in the measured state. Measurement records follow the order of the measurement instructions in all sampling modes, not the classical bits `record_index` from `from_qiskit`.
+
 - Add the opt-in local cloud task store `tc.cloud.store.TaskStore`, recording each submission from intent to result and recovering uncertain submissions by `bind`.
 
 - Add provider-independent cloud metadata in `task.details()["tensorcircuit"]`, including the `positional_logical_mapping` to physical qubits for `ReadoutMit`.

@@ -709,8 +709,7 @@ class BaseCircuit(AbstractCircuit):
     def _record_qubits_terminal_measure_only(
         self, merged_qir: Sequence[Dict[str, Any]]
     ) -> List[int]:
-        measured_so_far = 0
-        record_to_qubit: Dict[int, int] = {}
+        record_qubits: List[int] = []
         for d in merged_qir:
             if not d.get("instruction", False):
                 continue
@@ -722,23 +721,13 @@ class BaseCircuit(AbstractCircuit):
                     raise NotImplementedError(
                         "allow_state=True currently supports terminal measure_instruction only."
                     )
-                rid = int(d.get("record_index", measured_so_far))
-                record_to_qubit[rid] = int(d["index"][0])
-                measured_so_far += 1
+                record_qubits.append(int(d["index"][0]))
                 continue
             raise NotImplementedError(
                 f"allow_state=True does not support instruction `{name}`."
             )
-        if measured_so_far == 0:
+        if len(record_qubits) == 0:
             raise ValueError("No measurements defined for detector sampling.")
-        record_qubits = [-1] * measured_so_far
-        for rid, q in record_to_qubit.items():
-            if rid < measured_so_far:
-                record_qubits[rid] = q
-        if any(q < 0 for q in record_qubits):
-            raise ValueError(
-                "Measurement records are incomplete for detector resolution."
-            )
         return record_qubits
 
     def _walk_detector_trajectory_qir(
@@ -751,58 +740,38 @@ class BaseCircuit(AbstractCircuit):
         on_reset: Optional[Callable[[Dict[str, Any], int], None]] = None,
         on_noise: Optional[Callable[[Dict[str, Any], int], None]] = None,
     ) -> None:
-        active = [True] * self._nqubits
         for d in merged_qir:
             name = str(d.get("name", "")).upper()
             if d.get("is_channel", False):
-                if any(not active[int(i)] for i in d["index"]):
-                    raise NotImplementedError(
-                        "Noise after measure requires reset first."
-                    )
                 if on_channel is not None:
                     on_channel(d, name)
                 continue
 
             if not d.get("instruction", False):
-                inds = [int(i) for i in d.get("index", [])]
-                for q in inds:
-                    if q < self._nqubits and not active[q]:
-                        raise NotImplementedError(
-                            "Gate after measure requires reset_instruction first."
-                        )
                 if on_gate is not None:
                     on_gate(d)
                 continue
 
             if name in ["MEASURE", "M", "MZ"]:
                 q = int(d["index"][0])
-                if not active[q]:
-                    raise NotImplementedError("Repeated measure on inactive line.")
                 if on_measure is not None:
                     on_measure(d, q)
-                active[q] = False
                 continue
 
             if name == "MR":
                 q = int(d["index"][0])
-                if not active[q]:
-                    raise NotImplementedError("MR on inactive line.")
                 if on_mr is not None:
                     on_mr(d, q)
-                active[q] = True
                 continue
 
             if name == "RESET":
                 q = int(d["index"][0])
                 if on_reset is not None:
                     on_reset(d, q)
-                active[q] = True
                 continue
 
             if name in ["DEPOLARIZING", "PAULI"]:
                 q = int(d["index"][0])
-                if not active[q]:
-                    raise NotImplementedError("Noise on inactive line.")
                 if on_noise is not None:
                     on_noise(d, q)
                 continue
@@ -911,24 +880,17 @@ class BaseCircuit(AbstractCircuit):
             nodes = list(ket_nodes) + list(bra_nodes)
 
         record_edges: List[Optional[tn.Edge]] = [None] * len(record_qubits)
-        qubit_records: Dict[int, List[int]] = {}
-        for rid, q in enumerate(record_qubits):
-            qubit_records.setdefault(q, []).append(rid)
+        qubit_record = {q: rid for rid, q in enumerate(record_qubits)}
 
         for q in range(self._nqubits):
-            rids = qubit_records.get(q, [])
-            if len(rids) == 0:
+            if q not in qubit_record:
                 ket_front[q] ^ bra_front[q]
                 continue
-            if len(rids) > 1:
-                raise NotImplementedError(
-                    "allow_state=True currently supports at most one terminal measurement per qubit."
-                )
             qcopy = tn.CopyNode(3, 2)
             qcopy[0] ^ ket_front[q]
             qcopy[1] ^ bra_front[q]
             nodes.append(qcopy)
-            record_edges[rids[0]] = qcopy[2]
+            record_edges[qubit_record[q]] = qcopy[2]
 
         rid_usage_count: Dict[int, int] = {}
         for det in resolved_detectors:
@@ -986,6 +948,13 @@ class BaseCircuit(AbstractCircuit):
         resolved_detectors = self._resolve_detectors(merged_qir)
         if len(resolved_detectors) == 0:
             raise ValueError("No detectors defined in the circuit.")
+        return self._parity_probabilities(merged_qir, resolved_detectors)
+
+    def _parity_probabilities(
+        self,
+        merged_qir: Sequence[Dict[str, Any]],
+        resolved_detectors: Sequence[Sequence[int]],
+    ) -> Tensor:
         nodes, detector_edges = self._build_detector_tn_from_qir(
             merged_qir, resolved_detectors
         )
@@ -1044,7 +1013,6 @@ class BaseCircuit(AbstractCircuit):
         work = self._new_detector_work_circuit()
         work._qir = []
         work._extra_qir = []
-        active = [True] * n
         record_edges: Dict[int, tn.Edge] = {}
         measured_so_far = 0
         hadamard = np.array([[1.0, 1.0], [1.0, -1.0]], dtype=npdtype)
@@ -1054,58 +1022,45 @@ class BaseCircuit(AbstractCircuit):
         for d in merged_qir:
             name = str(d.get("name", "")).upper()
             if not d.get("instruction", False):
-                inds = [int(i) for i in d.get("index", [])]
-                for q in inds:
-                    if q < n and not active[q]:
-                        raise NotImplementedError(
-                            "Gate/noise after measure requires reset_instruction first."
-                        )
                 self._apply_qir(work, [d], allow_channel=True)  # type: ignore[arg-type]
                 continue
 
             if name in ["MEASURE", "M", "MZ"]:
+                # dephase the line and copy the outcome to the record, the line goes on
                 q = int(d["index"][0])
-                if not active[q]:
-                    raise NotImplementedError("Repeated measure on inactive line.")
-                qcopy = tn.CopyNode(3, 2)
+                qcopy = tn.CopyNode(5, 2)
                 work._nodes.append(qcopy)
                 qcopy[0] ^ work._front[q]
                 qcopy[1] ^ work._front[q + n]
-                rid = int(d.get("record_index", measured_so_far))
+                work._front[q] = qcopy[2]
+                work._front[q + n] = qcopy[3]
+                record_edges[measured_so_far] = qcopy[4]
                 measured_so_far += 1
-                record_edges[rid] = qcopy[2]
-                active[q] = False
                 continue
 
             if name == "MR":
                 q = int(d["index"][0])
-                if not active[q]:
-                    raise NotImplementedError("MR on inactive line.")
                 qcopy = tn.CopyNode(3, 2)
                 work._nodes.append(qcopy)
                 qcopy[0] ^ work._front[q]
                 qcopy[1] ^ work._front[q + n]
-                rid = int(d.get("record_index", measured_so_far))
+                record_edges[measured_so_far] = qcopy[2]
                 measured_so_far += 1
-                record_edges[rid] = qcopy[2]
                 kn = tn.Node(zero)
                 bn = tn.Node(zero)
                 work._nodes.extend([kn, bn])
                 work._front[q] = kn[0]
                 work._front[q + n] = bn[0]
-                active[q] = True
                 continue
 
             if name == "RESET":
                 q = int(d["index"][0])
-                if active[q]:
-                    work._front[q] ^ work._front[q + n]
+                work._front[q] ^ work._front[q + n]
                 kn = tn.Node(zero)
                 bn = tn.Node(zero)
                 work._nodes.extend([kn, bn])
                 work._front[q] = kn[0]
                 work._front[q + n] = bn[0]
-                active[q] = True
                 continue
 
             if name in ["DETECTOR", "BARRIER", "TICK", "QUBIT_COORDS", "SHIFT_COORDS"]:
@@ -1113,8 +1068,6 @@ class BaseCircuit(AbstractCircuit):
 
             if name in ["DEPOLARIZING", "PAULI"]:
                 q = int(d["index"][0])
-                if not active[q]:
-                    raise NotImplementedError("Noise on inactive line.")
                 params = d.get("parameters", {})
                 px = float(params.get("px", d.get("px", 0.0)))
                 py = float(params.get("py", d.get("py", 0.0)))
@@ -1127,8 +1080,7 @@ class BaseCircuit(AbstractCircuit):
             )
 
         for q in range(n):
-            if active[q]:
-                work._front[q] ^ work._front[q + n]
+            work._front[q] ^ work._front[q + n]
 
         nodes = list(work._nodes)
         rid_usage_count: Dict[int, int] = {}
@@ -1182,6 +1134,7 @@ class BaseCircuit(AbstractCircuit):
     def _can_build_detector_from_existing_nodes(
         self, merged_qir: Sequence[Dict[str, Any]]
     ) -> bool:
+        measured = set()
         for d in merged_qir:
             if d.get("is_channel", False):
                 return False
@@ -1191,8 +1144,10 @@ class BaseCircuit(AbstractCircuit):
             if name in ["DETECTOR", "BARRIER", "TICK", "QUBIT_COORDS", "SHIFT_COORDS"]:
                 continue
             if name in ["MEASURE", "M", "MZ"]:
-                if int(d.get("pos", len(self._qir))) < len(self._qir):
+                q = int(d["index"][0])
+                if int(d.get("pos", len(self._qir))) < len(self._qir) or q in measured:
                     return False
+                measured.add(q)
                 continue
             return False
         return True
@@ -1208,19 +1163,24 @@ class BaseCircuit(AbstractCircuit):
     ) -> Tensor:
         """
         Sample detector outcomes from instruction-annotated circuits.
+        A measured qubit is projected to the measured state and stays in the circuit,
+        it is only reset by an explicit ``reset_instruction``.
 
         :param shots: Number of samples to draw, defaults to 1.
         :type shots: int, optional
         :param batch: Number of samples to process in a single batch, defaults to None (equal to shots).
         :type batch: int, optional
         :param allow_state: If True, uses the full detector probability distribution for sampling
-            (faster but memory-intensive); if False, uses an autoregressive sampling method based on
-            the tensor network, defaults to False.
+            (faster but memory-intensive); if False, samples the quantum trajectories for ``Circuit``
+            and uses an autoregressive sampling method based on the tensor network for ``DMCircuit``,
+            defaults to False.
         :type allow_state: bool, optional
         :param status: Random numbers in [0, 1] used for sampling, defaults to None.
             If allow_state is True, shape should be [shots], [shots, 1] or [shots, 2]
             (see ``backend.probability_sample`` for the two-number form);
-            if allow_state is False, shape should be [shots, num_detectors].
+            if allow_state is False, shape should be [shots, num_random_events] for ``Circuit``,
+            with one number for each measurement, reset and Pauli noise in order,
+            and [shots, num_detectors] for ``DMCircuit``.
         :type status: Optional[Tensor], optional
         :param seed: Random seed for sampling, defaults to None.
         :type seed: Optional[int], optional
@@ -1231,17 +1191,92 @@ class BaseCircuit(AbstractCircuit):
             shots = int(kws["batch_size"])
         if "shots" in kws:
             shots = int(kws["shots"])
+        merged_qir = self._merge_qir_with_extra()
+        resolved_detectors = self._resolve_detectors(merged_qir)
+        if len(resolved_detectors) == 0:
+            raise ValueError("No detectors defined in the circuit.")
+        return self._sample_parities(
+            merged_qir, resolved_detectors, shots, batch, allow_state, status, seed
+        )
+
+    def sample_measurements(
+        self,
+        shots: int = 1,
+        batch: Optional[int] = None,
+        allow_state: bool = False,
+        status: Optional[Tensor] = None,
+        seed: Optional[int] = None,
+    ) -> Tensor:
+        """
+        Sample the records of all measurement instructions, including the mid-circuit ones.
+        A measured qubit is projected to the measured state and stays in the circuit,
+        it is only reset by an explicit ``reset_instruction``.
+
+        :Example:
+
+        >>> c = tc.Circuit(1)
+        >>> c.x(0)
+        >>> c.measure_instruction(0)
+        >>> c.x(0)
+        >>> c.measure_instruction(0)
+        >>> c.sample_measurements(shots=2)
+        array([[ True, False],
+               [ True, False]])
+
+        :param shots: Number of samples to draw, defaults to 1.
+        :type shots: int, optional
+        :param batch: Number of samples to process in a single batch, defaults to None (equal to shots).
+        :type batch: int, optional
+        :param allow_state: If True, samples from the full probability distribution of the records
+            (memory-intensive), see :py:meth:`sample_detector`, defaults to False.
+        :type allow_state: bool, optional
+        :param status: Random numbers in [0, 1] used for sampling, defaults to None,
+            with the shape as in :py:meth:`sample_detector` where the detectors are the records.
+        :type status: Optional[Tensor], optional
+        :param seed: Random seed for sampling, defaults to None.
+        :type seed: Optional[int], optional
+        :return: A boolean tensor of the measurement records with shape [shots, num_measurements],
+            in the order of the measurement instructions rather than of their classical bits
+            ``record_index``.
+        :rtype: Tensor
+        """
+        merged_qir = self._merge_qir_with_extra()
+        num_measurements = len(
+            [
+                d
+                for d in merged_qir
+                if d.get("instruction", False)
+                and self._is_measure_instruction_name(str(d.get("name", "")))
+            ]
+        )
+        if num_measurements == 0:
+            raise ValueError("No measurements defined in the circuit.")
+        return self._sample_parities(
+            merged_qir,
+            [[i] for i in range(num_measurements)],
+            shots,
+            batch,
+            allow_state,
+            status,
+            seed,
+        )
+
+    def _sample_parities(
+        self,
+        merged_qir: Sequence[Dict[str, Any]],
+        resolved_detectors: Sequence[Sequence[int]],
+        shots: int,
+        batch: Optional[int],
+        allow_state: bool,
+        status: Optional[Tensor],
+        seed: Optional[int],
+    ) -> Tensor:
         if shots <= 0:
             raise ValueError("shots must be positive.")
         if batch is None:
             batch = shots
         if batch <= 0:
             raise ValueError("batch must be positive.")
-
-        merged_qir = self._merge_qir_with_extra()
-        resolved_detectors = self._resolve_detectors(merged_qir)
-        if len(resolved_detectors) == 0:
-            raise ValueError("No detectors defined in the circuit.")
         num_detectors = len(resolved_detectors)
 
         if allow_state:
@@ -1264,7 +1299,9 @@ class BaseCircuit(AbstractCircuit):
                     )
             elif seed is not None:
                 g = backend.get_random_state(seed)
-            p = backend.reshape(self.detector_probabilities(), [-1])
+            p = backend.reshape(
+                self._parity_probabilities(merged_qir, resolved_detectors), [-1]
+            )
             sample_int = backend.probability_sample(shots, p, status_state, g)
             sample_bin = sample_int2bin(sample_int, num_detectors, dim=2)
             return backend.cast(sample_bin, "bool")

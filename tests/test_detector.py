@@ -128,24 +128,73 @@ def test_detector_invalid_lookback_raises(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
-@pytest.mark.parametrize("noise", [False, True])
-def test_detector_measure_then_operation_without_reset_raises(backend, noise):
-    c = tc.Circuit(2)
+@pytest.mark.parametrize(
+    "op, expected",
+    [("gate", [True, False]), ("noise", [True, False]), (None, [True, True])],
+)
+@pytest.mark.parametrize(
+    "cls, allow_state",
+    [(tc.Circuit, False), (tc.Circuit, True), (tc.DMCircuit, False)],
+)
+def test_measure_then_operation_without_reset(backend, op, expected, cls, allow_state):
+    c = cls(2)
+    c.x(1)
     c.measure_instruction(1)
-    if noise:
-        c.isotropicdepolarizing(0, 1, p=0.1, num_qubits=2)
-    else:
+    if op == "noise":
+        c.depolarizing(1, px=1.0, py=0.0, pz=0.0)
+    elif op == "gate":
         c.x(1)
-    c.detector_instruction([-1])
-    with pytest.raises(NotImplementedError):
-        c.sample_detector(batch_size=1)
+    c.measure_instruction(1)
+    samples = c.sample_measurements(shots=8, allow_state=allow_state, seed=1)
+    np.testing.assert_array_equal(
+        tc.backend.numpy(samples), np.tile([expected], [8, 1])
+    )
+
+
+@pytest.mark.parametrize("allow_state", [False, True])
+def test_measurement_records_follow_instruction_order(npb, allow_state):
+    qiskit = pytest.importorskip("qiskit")
+    qc = qiskit.QuantumCircuit(2, 4)
+    qc.x(0)
+    qc.measure(0, 3)
+    qc.measure(1, 1)
+    c = tc.Circuit.from_qiskit(qc)
+    samples = c.sample_measurements(shots=4, allow_state=allow_state, seed=1)
+    np.testing.assert_array_equal(samples, np.tile([[True, False]], [4, 1]))
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+@pytest.mark.parametrize("cls", [tc.Circuit, tc.DMCircuit])
+def test_mid_measurement_record_distribution(backend, cls):
+    a, b = 0.9, 2.1
+    c = cls(2)
+    c.rx(0, theta=a)
+    c.cx(0, 1)
+    c.measure_instruction(0)
+    c.rx(0, theta=b)
+    c.measure_instruction(0)
+    c.measure_instruction(1)
+    for i in range(3):
+        c.detector_instruction([i])
+
+    pa = [np.cos(a / 2) ** 2, np.sin(a / 2) ** 2]
+    pb = [np.cos(b / 2) ** 2, np.sin(b / 2) ** 2]
+    expected = np.zeros([2, 2, 2])
+    for m0 in range(2):
+        for m1 in range(2):
+            expected[m0, m1, m0] = pa[m0] * pb[m0 ^ m1]
+    p = tc.backend.numpy(c.detector_probabilities())
+    np.testing.assert_allclose(p, expected, atol=1e-5)
+
+    samples = np.asarray(tc.backend.numpy(c.sample_measurements(shots=4000, seed=7)))
+    freq = np.bincount(samples.astype(int) @ [4, 2, 1], minlength=8) / 4000
+    np.testing.assert_allclose(freq, expected.reshape([-1]), atol=0.03)
 
 
 def test_detector_invalid_trajectory_does_not_poison_jax_highp(jaxb):
-    c = tc.Circuit(1)
-    c.x(0)
+    c = tc.Circuit(2)
+    c.depolarizing2_instruction(0, 1, p=0.1)
     c.measure_instruction(0)
-    c.x(0)
     c.detector_instruction([-1])
     with pytest.raises(NotImplementedError):
         c.sample_detector(batch_size=1)
