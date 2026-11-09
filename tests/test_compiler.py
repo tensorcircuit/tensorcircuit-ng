@@ -168,6 +168,46 @@ def test_default_compiler():
     assert c1.gate_count() == 3
 
 
+def test_default_compiler_places_on_the_lowest_errors():
+    pytest.importorskip("qiskit")
+    from tensorcircuit.compiler.qiskit_compiler import properties_to_target
+
+    bit = {"SingleQubitErrRate": 1e-3, "ReadoutF0Err": 0.01, "ReadoutF1Err": 0.02}
+    # a chain 0 - 1 - 2 - 3 - 4 - 5, where qubit 4 and coupler 2 - 3 have
+    # unknown errors and are never used, though 3 - 4 looks the best
+    bits = {q: dict(bit) for q in range(6)}
+    bits[4]["SingleQubitErrRate"] = None
+    errors = {(0, 1): 0.2, (1, 2): 0.01, (2, 3): None, (3, 4): 1e-4, (4, 5): 1e-4}
+    links = {}
+    for (a, b), e in errors.items():
+        links[(a, b)] = links[(b, a)] = {"CZErrRate": e}
+    properties = {"bits": bits, "links": links}
+    target = properties_to_target(properties, ["u3", "h", "cx", "cz"])
+    assert not target.instruction_supported("cz", (2, 3))
+    assert not target.instruction_supported("measure", (4,))
+    assert target.instruction_supported("cx", (2, 1))
+
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cx(0, 1)
+    # seeded, as the layout on qiskit < 2 depends on the seed, see properties_to_target
+    compiler = tc.compiler.DefaultCompiler(
+        {"seed_transpiler": 0}, properties=properties
+    )
+    c1, info = compiler(c)
+    assert sorted(info["logical_physical_mapping"].values()) == [1, 2]
+    np.testing.assert_allclose(
+        c1.probability().reshape([2] * c1._nqubits).sum(axis=(0, 3, 4, 5)),
+        [[0.5, 0], [0, 0.5]],
+        atol=1e-5,
+    )
+    # the coupling map given by the user is kept
+    _, info = tc.compiler.DefaultCompiler(
+        {"coupling_map": [[0, 1], [1, 0]]}, properties=properties
+    )(c)
+    assert sorted(info["logical_physical_mapping"].values()) == [0, 1]
+
+
 def test_merge_same_axis_rotation():
     c = tc.Circuit(1)
     c.ry(0, theta=0.3)

@@ -64,7 +64,15 @@ def fake_config():
         "properties": {
             "last_update": "2026-11-08 06:00:00",
             "qubit_metrics": [
-                {"id": q, "t1": 50.0, "t2": 20.0, "measure_f0": 0.98} for q in range(6)
+                {
+                    "id": q,
+                    "t1": 50.0,
+                    "t2": 20.0,
+                    "measure_f0": 0.98,
+                    "measure_f1": 0.95,
+                    "xeb_fidelity": 0.999,
+                }
+                for q in range(6)
             ],
             "coupler_metrics": [
                 {"id": i, "qubits": e, "cz_fidelity": 0.99} for i, e in enumerate(edges)
@@ -260,6 +268,34 @@ def test_compile_inputs_with_initial_layout():
     assert sorted(comp["dropped_resets"]) == [3, 4, 5]
     assert "reset" not in {op["name"] for op in comp["instructions"]}
     np.testing.assert_allclose(simulate(comp), ideal(c), atol=1e-5)
+
+
+@requires_sdk
+def test_compile_chooses_the_layout_by_the_errors():
+    config = fake_config()
+    for m in config["properties"]["coupler_metrics"]:
+        m["cz_fidelity"] = 0.999 if m["qubits"] == [4, 5] else 0.95
+    properties = lqcloud._properties("FAKE6", config)
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cx(0, 1)
+    _, comp = lqcloud.compile_circuit(c, properties)
+    assert comp["physical_qubits"] == [4, 5] and comp["compiler"]["noise_aware"]
+    # the errors it was chosen by are kept, and the target is not
+    assert "target" not in comp["compiler"]["options"]
+    assert [b["qubit"] for b in comp["calibration"]["bits"]] == [4, 5]
+    ((link,),) = [comp["calibration"]["links"]]
+    assert link["qubits"] == [4, 5]
+    np.testing.assert_allclose(link["CZErrRate"], 0.001)
+    np.testing.assert_allclose(simulate(comp), ideal(c), atol=1e-5)
+    _, comp = lqcloud.compile_circuit(c, properties, noise_aware=False)
+    assert not comp["compiler"]["noise_aware"]
+    assert comp["compiler"]["options"]["coupling_map"]
+    # the coupling map given by the user is kept
+    _, comp = lqcloud.compile_circuit(
+        c, properties, compiled_options={"coupling_map": [[0, 3], [3, 0]]}
+    )
+    assert comp["physical_qubits"] == [0, 3] and not comp["compiler"]["noise_aware"]
 
 
 @requires_sdk
@@ -630,9 +666,9 @@ def test_batch_expectation_ps_mitigates_the_measured_qubits(
     compiling = []
     compile_circuit = lqcloud.compile_circuit
 
-    def record(c, properties, shots, flag, options):
+    def record(c, properties, shots, flag, *args):
         compiling.append(flag)
-        return compile_circuit(c, properties, shots, flag, options)
+        return compile_circuit(c, properties, shots, flag, *args)
 
     monkeypatch.setattr(lqcloud, "compile_circuit", record)
     c = tc.Circuit(2)
@@ -652,11 +688,42 @@ def test_batch_expectation_ps_mitigates_the_measured_qubits(
 
 
 @requires_sdk
+def test_batch_expectation_ps_without_errors_compiles_on_the_topology(fake_lqcloud):
+    for m in fake_lqcloud.config["properties"]["qubit_metrics"]:
+        del m["xeb_fidelity"]
+    captured = []
+
+    def run(cs, shots):
+        captured.extend(cs)
+        return [{"000": shots} for _ in cs]
+
+    c = tc.Circuit(3)
+    c.h(0)
+    c.cx(0, 2)
+    wrapper.batch_expectation_ps(
+        c, [[3, 0, 3]], device=DEVICE, with_rem=False, batch_submit_func=run
+    )
+    links = fake_properties()["links"]
+    pairs = [
+        tuple(d["index"])
+        for cc in captured
+        for d in cc.to_qir()
+        if len(d["index"]) == 2
+    ]
+    assert pairs and all(p in links for p in pairs)
+
+
+@requires_sdk
 def test_missing_readout_error_raises_before_submission(fake_lqcloud):
+    for m in fake_lqcloud.config["properties"]["qubit_metrics"][:2]:
+        del m["measure_f1"]
     c = tc.Circuit(2)
     c.h(0)
     with pytest.raises(ValueError, match="No readout error"):
-        wrapper.batch_expectation_ps(c, [[3, 0]], device=DEVICE)
+        # on the qubits 0 and 1 as given, which the default compiling avoids
+        wrapper.batch_expectation_ps(
+            c, [[3, 0]], device=DEVICE, compile_func=lambda circuit: (circuit, {})
+        )
     assert fake_lqcloud.submissions() == []
 
 
@@ -683,6 +750,7 @@ def test_list_properties_and_cancel(fake_lqcloud):
     fake_lqcloud.config["properties"]["coupler_metrics"].append(
         {"id": 7, "cz_fidelity": 0.99}
     )
+    del fake_lqcloud.config["properties"]["qubit_metrics"][2]["measure_f1"]
     d = Device.from_name(DEVICE)
     p = apis.list_properties(device=d)
     assert p["native_gates"] == ["cz", "rz", "sx", "x"]
@@ -814,3 +882,15 @@ def test_hardware_batch_expectation_ps():
     )
     print(r)
     np.testing.assert_allclose(r, [1, 1, -1], atol=0.2)
+
+
+@requires_hardware
+def test_hardware_noise_aware_ghz():
+    c = tc.Circuit(5)
+    c.h(0)
+    for i in range(4):
+        c.cx(i, i + 1)
+    t, r, _ = _hardware_run(c)
+    assert t.prepared["compilation"]["compiler"]["noise_aware"]
+    assert set(sorted(r, key=r.get)[-2:]) == {"00000", "11111"}
+    assert (r.get("00000", 0) + r.get("11111", 0)) / sum(r.values()) > 0.7

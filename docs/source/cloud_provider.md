@@ -31,11 +31,13 @@ Functions are looked up by name; a missing one makes the corresponding API raise
 
 Besides the vendor fields, `list_properties` should provide the standardized ones that `Device.topology()`, `Device.native_gates()` and the compilers read:
 
-- `bits`: `{qubit: {"T1", "T2", "ReadoutF0Err", "ReadoutF1Err", ...}}`, None for unknown values;
+- `bits`: `{qubit: {"T1", "T2", "ReadoutF0Err", "ReadoutF1Err", "SingleQubitErrRate", ...}}`, None for unknown values;
 - `links`: `{(q1, q2): {"CZErrRate", ...}}`, with both directions for symmetric couplers;
 - `native_gates`: qiskit gate names.
 
 When the provider compiles locally, compile against these standardized properties rather than the raw vendor configuration, so that what users see is what circuits are compiled to. Facts the vendor does not report, e.g. the native gates chosen by the provider, are added here once.
+
+The error rates `SingleQubitErrRate`, `ReadoutF0Err`, `ReadoutF1Err` and `CZErrRate` drive the noise aware layout of `compiler.qiskit_compiler.properties_to_target`; a qubit or coupler with any of them unknown is not used, so report what the vendor gives rather than defaults.
 
 ### Submission
 

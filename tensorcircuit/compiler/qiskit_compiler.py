@@ -3,7 +3,7 @@ compiler interface via qiskit
 """
 
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
 from ..abstractcircuit import AbstractCircuit
 from ..circuit import Circuit
@@ -202,3 +202,70 @@ def qiskit_compile(
     # TODO(@refraction-ray): more info to be added into r1 dict
 
     return (r0, r1)
+
+
+def properties_to_target(properties: Dict[str, Any], basis_gates: Sequence[str]) -> Any:
+    """
+    Build the qiskit ``Target`` of a device with the error rates in its properties,
+    for the noise aware layout of ``qiskit.transpile`` at ``optimization_level``
+    2 or 3, which places the circuit on the qubits of the highest estimated success
+    probability. A qubit without its single qubit or readout errors, or a coupler
+    without its ``CZErrRate``, is left out and never used.
+
+    :Example:
+
+    >>> d = tc.cloud.apis.get_device("lqcloud::QZ03")
+    >>> target = properties_to_target(d.list_properties(), ["cz", "rz", "sx", "x"])
+    >>> qiskit_compile(c, compiled_options={"target": target, "optimization_level": 2})
+
+    :param properties: the device properties by ``list_properties``, with the
+        standardized ``bits`` and ``links``
+    :type properties: Dict[str, Any]
+    :param basis_gates: qiskit names of the one and two qubit gates of the target,
+        each two qubit gate with the ``CZErrRate`` of the coupler
+    :type basis_gates: Sequence[str]
+    :return: the qiskit ``Target``, also supporting measure and reset
+    :rtype: Any
+    """
+    from qiskit.circuit import Measure, Reset
+    from qiskit.circuit.library.standard_gates import get_standard_gate_name_mapping
+    from qiskit.transpiler import InstructionProperties, Target
+
+    # qiskit < 2 (e.g. 0.46 and 1.x): VF2Layout may drop a usable qubit instead of
+    # a left out one, so the layout can be worse and depends on the seed when any
+    # qubit is left out; qiskit >= 2 is recommended
+    bits = {
+        q: b
+        for q, b in properties["bits"].items()
+        if all(
+            b.get(k) is not None
+            for k in ["SingleQubitErrRate", "ReadoutF0Err", "ReadoutF1Err"]
+        )
+    }
+    if not bits:
+        raise ValueError("No qubit with known errors in the device properties")
+    links = {}
+    for (q1, q2), link in properties["links"].items():
+        if link.get("CZErrRate") is not None and q1 in bits and q2 in bits:
+            links[(q1, q2)] = links[(q2, q1)] = link["CZErrRate"]
+    gates = get_standard_gate_name_mapping()
+    target = Target(num_qubits=max(properties["bits"]) + 1)
+    for name in basis_gates:
+        if gates[name].num_qubits == 1:
+            errors = {(q,): b["SingleQubitErrRate"] for q, b in bits.items()}
+        else:
+            errors = links  # type: ignore
+        target.add_instruction(
+            gates[name], {k: InstructionProperties(error=e) for k, e in errors.items()}
+        )
+    target.add_instruction(
+        Measure(),
+        {
+            (q,): InstructionProperties(
+                error=(b["ReadoutF0Err"] + b["ReadoutF1Err"]) / 2
+            )
+            for q, b in bits.items()
+        },
+    )
+    target.add_instruction(Reset(), {(q,): None for q in bits})
+    return target

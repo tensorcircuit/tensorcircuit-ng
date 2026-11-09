@@ -198,12 +198,7 @@ def batch_expectation_ps(
 
     if compile_func is None:
         try:
-            coupling_map = device.topology()
-            compile_func = DefaultCompiler(
-                {
-                    "coupling_map": coupling_map,
-                }
-            )
+            properties = device.list_properties()
         except (AttributeError, ValueError):
             logger.warning(
                 "device topology unavailable for %r, falling back to "
@@ -211,6 +206,18 @@ def batch_expectation_ps(
                 getattr(device, "name", device),
             )
             compile_func = DefaultCompiler()
+        else:
+            if "bits" in properties and "links" in properties:
+                try:
+                    compile_func = DefaultCompiler(properties=properties)
+                except ValueError:
+                    logger.warning(
+                        "no qubit with known errors on %r, compiling on the "
+                        "topology only",
+                        getattr(device, "name", device),
+                    )
+            if compile_func is None:
+                compile_func = DefaultCompiler({"coupling_map": device.topology()})
     c1, info = compile_func(c)  # type: ignore
     if not info.get("logical_physical_mapping", None):
         info["logical_physical_mapping"] = {i: i for i in range(c._nqubits)}

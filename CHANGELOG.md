@@ -26,6 +26,8 @@
 
 - Add the LQCloud (逻辑比特) cloud provider `lqcloud`, compiling circuits locally to native gates, with native batch submission and `batch_expectation_ps`; install the `lqcloud` SDK separately.
 
+- Add noise aware layout by default for the `lqcloud` provider and `batch_expectation_ps`, via `compiler.qiskit_compiler.properties_to_target` and `DefaultCompiler(properties=...)`; qubits and couplers of unknown errors are not used.
+
 - Add the opt-in local cloud task store `tc.cloud.store.TaskStore`, recording each submission from intent to result and recovering uncertain submissions by `bind`.
 
 - Add provider-independent cloud metadata in `task.details()["tensorcircuit"]`, including the `positional_logical_mapping` to physical qubits for `ReadoutMit`.

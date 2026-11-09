@@ -543,7 +543,13 @@ def test_tencent_batch_expectation_ps_contract(
             "qubits": 2,
             "links": [{"A": 0, "B": 1, "CZErrRate": 0.01}],
             "bits": [
-                {"Qubit": q, "T1": 30.0, "ReadoutF0Err": e0, "ReadoutF1Err": e1}
+                {
+                    "Qubit": q,
+                    "T1": 30.0,
+                    "SingleQubitErrRate": 0.001,
+                    "ReadoutF0Err": e0,
+                    "ReadoutF1Err": e1,
+                }
                 for q, (e0, e1) in errors.items()
             ],
         }

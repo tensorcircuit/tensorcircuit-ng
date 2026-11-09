@@ -14,7 +14,7 @@ from .abstraction import Device, sep, Task
 from .config import lqcloud_base_url
 from .utils import SubmissionRejected, SubmissionUnknown
 from ..abstractcircuit import AbstractCircuit
-from ..compiler.qiskit_compiler import qiskit_compile
+from ..compiler.qiskit_compiler import qiskit_compile, properties_to_target
 from ..utils import is_sequence
 
 logger = logging.getLogger(__name__)
@@ -290,6 +290,7 @@ def compile_circuit(
     shots: int = 1024,
     compiling: bool = True,
     compiled_options: Optional[Dict[str, Any]] = None,
+    noise_aware: bool = True,
 ) -> Tuple[Dict[int, int], Dict[str, Any]]:
     """
     Compile the circuit locally into native gates on the physical qubits of the
@@ -312,6 +313,13 @@ def compile_circuit(
     :param compiled_options: ``qiskit.transpile`` options overriding the defaults,
         e.g. ``initial_layout``, defaults to None
     :type compiled_options: Optional[Dict[str, Any]], optional
+    :param noise_aware: whether choose the layout by the error rates of the device
+        when compiling, with the qubits and couplers of unknown errors unused, see
+        :py:func:`tensorcircuit.compiler.qiskit_compiler.properties_to_target`,
+        unless ``coupling_map`` or ``basis_gates`` is in ``compiled_options``;
+        the errors of the qubits and couplers used are kept in the compilation,
+        defaults to True
+    :type noise_aware: bool, optional
     :return: the positional_logical_mapping from the classical bit to the physical
         qubit, and the compilation record, i.e. the program given to the SDK, which
         still adds e.g. the initial resets and the readout pulses before sending
@@ -323,12 +331,18 @@ def compile_circuit(
     windows = _readout_windows(circuit)
     records = windows[-1]["records"]
     options: Dict[str, Any] = {"basis_gates": list(properties["native_gates"])}
+    # the coupling_map or basis_gates given by the user is kept
+    noise_aware = noise_aware and not {"coupling_map", "basis_gates"} & set(
+        compiled_options or {}
+    )
     if compiling:
-        options.update(
-            coupling_map=[list(link) for link in properties["links"]],
-            optimization_level=2,
-            seed_transpiler=default_seed,
-        )
+        options.update(optimization_level=2, seed_transpiler=default_seed)
+        if noise_aware:
+            options["target"] = properties_to_target(
+                properties, options.pop("basis_gates")
+            )
+        else:
+            options["coupling_map"] = [list(link) for link in properties["links"]]
     else:
         # without a coupling map, level 1 keeps the qubits and merges single qubit gates
         options["optimization_level"] = 1
@@ -357,11 +371,29 @@ def compile_circuit(
             "name": "qiskit",
             "version": qiskit.__version__,
             "compiling": compiling,
-            "options": options,
+            "noise_aware": compiling and noise_aware,
+            # the target is built from the properties, see ``calibration``
+            "options": {k: v for k, v in options.items() if k != "target"},
         },
         "calibration_time": properties["calibration_time"],
+        "calibration": _calibration(properties, instructions, physical_qubits),
     }
     return _mapping(compilation), compilation
+
+
+def _calibration(
+    properties: Dict[str, Any], instructions: List[Dict[str, Any]], qubits: List[int]
+) -> Dict[str, Any]:
+    # the errors of the qubits and couplers used, by which the layout is chosen
+    couplers = sorted(
+        {tuple(sorted(op["qubits"])) for op in instructions if op["name"] == "cz"}
+    )
+    return {
+        "bits": [dict(properties["bits"].get(q) or {}, qubit=q) for q in qubits],
+        "links": [
+            dict(properties["links"].get(c) or {}, qubits=list(c)) for c in couplers
+        ],
+    }
 
 
 def _mapping(compilation: Dict[str, Any]) -> Dict[int, int]:
@@ -385,6 +417,7 @@ def prepare_task(
     compiled_options: Optional[
         Union[Dict[str, Any], Sequence[Optional[Dict[str, Any]]]]
     ] = None,
+    noise_aware: bool = True,
     **kws: Any,
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """
@@ -407,6 +440,9 @@ def prepare_task(
     :param compiled_options: ``qiskit.transpile`` options overriding the defaults,
         or one per circuit, defaults to None
     :type compiled_options: Optional[Union[Dict[str, Any], Sequence[Optional[Dict[str, Any]]]]], optional
+    :param noise_aware: whether choose the layout by the error rates of the device,
+        see :py:func:`compile_circuit`, defaults to True
+    :type noise_aware: bool, optional
     :param kws: options of other providers, ignored
     :type kws: Any
     :return: the keyword arguments of :py:func:`submit_task` with the compilation
@@ -421,7 +457,7 @@ def prepare_task(
     circuits = list(circuit) if is_sequence(circuit) else [circuit]  # type: ignore
     properties = list_properties(device, token)
     compilations = [
-        compile_circuit(c, properties, s, compiling, o)[1]
+        compile_circuit(c, properties, s, compiling, o, noise_aware)[1]
         for c, s, o in zip(
             circuits,
             _per_circuit(shots, len(circuits), "shots"),
@@ -537,13 +573,15 @@ def submit_task(
         Union[Dict[str, Any], Sequence[Optional[Dict[str, Any]]]]
     ] = None,
     compilation: Optional[Union[Dict[str, Any], Sequence[Dict[str, Any]]]] = None,
+    noise_aware: bool = True,
     **kws: Any,
 ) -> Union[Task, List[Task]]:
     """
     Submit a circuit to LQCloud. The circuit is compiled locally with qiskit into
     the native gates ``rz``, ``xhalf`` (i.e. ``sx``), ``x`` and ``cz`` on the
     physical qubits, which LQCloud runs without further compiling, see
-    :py:func:`compile_circuit`. The compilation is kept in
+    :py:func:`compile_circuit`. By default the layout is chosen by the error rates
+    of the device. The compilation is kept in
     ``task.prepared["compilation"]``, and the request body as sent to the server,
     i.e. with the rewrites by the SDK such as the readout pulses before
     measurements, in ``task.prepared["payload"]``, both also in the task store.
@@ -581,6 +619,9 @@ def submit_task(
     :param compilation: a compilation to send directly, or a list for a batch,
         e.g. by :py:func:`prepare_task`, defaults to None
     :type compilation: Optional[Union[Dict[str, Any], Sequence[Dict[str, Any]]]], optional
+    :param noise_aware: whether choose the layout by the error rates of the device,
+        see :py:func:`compile_circuit`, defaults to True
+    :type noise_aware: bool, optional
     :param kws: options of other providers, ignored
     :type kws: Any
     :return: the task, or a list of tasks for a batch
@@ -592,7 +633,14 @@ def submit_task(
     # tasks are free, and the charged cost is in ``details()["lqcloud"]``
     if compilation is None:
         send_kws, _ = prepare_task(
-            device, token, circuit, None, shots, compiling, compiled_options
+            device,
+            token,
+            circuit,
+            None,
+            shots,
+            compiling,
+            compiled_options,
+            noise_aware,
         )
         compilation = send_kws["compilation"]
     batch = is_sequence(compilation)

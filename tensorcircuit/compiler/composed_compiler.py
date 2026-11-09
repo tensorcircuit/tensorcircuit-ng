@@ -6,7 +6,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from ..utils import is_sequence
 from ..abstractcircuit import AbstractCircuit
-from .qiskit_compiler import qiskit_compile
+from .qiskit_compiler import qiskit_compile, properties_to_target
 from .simple_compiler import simple_compile
 
 
@@ -50,7 +50,11 @@ class Compiler:
 
 
 class DefaultCompiler(Compiler):
-    def __init__(self, qiskit_compiled_options: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        qiskit_compiled_options: Optional[Dict[str, Any]] = None,
+        properties: Optional[Dict[str, Any]] = None,
+    ):
         """
         A fallback choice to compile circuit running on tencent quantum cloud with rz as native gate
 
@@ -60,12 +64,24 @@ class DefaultCompiler(Compiler):
             where d is a device object,
             defaults to None, i.e. no qubit mapping is applied
         :type qiskit_compiled_options: Optional[Dict[str, Any]], optional
+        :param properties: the device properties by ``d.list_properties()``, if given,
+            the circuit is placed on the qubits with the lowest errors, see
+            :py:func:`tensorcircuit.compiler.qiskit_compiler.properties_to_target`,
+            unless ``coupling_map`` or ``basis_gates`` is given in
+            ``qiskit_compiled_options``, defaults to None
+        :type properties: Optional[Dict[str, Any]], optional
         """
-        compiled_options = {
+        compiled_options: Dict[str, Any] = {
             "optimization_level": 3,
             "basis_gates": ["u3", "h", "cx", "cz"],
         }
         # rz target is bad for qiskit
+        if properties is not None and not {"coupling_map", "basis_gates"} & set(
+            qiskit_compiled_options or {}
+        ):
+            compiled_options["target"] = properties_to_target(
+                properties, compiled_options.pop("basis_gates")
+            )
         if qiskit_compiled_options:
             compiled_options.update(qiskit_compiled_options)
         super().__init__(
