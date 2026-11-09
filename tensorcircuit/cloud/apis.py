@@ -62,8 +62,8 @@ def _provider_api(provider: Provider, name: str) -> Callable[..., Any]:
     ``get_task_details(task, device, token, prettify)``,
     ``resubmit_task(task, token)``, ``remove_task(task, token)``,
     ``list_tasks(device, token, **filter_kws)``, and optionally
-    ``prepare_task(device, token, **task_kws)``, see :py:func:`submit_task`, and
-    ``task_metadata(details, prepared)``, see :py:func:`get_task_metadata`.
+    ``prepare_task(device, token, **task_kws)`` and
+    ``task_metadata(details, prepared)``, see ``docs/source/cloud_provider.md``.
     """
     f = getattr(_provider_module(provider), name, None)
     if f is None:

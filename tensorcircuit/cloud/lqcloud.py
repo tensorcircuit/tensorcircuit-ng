@@ -553,6 +553,9 @@ def submit_task(
     :return: the task
     :rtype: Task
     """
+    # billing by the LQCloud docs for SDK 0.5.1: (¥5 + ¥0.005 × shots) × multiplier
+    # per task, where the multiplier depends on the device and the subscription;
+    # failed tasks are free, and the charged cost is in ``details()["lqcloud"]``
     _check_options(kws)
     if compilation is None:
         _, (prepared,) = prepare_task(
