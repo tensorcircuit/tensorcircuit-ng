@@ -30,6 +30,8 @@
 
 - Add `Circuit.sample_measurements` and `DMCircuit.sample_measurements` for the records of all measurement instructions. `sample_detector`, `detector_probabilities` and `sample_measurements` support gates, noise and measurements after a `measure_instruction` without reset, the measured qubit staying in the measured state. Measurement records follow the order of the measurement instructions in all sampling modes, not the classical bits `record_index` from `from_qiskit`.
 
+- Add the readout flip probability `p` of `measure_instruction` and `mr_instruction` in detector and measurement sampling, flipping only the record; `stim2tc` keeps the flip probabilities of stim measurements, e.g. `M(0.01)`, which were dropped.
+
 - Add the opt-in local cloud task store `tc.cloud.store.TaskStore`, recording each submission from intent to result and recovering uncertain submissions by `bind`.
 
 - Add provider-independent cloud metadata in `task.details()["tensorcircuit"]`, including the `positional_logical_mapping` to physical qubits for `ReadoutMit`.
@@ -53,6 +55,8 @@
 ### Fixed
 
 - `qiskit_compile` keeps the `inputs` state.
+
+- `Circuit.detector_probabilities` and detector sampling with `allow_state=True` keep the `inputs` state when the circuit has mid-circuit or repeated measurements, resets, noise or readout flips.
 
 - `Circuit.to_json` / `from_json` keep noise channels, diagonal and custom-named gates, measure / reset / barrier instructions and the circuit size; the JSON layout changes accordingly.
 

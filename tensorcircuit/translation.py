@@ -929,7 +929,7 @@ def stim2tc(
         # Measurement & Reset (Z-basis)
         if name in ["M", "MEASURE", "MZ"]:
             for q in targets:
-                c.measure_instruction(q)
+                c.measure_instruction(q, p=args[0] if args else 0.0)
             continue
         if name in ["R", "RZ"]:
             for q in targets:
@@ -937,7 +937,7 @@ def stim2tc(
             continue
         if name in ["MR", "MRZ"]:
             for q in targets:
-                c.measure_instruction(q)
+                c.measure_instruction(q, p=args[0] if args else 0.0)
                 c.reset_instruction(q)
             continue
 
@@ -945,7 +945,7 @@ def stim2tc(
         if name == "MX":
             for q in targets:
                 c.h(q)
-                c.measure_instruction(q)
+                c.measure_instruction(q, p=args[0] if args else 0.0)
                 c.h(q)
             continue
         if name == "RX":
@@ -957,7 +957,7 @@ def stim2tc(
         if name == "MRX":
             for q in targets:
                 c.h(q)
-                c.measure_instruction(q)
+                c.measure_instruction(q, p=args[0] if args else 0.0)
                 c.reset_instruction(q)
                 c.h(q)
             continue
@@ -967,7 +967,7 @@ def stim2tc(
             for q in targets:
                 c.sdg(q)
                 c.h(q)
-                c.measure_instruction(q)
+                c.measure_instruction(q, p=args[0] if args else 0.0)
                 c.h(q)
                 c.s(q)
             continue
@@ -983,7 +983,7 @@ def stim2tc(
             for q in targets:
                 c.sdg(q)
                 c.h(q)
-                c.measure_instruction(q)
+                c.measure_instruction(q, p=args[0] if args else 0.0)
                 c.reset_instruction(q)
                 c.h(q)
                 c.s(q)

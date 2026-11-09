@@ -192,7 +192,7 @@ class Circuit(BaseCircuit):
     def _new_detector_work_circuit(self) -> BaseCircuit:
         from .densitymatrix import DMCircuit2
 
-        return DMCircuit2(self._nqubits)
+        return DMCircuit2(**self.circuit_param)
 
     def mid_measurement(self, index: int, keep: int = 0) -> Tensor:
         """

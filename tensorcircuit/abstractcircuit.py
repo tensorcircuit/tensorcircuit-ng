@@ -837,12 +837,15 @@ class AbstractCircuit:
             summary[d["name"]] = summary.get(d["name"], 0) + 1
         return summary
 
-    def measure_instruction(self, *index: int) -> None:
+    def measure_instruction(self, *index: int, p: float = 0.0) -> None:
         """
         add a measurement instruction flag, no effect on numerical simulation
 
         :param index: the corresponding qubits
         :type index: int
+        :param p: the probability to flip the recorded outcome in detector and measurement
+            sampling, i.e. the readout error, the measured qubit is not affected, defaults to 0.0
+        :type p: float, optional
         """
         l = len(self._qir)
         if not hasattr(self, "_measure_counter"):
@@ -856,6 +859,8 @@ class AbstractCircuit:
                 "pos": l,
                 "record_index": self._measure_counter,
             }
+            if p:
+                d["parameters"] = {"p": p}
             self._measure_counter += 1
             self._extra_qir.append(d)
 
@@ -914,8 +919,11 @@ class AbstractCircuit:
 
         :param q: the corresponding qubit
         :type q: int
+        :param p: the probability to flip the recorded outcome, see :py:meth:`measure_instruction`,
+            defaults to 0.0
+        :type p: float, optional
         """
-        self.measure_instruction(q)
+        self.measure_instruction(q, p=p)
         self.reset_instruction(q)
 
     def depolarizing_instruction(

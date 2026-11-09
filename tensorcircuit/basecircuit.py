@@ -660,19 +660,24 @@ class BaseCircuit(AbstractCircuit):
             "PAULI",
         ]
 
+    @staticmethod
+    def _measure_flip(d: Dict[str, Any]) -> float:
+        return float(d.get("parameters", {}).get("p", d.get("p", 0.0)))
+
     def _count_detector_random_events(
         self, merged_qir: Sequence[Dict[str, Any]]
     ) -> int:
         c = 0
         for d in merged_qir:
+            name = str(d.get("name", ""))
             if d.get("is_channel", False):
-                if self._is_random_instruction_name(str(d.get("name", ""))):
+                if self._is_random_instruction_name(name):
                     c += 1
                 continue
-            if d.get("instruction", False) and self._is_random_instruction_name(
-                str(d.get("name", ""))
-            ):
+            if d.get("instruction", False) and self._is_random_instruction_name(name):
                 c += 1
+                if self._is_measure_instruction_name(name) and self._measure_flip(d):
+                    c += 1
         return c
 
     def _resolve_detectors(
@@ -829,13 +834,20 @@ class BaseCircuit(AbstractCircuit):
         def on_gate(d: Dict[str, Any]) -> None:
             self._apply_qir(c, [d], allow_channel=True)  # type: ignore[arg-type]
 
-        def on_measure(_: Dict[str, Any], q: int) -> None:
-            m = backend.cast(c.cond_measurement(q, status=next_status()), "int32")
+        def record(d: Dict[str, Any], m: Tensor) -> None:
+            p = self._measure_flip(d)
+            if p:
+                flip = backend.cast(next_status() < p, "int32")  # type: ignore
+                m = m + flip - 2 * m * flip
             records.append(m)
 
-        def on_mr(_: Dict[str, Any], q: int) -> None:
+        def on_measure(d: Dict[str, Any], q: int) -> None:
             m = backend.cast(c.cond_measurement(q, status=next_status()), "int32")
-            records.append(m)
+            record(d, m)
+
+        def on_mr(d: Dict[str, Any], q: int) -> None:
+            m = backend.cast(c.cond_measurement(q, status=next_status()), "int32")
+            record(d, m)
             c.conditional_gate(m, [gates.i(), gates.x()], q)  # type: ignore
 
         def on_reset(_: Dict[str, Any], q: int) -> None:
@@ -1019,6 +1031,17 @@ class BaseCircuit(AbstractCircuit):
         tracev = np.array([1.0, 1.0], dtype=npdtype)
         zero = np.array([1.0, 0.0], dtype=npdtype)
 
+        def add_record(d: Dict[str, Any], edge: tn.Edge) -> None:
+            nonlocal measured_so_far
+            p = self._measure_flip(d)
+            if p:
+                flip = tn.Node(np.array([[1 - p, p], [p, 1 - p]], dtype=npdtype))
+                work._nodes.append(flip)
+                edge ^ flip[0]
+                edge = flip[1]
+            record_edges[measured_so_far] = edge
+            measured_so_far += 1
+
         for d in merged_qir:
             name = str(d.get("name", "")).upper()
             if not d.get("instruction", False):
@@ -1034,8 +1057,7 @@ class BaseCircuit(AbstractCircuit):
                 qcopy[1] ^ work._front[q + n]
                 work._front[q] = qcopy[2]
                 work._front[q + n] = qcopy[3]
-                record_edges[measured_so_far] = qcopy[4]
-                measured_so_far += 1
+                add_record(d, qcopy[4])
                 continue
 
             if name == "MR":
@@ -1044,8 +1066,7 @@ class BaseCircuit(AbstractCircuit):
                 work._nodes.append(qcopy)
                 qcopy[0] ^ work._front[q]
                 qcopy[1] ^ work._front[q + n]
-                record_edges[measured_so_far] = qcopy[2]
-                measured_so_far += 1
+                add_record(d, qcopy[2])
                 kn = tn.Node(zero)
                 bn = tn.Node(zero)
                 work._nodes.extend([kn, bn])
@@ -1145,7 +1166,11 @@ class BaseCircuit(AbstractCircuit):
                 continue
             if name in ["MEASURE", "M", "MZ"]:
                 q = int(d["index"][0])
-                if int(d.get("pos", len(self._qir))) < len(self._qir) or q in measured:
+                if (
+                    int(d.get("pos", len(self._qir))) < len(self._qir)
+                    or q in measured
+                    or self._measure_flip(d)
+                ):
                     return False
                 measured.add(q)
                 continue
@@ -1179,7 +1204,8 @@ class BaseCircuit(AbstractCircuit):
             If allow_state is True, shape should be [shots], [shots, 1] or [shots, 2]
             (see ``backend.probability_sample`` for the two-number form);
             if allow_state is False, shape should be [shots, num_random_events] for ``Circuit``,
-            with one number for each measurement, reset and Pauli noise in order,
+            with one number for each measurement, reset and Pauli noise in order
+            and one more after each measurement with a flip probability,
             and [shots, num_detectors] for ``DMCircuit``.
         :type status: Optional[Tensor], optional
         :param seed: Random seed for sampling, defaults to None.

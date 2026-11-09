@@ -18,6 +18,7 @@ Use this file for noise APIs, detector sampling, and stabilizer/QEC workflows.
 - In dense detector tensor-network semantics, `measure_instruction` is a 5-leg copy tensor (ket/bra in, ket/bra out, record): the line is dephased and stays open, so later gates, noise and measurements act on the measured state without `reset_instruction`; the trajectory path collapses with `cond_measurement` and goes on likewise.
 - `detector_instruction(...)` and `observable_instruction(...)` index the absolute measurement record with zero-based positions, not Stim-style negative `rec(...)` offsets.
 - In dense simulation, measurement records are numbered by the order of the measurement instructions in every sampling path; `record_index` is the classical bit for export (`to_qiskit`, cloud results) and may be permuted or sparse after `from_qiskit`, so never use it as the simulator record id.
+- `measure_instruction(..., p=...)` is a readout flip of the record only (a 2x2 confusion node on the record leg, or an extra status draw right after the measurement in trajectories). With measure-without-reset semantics an X error before the measurement is not equivalent, since the flipped state keeps evolving.
 - Use `sample_measurements` for raw readout and `sample_detectors` when the QIR includes detector or observable annotations.
 
 ## Post-selection workflow

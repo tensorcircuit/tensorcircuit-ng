@@ -119,6 +119,47 @@ def test_detector_stim_depolarize2_surface_code(npb):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("cls", [tc.Circuit, tc.DMCircuit])
+def test_measurement_flip_only_affects_record(backend, cls):
+    c = cls(1)
+    c.x(0)
+    c.measure_instruction(0, p=0.2)
+    c.measure_instruction(0)
+    c.detector_instruction([0])
+    c.detector_instruction([1])
+    p = tc.backend.numpy(c.detector_probabilities())
+    np.testing.assert_allclose(p, [[0.0, 0.2], [0.0, 0.8]], atol=1e-5)
+    if cls is tc.Circuit:
+        # the flip consumes the status right after its measurement
+        status = np.array([[0.5, 0.1, 0.5], [0.5, 0.5, 0.5]], dtype=np.float32)
+        samples = c.sample_measurements(shots=2, status=status)
+        np.testing.assert_array_equal(
+            tc.backend.numpy(samples), [[False, True], [True, True]]
+        )
+
+
+def test_stim_measurement_flip(npb):
+    stim = pytest.importorskip("stim")
+    c = tc.translation.stim2tc(stim.Circuit("M(0.2) 0\nDETECTOR rec[-1]"))
+    np.testing.assert_allclose(c.detector_probabilities(), [0.8, 0.2], atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+@pytest.mark.parametrize("cls", [tc.Circuit, tc.DMCircuit])
+@pytest.mark.parametrize("noise", ["flip", "channel"])
+def test_detector_tn_keeps_inputs(backend, cls, noise):
+    c = cls(1, inputs=np.array([0.0, 1.0]))
+    if noise == "flip":
+        c.measure_instruction(0, p=0.2)
+    else:
+        c.depolarizing(0, px=0.2, py=0.0, pz=0.0)
+        c.measure_instruction(0)
+    c.detector_instruction([0])
+    p = tc.backend.numpy(c.detector_probabilities())
+    np.testing.assert_allclose(p, [0.2, 0.8], atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_detector_invalid_lookback_raises(backend):
     c = tc.Circuit(1)
     c.measure_instruction(0)
