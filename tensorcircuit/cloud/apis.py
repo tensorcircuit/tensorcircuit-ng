@@ -23,9 +23,14 @@ from .store import (
     store_errors,
     try_store,
 )
-from .utils import unknown_submission_errors
 from ..abstractcircuit import AbstractCircuit
 from ..utils import is_sequence
+
+try:
+    from .utils import unknown_submission_errors
+except ImportError:
+    # without requests, no remote provider can submit tasks
+    unknown_submission_errors = ()  # type: ignore
 
 logger = logging.getLogger(__name__)
 
