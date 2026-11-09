@@ -6,8 +6,7 @@ Use this file for public-feature integration, examples, tests, and validation de
 
 - `set_backend`, `set_dtype`, and `set_contractor` mutate package-wide runtime state. Any temporary switch inside a decorator, wrapper, or helper must restore the previous state on every exit path, including exceptions.
 - Validate unsupported structured inputs before tracing or JIT so invalid patterns fail before a compiled specialization is cached.
-- For type-checking fixes, prefer the smallest behavior-preserving change. A targeted `# type: ignore[...]` or `Any` is preferable when a more elaborate annotation would distort the runtime design.
-- Do not use `typing.cast` to satisfy mypy. When the runtime logic is correct and the only issue is an imprecise or invariant type annotation, use `# type: ignore[<code>]` on the offending line instead. `cast` is considered an awkward, code-rotting workaround here; `# type: ignore` makes the suppression explicit and local. Only revisit the annotation itself if the type is genuinely wrong.
+- For type-checking fixes, prefer the smallest behavior-preserving change. A targeted `# type: ignore[<code>]` or `Any` is preferable when a more elaborate annotation would distort the runtime design.
 - At thin third-party wrapper boundaries, handle known method-versus-attribute compatibility differences explicitly rather than spreading version checks through core logic.
 
 ## Public features and optional integrations
@@ -36,5 +35,4 @@ Use this file for public-feature integration, examples, tests, and validation de
 - For a differentiable feature, cover the core kernel, a correctness comparison against an existing reference path, and its AD behavior.
 - Compare sparse results numerically rather than depending on a particular sparse container layout.
 - Wrapper smoke tests should assert behavior against the underlying backend API; never suppress adapter failures with `except Exception: pass`.
-- Match algorithms, precision, and settings before comparing external libraries, and verify numerical outputs before interpreting timings.
 - Sanity-check automation should favor high-confidence, repo-aware rules: scan git-tracked Python, separate test bootstrap conventions from library import hygiene, and reserve subjective duplication or comment-quality judgments for review.

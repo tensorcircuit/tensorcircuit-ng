@@ -4,8 +4,9 @@ This directory stores short, durable notes for future development. Read this ind
 
 ## What belongs here
 
+- This memory serves people developing on or using TensorCircuit: development conventions, interface contracts, and the basic performance choices needed for a reasonably efficient implementation. A useful test: without this note, would a general developer fail to reach a basic efficient solution or find the software hard to use?
 - Keep repo-specific lessons that are easy to forget and expensive to rediscover.
-- Prefer stable design rules, API invariants, and recurring backend pitfalls over one-off debugging logs.
+- Prefer stable design rules, API invariants, and recurring backend pitfalls over one-off debugging logs. Leave out machine-specific findings, measured numbers, and extreme tuning.
 - Update an existing topic file when possible. Create a new file only if the lesson does not fit the current taxonomy.
 
 ## Memory map
