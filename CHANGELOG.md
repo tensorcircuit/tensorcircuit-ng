@@ -76,6 +76,8 @@
 
 - Hide proxy credentials in cloud debug logs; Tencent `resubmit_task` returns a task bound to its device.
 
+- Fix lost fields when concurrent `TaskStore.update` calls modify the same task. Reads and exports use matching index and record data, and an invalid local task ID no longer leaves a batch partially saved or deleted.
+
 - Result bits follow the `record_index` (classical bit) of measure instructions instead of their order, in `get_positional_logical_mapping`, `qiskit_compile` and the qiskit / OpenQASM translation.
 
 - Fix MPS truncation fidelity estimates, per-gate split overrides and `max_truncation_err`, and underflow in MPS measurement.

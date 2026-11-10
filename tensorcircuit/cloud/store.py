@@ -2,7 +2,8 @@
 Local task store for cloud submissions: a SQLite index with gzip JSON records
 """
 
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Union
+from contextlib import closing, contextmanager
 from datetime import datetime
 import gzip
 import hashlib
@@ -139,6 +140,8 @@ class TaskStore:
     """
     Local record of cloud tasks in a directory with a SQLite index ``tasks.sqlite``
     and one gzip JSON record ``records/<local_id>.json.gz`` per submitted circuit.
+    Writers sharing a store directory are serialized across threads and processes.
+    Concurrent updates to different fields of one record preserve both values.
     Records are never deleted automatically, except the submission intents of
     circuits certainly not submitted.
 
@@ -173,16 +176,31 @@ class TaskStore:
         conn.executescript(_schema)
         return conn
 
-    def _query(self, sql: str, params: Sequence[Any] = ()) -> List[Dict[str, Any]]:
+    @contextmanager
+    def _writer(self) -> Iterator[None]:
+        # The pending index entry must survive a crash during the gzip write.
+        # Lock separately so that committing it does not admit a second writer.
+        os.makedirs(self.path, mode=0o700, exist_ok=True)
+        with closing(
+            sqlite3.connect(os.path.join(self.path, "writer.lock"), timeout=30)
+        ) as lock:
+            lock.execute("BEGIN IMMEDIATE")
+            yield
+
+    def _query(
+        self, sql: str, params: Sequence[Any], *, bodies: bool
+    ) -> Iterator[Dict[str, Any]]:
         if not os.path.exists(self.index_path):
-            return []
-        conn = self._connect()
-        try:
-            return [dict(r) for r in conn.execute(sql, params).fetchall()]
-        finally:
-            conn.close()
+            return
+        with closing(self._connect()) as conn:
+            conn.execute("BEGIN")
+            for row in conn.execute(sql, params):
+                record = dict(row)
+                yield self._load(record) if bodies else record
 
     def _body_path(self, local_id: str) -> str:
+        if not local_id or os.path.basename(local_id) != local_id or "\x00" in local_id:
+            raise ValueError("A local task id must be a single filename component")
         return os.path.join(self.records_path, local_id + ".json.gz")
 
     def _write_body(self, record: Dict[str, Any]) -> str:
@@ -219,10 +237,16 @@ class TaskStore:
         :param records: the records
         :type records: Sequence[Dict[str, Any]]
         """
+        with self._writer():
+            self._save(records)
+
+    def _save(self, records: Sequence[Dict[str, Any]]) -> None:
         sql = "INSERT OR REPLACE INTO tasks (%s) VALUES (%s)" % (
             ", ".join(_columns),
             ", ".join("?" for _ in _columns),
         )
+        for r in records:
+            self._body_path(r["local_id"])
         now = time.time()
         for r in records:
             r["updated_at"] = now
@@ -230,8 +254,9 @@ class TaskStore:
         try:
             with conn:
                 conn.executemany(sql, [self._row(r, "pending", None) for r in records])
-            shas = [self._write_body(r) for r in records]
             with conn:
+                conn.execute("BEGIN EXCLUSIVE")
+                shas = [self._write_body(r) for r in records]
                 conn.executemany(
                     sql,
                     [self._row(r, "complete", s) for r, s in zip(records, shas)],
@@ -248,15 +273,17 @@ class TaskStore:
         :param fields: the fields to update
         :type fields: Any
         """
-        rows = self._query("SELECT * FROM tasks WHERE local_id = ?", [local_id])
-        if not rows:
-            raise ValueError("No task record with local id %s" % local_id)
-        record = self._load(rows[0])
-        if record["integrity"] not in ["complete", "pending"]:
-            raise ValueError("Task record %s is %s" % (local_id, record["integrity"]))
-        record.pop("integrity")
-        record.update(fields)
-        self.save([record])
+        with self._writer():
+            record = self.get(local_id)
+            if record is None:
+                raise ValueError("No task record with local id %s" % local_id)
+            if record["integrity"] not in ["complete", "pending"]:
+                raise ValueError(
+                    "Task record %s is %s" % (local_id, record["integrity"])
+                )
+            record.pop("integrity")
+            record.update(fields)
+            self._save([record])
 
     def delete(self, local_ids: Sequence[str]) -> None:
         """
@@ -268,17 +295,15 @@ class TaskStore:
         """
         if not local_ids or not os.path.exists(self.index_path):
             return
-        conn = self._connect()
-        try:
-            with conn:
+        paths = [self._body_path(i) for i in local_ids]
+        with self._writer():
+            with closing(self._connect()) as conn, conn:
                 conn.executemany(
                     "DELETE FROM tasks WHERE local_id = ?", [[i] for i in local_ids]
                 )
-        finally:
-            conn.close()
-        for i in local_ids:
-            if os.path.exists(self._body_path(i)):
-                os.remove(self._body_path(i))
+            for path in paths:
+                if os.path.exists(path):
+                    os.remove(path)
 
     def bind(self, local_id: str, remote_id: str) -> Any:
         """
@@ -351,19 +376,19 @@ class TaskStore:
         :rtype: Optional[Dict[str, Any]]
         """
         if local_id is not None:
-            rows = self._query("SELECT * FROM tasks WHERE local_id = ?", [local_id])
+            sql = "SELECT * FROM tasks WHERE local_id = ?"
+            params = [local_id]
         elif remote_id is not None:
             sql = "SELECT * FROM tasks WHERE remote_id = ?"
             params = [remote_id]
             if provider is not None:
                 sql += " AND provider = ?"
                 params.append(provider)
-            rows = self._query(sql + " ORDER BY created_at DESC LIMIT 1", params)
+            sql += " ORDER BY created_at DESC LIMIT 1"
         else:
             raise ValueError("Either `local_id` or `remote_id` must be provided")
-        if not rows:
-            return None
-        return self._load(rows[0])
+        rows = list(self._query(sql, params, bodies=True))
+        return rows[0] if rows else None
 
     def find(
         self,
@@ -399,6 +424,32 @@ class TaskStore:
         :return: index entries, use :py:meth:`get` for the full records
         :rtype: List[Dict[str, Any]]
         """
+        return list(
+            self._find(
+                provider,
+                device,
+                state,
+                batch_id,
+                submission_status,
+                since,
+                until,
+                limit,
+            )
+        )
+
+    def _find(
+        self,
+        provider: Optional[str] = None,
+        device: Optional[str] = None,
+        state: Optional[str] = None,
+        batch_id: Optional[str] = None,
+        submission_status: Optional[str] = None,
+        since: Optional[Union[float, str, datetime]] = None,
+        until: Optional[Union[float, str, datetime]] = None,
+        limit: Optional[int] = None,
+        *,
+        bodies: bool = False,
+    ) -> Iterator[Dict[str, Any]]:
         if device is not None and "::" in device:
             provider, device = device.split("::", 1)
         conds: List[str] = []
@@ -426,7 +477,7 @@ class TaskStore:
         if limit is not None:
             sql += " LIMIT ?"
             params.append(int(limit))
-        return self._query(sql, params)
+        return self._query(sql, params, bodies=bodies)
 
     def task(self, local_id: str) -> Any:
         """
@@ -469,11 +520,13 @@ class TaskStore:
         :return: number of exported records
         :rtype: int
         """
-        rows = self.find(**filters)
+        records = self._find(bodies=True, **filters)
+        count = 0
         with gzip.open(os.fspath(path), "wt", encoding="utf-8") as f:
-            for row in rows:
-                f.write(_dumps(self._load(row)) + "\n")
-        return len(rows)
+            for record in records:
+                f.write(_dumps(record) + "\n")
+                count += 1
+        return count
 
 
 def make_records(

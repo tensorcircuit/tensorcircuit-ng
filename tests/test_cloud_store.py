@@ -3,6 +3,8 @@ import json
 import logging
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
 import pytest
 import numpy as np
@@ -183,6 +185,42 @@ def test_store_drops_tasks_certainly_not_submitted(task_store):
         apis.submit_task(device="local::nowhere", circuit=bell(), store=task_store)
     assert task_store.find() == []
     assert os.listdir(task_store.records_path) == []
+
+
+def test_store_validates_batch_ids_before_writing(task_store):
+    t = apis.submit_task(device="local::testing", circuit=bell(), store=task_store)
+    record = task_store.get(t.local_id)
+    first = dict(record, local_id="new", updated_at=0)
+    with pytest.raises(ValueError, match="single filename component"):
+        task_store.save([first, dict(record, local_id="batch/item")])
+    assert first["updated_at"] == 0
+    with pytest.raises(ValueError, match="single filename component"):
+        task_store.delete([t.local_id, "batch/item"])
+    assert task_store.get("new") is None
+    assert task_store.get(t.local_id)["integrity"] == "complete"
+
+
+def test_store_concurrent_updates(task_store):
+    (record,) = store.make_records("local", "testing", [{}], False)
+    task_store.save([record])
+    updates = {
+        "remote_id": "remote",
+        "state": "completed",
+        "details": {"shots": 8},
+        "parent_id": "parent",
+    }
+    start = Barrier(len(updates))
+
+    def update(item):
+        field, value = item
+        start.wait(timeout=10)
+        TaskStore(task_store.path).update(record["local_id"], **{field: value})
+
+    with ThreadPoolExecutor(max_workers=len(updates)) as pool:
+        list(pool.map(update, updates.items()))
+    saved = task_store.get(record["local_id"])
+    assert saved["integrity"] == "complete"
+    assert {field: saved[field] for field in updates} == updates
 
 
 def test_store_interrupted_and_corrupt_records(task_store, monkeypatch):
