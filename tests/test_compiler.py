@@ -208,6 +208,96 @@ def test_default_compiler_places_on_the_lowest_errors():
     assert sorted(info["logical_physical_mapping"].values()) == [0, 1]
 
 
+def _marginal(c):
+    # the distribution of the classical bits
+    mapping = c.get_positional_logical_mapping()
+    order = [mapping[i] for i in range(len(mapping))]
+    n = c._nqubits
+    p = np.real(tc.backend.numpy(c.probability())).reshape([2] * n)
+    p = p.sum(axis=tuple(q for q in range(n) if q not in order))
+    return p.transpose([sorted(order).index(q) for q in order]).reshape(-1)
+
+
+def _symbol_ansatz(cls, ps):
+    c = cls(4)
+    for i in range(4):
+        c.rx(i, theta=ps[i])
+    for i in range(3):
+        c.cnot(i, i + 1)
+    for i in range(4):
+        c.rz(i, theta=2 * ps[4 + i] + 0.3)
+        c.ry(i, theta=ps[i] - ps[4 + i])
+    c.cz(3, 0)
+    c.measure_instruction(2)
+    c.measure_instruction(0)
+    c.measure_instruction(3)
+    return c
+
+
+@pytest.mark.parametrize("compiler", ["qiskit", "default"])
+def test_compile_symbol_circuit_once(compiler):
+    pytest.importorskip("qiskit")
+    import sympy
+
+    from tensorcircuit.compiler.qiskit_compiler import (
+        properties_to_target,
+        qiskit_compile,
+    )
+
+    bit = {"SingleQubitErrRate": 1e-3, "ReadoutF0Err": 0.01, "ReadoutF1Err": 0.02}
+    links = {}
+    for a in range(7):
+        links[(a, a + 1)] = links[(a + 1, a)] = {"CZErrRate": 0.01}
+    properties = {
+        "bits": {q: dict(bit) for q in range(8)},
+        "links": links,
+        "native_gates": ["cz", "rz", "sx", "x"],
+    }
+    ts = sympy.symbols("t0:8", real=True)
+    sc = _symbol_ansatz(tc.SymbolCircuit, ts)
+    if compiler == "qiskit":
+        # the basis gates default to the native gates in the properties
+        target = properties_to_target(properties)
+        assert target.instruction_supported("sx", (0,))
+        options = {"target": target, "optimization_level": 2, "seed_transpiler": 0}
+        csc, info = qiskit_compile(sc, compiled_options=options)
+    else:
+        csc, info = tc.compiler.DefaultCompiler(
+            {"seed_transpiler": 0}, properties=properties
+        )(sc)
+    assert isinstance(csc, tc.SymbolCircuit) and csc._nqubits == 8
+    # the same symbols, with their assumptions
+    assert csc.free_symbols() and csc.free_symbols() <= set(ts)
+    assert info["positional_logical_mapping"] == {0: 2, 1: 0, 2: 3}
+    assert csc.get_positional_logical_mapping() == {
+        i: info["logical_physical_mapping"][q]
+        for i, q in info["positional_logical_mapping"].items()
+    }
+    for seed in range(2):
+        values = np.random.default_rng(seed).normal(size=8)
+        np.testing.assert_allclose(
+            _marginal(csc.to_circuit(dict(zip(ts, values)))),
+            _marginal(_symbol_ansatz(tc.Circuit, values)),
+            atol=1e-5,
+        )
+
+
+def test_simple_compile_symbol_circuit():
+    import sympy
+
+    a, b = sympy.symbols("a b")
+    sc = tc.SymbolCircuit(2)
+    sc.rz(0, theta=a)
+    sc.rz(0, theta=b)
+    sc.rx(1, theta=0.0)
+    sc.h(1)
+    sc.h(1)
+    sc.cx(0, 1)
+    c, _ = tc.compiler.simple_compiler.simple_compile(sc)
+    assert [d["name"] for d in c.to_qir()] == ["rz", "cnot"]
+    assert sympy.simplify(c.to_qir()[0]["parameters"]["theta"] - a - b) == 0
+
+
 def test_merge_same_axis_rotation():
     c = tc.Circuit(1)
     c.ry(0, theta=0.3)

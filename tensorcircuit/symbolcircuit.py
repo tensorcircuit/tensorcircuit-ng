@@ -35,6 +35,7 @@ from .cons import backend, contractor, dtypestr, runtime_backend, set_function_b
 from .gates import Gate
 from .quantum import QuOperator, _decode_basis_label
 from .symbolgates import SYM_SGATE_MAP, SYM_VGATE_MAP, sym_r
+from .translation import _merge_extra_qir
 from .utils import is_sequence
 from .simplify import _full_light_cone_cancel
 
@@ -706,7 +707,8 @@ class SymbolCircuit(Circuit):
         self, param_dict: Optional[Dict[sympy.Symbol, Any]] = None
     ) -> Circuit:
         """
-        Convert to a numerical :class:`Circuit` by binding symbolic parameters.
+        Convert to a numerical :class:`Circuit` by binding symbolic parameters,
+        keeping the instructions such as measurements.
 
         :param param_dict: Mapping from sympy Symbol to numerical value.
             Pass ``None`` (or ``{}``) only if the circuit has no free symbols.
@@ -735,6 +737,8 @@ class SymbolCircuit(Circuit):
             dim=None if self._d == 2 else self._d,
         )
         c.append_from_qir(self._bound_qir(param_dict))
+        c._extra_qir = [dict(d) for d in self._extra_qir]
+        c._measure_counter = self._measure_counter
         return c
 
     def _bind_value(
@@ -831,6 +835,8 @@ class SymbolCircuit(Circuit):
                 }
             bound_qir.append(bound_instruction)
         sc.append_from_qir(bound_qir)
+        sc._extra_qir = [dict(d) for d in self._extra_qir]
+        sc._measure_counter = self._measure_counter
         return sc
 
     # ── Qiskit translation ────────────────────────────────────────────────────
@@ -855,6 +861,13 @@ class SymbolCircuit(Circuit):
         passed at the gate level (e.g. ``rx(theta)``), not as matrix entries,
         so this is rarely an issue for standard circuit translation.
 
+        :param enable_instruction: whether also export the measurement, reset and
+            barrier instructions, each measurement to the classical bit of its
+            ``record_index``, defaults to False
+        :type enable_instruction: bool, optional
+        :param enable_inputs: whether also export the ``inputs`` state, which is
+            unsupported and raises if ``inputs`` is given, defaults to False
+        :type enable_inputs: bool, optional
         :return: Qiskit ``QuantumCircuit`` with symbolic Parameters.
         :rtype: qiskit.circuit.QuantumCircuit
         """
@@ -865,7 +878,25 @@ class SymbolCircuit(Circuit):
                 "Qiskit is required for to_qiskit(); install with `pip install qiskit`."
             ) from exc
 
-        qc = QuantumCircuit(self._nqubits)
+        if enable_inputs and self.inputs is not None:
+            raise NotImplementedError(
+                "SymbolCircuit.to_qiskit does not support the inputs state"
+            )
+        qir = self._qir
+        if enable_instruction and self._extra_qir:
+            qir = _merge_extra_qir(qir, self._extra_qir)
+            # the same classical register as ``translation.qir2qiskit``
+            records = [
+                d.get("record_index", i)
+                for i, d in enumerate(
+                    d for d in self._extra_qir if d["name"] == "measure"
+                )
+            ]
+            qc = QuantumCircuit(
+                self._nqubits, max([self._nqubits] + [r + 1 for r in records])
+            )
+        else:
+            qc = QuantumCircuit(self._nqubits)
         sym_to_qk: Dict[sympy.Symbol, Parameter] = {}
 
         def _to_qk(expr: Any) -> Any:
@@ -891,14 +922,22 @@ class SymbolCircuit(Circuit):
             val = complex(expr)
             return float(val.real) if val.imag == 0 else val
 
-        for d in self._qir:
+        measure_cbit = 0
+        for d in qir:
             if d.get("is_channel"):
                 continue
             gate_name = d["name"]
             index = list(d["index"])
             params = d.get("parameters", {})
 
-            if gate_name in (
+            if gate_name == "measure":
+                qc.measure(index[0], d.get("record_index", measure_cbit))
+                measure_cbit += 1
+            elif gate_name == "reset":
+                qc.reset(index[0])
+            elif gate_name == "barrier":
+                qc.barrier(*index)
+            elif gate_name in (
                 "i",
                 "x",
                 "y",

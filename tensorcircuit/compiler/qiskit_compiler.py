@@ -5,9 +5,16 @@ compiler interface via qiskit
 import re
 from typing import Any, Dict, Optional, Sequence
 
+import sympy
+
 from ..abstractcircuit import AbstractCircuit
 from ..circuit import Circuit
-from ..translation import qiskit_from_qasm_str_ordered_measure, get_qiskit_qasm
+from ..symbolcircuit import SymbolCircuit
+from ..translation import (
+    get_qiskit_qasm,
+    qiskit2tc,
+    qiskit_from_qasm_str_ordered_measure,
+)
 
 
 def _free_pi(s: str) -> str:
@@ -130,14 +137,29 @@ def qiskit_compile(
     remove_barriers: bool = True,
 ) -> Any:
     """
-    compile the circuit using ``qiskit.transpile`` method with some tricks and hacks
+    compile the circuit using ``qiskit.transpile`` method with some tricks and hacks.
 
-    :param circuit: circuit in ``tc.Circuit`` or ``qiskit.QuantumCircuit`` form,
-        where the ``inputs`` state of ``tc.Circuit`` is prepared by ``initialize``
+    A ``SymbolCircuit`` with free symbols is compiled with the symbols kept, into
+    a ``SymbolCircuit`` on the compiled qubits with the same symbols, so that it is
+    compiled once and bound by ``to_circuit`` for each set of parameters, e.g.
+    submitted with ``compiling=False`` to run on the same physical qubits.
+
+    :Example:
+
+    >>> p = tc.cloud.apis.get_device("lqcloud::<device>").list_properties()
+    >>> options = {"target": properties_to_target(p),
+    ...            "optimization_level": 2, "seed_transpiler": 42}
+    >>> csc, info = qiskit_compile(sc, compiled_options=options)
+    >>> c = csc.to_circuit({theta: 0.3})
+
+    :param circuit: circuit in ``tc.Circuit``, ``tc.SymbolCircuit`` or
+        ``qiskit.QuantumCircuit`` form, where the ``inputs`` state of ``tc.Circuit``
+        is prepared by ``initialize``
     :type circuit: Any
     :param info: info for qubit mappings, defaults to None
     :type info: Optional[Dict[str, Any]], optional
-    :param output: output circuit format, defaults to "tc"
+    :param output: output circuit format, defaults to "tc", i.e. a ``tc.Circuit``,
+        or a ``tc.SymbolCircuit`` if the compiled circuit has parameters
     :type output: str, optional
     :param compiled_options: ``qiskit.transpile`` options in a dict, defaults to None
     :type compiled_options: Optional[Dict[str, Any]], optional
@@ -153,6 +175,9 @@ def qiskit_compile(
     from qiskit.compiler import transpile
     from qiskit.transpiler.passes import RemoveBarriers
 
+    symbols = {}
+    if isinstance(circuit, SymbolCircuit):
+        symbols = {str(s): s for s in circuit.free_symbols()}
     if isinstance(circuit, AbstractCircuit):
         circuit = circuit.to_qiskit(enable_instruction=True, enable_inputs=True)
     elif isinstance(circuit, str):
@@ -173,6 +198,18 @@ def qiskit_compile(
 
     elif output.lower() in ["qiskit", "ibm"]:
         r0 = ncircuit
+
+    elif output.lower() in ["tc", "tensorcircuit"] and ncircuit.parameters:
+        # the parameters back to the symbols of the same names
+        r0 = qiskit2tc(
+            ncircuit,
+            ncircuit.num_qubits,
+            circuit_constructor=SymbolCircuit,
+            binding_params={
+                p: symbols.get(p.name, sympy.Symbol(p.name))
+                for p in ncircuit.parameters
+            },
+        )
 
     elif output.lower() in ["tc", "tensorcircuit"]:
         s = _free_pi(get_qiskit_qasm(ncircuit))
@@ -204,26 +241,31 @@ def qiskit_compile(
     return (r0, r1)
 
 
-def properties_to_target(properties: Dict[str, Any], basis_gates: Sequence[str]) -> Any:
+def properties_to_target(
+    properties: Dict[str, Any], basis_gates: Optional[Sequence[str]] = None
+) -> Any:
     """
     Build the qiskit ``Target`` of a device with the error rates in its properties,
     for the noise aware layout of ``qiskit.transpile`` at ``optimization_level``
     2 or 3, which places the circuit on the qubits of the highest estimated success
     probability. A qubit without its single qubit or readout errors, or a coupler
-    without its ``CZErrRate``, is left out and never used.
+    without its ``CZErrRate``, is left out and never used. The layout is the best
+    one only for a circuit placed without routing; when SWAPs are needed, the
+    qubits are chosen by the routing and depend on ``seed_transpiler``.
 
     :Example:
 
     >>> d = tc.cloud.apis.get_device("lqcloud::QZ03")
-    >>> target = properties_to_target(d.list_properties(), ["cz", "rz", "sx", "x"])
+    >>> target = properties_to_target(d.list_properties())
     >>> qiskit_compile(c, compiled_options={"target": target, "optimization_level": 2})
 
     :param properties: the device properties by ``list_properties``, with the
         standardized ``bits`` and ``links``
     :type properties: Dict[str, Any]
     :param basis_gates: qiskit names of the one and two qubit gates of the target,
-        each two qubit gate with the ``CZErrRate`` of the coupler
-    :type basis_gates: Sequence[str]
+        each two qubit gate with the ``CZErrRate`` of the coupler, defaults to None,
+        i.e. the ``native_gates`` of the properties
+    :type basis_gates: Optional[Sequence[str]], optional
     :return: the qiskit ``Target``, also supporting measure and reset
     :rtype: Any
     """
@@ -231,6 +273,8 @@ def properties_to_target(properties: Dict[str, Any], basis_gates: Sequence[str])
     from qiskit.circuit.library.standard_gates import get_standard_gate_name_mapping
     from qiskit.transpiler import InstructionProperties, Target
 
+    if basis_gates is None:
+        basis_gates = properties["native_gates"]
     # qiskit < 2 (e.g. 0.46 and 1.x): VF2Layout may drop a usable qubit instead of
     # a left out one, so the layout can be worse and depends on the seed when any
     # qubit is left out; qiskit >= 2 is recommended

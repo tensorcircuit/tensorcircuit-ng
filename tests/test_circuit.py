@@ -1473,6 +1473,36 @@ def test_qiskit2tc_parameterized(backend):
             assert not np.isnan(grad[ansatz3_param])
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_qiskit2tc_parameter_expressions(backend):
+    qiskit = pytest.importorskip("qiskit")
+    import sympy
+    from qiskit.circuit import Parameter
+
+    a, b = Parameter("a"), Parameter("b[0]")
+    qc = qiskit.QuantumCircuit(2)
+    qc.rx(2 * a + 0.3, 0)
+    qc.cx(0, 1)
+    qc.rz(a - b, 1)
+    qc.ry(b, 1)
+    c = tc.Circuit.from_qiskit(qc, binding_params={a: 0.5, b: -0.2})
+    ref = tc.Circuit(2)
+    ref.rx(0, theta=1.3)
+    ref.cx(0, 1)
+    ref.rz(1, theta=0.7)
+    ref.ry(1, theta=-0.2)
+    np.testing.assert_allclose(c.state(), ref.state(), atol=1e-5)
+    # parameters bound to symbols give a SymbolCircuit
+    x, y = sympy.symbols("x y", real=True)
+    sc = tc.translation.qiskit2tc(
+        qc, 2, circuit_constructor=tc.SymbolCircuit, binding_params={a: x, b: y}
+    )
+    assert sc.free_symbols() == {x, y}
+    np.testing.assert_allclose(
+        sc.to_circuit({x: 0.5, y: -0.2}).state(), ref.state(), atol=1e-5
+    )
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_qiskit_vs_tc_intialization(backend):
     try:

@@ -317,6 +317,83 @@ def test_batch_exp_ps_groups_qubit_wise_commuting_strings():
     assert len(captured) == 3
 
 
+def test_batch_exp_ps_symbol_circuit_params():
+    pytest.importorskip("qiskit")
+    import sympy
+
+    ts = sympy.symbols("t0:3", real=True)
+    sc = tc.SymbolCircuit(3)
+    for i in range(3):
+        sc.rx(i, theta=ts[i])
+    sc.cx(0, 1)
+    sc.cx(1, 2)
+    sc.rz(2, theta=2 * ts[0] - 0.4)
+    sc.ry(0, theta=ts[2])
+    pss = [[3, 3, 0], [1, 0, 1], [0, 2, 3]]
+    ws = [1.0, -0.5, 2.0]
+    params = [dict(zip(ts, v)) for v in [[0.3, -1.2, 0.8], [2.1, 0.5, -0.7]]]
+    exact = np.array(
+        [wrapper.batch_expectation_ps(sc.to_circuit(b), pss) for b in params]
+    )
+    np.testing.assert_allclose(
+        wrapper.batch_expectation_ps(sc, pss, params=params), exact, atol=1e-5
+    )
+    captured = []
+
+    def run(cs, shots):
+        # exact counts of the measured classical bits, as a provider returns
+        captured.extend(cs)
+        rs = []
+        for ci in cs:
+            m = ci.get_positional_logical_mapping()
+            order = [m[i] for i in range(len(m))]
+            n = ci._nqubits
+            probs = np.real(tc.backend.numpy(ci.probability())).reshape([2] * n)
+            probs = probs.sum(axis=tuple(q for q in range(n) if q not in order))
+            probs = probs.transpose([sorted(order).index(q) for q in order])
+            rs.append(
+                {
+                    format(k, "0%db" % len(order)): p * shots
+                    for k, p in enumerate(probs.reshape(-1))
+                }
+            )
+        return rs
+
+    kws = dict(device="local::default", with_rem=False, batch_submit_func=run)
+    chain = {"coupling_map": [[i, i + 1] for i in range(4)]}
+    # compiled once in the call, all bindings submitted together
+    r = wrapper.batch_expectation_ps(
+        sc, pss, params=params, compile_func=tc.compiler.DefaultCompiler(chain), **kws
+    )
+    np.testing.assert_allclose(r, exact, atol=1e-4)
+    assert len(captured) == 3 * len(params)
+    r = wrapper.batch_expectation_ps(
+        sc,
+        pss,
+        ws=ws,
+        params=params[1],
+        compile_func=tc.compiler.DefaultCompiler(chain),
+        **kws,
+    )
+    np.testing.assert_allclose(r, exact[1] @ ws, atol=1e-4)
+    # compiled beforehand onto other qubits, which is not compiled again
+    csc, info = tc.compiler.DefaultCompiler(dict(chain, initial_layout=[4, 2, 3]))(sc)
+    assert sorted(info["logical_physical_mapping"].values()) == [2, 3, 4]
+
+    def compile_again(c):
+        raise AssertionError("compiled again")
+
+    r = wrapper.batch_expectation_ps(
+        csc, pss, ws=ws, params=params, info=info, compile_func=compile_again, **kws
+    )
+    np.testing.assert_allclose(r, exact @ ws, atol=1e-4)
+    r = wrapper.batch_expectation_ps(csc, pss, ws=ws, params=params, info=info)
+    np.testing.assert_allclose(r, exact @ ws, atol=1e-4)
+    assert not np.iscomplexobj(tc.backend.numpy(r))
+    with pytest.raises(ValueError, match="SymbolCircuit"):
+        wrapper.batch_expectation_ps(sc.to_circuit(params[0]), pss, params=params)
+
+
 @requires_cloud
 def test_batch_submit_template():
     run = tc.cloud.wrapper.batch_submit_template(

@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 import numpy as np
 import pytest
+import sympy
 
 import tensorcircuit as tc
 from tensorcircuit.cloud import apis, lqcloud, store, wrapper
@@ -909,6 +910,81 @@ def test_resubmit_sends_the_stored_compilation(fake_lqcloud, tmp_path):
     # the given task is not changed by the rerun
     assert restored.prepared is None
     assert s.get(t2.local_id)["parent_id"] == t.local_id
+
+
+@requires_sdk
+@pytest.mark.parametrize("method", ["qiskit", "default"])
+def test_symbol_circuit_compiled_once_runs_on_its_qubits(fake_lqcloud, method):
+    from tensorcircuit.compiler.qiskit_compiler import (
+        properties_to_target,
+        qiskit_compile,
+    )
+
+    ts = sympy.symbols("t0:4", real=True)
+    sc = tc.SymbolCircuit(3)
+    sc.rx(0, theta=ts[0])
+    sc.cx(0, 1)
+    sc.ry(1, theta=2 * ts[1] + 0.3)
+    sc.cx(1, 2)
+    sc.rz(2, theta=ts[2])
+    sc.rx(2, theta=ts[3] - ts[0])
+    # a line of interactions, placed without routing, so that the noise aware
+    # layout does not depend on the seed
+    sc.cx(2, 1)
+    for m in fake_lqcloud.config["properties"]["coupler_metrics"]:
+        m["cz_fidelity"] = 0.999 if m["qubits"] in [[3, 4], [4, 5]] else 0.95
+    p = apis.list_properties(device=DEVICE)
+    if method == "qiskit":
+        options = {
+            "target": properties_to_target(p),
+            "optimization_level": 2,
+            "seed_transpiler": 42,
+        }
+        csc, info = qiskit_compile(sc, compiled_options=options)
+    else:
+        # gates other than the native ones, translated by the provider
+        csc, info = tc.compiler.DefaultCompiler(properties=p)(sc)
+    layout = sorted(info["logical_physical_mapping"].values())
+    assert layout == [3, 4, 5]
+    # the device prefers other qubits later, while the compiled circuit stays
+    for m in fake_lqcloud.config["properties"]["coupler_metrics"]:
+        m["cz_fidelity"] = 0.999 if m["qubits"] in [[0, 1], [1, 2]] else 0.95
+    for seed in range(2):
+        values = dict(zip(ts, np.random.default_rng(seed).normal(size=4)))
+        t = apis.submit_task(
+            device=DEVICE, circuit=csc.to_circuit(values), compiling=False, store=False
+        )
+        comp = t.prepared["compilation"]
+        assert comp["physical_qubits"] == layout
+        np.testing.assert_allclose(
+            simulate(comp), ideal(sc.to_circuit(values)), atol=1e-5
+        )
+
+    # the same for batch_expectation_ps, given the compiled circuit and its info
+    def run(cs, shots):
+        rs = []
+        for c in cs:
+            t = apis.submit_task(device=DEVICE, circuit=c, compiling=False, store=False)
+            comp = t.prepared["compilation"]
+            assert comp["physical_qubits"] == layout
+            probs = simulate(comp)
+            n = comp["n_clbits"]
+            rs.append({format(i, "0%db" % n): q * shots for i, q in enumerate(probs)})
+        return rs
+
+    pss = [[3, 3, 0], [0, 1, 1], [2, 0, 3]]
+    r = wrapper.batch_expectation_ps(
+        csc,
+        pss,
+        device=DEVICE,
+        with_rem=False,
+        batch_submit_func=run,
+        params=values,
+        info=info,
+    )
+    np.testing.assert_allclose(
+        r, wrapper.batch_expectation_ps(sc, pss, params=values), atol=1e-4
+    )
 
 
 @requires_sdk

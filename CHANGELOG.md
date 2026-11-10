@@ -32,6 +32,10 @@
 
 - Add mid-circuit and repeated measurements and resets to the `lqcloud` provider, each measurement to its own classical bit, the measured qubit going on without reset unless a `reset_instruction` is given, with `x21` added after the two-state readout; pass other SDK options, e.g. `dynamic_decoupling`, by `run_options`.
 
+- Add `qiskit_compile` and `DefaultCompiler` of a `SymbolCircuit` with free symbols into a `SymbolCircuit` on the compiled qubits, the symbols kept in the compiled gates, so that a variational circuit is compiled once, e.g. with the noise aware `target` of a device, and each binding by `to_circuit` is submitted with `compiling=False` on the same qubits.
+
+- Add `params` and `info` to `cloud.wrapper.batch_expectation_ps`: a `SymbolCircuit` is compiled once and bound by each of `params`, all submitted together, e.g. for the parameter shift gradient, and a circuit compiled beforehand with its `info` is not compiled again, keeping its layout over the iterations of a variational algorithm. `qiskit2tc` binds qiskit parameters to sympy symbols with `circuit_constructor=SymbolCircuit`, and `properties_to_target` compiles to the `native_gates` of the properties by default. See `examples/cloud_parameter_shift_vqe.py`.
+
 - Add `Circuit.sample_measurements` and `DMCircuit.sample_measurements` for the records of all measurement instructions. `sample_detector`, `detector_probabilities` and `sample_measurements` support gates, noise and measurements after a `measure_instruction` without reset, the measured qubit staying in the measured state. Measurement records follow the order of the measurement instructions in all sampling modes, not the classical bits `record_index` from `from_qiskit`.
 
 - Add the readout flip probability `p` of `measure_instruction` and `mr_instruction` in detector and measurement sampling, flipping only the record; `stim2tc` keeps the flip probabilities of stim measurements, e.g. `M(0.01)`, which were dropped.
@@ -58,7 +62,13 @@
 
 ### Fixed
 
+- `cloud.wrapper.batch_expectation_ps` returns a real weighted sum for exact simulation with `ws`, as on a device, instead of a complex one.
+
 - `qiskit_compile` keeps the `inputs` state.
+
+- `SymbolCircuit.to_circuit` and `bind` keep the measure, reset and barrier instructions, which `SymbolCircuit.to_qiskit(enable_instruction=True)` now exports; `to_qiskit(enable_inputs=True)` raises for an `inputs` state instead of dropping it.
+
+- `Circuit.from_qiskit` binds parameter expressions of named `Parameter`s, e.g. `rz(2 * a + 0.3)`, which raised `AttributeError`, also on qiskit 2.
 
 - `Circuit.detector_probabilities` and detector sampling with `allow_state=True` keep the `inputs` state when the circuit has mid-circuit or repeated measurements, resets, noise or readout flips.
 

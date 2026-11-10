@@ -19,6 +19,8 @@ Use this file for `SymbolCircuit`, SymPy-to-JAX, and translation or interoperabi
 - `to_qiskit` and `translation.qir2qiskit` solve different problems and should not be forced into one dispatch path.
 - `to_qiskit` preserves symbolic parameters, while `qir2qiskit` reconstructs numeric gates from serialized QIR.
 - `_translate_qiskit_params` is the reverse-direction helper for Qiskit-to-TensorCircuit translation.
+- Compiling a `SymbolCircuit` goes through `to_qiskit`, Qiskit parameters named after the symbols, and `qiskit2tc` binding them back to the original SymPy symbols; a fresh `Symbol(name)` without the user's assumptions does not bind in `to_circuit`.
+- The noise aware layout of `properties_to_target` is reliable only when the circuit can be placed without routing. When SWAPs are needed, Sabre picks the layout and `VF2PostLayout` cannot always remap it, so the chosen qubits depend on `seed_transpiler`; tests asserting a layout should use a routing-free interaction graph.
 
 ## Stim translation
 

@@ -374,15 +374,21 @@ def qir2qiskit(
     return qiskit_circ
 
 
+def _qiskit_param_value(p: Any, binding_params: Any) -> Any:
+    if isinstance(p, ParameterVectorElement) and not (
+        isinstance(binding_params, dict) and p in binding_params
+    ):
+        return binding_params[p.index]
+    return binding_params[p]
+
+
 def _translate_qiskit_params(
     gate_info: CircuitInstruction, binding_params: Any
 ) -> List[float]:
     parameters = []
     for p in gate_info.operation.params:
-        if isinstance(p, ParameterVectorElement):
-            parameters.append(binding_params[p.index])
-        elif isinstance(p, Parameter):
-            parameters.append(binding_params[p])
+        if isinstance(p, Parameter):
+            parameters.append(_qiskit_param_value(p, binding_params))
         elif isinstance(p, ParameterExpression):
             if len(p.parameters) == 0:
                 parameters.append(float(p))
@@ -392,6 +398,20 @@ def _translate_qiskit_params(
             expr = p.sympify().simplify()
             if isinstance(expr, symengine.Expr):  # qiskit uses symengine if available
                 expr = expr._sympy_()  # sympy.Expr
+
+            parameter_list = list(p.parameters)
+            values = [_qiskit_param_value(q, binding_params) for q in parameter_list]
+            if any(isinstance(v, sympy.Basic) for v in values):
+                # symbolic values, e.g. for ``SymbolCircuit``
+                parameters.append(
+                    expr.subs(
+                        {
+                            sympy.Symbol(q.name): v
+                            for q, v in zip(parameter_list, values)
+                        }
+                    )
+                )
+                continue
 
             if expr.is_algebraic_expr():  # numpy ufuncs are not used
                 lambdify_module_name = "numpy"
@@ -407,17 +427,13 @@ def _translate_qiskit_params(
                 # but sympy.lambdify does not allow brackets in symbol names
                 free_symbol.name = free_symbol.name.replace("[", "_").replace("]", "")
 
-            parameter_list = list(p.parameters)
-            sympy_symbols = [param._symbol_expr for param in parameter_list]
             # replace names again: theta[0] -> theta_0
             sympy_symbols = [
-                sympy.Symbol(str(symbol).replace("[", "_").replace("]", ""))
-                for symbol in sympy_symbols
+                sympy.Symbol(param.name.replace("[", "_").replace("]", ""))
+                for param in parameter_list
             ]
             lam_f = sympy.lambdify(sympy_symbols, expr, modules=lambdify_module_name)
-            parameters.append(
-                lam_f(*[binding_params[param.index] for param in parameter_list])
-            )
+            parameters.append(lam_f(*values))
         else:
             # numbers, arrays, etc.
             parameters.append(p)
@@ -515,9 +531,9 @@ def qiskit2tc(
         elif gate_name in ["cx_o0", "cy_o0", "cz_o0"]:
             getattr(tc_circuit, "o" + gate_name[1])(*idx)
         elif gate_name in ["rx", "ry", "rz", "crx", "cry", "crz", "rxx", "ryy", "rzz"]:
-            getattr(tc_circuit, gate_name)(*idx, theta=parameters)
+            getattr(tc_circuit, gate_name)(*idx, theta=parameters[0])
         elif gate_name in ["crx_o0", "cry_o0", "crz_o0"]:
-            getattr(tc_circuit, "o" + gate_name[1:-3])(*idx, theta=parameters)
+            getattr(tc_circuit, "o" + gate_name[1:-3])(*idx, theta=parameters[0])
         elif gate_name in ["r"]:
             getattr(tc_circuit, "u")(
                 *idx,
