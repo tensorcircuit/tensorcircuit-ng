@@ -78,6 +78,8 @@
 
 - Result bits follow the `record_index` (classical bit) of measure instructions instead of their order, in `get_positional_logical_mapping`, `qiskit_compile` and the qiskit / OpenQASM translation.
 
+- `Circuit.from_openqasm(..., keep_measure_order=True)` preserves measurements between gates and raises `ValueError` if two measurements write to the same classical bit.
+
 - Fix MPS truncation fidelity estimates, per-gate split overrides and `max_truncation_err`, and underflow in MPS measurement.
 
 - Fix biased `probability_sample` for large float32 distributions (about 30% total variation at 24 qubits); external `status` may have shape `[shots, 2]` for the new two-level sampling.
