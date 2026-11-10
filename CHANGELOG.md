@@ -14,6 +14,8 @@
 
 - **Migration:** `cloud.wrapper.batch_expectation_ps` mitigates readout errors with the device properties of the measured qubits by default; `readout_cals="system"` runs the calibration circuits on each call instead of caching them on the device.
 
+- `cloud.wrapper.batch_expectation_ps` greedily groups qubit-wise commuting Pauli strings and measures each group with one circuit, e.g. two circuits instead of one per term for an Ising Hamiltonian; `shots` now counts per group.
+
 - Compute pure-state entanglement entropy, mutual information and anti-flatness on the smaller subsystem, which slightly changes entropy values.
 
 - `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators.

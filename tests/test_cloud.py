@@ -276,6 +276,47 @@ def test_batch_exp_ps_with_idle_qubit():
     np.testing.assert_allclose(result, [1])
 
 
+def test_batch_exp_ps_groups_qubit_wise_commuting_strings():
+    n = 3
+    c = tc.Circuit(n)
+    for i in range(n):
+        c.rx(i, theta=0.3 + 0.4 * i)
+        c.rz(i, theta=0.2 * i)
+    c.cx(0, 1)
+    c.cx(1, 2)
+    captured = []
+
+    def run(cs, shots):
+        captured.extend(cs)
+        rs = []
+        for ci in cs:
+            probs = np.real(tc.backend.numpy(ci.probability()))
+            rs.append({format(k, "0%db" % n): p * shots for k, p in enumerate(probs)})
+        return rs
+
+    pss = [
+        [3, 3, 0],
+        [1, 0, 0],
+        [0, 3, 3],
+        [2, 2, 0],
+        [1, 1, 0],
+        [0, 1, 0],
+        [3, 0, 0],
+        [0, 0, 1],
+    ]
+    r = wrapper.batch_expectation_ps(
+        c,
+        pss,
+        device="local::default",
+        with_rem=False,
+        compile_func=lambda circuit: (circuit, {}),
+        batch_submit_func=run,
+    )
+    np.testing.assert_allclose(r, wrapper.batch_expectation_ps(c, pss), atol=1e-5)
+    # the Z, X and Y strings, instead of one circuit per string
+    assert len(captured) == 3
+
+
 @requires_cloud
 def test_batch_submit_template():
     run = tc.cloud.wrapper.batch_submit_template(
@@ -502,7 +543,7 @@ def test_tencent_task_details_contract(fake_tencent):
         t.details()
 
 
-@pytest.mark.parametrize("readout_cals, nbatches", [("api", 1), ("system", 2)])
+@pytest.mark.parametrize("readout_cals, nbatches", [("api", [1]), ("system", [2, 1])])
 def test_tencent_batch_expectation_ps_contract(
     fake_tencent, with_readout_errors, readout_cals, nbatches
 ):
@@ -567,8 +608,9 @@ def test_tencent_batch_expectation_ps_contract(
     # the readout errors are mitigated on the measured physical qubits
     np.testing.assert_allclose(r, [1, -1], atol=1e-3)
     batches = fake_tencent.requests_to("task/submit")
-    # the system calibration runs two more circuits
-    assert [len(b) for b in batches] == [2] * nbatches
+    # X0 and Z1 are measured by one circuit, after the two calibration circuits
+    # of the system calibration
+    assert [len(b) for b in batches] == nbatches
     assert {(p["device"], p["shots"]) for b in batches for p in b} == {
         ("2xmon?o=0", 10000)
     }

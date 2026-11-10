@@ -129,6 +129,41 @@ def reduce_and_evaluate(
     return raw_counts
 
 
+def _qwc_groups(pss: Sequence[Sequence[int]]) -> Tuple[List[List[int]], Tensor]:
+    """
+    Partition the Pauli strings into qubit-wise commuting groups by greedy coloring
+    in the largest-first order, comparing one string with all strings or group
+    bases at a time, so that the memory is linear in the number of strings.
+
+    :param pss: Pauli strings of the same length
+    :type pss: Sequence[Sequence[int]]
+    :return: the indices of the strings in each group, and the measurement basis
+        of each group, 0 on the qubits measured by no string of the group
+    :rtype: Tuple[List[List[int]], Tensor]
+    """
+    a = np.array(pss, dtype=np.int8).reshape([len(pss), -1])
+    nz = a != 0
+    # number of strings each string does not qubit-wise commute with
+    degrees = [
+        np.count_nonzero(np.any(nz[i] & nz & (a != a[i]), axis=1))
+        for i in range(len(a))
+    ]
+    groups: List[List[int]] = []
+    bases = np.zeros_like(a)
+    for i in sorted(range(len(a)), key=lambda i: (-degrees[i], i)):
+        b = bases[: len(groups)]
+        fits = ~np.any(nz[i] & (b != 0) & (b != a[i]), axis=1)
+        if fits.any():
+            k = int(np.argmax(fits))
+            groups[k].append(i)
+            # the non-identity entries agree within a group
+            bases[k] = np.maximum(bases[k], a[i])
+        else:
+            bases[len(groups)] = a[i]
+            groups.append([i])
+    return groups, bases[: len(groups)]
+
+
 def batch_expectation_ps(
     c: Circuit,
     pss: List[List[int]],
@@ -144,6 +179,10 @@ def batch_expectation_ps(
     """
     Unified interface to compute the Pauli string expectation lists or sums via simulation or on real qpu.
     Error mitigation, circuit compilation and Pauli string grouping are all built-in.
+    On a device, the Pauli strings are greedily grouped into qubit-wise commuting
+    sets, each measured by one circuit, so the expectations in a group share the
+    shots, e.g. all ``Z_iZ_{i+1}`` terms of an Ising Hamiltonian in one circuit and
+    all ``X_i`` terms in another.
 
     One line access to unlock the whole power or real quantum hardware on quantum cloud.
 
@@ -170,7 +209,7 @@ def batch_expectation_ps(
         e.g. [2., -0.3] represents the final results is 2* ``pss`` [0]-0.3* ``pss`` [1]
         defaults to None, None indicate the list of expectations for ``pss`` are all returned
     :type ws: Optional[List[float]], optional
-    :param shots: measurement shots for each expectation estimation, defaults to 8192
+    :param shots: measurement shots for each measured group of Pauli strings, defaults to 8192
     :type shots: int, optional
     :param with_rem: whether enable readout error mitigation for the result, defaults to True
     :type with_rem: bool, optional
@@ -191,8 +230,6 @@ def batch_expectation_ps(
             sumr = sum([w * r for w, r in zip(ws, results)])
             return backend.convert_to_tensor(sumr)
     cs = []
-    infos = []
-    exps = []
     if isinstance(device, str):
         device = get_device(device)
 
@@ -221,32 +258,23 @@ def batch_expectation_ps(
     c1, info = compile_func(c)  # type: ignore
     if not info.get("logical_physical_mapping", None):
         info["logical_physical_mapping"] = {i: i for i in range(c._nqubits)}
-    for ps in pss:
-        # TODO(@refraction-ray): Pauli string grouping
-        # https://docs.pennylane.ai/en/stable/_modules/pennylane/pauli/grouping/group_observables.html
+    groups, bases = _qwc_groups(pss)
+    for basis in bases:
         c2 = Circuit.from_qir(c1.to_qir(), circuit_params={"nqubits": c1._nqubits})
-        exp = []
-        for j, i in enumerate(ps):
+        for j, i in enumerate(basis):
             if i == 1:
                 c2.H(info["logical_physical_mapping"][j])  # type: ignore
-                exp.append(j)
-
             elif i == 2:
                 # sd then H also measures Y, with one physical pulse fewer when
                 # the float32 angle is not compiled as pi/2, no better on hardware
                 c2.rx(info["logical_physical_mapping"][j], theta=np.pi / 2)  # type: ignore
-                exp.append(j)
-            elif i == 3:
-                exp.append(j)
-        if any(i in (1, 2) for i in ps):
+        if any(i in (1, 2) for i in basis):
             c2, _ = simple_compile(c2)
         for i in range(c._nqubits):
             c2.measure_instruction(info["logical_physical_mapping"][i])
         # TODO(@refraction-ray): two steps compiling with pre compilation:
         # basically done, require some fine tuning for performance
         cs.append(c2)
-        infos.append(info)
-        exps.append(exp)
 
     if batch_submit_func is None:
         # the circuits are already on the physical qubits, not to be remapped
@@ -273,17 +301,19 @@ def batch_expectation_ps(
         else:
             raise ValueError("Unknown readout_cals: %s" % readout_cals)
 
-    raw_counts = reduce_and_evaluate(cs, shots, run)  # type: ignore
+    group_counts = reduce_and_evaluate(cs, shots, run)  # type: ignore
+    raw_counts: List[counts.ct] = [None] * len(pss)  # type: ignore
+    for g, ct in zip(groups, group_counts):
+        for i in g:
+            raw_counts[i] = ct
+    exps = [[j for j, i in enumerate(ps) if i != 0] for ps in pss]
 
     if mit is not None:
         results = [
-            mit.expectation(raw_counts[i], exps[i], **infos[i])
-            for i in range(len(raw_counts))
+            mit.expectation(raw_counts[i], exps[i], **info) for i in range(len(pss))
         ]
     else:
-        results = [
-            counts.expectation(raw_counts[i], exps[i]) for i in range(len(raw_counts))
-        ]
+        results = [counts.expectation(raw_counts[i], exps[i]) for i in range(len(pss))]
     if ws is not None:
         sumr = sum([w * r for w, r in zip(ws, results)])
         return backend.convert_to_tensor(sumr)
