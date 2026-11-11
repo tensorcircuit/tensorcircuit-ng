@@ -402,3 +402,110 @@ def test_rc_keeps_instructions(npb):
     assert sequence(rebuilt[0]) == [("cnot", [0, 1]), ("measure", [1])]
     rebuilt[0].measure_instruction(0)
     assert rebuilt[0]._extra_qir[-1]["record_index"] == 1
+
+
+def _matrix_up_to_phase(c, expected):
+    actual = tc.backend.numpy(c.matrix())
+    phase = np.trace(expected.conj().T @ actual) / len(expected)
+    np.testing.assert_allclose(abs(phase), 1, atol=1e-6)
+    np.testing.assert_allclose(actual, phase * expected, atol=1e-6)
+
+
+def test_mitigators_expand(npb, highp):
+    M = qem.mitigators
+    c = tc.Circuit(3)
+    c.h(0)
+    c.rz(1, theta=0.4)
+    c.cz(0, 1)
+    c.rz(0, theta=-0.3)
+    c.cnot(1, 2)
+    c.rz(1, theta=-np.pi / 2)
+    c.measure_instruction(2)
+    expected = tc.backend.numpy(c.matrix())
+
+    def names(ci):
+        return [d["name"] for d in ci.to_qir(enable_instruction=True)]
+
+    twirl = M.Twirl(8, seed=1)
+    cs = twirl.expand(c)
+    assert len({ci.to_openqasm() for ci in cs}) > 1
+    assert [ci.to_openqasm() for ci in cs] == [
+        ci.to_openqasm() for ci in twirl.expand(c)
+    ]
+    for ci in cs:
+        _matrix_up_to_phase(ci, expected)
+        assert names(ci)[-1] == "measure"
+
+    cdr = M.CDR(3, sigma=0.3, seed=2)
+    cs = cdr.expand(c)
+    assert len(cs) == 4 and cs[0] is c
+    thetas = [
+        [float(d["parameters"]["theta"]) for d in ci.to_qir() if d["name"] == "rz"]
+        for ci in cs
+    ]
+    assert all(names(ci) == names(c) for ci in cs)
+    assert np.all(np.abs(np.diff(thetas, axis=0))[:, :2] > 0)
+    # the Clifford angles are kept, not to change the pulses after compiling
+    np.testing.assert_allclose(np.array(thetas)[:, 2], -np.pi / 2)
+    # the rz gates in common are perturbed the same, e.g. in another basis
+    c2 = tc.Circuit.from_qir(c.to_qir(enable_instruction=True), c.circuit_param)
+    c2.rz(2, theta=0.1)
+    for ci, cj in zip(cs[1:], cdr.expand(c2)[1:]):
+        np.testing.assert_allclose(
+            [d["parameters"]["theta"] for d in cj.to_qir() if d["name"] == "rz"][:3],
+            [d["parameters"]["theta"] for d in ci.to_qir() if d["name"] == "rz"],
+        )
+
+    cs = M.Fold([1, 3]).expand(c)
+    _matrix_up_to_phase(cs[1], expected)
+    assert names(cs[1]).count("cz") == 3 and names(cs[1]).count("cnot") == 3
+    assert names(cs[1]).count("barrier") == 4
+
+    chain = M.Chain(M.CDR(2, seed=3), M.Twirl(4, seed=4))
+    nested = chain.expand(c)
+    assert chain.shape == (3, 4)
+    assert np.shape(tc.backend.tree_map(lambda _: 0, nested)) == (3, 4)
+
+
+def test_mitigators_combine():
+    M = qem.mitigators
+    rng = np.random.default_rng(0)
+    ideal = rng.uniform(-1, 1, size=[2, 5, 3])
+    # two terms with their own Pauli noise rescaling, and the twirls averaged
+    scaled = np.array([0.7, 0.4])[:, None, None] * ideal
+    noisy = 0.05 + scaled + rng.normal(scale=0.01, size=[2, 5, 1]) * [1, -1, 0]
+    chain = M.Chain(M.CDR(4, intercept=True), M.Twirl(3))
+    np.testing.assert_allclose(
+        chain.combine(noisy, ideal), np.mean(ideal, -1)[:, 0], atol=1e-10
+    )
+    np.testing.assert_allclose(
+        M.CDR(4).combine(scaled[..., 0], ideal[..., 0]),
+        ideal[:, 0, 0],
+        atol=1e-10,
+    )
+    np.testing.assert_allclose(
+        M.Fold([1, 3, 5], order=2).combine([[0.9, 0.7, 0.3]], None), [0.925]
+    )
+
+
+def test_cdr_uninformative_training(caplog):
+    M = qem.mitigators
+    # a term vanishing by symmetry, a constant term and an informative term
+    ideal = np.array(
+        [[1e-17, -2e-17, 3e-17], [0.5, 0.5, 0.5], [0.6, 0.3, -0.2]], dtype=float
+    )
+    noisy = np.array([[0.02, 0.01, -0.01], [0.4, 0.4, 0.4], [0.48, 0.24, -0.16]])
+    noisy = noisy + 0.03
+    # a term with no signal left, uncorrelated with the varying ideal values
+    ideal = np.concatenate([ideal, [[0.6, 0.3, -0.2]]])
+    noisy = np.concatenate([noisy, [[0.1, -0.05, 0.05]]])
+    for intercept in [False, True]:
+        r = M.CDR(2, intercept=intercept).combine(noisy, ideal)
+        assert np.all(np.isfinite(r))
+        # the vanishing and no signal terms kept unscaled, the constant term
+        # fitted without ``a``
+        np.testing.assert_allclose(r[[0, 1, 3]], [0.05, 0.5, 0.1])
+    np.testing.assert_allclose(r[2], 0.6, atol=1e-10)
+    assert "[[0], [3]]" in caplog.text
+    with pytest.raises(ValueError, match="intercept"):
+        M.CDR(1, intercept=True)

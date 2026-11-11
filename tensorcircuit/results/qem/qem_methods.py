@@ -293,7 +293,7 @@ candidate_dict: collections.OrderedDict[Tuple[str, bytes], List[Any]] = (
 )
 
 
-def rc_circuit(c: Any) -> Any:
+def rc_circuit(c: Any, rng: Optional[np.random.Generator] = None) -> Any:
     """
     Apply Pauli twirling to the two-qubit gates of a circuit, keeping the
     measurement and reset instructions in place.
@@ -304,6 +304,9 @@ def rc_circuit(c: Any) -> Any:
     on concrete gate matrices.
 
     :param c: Input circuit.
+    :param rng: The random generator choosing the twirls, defaults to None,
+        i.e. the unseeded ``random.choice``
+    :type rng: Optional[np.random.Generator], optional
     :return: Randomized circuit.
     """
     cnew = type(c)(**c.circuit_param)
@@ -321,7 +324,10 @@ def rc_circuit(c: Any) -> Any:
                     candidate_dict.popitem(last=False)
             else:
                 candidate_dict.move_to_end(key)
-            rc_list = choice(rc_cand)
+            if rng is None:
+                rc_list = choice(rc_cand)
+            else:
+                rc_list = rc_cand[rng.integers(len(rc_cand))]
 
             cnew = _apply_gate(cnew, rc_list[0], d["index"][0])
             cnew = _apply_gate(cnew, rc_list[1], d["index"][1])

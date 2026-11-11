@@ -165,6 +165,12 @@ def _qwc_groups(pss: Sequence[Sequence[int]]) -> Tuple[List[List[int]], Tensor]:
     return groups, bases[: len(groups)]
 
 
+def _flatten(x: Any) -> Tuple[List[Any], Tuple[int, ...]]:
+    # the leaves of a nested list in order, and its shape
+    leaves, treedef = backend.tree_flatten(x)
+    return leaves, np.shape(backend.tree_unflatten(treedef, list(range(len(leaves)))))
+
+
 def batch_expectation_ps(
     c: Circuit,
     pss: List[List[int]],
@@ -178,6 +184,7 @@ def batch_expectation_ps(
     readout_cals: str = "api",
     params: Optional[Union[Dict[Any, Any], Sequence[Dict[Any, Any]]]] = None,
     info: Optional[Dict[str, Any]] = None,
+    variants: Any = None,
 ) -> Union[Any, List[Any]]:
     """
     Unified interface to compute the Pauli string expectation lists or sums via simulation or on real qpu.
@@ -191,6 +198,15 @@ def batch_expectation_ps(
     circuits are all submitted together, e.g. for the parameter shift gradient. To
     keep the compiled circuit, e.g. its layout, over the iterations of a variational
     algorithm, compile it once beforehand and pass it with its ``info``.
+
+    With ``variants``, e.g. the error mitigation methods of
+    :py:mod:`tensorcircuit.results.qem.mitigators`, each measurement circuit, i.e.
+    compiled and rotated to the measurement basis, is expanded into its variants,
+    all submitted together, and the results of the variants are returned on the
+    last axes, not combined. With ``device=None``, the same expansion is
+    simulated exactly instead, giving the ideal values of the variants, for which
+    the circuit compiled beforehand and its ``info`` are needed, the same as those
+    run on the device.
 
     One line access to unlock the whole power or real quantum hardware on quantum cloud.
 
@@ -212,6 +228,16 @@ def batch_expectation_ps(
         tc.cloud.wrapper.batch_expectation_ps(
             csc, pss, device=device, ws=ws, info=info, params=[{theta: 0.1}, {theta: 0.2}]
         )
+
+        # twirled and rescaled by the training circuits for each Pauli string
+        from tensorcircuit.results.qem import mitigators
+        m = mitigators.Chain(mitigators.CDR(2), mitigators.Twirl(8))
+        cc, info = tc.compiler.DefaultCompiler(properties=p)(c)
+        noisy = tc.cloud.wrapper.batch_expectation_ps(
+            cc, pss, device=device, info=info, variants=m
+        )
+        ideal = tc.cloud.wrapper.batch_expectation_ps(cc, pss, info=info, variants=m)
+        m.combine(noisy, ideal)
 
     :param c: The target circuit to compute expectation, or a ``SymbolCircuit``
         bound by ``params``
@@ -241,12 +267,22 @@ def batch_expectation_ps(
         with its ``logical_physical_mapping`` from qubit ``i`` of the Pauli strings
         to the qubit of ``c``, where ``c`` is not compiled again, defaults to None
     :type info: Optional[Dict[str, Any]], optional
+    :param variants: an object with ``expand``, e.g. of
+        :py:mod:`tensorcircuit.results.qem.mitigators`, or a function, from a
+        measurement circuit to a nested list of the circuits run instead, of the
+        same shape for all the measurement circuits, defaults to None
+    :type variants: Any, optional
     :return: List of Pauli string expectation or a weighted sum float for Pauli strings, depending on ``ws``,
-        stacked by ``params`` if a list
+        stacked by ``params`` if a list, with the axes of the ``variants`` last
     :rtype: Union[Any, List[Any]]
     """
     if params is not None and not isinstance(c, SymbolCircuit):
         raise ValueError("`params` are for a SymbolCircuit")
+    if device is None and variants is not None and info is None:
+        raise ValueError(
+            "`variants` without a device need the compiled circuit and its `info`, "
+            "the same as run on the device"
+        )
     bindings = list(params) if is_sequence(params) else [params]  # type: ignore
     n = len(pss[0])
     mapping = (info or {}).get("logical_physical_mapping") or {i: i for i in range(n)}
@@ -264,7 +300,7 @@ def batch_expectation_ps(
     def stacked(results: List[Any]) -> Any:
         return backend.stack(results) if is_sequence(params) else results[0]
 
-    if device is None:
+    if device is None and variants is None:
         exact = []
         for b in bindings:
             cb = bound(c, b)
@@ -332,45 +368,73 @@ def batch_expectation_ps(
                 c2.measure_instruction(mapping[i])
             cs.append(c2)
 
-    if batch_submit_func is None:
-        # the circuits are already on the physical qubits, not to be remapped
-        run = batch_submit_template(
-            device,
-            batch_limit,
-            enable_qos_qubit_mapping=False,
-            enable_qos_gate_decomposition=False,
-            compiling=False,
-        )
+    # the variants of each measurement circuit in order
+    if variants is None:
+        flattened = [_flatten(c2) for c2 in cs]
     else:
-        run = batch_submit_func
-
-    mit: Optional[ReadoutMit] = None
-    if with_rem:
-        mit = ReadoutMit(run)
-        qubits = sorted({mapping[i] for i in range(n)})
-        if readout_cals == "api":
-            mit.cals_from_api(qubits, device)
-        elif readout_cals == "system":
-            mit.cals_from_system(qubits, shots=shots)
-        else:
-            raise ValueError("Unknown readout_cals: %s" % readout_cals)
-
-    all_counts = reduce_and_evaluate(cs, shots, run)  # type: ignore
+        expand = getattr(variants, "expand", variants)
+        flattened = [_flatten(expand(c2)) for c2 in cs]
+    shape = flattened[0][1]
+    cs = [ci for leaves, _ in flattened for ci in leaves]
+    nv = len(flattened[0][0])
     exps = [[j for j, i in enumerate(ps) if i != 0] for ps in pss]
+
+    if device is None:
+        # simulated on the qubits in use only, e.g. of a circuit compiled on a device
+        active = sorted(
+            {q for ci in cs for d in ci.to_qir() for q in d["index"]}
+            | set(mapping.values())
+        )
+        index = {q: k for k, q in enumerate(active)}
+        compact = [ci.initial_mapping(index, len(active)) for ci in cs]
+
+        def value(j: int, i: int) -> Any:
+            return backend.real(
+                compact[j].expectation_ps(z=[index[mapping[q]] for q in exps[i]])
+            )
+
+    else:
+        if batch_submit_func is None:
+            # the circuits are already on the physical qubits, not to be remapped
+            run = batch_submit_template(
+                device,
+                batch_limit,
+                enable_qos_qubit_mapping=False,
+                enable_qos_gate_decomposition=False,
+                compiling=False,
+            )
+        else:
+            run = batch_submit_func
+
+        mit: Optional[ReadoutMit] = None
+        if with_rem:
+            mit = ReadoutMit(run)
+            qubits = sorted({mapping[i] for i in range(n)})
+            if readout_cals == "api":
+                mit.cals_from_api(qubits, device)
+            elif readout_cals == "system":
+                mit.cals_from_system(qubits, shots=shots)
+            else:
+                raise ValueError("Unknown readout_cals: %s" % readout_cals)
+
+        all_counts = reduce_and_evaluate(cs, shots, run)  # type: ignore
+
+        def value(j: int, i: int) -> Any:
+            if mit is not None:
+                return mit.expectation(all_counts[j], exps[i], **info)
+            return counts.expectation(all_counts[j], exps[i])
+
+    group = {i: g for g, members in enumerate(groups) for i in members}
     outputs = []
     for k in range(len(bindings)):
-        group_counts = all_counts[k * len(bases) : (k + 1) * len(bases)]
-        raw_counts: List[counts.ct] = [None] * len(pss)  # type: ignore
-        for g, ct in zip(groups, group_counts):
-            for i in g:
-                raw_counts[i] = ct
-        if mit is not None:
-            results = [
-                mit.expectation(raw_counts[i], exps[i], **info) for i in range(len(pss))
-            ]
-        else:
-            results = [
-                counts.expectation(raw_counts[i], exps[i]) for i in range(len(pss))
-            ]
+        results = []
+        for i in range(len(pss)):
+            j0 = (k * len(bases) + group[i]) * nv
+            vs = [value(j0 + v, i) for v in range(nv)]
+            results.append(
+                vs[0]
+                if variants is None
+                else backend.reshape(backend.stack(vs), list(shape))
+            )
         outputs.append(evaluate(results))
     return stacked(outputs)

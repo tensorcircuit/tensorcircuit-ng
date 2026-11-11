@@ -39,6 +39,7 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 
 - Import Placement: All imports — internal (`tensorcircuit.*`) and any third-party package listed in `pyproject.toml` — MUST appear at the top of the file. Only third-party packages that are NOT declared as must dependencies in `pyproject.toml` (e.g. `stim`, `qiskit`) should be imported inside a function body (lazy/optional import pattern). In `examples/`, every dependecy should be imported at the top of file`
 - Match existing naming, structure, and API patterns.
+- Before writing a helper, search for an existing one, e.g. in `tc.backend` or `tensorcircuit/utils.py`; do not duplicate logic.
 - Keep comments minimal and useful; avoid explanatory debugging commentary.
 - Use type hints and static analysis in the `tensorcircuit/` module.
 - Do not use `typing.cast` to satisfy mypy. When the runtime logic is correct and the only issue is an imprecise or invariant type annotation, use `# type: ignore`.

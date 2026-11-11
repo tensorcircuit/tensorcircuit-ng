@@ -317,6 +317,24 @@ def test_batch_exp_ps_groups_qubit_wise_commuting_strings():
     assert len(captured) == 3
 
 
+def _exact_counts(cs, shots, keep=1.0):
+    # exact counts of the measured classical bits, as a provider returns, under the
+    # global depolarizing noise keeping ``keep`` of the state
+    rs = []
+    for ci in cs:
+        m = ci.get_positional_logical_mapping()
+        order = [m[i] for i in range(len(m))]
+        n = ci._nqubits
+        probs = np.real(tc.backend.numpy(ci.probability())).reshape([2] * n)
+        probs = probs.sum(axis=tuple(q for q in range(n) if q not in order))
+        probs = probs.transpose([sorted(order).index(q) for q in order])
+        probs = keep * probs.reshape(-1) + (1 - keep) / probs.size
+        rs.append(
+            {format(k, "0%db" % len(order)): p * shots for k, p in enumerate(probs)}
+        )
+    return rs
+
+
 def test_batch_exp_ps_symbol_circuit_params():
     pytest.importorskip("qiskit")
     import sympy
@@ -341,23 +359,8 @@ def test_batch_exp_ps_symbol_circuit_params():
     captured = []
 
     def run(cs, shots):
-        # exact counts of the measured classical bits, as a provider returns
         captured.extend(cs)
-        rs = []
-        for ci in cs:
-            m = ci.get_positional_logical_mapping()
-            order = [m[i] for i in range(len(m))]
-            n = ci._nqubits
-            probs = np.real(tc.backend.numpy(ci.probability())).reshape([2] * n)
-            probs = probs.sum(axis=tuple(q for q in range(n) if q not in order))
-            probs = probs.transpose([sorted(order).index(q) for q in order])
-            rs.append(
-                {
-                    format(k, "0%db" % len(order)): p * shots
-                    for k, p in enumerate(probs.reshape(-1))
-                }
-            )
-        return rs
+        return _exact_counts(cs, shots)
 
     kws = dict(device="local::default", with_rem=False, batch_submit_func=run)
     chain = {"coupling_map": [[i, i + 1] for i in range(4)]}
@@ -392,6 +395,52 @@ def test_batch_exp_ps_symbol_circuit_params():
     assert not np.iscomplexobj(tc.backend.numpy(r))
     with pytest.raises(ValueError, match="SymbolCircuit"):
         wrapper.batch_expectation_ps(sc.to_circuit(params[0]), pss, params=params)
+
+
+def test_batch_exp_ps_variants(highp):
+    pytest.importorskip("qiskit")
+    from tensorcircuit.results.qem import mitigators
+
+    c = tc.Circuit(3)
+    for i in range(3):
+        c.rx(i, theta=0.3 + 0.4 * i)
+    c.cx(0, 1)
+    c.cx(1, 2)
+    c.rz(2, theta=0.7)
+    pss = [[3, 3, 0], [1, 0, 1], [0, 2, 3]]
+    exact = tc.backend.numpy(wrapper.batch_expectation_ps(c, pss))
+    cc, info = tc.compiler.DefaultCompiler(
+        {"coupling_map": [[i, i + 1] for i in range(3)], "initial_layout": [3, 1, 2]}
+    )(c)
+    m = mitigators.Chain(mitigators.CDR(2, seed=1), mitigators.Twirl(3, seed=2))
+    calls = []
+
+    def run(cs, shots):
+        calls.append(len(cs))
+        return _exact_counts(cs, shots, keep=0.6)
+
+    noisy = wrapper.batch_expectation_ps(
+        cc,
+        pss,
+        device="local::default",
+        with_rem=False,
+        info=info,
+        batch_submit_func=run,
+        variants=m,
+    )
+    ideal = wrapper.batch_expectation_ps(cc, pss, info=info, variants=m)
+    assert np.shape(noisy) == np.shape(ideal) == (3, 3, 3)
+    # the variants of all the measurement bases in one batch
+    assert len(calls) == 1
+    np.testing.assert_allclose(noisy, 0.6 * tc.backend.numpy(ideal), atol=1e-8)
+    np.testing.assert_allclose(m.combine(noisy, ideal), exact, atol=1e-8)
+    np.testing.assert_allclose(m.combine(ideal, ideal), exact, atol=1e-8)
+    r = wrapper.batch_expectation_ps(
+        cc, pss, ws=[1.0, -0.5, 2.0], info=info, variants=lambda ci: [[ci, ci]]
+    )
+    np.testing.assert_allclose(r, [[exact @ [1.0, -0.5, 2.0]] * 2], atol=1e-8)
+    with pytest.raises(ValueError, match="info"):
+        wrapper.batch_expectation_ps(cc, pss, variants=m)
 
 
 @requires_cloud
