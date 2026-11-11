@@ -2,39 +2,17 @@
 compiler interface via qiskit
 """
 
-import re
 from typing import Any, Dict, Optional, Sequence
 
 import sympy
 
 from ..abstractcircuit import AbstractCircuit
-from ..circuit import Circuit
 from ..symbolcircuit import SymbolCircuit
 from ..translation import (
     get_qiskit_qasm,
     qiskit2tc,
     qiskit_from_qasm_str_ordered_measure,
 )
-
-
-def _free_pi(s: str) -> str:
-    # dirty trick to get rid of pi in openqasm from qiskit
-    rs = []
-    pistr = "3.141592653589793"
-    s = s.replace("pi", pistr)
-    for r in s.split("\n"):
-        inc = re.search(r"\(.*\)", r)
-        if inc is None:
-            rs.append(r)
-        else:
-            v = r[inc.start() : inc.end()]
-            v = eval(v)
-            if not isinstance(v, tuple):
-                r = r[: inc.start()] + "(" + str(v) + ")" + r[inc.end() :]
-            else:  # u gate case
-                r = r[: inc.start()] + str(v) + r[inc.end() :]
-            rs.append(r)
-    return "\n".join(rs)
 
 
 def _comment_qasm(s: str) -> str:
@@ -212,11 +190,7 @@ def qiskit_compile(
         )
 
     elif output.lower() in ["tc", "tensorcircuit"]:
-        s = _free_pi(get_qiskit_qasm(ncircuit))
-        r0 = Circuit.from_openqasm(  # type: ignore
-            s,
-            keep_measure_order=True,
-        )
+        r0 = qiskit2tc(ncircuit, ncircuit.num_qubits)
 
     else:
         raise ValueError("Unknown output format: %s" % output)

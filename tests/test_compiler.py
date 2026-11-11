@@ -94,6 +94,28 @@ def test_qiskit_compile_positions_follow_classical_bits():
     assert c1.get_positional_logical_mapping() == {1: 2, 0: 0}
 
 
+def test_qiskit_compile_preserves_interleaved_measurements():
+    qiskit = pytest.importorskip("qiskit")
+    from tensorcircuit.compiler.qiskit_compiler import qiskit_compile
+
+    qc = qiskit.QuantumCircuit(1, 2)
+    qc.x(0)
+    qc.measure(0, 0)
+    qc.x(0)
+    qc.measure(0, 1)
+    compiled, _ = qiskit_compile(
+        qc,
+        output="tc",
+        compiled_options={"optimization_level": 0},
+    )
+    measurements = [
+        (d["index"][0], d["record_index"], d["pos"])
+        for d in compiled._extra_qir
+        if d["name"] == "measure"
+    ]
+    assert measurements == [(0, 0, 1), (0, 1, 2)]
+
+
 def test_composed_compiler():
     from tensorcircuit.compiler import DefaultCompiler
 
