@@ -219,9 +219,30 @@ def test_local_measurement_semantics(backend):
     c._extra_qir[1]["record_index"] = 3
     t = apis.submit_task(device="local::testing", circuit=c, shots=10)
     assert t.results() == {"0011": 10}
-    c.h(0)
-    with pytest.raises(ValueError, match="gates after a measurement"):
-        apis.submit_task(device="local::testing", circuit=c, shots=10)
+    c.x(0)
+    c.measure_instruction(0)
+    t = apis.submit_task(device="local::testing", circuit=c, shots=10)
+    assert t.results() == {"0010": 10}
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_local_measurement_reset_noise_and_readout(backend):
+    c = tc.Circuit(1)
+    c.x(0)
+    c.mr_instruction(0, p=1.0)
+    c.measure_instruction(0)
+    c.depolarizing_instruction(0, px=1.0, py=0.0, pz=0.0)
+    c.measure_instruction(0)
+    task = apis.submit_task(device="local::testing", circuit=c, shots=5)
+    assert task.results() == {"001": 5}
+
+
+def test_local_batch_shot_counts(npb):
+    c = tc.Circuit(1)
+    tasks = apis.submit_task(device="local::testing", circuit=[c, c], shots=[3, 5])
+    assert [t.results() for t in tasks] == [{"0": 3}, {"0": 5}]
+    with pytest.raises(ValueError, match="shot count"):
+        apis.submit_task(device="local::testing", circuit=[c, c], shots=[3])
 
 
 def test_local_batch_submit():
