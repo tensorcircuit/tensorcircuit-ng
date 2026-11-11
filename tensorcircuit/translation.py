@@ -803,29 +803,24 @@ def eqasm2tc(
 
 def qiskit_from_qasm_str_ordered_measure(qasm_str: str) -> Any:
     """
-    qiskit ``from_qasm_str`` method cannot keep the order of measure as the qasm file,
-    we provide this alternative function in case the order of measure instruction matters
+    Parse OpenQASM in source order, including measurements interleaved with gates.
 
     :param qasm_str: open qasm str
     :type qasm_str: str
     :return: ``qiskit.circuit.QuantumCircuit``
     :rtype: Any
+    :raises ValueError: if multiple measurements write to the same classical bit
     """
-    measure_sequence = []
-    qasm_instruction = []
-    for line in qasm_str.split("\n"):
-        if line.startswith("measure"):
-            index = int(line.split(" ")[1][2:-1])
-            cindex = int(line.split(" ")[3].strip(";").split("[")[1][:-1])
-            # sometimes we have qasm as "measure q[3] -> meas[0];"
-
-            measure_sequence.append((index, cindex))
-        else:
-            qasm_instruction.append(line)
-
-    qc = QuantumCircuit.from_qasm_str("\n".join(qasm_instruction))
-    for qid, cid in measure_sequence:
-        qc.measure(qid, cid)
+    qc = QuantumCircuit.from_qasm_str(qasm_str)
+    measured_bits = set()
+    for inst in qc.data:
+        if inst.operation.name == "measure":
+            bit = inst.clbits[0]
+            if bit in measured_bits:
+                raise ValueError(
+                    f"Multiple measurements write to classical bit {qc.find_bit(bit).index}"
+                )
+            measured_bits.add(bit)
     return qc
 
 

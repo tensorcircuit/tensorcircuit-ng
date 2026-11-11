@@ -1886,6 +1886,35 @@ measure q[0] -> c[0];"""
     assert c.get_positional_logical_mapping() == {0: 0, 1: 1}
 
 
+def test_from_qasm_interleaved_measurements(npb):
+    pytest.importorskip("qiskit")
+    qasm = """OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[1];
+creg first[1];
+creg second[1];
+x q[0];
+measure q[0] -> second[0];
+x q[0];
+measure q[0] -> first[0];"""
+    c = tc.Circuit.from_openqasm(qasm, keep_measure_order=True)
+    np.testing.assert_array_equal(c.sample_measurements(shots=1), [[1, 0]])
+    assert [m["record_index"] for m in c._extra_qir] == [1, 0]
+
+
+def test_from_qasm_rejects_duplicate_measurement_bit():
+    pytest.importorskip("qiskit")
+    qasm = """OPENQASM 2.0;
+qreg q[2];
+creg c[2];
+measure q -> c;
+measure q[0] -> c[1];"""
+    with pytest.raises(
+        ValueError, match="Multiple measurements write to classical bit 1"
+    ):
+        tc.Circuit.from_openqasm(qasm, keep_measure_order=True)
+
+
 def test_measure_records_follow_classical_bits():
     qiskit = pytest.importorskip("qiskit")
     qc = qiskit.QuantumCircuit(2, 4)
