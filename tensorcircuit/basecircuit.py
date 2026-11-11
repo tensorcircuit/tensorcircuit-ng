@@ -639,15 +639,6 @@ class BaseCircuit(AbstractCircuit):
             p = backend.real(backend.reshape(diag, [-1]))
         return p
 
-    def _merge_qir_with_extra(self) -> List[Dict[str, Any]]:
-        from .translation import _merge_extra_qir
-
-        return _merge_extra_qir(self._qir, getattr(self, "_extra_qir", []))
-
-    @staticmethod
-    def _is_measure_instruction_name(name: str) -> bool:
-        return name.upper() in ["MEASURE", "M", "MZ", "MR"]
-
     @staticmethod
     def _is_random_instruction_name(name: str) -> bool:
         return name.upper() in [
@@ -676,7 +667,7 @@ class BaseCircuit(AbstractCircuit):
                 continue
             if d.get("instruction", False) and self._is_random_instruction_name(name):
                 c += 1
-                if self._is_measure_instruction_name(name) and self._measure_flip(d):
+                if self._is_measurement(d) and self._measure_flip(d):
                     c += 1
         return c
 
@@ -689,13 +680,14 @@ class BaseCircuit(AbstractCircuit):
             if not d.get("instruction", False):
                 continue
             name = str(d.get("name", "")).upper()
-            if self._is_measure_instruction_name(name):
+            if self._is_measurement(d):
                 measured_so_far += 1
                 continue
             if name != "DETECTOR":
                 continue
             lookback_indices = [int(v) for v in d.get("index", [])]
-            base = int(d.get("current_m_count", measured_so_far))
+            # relative indices count back from the measurements before the detector
+            base = measured_so_far
             abs_indices = []
             for v in lookback_indices:
                 rid = base + v if v < 0 else v
@@ -956,7 +948,7 @@ class BaseCircuit(AbstractCircuit):
         :return: A tensor representing the joint probability distribution.
         :rtype: Tensor
         """
-        merged_qir = self._merge_qir_with_extra()
+        merged_qir = self.to_qir(enable_instruction=True)
         resolved_detectors = self._resolve_detectors(merged_qir)
         if len(resolved_detectors) == 0:
             raise ValueError("No detectors defined in the circuit.")
@@ -983,7 +975,7 @@ class BaseCircuit(AbstractCircuit):
         :return: The probability of the given outcome.
         :rtype: Tensor
         """
-        merged_qir = self._merge_qir_with_extra()
+        merged_qir = self.to_qir(enable_instruction=True)
         resolved_detectors = self._resolve_detectors(merged_qir)
         if len(resolved_detectors) == 0:
             raise ValueError("No detectors defined in the circuit.")
@@ -1217,7 +1209,7 @@ class BaseCircuit(AbstractCircuit):
             shots = int(kws["batch_size"])
         if "shots" in kws:
             shots = int(kws["shots"])
-        merged_qir = self._merge_qir_with_extra()
+        merged_qir = self.to_qir(enable_instruction=True)
         resolved_detectors = self._resolve_detectors(merged_qir)
         if len(resolved_detectors) == 0:
             raise ValueError("No detectors defined in the circuit.")
@@ -1266,15 +1258,8 @@ class BaseCircuit(AbstractCircuit):
             ``record_index``.
         :rtype: Tensor
         """
-        merged_qir = self._merge_qir_with_extra()
-        num_measurements = len(
-            [
-                d
-                for d in merged_qir
-                if d.get("instruction", False)
-                and self._is_measure_instruction_name(str(d.get("name", "")))
-            ]
-        )
+        merged_qir = self.to_qir(enable_instruction=True)
+        num_measurements = len(self._measurement_records(merged_qir))
         if num_measurements == 0:
             raise ValueError("No measurements defined in the circuit.")
         return self._sample_parities(

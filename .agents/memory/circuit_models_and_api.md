@@ -26,6 +26,7 @@ Use this file for cross-cutting circuit invariants, serialization behavior, and 
 - New gates should record enough information in `gatef` and `parameters` for reconstruction without hidden context.
 - For noise or channel instructions, store an explicit channel marker and replay them through the same delayed-channel application path during reconstruction. Do not rely on `TypeError` probing or method-name heuristics to distinguish gates from channels.
 - Cross-class `from_qir(...)` is expected to work only when the destination class supports the gates in the serialized program and the caller supplies any model-specific constructor arguments through `circuit_params`.
+- Instructions (`_extra_qir`: measure, reset, barrier, detector, noise flags) sit before gate `pos`, but `pos` is storage only. To rebuild or transform a circuit, edit the time-ordered `c.to_qir(enable_instruction=True)` list and replay it with `from_qir` / `append_from_qir` (a single instruction: `_add_instruction`), which derive `pos` and `_measure_counter`; never recompute `pos` or the counter by hand. Apply qubit maps with `_remap_qubits`, which leaves detector lookback indices alone, and compose with `_shift_records`, which moves classical bits and absolute detector indices behind the earlier circuit.
 
 ## MPS measurement and truncation diagnostics
 

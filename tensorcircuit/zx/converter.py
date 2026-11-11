@@ -1146,27 +1146,7 @@ def circuit_to_zx(
     b = GraphRepresentation()
     b.graph.track_phases = True
     n = c._nqubits
-    if hasattr(c, "_merge_qir"):
-        merged_qir = c._merge_qir()
-    else:
-        merged_qir_with_pos = sorted(
-            [(float(i), d) for i, d in enumerate(c._qir)]
-            + [
-                (
-                    float(d.get("pos", len(c._qir)))
-                    + (
-                        0.5
-                        if d.get("name", "").upper()
-                        in ["DETECTOR", "OBSERVABLE_INCLUDE"]
-                        else 0.01
-                    ),
-                    d,
-                )
-                for d in getattr(c, "_extra_qir", [])
-            ],
-            key=lambda x: x[0],
-        )
-        merged_qir = [d for _, d in merged_qir_with_pos]
+    merged_qir = c.to_qir(enable_instruction=True)
     for i, d in enumerate(merged_qir):
         name, index, params = (
             _zx_gate_name(d),

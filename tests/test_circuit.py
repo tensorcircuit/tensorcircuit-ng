@@ -1258,6 +1258,7 @@ def test_qir2qiskit(backend):
     c.x(2)
     c.y(2)
     c.z(2)
+    c.i(2)
     c.wroot(3)
     c.cnot(0, 1)
     c.cy(0, 1)
@@ -1357,6 +1358,7 @@ def test_qiskit2tc():
     qisc.x(3)
     qisc.y(3)
     qisc.z(3)
+    qisc.id(3)
     qisc.cu(
         5.868768495722669, 2.24809352294186, 3.59102783505607, 2.0223650288392, 1, 3
     )
@@ -1950,6 +1952,10 @@ def test_initial_mapping():
         c.expectation_ps(z=[1]), c1.expectation_ps(z=[2]), atol=1e-5
     )
     assert c1._extra_qir[0]["index"][0] == 0
+    c1.measure_instruction(1)
+    assert [d["record_index"] for d in c1._extra_qir] == [0, 1]
+    c1.detector_instruction([-1])
+    assert c1.initial_mapping({0: 1, 1: 2, 2: 0})._extra_qir[-1]["index"] == [-1]
 
     c2 = c1.initial_mapping({1: 0, 2: 1, 0: 2})
     np.testing.assert_allclose(
@@ -1961,6 +1967,71 @@ def test_initial_mapping():
         c.expectation_ps(z=[1]), c3.expectation_ps(z=[7]), atol=1e-5
     )
     print(c3.draw())
+
+
+def test_compose_keeps_instructions():
+    def sequence(c):
+        return [
+            (d["name"], list(d["index"]), d.get("record_index"))
+            for d in c.to_qir(enable_instruction=True)
+        ]
+
+    a = tc.Circuit(2)
+    a.h(0)
+    a.measure_instruction(0)
+    a.reset_instruction(0)
+    a.cnot(0, 1)
+    a.measure_instruction(1)
+    assert sequence(a.copy()) == sequence(a)
+
+    b = tc.Circuit(1)
+    b.x(0)
+    b.measure_instruction(0)
+    c = a.copy()
+    c.append(b, indices=[1])
+    assert sequence(c) == sequence(a) + [("x", [1], None), ("measure", [1], 2)]
+    c.measure_instruction(0)
+    assert c._extra_qir[-1]["record_index"] == 3
+
+    c = a.copy()
+    c.prepend(b)
+    assert sequence(c) == [("x", [0], None), ("measure", [0], 0)] + [
+        (name, index, None if r is None else r + 1) for name, index, r in sequence(a)
+    ]
+
+
+def test_qir_with_instructions():
+    measure = {"index": [0], "name": "measure", "gatef": "measure", "instruction": True}
+    c = tc.Circuit.from_json({"nqubits": 1, "qir": [], "extra_qir": [measure]})
+    c.x(0)
+    c.measure_instruction(0)
+    c.detector_instruction([0, 1])
+    qir = c.to_qir(enable_instruction=True)
+    assert [d["name"] for d in qir] == ["measure", "x", "measure", "detector"]
+    c2 = tc.Circuit.from_qir(qir)
+    assert c2._nqubits == 1
+    records = [d.get("record_index") for d in c2.copy().to_qir(enable_instruction=True)]
+    assert records == [0, None, 1, None]
+    tick = tc.Circuit.from_qir([{"name": "tick", "instruction": True}])
+    assert tick._nqubits == 1
+    assert tick.initial_mapping({0: 0})._extra_qir[0]["name"] == "tick"
+    qiskit = pytest.importorskip("qiskit")
+    qc = tc.translation.qir2qiskit([measure] + qir[1:3], 1)
+    assert isinstance(qc, qiskit.QuantumCircuit)
+    measured = [qc.find_bit(i.clbits[0]).index for i in qc.data if i.clbits]
+    assert measured == [0, 1]
+
+
+def test_qiskit2tc_composite_keeps_measurements():
+    qiskit = pytest.importorskip("qiskit")
+    sub = qiskit.QuantumCircuit(1)
+    sub.h(0)
+    qc = qiskit.QuantumCircuit(2, 2)
+    qc.measure(0, 1)
+    qc.append(sub.to_gate(), [1])
+    qc.measure(1, 0)
+    c = tc.Circuit.from_qiskit(qc)
+    assert c.get_positional_logical_mapping() == {0: 1, 1: 0}
 
 
 def test_get_positional_logical_mapping():

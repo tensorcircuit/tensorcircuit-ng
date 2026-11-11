@@ -34,6 +34,7 @@ except ImportError:
     )
 
 from . import channels, gates
+from .abstractcircuit import AbstractCircuit
 from .circuit import Circuit
 from .cons import backend, rdtypestr
 from .densitymatrix import DMCircuit2
@@ -81,27 +82,6 @@ def _get_float(parameters: Any, key: str, default: int = 0) -> float:
     return np.real(backend.numpy(gates.array_to_tensor(parameters.get(key, default)))).item()  # type: ignore
 
 
-def _merge_extra_qir(
-    qir: List[Dict[str, Any]], extra_qir: List[Dict[str, Any]]
-) -> List[Dict[str, Any]]:
-    nqir = []
-    # caution on the same pos!
-    inds: Dict[Union[int, float], List[Dict[str, Any]]] = {}
-    for d in extra_qir:
-        pos = d.get("pos", len(qir))
-        if pos not in inds:
-            inds[pos] = []
-        inds[pos].append(d)
-    for i, q in enumerate(qir):
-        if i in inds:
-            nqir += inds[i]
-        nqir.append(q)
-    for k in sorted(inds):
-        if k >= len(qir):
-            nqir += inds[k]
-    return nqir
-
-
 # TODO(@erertertet):
 #   add default theta to iswap gate
 #   add more cirq built-in gate instead of customized
@@ -124,12 +104,13 @@ def qir2cirq(
     >>> print(cisc)
     1: ───H───X───
 
-    :param qir: The quantum intermediate representation of a circuit.
+    :param qir: The quantum intermediate representation of a circuit, i.e. the gates
+        and optionally the instructions in time order, as given by ``c.to_qir()``.
     :type qir: List[Dict[str, Any]]
     :param n: # of qubits
     :type n: int
-    :param extra_qir: The extra quantum IR of tc circuit including measure and reset on hardware,
-        defaults to None
+    :param extra_qir: The instructions to be merged into ``qir`` by their ``pos``,
+        only for the legacy separate form, defaults to None
     :type extra_qir: Optional[List[Dict[str, Any]]]
     :return: A ``cirq.Circuit`` object.
     :rtype: Any
@@ -154,8 +135,10 @@ def qir2cirq(
         ) -> List[str]:
             return [self.name] * self.nqubit
 
+    # TODO(@refraction-ray): translate the instructions, e.g. measure, reset and
+    # barrier, which are not supported yet
     if extra_qir is not None and len(extra_qir) > 0:
-        qir = _merge_extra_qir(qir, extra_qir)
+        qir = AbstractCircuit._merge_extra_qir(qir, extra_qir)
     qbits = cirq.LineQubit.range(n)
     cmd = []
     for gate_info in qir:
@@ -231,12 +214,14 @@ def qir2qiskit(
     [(Instruction(name='h', num_qubits=1, num_clbits=0, params=[]), [Qubit(QuantumRegister(2, 'q'), 1)], []),
      (Instruction(name='x', num_qubits=1, num_clbits=0, params=[]), [Qubit(QuantumRegister(2, 'q'), 1)], [])]
 
-    :param qir: The quantum intermediate representation of a circuit.
+    :param qir: The quantum intermediate representation of a circuit, i.e. the gates
+        and optionally the instructions in time order, as given by ``c.to_qir()``.
     :type qir: List[Dict[str, Any]]
     :param n: # of qubits
     :type n: int
-    :param extra_qir: The extra quantum IR of tc circuit including measure and reset on hardware,
-        defaults to None. Each measurement is written to the classical bit of its ``record_index``.
+    :param extra_qir: The instructions to be merged into ``qir`` by their ``pos``,
+        only for the legacy separate form, defaults to None.
+        Each measurement is written to the classical bit of its ``record_index``.
     :type extra_qir: Optional[List[Dict[str, Any]]]
     :param initialization: Circuit initial state in qiskit format
     :type initialization: Optional[Tensor]
@@ -244,17 +229,15 @@ def qir2qiskit(
     :rtype: Any
     """
     if extra_qir is not None and len(extra_qir) > 0:
-        qir = _merge_extra_qir(qir, extra_qir)
-        records = [
-            d.get("record_index", i)
-            for i, d in enumerate(d for d in extra_qir if d["name"] == "measure")
-        ]
+        qir = AbstractCircuit._merge_extra_qir(qir, extra_qir)
+    records = AbstractCircuit._measurement_records(qir)
+    if any(d.get("instruction", False) for d in qir):
         qiskit_circ = QuantumCircuit(n, max([n] + [r + 1 for r in records]))
     else:
         qiskit_circ = QuantumCircuit(n)
     if initialization is not None:
         qiskit_circ.initialize(initialization)
-    measure_cbit = 0
+    record = iter(records)
     for gate_info in qir:
         if gate_info.get("is_channel", False):
             continue
@@ -271,7 +254,6 @@ def qir2qiskit(
             "x",
             "y",
             "z",
-            "i",
             "s",
             "t",
             "swap",
@@ -283,6 +265,8 @@ def qir2qiskit(
             "cz",
         ]:
             getattr(qiskit_circ, gate_name)(*index)
+        elif gate_name == "i":
+            qiskit_circ.id(*index)
         elif gate_name in ["sd", "td"]:
             getattr(qiskit_circ, gate_name + "g")(*index)
         elif gate_name in ["ox", "oy", "oz"]:
@@ -348,8 +332,7 @@ def qir2qiskit(
             )
             qiskit_circ.unitary(qop, index[::-1], label=qis_name)
         elif gate_name == "measure":
-            qiskit_circ.measure(index[0], gate_info.get("record_index", measure_cbit))
-            measure_cbit += 1
+            qiskit_circ.measure(index[0], next(record))
         elif gate_name == "reset":
             qiskit_circ.reset(index[0])
         elif gate_name == "barrier":
@@ -526,6 +509,8 @@ def qiskit2tc(
             "cz",
         ]:
             getattr(tc_circuit, gate_name)(*idx)
+        elif gate_name == "id":
+            tc_circuit.i(*idx)
         elif gate_name in ["sdg", "tdg"]:
             getattr(tc_circuit, gate_name[:-1])(*idx)
         elif gate_name in ["cx_o0", "cy_o0", "cz_o0"]:
@@ -589,11 +574,16 @@ def qiskit2tc(
                     *idx, ctrl=ctrl_state, unitary=base_gate.to_matrix()
                 )
         elif gate_name == "measure":
-            tc_circuit.measure_instruction(*idx)
             # the classical bit identifies the measurement record
-            tc_circuit._extra_qir[-1]["record_index"] = qc.find_bit(
-                gate_info.clbits[0]
-            ).index
+            tc_circuit._add_instruction(
+                {
+                    "index": list(idx),
+                    "name": "measure",
+                    "gatef": "measure",
+                    "instruction": True,
+                    "record_index": qc.find_bit(gate_info.clbits[0]).index,
+                }
+            )
         elif gate_name == "reset":
             tc_circuit.reset_instruction(*idx)
         elif gate_name == "barrier":
@@ -616,12 +606,6 @@ def qiskit2tc(
         else:  # unitary gate
             idx_inverse = (x for x in idx[::-1])
             tc_circuit.any(*idx_inverse, unitary=gate_info[0].to_matrix())
-    records = [
-        d["record_index"] for d in tc_circuit._extra_qir if d["name"] == "measure"
-    ]
-    if records:
-        # later measurements never reuse an imported classical bit
-        tc_circuit._measure_counter = max(records) + 1
     return tc_circuit
 
 

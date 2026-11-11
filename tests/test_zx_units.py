@@ -440,3 +440,19 @@ def test_stabilizertcircuit_one_liners():
 
     stc.apply(G(), 0)
     assert len(stc._qir) > 20
+
+
+def test_circuit_to_zx_instruction_order():
+    def signature(built):
+        g = built.graph
+        return sorted(g.edges()), [
+            (v, g.type(v), g.row(v)) for v in sorted(g.vertices())
+        ]
+
+    c = tc.Circuit(1)
+    c.h(0)
+    c.measure_instruction(0)
+    c.x(0)
+    c.measure_instruction(0)
+    expected = signature(circuit_to_zx(StabilizerTCircuit.from_circuit(c)))
+    assert signature(circuit_to_zx(c)) == expected

@@ -1091,7 +1091,7 @@ def test_from_circuit_ordering(backend):
     stc = StabilizerTCircuit.from_circuit(c)
 
     names = [d["name"].upper() for d in stc._qir]
-    # translation._merge_extra_qir logic: extra instructions at pos i come BEFORE qir[i]
+    # AbstractCircuit._merge_extra_qir logic: extra instructions at pos i come BEFORE qir[i]
     expected = ["H", "MEASURE", "RESET", "X"]
     assert names == expected
 

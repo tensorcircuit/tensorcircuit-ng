@@ -2,7 +2,7 @@
 Cloud provider from local machine
 """
 
-from typing import Any, Dict, List, Optional, Union, Sequence
+from typing import Any, Dict, List, Optional, Union, Sequence, Set
 from uuid import uuid4
 import time
 
@@ -51,12 +51,12 @@ def submit_task(
     def _circuit2result(c: AbstractCircuit) -> Dict[str, Any]:
         if device.name not in ["testing", "default"]:
             raise ValueError("Unsupported device from local provider: %s" % device.name)
-        if any(
-            d["name"] == "measure"
-            and any(d["index"][0] in g["index"] for g in c._qir[d.get("pos", 0) :])
-            for d in c._extra_qir
-        ):
-            raise ValueError("Local provider cannot run gates after a measurement")
+        measured: Set[int] = set()
+        for d in c.to_qir(enable_instruction=True):
+            if c._is_measurement(d):
+                measured.add(d["index"][0])
+            elif not d.get("instruction", False) and measured & set(d["index"]):
+                raise ValueError("Local provider cannot run gates after a measurement")
         samples = c.sample(batch=shots, allow_state=True, format="sample_bin")  # type: ignore
         # bit i of the result is the qubit measured into classical bit i, unwritten
         # classical bits read the appended zero column, and all qubits are measured

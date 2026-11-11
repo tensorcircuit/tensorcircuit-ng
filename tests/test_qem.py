@@ -363,3 +363,42 @@ def test_rc_preserves_initial_state(npb, kind, monkeypatch):
     for simplify in (False, True):
         _, rebuilt = apply_rc(circuit, check_rebuilt, simplify=simplify)
         check_rebuilt(rebuilt[0])
+
+
+def test_rc_keeps_instructions(npb):
+    def sequence(circuit):
+        merged = circuit.to_qir(enable_instruction=True)
+        return [
+            (d["name"], list(d["index"]))
+            for d in merged
+            if d["name"] in ["cnot", "measure", "reset", "barrier"]
+        ]
+
+    c = tc.Circuit(3)
+    c.h(0)
+    c.cnot(0, 1)
+    c.measure_instruction(1)
+    c.reset_instruction(1)
+    c.barrier_instruction(0, 1, 2)
+    c.cnot(1, 2)
+    c.measure_instruction(2)
+    c.measure_instruction(0)
+    expected = sequence(c)
+    rc = qem.rc_circuit(c)
+    assert sequence(rc) == expected
+    pruned = qem.prune_ddcircuit(rc, [0, 1, 2])
+    assert sequence(pruned) == expected
+    assert rc.to_qiskit(enable_instruction=True).count_ops()["measure"] == 3
+    for rebuilt in (rc, pruned):
+        rebuilt.measure_instruction(1)
+        assert rebuilt._extra_qir[-1]["record_index"] == 3
+    with pytest.raises(ValueError, match="at the end"):
+        apply_rc(c, lambda _: 0.0)
+
+    c = tc.Circuit(2)
+    c.cnot(0, 1)
+    c.measure_instruction(1)
+    _, rebuilt = apply_rc(c, lambda _: 0.0, simplify=True)
+    assert sequence(rebuilt[0]) == [("cnot", [0, 1]), ("measure", [1])]
+    rebuilt[0].measure_instruction(0)
+    assert rebuilt[0]._extra_qir[-1]["record_index"] == 1

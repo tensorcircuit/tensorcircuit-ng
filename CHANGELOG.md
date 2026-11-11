@@ -26,6 +26,8 @@
 
 ### Added
 
+- `to_qir(enable_instruction=True)` returns the gates and instructions in time order, which `from_qir`, `append_from_qir` and `qir2qiskit` accept.
+
 - Add the LQCloud (逻辑比特) cloud provider `lqcloud`, compiling circuits locally to native gates, with native batch submission and `batch_expectation_ps`; install the `lqcloud` SDK separately.
 
 - Add noise aware layout by default for the `lqcloud` provider and `batch_expectation_ps`, via `compiler.qiskit_compiler.properties_to_target` and `DefaultCompiler(properties=...)`; qubits and couplers of unknown errors are not used.
@@ -61,6 +63,10 @@
 - Add `cache_size` and `clear_cache()` to the contraction path cache of `OMEOptimizer`.
 
 ### Fixed
+
+- `qem.rc_circuit` keeps measurement instructions, and its circuits export to qiskit >= 1.0.
+
+- Measurement, reset and barrier instructions are kept in order by `copy`, `append`, `prepend`, `initial_mapping` and `qem` rebuilds, with the measurements of an appended circuit recorded after the existing classical bits and absolute detector indices shifted accordingly; this also fixes measurements lost by `from_qiskit` with composite gates. Detector lookbacks count the preceding measurements rather than classical bits, and `circuit_to_zx` orders the instructions of a `Circuit` as elsewhere.
 
 - `cloud.wrapper.batch_expectation_ps` returns a real weighted sum for exact simulation with `ws`, as on a device, instead of a complex one.
 

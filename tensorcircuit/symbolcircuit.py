@@ -35,7 +35,6 @@ from .cons import backend, contractor, dtypestr, runtime_backend, set_function_b
 from .gates import Gate
 from .quantum import QuOperator, _decode_basis_label
 from .symbolgates import SYM_SGATE_MAP, SYM_VGATE_MAP, sym_r
-from .translation import _merge_extra_qir
 from .utils import is_sequence
 from .simplify import _full_light_cone_cancel
 
@@ -736,9 +735,9 @@ class SymbolCircuit(Circuit):
             split=self.split,
             dim=None if self._d == 2 else self._d,
         )
-        c.append_from_qir(self._bound_qir(param_dict))
-        c._extra_qir = [dict(d) for d in self._extra_qir]
-        c._measure_counter = self._measure_counter
+        c.append_from_qir(
+            self._merge_extra_qir(self._bound_qir(param_dict), self._extra_qir)
+        )
         return c
 
     def _bind_value(
@@ -834,9 +833,7 @@ class SymbolCircuit(Circuit):
                     k: substitute(v) for k, v in instruction["parameters"].items()
                 }
             bound_qir.append(bound_instruction)
-        sc.append_from_qir(bound_qir)
-        sc._extra_qir = [dict(d) for d in self._extra_qir]
-        sc._measure_counter = self._measure_counter
+        sc.append_from_qir(self._merge_extra_qir(bound_qir, self._extra_qir))
         return sc
 
     # ── Qiskit translation ────────────────────────────────────────────────────
@@ -882,16 +879,9 @@ class SymbolCircuit(Circuit):
             raise NotImplementedError(
                 "SymbolCircuit.to_qiskit does not support the inputs state"
             )
-        qir = self._qir
-        if enable_instruction and self._extra_qir:
-            qir = _merge_extra_qir(qir, self._extra_qir)
-            # the same classical register as ``translation.qir2qiskit``
-            records = [
-                d.get("record_index", i)
-                for i, d in enumerate(
-                    d for d in self._extra_qir if d["name"] == "measure"
-                )
-            ]
+        qir = self.to_qir(enable_instruction=enable_instruction)
+        records = self._measurement_records(qir)
+        if self._extra_qir and enable_instruction:
             qc = QuantumCircuit(
                 self._nqubits, max([self._nqubits] + [r + 1 for r in records])
             )
@@ -922,7 +912,7 @@ class SymbolCircuit(Circuit):
             val = complex(expr)
             return float(val.real) if val.imag == 0 else val
 
-        measure_cbit = 0
+        record = iter(records)
         for d in qir:
             if d.get("is_channel"):
                 continue
@@ -931,8 +921,7 @@ class SymbolCircuit(Circuit):
             params = d.get("parameters", {})
 
             if gate_name == "measure":
-                qc.measure(index[0], d.get("record_index", measure_cbit))
-                measure_cbit += 1
+                qc.measure(index[0], next(record))
             elif gate_name == "reset":
                 qc.reset(index[0])
             elif gate_name == "barrier":

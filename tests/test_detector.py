@@ -41,6 +41,38 @@ def test_detector_current_m_count_freeze(backend):
     np.testing.assert_array_equal(s1, s2)
 
 
+def test_detector_lookback_counts_measurements(npb):
+    qiskit = pytest.importorskip("qiskit")
+    qc = qiskit.QuantumCircuit(1, 4)
+    qc.x(0)
+    qc.measure(0, 3)
+    c = tc.Circuit.from_qiskit(qc)
+    c.detector_instruction([-1])
+    c.reset_instruction(0)
+    c.measure_instruction(0)
+    samples = np.asarray(c.sample_detector(batch_size=8, seed=1))
+    np.testing.assert_array_equal(samples[:, 0], np.ones(8, dtype=bool))
+
+
+def test_detector_absolute_index_after_compose(npb):
+    def part(flip):
+        c = tc.Circuit(1)
+        c.reset_instruction(0)
+        if flip:
+            c.x(0)
+        c.measure_instruction(0)
+        c.detector_instruction([0])
+        return c
+
+    expected = np.tile([True, False], (8, 1))
+    c = part(True)
+    c.append(part(False))
+    np.testing.assert_array_equal(c.sample_detector(batch_size=8, seed=1), expected)
+    c = part(False)
+    c.prepend(part(True))
+    np.testing.assert_array_equal(c.sample_detector(batch_size=8, seed=1), expected)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_detector_with_reset_instruction(backend):
     c = tc.Circuit(1)

@@ -43,6 +43,9 @@ def apply_zne(
     Apply zero-noise extrapolation (ZNE) and return the mitigated results.
 
     Reconstructed circuits retain the input circuit's type and initial state.
+    The folded gates, e.g. ``G G^{-1} G``, are cancelled by a compiler that
+    cancels inverse pairs, e.g. qiskit's, before running on hardware, unless a
+    barrier separates them.
 
     :param circuit: The aim circuit.
     :type circuit: Any
@@ -94,21 +97,15 @@ def prune_ddcircuit(c: Any, qlist: List[int]) -> Any:
     :return: new circuit
     :rtype: Any
     """
-    qir = c.to_qir()
-    cnew = type(c)(**c.circuit_param)
-    for d in qir:
-        if d["index"][0] in qlist:
+    kept = []
+    for d in c.to_qir(enable_instruction=True):
+        if d.get("instruction", False):
+            kept.append(d)
+        elif d["index"][0] in qlist:
             if_iden = np.sum(abs(np.array([[1, 0], [0, 1]]) - d["gate"].get_tensor()))
             if if_iden > 1e-4:
-                if "parameters" not in d:
-                    cnew.apply_general_gate_delayed(d["gatef"], d["name"])(
-                        cnew, *d["index"]
-                    )
-                else:
-                    cnew.apply_general_variable_gate_delayed(d["gatef"], d["name"])(
-                        cnew, *d["index"], **d["parameters"]
-                    )
-    return cnew
+                kept.append(d)
+    return type(c).from_qir(kept, c.circuit_param)
 
 
 def used_qubits(c: Any) -> List[int]:
@@ -298,7 +295,8 @@ candidate_dict: collections.OrderedDict[Tuple[str, bytes], List[Any]] = (
 
 def rc_circuit(c: Any) -> Any:
     """
-    Apply Pauli twirling to the two-qubit gates of a circuit.
+    Apply Pauli twirling to the two-qubit gates of a circuit, keeping the
+    measurement and reset instructions in place.
 
     Cached candidates are reused only for an identical gate matrix and dtype.
     The cache retains at most 1,000,000 matrices, evicting the least recently
@@ -308,10 +306,11 @@ def rc_circuit(c: Any) -> Any:
     :param c: Input circuit.
     :return: Randomized circuit.
     """
-    qir = c.to_qir()
     cnew = type(c)(**c.circuit_param)
-    for d in qir:
-        if len(d["index"]) == 2:
+    for d in c.to_qir(enable_instruction=True):
+        if d.get("instruction", False):
+            cnew._add_instruction(d)
+        elif len(d["index"]) == 2:
             matrix = backend.numpy(backend.reshapem(d["gate"].tensor))
             key = (matrix.dtype.str, matrix.tobytes())
             rc_cand = candidate_dict.get(key)
@@ -365,7 +364,8 @@ def apply_rc(
     :type executor: Callable[[Any], Any]
     :param num_to_average: Number of circuits for RC, defaults to 1
     :type num_to_average: int, optional
-    :param simplify: Whether simplify the circuits by merging single qubit gates, defaults to True
+    :param simplify: Whether simplify the circuits by merging single qubit gates,
+        only for measurement and reset instructions at the end, defaults to True
     :type simplify: bool, optional
     :param iscount: whether the output is bit string, defaults to False
     :type iscount: bool, optional
@@ -381,7 +381,15 @@ def apply_rc(
             circuit1 = prune_ddcircuit(
                 circuit1, qlist=list(range(circuit1.circuit_param["nqubits"]))
             )
-            circuit1 = simple_compiler.merge(circuit1)
+            ngates = len(circuit1._qir)
+            if any(d.get("pos", ngates) < ngates for d in circuit1._extra_qir):
+                raise ValueError(
+                    "`simplify` only supports measurement and reset instructions "
+                    "at the end of the circuit"
+                )
+            merged = simple_compiler.merge(circuit1)
+            merged.append_from_qir(circuit1._extra_qir)
+            circuit1 = merged
 
         exp.append(executor(circuit1))
         circuit_list.append(circuit1)

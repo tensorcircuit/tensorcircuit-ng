@@ -332,8 +332,6 @@ def simple_compile(
         qir = prune(qir, **compiled_options)
         len1 = len(qir)
 
-    c = type(circuit).from_qir(qir, circuit.circuit_param)
-
-    for d in circuit._extra_qir:
-        c._extra_qir.append({**d, "pos": len(qir)})
+    # the instructions are all after the gates
+    c = type(circuit).from_qir(qir + circuit._extra_qir, circuit.circuit_param)
     return (c, info)
