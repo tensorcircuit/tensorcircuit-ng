@@ -711,7 +711,7 @@ class BaseCircuit(AbstractCircuit):
             if not d.get("instruction", False):
                 continue
             name = str(d.get("name", "")).upper()
-            if name in ["DETECTOR", "BARRIER", "TICK", "QUBIT_COORDS", "SHIFT_COORDS"]:
+            if name.lower() in self.passive_instructions:
                 continue
             if name in ["MEASURE", "M", "MZ"]:
                 if int(d.get("pos", len(self._qir))) < len(self._qir):
@@ -773,7 +773,7 @@ class BaseCircuit(AbstractCircuit):
                     on_noise(d, q)
                 continue
 
-            if name in ["DETECTOR", "BARRIER", "TICK", "QUBIT_COORDS", "SHIFT_COORDS"]:
+            if name.lower() in self.passive_instructions:
                 continue
 
             raise NotImplementedError(
@@ -1076,7 +1076,7 @@ class BaseCircuit(AbstractCircuit):
                 work._front[q + n] = bn[0]
                 continue
 
-            if name in ["DETECTOR", "BARRIER", "TICK", "QUBIT_COORDS", "SHIFT_COORDS"]:
+            if name.lower() in self.passive_instructions:
                 continue
 
             if name in ["DEPOLARIZING", "PAULI"]:
@@ -1154,7 +1154,7 @@ class BaseCircuit(AbstractCircuit):
             if not d.get("instruction", False):
                 continue
             name = str(d.get("name", "")).upper()
-            if name in ["DETECTOR", "BARRIER", "TICK", "QUBIT_COORDS", "SHIFT_COORDS"]:
+            if name.lower() in self.passive_instructions:
                 continue
             if name in ["MEASURE", "M", "MZ"]:
                 q = int(d["index"][0])

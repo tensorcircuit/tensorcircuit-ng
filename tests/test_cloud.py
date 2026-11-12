@@ -276,6 +276,22 @@ def test_batch_exp_ps_with_idle_qubit():
     np.testing.assert_allclose(result, [1])
 
 
+def test_batch_exp_ps_with_delays():
+    # the circuits are merged by json, as OpenQASM 2 cannot export the delays
+    c = tc.Circuit(2)
+    c.x(0)
+    c.delay_instruction(0, 1, duration=40)
+    result = wrapper.batch_expectation_ps(
+        c,
+        [[3, 0], [3, 3]],
+        device="local::default",
+        with_rem=False,
+        shots=100,
+        compile_func=lambda circuit: (circuit, {}),
+    )
+    np.testing.assert_allclose(result, [-1, -1])
+
+
 def test_batch_exp_ps_groups_qubit_wise_commuting_strings():
     n = 3
     c = tc.Circuit(n)

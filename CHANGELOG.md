@@ -26,6 +26,8 @@
 
 ### Added
 
+- Add `delay_instruction(*index, duration, unit="ns")` for idling qubits, stored in nanoseconds, with no effect on simulation. `to_qiskit` and `from_qiskit` convert it from and to the qiskit `Delay` in SI units; a `Delay` in `dt` is skipped with a warning. `to_openqasm` raises on delays, since OpenQASM 2 cannot hold their unit. The `lqcloud` provider sends it as the native `delay`, and `properties_to_target` supports it.
+
 - `to_qir(enable_instruction=True)` returns the gates and instructions in time order, which `from_qir`, `append_from_qir` and `qir2qiskit` accept.
 
 - Add the LQCloud (逻辑比特) cloud provider `lqcloud`, compiling circuits locally to native gates, with native batch submission and `batch_expectation_ps`; install the `lqcloud` SDK separately.

@@ -2033,6 +2033,58 @@ def test_qiskit2tc_composite_keeps_measurements():
     assert c.get_positional_logical_mapping() == {0: 1, 1: 0}
 
 
+def test_delay_instruction_units_and_qiskit():
+    def durations(c):
+        return [
+            (d["index"], d["parameters"]["duration"])
+            for d in c.to_qir(enable_instruction=True)
+            if d["name"] == "delay"
+        ]
+
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cz(0, 1)
+    c.delay_instruction(0, 1, duration=40)
+    c.cz(0, 1)
+    c.delay_instruction(1, duration=1.5, unit="us")
+    expected = [([0], 40.0), ([1], 40.0), ([1], 1500.0)]
+    assert durations(c) == expected
+    with pytest.raises(ValueError, match="dt"):
+        c.delay_instruction(0, duration=10, unit="dt")
+    # identity in simulation, and dropped by inverse like the other instructions
+    np.testing.assert_allclose(
+        c.state(), np.array([1, 0, 1, 0]) / np.sqrt(2), atol=1e-6
+    )
+    measured = c.copy()
+    measured.measure_instruction(0)
+    measured.detector_instruction([0])
+    np.testing.assert_allclose(measured.detector_probabilities(), [0.5, 0.5], atol=1e-6)
+    assert c.inverse()._extra_qir == []
+    # OpenQASM 2 has no unit, so qiskit would read the delays back in dt
+    with pytest.raises(ValueError, match="OpenQASM 2"):
+        c.to_openqasm()
+
+    qiskit = pytest.importorskip("qiskit")
+    qc = c.to_qiskit(enable_instruction=True)
+    assert [
+        (i.operation.duration, i.operation.unit)
+        for i in qc.data
+        if i.operation.name == "delay"
+    ] == [(40.0, "ns"), (40.0, "ns"), (1500.0, "ns")]
+    # qiskit >= 2 converts the delays to seconds, and keeps the gates across them
+    compiled = qiskit.transpile(
+        qc, basis_gates=["rz", "sx", "cz"], optimization_level=2
+    )
+    c2 = tc.Circuit.from_qiskit(compiled)
+    assert durations(c2) == expected and c2.gate_count("cz") == 2
+
+    qc = qiskit.QuantumCircuit(1)
+    qc.delay(25, 0, unit="ms")
+    # in the default unit dt, without a duration in nanoseconds
+    qc.delay(100, 0)
+    assert durations(tc.Circuit.from_qiskit(qc)) == [([0], 2.5e7)]
+
+
 def test_get_positional_logical_mapping():
     c = tc.Circuit(3)
     c.cx(0, 1)

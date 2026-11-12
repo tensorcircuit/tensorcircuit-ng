@@ -97,6 +97,16 @@ class AbstractCircuit:
     gate_aliases = gate_aliases
     # instructions whose ``index`` refers to measurement records instead of qubits
     record_instructions = ["detector", "observable_include"]
+    # instructions without effect on the state, skipped when simulating the
+    # measurements and detectors
+    passive_instructions = [
+        "detector",
+        "barrier",
+        "delay",
+        "tick",
+        "qubit_coords",
+        "shift_coords",
+    ]
 
     def apply_general_gate(
         self,
@@ -1106,6 +1116,64 @@ class AbstractCircuit:
         }
         self._extra_qir.append(d)
 
+    @staticmethod
+    def _delay_ns(duration: float, unit: str) -> float:
+        """
+        The duration in nanoseconds, rounded to 12 significant digits to remove the
+        floating point error of the unit conversion, e.g. 40 ns converted to seconds
+        by ``qiskit.transpile`` and back gives 39.99999999999999 ns otherwise.
+        """
+        units = {"s": 1e9, "ms": 1e6, "us": 1e3, "ns": 1.0, "ps": 1e-3}
+        if unit not in units:
+            raise ValueError(
+                "Unknown delay unit %s, expected one of %s" % (unit, ", ".join(units))
+            )
+        return float("%.12g" % (float(duration) * units[unit]))
+
+    def delay_instruction(self, *index: int, duration: float, unit: str = "ns") -> None:
+        """
+        add a delay instruction flag, i.e. each of the qubits idles for ``duration``,
+        no effect on numerical simulation. On hardware, it controls the timing, e.g.
+        the idle time between two gates or before a readout.
+
+        The duration is stored in nanoseconds as ``parameters["duration"]``, one
+        instruction per qubit. ``to_qiskit`` exports it as a qiskit ``Delay`` in
+        ``"ns"``, and ``from_qiskit`` converts a ``Delay`` in ``"s"``, ``"ms"``,
+        ``"us"``, ``"ns"`` or ``"ps"`` back, while one in ``"dt"``, the default unit
+        of qiskit, or a stretch expression has no duration in nanoseconds and is
+        skipped with a warning. OpenQASM 2 cannot hold the unit, so
+        :py:meth:`to_openqasm` raises on delays, while ``to_json`` keeps them. Like
+        the other instructions, delays are dropped by :py:meth:`inverse`.
+
+        :Example:
+
+        >>> c = tc.Circuit(2)
+        >>> c.cz(0, 1)
+        >>> c.delay_instruction(0, 1, duration=40)
+        >>> c.cz(0, 1)
+        >>> c.delay_instruction(0, duration=2, unit="us")  # stored as 2000.0 ns
+
+        :param index: the corresponding qubits
+        :type index: int
+        :param duration: the idle time in ``unit``
+        :type duration: float
+        :param unit: the time unit of ``duration``, one of ``"s"``, ``"ms"``,
+            ``"us"``, ``"ns"`` and ``"ps"``, defaults to ``"ns"``
+        :type unit: str, optional
+        """
+        l = len(self._qir)
+        duration = self._delay_ns(duration, unit)
+        for ind in index:
+            d = {
+                "index": [ind],
+                "name": "delay",
+                "gatef": "delay",
+                "instruction": True,
+                "pos": l,
+                "parameters": {"duration": duration},
+            }
+            self._extra_qir.append(d)
+
     def to_cirq(self, enable_instruction: bool = False) -> Any:
         """
         Translate ``tc.Circuit`` to a cirq circuit object.
@@ -1125,7 +1193,8 @@ class AbstractCircuit:
         """
         Translate ``tc.Circuit`` to a qiskit QuantumCircuit object.
 
-        :param enable_instruction: whether also export measurement and reset instructions
+        :param enable_instruction: whether also export the instructions, i.e.
+            measurement, reset, barrier and delay
         :type enable_instruction: bool, defaults to False
         :param enable_inputs: whether also export the inputs
         :type enable_inputs: bool, defaults to False
@@ -1161,15 +1230,11 @@ class AbstractCircuit:
 
         :return: circuit representation in openqasm format
         :rtype: str
+        :raises ValueError: if the circuit has delays, see :py:meth:`delay_instruction`
         """
-        qc = self.to_qiskit(enable_instruction=True)
-        try:
-            qasm_str = qc.qasm(**kws)  # type: ignore
-        except AttributeError:  # qiskit 1.0
-            from qiskit.qasm2 import dumps
+        from .translation import get_qiskit_qasm
 
-            qasm_str = dumps(qc)  # type: ignore
-        return qasm_str  # type: ignore
+        return get_qiskit_qasm(self.to_qiskit(enable_instruction=True), **kws)
 
     def to_openqasm_file(self, file: str, **kws: Any) -> None:
         """

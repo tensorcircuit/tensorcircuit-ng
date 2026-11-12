@@ -43,9 +43,24 @@ from .interfaces.tensortrans import tensor_to_numpy
 Tensor = Any
 
 
-def get_qiskit_qasm(qc: Any) -> str:
+def get_qiskit_qasm(qc: Any, **kws: Any) -> str:
+    """
+    The OpenQASM 2 of a qiskit circuit.
+
+    :param qc: the qiskit circuit
+    :type qc: Any
+    :raises ValueError: if the circuit has delays, since OpenQASM 2 cannot hold
+        their unit, and qiskit reads them back in ``dt``
+    :return: the OpenQASM 2 string
+    :rtype: str
+    """
+    if any(inst.operation.name == "delay" for inst in qc.data):
+        raise ValueError(
+            "OpenQASM 2 cannot hold the unit of delays, use the qiskit circuit "
+            "to keep them"
+        )
     try:
-        qasm_str = qc.qasm()  # type: ignore
+        qasm_str = qc.qasm(**kws)  # type: ignore
     except AttributeError:  # qiskit 1.0
         from qiskit.qasm2 import dumps
 
@@ -337,6 +352,8 @@ def qir2qiskit(
             qiskit_circ.reset(index[0])
         elif gate_name == "barrier":
             qiskit_circ.barrier(*index)
+        elif gate_name == "delay":
+            qiskit_circ.delay(parameters["duration"], index[0], unit="ns")
         else:  # r cr any gate
             gatem = np.reshape(
                 backend.numpy(gate_info["gatef"](**parameters).tensor),
@@ -588,6 +605,15 @@ def qiskit2tc(
             tc_circuit.reset_instruction(*idx)
         elif gate_name == "barrier":
             tc_circuit.barrier_instruction(*idx)
+        elif gate_name == "delay":
+            unit = gate_info.operation.unit
+            # dt and stretch expressions have no duration in nanoseconds
+            if unit in ["dt", "expr"]:
+                logger.warning(
+                    f"qiskit to tc translation doesn't support delay in unit {unit}, skipping"
+                )
+            else:
+                tc_circuit.delay_instruction(*idx, duration=parameters[0], unit=unit)
         elif gate_name == "initialize":
             # already taken care of when initializing
             continue

@@ -112,9 +112,9 @@ def reduce_and_evaluate(
     reduced_cs = []
     reduced_dict = {}
     recover_dict = {}
-    # merge the same circuit
+    # merge the same circuit, by json which keeps the delays unlike OpenQASM 2
     for j, c in enumerate(cs):
-        key = hash(c.to_openqasm())
+        key = hash(c.to_json())
         if key not in reduced_dict:
             reduced_dict[key] = [j]
             reduced_cs.append(c)
@@ -125,7 +125,7 @@ def reduce_and_evaluate(
     reduced_raw_counts = run(reduced_cs, shots)
     raw_counts: List[Dict[str, int]] = [None] * len(cs)  # type: ignore
     for i, c in enumerate(cs):
-        key = hash(c.to_openqasm())
+        key = hash(c.to_json())
         raw_counts[i] = reduced_raw_counts[recover_dict[key]]
     return raw_counts
 

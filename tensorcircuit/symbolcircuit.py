@@ -858,8 +858,8 @@ class SymbolCircuit(Circuit):
         passed at the gate level (e.g. ``rx(theta)``), not as matrix entries,
         so this is rarely an issue for standard circuit translation.
 
-        :param enable_instruction: whether also export the measurement, reset and
-            barrier instructions, each measurement to the classical bit of its
+        :param enable_instruction: whether also export the measurement, reset,
+            barrier and delay instructions, each measurement to the classical bit of its
             ``record_index``, defaults to False
         :type enable_instruction: bool, optional
         :param enable_inputs: whether also export the ``inputs`` state, which is
@@ -926,6 +926,8 @@ class SymbolCircuit(Circuit):
                 qc.reset(index[0])
             elif gate_name == "barrier":
                 qc.barrier(*index)
+            elif gate_name == "delay":
+                qc.delay(params["duration"], index[0], unit="ns")
             elif gate_name in (
                 "i",
                 "x",
