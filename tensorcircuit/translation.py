@@ -531,7 +531,7 @@ def qiskit2tc(
                 *idx, theta=parameters[0], phi=parameters[1], lbd=parameters[2]
             )
         elif gate_name == "hamiltonian":
-            tc_circuit.exp(*idx, theta=parameters[-1], unitary=parameters[0])
+            tc_circuit.exp(*idx[::-1], theta=parameters[-1], unitary=parameters[0])
         elif gate_name == "cswap":
             tc_circuit.fredkin(*idx)
         elif gate_name[:3] == "ccx":

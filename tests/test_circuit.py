@@ -1336,8 +1336,7 @@ def test_qiskit2tc():
     qisc = QuantumCircuit(n)
     for i in range(n):
         qisc.h(i)
-    zz = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
-    exp_op = qi.Operator(zz)
+    exp_op = qi.Operator(qi.Pauli("XZ"))
     for i in range(n):
         gate = HamiltonianGate(exp_op, time=np.random.uniform())
         qisc.append(gate, [i, (i + 1) % n])
