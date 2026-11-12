@@ -114,6 +114,8 @@
 
 - Preserve two-qubit depolarizing noise when sampling Stim detector trajectories.
 
+- The ZX converter maps X to Y and Y to X for Stim's `H_XY` gate.
+
 - Compute fidelity reliably for positive semidefinite states; `sqrtmh` always clips negative eigenvalues.
 
 - Preserve double precision of Python scalar inputs in `time_correlation`, `resolvent_bilinear`, `zero_temperature_greens_function` and PyTorch `convert_to_tensor`.

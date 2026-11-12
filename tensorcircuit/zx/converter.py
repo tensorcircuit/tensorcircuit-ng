@@ -978,13 +978,6 @@ def _y_gate(b: GraphRepresentation, q: int) -> None:
     b.graph.scalar.add_phase(Fraction(1, 2))
 
 
-def _h_xy(b: GraphRepresentation, q: int) -> None:
-    z_phase(b, q, Fraction(1, 1))
-    x_phase(b, q, Fraction(1, 1))
-    z_phase(b, q, Fraction(1, 2))
-    b.graph.scalar.add_phase(Fraction(-1, 4))
-
-
 def _s_gate(b: GraphRepresentation, q: int) -> None:
     z_phase(b, q, Fraction(1, 2))
 
@@ -1073,7 +1066,7 @@ GATE_TABLE: Dict[str, tuple[Callable[..., Any], int]] = {
     "SQRT_Y": (sqrt_y, 1),
     "SQRT_Y_DAG": (sqrt_y_dag, 1),
     "H": (h_gate, 1),
-    "H_XY": (_h_xy, 1),
+    "H_XY": (h_xy, 1),
     "SQRT_Z": (_sqrt_z_gate, 1),
     "H_YZ": (h_yz, 1),
     "H_XZ": (h_gate, 1),

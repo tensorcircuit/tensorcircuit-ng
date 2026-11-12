@@ -47,7 +47,6 @@ from tensorcircuit.zx.converter import (
     mx,
     my,
     _y_gate,
-    _h_xy,
     circuit_to_zx,
 )
 
@@ -277,7 +276,6 @@ def test_converter_missing_gates():
     mx(b, 0, p=0.01)
     my(b, 0, p=0.01)
     _y_gate(b, 0)
-    _h_xy(b, 0)
 
     num_vertices_before = b.num_vertices()
     num_edges_before = b.num_edges()
@@ -329,7 +327,6 @@ def test_converter_dispatch_more():
     c._qir.append({"name": "SQRT_Y", "index": [0]})
     c._qir.append({"name": "SQRT_Y_DAG", "index": [0]})
     c._qir.append({"name": "SQRT_Z", "index": [0]})
-    c._qir.append({"name": "H_XY", "index": [0]})
     c._qir.append({"name": "H_YZ", "index": [0]})
     c._qir.append({"name": "H_XZ", "index": [0]})
     c._qir.append({"name": "R_X", "index": [0], "parameters": {"theta": 0.1}})
@@ -347,6 +344,9 @@ def test_converter_dispatch_more():
 
     g = circuit_to_zx(c)
     assert g is not None
+
+    stc = StabilizerTCircuit.from_stim_str("H 0\nH_XY 0\nMY 0")
+    np.testing.assert_array_equal(stc.sample_measurements(shots=1), [[0]])
 
 
 def test_stabilizertcircuit_from_stim_more():
