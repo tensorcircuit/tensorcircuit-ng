@@ -1456,7 +1456,7 @@ class AbstractCircuit:
                 getattr(c, "RZ")(gate[2], theta=gate[3])
             elif gate[1] == "fs" or gate[1] == "fsim":
                 i, j, theta, phi = gate[2:]
-                getattr(c, "ISWAP")(i, j, theta=-theta)  # type: ignore
+                getattr(c, "ISWAP")(i, j, theta=-theta * 2 / np.pi)  # type: ignore
                 getattr(c, "CPHASE")(i, j, theta=-phi)  # type: ignore
             else:
                 raise NotImplementedError

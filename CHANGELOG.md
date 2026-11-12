@@ -82,6 +82,8 @@
 
 - `Circuit.to_json` / `from_json` keep noise channels, diagonal and custom-named gates, measure / reset / barrier instructions and the circuit size; the JSON layout changes accordingly.
 
+- `Circuit.from_qsim_file` interprets the mixing angle of `fs` and `fsim` gates in radians.
+
 - Hide proxy credentials in cloud debug logs; Tencent `resubmit_task` returns a task bound to its device.
 
 - Result bits follow the `record_index` (classical bit) of measure instructions instead of their order, in `get_positional_logical_mapping`, `qiskit_compile` and the qiskit / OpenQASM translation.
