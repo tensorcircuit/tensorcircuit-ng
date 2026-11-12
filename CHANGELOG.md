@@ -74,6 +74,8 @@
 
 - `qiskit_compile` keeps the `inputs` state.
 
+- `Circuit.from_qiskit` preserves qubit order when importing a `HamiltonianGate` with an asymmetric generator.
+
 - `SymbolCircuit.to_circuit` and `bind` keep the measure, reset and barrier instructions, which `SymbolCircuit.to_qiskit(enable_instruction=True)` now exports; `to_qiskit(enable_inputs=True)` raises for an `inputs` state instead of dropping it.
 
 - `Circuit.from_qiskit` binds parameter expressions of named `Parameter`s, e.g. `rz(2 * a + 0.3)`, which raised `AttributeError`, also on qiskit 2.
