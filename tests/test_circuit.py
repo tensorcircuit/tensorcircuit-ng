@@ -2762,6 +2762,10 @@ def test_qsim_roundtrip(backend, tmp_path):
     m = tc.backend.numpy(c.matrix())
     np.testing.assert_allclose(m @ m.conj().T, np.eye(4), atol=1e-5)
 
+    qsim_path.write_text("2\n0 fs 0 1 0.4 0.2")
+    fs = tc.Circuit.from_qsim_file(str(qsim_path))
+    np.testing.assert_allclose(fs.matrix()[2, 1], -1j * np.sin(0.4), atol=1e-6)
+
     # unknown gate name raises NotImplementedError (fail-fast contract).
     with pytest.raises(NotImplementedError):
         tc.Circuit._apply_qsim(tc.Circuit(2), ["2", "0 bogus 0"])
