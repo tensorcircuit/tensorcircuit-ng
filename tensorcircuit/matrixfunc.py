@@ -379,7 +379,12 @@ def _lanczos_core(
     safe_norm = backend.where(vector_norm > 0, vector_norm, 1.0)
     q = vector / backend.cast(safe_norm, dtypestr)
     q_previous = backend.zeros([dimension], dtype=dtypestr)
-    basis = backend.zeros([dimension, config.max_dim], dtype=dtypestr)
+    basis_shape = (
+        [config.max_dim, dimension]
+        if config.reorthogonalization == "full"
+        else [dimension, config.max_dim]
+    )
+    basis = backend.zeros(basis_shape, dtype=dtypestr)
     diagonal = backend.zeros([config.max_dim], dtype=dtypestr)
     off_diagonal = backend.zeros([max(config.max_dim - 1, 0)], dtype=dtypestr)
     active = backend.zeros([config.max_dim], dtype="bool")
@@ -410,9 +415,11 @@ def _lanczos_core(
             residual = residual - backend.cast(alpha, dtypestr) * current
             if config.reorthogonalization == "full":
                 overlaps = backend.tensordot(
-                    backend.conj(backend.transpose(current_basis)), residual, axes=1
+                    backend.conj(current_basis), residual, axes=1
                 )
-                residual = residual - backend.matvec(current_basis, overlaps)
+                residual = residual - backend.matvec(
+                    backend.transpose(current_basis), overlaps
+                )
             beta = _safe_norm(residual)
             scale = backend.where(backend.abs(alpha) > 1.0, backend.abs(alpha), 1.0)
             next_alive = (beta > tolerance * scale) & (index < config.max_dim - 1)
@@ -421,9 +428,16 @@ def _lanczos_core(
             next_vector = next_vector * backend.cast(next_alive, dtypestr)
 
             current_slot = _one_hot(index, config.max_dim)
-            new_basis = current_basis + backend.reshape(
-                current, [dimension, 1]
-            ) * backend.reshape(current_slot, [1, config.max_dim])
+            if config.reorthogonalization == "full":
+                new_basis = backend.scatter(
+                    current_basis,
+                    backend.reshape(index, [1, 1]),
+                    backend.reshape(current, [1, dimension]),
+                )
+            else:
+                new_basis = current_basis + backend.reshape(
+                    current, [dimension, 1]
+                ) * backend.reshape(current_slot, [1, config.max_dim])
             new_diagonal = current_diagonal + current_slot * backend.cast(
                 alpha, dtypestr
             )
@@ -493,7 +507,11 @@ def _lanczos_core(
         residual_norm=final[8],
     )
     return KrylovProjection(
-        basis=final[3],
+        basis=(
+            backend.transpose(final[3])
+            if config.reorthogonalization == "full"
+            else final[3]
+        ),
         recurrence=recurrence,
     )
 
