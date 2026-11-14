@@ -20,6 +20,8 @@ Pull Request Guidelines
 
 We welcome pull requests from everyone. For large PRs involving feature enhancement or API changes, we ask that you first open a GitHub issue to discuss your proposal.
 
+Before proposing a new feature, please read `VISION.md <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/VISION.md>`_ for the scope and priorities of the project.
+
 The following git workflow is recommended for contribution by PR:
 
 * Configure your git username and email so that they match your GitHub account if you haven't.
