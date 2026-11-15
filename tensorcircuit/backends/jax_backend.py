@@ -129,6 +129,7 @@ def _qr_jax(
     q, r = adaware_qr(tensor)
     if non_negative_diagonal:
         phases = jnp.sign(jnp.diagonal(r))
+        phases = jnp.where(phases == 0, jnp.ones_like(phases), phases)
         q = q * phases
         r = phases.conj()[:, None] * r
     center_dim = q.shape[1]
@@ -155,6 +156,7 @@ def _rq_jax(
     q, r = adaware_qr(jnp.conj(jnp.transpose(tensor)))
     if non_negative_diagonal:
         phases = jnp.sign(jnp.diagonal(r))
+        phases = jnp.where(phases == 0, jnp.ones_like(phases), phases)
         q = q * phases
         r = phases.conj()[:, None] * r
     r, q = jnp.conj(jnp.transpose(r)), jnp.conj(jnp.transpose(q))  # M=r*q at this point

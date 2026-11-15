@@ -140,9 +140,10 @@ def _qr_torch(
     tensor = torchlib.reshape(tensor, [reduce(mul, left_dims), reduce(mul, right_dims)])
     q, r = torchqr.apply(tensor)
     if non_negative_diagonal:
-        phases = torchlib.sign(torchlib.linalg.diagonal(r))
+        phases = torchlib.sgn(torchlib.linalg.diagonal(r))
+        phases = torchlib.where(phases == 0, torchlib.ones_like(phases), phases)
         q = q * phases
-        r = phases[:, None] * r
+        r = phases.conj()[:, None] * r
     center_dim = q.shape[1]
     q = torchlib.reshape(q, left_dims + [center_dim])
     r = torchlib.reshape(r, [center_dim] + right_dims)
@@ -190,9 +191,10 @@ def _rq_torch(
     tensor = torchlib.reshape(tensor, [reduce(mul, left_dims), reduce(mul, right_dims)])
     q, r = torchqr.apply(tensor.adjoint())
     if non_negative_diagonal:
-        phases = torchlib.sign(torchlib.linalg.diagonal(r))
+        phases = torchlib.sgn(torchlib.linalg.diagonal(r))
+        phases = torchlib.where(phases == 0, torchlib.ones_like(phases), phases)
         q = q * phases
-        r = phases[:, None] * r
+        r = phases.conj()[:, None] * r
     r, q = r.adjoint(), q.adjoint()
     # M=r*q at this point
     center_dim = r.shape[1]

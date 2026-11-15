@@ -76,10 +76,13 @@ def test_convert_to_tensor_dtype_tf(tfb):
     np.testing.assert_allclose(widened, np.complex128(2.1), atol=0.0, rtol=0.0)
 
 
-def test_qr_rq_non_negative_diagonal_rank_deficient_complex(tfb):
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_qr_rq_non_negative_diagonal_rank_deficient_complex(backend):
     matrix = np.array([[0.0, 1 + 2j], [0.0, 3 - 1j]])
     q, r = tc.backend.qr(tc.backend.convert_to_tensor(matrix), 1, True)
     np.testing.assert_allclose(tc.backend.numpy(q @ r), matrix, atol=1e-5)
+    q_np = tc.backend.numpy(q)
+    np.testing.assert_allclose(q_np.conj().T @ q_np, np.eye(2), atol=1e-5)
     diag = np.diagonal(tc.backend.numpy(r))
     np.testing.assert_allclose(diag.imag, np.zeros(2), atol=1e-5)
     assert np.all(diag.real >= -1e-6)
@@ -87,6 +90,8 @@ def test_qr_rq_non_negative_diagonal_rank_deficient_complex(tfb):
     matrix_rq = np.array([[0.0, 0.0], [1 + 2j, 3 - 1j]])
     r_rq, q_rq = tc.backend.rq(tc.backend.convert_to_tensor(matrix_rq), 1, True)
     np.testing.assert_allclose(tc.backend.numpy(r_rq @ q_rq), matrix_rq, atol=1e-5)
+    q_np = tc.backend.numpy(q_rq)
+    np.testing.assert_allclose(q_np @ q_np.conj().T, np.eye(2), atol=1e-5)
     diag_rq = np.diagonal(tc.backend.numpy(r_rq))
     np.testing.assert_allclose(diag_rq.imag, np.zeros(2), atol=1e-5)
     assert np.all(diag_rq.real >= -1e-6)
