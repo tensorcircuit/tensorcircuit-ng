@@ -2,7 +2,7 @@
 
 import os
 import sys
-from functools import partial
+from functools import lru_cache, partial
 
 import numpy as np
 import opt_einsum as oem
@@ -17,6 +17,31 @@ modulepath = os.path.dirname(os.path.dirname(thisfile))
 
 sys.path.insert(0, modulepath)
 import tensorcircuit as tc
+
+
+@lru_cache(maxsize=1)
+def torch_compile_supports_complex():
+    """Whether torch.compile can handle complex64 in this environment.
+
+    Compiles a minimal complex function directly through torch.compile;
+    the tensorcircuit layer is covered by the twins themselves. Any
+    compile failure is treated as unsupported and the twins are skipped;
+    the eager assertions in the test bodies are unaffected.
+    """
+    import torch
+
+    def f(x):
+        return torch.matmul(x, x).abs().sum()
+
+    try:
+        torch.compile(f)(torch.zeros(3, 3, dtype=torch.complex64))
+    except Exception:  # pylint: disable=broad-exception-caught
+        print(
+            "torch.compile complex lowering unavailable; "
+            "skipping compile twin blocks"
+        )
+        return False
+    return True
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("cpb")])
@@ -115,7 +140,7 @@ def test_adjoint_gate_circuit():
     np.testing.assert_allclose(c.state(), np.array([0.0, -1.0j]))
 
 
-@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_jittable_measure(backend):
     @partial(tc.backend.jit, static_argnums=(2, 3))
     def f(param, key, n=4, nlayers=1):
@@ -145,6 +170,18 @@ def test_jittable_measure(backend):
         keys = [jax.random.PRNGKey(s) for s in range(8, 16)]
         r3 = f(tc.backend.ones([2, 4]), jax.random.PRNGKey(23))
         r4 = f(tc.backend.ones([2, 4]), jax.random.PRNGKey(23))
+    elif tc.backend.name == "pytorch":
+        import torch
+
+        r1 = f(tc.backend.ones([2, 4]), torch.Generator().manual_seed(23))
+        keys = [torch.Generator().manual_seed(s) for s in range(8)]
+        r3 = f(tc.backend.ones([2, 4]), torch.Generator().manual_seed(23))
+        r4 = f(tc.backend.ones([2, 4]), torch.Generator().manual_seed(23))
+        if torch_compile_supports_complex():
+            fc = tc.backend.jit(f, jit_compile=True)
+            rc3 = fc(tc.backend.ones([2, 4]), torch.Generator().manual_seed(23))
+            rc4 = fc(tc.backend.ones([2, 4]), torch.Generator().manual_seed(23))
+            np.testing.assert_allclose(rc3[0], rc4[0], atol=1e-6)
 
     samples, prob = r1
     assert len(samples) == 3
@@ -161,7 +198,7 @@ def test_jittable_measure(backend):
     # As seen here, though I have tried the best, the random API is still not that consistent under jit
 
 
-@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_jittable_depolarizing(backend):
     @tc.backend.jit
     def f1(key):
@@ -279,6 +316,25 @@ def test_jittable_depolarizing(backend):
             np.testing.assert_allclose(
                 tc.backend.norm(f(jax.random.PRNGKey(24))), 1.0, atol=1e-4
             )
+
+        elif tc.backend.name == "pytorch":
+            import torch
+
+            np.testing.assert_allclose(tc.backend.norm(f(None)), 1.0, atol=1e-4)
+            np.testing.assert_allclose(
+                tc.backend.norm(f(torch.Generator().manual_seed(23))), 1.0, atol=1e-4
+            )
+            np.testing.assert_allclose(
+                tc.backend.norm(f(torch.Generator().manual_seed(24))), 1.0, atol=1e-4
+            )
+            if torch_compile_supports_complex():
+                fc = tc.backend.jit(f, jit_compile=True)
+                np.testing.assert_allclose(tc.backend.norm(fc(None)), 1.0, atol=1e-4)
+                np.testing.assert_allclose(
+                    tc.backend.norm(fc(torch.Generator().manual_seed(23))),
+                    1.0,
+                    atol=1e-4,
+                )
 
 
 @pytest.mark.parametrize("backend", [lf("jaxb")])  # too slow for np
@@ -1658,7 +1714,7 @@ def test_circuit_inverse_2(backend):
     np.testing.assert_allclose(c.state(), inputs, atol=1e-5)
 
 
-@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_jittable_amplitude(backend):
     @tc.backend.jit
     def amp(s):
@@ -1674,6 +1730,17 @@ def test_jittable_amplitude(backend):
     np.testing.assert_allclose(
         amp(tc.array_to_tensor([0, 0, 0], dtype="float32")), 1 / np.sqrt(2), atol=1e-5
     )
+
+    if tc.backend.name == "pytorch" and torch_compile_supports_complex():
+        camp = tc.backend.jit(amp, jit_compile=True)
+        np.testing.assert_allclose(
+            camp(tc.array_to_tensor([0, 1, 1], dtype="float32")), 0, atol=1e-5
+        )
+        np.testing.assert_allclose(
+            camp(tc.array_to_tensor([0, 0, 0], dtype="float32")),
+            1 / np.sqrt(2),
+            atol=1e-5,
+        )
 
 
 def test_draw_cond_measure():
@@ -2099,7 +2166,7 @@ def test_get_positional_logical_mapping():
     assert c.get_positional_logical_mapping() == {0: 2, 1: 0}
 
 
-@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_inverse_jit(backend):
     K = tc.backend
 
@@ -2118,6 +2185,12 @@ def test_inverse_jit(backend):
     vs, gs = v_ansatz(K.ones([2, 3], dtype="float32"))
     assert K.shape_tuple(gs) == (2, 3)
     np.testing.assert_allclose(K.numpy(vs), -1.0 * K.ones([2]), atol=1e-5)
+
+    if tc.backend.name == "pytorch" and torch_compile_supports_complex():
+        v_ansatz_c = K.jit(K.vvag(simple_ansatz), jit_compile=True)
+        vs_c, gs_c = v_ansatz_c(K.ones([2, 3], dtype="float32"))
+        assert K.shape_tuple(gs_c) == (2, 3)
+        np.testing.assert_allclose(K.numpy(vs_c), -1.0 * K.ones([2]), atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("npb")])
