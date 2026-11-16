@@ -11,6 +11,7 @@ import torch  # type: ignore
 Array = Any  # torch Tensor
 
 qr_epsilon = 1e-8
+qr_epsilon_single = 1e-6  # float32 and complex64
 
 
 class _PSDSquareRoot(torch.autograd.Function):
@@ -76,11 +77,16 @@ def torchqr_grad(
         """
 
         # Modification begins
+        eps = (
+            qr_epsilon_single
+            if r.dtype in (torch.float32, torch.complex64)
+            else qr_epsilon
+        )
         rdiag = torch.linalg.diagonal(r)
-        # if abs(rdiag[i]) < qr_epsilon then rdiag[i] = qr_epsilon otherwise keep the old value
-        qr_epsilon_diag = torch.ones_like(rdiag) * qr_epsilon
-        rdiag = torch.where(rdiag.abs() < qr_epsilon, qr_epsilon_diag, rdiag)
-        r = torch.diagonal_scatter(r, rdiag, dim1=-2, dim2=-1)
+        # if abs(rdiag[i]) < eps then rdiag[i] = eps otherwise keep the old value
+        qr_epsilon_diag = torch.ones_like(rdiag) * eps
+        rdiag = torch.where(rdiag.abs() < eps, qr_epsilon_diag, rdiag)
+        r_safe = torch.diagonal_scatter(r, rdiag, dim1=-2, dim2=-1)
         # Modification ends
 
         qdq = torch.matmul(q.adjoint(), dq)
@@ -89,8 +95,8 @@ def torchqr_grad(
         rdr_ = rdr - rdr.adjoint()
         tril = torch.tril(qdq_ + rdr_)
 
-        grad_a = torch.matmul(q, dr + _TriangularSolve(tril, r))
-        grad_b = _TriangularSolve(dq - torch.matmul(q, qdq), r)
+        grad_a = torch.matmul(q, dr + _TriangularSolve(tril, r_safe))
+        grad_b = _TriangularSolve(dq - torch.matmul(q, qdq), r_safe)
         ret = grad_a + grad_b
 
         if q.is_complex():
@@ -99,7 +105,7 @@ def torchqr_grad(
                 torch.zeros_like(m), torch.linalg.diagonal(m), dim1=-2, dim2=-1
             )
             correction = eyem - torch.real(eyem).to(dtype=q.dtype)
-            ret = ret + _TriangularSolve(torch.matmul(q, correction.adjoint()), r)
+            ret = ret + _TriangularSolve(torch.matmul(q, correction.adjoint()), r_safe)
 
         return ret
 

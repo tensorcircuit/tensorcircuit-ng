@@ -1543,6 +1543,49 @@ def test_qr(backend, highp):
         np.testing.assert_allclose(n_grad, a_grad, atol=1e-3)
 
 
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("operation", ["qr", "rq"])
+@pytest.mark.parametrize("diagonal", [0.0, 1e-9, -1e-9])
+def test_qr_rq_small_diagonal_gradient(backend, highp, operation, diagonal):
+    matrix = np.array([[diagonal, 1 + 2j], [0.0, 3 - 1j]], dtype=np.complex128)
+    if operation == "rq":
+        matrix = matrix.conj().T
+    tensor = tc.backend.convert_to_tensor(matrix)
+
+    for non_negative in [False, True]:
+
+        def loss(a):
+            left, right = getattr(tc.backend, operation)(a, 1, non_negative)
+            return tc.backend.real(tc.backend.sum(left @ right))
+
+        np.testing.assert_allclose(
+            tc.backend.numpy(tc.backend.grad(loss)(tensor)),
+            np.ones_like(matrix),
+            atol=2e-7,
+        )
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("operation", ["qr", "rq"])
+def test_qr_rq_zero_diagonal_gradient_single(backend, operation):
+    matrix = np.array([[0.0, 1 + 2j], [0.0, 3 - 1j]], dtype=np.complex64)
+    if operation == "rq":
+        matrix = matrix.conj().T
+    tensor = tc.backend.convert_to_tensor(matrix)
+
+    for non_negative in [False, True]:
+
+        def loss(a):
+            left, right = getattr(tc.backend, operation)(a, 1, non_negative)
+            return tc.backend.real(tc.backend.sum(left @ right))
+
+        np.testing.assert_allclose(
+            tc.backend.numpy(tc.backend.grad(loss)(tensor)),
+            np.ones_like(matrix),
+            atol=0.2,
+        )
+
+
 @pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
 def test_qr_wide_ad(backend, highp):
     def qr_loss(p):

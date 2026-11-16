@@ -546,6 +546,30 @@ def test_fidelity_gradient(backend, highp):
     )
 
 
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("diagonal", [0.0, 1e-9])
+def test_small_input_diagonal_gradient(backend, highp, diagonal):
+    state = tc.backend.convert_to_tensor(
+        np.array([diagonal, 0.0, 1.0, 3.0], dtype=np.complex128)
+    )
+    direction = tc.backend.convert_to_tensor(
+        np.array([0.0, 1.0, 0.0, 0.0], dtype=np.complex128)
+    )
+
+    def expectation(theta):
+        wavefunction = state + tc.backend.cast(theta, "complex128") * direction
+        circuit = tc.MPSCircuit(2, wavefunction=wavefunction)
+        return tc.backend.real(circuit.expectation_ps(x=[0], normalize=True))
+
+    theta = tc.backend.convert_to_tensor(np.float64(0.0))
+    value, gradient = tc.backend.value_and_grad(expectation)(theta)
+    norm_squared = 10 + diagonal**2
+    np.testing.assert_allclose(
+        tc.backend.numpy(value), 2 * diagonal / norm_squared, atol=1e-12
+    )
+    np.testing.assert_allclose(tc.backend.numpy(gradient), 6 / norm_squared, atol=2e-7)
+
+
 def do_test_rdm(test_circuits: type_test_circuits):
     (
         c,

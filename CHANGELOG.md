@@ -68,6 +68,8 @@
 
 ### Fixed
 
+- QR/RQ gradients are no longer suppressed when a diagonal entry of R is below the regularization threshold, which also fixes affected MPS gradients. The threshold is now `1e-6` in single precision and stays `1e-8` in double precision.
+
 - `qem.rc_circuit` keeps measurement instructions, and its circuits export to qiskit >= 1.0.
 
 - Measurement, reset and barrier instructions are kept in order by `copy`, `append`, `prepend`, `initial_mapping` and `qem` rebuilds, with the measurements of an appended circuit recorded after the existing classical bits and absolute detector indices shifted accordingly; this also fixes measurements lost by `from_qiskit` with composite gates. Detector lookbacks count the preceding measurements rather than classical bits, and `circuit_to_zx` orders the instructions of a `Circuit` as elsewhere.
