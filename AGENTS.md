@@ -58,7 +58,8 @@ TensorCircuit is a tensor-network-first, multi-backend quantum computing framewo
 ## Testing Rules
 
 - Use fixtures from `tests/conftest.py`.
-- Add regression cases to the existing test module for the affected feature. Keep each case tied to a distinct behavior or failure; avoid duplicate coverage and oversized test inputs. Create a new test module only for a genuinely new test area.
+- Add regression cases to the existing test module for the affected feature. Keep each case tied to a distinct behavior or failure; avoid duplicate coverage and oversized test inputs. Create a new test module only for a genuinely new module or a genuinely new test area; never create a new test file for changes to existing modules.
+- For a small bug fix, do not add a large test suite. At most one or two regression tests, placed in the existing test module for the affected feature, covering the most relevant failure.
 - In tests, never call `tc.set_backend()` or `tc.set_dtype()` directly.
 - Use backend fixtures such as `npb`, `tfb`, `jaxb`, `torchb`, and `cpb` instead of manual backend switching.
 - Use the `highp` fixture when a test requires `complex128` precision.
