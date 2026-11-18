@@ -240,10 +240,10 @@ def properties_to_target(
         each two qubit gate with the ``CZErrRate`` of the coupler, defaults to None,
         i.e. the ``native_gates`` of the properties
     :type basis_gates: Optional[Sequence[str]], optional
-    :return: the qiskit ``Target``, also supporting measure and reset
+    :return: the qiskit ``Target``, also supporting measure, reset and delay
     :rtype: Any
     """
-    from qiskit.circuit import Measure, Reset
+    from qiskit.circuit import Delay, Measure, Parameter, Reset
     from qiskit.circuit.library.standard_gates import get_standard_gate_name_mapping
     from qiskit.transpiler import InstructionProperties, Target
 
@@ -286,4 +286,5 @@ def properties_to_target(
         },
     )
     target.add_instruction(Reset(), {(q,): None for q in bits})
+    target.add_instruction(Delay(Parameter("t")), {(q,): None for q in bits})
     return target

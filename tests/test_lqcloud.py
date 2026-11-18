@@ -423,6 +423,32 @@ def test_compile_restores_after_two_state_readout(ops, names):
     assert [op["name"] for op in comp["instructions"]] == names
 
 
+@requires_sdk
+@pytest.mark.parametrize("compiling", [True, False])
+def test_delays_are_sent_in_nanoseconds(fake_lqcloud, compiling):
+    # e.g. idling between two CZ gates on the same pair
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cz(0, 1)
+    c.delay_instruction(0, 1, duration=40)
+    c.cz(0, 1)
+    c.delay_instruction(0, duration=1.5, unit="us")
+    t = apis.submit_task(device=DEVICE, circuit=c, compiling=compiling, store=False)
+    comp = t.prepared["compilation"]
+    names = [op["name"] for op in comp["instructions"]]
+    # the CZ gates are not cancelled across the delays
+    first = names.index("cz")
+    assert names[first : first + 4] == ["cz", "delay", "delay", "cz"]
+    np.testing.assert_allclose(simulate(comp), ideal(c), atol=1e-5)
+    (sent,) = fake_lqcloud.submissions()
+    delays = [
+        op["params"]
+        for op in sent["body"]["command"]["circuit"]["instructions"]
+        if op["name"] == "delay"
+    ]
+    assert delays == [[40.0], [40.0], [1500.0]]
+
+
 def _same_clbit():
     from qiskit import QuantumCircuit
 

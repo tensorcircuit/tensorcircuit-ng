@@ -26,6 +26,10 @@
 
 ### Added
 
+- Add `delay_instruction(*index, duration, unit="ns")` for idling qubits, stored in nanoseconds, with no effect on simulation. `to_qiskit` and `from_qiskit` convert it from and to the qiskit `Delay` in SI units; a `Delay` in `dt` is skipped with a warning. `to_openqasm` raises on delays, since OpenQASM 2 cannot hold their unit. The `lqcloud` provider sends it as the native `delay`, and `properties_to_target` supports it.
+
+- `to_qir(enable_instruction=True)` returns the gates and instructions in time order, which `from_qir`, `append_from_qir` and `qir2qiskit` accept.
+
 - Add the LQCloud (逻辑比特) cloud provider `lqcloud`, compiling circuits locally to native gates, with native batch submission and `batch_expectation_ps`; install the `lqcloud` SDK separately.
 
 - Add noise aware layout by default for the `lqcloud` provider and `batch_expectation_ps`, via `compiler.qiskit_compiler.properties_to_target` and `DefaultCompiler(properties=...)`; qubits and couplers of unknown errors are not used.
@@ -35,6 +39,8 @@
 - Add `qiskit_compile` and `DefaultCompiler` of a `SymbolCircuit` with free symbols into a `SymbolCircuit` on the compiled qubits, the symbols kept in the compiled gates, so that a variational circuit is compiled once, e.g. with the noise aware `target` of a device, and each binding by `to_circuit` is submitted with `compiling=False` on the same qubits.
 
 - Add `params` and `info` to `cloud.wrapper.batch_expectation_ps`: a `SymbolCircuit` is compiled once and bound by each of `params`, all submitted together, e.g. for the parameter shift gradient, and a circuit compiled beforehand with its `info` is not compiled again, keeping its layout over the iterations of a variational algorithm. `qiskit2tc` binds qiskit parameters to sympy symbols with `circuit_constructor=SymbolCircuit`, and `properties_to_target` compiles to the `native_gates` of the properties by default. See `examples/cloud_parameter_shift_vqe.py`.
+
+- Add `variants` to `cloud.wrapper.batch_expectation_ps`, expanding each measurement circuit into variants submitted in one batch, with the results on the last axes; with `device=None` and the compiled circuit's `info`, the same variants are simulated exactly. Add the error mitigation methods `Twirl`, `CDR`, `Fold` and `Chain` in `results.qem.mitigators` for it, each with `expand` and `combine(values, ideal)`, e.g. twirling and rescaling each Pauli string by training circuits with perturbed `rz` angles. `rc_circuit` accepts a seeded `rng`.
 
 - Add `Circuit.sample_measurements` and `DMCircuit.sample_measurements` for the records of all measurement instructions. `sample_detector`, `detector_probabilities` and `sample_measurements` support gates, noise and measurements after a `measure_instruction` without reset, the measured qubit staying in the measured state. Measurement records follow the order of the measurement instructions in all sampling modes, not the classical bits `record_index` from `from_qiskit`.
 
@@ -62,9 +68,17 @@
 
 ### Fixed
 
+- QR/RQ gradients are no longer suppressed when a diagonal entry of R is below the regularization threshold, which also fixes affected MPS gradients. The threshold is now `1e-6` in single precision and stays `1e-8` in double precision.
+
+- `qem.rc_circuit` keeps measurement instructions, and its circuits export to qiskit >= 1.0.
+
+- Measurement, reset and barrier instructions are kept in order by `copy`, `append`, `prepend`, `initial_mapping` and `qem` rebuilds, with the measurements of an appended circuit recorded after the existing classical bits and absolute detector indices shifted accordingly; this also fixes measurements lost by `from_qiskit` with composite gates. Detector lookbacks count the preceding measurements rather than classical bits, and `circuit_to_zx` orders the instructions of a `Circuit` as elsewhere.
+
 - `cloud.wrapper.batch_expectation_ps` returns a real weighted sum for exact simulation with `ws`, as on a device, instead of a complex one.
 
 - `qiskit_compile` keeps the `inputs` state.
+
+- `Circuit.from_qiskit` preserves qubit order when importing a `HamiltonianGate` with an asymmetric generator.
 
 - `SymbolCircuit.to_circuit` and `bind` keep the measure, reset and barrier instructions, which `SymbolCircuit.to_qiskit(enable_instruction=True)` now exports; `to_qiskit(enable_inputs=True)` raises for an `inputs` state instead of dropping it.
 
@@ -75,6 +89,8 @@
 - The `local` cloud provider returns counts from mid-circuit measurements on qubit `Circuit` inputs, including resets and readout flips. Unwritten classical bits are zero, repeated writes use the last result, and batch submissions honor per-circuit shot counts.
 
 - `Circuit.to_json` / `from_json` keep noise channels, diagonal and custom-named gates, measure / reset / barrier instructions and the circuit size; the JSON layout changes accordingly.
+
+- `Circuit.from_qsim_file` interprets the mixing angle of `fs` and `fsim` gates in radians.
 
 - Hide proxy credentials in cloud debug logs; Tencent `resubmit_task` returns a task bound to its device.
 
@@ -107,6 +123,8 @@
 - Pauli propagation uses the gate matrices recorded in the circuit, so renamed and inverted gates propagate correctly, and `apply_gate` accepts aliases such as `cx`.
 
 - Preserve two-qubit depolarizing noise when sampling Stim detector trajectories.
+
+- The ZX converter maps X to Y and Y to X for Stim's `H_XY` gate.
 
 - Compute fidelity reliably for positive semidefinite states; `sqrtmh` always clips negative eigenvalues.
 

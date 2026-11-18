@@ -10,6 +10,7 @@ Quantum error mitigation methods
 
 from ...utils import experimental_module_warning
 from . import qem_methods
+from . import mitigators
 
 apply_zne = qem_methods.apply_zne
 zne_option = qem_methods.zne_option  # type: ignore

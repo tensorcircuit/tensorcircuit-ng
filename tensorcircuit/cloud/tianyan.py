@@ -202,8 +202,14 @@ def _tc_qir_to_qcis(circuit: AbstractCircuit) -> str:
     """
     qir = circuit.to_qir()
     extra_qir = circuit._extra_qir
-    measure_instructions = [inst for inst in extra_qir if inst.get("name") == "measure"]
-    measure_instructions.sort(key=lambda inst: inst.get("record_index", 0))
+    measures = [inst for inst in extra_qir if inst.get("name") == "measure"]
+    measure_instructions = [
+        inst
+        for _, inst in sorted(
+            zip(AbstractCircuit._measurement_records(measures), measures),
+            key=lambda x: x[0],
+        )
+    ]
 
     _assert_cqlib()
 

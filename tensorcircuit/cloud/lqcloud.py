@@ -181,6 +181,7 @@ def _check_circuit(circuit: Any) -> None:
         "measure",
         "reset",
         "barrier",
+        "delay",
     }
     if instructions:
         raise ValueError(
@@ -312,6 +313,12 @@ def _native_instructions(
         started.update(qubits)
         if name == "reset":
             ops.append({"name": "reset", "qubits": qubits})
+        elif name == "delay":
+            # in nanoseconds for the SDK, converted to seconds by qiskit >= 2
+            duration = AbstractCircuit._delay_ns(
+                inst.operation.duration, inst.operation.unit
+            )
+            ops.append({"name": "delay", "qubits": qubits, "params": [duration]})
         elif name == "measure":
             if two_state:
                 shelved.add(qubits[0])
@@ -363,6 +370,12 @@ def compile_circuit(
     measurements of the other qubits sharing a readout line, and a circuit that
     cannot run fails with the ``internal_error`` of the task, so it may depend on
     the layout chosen.
+
+    A ``delay_instruction`` runs as the native ``delay`` of the same duration in
+    nanoseconds, and the compiler does not merge or cancel the gates on its qubit
+    across it, e.g. ``cz``, delay, ``cz`` keeps both CZ gates. Automatic dynamical
+    decoupling by ``run_options``, which needs idle windows longer than the gaps
+    between gates, may fill the delays with pulses.
 
     :param circuit: the circuit
     :type circuit: AbstractCircuit

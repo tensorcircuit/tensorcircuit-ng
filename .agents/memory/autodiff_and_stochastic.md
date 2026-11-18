@@ -7,6 +7,9 @@ Use this file for complex gradients, backend AD differences, and noisy-gradient 
 - JAX `custom_vjp` for complex outputs expects Wirtinger-style cotangents, which differs from TensorFlow's `custom_gradient` convention.
 - When porting a complex gradient rule from TensorFlow to JAX, conjugate incoming cotangents and conjugate the returned gradient. Missing the final conjugation usually produces a sign or complex-conjugate mismatch.
 - Wide or tall QR/SVD paths are not safely covered by native JAX AD. Use the repo's custom AD-aware primitives when the matrix geometry is not square.
+- QR backward regularization must keep the original R in products such as R @ dR.H; use a separate protected R only in triangular solves. Replacing the original factor in the full gradient formula breaks reconstruction-gradient cancellations.
+- Reduced QR has no ordinary derivative at rank-deficient points. For tall matrices that are rank deficient or have a diagonal of R below the regularization threshold, factor cotangents can lose information even when a recomposed loss is smooth; a finite regularized VJP cannot guarantee universally exact gradients there. Square and wide matrices do not have this limitation.
+- The QR regularization threshold must scale with precision: in single precision, roundoff in the backward cancellation is divided by the threshold, so a double-precision threshold leaves O(1) gradient errors for near-singular inputs.
 
 ## Debugging gradient mismatches
 

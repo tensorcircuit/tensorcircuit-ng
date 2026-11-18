@@ -462,6 +462,8 @@ def test_simple_compile_preserves_measurement_export(npb):
     compiled, _ = tc.compiler.simple_compiler.simple_compile(c)
     assert c.to_qiskit(enable_instruction=True) == original
     assert compiled.gate_count() == 1
+    compiled.measure_instruction(0)
+    assert [d["record_index"] for d in compiled._extra_qir] == [0, 1]
     for qc in (original, compiled.to_qiskit(enable_instruction=True)):
         state = qiskit.quantum_info.Statevector.from_instruction(
             qc.remove_final_measurements(inplace=False)

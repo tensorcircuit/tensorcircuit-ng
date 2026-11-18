@@ -74,20 +74,16 @@ def submit_task(
 
 
 def _sample_counts(c: Circuit, shots: int) -> Dict[str, int]:
-    measures = [
-        d
-        for d in c._merge_qir_with_extra()
-        if d.get("instruction") and c._is_measure_instruction_name(d["name"])
-    ]
-    if not measures:
+    records = c._measurement_records(c.to_qir(enable_instruction=True))
+    if not records:
         return c.sample(  # type: ignore[no-any-return]
             batch=shots, allow_state=True, format="count_dict_bin", jittable=False
         )
 
     samples = backend.cast(c.sample_measurements(shots=shots), "int32")
-    last_write = {d.get("record_index", i): i for i, d in enumerate(measures)}
+    last_write = {bit: i for i, bit in enumerate(records)}
     width = max(last_write) + 1
-    order = [last_write.get(i, len(measures)) for i in range(width)]
+    order = [last_write.get(i, len(records)) for i in range(width)]
     if len(last_write) < width:
         samples = backend.concat([samples, backend.zeros_like(samples[:, :1])], axis=1)
     samples = backend.gather(samples, backend.convert_to_tensor(order), axis=1)
