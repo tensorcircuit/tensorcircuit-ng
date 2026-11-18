@@ -1976,7 +1976,9 @@ def test_backend_expand_dims(backend):
     assert result.shape == (2, 1, 2)
 
 
-@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+@pytest.mark.parametrize(
+    "backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb"), lf("cpb")]
+)
 def test_backend_where(backend):
     """Test where method."""
     condition = tc.backend.convert_to_tensor([True, False, True])
@@ -1984,7 +1986,63 @@ def test_backend_where(backend):
     y = tc.backend.convert_to_tensor([4, 5, 6])
     result = tc.backend.where(condition, x, y)
     expected = tc.backend.convert_to_tensor([1, 5, 3])
-    np.testing.assert_allclose(result, expected)
+    np.testing.assert_allclose(tc.backend.numpy(result), tc.backend.numpy(expected))
+
+
+@pytest.mark.parametrize(
+    "backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb"), lf("cpb")]
+)
+def test_backend_where_indices(backend):
+    """The one-argument where returns the indices of the true entries."""
+    condition = tc.backend.convert_to_tensor([[True, False], [False, True]])
+    indices = tc.backend.where(condition)
+    assert isinstance(indices, tuple) and len(indices) == 2
+    rows, cols = (tc.backend.numpy(indices[i]) for i in range(2))
+    np.testing.assert_array_equal(rows, [0, 1])
+    np.testing.assert_array_equal(cols, [0, 1])
+
+
+@pytest.mark.parametrize("backend", [lf("cpb")])
+@pytest.mark.parametrize(
+    "dtype,expected_dtype",
+    [
+        ("float_", "float64"),
+        ("complex_", "complex128"),
+        ("singlecomplex", "complex64"),
+        ("cfloat", "complex128"),
+        ("f4", "float32"),
+    ],
+)
+def test_backend_cast_dtype_spellings(backend, dtype, expected_dtype):
+    """Test cupy cast with legacy aliases and non-attribute strings."""
+    a = tc.backend.convert_to_tensor(np.array([1.0 + 2.0j, 3.0 + 4.0j]))
+    result = tc.backend.cast(a, dtype)
+    assert tc.backend.dtype(result) == expected_dtype
+    np.testing.assert_allclose(tc.backend.numpy(tc.backend.real(result)), [1.0, 3.0])
+
+
+@pytest.mark.parametrize("backend", [lf("cpb")])
+def test_backend_cast_dtype_object(backend):
+    """cupy cast accepts dtype objects."""
+    a = tc.backend.convert_to_tensor(np.array([1.0 + 2.0j, 3.0 + 4.0j]))
+    result = tc.backend.cast(a, np.dtype("complex128"))
+    assert tc.backend.dtype(result) == "complex128"
+
+
+@pytest.mark.parametrize("backend", [lf("cpb")])
+def test_backend_exp_log_keyword(backend):
+    """cupy exp/log keep the abstract ``tensor`` keyword spelling."""
+    x = tc.backend.convert_to_tensor(np.array([1.0, 2.0]))
+    np.testing.assert_allclose(
+        tc.backend.numpy(tc.backend.exp(tensor=x)),
+        np.exp(np.array([1.0, 2.0])),
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        tc.backend.numpy(tc.backend.log(tensor=x)),
+        np.log(np.array([1.0, 2.0])),
+        atol=1e-6,
+    )
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])

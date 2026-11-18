@@ -81,6 +81,23 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
     def sign(self, tensor: Tensor) -> Tensor:
         return cp.sign(tensor)
 
+    def exp(self, tensor: Tensor) -> Tensor:
+        return cp.exp(tensor)
+
+    def log(self, tensor: Tensor) -> Tensor:
+        return cp.log(tensor)
+
+    def where(
+        self,
+        condition: Tensor,
+        x: Optional[Tensor] = None,
+        y: Optional[Tensor] = None,
+    ) -> Tensor:
+        if x is None and y is None:
+            return cp.where(condition)
+        assert x is not None and y is not None
+        return cp.where(condition, x, y)
+
     def multiply(self, tensor1: Tensor, tensor2: Tensor) -> Tensor:
         return tensor1 * tensor2
 
@@ -278,9 +295,8 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
 
     def cast(self, a: Tensor, dtype: Union[str, Any]) -> Tensor:
         if isinstance(dtype, str):
-            cp_dtype = getattr(cp, dtype)
-        else:
-            cp_dtype = dtype
+            dtype = getattr(cp, dtype, dtype)
+        cp_dtype = cp.dtype(dtype)
         if cp.iscomplexobj(a) and not cp.issubdtype(cp_dtype, cp.complexfloating):
             a = cp.real(a)
         return a.astype(cp_dtype)
