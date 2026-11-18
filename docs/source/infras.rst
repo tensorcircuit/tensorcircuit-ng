@@ -207,6 +207,13 @@ From lower level to higher level, a view of API layers invoking QPU calls
 
 - Application level code with QPU calls built directly on ``batch_expectation_ps`` or more fancy algorithms can be built on ``batch_submit_func`` so that these algorithms can be reused as long as one function ``batch_submit_func`` is defined for a given vendor (cheaper than defining a new provider from lower level).
 
+To define a new provider from the lower level, see the guide below.
+
+.. toctree::
+   :maxdepth: 1
+
+   cloud_provider.md
+
 
 .. Note::
 

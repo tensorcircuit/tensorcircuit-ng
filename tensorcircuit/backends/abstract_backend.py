@@ -1826,6 +1826,7 @@ class ExtendedBackend:
     ) -> Tensor:
         """
         Categorical random sampler with internally managed random state.
+        See :py:meth:`stateful_randc` for the precision caveat with long float32 ``p``.
 
         :param a: The possible options
         :type a: Union[int, Sequence[int], Tensor]
@@ -1852,6 +1853,12 @@ class ExtendedBackend:
     ) -> Tensor:
         """
         Categorical random sampler with given random state.
+
+        Except on the NumPy backend, sampling with ``p`` relies on a cumulative distribution
+        in the precision of ``p``. For a long float32 ``p`` (beyond about ``2**16`` options),
+        outcome frequencies become visibly biased and small-probability options may be
+        unreachable. Use :py:meth:`probability_sample` for such distributions and gather
+        the options from the returned indices.
 
         :param g: stateful register for each package
         :type g: Any
@@ -1882,24 +1889,59 @@ class ExtendedBackend:
         :param p: prbability vector
         :type p: Tensor
         :param status: external randomness as a tensor with each element drawn uniformly from [0, 1],
-            defaults to None
+            shape ``[shots]`` or ``[shots, 2]``, defaults to None.
+            With shape ``[shots]``, one uniform number per shot resolves outcome probabilities
+            only up to the precision of ``p.dtype``, which visibly biases float32 sampling
+            beyond about ``2**20`` outcomes.
+            With shape ``[shots, 2]`` and more than ``2**12`` outcomes, the two numbers select
+            a block and then an outcome within it, which stays accurate in float32.
+            When ``status`` is None, the suitable shape is drawn internally.
         :type status: Optional[Tensor], optional
         :param g: backend random genrator, defaults to None
         :type g: Any, optional
         :return: The drawn sample as an int tensor
         :rtype: Tensor
         """
+        p = p / self.sum(p)
+        n = self.shape_tuple(p)[0]
+        dtype = self.dtype(p)
         if status is not None:
             status = self.convert_to_tensor(status)
-        elif g is not None:
-            status = self.stateful_randu(g, shape=[shots])
         else:
-            status = self.implicit_randu(shape=[shots])
-        p = p / self.sum(p)
-        p_cuml = self.cumsum(p)
-        r = p_cuml[-1] * (1 - self.cast(status, p.dtype))
-        ind = self.searchsorted(p_cuml, r)
-        a = self.arange(self.shape_tuple(p)[0])
+            shape = [shots] if dtype == "float64" or n <= 4096 else [shots, 2]
+            if g is not None:
+                status = self.stateful_randu(g, shape=shape, dtype=dtype)
+            else:
+                status = self.implicit_randu(shape=shape, dtype=dtype)
+        status = self.cast(status, dtype)
+        ss = self.shape_tuple(status)
+        if len(ss) == 2 and ss[1] == 2 and n > 4096:
+            # power-of-two blocks so that each level resolves at most about 2**12
+            # outcomes (sqrt(n) per level beyond 2**24) within float32 precision
+            bits = (n - 1).bit_length()
+            m = 1 << min((bits + 1) // 2, bits - 12)
+            nb = -(-n // m)
+            if nb * m > n:
+                p = self.concat([p, self.zeros([nb * m - n], dtype=dtype)])
+            p_cuml = self.cumsum(self.reshape(p, [nb, m]), axis=1)
+            b_mass = p_cuml[:, -1]
+            b_cuml = self.cumsum(b_mass)
+            b = self.searchsorted(b_cuml, b_cuml[-1] * (1 - status[:, 0]))
+            r = self.gather1d(b_mass, b) * (1 - status[:, 1])
+            p_cuml = self.reshape(p_cuml, [-1])
+            ind = b * m
+            step = m // 2
+            while step >= 1:
+                cand = ind + step
+                ind = self.where(self.gather1d(p_cuml, cand - 1) < r, cand, ind)
+                step //= 2
+        else:
+            if len(ss) == 2 and ss[1] == 2:
+                status = status[:, 0]
+            p_cuml = self.cumsum(p)
+            r = p_cuml[-1] * (1 - status)
+            ind = self.searchsorted(p_cuml, r)
+        a = self.arange(n)
         res = self.gather1d(a, ind)
         return res
 

@@ -1,5 +1,6 @@
 """Core correctness regressions for ``tensorcircuit.tnalg``."""
 
+import dataclasses
 import importlib
 
 import numpy as np
@@ -63,6 +64,342 @@ PAULI_I = np.asarray(((1, 0), (0, 1)), dtype=np.complex128)
 PAULI_X = np.asarray(((0, 1), (1, 0)), dtype=np.complex128)
 PAULI_Y = np.asarray(((0, -1j), (1j, 0)), dtype=np.complex128)
 PAULI_Z = np.asarray(((1, 0), (0, -1)), dtype=np.complex128)
+
+
+def _gate_program_vector(buffers):
+    value = buffers[0, :1]
+    for site in range(1, buffers.shape[0]):
+        value = jnp.tensordot(value, buffers[site], axes=(-1, 0))
+    return value[..., 0].reshape(-1)
+
+
+def _gate_program_circuit(n=6, seed=7):
+    rng = np.random.default_rng(seed)
+    circuit = tc.Circuit(n)
+    for site in range(n):
+        circuit.ry(site, theta=0.13 + site * 0.11)
+    for _ in range(3):
+        for site in rng.permutation(n - 1):
+            matrix = scipy.linalg.expm(
+                -0.6j * (rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4)))
+            )
+            matrix, _ = np.linalg.qr(matrix)
+            circuit.unitary(int(site + 1), int(site), unitary=matrix)
+            circuit.rx(int(site), theta=float(rng.uniform(-1, 1)))
+    circuit.rz(n - 1, theta=0.21)
+    return circuit
+
+
+def _first_pair_record(program):
+    return int(np.flatnonzero(np.asarray(program.records[:, 0]) < 2)[0])
+
+
+@pytest.mark.parametrize("pad", [False, True])
+@pytest.mark.parametrize("chi", [2, 16])
+def test_gate_program_matches_circuit_and_truncation(jaxb, pad, chi):
+    tnalg = tc.tnalg
+    circuit = _gate_program_circuit()
+    program = tnalg.prepare_gate_program(circuit, pad=pad)
+    length = program.records.shape[0]
+    assert (length & (length - 1) == 0) or not pad
+    result = jax.jit(lambda p: tnalg.run_gate_program(p, chi=chi))(program)
+    vector = _gate_program_vector(result.buffers)
+    reference = tc.MPSCircuit.from_qir(
+        circuit.to_qir(), {"nqubits": 6, "split": {"max_singular_values": chi}}
+    )
+    expected = np.asarray(reference.wavefunction())
+    # Directional canonicalization changes gauge, but not Schmidt truncation.
+    np.testing.assert_allclose(vector, expected, atol=8e-6, rtol=8e-5)
+    np.testing.assert_allclose(result.fidelity, reference.get_fidelity(), atol=8e-6)
+    np.testing.assert_allclose(
+        result.fidelity, jnp.real(jnp.vdot(vector, vector)), atol=8e-6
+    )
+    if chi == 16:
+        np.testing.assert_allclose(vector, circuit.state(), atol=5e-6)
+    converted = tnalg.gate_program_to_mpscircuit(result)
+    np.testing.assert_allclose(converted.wavefunction(), vector, atol=5e-6)
+    np.testing.assert_allclose(converted.get_fidelity(), result.fidelity, atol=1e-7)
+    assert converted.get_center_position() == 0
+    assert [t.shape[2] for t in converted.get_tensors()] == [
+        min(chi, 2 ** (i + 1), 2 ** (5 - i)) for i in range(6)
+    ]
+
+
+def test_gate_program_stack_structure_reuse_vmap_and_sampling(jaxb):
+    tnalg = tc.tnalg
+    circuits = [_gate_program_circuit(seed=s) for s in (3, 19)]
+    programs = [tnalg.prepare_gate_program(c, pad=False) for c in circuits]
+    assert programs[0].records.shape != programs[1].records.shape
+    traces = []
+
+    def execute(program, status):
+        traces.append(1)
+        result = tnalg.run_gate_program(program, chi=2)
+        mps = tnalg.gate_program_to_mpscircuit(result)
+        samples = jax.vmap(lambda st: mps.sample(status=st))(status)
+        return _gate_program_vector(result.buffers), result.fidelity, samples
+
+    run = jax.jit(execute)
+    status = jnp.asarray(np.random.default_rng(4).uniform(size=(64, 6)), jnp.float32)
+    expected = [run(p, status) for p in programs]
+    batch = tnalg.stack_gate_programs(programs)
+    assert batch.records.shape[1] == max(p.records.shape[0] for p in programs)
+    traces.clear()
+    run_aligned = jax.jit(lambda p, st: execute(p, st))
+    for i, reference in enumerate(expected):
+        aligned = jax.tree_util.tree_map(lambda x, i=i: x[i], batch)
+        for actual, value in zip(run_aligned(aligned, status), reference):
+            np.testing.assert_allclose(actual, value, atol=5e-6)
+    assert len(traces) == 1
+    batched = jax.jit(jax.vmap(execute, in_axes=(0, None)))(batch, status)
+    for i, reference in enumerate(expected):
+        for actual, value in zip(batched, reference):
+            np.testing.assert_allclose(actual[i], value, atol=5e-6)
+
+
+@pytest.mark.parametrize("method", ["svd", "gram_eigh"])
+@pytest.mark.parametrize("n", [1, 4])
+def test_gate_program_padding_isolated_sites_and_sampling(jaxb, highp, method, n):
+    tnalg = tc.tnalg
+    circuit = tc.Circuit(n)
+    circuit.x(0)
+    if n > 1:
+        circuit.h(1)
+        circuit.cnot(1, 2)
+    program = tnalg.prepare_gate_program(circuit)
+    enabled = jax.config.x64_enabled
+
+    def execute(program, status):
+        result = tnalg.run_gate_program(
+            program, chi=16, truncation=method, truncation_dtype=jnp.complex128
+        )
+        mps = tnalg.gate_program_to_mpscircuit(result)
+        samples = jax.vmap(lambda st: mps.sample(status=st))(status)
+        return mps.wavefunction(), samples, result.fidelity
+
+    vector, samples, fidelity = jax.jit(execute)(program, jnp.full((8, n), 0.37))
+    np.testing.assert_allclose(vector, circuit.state(), atol=2e-6)
+    np.testing.assert_array_equal(samples[:, 0], 1)
+    if n > 1:
+        np.testing.assert_array_equal(samples[:, 1], samples[:, 2])
+        np.testing.assert_array_equal(samples[:, 3:], 0)
+    np.testing.assert_allclose(fidelity, 1, atol=1e-7)
+    assert jax.config.x64_enabled == enabled
+
+
+def test_gate_program_gram_truncation(jaxb, highp):
+    tnalg = tc.tnalg
+    program = tnalg.prepare_gate_program(_gate_program_circuit())
+    svd = jax.jit(lambda p: tnalg.run_gate_program(p, chi=2))(program)
+    gram = jax.jit(
+        lambda p: tnalg.run_gate_program(
+            p, chi=2, truncation="gram_eigh", truncation_dtype=jnp.complex128
+        )
+    )(program)
+    vector = _gate_program_vector(gram.buffers)
+    np.testing.assert_allclose(vector, _gate_program_vector(svd.buffers), atol=5e-6)
+    np.testing.assert_allclose(gram.fidelity, svd.fidelity, atol=3e-6)
+    np.testing.assert_allclose(
+        gram.fidelity, jnp.real(jnp.vdot(vector, vector)), atol=8e-6
+    )
+
+
+def test_gate_program_mixed_precision_scope(jaxb):
+    tnalg = tc.tnalg
+    program = tnalg.prepare_gate_program(_gate_program_circuit(n=4))
+    enabled = jax.config.x64_enabled
+    enable_x64 = getattr(jax, "enable_x64", None)
+    if enable_x64 is None:
+        enable_x64 = jax.experimental.enable_x64
+    with enable_x64(True):
+        result = jax.jit(
+            lambda pg: tnalg.run_gate_program(
+                pg, chi=2, truncation="gram_eigh", truncation_dtype=jnp.complex128
+            )
+        )(program)
+        assert result.buffers.dtype == jnp.complex64
+        assert result.fidelity.dtype == jnp.float64
+        assert np.all(np.isfinite(result.buffers))
+    assert jax.config.x64_enabled == enabled
+    if not enabled:
+        with pytest.raises(ValueError, match="x64"):
+            tnalg.run_gate_program(program, chi=2, truncation_dtype=jnp.complex128)
+
+
+def test_gate_program_gate_gradient(jaxb, highp):
+    tnalg = tc.tnalg
+    circuit = tc.Circuit(2)
+    circuit.unitary(0, 1, unitary=scipy.linalg.expm(-0.2j * np.kron(PAULI_X, PAULI_X)))
+    program = tnalg.prepare_gate_program(circuit)
+    row = _first_pair_record(program)
+
+    def loss(theta):
+        matrix = jsp_linalg.expm(-1j * theta * jnp.asarray(np.kron(PAULI_X, PAULI_X)))
+        gates = program.gates.at[row].set(matrix.reshape(2, 2, 2, 2))
+        result = tnalg.run_gate_program(
+            dataclasses.replace(program, gates=gates), chi=2, dtype=jnp.complex128
+        )
+        vector = _gate_program_vector(result.buffers)
+        return jnp.real(jnp.vdot(vector, jnp.asarray((1, 1, -1, -1)) * vector))
+
+    theta = jnp.asarray(0.27)
+    value, derivative = jax.jit(jax.value_and_grad(loss))(theta)
+    np.testing.assert_allclose(value, np.cos(2 * theta), atol=1e-10)
+    np.testing.assert_allclose(derivative, -2 * np.sin(2 * theta), atol=1e-9)
+
+
+def test_gate_program_truncated_gradient_and_sample_distribution(jaxb, highp):
+    tnalg = tc.tnalg
+    program = tnalg.prepare_gate_program(_gate_program_circuit(n=4))
+    row = _first_pair_record(program)
+    generator = jnp.asarray(np.kron(PAULI_X, PAULI_Z))
+
+    def evolve(theta):
+        matrix = jsp_linalg.expm(-1j * theta * generator)
+        gates = program.gates.at[row].set(
+            (matrix @ program.gates[row].reshape(4, 4)).reshape(2, 2, 2, 2)
+        )
+        return tnalg.run_gate_program(
+            dataclasses.replace(program, gates=gates), chi=2, dtype=jnp.complex128
+        )
+
+    def loss(theta):
+        vector = _gate_program_vector(evolve(theta).buffers)
+        weights = jnp.arange(16, dtype=jnp.float64)
+        return jnp.sum(weights * jnp.abs(vector) ** 2) / jnp.real(
+            jnp.vdot(vector, vector)
+        )
+
+    theta, delta = jnp.asarray(0.19), 1e-5
+    finite_difference = (loss(theta + delta) - loss(theta - delta)) / (2 * delta)
+    np.testing.assert_allclose(
+        jax.jit(jax.grad(loss))(theta), finite_difference, atol=2e-6
+    )
+    status = jnp.asarray(np.random.default_rng(5).uniform(size=(6000, 4)))
+
+    @jax.jit
+    def sample(status):
+        mps = tnalg.gate_program_to_mpscircuit(evolve(theta))
+        return jax.vmap(lambda st: mps.sample(status=st))(status)
+
+    samples = np.asarray(sample(status))
+    indices = samples @ np.asarray((8, 4, 2, 1))
+    empirical = np.bincount(indices, minlength=16) / len(samples)
+    probability = np.abs(np.asarray(_gate_program_vector(evolve(theta).buffers))) ** 2
+    probability /= probability.sum()
+    assert 0.5 * np.sum(np.abs(empirical - probability)) < 0.05
+
+
+def test_gate_program_routed_qaoa(jaxb):
+    tnalg = tc.tnalg
+    circuit = tc.Circuit(8)
+    for site in range(8):
+        circuit.h(site)
+    for layer in range(2):
+        for i, j in ((0, 5), (1, 7), (2, 6), (3, 0), (4, 7)):
+            circuit.rzz(i, j, theta=0.23 + layer * 0.14 + i * 0.03)
+        for i in range(8):
+            circuit.rx(i, theta=0.12 + 0.02 * i)
+    routed, info = tc.compiler.linear_route(circuit)
+    program = tnalg.prepare_gate_program(routed)
+    result = jax.jit(lambda p: tnalg.run_gate_program(p, chi=16))(program)
+    vector = np.asarray(_gate_program_vector(result.buffers)).reshape((2,) * 8)
+    logical = vector.transpose(info["final_layout"]).reshape(-1)
+    np.testing.assert_allclose(logical, circuit.state(), atol=8e-6)
+
+
+def test_gate_program_qudit_and_empty(jaxb):
+    tnalg = tc.tnalg
+    run = jax.jit(lambda p: tnalg.run_gate_program(p, chi=5))
+    for n in (1, 3):
+        circuit = tc.Circuit(n, dim=3)
+        result = run(tnalg.prepare_gate_program(circuit))
+        product = jnp.zeros((n, 5, 3, 5)).at[:, 0, 0, 0].set(1)
+        np.testing.assert_array_equal(result.buffers, product)
+        np.testing.assert_allclose(result.fidelity, 1)
+        matrix = scipy.linalg.expm(-0.3j * np.ones((3, 3)))
+        circuit.unitary(-n, unitary=matrix)
+        if n > 1:
+            circuit.unitary(2, 1, unitary=np.kron(matrix, matrix))
+        result = run(tnalg.prepare_gate_program(circuit))
+        np.testing.assert_allclose(
+            _gate_program_vector(result.buffers), circuit.state(), atol=3e-6
+        )
+
+
+def test_gate_program_export_handles_rotated_padding(jaxb):
+    tnalg = tc.tnalg
+    circuit = _gate_program_circuit(n=4)
+    program = tnalg.prepare_gate_program(circuit)
+    result = jax.jit(lambda p: tnalg.run_gate_program(p, chi=16))(program)
+    buffers = result.buffers
+    rng = np.random.default_rng(12)
+    gauge, _ = np.linalg.qr(rng.normal(size=(16, 16)) + 1j * rng.normal(size=(16, 16)))
+    gauge = jnp.asarray(gauge, dtype=buffers.dtype)
+    rotated = buffers.at[1].set(jnp.einsum("aib,bc->aic", buffers[1], gauge))
+    rotated = rotated.at[2].set(jnp.einsum("ab,bic->aic", gauge.conj().T, buffers[2]))
+    exported = tnalg.gate_program_to_mpscircuit(result._replace(buffers=rotated))
+    np.testing.assert_allclose(exported.wavefunction(), circuit.state(), atol=5e-6)
+    for tensor in exported.get_tensors()[1:]:
+        matrix = tensor.reshape(tensor.shape[0], -1)
+        np.testing.assert_allclose(
+            matrix @ matrix.conj().T, np.eye(len(matrix)), atol=3e-6
+        )
+
+
+def test_gate_program_updates_do_not_copy_the_whole_state(jaxb):
+    if jax.default_backend() != "cpu":
+        pytest.skip("native CPU HLO copy regression")
+    tnalg = tc.tnalg
+    circuit = tc.Circuit(32)
+    for site in range(31):
+        circuit.cnot(site, site + 1)
+    program = tnalg.prepare_gate_program(circuit)
+    executable = (
+        jax.jit(lambda p: tnalg.run_gate_program(p, chi=4)).lower(program).compile()
+    )
+    # Materializing the constant product state once per call is expected.
+    copies = [
+        line
+        for line in executable.as_text().splitlines()
+        if " copy(" in line and "c64[32,4,2,4]" in line and "copy(%constant" not in line
+    ]
+    assert not copies, copies
+
+
+def test_gate_program_validation(jaxb):
+    tnalg = tc.tnalg
+    with pytest.raises(TypeError, match="Circuit"):
+        tnalg.prepare_gate_program([])
+    with pytest.raises(ValueError, match="default input"):
+        tnalg.prepare_gate_program(tc.Circuit(3, inputs=np.ones(8) / np.sqrt(8)))
+    circuit = tc.Circuit(3)
+    circuit.cnot(0, 2)
+    with pytest.raises(ValueError, match="adjacent"):
+        tnalg.prepare_gate_program(circuit)
+    circuit = tc.Circuit(2)
+    circuit.unitary(0, unitary=2 * np.eye(2))
+    with pytest.raises(ValueError, match="unitary"):
+        tnalg.prepare_gate_program(circuit)
+    programs = [tnalg.prepare_gate_program(tc.Circuit(n)) for n in (2, 3)]
+    with pytest.raises(ValueError, match="equal n"):
+        tnalg.stack_gate_programs(programs)
+    with pytest.raises(ValueError, match="vmap"):
+        tnalg.run_gate_program(tnalg.stack_gate_programs(programs[:1]), chi=2)
+    with pytest.raises(ValueError, match="truncation"):
+        tnalg.run_gate_program(programs[0], chi=2, truncation="bad")
+
+
+def test_gate_program_diagonal_gate_axes(jaxb):
+    circuit = tc.Circuit(3)
+    circuit.h(0)
+    circuit.ry(1, theta=0.43)
+    circuit.diagonal(1, 0, diag=jnp.exp(1j * jnp.asarray((0.1, 0.3, -0.7, 0.2))))
+    program = tc.tnalg.prepare_gate_program(circuit)
+    result = jax.jit(lambda p: tc.tnalg.run_gate_program(p, chi=4))(program)
+    np.testing.assert_allclose(
+        _gate_program_vector(result.buffers), circuit.state(), atol=2e-6
+    )
 
 
 def kron_sites(operators):

@@ -116,6 +116,7 @@ adaware_svd_jit = jax.jit(adaware_svd)
 
 
 qr_epsilon = 1e-8
+qr_epsilon_single = 1e-6  # float32 and complex64
 
 
 @jax.custom_vjp
@@ -142,12 +143,13 @@ def jaxqr_bwd(res: Sequence[Array], tangents: Sequence[Array]) -> Tuple[Array]:
 
     def _QrGradSquareAndDeepMatrices(q: Array, r: Array, dq: Array, dr: Array) -> Array:
         # Modification begins
+        eps = (
+            qr_epsilon_single if jnp.finfo(r.dtype).dtype == jnp.float32 else qr_epsilon
+        )
         rdiag = jnp.diag(r)
-        rdiag = (jnp.abs(rdiag) < qr_epsilon) * qr_epsilon + (
-            jnp.abs(rdiag) >= qr_epsilon
-        ) * rdiag
+        rdiag = (jnp.abs(rdiag) < eps) * eps + (jnp.abs(rdiag) >= eps) * rdiag
         diag_indices = jnp.arange(min(r.shape[-2:]))
-        r = r.at[diag_indices, diag_indices].set(rdiag)
+        r_safe = r.at[diag_indices, diag_indices].set(rdiag)
         # Modification ends
 
         qdq = q.T.conj().dot(dq)
@@ -156,8 +158,8 @@ def jaxqr_bwd(res: Sequence[Array], tangents: Sequence[Array]) -> Tuple[Array]:
         rdr_ = rdr - rdr.T.conj()
         tril = jnp.tril(qdq_ + rdr_)
 
-        grad_a = q.dot(dr + _TriangularSolve(tril, r))
-        grad_b = _TriangularSolve(dq - q.dot(qdq), r)
+        grad_a = q.dot(dr + _TriangularSolve(tril, r_safe))
+        grad_b = _TriangularSolve(dq - q.dot(qdq), r_safe)
         ret = grad_a + grad_b
 
         if jnp.iscomplexobj(q):
@@ -166,7 +168,7 @@ def jaxqr_bwd(res: Sequence[Array], tangents: Sequence[Array]) -> Tuple[Array]:
             eyem = jnp.zeros_like(m)
             eyem = eyem.at[jnp.arange(length), jnp.arange(length)].set(jnp.diag(m))
             correction = eyem - jnp.real(eyem)
-            ret = ret + _TriangularSolve(q.dot(correction.T.conj()), r)
+            ret = ret + _TriangularSolve(q.dot(correction.T.conj()), r_safe)
 
         return ret
 

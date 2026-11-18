@@ -17,6 +17,7 @@ import pytest
 import tensorcircuit as tc
 from tensorcircuit.cloud import apis, tianyan
 from tensorcircuit.cloud.abstraction import Device, Task
+from tensorcircuit.cloud.utils import SubmissionUnknown
 
 # token is picked up automatically by the cloud env token system
 LOGIN_KEY = os.getenv("TC_TOKEN_TIANYAN")
@@ -386,8 +387,39 @@ def test_batch_submission_validates_returned_task_ids() -> None:
         patch.object(tianyan, "_get_platform", return_value=platform),
         patch.object(tianyan, "QuantumLanguage", FAKE_QUANTUM_LANGUAGE),
     ):
-        with pytest.raises(ValueError, match="1 task IDs for 2"):
+        with pytest.raises(SubmissionUnknown, match="1 task IDs for 2"):
             tianyan.submit_task(device, "token", source=["H Q0", "X Q0"], shots=100)
+
+
+def test_submission_failure_is_unknown_and_not_retried() -> None:
+    platform = _FakePlatform({})
+    device = Device.from_name("tianyan::tianyan_sw")
+
+    def lost(**kwargs: Any) -> List[str]:
+        platform.calls.append(kwargs)
+        raise ConnectionError("connection reset")
+
+    platform.submit_job = lost  # type: ignore
+    with (
+        patch.object(tianyan, "_assert_cqlib"),
+        patch.object(tianyan, "_get_platform", return_value=platform),
+        patch.object(tianyan, "QuantumLanguage", FAKE_QUANTUM_LANGUAGE),
+    ):
+        with pytest.raises(SubmissionUnknown, match="connection reset"):
+            tianyan.submit_task(device, "token", source="H Q0", shots=100)
+    assert len(platform.calls) == 1
+
+
+def test_rerun_without_task_id_is_unknown() -> None:
+    platform = _FakePlatform({})
+    platform.re_execute_task = lambda task_id: []  # type: ignore
+    task = Task("task-1", Device.from_name("tianyan::tianyan_sw"))
+    with (
+        patch.object(tianyan, "_assert_cqlib"),
+        patch.object(tianyan, "_get_platform", return_value=platform),
+    ):
+        with pytest.raises(SubmissionUnknown, match="single valid task ID"):
+            tianyan.resubmit_task(task, "token")
 
 
 @requires_cqlib

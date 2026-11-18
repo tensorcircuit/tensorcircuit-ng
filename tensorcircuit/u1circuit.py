@@ -802,7 +802,8 @@ class U1Circuit(AbstractCircuit):
         :type format: Optional[str]
         :param random_generator: Random generator, defaults to None
         :type random_generator: Optional[Any], optional
-        :param status: External randomness tensor uniformly from [0, 1], shape [batch]
+        :param status: External randomness tensor uniformly from [0, 1], shape [batch] or [batch, 2]
+            (see ``backend.probability_sample`` for the two-number form)
         :type status: Optional[Tensor]
         :param jittable: Keep full size for jit compatibility, defaults to True
         :type jittable: bool

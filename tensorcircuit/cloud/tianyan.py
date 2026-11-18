@@ -6,9 +6,21 @@ https://qc.zdxlz.com
 from collections import Counter
 from datetime import datetime
 import logging
-from typing import Any, cast, Dict, List, Optional, Sequence, Set, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    cast,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 
 from .abstraction import Device, sep, Task
+from .utils import SubmissionUnknown, unknown_submission_errors
 from ..abstractcircuit import AbstractCircuit
 from ..utils import is_sequence
 
@@ -51,6 +63,17 @@ def _assert_cqlib() -> None:
             "Installed cqlib is incompatible with TianYan provider; "
             "missing TianYanPlatform attributes: %s" % ", ".join(missing)
         )
+
+
+def _send(f: Callable[..., Any], *args: Any, **kws: Any) -> Any:
+    # the request creates paid tasks: sent once, any failure leaves them unknown
+    errors = unknown_submission_errors
+    if CqlibError is not None:
+        errors = errors + (CqlibError,)  # type: ignore
+    try:
+        return f(*args, **kws)
+    except errors as e:
+        raise SubmissionUnknown(repr(e)) from e
 
 
 def _get_platform(token: str, machine_name: Optional[str] = None) -> "TianYanPlatform":
@@ -179,8 +202,14 @@ def _tc_qir_to_qcis(circuit: AbstractCircuit) -> str:
     """
     qir = circuit.to_qir()
     extra_qir = circuit._extra_qir
-    measure_instructions = [inst for inst in extra_qir if inst.get("name") == "measure"]
-    measure_instructions.sort(key=lambda inst: inst.get("record_index", 0))
+    measures = [inst for inst in extra_qir if inst.get("name") == "measure"]
+    measure_instructions = [
+        inst
+        for _, inst in sorted(
+            zip(AbstractCircuit._measurement_records(measures), measures),
+            key=lambda x: x[0],
+        )
+    ]
 
     _assert_cqlib()
 
@@ -666,46 +695,56 @@ def submit_task(
         # submit_experiment submits the circuits as one experiment (a job
         # group under lab_name) and returns one query id per circuit;
         # submit_job below is the single-circuit endpoint
-        query_ids = pf.submit_experiment(
+        query_ids = _send(
+            pf.submit_experiment,
             circuit=sources,
             language=QuantumLanguage.QCIS,  # type: ignore
             lab_id=lab_id,
             lab_name=exp_name,
             num_shots=num_shots,
         )
+        # the circuits are sent, so an unexpected answer leaves them unknown
         if not isinstance(query_ids, (list, tuple)):
-            raise ValueError("TianYan batch submission did not return task IDs")
+            raise SubmissionUnknown("TianYan batch submission did not return task IDs")
         if len(query_ids) != len(sources):
-            raise ValueError(
+            raise SubmissionUnknown(
                 f"TianYan returned {len(query_ids)} task IDs for "
                 f"{len(sources)} submitted circuits"
             )
         tasks = []
         for qid, src in zip(query_ids, sources):
             if not isinstance(qid, str) or not qid:
-                raise ValueError("TianYan returned an invalid task ID")
+                raise SubmissionUnknown("TianYan returned an invalid task ID")
             task = Task(id_=qid, device=device)
             task.add_details(source=src)
             tasks.append(task)
         return tasks
     else:
         num_shots = _normalize_shots(shots, 1)
-        query_id = pf.submit_job(
-            circuit=source,  # type: ignore
-            exp_name=exp_name,
-            lab_id=lab_id,
-            num_shots=num_shots,
-            language=QuantumLanguage.QCIS,  # type: ignore
+        query_id = _single_id(
+            _send(
+                pf.submit_job,
+                circuit=source,  # type: ignore
+                exp_name=exp_name,
+                lab_id=lab_id,
+                num_shots=num_shots,
+                language=QuantumLanguage.QCIS,  # type: ignore
+            )
         )
-        if isinstance(query_id, (list, tuple)):
-            if len(query_id) != 1:
-                raise ValueError("TianYan single submission returned multiple task IDs")
-            query_id = query_id[0]
-        if not isinstance(query_id, str) or not query_id:
-            raise ValueError("TianYan submission did not return a valid task ID")
         task = Task(id_=query_id, device=device)
         task.add_details(source=source)
         return task
+
+
+def _single_id(query_id: Any) -> str:
+    # the circuit is sent, so an unexpected answer leaves it unknown
+    if isinstance(query_id, (list, tuple)) and len(query_id) == 1:
+        query_id = query_id[0]
+    if not isinstance(query_id, str) or not query_id:
+        raise SubmissionUnknown(
+            "TianYan did not return a single valid task ID: %r" % (query_id,)
+        )
+    return query_id
 
 
 def resubmit_task(task: Task, token: str) -> Task:
@@ -713,14 +752,9 @@ def resubmit_task(task: Task, token: str) -> Task:
     if task.device is None:
         raise ValueError("Task must have an associated device for resubmission.")
     pf = _get_platform(token, machine_name=task.device.name)
-    try:
-        # cqlib re-execute task
-        new_query_id = pf.re_execute_task(task.id_)
-        if isinstance(new_query_id, list):
-            new_query_id = new_query_id[0]
-        return Task(id_=new_query_id, device=task.device)
-    except CqlibError as e:  # type: ignore
-        raise ValueError("Failed to resubmit task %s: %s" % (task.id_, e)) from e
+    # cqlib re-execute task
+    new_query_id = _single_id(_send(pf.re_execute_task, task.id_))
+    return Task(id_=new_query_id, device=task.device)
 
 
 def remove_task(task: Task, token: str) -> Any:
@@ -736,6 +770,11 @@ def list_tasks(device: Device, token: str, **filter_kws: Any) -> List[Task]:
     raise NotImplementedError(
         "TianYan provider does not support list_tasks because cqlib has no listing API"
     )
+
+
+# the prepared circuit runs on its qubits as they are
+def task_metadata(details: Dict[str, Any], prepared: Dict[str, Any]) -> Dict[str, Any]:
+    return {"positional_logical_mapping": prepared.get("positional_logical_mapping")}
 
 
 def get_task_details(

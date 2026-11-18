@@ -9,6 +9,7 @@ import logging
 import os
 import sys
 import time
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 
@@ -21,6 +22,24 @@ thismodule = sys.modules[__name__]
 class HttpStatusError(Exception):
     """
     Used when the return request has http code beyond 200
+    """
+
+    pass
+
+
+class SubmissionUnknown(Exception):
+    """
+    Raised when a request creating paid tasks fails after it may have reached
+    the server, so the tasks may have been accepted; it is never retried
+    """
+
+    pass
+
+
+class SubmissionRejected(ValueError):
+    """
+    Raised when the provider explicitly rejects a request creating paid tasks,
+    so the tasks are certainly not submitted
     """
 
     pass
@@ -54,6 +73,21 @@ def set_proxy(proxy: Optional[str] = None) -> None:
         setattr(thismodule, "proxy", None)
 
 
+def redact_url(url: str) -> str:
+    """
+    Hide the ``user:password@`` part of a URL, e.g., for logging proxies.
+
+    :param url: URL possibly carrying credentials
+    :type url: str
+    :return: URL with the credentials replaced by ``***``
+    :rtype: str
+    """
+    parts = urlsplit(url)
+    if "@" not in parts.netloc:
+        return url
+    return urlunsplit(parts._replace(netloc="***@" + parts.netloc.rsplit("@", 1)[1]))
+
+
 def reconnect(tries: int = 5, timeout: int = 12) -> Callable[..., Any]:
     # wrapper originally designed in xalpha by @refraction-ray
     # https://github.com/refraction-ray/xalpha
@@ -65,7 +99,7 @@ def reconnect(tries: int = 5, timeout: int = 12) -> Callable[..., Any]:
                     "http": getattr(thismodule, "proxy"),
                     "https": getattr(thismodule, "proxy"),
                 }
-                logger.debug("Using proxy %s" % getattr(thismodule, "proxy"))
+                logger.debug("Using proxy %s", redact_url(getattr(thismodule, "proxy")))
             kws["timeout"] = timeout
             if args:
                 url = args[0]
@@ -90,14 +124,14 @@ def reconnect(tries: int = 5, timeout: int = 12) -> Callable[..., Any]:
                         raise HttpStatusError
                     return r
                 except connection_errors as e:
-                    logger.warning("Fails at fetching url: %s. Try again." % url)
                     if count == tries - 1:
                         logger.error(
                             "Still wrong at fetching url: %s. after %s tries."
                             % (url, tries)
                         )
-                        logger.error("Fails due to %s" % e.args[0])
+                        logger.error("Fails due to %r", e)
                         raise e
+                    logger.warning("Fails at fetching url: %s. Try again." % url)
                     time.sleep(0.5 * count)
 
         return wrapper
@@ -119,3 +153,30 @@ def rget_json(*args: Any, **kws: Any) -> Any:
 def rpost_json(*args: Any, **kws: Any) -> Any:
     r = requests.post(*args, **kws)
     return r.json()
+
+
+@reconnect(tries=1, timeout=60)
+def _rpost_json_once(*args: Any, **kws: Any) -> Any:
+    r = requests.post(*args, **kws)
+    return r.json()
+
+
+def rpost_json_once(*args: Any, **kws: Any) -> Any:
+    """
+    Post a request creating paid tasks only once with a longer timeout.
+    Any failure of the request itself raises :py:class:`SubmissionUnknown`,
+    while an error in a parsed response is left to the caller.
+    """
+    try:
+        return _rpost_json_once(*args, **kws)
+    except connection_errors as e:
+        raise SubmissionUnknown(repr(e)) from e
+
+
+# failures after which submitted tasks may have been accepted
+unknown_submission_errors = (
+    SubmissionUnknown,
+    requests.exceptions.RequestException,
+    ConnectionError,
+    TimeoutError,
+)

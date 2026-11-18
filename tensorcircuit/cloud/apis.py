@@ -2,46 +2,80 @@
 main entrypoints of cloud module
 """
 
-from typing import Any, List, Optional, Dict, Union, Tuple
+from typing import Any, Callable, List, Optional, Dict, Sequence, Union, Tuple
 from base64 import b64decode, b64encode
+from copy import copy
 from functools import partial
+import importlib
 import json
 import os
 import sys
 import tempfile
 import logging
 
-from .abstraction import Provider, Device, Task, sep, sep2
+from .abstraction import Provider, Device, Task, metadata_keys, sep, sep2
+from .store import (
+    PathLike,
+    TaskStore,
+    as_store,
+    circuit_record,
+    make_records,
+    store_errors,
+    try_store,
+)
+from ..abstractcircuit import AbstractCircuit
+from ..utils import is_sequence
+
+try:
+    from .utils import unknown_submission_errors
+except ImportError:
+    # without requests, no remote provider can submit tasks
+    unknown_submission_errors = ()  # type: ignore
 
 logger = logging.getLogger(__name__)
-
-
-try:
-    from . import tencent  # type: ignore
-except (ImportError, ModuleNotFoundError):
-    logger.info("fail to load cloud provider module: tencent")
-
-try:
-    from . import local
-except (ImportError, ModuleNotFoundError):
-    logger.info("fail to load cloud provider module: local")
-
-try:
-    from . import quafu_provider
-except (ImportError, ModuleNotFoundError):
-    logger.info("fail to load cloud provider module: quafu")
-
-try:
-    from . import tianyan
-except (ImportError, ModuleNotFoundError):
-    logger.info("fail to load cloud provider module: tianyan")
 
 package_name = "tensorcircuit"
 thismodule = sys.modules[__name__]
 
+# provider name -> the module implementing the provider interface, see
+# ``_provider_api``, and the vendor SDKs it needs, recorded in the task store
+_provider_modules = {
+    "tencent": ("tencent", []),
+    "local": ("local", []),
+    "quafu": ("quafu_provider", ["quafu"]),
+    "tianyan": ("tianyan", ["cqlib"]),
+    "lqcloud": ("lqcloud", ["lqcloud"]),
+}
 
 default_provider = Provider.from_name("tencent")
-avail_providers = ["tencent", "local", "quafu", "tianyan"]
+avail_providers = list(_provider_modules)
+
+
+def _provider_module(provider: Provider) -> Any:
+    if provider.name not in _provider_modules:
+        raise ValueError("Unsupported provider: %s" % provider.name)
+    return importlib.import_module(
+        "." + _provider_modules[provider.name][0], __package__
+    )
+
+
+def _provider_api(provider: Provider, name: str) -> Callable[..., Any]:
+    """
+    Get a function of the provider interface implemented by each provider module:
+    ``list_devices(token, **kws)``, ``list_properties(device, token)``,
+    ``submit_task(device, token, **task_kws)``,
+    ``get_task_details(task, device, token, prettify)``,
+    ``resubmit_task(task, token)``, ``remove_task(task, token)``,
+    ``list_tasks(device, token, **filter_kws)``, and optionally
+    ``prepare_task(device, token, **task_kws)`` and
+    ``task_metadata(details, prepared)``, see ``docs/source/cloud_provider.md``.
+    """
+    f = getattr(_provider_module(provider), name, None)
+    if f is None:
+        raise NotImplementedError(
+            "%s provider does not support %s" % (provider.name, name)
+        )
+    return f  # type: ignore
 
 
 def list_providers() -> List[Provider]:
@@ -136,6 +170,43 @@ def set_device(
 set_device()
 get_device = partial(set_device, set_global=False)
 
+default_store: Optional[TaskStore] = None
+
+
+def set_store(
+    store: Optional[Union[bool, PathLike, TaskStore]] = True,
+) -> Optional[TaskStore]:
+    """
+    Set the default local task store for all following submissions,
+    including those inside wrappers such as ``batch_expectation_ps``.
+    The ``store`` argument of :py:func:`submit_task` overrides it per call.
+
+    :Example:
+
+    >>> apis.set_store(True)  # record tasks in ~/.tensorcircuit/tasks
+    >>> apis.set_store("./my_tasks")  # record tasks in a given directory
+    >>> apis.set_store(False)  # stop recording, the default
+
+    :param store: ``True`` for the default directory, a path for a given
+        directory, ``False`` or None for no store, defaults to True
+    :type store: Optional[Union[bool, PathLike, TaskStore]], optional
+    :return: the default task store, None if disabled
+    :rtype: Optional[TaskStore]
+    """
+    global default_store
+    default_store = as_store(store)
+    return default_store
+
+
+def get_store() -> Optional[TaskStore]:
+    """
+    Get the default local task store set by :py:func:`set_store`
+
+    :return: the default task store, None if disabled
+    :rtype: Optional[TaskStore]
+    """
+    return default_store
+
 
 def b64encode_s(s: str) -> str:
     return b64encode(s.encode("utf-8")).decode("utf-8")
@@ -194,14 +265,38 @@ def _write_auth_file(path: str, tokens: Dict[str, str]) -> None:
             pass
 
 
-# Process-local session token overrides (key -> token), where key is
-# ``"<provider>::"`` or ``"<provider>::<device>"``. This is the session layer
-# on top of the disk-backed auth file: it holds only tokens explicitly set via
-# ``set_token`` in this process (including ``cached=False`` writes), never a
-# mirror of disk. Readers must not rebind this global; ``get_token`` falls back
-# to disk when a key is absent here, so in-place mutations (e.g. ``patch.dict``
-# in tests) survive across ``get_token`` calls.
+# Process-local tokens (key -> token), where key is ``"<provider>::"`` or
+# ``"<provider>::<device>"``. It holds only tokens set via ``set_token`` in this
+# process, never a mirror of the auth file, and is only mutated in place.
 saved_token: Dict[str, Any] = {}
+
+
+def _token_key(
+    provider: Optional[Union[str, Provider]] = None,
+    device: Optional[Union[str, Device]] = None,
+) -> str:
+    if isinstance(provider, str):
+        provider = Provider.from_name(provider)
+    if device is None:
+        if provider is None:
+            provider = default_provider
+        return provider.name + sep
+    device = Device.from_name(device)
+    if provider is None:
+        provider = device.provider
+    if provider is None:
+        provider = default_provider
+    return provider.name + sep + device.name
+
+
+def _check_token(token: Any) -> None:
+    # never echo the token itself in the error message
+    if not isinstance(token, str):
+        raise TypeError("token must be a str, got %s" % type(token).__name__)
+    if not token.strip():
+        raise ValueError("token must be non-empty")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in token):
+        raise ValueError("token must not contain control characters such as newlines")
 
 
 def _preprocess(
@@ -240,63 +335,71 @@ def set_token(
     token: Optional[str] = None,
     provider: Optional[Union[str, Provider]] = None,
     device: Optional[Union[str, Device]] = None,
-    cached: bool = True,
+    cached: bool = False,
     clear: bool = False,
 ) -> Dict[str, Any]:
     """
-    Set API token for given provider or specifically to given device
+    Set API token for given provider or specifically to given device.
+    The token is only kept in the current process unless ``cached=True``,
+    which also saves it to the auth file ``~/.tc.auth.json`` (or the path in
+    ``TC_AUTH_PATH``). The file is base64 encoded, not encrypted, and is
+    readable by the owner only on POSIX.
 
-    :param token: the API token, defaults to None
+    :Example:
+
+    >>> apis.set_token("my-token", provider="tencent")  # this process only
+    >>> apis.set_token("my-token", provider="tencent", cached=True)  # also on disk
+    >>> apis.set_token(provider="tencent", clear=True)  # remove tencent tokens
+
+    :param token: the API token, defaults to None, which returns all tokens
+        saved in memory and on the disk
     :type token: Optional[str], optional
     :param provider: provider scope of the token; defaults to None
     :type provider: Optional[Union[str, Provider]], optional
     :param device: device scope of the token (more specific than provider);
         defaults to None
     :type device: Optional[Union[str, Device]], optional
-    :param cached: whether save on the disk, defaults to True
+    :param cached: whether also save the token on the disk, defaults to False
     :type cached: bool, optional
-    :param clear: if True, clear all token saved, defaults to False
+    :param clear: if True, remove saved tokens both in memory and on the disk:
+        the given device token, all tokens of the given provider,
+        or all tokens if no scope is given, defaults to False
     :type clear: bool, optional
-    :return: the session-level saved_token dict
+    :return: the tokens saved in memory of this process
     :rtype: Dict[str, Any]
     """
-    global saved_token
     authpath = _auth_path()
     if clear is True:
-        saved_token = {}
-        if cached and os.path.exists(authpath):
-            try:
-                os.remove(authpath)
-            except OSError as e:
-                logger.warning("token file removal failure: %s", e)
+        if provider is None and device is None:
+            saved_token.clear()
+            if os.path.exists(authpath):
+                try:
+                    os.remove(authpath)
+                except OSError as e:
+                    logger.warning("token file removal failure: %s", e)
+            return saved_token
+        key = _token_key(provider, device)
+
+        def in_scope(k: str) -> bool:
+            return k == key or (device is None and k.startswith(key))
+
+        for k in [k for k in saved_token if in_scope(k)]:
+            del saved_token[k]
+        file_token = _read_auth_file(authpath)
+        kept = {k: v for k, v in file_token.items() if not in_scope(k)}
+        if len(kept) < len(file_token):
+            _write_auth_file(authpath, kept)
         return saved_token
     if token is None:
-        # pure read: return the merged view of disk + session overrides.
-        # Never write back to disk here: writing back on import / get_token is
-        # what used to truncate the auth file under multiprocessing (each
-        # worker re-dumped a stale snapshot).
+        # pure read, never write back: rewriting a stale snapshot on import
+        # used to truncate the auth file under multiprocessing
         file_token = _read_auth_file(authpath)
         file_token.update(saved_token)
         return file_token
-    # with token: write the session override layer first (so get_token can read
-    # it even when cached=False), then optionally persist to disk.
-    if isinstance(provider, str):
-        provider = Provider.from_name(provider)
-    if device is None:
-        if provider is None:
-            provider = default_provider
-        key = provider.name + sep
-    else:
-        device = Device.from_name(device)
-        if provider is None:
-            provider = device.provider  # type: ignore
-        if provider is None:
-            provider = default_provider
-        key = provider.name + sep + device.name  # type: ignore
+    _check_token(token)
+    key = _token_key(provider, device)
     saved_token[key] = token
     if cached:
-        # merge the new entry into the freshest on-disk state and persist
-        # atomically, so concurrent processes can't clobber each other.
         file_token = _read_auth_file(authpath)
         file_token[key] = token
         _write_auth_file(authpath, file_token)
@@ -311,11 +414,11 @@ def get_token(
     device: Optional[Union[str, Device]] = None,
 ) -> Optional[str]:
     """
-    Get API token setted for given provider or device,
-    if no device token saved, the corresponding provider tken is returned.
-    Environment variables take precedence and are never persisted: a single
-    token can be supplied via ``TC_TOKEN``, or a per-provider token via
-    ``TC_TOKEN_<PROVIDER_NAME>`` (uppercased), e.g. ``TC_TOKEN_TENCENT``.
+    Get API token set for given provider or device.
+    The lookup order is: tokens set by ``set_token`` in this process,
+    the ``TC_TOKEN_<PROVIDER_NAME>`` environment variable (uppercased,
+    e.g. ``TC_TOKEN_TENCENT``), and the auth file. Within the process and
+    the auth file, a device token takes precedence over the provider token.
 
     :param provider: provider scope to look up; defaults to the current
         default provider
@@ -328,27 +431,20 @@ def get_token(
     if provider is None:
         provider = get_provider()
     provider = Provider.from_name(provider)
-    target = provider.name + sep
+    keys = [provider.name + sep]
     if device is not None:
         device = Device.from_name(device, provider)
-        target = target + device.name
-    # 1. env var override (process-scoped, never persisted): single token,
-    #    or per-provider token.
-    env_token = os.environ.get("TC_TOKEN")
-    if env_token is None:
-        env_token = os.environ.get("TC_TOKEN_" + provider.name.upper())
-    if env_token is not None:
+        keys.insert(0, provider.name + sep + device.name)
+    for key in keys:
+        if key in saved_token:
+            return saved_token[key]  # type: ignore
+    env_token = os.environ.get("TC_TOKEN_" + provider.name.upper())
+    if env_token:
         return env_token
-    # 2. session override (in-memory, process-scoped, set via set_token).
-    #    Read-only here: never rebind the global, so in-place mutations
-    #    (e.g. patch.dict in tests) survive across get_token calls, and
-    #    cached=False writes remain visible to readers.
-    if target in saved_token:
-        return saved_token[target]  # type: ignore
-    # 3. disk (persistent, shared across processes); read-only.
     file_token = _read_auth_file(_auth_path())
-    if target in file_token:
-        return file_token[target]  # type: ignore
+    for key in keys:
+        if key in file_token:
+            return file_token[key]
     return None
 
 
@@ -377,14 +473,7 @@ def list_devices(
     provider = Provider.from_name(provider)
     if token is None:
         token = provider.get_token()
-    if provider.name == "tencent":
-        return tencent.list_devices(token, **kws)  # type: ignore
-    elif provider.name == "tianyan":
-        return tianyan.list_devices(token, **kws)
-    elif provider.name == "local":
-        return local.list_devices(token, **kws)
-    else:
-        raise ValueError("Unsupported provider: %s" % provider.name)
+    return _provider_api(provider, "list_devices")(token, **kws)  # type: ignore
 
 
 def list_properties(
@@ -409,14 +498,7 @@ def list_properties(
 
     if token is None:
         token = device.get_token()  # type: ignore
-    if provider.name == "tencent":  # type: ignore
-        return tencent.list_properties(device, token)  # type: ignore
-    elif provider.name == "tianyan":
-        return tianyan.list_properties(device, token)
-    elif provider.name == "local":
-        raise ValueError("Unsupported method for local backend")
-    else:
-        raise ValueError("Unsupported provider: %s" % provider.name)  # type: ignore
+    return _provider_api(provider, "list_properties")(device, token)  # type: ignore
 
 
 def get_task(
@@ -474,25 +556,38 @@ def get_task_details(
         device = default_device
     if token is None:
         token = device.get_token()
-    provider = device.provider
+    details = _provider_api(device.provider, "get_task_details")
+    return details(task, device, token, prettify)  # type: ignore
 
-    if provider.name == "tencent":
-        return tencent.get_task_details(task, device, token, prettify)  # type: ignore
-    elif provider.name == "tianyan":
-        return tianyan.get_task_details(task, device, token, prettify)  # type: ignore
-    elif provider.name == "local":
-        return local.get_task_details(task, device, token, prettify)  # type: ignore
-    elif provider.name == "quafu":
-        return quafu_provider.get_task_details(task, device, token, prettify)  # type: ignore
 
-    else:
-        raise ValueError("Unsupported provider: %s" % provider.name)  # type: ignore
+def get_task_metadata(task: Task, details: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Get the provider-independent metadata of the task details, i.e.
+    ``task.details()["tensorcircuit"]`` without the archive status, see
+    :py:meth:`Task.details`. The provider module gives the values it knows from
+    its own details and :py:attr:`Task.prepared`, empty if unknown, by
+    ``task_metadata(details, prepared)``, and the other values are None.
+
+    :param task: the task
+    :type task: Task
+    :param details: the task details by :py:func:`get_task_details`
+    :type details: Dict[str, Any]
+    :return: the metadata
+    :rtype: Dict[str, Any]
+    """
+    meta: Dict[str, Any] = dict.fromkeys(metadata_keys)
+    if task.device is not None:
+        f = getattr(_provider_module(task.device.provider), "task_metadata", None)
+        if f is not None:
+            meta.update(f(details, task.prepared or {}))
+    return dict(schema_version=1, **meta)
 
 
 def submit_task(
     provider: Optional[Union[str, Provider]] = None,
     device: Optional[Union[str, Device]] = None,
     token: Optional[str] = None,
+    store: Optional[Union[bool, PathLike, TaskStore]] = None,
     **task_kws: Any,
 ) -> List[Task]:
     """
@@ -509,60 +604,217 @@ def submit_task(
     :param token: API token for the provider; defaults to None which uses
         the saved token
     :type token: Optional[str], optional
+    :param store: whether record the tasks in a local task store: ``True`` for
+        the default directory, a path for a given directory, or ``False``;
+        defaults to None, which follows :py:func:`set_store`
+    :type store: Optional[Union[bool, PathLike, TaskStore]], optional
     :param task_kws: all necessary keywords arguments for task submission,
         see detailed API in each provider backend:
         1. tencent - :py:func:`tensorcircuit.cloud.tencent.submit_task`
         2. tianyan - :py:func:`tensorcircuit.cloud.tianyan.submit_task`
+        3. lqcloud - :py:func:`tensorcircuit.cloud.lqcloud.submit_task`
     :type task_kws: Any
     :return: Task object or list of Task for batch submission
     :rtype: List[Task]
     """
     provider, device = _preprocess(provider, device)
-
+    # resolve the provider before recording anything in the store
+    submit = _provider_api(provider, "submit_task")
     if token is None:
         token = device.get_token()  # type: ignore
-    if provider.name == "tencent":  # type: ignore
-        return tencent.submit_task(device, token, **task_kws)  # type: ignore
-    elif provider.name == "tianyan":  # type: ignore
-        return tianyan.submit_task(device, token, **task_kws)  # type: ignore
-    elif provider.name == "local":  # type: ignore
-        return local.submit_task(device, token, **task_kws)  # type: ignore
-    elif provider.name == "quafu":  # type: ignore
-        return quafu_provider.submit_task(device, token, **task_kws)  # type: ignore
+    ts = default_store if store is None else as_store(store)
+
+    # providers take an explicit source over the circuit
+    source = task_kws.get("source")
+    items = task_kws.get("circuit") if source is None else source
+    batch = is_sequence(items)
+    items = list(items) if batch else [items]  # type: ignore
+    prepare = getattr(_provider_module(provider), "prepare_task", None)
+    if prepare is None:
+        send_kws, prepared = task_kws, [_prepared(c) for c in items]
     else:
-        raise ValueError("Unsupported provider: %s" % provider.name)  # type: ignore
+        # compile locally first, so the intents hold what is prepared for each circuit
+        send_kws, prepared = prepare(device, token, **task_kws)
+    records = []
+    if ts is not None:
+        records = make_records(
+            provider.name,
+            device.name,
+            _task_requests(items, task_kws),
+            batch,
+            _provider_modules[provider.name][1],
+        )
+    return _send_tasks(  # type: ignore
+        ts, records, prepared, lambda: submit(device, token, **send_kws)
+    )
+
+
+def _prepared(c: Any) -> Dict[str, Any]:
+    # what is prepared for a circuit by providers without ``prepare_task``
+    mapping = (
+        c.get_positional_logical_mapping() if isinstance(c, AbstractCircuit) else None
+    )
+    return {"positional_logical_mapping": mapping}
+
+
+def _send_tasks(
+    ts: Optional[TaskStore],
+    records: List[Dict[str, Any]],
+    prepared: Sequence[Optional[Dict[str, Any]]],
+    send: Callable[[], Any],
+) -> Any:
+    """
+    Send paid tasks once, recording them in the store if any: the submission
+    intents are saved before sending, kept as ``unknown`` if the tasks may have
+    been accepted, and deleted for the tasks certainly not submitted.
+    Once the request is sent, ``send`` returns the accepted tasks, where each
+    missing circuit is explicitly rejected, or raises ``SubmissionRejected``
+    or ``SubmissionUnknown``; any other failure happens before sending.
+    ``prepared`` holds what is prepared for each circuit, see :py:attr:`Task.prepared`.
+    """
+    for rec, p in zip(records, prepared):
+        rec["prepared"] = p
+    if ts is not None:
+        try_store(ts.save, records)
+    try:
+        r = send()
+    except unknown_submission_errors as e:
+        if ts is not None:
+            for rec in records:
+                rec["submission"] = {"status": "unknown", "error": repr(e)}
+            try_store(ts.save, records)
+        raise
+    except Exception:
+        if ts is not None:
+            try_store(ts.delete, [rec["local_id"] for rec in records])
+        raise
+    tasks = r if isinstance(r, list) else [r]
+    for i, t in enumerate(tasks):
+        if t.circuit_index is None:
+            t.circuit_index = i
+        if t.prepared is None:
+            t.prepared = prepared[t.circuit_index]
+    if ts is not None:
+        bound = {t.circuit_index: t for t in tasks}
+        accepted = [rec for rec in records if rec["circuit_index"] in bound]
+        for rec in accepted:
+            t = bound[rec["circuit_index"]]
+            rec["remote_id"] = t.id_
+            rec["prepared"] = t.prepared
+            rec["submission"] = {"status": "submitted", "error": None}
+        # circuits explicitly rejected by the provider in a batch
+        try_store(
+            ts.delete,
+            [rec["local_id"] for rec in records if rec["circuit_index"] not in bound],
+        )
+        error = try_store(ts.save, accepted)
+        for rec in accepted:
+            bound[rec["circuit_index"]]._bind_store(ts, rec["local_id"], error)
+    return r
+
+
+def _circuit_record(c: Any) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    # a circuit that cannot be archived must never block a valid submission
+    if not isinstance(c, AbstractCircuit):
+        return None, None
+    try:
+        return circuit_record(c), None
+    except Exception as e:
+        logger.warning("task store cannot serialize the circuit: %r", e)
+        return None, repr(e)
+
+
+def _task_requests(items: List[Any], task_kws: Dict[str, Any]) -> List[Dict[str, Any]]:
+    shots = task_kws.get("shots")
+    options = {
+        k: v for k, v in task_kws.items() if k not in ["circuit", "source", "shots"]
+    }
+    requests = []
+    for i, c in enumerate(items):
+        circuit, error = _circuit_record(c)
+        requests.append(
+            {
+                "circuit": circuit,
+                "circuit_error": error,
+                "circuit_type": None if c is None else type(c).__name__,
+                "source": c if isinstance(c, str) else None,
+                "shots": shots[i] if is_sequence(shots) else shots,  # type: ignore
+                "options": options,
+            }
+        )
+    return requests
 
 
 def resubmit_task(
     task: Optional[Union[str, Task]],
     token: Optional[str] = None,
+    store: Optional[Union[bool, PathLike, TaskStore]] = None,
 ) -> Task:
     """
-    Rerun the given task
+    Rerun the given task on the provider as a new paid task, which is sent once
+    and recorded with the original record as its parent if a store is active
 
     :param task: task id string or Task object to rerun
     :type task: Optional[Union[str, Task]]
     :param token: API token for the provider; defaults to None which uses
         the saved token
     :type token: Optional[str], optional
+    :param store: the task store, see :py:func:`submit_task`; defaults to None,
+        i.e. the store of ``task`` if any, otherwise the global store
+    :type store: Optional[Union[bool, PathLike, TaskStore]], optional
     :return: the newly submitted Task
     :rtype: Task
     """
     if isinstance(task, str):
-        task = Task(task)
+        task = get_task(task)
     device = task.get_device()  # type: ignore
     if token is None:
         token = device.get_token()
     provider = device.provider
+    resubmit = _provider_api(provider, "resubmit_task")
+    # the rerun is recorded where the original task is, unless specified
+    ts = as_store(store) if store is not None else (task._store or default_store)  # type: ignore
+    parent = None if ts is None else _parent_record(ts, task, provider.name)  # type: ignore
+    prepared = task.prepared  # type: ignore
+    if prepared is None and parent:
+        # the rerun sends the same, e.g. the compiled program, which the record holds
+        prepared = parent.get("prepared")
+    records = []
+    if ts is not None:
+        request = dict(parent["request"] or {}) if parent else {}
+        request["resubmit_of"] = task.id_  # type: ignore
+        records = make_records(
+            provider.name,
+            device.name,
+            [request],
+            False,
+            _provider_modules[provider.name][1],
+        )
+        if parent:
+            records[0]["parent_id"] = parent["local_id"]
+    if prepared is not None and task.prepared is None:  # type: ignore
+        # the provider reruns from what the task holds, without changing the given one
+        task = copy(task)
+        task.prepared = prepared  # type: ignore
+    return _send_tasks(  # type: ignore
+        ts, records, [prepared], lambda: resubmit(task, token)
+    )
 
-    if provider.name == "tencent":  # type: ignore
-        return tencent.resubmit_task(task, token)  # type: ignore
-    elif provider.name == "tianyan":  # type: ignore
-        return tianyan.resubmit_task(task, token)  # type: ignore
-    elif provider.name == "local":
-        raise ValueError("Unsupported method for local backend")
-    else:
-        raise ValueError("Unsupported provider: %s" % provider.name)  # type: ignore
+
+def _parent_record(
+    ts: TaskStore, task: Task, provider: str
+) -> Optional[Dict[str, Any]]:
+    # the record of the task to rerun, a store failure never blocks the rerun
+    try:
+        record = ts.get(task.local_id) if task.local_id is not None else None
+        if record is None:
+            record = ts.get(remote_id=task.id_, provider=provider)
+    except store_errors as e:
+        logger.warning("task store read failure: %s", e)
+        return None
+    if record is None or record["integrity"] not in ["complete", "pending"]:
+        return None
+    return record
 
 
 def remove_task(
@@ -574,16 +826,7 @@ def remove_task(
     device = task.get_device()  # type: ignore
     if token is None:
         token = device.get_token()
-    provider = device.provider
-
-    if provider.name == "tencent":  # type: ignore
-        return tencent.remove_task(task, token)  # type: ignore
-    elif provider.name == "tianyan":  # type: ignore
-        return tianyan.remove_task(task, token)  # type: ignore
-    elif provider.name == "local":
-        raise ValueError("Unsupported method for local backend")
-    else:
-        raise ValueError("Unsupported provider: %s" % provider.name)  # type: ignore
+    return _provider_api(device.provider, "remove_task")(task, token)  # type: ignore
 
 
 def list_tasks(
@@ -612,11 +855,4 @@ def list_tasks(
         token = provider.get_token()  # type: ignore
     if device is not None:
         device = Device.from_name(device)
-    if provider.name == "tencent":  # type: ignore
-        return tencent.list_tasks(device, token, **filter_kws)  # type: ignore
-    elif provider.name == "tianyan":  # type: ignore
-        return tianyan.list_tasks(device, token, **filter_kws)  # type: ignore
-    elif provider.name == "local":  # type: ignore
-        return local.list_tasks(device, token, **filter_kws)  # type: ignore
-    else:
-        raise ValueError("Unsupported provider: %s" % provider.name)  # type: ignore
+    return _provider_api(provider, "list_tasks")(device, token, **filter_kws)  # type: ignore

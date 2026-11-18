@@ -225,7 +225,8 @@ def generaldepolarizingchannel(
     sqrt_probs = backend.reshape(
         _sqrt(probs), [-1] + [1] * (len(backend.shape_tuple(tup)) - 1)
     )
-    Gkarus = [Gate(g) for g in sqrt_probs * tup]
+    weighted_paulis = sqrt_probs * tup
+    Gkarus = [Gate(weighted_paulis[i]) for i in range(len(probs))]
 
     return KrausList(Gkarus, name="depolarizing", is_unitary=True)
 

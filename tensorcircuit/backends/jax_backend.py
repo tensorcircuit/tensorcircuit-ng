@@ -129,6 +129,7 @@ def _qr_jax(
     q, r = adaware_qr(tensor)
     if non_negative_diagonal:
         phases = jnp.sign(jnp.diagonal(r))
+        phases = jnp.where(phases == 0, jnp.ones_like(phases), phases)
         q = q * phases
         r = phases.conj()[:, None] * r
     center_dim = q.shape[1]
@@ -155,6 +156,7 @@ def _rq_jax(
     q, r = adaware_qr(jnp.conj(jnp.transpose(tensor)))
     if non_negative_diagonal:
         phases = jnp.sign(jnp.diagonal(r))
+        phases = jnp.where(phases == 0, jnp.ones_like(phases), phases)
         q = q * phases
         r = phases.conj()[:, None] * r
     r, q = jnp.conj(jnp.transpose(r)), jnp.conj(jnp.transpose(q))  # M=r*q at this point
@@ -516,12 +518,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         return jnp.cumsum(a, axis)
 
     def is_tensor(self, a: Any) -> bool:
-        if not isinstance(a, jnp.ndarray):
-            return False
-        # isinstance(np.eye(1), jax.numpy.ndarray) = True!
-        if getattr(a, "_value", None) is not None:
-            return True
-        return False
+        return not isinstance(a, np.ndarray) and isinstance(a, jnp.ndarray)
 
     def solve(self, A: Tensor, b: Tensor, assume_a: str = "gen") -> Tensor:  # type: ignore
         return jsp.linalg.solve(A, b, assume_a=assume_a)

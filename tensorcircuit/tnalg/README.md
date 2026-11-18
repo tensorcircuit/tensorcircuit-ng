@@ -18,7 +18,7 @@ TensorCircuit currently has several MPS/MPO-related interfaces with different pu
 
 `QuVector` can represent an MPS, but it is a general tensor-network graph abstraction and is not required to have a linear-chain MPS topology. `MPSCircuit` and TNALG can represent related physical states, but they have different state lifecycles, truncation behavior, and execution models. They should not be treated as interchangeable live views of the same state.
 
-The word “TEBD” also appears in two related contexts. `MPSCircuit` is an MPS-based gate simulator, whereas `tnalg` implements Hamiltonian time evolution with a fixed Suzuki–Trotter schedule. For new fixed-shape TEBD, TDVP, or DMRG workflows, use the TNALG APIs. For circuit-style gate application, measurement, and sampling, use `MPSCircuit` or another circuit class.
+The word “TEBD” also appears in two related contexts. `MPSCircuit` is an MPS-based gate simulator, whereas `tnalg` implements Hamiltonian time evolution with a fixed Suzuki–Trotter schedule. For new fixed-shape TEBD, TDVP, or DMRG workflows, use the TNALG APIs. For circuit-style gate application, measurement, and sampling, use `MPSCircuit` or another circuit class. To simulate many adjacent-gate circuits of differing structure with one compiled executable, use the TNALG gate programs below, which export to `MPSCircuit` for sampling.
 
 ## Interoperability
 
@@ -33,6 +33,37 @@ Conversions across these boundaries may also change the representation. In parti
 TNALG is currently implemented directly with JAX primitives, including JAX PyTrees, `jax.jit`, `jax.lax`, `jax.vmap`, JAX autodiff, and JAX-specific linear-algebra helpers. It therefore requires JAX and should be regarded as a JAX-native subsystem.
 
 Changing TensorCircuit's global backend does not make TNALG backend-agnostic. TensorFlow, PyTorch, NumPy, and other TensorCircuit backends are not currently supported by the TNALG algorithms.
+
+### Dynamic gate programs
+
+`prepare_gate_program` provides a separate execution path for many circuits whose structures differ. Its input is a concrete `Circuit` containing unitary onsite and adjacent two-site gates with default zero input. Route nonlocal qubit circuits with `tc.compiler.linear_route` first. The resulting `GateProgram` is a pytree: one record `(kind, site)` and one gate per row, with single-site gates absorbed into neighboring two-site gates. Pass it to JIT as an argument; programs with the same record count reuse one compiled runner regardless of structure. Changing the record count, `n`, `chi`, the local dimension, dtypes, truncation options, or batch size may compile another executable.
+
+The record count is padded with no-ops to the next power of two by default, so programs of similar length share an executable. `pad=False` keeps the exact length. `stack_gate_programs` pads a list of programs to its longest member and stacks them with a leading batch axis for `jax.vmap`. Under `vmap` with differing records every branch of the record dispatch runs for every row, so no-op padding costs as much as a two-site gate; unpadded programs avoid this at the price of one compilation per distinct batch length.
+
+```python
+batch = tc.tnalg.stack_gate_programs(
+    [tc.tnalg.prepare_gate_program(c) for c in routed_circuits]
+)
+
+@jax.jit
+def simulate(batch):
+    return jax.vmap(lambda p: tc.tnalg.run_gate_program(p, chi=chi))(batch)
+
+@jax.jit
+def sample(results, status):  # status: [batch, shots, n]
+    def one(result, st):
+        mps = tc.tnalg.gate_program_to_mpscircuit(result)
+        return jax.vmap(lambda s: mps.sample(status=s))(st)
+    return jax.vmap(one)(results, status)
+```
+
+`run_gate_program` is a pure function without internal compilation; JIT it or an enclosing function. Select the JAX backend before using the `MPSCircuit` conversion and sampling boundary. Each status row has shape `[n]` and represents one shot; call the sampling function on fixed shot chunks to bound memory and reuse its executable. Keep circuit objects local to the transformed function and return arrays. Decode physical sample columns with the router's `final_layout`.
+
+The executor starts from `|0...0>` and uses private `[n, chi, d, chi]` dense buffers, including padded boundary bonds. This does not change `MPSSpec` or the existing algorithm states. Export uses two lossless QR sweeps to remove redundant padding and establish orthogonality center zero; it does not assume that null-space bases occupy trailing coordinates. `GateProgramResult.fidelity` is the product of relative retained weights over truncations, not the exact overlap with an untruncated state; export transfers it to `MPSCircuit.get_fidelity()`.
+
+The default truncation is `svd`. `gram_eigh` is an optional alternative for batched accelerators; it squares the condition number and should use complex128 decomposition precision. Enable x64 around the complete JIT/AD call when using `truncation_dtype=jnp.complex128`; the library does not change precision settings. A machine-precision Gram regularizer separates padded zero eigenvalues, and discarded weight is computed from the unperturbed projection residual. Accelerator performance and numerical behavior depend on JAX, jaxlib, and hardware and require independent validation.
+
+To differentiate gate values, prepare the structure outside AD and replace entries of `program.gates` inside the differentiated function. SVD and QR reuse custom VJPs and support reverse-mode differentiation away from singular truncation boundaries; forward-mode JVP is unsupported, and gradients at degenerate Gram spectra are not guaranteed. Discrete samples do not have an ordinary pathwise derivative. See `examples/tnalg_gate_program.py` for routing, batched simulation, and chunked sampling.
 
 ## Symmetry-aware accuracy trade-off
 
