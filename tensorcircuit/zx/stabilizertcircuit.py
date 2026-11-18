@@ -4,7 +4,7 @@ Stabilizer+T Circuit class using ZX-calculus and JAX.
 
 from __future__ import annotations
 from math import ceil
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Optional, Sequence, Tuple, Union
 import re
 
 import jax
@@ -146,16 +146,10 @@ class StabilizerTCircuit(AbstractCircuit):
         self._num_observables = 0
         # Probability-evaluation cache (mode="joint"), independent of sampling.
         self._compiled_probs: Optional[CompiledProgram] = None
-        self._compiled_expectation: Optional[
-            Tuple[Tuple[Any, ...], SamplingGraph, List[str], CompiledScalarGraphs]
-        ] = None
         self._channel_sampler_probs: Optional[ChannelSampler] = None
-
-    def _merge_qir(self) -> List[Dict[str, Any]]:
-        """
-        Merge _qir and _extra_qir into a single list of instructions ordered by 'pos'.
-        """
-        return self._qir
+        self._compiled_expectation: Optional[
+            Tuple[Tuple[Any, ...], SamplingGraph, list[str], CompiledScalarGraphs]
+        ] = None
 
     def _compile(
         self, sample_detectors: bool, force_measure_all: bool = False
@@ -197,10 +191,12 @@ class StabilizerTCircuit(AbstractCircuit):
         """
         stc = cls(circuit._nqubits, strategy=strategy)
 
-        # Collect all operations and normalize names
-        qir = []
-        for d in circuit._qir:
+        # Collect all operations in time order and normalize names
+        for d in circuit.to_qir(enable_instruction=True):
             new_d = d.copy()
+            if new_d.get("instruction", False):
+                stc._add_instruction(new_d)
+                continue
             if "gatef" in new_d:
                 if "name" not in new_d or not new_d["name"]:
                     gatef = new_d["gatef"]
@@ -209,18 +205,7 @@ class StabilizerTCircuit(AbstractCircuit):
                     elif hasattr(gatef, "__name__"):
                         new_d["name"] = gatef.__name__.upper()
             new_d["name"] = _zx_gate_name(new_d)
-            qir.append(new_d)
-
-        extra_qir = []
-        for d in getattr(circuit, "_extra_qir", []):
-            new_d = d.copy()
-            if "name" in new_d:
-                new_d["name"] = new_d["name"].upper()
-            extra_qir.append(new_d)
-
-        from ..translation import _merge_extra_qir
-
-        stc._qir = _merge_extra_qir(qir, extra_qir)
+            stc._append_instruction(new_d)
 
         return stc
 
@@ -449,7 +434,13 @@ class StabilizerTCircuit(AbstractCircuit):
             for i in z:
                 pauli_dict[i] = "Z"
 
-        key = (self.strategy, dtypestr, tuple(sorted(pauli_dict.items())))
+        # Inherited instruction methods can append directly to _extra_qir.
+        key = (
+            self.strategy,
+            dtypestr,
+            tuple(sorted(pauli_dict.items())),
+            len(self._extra_qir),
+        )
         if self._compiled_expectation is None or self._compiled_expectation[0] != key:
             self._compiled_expectation = None
             prepared = prepare_graph(
@@ -551,6 +542,13 @@ class StabilizerTCircuit(AbstractCircuit):
         self._num_observables = 0
         self._compiled_probs = None
         self._channel_sampler_probs = None
+
+    def _add_instruction(self, d: Dict[str, Any]) -> None:
+        # instructions live in ``_qir`` in time order, named as in Stim
+        new_d = d.copy()
+        if "name" in new_d:
+            new_d["name"] = new_d["name"].upper()
+        self._append_instruction(new_d)
 
     def apply(self, gate: Any, *index: int, **kwargs: Any) -> None:
         if hasattr(gate, "name"):

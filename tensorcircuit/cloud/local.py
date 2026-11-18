@@ -2,11 +2,13 @@
 Cloud provider from local machine
 """
 
-from typing import Any, Dict, List, Optional, Union, Sequence
+from typing import Any, Dict, List, Optional, Union, Sequence, Set
 from uuid import uuid4
 import time
 
 from .abstraction import Device, sep, Task
+from ..cons import backend
+from ..quantum import sample2all
 from ..utils import is_sequence
 from ..abstractcircuit import AbstractCircuit
 
@@ -20,6 +22,11 @@ def list_devices(token: Optional[str] = None, **kws: Any) -> List[Device]:
     for d in local_devices:
         rs.append(Device.from_name("local" + sep + d))
     return rs
+
+
+# the prepared circuit runs on its qubits as they are
+def task_metadata(details: Dict[str, Any], prepared: Dict[str, Any]) -> Dict[str, Any]:
+    return {"positional_logical_mapping": prepared.get("positional_logical_mapping")}
 
 
 def get_task_details(
@@ -38,11 +45,27 @@ def submit_task(
     circuit: Optional[Union[AbstractCircuit, Sequence[AbstractCircuit]]] = None,
     **kws: Any,
 ) -> List[Task]:
+    if kws.get("source") is not None:
+        raise ValueError("Local provider only runs circuits, `source` is unsupported")
+
     def _circuit2result(c: AbstractCircuit) -> Dict[str, Any]:
-        if device.name in ["testing", "default"]:
-            count = c.sample(batch=shots, allow_state=True, format="count_dict_bin")  # type: ignore
-        else:
+        if device.name not in ["testing", "default"]:
             raise ValueError("Unsupported device from local provider: %s" % device.name)
+        measured: Set[int] = set()
+        for d in c.to_qir(enable_instruction=True):
+            if c._is_measurement(d):
+                measured.add(d["index"][0])
+            elif not d.get("instruction", False) and measured & set(d["index"]):
+                raise ValueError("Local provider cannot run gates after a measurement")
+        samples = c.sample(batch=shots, allow_state=True, format="sample_bin")  # type: ignore
+        # bit i of the result is the qubit measured into classical bit i, unwritten
+        # classical bits read the appended zero column, and all qubits are measured
+        # without measure instructions
+        positions = c.get_positional_logical_mapping()
+        columns = [positions.get(i, c._nqubits) for i in range(max(positions) + 1)]
+        samples = backend.concat([samples, backend.zeros_like(samples[:, :1])], axis=1)
+        samples = backend.gather(samples, backend.convert_to_tensor(columns), axis=1)
+        count = sample2all(samples, len(columns), format="count_dict_bin")
         d = {
             "id": str(uuid4()),
             "state": "completed",

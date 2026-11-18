@@ -6,6 +6,7 @@ tensorcircuit.templates
     templates/chems.rst
     templates/conversions.rst
     templates/dataset.rst
+    templates/diagonal.rst
     templates/graphs.rst
     templates/hamiltonians.rst
     templates/lattice.rst

@@ -139,6 +139,40 @@ def test_dangling_hyperedge(contractor_setup, backend):
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("contractor_setup", ["cotengra", "greedy"], indirect=True)
+def test_hyperedge_multiple_open_legs(contractor_setup, backend):
+    # A(i), B(i), Output(i, i): the output is diagonal in its two open legs
+    a = tn.Node(tc.gates.num_to_tensor(np.array([1.0, 2.0])), name="A")
+    b = tn.Node(tc.gates.num_to_tensor(np.array([1.0, 3.0])), name="B")
+    cn = tn.CopyNode(4, 2, name="CN")
+    a[0] ^ cn[0]
+    b[0] ^ cn[1]
+    res = tc.contractor([a, b, cn], output_edge_order=[cn[2], cn[3]])
+    assert res.tensor.dtype == a.tensor.dtype
+    np.testing.assert_allclose(
+        tc.backend.numpy(res.tensor), np.diag([1.0, 6.0]), atol=1e-5
+    )
+
+    # a hyperedge carried by no tensor keeps the CopyNode dtype
+    cn = tn.CopyNode(2, 2, name="CN", dtype=tc.rdtypestr)
+    res = tc.contractor([cn], output_edge_order=[cn[0], cn[1]])
+    assert res.tensor.dtype == tc.backend.eye(2, dtype=tc.rdtypestr).dtype
+    np.testing.assert_allclose(tc.backend.numpy(res.tensor), np.eye(2), atol=1e-5)
+
+    # the same for a CopyNode subgraph whose open legs lead to outside nodes
+    a = tn.Node(tc.gates.num_to_tensor(np.array([1.0, 2.0])), name="A")
+    b = tn.Node(tc.gates.num_to_tensor(np.array([1.0, 3.0])), name="B")
+    cn = tn.CopyNode(2, 2, name="CN", dtype=tc.dtypestr)
+    a[0] ^ cn[0]
+    cn[1] ^ b[0]
+    res = tc.contractor([cn], output_edge_order=[cn[0], cn[1]])
+    assert res.tensor.dtype == a.tensor.dtype
+    np.testing.assert_allclose(tc.backend.numpy(res.tensor), np.eye(2), atol=1e-5)
+    res = tc.contractor([a, res, b])
+    np.testing.assert_allclose(tc.backend.numpy(res.tensor), 7.0, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("contractor_setup", ["cotengra"], indirect=True)
 def test_tensorcircuit_circuit_hyperedge_support(contractor_setup, backend):
     c = tc.Circuit(2)

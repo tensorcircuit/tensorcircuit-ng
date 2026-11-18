@@ -41,6 +41,38 @@ def test_detector_current_m_count_freeze(backend):
     np.testing.assert_array_equal(s1, s2)
 
 
+def test_detector_lookback_counts_measurements(npb):
+    qiskit = pytest.importorskip("qiskit")
+    qc = qiskit.QuantumCircuit(1, 4)
+    qc.x(0)
+    qc.measure(0, 3)
+    c = tc.Circuit.from_qiskit(qc)
+    c.detector_instruction([-1])
+    c.reset_instruction(0)
+    c.measure_instruction(0)
+    samples = np.asarray(c.sample_detector(batch_size=8, seed=1))
+    np.testing.assert_array_equal(samples[:, 0], np.ones(8, dtype=bool))
+
+
+def test_detector_absolute_index_after_compose(npb):
+    def part(flip):
+        c = tc.Circuit(1)
+        c.reset_instruction(0)
+        if flip:
+            c.x(0)
+        c.measure_instruction(0)
+        c.detector_instruction([0])
+        return c
+
+    expected = np.tile([True, False], (8, 1))
+    c = part(True)
+    c.append(part(False))
+    np.testing.assert_array_equal(c.sample_detector(batch_size=8, seed=1), expected)
+    c = part(False)
+    c.prepend(part(True))
+    np.testing.assert_array_equal(c.sample_detector(batch_size=8, seed=1), expected)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_detector_with_reset_instruction(backend):
     c = tc.Circuit(1)
@@ -75,6 +107,90 @@ def test_detector_depolarizing_channel_seed_reproducible(backend):
     np.testing.assert_array_equal(r0, r1)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_detector_depolarize2_pauli_branches(backend):
+    c = tc.Circuit(2)
+    c.isotropicdepolarizing(1, 0, p=15 / 16, num_qubits=2)
+    for q in range(2):
+        c.measure_instruction(q)
+        c.detector_instruction([q])
+    status = np.full((16, 3), 0.5, dtype=np.float32)
+    status[:, 0] = (np.arange(16) + 0.5) / 16
+    expected = [[i % 4 in (1, 2), i // 4 in (1, 2)] for i in range(16)]
+    actual = tc.backend.numpy(c.sample_detector(shots=16, status=status))
+    np.testing.assert_array_equal(actual, expected)
+
+
+def test_detector_stim_depolarize2_surface_code(npb):
+    stim = pytest.importorskip("stim")
+    surface = stim.Circuit.generated(
+        "surface_code:rotated_memory_z", distance=3, rounds=1
+    )
+    noisy = stim.Circuit()
+    for instruction in surface:
+        if instruction.name == "MR":
+            noisy.append("DEPOLARIZE2", [1, 9], 15 / 16)
+        noisy.append(instruction)
+
+    # 17 resets precede the noise, followed by 8 measure/reset pairs and 9 measurements.
+    # Uniform Pauli weights let these statuses select II, IX, XI and XX.
+    status = np.full((4, 43), 0.5, dtype=np.float32)
+    status[:, 17] = (np.array([0, 1, 4, 5]) + 0.5) / 16
+    c = tc.translation.stim2tc(noisy)
+    actual = tc.backend.numpy(c.sample_detector(shots=4, status=status))
+
+    expected = []
+    for error_qubits in [[], [9], [1], [1, 9]]:
+        reference = stim.Circuit()
+        for instruction in surface:
+            if instruction.name == "MR" and error_qubits:
+                reference.append("X_ERROR", error_qubits, 1.0)
+            reference.append(instruction)
+        expected.append(reference.compile_detector_sampler().sample(shots=1)[0])
+    np.testing.assert_array_equal(actual, expected)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("cls", [tc.Circuit, tc.DMCircuit])
+def test_measurement_flip_only_affects_record(backend, cls):
+    c = cls(1)
+    c.x(0)
+    c.measure_instruction(0, p=0.2)
+    c.measure_instruction(0)
+    c.detector_instruction([0])
+    c.detector_instruction([1])
+    p = tc.backend.numpy(c.detector_probabilities())
+    np.testing.assert_allclose(p, [[0.0, 0.2], [0.0, 0.8]], atol=1e-5)
+    if cls is tc.Circuit:
+        # the flip consumes the status right after its measurement
+        status = np.array([[0.5, 0.1, 0.5], [0.5, 0.5, 0.5]], dtype=np.float32)
+        samples = c.sample_measurements(shots=2, status=status)
+        np.testing.assert_array_equal(
+            tc.backend.numpy(samples), [[False, True], [True, True]]
+        )
+
+
+def test_stim_measurement_flip(npb):
+    stim = pytest.importorskip("stim")
+    c = tc.translation.stim2tc(stim.Circuit("M(0.2) 0\nDETECTOR rec[-1]"))
+    np.testing.assert_allclose(c.detector_probabilities(), [0.8, 0.2], atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+@pytest.mark.parametrize("cls", [tc.Circuit, tc.DMCircuit])
+@pytest.mark.parametrize("noise", ["flip", "channel"])
+def test_detector_tn_keeps_inputs(backend, cls, noise):
+    c = cls(1, inputs=np.array([0.0, 1.0]))
+    if noise == "flip":
+        c.measure_instruction(0, p=0.2)
+    else:
+        c.depolarizing(0, px=0.2, py=0.0, pz=0.0)
+        c.measure_instruction(0)
+    c.detector_instruction([0])
+    p = tc.backend.numpy(c.detector_probabilities())
+    np.testing.assert_allclose(p, [0.2, 0.8], atol=1e-5)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_detector_invalid_lookback_raises(backend):
     c = tc.Circuit(1)
@@ -85,21 +201,73 @@ def test_detector_invalid_lookback_raises(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
-def test_detector_measure_then_gate_without_reset_raises(backend):
-    c = tc.Circuit(1)
-    c.x(0)
+@pytest.mark.parametrize(
+    "op, expected",
+    [("gate", [True, False]), ("noise", [True, False]), (None, [True, True])],
+)
+@pytest.mark.parametrize(
+    "cls, allow_state",
+    [(tc.Circuit, False), (tc.Circuit, True), (tc.DMCircuit, False)],
+)
+def test_measure_then_operation_without_reset(backend, op, expected, cls, allow_state):
+    c = cls(2)
+    c.x(1)
+    c.measure_instruction(1)
+    if op == "noise":
+        c.depolarizing(1, px=1.0, py=0.0, pz=0.0)
+    elif op == "gate":
+        c.x(1)
+    c.measure_instruction(1)
+    samples = c.sample_measurements(shots=8, allow_state=allow_state, seed=1)
+    np.testing.assert_array_equal(
+        tc.backend.numpy(samples), np.tile([expected], [8, 1])
+    )
+
+
+@pytest.mark.parametrize("allow_state", [False, True])
+def test_measurement_records_follow_instruction_order(npb, allow_state):
+    qiskit = pytest.importorskip("qiskit")
+    qc = qiskit.QuantumCircuit(2, 4)
+    qc.x(0)
+    qc.measure(0, 3)
+    qc.measure(1, 1)
+    c = tc.Circuit.from_qiskit(qc)
+    samples = c.sample_measurements(shots=4, allow_state=allow_state, seed=1)
+    np.testing.assert_array_equal(samples, np.tile([[True, False]], [4, 1]))
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+@pytest.mark.parametrize("cls", [tc.Circuit, tc.DMCircuit])
+def test_mid_measurement_record_distribution(backend, cls):
+    a, b = 0.9, 2.1
+    c = cls(2)
+    c.rx(0, theta=a)
+    c.cx(0, 1)
     c.measure_instruction(0)
-    c.x(0)
-    c.detector_instruction([-1])
-    with pytest.raises(NotImplementedError):
-        c.sample_detector(batch_size=1)
+    c.rx(0, theta=b)
+    c.measure_instruction(0)
+    c.measure_instruction(1)
+    for i in range(3):
+        c.detector_instruction([i])
+
+    pa = [np.cos(a / 2) ** 2, np.sin(a / 2) ** 2]
+    pb = [np.cos(b / 2) ** 2, np.sin(b / 2) ** 2]
+    expected = np.zeros([2, 2, 2])
+    for m0 in range(2):
+        for m1 in range(2):
+            expected[m0, m1, m0] = pa[m0] * pb[m0 ^ m1]
+    p = tc.backend.numpy(c.detector_probabilities())
+    np.testing.assert_allclose(p, expected, atol=1e-5)
+
+    samples = np.asarray(tc.backend.numpy(c.sample_measurements(shots=4000, seed=7)))
+    freq = np.bincount(samples.astype(int) @ [4, 2, 1], minlength=8) / 4000
+    np.testing.assert_allclose(freq, expected.reshape([-1]), atol=0.03)
 
 
 def test_detector_invalid_trajectory_does_not_poison_jax_highp(jaxb):
-    c = tc.Circuit(1)
-    c.x(0)
+    c = tc.Circuit(2)
+    c.depolarizing2_instruction(0, 1, p=0.1)
     c.measure_instruction(0)
-    c.x(0)
     c.detector_instruction([-1])
     with pytest.raises(NotImplementedError):
         c.sample_detector(batch_size=1)

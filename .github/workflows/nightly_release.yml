@@ -1,20 +1,19 @@
-name: release
+name: nightly
 on:
-  # push:
-  #   branches:
-  #     - beta
   schedule:
     - cron: "0 12 * * *"
+  workflow_dispatch:
 jobs:
   tests:
     runs-on: ubuntu-22.04
     name: test
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
     steps:
       - uses: actions/checkout@v2
-        with:
-          ref: beta
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -68,8 +67,4 @@ jobs:
         run: |
           python3 -m build
       - name: upload to pypi
-        # if: startsWith(github.ref, 'refs/tags')
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          # skip_existing: true

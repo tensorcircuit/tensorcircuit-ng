@@ -44,6 +44,24 @@ def test_vmap_jax(jaxb):
     assert tc.backend.numpy(r)[0, 0] == 3.0
 
 
+def test_jax_is_tensor_traced(jaxb):
+    K = tc.backend
+    data = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+    tensor = K.convert_to_tensor(data)
+    assert K.is_tensor(tensor)
+    for host_value in (data, [1.0, 2.0], 1.0, np.float32(1.0)):
+        assert not K.is_tensor(host_value)
+
+    def loss(x):
+        assert K.is_tensor(x)
+        return K.sum(x**2)
+
+    np.testing.assert_allclose(K.numpy(K.jit(loss)(tensor)), np.sum(data**2))
+    np.testing.assert_allclose(K.numpy(K.jit(K.grad(loss))(tensor)), 2 * data)
+    batched = K.jit(K.vmap(loss))(tensor)
+    np.testing.assert_allclose(K.numpy(batched), np.sum(data**2, axis=1))
+
+
 def test_vmap_tf(tfb):
     r = universal_vmap()
     assert r.numpy()[0, 0] == 3.0
@@ -56,6 +74,27 @@ def test_convert_to_tensor_dtype_tf(tfb):
     real_tensor = tc.backend.convert_to_tensor(np.float64(2.1))
     widened = tc.backend.convert_to_tensor(real_tensor, dtype="complex128")
     np.testing.assert_allclose(widened, np.complex128(2.1), atol=0.0, rtol=0.0)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_qr_rq_non_negative_diagonal_rank_deficient_complex(backend):
+    matrix = np.array([[0.0, 1 + 2j], [0.0, 3 - 1j]])
+    q, r = tc.backend.qr(tc.backend.convert_to_tensor(matrix), 1, True)
+    np.testing.assert_allclose(tc.backend.numpy(q @ r), matrix, atol=1e-5)
+    q_np = tc.backend.numpy(q)
+    np.testing.assert_allclose(q_np.conj().T @ q_np, np.eye(2), atol=1e-5)
+    diag = np.diagonal(tc.backend.numpy(r))
+    np.testing.assert_allclose(diag.imag, np.zeros(2), atol=1e-5)
+    assert np.all(diag.real >= -1e-6)
+
+    matrix_rq = np.array([[0.0, 0.0], [1 + 2j, 3 - 1j]])
+    r_rq, q_rq = tc.backend.rq(tc.backend.convert_to_tensor(matrix_rq), 1, True)
+    np.testing.assert_allclose(tc.backend.numpy(r_rq @ q_rq), matrix_rq, atol=1e-5)
+    q_np = tc.backend.numpy(q_rq)
+    np.testing.assert_allclose(q_np @ q_np.conj().T, np.eye(2), atol=1e-5)
+    diag_rq = np.diagonal(tc.backend.numpy(r_rq))
+    np.testing.assert_allclose(diag_rq.imag, np.zeros(2), atol=1e-5)
+    assert np.all(diag_rq.real >= -1e-6)
 
 
 def test_convert_to_tensor_dtype_torch(torchb):
@@ -796,6 +835,47 @@ def test_backend_methods_2(backend):
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_probability_sample_two_level(backend):
+    n, shots = 2**18, 20000
+    rng = np.random.default_rng(7)
+    delta = 5e-3
+    p = np.full([n], delta / (n - 1), dtype=np.float32)
+    p[0] = 1 - delta
+    status = np.stack(
+        [rng.uniform(0, delta / 2, size=shots), rng.uniform(size=shots)], axis=1
+    ).astype(np.float32)
+    f = tc.backend.jit(lambda p, s: tc.backend.probability_sample(shots, p, s))
+    r = tc.backend.numpy(
+        f(tc.backend.convert_to_tensor(p), tc.backend.convert_to_tensor(status))
+    )
+    # the low tail of status[:, 0] maps to the upper half of the tiny-probability outcomes,
+    # which float32 single-level sampling cannot resolve next to p[0];
+    # 20000 uniform draws over 2**17 outcomes give about 18500 distinct ones
+    assert r.min() > 0 and r.max() < n
+    assert len(np.unique(r)) > 17500
+
+    n = 5001
+    p = rng.exponential(size=[n])
+    p[rng.uniform(size=[n]) < 0.2] = 0
+    p[-51:] = 0
+    p = (p / p.sum()).astype(np.float32)
+    shots = 200000
+    r = tc.backend.numpy(
+        tc.backend.probability_sample(
+            shots, tc.backend.convert_to_tensor(p), g=tc.backend.get_random_state(42)
+        )
+    )
+    counts = np.bincount(r, minlength=n)
+    assert len(counts) == n
+    assert counts[p == 0].sum() == 0
+    np.testing.assert_allclose(
+        counts[:-1].reshape([50, 100]).sum(axis=1) / shots,
+        p[:-1].reshape([50, 100]).sum(axis=1),
+        atol=3e-3,
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_floor(backend):
     """Test floor method (element-wise, dtype/device preservation, integers unchanged)."""
     a = tc.backend.convert_to_tensor([-1.7, -0.0, 0.0, 0.2, 3.9])
@@ -1463,6 +1543,49 @@ def test_qr(backend, highp):
         np.testing.assert_allclose(n_grad, a_grad, atol=1e-3)
 
 
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("operation", ["qr", "rq"])
+@pytest.mark.parametrize("diagonal", [0.0, 1e-9, -1e-9])
+def test_qr_rq_small_diagonal_gradient(backend, highp, operation, diagonal):
+    matrix = np.array([[diagonal, 1 + 2j], [0.0, 3 - 1j]], dtype=np.complex128)
+    if operation == "rq":
+        matrix = matrix.conj().T
+    tensor = tc.backend.convert_to_tensor(matrix)
+
+    for non_negative in [False, True]:
+
+        def loss(a):
+            left, right = getattr(tc.backend, operation)(a, 1, non_negative)
+            return tc.backend.real(tc.backend.sum(left @ right))
+
+        np.testing.assert_allclose(
+            tc.backend.numpy(tc.backend.grad(loss)(tensor)),
+            np.ones_like(matrix),
+            atol=2e-7,
+        )
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("operation", ["qr", "rq"])
+def test_qr_rq_zero_diagonal_gradient_single(backend, operation):
+    matrix = np.array([[0.0, 1 + 2j], [0.0, 3 - 1j]], dtype=np.complex64)
+    if operation == "rq":
+        matrix = matrix.conj().T
+    tensor = tc.backend.convert_to_tensor(matrix)
+
+    for non_negative in [False, True]:
+
+        def loss(a):
+            left, right = getattr(tc.backend, operation)(a, 1, non_negative)
+            return tc.backend.real(tc.backend.sum(left @ right))
+
+        np.testing.assert_allclose(
+            tc.backend.numpy(tc.backend.grad(loss)(tensor)),
+            np.ones_like(matrix),
+            atol=0.2,
+        )
+
+
 @pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
 def test_qr_wide_ad(backend, highp):
     def qr_loss(p):
@@ -1546,6 +1669,14 @@ def test_backend_randoms_v2(backend):
         key, subkey = tc.backend.random_split(key)
         r.append(tc.backend.stateful_randc(subkey, 3, [5]))
     assert tuple(r[0]) != tuple(r[1])
+
+
+def test_tf_adjacent_seeds_independent(tfb):
+    r0 = tc.backend.stateful_randu(tc.backend.get_random_state(0), shape=[8])
+    r1 = tc.backend.stateful_randu(tc.backend.get_random_state(1), shape=[8])
+    # Philox emits four numbers per counter step, so a counter-only seed shift
+    # would make r1 a copy of r0 shifted by four
+    assert not np.allclose(r1[:4], r0[4:])
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
@@ -1963,6 +2094,31 @@ def test_scatter(backend):
     np.testing.assert_allclose(tc.backend.numpy(res), expected)
 
 
+@pytest.mark.parametrize("index_dtype", ["int32", "int64"])
+@pytest.mark.parametrize("mode", ["update", "add", "sub"])
+def test_scatter_torch_vmap(torchb, index_dtype, mode):
+    K = tc.backend
+    operand = K.ones([4], dtype="float32")
+    indices = K.convert_to_tensor([[[0], [2]], [[1], [3]]], dtype=index_dtype)
+    updates = K.convert_to_tensor([[0.5, 0.7], [-0.3, 0.2]], dtype="float32")
+    scatter = K.vmap(
+        lambda i, u: K.scatter(operand, i, u, mode=mode), vectorized_argnums=(0, 1)
+    )
+    result = scatter(indices, updates)
+    if mode == "update":
+        expected = [[0.5, 1.0, 0.7, 1.0], [1.0, -0.3, 1.0, 0.2]]
+    elif mode == "add":
+        expected = [[1.5, 1.0, 1.7, 1.0], [1.0, 0.7, 1.0, 1.2]]
+    else:
+        expected = [[0.5, 1.0, 0.3, 1.0], [1.0, 1.3, 1.0, 0.8]]
+    np.testing.assert_allclose(K.numpy(result), expected, atol=1e-7)
+    np.testing.assert_array_equal(K.numpy(operand), np.ones(4))
+    gradient = K.grad(lambda u: K.sum(scatter(indices, u)))(updates)
+    np.testing.assert_allclose(
+        K.numpy(gradient), np.full((2, 2), -1.0 if mode == "sub" else 1.0)
+    )
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_methods_3(backend):
     # repeat
@@ -2066,18 +2222,18 @@ def test_sqrtmh_psd_values(backend, highp):
 
 @pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
 def test_sqrtmh_fixed_rank_gradient(backend, highp):
-    k = tc.backend
+    K = tc.backend
     observable = tc.array_to_tensor(np.diag([1.0, 0.0, 0.0]))
 
     def loss(theta):
-        amplitudes = k.stack([k.cos(theta), k.sin(theta), theta * 0])
-        rho = k.reshape(amplitudes, (3, 1)) @ k.reshape(amplitudes, (1, 3))
-        return k.real(k.trace(k.sqrtmh(k.cast(rho, tc.dtypestr)) @ observable))
+        amplitudes = K.stack([K.cos(theta), K.sin(theta), theta * 0])
+        rho = K.reshape(amplitudes, (3, 1)) @ K.reshape(amplitudes, (1, 3))
+        return K.real(K.trace(K.sqrtmh(K.cast(rho, tc.dtypestr)) @ observable))
 
-    theta = k.convert_to_tensor(np.array(0.3))
-    derivative = k.grad(loss)
-    for evaluate in (derivative, k.jit(derivative)):
-        np.testing.assert_allclose(k.numpy(evaluate(theta)), -np.sin(0.6), atol=1e-7)
+    theta = K.convert_to_tensor(np.array(0.3))
+    derivative = K.grad(loss)
+    for evaluate in (derivative, K.jit(derivative)):
+        np.testing.assert_allclose(K.numpy(evaluate(theta)), -np.sin(0.6), atol=1e-7)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])

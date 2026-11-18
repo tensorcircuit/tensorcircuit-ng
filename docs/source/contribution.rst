@@ -20,6 +20,8 @@ Pull Request Guidelines
 
 We welcome pull requests from everyone. For large PRs involving feature enhancement or API changes, we ask that you first open a GitHub issue to discuss your proposal.
 
+Before proposing a new feature, please read `VISION.md <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/VISION.md>`_ for the scope and priorities of the project.
+
 The following git workflow is recommended for contribution by PR:
 
 * Configure your git username and email so that they match your GitHub account if you haven't.
@@ -259,14 +261,16 @@ And from GitHub page choose draft a release from tag.
 
 **PyPI Release**
 
+Pushing a ``v*`` tag triggers the ``release`` GitHub Action (``.github/workflows/release.yml``), which checks that the tag matches ``__version__``, builds the package and publishes ``tensorcircuit-ng`` to PyPI via trusted publishing.
+The ``nightly`` GitHub Action builds ``master`` daily and publishes it as ``tensorcircuit-nightly``.
+
+To release manually instead:
+
 .. code-block:: bash
 
     python -m build
     export VERSION=0.x.y
     twine upload dist/tensorcircuit_ng-${VERSION}-py3-none-any.whl dist/tensorcircuit_ng-${VERSION}.tar.gz
-
-For upload authentication via token, please refer `this tutorial <https://kynan.github.io/blog/2020/05/23/how-to-upload-your-package-to-the-python-package-index-pypi-test-server>`__ .
-Latest version of twine direct accepts token.
 
 
 **DockerHub Release**

@@ -6,7 +6,6 @@ Methods for abstract circuits independent of nodes, edges and contractions
 
 import json
 import logging
-from copy import deepcopy
 from functools import reduce
 from operator import add
 from typing import (
@@ -96,6 +95,18 @@ class AbstractCircuit:
     mpogates = mpogates
     diaggates = diaggates
     gate_aliases = gate_aliases
+    # instructions whose ``index`` refers to measurement records instead of qubits
+    record_instructions = ["detector", "observable_include"]
+    # instructions without effect on the state, skipped when simulating the
+    # measurements and detectors
+    passive_instructions = [
+        "detector",
+        "barrier",
+        "delay",
+        "tick",
+        "qubit_coords",
+        "shift_coords",
+    ]
 
     def apply_general_gate(
         self,
@@ -375,7 +386,7 @@ class AbstractCircuit:
             for alias_gate in gate_alias[1:]:
                 setattr(cls, alias_gate, getattr(cls, present_gate))
 
-    def to_qir(self) -> List[Dict[str, Any]]:
+    def to_qir(self, enable_instruction: bool = False) -> List[Dict[str, Any]]:
         """
         Return the quantum intermediate representation of the circuit.
 
@@ -408,12 +419,18 @@ class AbstractCircuit:
                     Edge('cnot'[3] -> 'qb-2'[0] )
                 ]), 'index': (0, 1), 'name': 'cnot', 'split': None, 'mpo': False}]
 
-        :return: The quantum intermediate representation of the circuit.
+        :param enable_instruction: whether to include the measurement, reset and other
+            instructions, defaults to False, i.e. gates only
+        :type enable_instruction: bool, optional
+        :return: The quantum intermediate representation of the circuit, i.e. the
+            gates, and the instructions if enabled, in time order.
         :rtype: List[Dict[str, Any]]
 
         .. note:: Returns a shallow copy of the internal instruction list, so the
             caller may freely mutate the result without corrupting this circuit's own IR.
         """
+        if enable_instruction:
+            return self._merge_extra_qir(self._qir, getattr(self, "_extra_qir", []))
         return list(self._qir)
 
     @classmethod
@@ -444,29 +461,35 @@ class AbstractCircuit:
         >>> c.expectation((tc.gates.z(), [1]))
         array(0.764842+0.j, dtype=complex64)
 
-        :param qir: The quantum intermediate representation of a circuit.
+        :param qir: The quantum intermediate representation of a circuit, i.e. the
+            gates and optionally the instructions in time order, as given by
+            :py:meth:`to_qir`.
         :type qir: List[Dict[str, Any]]
         :param circuit_params: Extra circuit parameters.
         :type circuit_params: Optional[Dict[str, Any]]
         :param allow_channel: Whether to replay noise channels. If False, channel
             entries are omitted, defaults to False.
         :type allow_channel: bool, optional
-        :return: The circuit have same gates in the qir.
+        :return: The circuit have same gates and instructions in the qir.
         :rtype: Circuit
         """
-        # TODO(@refraction-ray): add extra_qir support
         if circuit_params is None:
             circuit_params = {}
         if "nqubits" not in circuit_params:
-            nqubits = 0
-            for d in qir:
-                if max(d["index"]) > nqubits:
-                    nqubits = max(d["index"])
-            nqubits += 1
-            circuit_params["nqubits"] = nqubits
+            # the largest qubit index plus one, detectors index measurements instead,
+            # and some instructions, e.g. tick, have no qubits
+            circuit_params["nqubits"] = 1 + max(
+                (
+                    i
+                    for d in qir
+                    if not cls._is_record_instruction(d)
+                    for i in d.get("index", [])
+                ),
+                default=0,
+            )
 
         c = cls(**circuit_params)
-        c = cls._apply_qir(c, qir, allow_channel=allow_channel)
+        c.append_from_qir(qir, allow_channel=allow_channel)
         return c
 
     @staticmethod
@@ -648,12 +671,18 @@ class AbstractCircuit:
         [{'gatef': h, 'gate': Gate(...), 'index': (0,), 'name': 'h', 'split': None, 'mpo': False},
          {'gatef': cnot, 'gate': Gate(...), 'index': (0, 1), 'name': 'cnot', 'split': None, 'mpo': False}]
 
-        :param qir: The quantum intermediate representation.
+        :param qir: The quantum intermediate representation, i.e. the gates and
+            optionally the instructions in time order, as given by :py:meth:`to_qir`.
+            Each instruction is placed after the gates preceding it.
         :type qir: List[Dict[str, Any]]
         :param allow_channel: whether to allow channel in the qir, defaults to False
         :type allow_channel: bool, optional
         """
-        self._apply_qir(self, qir, allow_channel=allow_channel)
+        for d in qir:
+            if d.get("instruction", False):
+                self._add_instruction(d)
+            else:
+                self._apply_qir(self, [d], allow_channel=allow_channel)
 
     def initial_mapping(
         self,
@@ -685,38 +714,106 @@ class AbstractCircuit:
                 circuit_params["nqubits"] = self._nqubits
 
         c = type(self)(**circuit_params)
-
-        for d in self.to_qir():
-            mapped_index = [logical_physical_mapping[i] for i in d["index"]]
-            if d.get("is_channel", False):
-                channel_f = d.get("channel_f", None)
-                if channel_f is None:
-                    raise ValueError("QIR channel entry is missing `channel_f`.")
-                channel_parameters = d.get("channel_parameters", {})
-                kwargs = dict(channel_parameters)
-                if "name" in d:
-                    kwargs["name"] = d["name"]
-                channel_unitary = d.get("channel_unitary", False)
-                c.apply_general_kraus_delayed(channel_f, is_unitary=channel_unitary)(  # type: ignore
-                    c, *mapped_index, **kwargs
-                )
-                continue
-
-            if "parameters" not in d:
-                c.apply_general_gate_delayed(d["gatef"], d["name"], mpo=d["mpo"])(
-                    c, *mapped_index, split=d["split"]
-                )
-            else:
-                c.apply_general_variable_gate_delayed(
-                    d["gatef"], d["name"], mpo=d["mpo"]
-                )(c, *mapped_index, **d["parameters"], split=d["split"])
-        for d in self._extra_qir:
-            mapped_index = [logical_physical_mapping[i] for i in d["index"]]
-            dc = deepcopy(d)
-            dc["index"] = mapped_index
-            c._extra_qir.append(dc)
-
+        c.append_from_qir(
+            [
+                self._remap_qubits(d, logical_physical_mapping)
+                for d in self.to_qir(enable_instruction=True)
+            ],
+            allow_channel=True,
+        )
         return c
+
+    @staticmethod
+    def _merge_extra_qir(
+        qir: Sequence[Dict[str, Any]], extra_qir: Sequence[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Merge the gates and the instructions in time order, where an instruction at
+        ``pos`` comes before gate ``pos``, and those at the same ``pos`` keep their order.
+        """
+        nqir: List[Dict[str, Any]] = []
+        inds: Dict[Union[int, float], List[Dict[str, Any]]] = {}
+        for d in extra_qir:
+            inds.setdefault(d.get("pos", len(qir)), []).append(d)
+        for i, q in enumerate(qir):
+            nqir += inds.get(i, [])
+            nqir.append(q)
+        for k in sorted(inds):
+            if k >= len(qir):
+                nqir += inds[k]
+        return nqir
+
+    @staticmethod
+    def _is_measurement(d: Dict[str, Any]) -> bool:
+        return bool(d.get("instruction", False)) and str(d.get("name", "")).upper() in [
+            "MEASURE",
+            "M",
+            "MZ",
+            "MR",
+        ]
+
+    @classmethod
+    def _is_record_instruction(cls, d: Dict[str, Any]) -> bool:
+        return str(d.get("name", "")).lower() in cls.record_instructions
+
+    @classmethod
+    def _measurement_records(cls, qir: Sequence[Dict[str, Any]]) -> List[int]:
+        """
+        The classical bit of each measurement in ``qir`` in order, i.e. its
+        ``record_index``, defaulting to the next free bit as in :py:meth:`_add_instruction`.
+        """
+        records: List[int] = []
+        counter = 0
+        for d in qir:
+            if cls._is_measurement(d):
+                records.append(d.get("record_index", counter))
+                counter = max(counter, records[-1] + 1)
+        return records
+
+    @classmethod
+    def _remap_qubits(cls, d: Dict[str, Any], mapping: Any) -> Dict[str, Any]:
+        """
+        Copy a gate or an instruction onto the qubits given by ``mapping[q]``,
+        where an instruction without qubits, e.g. a detector or tick, is kept.
+        """
+        if cls._is_record_instruction(d) or "index" not in d:
+            return dict(d)
+        return dict(d, index=[mapping[i] for i in d["index"]])
+
+    def _shift_records(self, qir: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Copy the qir of another circuit to follow this circuit: its measurements are
+        recorded after the classical bits of this circuit, and the non-negative,
+        i.e. absolute, measurement indices of its detectors and observables count
+        the measurements of this circuit first.
+        """
+        record_offset = getattr(self, "_measure_counter", 0)
+        measure_offset = len(self._measurement_records(self._extra_qir))
+        records = iter(self._measurement_records(qir))
+        shifted = []
+        for d in qir:
+            if self._is_measurement(d):
+                d = dict(d, record_index=next(records) + record_offset)
+            elif self._is_record_instruction(d):
+                d = dict(
+                    d, index=[i + measure_offset if i >= 0 else i for i in d["index"]]
+                )
+            shifted.append(d)
+        return shifted
+
+    def _add_instruction(self, d: Dict[str, Any]) -> None:
+        """
+        Add a copy of a single instruction, e.g. measure, reset or barrier, after all
+        the current gates, i.e. its ``pos`` is the current number of gates. A
+        measurement keeps its ``record_index``, defaulting to the next free classical
+        bit, and later measurements are recorded after it.
+        """
+        d = dict(d, pos=len(self._qir))
+        if self._is_measurement(d):
+            counter = getattr(self, "_measure_counter", 0)
+            d.setdefault("record_index", counter)
+            self._measure_counter = max(counter, d["record_index"] + 1)
+        self._extra_qir.append(d)
 
     def get_positional_logical_mapping(self) -> Dict[int, int]:
         """
@@ -724,21 +821,23 @@ class AbstractCircuit:
         This function is useful when we only measure part of the qubits in the circuit,
         to process the count result from partial measurement, we must be aware of the mapping,
         i.e. for each position in the count bitstring, what is the corresponding qubits (logical)
-        defined on the circuit
+        defined on the circuit. The position is the ``record_index`` of the measurement,
+        i.e. its classical bit, which is the order of measure instructions by default.
 
         :return: ``positional_logical_mapping``
         :rtype: Dict[int, int]
         """
-        id_mapping = {i: i for i in range(self._nqubits)}
-        if len(self._extra_qir) == 0:
-            return id_mapping
-        measure_index = []
-        for inst in self._extra_qir:
-            if inst["name"] == "measure":
-                measure_index.append(inst["index"][0])
-        if len(measure_index) == 0:
-            return id_mapping
-        return {i: j for i, j in enumerate(measure_index)}
+        measures = [inst for inst in self._extra_qir if inst["name"] == "measure"]
+        if len(measures) == 0:
+            return {i: i for i in range(self._nqubits)}
+        return dict(
+            sorted(
+                zip(
+                    self._measurement_records(measures),
+                    [inst["index"][0] for inst in measures],
+                )
+            )
+        )
 
     @staticmethod
     def standardize_gate(name: str) -> str:
@@ -837,12 +936,15 @@ class AbstractCircuit:
             summary[d["name"]] = summary.get(d["name"], 0) + 1
         return summary
 
-    def measure_instruction(self, *index: int) -> None:
+    def measure_instruction(self, *index: int, p: float = 0.0) -> None:
         """
         add a measurement instruction flag, no effect on numerical simulation
 
         :param index: the corresponding qubits
         :type index: int
+        :param p: the probability to flip the recorded outcome in detector and measurement
+            sampling, i.e. the readout error, the measured qubit is not affected, defaults to 0.0
+        :type p: float, optional
         """
         l = len(self._qir)
         if not hasattr(self, "_measure_counter"):
@@ -856,6 +958,8 @@ class AbstractCircuit:
                 "pos": l,
                 "record_index": self._measure_counter,
             }
+            if p:
+                d["parameters"] = {"p": p}
             self._measure_counter += 1
             self._extra_qir.append(d)
 
@@ -879,7 +983,6 @@ class AbstractCircuit:
             "instruction": True,
             "pos": l,
             "coords": coords,
-            "current_m_count": getattr(self, "_measure_counter", 0),
         }
         d.update(kws)
         self._extra_qir.append(d)
@@ -914,8 +1017,11 @@ class AbstractCircuit:
 
         :param q: the corresponding qubit
         :type q: int
+        :param p: the probability to flip the recorded outcome, see :py:meth:`measure_instruction`,
+            defaults to 0.0
+        :type p: float, optional
         """
-        self.measure_instruction(q)
+        self.measure_instruction(q, p=p)
         self.reset_instruction(q)
 
     def depolarizing_instruction(
@@ -1010,6 +1116,64 @@ class AbstractCircuit:
         }
         self._extra_qir.append(d)
 
+    @staticmethod
+    def _delay_ns(duration: float, unit: str) -> float:
+        """
+        The duration in nanoseconds, rounded to 12 significant digits to remove the
+        floating point error of the unit conversion, e.g. 40 ns converted to seconds
+        by ``qiskit.transpile`` and back gives 39.99999999999999 ns otherwise.
+        """
+        units = {"s": 1e9, "ms": 1e6, "us": 1e3, "ns": 1.0, "ps": 1e-3}
+        if unit not in units:
+            raise ValueError(
+                "Unknown delay unit %s, expected one of %s" % (unit, ", ".join(units))
+            )
+        return float("%.12g" % (float(duration) * units[unit]))
+
+    def delay_instruction(self, *index: int, duration: float, unit: str = "ns") -> None:
+        """
+        add a delay instruction flag, i.e. each of the qubits idles for ``duration``,
+        no effect on numerical simulation. On hardware, it controls the timing, e.g.
+        the idle time between two gates or before a readout.
+
+        The duration is stored in nanoseconds as ``parameters["duration"]``, one
+        instruction per qubit. ``to_qiskit`` exports it as a qiskit ``Delay`` in
+        ``"ns"``, and ``from_qiskit`` converts a ``Delay`` in ``"s"``, ``"ms"``,
+        ``"us"``, ``"ns"`` or ``"ps"`` back, while one in ``"dt"``, the default unit
+        of qiskit, or a stretch expression has no duration in nanoseconds and is
+        skipped with a warning. OpenQASM 2 cannot hold the unit, so
+        :py:meth:`to_openqasm` raises on delays, while ``to_json`` keeps them. Like
+        the other instructions, delays are dropped by :py:meth:`inverse`.
+
+        :Example:
+
+        >>> c = tc.Circuit(2)
+        >>> c.cz(0, 1)
+        >>> c.delay_instruction(0, 1, duration=40)
+        >>> c.cz(0, 1)
+        >>> c.delay_instruction(0, duration=2, unit="us")  # stored as 2000.0 ns
+
+        :param index: the corresponding qubits
+        :type index: int
+        :param duration: the idle time in ``unit``
+        :type duration: float
+        :param unit: the time unit of ``duration``, one of ``"s"``, ``"ms"``,
+            ``"us"``, ``"ns"`` and ``"ps"``, defaults to ``"ns"``
+        :type unit: str, optional
+        """
+        l = len(self._qir)
+        duration = self._delay_ns(duration, unit)
+        for ind in index:
+            d = {
+                "index": [ind],
+                "name": "delay",
+                "gatef": "delay",
+                "instruction": True,
+                "pos": l,
+                "parameters": {"duration": duration},
+            }
+            self._extra_qir.append(d)
+
     def to_cirq(self, enable_instruction: bool = False) -> Any:
         """
         Translate ``tc.Circuit`` to a cirq circuit object.
@@ -1020,10 +1184,8 @@ class AbstractCircuit:
         """
         from .translation import qir2cirq
 
-        qir = self.to_qir()
-        if enable_instruction is False:
-            return qir2cirq(qir, n=self._nqubits)
-        return qir2cirq(qir, n=self._nqubits, extra_qir=self._extra_qir)
+        qir = self.to_qir(enable_instruction=enable_instruction)
+        return qir2cirq(qir, n=self._nqubits)
 
     def to_qiskit(
         self, enable_instruction: bool = False, enable_inputs: bool = False
@@ -1031,7 +1193,8 @@ class AbstractCircuit:
         """
         Translate ``tc.Circuit`` to a qiskit QuantumCircuit object.
 
-        :param enable_instruction: whether also export measurement and reset instructions
+        :param enable_instruction: whether also export the instructions, i.e.
+            measurement, reset, barrier and delay
         :type enable_instruction: bool, defaults to False
         :param enable_inputs: whether also export the inputs
         :type enable_inputs: bool, defaults to False
@@ -1039,11 +1202,7 @@ class AbstractCircuit:
         """
         from .translation import qir2qiskit
 
-        qir = self.to_qir()
-        if enable_instruction:
-            extra_qir = self._extra_qir
-        else:
-            extra_qir = None
+        qir = self.to_qir(enable_instruction=enable_instruction)
         if enable_inputs and self.circuit_param.get("inputs") is not None:
             inputs = self.circuit_param["inputs"]
             inputs = (
@@ -1060,7 +1219,6 @@ class AbstractCircuit:
         return qir2qiskit(
             qir,
             n=self._nqubits,
-            extra_qir=extra_qir,
             initialization=initialization,
         )
 
@@ -1072,15 +1230,11 @@ class AbstractCircuit:
 
         :return: circuit representation in openqasm format
         :rtype: str
+        :raises ValueError: if the circuit has delays, see :py:meth:`delay_instruction`
         """
-        qc = self.to_qiskit(enable_instruction=True)
-        try:
-            qasm_str = qc.qasm(**kws)  # type: ignore
-        except AttributeError:  # qiskit 1.0
-            from qiskit.qasm2 import dumps
+        from .translation import get_qiskit_qasm
 
-            qasm_str = dumps(qc)  # type: ignore
-        return qasm_str  # type: ignore
+        return get_qiskit_qasm(self.to_qiskit(enable_instruction=True), **kws)
 
     def to_openqasm_file(self, file: str, **kws: Any) -> None:
         """
@@ -1263,19 +1417,27 @@ class AbstractCircuit:
 
     def to_json(self, file: Optional[str] = None, simplified: bool = False) -> Any:
         """
-        circuit dumps to json
+        Dump the circuit to json, including gates, noise channels, the measure /
+        reset / barrier instructions in ``extra_qir`` and the circuit size.
+        Custom input states are not included.
 
         :param file: file str to dump the json to, defaults to None, return the json str
         :type file: Optional[str], optional
-        :param simplified: If False, keep all info for each gate, defaults to be False.
-            If True, suitable for IO since less information is required
+        :param simplified: If True, omit the gate tensors which are not needed to
+            restore the circuit, see :py:func:`tensorcircuit.translation.qir2json`,
+            defaults to False
         :type simplified: bool
-        :return: None if dumps to file otherwise the json str
+        :return: the json str
         :rtype: Any
         """
         from .translation import qir2json
 
-        tcqasm = qir2json(self.to_qir(), simplified=simplified)
+        tcqasm = {
+            "nqubits": self._nqubits,
+            "dim": getattr(self, "_d", 2),
+            "qir": qir2json(self.to_qir(), simplified=simplified),
+            "extra_qir": [dict(inst) for inst in self._extra_qir],
+        }
         if file is not None:
             with open(file, "w") as f:
                 json.dump(tcqasm, f)
@@ -1359,7 +1521,7 @@ class AbstractCircuit:
                 getattr(c, "RZ")(gate[2], theta=gate[3])
             elif gate[1] == "fs" or gate[1] == "fsim":
                 i, j, theta, phi = gate[2:]
-                getattr(c, "ISWAP")(i, j, theta=-theta)  # type: ignore
+                getattr(c, "ISWAP")(i, j, theta=-theta * 2 / np.pi)  # type: ignore
                 getattr(c, "CPHASE")(i, j, theta=-phi)  # type: ignore
             else:
                 raise NotImplementedError
@@ -1372,20 +1534,35 @@ class AbstractCircuit:
         """
         load json str as a Circuit
 
-        :param jsonstr: _description_
+        :param jsonstr: json str or the loaded object from :py:meth:`to_json`,
+            or a gate list from :py:func:`tensorcircuit.translation.qir2json`
         :type jsonstr: str
         :param circuit_params: Extra circuit parameters in the format of ``__init__``,
             defaults to None
         :type circuit_params: Optional[Dict[str, Any]], optional
-        :return: _description_
+        :return: the restored circuit
         :rtype: AbstractCircuit
         """
         from .translation import json2qir
 
         if isinstance(jsonstr, str):
             jsonstr = json.loads(jsonstr)
-        qir = json2qir(jsonstr)  # type: ignore
-        return cls.from_qir(qir, circuit_params)
+        if isinstance(jsonstr, list):
+            jsonstr = {"qir": jsonstr}  # type: ignore
+        params: Dict[str, Any] = {}
+        if "nqubits" in jsonstr:
+            params["nqubits"] = jsonstr["nqubits"]  # type: ignore
+        if jsonstr.get("dim", 2) != 2:  # type: ignore
+            params["dim"] = jsonstr["dim"]  # type: ignore
+        params.update(circuit_params or {})
+        c = cls.from_qir(
+            cls._merge_extra_qir(
+                json2qir(jsonstr["qir"]), jsonstr.get("extra_qir", [])  # type: ignore
+            ),
+            params,
+            allow_channel=getattr(cls, "is_dm", False),
+        )
+        return c
 
     @classmethod
     def from_json_file(
@@ -1463,16 +1640,17 @@ class AbstractCircuit:
     def prepend(self, c: "AbstractCircuit") -> "AbstractCircuit":
         """
         Prepend circuit ``c`` in place, preserving channels for density-matrix circuits.
+        The measurements of this circuit are recorded after the classical bits of ``c``,
+        and its detectors keep referring to its own measurements.
 
         :param c: The other circuit to be prepended
         :type c: BaseCircuit
         :return: The composed circuit
         :rtype: BaseCircuit
         """
-        qir1 = self.to_qir()
-        qir0 = c.to_qir()
-        newc = type(self).from_qir(
-            qir0 + qir1,
+        newc = self.from_qir(
+            c.to_qir(enable_instruction=True)
+            + c._shift_records(self.to_qir(enable_instruction=True)),
             self.circuit_param,
             allow_channel=getattr(self, "is_dm", False),
         )
@@ -1485,7 +1663,9 @@ class AbstractCircuit:
         """
         Append circuit ``c`` after this circuit in place.
 
-        Noise channels are preserved for density-matrix circuits.
+        Noise channels are preserved for density-matrix circuits. The measurements
+        of ``c`` are recorded after the classical bits of this circuit, and its
+        detectors keep referring to its own measurements.
 
         :example:
 
@@ -1511,18 +1691,11 @@ class AbstractCircuit:
         :return: This circuit after it has been updated in place with ``c``.
         :rtype: BaseCircuit
         """
-        qir1 = self.to_qir()
-        qir2 = c.to_qir()
+        later = self._shift_records(c.to_qir(enable_instruction=True))
         if indices is not None:
-            qir2_old = qir2
-            qir2 = []
-            for d in qir2_old:
-                # avoid modifying the original circuit
-                d = d.copy()
-                d["index"] = [indices[i] for i in d["index"]]
-                qir2.append(d)
-        newc = type(self).from_qir(
-            qir1 + qir2,
+            later = [self._remap_qubits(d, indices) for d in later]
+        newc = self.from_qir(
+            self.to_qir(enable_instruction=True) + later,
             self.circuit_param,
             allow_channel=getattr(self, "is_dm", False),
         )
@@ -1531,13 +1704,14 @@ class AbstractCircuit:
 
     def copy(self) -> "AbstractCircuit":
         """
-        Copy the circuit, preserving noise channels for density-matrix circuits.
+        Copy the circuit with its instructions, preserving noise channels for
+        density-matrix circuits.
         """
-        qir = self.to_qir()
-        c = type(self).from_qir(
-            qir, self.circuit_param, allow_channel=getattr(self, "is_dm", False)
+        return self.from_qir(
+            self.to_qir(enable_instruction=True),
+            self.circuit_param,
+            allow_channel=getattr(self, "is_dm", False),
         )
-        return c
 
     def expectation(
         self,

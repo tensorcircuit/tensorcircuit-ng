@@ -702,6 +702,49 @@ def test_to_qiskit_state_matches(SymbolCircuit, sym):
     assert np.allclose(tc_state, qk_state, atol=1e-6)
 
 
+def test_instructions_kept_by_to_qiskit_and_to_circuit(SymbolCircuit, sym):
+    pytest.importorskip("qiskit")
+    theta = sym["theta"]
+
+    def build(cls, angle):
+        c = cls(3)
+        c.rx(0, theta=angle)
+        c.cnot(0, 1)
+        c.measure_instruction(1)
+        c.reset_instruction(1)
+        c.barrier_instruction(0, 1, 2)
+        c.measure_instruction(2)
+        c.measure_instruction(0)
+        return c
+
+    def ops(qc):
+        return [
+            (
+                inst.operation.name,
+                [qc.find_bit(q).index for q in inst.qubits],
+                [qc.find_bit(b).index for b in inst.clbits],
+            )
+            for inst in qc.data
+        ]
+
+    sc = build(SymbolCircuit, theta)
+    expected = ops(build(tc.Circuit, 0.3).to_qiskit(enable_instruction=True))
+    assert ops(sc.to_qiskit(enable_instruction=True)) == expected
+    assert "measure" not in {op[0] for op in ops(sc.to_qiskit())}
+    bound = sc.to_circuit({theta: 0.3})
+    assert ops(bound.to_qiskit(enable_instruction=True)) == expected
+    assert bound.get_positional_logical_mapping() == {0: 1, 1: 2, 2: 0}
+    assert sc.bind({theta: 0.3})._extra_qir == sc._extra_qir
+
+
+def test_to_qiskit_rejects_inputs(SymbolCircuit, sym):
+    pytest.importorskip("qiskit")
+    sc = SymbolCircuit(1, inputs=np.array([0, 1]))
+    sc.rx(0, theta=sym["theta"])
+    with pytest.raises(NotImplementedError, match="inputs"):
+        sc.to_qiskit(enable_inputs=True)
+
+
 # ── multi-qubit / multi-symbol circuits ───────────────────────────────────────
 
 

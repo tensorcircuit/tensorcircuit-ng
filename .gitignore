@@ -16,6 +16,7 @@ dataset
 *.disable
 *.mo
 develop
+notes/
 examples-ng
 .coverage*
 tutorials.po

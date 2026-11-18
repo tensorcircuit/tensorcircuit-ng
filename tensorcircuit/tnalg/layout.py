@@ -522,27 +522,31 @@ class MPSSpec:
         for site, physical in enumerate(physical_indices):
             left = bond_indices[site]
             right = bond_indices[site + 1]
+            right_degeneracies = dict(zip(right.charges, right.degeneracies))
+            right_capacities: dict[Charge, int] = {}
+            left_capacities = dict.fromkeys(left.charges, 0)
+            for left_charge, left_degeneracy in zip(left.charges, left.degeneracies):
+                for physical_charge, physical_degeneracy in zip(
+                    physical.charges, physical.degeneracies
+                ):
+                    target = symmetry.add(left_charge, physical_charge)
+                    right_capacities[target] = (
+                        right_capacities.get(target, 0)
+                        + left_degeneracy * physical_degeneracy
+                    )
+                    left_capacities[
+                        left_charge
+                    ] += physical_degeneracy * right_degeneracies.get(target, 0)
             for right_charge, right_degeneracy in zip(
                 right.charges, right.degeneracies
             ):
-                capacity = sum(
-                    left.degeneracy(left_charge) * physical.degeneracy(physical_charge)
-                    for left_charge in left.charges
-                    for physical_charge in physical.charges
-                    if symmetry.add(left_charge, physical_charge) == right_charge
-                )
+                capacity = right_capacities.get(right_charge, 0)
                 if right_degeneracy > capacity:
                     raise ValueError(
                         f"bond {site + 1} sector {right_charge} exceeds left capacity"
                     )
             for left_charge, left_degeneracy in zip(left.charges, left.degeneracies):
-                capacity = sum(
-                    physical.degeneracy(physical_charge)
-                    * right.degeneracy(right_charge)
-                    for physical_charge in physical.charges
-                    for right_charge in right.charges
-                    if symmetry.add(left_charge, physical_charge) == right_charge
-                )
+                capacity = left_capacities[left_charge]
                 if left_degeneracy > capacity:
                     raise ValueError(
                         f"bond {site} sector {left_charge} exceeds right capacity"
@@ -551,14 +555,15 @@ class MPSSpec:
         for site, physical in enumerate(physical_indices):
             left = bond_indices[site]
             right = bond_indices[site + 1]
+            right_positions = {charge: i for i, charge in enumerate(right.charges)}
             coordinates = []
             shapes = []
             for left_position, left_charge in enumerate(left.charges):
                 for physical_position, physical_charge in enumerate(physical.charges):
                     target_charge = symmetry.add(left_charge, physical_charge)
-                    if target_charge not in right.charges:
+                    if target_charge not in right_positions:
                         continue
-                    right_position = right.charges.index(target_charge)
+                    right_position = right_positions[target_charge]
                     coordinates.append(
                         (left_position, physical_position, right_position)
                     )

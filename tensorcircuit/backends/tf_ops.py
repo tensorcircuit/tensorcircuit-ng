@@ -11,6 +11,7 @@ import tensorflow as tf
 Array = Any  # tensorflow Tensor
 
 qr_epsilon = 1e-8
+qr_epsilon_single = 1e-6  # float32 and complex64
 
 
 @tf.custom_gradient  # type: ignore[misc]
@@ -69,12 +70,13 @@ def tfqr_grad(a: Array, q: Array, r: Array, dq: Array, dr: Array) -> Array:
         """
 
         # Modification begins
+        eps = qr_epsilon_single if r.dtype.real_dtype == tf.float32 else qr_epsilon
         rdiag = tf.linalg.diag_part(r)
-        small_indices = tf.where(tf.math.abs(rdiag) < qr_epsilon)
+        small_indices = tf.where(tf.math.abs(rdiag) < eps)
         length = tf.shape(small_indices)[0]
-        newvalues = tf.ones((length,), dtype=rdiag.dtype) * qr_epsilon
+        newvalues = tf.ones((length,), dtype=rdiag.dtype) * eps
         rdiag = tf.tensor_scatter_nd_update(rdiag, small_indices, newvalues)
-        r = tf.linalg.set_diag(r, rdiag)
+        r_safe = tf.linalg.set_diag(r, rdiag)
         # Modification ends
 
         qdq = tf.matmul(q, dq, adjoint_a=True)
@@ -83,15 +85,17 @@ def tfqr_grad(a: Array, q: Array, r: Array, dq: Array, dr: Array) -> Array:
         rdr_ = rdr - tf.linalg.adjoint(rdr)
         tril = tf.linalg.band_part(qdq_ + rdr_, -1, 0)
 
-        grad_a = tf.matmul(q, dr + _TriangularSolve(tril, r))
-        grad_b = _TriangularSolve(dq - tf.matmul(q, qdq), r)
+        grad_a = tf.matmul(q, dr + _TriangularSolve(tril, r_safe))
+        grad_b = _TriangularSolve(dq - tf.matmul(q, qdq), r_safe)
         ret = grad_a + grad_b
 
         if q.dtype.is_complex:
             m = rdr - tf.linalg.adjoint(qdq)
             eyem = tf.linalg.set_diag(tf.zeros_like(m), tf.linalg.diag_part(m))
             correction = eyem - tf.cast(tf.math.real(eyem), q.dtype)
-            ret = ret + _TriangularSolve(tf.matmul(q, tf.linalg.adjoint(correction)), r)
+            ret = ret + _TriangularSolve(
+                tf.matmul(q, tf.linalg.adjoint(correction)), r_safe
+            )
 
         return ret
 

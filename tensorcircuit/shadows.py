@@ -93,18 +93,13 @@ def shadow_snapshots(
 
     def proj_measure(pauli_string: Tensor, st: Tensor) -> Tensor:
         c_ = Circuit(nq, inputs=psi)
+        parameters = backend.gather(angles, pauli_string)
         for i in range(nq):
             c_.r(  # type: ignore
                 i,
-                theta=backend.gather1d(
-                    backend.gather1d(angles, backend.gather1d(pauli_string, i)), 0
-                ),
-                alpha=backend.gather1d(
-                    backend.gather1d(angles, backend.gather1d(pauli_string, i)), 1
-                ),
-                phi=backend.gather1d(
-                    backend.gather1d(angles, backend.gather1d(pauli_string, i)), 2
-                ),
+                theta=parameters[i, 0],
+                alpha=parameters[i, 1],
+                phi=parameters[i, 2],
             )
         return c_.sample(batch=repeat, format="sample_bin", allow_state=True, status=st)
 
@@ -131,11 +126,16 @@ def local_snapshot_states(
     :return lss_states: shape = (ns, repeat, nq, 2, 2)
     :rtype: Tensor
     """
+    if sub is not None:
+        snapshots = slice_sub(backend.convert_to_tensor(snapshots), sub)
+        pauli_strings = backend.gather(
+            backend.convert_to_tensor(pauli_strings),
+            backend.convert_to_tensor(sub, dtype="int32"),
+            axis=-1,
+        )
     pauli_strings = backend.cast(pauli_strings, dtype="int32") - 1
     if len(pauli_strings.shape) < len(snapshots.shape):
-        pauli_strings = backend.tile(
-            pauli_strings[:, None, :], (1, snapshots.shape[1], 1)
-        )  # (ns, repeat, nq)
+        pauli_strings = pauli_strings[:, None, :]
 
     X_dm = backend.cast(
         backend.convert_to_tensor([[[1, 1], [1, 1]], [[1, -1], [-1, 1]]]) / 2,
@@ -152,16 +152,8 @@ def local_snapshot_states(
     )
     pauli_dm = backend.stack((X_dm, Y_dm, Z_dm), axis=0)  # (3, 2, 2, 2)
 
-    def dm(p: Tensor, s: Tensor) -> Tensor:
-        return backend.gather1d(backend.gather1d(pauli_dm, p), s)
-
-    v = backend.vmap(dm, vectorized_argnums=(0, 1))
-    vv = backend.vmap(v, vectorized_argnums=(0, 1))
-    vvv = backend.vmap(vv, vectorized_argnums=(0, 1))
-
-    lss_states = vvv(pauli_strings, snapshots)
-    if sub is not None:
-        lss_states = slice_sub(lss_states, sub)
+    indices = 2 * pauli_strings + backend.cast(snapshots, "int32")
+    lss_states = backend.gather(backend.reshape(pauli_dm, (6, 2, 2)), indices)
     return 3 * lss_states - backend.eye(2)[None, None, None, :, :]
 
 
@@ -586,10 +578,6 @@ def slice_sub(entirety: Tensor, sub: Sequence[int]) -> Tensor:
     if len(entirety.shape) < 3:
         entirety = entirety[:, None, :]
 
-    def slc(x: Tensor, idx: Tensor) -> Tensor:
-        return backend.gather1d(x, idx)
-
-    v = backend.vmap(slc, vectorized_argnums=(1,))
-    vv = backend.vmap(v, vectorized_argnums=(0,))
-    vvv = backend.vmap(vv, vectorized_argnums=(0,))
-    return vvv(entirety, backend.convert_to_tensor(sub))
+    return backend.gather(
+        entirety, backend.convert_to_tensor(sub, dtype="int32"), axis=2
+    )

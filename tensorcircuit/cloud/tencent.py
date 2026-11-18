@@ -2,19 +2,19 @@
 Cloud provider from Tencent
 """
 
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from datetime import datetime
 from json import dumps
 import logging
 from functools import partial
 
 from .config import tencent_base_url
-from .utils import rpost_json
+from .utils import SubmissionRejected, SubmissionUnknown, rpost_json, rpost_json_once
 from .abstraction import Device, sep, Task
 from ..abstractcircuit import AbstractCircuit
 from ..utils import is_sequence, arg_alias
 from ..circuit import Circuit
-from ..translation import eqasm2tc
+from ..translation import eqasm2tc, get_qiskit_qasm
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +114,106 @@ def _replace_rz_to_st(qasm: str) -> str:
         "compiled_options": ["qiskit_compiled_options"],
     },
 )
+def prepare_task(
+    device: Device,
+    token: Optional[str] = None,
+    circuit: Optional[Union[AbstractCircuit, Sequence[AbstractCircuit]]] = None,
+    source: Optional[Union[str, Sequence[str]]] = None,
+    compiling: bool = False,
+    compiled_options: Optional[Dict[str, Any]] = None,
+    enable_qiskit_initial_mapping: bool = False,
+    **kws: Any,
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """
+    Locally compile and translate the circuits into the ``source`` sent by
+    :py:func:`submit_task`.
+
+    :param device: the target device
+    :type device: Device
+    :param token: unused, for the uniform provider interface, defaults to None
+    :type token: Optional[str], optional
+    :param circuit: tensorcircuit or qiskit circuit object, defaults to None
+    :type circuit: Optional[Union[AbstractCircuit, Sequence[AbstractCircuit]]], optional
+    :param source: directly given circuit representation, sent as it is,
+        defaults to None
+    :type source: Optional[Union[str, Sequence[str]]], optional
+    :param compiling: whether compiling in tc via qiskit compiling system,
+        defaults to False
+    :type compiling: bool, optional
+    :param compiled_options: compiling options for qiskit ``transpile`` method,
+        defaults to None
+    :type compiled_options: Optional[Dict[str, Any]], optional
+    :param enable_qiskit_initial_mapping: whether the default compiling options
+        route on the device topology, defaults to False
+    :type enable_qiskit_initial_mapping: bool, optional
+    :param kws: the other keyword arguments of :py:func:`submit_task`
+    :type kws: Any
+    :return: the keyword arguments of :py:func:`submit_task` with the ``source``
+        to send, and what is prepared for each circuit, i.e. its ``source`` and
+        ``positional_logical_mapping``, None if unknown, e.g. for a given ``source``
+    :rtype: Tuple[Dict[str, Any], List[Dict[str, Any]]]
+    """
+    if source is not None:
+        sources = source if is_sequence(source) else [source]  # type: ignore
+        return dict(kws, source=source), [
+            {"positional_logical_mapping": None, "source": s} for s in sources
+        ]
+    from ..compiler.qiskit_compiler import (
+        qiskit_compile,
+        _get_positional_logical_mapping_from_qiskit,
+    )
+    from qiskit.circuit import QuantumCircuit
+
+    if compiled_options is None and compiling is True:
+        links = device.topology()
+        if (
+            enable_qiskit_initial_mapping is True
+            and isinstance(links, list)
+            and len(links) > 1
+            and isinstance(links[0], list)
+        ):
+            coupling_map = links
+        else:
+            coupling_map = None
+        compiled_options = {
+            "basis_gates": ["h", "x", "y", "z", "s", "t", "rz", "cx", "cz"],
+            "optimization_level": 2,
+            "coupling_map": coupling_map,
+        }
+
+    def c2qasm(c: Any) -> Tuple[str, Dict[int, int]]:
+        if compiling is True:
+            c, _ = qiskit_compile(
+                c, output="qiskit", info=None, compiled_options=compiled_options
+            )
+            s = get_qiskit_qasm(c)
+        elif isinstance(c, QuantumCircuit):
+            s = c.qasm()
+        else:
+            s = c.to_openqasm()
+        if isinstance(c, QuantumCircuit):
+            mapping = _get_positional_logical_mapping_from_qiskit(c)
+        else:
+            mapping = c.get_positional_logical_mapping()
+        return _replace_rz_to_st(s), mapping
+
+    compiled = [c2qasm(c) for c in (circuit if is_sequence(circuit) else [circuit])]  # type: ignore
+    sources = [s for s, _ in compiled]
+    send_kws = dict(
+        kws, source=sources if is_sequence(circuit) else sources[0], lang="OPENQASM"
+    )
+    return send_kws, [
+        {"positional_logical_mapping": m, "source": s} for s, m in compiled
+    ]
+
+
+@partial(
+    arg_alias,
+    alias_dict={
+        "compiling": ["compiled"],
+        "compiled_options": ["qiskit_compiled_options"],
+    },
+)
 def submit_task(
     device: Device,
     token: str,
@@ -178,45 +278,16 @@ def submit_task(
     :return: Task object or List of Task for batch submission
     :rtype: List[Task]
     """
+    prepared = None
     if source is None:
-        if compiled_options is None and compiling is True:
-            links = device.topology()
-            if (
-                enable_qiskit_initial_mapping is True
-                and isinstance(links, list)
-                and len(links) > 1
-                and isinstance(links[0], list)
-            ):
-                coupling_map = links
-            else:
-                coupling_map = None
-            compiled_options = {
-                "basis_gates": ["h", "x", "y", "z", "s", "t", "rz", "cx", "cz"],
-                "optimization_level": 2,
-                "coupling_map": coupling_map,
-            }
-
-        def c2qasm(c: Any, compiling: bool) -> str:
-            from ..compiler.qiskit_compiler import qiskit_compile
-            from qiskit.circuit import QuantumCircuit
-
-            if compiling is True:
-                s, _ = qiskit_compile(
-                    c, output="qasm", info=None, compiled_options=compiled_options
-                )
-            else:
-                if isinstance(c, QuantumCircuit):
-                    s = c.qasm()
-                else:
-                    s = c.to_openqasm()
-            s = _replace_rz_to_st(s)
-            return s  # type: ignore
-
-        if is_sequence(circuit):
-            source = [c2qasm(c, compiling) for c in circuit]  # type: ignore
-        else:
-            source = c2qasm(circuit, compiling)
-        lang = "OPENQASM"
+        send_kws, prepared = prepare_task(
+            device,
+            circuit=circuit,
+            compiling=compiling,
+            compiled_options=compiled_options,
+            enable_qiskit_initial_mapping=enable_qiskit_initial_mapping,
+        )
+        source, lang = send_kws["source"], send_kws["lang"]
 
     if len(device.name.split("?")) > 1:
         device_str = device.name
@@ -262,40 +333,51 @@ def submit_task(
             "remarks": remarks,
             "group": group,
         }
-    r = rpost_json(
+    r = rpost_json_once(
         tencent_base_url + "task/submit", json=json, headers=tencent_headers(token)
     )
-    r = error_handling(r)
     rtn = []
-    for t in r["tasks"]:
-        if "err" in t or "id" not in t:
-            if "err" in t:
-                logger.warning(t["err"])
-            else:
-                logger.warning("unsuccessful submission of the task:\n" + dumps(r))
-        else:
-            ti = Task(id_=t["id"], device=device)
+    for i, id_ in enumerate(_submitted_ids(r, len(json) if is_sequence(source) else 1)):
+        if id_ is not None:
+            ti = Task(id_=id_, device=device)
+            ti.circuit_index = i
+            if prepared is not None:
+                ti.prepared = prepared[i]
             rtn.append(ti)
     if not is_sequence(source):
         return rtn[0]  # type: ignore
-    elif len(rtn) == 0:
-        raise ValueError("All tasks submitted failed")
-    else:
-        return rtn
+    return rtn
+
+
+def _submitted_ids(r: Any, n: int) -> List[Optional[str]]:
+    # the task id of each of the n sent circuits, None if explicitly rejected;
+    # any other answer leaves the circuits unknown
+    if isinstance(r, dict) and "err" in r:
+        raise SubmissionRejected(r["err"])
+    tasks = r.get("tasks") if isinstance(r, dict) else None
+    if not isinstance(tasks, list) or len(tasks) != n:
+        raise SubmissionUnknown(dumps(r))
+    ids = []
+    for t in tasks:
+        if isinstance(t, dict) and t.get("id"):
+            ids.append(t["id"])
+        elif isinstance(t, dict) and "err" in t:
+            logger.warning(t["err"])
+            ids.append(None)
+        else:
+            raise SubmissionUnknown(dumps(r))
+    if all(i is None for i in ids):
+        raise SubmissionRejected("All tasks submitted failed: " + dumps(r))
+    return ids
 
 
 def resubmit_task(task: Task, token: str) -> Task:
     # TODO(@refraction-ray): batch resubmit
     json = {"id": task.id_}
-    r = rpost_json(
+    r = rpost_json_once(
         tencent_base_url + "task/start", json=json, headers=tencent_headers(token)
     )
-    r = error_handling(r)
-    try:
-        return Task(id_=r["tasks"][0]["id"])
-
-    except KeyError:
-        raise ValueError(dumps(r))
+    return Task(id_=_submitted_ids(r, 1)[0], device=task.device)  # type: ignore
 
 
 def remove_task(task: Task, token: str) -> Any:
@@ -330,6 +412,33 @@ def list_tasks(device: Device, token: str, **filter_kws: Any) -> List[Task]:
         return rtn
     except KeyError:
         raise ValueError(dumps(r))
+
+
+def task_metadata(details: Dict[str, Any], prepared: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    The provider-independent metadata of the task, see
+    :py:func:`tensorcircuit.cloud.apis.get_task_metadata`, where the qubits of the
+    prepared circuit run on the physical ones given by ``optimization.pairs``.
+
+    :param details: the task details by :py:func:`get_task_details`
+    :type details: Dict[str, Any]
+    :param prepared: ``task.prepared``, empty if unknown
+    :type prepared: Dict[str, Any]
+    :return: the ``positional_logical_mapping`` from the classical bit to the
+        physical qubit
+    :rtype: Dict[str, Any]
+    """
+    mapping = prepared.get("positional_logical_mapping")
+    pairs = (details.get("optimization") or {}).get("pairs")
+    if (
+        mapping is None
+        or pairs is None
+        or any(q not in pairs for q in mapping.values())
+    ):
+        physical = None
+    else:
+        physical = {i: pairs[q] for i, q in mapping.items()}
+    return {"positional_logical_mapping": physical}
 
 
 def get_task_details(

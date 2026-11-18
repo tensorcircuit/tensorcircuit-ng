@@ -1813,16 +1813,16 @@ def test_fidelity_diagonal_limits(backend, highp):
 def test_fidelity_pure_gradient(backend, double_precision, request):
     if double_precision:
         request.getfixturevalue("highp")
-    k = tc.backend
+    K = tc.backend
     sigma = tc.array_to_tensor(np.diag([1.0, 0.0, 0.0]))
-    theta = k.convert_to_tensor(np.array(0.3, dtype=tc.rdtypestr))
+    theta = K.convert_to_tensor(np.array(0.3, dtype=tc.rdtypestr))
 
     def state(parameter):
-        amplitudes = k.cast(
-            k.stack([k.cos(parameter), k.sin(parameter), parameter * 0]),
+        amplitudes = K.cast(
+            K.stack([K.cos(parameter), K.sin(parameter), parameter * 0]),
             tc.dtypestr,
         )
-        return k.reshape(amplitudes, (3, 1)) @ k.reshape(k.conj(amplitudes), (1, 3))
+        return K.reshape(amplitudes, (3, 1)) @ K.reshape(K.conj(amplitudes), (1, 3))
 
     for swap in (False, True):
 
@@ -1830,10 +1830,10 @@ def test_fidelity_pure_gradient(backend, double_precision, request):
             rho = state(parameter)
             return qu.fidelity(sigma, rho) if swap else qu.fidelity(rho, sigma)
 
-        derivative = k.grad(loss)
-        for evaluate in (derivative, k.jit(derivative)):
+        derivative = K.grad(loss)
+        for evaluate in (derivative, K.jit(derivative)):
             np.testing.assert_allclose(
-                k.numpy(evaluate(theta)),
+                K.numpy(evaluate(theta)),
                 -np.sin(0.6),
                 atol=3e-7 if double_precision else 1e-3,
             )
@@ -1841,18 +1841,18 @@ def test_fidelity_pure_gradient(backend, double_precision, request):
 
 @pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
 def test_fidelity_degenerate_gradient(backend, highp):
-    k = tc.backend
+    K = tc.backend
     sigma = tc.array_to_tensor(np.diag([0.7, 0.3]))
     center = tc.array_to_tensor(np.eye(2) / 2)
     direction = tc.array_to_tensor(np.diag([1.0, -1.0]))
 
     def loss(theta):
-        return qu.fidelity(center + k.cast(theta, tc.dtypestr) * direction, sigma)
+        return qu.fidelity(center + K.cast(theta, tc.dtypestr) * direction, sigma)
 
-    theta = k.convert_to_tensor(np.array(0.0))
-    derivative = k.grad(loss)
-    for evaluate in (derivative, k.jit(derivative)):
-        np.testing.assert_allclose(k.numpy(evaluate(theta)), 0.4, atol=1e-10)
+    theta = K.convert_to_tensor(np.array(0.0))
+    derivative = K.grad(loss)
+    for evaluate in (derivative, K.jit(derivative)):
+        np.testing.assert_allclose(K.numpy(evaluate(theta)), 0.4, atol=1e-10)
 
 
 def test_correlation_selected_bits(npb):
@@ -1891,22 +1891,22 @@ def test_correlation_selected_bits_dynamic_indices(backend):
 
 
 def test_trace_distance_degenerate_hermitian_gradient(jaxb, highp):
-    k = tc.backend
+    K = tc.backend
     rng = np.random.default_rng(51)
     unitary, _ = np.linalg.qr(rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4)))
-    reference = k.convert_to_tensor(np.eye(4, dtype=np.complex128) / 4)
+    reference = K.convert_to_tensor(np.eye(4, dtype=np.complex128) / 4)
     eps = 1e-4
 
     def loss(parts):
-        matrix = k.cast(parts[0], "complex128") + 1j * k.cast(parts[1], "complex128")
-        delta = (matrix + k.adjoint(matrix)) / 2
+        matrix = K.cast(parts[0], "complex128") + 1j * K.cast(parts[1], "complex128")
+        delta = (matrix + K.adjoint(matrix)) / 2
         return qu.trace_distance(reference + delta, reference, eps)
 
-    evaluate = k.jit(k.value_and_grad(loss))
+    evaluate = K.jit(K.value_and_grad(loss))
     for eigenvalues in (np.zeros(4), np.array([0.05, 0.05, -0.05, -0.05])):
         delta = (unitary * eigenvalues) @ unitary.conj().T
         value, gradient = evaluate(
-            k.convert_to_tensor(np.stack([delta.real, delta.imag]))
+            K.convert_to_tensor(np.stack([delta.real, delta.imag]))
         )
         weights = eigenvalues / (2 * np.sqrt(eigenvalues**2 + eps))
         expected_gradient = (unitary * weights) @ unitary.conj().T
@@ -1921,18 +1921,18 @@ def test_trace_distance_degenerate_hermitian_gradient(jaxb, highp):
 
 
 def test_renyi_half_power_gradient(jaxb, highp):
-    k = tc.backend
+    K = tc.backend
     rho = np.array([[0.4 + 0.01j, 0.03j], [0.02, 0.6 - 0.01j]])
-    x = k.convert_to_tensor(np.stack([rho.real, rho.imag]))
+    x = K.convert_to_tensor(np.stack([rho.real, rho.imag]))
     for order in (4, 13):
 
         def loss(parts):
-            matrix = k.cast(parts[0], "complex128") + 1j * k.cast(
+            matrix = K.cast(parts[0], "complex128") + 1j * K.cast(
                 parts[1], "complex128"
             )
             return qu.renyi_entropy(matrix, order)
 
-        value, gradient = k.jit(k.value_and_grad(loss))(x)
+        value, gradient = K.jit(K.value_and_grad(loss))(x)
         moment = np.trace(np.linalg.matrix_power(rho, order))
         derivative = (
             order * np.linalg.matrix_power(rho, order - 1).T / ((1 - order) * moment)

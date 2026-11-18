@@ -3,7 +3,6 @@ Circuit object translation in different packages
 """
 
 import logging
-from copy import deepcopy
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -34,7 +33,8 @@ except ImportError:
         "Please first ``pip install -U sympy symengine`` to enable `qiskit2tc` in translation module"
     )
 
-from . import gates
+from . import channels, gates
+from .abstractcircuit import AbstractCircuit
 from .circuit import Circuit
 from .cons import backend, rdtypestr
 from .densitymatrix import DMCircuit2
@@ -43,9 +43,24 @@ from .interfaces.tensortrans import tensor_to_numpy
 Tensor = Any
 
 
-def get_qiskit_qasm(qc: Any) -> str:
+def get_qiskit_qasm(qc: Any, **kws: Any) -> str:
+    """
+    The OpenQASM 2 of a qiskit circuit.
+
+    :param qc: the qiskit circuit
+    :type qc: Any
+    :raises ValueError: if the circuit has delays, since OpenQASM 2 cannot hold
+        their unit, and qiskit reads them back in ``dt``
+    :return: the OpenQASM 2 string
+    :rtype: str
+    """
+    if any(inst.operation.name == "delay" for inst in qc.data):
+        raise ValueError(
+            "OpenQASM 2 cannot hold the unit of delays, use the qiskit circuit "
+            "to keep them"
+        )
     try:
-        qasm_str = qc.qasm()  # type: ignore
+        qasm_str = qc.qasm(**kws)  # type: ignore
     except AttributeError:  # qiskit 1.0
         from qiskit.qasm2 import dumps
 
@@ -82,27 +97,6 @@ def _get_float(parameters: Any, key: str, default: int = 0) -> float:
     return np.real(backend.numpy(gates.array_to_tensor(parameters.get(key, default)))).item()  # type: ignore
 
 
-def _merge_extra_qir(
-    qir: List[Dict[str, Any]], extra_qir: List[Dict[str, Any]]
-) -> List[Dict[str, Any]]:
-    nqir = []
-    # caution on the same pos!
-    inds: Dict[Union[int, float], List[Dict[str, Any]]] = {}
-    for d in extra_qir:
-        pos = d.get("pos", len(qir))
-        if pos not in inds:
-            inds[pos] = []
-        inds[pos].append(d)
-    for i, q in enumerate(qir):
-        if i in inds:
-            nqir += inds[i]
-        nqir.append(q)
-    for k in sorted(inds):
-        if k >= len(qir):
-            nqir += inds[k]
-    return nqir
-
-
 # TODO(@erertertet):
 #   add default theta to iswap gate
 #   add more cirq built-in gate instead of customized
@@ -125,12 +119,13 @@ def qir2cirq(
     >>> print(cisc)
     1: ───H───X───
 
-    :param qir: The quantum intermediate representation of a circuit.
+    :param qir: The quantum intermediate representation of a circuit, i.e. the gates
+        and optionally the instructions in time order, as given by ``c.to_qir()``.
     :type qir: List[Dict[str, Any]]
     :param n: # of qubits
     :type n: int
-    :param extra_qir: The extra quantum IR of tc circuit including measure and reset on hardware,
-        defaults to None
+    :param extra_qir: The instructions to be merged into ``qir`` by their ``pos``,
+        only for the legacy separate form, defaults to None
     :type extra_qir: Optional[List[Dict[str, Any]]]
     :return: A ``cirq.Circuit`` object.
     :rtype: Any
@@ -155,8 +150,10 @@ def qir2cirq(
         ) -> List[str]:
             return [self.name] * self.nqubit
 
+    # TODO(@refraction-ray): translate the instructions, e.g. measure, reset and
+    # barrier, which are not supported yet
     if extra_qir is not None and len(extra_qir) > 0:
-        qir = _merge_extra_qir(qir, extra_qir)
+        qir = AbstractCircuit._merge_extra_qir(qir, extra_qir)
     qbits = cirq.LineQubit.range(n)
     cmd = []
     for gate_info in qir:
@@ -232,12 +229,14 @@ def qir2qiskit(
     [(Instruction(name='h', num_qubits=1, num_clbits=0, params=[]), [Qubit(QuantumRegister(2, 'q'), 1)], []),
      (Instruction(name='x', num_qubits=1, num_clbits=0, params=[]), [Qubit(QuantumRegister(2, 'q'), 1)], [])]
 
-    :param qir: The quantum intermediate representation of a circuit.
+    :param qir: The quantum intermediate representation of a circuit, i.e. the gates
+        and optionally the instructions in time order, as given by ``c.to_qir()``.
     :type qir: List[Dict[str, Any]]
     :param n: # of qubits
     :type n: int
-    :param extra_qir: The extra quantum IR of tc circuit including measure and reset on hardware,
-        defaults to None
+    :param extra_qir: The instructions to be merged into ``qir`` by their ``pos``,
+        only for the legacy separate form, defaults to None.
+        Each measurement is written to the classical bit of its ``record_index``.
     :type extra_qir: Optional[List[Dict[str, Any]]]
     :param initialization: Circuit initial state in qiskit format
     :type initialization: Optional[Tensor]
@@ -245,13 +244,15 @@ def qir2qiskit(
     :rtype: Any
     """
     if extra_qir is not None and len(extra_qir) > 0:
-        qir = _merge_extra_qir(qir, extra_qir)
-        qiskit_circ = QuantumCircuit(n, n)
+        qir = AbstractCircuit._merge_extra_qir(qir, extra_qir)
+    records = AbstractCircuit._measurement_records(qir)
+    if any(d.get("instruction", False) for d in qir):
+        qiskit_circ = QuantumCircuit(n, max([n] + [r + 1 for r in records]))
     else:
         qiskit_circ = QuantumCircuit(n)
     if initialization is not None:
         qiskit_circ.initialize(initialization)
-    measure_cbit = 0
+    record = iter(records)
     for gate_info in qir:
         if gate_info.get("is_channel", False):
             continue
@@ -268,7 +269,6 @@ def qir2qiskit(
             "x",
             "y",
             "z",
-            "i",
             "s",
             "t",
             "swap",
@@ -280,6 +280,8 @@ def qir2qiskit(
             "cz",
         ]:
             getattr(qiskit_circ, gate_name)(*index)
+        elif gate_name == "i":
+            qiskit_circ.id(*index)
         elif gate_name in ["sd", "td"]:
             getattr(qiskit_circ, gate_name + "g")(*index)
         elif gate_name in ["ox", "oy", "oz"]:
@@ -345,12 +347,13 @@ def qir2qiskit(
             )
             qiskit_circ.unitary(qop, index[::-1], label=qis_name)
         elif gate_name == "measure":
-            qiskit_circ.measure(index[0], measure_cbit)
-            measure_cbit += 1
+            qiskit_circ.measure(index[0], next(record))
         elif gate_name == "reset":
             qiskit_circ.reset(index[0])
         elif gate_name == "barrier":
             qiskit_circ.barrier(*index)
+        elif gate_name == "delay":
+            qiskit_circ.delay(parameters["duration"], index[0], unit="ns")
         else:  # r cr any gate
             gatem = np.reshape(
                 backend.numpy(gate_info["gatef"](**parameters).tensor),
@@ -371,15 +374,21 @@ def qir2qiskit(
     return qiskit_circ
 
 
+def _qiskit_param_value(p: Any, binding_params: Any) -> Any:
+    if isinstance(p, ParameterVectorElement) and not (
+        isinstance(binding_params, dict) and p in binding_params
+    ):
+        return binding_params[p.index]
+    return binding_params[p]
+
+
 def _translate_qiskit_params(
     gate_info: CircuitInstruction, binding_params: Any
 ) -> List[float]:
     parameters = []
     for p in gate_info.operation.params:
-        if isinstance(p, ParameterVectorElement):
-            parameters.append(binding_params[p.index])
-        elif isinstance(p, Parameter):
-            parameters.append(binding_params[p])
+        if isinstance(p, Parameter):
+            parameters.append(_qiskit_param_value(p, binding_params))
         elif isinstance(p, ParameterExpression):
             if len(p.parameters) == 0:
                 parameters.append(float(p))
@@ -389,6 +398,20 @@ def _translate_qiskit_params(
             expr = p.sympify().simplify()
             if isinstance(expr, symengine.Expr):  # qiskit uses symengine if available
                 expr = expr._sympy_()  # sympy.Expr
+
+            parameter_list = list(p.parameters)
+            values = [_qiskit_param_value(q, binding_params) for q in parameter_list]
+            if any(isinstance(v, sympy.Basic) for v in values):
+                # symbolic values, e.g. for ``SymbolCircuit``
+                parameters.append(
+                    expr.subs(
+                        {
+                            sympy.Symbol(q.name): v
+                            for q, v in zip(parameter_list, values)
+                        }
+                    )
+                )
+                continue
 
             if expr.is_algebraic_expr():  # numpy ufuncs are not used
                 lambdify_module_name = "numpy"
@@ -404,17 +427,13 @@ def _translate_qiskit_params(
                 # but sympy.lambdify does not allow brackets in symbol names
                 free_symbol.name = free_symbol.name.replace("[", "_").replace("]", "")
 
-            parameter_list = list(p.parameters)
-            sympy_symbols = [param._symbol_expr for param in parameter_list]
             # replace names again: theta[0] -> theta_0
             sympy_symbols = [
-                sympy.Symbol(str(symbol).replace("[", "_").replace("]", ""))
-                for symbol in sympy_symbols
+                sympy.Symbol(param.name.replace("[", "_").replace("]", ""))
+                for param in parameter_list
             ]
             lam_f = sympy.lambdify(sympy_symbols, expr, modules=lambdify_module_name)
-            parameters.append(
-                lam_f(*[binding_params[param.index] for param in parameter_list])
-            )
+            parameters.append(lam_f(*values))
         else:
             # numbers, arrays, etc.
             parameters.append(p)
@@ -507,14 +526,16 @@ def qiskit2tc(
             "cz",
         ]:
             getattr(tc_circuit, gate_name)(*idx)
+        elif gate_name == "id":
+            tc_circuit.i(*idx)
         elif gate_name in ["sdg", "tdg"]:
             getattr(tc_circuit, gate_name[:-1])(*idx)
         elif gate_name in ["cx_o0", "cy_o0", "cz_o0"]:
             getattr(tc_circuit, "o" + gate_name[1])(*idx)
         elif gate_name in ["rx", "ry", "rz", "crx", "cry", "crz", "rxx", "ryy", "rzz"]:
-            getattr(tc_circuit, gate_name)(*idx, theta=parameters)
+            getattr(tc_circuit, gate_name)(*idx, theta=parameters[0])
         elif gate_name in ["crx_o0", "cry_o0", "crz_o0"]:
-            getattr(tc_circuit, "o" + gate_name[1:-3])(*idx, theta=parameters)
+            getattr(tc_circuit, "o" + gate_name[1:-3])(*idx, theta=parameters[0])
         elif gate_name in ["r"]:
             getattr(tc_circuit, "u")(
                 *idx,
@@ -527,7 +548,7 @@ def qiskit2tc(
                 *idx, theta=parameters[0], phi=parameters[1], lbd=parameters[2]
             )
         elif gate_name == "hamiltonian":
-            tc_circuit.exp(*idx, theta=parameters[-1], unitary=parameters[0])
+            tc_circuit.exp(*idx[::-1], theta=parameters[-1], unitary=parameters[0])
         elif gate_name == "cswap":
             tc_circuit.fredkin(*idx)
         elif gate_name[:3] == "ccx":
@@ -570,11 +591,29 @@ def qiskit2tc(
                     *idx, ctrl=ctrl_state, unitary=base_gate.to_matrix()
                 )
         elif gate_name == "measure":
-            tc_circuit.measure_instruction(*idx)
+            # the classical bit identifies the measurement record
+            tc_circuit._add_instruction(
+                {
+                    "index": list(idx),
+                    "name": "measure",
+                    "gatef": "measure",
+                    "instruction": True,
+                    "record_index": qc.find_bit(gate_info.clbits[0]).index,
+                }
+            )
         elif gate_name == "reset":
             tc_circuit.reset_instruction(*idx)
         elif gate_name == "barrier":
             tc_circuit.barrier_instruction(*idx)
+        elif gate_name == "delay":
+            unit = gate_info.operation.unit
+            # dt and stretch expressions have no duration in nanoseconds
+            if unit in ["dt", "expr"]:
+                logger.warning(
+                    f"qiskit to tc translation doesn't support delay in unit {unit}, skipping"
+                )
+            else:
+                tc_circuit.delay_instruction(*idx, duration=parameters[0], unit=unit)
         elif gate_name == "initialize":
             # already taken care of when initializing
             continue
@@ -625,94 +664,102 @@ def json_to_tensor(a: Any) -> Any:
         return ar + 1.0j * ai
 
 
+def _value_to_json(v: Any) -> Any:
+    if v is None or isinstance(v, (bool, int, float, str)):
+        return v
+    return tensor_to_json(v)
+
+
+def _json_to_value(v: Any) -> Any:
+    if isinstance(v, list):
+        return json_to_tensor(v)
+    return v
+
+
 def qir2json(
     qir: List[Dict[str, Any]], simplified: bool = False
 ) -> List[Dict[str, Any]]:
     """
-    transform qir to json compatible list of dict where array is replaced by real and imaginary list
+    Transform qir to a json compatible list of dicts, one per gate or noise channel,
+    where tensors are replaced by real and imaginary lists.
+    Each gate dict has ``name``, ``qubits``, optional ``parameters``, ``mpo``,
+    ``diagonal``, ``gatef`` (the gate function name if different from ``name``)
+    and ``tensor``, the gate tensor; a channel dict has ``is_channel``,
+    ``channel`` (the channel function name), ``unitary`` and ``parameters``.
 
     :param qir: the quantum intermediate representation of a circuit
     :type qir: List[Dict[str, Any]]
-    :param simplified: If False, keep all info for each gate, defaults to be False.
-        If True, suitable for IO since less information is required
+    :param simplified: if True, omit the gate tensors, which are not needed to
+        restore the circuit, defaults to False
     :type simplified: bool
-    :return: json-compatible list of dicts (complex arrays split into real/imaginary lists)
+    :return: json compatible list of dicts
     :rtype: List[Dict[str, Any]]
     """
-    logger.warning(
-        "experimental feature subject to fast protocol and implementation change, try on your own risk"
-    )
-    qir = deepcopy(qir)
-    tcqasm = []
+    records = []
     for r in qir:
-        if r.get("is_channel", False):
-            continue
-        if r["mpo"] is True:
-            nm = backend.reshapem(r["gate"].eval())
-        else:
-            nm = backend.reshapem(r["gate"].tensor)
-        nmr, nmi = tensor_to_json(nm)
-        if backend.shape_tuple(nm)[0] == backend.shape_tuple(nm)[1] == 2:
-            uparams = [float(p) for p in gates.get_u_parameter(backend.numpy(nm))]
-        else:
-            uparams = []
-        params = r.get("parameters", {})
-        for k, v in params.items():
-            params[k] = tensor_to_json(v)
-
-        ditem = {
-            "name": r["gatef"].n,
-            "qubits": list(r["index"]),
+        item: Dict[str, Any] = {
+            "name": r["name"],
+            "qubits": [int(q) for q in r["index"]],
         }
-        unsupport_list = ["any", "unitary", "mpo", "exp", "exp1", "r", "cr"]
-        if not simplified:
-            ditem.update(
-                {
-                    "matrix": [nmr, nmi],
-                    "uparams": uparams,
-                    "parameters": params,
-                    "mpo": r["mpo"],
-                }
+        if r.get("is_channel", False):
+            item.update(
+                is_channel=True,
+                channel=r["channel_f"].__name__,
+                unitary=r.get("channel_unitary", False),
+                parameters={
+                    k: _value_to_json(v)
+                    for k, v in r.get("channel_parameters", {}).items()
+                },
             )
-        else:  # update only when necessary: simplified=True
-            if ditem["name"] in unsupport_list and uparams:
-                ditem.update({"uparams": uparams})
-            elif ditem["name"] in unsupport_list:
-                ditem.update({"matrix": [nmr, nmi]})
-            if params:
-                ditem.update({"parameters": params})
-            if r["mpo"]:
-                ditem.update({"mpo": r["mpo"]})
-        tcqasm.append(ditem)
-    return tcqasm
+            records.append(item)
+            continue
+        gatef = getattr(r["gatef"], "n", None) or r["gatef"].__name__
+        if gatef != item["name"]:
+            item["gatef"] = gatef
+        if r.get("parameters"):
+            item["parameters"] = {
+                k: _value_to_json(v) for k, v in r["parameters"].items()
+            }
+        for k in ["mpo", "diagonal"]:
+            if r.get(k, False):
+                item[k] = True
+        if not simplified:
+            tensor = r["gate"].eval() if r.get("mpo", False) else r["gate"].tensor
+            item["tensor"] = tensor_to_json(tensor)
+        records.append(item)
+    return records
 
 
 def json2qir(tcqasm: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    logger.warning(
-        "experimental feature subject to fast protocol and implementation change, try on your own risk"
-    )
-    tcqasm = deepcopy(tcqasm)
+    """
+    Transform the output of :py:func:`qir2json` back to qir, gates are
+    restored from the gate function and parameters.
+
+    :param tcqasm: json compatible list of dicts
+    :type tcqasm: List[Dict[str, Any]]
+    :return: qir which can be used by ``Circuit.from_qir``
+    :rtype: List[Dict[str, Any]]
+    """
     qir = []
     for d in tcqasm:
-        param = d.get("parameters", {})
-        for k, v in param.items():
-            # tree_map doesn't work here since the end leaves are list
-            param[k] = json_to_tensor(v)
-        if "matrix" in d:
-            gatem = json_to_tensor(d["matrix"])
+        params = {k: _json_to_value(v) for k, v in d.get("parameters", {}).items()}
+        item: Dict[str, Any] = {"name": d["name"], "index": tuple(d["qubits"])}
+        if d.get("is_channel", False):
+            item.update(
+                is_channel=True,
+                channel_f=getattr(channels, d["channel"]),
+                channel_parameters=params,
+                channel_unitary=d.get("unitary", False),
+            )
         else:
-            gatem = getattr(gates, d["name"])(**param)
-        qir.append(
-            {
-                "gate": gatem,
-                "index": tuple(d["qubits"]),
-                "mpo": d.get("mpo", False),
-                "split": {},
-                "parameters": param,
-                "gatef": getattr(gates, d["name"]),
-                "name": d["name"],
-            }
-        )
+            item.update(
+                gatef=getattr(gates, d.get("gatef", d["name"])),
+                parameters=params,
+                mpo=d.get("mpo", False),
+                diagonal=d.get("diagonal", False),
+                split={},
+            )
+        qir.append(item)
     return qir
 
 
@@ -766,29 +813,24 @@ def eqasm2tc(
 
 def qiskit_from_qasm_str_ordered_measure(qasm_str: str) -> Any:
     """
-    qiskit ``from_qasm_str`` method cannot keep the order of measure as the qasm file,
-    we provide this alternative function in case the order of measure instruction matters
+    Parse OpenQASM in source order, including measurements interleaved with gates.
 
     :param qasm_str: open qasm str
     :type qasm_str: str
     :return: ``qiskit.circuit.QuantumCircuit``
     :rtype: Any
+    :raises ValueError: if multiple measurements write to the same classical bit
     """
-    measure_sequence = []
-    qasm_instruction = []
-    for line in qasm_str.split("\n"):
-        if line.startswith("measure"):
-            index = int(line.split(" ")[1][2:-1])
-            cindex = int(line.split(" ")[3].strip(";").split("[")[1][:-1])
-            # sometimes we have qasm as "measure q[3] -> meas[0];"
-
-            measure_sequence.append((index, cindex))
-        else:
-            qasm_instruction.append(line)
-
-    qc = QuantumCircuit.from_qasm_str("\n".join(qasm_instruction))
-    for qid, cid in measure_sequence:
-        qc.measure(qid, cid)
+    qc = QuantumCircuit.from_qasm_str(qasm_str)
+    measured_bits = set()
+    for inst in qc.data:
+        if inst.operation.name == "measure":
+            bit = inst.clbits[0]
+            if bit in measured_bits:
+                raise ValueError(
+                    f"Multiple measurements write to classical bit {qc.find_bit(bit).index}"
+                )
+            measured_bits.add(bit)
     return qc
 
 
@@ -908,7 +950,7 @@ def stim2tc(
         # Measurement & Reset (Z-basis)
         if name in ["M", "MEASURE", "MZ"]:
             for q in targets:
-                c.measure_instruction(q)
+                c.measure_instruction(q, p=args[0] if args else 0.0)
             continue
         if name in ["R", "RZ"]:
             for q in targets:
@@ -916,7 +958,7 @@ def stim2tc(
             continue
         if name in ["MR", "MRZ"]:
             for q in targets:
-                c.measure_instruction(q)
+                c.measure_instruction(q, p=args[0] if args else 0.0)
                 c.reset_instruction(q)
             continue
 
@@ -924,7 +966,7 @@ def stim2tc(
         if name == "MX":
             for q in targets:
                 c.h(q)
-                c.measure_instruction(q)
+                c.measure_instruction(q, p=args[0] if args else 0.0)
                 c.h(q)
             continue
         if name == "RX":
@@ -936,7 +978,7 @@ def stim2tc(
         if name == "MRX":
             for q in targets:
                 c.h(q)
-                c.measure_instruction(q)
+                c.measure_instruction(q, p=args[0] if args else 0.0)
                 c.reset_instruction(q)
                 c.h(q)
             continue
@@ -946,7 +988,7 @@ def stim2tc(
             for q in targets:
                 c.sdg(q)
                 c.h(q)
-                c.measure_instruction(q)
+                c.measure_instruction(q, p=args[0] if args else 0.0)
                 c.h(q)
                 c.s(q)
             continue
@@ -962,7 +1004,7 @@ def stim2tc(
             for q in targets:
                 c.sdg(q)
                 c.h(q)
-                c.measure_instruction(q)
+                c.measure_instruction(q, p=args[0] if args else 0.0)
                 c.reset_instruction(q)
                 c.h(q)
                 c.s(q)

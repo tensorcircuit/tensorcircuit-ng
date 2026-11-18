@@ -1091,7 +1091,7 @@ def test_from_circuit_ordering(backend):
     stc = StabilizerTCircuit.from_circuit(c)
 
     names = [d["name"].upper() for d in stc._qir]
-    # translation._merge_extra_qir logic: extra instructions at pos i come BEFORE qir[i]
+    # AbstractCircuit._merge_extra_qir logic: extra instructions at pos i come BEFORE qir[i]
     expected = ["H", "MEASURE", "RESET", "X"]
     assert names == expected
 
@@ -1659,3 +1659,6 @@ def test_zx_expectation_cache_normalization_and_mutation(jaxb):
     c.x_error(0, 0.2)
     for nmc in [1000, 2000]:
         np.testing.assert_allclose(c.expectation_ps(z=[0, 1], nmc=nmc), -0.6, atol=0.1)
+    c.delay_instruction(0, duration=10)
+    with pytest.raises(ValueError, match="Unknown instruction name: 'DELAY'"):
+        c.expectation_ps(z=[0, 1])

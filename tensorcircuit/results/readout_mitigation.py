@@ -243,8 +243,10 @@ class ReadoutMit:
         pro = list_properties(device)
 
         for q in qubits:
-            error01 = pro["bits"][q]["ReadoutF0Err"]
-            error10 = pro["bits"][q]["ReadoutF1Err"]
+            error01 = pro["bits"][q].get("ReadoutF0Err")
+            error10 = pro["bits"][q].get("ReadoutF1Err")
+            if error01 is None or error10 is None:
+                raise ValueError("No readout error of qubit %s from %s" % (q, device))
             readout_single = np.array(
                 [
                     [1 - error01, error10],
@@ -455,6 +457,12 @@ class ReadoutMit:
             logical_positional_mapping = {
                 v: k for k, v in positional_logical_mapping.items()
             }
+            if len(logical_positional_mapping) < len(positional_logical_mapping):
+                raise ValueError(
+                    "Readout mitigation does not support a qubit measured more than "
+                    "once, got positional_logical_mapping %s"
+                    % positional_logical_mapping
+                )
             use_position_qubits = [logical_positional_mapping[lq] for lq in qubits]
 
         if logical_physical_mapping is None:
