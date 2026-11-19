@@ -128,6 +128,8 @@ class torchqr(torch.autograd.Function):
     Customized backward of qr for better numerical stability
     """
 
+    generate_vmap_rule = True
+
     @staticmethod
     def forward(a: Array) -> Any:
         q, r = torch.linalg.qr(a, mode="reduced")

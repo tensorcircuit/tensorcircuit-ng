@@ -1624,6 +1624,36 @@ def test_qr_wide_ad(backend, highp):
     np.testing.assert_allclose(float(grad_ad), grad_num, atol=1e-5)
 
 
+def test_torchqr_vmap(torchb):
+    import torch
+    from tensorcircuit.backends.pytorch_ops import torchqr
+
+    inputs = torch.randn(6, 4, 4, dtype=torch.complex64)
+    q, r = torch.func.vmap(torchqr.apply)(inputs)
+    assert q.shape == (6, 4, 4)
+    assert r.shape == (6, 4, 4)
+    assert torch.allclose(q @ r, inputs, atol=1e-4)
+
+
+def test_torchqr_vmap_grad_matches_eager(torchb):
+    import torch
+    from tensorcircuit.backends.pytorch_ops import torchqr
+
+    inputs = torch.randn(3, 4, 4, dtype=torch.complex64)
+
+    def loss(a):
+        q, r = torchqr.apply(a)
+        return (q @ r).abs().sum()
+
+    g_batch = torch.func.vmap(torch.func.grad(loss))(inputs)
+    assert g_batch.shape == (3, 4, 4)
+    assert torch.isfinite(g_batch.real).all()
+    for i in range(inputs.shape[0]):
+        a = inputs[i].clone().requires_grad_(True)
+        loss(a).backward()
+        assert torch.allclose(g_batch[i], a.grad, atol=1e-4)
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_sparse_methods(backend):
     values = tc.backend.convert_to_tensor(np.array([1.0, 2.0]))
