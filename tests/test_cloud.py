@@ -287,18 +287,41 @@ def test_batch_exp_ps():
     )
 
 
-def test_batch_exp_ps_with_idle_qubit():
-    c = tc.Circuit(2)
-    c.h(0)
+def test_batch_exp_ps_with_idle_qubit(npb):
+    c = tc.Circuit(3, inputs=np.array([0, 0, 0, 0, 1, 0, 0, 0]))
+    c.h(2)
     result = wrapper.batch_expectation_ps(
         c,
-        [[0, 3]],
+        [[0, 3, 0], [0, 0, 3]],
         device="local::default",
         with_rem=False,
-        shots=100,
-        compile_func=lambda circuit: (circuit, {}),
+        shots=8,
+        info={"logical_physical_mapping": {0: 2, 1: 1, 2: 0}},
     )
-    np.testing.assert_allclose(result, [1])
+    np.testing.assert_allclose(result, [1, -1])
+
+
+def test_batch_exp_ps_preserves_inputs(npb):
+    psi = np.array([1, 0, 0, 1j, 0, 2, 0, 0]) / np.sqrt(6)
+    c = tc.Circuit(3, inputs=psi)
+    c.rx(0, theta=0.3)
+    pss = [[3], [1], [2]]
+    expected = wrapper.batch_expectation_ps(c, pss)
+    result = wrapper.batch_expectation_ps(
+        c,
+        pss,
+        variants=lambda ci: [ci],
+        info={"logical_physical_mapping": {0: 0}},
+    )
+    np.testing.assert_allclose(result[:, 0], expected, atol=1e-6)
+
+
+def test_reduce_and_evaluate_distinguishes_inputs(npb):
+    circuits = [tc.Circuit(1, inputs=np.array(psi)) for psi in ([1, 0], [0, 1])]
+    for c in circuits:
+        c.measure_instruction(0)
+    results = wrapper.reduce_and_evaluate(circuits, 10, _exact_counts)
+    np.testing.assert_allclose([counts.expectation(r, [0]) for r in results], [1, -1])
 
 
 def test_batch_exp_ps_with_delays():

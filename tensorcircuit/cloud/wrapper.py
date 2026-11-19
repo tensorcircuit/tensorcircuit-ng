@@ -8,6 +8,7 @@ import time
 
 import numpy as np
 
+from ..abstractcircuit import AbstractCircuit
 from ..circuit import Circuit
 from ..results import counts
 from ..results.readout_mitigation import ReadoutMit
@@ -106,28 +107,31 @@ def sample_expectation_ps(
     return counts.expectation(raw_counts, x + y + z)
 
 
+def _has_custom_inputs(c: AbstractCircuit) -> bool:
+    return any(
+        c.circuit_param.get(k) is not None for k in ("inputs", "mps_inputs", "tensors")
+    )
+
+
 def reduce_and_evaluate(
     cs: List[Circuit], shots: int, run: Callable[..., Any]
 ) -> List[counts.ct]:
-    reduced_cs = []
-    reduced_dict = {}
-    recover_dict = {}
-    # merge the same circuit, by json which keeps the delays unlike OpenQASM 2
-    for j, c in enumerate(cs):
-        key = hash(c.to_json())
-        if key not in reduced_dict:
-            reduced_dict[key] = [j]
-            reduced_cs.append(c)
-            recover_dict[key] = len(reduced_cs) - 1
+    reduced_cs: List[Circuit] = []
+    indices = {}
+    order = []
+    # JSON keeps delays, but does not encode custom input states.
+    for c in cs:
+        if _has_custom_inputs(c):
+            key = ("input", id(c))
         else:
-            reduced_dict[key].append(j)
+            key = ("gates", hash(c.to_json()))
+        if key not in indices:
+            indices[key] = len(reduced_cs)
+            reduced_cs.append(c)
+        order.append(indices[key])
 
     reduced_raw_counts = run(reduced_cs, shots)
-    raw_counts: List[Dict[str, int]] = [None] * len(cs)  # type: ignore
-    for i, c in enumerate(cs):
-        key = hash(c.to_json())
-        raw_counts[i] = reduced_raw_counts[recover_dict[key]]
-    return raw_counts
+    return [reduced_raw_counts[i] for i in order]
 
 
 def _qwc_groups(pss: Sequence[Sequence[int]]) -> Tuple[List[List[int]], Tensor]:
@@ -354,7 +358,7 @@ def batch_expectation_ps(
     for b in bindings:
         c1 = bound(c, b)
         for basis in bases:
-            c2 = Circuit.from_qir(c1.to_qir(), circuit_params={"nqubits": c1._nqubits})
+            c2 = Circuit.from_qir(c1.to_qir(), circuit_params=c1.circuit_param.copy())
             for j, i in enumerate(basis):
                 if i == 1:
                     c2.H(mapping[j])  # type: ignore
@@ -386,11 +390,20 @@ def batch_expectation_ps(
             | set(mapping.values())
         )
         index = {q: k for k, q in enumerate(active)}
-        compact = [ci.initial_mapping(index, len(active)) for ci in cs]
+        compact_mapping = {q: index[p] for q, p in mapping.items()}
+        # Gate indices alone do not identify the active qubits of a custom input.
+        compact = []
+        for ci in cs:
+            if _has_custom_inputs(ci):
+                compact.append((ci, mapping))
+            else:
+                mapped = ci.initial_mapping(index, len(active))
+                compact.append((mapped, compact_mapping))
 
         def value(j: int, i: int) -> Any:
+            circuit, positions = compact[j]
             return backend.real(
-                compact[j].expectation_ps(z=[index[mapping[q]] for q in exps[i]])
+                circuit.expectation_ps(z=[positions[q] for q in exps[i]])
             )
 
     else:
