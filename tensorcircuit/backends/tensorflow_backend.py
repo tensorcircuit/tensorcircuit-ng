@@ -1116,6 +1116,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     ) -> Any:
         if isinstance(vectorized_argnums, int):
             vectorized_argnums = (vectorized_argnums,)
+        vectorized_argnums = tuple(sorted(vectorized_argnums))
         if vectorized_argnums == (0,):  # fast shortcut
 
             def wrapper(*args: Any, **kws: Any) -> Tensor:

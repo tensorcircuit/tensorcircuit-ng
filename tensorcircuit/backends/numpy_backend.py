@@ -564,6 +564,7 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         )
         if isinstance(vectorized_argnums, int):
             vectorized_argnums = (vectorized_argnums,)
+        vectorized_argnums = tuple(sorted(vectorized_argnums))
 
         def wrapper(*args: Any, **kws: Any) -> Tensor:
             results = []
