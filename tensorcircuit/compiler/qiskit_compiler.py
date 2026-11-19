@@ -113,6 +113,7 @@ def qiskit_compile(
     output: str = "tc",
     compiled_options: Optional[Dict[str, Any]] = None,
     remove_barriers: bool = True,
+    remove_initial_resets: bool = False,
 ) -> Any:
     """
     compile the circuit using ``qiskit.transpile`` method with some tricks and hacks.
@@ -144,6 +145,9 @@ def qiskit_compile(
     :param remove_barriers: whether remove the barriers after compiling,
         defaults to True
     :type remove_barriers: bool, optional
+    :param remove_initial_resets: remove resets on known-zero qubits before passing
+        the circuit to a compiler that only supports terminal resets, defaults to False
+    :type remove_initial_resets: bool, optional
     :return: Tuple containing the output circuit and the qubit mapping info dict.
         ``positional_logical_mapping`` in the info refers to the original circuit,
         keyed by the classical bit; the output circuit keeps the classical bits,
@@ -151,7 +155,7 @@ def qiskit_compile(
     :rtype: Any
     """
     from qiskit.compiler import transpile
-    from qiskit.transpiler.passes import RemoveBarriers
+    from qiskit.transpiler.passes import RemoveBarriers, RemoveResetInZeroState
 
     symbols = {}
     if isinstance(circuit, SymbolCircuit):
@@ -170,6 +174,8 @@ def qiskit_compile(
     ncircuit = transpile(circuit, **compiled_options)
     if remove_barriers:
         ncircuit = RemoveBarriers()(ncircuit)
+    if remove_initial_resets and "reset" in ncircuit.count_ops():
+        ncircuit = RemoveResetInZeroState()(ncircuit)
 
     if output.lower() in ["qasm", "openqasm"]:
         r0 = get_qiskit_qasm(ncircuit)

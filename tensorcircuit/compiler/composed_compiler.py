@@ -2,6 +2,7 @@
 object oriented compiler pipeline
 """
 
+from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from ..utils import is_sequence
@@ -85,7 +86,7 @@ class DefaultCompiler(Compiler):
         if qiskit_compiled_options:
             compiled_options.update(qiskit_compiled_options)
         super().__init__(
-            [qiskit_compile, simple_compile],
+            [partial(qiskit_compile, remove_initial_resets=True), simple_compile],
             [compiled_options, None],  # type: ignore
         )
 

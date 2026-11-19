@@ -190,6 +190,23 @@ def test_default_compiler():
     assert c1.gate_count() == 3
 
 
+def test_default_compiler_preserves_inputs(npb):
+    pytest.importorskip("qiskit")
+    c = tc.Circuit(2, inputs=np.array([1, 2j, -1, 3]) / np.sqrt(15))
+    c.ry(0, theta=0.3)
+    compiled, _ = tc.compiler.DefaultCompiler()(c)
+    np.testing.assert_allclose(
+        np.abs(np.vdot(c.state(), compiled.state())), 1, atol=1e-6
+    )
+
+    c = tc.Circuit(1)
+    c.x(0)
+    c.reset_instruction(0)
+    c.h(0)
+    with pytest.raises(ValueError, match="middle of the circuit"):
+        tc.compiler.DefaultCompiler({"optimization_level": 0})(c)
+
+
 def test_default_compiler_places_on_the_lowest_errors():
     pytest.importorskip("qiskit")
     from tensorcircuit.compiler.qiskit_compiler import properties_to_target
