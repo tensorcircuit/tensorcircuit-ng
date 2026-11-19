@@ -86,6 +86,8 @@
 
 - `Circuit.detector_probabilities` and detector sampling with `allow_state=True` keep the `inputs` state when the circuit has mid-circuit or repeated measurements, resets, noise or readout flips.
 
+- The `local` cloud provider returns counts from mid-circuit measurements on qubit `Circuit` inputs, including resets and readout flips. Unwritten classical bits are zero, repeated writes use the last result, and batch submissions honor per-circuit shot counts.
+
 - `Circuit.to_json` / `from_json` keep noise channels, diagonal and custom-named gates, measure / reset / barrier instructions and the circuit size; the JSON layout changes accordingly.
 
 - `Circuit.from_qsim_file` interprets the mixing angle of `fs` and `fsim` gates in radians.
