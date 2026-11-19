@@ -262,6 +262,23 @@ def test_time_correlation_and_fft_conventions(npb):
     np.testing.assert_allclose(frequencies, expected_frequency, atol=2e-5)
 
 
+def test_chebyshev_time_correlation_preserves_dtype(npb):
+    diagonal = np.linspace(0.25, 0.75, 2048, dtype=np.float64)
+    state = np.zeros(diagonal.size, dtype=np.complex64)
+    state[0] = 1
+    method = tc.matrixfunc.ChebyshevConfig(8, (-1.0, 1.0))
+    times = np.linspace(0.0, 0.5, 4 * method.order, dtype=np.float32)
+
+    for query in (times[:-1], times):
+        correlation = tc.spectral.time_correlation(
+            lambda v: diagonal * v, state, state, query, method=method
+        )
+        assert correlation.dtype == state.dtype
+        np.testing.assert_allclose(
+            correlation, np.exp(-1j * diagonal[0] * query), atol=1e-6
+        )
+
+
 def test_fft_default_preserves_zero_time_sum_rule(npb):
     times = np.linspace(0.0, 20.0, 201)
     correlation = np.exp(-1.3j * times)

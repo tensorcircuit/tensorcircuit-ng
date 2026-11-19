@@ -1117,7 +1117,7 @@ def _chebyshev_bilinear(
         moments = backend.concat(
             [moments, backend.tensordot(vectors, left, axes=1)], axis=0
         )
-    return backend.tensordot(coefficients, moments, axes=1)
+    return backend.cast(backend.tensordot(coefficients, moments, axes=1), dtypestr)
 
 
 def chebyshev_moments(
