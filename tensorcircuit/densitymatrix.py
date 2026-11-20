@@ -418,10 +418,46 @@ class DMCircuit2(DMCircuit):
             index[0], int
         ):  # try best to be compatible with DMCircuit interface
             index = index[0][0]
-        super_op = kraus_to_super_gate(kraus)
+        self.apply_superoperator(kraus_to_super_gate(kraus), *index)
+
+    general_kraus = apply_general_kraus
+
+    def apply_superoperator(self, superop: Tensor, *index: int) -> None:
+        r"""
+        Apply a channel given as a superoperator on the qubits ``index``.
+        Composing gates and channels into one superoperator keeps the tensor
+        network, and thus jit compilation, the same when only their values change.
+
+        .. warning::
+
+            This is a low-level method; use it with care. The superoperator is
+            attached to the tensor network only and is **not** recorded in the
+            circuit IR. Methods that rebuild or export the circuit from the IR,
+            such as ``to_qir``, ``inverse``, ``to_circuit``, ``to_qiskit`` and
+            ``draw``, silently drop it without an error. Neither the shape nor the
+            physicality (complete positivity, trace preservation) of ``superop``
+            is checked.
+
+        :Example:
+
+        >>> c = tc.DMCircuit2(2)
+        >>> kraus = tc.channels.isotropicdepolarizingchannel(0.1, 2)
+        >>> c.apply_superoperator(tc.channels.kraus_to_super_gate(kraus), 0, 1)
+
+        :param superop: Matrix of shape :math:`[d^{2k}, d^{2k}]` for :math:`k`
+            qubits acting on the row-major vectorized density matrix, i.e.
+            :math:`\sum_j K_j \otimes K_j^*` for Kraus operators :math:`K_j`, as
+            given by :func:`tensorcircuit.channels.kraus_to_super_gate`; the row
+            and column legs are each ordered as ``index`` for the ket, then
+            ``index`` for the bra
+        :type superop: Tensor
+        :param index: The qubits the channel acts on, in the order of the legs of ``superop``
+        :type index: int
+        """
+        superop = backend.cast(backend.convert_to_tensor(superop), dtypestr)
+        index = tuple(i if i >= 0 else self._nqubits + i for i in index)
         nlegs = 4 * len(index)
-        super_op = backend.reshape(super_op, [self._d] * nlegs)
-        super_op = Gate(super_op)
+        super_op = Gate(backend.reshape(superop, [self._d] * nlegs))
         o2i = int(nlegs / 2)
         r2l = int(nlegs / 4)
         for i, ind in enumerate(index):
@@ -431,8 +467,6 @@ class DMCircuit2(DMCircuit):
             self._front[ind] = super_op.get_edge(i)
         self._nodes.append(super_op)
         setattr(self, "state_tensor", None)
-
-    general_kraus = apply_general_kraus
 
     @staticmethod
     def apply_general_kraus_delayed(

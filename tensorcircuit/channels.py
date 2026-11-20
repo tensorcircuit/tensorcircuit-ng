@@ -125,8 +125,8 @@ def isotropicdepolarizingchannel(p: float, num_qubits: int = 1) -> Sequence[Gate
     >>> tc.channels.kraus_identity_check(cs)
 
 
-    :param p: error probability
-    :type p: float
+    :param p: error probability, can be a tensor for jit and autodiff
+    :type p: Union[float, Tensor]
     :param num_qubits: number of qubits, defaults 1
     :type num_qubits: int, optional
     :return: Sequences of Gates
@@ -174,24 +174,39 @@ def generaldepolarizingchannel(
     >>> tc.channels.kraus_identity_check(cs)
 
 
-    :param p: parameter for each Pauli channel
-    :type p: Union[float, Sequence]
+    :param p: parameter for each Pauli channel, a scalar or a sequence of
+        :math:`4^n-1` values; tensors are accepted for jit and autodiff, in which
+        case the range of the values is not checked
+    :type p: Union[float, Tensor, Sequence]
     :param num_qubits: number of qubits, defaults 1
     :type num_qubits: int, optional
     :return: Sequences of Gates
     :rtype: Sequence[Gate]
     """
     m = 4**num_qubits - 1
-    if isinstance(p, float):
+    if isinstance(p, (int, float)):
         probs = [1 - m * p] + m * [p]
-    elif isinstance(p, Sequence):
+    elif isinstance(p, Sequence) and all(isinstance(pi, (int, float)) for pi in p):
         if not len(p) == m:
             raise ValueError(f"Invalid probability input {p}")
         probs = [1 - sum(p)] + list(p)
+    elif isinstance(p, Sequence):
+        if not len(p) == m:
+            raise ValueError(f"Invalid probability input {p}")
+        ps = backend.stack(
+            [backend.cast(backend.convert_to_tensor(pi), cons.rdtypestr) for pi in p]
+        )
+        probs = backend.concat([backend.reshape(1 - backend.sum(ps), [1]), ps])
     else:
-        raise ValueError("p should be float or list")
-
-    if not np.all(np.array(probs) >= 0):
+        ps = backend.cast(backend.convert_to_tensor(p), cons.rdtypestr)
+        if len(backend.shape_tuple(ps)) == 0:
+            ones = backend.ones([m], dtype=cons.rdtypestr)
+            probs = backend.concat([backend.reshape(1 - m * ps, [1]), ps * ones])
+        elif backend.shape_tuple(ps) == (m,):
+            probs = backend.concat([backend.reshape(1 - backend.sum(ps), [1]), ps])
+        else:
+            raise ValueError(f"Invalid probability input {p}")
+    if isinstance(probs, list) and not np.all(np.array(probs) >= 0):
         raise ValueError(f"Invalid probability input {p}")
 
     # paulis = [gates.i().tensor, gates.x().tensor, gates.y().tensor, gates.z().tensor]  # type: ignore
@@ -214,19 +229,13 @@ def generaldepolarizingchannel(
 
     final_shape = [-1] + [2] * (2 * num_qubits)
     tup = current.reshape(final_shape)
-
-    if len(tup) != len(probs):
-        raise ValueError(
-            f"Pauli term count ({len(tup)}) does not match probability count ({len(probs)})"
-        )
-
     tup = backend.convert_to_tensor(tup)
     tup = backend.cast(tup, dtype=cons.dtypestr)
     sqrt_probs = backend.reshape(
         _sqrt(probs), [-1] + [1] * (len(backend.shape_tuple(tup)) - 1)
     )
     weighted_paulis = sqrt_probs * tup
-    Gkarus = [Gate(weighted_paulis[i]) for i in range(len(probs))]
+    Gkarus = [Gate(weighted_paulis[i]) for i in range(m + 1)]
 
     return KrausList(Gkarus, name="depolarizing", is_unitary=True)
 
@@ -364,15 +373,20 @@ def thermalrelaxationchannel(
     :type t2: float
     :param time: gate time
     :type time: float
-    :param method: method to express error (default: "ByChoi"). When :math:`T1>T2`, choose method "ByKraus"
-        or "ByChoi" for jit. When :math:`T1<T2`,choose method "ByChoi" for jit. Users can also set method
-        as "AUTO" and never mind the relative magnitude of :math:`T1,T2`, which is not jitable.
+    :param method: method to express error (default: "ByChoi"). "ByKraus" requires :math:`T1>T2`;
+        "ByChoi" works for both. "AUTO" chooses "ByKraus" when ``t1`` and ``t2`` are Python
+        numbers with :math:`T1>T2` and "ByChoi" otherwise, so it is jitable when they are tensors.
     :type method: str, optional
     :param excitedstatepopulation: the population of  state :math:`|1\rangle` at equilibrium (default: 0)
     :type excitedstatepopulation: float, optional
     :return: A thermal_relaxation_channel
     :rtype: Sequence[Gate]
     """
+    if method == "AUTO":
+        if isinstance(t1, (int, float)) and isinstance(t2, (int, float)) and t1 > t2:
+            method = "ByKraus"
+        else:
+            method = "ByChoi"
     t1 = backend.cast(array_to_tensor(t1), dtype=cons.dtypestr)
     t2 = backend.cast(array_to_tensor(t2), dtype=cons.dtypestr)
     time = backend.cast(array_to_tensor(time), dtype=cons.dtypestr)
@@ -391,9 +405,7 @@ def thermalrelaxationchannel(
     p0 = backend.cast(array_to_tensor(p0), dtype=cons.dtypestr)
     p1 = backend.cast(array_to_tensor(p1), dtype=cons.dtypestr)
 
-    if method == "ByKraus" or (
-        method == "AUTO" and backend.real(t1) > backend.real(t2)
-    ):
+    if method == "ByKraus":
         # jit avaliable
         m0 = backend.convert_to_tensor(
             np.array([[1, 0], [0, 0]], dtype=cons.npdtype)
@@ -417,22 +429,28 @@ def thermalrelaxationchannel(
             m3,
         ]
 
-        p_reset0 = p_reset * p0
-        p_reset1 = p_reset * p1
         p_z = (
             (1 - p_reset) * (1 - backend.exp(-time * (rate2 - rate1))) / 2
         )  # must have rate2 > rate1
-        p_identity = 1 - p_z - p_reset0 - p_reset1
-        probs = [p_identity, p_z, p_reset0, p_reset0, p_reset1, p_reset1]
+        p_identity = 1 - p_z - p_reset * p0 - p_reset * p1
+        # factorized square roots keep gradients finite when p0 or p1 is zero
+        sqrt_reset0 = _sqrt(p_reset) * _sqrt(p0)
+        sqrt_reset1 = _sqrt(p_reset) * _sqrt(p1)
+        sqrt_probs = [
+            _sqrt(p_identity),
+            _sqrt(p_z),
+            sqrt_reset0,
+            sqrt_reset0,
+            sqrt_reset1,
+            sqrt_reset1,
+        ]
 
         Gkraus = []
-        for pro, paugate in zip(probs, tup):
-            Gkraus.append(Gate(_sqrt(pro) * paugate))
+        for sp, paugate in zip(sqrt_probs, tup):
+            Gkraus.append(Gate(sp * paugate))
         return KrausList(Gkraus, name="thermal_relaxation", is_unitary=False)
 
-    elif method == "ByChoi" or (
-        method == "AUTO" and backend.real(t2) >= backend.real(t1)
-    ):
+    elif method == "ByChoi":
         # jit avaliable
         choi = (1 - p1 * p_reset) * backend.convert_to_tensor(
             np.array(
@@ -466,9 +484,8 @@ def thermalrelaxationchannel(
         )
 
         nmax = 4
-        if (
-            np.abs(excitedstatepopulation - 0.0) < 1e-3
-            or np.abs(excitedstatepopulation - 1.0) < 1e-3
+        if isinstance(excitedstatepopulation, (int, float)) and (
+            excitedstatepopulation in (0, 1)
         ):
             nmax = 3
 
@@ -480,7 +497,7 @@ def thermalrelaxationchannel(
         raise ValueError(
             f"No valid method is provided for thermalrelaxationchannel: "
             f"got method={method!r}, expected one of "
-            f"['ByChoi', 'ByKraus', 'AUTO']. Note 'AUTO' is not jitable."
+            f"['ByChoi', 'ByKraus', 'AUTO']."
         )
 
 
