@@ -842,6 +842,23 @@ def test_backend_methods_2(backend):
     assert tc.backend.dtype(o) == "complex64"
 
 
+@pytest.mark.parametrize("backend", [lf("torchb")])
+def test_backend_dtype_compiled_round(backend):
+    import torch
+
+    def ones_like_round(a):
+        return torch.ones_like(a, dtype=getattr(torch, tc.backend.dtype(a)))
+
+    compiled = torch.compile(
+        ones_like_round, fullgraph=True, dynamic=False, backend="eager"
+    )
+    for dtype_name in ("complex64", "complex128", "float32"):
+        a = torch.ones(3, dtype=getattr(torch, dtype_name))
+        out = compiled(a)
+        assert out.dtype == a.dtype
+        np.testing.assert_allclose(tc.backend.numpy(out), np.ones(3))
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_probability_sample_two_level(backend):
     n, shots = 2**18, 20000

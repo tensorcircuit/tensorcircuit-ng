@@ -70,6 +70,8 @@
 
 ### Fixed
 
+- `PyTorchBackend.dtype` spells the dtype via `str(a.dtype)` instead of `a.dtype.__str__()`, so reading the backend dtype no longer graph-breaks `torch.compile` rounds.
+
 - Depolarizing and thermal relaxation channels work under jit and autodiff with tensor parameters.
 
 - `thermalrelaxationchannel(..., "ByChoi")` keeps small nonzero excited-state populations.

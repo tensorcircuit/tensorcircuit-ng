@@ -517,7 +517,7 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         return torchlib.zeros_like(a)
 
     def dtype(self, a: Tensor) -> str:
-        return a.dtype.__str__().split(".")[-1]  # type: ignore
+        return str(a.dtype).split(".")[-1]
 
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return torchlib.stack(a, dim=axis)
