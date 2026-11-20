@@ -44,7 +44,10 @@ def lightcone_compile(
         raise ValueError("observable_qubits contains an index outside the circuit")
     if len(set(normalized_observable_qubits)) != len(normalized_observable_qubits):
         raise ValueError("observable_qubits must not contain duplicates")
-    if circuit.inputs is not None:
+    if (
+        circuit.inputs is not None
+        or circuit.circuit_param.get("mps_inputs") is not None
+    ):
         raise NotImplementedError(
             "lightcone_compile requires the default product input state"
         )

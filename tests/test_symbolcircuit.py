@@ -146,6 +146,14 @@ def test_lightcone_compile_rejects_channels(SymbolCircuit):
         tc.compiler.lightcone_compile(sc, [0])
 
 
+def test_lightcone_compile_rejects_replaced_mps_inputs(SymbolCircuit):
+    sc = SymbolCircuit(1, inputs=np.array([0, 1], dtype=object))
+    sc.replace_mps_inputs(tc.Circuit(1).quvector())
+
+    with pytest.raises(NotImplementedError, match="default product input"):
+        tc.compiler.lightcone_compile(sc, [0])
+
+
 def test_lightcone_compile_preserves_custom_gate_name(SymbolCircuit, sym):
     theta = sym["theta"]
     sc = SymbolCircuit(2)

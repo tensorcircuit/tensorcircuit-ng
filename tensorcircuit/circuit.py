@@ -184,6 +184,9 @@ class Circuit(BaseCircuit):
         self.coloring_nodes(new_nodes, flag="inputs")
         self._nodes = new_nodes + self._nodes[self._start_index :]
         self._start_index = len(new_nodes)
+        self.inputs = None
+        self.mps_inputs = mps_inputs.copy()
+        self.circuit_param.update(inputs=None, mps_inputs=self.mps_inputs, tensors=None)
         self.state_tensor = None
 
     # TODO(@refraction-ray): add noise support in IR

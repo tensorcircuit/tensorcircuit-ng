@@ -714,22 +714,27 @@ def test_circuit_add_demo():
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_replace_mps_inputs_invalidates_expectation_cache(backend):
-    c = tc.Circuit(1)
+    c = tc.Circuit(1, inputs=tc.array_to_tensor([1, 0]))
     np.testing.assert_allclose(c.expectation_ps(z=[0]), 1)
-    source = tc.Circuit(1)
-    source.x(0)
-    c.replace_mps_inputs(source.quvector())
+    source = tc.Circuit(1, inputs=tc.array_to_tensor([0, 1])).quvector()
+    c.replace_mps_inputs(source)
+    source.out_edges[0].node1.tensor = tc.array_to_tensor([1, 0])
     np.testing.assert_allclose(c.expectation_ps(z=[0]), -1)
+    np.testing.assert_allclose(c.copy().state(), [0, 1])
+    c.measure_instruction(0)
+    np.testing.assert_allclose(c.sample_measurements(shots=3, seed=21), np.ones((3, 1)))
 
 
-def test_circuit_replace_inputs():
+@pytest.mark.parametrize("circuit_type", [tc.Circuit, tc.DMCircuit])
+def test_circuit_replace_inputs(npb, circuit_type):
     n = 3
-    c = tc.Circuit(n, inputs=np.zeros([2**n]))
+    c = circuit_type(n, inputs=np.zeros([2**n]))
     for i in range(n):
         c.H(i)
     evenstate = np.ones([2**n])
     evenstate /= np.linalg.norm(evenstate)
     c.replace_inputs(evenstate)
+    np.testing.assert_allclose(c.copy().state(), c.state(), atol=1e-6)
     for i in range(n):
         np.testing.assert_allclose(c.expectation_ps(z=[i]), 1.0, atol=1e-5)
 
