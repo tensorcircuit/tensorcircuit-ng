@@ -38,6 +38,14 @@ def test_vmap_np():
     assert tc.backend.numpy(r)[0, 0] == 3.0
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_vmap_reordered_arguments(backend):
+    K = tc.backend
+    f = K.vmap(lambda x, y: x - 2 * y, vectorized_argnums=(1, 0))
+    result = f(K.convert_to_tensor([1.0, 2.0]), K.convert_to_tensor([4.0, 8.0]))
+    np.testing.assert_allclose(K.numpy(result), [-7, -14])
+
+
 def test_vmap_jax(jaxb):
     r = universal_vmap()
     assert r.shape == (20, 1)
