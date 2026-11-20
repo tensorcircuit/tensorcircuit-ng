@@ -13,6 +13,108 @@ sys.path.insert(0, modulepath)
 import tensorcircuit as tc
 
 
+def test_mesolve_amplitude_damping(jaxb, highp):
+    pytest.importorskip("diffrax")
+    K = tc.backend
+    times = np.array([0.2, 0.3, 0.75, 1.4])
+    excited = np.diag([0.0, 1.0])
+    lowering = K.convert_to_tensor([[0.0, 1.0], [0.0, 0.0]])
+
+    def solve(rate, callback=None):
+        c_ops = [K.sqrt(rate) * lowering]
+        return tc.timeevol.mesolve(
+            np.zeros_like(excited), excited, times, c_ops=c_ops, callback=callback
+        )
+
+    def population(rate):
+        return solve(rate, lambda rho: K.real(rho[1, 1]))
+
+    rate = 0.7
+    expected = np.exp(-rate * (times - times[0]))
+    np.testing.assert_allclose(K.jit(population)(rate), expected, atol=2e-7)
+    states = np.stack([np.diag([1 - p, p]) for p in expected])
+    np.testing.assert_allclose(solve(rate), states, atol=2e-7)
+
+    rates = np.array([0.3, 0.7])
+    gradients = K.jit(K.vmap(K.grad(lambda r: population(r)[-1])))(rates)
+    elapsed = times[-1] - times[0]
+    np.testing.assert_allclose(
+        gradients, -elapsed * np.exp(-rates * elapsed), atol=2e-6
+    )
+
+
+def test_mesolve_driven_coherence(jaxb, highp):
+    pytest.importorskip("diffrax")
+    K = tc.backend
+    times = np.array([0.0, 0.35, 0.8, 1.2])
+    z = tc.gates.z().tensor
+    plus = np.full((2, 2), 0.5)
+    # H(t) = t Z / 2 and C(t) = sqrt(rate) t Z commute at all times.
+    for rate in (0.0, 0.4):
+        jumps = [lambda t, r: K.sqrt(r) * t * z] if rate else []
+        states = tc.timeevol.mesolve(
+            lambda t, r: t * z / 2,
+            plus,
+            times,
+            jumps,
+            None,
+            rate,
+            rtol=1e-9,
+            atol=1e-11,
+        )
+        coherence = 0.5 * np.exp(-0.5j * times**2 - 2 * rate * times**3 / 3)
+        np.testing.assert_allclose(states[:, 0, 1], coherence, atol=2e-9)
+        np.testing.assert_allclose(states[:, 1, 0], coherence.conj(), atol=2e-9)
+        np.testing.assert_allclose(np.trace(states, axis1=1, axis2=2), 1.0)
+
+
+def test_mesolve_identity_collapse(jaxb):
+    pytest.importorskip("diffrax")
+    # A collapse operator proportional to the identity has zero dissipator.
+    t = 0.25
+    states = tc.timeevol.mesolve(
+        tc.gates.y().tensor, np.full((2, 2), 0.5), t, [2**14 * np.eye(2)]
+    )
+    np.testing.assert_allclose(states[-1, 0, 0], (1 - np.sin(2 * t)) / 2, atol=2e-6)
+
+
+def test_mesolve_square_pulse(jaxb):
+    pytest.importorskip("diffrax")
+    x = tc.gates.x().tensor
+    start, stop = 0.375, 0.385
+
+    def pulse(t):
+        return tc.backend.where((start <= t) & (t < stop), 25 * np.pi, 0.0) * x
+
+    states = tc.timeevol.mesolve(
+        pulse, np.diag([0.0, 1.0]), 1.0, dtmax=0.001, jump_ts=[start, stop]
+    )
+    np.testing.assert_allclose(states[-1, 1, 1], 0.5, atol=2e-5)
+
+
+def test_mesolve_localized_pulse(jaxb, highp):
+    pytest.importorskip("diffrax")
+    K = tc.backend
+    x = tc.gates.x().tensor
+    ground = np.diag([1.0, 0.0])
+
+    def pulse(t, amplitude):
+        # Unit amplitude gives pulse area pi/4 over [3/8, 1/2].
+        phase = 8 * (t - 3 / 8)
+        envelope = K.where((phase > 0) & (phase < 1), K.sin(np.pi * phase) ** 2, 0.0)
+        return amplitude * 4 * np.pi * envelope * x
+
+    @K.jit
+    @K.value_and_grad
+    def population(amplitude):
+        states = tc.timeevol.mesolve(
+            pulse, ground, 1.0, None, None, amplitude, dt0=1.0, dtmax=1 / 64
+        )
+        return K.real(states[-1, 1, 1])
+
+    np.testing.assert_allclose(population(1.0), [0.5, np.pi / 4], atol=2e-5)
+
+
 def test_circuit_ode_evol(highp, jaxb):
     try:
         import diffrax  # pylint: disable=unused-import
