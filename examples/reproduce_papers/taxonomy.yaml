@@ -81,6 +81,9 @@ tc_features:
   density-matrix:
     label: "Density Matrix"
     api: "tc.DMCircuit"
+  fermionic-gaussian-state:
+    label: "Fermionic Gaussian State"
+    api: "tc.FGSSimulator"
   stabilizer:
     label: "Stabilizer Simulation"
     api: "tc.StabilizerCircuit"
