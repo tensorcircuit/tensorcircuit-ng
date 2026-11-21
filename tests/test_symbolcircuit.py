@@ -1422,12 +1422,11 @@ def test_bind_with_fixed_and_variable_gates(SymbolCircuit: Any, sym: Any) -> Non
     assert sc2.gate_count() == 2
 
 
-def test_bind_propagates_inputs(SymbolCircuit: Any, sym: Any) -> None:
+def test_bind_propagates_inputs(SymbolCircuit: Any, sym: Any, jaxb: Any) -> None:
     """bind() must propagate ``inputs``."""
     theta = sym["theta"]
 
-    inputs = np.zeros(4, dtype=complex)
-    inputs[3] = 1.0
+    inputs = np.array([0, 0, 1, 0], dtype=object)
 
     sc = SymbolCircuit(2, inputs=inputs)
     sc.rx(0, theta=theta)
@@ -1439,6 +1438,13 @@ def test_bind_propagates_inputs(SymbolCircuit: Any, sym: Any) -> None:
     assert sc2.inputs is not None
     bound = sc2.expectation_ps(z=[0])
     assert sympy.simplify(bound + 1) == 0
+
+    mapped = sc.initial_mapping({0: 2, 1: 0}, n=3)
+    np.testing.assert_allclose(
+        tc.backend.numpy(mapped.to_circuit({theta: 0.0}).state()),
+        [0, 1, 0, 0, 0, 0, 0, 0],
+        atol=1e-6,
+    )
 
 
 # -- to_qiskit coverage (various gate branches) --------------------------------
