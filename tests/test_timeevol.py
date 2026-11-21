@@ -92,6 +92,54 @@ def test_mesolve_mixed_scale_collapse(jaxb, local):
     )
 
 
+@pytest.mark.parametrize("n", [1, 6])
+@pytest.mark.parametrize("weak", ["y", "z"])
+def test_mesolve_mixed_scale_local_channels(jaxb, n, weak):
+    pytest.importorskip("diffrax")
+    d = 2**n
+    channels = [2**14 * tc.gates.x().tensor, getattr(tc.gates, weak)().tensor]
+    states = tc.timeevol.mesolve(
+        np.zeros((d, d)),
+        np.full((d, d), 1 / d),
+        0.25,
+        local_c_ops={(0,): channels},
+    )
+    coherence = np.exp(-0.5)
+    expected = np.kron(
+        [[1, coherence], [coherence, 1]], np.full((d // 2, d // 2), 1 / d)
+    )
+    np.testing.assert_allclose(states[-1], expected, rtol=0, atol=2e-6)
+
+
+def test_mesolve_local_channel_matrix_gradient(jaxb, highp):
+    pytest.importorskip("diffrax")
+    K = tc.backend
+
+    def loss(epsilon, local):
+        collapse = tc.gates.z().tensor + epsilon * tc.gates.x().tensor
+        options = (
+            {"local_c_ops": {(0,): [collapse]}}
+            if local
+            else {"c_ops": [K.kron(collapse, np.eye(32))]}
+        )
+        states = tc.timeevol.mesolve(
+            np.zeros((64, 64)),
+            np.full((64, 64), 1 / 64),
+            0.1,
+            rtol=1e-12,
+            atol=1e-12,
+            **options,
+        )
+        return K.real(states[-1, 0, 0])
+
+    value, grad = K.jit(K.value_and_grad(lambda e: loss(e, True)))(0.0)
+    dense_value, dense_grad = K.jit(K.value_and_grad(lambda e: loss(e, False)))(0.0)
+    np.testing.assert_allclose(
+        [value, grad], [dense_value, dense_grad], rtol=0, atol=1e-12
+    )
+    np.testing.assert_allclose(grad, (1 - np.exp(-0.2)) / 64, rtol=0, atol=1e-12)
+
+
 def test_mesolve_local_collapse(jaxb, highp):
     pytest.importorskip("diffrax")
     K = tc.backend

@@ -496,7 +496,7 @@ def _mesolve_matrix(value: Tensor, dimension: int) -> Tensor:
 
 def _local_dissipator(
     sites: Tuple[int, ...], operators: Sequence[Tensor], n: int
-) -> Tuple[Tensor, Callable[[Tensor], Tensor]]:
+) -> Callable[[Tensor], Tensor]:
     if not isinstance(sites, tuple):
         raise TypeError("Local collapse sites must be a tuple, e.g. (0,).")
     if callable(operators):
@@ -511,7 +511,7 @@ def _local_dissipator(
         )
     d = 2 ** len(sites)
     eye = backend.eye(d, dtype=dtypestr)
-    generator = backend.zeros((d * d, d * d), dtype=dtypestr)
+    generators = []
     for op in operators:
         if callable(op):
             raise TypeError("local_c_ops requires static matrices, not callables.")
@@ -519,24 +519,32 @@ def _local_dissipator(
         decay = backend.adjoint(c) @ c
         # Row-major vectorization: vec(A rho B) = (A ⊗ Bᵀ) vec(rho).
         loss = backend.kron(decay, eye) + backend.kron(eye, backend.transpose(decay))
-        generator = generator + (backend.kron(c, backend.conj(c)) - 0.5 * loss)
+        generators.append(backend.kron(c, backend.conj(c)) - 0.5 * loss)
+
+    if not generators:
+        return lambda rho: backend.zeros(rho.shape, dtype=dtypestr)
+    # Reduce after contraction so large rates cannot erase weak channel coefficients.
+    generator = backend.stack(generators)
+    channels = len(generators)
 
     if len(sites) == 1 and n >= 6:
         before, after = 2 ** sites[0], 2 ** (n - sites[0] - 1)
         shape = (before, 2, after, before, 2, after)
-        diagonal = backend.reshape(backend.diagonal(generator), (1, 2, 1, 1, 2, 1))
-        diagonal = backend.reshape(
-            diagonal * backend.ones(shape, dtype=dtypestr), (2**n, 2**n)
-        )
 
         def apply_single(rho: Tensor) -> Tensor:
             blocks = backend.reshape(rho, shape)
             outputs = [
-                sum(
-                    generator[2 * a + b, 2 * c + d] * blocks[:, c, :, :, d, :]
-                    for c in range(2)
-                    for d in range(2)
-                    if (a, b) != (c, d)
+                backend.sum(
+                    sum(
+                        backend.reshape(
+                            generator[:, 2 * a + b, 2 * c + d],
+                            (channels, 1, 1, 1, 1),
+                        )
+                        * blocks[None, :, c, :, :, d, :]
+                        for c in range(2)
+                        for d in range(2)
+                    ),
+                    axis=0,
                 )
                 for a in range(2)
                 for b in range(2)
@@ -550,7 +558,7 @@ def _local_dissipator(
             )
             return backend.reshape(result, rho.shape)
 
-        return diagonal, apply_single
+        return apply_single
 
     active = sites + tuple(n + i for i in sites)
     order = active + tuple(i for i in range(2 * n) if i not in active)
@@ -559,12 +567,15 @@ def _local_dissipator(
 
     def apply(rho: Tensor) -> Tensor:
         local = backend.transpose(backend.reshape(rho, legs), order)
-        result = generator @ backend.reshape(local, (d * d, -1))
+        result = backend.reshape(generator, (-1, d * d)) @ backend.reshape(
+            local, (d * d, -1)
+        )
+        result = backend.sum(backend.reshape(result, (channels, d * d, -1)), axis=0)
         return backend.reshape(
             backend.transpose(backend.reshape(result, legs), inverse), rho.shape
         )
 
-    return 0, apply
+    return apply
 
 
 def mesolve(
@@ -607,8 +618,9 @@ def mesolve(
         collapse matrices on those sites. Site 0 is the most significant qubit.
         Each matrix includes the square root of its rate and may depend on
         differentiable parameters. These channels add to ``c_ops``. For a
-        support of dimension ``d``, the solver constructs one ``(d², d²)``
-        dissipator and applies it to the corresponding density-matrix axes.
+        support of dimension ``d``, the solver constructs a ``(d², d²)``
+        generator per channel and applies them in a batch to the corresponding
+        density-matrix axes. Channel results are summed after application.
     :type local_c_ops: Optional[Mapping[Tuple[int, ...], Sequence[Tensor]]]
     :param solver_kws: Additional keyword arguments to pass to the ODE solver.
 
@@ -667,7 +679,6 @@ def mesolve(
         if 2**n != dimension:
             raise ValueError("Local collapse operators require a qubit density matrix.")
         local = [_local_dissipator(sites, ops, n) for sites, ops in local_c_ops.items()]
-    diagonal = sum(term[0] for term in local)
 
     def lindblad(rho: Tensor, t: Tensor, *params: Any) -> Tensor:
         ht = prepare_h(h(t, *params)) if driven else h
@@ -683,11 +694,8 @@ def mesolve(
         ):
             dissipator = c @ rho @ cd - 0.5 * (cdc @ rho + rho @ cdc)
             derivative = derivative + dissipator
-        if local:
-            dissipator = diagonal * rho
-            for _, apply in local:
-                dissipator = dissipator + apply(rho)
-            derivative = derivative + dissipator
+        for apply in local:
+            derivative = derivative + apply(rho)
         return derivative
 
     solver_kws = {**solver_kws, "ode_backend": "diffrax"}

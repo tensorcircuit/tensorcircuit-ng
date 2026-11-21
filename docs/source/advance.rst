@@ -517,6 +517,7 @@ vectors through a Hermitian ``LinearOperator``.
     )
 
 The order of a site tuple gives the tensor-factor order of its matrices.
+Channels on the same support are applied in a batch and summed afterward.
 Build the local matrices inside a differentiated function to vary their rates.
 Time-dependent Hamiltonians may also return a Hermitian ``LinearOperator``.
 Wrap MVP functions with ``aslinearoperator(mvp, shape=(D, D))``. A bare
