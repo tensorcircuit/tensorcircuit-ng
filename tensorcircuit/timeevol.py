@@ -2,7 +2,7 @@
 Analog time evolution engines
 """
 
-from typing import Any, Tuple, Optional, Callable, Sequence, Dict, Union
+from typing import Any, Tuple, Optional, Callable, Sequence, Dict, Mapping, Union
 from functools import partial
 import math
 import warnings
@@ -12,7 +12,7 @@ import numpy as np
 from .cons import backend, dtypestr, rdtypestr, contractor
 from .gates import Gate
 from . import matrixfunc
-from .quantum import aslinearoperator
+from .quantum import LinearOperator, aslinearoperator
 from .utils import arg_alias
 
 Tensor = Any
@@ -484,6 +484,52 @@ def _solve_ode(
     return s1
 
 
+def _mesolve_matrix(value: Tensor, dimension: int) -> Tensor:
+    value = backend.convert_to_tensor(value, dtype=dtypestr)
+    shape = backend.shape_tuple(value)
+    if shape != (dimension, dimension):
+        raise ValueError(
+            f"Expected an operator of shape {(dimension, dimension)}, got {shape}."
+        )
+    return value
+
+
+def _local_dissipator(
+    sites: Tuple[int, ...], operators: Sequence[Tensor], n: int
+) -> Callable[[Tensor], Tensor]:
+    if (
+        not sites
+        or len(set(sites)) != len(sites)
+        or any(i < 0 or i >= n for i in sites)
+    ):
+        raise ValueError(
+            "Local collapse sites must be distinct qubit indices in range."
+        )
+    d = 2 ** len(sites)
+    eye = backend.eye(d, dtype=dtypestr)
+    generator = backend.zeros((d * d, d * d), dtype=dtypestr)
+    for op in operators:
+        c = _mesolve_matrix(op, d)
+        decay = backend.adjoint(c) @ c
+        # Row-major vectorization: vec(A rho B) = (A ⊗ Bᵀ) vec(rho).
+        loss = backend.kron(decay, eye) + backend.kron(eye, backend.transpose(decay))
+        generator = generator + (backend.kron(c, backend.conj(c)) - 0.5 * loss)
+
+    active = sites + tuple(n + i for i in sites)
+    order = active + tuple(i for i in range(2 * n) if i not in active)
+    inverse = tuple(order.index(i) for i in range(2 * n))
+    legs = (2,) * (2 * n)
+
+    def apply(rho: Tensor) -> Tensor:
+        local = backend.transpose(backend.reshape(rho, legs), order)
+        result = generator @ backend.reshape(local, (d * d, -1))
+        return backend.reshape(
+            backend.transpose(backend.reshape(result, legs), inverse), rho.shape
+        )
+
+    return apply
+
+
 def mesolve(
     hamiltonian: Union[Tensor, Callable[..., Tensor]],
     rho0: Tensor,
@@ -491,6 +537,7 @@ def mesolve(
     c_ops: Optional[Sequence[Union[Tensor, Callable[..., Tensor]]]] = None,
     callback: Optional[Callable[..., Tensor]] = None,
     *args: Any,
+    local_c_ops: Optional[Mapping[Tuple[int, ...], Sequence[Tensor]]] = None,
     **solver_kws: Any,
 ) -> Tensor:
     """
@@ -501,8 +548,9 @@ def mesolve(
 
     Note: This function currently only supports the JAX backend and requires ``diffrax``.
 
-    :param hamiltonian: Dense Hamiltonian matrix, or a function returning it with signature
-        ``hamiltonian(time, *args) -> Tensor``.
+    :param hamiltonian: Dense Hamiltonian matrix, Hermitian
+        :class:`~tensorcircuit.quantum.LinearOperator`, or a function returning
+        either representation with signature ``hamiltonian(time, *args)``.
     :type hamiltonian: Union[Tensor, Callable[..., Tensor]]
     :param rho0: The initial density matrix of shape ``(D, D)`` at the first time point.
     :type rho0: Tensor
@@ -515,6 +563,13 @@ def mesolve(
     :type callback: Optional[Callable[..., Tensor]]
     :param args: Additional arguments to pass to the time-dependent operators.
     :type args: tuple | list
+    :param local_c_ops: Optional mapping from ordered qubit indices to static
+        collapse matrices on those sites. Site 0 is the most significant qubit.
+        Each matrix includes the square root of its rate and may depend on
+        differentiable parameters. These channels add to ``c_ops``. For a
+        support of dimension ``d``, the solver constructs one ``(d², d²)``
+        dissipator and applies it to the corresponding density-matrix axes.
+    :type local_c_ops: Optional[Mapping[Tuple[int, ...], Sequence[Tensor]]]
     :param solver_kws: Additional keyword arguments to pass to the ODE solver.
 
         - ``rtol`` (default: 1e-8) and ``atol`` (default: 1e-8) are used to determine how accurately you would
@@ -544,34 +599,51 @@ def mesolve(
     if len(shape) != 2 or shape[0] != shape[1] or not shape[0]:
         raise ValueError("rho0 must be a nonempty square density matrix.")
 
-    def matrix(value: Tensor) -> Tensor:
-        value = backend.convert_to_tensor(value, dtype=dtypestr)
-        operator_shape = backend.shape_tuple(value)
-        if operator_shape != shape:
-            raise ValueError(
-                f"Expected an operator of shape {shape}, got {operator_shape}."
-            )
-        return value
+    dimension = shape[0]
+
+    def prepare_h(value: Tensor) -> Tensor:
+        if isinstance(value, LinearOperator):
+            if value.shape != shape:
+                raise ValueError(
+                    f"Expected a Hamiltonian of shape {shape}, got {value.shape}."
+                )
+            return value
+        return _mesolve_matrix(value, dimension)
 
     def collapse_terms(value: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
-        c = matrix(value)
+        c = _mesolve_matrix(value, dimension)
         cd = backend.adjoint(c)
         return c, cd, cd @ c
 
-    h = hamiltonian if callable(hamiltonian) else matrix(hamiltonian)
+    driven = callable(hamiltonian) and not isinstance(hamiltonian, LinearOperator)
+    h = hamiltonian if driven else prepare_h(hamiltonian)
     if c_ops is None:
         c_ops = ()
     static = tuple(collapse_terms(c) for c in c_ops if not callable(c))
     dynamic = tuple(c for c in c_ops if callable(c))
+    local = []
+    if local_c_ops:
+        n = dimension.bit_length() - 1
+        if 2**n != dimension:
+            raise ValueError("Local collapse operators require a qubit density matrix.")
+        local = [_local_dissipator(sites, ops, n) for sites, ops in local_c_ops.items()]
 
     def lindblad(rho: Tensor, t: Tensor, *params: Any) -> Tensor:
-        ht = matrix(h(t, *params)) if callable(h) else h
-        derivative = -1j * (ht @ rho - rho @ ht)
+        ht = prepare_h(h(t, *params)) if driven else h
+        if isinstance(ht, LinearOperator):
+            apply_rows = backend.vmap(ht.matvec)
+            left = backend.transpose(apply_rows(backend.transpose(rho)))
+            right = backend.conj(apply_rows(backend.conj(rho)))
+            derivative = -1j * (left - right)
+        else:
+            derivative = -1j * (ht @ rho - rho @ ht)
         for c, cd, cdc in static + tuple(
             collapse_terms(c(t, *params)) for c in dynamic
         ):
             dissipator = c @ rho @ cd - 0.5 * (cdc @ rho + rho @ cdc)
             derivative = derivative + dissipator
+        for apply in local:
+            derivative = derivative + apply(rho)
         return derivative
 
     solver_kws = {**solver_kws, "ode_backend": "diffrax"}

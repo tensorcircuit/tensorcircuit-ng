@@ -4,6 +4,8 @@
 
 ### Changed
 
+- `timeevol.mesolve` can apply a Hermitian `LinearOperator` Hamiltonian and contract static qubit-local collapse matrices on their support via `local_c_ops`.
+
 - **Migration:** cloud `set_token` keeps tokens in the current process unless `cached=True`. Tokens are looked up from `set_token`, then `TC_TOKEN_<PROVIDER>`, then the auth file; the generic `TC_TOKEN` is no longer read.
 
 - **Migration:** paid cloud submissions are sent once instead of retried, raising `tc.cloud.utils.SubmissionUnknown` if the tasks may have been accepted and `SubmissionRejected` if rejected.

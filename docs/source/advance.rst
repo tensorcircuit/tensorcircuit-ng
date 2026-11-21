@@ -501,6 +501,25 @@ The methods integrate the time-dependent Schrödinger equation using JAX's ODE s
 
 Hamiltonians and collapse operators can also be functions of the form ``op(t, *args)``, with ``args`` passed after ``callback``. For a narrow smooth pulse, use an upper bound such as ``dtmax=pulse_width / 10`` to resolve its shape. For a square pulse, pass its known switching times as ``jump_ts=[t_on, t_off]`` so that an integration step does not cross either discontinuity.
 
+For local noise on qubits, supply each static collapse matrix on the sites it
+acts on. For example, the following evolves two qubits under
+:math:`X_0 + X_1` with independent amplitude damping. The two dissipators
+each occupy a :math:`4\times4` matrix. The Hamiltonian acts on single
+vectors through a Hermitian ``LinearOperator``.
+
+.. code-block:: python
+
+    hx = tc.quantum.PauliStringSum2MVP([[1, 0], [0, 1]], [1., 1.])
+    h = tc.quantum.aslinearoperator(hx, shape=(4, 4))
+    states = tc.timeevol.mesolve(
+        h, K.kron(excited, excited), [0., 0.5, 1.],
+        local_c_ops={(0,): [0.2**0.5 * lowering], (1,): [0.4**0.5 * lowering]},
+    )
+
+The order of a site tuple gives the tensor-factor order of its matrices.
+Build the local matrices inside a differentiated function to vary their rates.
+Time-dependent Hamiltonians may also return a Hermitian ``LinearOperator``.
+
 **Comparison of Time Evolution Methods:**
 
 +--------------------------+----------------+------------------+------------------+------------------+
