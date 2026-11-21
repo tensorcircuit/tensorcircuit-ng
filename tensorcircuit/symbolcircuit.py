@@ -163,6 +163,10 @@ class SymbolCircuit(Circuit):
         self._extra_qir: List[Dict[str, Any]] = []
         self._measure_counter = 0
 
+    def replace_mps_inputs(self, mps_inputs: QuOperator) -> None:
+        """Raise NotImplementedError because SymbolCircuit does not support MPS inputs."""
+        raise NotImplementedError("mps_inputs are not yet supported in SymbolCircuit")
+
     # ── gate registration overrides ───────────────────────────────────────────
 
     @staticmethod
