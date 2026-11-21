@@ -473,6 +473,34 @@ The methods integrate the time-dependent Schrödinger equation using JAX's ODE s
     3. Local evolution requires dense Hamiltonian matrices and is suitable for subsystems with few qubits.
     4. Both methods support callback functions to compute observables during evolution without storing all state vectors.
 
+**Lindblad master equation**
+
+``tc.timeevol.mesolve`` evolves a dense density matrix under a Hamiltonian and collapse operators on the JAX backend with ``diffrax`` installed. It uses the same time grid, callback convention, and diffrax solver options as ``ode_evol_global``. The example below computes the excited-state population of a decaying qubit for several decay rates.
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+
+    K = tc.set_backend("jax")
+    excited = K.convert_to_tensor([[0., 0.], [0., 1.]])
+    hamiltonian = K.zeros_like(excited)
+    lowering = K.convert_to_tensor([[0., 1.], [0., 0.]])
+
+    @K.jit
+    def population(gamma):
+        return tc.timeevol.mesolve(
+            hamiltonian=hamiltonian,
+            rho0=excited,
+            times=[0., 0.5, 1.],
+            c_ops=[gamma**0.5 * lowering],
+            callback=lambda rho: K.real(rho[1, 1]),
+        )  # exp(-gamma * t) at each output time
+
+    for gamma in (0.2, 0.4, 0.8):
+        print(gamma, population(gamma))
+
+Hamiltonians and collapse operators can also be functions of the form ``op(t, *args)``, with ``args`` passed after ``callback``. For a narrow smooth pulse, use an upper bound such as ``dtmax=pulse_width / 10`` to resolve its shape. For a square pulse, pass its known switching times as ``jump_ts=[t_on, t_off]`` so that an integration step does not cross either discontinuity.
+
 **Comparison of Time Evolution Methods:**
 
 +--------------------------+----------------+------------------+------------------+------------------+

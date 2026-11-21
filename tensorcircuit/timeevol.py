@@ -2,7 +2,7 @@
 Analog time evolution engines
 """
 
-from typing import Any, Tuple, Optional, Callable, Sequence, Dict
+from typing import Any, Tuple, Optional, Callable, Sequence, Dict, Union
 from functools import partial
 import math
 import warnings
@@ -402,6 +402,7 @@ def _solve_ode(
     times: Tensor,
     args: Any,
     solver_kws: Dict[str, Any],
+    split_complex: bool = False,
 ) -> Tensor:
     rtol = solver_kws.get("rtol", 1e-8)
     atol = solver_kws.get("atol", 1e-8)
@@ -422,11 +423,16 @@ def _solve_ode(
 
     import diffrax
 
-    # Ignore complex warning
-    warnings.simplefilter("ignore", category=UserWarning, append=True)
-
     solver = solver_kws.get("solver", "Tsit5")
     dt0 = solver_kws.get("dt0", 0.01)
+    dtmax = solver_kws.get("dtmax")
+    pid = diffrax.PIDController(rtol=rtol, atol=atol, dtmax=dtmax)
+    jump_ts = solver_kws.get("jump_ts")
+    controller = (
+        diffrax.ClipStepSizeController(pid, jump_ts=jump_ts)
+        if jump_ts is not None
+        else pid
+    )
     all_solvers = {
         "Dopri5": diffrax.Dopri5,
         "Tsit5": diffrax.Tsit5,
@@ -437,14 +443,13 @@ def _solve_ode(
     solver_obj = all_solvers[solver]()
     is_implicit = isinstance(solver_obj, diffrax.AbstractImplicitSolver)
     is_complex = "complex" in backend.dtype(s)
+    split = is_complex and (is_implicit or split_complex)
 
-    if is_implicit and is_complex:
-        # Implicit diffrax solvers require real-valued state.
-        # Split complex state into real/imaginary parts and wrap the ODE.
-        s_re = backend.real(s)
-        s_im = backend.imag(s)
-        s_real = backend.concat([s_re, s_im], axis=-1)
-        n = s.shape[-1]
+    rhs = f
+    if split:
+        # Use a real-valued state for implicit solvers and Lindblad evolution.
+        n = backend.shape_tuple(s)[-1]
+        s = backend.concat([backend.real(s), backend.imag(s)], axis=-1)
 
         def f_real(y_real: Tensor, t: Any, *fargs: Any) -> Tensor:
             y_complex = y_real[..., :n] + 1j * y_real[..., n:]
@@ -453,39 +458,128 @@ def _solve_ode(
                 [backend.real(dy_complex), backend.imag(dy_complex)], axis=-1
             )
 
-        term = diffrax.ODETerm(lambda t, y, fargs: f_real(y, t, *fargs))
-        s1_real = diffrax.diffeqsolve(
-            terms=term,
+        rhs = f_real
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Complex dtype support in Diffrax",
+            category=UserWarning,
+            append=True,
+        )
+        s1 = diffrax.diffeqsolve(
+            terms=diffrax.ODETerm(lambda t, y, fargs: rhs(y, t, *fargs)),
             solver=solver_obj,
             t0=ts[0],
             t1=ts[-1],
             dt0=dt0,
-            y0=s_real,
+            y0=s,
             saveat=diffrax.SaveAt(ts=ts),
             args=args,
-            stepsize_controller=diffrax.PIDController(rtol=rtol, atol=atol),
+            stepsize_controller=controller,
             max_steps=max_steps,
         ).ys
-        s1 = s1_real[..., :n] + 1j * s1_real[..., n:]
-        return backend.cast(s1, dtype=dtypestr)
-
-    # ODE
-    term = diffrax.ODETerm(lambda t, y, args: f(y, t, *args))
-
-    # solve ODE
-    s1 = diffrax.diffeqsolve(
-        terms=term,
-        solver=solver_obj,
-        t0=ts[0],
-        t1=ts[-1],
-        dt0=dt0,
-        y0=s,
-        saveat=diffrax.SaveAt(ts=ts),
-        args=args,
-        stepsize_controller=diffrax.PIDController(rtol=rtol, atol=atol),
-        max_steps=max_steps,
-    ).ys
+    if split:
+        s1 = backend.cast(s1[..., :n] + 1j * s1[..., n:], dtype=dtypestr)
     return s1
+
+
+def mesolve(
+    hamiltonian: Union[Tensor, Callable[..., Tensor]],
+    rho0: Tensor,
+    times: Tensor,
+    c_ops: Optional[Sequence[Union[Tensor, Callable[..., Tensor]]]] = None,
+    callback: Optional[Callable[..., Tensor]] = None,
+    *args: Any,
+    **solver_kws: Any,
+) -> Tensor:
+    """
+    ODE-based Lindblad master equation evolution of a dense density matrix.
+    The Hamiltonian contributes ``-1j * (H @ rho - rho @ H)``. Each collapse
+    operator contributes ``C @ rho @ C† - (C† @ C @ rho + rho @ C† @ C) / 2``.
+    Both act directly on the density matrix, which is integrated with ``diffrax.diffeqsolve``.
+
+    Note: This function currently only supports the JAX backend and requires ``diffrax``.
+
+    :param hamiltonian: Dense Hamiltonian matrix, or a function returning it with signature
+        ``hamiltonian(time, *args) -> Tensor``.
+    :type hamiltonian: Union[Tensor, Callable[..., Tensor]]
+    :param rho0: The initial density matrix of shape ``(D, D)`` at the first time point.
+    :type rho0: Tensor
+    :param times: Real output time points. A scalar ``t`` requests output at ``0`` and ``t``.
+    :type times: Tensor
+    :param c_ops: Collapse operators, each a dense matrix or a function with signature
+        ``c_op(time, *args) -> Tensor``. Include the square root of each rate in its operator.
+    :type c_ops: Optional[Sequence[Union[Tensor, Callable[..., Tensor]]]]
+    :param callback: Optional function to apply to the density matrix at each output time.
+    :type callback: Optional[Callable[..., Tensor]]
+    :param args: Additional arguments to pass to the time-dependent operators.
+    :type args: tuple | list
+    :param solver_kws: Additional keyword arguments to pass to the ODE solver.
+
+        - ``rtol`` (default: 1e-8) and ``atol`` (default: 1e-8) are used to determine how accurately you would
+          like the numerical approximation to your equation.
+
+        - The ``solver`` parameter accepts one of {'Tsit5' (default), 'Dopri5', 'Dopri8', 'Kvaerno5'}.
+
+        - ``dt0`` (default: 0.01) specifies the initial step size.
+
+        - ``dtmax`` (default: None) bounds the internal step size. Set it below the width
+          of the narrowest pulse so that the adaptive solver cannot step over it.
+
+        - ``jump_ts`` (default: None) specifies known discontinuity times in the
+          Hamiltonian or collapse operators. The solver steps to either side of each jump.
+
+        - ``max_steps`` (default: 4096)  The maximum number of steps to take before quitting the computation
+          unconditionally.
+    :type solver_kws: dict
+
+    :return: Evolved density matrices of shape ``(num_times, D, D)`` or stacked callback results.
+    :rtype: Tensor
+    """
+    if backend.name != "jax":
+        raise NotImplementedError("mesolve requires the JAX backend and diffrax.")
+    rho0 = backend.convert_to_tensor(rho0, dtype=dtypestr)
+    shape = backend.shape_tuple(rho0)
+    if len(shape) != 2 or shape[0] != shape[1] or not shape[0]:
+        raise ValueError("rho0 must be a nonempty square density matrix.")
+
+    def matrix(value: Tensor) -> Tensor:
+        value = backend.convert_to_tensor(value, dtype=dtypestr)
+        operator_shape = backend.shape_tuple(value)
+        if operator_shape != shape:
+            raise ValueError(
+                f"Expected an operator of shape {shape}, got {operator_shape}."
+            )
+        return value
+
+    def collapse_terms(value: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
+        c = matrix(value)
+        cd = backend.adjoint(c)
+        return c, cd, cd @ c
+
+    h = hamiltonian if callable(hamiltonian) else matrix(hamiltonian)
+    if c_ops is None:
+        c_ops = ()
+    static = tuple(collapse_terms(c) for c in c_ops if not callable(c))
+    dynamic = tuple(c for c in c_ops if callable(c))
+
+    def lindblad(rho: Tensor, t: Tensor, *params: Any) -> Tensor:
+        ht = matrix(h(t, *params)) if callable(h) else h
+        derivative = -1j * (ht @ rho - rho @ ht)
+        for c, cd, cdc in static + tuple(
+            collapse_terms(c(t, *params)) for c in dynamic
+        ):
+            dissipator = c @ rho @ cd - 0.5 * (cdc @ rho + rho @ cdc)
+            derivative = derivative + dissipator
+        return derivative
+
+    solver_kws = {**solver_kws, "ode_backend": "diffrax"}
+    s1 = _solve_ode(lindblad, rho0, times, args, solver_kws, split_complex=True)
+
+    if callback is None:
+        return s1
+    return backend.stack([callback(a_state) for a_state in s1])
 
 
 def ode_evol_local(
@@ -531,6 +625,11 @@ def ode_evol_local(
           and only works when ``ode_backend='diffrax'``.
 
         - ``dt0`` (default: 0.01) specifies the initial step size and only works when ``ode_backend='diffrax'``.
+
+        - ``dtmax`` (default: None) bounds the internal step size and only works when ``ode_backend='diffrax'``.
+
+        - ``jump_ts`` (default: None) specifies known discontinuity times in the Hamiltonian
+          and only works when ``ode_backend='diffrax'``.
 
         - ``max_steps`` (default: 4096)  The maximum number of steps to take before quitting the computation
           unconditionally and only works when ``ode_backend='diffrax'``.
@@ -619,6 +718,11 @@ def ode_evol_global(
           and only works when ``ode_backend='diffrax'``.
 
         - ``dt0`` (default: 0.01) specifies the initial step size and only works when ``ode_backend='diffrax'``.
+
+        - ``dtmax`` (default: None) bounds the internal step size and only works when ``ode_backend='diffrax'``.
+
+        - ``jump_ts`` (default: None) specifies known discontinuity times in the Hamiltonian
+          and only works when ``ode_backend='diffrax'``.
 
         - ``max_steps`` (default: 4096)  The maximum number of steps to take before quitting the computation
           unconditionally and only works when ``ode_backend='diffrax'``.
