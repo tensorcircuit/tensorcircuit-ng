@@ -519,6 +519,17 @@ vectors through a Hermitian ``LinearOperator``.
 The order of a site tuple gives the tensor-factor order of its matrices.
 Build the local matrices inside a differentiated function to vary their rates.
 Time-dependent Hamiltonians may also return a Hermitian ``LinearOperator``.
+Wrap MVP functions with ``aslinearoperator(mvp, shape=(D, D))``. A bare
+callable is interpreted as ``hamiltonian(t, *args)``. Hermiticity of the
+Hamiltonian is assumed without checking.
+Sparse Hamiltonians built with ``aslinearoperator(PauliStringSum2COO(...))``
+also support JIT and gradients with respect to the Pauli coefficients, including
+the JAX CPU path through BCSR and batched matrix-vector products.
+
+For smooth, nonstiff evolution at tight tolerances (for example,
+``rtol <= 1e-10``), try ``solver="Dopri8"``. Its higher order can reduce
+the cost of reaching a given accuracy. Select tolerances using the error
+against a converged reference for the states or observables of interest.
 
 **Comparison of Time Evolution Methods:**
 

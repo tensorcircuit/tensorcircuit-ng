@@ -131,6 +131,96 @@ def test_mesolve_local_collapse(jaxb, highp):
     np.testing.assert_allclose(gradient, dense_gradient, atol=1e-12, rtol=0)
 
 
+@pytest.mark.parametrize("representation", ["mvp", "sparse"])
+def test_mesolve_driven_linear_operator_gradient(jaxb, highp, representation):
+    pytest.importorskip("diffrax")
+    K = tc.backend
+    words = [[3, 0], [1, 2], [0, 2]]
+    dense_terms = K.stack(
+        [
+            K.kron(tc.gates.z().tensor, tc.gates.i().tensor),
+            K.kron(tc.gates.x().tensor, tc.gates.y().tensor),
+            K.kron(tc.gates.i().tensor, tc.gates.y().tensor),
+        ]
+    )
+    rho = np.full((4, 4), 0.25)
+    local = {(0,): [0.2 * tc.gates.z().tensor]}
+
+    def run(amplitude, compact):
+        def h(t, drive):
+            weights = K.stack([0.3 + 0 * drive, drive * K.cos(t), 0.2 + 0 * drive])
+            if not compact:
+                return K.einsum("i,ijk->jk", weights, dense_terms)
+            if representation == "sparse":
+                matrix = tc.quantum.PauliStringSum2COO(words, weights)
+                return tc.quantum.aslinearoperator(matrix)
+            mvp = tc.quantum.PauliStringSum2MVP(words, weights)
+            return tc.quantum.aslinearoperator(mvp, shape=(4, 4))
+
+        states = tc.timeevol.mesolve(
+            h,
+            rho,
+            [0.0, 0.1, 0.3],
+            None,
+            None,
+            amplitude,
+            local_c_ops=local,
+            rtol=1e-12,
+            atol=1e-12,
+        )
+        return K.real(states[-1, 0, 0]), states
+
+    (value, states), gradient = K.jit(
+        K.value_and_grad(lambda a: run(a, True), has_aux=True)
+    )(0.7)
+    (dense_value, dense_states), dense_gradient = K.jit(
+        K.value_and_grad(lambda a: run(a, False), has_aux=True)
+    )(0.7)
+    np.testing.assert_allclose(states, dense_states, atol=1e-12, rtol=0)
+    np.testing.assert_allclose(
+        [value, gradient], [dense_value, dense_gradient], atol=1e-12, rtol=0
+    )
+
+
+@pytest.mark.parametrize("hermitian", [False, True])
+def test_mesolve_single_site_channels(jaxb, highp, hermitian):
+    pytest.importorskip("diffrax")
+    K = tc.backend
+    jump = K.convert_to_tensor([[0.1j, 0.3], [0.2, -0.1j]], dtype=tc.dtypestr)
+    h = K.kron(K.kron(tc.gates.y().tensor, np.eye(16)), tc.gates.x().tensor)
+    rho = np.arange(4096).reshape(64, 64) / 4096 + 0.1j
+    if hermitian:
+        rho = rho @ rho.conj().T
+        rho = rho / np.trace(rho)
+
+    def loss(rate, local):
+        scaled = K.sqrt(rate) * jump
+        if local:
+            options = {"local_c_ops": {(1,): [scaled], (4,): [jump]}}
+            op = tc.quantum.aslinearoperator(h)
+        else:
+            options = {
+                "c_ops": [
+                    K.kron(K.kron(np.eye(2), scaled), np.eye(16)),
+                    K.kron(K.kron(np.eye(16), jump), np.eye(2)),
+                ]
+            }
+            op = h
+        states = tc.timeevol.mesolve(op, rho, [0.0, 0.1], **options)
+        return K.real(states[-1, 0, 1]), states
+
+    (value, states), grad = K.jit(
+        K.value_and_grad(lambda r: loss(r, True), has_aux=True)
+    )(0.7)
+    (dense_value, dense_states), dense_grad = K.jit(
+        K.value_and_grad(lambda r: loss(r, False), has_aux=True)
+    )(0.7)
+    np.testing.assert_allclose(states, dense_states, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(
+        [value, grad], [dense_value, dense_grad], rtol=0, atol=1e-12
+    )
+
+
 def test_mesolve_local_shapes(jaxb):
     with pytest.raises(ValueError, match="qubit density matrix"):
         tc.timeevol.mesolve(
@@ -147,6 +237,13 @@ def test_mesolve_local_shapes(jaxb):
         )
     with pytest.raises(ValueError, match="Hamiltonian of shape"):
         tc.timeevol.mesolve(tc.quantum.aslinearoperator(np.eye(2)), np.eye(4) / 4, 1.0)
+    with pytest.raises(TypeError, match="must be a tuple"):
+        tc.timeevol.mesolve(np.eye(2), np.eye(2) / 2, 1.0, local_c_ops={0: [np.eye(2)]})
+    for operators in [lambda t: np.eye(2), [lambda t: np.eye(2)]]:
+        with pytest.raises(TypeError, match="static matrices"):
+            tc.timeevol.mesolve(
+                np.eye(2), np.eye(2) / 2, 1.0, local_c_ops={(0,): operators}
+            )
 
 
 @pytest.mark.parametrize("matrix_free", [False, True])

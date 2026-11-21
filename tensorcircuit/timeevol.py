@@ -496,7 +496,11 @@ def _mesolve_matrix(value: Tensor, dimension: int) -> Tensor:
 
 def _local_dissipator(
     sites: Tuple[int, ...], operators: Sequence[Tensor], n: int
-) -> Callable[[Tensor], Tensor]:
+) -> Tuple[Tensor, Callable[[Tensor], Tensor]]:
+    if not isinstance(sites, tuple):
+        raise TypeError("Local collapse sites must be a tuple, e.g. (0,).")
+    if callable(operators):
+        raise TypeError("local_c_ops requires static matrices, not callables.")
     if (
         not sites
         or len(set(sites)) != len(sites)
@@ -509,11 +513,44 @@ def _local_dissipator(
     eye = backend.eye(d, dtype=dtypestr)
     generator = backend.zeros((d * d, d * d), dtype=dtypestr)
     for op in operators:
+        if callable(op):
+            raise TypeError("local_c_ops requires static matrices, not callables.")
         c = _mesolve_matrix(op, d)
         decay = backend.adjoint(c) @ c
         # Row-major vectorization: vec(A rho B) = (A ⊗ Bᵀ) vec(rho).
         loss = backend.kron(decay, eye) + backend.kron(eye, backend.transpose(decay))
         generator = generator + (backend.kron(c, backend.conj(c)) - 0.5 * loss)
+
+    if len(sites) == 1 and n >= 6:
+        before, after = 2 ** sites[0], 2 ** (n - sites[0] - 1)
+        shape = (before, 2, after, before, 2, after)
+        diagonal = backend.reshape(backend.diagonal(generator), (1, 2, 1, 1, 2, 1))
+        diagonal = backend.reshape(
+            diagonal * backend.ones(shape, dtype=dtypestr), (2**n, 2**n)
+        )
+
+        def apply_single(rho: Tensor) -> Tensor:
+            blocks = backend.reshape(rho, shape)
+            outputs = [
+                sum(
+                    generator[2 * a + b, 2 * c + d] * blocks[:, c, :, :, d, :]
+                    for c in range(2)
+                    for d in range(2)
+                    if (a, b) != (c, d)
+                )
+                for a in range(2)
+                for b in range(2)
+            ]
+            result = backend.stack(
+                [
+                    backend.stack(outputs[:2], axis=3),
+                    backend.stack(outputs[2:], axis=3),
+                ],
+                axis=1,
+            )
+            return backend.reshape(result, rho.shape)
+
+        return diagonal, apply_single
 
     active = sites + tuple(n + i for i in sites)
     order = active + tuple(i for i in range(2 * n) if i not in active)
@@ -527,7 +564,7 @@ def _local_dissipator(
             backend.transpose(backend.reshape(result, legs), inverse), rho.shape
         )
 
-    return apply
+    return 0, apply
 
 
 def mesolve(
@@ -551,6 +588,9 @@ def mesolve(
     :param hamiltonian: Dense Hamiltonian matrix, Hermitian
         :class:`~tensorcircuit.quantum.LinearOperator`, or a function returning
         either representation with signature ``hamiltonian(time, *args)``.
+        Wrap an MVP callable with ``aslinearoperator(mvp, shape=(D, D))``;
+        a bare callable is interpreted as ``hamiltonian(time, *args)``.
+        The Hamiltonian is assumed Hermitian without checking.
     :type hamiltonian: Union[Tensor, Callable[..., Tensor]]
     :param rho0: The initial density matrix of shape ``(D, D)`` at the first time point.
     :type rho0: Tensor
@@ -627,6 +667,7 @@ def mesolve(
         if 2**n != dimension:
             raise ValueError("Local collapse operators require a qubit density matrix.")
         local = [_local_dissipator(sites, ops, n) for sites, ops in local_c_ops.items()]
+    diagonal = sum(term[0] for term in local)
 
     def lindblad(rho: Tensor, t: Tensor, *params: Any) -> Tensor:
         ht = prepare_h(h(t, *params)) if driven else h
@@ -642,8 +683,11 @@ def mesolve(
         ):
             dissipator = c @ rho @ cd - 0.5 * (cdc @ rho + rho @ cdc)
             derivative = derivative + dissipator
-        for apply in local:
-            derivative = derivative + apply(rho)
+        if local:
+            dissipator = diagonal * rho
+            for _, apply in local:
+                dissipator = dissipator + apply(rho)
+            derivative = derivative + dissipator
         return derivative
 
     solver_kws = {**solver_kws, "ode_backend": "diffrax"}
