@@ -5,6 +5,7 @@ Use this file for noise APIs, detector sampling, and stabilizer/QEC workflows.
 ## Noise API rules
 
 - In `mesolve`, cancel the jump and loss terms of each collapse operator before adding channels. In complex64, summing all `C†C` first can erase a weak decay rate next to a large identity channel and break trace preservation.
+- Profile both the complex Lindblad RHS and the complete real-valued Diffrax solve. Single-qubit slice/stack contractions can remove transposes while adding copies, and small density matrices can favor the direct contraction. Choose the size cutoff from paired end-to-end measurements.
 - `circuit_with_noise(...)` applies gate noise but not readout error automatically; pass `readout_error=noise_conf.readout_error` when sampling if readout confusion is part of the experiment.
 - `NoiseConf.add_noise("readout", ...)` expects per-qubit probabilities of the form `[p(0|0), p(1|1)]`, not a full confusion matrix.
 - Prefer `Circuit.expectation(..., noise_conf=..., nmc=...)` when the noisy expectation API already covers the use case.
