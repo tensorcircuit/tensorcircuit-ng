@@ -148,6 +148,8 @@
 
 - Speed up MPS sampling, Pauli string sum matrices and `U1Circuit.expectation_pss`, Clifford gates in `SparsePauliPropagationEngine`, classical-shadow expectations and finite-shot correlations, truncated free energies and Rényi entropies, and `QuOperator` network checks.
 
+- Speed up repeated ZX Pauli expectations by reusing the most recent compiled program.
+
 ## v1.10.0
 
 ### Added
