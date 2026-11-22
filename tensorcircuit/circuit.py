@@ -195,14 +195,12 @@ class Circuit(BaseCircuit):
         """
         Remap gates, instructions and the initial state onto a new qubit layout.
 
-        Explicit inputs require a mapping for every input qubit. Additional
-        qubits start in zero. Dense state-vector inputs allocate the expanded
-        state. Matrix/operator inputs raise ``ValueError``. MPS inputs remain
-        a tensor network. This method applies to pure-state circuits.
-        ``DMCircuit.initial_mapping`` does not preserve a custom density matrix
-        automatically. Supplying ``circuit_params`` overrides
-        the initial state and constructor options, as in
-        ``AbstractCircuit.initial_mapping``.
+        Automatic remapping supports dense state vectors and requires a mapping
+        for every input qubit. Additional qubits start in zero. To supply
+        ``mps_inputs`` or ``tensors``, arrange them in the target layout and
+        pass them via ``circuit_params``. Explicit constructor parameters take
+        precedence over the source circuit's parameters. For ``DMCircuit``,
+        pass a custom density matrix explicitly via ``circuit_params``.
 
         :param logical_physical_mapping: how to map logical qubits to the physical qubits on the new circuit
         :type logical_physical_mapping: Dict[int, int]
@@ -210,25 +208,21 @@ class Circuit(BaseCircuit):
         :type n: Optional[int], optional
         :param circuit_params: keyword arguments forwarded to the new circuit constructor, defaults to None
         :type circuit_params: Optional[Dict[str, Any]], optional
-        :raises ValueError: if an input qubit is unmapped or the inputs are a matrix/operator
+        :raises ValueError: if a dense input qubit is unmapped or automatic remapping
+            is requested for matrix/operator inputs, ``mps_inputs``, or ``tensors``.
         :return: A new circuit with the gates, instructions and initial state remapped.
         :rtype: Circuit
         """
         if circuit_params is None:
             circuit_params = self.circuit_param.copy()
             width = self._nqubits if n is None else n
-            if (
-                circuit_params.get("inputs") is not None
-                and len(self._front) != self._nqubits
-            ):
-                raise ValueError(
-                    "initial_mapping supports dense state-vector inputs only, "
-                    "not matrix/operator inputs"
-                )
-            if any(
-                circuit_params.get(k) is not None
-                for k in ("inputs", "mps_inputs", "tensors")
-            ):
+            inputs = circuit_params.get("inputs")
+            if inputs is not None:
+                if len(self._front) != self._nqubits:
+                    raise ValueError(
+                        "initial_mapping supports dense state-vector inputs only, "
+                        "not matrix/operator inputs"
+                    )
                 if any(q not in logical_physical_mapping for q in range(self._nqubits)):
                     raise ValueError(
                         "Explicit inputs require mapping every input qubit"
@@ -236,36 +230,28 @@ class Circuit(BaseCircuit):
                 if width != self._nqubits or any(
                     q != logical_physical_mapping[q] for q in range(self._nqubits)
                 ):
-                    if circuit_params.get("inputs") is not None:
-                        inputs = backend.reshape(
-                            backend.convert_to_tensor(circuit_params["inputs"]),
-                            [self._d] * self._nqubits,
+                    inputs = backend.reshape(
+                        backend.convert_to_tensor(inputs), [self._d] * self._nqubits
+                    )
+                    for _ in range(width - self._nqubits):
+                        inputs = backend.stack(
+                            [inputs] + [backend.zeros_like(inputs)] * (self._d - 1),
+                            axis=-1,
                         )
-                        for _ in range(width - self._nqubits):
-                            inputs = backend.stack(
-                                [inputs] + [backend.zeros_like(inputs)] * (self._d - 1),
-                                axis=-1,
-                            )
-                        layout = [
-                            logical_physical_mapping[q] for q in range(self._nqubits)
-                        ]
-                        layout += [q for q in range(width) if q not in layout]
-                        inputs = backend.transpose(
-                            inputs, [layout.index(q) for q in range(width)]
-                        )
-                        circuit_params["inputs"] = backend.reshape(inputs, [-1])
-                    else:
-                        nodes, edges = type(self)(**self.circuit_param)._copy()
-                        front = [
-                            node[0] for node in self.all_zero_nodes(width, dim=self._d)
-                        ]
-                        for q in range(self._nqubits):
-                            front[logical_physical_mapping[q]] = edges[q]
-                        circuit_params.update(
-                            inputs=None,
-                            mps_inputs=QuOperator(front, [], ref_nodes=nodes),
-                            tensors=None,
-                        )
+                    layout = [logical_physical_mapping[q] for q in range(self._nqubits)]
+                    layout += [q for q in range(width) if q not in layout]
+                    inputs = backend.transpose(
+                        inputs, [layout.index(q) for q in range(width)]
+                    )
+                    circuit_params["inputs"] = backend.reshape(inputs, [-1])
+            elif (
+                circuit_params.get("mps_inputs") is not None
+                or circuit_params.get("tensors") is not None
+            ):
+                raise ValueError(
+                    "Automatic layout remapping supports dense state vectors only. "
+                    "Pass mps_inputs or tensors in the target layout via circuit_params"
+                )
             circuit_params["nqubits"] = width
         return super().initial_mapping(logical_physical_mapping, n, circuit_params)  # type: ignore
 

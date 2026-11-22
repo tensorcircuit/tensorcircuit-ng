@@ -693,7 +693,7 @@ class AbstractCircuit:
         """
         generate a new circuit with the qubit mapping given by ``logical_physical_mapping``
 
-        Only ``Circuit`` carries explicit initial states over to the new layout. Other circuit
+        Only ``Circuit`` carries dense state-vector inputs over to the new layout. Other circuit
         types, such as ``DMCircuit``, start from their default initial state unless
         ``circuit_params`` supplies one; a custom density matrix is not preserved.
 
