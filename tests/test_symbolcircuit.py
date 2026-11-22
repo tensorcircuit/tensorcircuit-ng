@@ -76,6 +76,16 @@ def test_init(SymbolCircuit):
     assert sc._qir == []
 
 
+def test_replace_mps_inputs_rejected(npb, SymbolCircuit):
+    sc = SymbolCircuit(1, inputs=np.array([0, 1], dtype=object))
+    mps_inputs = tc.Circuit(1).quvector()
+
+    with pytest.raises(NotImplementedError, match="mps_inputs.*SymbolCircuit"):
+        sc.replace_mps_inputs(mps_inputs)
+
+    assert sc.amplitude("1") == 1
+
+
 # ── fixed gates ────────────────────────────────────────────────────────────────
 
 

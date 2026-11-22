@@ -1765,6 +1765,8 @@ class BaseCircuit(AbstractCircuit):
             self._nodes[0].tensor = inputs
             if self.is_dm:
                 self._nodes[1].tensor = backend.conj(inputs)
+            self.inputs = inputs
+            self.circuit_param["inputs"] = inputs
             self.state_tensor = None  # invalidate the contracted-state cache
         else:  # TODO(@refraction-ray) replace several start as inputs
             raise NotImplementedError("not support replace with no inputs")
