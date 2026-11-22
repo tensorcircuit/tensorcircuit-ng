@@ -1694,6 +1694,49 @@ def test_PauliStringSum2MVP(backend):
     np.testing.assert_allclose(result_id, 2.0 * psi3, atol=1e-5)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_Lindblad2PauliStringSum(backend, highp):
+    K = tc.backend
+    h_words, h_weights = [[2, 0], [1, 2], [0, 2], [0, 0]], [0.3, -0.2, 0.4, 1.0]
+    jumps = [
+        ([[0, 0], [1, 2], [2, 1], [3, 3], [1, 2]], [0.1j, 0.2, 0.3j, -0.4, 0.1]),
+        ([[1, 0], [2, 0], [0, 1], [0, 2]], [0.2, 0.2j, 0.3, 0.3j]),
+    ]
+    rho = K.convert_to_tensor(
+        np.arange(16).reshape(4, 4) / 16 + 0.1j, dtype=tc.dtypestr
+    )
+    for hs, hw in [(h_words, h_weights), ([], [])]:
+        structures, weights = qu.Lindblad2PauliStringSum(hs, hw, jumps)
+        assert len(structures) == len(set(map(tuple, structures)))
+        h = (
+            qu.PauliStringSum2Dense(hs, hw)
+            if hs
+            else K.zeros((4, 4), dtype=tc.dtypestr)
+        )
+        expected = -1j * (h @ rho - rho @ h)
+        for words, coefficients in jumps:
+            c = qu.PauliStringSum2Dense(words, coefficients)
+            cd = K.adjoint(c)
+            expected = expected + c @ rho @ cd - 0.5 * (cd @ c @ rho + rho @ cd @ c)
+        actual = qu.PauliStringSum2MVP(structures, weights)(K.reshape(rho, [-1]))
+        np.testing.assert_allclose(
+            K.numpy(actual), K.numpy(K.reshape(expected, [-1])), atol=1e-12, rtol=0
+        )
+    structures, weights = qu.Lindblad2PauliStringSum([], [])
+    np.testing.assert_allclose(
+        qu.PauliStringSum2MVP(structures, weights)(rho), K.zeros_like(rho)
+    )
+
+
+def test_Lindblad2PauliStringSum_invalid_inputs(npb):
+    with pytest.raises(ValueError, match="one weight per Pauli string"):
+        qu.Lindblad2PauliStringSum([[3]], [])
+    with pytest.raises(ValueError, match="one weight per Pauli string"):
+        qu.Lindblad2PauliStringSum([], [], [([[1]], [0.5, 1.0])])
+    with pytest.raises(ValueError, match="use codes"):
+        qu.Lindblad2PauliStringSum([[4]], [1.0])
+
+
 def test_PauliStringSum2MVP_diagonal_dtype(npb):
     # the MVP computes in the global dtype, so a real input with a complex
     # weight on a merged Z/I term still gives the complex result

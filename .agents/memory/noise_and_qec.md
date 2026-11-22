@@ -4,6 +4,7 @@ Use this file for noise APIs, detector sampling, and stabilizer/QEC workflows.
 
 ## Noise API rules
 
+- Benchmark the complete `mesolve` solve, not only its RHS.
 - `circuit_with_noise(...)` applies gate noise but not readout error automatically; pass `readout_error=noise_conf.readout_error` when sampling if readout confusion is part of the experiment.
 - `NoiseConf.add_noise("readout", ...)` expects per-qubit probabilities of the form `[p(0|0), p(1|1)]`, not a full confusion matrix.
 - Prefer `Circuit.expectation(..., noise_conf=..., nmc=...)` when the noisy expectation API already covers the use case.
