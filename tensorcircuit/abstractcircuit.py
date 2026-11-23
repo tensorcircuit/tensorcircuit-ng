@@ -693,6 +693,10 @@ class AbstractCircuit:
         """
         generate a new circuit with the qubit mapping given by ``logical_physical_mapping``
 
+        Only ``Circuit`` carries dense state-vector inputs over to the new layout. Other circuit
+        types, such as ``DMCircuit``, start from their default initial state unless
+        ``circuit_params`` supplies one; a custom density matrix is not preserved.
+
         :param logical_physical_mapping: how to map logical qubits to the physical qubits on the new circuit
         :type logical_physical_mapping: Dict[int, int]
         :param n: number of qubit of the new circuit, can be different from the original one, defaults to None

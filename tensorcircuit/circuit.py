@@ -189,6 +189,75 @@ class Circuit(BaseCircuit):
         self.circuit_param.update(inputs=None, mps_inputs=self.mps_inputs, tensors=None)
         self.state_tensor = None
 
+    def initial_mapping(
+        self,
+        logical_physical_mapping: Dict[int, int],
+        n: Optional[int] = None,
+        circuit_params: Optional[Dict[str, Any]] = None,
+    ) -> "Circuit":
+        """
+        Remap gates, instructions and the initial state onto a new qubit layout.
+
+        Automatic remapping supports dense state vectors and requires a mapping
+        for every input qubit. Additional qubits start in zero. To supply
+        ``mps_inputs`` or ``tensors``, arrange them in the target layout and
+        pass them via ``circuit_params``. Explicit constructor parameters take
+        precedence over the source circuit's parameters. For ``DMCircuit``,
+        pass a custom density matrix explicitly via ``circuit_params``.
+
+        :param logical_physical_mapping: how to map logical qubits to the physical qubits on the new circuit
+        :type logical_physical_mapping: Dict[int, int]
+        :param n: number of qubit of the new circuit, can be different from the original one, defaults to None
+        :type n: Optional[int], optional
+        :param circuit_params: keyword arguments forwarded to the new circuit constructor, defaults to None
+        :type circuit_params: Optional[Dict[str, Any]], optional
+        :raises ValueError: if a dense input qubit is unmapped or automatic remapping
+            is requested for matrix/operator inputs, ``mps_inputs``, or ``tensors``.
+        :return: A new circuit with the gates, instructions and initial state remapped.
+        :rtype: Circuit
+        """
+        if circuit_params is None:
+            circuit_params = self.circuit_param.copy()
+            width = self._nqubits if n is None else n
+            inputs = circuit_params.get("inputs")
+            if inputs is not None:
+                if len(self._front) != self._nqubits:
+                    raise ValueError(
+                        "initial_mapping supports dense state-vector inputs only, "
+                        "not matrix/operator inputs"
+                    )
+                if any(q not in logical_physical_mapping for q in range(self._nqubits)):
+                    raise ValueError(
+                        "Explicit inputs require mapping every input qubit"
+                    )
+                if width != self._nqubits or any(
+                    q != logical_physical_mapping[q] for q in range(self._nqubits)
+                ):
+                    inputs = backend.reshape(
+                        backend.convert_to_tensor(inputs), [self._d] * self._nqubits
+                    )
+                    for _ in range(width - self._nqubits):
+                        inputs = backend.stack(
+                            [inputs] + [backend.zeros_like(inputs)] * (self._d - 1),
+                            axis=-1,
+                        )
+                    layout = [logical_physical_mapping[q] for q in range(self._nqubits)]
+                    layout += [q for q in range(width) if q not in layout]
+                    inputs = backend.transpose(
+                        inputs, [layout.index(q) for q in range(width)]
+                    )
+                    circuit_params["inputs"] = backend.reshape(inputs, [-1])
+            elif (
+                circuit_params.get("mps_inputs") is not None
+                or circuit_params.get("tensors") is not None
+            ):
+                raise ValueError(
+                    "Automatic layout remapping supports dense state vectors only. "
+                    "Pass mps_inputs or tensors in the target layout via circuit_params"
+                )
+            circuit_params["nqubits"] = width
+        return super().initial_mapping(logical_physical_mapping, n, circuit_params)  # type: ignore
+
     # TODO(@refraction-ray): add noise support in IR
     # TODO(@refraction-ray): unify mid measure to basecircuit
 

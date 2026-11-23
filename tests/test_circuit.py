@@ -1973,6 +1973,47 @@ def test_initial_mapping():
     print(c3.draw())
 
 
+def test_initial_mapping_preserves_inputs(npb):
+    psi = tc.array_to_tensor([1, 2j, -1, 3]) / np.sqrt(15)
+    c = tc.Circuit(2, inputs=psi)
+    c.ry(0, theta=0.3)
+    state = tc.backend.numpy(c.state())
+    np.testing.assert_allclose(
+        c.initial_mapping({0: 0, 1: 1}).state(), state, atol=1e-6
+    )
+    mapped = c.initial_mapping({0: 2, 1: 0}, n=3)
+    expected = [state[0], state[2], 0, 0, state[1], state[3], 0, 0]
+    np.testing.assert_allclose(mapped.state(), expected, atol=1e-6)
+    np.testing.assert_allclose(mapped.copy().state(), expected, atol=1e-6)
+    np.testing.assert_allclose(c.state(), state, atol=1e-6)
+    pytest.importorskip("qiskit")
+    exported = tc.Circuit.from_qiskit(mapped.to_qiskit(enable_inputs=True))
+    np.testing.assert_allclose(exported.state(), expected, atol=1e-6)
+
+
+@pytest.mark.parametrize("input_key", ["mps_inputs", "tensors"])
+def test_initial_mapping_requires_explicit_mps_layout(npb, input_key):
+    tensors = [np.reshape([0, 1], (1, 2, 1)), np.reshape([1, 0], (1, 2, 1))]
+    if input_key == "mps_inputs":
+        params = {"mps_inputs": tc.Circuit(2, tensors=tensors).quvector()}
+    else:
+        params = {"tensors": tensors}
+    c = tc.Circuit(2, **params)
+    c.x(0)
+    layout = {0: 1, 1: 0}
+    with pytest.raises(ValueError, match="target layout via circuit_params"):
+        c.initial_mapping(layout)
+
+    mapped = c.initial_mapping(layout, circuit_params=params)
+    np.testing.assert_allclose(mapped.state(), [0, 0, 0, 1])
+
+
+def test_initial_mapping_rejects_operator_inputs(npb):
+    c = tc.Circuit(2, inputs=np.eye(4))
+    with pytest.raises(ValueError, match="matrix/operator inputs"):
+        c.initial_mapping({0: 1, 1: 0})
+
+
 def test_compose_keeps_instructions():
     def sequence(c):
         return [

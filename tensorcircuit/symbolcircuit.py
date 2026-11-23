@@ -316,6 +316,18 @@ class SymbolCircuit(Circuit):
         )
 
     @backend_numpy
+    def initial_mapping(
+        self,
+        logical_physical_mapping: Dict[int, int],
+        n: Optional[int] = None,
+        circuit_params: Optional[Dict[str, Any]] = None,
+    ) -> "SymbolCircuit":
+        """
+        Remap gates, instructions and the initial state with backend isolation.
+        """
+        return super().initial_mapping(logical_physical_mapping, n, circuit_params)  # type: ignore
+
+    @backend_numpy
     def _copy(
         self, conj: Optional[bool] = False
     ) -> Tuple[List[tn.Node], List[tn.Edge]]:
