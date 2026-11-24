@@ -1708,7 +1708,7 @@ def test_Lindblad2PauliStringSum(backend, highp):
         np.arange(16).reshape(4, 4) / 16 + 0.1j, dtype=tc.dtypestr
     )
     for hs, hw in [(h_words, h_weights), ([], [])]:
-        structures, weights = qu.Lindblad2PauliStringSum(hs, hw, jumps)
+        structures, weights = qu.Lindblad2PauliStringSum((hs, hw), jumps=jumps)
         assert len(structures) == len(set(map(tuple, structures)))
         h = (
             qu.PauliStringSum2Dense(hs, hw)
@@ -1724,7 +1724,7 @@ def test_Lindblad2PauliStringSum(backend, highp):
         np.testing.assert_allclose(
             K.numpy(actual), K.numpy(K.reshape(expected, [-1])), atol=1e-12, rtol=0
         )
-    structures, weights = qu.Lindblad2PauliStringSum([], [])
+    structures, weights = qu.Lindblad2PauliStringSum(([], []))
     np.testing.assert_allclose(
         qu.PauliStringSum2MVP(structures, weights)(rho), K.zeros_like(rho)
     )
@@ -1732,11 +1732,11 @@ def test_Lindblad2PauliStringSum(backend, highp):
 
 def test_Lindblad2PauliStringSum_invalid_inputs(npb):
     with pytest.raises(ValueError, match="one weight per Pauli string"):
-        qu.Lindblad2PauliStringSum([[3]], [])
+        qu.Lindblad2PauliStringSum(([[3]], []))
     with pytest.raises(ValueError, match="one weight per Pauli string"):
-        qu.Lindblad2PauliStringSum([], [], [([[1]], [0.5, 1.0])])
+        qu.Lindblad2PauliStringSum(([], []), jumps=[([[1]], [0.5, 1.0])])
     with pytest.raises(ValueError, match="use codes"):
-        qu.Lindblad2PauliStringSum([[4]], [1.0])
+        qu.Lindblad2PauliStringSum(([[4]], [1.0]))
 
 
 def test_PauliStringSum2MVP_diagonal_dtype(npb):

@@ -78,6 +78,18 @@ def test_mesolve_identity_collapse(jaxb):
     np.testing.assert_allclose(states[-1, 0, 0], (1 - np.sin(2 * t)) / 2, atol=2e-6)
 
 
+def test_mesolve_static_linear_operator(jaxb, highp):
+    pytest.importorskip("diffrax")
+    y = tc.gates.y().tensor
+    mvp = tc.quantum.PauliStringSum2MVP([[2]], [1.0])
+    h = tc.quantum.aslinearoperator(mvp, shape=(2, 2))
+    rho = np.array([[0.6, 0.2 + 0.1j], [0.2 - 0.1j, 0.4]])
+    times = [0.0, 0.1, 0.3]
+    states = tc.timeevol.mesolve(h, rho, times, rtol=1e-13, atol=1e-13)
+    dense_states = tc.timeevol.mesolve(y, rho, times, rtol=1e-13, atol=1e-13)
+    np.testing.assert_allclose(states, dense_states, atol=1e-12, rtol=0)
+
+
 @pytest.mark.parametrize("representation", ["mvp", "sparse"])
 def test_mesolve_driven_linear_operator_gradient(jaxb, highp, representation):
     pytest.importorskip("diffrax")
@@ -146,7 +158,7 @@ def test_mesolve_pauli_raw_gradient(jaxb, highp):
 
         def rhs(r, t):
             structures, weights = tc.quantum.Lindblad2PauliStringSum(
-                h_words, h_weights(t), [(c_words, c_weights(t))]
+                (h_words, h_weights(t)), jumps=[(c_words, c_weights(t))]
             )
             return tc.quantum.PauliStringSum2MVP(structures, weights)(r)
 

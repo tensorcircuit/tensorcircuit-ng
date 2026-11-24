@@ -518,7 +518,8 @@ def mesolve(
         either representation or an MVP callable with signature ``mvp(vector)``.
         The time-dependent function takes ``(time, *args)``. For a static MVP,
         pass ``aslinearoperator(mvp, shape=(D, D))``.
-        The Hamiltonian is assumed Hermitian without checking.
+        Matrix-free Hamiltonians, including returned MVP functions, must be
+        Hermitian. This requirement is assumed without checking.
         With ``mode="raw"``, supply ``rhs(vec_rho, time, *args)`` returning
         the derivative of the row-major flattened density matrix instead.
     :type hamiltonian: Union[Tensor, Callable[..., Tensor]]

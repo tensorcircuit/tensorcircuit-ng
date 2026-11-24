@@ -504,7 +504,7 @@ Hamiltonians and collapse operators can also be functions of the form ``op(t, *a
 Hamiltonians may be dense matrices or Hermitian ``LinearOperator`` objects.
 A time-dependent ``hamiltonian(t, *args)`` may return either representation
 or an MVP function ``mvp(vector)``. For a static MVP, pass
-``aslinearoperator(mvp, shape=(D, D))``. The Hamiltonian must be Hermitian.
+``aslinearoperator(mvp, shape=(D, D))``. Matrix-free Hamiltonians must be Hermitian.
 Sparse Hamiltonians built with ``aslinearoperator(PauliStringSum2COO(...))``
 also support JIT and gradients with respect to the Pauli coefficients.
 
@@ -516,7 +516,8 @@ states and callback inputs remain matrices. Raw mode uses the same solver
 options as the default mode; include all dynamics in ``rhs`` and omit ``c_ops``.
 
 ``tc.quantum.Lindblad2PauliStringSum`` translates a Hamiltonian and jumps
-written as Pauli sums into the corresponding 2N-qubit generator. It merges
+written as Pauli sums into the corresponding 2N-qubit generator. The Hamiltonian
+and each jump use the same ``(structures, weights)`` representation. It merges
 duplicate strings and returns structures and weights, which can be passed to
 ``PauliStringSum2MVP`` without constructing a matrix. For example, this
 self-contained calculation evolves two qubits under :math:`X_0 + X_1` with
@@ -534,7 +535,7 @@ independent amplitude damping, using :math:`\sigma^- = (X + iY)/2`:
         ([[0, 1], [0, 2]], [0.4**0.5 / 2, 1j * 0.4**0.5 / 2]),
     ]
     structures, weights = tc.quantum.Lindblad2PauliStringSum(
-        [[1, 0], [0, 1]], [1., 1.], jumps
+        ([[1, 0], [0, 1]], [1., 1.]), jumps=jumps
     )
     lmvp = tc.quantum.PauliStringSum2MVP(structures, weights)
     states = tc.timeevol.mesolve(

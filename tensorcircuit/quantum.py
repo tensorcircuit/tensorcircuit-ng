@@ -2318,8 +2318,7 @@ def heisenberg_hamiltonian(
 
 
 def Lindblad2PauliStringSum(
-    h_structures: Sequence[Sequence[int]],
-    h_weights: Sequence[Tensor],
+    hamiltonian: Tuple[Sequence[Sequence[int]], Sequence[Tensor]],
     jumps: Sequence[Tuple[Sequence[Sequence[int]], Sequence[Tensor]]] = (),
 ) -> Tuple[List[List[int]], Tensor]:
     """
@@ -2332,10 +2331,10 @@ def Lindblad2PauliStringSum(
     are merged.
     No operator is built; pass the result to :func:`PauliStringSum2MVP`.
 
-    :param h_structures: Static N-qubit Hamiltonian strings using 0: I, 1: X, 2: Y, 3: Z.
-    :type h_structures: Sequence[Sequence[int]]
-    :param h_weights: Hamiltonian coefficients in the same order.
-    :type h_weights: Sequence[Tensor]
+    :param hamiltonian: A ``(structures, weights)`` pair. Structures are static
+        N-qubit Pauli strings using 0: I, 1: X, 2: Y, 3: Z; weights are the
+        corresponding Hamiltonian coefficients.
+    :type hamiltonian: Tuple[Sequence[Sequence[int]], Sequence[Tensor]]
     :param jumps: Each jump is a ``(structures, weights)`` pair. Include the
         square root of its rate in the weights; for example, amplitude damping
         uses ``[[1], [2]]`` with weights ``[sqrt(rate)/2, 1j*sqrt(rate)/2]``.
@@ -2344,6 +2343,7 @@ def Lindblad2PauliStringSum(
     :return: Unique 2N-qubit Pauli strings and their backend weight tensor.
     :rtype: Tuple[List[List[int]], Tensor]
     """
+    h_structures, h_weights = hamiltonian
     if len(h_structures) != len(h_weights) or any(
         len(structures) != len(weights) for structures, weights in jumps
     ):

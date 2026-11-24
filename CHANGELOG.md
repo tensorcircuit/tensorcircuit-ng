@@ -28,7 +28,7 @@
 
 - Add `DMCircuit2.apply_superoperator` to apply a channel given as a superoperator.
 
-- Add `tc.timeevol.mesolve` for differentiable Lindblad evolution of dense density matrices on JAX with diffrax, including Hermitian `LinearOperator` Hamiltonians and user-defined vectorized generators through `mode="raw"`. Add `tc.quantum.Lindblad2PauliStringSum` to translate Pauli Hamiltonians and jumps for use with `PauliStringSum2MVP`. The diffrax ODE solvers also accept `dtmax` to bound the internal step size and `jump_ts` for known discontinuities.
+- Add `tc.timeevol.mesolve` for differentiable Lindblad evolution of dense density matrices on JAX with diffrax, including Hermitian `LinearOperator` Hamiltonians and user-defined vectorized generators through `mode="raw"`. Add `tc.quantum.Lindblad2PauliStringSum` to translate Pauli Hamiltonians and jumps, each represented as `(structures, weights)`, for use with `PauliStringSum2MVP`. The diffrax ODE solvers also accept `dtmax` to bound the internal step size and `jump_ts` for known discontinuities.
 
 - Add `delay_instruction(*index, duration, unit="ns")` for idling qubits, stored in nanoseconds, with no effect on simulation. `to_qiskit` and `from_qiskit` convert it from and to the qiskit `Delay` in SI units; a `Delay` in `dt` is skipped with a warning. `to_openqasm` raises on delays, since OpenQASM 2 cannot hold their unit. The `lqcloud` provider sends it as the native `delay`, and `properties_to_target` supports it.
 
