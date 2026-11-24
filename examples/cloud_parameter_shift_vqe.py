@@ -7,7 +7,8 @@ The ansatz is compiled once for the device as a ``SymbolCircuit``. Each step bin
 the current parameters and their ``±pi/2`` shifts, and evaluates all of them in
 one ``batch_expectation_ps`` call, i.e. one batch of 2 x 9 circuits for the two
 qubit-wise commuting groups {Z0Z1} and {X0, X1}. Without ``--device``, the
-energies are exact.
+energies are exact. The tutorial ``docs/source/tutorials/lqcloud_qpu_workflow.ipynb``
+explains the same workflow step by step.
 
 .. code-block:: bash
 

@@ -209,6 +209,8 @@ def batch_expectation_ps(
     run on the device.
 
     One line access to unlock the whole power or real quantum hardware on quantum cloud.
+    See the tutorial ``docs/source/tutorials/lqcloud_qpu_workflow.ipynb`` for an
+    end-to-end example on hardware.
 
     :Example:
 

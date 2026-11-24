@@ -595,7 +595,11 @@ def submit_task(
 
     .. seealso::
 
-        :py:func:`tensorcircuit.cloud.tencent.submit_task`
+        :py:func:`tensorcircuit.cloud.tencent.submit_task`,
+        :py:func:`tensorcircuit.cloud.tianyan.submit_task`,
+        :py:func:`tensorcircuit.cloud.lqcloud.submit_task`, and the tutorial
+        ``docs/source/tutorials/lqcloud_qpu_workflow.ipynb`` for an end-to-end
+        hardware workflow
 
     :param provider: provider name or Provider instance; defaults to None
     :type provider: Optional[Union[str, Provider]], optional
