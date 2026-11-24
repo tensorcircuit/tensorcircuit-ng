@@ -2396,7 +2396,8 @@ def PauliStringSum2MVP(
     The returned function `mvp(psi)` computes sum(w_i * P_i * psi).
     Pure Z/I terms are merged into one precomputed diagonal; each remaining term
     is applied with backend flips (for X/Y) and broadcasting (for Z/Y phases),
-    avoiding explicit matrix construction.
+    avoiding explicit matrix construction. Applying flips before phases lets
+    compiled backends reuse flips shared by multiple terms.
 
     :param structures: List of Pauli strings, e.g. [[1, 0, 3], [0, 2, 0]] for X0 Z2 and Y1.
         (0: I, 1: X, 2: Y, 3: Z)
@@ -2437,13 +2438,13 @@ def PauliStringSum2MVP(
             diagonal_terms.append(i)
             continue
 
-        # Z mask comes from Z terms AND Y terms (Y = i * X * Z)
+        # Apply flips before the Z/Y mask: Y = -i * Z * X.
         term_mask_indices.append(tuple(sorted(z_indices + y_indices)))
         # Flip axes come from X terms AND Y terms
         term_flip_axes.append(tuple(sorted(x_indices + y_indices)))
-        # Global phase: each Y contributes 1j; weights follow the global dtype
+        # Global phase: each Y contributes -1j; weights follow the global dtype
         term_weights.append(
-            backend.convert_to_tensor(w, dtype=dtypestr) * (1j) ** len(y_indices)
+            backend.convert_to_tensor(w, dtype=dtypestr) * (-1j) ** len(y_indices)
         )
 
     # Pre-fuse per-axis Z masks into a single broadcastable mask per term.
@@ -2493,17 +2494,12 @@ def PauliStringSum2MVP(
             total_res = psi_tensor * diagonal
 
         for i in range(len(term_weights)):
-            term_psi = psi_tensor
+            term_psi = backend.flip(psi_tensor, term_flip_axes[i])
 
-            # 1. Apply fused Z mask via a single broadcast multiply
             fused = term_fused_masks[i]
             if fused is not None:
                 term_psi = term_psi * fused
 
-            # 2. Apply X/Y flips
-            term_psi = backend.flip(term_psi, term_flip_axes[i])
-
-            # 3. Apply weight
             total_res = total_res + (term_psi * term_weights[i])
 
         if is_flat:

@@ -1658,8 +1658,10 @@ def test_PauliStringSum2MVP(backend):
         [3, 3, 0, 0],  # Z0 Z1
         [1, 2, 0, 0],  # X0 Y1
         [0, 2, 2, 3],  # Y1 Y2 Z3
+        [2, 0, 0, 0],  # Y0 shares the X0 flip
+        [1, 0, 3, 0],  # X0 Z2 shares the X0 flip
     ]
-    weights = [0.5, -0.3, 1.2, 0.7, -0.9]
+    weights = [0.5, -0.3, 1.2, 0.7, -0.9, 0.2j, -0.4]
 
     mvp = qu.PauliStringSum2MVP(structures, weights)
     H_dense = qu.PauliStringSum2Dense(structures, weights)
