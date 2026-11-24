@@ -1,0 +1,135 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2020-2026, TensorCircuit-NG Development Team. Created by
+# Shi-Xin Zhang.
+# This file is distributed under the same license as the tensorcircuit-ng
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: tensorcircuit-ng \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-24 15:38+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../source/tencirpauli.rst:2
+msgid "TenCirPauli Plugin"
+msgstr "TenCirPauli 插件"
+
+#: ../../source/tencirpauli.rst:4
+msgid ""
+"`TenCirPauli <https://github.com/tensorcircuit/TenCirPauli>`_ is a "
+"Python-first, Rust-native companion for TensorCircuit-NG. Its two main "
+"entry points are approximate circuit simulation with Pauli propagation "
+"and backpropagation, and fast fixed-particle-number circuit simulation."
+msgstr ""
+"`TenCirPauli <https://github.com/tensorcircuit/TenCirPauli>`_ 是 "
+"TensorCircuit-NG 的 Python 优先、Rust "
+"原生配套包。它的两个主要入口是：基于泡利传播与反向传播的近似线路模拟，以及快速的固定粒子数线路模拟。"
+
+#: ../../source/tencirpauli.rst:8
+msgid "TenCirPauli on GitHub"
+msgstr "GitHub 上的 TenCirPauli"
+
+#: ../../source/tencirpauli.rst:12
+msgid "Read the full benchmarks and implementation details."
+msgstr "阅读完整的基准测试和实现细节。"
+
+#: ../../source/tencirpauli.rst:14
+msgid "TenCirPauli Documentation"
+msgstr "TenCirPauli 文档"
+
+#: ../../source/tencirpauli.rst:18
+msgid "Read the user guide and API reference."
+msgstr "阅读用户指南和 API 参考。"
+
+#: ../../source/tencirpauli.rst:21
+msgid "Installation"
+msgstr "安装"
+
+#: ../../source/tencirpauli.rst:23
+msgid "Install the companion package alongside TensorCircuit-NG:"
+msgstr "将配套包与 TensorCircuit-NG 一起安装："
+
+#: ../../source/tencirpauli.rst:29
+msgid ""
+"The package complements TensorCircuit-NG rather than replacing its "
+"general-purpose circuit and tensor-network simulators. Use TensorCircuit-"
+"NG to construct circuits and work with its differentiable backend "
+"interface, then hand off suitable structured workloads to TenCirPauli."
+msgstr ""
+"该包是对 TensorCircuit-NG 的补充，而不是替代其通用线路和张量网络模拟器。请使用 TensorCircuit-NG "
+"构建线路并使用其可微后端接口，然后将适合的结构化工作负载交给 TenCirPauli。"
+
+#: ../../source/tencirpauli.rst:32
+msgid "Pauli propagation"
+msgstr "泡利传播"
+
+#: ../../source/tencirpauli.rst:34
+msgid ""
+"TenCirPauli provides approximate circuit simulation based on Pauli "
+"propagation. It can import a regular TensorCircuit circuit, propagate "
+"Pauli operators through the circuit, and return observable values "
+"together with gate-parameter gradients:"
+msgstr ""
+"TenCirPauli 提供基于泡利传播的近似线路模拟。它可以导入普通的 TensorCircuit "
+"线路，将泡利算符传播通过线路，并返回观测量值以及门参数梯度："
+
+#: ../../source/tencirpauli.rst:57
+msgid ""
+"TenCirPauli is substantially faster than `PauliPropagation.jl "
+"<https://github.com/SparqleSim/PauliPropagation.jl>`_. See the "
+"`TenCirPauli performance comparisons "
+"<https://tensorcircuit.github.io/TenCirPauli/performance/>`_ for the "
+"benchmark details."
+msgstr ""
+"TenCirPauli 比 `PauliPropagation.jl "
+"<https://github.com/SparqleSim/PauliPropagation.jl>`_ 快得多。基准细节见 "
+"`TenCirPauli 性能对比 "
+"<https://tensorcircuit.github.io/TenCirPauli/performance/>`_ 。"
+
+#: ../../source/tencirpauli.rst:60
+msgid "Fixed-particle-number circuits"
+msgstr "固定粒子数线路"
+
+#: ../../source/tencirpauli.rst:62
+msgid ""
+"TensorCircuit-NG already provides :py:class:`tensorcircuit.U1Circuit` for"
+" particle-number-conserving simulations. TenCirPauli provides a faster "
+"Rust implementation for this same class of circuits. It avoids JAX JIT "
+"compilation's cold-start overhead:"
+msgstr ""
+"TensorCircuit-NG 已经提供了用于粒子数守恒模拟的 "
+":py:class:`tensorcircuit.U1Circuit`。TenCirPauli 为同一类线路提供了更快的 Rust 实现。它避免了"
+" JAX JIT 编译的冷启动开销："
+
+#: ../../source/tencirpauli.rst:81
+msgid "Structured operators and MVPs"
+msgstr "结构化算符与 MVP"
+
+#: ../../source/tencirpauli.rst:83
+msgid ""
+"TenCirPauli offers backend-compatible matrix-vector-product (MVP) "
+"interfaces for structured fermionic, bosonic, Majorana, qudit, and hybrid"
+" operators. It also provides fermion-to-qubit mappings and import paths "
+"from quantum-chemistry libraries, so these operators can be used directly"
+" in TensorCircuit workflows without materializing dense matrices."
+msgstr ""
+"TenCirPauli 为结构化费米子、玻色子、Majorana、qudit 和混合算符提供后端兼容的矩阵-向量积 (MVP) "
+"接口。它还提供费米子到量子比特的映射以及从量子化学库导入的路径，因此这些算符可以直接用于 TensorCircuit 工作流，而无需物化稠密矩阵。"
+
+#: ../../source/tencirpauli.rst:85
+msgid ""
+"For example, a molecular Hamiltonian from PySCF can be mapped to a Pauli-"
+"string MVP:"
+msgstr "例如，来自 PySCF 的分子哈密顿量可以映射为泡利串 MVP："
+
