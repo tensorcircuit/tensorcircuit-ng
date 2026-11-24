@@ -1,0 +1,2305 @@
+{
+  "paper": "Torlai et al., Nature Physics 14, 447-450",
+  "arxiv_id": "1703.05334",
+  "config": {
+    "sizes": [
+      8,
+      10,
+      12
+    ],
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "positive_shots": [
+      20,
+      100,
+      500,
+      2000,
+      10000
+    ],
+    "phase_shots_per_basis": 6400,
+    "alpha": 1,
+    "probability_floor": 1e-12,
+    "optimizer": "L-BFGS-B",
+    "maxiter_per_fit": 2000,
+    "amplitude_initial_scales": [
+      0.1,
+      0.5,
+      1.0
+    ],
+    "amplitude_restart_kl_threshold": 1e-05,
+    "phase_pretraining": "Squared error in empirical basis probabilities"
+  },
+  "software": {
+    "tensorcircuit": "1.9.1",
+    "python": "3.11.16",
+    "matplotlib": "3.11.0",
+    "jax": "0.7.0",
+    "numpy": "2.2.6",
+    "scipy": "1.17.1",
+    "devices": [
+      "cpu"
+    ]
+  },
+  "positive": [
+    {
+      "n": 8,
+      "seed": 0,
+      "shots": 20,
+      "fidelity": 0.9014965084383404,
+      "overlap": 0.9494716996510957,
+      "norm_error": 3.1530333899354446e-14,
+      "leakage": 8.665512751804272e-12,
+      "z_tv": 0.27499995539171934,
+      "observable_max_error": 0.4999995746084613,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 1.8775242811493909,
+        "selected_attempt": 2,
+        "empirical_kl": 2.3431034890109004e-11,
+        "attempts": [
+          {
+            "initial_loss": 5.861295327274084,
+            "final_loss": 1.9991638135835093,
+            "iterations": 87,
+            "evaluations": 92,
+            "gradient_max": 1.2295752491956607e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 6.009648541092093,
+            "final_loss": 2.1774844871123493,
+            "iterations": 84,
+            "evaluations": 90,
+            "gradient_max": 4.438267629860454e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 8.540034807187078,
+            "final_loss": 1.8775242811728219,
+            "iterations": 71,
+            "evaluations": 76,
+            "gradient_max": 1.643832690606776e-06,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 8,
+      "seed": 0,
+      "shots": 100,
+      "fidelity": 0.9677507916195773,
+      "overlap": 0.9837432549296474,
+      "norm_error": 2.6645352591003757e-15,
+      "leakage": 3.8753555919868177e-11,
+      "z_tv": 0.1299997993307963,
+      "observable_max_error": 0.21999990036822997,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.0139485698503434,
+        "selected_attempt": 0,
+        "empirical_kl": 3.922107083553783e-11,
+        "attempts": [
+          {
+            "initial_loss": 5.777331108248802,
+            "final_loss": 2.0139485698895645,
+            "iterations": 113,
+            "evaluations": 125,
+            "gradient_max": 3.680280784021622e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 8,
+      "seed": 0,
+      "shots": 500,
+      "fidelity": 0.9973036895257513,
+      "overlap": 0.9986509347743842,
+      "norm_error": 5.362377208939506e-14,
+      "leakage": 5.084110910047457e-11,
+      "z_tv": 0.03699993282698796,
+      "observable_max_error": 0.05999963233430994,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.0741904784226315,
+        "selected_attempt": 0,
+        "empirical_kl": 5.205258446494554e-11,
+        "attempts": [
+          {
+            "initial_loss": 5.724283162689281,
+            "final_loss": 2.074190478474684,
+            "iterations": 114,
+            "evaluations": 131,
+            "gradient_max": 4.610139530981039e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 8,
+      "seed": 0,
+      "shots": 2000,
+      "fidelity": 0.999596739467617,
+      "overlap": 0.9997983494023267,
+      "norm_error": 1.7985612998927536e-14,
+      "leakage": 4.371947248671404e-11,
+      "z_tv": 0.017000707551531227,
+      "observable_max_error": 0.02000076193047362,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.0786339226164614,
+        "selected_attempt": 0,
+        "empirical_kl": 4.5646153523648536e-11,
+        "attempts": [
+          {
+            "initial_loss": 5.738270222034231,
+            "final_loss": 2.0786339226621076,
+            "iterations": 128,
+            "evaluations": 155,
+            "gradient_max": 9.283945007055741e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 8,
+      "seed": 0,
+      "shots": 10000,
+      "fidelity": 0.9999017294539921,
+      "overlap": 0.9999508635197992,
+      "norm_error": 1.2323475573339238e-14,
+      "leakage": 4.0321856964453673e-10,
+      "z_tv": 0.009500512407809693,
+      "observable_max_error": 0.007201989076035309,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.0792451082870906,
+        "selected_attempt": 0,
+        "empirical_kl": 4.143667631240078e-10,
+        "attempts": [
+          {
+            "initial_loss": 5.7280615978624,
+            "final_loss": 2.0792451087014574,
+            "iterations": 126,
+            "evaluations": 146,
+            "gradient_max": 1.5701336270225968e-06,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 8,
+      "seed": 1,
+      "shots": 20,
+      "fidelity": 0.9592810615769027,
+      "overlap": 0.9794289466709174,
+      "norm_error": 2.3647750424515834e-13,
+      "leakage": 1.0043943454718374e-10,
+      "z_tv": 0.1749999782835712,
+      "observable_max_error": 0.19999994097596652,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 1.9991638135818404,
+        "selected_attempt": 0,
+        "empirical_kl": 1.0009459927573516e-10,
+        "attempts": [
+          {
+            "initial_loss": 5.452270283726725,
+            "final_loss": 1.999163813681935,
+            "iterations": 97,
+            "evaluations": 110,
+            "gradient_max": 5.147760288396457e-08,
+            "converged": true,
+            "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+          }
+        ]
+      }
+    },
+    {
+      "n": 8,
+      "seed": 1,
+      "shots": 100,
+      "fidelity": 0.9816685672527031,
+      "overlap": 0.9907918889719995,
+      "norm_error": 4.218847493575595e-15,
+      "leakage": 6.957701081944379e-11,
+      "z_tv": 0.11500014202015245,
+      "observable_max_error": 0.16000029066209576,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.0430784676673746,
+        "selected_attempt": 0,
+        "empirical_kl": 7.1637806797753e-11,
+        "attempts": [
+          {
+            "initial_loss": 5.424385522890006,
+            "final_loss": 2.0430784677390124,
+            "iterations": 108,
+            "evaluations": 124,
+            "gradient_max": 6.736536226866174e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 8,
+      "seed": 1,
+      "shots": 500,
+      "fidelity": 0.9880200088212727,
+      "overlap": 0.9939919561149742,
+      "norm_error": 3.9968028886505635e-15,
+      "leakage": 3.730393771661511e-11,
+      "z_tv": 0.09200017300626417,
+      "observable_max_error": 0.12199957395665395,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.0549291703927546,
+        "selected_attempt": 0,
+        "empirical_kl": 3.8484326836396576e-11,
+        "attempts": [
+          {
+            "initial_loss": 5.411331381333923,
+            "final_loss": 2.054929170431239,
+            "iterations": 119,
+            "evaluations": 141,
+            "gradient_max": 4.691917923729764e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 8,
+      "seed": 1,
+      "shots": 2000,
+      "fidelity": 0.9993010639245967,
+      "overlap": 0.9996504708769944,
+      "norm_error": 3.774758283725532e-15,
+      "leakage": 9.248024568364599e-11,
+      "z_tv": 0.022999829802164057,
+      "observable_max_error": 0.021000441729088215,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.0780404182584697,
+        "selected_attempt": 0,
+        "empirical_kl": 9.43209954584745e-11,
+        "attempts": [
+          {
+            "initial_loss": 5.426394975084806,
+            "final_loss": 2.0780404183527907,
+            "iterations": 144,
+            "evaluations": 177,
+            "gradient_max": 6.016435948236528e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 8,
+      "seed": 1,
+      "shots": 10000,
+      "fidelity": 0.9998556096566314,
+      "overlap": 0.9999278022220561,
+      "norm_error": 1.3655743202889425e-14,
+      "leakage": 1.0043732512343695e-10,
+      "z_tv": 0.00990025657317132,
+      "observable_max_error": 0.0112000075519475,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.0791526062299734,
+        "selected_attempt": 0,
+        "empirical_kl": 1.0342215972514168e-10,
+        "attempts": [
+          {
+            "initial_loss": 5.42886455532946,
+            "final_loss": 2.0791526063333956,
+            "iterations": 125,
+            "evaluations": 147,
+            "gradient_max": 7.515682297531271e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 8,
+      "seed": 2,
+      "shots": 20,
+      "fidelity": 0.8425037243368387,
+      "overlap": 0.9178800163075993,
+      "norm_error": 5.995204332975845e-15,
+      "leakage": 7.404898916263392e-11,
+      "z_tv": 0.22500027261440933,
+      "observable_max_error": 0.25000000000000566,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 1.8775242811493909,
+        "selected_attempt": 2,
+        "empirical_kl": 7.62088170347397e-11,
+        "attempts": [
+          {
+            "initial_loss": 5.317936190145979,
+            "final_loss": 2.108169769065444,
+            "iterations": 86,
+            "evaluations": 96,
+            "gradient_max": 7.768831517332431e-08,
+            "converged": true,
+            "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+          },
+          {
+            "initial_loss": 5.96788301286189,
+            "final_loss": 1.9730014063978616,
+            "iterations": 68,
+            "evaluations": 74,
+            "gradient_max": 2.9153009783139386e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 6.779893819217834,
+            "final_loss": 1.8775242812255997,
+            "iterations": 154,
+            "evaluations": 192,
+            "gradient_max": 7.382632448356837e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 8,
+      "seed": 2,
+      "shots": 100,
+      "fidelity": 0.9844565362508575,
+      "overlap": 0.9921978312064875,
+      "norm_error": 8.215650382226158e-15,
+      "leakage": 1.5711876244495215e-11,
+      "z_tv": 0.09999996099886634,
+      "observable_max_error": 0.11999995426125798,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.0492026056181363,
+        "selected_attempt": 0,
+        "empirical_kl": 1.575006791654232e-11,
+        "attempts": [
+          {
+            "initial_loss": 5.294214877768443,
+            "final_loss": 2.0492026056338863,
+            "iterations": 81,
+            "evaluations": 94,
+            "gradient_max": 7.466294987240389e-08,
+            "converged": true,
+            "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+          }
+        ]
+      }
+    },
+    {
+      "n": 8,
+      "seed": 2,
+      "shots": 500,
+      "fidelity": 0.999047338110654,
+      "overlap": 0.9995235555556727,
+      "norm_error": 2.0761170560490427e-14,
+      "leakage": 1.0076162126892996e-11,
+      "z_tv": 0.02800032586781688,
+      "observable_max_error": 0.036000536004148986,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.0775422491688786,
+        "selected_attempt": 0,
+        "empirical_kl": 1.070699084948501e-11,
+        "attempts": [
+          {
+            "initial_loss": 5.283131169320131,
+            "final_loss": 2.0775422491795856,
+            "iterations": 96,
+            "evaluations": 109,
+            "gradient_max": 4.0686719834961713e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 8,
+      "seed": 2,
+      "shots": 2000,
+      "fidelity": 0.9995890525469188,
+      "overlap": 0.9997945051593946,
+      "norm_error": 3.042011087472929e-14,
+      "leakage": 2.7469138075275623e-12,
+      "z_tv": 0.01799973216420562,
+      "observable_max_error": 0.025999800497041314,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.0786196350727515,
+        "selected_attempt": 0,
+        "empirical_kl": 3.1961100432909006e-12,
+        "attempts": [
+          {
+            "initial_loss": 5.285087454272556,
+            "final_loss": 2.0786196350759476,
+            "iterations": 79,
+            "evaluations": 88,
+            "gradient_max": 2.4586882218224076e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 8,
+      "seed": 2,
+      "shots": 10000,
+      "fidelity": 0.9998877397675126,
+      "overlap": 0.9999438683083729,
+      "norm_error": 1.6542323066914832e-14,
+      "leakage": 7.513589750374194e-11,
+      "z_tv": 0.009700384473390871,
+      "observable_max_error": 0.012199359434796553,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.0792172831921842,
+        "selected_attempt": 0,
+        "empirical_kl": 7.909850552323405e-11,
+        "attempts": [
+          {
+            "initial_loss": 5.2846026929324585,
+            "final_loss": 2.0792172832712827,
+            "iterations": 162,
+            "evaluations": 190,
+            "gradient_max": 9.122767560720302e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 10,
+      "seed": 0,
+      "shots": 20,
+      "fidelity": 0.738869871456051,
+      "overlap": 0.8595754018444519,
+      "norm_error": 1.7439383270811959e-12,
+      "leakage": 1.7278209973881076e-09,
+      "z_tv": 0.30000011005381916,
+      "observable_max_error": 0.5000001205247584,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 1.920676592017158,
+        "selected_attempt": 1,
+        "empirical_kl": 1.7232690829871444e-09,
+        "attempts": [
+          {
+            "initial_loss": 7.031777200111171,
+            "final_loss": 2.209208216690149,
+            "iterations": 92,
+            "evaluations": 105,
+            "gradient_max": 2.2901316720495954e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 7.482003644286157,
+            "final_loss": 1.920676593740427,
+            "iterations": 98,
+            "evaluations": 110,
+            "gradient_max": 2.3991830465416056e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 10,
+      "seed": 0,
+      "shots": 100,
+      "fidelity": 0.9631124477407438,
+      "overlap": 0.9813829261510227,
+      "norm_error": 2.6645352591003757e-14,
+      "leakage": 1.554045780949309e-11,
+      "z_tv": 0.1500000442225919,
+      "observable_max_error": 0.12000053216074441,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.2333772117160287,
+        "selected_attempt": 2,
+        "empirical_kl": 1.787725523172412e-11,
+        "attempts": [
+          {
+            "initial_loss": 7.036232138846012,
+            "final_loss": 2.2952037536224275,
+            "iterations": 101,
+            "evaluations": 106,
+            "gradient_max": 3.845092322318777e-08,
+            "converged": true,
+            "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+          },
+          {
+            "initial_loss": 7.620286280896962,
+            "final_loss": 2.3327510316850497,
+            "iterations": 127,
+            "evaluations": 134,
+            "gradient_max": 1.4825276418929675e-06,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 11.404260413033432,
+            "final_loss": 2.233377211733906,
+            "iterations": 84,
+            "evaluations": 90,
+            "gradient_max": 4.96148696174759e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 10,
+      "seed": 0,
+      "shots": 500,
+      "fidelity": 0.9938716617517028,
+      "overlap": 0.9969311218693611,
+      "norm_error": 2.1760371282653068e-13,
+      "leakage": 2.294942014202661e-12,
+      "z_tv": 0.06600003524614385,
+      "observable_max_error": 0.06800000489512215,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.290256895510302,
+        "selected_attempt": 0,
+        "empirical_kl": 2.596145520783466e-12,
+        "attempts": [
+          {
+            "initial_loss": 7.0151477018300525,
+            "final_loss": 2.2902568955128983,
+            "iterations": 87,
+            "evaluations": 94,
+            "gradient_max": 3.279609761469571e-08,
+            "converged": true,
+            "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+          }
+        ]
+      }
+    },
+    {
+      "n": 10,
+      "seed": 0,
+      "shots": 2000,
+      "fidelity": 0.9981684792320309,
+      "overlap": 0.9990838199230487,
+      "norm_error": 3.730349362740526e-14,
+      "leakage": 3.072109233670517e-11,
+      "z_tv": 0.03350012192003142,
+      "observable_max_error": 0.03600037499684283,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.298962452452347,
+        "selected_attempt": 0,
+        "empirical_kl": 3.100364409647227e-11,
+        "attempts": [
+          {
+            "initial_loss": 7.019849971587089,
+            "final_loss": 2.2989624524833507,
+            "iterations": 102,
+            "evaluations": 115,
+            "gradient_max": 2.8577665478931257e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 10,
+      "seed": 0,
+      "shots": 10000,
+      "fidelity": 0.9997509941725266,
+      "overlap": 0.9998754893348104,
+      "norm_error": 1.8207657603852567e-14,
+      "leakage": 4.29127844370214e-11,
+      "z_tv": 0.013100187868091574,
+      "observable_max_error": 0.014200565251599073,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.302086450887048,
+        "selected_attempt": 0,
+        "empirical_kl": 4.472999748372786e-11,
+        "attempts": [
+          {
+            "initial_loss": 7.024015876341817,
+            "final_loss": 2.302086450931778,
+            "iterations": 104,
+            "evaluations": 121,
+            "gradient_max": 5.290211448741708e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 10,
+      "seed": 1,
+      "shots": 20,
+      "fidelity": 0.6645426428362119,
+      "overlap": 0.8151948496133988,
+      "norm_error": 8.659739592076221e-15,
+      "leakage": 0.06666668202096127,
+      "z_tv": 0.366666819050146,
+      "observable_max_error": 0.3000006103004846,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 1.9433779257532875,
+        "selected_attempt": 2,
+        "empirical_kl": 0.09547712524855023,
+        "attempts": [
+          {
+            "initial_loss": 7.256949516552014,
+            "final_loss": 2.2957637669213,
+            "iterations": 80,
+            "evaluations": 100,
+            "gradient_max": 5.275914229749013e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 10.673457726745637,
+            "final_loss": 2.196724747414305,
+            "iterations": 84,
+            "evaluations": 96,
+            "gradient_max": 3.602251214828638e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 14.636988852153717,
+            "final_loss": 2.0388550510018377,
+            "iterations": 87,
+            "evaluations": 93,
+            "gradient_max": 4.3211973319015044e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 10,
+      "seed": 1,
+      "shots": 100,
+      "fidelity": 0.9774913993261308,
+      "overlap": 0.9886816471069597,
+      "norm_error": 3.674838211509268e-14,
+      "leakage": 2.1112445125481827e-11,
+      "z_tv": 0.11000033223249042,
+      "observable_max_error": 0.1000000933602685,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.259168540705449,
+        "selected_attempt": 0,
+        "empirical_kl": 2.269517906938745e-11,
+        "attempts": [
+          {
+            "initial_loss": 7.184948007631321,
+            "final_loss": 2.2591685407281443,
+            "iterations": 105,
+            "evaluations": 117,
+            "gradient_max": 6.191075812006738e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 10,
+      "seed": 1,
+      "shots": 500,
+      "fidelity": 0.9981324298902524,
+      "overlap": 0.999065778560277,
+      "norm_error": 2.353672812205332e-14,
+      "leakage": 9.116229993111347e-11,
+      "z_tv": 0.03400047772315187,
+      "observable_max_error": 0.04800069610415614,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.298856668732987,
+        "selected_attempt": 0,
+        "empirical_kl": 9.397105316111265e-11,
+        "attempts": [
+          {
+            "initial_loss": 7.167112158153908,
+            "final_loss": 2.298856668826958,
+            "iterations": 143,
+            "evaluations": 173,
+            "gradient_max": 6.556797829126992e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 10,
+      "seed": 1,
+      "shots": 2000,
+      "fidelity": 0.9991018038393608,
+      "overlap": 0.999550801029823,
+      "norm_error": 1.0658141036401503e-14,
+      "leakage": 1.5237755501829042e-10,
+      "z_tv": 0.026000291857998993,
+      "observable_max_error": 0.02099982937291467,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.3007994350293886,
+        "selected_attempt": 0,
+        "empirical_kl": 1.5322187962851785e-10,
+        "attempts": [
+          {
+            "initial_loss": 7.165981349129908,
+            "final_loss": 2.3007994351826104,
+            "iterations": 207,
+            "evaluations": 257,
+            "gradient_max": 3.9174067116358883e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 10,
+      "seed": 1,
+      "shots": 10000,
+      "fidelity": 0.9996580015251856,
+      "overlap": 0.9998289861397226,
+      "norm_error": 1.0658141036401503e-14,
+      "leakage": 4.182088009230256e-11,
+      "z_tv": 0.01620000346812002,
+      "observable_max_error": 0.016599866901816362,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.301901422919964,
+        "selected_attempt": 0,
+        "empirical_kl": 4.206057724331913e-11,
+        "attempts": [
+          {
+            "initial_loss": 7.169972058622644,
+            "final_loss": 2.3019014229620245,
+            "iterations": 136,
+            "evaluations": 159,
+            "gradient_max": 2.7201315909460583e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 10,
+      "seed": 2,
+      "shots": 20,
+      "fidelity": 0.7736178241389084,
+      "overlap": 0.8795554696202557,
+      "norm_error": 8.570921750106208e-14,
+      "leakage": 2.1044055387164917e-11,
+      "z_tv": 0.2500001038443145,
+      "observable_max_error": 0.3000001777849129,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.01615371726138,
+        "selected_attempt": 1,
+        "empirical_kl": 2.119726616456319e-11,
+        "attempts": [
+          {
+            "initial_loss": 7.1663167969582044,
+            "final_loss": 2.6021828460296548,
+            "iterations": 76,
+            "evaluations": 87,
+            "gradient_max": 1.1386447256952838e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 8.812092268291652,
+            "final_loss": 2.0161537172825774,
+            "iterations": 79,
+            "evaluations": 87,
+            "gradient_max": 9.68942651952901e-08,
+            "converged": true,
+            "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+          }
+        ]
+      }
+    },
+    {
+      "n": 10,
+      "seed": 2,
+      "shots": 100,
+      "fidelity": 0.9776495517211573,
+      "overlap": 0.9887616253279439,
+      "norm_error": 5.10702591327572e-15,
+      "leakage": 5.155254001465437e-11,
+      "z_tv": 0.10000051960532572,
+      "observable_max_error": 0.1400008581850889,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.2610205879107568,
+        "selected_attempt": 1,
+        "empirical_kl": 5.312683626357284e-11,
+        "attempts": [
+          {
+            "initial_loss": 7.158575290911777,
+            "final_loss": 2.348007863640676,
+            "iterations": 111,
+            "evaluations": 118,
+            "gradient_max": 2.9926007362756326e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 8.634566606125553,
+            "final_loss": 2.2610205879638836,
+            "iterations": 140,
+            "evaluations": 161,
+            "gradient_max": 6.293837638695689e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 10,
+      "seed": 2,
+      "shots": 500,
+      "fidelity": 0.9982673249099755,
+      "overlap": 0.9991332868591535,
+      "norm_error": 3.6193270602780103e-14,
+      "leakage": 3.679645477205895e-11,
+      "z_tv": 0.034000259854228936,
+      "observable_max_error": 0.044000547950177604,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.299129381446556,
+        "selected_attempt": 0,
+        "empirical_kl": 3.853006802501113e-11,
+        "attempts": [
+          {
+            "initial_loss": 7.154837554296335,
+            "final_loss": 2.299129381485086,
+            "iterations": 118,
+            "evaluations": 134,
+            "gradient_max": 6.219742604259809e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 10,
+      "seed": 2,
+      "shots": 2000,
+      "fidelity": 0.9988064516640366,
+      "overlap": 0.9994030476559678,
+      "norm_error": 4.929390229335695e-14,
+      "leakage": 1.9231949366371737e-11,
+      "z_tv": 0.03100034779818522,
+      "observable_max_error": 0.034000263371713246,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.3002073782328516,
+        "selected_attempt": 0,
+        "empirical_kl": 2.035127621979882e-11,
+        "attempts": [
+          {
+            "initial_loss": 7.155179163400316,
+            "final_loss": 2.300207378253203,
+            "iterations": 102,
+            "evaluations": 116,
+            "gradient_max": 4.2044281753006806e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 10,
+      "seed": 2,
+      "shots": 10000,
+      "fidelity": 0.9997492975124904,
+      "overlap": 0.9998746408987931,
+      "norm_error": 9.547918011776346e-15,
+      "leakage": 4.685696275430473e-12,
+      "z_tv": 0.013300088517282836,
+      "observable_max_error": 0.015599870343378841,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.3020850768026015,
+        "selected_attempt": 0,
+        "empirical_kl": 5.501821220832426e-12,
+        "attempts": [
+          {
+            "initial_loss": 7.153735601634889,
+            "final_loss": 2.3020850768081034,
+            "iterations": 106,
+            "evaluations": 115,
+            "gradient_max": 4.188963197922014e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 12,
+      "seed": 0,
+      "shots": 20,
+      "fidelity": 0.7885203488080821,
+      "overlap": 0.8879866827875754,
+      "norm_error": 3.0531133177191805e-14,
+      "leakage": 1.0319767262956248e-10,
+      "z_tv": 0.29999989216443845,
+      "observable_max_error": 0.26666936267618346,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.197935464241136,
+        "selected_attempt": 2,
+        "empirical_kl": 1.2374723468155935e-10,
+        "attempts": [
+          {
+            "initial_loss": 8.195003398510067,
+            "final_loss": 2.557488657443264,
+            "iterations": 86,
+            "evaluations": 96,
+            "gradient_max": 1.564034444456741e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 10.27592242538831,
+            "final_loss": 2.293412589513264,
+            "iterations": 91,
+            "evaluations": 98,
+            "gradient_max": 2.6386394599148266e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 15.119501831514386,
+            "final_loss": 2.197935464364883,
+            "iterations": 153,
+            "evaluations": 178,
+            "gradient_max": 2.016899543086443e-06,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 12,
+      "seed": 0,
+      "shots": 100,
+      "fidelity": 0.970994723476348,
+      "overlap": 0.9853906451130678,
+      "norm_error": 1.7863488466218769e-13,
+      "leakage": 1.6915469025491348e-10,
+      "z_tv": 0.1299996127571086,
+      "observable_max_error": 0.14666521267844268,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.428582763168886,
+        "selected_attempt": 1,
+        "empirical_kl": 1.8139179047693688e-10,
+        "attempts": [
+          {
+            "initial_loss": 8.134963183966041,
+            "final_loss": 2.540646473539637,
+            "iterations": 95,
+            "evaluations": 107,
+            "gradient_max": 9.538038550064603e-08,
+            "converged": true,
+            "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+          },
+          {
+            "initial_loss": 10.240208331196913,
+            "final_loss": 2.4285827633502777,
+            "iterations": 173,
+            "evaluations": 202,
+            "gradient_max": 1.8056923930183878e-06,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 12,
+      "seed": 0,
+      "shots": 500,
+      "fidelity": 0.9962739491434225,
+      "overlap": 0.9981352358991353,
+      "norm_error": 2.220446049250313e-15,
+      "leakage": 8.356426661748628e-12,
+      "z_tv": 0.05199982870832525,
+      "observable_max_error": 0.061333392456649705,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.477489789397582,
+        "selected_attempt": 0,
+        "empirical_kl": 9.064748951459478e-12,
+        "attempts": [
+          {
+            "initial_loss": 8.126601196256356,
+            "final_loss": 2.4774897894066465,
+            "iterations": 107,
+            "evaluations": 118,
+            "gradient_max": 3.2275900486329423e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 12,
+      "seed": 0,
+      "shots": 2000,
+      "fidelity": 0.9986567582701601,
+      "overlap": 0.9993281534461841,
+      "norm_error": 5.218048215738236e-14,
+      "leakage": 6.386291495630303e-11,
+      "z_tv": 0.030833854805503255,
+      "observable_max_error": 0.034332843911066946,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.482224048752771,
+        "selected_attempt": 0,
+        "empirical_kl": 6.780442873832726e-11,
+        "attempts": [
+          {
+            "initial_loss": 8.130736274963082,
+            "final_loss": 2.4822240488205756,
+            "iterations": 161,
+            "evaluations": 184,
+            "gradient_max": 6.159747258077786e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 12,
+      "seed": 0,
+      "shots": 10000,
+      "fidelity": 0.9995653635477353,
+      "overlap": 0.9997826581551289,
+      "norm_error": 8.482103908136196e-14,
+      "leakage": 4.120004337693217e-11,
+      "z_tv": 0.017966918844560018,
+      "observable_max_error": 0.018733544648384837,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.4840384591760967,
+        "selected_attempt": 0,
+        "empirical_kl": 4.29127844370214e-11,
+        "attempts": [
+          {
+            "initial_loss": 8.122080298061507,
+            "final_loss": 2.4840384592190095,
+            "iterations": 139,
+            "evaluations": 163,
+            "gradient_max": 4.745104793877182e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 12,
+      "seed": 1,
+      "shots": 20,
+      "fidelity": 0.8049830830076349,
+      "overlap": 0.8972084947255208,
+      "norm_error": 2.0872192862952943e-14,
+      "leakage": 2.1590551568806404e-10,
+      "z_tv": 0.23333329428515104,
+      "observable_max_error": 0.26666737921469164,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.2332703749380514,
+        "selected_attempt": 2,
+        "empirical_kl": 2.1711787923095471e-10,
+        "attempts": [
+          {
+            "initial_loss": 8.542939613054498,
+            "final_loss": 2.9843819806587364,
+            "iterations": 76,
+            "evaluations": 86,
+            "gradient_max": 8.869403715519673e-08,
+            "converged": true,
+            "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+          },
+          {
+            "initial_loss": 11.554722157992613,
+            "final_loss": 2.3287475002276325,
+            "iterations": 145,
+            "evaluations": 166,
+            "gradient_max": 5.951055369393665e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 17.664354510855752,
+            "final_loss": 2.2332703751551692,
+            "iterations": 118,
+            "evaluations": 136,
+            "gradient_max": 5.703591201333414e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 12,
+      "seed": 1,
+      "shots": 100,
+      "fidelity": 0.977956735855534,
+      "overlap": 0.9889169509395286,
+      "norm_error": 1.028066520802895e-13,
+      "leakage": 1.8127721546079556e-12,
+      "z_tv": 0.11666665776405524,
+      "observable_max_error": 0.12666611246491943,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.442445308168408,
+        "selected_attempt": 1,
+        "empirical_kl": 2.6010305020918167e-12,
+        "attempts": [
+          {
+            "initial_loss": 8.50573443400603,
+            "final_loss": 2.7329604433810433,
+            "iterations": 219,
+            "evaluations": 261,
+            "gradient_max": 2.7910197415069877e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 11.36730667753494,
+            "final_loss": 2.442445308171009,
+            "iterations": 86,
+            "evaluations": 92,
+            "gradient_max": 3.536417482453779e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 12,
+      "seed": 1,
+      "shots": 500,
+      "fidelity": 0.9950488355859501,
+      "overlap": 0.9975213459299757,
+      "norm_error": 9.43689570931383e-14,
+      "leakage": 6.126343876644569e-11,
+      "z_tv": 0.052666291979677544,
+      "observable_max_error": 0.06533346280334684,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.4749560489758777,
+        "selected_attempt": 1,
+        "empirical_kl": 6.306732913685664e-11,
+        "attempts": [
+          {
+            "initial_loss": 8.507983366417147,
+            "final_loss": 2.849763804579624,
+            "iterations": 199,
+            "evaluations": 231,
+            "gradient_max": 2.8254766087410405e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 11.29470433761518,
+            "final_loss": 2.474956049038945,
+            "iterations": 126,
+            "evaluations": 153,
+            "gradient_max": 7.385782179234305e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 12,
+      "seed": 1,
+      "shots": 2000,
+      "fidelity": 0.9988385118136993,
+      "overlap": 0.9994190871769957,
+      "norm_error": 3.941291737419306e-14,
+      "leakage": 2.078559546703218e-12,
+      "z_tv": 0.02649972469372334,
+      "observable_max_error": 0.02333330927962507,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.4825833333039773,
+        "selected_attempt": 0,
+        "empirical_kl": 2.8035351817834453e-12,
+        "attempts": [
+          {
+            "initial_loss": 8.498199698626815,
+            "final_loss": 2.482583333306781,
+            "iterations": 132,
+            "evaluations": 147,
+            "gradient_max": 4.705482303405732e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 12,
+      "seed": 1,
+      "shots": 10000,
+      "fidelity": 0.9997649650573649,
+      "overlap": 0.9998824756226928,
+      "norm_error": 2.353672812205332e-14,
+      "leakage": 6.409406339002999e-11,
+      "z_tv": 0.013566364642817819,
+      "observable_max_error": 0.013066568135802092,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.484434985811549,
+        "selected_attempt": 1,
+        "empirical_kl": 6.661204920987984e-11,
+        "attempts": [
+          {
+            "initial_loss": 8.500676255648045,
+            "final_loss": 2.7695351901197856,
+            "iterations": 91,
+            "evaluations": 106,
+            "gradient_max": 5.961511296580707e-08,
+            "converged": true,
+            "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+          },
+          {
+            "initial_loss": 11.274692334104943,
+            "final_loss": 2.484434985878161,
+            "iterations": 112,
+            "evaluations": 134,
+            "gradient_max": 5.462865738553006e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 12,
+      "seed": 2,
+      "shots": 20,
+      "fidelity": 0.7118866941048143,
+      "overlap": 0.8437337815358671,
+      "norm_error": 6.616929226765933e-14,
+      "leakage": 1.7102985694350537e-12,
+      "z_tv": 0.31666675238159825,
+      "observable_max_error": 0.33333333333326687,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.0946409388260623,
+        "selected_attempt": 2,
+        "empirical_kl": 1.871391930308164e-12,
+        "attempts": [
+          {
+            "initial_loss": 9.221697723650168,
+            "final_loss": 2.8314178381951933,
+            "iterations": 77,
+            "evaluations": 84,
+            "gradient_max": 5.781045601972181e-08,
+            "converged": true,
+            "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+          },
+          {
+            "initial_loss": 10.8004003568666,
+            "final_loss": 2.388889714735024,
+            "iterations": 93,
+            "evaluations": 99,
+            "gradient_max": 1.6889955612956085e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 22.886685361456443,
+            "final_loss": 2.0946409388279337,
+            "iterations": 86,
+            "evaluations": 93,
+            "gradient_max": 2.1827803524600136e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 12,
+      "seed": 2,
+      "shots": 100,
+      "fidelity": 0.9824164937073763,
+      "overlap": 0.9911692558324114,
+      "norm_error": 1.0771383784913269e-12,
+      "leakage": 3.4500280410298956e-10,
+      "z_tv": 0.09999998113917377,
+      "observable_max_error": 0.1333333604306861,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.4502764127976784,
+        "selected_attempt": 1,
+        "empirical_kl": 3.433218154214046e-10,
+        "attempts": [
+          {
+            "initial_loss": 9.191311630619394,
+            "final_loss": 2.6937292208257446,
+            "iterations": 104,
+            "evaluations": 111,
+            "gradient_max": 3.5961763616342504e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          },
+          {
+            "initial_loss": 10.903936989204128,
+            "final_loss": 2.450276413141,
+            "iterations": 90,
+            "evaluations": 100,
+            "gradient_max": 5.2168861858365124e-08,
+            "converged": true,
+            "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+          }
+        ]
+      }
+    },
+    {
+      "n": 12,
+      "seed": 2,
+      "shots": 500,
+      "fidelity": 0.9959780113972925,
+      "overlap": 0.9979869795730265,
+      "norm_error": 8.770761894538737e-15,
+      "leakage": 5.635603095299757e-12,
+      "z_tv": 0.05466704774048739,
+      "observable_max_error": 0.05333377402344064,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.476968976711468,
+        "selected_attempt": 0,
+        "empirical_kl": 7.680522884356833e-12,
+        "attempts": [
+          {
+            "initial_loss": 9.19071795674884,
+            "final_loss": 2.4769689767191485,
+            "iterations": 94,
+            "evaluations": 109,
+            "gradient_max": 4.4951122027108033e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 12,
+      "seed": 2,
+      "shots": 2000,
+      "fidelity": 0.9992298443363232,
+      "overlap": 0.999614847997129,
+      "norm_error": 9.543477119677846e-13,
+      "leakage": 1.1327927484927613e-10,
+      "z_tv": 0.02266661261514839,
+      "observable_max_error": 0.023666444887716742,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.483372717390257,
+        "selected_attempt": 0,
+        "empirical_kl": 1.1297363045059683e-10,
+        "attempts": [
+          {
+            "initial_loss": 9.189530803808942,
+            "final_loss": 2.4833727175032307,
+            "iterations": 103,
+            "evaluations": 122,
+            "gradient_max": 2.4879413578737346e-07,
+            "converged": true,
+            "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+          }
+        ]
+      }
+    },
+    {
+      "n": 12,
+      "seed": 2,
+      "shots": 10000,
+      "fidelity": 0.99982890133396,
+      "overlap": 0.9999144470073227,
+      "norm_error": 1.6764367671839864e-13,
+      "leakage": 7.594480599948383e-12,
+      "z_tv": 0.01086662264000033,
+      "observable_max_error": 0.013533305381743577,
+      "optimization": {
+        "objective": "Z-basis empirical NLL",
+        "empirical_entropy": 2.484565357714018,
+        "selected_attempt": 0,
+        "empirical_kl": 7.575273741622368e-12,
+        "attempts": [
+          {
+            "initial_loss": 9.188280229199997,
+            "final_loss": 2.484565357721593,
+            "iterations": 89,
+            "evaluations": 98,
+            "gradient_max": 7.496358784859423e-08,
+            "converged": true,
+            "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+          }
+        ]
+      }
+    }
+  ],
+  "complex": [
+    {
+      "n": 8,
+      "seed": 0,
+      "shots_per_basis": 6400,
+      "basis_count": 15,
+      "fidelity": 0.9997588133671118,
+      "overlap": 0.9998793994113049,
+      "norm_error": 7.438494264988549e-15,
+      "leakage": 2.179045832662041e-11,
+      "z_tv": 0.0033950018540532733,
+      "phase_rmse": 0.014757799561284764,
+      "relative_phases": [
+        -0.0,
+        -2.4713329105904753,
+        -1.8259818777158738,
+        1.6891953968262763,
+        -0.07673647362703459,
+        0.282338319800372,
+        0.3092267673780653,
+        -1.758172590179974
+      ],
+      "observable_max_error": 0.006489310807628865,
+      "z_only_fidelity": 0.11827675709886411,
+      "target_relative_phases": [
+        0.0,
+        -2.4663884801505183,
+        -1.8281817091575394,
+        1.7122446868149042,
+        -0.04552230866248186,
+        0.3053953990381473,
+        0.34542549174219106,
+        -1.7231546285448187
+      ],
+      "optimization": {
+        "amplitude": {
+          "objective": "Z-basis empirical NLL",
+          "empirical_entropy": 2.0783009462120137,
+          "selected_attempt": 0,
+          "empirical_kl": 2.4525714792389408e-11,
+          "attempts": [
+            {
+              "initial_loss": 5.250591759373855,
+              "final_loss": 2.0783009462365394,
+              "iterations": 108,
+              "evaluations": 128,
+              "gradient_max": 1.0760142581974275e-06,
+              "converged": true,
+              "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+            }
+          ]
+        },
+        "phase_warmup": {
+          "initial_loss": 0.0149502355271173,
+          "final_loss": 0.0002149656822243208,
+          "iterations": 15,
+          "evaluations": 17,
+          "gradient_max": 8.121779077228355e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "phase": {
+          "initial_loss": 3.1361732692926907,
+          "final_loss": 3.136151773394032,
+          "iterations": 11,
+          "evaluations": 13,
+          "gradient_max": 7.684613873585435e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "joint": {
+          "initial_loss": 3.136151773394032,
+          "final_loss": 3.1353023501551784,
+          "iterations": 30,
+          "evaluations": 33,
+          "gradient_max": 8.068731822758656e-07,
+          "converged": true,
+          "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        }
+      }
+    },
+    {
+      "n": 8,
+      "seed": 1,
+      "shots_per_basis": 6400,
+      "basis_count": 15,
+      "fidelity": 0.9995229285089899,
+      "overlap": 0.9997614357980558,
+      "norm_error": 5.10702591327572e-15,
+      "leakage": 2.4799551301413203e-10,
+      "z_tv": 0.00370714556121744,
+      "phase_rmse": 0.021283215294393767,
+      "relative_phases": [
+        -0.0,
+        -2.251388946123565,
+        -2.3461471175840325,
+        1.38380998188525,
+        -2.413877576878205,
+        1.7839531810653975,
+        3.0243219281027125,
+        -0.9204059374165219
+      ],
+      "observable_max_error": 0.009566042343478964,
+      "z_only_fidelity": 0.050337954948639976,
+      "target_relative_phases": [
+        0.0,
+        -2.2412628908850323,
+        -2.3470490480698487,
+        1.3795417109025854,
+        -2.433491909378945,
+        1.7641620278693324,
+        3.008403636787953,
+        -0.9845208212950758
+      ],
+      "optimization": {
+        "amplitude": {
+          "objective": "Z-basis empirical NLL",
+          "empirical_entropy": 2.0782485246259967,
+          "selected_attempt": 0,
+          "empirical_kl": 2.5264546010816957e-10,
+          "attempts": [
+            {
+              "initial_loss": 5.558173547805996,
+              "final_loss": 2.078248524878642,
+              "iterations": 125,
+              "evaluations": 148,
+              "gradient_max": 9.063408166663093e-07,
+              "converged": true,
+              "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+            }
+          ]
+        },
+        "phase_warmup": {
+          "initial_loss": 0.019977491983632113,
+          "final_loss": 0.00021898675244394993,
+          "iterations": 15,
+          "evaluations": 18,
+          "gradient_max": 4.56245291301847e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "phase": {
+          "initial_loss": 3.1412083782267577,
+          "final_loss": 3.1411801352785864,
+          "iterations": 12,
+          "evaluations": 15,
+          "gradient_max": 1.1235906943811365e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "joint": {
+          "initial_loss": 3.1411801352785864,
+          "final_loss": 3.140106139284302,
+          "iterations": 39,
+          "evaluations": 45,
+          "gradient_max": 2.909287395217198e-07,
+          "converged": true,
+          "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        }
+      }
+    },
+    {
+      "n": 8,
+      "seed": 2,
+      "shots_per_basis": 6400,
+      "basis_count": 15,
+      "fidelity": 0.9992749161185932,
+      "overlap": 0.9996373923171308,
+      "norm_error": 1.9095836023552692e-14,
+      "leakage": 2.137965360304861e-10,
+      "z_tv": 0.006204308574241634,
+      "phase_rmse": 0.02602092574383218,
+      "relative_phases": [
+        0.0,
+        -2.6425917165043957,
+        -1.7139316745497526,
+        -0.695019207807402,
+        -2.214189084449995,
+        0.7767527551550497,
+        3.126969670029607,
+        1.4799979595157557
+      ],
+      "observable_max_error": 0.009408365523286742,
+      "z_only_fidelity": 0.02388930959408323,
+      "target_relative_phases": [
+        0.0,
+        -2.6620955015742562,
+        -1.7097287045689626,
+        -0.6977476283794357,
+        -2.178806272204825,
+        0.8304398355273108,
+        -3.115354599303289,
+        1.5297250980986021
+      ],
+      "optimization": {
+        "amplitude": {
+          "objective": "Z-basis empirical NLL",
+          "empirical_entropy": 2.079076067607561,
+          "selected_attempt": 0,
+          "empirical_kl": 2.1855717236007877e-10,
+          "attempts": [
+            {
+              "initial_loss": 5.493340233742248,
+              "final_loss": 2.079076067826118,
+              "iterations": 141,
+              "evaluations": 169,
+              "gradient_max": 6.978776847508618e-07,
+              "converged": true,
+              "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+            }
+          ]
+        },
+        "phase_warmup": {
+          "initial_loss": 0.017191333259566885,
+          "final_loss": 0.00018342041017838478,
+          "iterations": 16,
+          "evaluations": 20,
+          "gradient_max": 1.3778318586325841e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "phase": {
+          "initial_loss": 3.139693887355188,
+          "final_loss": 3.1396458433121843,
+          "iterations": 12,
+          "evaluations": 15,
+          "gradient_max": 9.479444894307869e-09,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "joint": {
+          "initial_loss": 3.1396458433121843,
+          "final_loss": 3.139298082671809,
+          "iterations": 32,
+          "evaluations": 36,
+          "gradient_max": 7.812158764940277e-07,
+          "converged": true,
+          "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        }
+      }
+    },
+    {
+      "n": 10,
+      "seed": 0,
+      "shots_per_basis": 6400,
+      "basis_count": 19,
+      "fidelity": 0.9997911170020964,
+      "overlap": 0.9998955530464652,
+      "norm_error": 2.3092638912203256e-14,
+      "leakage": 1.8386403510817217e-12,
+      "z_tv": 0.0025445332325474907,
+      "phase_rmse": 0.013984438131506838,
+      "relative_phases": [
+        0.0,
+        0.5681380032280646,
+        1.8087069774924216,
+        -2.1114099019543997,
+        -0.3370565636513803,
+        -1.120360938658305,
+        1.4327895616556234,
+        -2.164746955501488,
+        -2.29282665462961,
+        -1.9936942252583567
+      ],
+      "observable_max_error": 0.0070230416583262345,
+      "z_only_fidelity": 0.05209474186814276,
+      "target_relative_phases": [
+        0.0,
+        0.5701054420483054,
+        1.845373873093902,
+        -2.073663963417479,
+        -0.3109766009779591,
+        -1.1109476828445666,
+        1.4289939926610105,
+        -2.154503183176502,
+        -2.282602466797574,
+        -1.9740458885335523
+      ],
+      "optimization": {
+        "amplitude": {
+          "objective": "Z-basis empirical NLL",
+          "empirical_entropy": 2.3019983533633734,
+          "selected_attempt": 0,
+          "empirical_kl": 1.793676318584403e-12,
+          "attempts": [
+            {
+              "initial_loss": 6.529023397603519,
+              "final_loss": 2.301998353365167,
+              "iterations": 92,
+              "evaluations": 100,
+              "gradient_max": 1.0977704084434236e-07,
+              "converged": true,
+              "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+            }
+          ]
+        },
+        "phase_warmup": {
+          "initial_loss": 0.008651605537331946,
+          "final_loss": 0.00016910737817839116,
+          "iterations": 26,
+          "evaluations": 32,
+          "gradient_max": 7.855283477036684e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "phase": {
+          "initial_loss": 3.4295385283275146,
+          "final_loss": 3.429520012384594,
+          "iterations": 16,
+          "evaluations": 18,
+          "gradient_max": 4.357673374853057e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "joint": {
+          "initial_loss": 3.429520012384594,
+          "final_loss": 3.4290494326926857,
+          "iterations": 37,
+          "evaluations": 41,
+          "gradient_max": 3.0438735313456026e-07,
+          "converged": true,
+          "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        }
+      }
+    },
+    {
+      "n": 10,
+      "seed": 1,
+      "shots_per_basis": 6400,
+      "basis_count": 19,
+      "fidelity": 0.9995291490354918,
+      "overlap": 0.9997645467986409,
+      "norm_error": 1.532107773982716e-14,
+      "leakage": 9.100742381917826e-11,
+      "z_tv": 0.002602167140729739,
+      "phase_rmse": 0.021436613087536055,
+      "relative_phases": [
+        0.0,
+        -2.809286016290387,
+        2.7234515155198875,
+        2.2099077472218354,
+        -0.4315479405742754,
+        -1.6905007888607213,
+        -0.45876650441932476,
+        2.407420834535279,
+        0.331163438804567,
+        1.5876857126023491
+      ],
+      "observable_max_error": 0.005747874224368746,
+      "z_only_fidelity": 0.011077926786334716,
+      "target_relative_phases": [
+        0.0,
+        -2.7933286682097473,
+        2.750981579483677,
+        2.2185961212525385,
+        -0.38901675427324656,
+        -1.6569902754875934,
+        -0.44637939261672904,
+        2.4050544751380576,
+        0.2990065187669244,
+        1.572959418720634
+      ],
+      "optimization": {
+        "amplitude": {
+          "objective": "Z-basis empirical NLL",
+          "empirical_entropy": 2.301661547594497,
+          "selected_attempt": 0,
+          "empirical_kl": 9.337997042280222e-11,
+          "attempts": [
+            {
+              "initial_loss": 6.939578211405362,
+              "final_loss": 2.301661547687877,
+              "iterations": 162,
+              "evaluations": 192,
+              "gradient_max": 4.069319606519578e-07,
+              "converged": true,
+              "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+            }
+          ]
+        },
+        "phase_warmup": {
+          "initial_loss": 0.010938001887398326,
+          "final_loss": 0.00018436191997650106,
+          "iterations": 20,
+          "evaluations": 24,
+          "gradient_max": 3.502937439399517e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "phase": {
+          "initial_loss": 3.428364433368856,
+          "final_loss": 3.428333015220524,
+          "iterations": 14,
+          "evaluations": 17,
+          "gradient_max": 4.4256785079232956e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "joint": {
+          "initial_loss": 3.428333015220524,
+          "final_loss": 3.427563604659481,
+          "iterations": 43,
+          "evaluations": 48,
+          "gradient_max": 3.531351001841672e-07,
+          "converged": true,
+          "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        }
+      }
+    },
+    {
+      "n": 10,
+      "seed": 2,
+      "shots_per_basis": 6400,
+      "basis_count": 19,
+      "fidelity": 0.9994249389932368,
+      "overlap": 0.9997124281478333,
+      "norm_error": 2.220446049250313e-15,
+      "leakage": 1.4564605077538317e-10,
+      "z_tv": 0.004633605210242869,
+      "phase_rmse": 0.023322133374452277,
+      "relative_phases": [
+        -0.0,
+        0.41251848852824313,
+        -0.011933950151586666,
+        -2.820632440654869,
+        -3.00382076001388,
+        -2.3145345401937454,
+        1.4161204582814035,
+        1.144961177546518,
+        2.1859908223553335,
+        -1.7745628351966065
+      ],
+      "observable_max_error": 0.007277853155882363,
+      "z_only_fidelity": 0.011401062366558195,
+      "target_relative_phases": [
+        0.0,
+        0.3711259570532359,
+        -0.03970071205085545,
+        -2.8681752660739805,
+        -3.07739623604769,
+        -2.3924389001763475,
+        1.3473377147323111,
+        1.1081203099196308,
+        2.1649990690241023,
+        -1.8171517997304387
+      ],
+      "optimization": {
+        "amplitude": {
+          "objective": "Z-basis empirical NLL",
+          "empirical_entropy": 2.3018526053520785,
+          "selected_attempt": 0,
+          "empirical_kl": 1.4634293776794038e-10,
+          "attempts": [
+            {
+              "initial_loss": 6.88288899609218,
+              "final_loss": 2.3018526054984214,
+              "iterations": 155,
+              "evaluations": 185,
+              "gradient_max": 1.0859987826083629e-06,
+              "converged": true,
+              "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+            }
+          ]
+        },
+        "phase_warmup": {
+          "initial_loss": 0.0068451462843637624,
+          "final_loss": 0.00016790331001818493,
+          "iterations": 18,
+          "evaluations": 20,
+          "gradient_max": 4.018390689679948e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "phase": {
+          "initial_loss": 3.4266663018551555,
+          "final_loss": 3.4266437855544516,
+          "iterations": 14,
+          "evaluations": 16,
+          "gradient_max": 3.234131508334251e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "joint": {
+          "initial_loss": 3.4266437855544516,
+          "final_loss": 3.4261250853385596,
+          "iterations": 46,
+          "evaluations": 51,
+          "gradient_max": 2.8417879769236926e-07,
+          "converged": true,
+          "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        }
+      }
+    },
+    {
+      "n": 12,
+      "seed": 0,
+      "shots_per_basis": 6400,
+      "basis_count": 23,
+      "fidelity": 0.9994829646036295,
+      "overlap": 0.9997414488774733,
+      "norm_error": 4.618527782440651e-14,
+      "leakage": 2.3160584561310316e-11,
+      "z_tv": 0.0034208749917899028,
+      "phase_rmse": 0.02237409534957741,
+      "relative_phases": [
+        0.0,
+        -2.9182039708902927,
+        -1.953626851572336,
+        1.6408045234392141,
+        2.6695754355977956,
+        -1.1358816368456588,
+        -1.0707524663036467,
+        1.9928284527583617,
+        0.4957795858129666,
+        -0.45614245264605524,
+        1.801211928205329,
+        2.57198360584537
+      ],
+      "observable_max_error": 0.005426152135945744,
+      "z_only_fidelity": 0.00630147094330954,
+      "target_relative_phases": [
+        0.0,
+        -2.8909434405264998,
+        -1.885840970442342,
+        1.7117838920789468,
+        2.7573182677102888,
+        -1.086038706021648,
+        -1.0224984286155736,
+        2.0378539951811354,
+        0.5177176679060658,
+        -0.41779879141409065,
+        1.8512291779586367,
+        2.6129167321730002
+      ],
+      "optimization": {
+        "amplitude": {
+          "objective": "Z-basis empirical NLL",
+          "empirical_entropy": 2.4835471667534996,
+          "selected_attempt": 0,
+          "empirical_kl": 2.2530866061742927e-11,
+          "attempts": [
+            {
+              "initial_loss": 8.63447715866566,
+              "final_loss": 2.4835471667760305,
+              "iterations": 117,
+              "evaluations": 130,
+              "gradient_max": 3.717796049906852e-07,
+              "converged": true,
+              "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+            }
+          ]
+        },
+        "phase_warmup": {
+          "initial_loss": 0.007379892715686824,
+          "final_loss": 0.00019776886742127323,
+          "iterations": 21,
+          "evaluations": 24,
+          "gradient_max": 3.799207658732048e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "phase": {
+          "initial_loss": 3.652718796814973,
+          "final_loss": 3.6526628282785847,
+          "iterations": 17,
+          "evaluations": 19,
+          "gradient_max": 7.348398760330307e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "joint": {
+          "initial_loss": 3.6526628282785847,
+          "final_loss": 3.651451941108134,
+          "iterations": 63,
+          "evaluations": 69,
+          "gradient_max": 1.2058850865124042e-06,
+          "converged": true,
+          "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        }
+      }
+    },
+    {
+      "n": 12,
+      "seed": 1,
+      "shots_per_basis": 6400,
+      "basis_count": 23,
+      "fidelity": 0.9989433828652543,
+      "overlap": 0.9994715518038791,
+      "norm_error": 1.9095836023552692e-14,
+      "leakage": 1.2939982418913587e-10,
+      "z_tv": 0.0019356978687916759,
+      "phase_rmse": 0.03241723548545159,
+      "relative_phases": [
+        0.0,
+        -0.07883250371068398,
+        2.0137804828461165,
+        0.6067809650115481,
+        1.224551211705979,
+        1.8293081724962903,
+        -1.3827435422762164,
+        -1.3711124171131184,
+        1.5739194452108194,
+        3.0484805118704212,
+        0.3221172356058184,
+        0.9444910113476093
+      ],
+      "observable_max_error": 0.00836318863890989,
+      "z_only_fidelity": 0.16686314821435466,
+      "target_relative_phases": [
+        0.0,
+        -0.10636468052545058,
+        1.9969034035917406,
+        0.5758930830014557,
+        1.1415944957644486,
+        1.770153867608745,
+        -1.492477616996824,
+        -1.4485956626391445,
+        1.4915289393002618,
+        2.979221292301465,
+        0.2519824862236113,
+        0.8490948761284259
+      ],
+      "optimization": {
+        "amplitude": {
+          "objective": "Z-basis empirical NLL",
+          "empirical_entropy": 2.483074910320115,
+          "selected_attempt": 0,
+          "empirical_kl": 1.2960432727027182e-10,
+          "attempts": [
+            {
+              "initial_loss": 8.322160180354494,
+              "final_loss": 2.4830749104497194,
+              "iterations": 185,
+              "evaluations": 221,
+              "gradient_max": 6.182940550165049e-07,
+              "converged": true,
+              "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+            }
+          ]
+        },
+        "phase_warmup": {
+          "initial_loss": 0.00569007257121024,
+          "final_loss": 0.00022424454680870228,
+          "iterations": 23,
+          "evaluations": 28,
+          "gradient_max": 6.881499799028057e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "phase": {
+          "initial_loss": 3.6527953618020095,
+          "final_loss": 3.652770548050169,
+          "iterations": 17,
+          "evaluations": 22,
+          "gradient_max": 5.411352031890109e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "joint": {
+          "initial_loss": 3.652770548050169,
+          "final_loss": 3.6510976771230523,
+          "iterations": 76,
+          "evaluations": 83,
+          "gradient_max": 8.066973426582948e-07,
+          "converged": true,
+          "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        }
+      }
+    },
+    {
+      "n": 12,
+      "seed": 2,
+      "shots_per_basis": 6400,
+      "basis_count": 23,
+      "fidelity": 0.9984287433047621,
+      "overlap": 0.9992140628037428,
+      "norm_error": 2.120525977034049e-13,
+      "leakage": 4.577638268443707e-11,
+      "z_tv": 0.004943303630576884,
+      "phase_rmse": 0.03918388632104064,
+      "relative_phases": [
+        -0.0,
+        1.6378506000436261,
+        -1.5011547307224609,
+        -0.10725551721807847,
+        -2.729636837598935,
+        -2.136860526388594,
+        1.5570673223590739,
+        1.1263594310663405,
+        2.6630501453676465,
+        -2.6228127877895533,
+        2.846804397704018,
+        -2.8405969768013355
+      ],
+      "observable_max_error": 0.006417894707044958,
+      "z_only_fidelity": 0.05273932687032271,
+      "target_relative_phases": [
+        0.0,
+        1.6765764642290935,
+        -1.4447205409221118,
+        -0.03395332108433369,
+        -2.6734842790604194,
+        -2.1079311321967036,
+        1.573928320796979,
+        1.1071466544408146,
+        2.6738187903767927,
+        -2.632681493553991,
+        2.803642817195382,
+        -2.89987167059633
+      ],
+      "optimization": {
+        "amplitude": {
+          "objective": "Z-basis empirical NLL",
+          "empirical_entropy": 2.483750194169171,
+          "selected_attempt": 0,
+          "empirical_kl": 4.5133674575481564e-11,
+          "attempts": [
+            {
+              "initial_loss": 8.98473859777683,
+              "final_loss": 2.4837501942143048,
+              "iterations": 113,
+              "evaluations": 123,
+              "gradient_max": 1.1695845871243914e-07,
+              "converged": true,
+              "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+            }
+          ]
+        },
+        "phase_warmup": {
+          "initial_loss": 0.006125243608644945,
+          "final_loss": 0.0002043763928810305,
+          "iterations": 20,
+          "evaluations": 23,
+          "gradient_max": 4.36243613402988e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "phase": {
+          "initial_loss": 3.65091101009859,
+          "final_loss": 3.6508887308715727,
+          "iterations": 16,
+          "evaluations": 20,
+          "gradient_max": 9.347074706504412e-08,
+          "converged": true,
+          "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+        },
+        "joint": {
+          "initial_loss": 3.6508887308715727,
+          "final_loss": 3.649719651246762,
+          "iterations": 46,
+          "evaluations": 52,
+          "gradient_max": 5.530391792069653e-07,
+          "converged": true,
+          "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+        }
+      }
+    }
+  ],
+  "elapsed_seconds": 19.53249410004355,
+  "acceptance": {
+    "passed": true,
+    "checks": {
+      "n8_complete": true,
+      "n8_positive_mean_fidelity": true,
+      "n8_positive_min_fidelity": true,
+      "n8_sample_size_gain": true,
+      "n8_leakage": true,
+      "n8_z_tv": true,
+      "n8_phase_mean_fidelity": true,
+      "n8_phase_min_fidelity": true,
+      "n8_phase_rmse": true,
+      "n8_multibasis_gain": true,
+      "n8_observables": true,
+      "n10_complete": true,
+      "n10_positive_mean_fidelity": true,
+      "n10_positive_min_fidelity": true,
+      "n10_sample_size_gain": true,
+      "n10_leakage": true,
+      "n10_z_tv": true,
+      "n10_phase_mean_fidelity": true,
+      "n10_phase_min_fidelity": true,
+      "n10_phase_rmse": true,
+      "n10_multibasis_gain": true,
+      "n10_observables": true,
+      "n12_complete": true,
+      "n12_positive_mean_fidelity": true,
+      "n12_positive_min_fidelity": true,
+      "n12_sample_size_gain": true,
+      "n12_leakage": true,
+      "n12_z_tv": true,
+      "n12_phase_mean_fidelity": true,
+      "n12_phase_min_fidelity": true,
+      "n12_phase_rmse": true,
+      "n12_multibasis_gain": true,
+      "n12_observables": true,
+      "all_states_normalized": true,
+      "all_experiments_present": true
+    }
+  }
+}
