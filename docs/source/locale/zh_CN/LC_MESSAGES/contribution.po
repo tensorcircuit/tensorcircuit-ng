@@ -404,55 +404,133 @@ msgstr ""
 msgid "Releases"
 msgstr "发布"
 
-#: ../../source/contribution.rst:250
+#: ../../source/contribution.rst:251
+msgid "Stable release"
+msgstr "正式版发布"
+
+#: ../../source/contribution.rst:253
 msgid ""
-"Firstly, ensure that the version numbers in __init__.py and CHANGELOG are"
-" correctly updated."
-msgstr "首先，确保 __init__.py 和 CHANGELOG 中的版本号已正确更新。"
+"Bump ``__version__`` in ``tensorcircuit/__init__.py``. Add a ``## vX.Y.Z`` "
+"heading immediately below ``## Unreleased`` in ``CHANGELOG.md`` so the "
+"accumulated entries belong to the new version."
+msgstr ""
+"更新 ``tensorcircuit/__init__.py`` 中的 ``__version__``。在 ``CHANGELOG.md`` "
+"的 ``## Unreleased`` 下方紧接着添加 ``## vX.Y.Z`` 标题，将积累的条目归入新版本。"
 
-#: ../../source/contribution.rst:252
-msgid "**GitHub Release**"
-msgstr "**GitHub 发布**"
+#: ../../source/contribution.rst:254
+msgid ""
+"Review the version bump, then commit it and push it to ``master`` on the "
+"official repository. Wait for the ``ci`` run triggered by that branch push "
+"to pass for the release commit SHA."
+msgstr ""
+"核对版本改动后提交，并推送到官方仓库的 ``master`` 分支。确认这次分支推送触发的 "
+"``ci`` 已在发布提交对应的 SHA 上通过。"
 
-#: ../../source/contribution.rst:260
-msgid "And from GitHub page choose draft a release from tag."
-msgstr "然后在 GitHub 页面上选择从 tag 起草一个 release。"
+#: ../../source/contribution.rst:255
+msgid ""
+"Create a signed ``vX.Y.Z`` tag pointing to the commit that passed CI and "
+"push the tag. Substitute the release version, commit SHA, and the name of "
+"your remote for the official repository in these commands."
+msgstr ""
+"为通过 CI 的提交创建签名 tag ``vX.Y.Z`` 并推送。执行命令前，替换其中的版本号、"
+"提交 SHA 和指向官方仓库的远程名称。"
 
 #: ../../source/contribution.rst:262
-msgid "**PyPI Release**"
-msgstr "**PyPI 发布**"
-
-#: ../../source/contribution.rst:264
 msgid ""
-"Pushing a ``v*`` tag triggers the ``release`` GitHub Action "
-"(``.github/workflows/release.yml``), which checks that the tag matches "
-"``__version__``, builds the package and publishes ``tensorcircuit-ng`` to"
-" PyPI via trusted publishing. The ``nightly`` GitHub Action builds "
-"``master`` daily and publishes it as ``tensorcircuit-nightly``."
+"Wait for the tag-triggered ``release`` workflow to pass, then verify that "
+"the wheel and source distribution appear for the new version on PyPI. This "
+"workflow checks that the tag matches ``__version__`` and publishes "
+"``tensorcircuit-ng`` via trusted publishing. The tag push also starts a "
+"separate ``ci`` run for the same commit."
 msgstr ""
-"推送 ``v*`` tag 会触发 ``release`` GitHub "
-"Action（``.github/workflows/release.yml``），它会检查 tag 与 ``__version__`` "
-"是否一致，构建软件包并通过 trusted publishing 将 ``tensorcircuit-ng`` 发布到 "
-"PyPI。``nightly`` GitHub Action 每天构建 ``master`` 并将其发布为 ``tensorcircuit-"
-"nightly``。"
+"等待 tag 触发的 ``release`` 工作流通过，再确认新版本的 wheel 和源码包均已出现在 "
+"PyPI 上。此工作流检查 tag 与 ``__version__`` 是否一致，并通过 Trusted Publishing "
+"发布 ``tensorcircuit-ng``。推送 tag 还会为同一提交触发另一轮独立的 ``ci``。"
 
-#: ../../source/contribution.rst:267
-msgid "To release manually instead:"
-msgstr "如需改为手动发布："
+#: ../../source/contribution.rst:263
+msgid ""
+"Draft the release notes using the format below, then publish the GitHub "
+"release from the existing tag. With the GitHub CLI, save the notes to "
+"``release-notes.md`` and use the following command."
+msgstr ""
+"按下文格式起草发布说明，再用已有的 tag 发布 GitHub Release。使用 GitHub CLI 时，"
+"将发布说明保存到 ``release-notes.md`` 后执行以下命令。"
+
+#: ../../source/contribution.rst:271
+msgid "GitHub release notes"
+msgstr "GitHub 发布说明"
+
+#: ../../source/contribution.rst:273
+msgid ""
+"Set the title to the tag alone, such as ``v1.11.0``. Start the body directly "
+"with a few short highlights."
+msgstr "标题只写 tag，例如 ``v1.11.0``。正文直接以几条简短的亮点开头。"
+
+#: ../../source/contribution.rst:274
+msgid ""
+"Lead with the most important user-facing changes and explain what they "
+"enable. Group related features and summarize the remaining performance and "
+"correctness improvements in one bullet. Mention specific APIs when they help "
+"readers use the feature."
+msgstr ""
+"优先写用户最能感受到的变化，并说明它们能用来做什么。把相关功能归在一起，其余性能改进"
+"和正确性修复合为一条。具体 API 能帮助读者使用功能时，再写出 API 名称。"
+
+#: ../../source/contribution.rst:275
+msgid ""
+"Close the highlights with a single link to the changelog section at the "
+"release tag for the full list and migration details."
+msgstr "亮点之后只附该 tag 对应的 changelog 章节链接，供读者查阅完整变更和迁移说明。"
 
 #: ../../source/contribution.rst:276
-msgid "**DockerHub Release**"
-msgstr "**DockerHub 发布**"
+msgid ""
+"End with an ``Acknowledgments`` heading and @mention each human contributor "
+"other than the maintainer publishing the release. Between the previous and "
+"new tags, check commit authors, co-authors, and merged pull request authors. "
+"Use each contributor's GitHub handle once."
+msgstr ""
+"以 ``Acknowledgments`` 小节收尾，@ 每位参与贡献的真人，发布人除外。核对上一个 tag "
+"到新 tag 之间的提交作者、共同作者和已合并 PR 的作者。每位贡献者的 GitHub 用户名只写一次。"
 
 #: ../../source/contribution.rst:278
+msgid ""
+"See the `v1.11.0 release notes <https://github.com/tensorcircuit/tensorcircuit-ng/releases/tag/v1.11.0>`_ "
+"for an example."
+msgstr ""
+"可参考 `v1.11.0 发布说明 <https://github.com/tensorcircuit/tensorcircuit-ng/releases/tag/v1.11.0>`_。"
+
+#: ../../source/contribution.rst:281
+msgid "Nightly and manual PyPI releases"
+msgstr "Nightly 和手动 PyPI 发布"
+
+#: ../../source/contribution.rst:283
+msgid ""
+"The ``nightly`` workflow builds ``master`` daily and publishes it as "
+"``tensorcircuit-nightly``. Its schedule is set in "
+"``.github/workflows/nightly_release.yml``."
+msgstr ""
+"``nightly`` 工作流每天构建 ``master`` 并发布为 ``tensorcircuit-nightly``。"
+"触发时间在 ``.github/workflows/nightly_release.yml`` 中配置。"
+
+#: ../../source/contribution.rst:285
+msgid ""
+"For a manual PyPI upload, build from the release commit and upload the wheel "
+"and source distribution."
+msgstr "手动上传至 PyPI 时，从发布提交构建并上传 wheel 和源码包。"
+
+#: ../../source/contribution.rst:295
+msgid "DockerHub Release"
+msgstr "DockerHub 发布"
+
+#: ../../source/contribution.rst:297
 msgid "Make sure the DockerHub account is logged in via ``docker login``."
 msgstr "确保已通过 ``docker login`` 登录 DockerHub 账户。"
 
-#: ../../source/contribution.rst:288
-msgid "**Binder Release**"
-msgstr "**Binder 发布**"
+#: ../../source/contribution.rst:308
+msgid "Binder Release"
+msgstr "Binder 发布"
 
-#: ../../source/contribution.rst:290
+#: ../../source/contribution.rst:310
 msgid ""
 "One may need to update the tensorcircuit version for binder environment "
 "by pushing new commit in refraction-ray/tc-env repo with new version "
