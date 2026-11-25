@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.11.0
+
 ### Changed
 
 - **Migration:** cloud `set_token` keeps tokens in the current process unless `cached=True`. Tokens are looked up from `set_token`, then `TC_TOKEN_<PROVIDER>`, then the auth file; the generic `TC_TOKEN` is no longer read.
