@@ -2,7 +2,7 @@
 
 `tensorcircuit.cloud` exposes quantum hardware through one set of APIs (`submit_task`, `get_task`, `Task.results`, ...) in `apis.py`. Each provider is a module implementing a fixed set of functions, and `apis.py` dispatches to it by name. Anything specific to a provider belongs in its module, rather than in branches on provider names in the generic layer. Files below are in `tensorcircuit/cloud/` unless a path is given.
 
-Existing providers are good references: `tencent.py` (batch submission, qubit remapping by the provider), `tianyan.py` (vendor SDK), and `lqcloud.py` (vendor SDK, local compilation to native gates, the request body as sent kept in `task.prepared`).
+Existing providers are good references: `tencent.py` (batch submission, qubit remapping by the provider), `tianyan.py` (vendor SDK), `lqcloud.py` (vendor SDK, local compilation to native gates, the request body as sent kept in `task.prepared`), and `qboson.py` (Ising problems instead of circuits, given as `source`).
 
 ## Registration
 

@@ -6,6 +6,7 @@ tensorcircuit.cloud
     cloud/config.rst
     cloud/local.rst
     cloud/lqcloud.rst
+    cloud/qboson.rst
     cloud/quafu_provider.rst
     cloud/store.rst
     cloud/tencent.rst

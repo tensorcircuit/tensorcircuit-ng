@@ -45,6 +45,7 @@ _provider_modules = {
     "quafu": ("quafu_provider", ["quafu"]),
     "tianyan": ("tianyan", ["cqlib"]),
     "lqcloud": ("lqcloud", ["lqcloud"]),
+    "qboson": ("qboson", ["kaiwu"]),
 }
 
 default_provider = Provider.from_name("tencent")
@@ -597,7 +598,9 @@ def submit_task(
 
         :py:func:`tensorcircuit.cloud.tencent.submit_task`,
         :py:func:`tensorcircuit.cloud.tianyan.submit_task`,
-        :py:func:`tensorcircuit.cloud.lqcloud.submit_task`, and the tutorial
+        :py:func:`tensorcircuit.cloud.lqcloud.submit_task`,
+        :py:func:`tensorcircuit.cloud.qboson.submit_task` for Ising problems on
+        a coherent Ising machine, and the tutorial
         ``docs/source/tutorials/lqcloud_qpu_workflow.ipynb`` for an end-to-end
         hardware workflow
 
@@ -617,6 +620,7 @@ def submit_task(
         1. tencent - :py:func:`tensorcircuit.cloud.tencent.submit_task`
         2. tianyan - :py:func:`tensorcircuit.cloud.tianyan.submit_task`
         3. lqcloud - :py:func:`tensorcircuit.cloud.lqcloud.submit_task`
+        4. qboson - :py:func:`tensorcircuit.cloud.qboson.submit_task`
     :type task_kws: Any
     :return: Task object or list of Task for batch submission
     :rtype: List[Task]

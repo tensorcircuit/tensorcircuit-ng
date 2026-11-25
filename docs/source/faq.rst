@@ -178,6 +178,8 @@ Use :py:mod:`tensorcircuit.cloud`, which submits ``tc.Circuit`` objects to the Q
 
 For most applications, :py:func:`tensorcircuit.cloud.wrapper.batch_expectation_ps` is all you need: it compiles the circuit for the device, measures the Pauli strings in grouped and batched circuits and corrects readout errors, and with ``device=None`` returns the exact values by simulation instead. See :doc:`tutorials/lqcloud_qpu_workflow` for an end-to-end example with noise-aware compilation, the local task store and a parameter-shift VQE on hardware.
 
+The ``qboson`` provider runs Ising problems instead of circuits on the coherent Ising machine of Qboson (玻色量子): submit the coupling matrix ``J``, or ``{"J": J, "h": h}`` with fields, as ``source`` to ``"qboson::cim"``, and get low energy spin configurations as bitstrings, see :py:func:`tensorcircuit.cloud.qboson.submit_task` for the energy and bit conventions.
+
 Can I apply quantum operation based on previous classical measurement results?
 ----------------------------------------------------------------------------------------------------
 

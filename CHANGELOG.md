@@ -36,6 +36,8 @@
 
 - Add the LQCloud (逻辑比特) cloud provider `lqcloud`, compiling circuits locally to native gates, with native batch submission and `batch_expectation_ps`; install the `lqcloud` SDK separately.
 
+- Add the Qboson (玻色量子) cloud provider `qboson`, running Ising problems `source=J` or `source={"J": J, "h": h}` on the coherent Ising machine `qboson::cim` and returning low energy spin configurations as bitstrings; install the `kaiwu` SDK separately.
+
 - Add noise aware layout by default for the `lqcloud` provider and `batch_expectation_ps`, via `compiler.qiskit_compiler.properties_to_target` and `DefaultCompiler(properties=...)`; qubits and couplers of unknown errors are not used.
 
 - Add mid-circuit and repeated measurements and resets to the `lqcloud` provider, each measurement to its own classical bit, the measured qubit going on without reset unless a `reset_instruction` is given, with `x21` added after the two-state readout; pass other SDK options, e.g. `dynamic_decoupling`, by `run_options`.
