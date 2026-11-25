@@ -12,7 +12,7 @@ import numpy as np
 from .cons import backend, dtypestr, rdtypestr, contractor
 from .gates import Gate
 from . import matrixfunc
-from .quantum import aslinearoperator
+from .quantum import LinearOperator, aslinearoperator
 from .utils import arg_alias
 
 Tensor = Any
@@ -484,6 +484,16 @@ def _solve_ode(
     return s1
 
 
+def _mesolve_matrix(value: Tensor, dimension: int) -> Tensor:
+    value = backend.convert_to_tensor(value, dtype=dtypestr)
+    shape = backend.shape_tuple(value)
+    if shape != (dimension, dimension):
+        raise ValueError(
+            f"Expected an operator of shape {(dimension, dimension)}, got {shape}."
+        )
+    return value
+
+
 def mesolve(
     hamiltonian: Union[Tensor, Callable[..., Tensor]],
     rho0: Tensor,
@@ -491,18 +501,27 @@ def mesolve(
     c_ops: Optional[Sequence[Union[Tensor, Callable[..., Tensor]]]] = None,
     callback: Optional[Callable[..., Tensor]] = None,
     *args: Any,
+    mode: str = "hamiltonian",
     **solver_kws: Any,
 ) -> Tensor:
     """
     ODE-based Lindblad master equation evolution of a dense density matrix.
     The Hamiltonian contributes ``-1j * (H @ rho - rho @ H)``. Each collapse
     operator contributes ``C @ rho @ C† - (C† @ C @ rho + rho @ C† @ C) / 2``.
-    Both act directly on the density matrix, which is integrated with ``diffrax.diffeqsolve``.
+    In the default mode both act directly on the density matrix. Raw mode instead
+    integrates a supplied vectorized right-hand side. Both use ``diffrax.diffeqsolve``.
 
     Note: This function currently only supports the JAX backend and requires ``diffrax``.
 
-    :param hamiltonian: Dense Hamiltonian matrix, or a function returning it with signature
-        ``hamiltonian(time, *args) -> Tensor``.
+    :param hamiltonian: Dense Hamiltonian matrix, Hermitian
+        :class:`~tensorcircuit.quantum.LinearOperator`, or a function returning
+        either representation or an MVP callable with signature ``mvp(vector)``.
+        The time-dependent function takes ``(time, *args)``. For a static MVP,
+        pass ``aslinearoperator(mvp, shape=(D, D))``.
+        Matrix-free Hamiltonians, including returned MVP functions, must be
+        Hermitian. This requirement is assumed without checking.
+        With ``mode="raw"``, supply ``rhs(vec_rho, time, *args)`` returning
+        the derivative of the row-major flattened density matrix instead.
     :type hamiltonian: Union[Tensor, Callable[..., Tensor]]
     :param rho0: The initial density matrix of shape ``(D, D)`` at the first time point.
     :type rho0: Tensor
@@ -513,8 +532,14 @@ def mesolve(
     :type c_ops: Optional[Sequence[Union[Tensor, Callable[..., Tensor]]]]
     :param callback: Optional function to apply to the density matrix at each output time.
     :type callback: Optional[Callable[..., Tensor]]
-    :param args: Additional arguments to pass to the time-dependent operators.
+    :param args: Additional arguments to pass to the time-dependent operators or raw RHS.
     :type args: tuple | list
+    :param mode: ``"hamiltonian"`` (default) constructs the Lindblad RHS from
+        the Hamiltonian and dense collapse operators. ``"raw"`` calls the
+        supplied RHS on ``reshape(rho, [-1])``; omit ``c_ops`` in this mode.
+        For N qubits, the first N qubit axes label rows and the last N
+        label columns. Output states and callback inputs remain ``(D, D)`` matrices.
+    :type mode: str
     :param solver_kws: Additional keyword arguments to pass to the ODE solver.
 
         - ``rtol`` (default: 1e-8) and ``atol`` (default: 1e-8) are used to determine how accurately you would
@@ -528,7 +553,7 @@ def mesolve(
           of the narrowest pulse so that the adaptive solver cannot step over it.
 
         - ``jump_ts`` (default: None) specifies known discontinuity times in the
-          Hamiltonian or collapse operators. The solver steps to either side of each jump.
+          Hamiltonian, collapse operators or raw RHS. The solver steps to either side of each jump.
 
         - ``max_steps`` (default: 4096)  The maximum number of steps to take before quitting the computation
           unconditionally.
@@ -544,38 +569,62 @@ def mesolve(
     if len(shape) != 2 or shape[0] != shape[1] or not shape[0]:
         raise ValueError("rho0 must be a nonempty square density matrix.")
 
-    def matrix(value: Tensor) -> Tensor:
-        value = backend.convert_to_tensor(value, dtype=dtypestr)
-        operator_shape = backend.shape_tuple(value)
-        if operator_shape != shape:
-            raise ValueError(
-                f"Expected an operator of shape {shape}, got {operator_shape}."
-            )
-        return value
+    dimension = shape[0]
+
+    def prepare_h(value: Tensor) -> Tensor:
+        if isinstance(value, LinearOperator):
+            if value.shape != shape:
+                raise ValueError(
+                    f"Expected a Hamiltonian of shape {shape}, got {value.shape}."
+                )
+            return value
+        if callable(value):
+            return aslinearoperator(value, shape=shape)
+        return _mesolve_matrix(value, dimension)
 
     def collapse_terms(value: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
-        c = matrix(value)
+        c = _mesolve_matrix(value, dimension)
         cd = backend.adjoint(c)
         return c, cd, cd @ c
 
-    h = hamiltonian if callable(hamiltonian) else matrix(hamiltonian)
-    if c_ops is None:
-        c_ops = ()
-    static = tuple(collapse_terms(c) for c in c_ops if not callable(c))
-    dynamic = tuple(c for c in c_ops if callable(c))
+    if mode == "raw":
+        if c_ops:
+            raise ValueError("c_ops must be omitted in raw mode.")
+        rho0 = backend.reshape(rho0, [-1])
 
-    def lindblad(rho: Tensor, t: Tensor, *params: Any) -> Tensor:
-        ht = matrix(h(t, *params)) if callable(h) else h
-        derivative = -1j * (ht @ rho - rho @ ht)
-        for c, cd, cdc in static + tuple(
-            collapse_terms(c(t, *params)) for c in dynamic
-        ):
-            dissipator = c @ rho @ cd - 0.5 * (cdc @ rho + rho @ cdc)
-            derivative = derivative + dissipator
-        return derivative
+        def lindblad(rho: Tensor, t: Tensor, *params: Any) -> Tensor:
+            return hamiltonian(rho, t, *params)
+
+    elif mode == "hamiltonian":
+        driven = callable(hamiltonian) and not isinstance(hamiltonian, LinearOperator)
+        h = hamiltonian if driven else prepare_h(hamiltonian)
+        if c_ops is None:
+            c_ops = ()
+        static = tuple(collapse_terms(c) for c in c_ops if not callable(c))
+        dynamic = tuple(c for c in c_ops if callable(c))
+
+        def lindblad(rho: Tensor, t: Tensor, *params: Any) -> Tensor:
+            ht = prepare_h(h(t, *params)) if driven else h
+            if isinstance(ht, LinearOperator):
+                apply_rows = backend.vmap(ht.matvec)
+                left = backend.transpose(apply_rows(backend.transpose(rho)))
+                right = backend.conj(apply_rows(backend.conj(rho)))
+                derivative = -1j * (left - right)
+            else:
+                derivative = -1j * (ht @ rho - rho @ ht)
+            for c, cd, cdc in static + tuple(
+                collapse_terms(c(t, *params)) for c in dynamic
+            ):
+                dissipator = c @ rho @ cd - 0.5 * (cdc @ rho + rho @ cdc)
+                derivative = derivative + dissipator
+            return derivative
+
+    else:
+        raise ValueError("mode must be 'hamiltonian' or 'raw'.")
 
     solver_kws = {**solver_kws, "ode_backend": "diffrax"}
     s1 = _solve_ode(lindblad, rho0, times, args, solver_kws, split_complex=True)
+    s1 = backend.reshape(s1, (-1, dimension, dimension))
 
     if callback is None:
         return s1

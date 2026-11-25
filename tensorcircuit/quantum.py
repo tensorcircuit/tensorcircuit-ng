@@ -2317,6 +2317,76 @@ def heisenberg_hamiltonian(
     return PauliStringSum2Dense(ls, weight, numpy=numpy)
 
 
+def Lindblad2PauliStringSum(
+    hamiltonian: Tuple[Sequence[Sequence[int]], Sequence[Tensor]],
+    jumps: Sequence[Tuple[Sequence[Sequence[int]], Sequence[Tensor]]] = (),
+) -> Tuple[List[List[int]], Tensor]:
+    """
+    Translate a Pauli Hamiltonian and jumps into a vectorized Lindbladian.
+
+    Uses row-major vectorization, ``vec(A rho B) = (A ⊗ Bᵀ) vec(rho)``.
+    The returned strings act on 2N qubits: row indices first, then column
+    indices. Structures are processed statically on the host; weights use
+    backend operations and support JIT and differentiation. Duplicate strings
+    are merged.
+    No operator is built; pass the result to :func:`PauliStringSum2MVP`.
+
+    :param hamiltonian: A ``(structures, weights)`` pair. Structures are static
+        N-qubit Pauli strings using 0: I, 1: X, 2: Y, 3: Z; weights are the
+        corresponding Hamiltonian coefficients.
+    :type hamiltonian: Tuple[Sequence[Sequence[int]], Sequence[Tensor]]
+    :param jumps: Each jump is a ``(structures, weights)`` pair. Include the
+        square root of its rate in the weights; for example, amplitude damping
+        uses ``[[1], [2]]`` with weights ``[sqrt(rate)/2, 1j*sqrt(rate)/2]``.
+    :type jumps: Sequence[Tuple[Sequence[Sequence[int]], Sequence[Tensor]]]
+    :raises ValueError: If the Hamiltonian or a jump has a different number of strings and weights.
+    :return: Unique 2N-qubit Pauli strings and their backend weight tensor.
+    :rtype: Tuple[List[List[int]], Tensor]
+    """
+    h_structures, h_weights = hamiltonian
+    if len(h_structures) != len(h_weights) or any(
+        len(structures) != len(weights) for structures, weights in jumps
+    ):
+        raise ValueError(
+            "The Hamiltonian and each jump require one weight per Pauli string."
+        )
+    strings = list(h_structures) + [s for structures, _ in jumps for s in structures]
+    n = len(strings[0]) if strings else 0
+    if any(len(s) != n or any(p not in (0, 1, 2, 3) for p in s) for s in strings):
+        raise ValueError("Pauli strings must have equal lengths and use codes 0–3.")
+    identity = (0,) * n
+    terms: Dict[Tuple[int, ...], Tensor] = {}
+
+    def add(left: Sequence[int], right: Sequence[int], weight: Tensor) -> None:
+        key = tuple(left) + tuple(right)
+        terms[key] = terms.get(key, 0) + weight
+
+    for p, w in zip(h_structures, h_weights):
+        w = backend.convert_to_tensor(w, dtype=dtypestr)
+        add(p, identity, -1j * w)
+        add(identity, p, 1j * (-1) ** tuple(p).count(2) * w)
+
+    # Pauli codes multiply by XOR, with this ordered-product phase table.
+    phases = ((1, 1, 1, 1), (1, 1, 1j, -1j), (1, -1j, 1, 1j), (1, 1j, -1j, 1))
+    for structures, weights in jumps:
+        weights = [backend.convert_to_tensor(w, dtype=dtypestr) for w in weights]
+        for p, a in zip(structures, weights):
+            for q, b in zip(structures, weights):
+                add(p, q, a * backend.conj(b) * (-1) ** tuple(q).count(2))
+                product = tuple(x ^ y for x, y in zip(p, q))
+                phase = reduce(mul, (phases[x][y] for x, y in zip(p, q)), 1)
+                decay = -0.5 * backend.conj(a) * b * phase
+                add(product, identity, decay)
+                add(identity, product, decay * (-1) ** product.count(2))
+
+    coefficients = (
+        backend.stack(list(terms.values()))
+        if terms
+        else backend.zeros((0,), dtype=dtypestr)
+    )
+    return [list(s) for s in terms], coefficients
+
+
 def PauliStringSum2MVP(
     structures: Sequence[Sequence[int]],
     weights: Sequence[float],
@@ -2326,7 +2396,8 @@ def PauliStringSum2MVP(
     The returned function `mvp(psi)` computes sum(w_i * P_i * psi).
     Pure Z/I terms are merged into one precomputed diagonal; each remaining term
     is applied with backend flips (for X/Y) and broadcasting (for Z/Y phases),
-    avoiding explicit matrix construction.
+    avoiding explicit matrix construction. Applying flips before phases lets
+    compiled backends reuse flips shared by multiple terms.
 
     :param structures: List of Pauli strings, e.g. [[1, 0, 3], [0, 2, 0]] for X0 Z2 and Y1.
         (0: I, 1: X, 2: Y, 3: Z)
@@ -2367,13 +2438,13 @@ def PauliStringSum2MVP(
             diagonal_terms.append(i)
             continue
 
-        # Z mask comes from Z terms AND Y terms (Y = i * X * Z)
+        # Apply flips before the Z/Y mask: Y = -i * Z * X.
         term_mask_indices.append(tuple(sorted(z_indices + y_indices)))
         # Flip axes come from X terms AND Y terms
         term_flip_axes.append(tuple(sorted(x_indices + y_indices)))
-        # Global phase: each Y contributes 1j; weights follow the global dtype
+        # Global phase: each Y contributes -1j; weights follow the global dtype
         term_weights.append(
-            backend.convert_to_tensor(w, dtype=dtypestr) * (1j) ** len(y_indices)
+            backend.convert_to_tensor(w, dtype=dtypestr) * (-1j) ** len(y_indices)
         )
 
     # Pre-fuse per-axis Z masks into a single broadcastable mask per term.
@@ -2423,17 +2494,12 @@ def PauliStringSum2MVP(
             total_res = psi_tensor * diagonal
 
         for i in range(len(term_weights)):
-            term_psi = psi_tensor
+            term_psi = backend.flip(psi_tensor, term_flip_axes[i])
 
-            # 1. Apply fused Z mask via a single broadcast multiply
             fused = term_fused_masks[i]
             if fused is not None:
                 term_psi = term_psi * fused
 
-            # 2. Apply X/Y flips
-            term_psi = backend.flip(term_psi, term_flip_axes[i])
-
-            # 3. Apply weight
             total_res = total_res + (term_psi * term_weights[i])
 
         if is_flat:
