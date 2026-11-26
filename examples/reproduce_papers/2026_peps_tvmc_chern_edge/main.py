@@ -211,6 +211,10 @@ class Hofstadter:
             z_masks.append(tuple(int(code in (2, 3)) for code in codes))
         unique = list(dict.fromkeys(x_masks))
         groups = [unique.index(mask) for mask in x_masks]
+        endpoints = [[i for i, bit in enumerate(mask) if bit] for mask in unique]
+        self.hop_left, self.hop_right = K.transpose(K.convert_to_tensor(endpoints))
+        # Each allowed hop touches one particle and one hole, with degree at most four.
+        self.hop_limit = min(len(unique), 4 * min(particles, self.nsites - particles))
         self.flips = K.convert_to_tensor(unique)
         self.z_masks = K.convert_to_tensor(z_masks)
         # Pauli terms avoid the full-state dimension limit of backend_mvp_plan.
@@ -228,11 +232,18 @@ class Hofstadter:
         K = tc.backend
         signs = 1 - 2 * K.mod(self.z_masks @ occupation, 2)
         matrix_elements = self.grouping @ (self.coefficients * signs)
-        connected = K.mod(occupation[None, :] + self.flips, 2)
+        allowed = occupation[self.hop_left] != occupation[self.hop_right]
+        flips = self.flips
+        if self.hop_limit < self.flips.shape[0]:
+            indices = K.argsort(K.cast(~allowed, "int32"))[: self.hop_limit]
+            flips, matrix_elements, allowed = (
+                flips[indices],
+                matrix_elements[indices],
+                allowed[indices],
+            )
+        connected = K.mod(occupation[None, :] + flips, 2)
         amplitudes = self.peps.batch_amplitude(theta, connected)
-        amplitudes = K.where(
-            K.sum(connected, axis=1) == self.particles, amplitudes, 0.0
-        )
+        amplitudes = K.where(allowed, amplitudes, 0.0)
         amplitude = self.peps.amplitude(theta, occupation)
         return (
             K.sum(matrix_elements * amplitudes) / amplitude
@@ -702,31 +713,61 @@ def determinant(orbitals, occupation, particles):
     return K.det(K.gather1d(orbitals, indices))
 
 
-def importance_statistics(ratios, configurations):
-    """Raw self-normalized PEPS density and delete-block jackknife uncertainty."""
-    ratios = ratios / np.max(np.abs(ratios))
-    weights = np.abs(ratios) ** 2
-    weighted = weights[:, None] * configurations
-    total = np.concatenate(([ratios.sum(), weights.sum()], weighted.sum(axis=0)))
+def importance_statistics(batches, samples, nsites):
+    """Stream 32 contiguous delete-group sums with a common amplitude scale."""
+    if samples < 32:
+        raise ValueError("Delete-group statistics require at least 32 samples.")
+    sizes = np.full(32, samples // 32)
+    sizes[: samples % 32] += 1
+    ends = sizes.cumsum()
+    # Sum of ratios, sum of weights, weighted occupations, sum of squared weights.
+    groups = np.zeros((32, nsites + 3), dtype=np.complex128)
+    occupations = np.zeros(nsites, dtype=np.int64)
+    scale, count, group = 0.0, 0, 0
+    for ratios, states in batches:
+        if count + len(ratios) > samples:
+            raise ValueError("The streamed sample count exceeds the requested total.")
+        largest = np.max(np.abs(ratios))
+        if not np.isfinite(largest):
+            raise FloatingPointError("Nonfinite importance ratio.")
+        if largest > scale:
+            factor = scale / largest
+            groups[:, 0] *= factor
+            groups[:, 1:-1] *= factor**2
+            groups[:, -1] *= factor**4
+            scale = largest
+        ratios = ratios / scale if scale else ratios
+        weights = np.abs(ratios) ** 2
+        occupations += states.sum(axis=0)
+        offset = 0
+        while offset < len(ratios):
+            size = min(ends[group] - count, len(ratios) - offset)
+            part = slice(offset, offset + size)
+            w = weights[part]
+            groups[group, 0] += ratios[part].sum()
+            groups[group, 1] += w.sum()
+            groups[group, 2:-1] += w @ states[part]
+            groups[group, -1] += w @ w
+            count += size
+            offset += size
+            if count == ends[group]:
+                group += 1
 
-    def moments(sums, count):
-        fidelity = np.abs(sums[0]) ** 2 / (count * sums[1].real)
-        return np.concatenate(([1 - fidelity], sums[2:].real / sums[1].real))
+    total = groups.sum(axis=0)
+    if count != samples or (total[1].real - groups[:, 1].real <= 0).any():
+        raise ValueError("Insufficient samples or weight for delete-group statistics.")
 
-    estimate = moments(total, len(ratios))
-    blocks = np.array_split(np.arange(len(ratios)), 32)
-    deleted = []
-    for indices in blocks:
-        removed = np.concatenate(
-            (
-                [ratios[indices].sum(), weights[indices].sum()],
-                weighted[indices].sum(axis=0),
-            )
-        )
-        deleted.append(moments(total - removed, len(ratios) - len(indices)))
-    deleted = np.asarray(deleted)
-    stderr = np.sqrt(31 / 32 * np.sum((deleted - deleted.mean(axis=0)) ** 2, axis=0))
-    return estimate, stderr, weights
+    def moments(sums, n):
+        fidelity = abs(sums[0]) ** 2 / (n * sums[1].real)
+        return np.r_[1 - fidelity, sums[2:-1].real / sums[1].real]
+
+    estimate = moments(total, samples)
+    deleted = np.asarray(
+        [moments(total - g, samples - n) for g, n in zip(groups, sizes)]
+    )
+    stderr = np.sqrt(31 / 32 * ((deleted - deleted.mean(axis=0)) ** 2).sum(axis=0))
+    ess = total[1].real ** 2 / total[-1].real
+    return estimate, stderr, ess, 1 / total[1].real, occupations / samples
 
 
 def measure(problem, theta, physical_time, samples=8192, seed=8201, batch_size=2048):
@@ -758,22 +799,21 @@ def measure(problem, theta, physical_time, samples=8192, seed=8201, batch_size=2
         for value in (theta, orbitals, correlation)
     ]
     rng = np.random.default_rng(seed)
-    ratios, configurations = [], []
+
+    def batches():
+        for start in range(0, samples, batch_size):
+            uniforms = jax.device_put(rng.random((batch_size, problem.nsites)), sharded)
+            ratios, states = draw_batch(theta, orbitals, correlation, uniforms)
+            stop = min(batch_size, samples - start)
+            occupations = np.asarray(states)[:stop]
+            np.testing.assert_array_equal(occupations.sum(axis=1), problem.particles)
+            yield np.asarray(ratios)[:stop], occupations
+
     started = time.perf_counter()
-    for _ in range((samples + batch_size - 1) // batch_size):
-        uniforms = jax.device_put(rng.random((batch_size, problem.nsites)), sharded)
-        ratios_batch, states = draw_batch(theta, orbitals, correlation, uniforms)
-        np.testing.assert_array_equal(np.asarray(states).sum(axis=1), problem.particles)
-        values = np.asarray(ratios_batch)
-        if not np.all(np.isfinite(values)):
-            raise FloatingPointError("Non-finite importance ratios")
-        ratios.append(values)
-        configurations.append(np.asarray(states))
-    ratios = np.concatenate(ratios)[:samples]
-    configurations = np.concatenate(configurations)[:samples]
-    estimate, stderr, weights = importance_statistics(ratios, configurations)
-    density = configurations.mean(axis=0)
-    error = configurations.std(axis=0, ddof=1) / np.sqrt(samples)
+    estimate, stderr, ess, max_weight, density = importance_statistics(
+        batches(), samples, problem.nsites
+    )
+    error = np.sqrt(density * (1 - density) / (samples - 1))
     np.testing.assert_array_less(abs(density - reference_density), 6 * error + 0.002)
     difference = estimate[1:] - reference_density
     report = {
@@ -788,8 +828,8 @@ def measure(problem, theta, physical_time, samples=8192, seed=8201, batch_size=2
         "density_max_error": float(np.max(abs(difference))),
         "density_stderr_rms": float(np.sqrt(np.mean(stderr[1:] ** 2))),
         "density_stderr_max": float(np.max(stderr[1:])),
-        "weight_effective_sample_size": float(weights.sum() ** 2 / np.sum(weights**2)),
-        "max_weight_fraction": float(weights.max() / weights.sum()),
+        "weight_effective_sample_size": float(ess),
+        "max_weight_fraction": float(max_weight),
         "seconds_including_compilation": time.perf_counter() - started,
         "estimator": "Self-normalized importance density; no reference-density correction or smoothing.",
     }
@@ -854,14 +894,18 @@ def advance_phase(engine, state, dt, steps, imaginary, label):
 
 
 def simulate(
-    samples=10240, measurement_samples=4194304, seed=DEFAULT_SEED, solver="dense"
+    samples=10240,
+    measurement_samples=4194304,
+    seed=DEFAULT_SEED,
+    solver="dense",
+    batch_size=None,
 ):
     """Prepare from random tensors, evolve to t=8, and independently measure four frames."""
     K = tc.backend
     # Preserve the published default streams while letting --seed shift every stage.
     bond_seed = 7109 + (seed - DEFAULT_SEED)
     measurement_seed = 9147 + (seed - DEFAULT_SEED)
-    batch = min(samples, 2560 * len(jax.devices()))
+    batch = min(samples, batch_size or 2560 * len(jax.devices()))
     small = FermionPEPS(6, 6, 2)
     _, draw = K.random_split(K.get_random_state(seed))
     theta = small.random_parameters(draw)
@@ -989,12 +1033,19 @@ def main():
     parser.add_argument(
         "--output", type=Path, default=Path(__file__).resolve().parent / "outputs"
     )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        help="Maximum configurations per score/energy contraction batch.",
+    )
     parser.add_argument("--plot-only", action="store_true")
     parser.add_argument("--samples", type=int, default=10240)
     parser.add_argument("--measurement-samples", type=int, default=4194304)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--solver", choices=("dense", "cg"), default="dense")
     args = parser.parse_args()
+    if args.batch_size is not None and args.batch_size < 1:
+        parser.error("Batch size must be positive.")
     if args.samples < 2 or args.measurement_samples < 64:
         parser.error("Use at least two chains and 64 independent measurement samples.")
     tc.set_backend("jax")
@@ -1005,7 +1056,11 @@ def main():
             summary = dict(saved)
     else:
         summary = simulate(
-            args.samples, args.measurement_samples, args.seed, args.solver
+            args.samples,
+            args.measurement_samples,
+            args.seed,
+            args.solver,
+            args.batch_size,
         )
         np.savez_compressed(args.output / "summary.npz", **summary)
     plot(summary, args.output)

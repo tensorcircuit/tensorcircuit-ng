@@ -20,6 +20,7 @@ if __package__:
         enlarge_bond,
         gaussian_reference,
         determinant,
+        importance_statistics,
         measure,
         sr_cg_solve,
         sr_moments_solve,
@@ -33,6 +34,7 @@ else:
         enlarge_bond,
         gaussian_reference,
         determinant,
+        importance_statistics,
         measure,
         sr_cg_solve,
         sr_moments_solve,
@@ -217,6 +219,21 @@ def check_kernels(rows=2, columns=3, bond_dim=2):
         "gauge_null_error": float(gauge_error),
         "sr_residual": float(residual),
     }
+
+
+def check_pruned_hops():
+    """Compare the compact connected-state sum to the charge-sector Hamiltonian."""
+    K = tc.backend
+    peps = FermionPEPS(2, 4, 2)
+    problem = Hofstadter(peps, 6)
+    assert problem.hop_limit < len(peps.bonds)
+    basis, matrix = sector_reference(problem, -0.3)
+    states = K.cast(K.convert_to_tensor(basis), "int64")
+    theta = peps.random_parameters(K.get_random_state(87))
+    amplitudes = np.asarray(K.jit(peps.batch_amplitude)(theta, states))
+    local = np.asarray(K.jit(problem.local_batch)(theta, states, -0.3))
+    np.testing.assert_allclose(local, (matrix @ amplitudes) / amplitudes, atol=1e-10)
+    return {"sector_size": len(basis), "hop_limit": problem.hop_limit}
 
 
 def check_cg():
@@ -555,6 +572,57 @@ def check_paths():
     return {"amplitudes_and_scores_agree": True, "path_reused": True}
 
 
+def check_streamed_measurement():
+    """Compare a padded, unevenly partitioned stream with direct delete-group sums."""
+    rng = np.random.default_rng(912)
+    ratios = rng.normal(size=101) + 1j * rng.normal(size=101)
+    ratios[:13] = 0
+    ratios[63:] *= 30
+    states = rng.integers(0, 2, size=(101, 5))
+    weights = abs(ratios) ** 2
+
+    def moments(idx):
+        norm = weights[idx].sum()
+        return np.r_[
+            1 - abs(ratios[idx].sum()) ** 2 / (len(idx) * norm),
+            weights[idx] @ states[idx] / norm,
+        ]
+
+    all_rows = np.arange(len(states))
+    deleted = np.stack(
+        [moments(np.setdiff1d(all_rows, g)) for g in np.array_split(all_rows, 32)]
+    )
+    expected_error = np.sqrt(
+        31 / 32 * ((deleted - deleted.mean(axis=0)) ** 2).sum(axis=0)
+    )
+    batches = (
+        (ratios[i : i + 13], states[i : i + 13]) for i in range(0, len(states), 13)
+    )
+    actual, error, ess, largest, proposal = importance_statistics(
+        batches, len(states), 5
+    )
+    np.testing.assert_allclose(actual, moments(all_rows), atol=1e-14)
+    np.testing.assert_allclose(error, expected_error, atol=1e-14)
+    np.testing.assert_allclose(ess, weights.sum() ** 2 / (weights @ weights))
+    np.testing.assert_allclose(largest, weights.max() / weights.sum())
+    np.testing.assert_allclose(proposal, states.mean(axis=0))
+    for infidelity, effective in ((1.0, 101.0), (0.0, 0.0)):
+        with np.testing.assert_raises(AssertionError):
+            check_overlap_quality(
+                np.array([infidelity]), np.zeros(1), np.array([effective]), len(states)
+            )
+    return {"samples": len(states), "groups": 32}
+
+
+def check_overlap_quality(infidelity, stderr, ess, samples):
+    """Require a resolved state error and nondegenerate importance weights."""
+    np.testing.assert_array_less(-1e-12, infidelity)
+    np.testing.assert_array_less(-1e-12, stderr)
+    np.testing.assert_array_less(infidelity + 3 * stderr, 0.003)
+    np.testing.assert_array_less(samples * 0.5, ess)
+    np.testing.assert_array_less(ess, samples * (1 + 1e-12))
+
+
 def check_summary(output):
     """Validate the generated numerical summary independently of the plot."""
     with np.load(output / "summary.npz") as saved:
@@ -568,6 +636,17 @@ def check_summary(output):
             "effective_samples",
         ):
             assert np.isfinite(saved[name]).all(), name
+        np.testing.assert_array_equal(saved["times"], [0.0, 2.0, 4.0, 8.0])
+        assert density.shape == exact.shape == saved["density_stderr"].shape == (4, 36)
+        assert saved["background"].shape == (36,)
+        for field in ("infidelity", "infidelity_stderr", "effective_samples"):
+            assert saved[field].shape == (4,), field
+        check_overlap_quality(
+            saved["infidelity"],
+            saved["infidelity_stderr"],
+            saved["effective_samples"],
+            int(saved["measurement_samples"]),
+        )
         np.testing.assert_allclose(density.sum(axis=1), 24.0, atol=1e-10)
         np.testing.assert_allclose(exact.sum(axis=1), 24.0, atol=1e-10)
         np.testing.assert_array_less(-1e-12, density)
@@ -596,9 +675,11 @@ def main():
     tc.set_dtype("complex128")
     checks = [
         check_kernels,
+        check_pruned_hops,
         check_cg,
         check_cg_estimate,
         check_paths,
+        check_streamed_measurement,
         check_batched_moments,
         check_sampling,
         check_preparation,
