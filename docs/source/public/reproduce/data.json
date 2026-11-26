@@ -591,8 +591,8 @@
     "slug": "2018_neural_quantum_tomography",
     "title": "Neural-network quantum state tomography",
     "card_title": "Figure 1 · W-state tomography",
-    "summary": "Finite-shot RBMs recover W-state populations and learn relative phases from Z, XX, and XY measurements.",
-    "description": "Illustrates the Figure 1 mechanisms at 8, 10, and 12 qubits with three seeds per size. TensorCircuit-NG generates finite-shot samples from positive or random-phase W states. Positive-state fits use five nested Z-basis sample budgets. Phase fits use 6,400 shots per basis in Z and adjacent XX and XY bases, with a matched Z-only control. The RBMs have no support mask. Full configuration enumeration replaces Monte Carlo normalization, and L-BFGS-B with measured-probability phase pretraining replaces the paper's training optimizer. Saved parameters support a separate NumPy check of fidelity, leakage, relative phases, and the controls.",
+    "summary": "At 20 qubits, finite-shot RBMs estimate W-state populations and learn relative phases from Z, XX, and XY measurements.",
+    "description": "Reproduces the 20-qubit W-state experiments in Figure 1 with three seeds. A bond-two MPS produces 50, 1,000, and 20,000 nested Z-basis shots for the positive state and 6,400 shots per basis across 39 bases for the random-phase state. Unrestricted RBMs learn amplitudes with block Gibbs SGD and phases with a damped empirical natural gradient. The phase fit and Z-only control share the same amplitude fit. The figures report absolute overlap, unconditional single-excitation probabilities, and relative phases.",
     "authors": [
       "Giacomo Torlai",
       "Guglielmo Mazzola",
@@ -610,11 +610,10 @@
       "generative-model"
     ],
     "tc_features": [
-      "circuit",
+      "mps-circuit",
       "sampling",
-      "expectation",
       "jit",
-      "autodiff"
+      "vmap"
     ],
     "backend": "jax",
     "hardware": {
@@ -623,14 +622,14 @@
     },
     "figures": [
       {
-        "target": "Figure 1 mechanisms: overlap, populations, and measurement-basis comparison",
+        "target": "Figure 1: overlap, populations, and measurement-basis comparison",
         "source": "outputs/result.png",
         "figure": "figures/2018_neural_quantum_tomography__result.webp",
         "thumb": "thumbs/2018_neural_quantum_tomography__result.webp",
         "script": "main.py"
       },
       {
-        "target": "Figure 1 mechanism: relative-phase reconstruction",
+        "target": "Figure 1: relative-phase reconstruction",
         "source": "outputs/phases.png",
         "figure": "figures/2018_neural_quantum_tomography__phases.webp",
         "thumb": "thumbs/2018_neural_quantum_tomography__phases.webp",
