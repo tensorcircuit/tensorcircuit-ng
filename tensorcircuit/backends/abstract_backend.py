@@ -7,13 +7,34 @@ Backend magic inherited from tensornetwork: abstract backend
 from collections import OrderedDict, defaultdict
 from functools import reduce, partial
 from operator import mul
-from typing import Any, Callable, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 import math
 import numpy as np
 from ..utils import return_partial
 
 Tensor = Any
+
+
+def normalize_axes(axes: Sequence[int], ndim: int) -> List[int]:
+    """
+    Normalize axes to non-negative values; out-of-range axes raise ``IndexError``
+    and repeated axes raise ``ValueError``.
+    """
+    normalized = [range(ndim)[axis] for axis in axes]
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("Repeated axis in {}".format(tuple(axes)))
+    return normalized
 
 
 class _TreeDef:
@@ -861,6 +882,52 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `stack`.".format(self.name)
         )
 
+    def unstack(self: Any, a: Tensor, axis: int = 0) -> List[Tensor]:
+        """
+        Split tensor ``a`` along ``axis`` into a list of tensors with that axis
+        removed, the inverse of :py:meth:`stack`.
+
+        :param a: tensor with rank at least one
+        :type a: Tensor
+        :param axis: the unstack axis, defaults to 0
+        :type axis: int, optional
+        :return: list of ``a.shape[axis]`` tensors
+        :rtype: List[Tensor]
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `unstack`.".format(self.name)
+        )
+
+    def unstack_scalars(
+        self: Any, a: Tensor
+    ) -> Union[List[Tensor], Dict[Tuple[int, ...], Tensor]]:
+        """
+        Split tensor ``a`` into its scalar elements with a single op.
+
+        Use it at the top of a differentiated and jitted function instead of
+        reading ``params[k]`` at every gate: on the JAX backend, each such read
+        adds a slice whose gradient XLA assembles slowly, so compile time grows
+        roughly quadratically with the number of reads.
+
+        :Example:
+
+        >>> params = tc.backend.ones([2, 3, 2])
+        >>> thetas = tc.backend.unstack_scalars(params)
+        >>> c = tc.Circuit(3)
+        >>> c.rzz(0, 1, theta=thetas[1, 0, 0])
+
+        :param a: tensor with rank at least one and a static shape
+        :type a: Tensor
+        :return: list of scalars for a one-dimensional ``a``, otherwise a dict
+            from index tuples to scalars, so that ``result[i, j]`` equals ``a[i, j]``
+        :rtype: Union[List[Tensor], Dict[Tuple[int, ...], Tensor]]
+        """
+        shape = tuple(a.shape)
+        scalars = self.unstack(self.reshape(a, [-1]))
+        if len(shape) == 1:
+            return scalars  # type: ignore
+        return dict(zip(np.ndindex(*shape), scalars))
+
     def concat(self: Any, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         """
         Join a sequence of arrays along an existing axis.
@@ -1378,6 +1445,22 @@ class ExtendedBackend:
         """
         return a[::-1]
 
+    def flip(self: Any, a: Tensor, axes: Sequence[int]) -> Tensor:
+        """
+        Reverse ``a`` along each axis in ``axes``.
+
+        :param a: input tensor
+        :type a: Tensor
+        :param axes: axes to reverse, each at most once
+        :type axes: Sequence[int]
+        :return: the flipped tensor
+        :rtype: Tensor
+        """
+        index = [slice(None)] * len(a.shape)
+        for axis in normalize_axes(axes, len(a.shape)):
+            index[axis] = slice(None, None, -1)
+        return a[tuple(index)]
+
     def right_shift(self: Any, x: Tensor, y: Tensor) -> Tensor:
         """
         Shift the bits of an integer x to the right y bits.
@@ -1799,6 +1882,7 @@ class ExtendedBackend:
     ) -> Tensor:
         """
         Categorical random sampler with internally managed random state.
+        See :py:meth:`stateful_randc` for the precision caveat with long float32 ``p``.
 
         :param a: The possible options
         :type a: Union[int, Sequence[int], Tensor]
@@ -1825,6 +1909,12 @@ class ExtendedBackend:
     ) -> Tensor:
         """
         Categorical random sampler with given random state.
+
+        Except on the NumPy backend, sampling with ``p`` relies on a cumulative distribution
+        in the precision of ``p``. For a long float32 ``p`` (beyond about ``2**16`` options),
+        outcome frequencies become visibly biased and small-probability options may be
+        unreachable. Use :py:meth:`probability_sample` for such distributions and gather
+        the options from the returned indices.
 
         :param g: stateful register for each package
         :type g: Any
@@ -1855,24 +1945,59 @@ class ExtendedBackend:
         :param p: prbability vector
         :type p: Tensor
         :param status: external randomness as a tensor with each element drawn uniformly from [0, 1],
-            defaults to None
+            shape ``[shots]`` or ``[shots, 2]``, defaults to None.
+            With shape ``[shots]``, one uniform number per shot resolves outcome probabilities
+            only up to the precision of ``p.dtype``, which visibly biases float32 sampling
+            beyond about ``2**20`` outcomes.
+            With shape ``[shots, 2]`` and more than ``2**12`` outcomes, the two numbers select
+            a block and then an outcome within it, which stays accurate in float32.
+            When ``status`` is None, the suitable shape is drawn internally.
         :type status: Optional[Tensor], optional
         :param g: backend random genrator, defaults to None
         :type g: Any, optional
         :return: The drawn sample as an int tensor
         :rtype: Tensor
         """
+        p = p / self.sum(p)
+        n = self.shape_tuple(p)[0]
+        dtype = self.dtype(p)
         if status is not None:
             status = self.convert_to_tensor(status)
-        elif g is not None:
-            status = self.stateful_randu(g, shape=[shots])
         else:
-            status = self.implicit_randu(shape=[shots])
-        p = p / self.sum(p)
-        p_cuml = self.cumsum(p)
-        r = p_cuml[-1] * (1 - self.cast(status, p.dtype))
-        ind = self.searchsorted(p_cuml, r)
-        a = self.arange(self.shape_tuple(p)[0])
+            shape = [shots] if dtype == "float64" or n <= 4096 else [shots, 2]
+            if g is not None:
+                status = self.stateful_randu(g, shape=shape, dtype=dtype)
+            else:
+                status = self.implicit_randu(shape=shape, dtype=dtype)
+        status = self.cast(status, dtype)
+        ss = self.shape_tuple(status)
+        if len(ss) == 2 and ss[1] == 2 and n > 4096:
+            # power-of-two blocks so that each level resolves at most about 2**12
+            # outcomes (sqrt(n) per level beyond 2**24) within float32 precision
+            bits = (n - 1).bit_length()
+            m = 1 << min((bits + 1) // 2, bits - 12)
+            nb = -(-n // m)
+            if nb * m > n:
+                p = self.concat([p, self.zeros([nb * m - n], dtype=dtype)])
+            p_cuml = self.cumsum(self.reshape(p, [nb, m]), axis=1)
+            b_mass = p_cuml[:, -1]
+            b_cuml = self.cumsum(b_mass)
+            b = self.searchsorted(b_cuml, b_cuml[-1] * (1 - status[:, 0]))
+            r = self.gather1d(b_mass, b) * (1 - status[:, 1])
+            p_cuml = self.reshape(p_cuml, [-1])
+            ind = b * m
+            step = m // 2
+            while step >= 1:
+                cand = ind + step
+                ind = self.where(self.gather1d(p_cuml, cand - 1) < r, cand, ind)
+                step //= 2
+        else:
+            if len(ss) == 2 and ss[1] == 2:
+                status = status[:, 0]
+            p_cuml = self.cumsum(p)
+            r = p_cuml[-1] * (1 - status)
+            ind = self.searchsorted(p_cuml, r)
+        a = self.arange(n)
         res = self.gather1d(a, ind)
         return res
 
@@ -1888,6 +2013,34 @@ class ExtendedBackend:
         :rtype: Tensor
         """
         return operand[indices]
+
+    def gather(self: Any, operand: Tensor, indices: Tensor, axis: int = 0) -> Tensor:
+        """
+        Select slices along one axis, preserving their order and duplicates.
+
+        The output shape is ``operand.shape[:axis] + indices.shape +
+        operand.shape[axis + 1:]`` after normalizing a negative axis.
+        Scalar indices remove the selected axis; empty indices produce an
+        empty output. All operand batch dimensions share the same indices;
+        use ``vmap`` for paired batches of operands and indices.
+
+        The result retains the operand's dtype and device. Gradients with
+        respect to the operand accumulate at repeated indices. The operation
+        supports JIT with a static axis on backends that support compilation.
+
+        :param operand: tensor of rank at least one
+        :type operand: Tensor
+        :param indices: int32 or int64 tensor of any rank on the operand's device;
+            entries must lie in ``[0, operand.shape[axis])``
+        :type indices: Tensor
+        :param axis: axis to select, in ``[-operand.ndim, operand.ndim)``
+        :type axis: int
+        :return: selected slices with the index dimensions inserted at ``axis``
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `gather`.".format(self.name)
+        )
 
     def scatter(
         self: Any,
@@ -1953,6 +2106,40 @@ class ExtendedBackend:
             indices=np.array([a.row, a.col]).T,
             values=a.data,
             shape=a.shape,
+        )
+
+    def csr_sparse_matrix(
+        self: Any, indptr: Tensor, indices: Tensor, values: Tensor, shape: Tensor
+    ) -> Tensor:
+        """
+        Generate the csr format sparse matrix from row pointers, column indices and values.
+
+        :param indptr: shape [m + 1] row pointers for an [m, k] matrix
+        :type indptr: Tensor
+        :param indices: shape [n] column indices for n stored values
+        :type indices: Tensor
+        :param values: shape [n]
+        :type values: Tensor
+        :param shape: Tuple[int, ...]
+        :type shape: Tensor
+        :return: the CSR sparse matrix
+        :rtype: Tensor
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `csr_sparse_matrix`.".format(self.name)
+        )
+
+    def csr_sparse_matrix_from_numpy(self: Any, a: Tensor) -> Tensor:
+        """
+        Generate the csr format sparse matrix from scipy csr sparse matrix.
+
+        :param a: Scipy csr format sparse matrix
+        :type a: Tensor
+        :return: CSR sparse matrix in backend format
+        :rtype: Tensor
+        """
+        return self.csr_sparse_matrix(
+            indptr=a.indptr, indices=a.indices, values=a.data, shape=a.shape
         )
 
     def sparse_dense_matmul(
@@ -2382,32 +2569,20 @@ class ExtendedBackend:
             return t
 
         def wrapper(*args: Any, **kws: Any) -> Any:
-            pf = partial(f, **kws)
             jjs = []
             for argnum in argnums:  # type: ignore
-                jj = self.vmap(jvp1, vectorized_argnums=2)(
-                    pf,
-                    args,
-                    tuple(
-                        [
-                            (
-                                self.reshape(
-                                    self.eye(self.sizen(arg), dtype=arg.dtype),
-                                    [-1] + list(self.shape_tuple(arg)),
-                                )
-                                if i == argnum
-                                else self.reshape(
-                                    self.zeros(
-                                        [self.sizen(args[argnum]), self.sizen(arg)],
-                                        dtype=arg.dtype,
-                                    ),
-                                    [-1] + list(self.shape_tuple(arg)),
-                                )
-                            )
-                            for i, arg in enumerate(args)
-                        ]
-                    ),
+
+                def pf(arg: Tensor, position: int = argnum) -> Any:
+                    selected_args = list(args)
+                    selected_args[position] = arg
+                    return f(*selected_args, **kws)
+
+                arg = args[argnum]
+                tangents = self.reshape(
+                    self.eye(self.sizen(arg), dtype=arg.dtype),
+                    [-1] + list(self.shape_tuple(arg)),
                 )
+                jj = self.vmap(jvp1, vectorized_argnums=2)(pf, (arg,), (tangents,))
                 jj = self.tree_map(
                     partial(
                         _transform, input_shape=list(self.shape_tuple(args[argnum]))
@@ -2427,6 +2602,11 @@ class ExtendedBackend:
         """
         Compute the Jacobian of ``f`` using reverse mode AD.
 
+        For complex-valued ``f``, the result follows the backend ``vjp``
+        convention: the TensorFlow and PyTorch results are the complex
+        conjugate of the JAX result. For holomorphic ``f``, the JAX result
+        equals the ``jacfwd`` result.
+
         :param f: The function whose Jacobian is required
         :type f: Callable[..., Any]
         :param argnums: the position of the arg as Jacobian input, defaults to 0
@@ -2440,7 +2620,14 @@ class ExtendedBackend:
             argnums = (argnums,)
 
         def wrapper(*args: Any, **kws: Any) -> Any:
-            pf = partial(f, **kws)
+            selected = tuple(sorted({range(len(args))[i] for i in argnums}))
+
+            def pf(*differentiated: Any) -> Any:
+                selected_args = list(args)
+                for i, value in zip(selected, differentiated):
+                    selected_args[i] = value
+                return f(*selected_args, **kws)
+
             values = f(*args, **kws)  # TODO(@refraction-ray): any way to save this?
             collect = tuple
             if isinstance(values, list):
@@ -2458,7 +2645,7 @@ class ExtendedBackend:
             for k in range(len(values)):
                 jj = self.vmap(vjp1, vectorized_argnums=2)(
                     pf,
-                    args,
+                    tuple(args[i] for i in selected),
                     collect(
                         [
                             (
@@ -2469,7 +2656,8 @@ class ExtendedBackend:
                                 if i == k
                                 else self.reshape(
                                     self.zeros(
-                                        [self.sizen(v), self.sizen(v)], dtype=v.dtype
+                                        [self.sizen(values[k]), self.sizen(v)],
+                                        dtype=v.dtype,
                                     ),
                                     [-1] + list(self.shape_tuple(v)),
                                 )
@@ -2486,7 +2674,7 @@ class ExtendedBackend:
                     ),
                     jj,
                 )
-                jj = [jji for ind, jji in enumerate(jj) if ind in argnums]
+                jj = list(jj)
                 if len(jj) == 1:
                     jj = jj[0]
                 jjs.append(jj)

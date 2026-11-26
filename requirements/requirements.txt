@@ -6,5 +6,6 @@ tensornetwork-ng
 graphviz
 jax==0.7.0
 jaxlib==0.7.0
+diffrax>=0.7.1
 networkx
 optax

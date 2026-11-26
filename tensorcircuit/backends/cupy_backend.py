@@ -1,11 +1,17 @@
 """
 CuPy backend. Not in the tensornetwork package and highly experimental.
+
+.. warning::
+
+    This backend is experimental: its API may change and the whole backend may be
+    removed at any time without deprecation. Setting it via ``tc.set_backend("cupy")``
+    emits :py:class:`tensorcircuit.utils.ExperimentalWarning`.
 """
 
 # pylint: disable=invalid-name
 
 import logging
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -22,6 +28,7 @@ except ImportError:
     tnbackend = abstract_backend.AbstractBackend
 
 
+from ..utils import experimental_module_warning
 from .abstract_backend import ExtendedBackend
 
 logger = logging.getLogger(__name__)
@@ -50,6 +57,7 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
         cp = cupy
         cpx = cupyx
         self.name = "cupy"
+        experimental_module_warning(__name__)
 
     def convert_to_tensor(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
         if not isinstance(a, cp.ndarray) and not cp.isscalar(a):
@@ -115,6 +123,12 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
             dtype = dtypestr
         return cp.zeros(shape, dtype=dtype)
 
+    def zeros_like(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
+        return cp.zeros_like(a, dtype=dtype)
+
+    def ones_like(self, a: Tensor, dtype: Optional[str] = None) -> Tensor:
+        return cp.ones_like(a, dtype=dtype)
+
     def copy(self, a: Tensor) -> Tensor:
         return a.copy()
 
@@ -123,6 +137,9 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
 
     def abs(self, a: Tensor) -> Tensor:
         return cp.abs(a)
+
+    def power(self, a: Tensor, b: Union[Tensor, float]) -> Tensor:
+        return cp.power(a, b)
 
     def sin(self, a: Tensor) -> Tensor:
         return cp.sin(a)
@@ -194,6 +211,9 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
 
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return cp.stack(a, axis=axis)
+
+    def unstack(self, a: Tensor, axis: int = 0) -> List[Tensor]:
+        return list(cp.moveaxis(a, axis, 0))
 
     def concat(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return cp.concatenate(a, axis=axis)
@@ -402,6 +422,18 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
         values = self.convert_to_tensor(values)
         indices = self.convert_to_tensor(indices).T
         return cp.sparse.coo_matrix((values, indices), shape=shape)
+
+    def csr_sparse_matrix(
+        self, indptr: Tensor, indices: Tensor, values: Tensor, shape: Tensor
+    ) -> Tensor:
+        return cp.sparse.csr_matrix(
+            (
+                self.convert_to_tensor(values),
+                self.convert_to_tensor(indices),
+                self.convert_to_tensor(indptr),
+            ),
+            shape=shape,
+        )
 
     def sparse_dense_matmul(
         self,

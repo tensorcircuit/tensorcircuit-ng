@@ -156,6 +156,26 @@ def test_ee():
     np.testing.assert_allclose(ee0, ee1, atol=1e-6)
 
 
+def test_entanglement_entropy_uneven_partition():
+    c = tc.StabilizerCircuit(5)
+    c.h(0)
+    c.cx(0, 1)
+    c.h(2)
+    c.cx(2, 3)
+    c.z(4)
+    for keep, expected in [
+        ([0, 2], 2),
+        ([1, 3, 4], 2),
+        ([0, 1], 0),
+        ([2, 3, 4], 0),
+        ([], 0),
+        (list(range(5)), 0),
+    ]:
+        np.testing.assert_allclose(
+            c.entanglement_entropy(subsystem_to_keep=keep), expected * np.log(2)
+        )
+
+
 def test_random_gates():
     c = tc.StabilizerCircuit(4)
     c.random_gate(0, 1, recorded=True)

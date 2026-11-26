@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: tensorcircuit-ng \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-06-15 16:24+0800\n"
+"POT-Creation-Date: 2026-11-24 15:38+0800\n"
 "PO-Revision-Date: 2026-03-31 13:30+0800\n"
 "Last-Translator: Gemini CLI\n"
 "Language: zh_CN\n"
@@ -21,41 +21,82 @@ msgstr ""
 "Generated-By: Babel 2.18.0\n"
 
 #: ../../source/agentic.rst:2
-msgid "Agentic Development"
-msgstr "智能体（Agent）开发"
+msgid "Agentic Quantum Research"
+msgstr "智能体量子研究"
 
 #: ../../source/agentic.rst:5
 msgid ""
-"TensorCircuit-NG is the world's first AI-native quantum programming "
-"platform, purpose-built for agentic research and automated scientific "
-"discovery."
-msgstr "TensorCircuit-NG 是全球首个 AI 原生量子编程平台，专为智能体（Agent）辅助研究和自动化科学发现而设计。"
+"TensorCircuit-NG is an AI-native quantum research runtime for agentic "
+"discovery, algorithm design, quantum simulation, execution optimization, "
+"validation, and research artifact generation."
+msgstr "TensorCircuit-NG 是一个 AI 原生的量子研究运行时，面向智能体驱动的发现、算法设计、量子模拟、执行优化、验证和研究产物生成。"
 
-#: ../../source/agentic.rst:10
+#: ../../source/agentic.rst:7
+msgid ""
+"From published quantum knowledge to executable research infrastructure, "
+"TensorCircuit-NG connects AI agents to the context, rules, skills, and "
+"high-performance execution backends required for serious quantum "
+"research."
+msgstr ""
+"从已发表的量子知识到可执行的研究基础设施，TensorCircuit-NG 将 AI "
+"智能体与严肃量子研究所需要的上下文、规则、技能和高性能执行后端连接起来。"
+
+#: ../../source/agentic.rst:12
 msgid "🚀 Experience Agent-Native Discovery"
 msgstr "🚀 体验智能体原生发现"
 
-#: ../../source/agentic.rst:17
-msgid ""
-"Click here to see how AI agents autonomously solve complex quantum "
-"problems in TensorCircuit-NG."
-msgstr "点击这里查看 AI 智能体如何在 TensorCircuit-NG 中自主解决复杂的量子问题。"
-
 #: ../../source/agentic.rst:19
+msgid ""
+"Explore how AI agents can discover, implement, optimize, validate, and "
+"communicate quantum research workflows in TensorCircuit-NG."
+msgstr "了解 AI 智能体如何在 TensorCircuit-NG 中发现、实现、优化、验证和交流量子研究工作流。"
+
+#: ../../source/agentic.rst:21
 msgid "Platform Overview"
 msgstr "平台概述"
 
-#: ../../source/agentic.rst:25
+#: ../../source/agentic.rst:27
 msgid ""
 "Review the broader TensorCircuit-NG architecture, performance evidence, "
 "and adoption landscape."
 msgstr "了解更广泛的 TensorCircuit-NG 架构、性能数据以及应用生态。"
 
-#: ../../source/agentic.rst:30
+#: ../../source/agentic.rst:32
+msgid "Agentic evaluation"
+msgstr "智能体评测"
+
+#: ../../source/agentic.rst:34
+msgid ""
+"The `ORBIT-Q benchmark <https://sxzgroup.github.io/ORBIT-Q/>`_ is the "
+"evaluation layer for agentic quantum software: it tests autonomous agents"
+" on framework-constrained scientific programming, correctness, and "
+"artifact efficiency. It makes agent-friendliness measurable rather than "
+"treating it as a code-generation slogan, while also evaluating the "
+"runtime performance of the resulting scientific artifacts."
+msgstr ""
+"`ORBIT-Q 基准 <https://sxzgroup.github.io/ORBIT-Q/>`_ "
+"是智能体量子软件评测层：它在框架约束下的科学编程、正确性和产物效率方面测试自主智能体。它使“智能体友好”变得可度量，而不是停留为一句代码生成口号，同时也评估所生成科研产物的运行时性能。"
+
+#: ../../source/agentic.rst:36
+msgid ""
+"In the reported framework-axis comparison, TensorCircuit-NG achieved the "
+"highest agent solve success rate and the lowest artifact-runtime slowdown"
+" among the evaluated quantum software frameworks. Together, the agentic "
+"skills and ORBIT-Q evaluation establish a measurable loop for building, "
+"testing, and improving AI-agent-compatible quantum software. See the "
+"`accompanying paper <https://arxiv.org/abs/2607.03105>`_ for the "
+"benchmark design and methodology."
+msgstr ""
+"在已报道的框架维度对比中，TensorCircuit-NG "
+"在被评估的量子软件框架中取得了最高的智能体求解成功率，以及最低的产物运行时性能损失。智能体技能与 ORBIT-Q "
+"评测共同构成了一个可度量的闭环，用于构建、测试和改进与 AI 智能体兼容的量子软件。基准设计与方法见 `随附论文 "
+"<https://arxiv.org/abs/2607.03105>`_ 。"
+
+#: ../../source/agentic.rst:40
 msgid "Why Work Within the Repository?"
 msgstr "为什么要在仓库内工作？"
 
-#: ../../source/agentic.rst:32
+#: ../../source/agentic.rst:42
 msgid ""
 "To write scripts and applications efficiently with AI coding agents "
 "(e.g., ClaudeCode, Cursor, Codex, Antigravity, OpenCode), we strongly "
@@ -64,7 +105,7 @@ msgstr ""
 "为了高效地使用 AI 编程智能体（如 "
 "ClaudeCode、Cursor、Codex、Antigravity、OpenCode）编写脚本和应用程序，我们强烈建议直接在本地仓库内工作。"
 
-#: ../../source/agentic.rst:35
+#: ../../source/agentic.rst:45
 msgid ""
 "**Rich Context**: The repository contains over 100 scripts in "
 "``examples/`` and extensive test cases in ``tests/``. These provide "
@@ -74,7 +115,7 @@ msgstr ""
 "**丰富的上下文**: 仓库中的 ``examples/`` 目录下包含 100 多个脚本，``tests/`` 目录下有大量的测试用例。这些为 "
 "AI 提供了必不可少的参考，显著减少了 AI 幻觉，并帮助智能体理解地道的用法。"
 
-#: ../../source/agentic.rst:36
+#: ../../source/agentic.rst:46
 msgid ""
 "**Built-in Rules**: We provide a dedicated `AGENTS.md "
 "<https://github.com/tensorcircuit/tensorcircuit-"
@@ -86,114 +127,118 @@ msgstr ""
 "/tensorcircuit-ng/blob/master/AGENTS.md>`_ 文件。它是 AI 智能体的“手册”（类似于 "
 "``CLAUDE.md``），定义了编码标准和最佳实践。"
 
-#: ../../source/agentic.rst:37
+#: ../../source/agentic.rst:47
 msgid ""
 "**Specialized Agentic Skills**: The ``.agents/skills/`` directory "
 "contains specialized workflows to guide AI assistants on complex, multi-"
 "step tasks."
 msgstr "**专业智能体技能**: ``.agents/skills/`` 目录包含了专门的工作流，用于引导 AI 助手完成复杂的多步任务。"
 
-#: ../../source/agentic.rst:40
+#: ../../source/agentic.rst:50
 msgid "Specialized Agentic Skills"
 msgstr "专业智能体技能"
 
-#: ../../source/agentic.rst:42
+#: ../../source/agentic.rst:52
 msgid ""
 "TensorCircuit-NG includes built-in agentic skills that can be activated "
 "by compatible AI agents to perform advanced tasks:"
 msgstr "TensorCircuit-NG 包含了内置的智能体技能，可由兼容的 AI 智能体激活以执行高级任务："
 
-#: ../../source/agentic.rst:44
+#: ../../source/agentic.rst:54
 msgid ""
-"**arxiv-reproduce**: Autonomously reproduces arXiv papers with "
-"standardized output and code quality validation."
-msgstr "**arxiv-reproduce**: 自主复现 arXiv 论文，具有标准化的输出和代码质量校验。"
+"**arxiv-reproduce**: Translates published methods into standardized, "
+"runnable, and validated research artifacts."
+msgstr "**arxiv-reproduce**: 将已发表的方法转化为标准化、可运行且经过验证的研究产物。"
 
-#: ../../source/agentic.rst:45
+#: ../../source/agentic.rst:55
 msgid ""
 "**performance-optimize**: Scientific execution and memory optimization "
 "workflow (JAX scanning, vectorized parallelism, etc.)."
 msgstr "**performance-optimize**: 科学执行与内存优化工作流（JAX scanning、向量化并行等）。"
 
-#: ../../source/agentic.rst:46
+#: ../../source/agentic.rst:56
 msgid ""
 "**tc-rosetta**: End-to-end framework translation (from Qiskit, PennyLane,"
 " etc.) with intrinsic mathematical intent rewriting."
 msgstr "**tc-rosetta**: 端到端框架转换（从 Qiskit、PennyLane 等转换），具有内在数学意图重写功能。"
 
-#: ../../source/agentic.rst:47
+#: ../../source/agentic.rst:57
 msgid ""
 "**tutorial-crafter**: Transforms raw scripts into comprehensive, "
 "narrative-driven educational tutorials."
 msgstr "**tutorial-crafter**: 将原始脚本转换为全面的、叙事驱动的教学教程。"
 
-#: ../../source/agentic.rst:48
+#: ../../source/agentic.rst:58
 msgid ""
 "**demo-generator**: Transforms scripts into interactive, high-performance"
 " Streamlit GUI applications."
 msgstr "**demo-generator**: 将脚本转换为交互式、高性能的 Streamlit GUI 应用程序。"
 
-#: ../../source/agentic.rst:49
+#: ../../source/agentic.rst:59
 msgid ""
 "**code-reviewer**: Autonomously reviews and refactors code for "
 "mathematical correctness and performance."
 msgstr "**code-reviewer**: 自主审查和重构代码，以确保数学正确性和性能。"
 
-#: ../../source/agentic.rst:50
+#: ../../source/agentic.rst:60
 msgid ""
 "**sanity-checker**: Systematic audit and refactoring to reduce technical "
 "debt, improve abstractions, and ensure codebase health."
 msgstr "**sanity-checker**：系统性审计 and 重构，以减少技术债务、改善抽象并确保代码库的健康。"
 
-#: ../../source/agentic.rst:51
+#: ../../source/agentic.rst:61
 msgid ""
 "**meta-explorer**: High-intensity autonomous research agent for circuit "
 "architecture and optimization strategy discovery (VQE, QML, QAOA, etc.)."
 msgstr "**meta-explorer**: 高强度的自主研究智能体，用于线路架构和优化策略发现（VQE、QML、QAOA 等）。"
 
-#: ../../source/agentic.rst:54
+#: ../../source/agentic.rst:64
 msgid "Recommended Workflow"
 msgstr "推荐工作流"
 
-#: ../../source/agentic.rst:56
+#: ../../source/agentic.rst:66
 msgid "**Clone the repository**:"
 msgstr "**克隆仓库**:"
 
-#: ../../source/agentic.rst:62
+#: ../../source/agentic.rst:72
 msgid "**Switch to a local playground branch**:"
 msgstr "**切换到本地测试（playground）分支**:"
 
-#: ../../source/agentic.rst:68
+#: ../../source/agentic.rst:78
 msgid ""
 "**Open the repository folder in your AI IDE**: Start writing TC-NG-based "
 "scripts using natural language instructions."
 msgstr "**在 AI IDE 中打开仓库文件夹**: 开始使用自然语言指令编写基于 TensorCircuit-NG 的脚本。"
 
-#: ../../source/agentic.rst:70
+#: ../../source/agentic.rst:80
 msgid ""
 "By integrating extreme performance with an autonomous, intent-driven AI "
-"workflow, TensorCircuit-NG empowers researchers to transition from manual"
-" coding to automated scientific discovery."
-msgstr "通过将极致性能与自主的、意图驱动的 AI 工作流相结合，TensorCircuit-NG 助力研究人员从手动编码转向自动化的科学发现。"
+"workflow, TensorCircuit-NG helps researchers move from a research "
+"question to implementation, exploration, optimization, validation, and a "
+"reusable scientific artifact."
+msgstr ""
+"通过将极致性能与自主的、意图驱动的 AI 工作流相结合，TensorCircuit-NG "
+"帮助研究人员从研究问题走向实现、探索、优化、验证以及可复用的科学产物。"
 
-#: ../../source/agentic.rst:73
+#: ../../source/agentic.rst:83
 msgid "Initial Prompt for Empty Workspace Setup"
 msgstr "空白工作区初始设置提示词"
 
-#: ../../source/agentic.rst:75
+#: ../../source/agentic.rst:85
 msgid ""
 "When starting in a completely empty folder/workspace with an AI agent, "
 "you can copy and paste the following initial prompt to bootstrap the "
 "agent. This instructs the agent to clone the repository, read coding "
 "guidelines/skills, and execute tasks accordingly:"
 msgstr ""
-"当在完全空白的文件夹/工作区中使用 AI 智能体时，您可以复制并粘贴以下初始提示词以引导该智能体。这将指示智能体克隆仓库、阅读编码规范与技能文件，并相应地执行任务："
+"当在完全空白的文件夹/工作区中使用 AI "
+"智能体时，您可以复制并粘贴以下初始提示词以引导该智能体。这将指示智能体克隆仓库、阅读编码规范与技能文件，并相应地执行任务："
 
-#: ../../source/agentic.rst:93
+#: ../../source/agentic.rst:103
 msgid "AI-Native Documentation"
 msgstr "AI 原生文档"
 
-#: ../../source/agentic.rst:95
+#: ../../source/agentic.rst:105
 msgid ""
 "One can also refer to AI-native docs for tensorcircuit-ng: `Devin "
 "Deepwiki <https://deepwiki.com/tensorcircuit/tensorcircuit-ng>`_, `Google"
@@ -202,7 +247,27 @@ msgid ""
 "<https://context7.com/tensorcircuit/tensorcircuit-ng>`_."
 msgstr ""
 "您也可以参考 TensorCircuit-NG 的 AI 原生文档：`Devin Deepwiki "
-"<https://deepwiki.com/tensorcircuit/tensorcircuit-ng>`_、`Google Code Wiki"
-" <https://codewiki.google/github.com/tensorcircuit/tensorcircuit-ng>`_ 和 "
-"`Context7 MCP <https://context7.com/tensorcircuit/tensorcircuit-ng>`_。"
+"<https://deepwiki.com/tensorcircuit/tensorcircuit-ng>`_ 、`Google Code "
+"Wiki <https://codewiki.google/github.com/tensorcircuit/tensorcircuit-"
+"ng>`_ 和 `Context7 MCP <https://context7.com/tensorcircuit/tensorcircuit-"
+"ng>`_ 。"
+
+#~ msgid ""
+#~ "TensorCircuit-NG is the world's first"
+#~ " AI-native quantum programming platform,"
+#~ " purpose-built for agentic research "
+#~ "and automated scientific discovery."
+#~ msgstr "TensorCircuit-NG 是全球首个 AI 原生量子编程平台，专为智能体（Agent）辅助研究和自动化科学发现而设计。"
+
+#~ msgid ""
+#~ "Click here to see how AI agents"
+#~ " autonomously solve complex quantum "
+#~ "problems in TensorCircuit-NG."
+#~ msgstr "点击这里查看 AI 智能体如何在 TensorCircuit-NG 中自主解决复杂的量子问题。"
+
+#~ msgid ""
+#~ "**arxiv-reproduce**: Autonomously reproduces "
+#~ "arXiv papers with standardized output "
+#~ "and code quality validation."
+#~ msgstr "**arxiv-reproduce**: 自主复现 arXiv 论文，具有标准化的输出和代码质量校验。"
 

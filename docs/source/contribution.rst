@@ -20,6 +20,8 @@ Pull Request Guidelines
 
 We welcome pull requests from everyone. For large PRs involving feature enhancement or API changes, we ask that you first open a GitHub issue to discuss your proposal.
 
+Before proposing a new feature, please read `VISION.md <https://github.com/tensorcircuit/tensorcircuit-ng/blob/master/VISION.md>`_ for the scope and priorities of the project.
+
 The following git workflow is recommended for contribution by PR:
 
 * Configure your git username and email so that they match your GitHub account if you haven't.
@@ -245,19 +247,42 @@ To generate the Chinese version of the documentation: ``sphinx-build source -D l
 Releases
 ------------
 
-Firstly, ensure that the version numbers in __init__.py and CHANGELOG are correctly updated.
+Stable release
+~~~~~~~~~~~~~~
 
-**GitHub Release**
+#. Bump ``__version__`` in ``tensorcircuit/__init__.py``. Add a ``## vX.Y.Z`` heading immediately below ``## Unreleased`` in ``CHANGELOG.md`` so the accumulated entries belong to the new version.
+#. Review the version bump, then commit it and push it to ``master`` on the official repository. Wait for the ``ci`` run triggered by that branch push to pass for the release commit SHA.
+#. Create a signed ``vX.Y.Z`` tag pointing to the commit that passed CI and push the tag. Substitute the release version, commit SHA, and the name of your remote for the official repository in these commands.
 
-.. code-block:: bash
+   .. code-block:: bash
 
-    git tag v0.x.y 
-    git push origin v0.x.y
-    # assume origin is the upstream name
+       git tag -s vX.Y.Z RELEASE_COMMIT_SHA -m "version X.Y.Z"
+       git push upstream refs/tags/vX.Y.Z
 
-And from GitHub page choose draft a release from tag.
+#. Wait for the tag-triggered ``release`` workflow to pass, then verify that the wheel and source distribution appear for the new version on PyPI. This workflow checks that the tag matches ``__version__`` and publishes ``tensorcircuit-ng`` via trusted publishing. The tag push also starts a separate ``ci`` run for the same commit.
+#. Draft the release notes using the format below, then publish the GitHub release from the existing tag. With the GitHub CLI, save the notes to ``release-notes.md`` and use the following command.
 
-**PyPI Release**
+   .. code-block:: bash
+
+       gh release create vX.Y.Z --repo tensorcircuit/tensorcircuit-ng \
+           --verify-tag --title vX.Y.Z --notes-file release-notes.md
+
+GitHub release notes
+~~~~~~~~~~~~~~~~~~~~
+
+* Set the title to the tag alone, such as ``v1.11.0``. Start the body directly with a few short highlights.
+* Lead with the most important user-facing changes and explain what they enable. Group related features and summarize the remaining performance and correctness improvements in one bullet. Mention specific APIs when they help readers use the feature.
+* Close the highlights with a single link to the changelog section at the release tag for the full list and migration details.
+* End with an ``Acknowledgments`` heading and @mention each human contributor other than the maintainer publishing the release. Between the previous and new tags, check commit authors, co-authors, and merged pull request authors. Use each contributor's GitHub handle once.
+
+See the `v1.11.0 release notes <https://github.com/tensorcircuit/tensorcircuit-ng/releases/tag/v1.11.0>`_ for an example.
+
+Nightly and manual PyPI releases
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``nightly`` workflow builds ``master`` daily and publishes it as ``tensorcircuit-nightly``. Its schedule is set in ``.github/workflows/nightly_release.yml``.
+
+For a manual PyPI upload, build from the release commit and upload the wheel and source distribution.
 
 .. code-block:: bash
 
@@ -265,11 +290,9 @@ And from GitHub page choose draft a release from tag.
     export VERSION=0.x.y
     twine upload dist/tensorcircuit_ng-${VERSION}-py3-none-any.whl dist/tensorcircuit_ng-${VERSION}.tar.gz
 
-For upload authentication via token, please refer `this tutorial <https://kynan.github.io/blog/2020/05/23/how-to-upload-your-package-to-the-python-package-index-pypi-test-server>`__ .
-Latest version of twine direct accepts token.
 
-
-**DockerHub Release**
+DockerHub Release
+~~~~~~~~~~~~~~~~~
 
 Make sure the DockerHub account is logged in via ``docker login``.
 
@@ -281,7 +304,8 @@ Make sure the DockerHub account is logged in via ``docker login``.
     sudo docker tag tensorcircuit:latest tensorcircuit/tensorcircuit:latest
     sudo docker push tensorcircuit/tensorcircuit:latest
 
-**Binder Release**
+Binder Release
+~~~~~~~~~~~~~~
 
 One may need to update the tensorcircuit version for binder environment by pushing new commit in refraction-ray/tc-env repo with new version update in its ``requirements.txt``.
-See `mybind setup <https://discourse.jupyter.org/t/tip-speed-up-binder-launches-by-pulling-github-content-in-a-binder-link-with-nbgitpuller/922>`_ for speed up via nbgitpuller. 
+See `mybind setup <https://discourse.jupyter.org/t/tip-speed-up-binder-launches-by-pulling-github-content-in-a-binder-link-with-nbgitpuller/922>`_ for speed up via nbgitpuller.

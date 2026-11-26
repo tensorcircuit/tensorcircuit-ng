@@ -13,14 +13,16 @@ tc.set_dtype("complex128")
 
 
 def energy_reference(param, n, nlayers):
+    # split once instead of slicing param at every gate, which slows down jit
+    thetas = K.unstack_scalars(param)
     c = tc.Circuit(n)
     for i in range(n):
         c.h(i)
     for i in range(nlayers):
         for j in range(n - 1):
-            c.rzz(j, j + 1, theta=param[i, j, 0])
+            c.rzz(j, j + 1, theta=thetas[i, j, 0])
         for j in range(n):
-            c.rx(j, theta=param[i, j, 1])
+            c.rx(j, theta=thetas[i, j, 1])
     return K.real(c.expectation_ps(z=[0, 1]))
 
 
@@ -50,12 +52,13 @@ with tc.runtime_backend("tensorflow") as tfk:
 
 def energy(param, n, nlayers, each):
     def loop_f(s_, param_):
+        thetas_ = K.unstack_scalars(param_)
         c_ = tc.Circuit(n, inputs=s_)
         for i in range(each):
             for j in range(n - 1):
-                c_.rzz(j, j + 1, theta=param_[i, j, 0])
+                c_.rzz(j, j + 1, theta=thetas_[i, j, 0])
             for j in range(n):
-                c_.rx(j, theta=param_[i, j, 1])
+                c_.rx(j, theta=thetas_[i, j, 1])
         s_ = c_.state()
         return s_, s_
 
@@ -91,5 +94,5 @@ if __name__ == "__main__":
     np.testing.assert_allclose(r0[0][1], r1[0][1], atol=1e-5)
     # correctness check
 
-    print("jax plain impl (may be super slow for deeper system)")
+    print("jax plain impl (may be slow for deeper system)")
     r0 = tc.utils.benchmark(vg_reference, param, n, nlayers)  # too slow

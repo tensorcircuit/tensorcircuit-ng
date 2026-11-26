@@ -8,12 +8,12 @@ import os
 import re
 from functools import reduce, partial
 from operator import mul
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 from scipy.sparse import coo_matrix
 import tensornetwork
 from tensornetwork.backends.tensorflow import tensorflow_backend
-from .abstract_backend import ExtendedBackend
+from .abstract_backend import ExtendedBackend, normalize_axes
 
 dtypestr: str
 rdtypestr: str
@@ -78,6 +78,14 @@ def _promote_tf(a: Tensor, b: Tensor) -> Tuple[Tensor, Tensor]:
     return a, b
 
 
+def _densify_gradient(g: pytree) -> pytree:
+    # tape.gradient returns IndexedSlices for gather-like ops; expose dense tensors
+    return tf.nest.map_structure(
+        lambda gi: tf.convert_to_tensor(gi) if isinstance(gi, tf.IndexedSlices) else gi,
+        g,
+    )
+
+
 def _tensordot_tf(
     self: Any, a: Tensor, b: Tensor, axes: Union[int, Sequence[Sequence[int]]]
 ) -> Tensor:
@@ -112,29 +120,27 @@ def _random_choice_tf(
     # for stateless random module, tf has corresponding categorical function similar to choice
     # however, such utility is not implemented with ``tf.random.Generator``
     # part of the code below is inspired by corresponding implementation in jax (Apache 2.0)
-    if isinstance(a, int):
-        assert a > 0
-        a = tf.range(a)
-    if not (isinstance(a, tf.Tensor) or isinstance(a, tf.Variable)):
-        a = tf.constant(a)
-    assert len(a.shape) == 1
     if isinstance(shape, int):
         shape = (shape,)
+    if isinstance(a, int):
+        assert a > 0
+        n = a
+    else:
+        if not (isinstance(a, tf.Tensor) or isinstance(a, tf.Variable)):
+            a = tf.constant(a)
+        assert len(a.shape) == 1
+        n = tf.shape(a)[0]
     if p is None:
-        dtype = tf.float32
-        p = tf.ones_like(a)
-        p = tf.cast(p, dtype=dtype)
-        p /= tf.reduce_sum(p)
+        ind = g.uniform(shape, minval=0, maxval=n, dtype=tf.int32)
     else:
         if not (isinstance(p, tf.Tensor) or isinstance(p, tf.Variable)):
             p = tf.constant(p)
-        dtype = p.dtype
-    shape1 = reduce(mul, shape)
-    p_cuml = tf.cumsum(p)
-    r = p_cuml[-1] * (1 - g.uniform([shape1], dtype=dtype))
-    ind = tf.searchsorted(p_cuml, r)
-    res = tf.gather(a, ind)
-    return tf.reshape(res, shape)
+        p_cuml = tf.cumsum(p)
+        r = p_cuml[-1] * (1 - g.uniform([reduce(mul, shape, 1)], dtype=p.dtype))
+        ind = tf.reshape(tf.searchsorted(p_cuml, r), shape)
+    if isinstance(a, int):
+        return ind
+    return tf.gather(a, ind)
 
 
 def _qr_tf(
@@ -179,8 +185,9 @@ def _qr_tf(
     q, r = tfqr(tensor)
     if non_negative_diagonal:
         phases = tf.math.sign(tf.linalg.diag_part(r))
+        phases = tf.where(phases == 0, tf.ones_like(phases), phases)
         q = q * phases
-        r = phases[:, None] * r
+        r = tf.math.conj(phases)[:, None] * r
     center_dim = tf.shape(q)[1]
     q = tf.reshape(q, tf.concat([left_dims, [center_dim]], axis=-1))
     r = tf.reshape(r, tf.concat([[center_dim], right_dims], axis=-1))
@@ -229,8 +236,9 @@ def _rq_tf(
     q, r = tfqr(tf.math.conj(tf.transpose(tensor)))
     if non_negative_diagonal:
         phases = tf.math.sign(tf.linalg.diag_part(r))
+        phases = tf.where(phases == 0, tf.ones_like(phases), phases)
         q = q * phases
-        r = phases[:, None] * r
+        r = tf.math.conj(phases)[:, None] * r
     r, q = (
         tf.math.conj(tf.transpose(r)),
         tf.math.conj(tf.transpose(q)),
@@ -631,6 +639,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return tf.stack(a, axis=axis)
 
+    def unstack(self, a: Tensor, axis: int = 0) -> List[Tensor]:
+        return tf.unstack(a, axis=axis)  # type: ignore
+
     def clip(self, a: Tensor, a_min: Tensor, a_max: Tensor) -> Tensor:
         return tf.clip_by_value(a, a_min, a_max)
 
@@ -640,6 +651,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         return tf.math.floor(a)
 
     def floor_divide(self, x: Tensor, y: Tensor) -> Tensor:
+        x, y = _promote_tf(x, y)
         return tf.math.floordiv(x, y)
 
     def concat(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
@@ -714,12 +726,15 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         return tf.range(start=start, limit=stop, delta=step)
 
     def mod(self, x: Tensor, y: Tensor) -> Tensor:
+        x, y = _promote_tf(x, y)
         return tf.math.mod(x, y)
 
     def right_shift(self, x: Tensor, y: Tensor) -> Tensor:
+        x, y = _promote_tf(x, y)
         return tf.bitwise.right_shift(x, y)
 
     def left_shift(self, x: Tensor, y: Tensor) -> Tensor:
+        x, y = _promote_tf(x, y)
         return tf.bitwise.left_shift(x, y)
 
     def bitwise_and(self, x: Tensor, y: Tensor) -> Tensor:
@@ -767,7 +782,11 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
         if seed is None:
             g = tf.random.Generator.from_non_deterministic_state()
         elif isinstance(seed, int):
-            g = tf.random.Generator.from_seed(seed)
+            # ``from_seed`` puts the seed into the Philox counter with key 0, so adjacent
+            # seeds give shifted copies of one stream; use the seed as the key instead
+            g = tf.random.Generator.from_key_counter(
+                key=seed, counter=[0, 0], alg="philox"
+            )
         else:
             g = seed
         if get_only is False:
@@ -829,6 +848,19 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
 
     def gather1d(self, operand: Tensor, indices: Tensor) -> Tensor:
         return tf.gather(operand, indices)
+
+    def flip(self, a: Tensor, axes: Sequence[int]) -> Tensor:
+        # tf.reverse is limited in rank, so each axis is reversed on a rank-3 view;
+        # unknown static sizes are read from the dynamic shape
+        shape = [d if d is not None else tf.shape(a)[i] for i, d in enumerate(a.shape)]
+        for axis in normalize_axes(axes, len(shape)):
+            pre = reduce(mul, shape[:axis], 1)
+            post = reduce(mul, shape[axis + 1 :], 1)
+            a = tf.reverse(tf.reshape(a, (pre, shape[axis], post)), axis=[1])
+        return tf.reshape(a, shape)
+
+    def gather(self, operand: Tensor, indices: Tensor, axis: int = 0) -> Tensor:
+        return tf.gather(operand, indices, axis=axis)
 
     def scatter(
         self, operand: Tensor, indices: Tensor, updates: Tensor, mode: str = "update"
@@ -977,6 +1009,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
                     g = t.gradient(y[0], x)
                 else:
                     g = t.gradient(y, x)
+            g = _densify_gradient(g)
             if has_aux:
                 return (g, y[1:])
             return g
@@ -1007,6 +1040,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
                     g = t.gradient(y[0], x)
                 else:
                     g = t.gradient(y, x)
+            g = _densify_gradient(g)
             return y, g
 
         return wrapper
@@ -1032,7 +1066,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
             v = tuple([tf.identity(vi) for vi in v])
         with tf.autodiff.ForwardAccumulator(inputs, v) as t:
             y = f(*inputs)
-        g = t.jvp(y)
+        g = t.jvp(y, unconnected_gradients=tf.UnconnectedGradients.ZERO)
         return y, g
 
     def vjp(
@@ -1055,16 +1089,10 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
             t.watch(inputs)
             y = f(*inputs)
         g = t.gradient(y, inputs, v)
-        g = list(g)
-        for i, gi in enumerate(g):
-            if gi is None:
-                g[i] = tf.zeros_like(inputs[i])
-            if isinstance(gi, tf.IndexedSlices):
-                # gradient can return sth weird
-                # TODO(@refraction-ray): check whether other AD tf methods have such issues
-                # shape is still unkown, dense_shape attr doesn't work?
-                g[i] = tf.convert_to_tensor(gi)
-        g = tuple(g)
+        g = tuple(
+            tf.zeros_like(inputs[i]) if gi is None else gi for i, gi in enumerate(g)
+        )
+        g = _densify_gradient(g)
         if one_input:
             g = g[0]
         return y, g
@@ -1091,6 +1119,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
     ) -> Any:
         if isinstance(vectorized_argnums, int):
             vectorized_argnums = (vectorized_argnums,)
+        vectorized_argnums = tuple(sorted(vectorized_argnums))
         if vectorized_argnums == (0,):  # fast shortcut
 
             def wrapper(*args: Any, **kws: Any) -> Tensor:
@@ -1146,6 +1175,7 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
                 grad = tape.gradient(vs[0], x)
             else:
                 grad = tape.gradient(vs, x)
+            grad = _densify_gradient(grad)
             return vs, grad
 
         return wrapper

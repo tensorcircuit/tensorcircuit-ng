@@ -35,3 +35,4 @@ Jupyter Tutorials
     tutorials/distributed_simulation.ipynb
     tutorials/qcloud_sdk_demo.ipynb
     tutorials/tianyan_cloud.ipynb
+    tutorials/lqcloud_qpu_workflow.ipynb

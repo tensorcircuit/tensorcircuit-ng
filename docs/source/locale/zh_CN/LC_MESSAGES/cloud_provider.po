@@ -1,0 +1,638 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2020-2026, TensorCircuit-NG Development Team. Created by
+# Shi-Xin Zhang.
+# This file is distributed under the same license as the tensorcircuit-ng
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: tensorcircuit-ng \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-24 15:38+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../source/cloud_provider.md:1
+msgid "Adding a Cloud Provider"
+msgstr "新增云厂商"
+
+#: ../../source/cloud_provider.md:3
+msgid ""
+"`tensorcircuit.cloud` exposes quantum hardware through one set of APIs "
+"(`submit_task`, `get_task`, `Task.results`, ...) in `apis.py`. Each "
+"provider is a module implementing a fixed set of functions, and `apis.py`"
+" dispatches to it by name. Anything specific to a provider belongs in its"
+" module, rather than in branches on provider names in the generic layer. "
+"Files below are in `tensorcircuit/cloud/` unless a path is given."
+msgstr ""
+"`tensorcircuit.cloud` 在 `apis.py` 中通过一套 "
+"API（`submit_task`、`get_task`、`Task.results` "
+"等）暴露量子硬件。每个厂商都是一个实现固定函数集合的模块，`apis.py` "
+"按名称分发到它。任何厂商特有的内容都应放在其模块中，而不是在通用层里按厂商名分支。除非给出路径，下面的文件都位于 "
+"`tensorcircuit/cloud/`。"
+
+#: ../../source/cloud_provider.md:5
+msgid ""
+"Existing providers are good references: `tencent.py` (batch submission, "
+"qubit remapping by the provider), `tianyan.py` (vendor SDK), and "
+"`lqcloud.py` (vendor SDK, local compilation to native gates, the request "
+"body as sent kept in `task.prepared`)."
+msgstr ""
+"现有厂商是很好的参考：`tencent.py`（批量提交，由厂商进行量子比特重映射）、`tianyan.py`（厂商 SDK）和 "
+"`lqcloud.py`（厂商 SDK，在本地编译为原生门，实际发送的请求体保存在 `task.prepared` 中）。"
+
+#: ../../source/cloud_provider.md:7
+msgid "Registration"
+msgstr "注册"
+
+#: ../../source/cloud_provider.md:9
+msgid ""
+"Add the module, e.g. `myprovider.py`, and register it in "
+"`_provider_modules` in `apis.py` together with the vendor SDK modules it "
+"needs, whose versions the task store records. Modules are imported on "
+"first use, so a missing vendor SDK only fails when the provider is used."
+msgstr ""
+"添加模块，例如 `myprovider.py`，并在 `apis.py` 的 `_provider_modules` "
+"中注册它，同时注册它所需的厂商 SDK 模块，任务存储会记录这些 SDK 的版本。模块在首次使用时才导入，因此缺少厂商 SDK "
+"只会在使用该厂商时失败。"
+
+#: ../../source/cloud_provider.md:10
+msgid ""
+"Import the vendor SDK inside a helper, raising an `ImportError` with the "
+"install command, since vendor SDKs are not dependencies of TensorCircuit."
+" Pin the tested version in `requirements/requirements-extra.txt` for CI, "
+"without adding a `pyproject.toml` extra."
+msgstr ""
+"在辅助函数内部导入厂商 SDK，并在导入失败时抛出带有安装命令的 `ImportError`，因为厂商 SDK 不是 TensorCircuit "
+"的依赖。在 `requirements/requirements-extra.txt` 中固定经过测试的版本以供 CI 使用，不要在 "
+"`pyproject.toml` 中添加 extra。"
+
+#: ../../source/cloud_provider.md:11
+msgid "Put the default service URL in `config.py`."
+msgstr "把默认服务 URL 放在 `config.py` 中。"
+
+#: ../../source/cloud_provider.md:12
+msgid ""
+"Regenerate the API docs with `docs/source/generate_rst.py` instead of "
+"editing `.rst` files, and add a CHANGELOG entry."
+msgstr ""
+"使用 `docs/source/generate_rst.py` 重新生成 API 文档，而不是直接编辑 `.rst` 文件，并添加 "
+"CHANGELOG 条目。"
+
+#: ../../source/cloud_provider.md:14
+msgid "Interface"
+msgstr "接口"
+
+#: ../../source/cloud_provider.md:16
+msgid ""
+"Functions are looked up by name; a missing one makes the corresponding "
+"API raise `NotImplementedError`."
+msgstr "函数按名称查找；缺少某个函数会使相应 API 抛出 `NotImplementedError`。"
+
+#: ../../source/cloud_provider.md
+msgid "Function"
+msgstr "函数"
+
+#: ../../source/cloud_provider.md
+msgid "Contract"
+msgstr "约定"
+
+#: ../../source/cloud_provider.md
+msgid "`list_devices(token, **kws)`"
+msgstr "`list_devices(token, **kws)`"
+
+#: ../../source/cloud_provider.md
+msgid "`List[Device]`, named `\"provider::device\"`"
+msgstr "`List[Device]`，命名为 `\"provider::device\"`"
+
+#: ../../source/cloud_provider.md
+msgid "`list_properties(device, token)`"
+msgstr "`list_properties(device, token)`"
+
+#: ../../source/cloud_provider.md
+msgid "device properties, see below"
+msgstr "设备属性，见下文"
+
+#: ../../source/cloud_provider.md
+msgid "`submit_task(device, token, **task_kws)`"
+msgstr "`submit_task(device, token, **task_kws)`"
+
+#: ../../source/cloud_provider.md
+msgid "a `Task`, or a list of `Task` for batches"
+msgstr "一个 `Task`，批量时为 `Task` 列表"
+
+#: ../../source/cloud_provider.md
+msgid "`get_task_details(task, device, token, prettify)`"
+msgstr "`get_task_details(task, device, token, prettify)`"
+
+#: ../../source/cloud_provider.md
+msgid "the task details, see below"
+msgstr "任务详情，见下文"
+
+#: ../../source/cloud_provider.md
+msgid "`resubmit_task(task, token)`"
+msgstr "`resubmit_task(task, token)`"
+
+#: ../../source/cloud_provider.md
+msgid "rerun what was prepared for the task as a new `Task`"
+msgstr "将任务已准备好的内容作为新 `Task` 重新运行"
+
+#: ../../source/cloud_provider.md
+msgid "`remove_task(task, token)`"
+msgstr "`remove_task(task, token)`"
+
+#: ../../source/cloud_provider.md
+msgid "cancel or delete the task"
+msgstr "取消或删除任务"
+
+#: ../../source/cloud_provider.md
+msgid "`list_tasks(device, token, **filter_kws)`"
+msgstr "`list_tasks(device, token, **filter_kws)`"
+
+#: ../../source/cloud_provider.md
+msgid "`List[Task]`"
+msgstr "`List[Task]`"
+
+#: ../../source/cloud_provider.md
+msgid "`prepare_task(device, token, **task_kws)` (optional)"
+msgstr "`prepare_task(device, token, **task_kws)`（可选）"
+
+#: ../../source/cloud_provider.md
+msgid "compile locally before sending, see below"
+msgstr "发送前在本地编译，见下文"
+
+#: ../../source/cloud_provider.md
+msgid "`task_metadata(details, prepared)` (optional)"
+msgstr "`task_metadata(details, prepared)`（可选）"
+
+#: ../../source/cloud_provider.md
+msgid "the metadata added by TensorCircuit, see below"
+msgstr "TensorCircuit 添加的元数据，见下文"
+
+#: ../../source/cloud_provider.md:30
+msgid "Properties"
+msgstr "属性"
+
+#: ../../source/cloud_provider.md:32
+msgid ""
+"Besides the vendor fields, `list_properties` should provide the "
+"standardized ones that `Device.topology()`, `Device.native_gates()` and "
+"the compilers read:"
+msgstr ""
+"除厂商字段外，`list_properties` 应提供 `Device.topology()`、`Device.native_gates()` "
+"和编译器读取的标准化字段："
+
+#: ../../source/cloud_provider.md:34
+#, python-brace-format
+msgid ""
+"`bits`: `{qubit: {\"T1\", \"T2\", \"ReadoutF0Err\", \"ReadoutF1Err\", "
+"\"SingleQubitErrRate\", ...}}`, None for unknown values;"
+msgstr ""
+"`bits`：`{qubit: {\"T1\", \"T2\", \"ReadoutF0Err\", \"ReadoutF1Err\", "
+"\"SingleQubitErrRate\", ...}}`，未知值为 None；"
+
+#: ../../source/cloud_provider.md:35
+#, python-brace-format
+msgid ""
+"`links`: `{(q1, q2): {\"CZErrRate\", ...}}`, with both directions for "
+"symmetric couplers;"
+msgstr "`links`：`{(q1, q2): {\"CZErrRate\", ...}}`，对称耦合器需给出两个方向；"
+
+#: ../../source/cloud_provider.md:36
+msgid "`native_gates`: qiskit gate names."
+msgstr "`native_gates`：qiskit 门名称。"
+
+#: ../../source/cloud_provider.md:38
+msgid ""
+"When the provider compiles locally, compile against these standardized "
+"properties rather than the raw vendor configuration, so that what users "
+"see is what circuits are compiled to. Facts the vendor does not report, "
+"e.g. the native gates chosen by the provider, are added here once."
+msgstr "当厂商在本地编译时，应针对这些标准化属性进行编译，而不是使用原始厂商配置，从而确保用户看到的就是线路编译所依据的内容。厂商未报告的事实，例如厂商选定的原生门，只需在这里添加一次。"
+
+#: ../../source/cloud_provider.md:40
+msgid ""
+"The error rates `SingleQubitErrRate`, `ReadoutF0Err`, `ReadoutF1Err` and "
+"`CZErrRate` drive the noise aware layout of "
+"`compiler.qiskit_compiler.properties_to_target`; a qubit or coupler with "
+"any of them unknown is not used, so report what the vendor gives rather "
+"than defaults."
+msgstr ""
+"错误率 `SingleQubitErrRate`、`ReadoutF0Err`、`ReadoutF1Err` 和 `CZErrRate` 驱动 "
+"`compiler.qiskit_compiler.properties_to_target` "
+"的噪声感知布局；任一错误率未知的量子比特或耦合器都不会被使用，因此请报告厂商给出的值，而不要使用默认值。"
+
+#: ../../source/cloud_provider.md:42
+msgid "Submission"
+msgstr "提交"
+
+#: ../../source/cloud_provider.md:44
+msgid ""
+"`apis.submit_task` records a submission intent in the task store, then "
+"calls the provider `submit_task` once. Paid requests must never be "
+"retried blindly, since a retry after a lost response may run and charge "
+"the tasks twice. The provider must therefore classify every failure:"
+msgstr ""
+"`apis.submit_task` 先在任务存储中记录一次提交意图，然后调用一次厂商的 "
+"`submit_task`。付费请求绝不能盲目重试，因为响应丢失后的重试可能导致任务被执行并计费两次。因此厂商必须对每种失败进行分类："
+
+#: ../../source/cloud_provider.md:46
+msgid ""
+"**Local failures** before anything is sent, e.g. an unsupported circuit "
+"or invalid shots: raise them as they are, typically `ValueError`. The "
+"intent is deleted."
+msgstr "**发送前的本地失败**: 例如不支持的线路或无效的 shots：按原样抛出，通常是 `ValueError`。该意图会被删除。"
+
+#: ../../source/cloud_provider.md:47
+msgid ""
+"**Explicit rejection** by the server, e.g. HTTP 4xx such as invalid "
+"credentials or circuits: raise `utils.SubmissionRejected`. The intent is "
+"deleted."
+msgstr "**服务器明确拒绝**: 例如表示凭据或线路无效的 HTTP 4xx：抛出 `utils.SubmissionRejected`。该意图会被删除。"
+
+#: ../../source/cloud_provider.md:48
+msgid ""
+"**Anything after which the tasks may have been accepted**, e.g. timeouts,"
+" connection errors, HTTP 5xx and 408, idempotency conflicts, malformed "
+"responses, or a response without a task id: raise "
+"`utils.SubmissionUnknown`. The intent is kept as `unknown`, to be bound "
+"later by `TaskStore.bind(local_id, remote_id)`."
+msgstr ""
+"**任务可能已被接受的任何情况**: 例如超时、连接错误、HTTP 5xx 和 408、幂等冲突、格式错误的响应，或没有任务 id 的响应：抛出 "
+"`utils.SubmissionUnknown`。该意图会保留为 `unknown`，之后由 `TaskStore.bind(local_id,"
+" remote_id)` 绑定。"
+
+#: ../../source/cloud_provider.md:49
+msgid ""
+"**After the server accepts the tasks, never raise**: the paid task id "
+"would be lost. Return the tasks even if some optional bookkeeping fails."
+msgstr "**服务器接受任务之后，绝不要抛出异常**: 否则付费任务 id 会丢失。即使某些可选的记录工作失败，也要返回任务。"
+
+#: ../../source/cloud_provider.md:51
+msgid ""
+"To keep the classification sharp, fetch everything the submission needs, "
+"e.g. the device configuration, before sending, so that the send itself is"
+" the only request that can fail ambiguously. If the vendor SDK retries "
+"internally, make sure it uses an idempotency key that the server "
+"deduplicates."
+msgstr ""
+"为保持分类清晰，请在发送前获取提交所需的一切信息，例如设备配置，使发送本身成为唯一可能以模糊方式失败的请求。如果厂商 SDK "
+"内部会重试，请确保它使用服务器可去重的幂等键。"
+
+#: ../../source/cloud_provider.md:53
+msgid ""
+"For batches, return the accepted tasks with `task.circuit_index` set to "
+"their circuit in the batch; a circuit without a returned task counts as "
+"explicitly rejected. A response that does not account for every circuit "
+"is `SubmissionUnknown`."
+msgstr ""
+"对于批量提交，返回已接受的任务，并将 `task.circuit_index` "
+"设为其在批量中的线路索引；没有返回任务的线路视为被明确拒绝。若响应未覆盖每一条线路，则属于 `SubmissionUnknown`。"
+
+#: ../../source/cloud_provider.md:55
+msgid ""
+"Ignore the options of other providers, since generic callers pass one set"
+" of options to every provider. `wrapper.batch_expectation_ps` submits "
+"circuits already compiled onto the physical qubits with "
+"`compiling=False`, `enable_qos_qubit_mapping=False` and "
+"`enable_qos_gate_decomposition=False`; with these, qubit `i` of a circuit"
+" must run on physical qubit `i`, whose readout errors are taken from "
+"`bits` for the mitigation."
+msgstr ""
+"忽略其它厂商的选项，因为通用调用方会把同一组选项传给每个厂商。`wrapper.batch_expectation_ps` "
+"提交的线路已经编译到物理量子比特上，并带有 `compiling=False`、`enable_qos_qubit_mapping=False` "
+"和 `enable_qos_gate_decomposition=False`；在这种情况下，线路的量子比特 `i` 必须运行在物理量子比特 "
+"`i` 上，其读出错误从 `bits` 中获取以做缓解。"
+
+#: ../../source/cloud_provider.md:57
+msgid "What is prepared: `task.prepared`"
+msgstr "准备内容：`task.prepared`"
+
+#: ../../source/cloud_provider.md:59
+msgid ""
+"`task.prepared` is a dict of what TensorCircuit prepared for sending one "
+"circuit, which is not necessarily the request the server receives. It is "
+"stored in the task record and used by `resubmit_task`:"
+msgstr ""
+"`task.prepared` 是 TensorCircuit "
+"为发送一条线路所准备内容的字典，它不一定等于服务器收到的请求。它保存在任务记录中，并由 `resubmit_task` 使用："
+
+#: ../../source/cloud_provider.md:61
+msgid ""
+"the prepared program, e.g. `source` for `tencent` and `compilation` for "
+"`lqcloud`;"
+msgstr "准备好的程序，例如 `tencent` 的 `source` 和 `lqcloud` 的 `compilation`；"
+
+#: ../../source/cloud_provider.md:62
+msgid ""
+"`positional_logical_mapping`: from the classical bit, i.e. the position "
+"in the result bitstring, to the qubit it measures in the prepared "
+"circuit; None if unknown, e.g. for raw source strings. It is derived from"
+" the circuit and never sent, since reading it back from a serialized "
+"program would need a parser per format;"
+msgstr ""
+"`positional_logical_mapping`：从经典比特（即结果比特串中的位置）到其在已准备线路中测量的量子比特的映射；未知时为 "
+"None，例如对原始源字符串。它由线路推导而来且从不发送，因为从序列化程序读回它需要为每种格式编写解析器；"
+
+#: ../../source/cloud_provider.md:63
+msgid ""
+"optionally the request actually sent, if the provider can capture it "
+"after sending, e.g. `payload` for `lqcloud`."
+msgstr "可选的、实际发送的请求，如果厂商能在发送后捕获它，例如 `lqcloud` 的 `payload`。"
+
+#: ../../source/cloud_provider.md:65
+msgid ""
+"Without `prepare_task`, it holds the mapping of each circuit's "
+"`get_positional_logical_mapping()`. Implement `prepare_task(device, "
+"token, **task_kws) -> (send_kws, prepared)` when the provider compiles "
+"locally: it returns the keyword arguments for `submit_task`, e.g. the "
+"compiled program, and one `prepared` dict per circuit, so that the intent"
+" recorded before sending already holds the exact program. `submit_task` "
+"may also set `task.prepared` itself, e.g. to add the request body "
+"captured after sending; it then replaces the dict from `prepare_task`, so"
+" it must be the full dict."
+msgstr ""
+"没有 `prepare_task` 时，它保存每条线路的 `get_positional_logical_mapping()` "
+"映射。当厂商在本地编译时，实现 `prepare_task(device, token, **task_kws) -> (send_kws, "
+"prepared)`：它返回 `submit_task` 的关键字参数（例如编译后的程序），以及每条线路一个 `prepared` "
+"字典，从而在发送前记录的意图中就已包含确切的程序。`submit_task` 也可以自行设置 "
+"`task.prepared`，例如添加发送后捕获的请求体；此时它会替换来自 `prepare_task` 的字典，因此必须是完整的字典。"
+
+#: ../../source/cloud_provider.md:67
+msgid ""
+"Keep every option needed to send the program again in the prepared "
+"program, e.g. the shots and the SDK run options in the `lqcloud` "
+"compilation, since `submit_task` and `resubmit_task` only get the "
+"prepared program. Pass vendor run options as one dict, e.g. `run_options`"
+" of `lqcloud`, rather than one argument each, and allow only the options "
+"known to be read, if the SDK silently ignores unknown ones."
+msgstr ""
+"在准备好的程序中保留再次发送该程序所需的所有选项，例如 `lqcloud` 编译中的 shots 和 SDK 运行选项，因为 "
+"`submit_task` 和 `resubmit_task` 只会拿到准备好的程序。请将厂商运行选项作为一个字典传入，例如 `lqcloud` "
+"的 `run_options`，而不是每个选项一个参数；如果 SDK 会静默忽略未知选项，则只允许已知会被读取的选项。"
+
+#: ../../source/cloud_provider.md:69
+msgid ""
+"Record facts, not predictions. If an SDK rewrites the program before "
+"sending, e.g. by adding resets or readout pulses, capture what it "
+"actually sends, e.g. with a `requests` response hook on the session of "
+"the provider instance created for this submission, instead of re-"
+"implementing or calling its private logic. Where the compilation itself "
+"depends on such a decision, e.g. the two-state readout of `lqcloud` "
+"deciding the `x21` restores after mid-circuit measurements, call the SDK "
+"rule rather than re-implementing it, record the decision in the prepared "
+"program, and check it again when sending."
+msgstr ""
+"记录事实，而不是预测。如果 SDK 在发送前会改写程序，例如添加复位或读出脉冲，请捕获它实际发送的内容，例如在该次提交所创建的厂商实例的 "
+"session 上挂一个 `requests` 响应钩子，而不要重新实现或调用其私有逻辑。如果编译本身依赖这类决策，例如 `lqcloud` "
+"的双态读出决定在中间测量后是否施加 `x21` 恢复，请调用 SDK 的规则而不是重新实现，将该决策记录在准备好的程序中，并在发送时再次检查。"
+
+#: ../../source/cloud_provider.md:71
+msgid "Task details"
+msgstr "任务详情"
+
+#: ../../source/cloud_provider.md:73
+msgid "`get_task_details` returns the vendor fields plus:"
+msgstr "`get_task_details` 返回厂商字段以及："
+
+#: ../../source/cloud_provider.md:75
+msgid ""
+"`state`: one of `\"pending\"`, `\"completed\"` and `\"failed\"`. Map "
+"every vendor state explicitly, and raise `ValueError` for unknown ones "
+"instead of guessing. `Task.results` waits on `pending`, so do not add "
+"timeouts there."
+msgstr ""
+"`state`：取值为 `\"pending\"`、`\"completed\"` 和 `\"failed\"` "
+"之一。显式映射每一种厂商状态，遇到未知状态时抛出 `ValueError`，而不要猜测。`Task.results` 会等待 "
+"`pending`，因此不要在那里添加超时。"
+
+#: ../../source/cloud_provider.md:76
+msgid ""
+"`results`: the observed counts without any correction once completed. Bit"
+" `i` of each bitstring, from the left, is classical bit `i`, i.e. the "
+"measurement with `record_index` `i`. Only measured classical bits appear."
+" Counts corrected by the vendor, if any, go into the vendor fields."
+msgstr ""
+"`results`：完成后未经任何校正的观测计数。每个比特串从左起第 `i` 位是经典比特 `i`，即 `record_index` 为 `i` "
+"的测量。只出现被测量的经典比特。厂商校正过的计数（如有）放入厂商字段。"
+
+#: ../../source/cloud_provider.md:77
+msgid "`memory`: the bitstring of each shot, if the vendor returns it."
+msgstr "`memory`：若厂商返回，则为每次 shot 的比特串。"
+
+#: ../../source/cloud_provider.md:78
+msgid ""
+"`err`: the error message when failed, raised by `Task.results` as "
+"`TaskFailed`."
+msgstr "`err`：失败时的错误信息，由 `Task.results` 以 `TaskFailed` 抛出。"
+
+#: ../../source/cloud_provider.md:80
+msgid ""
+"Reject result formats you cannot read, e.g. results offloaded to a URL, "
+"instead of returning partial data. Handle every format the vendor may "
+"choose by itself; for example, LQCloud returns per-shot `memory` instead "
+"of counts for 12 or more measured qubits."
+msgstr ""
+"拒绝无法读取的结果格式，例如被转移到 URL 的结果，而不是返回部分数据。自行处理厂商可能选择的每一种格式；例如，LQCloud 在测量 12 "
+"个或更多量子比特时返回逐 shot 的 `memory` 而不是计数。"
+
+#: ../../source/cloud_provider.md:82
+msgid "Metadata: `task_metadata(details, prepared)`"
+msgstr "元数据：`task_metadata(details, prepared)`"
+
+#: ../../source/cloud_provider.md:84
+msgid ""
+"`Task.details()[\"tensorcircuit\"]` holds what TensorCircuit adds to the "
+"provider details and what the provider cannot give alone, with the same "
+"meaning on every provider, i.e. the keys in `metadata_keys` of "
+"`abstraction.py`. `task_metadata` returns the values the provider knows "
+"from its details and `task.prepared`, empty if unknown; the other values "
+"are None, i.e. unknown:"
+msgstr ""
+"`Task.details()[\"tensorcircuit\"]` 保存 TensorCircuit "
+"添加到厂商详情中、且厂商无法单独提供的内容，这些内容在每个厂商上含义相同，即 `abstraction.py` 的 `metadata_keys`"
+" 中的键。`task_metadata` 返回厂商能从其详情和 `task.prepared` 中得知的值，未知时为空；其它值为 "
+"None，即未知："
+
+#: ../../source/cloud_provider.md:86
+msgid ""
+"`positional_logical_mapping`: from the classical bit to the physical "
+"qubit. Return the prepared mapping if the provider runs the prepared "
+"qubits unchanged, see `lqcloud.py`, or compose it with the provider's "
+"qubit mapping if the provider remaps them, see `tencent.py`."
+msgstr ""
+"`positional_logical_mapping`：从经典比特到物理量子比特的映射。如果厂商原样运行准备好的量子比特（见 "
+"`lqcloud.py`），则返回准备好的映射；如果厂商会重映射它们（见 `tencent.py`），则将其与厂商的量子比特映射复合。"
+
+#: ../../source/cloud_provider.md:88
+msgid ""
+"Add a key to `metadata_keys` only when it means the same thing on "
+"different providers and needs TensorCircuit's side, e.g. the readout "
+"windows of mid-circuit measurements; what the provider observes belongs "
+"in the task details above, and vendor-only data, e.g. IQ points or "
+"readout-corrected counts, stays in the provider's own fields."
+msgstr ""
+"只有当某个键在不同厂商上含义相同且需要 TensorCircuit 侧参与时，才将其加入 "
+"`metadata_keys`，例如中间测量的读出窗口；厂商观测到的内容属于上面的任务详情，而仅厂商特有的数据（例如 IQ "
+"点或读出校正后的计数）留在厂商自己的字段中。"
+
+#: ../../source/cloud_provider.md:90
+msgid "Circuits and compilation"
+msgstr "线路与编译"
+
+#: ../../source/cloud_provider.md:92
+msgid ""
+"Raise on what the hardware cannot run, e.g. mid-circuit measurements or "
+"resets on hardware without them, noise channels, MPS or density-matrix "
+"inputs, or batch submissions, instead of dropping it silently. A state "
+"vector `inputs` can be run by synthesizing a state preparation circuit, "
+"e.g. by `compiler.qiskit_compile`, whose depth grows exponentially with "
+"the number of qubits; document this cost."
+msgstr ""
+"对于硬件无法运行的内容应抛出异常，例如不支持中间测量或复位时的中间测量和复位、噪声信道、MPS 或密度矩阵输入，或批量提交，而不是静默丢弃。态矢量"
+" `inputs` 可以通过合成态制备线路来运行，例如使用 "
+"`compiler.qiskit_compile`，其深度随量子比特数指数增长；请在文档中说明这一代价。"
+
+#: ../../source/cloud_provider.md:93
+msgid ""
+"With mid-circuit measurements, each measurement writes its own classical "
+"bit, i.e. its `record_index`, and the measured qubit goes on in the "
+"measured state unless a `reset_instruction` follows; reject circuits "
+"writing a classical bit twice, and add what the hardware needs to keep "
+"this meaning, e.g. `x21` after the two-state readout of `lqcloud`."
+msgstr ""
+"使用中间测量时，每次测量写入自己的经典比特，即其 `record_index`，且被测量子比特在测量后继续处于被测状态，除非后面跟随 "
+"`reset_instruction`；拒绝两次写入同一经典比特的线路，并添加硬件保持该语义所需的内容，例如 `lqcloud` 双态读出后的 "
+"`x21`。"
+
+#: ../../source/cloud_provider.md:94
+msgid ""
+"When compiling locally with `compiler.qiskit_compile`, separate each "
+"readout window, i.e. the final measurements and each run of mid-circuit "
+"measurements, from the gates by barriers (`remove_barriers=False`) so the"
+" optimizer cannot move the measurements, and pass a fixed "
+"`seed_transpiler` so recompiling gives the same program."
+msgstr ""
+"使用 `compiler.qiskit_compile` 在本地编译时，用 "
+"barrier（`remove_barriers=False`）将每个读出窗口（最终测量以及每一段中间测量）与门隔开，使优化器无法移动测量；并传入固定的"
+" `seed_transpiler`，使重新编译得到相同程序。"
+
+#: ../../source/cloud_provider.md:95
+msgid ""
+"A `delay_instruction` holds its duration in nanoseconds. Send it in the "
+"vendor's unit, converting from the unit of the compiled circuit, e.g. "
+"seconds after `qiskit.transpile` with qiskit >= 2, and declare `Delay` in"
+" a qiskit `Target`, as `properties_to_target` does, or the compilation "
+"fails. Reject delays on hardware without them."
+msgstr ""
+"`delay_instruction` 以纳秒保存其持续时间。请以厂商的单位发送，并从编译线路的单位换算，例如在 qiskit >= 2 的 "
+"`qiskit.transpile` 之后为秒；同时在 qiskit `Target` 中声明 `Delay`（如 "
+"`properties_to_target` 所做），否则编译会失败。在没有延迟支持的硬件上应拒绝延迟。"
+
+#: ../../source/cloud_provider.md:96
+msgid ""
+"When renaming gates to the vendor's native gates, check their "
+"conventions. With only `rz`, `sx`, `x`, `cz`, |0> inputs and Z-basis "
+"readout, flipping the rotation sense of `rz` or `sx` is unobservable, "
+"since it amounts to the complex conjugation of the circuit, and any basis"
+" change is built from the same gates. The angle scale, e.g. `rz(theta)` "
+"rotating by `theta / 2`, is observable and must be confirmed on hardware "
+"with circuits of arbitrary angles. A second non-diagonal native gate, or "
+"gates decomposed by the vendor, make the sign observable as well."
+msgstr ""
+"将门重命名为厂商原生门时，请检查其约定。若只有 `rz`、`sx`、`x`、`cz`、|0> 输入和 Z 基读出，翻转 `rz` 或 `sx` "
+"的旋转方向是不可观测的，因为这相当于对线路做复共轭，而任何基变换都由同样的门构建。角度尺度（例如 `rz(theta)` 旋转 `theta / "
+"2`）是可观测的，必须用任意角度的线路在硬件上确认。第二个非对角原生门，或由厂商分解的门，也会使符号变得可观测。"
+
+#: ../../source/cloud_provider.md:98
+msgid "Credentials"
+msgstr "凭据"
+
+#: ../../source/cloud_provider.md:100
+msgid ""
+"Tokens come only from TensorCircuit: `set_token(token, provider=...)`, "
+"the `TC_TOKEN_<PROVIDER>` environment variable, or the auth file, passed "
+"in as `token`. Do not let the vendor SDK read its own environment "
+"variables or account files, and turn off any local job store of the SDK, "
+"since the TensorCircuit task store already records the tasks. Never write"
+" tokens into logs, task records or tests."
+msgstr ""
+"Token 只能来自 TensorCircuit：`set_token(token, "
+"provider=...)`、`TC_TOKEN_<PROVIDER>` 环境变量，或作为 `token` 传入的 auth 文件。不要让厂商 "
+"SDK 读取自己的环境变量或账户文件，并关闭 SDK 的任何本地任务存储，因为 TensorCircuit 任务存储已经记录了任务。绝不要把 "
+"token 写入日志、任务记录或测试。"
+
+#: ../../source/cloud_provider.md:102
+msgid "Tests"
+msgstr "测试"
+
+#: ../../source/cloud_provider.md:104
+msgid "Put the tests in `tests/test_<provider>.py`:"
+msgstr "将测试放在 `tests/test_<provider>.py`："
+
+#: ../../source/cloud_provider.md:106
+msgid ""
+"Offline tests run by default. Run the real SDK against a fake server, "
+"patched at the lowest HTTP level used, e.g. "
+"`requests.adapters.HTTPAdapter.send`, so that the SDK's request building,"
+" compression and hooks are exercised. Make the fake fail on unexpected "
+"requests. Set decoy SDK credentials in the environment to check that they"
+" are ignored."
+msgstr ""
+"离线测试默认运行。通过打补丁的最低 HTTP 层（例如 `requests.adapters.HTTPAdapter.send`）让真实 SDK "
+"针对假服务器运行，从而覆盖 SDK 的请求构造、压缩和钩子。让假服务器在收到意外请求时失败。在环境中设置诱饵 SDK 凭据，以检查它们会被忽略。"
+
+#: ../../source/cloud_provider.md:107
+msgid ""
+"Cover the submission error classification, the state mapping including "
+"unknown states, result formats, bit order with partial measurements, the "
+"store records and `resubmit`."
+msgstr "覆盖提交错误分类、状态映射（包括未知状态）、结果格式、部分测量下的比特顺序、存储记录以及 `resubmit`。"
+
+#: ../../source/cloud_provider.md:108
+msgid ""
+"Online tests need `TC_CLOUD_TEST=1` and `TC_TOKEN_<PROVIDER>`; paid "
+"hardware tests also need `TC_CLOUD_HARDWARE_TEST=1`. Read the switches at"
+" import time so that tokens set by fixtures cannot enable them."
+msgstr ""
+"在线测试需要 `TC_CLOUD_TEST=1` 和 `TC_TOKEN_<PROVIDER>`；付费硬件测试还需要 "
+"`TC_CLOUD_HARDWARE_TEST=1`。在导入时读取这些开关，使 fixture 设置的 token 无法启用它们。"
+
+#: ../../source/cloud_provider.md:110
+msgid "On hardware, check what the offline tests cannot:"
+msgstr "在硬件上检查离线测试无法覆盖的内容："
+
+#: ../../source/cloud_provider.md:112
+msgid ""
+"the bit order, with a partial measurement out of qubit order, e.g. `x(2)`"
+" and measuring qubits 2, 0, 1 should give mostly `100`;"
+msgstr "比特顺序：使用不按量子比特顺序的部分测量，例如 `x(2)` 并测量量子比特 2、0、1 应主要得到 `100`；"
+
+#: ../../source/cloud_provider.md:113
+msgid ""
+"the qubit layout, routing and gate conventions against the ideal "
+"distribution, with circuits of arbitrary rotation angles, using "
+"statistical checks such as the set of leading outcomes or a total "
+"variation distance bound, not exact rankings;"
+msgstr "量子比特布局、路由和门约定：用任意旋转角度的线路对照理想分布检查，使用统计检验，例如主要结果集合或全变差距离上界，而不是精确排名；"
+
+#: ../../source/cloud_provider.md:114
+msgid "every result format the vendor may return."
+msgstr "厂商可能返回的每一种结果格式。"
+
+#: ../../source/cloud_provider.md:116
+msgid ""
+"Keep hardware circuits shallow: deep state preparation fails from "
+"decoherence alone and hides integration errors. Keep a log of every paid "
+"run with its task id, purpose, result and cost."
+msgstr "保持硬件线路较浅：过深的态制备仅因退相干就会失败，并会掩盖集成错误。为每次付费运行保留日志，记录任务 id、目的、结果和成本。"
+

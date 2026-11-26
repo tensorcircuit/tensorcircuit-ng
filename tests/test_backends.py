@@ -10,7 +10,9 @@ import numpy as np
 import pytest
 from pytest_lazyfixture import lazy_fixture as lf
 import scipy
+import scipy.sparse
 import tensorflow as tf
+import tensornetwork as tn
 
 thisfile = os.path.abspath(__file__)
 modulepath = os.path.dirname(os.path.dirname(thisfile))
@@ -36,10 +38,36 @@ def test_vmap_np():
     assert tc.backend.numpy(r)[0, 0] == 3.0
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_vmap_reordered_arguments(backend):
+    K = tc.backend
+    f = K.vmap(lambda x, y: x - 2 * y, vectorized_argnums=(1, 0))
+    result = f(K.convert_to_tensor([1.0, 2.0]), K.convert_to_tensor([4.0, 8.0]))
+    np.testing.assert_allclose(K.numpy(result), [-7, -14])
+
+
 def test_vmap_jax(jaxb):
     r = universal_vmap()
     assert r.shape == (20, 1)
     assert tc.backend.numpy(r)[0, 0] == 3.0
+
+
+def test_jax_is_tensor_traced(jaxb):
+    K = tc.backend
+    data = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+    tensor = K.convert_to_tensor(data)
+    assert K.is_tensor(tensor)
+    for host_value in (data, [1.0, 2.0], 1.0, np.float32(1.0)):
+        assert not K.is_tensor(host_value)
+
+    def loss(x):
+        assert K.is_tensor(x)
+        return K.sum(x**2)
+
+    np.testing.assert_allclose(K.numpy(K.jit(loss)(tensor)), np.sum(data**2))
+    np.testing.assert_allclose(K.numpy(K.jit(K.grad(loss))(tensor)), 2 * data)
+    batched = K.jit(K.vmap(loss))(tensor)
+    np.testing.assert_allclose(K.numpy(batched), np.sum(data**2, axis=1))
 
 
 def test_vmap_tf(tfb):
@@ -54,6 +82,27 @@ def test_convert_to_tensor_dtype_tf(tfb):
     real_tensor = tc.backend.convert_to_tensor(np.float64(2.1))
     widened = tc.backend.convert_to_tensor(real_tensor, dtype="complex128")
     np.testing.assert_allclose(widened, np.complex128(2.1), atol=0.0, rtol=0.0)
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+def test_qr_rq_non_negative_diagonal_rank_deficient_complex(backend):
+    matrix = np.array([[0.0, 1 + 2j], [0.0, 3 - 1j]])
+    q, r = tc.backend.qr(tc.backend.convert_to_tensor(matrix), 1, True)
+    np.testing.assert_allclose(tc.backend.numpy(q @ r), matrix, atol=1e-5)
+    q_np = tc.backend.numpy(q)
+    np.testing.assert_allclose(q_np.conj().T @ q_np, np.eye(2), atol=1e-5)
+    diag = np.diagonal(tc.backend.numpy(r))
+    np.testing.assert_allclose(diag.imag, np.zeros(2), atol=1e-5)
+    assert np.all(diag.real >= -1e-6)
+
+    matrix_rq = np.array([[0.0, 0.0], [1 + 2j, 3 - 1j]])
+    r_rq, q_rq = tc.backend.rq(tc.backend.convert_to_tensor(matrix_rq), 1, True)
+    np.testing.assert_allclose(tc.backend.numpy(r_rq @ q_rq), matrix_rq, atol=1e-5)
+    q_np = tc.backend.numpy(q_rq)
+    np.testing.assert_allclose(q_np @ q_np.conj().T, np.eye(2), atol=1e-5)
+    diag_rq = np.diagonal(tc.backend.numpy(r_rq))
+    np.testing.assert_allclose(diag_rq.imag, np.zeros(2), atol=1e-5)
+    assert np.all(diag_rq.real >= -1e-6)
 
 
 def test_convert_to_tensor_dtype_torch(torchb):
@@ -96,6 +145,94 @@ def test_sparse_csr_from_coo(backend):
     coo_dense = tc.backend.to_dense(coo_matrix)
     csr_dense = tc.backend.to_dense(csr_matrix)
     np.testing.assert_allclose(coo_dense, csr_dense, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_flip(backend):
+    a = np.arange(2**10).reshape([2] * 10)
+    np.testing.assert_allclose(
+        tc.backend.flip(tc.backend.convert_to_tensor(a), (0, 3, -1)),
+        np.flip(a, (0, 3, -1)),
+    )
+    with pytest.raises(IndexError):
+        tc.backend.flip(tc.backend.convert_to_tensor(a), (10,))
+    with pytest.raises(IndexError):
+        tc.backend.flip(tc.backend.convert_to_tensor(a), (-11,))
+    with pytest.raises(ValueError):
+        tc.backend.flip(tc.backend.convert_to_tensor(a), (0, -10))
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_unstack(backend):
+    a = np.arange(24, dtype=np.float32).reshape([2, 3, 4])
+    parts = tc.backend.unstack(tc.backend.convert_to_tensor(a), axis=1)
+    assert len(parts) == 3
+    for i, part in enumerate(parts):
+        np.testing.assert_allclose(tc.backend.numpy(part), a[:, i])
+    thetas = tc.backend.unstack_scalars(tc.backend.convert_to_tensor(a))
+    np.testing.assert_allclose(tc.backend.numpy(thetas[1, 2, 3]), a[1, 2, 3])
+    assert len(tc.backend.unstack_scalars(tc.backend.convert_to_tensor(a[0, 0]))) == 4
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_unstack_scalars_grad(backend):
+    def f(params):
+        thetas = tc.backend.unstack_scalars(params)
+        c = tc.Circuit(2)
+        c.rx(0, theta=thetas[0, 1])
+        c.rzz(0, 1, theta=thetas[1, 0])
+        c.rx(1, theta=thetas[1, 1])
+        return tc.backend.real(c.expectation_ps(z=[0]) + c.expectation_ps(y=[1]))
+
+    def f_ref(params):
+        c = tc.Circuit(2)
+        c.rx(0, theta=params[0, 1])
+        c.rzz(0, 1, theta=params[1, 0])
+        c.rx(1, theta=params[1, 1])
+        return tc.backend.real(c.expectation_ps(z=[0]) + c.expectation_ps(y=[1]))
+
+    params = tc.backend.convert_to_tensor(
+        np.array([[0.1, 0.2], [0.3, 0.4]], dtype=np.float32)
+    )
+    v, g = tc.backend.jit(tc.backend.value_and_grad(f))(params)
+    v_ref, g_ref = tc.backend.value_and_grad(f_ref)(params)
+    np.testing.assert_allclose(v, v_ref, atol=1e-5)
+    np.testing.assert_allclose(g, g_ref, atol=1e-5)
+
+
+def test_sparse_numpy_requires_grad(torchb):
+    import torch
+
+    values = torch.tensor([1.0, 2.0], requires_grad=True)
+    coo = torch.sparse_coo_tensor(torch.tensor([[0, 1], [1, 0]]), values, (2, 2))
+    np.testing.assert_allclose(tc.backend.numpy(coo).toarray(), [[0, 1], [2, 0]])
+
+
+def test_flip_tf_dynamic_shape(tfb):
+    f = tf.function(
+        lambda x: tc.backend.flip(x, (1,)),
+        input_signature=[tf.TensorSpec((None, 3), tf.int32)],
+    )
+    a = np.arange(6, dtype=np.int32).reshape(2, 3)
+    np.testing.assert_allclose(f(a), np.flip(a, 1))
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("torchb")])
+def test_csr_sparse_matrix(backend):
+    a = np.array([[1.0, 0, 2.0], [0, 0, 3.0], [4.0, 5.0, 0]], dtype=np.complex64)
+    m = tc.backend.csr_sparse_matrix_from_numpy(scipy.sparse.csr_matrix(a))
+    assert tc.backend.is_sparse(m)
+    np.testing.assert_allclose(tc.backend.to_dense(m), a, atol=1e-6)
+    np.testing.assert_allclose(tc.backend.numpy(m).toarray(), a, atol=1e-6)
+    v = np.array([1.0, 2.0, 3.0], dtype=np.complex64)
+    np.testing.assert_allclose(
+        tc.backend.sparse_dense_matmul(m, tc.backend.convert_to_tensor(v)),
+        a @ v,
+        atol=1e-5,
+    )
+    assert tc.backend.is_sparse(scipy.sparse.csr_matrix(a)) == (
+        tc.backend.name == "numpy"
+    )
 
 
 def test_sparse_tensor_matmul_monkey_patch(tfb):
@@ -743,6 +880,64 @@ def test_backend_methods_2(backend):
     assert tc.backend.dtype(o) == "complex64"
 
 
+@pytest.mark.parametrize("backend", [lf("torchb")])
+def test_backend_dtype_compiled_round(backend):
+    import torch
+
+    def ones_like_round(a):
+        return torch.ones_like(a, dtype=getattr(torch, tc.backend.dtype(a)))
+
+    compiled = torch.compile(
+        ones_like_round, fullgraph=True, dynamic=False, backend="eager"
+    )
+    for dtype_name in ("complex64", "complex128", "float32"):
+        a = torch.ones(3, dtype=getattr(torch, dtype_name))
+        out = compiled(a)
+        assert out.dtype == a.dtype
+        np.testing.assert_allclose(tc.backend.numpy(out), np.ones(3))
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_probability_sample_two_level(backend):
+    n, shots = 2**18, 20000
+    rng = np.random.default_rng(7)
+    delta = 5e-3
+    p = np.full([n], delta / (n - 1), dtype=np.float32)
+    p[0] = 1 - delta
+    status = np.stack(
+        [rng.uniform(0, delta / 2, size=shots), rng.uniform(size=shots)], axis=1
+    ).astype(np.float32)
+    f = tc.backend.jit(lambda p, s: tc.backend.probability_sample(shots, p, s))
+    r = tc.backend.numpy(
+        f(tc.backend.convert_to_tensor(p), tc.backend.convert_to_tensor(status))
+    )
+    # the low tail of status[:, 0] maps to the upper half of the tiny-probability outcomes,
+    # which float32 single-level sampling cannot resolve next to p[0];
+    # 20000 uniform draws over 2**17 outcomes give about 18500 distinct ones
+    assert r.min() > 0 and r.max() < n
+    assert len(np.unique(r)) > 17500
+
+    n = 5001
+    p = rng.exponential(size=[n])
+    p[rng.uniform(size=[n]) < 0.2] = 0
+    p[-51:] = 0
+    p = (p / p.sum()).astype(np.float32)
+    shots = 200000
+    r = tc.backend.numpy(
+        tc.backend.probability_sample(
+            shots, tc.backend.convert_to_tensor(p), g=tc.backend.get_random_state(42)
+        )
+    )
+    counts = np.bincount(r, minlength=n)
+    assert len(counts) == n
+    assert counts[p == 0].sum() == 0
+    np.testing.assert_allclose(
+        counts[:-1].reshape([50, 100]).sum(axis=1) / shots,
+        p[:-1].reshape([50, 100]).sum(axis=1),
+        atol=3e-3,
+    )
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_floor(backend):
     """Test floor method (element-wise, dtype/device preservation, integers unchanged)."""
@@ -1114,6 +1309,41 @@ def test_vjp_complex(backend):
         np.testing.assert_allclose(tc.backend.numpy(g), 2 - 2j, atol=1e-5)
 
 
+def test_vjp_vmap_torch(torchb):
+    K = tc.backend
+    x = K.convert_to_tensor([1.0, 2.0])
+    cotangents = K.eye(2, dtype="float32")
+    values, gradients = K.vmap(lambda v: K.vjp(lambda y: y**3, x, v))(cotangents)
+    np.testing.assert_allclose(K.numpy(values), [[1.0, 8.0], [1.0, 8.0]])
+    np.testing.assert_allclose(K.numpy(gradients), np.diag([3.0, 12.0]))
+
+
+@pytest.mark.parametrize("mode", ["jvp", "vjp"])
+def test_derivative_higher_order_torch(torchb, mode):
+    K = tc.backend
+    x = K.convert_to_tensor([1.0, 2.0])
+
+    def derivative(y):
+        return K.sum(getattr(K, mode)(lambda z: z**3, y, K.ones_like(y))[1])
+
+    np.testing.assert_allclose(K.numpy(K.grad(derivative)(x)), [6.0, 12.0])
+
+
+def test_jac_sqrtmh_torch(torchb):
+    K = tc.backend
+    x = K.convert_to_tensor([1.0, 4.0])
+
+    def root(y):
+        return K.sqrtmh(K.diagflat(y), psd=True)
+
+    forward = K.jacfwd(root)(x)
+    reverse = K.jacrev(root)(x)
+    np.testing.assert_allclose(K.numpy(forward), K.numpy(reverse), atol=1e-6)
+    expected = np.zeros((2, 2, 2))
+    expected[0, 0, 0], expected[1, 1, 1] = 0.5, 0.25
+    np.testing.assert_allclose(K.numpy(forward), expected, atol=1e-6)
+
+
 # TODO(@refraction-ray): consistent and unified pytree utils for pytorch backend?
 
 
@@ -1183,10 +1413,9 @@ def test_jvp_pytree(backend):
     np.testing.assert_allclose(tc.backend.numpy(g[1]), np.ones([2]), atol=1e-5)
 
 
-@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
 @pytest.mark.parametrize("mode", ["jacfwd", "jacrev"])
 def test_jac(backend, mode):
-    # make no sense for torch backend when you have no real vmap interface
     backend_jac = getattr(tc.backend, mode)
 
     def f(x):
@@ -1222,6 +1451,13 @@ def test_jac(backend, mode):
     np.testing.assert_allclose(jacf4jit(x, x)[0][1], np.zeros([3, 3]), atol=1e-5)
     np.testing.assert_allclose(jacf4(x, x)[1][1], np.eye(3), atol=1e-5)
     np.testing.assert_allclose(jacf4(x, x)[0][1], np.zeros([3, 3]), atol=1e-5)
+
+    def f5(x, y):
+        return x**2, y * tc.backend.sum(x)
+
+    jacf5 = backend_jac(f5, argnums=-1)(x, tc.backend.ones([2]))
+    np.testing.assert_allclose(jacf5[0], np.zeros([3, 2]), atol=1e-5)
+    np.testing.assert_allclose(jacf5[1], 3 * np.eye(2), atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
@@ -1269,6 +1505,49 @@ def test_vvag_has_aux(backend):
     fvvag = tc.backend.vvag(f, has_aux=True)
     (_, v1), _ = fvvag(tc.backend.ones([10, 2]))
     np.testing.assert_allclose(v1, 2 * tc.backend.ones([10]))
+
+
+def test_torch_svd_complex(torchb, highp):
+    matrix = tc.array_to_tensor(
+        np.array([[1 + 2j, 3 - 1j, 2 + 0.5j], [-2 + 1j, 0.3 - 2j, 1 + 1j]])
+    )
+    u, s, vh, discarded = tc.backend.svd(matrix)
+    np.testing.assert_allclose((u * s) @ vh, matrix, atol=1e-12)
+    assert discarded.shape == (0,)
+
+    def loss(a):
+        u, s, vh, _ = tc.backend.svd(a)
+        return tc.backend.sum(tc.backend.real((u * s) @ vh) ** 2)
+
+    np.testing.assert_allclose(
+        tc.backend.grad(loss)(matrix), 2 * tc.backend.real(matrix), atol=1e-12
+    )
+    node = tn.Node(matrix, backend="pytorch")
+    left, singular, right, _ = tn.split_node_full_svd(node, [node[0]], [node[1]])
+    np.testing.assert_allclose(
+        left.tensor @ singular.tensor @ right.tensor, matrix, atol=1e-12
+    )
+
+
+def test_torch_svd_truncation(torchb):
+    tensor = tc.array_to_tensor(
+        np.array([[5j, 0, 0], [0, 3, 0], [0, 0, 1], [0, 0, 0]]).reshape(2, 2, 3)
+    )
+    for options, keep in [
+        ({"max_singular_values": 2}, 2),
+        ({"max_truncation_error": 1.1}, 2),
+        ({"max_truncation_error": 0.22, "relative": True}, 2),
+        ({"max_singular_values": 1, "max_truncation_error": 1.1}, 1),
+    ]:
+        u, s, vh, discarded = tc.backend.svd(tensor, pivot_axis=2, **options)
+        assert u.shape == (2, 2, keep)
+        assert vh.shape == (keep, 3)
+        assert s.dtype == tensor.dtype
+        np.testing.assert_allclose(s, np.array([5, 3, 1])[:keep])
+        np.testing.assert_allclose(discarded, np.array([5, 3, 1])[keep:])
+        expected = np.zeros((4, 3), dtype=np.complex64)
+        expected[np.arange(keep), np.arange(keep)] = np.array([5j, 3, 1])[:keep]
+        np.testing.assert_allclose(u.reshape(4, keep) @ (s[:, None] * vh), expected)
 
 
 def test_jax_svd(jaxb, highp):
@@ -1327,6 +1606,49 @@ def test_qr(backend, highp):
         np.testing.assert_allclose(n_grad, a_grad, atol=1e-3)
 
 
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("operation", ["qr", "rq"])
+@pytest.mark.parametrize("diagonal", [0.0, 1e-9, -1e-9])
+def test_qr_rq_small_diagonal_gradient(backend, highp, operation, diagonal):
+    matrix = np.array([[diagonal, 1 + 2j], [0.0, 3 - 1j]], dtype=np.complex128)
+    if operation == "rq":
+        matrix = matrix.conj().T
+    tensor = tc.backend.convert_to_tensor(matrix)
+
+    for non_negative in [False, True]:
+
+        def loss(a):
+            left, right = getattr(tc.backend, operation)(a, 1, non_negative)
+            return tc.backend.real(tc.backend.sum(left @ right))
+
+        np.testing.assert_allclose(
+            tc.backend.numpy(tc.backend.grad(loss)(tensor)),
+            np.ones_like(matrix),
+            atol=2e-7,
+        )
+
+
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
+@pytest.mark.parametrize("operation", ["qr", "rq"])
+def test_qr_rq_zero_diagonal_gradient_single(backend, operation):
+    matrix = np.array([[0.0, 1 + 2j], [0.0, 3 - 1j]], dtype=np.complex64)
+    if operation == "rq":
+        matrix = matrix.conj().T
+    tensor = tc.backend.convert_to_tensor(matrix)
+
+    for non_negative in [False, True]:
+
+        def loss(a):
+            left, right = getattr(tc.backend, operation)(a, 1, non_negative)
+            return tc.backend.real(tc.backend.sum(left @ right))
+
+        np.testing.assert_allclose(
+            tc.backend.numpy(tc.backend.grad(loss)(tensor)),
+            np.ones_like(matrix),
+            atol=0.2,
+        )
+
+
 @pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
 def test_qr_wide_ad(backend, highp):
     def qr_loss(p):
@@ -1363,6 +1685,36 @@ def test_qr_wide_ad(backend, highp):
     grad_num = (val_p - val_m) / (2 * eps)
 
     np.testing.assert_allclose(float(grad_ad), grad_num, atol=1e-5)
+
+
+def test_torchqr_vmap(torchb):
+    import torch
+    from tensorcircuit.backends.pytorch_ops import torchqr
+
+    inputs = torch.randn(6, 4, 4, dtype=torch.complex64)
+    q, r = torch.func.vmap(torchqr.apply)(inputs)
+    assert q.shape == (6, 4, 4)
+    assert r.shape == (6, 4, 4)
+    assert torch.allclose(q @ r, inputs, atol=1e-4)
+
+
+def test_torchqr_vmap_grad_matches_eager(torchb):
+    import torch
+    from tensorcircuit.backends.pytorch_ops import torchqr
+
+    inputs = torch.randn(3, 4, 4, dtype=torch.complex64)
+
+    def loss(a):
+        q, r = torchqr.apply(a)
+        return (q @ r).abs().sum()
+
+    g_batch = torch.func.vmap(torch.func.grad(loss))(inputs)
+    assert g_batch.shape == (3, 4, 4)
+    assert torch.isfinite(g_batch.real).all()
+    for i in range(inputs.shape[0]):
+        a = inputs[i].clone().requires_grad_(True)
+        loss(a).backward()
+        assert torch.allclose(g_batch[i], a.grad, atol=1e-4)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
@@ -1410,6 +1762,14 @@ def test_backend_randoms_v2(backend):
         key, subkey = tc.backend.random_split(key)
         r.append(tc.backend.stateful_randc(subkey, 3, [5]))
     assert tuple(r[0]) != tuple(r[1])
+
+
+def test_tf_adjacent_seeds_independent(tfb):
+    r0 = tc.backend.stateful_randu(tc.backend.get_random_state(0), shape=[8])
+    r1 = tc.backend.stateful_randu(tc.backend.get_random_state(1), shape=[8])
+    # Philox emits four numbers per counter step, so a counter-only seed shift
+    # would make r1 a copy of r0 shifted by four
+    assert not np.allclose(r1[:4], r0[4:])
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
@@ -1592,7 +1952,7 @@ def test_optimizers(backend):
     assert loss < -0.7
 
 
-@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_hessian(backend):
     # hessian support is now very fragile and especially has potential issues on tf backend
     def f(param):
@@ -1827,6 +2187,31 @@ def test_scatter(backend):
     np.testing.assert_allclose(tc.backend.numpy(res), expected)
 
 
+@pytest.mark.parametrize("index_dtype", ["int32", "int64"])
+@pytest.mark.parametrize("mode", ["update", "add", "sub"])
+def test_scatter_torch_vmap(torchb, index_dtype, mode):
+    K = tc.backend
+    operand = K.ones([4], dtype="float32")
+    indices = K.convert_to_tensor([[[0], [2]], [[1], [3]]], dtype=index_dtype)
+    updates = K.convert_to_tensor([[0.5, 0.7], [-0.3, 0.2]], dtype="float32")
+    scatter = K.vmap(
+        lambda i, u: K.scatter(operand, i, u, mode=mode), vectorized_argnums=(0, 1)
+    )
+    result = scatter(indices, updates)
+    if mode == "update":
+        expected = [[0.5, 1.0, 0.7, 1.0], [1.0, -0.3, 1.0, 0.2]]
+    elif mode == "add":
+        expected = [[1.5, 1.0, 1.7, 1.0], [1.0, 0.7, 1.0, 1.2]]
+    else:
+        expected = [[0.5, 1.0, 0.3, 1.0], [1.0, 1.3, 1.0, 0.8]]
+    np.testing.assert_allclose(K.numpy(result), expected, atol=1e-7)
+    np.testing.assert_array_equal(K.numpy(operand), np.ones(4))
+    gradient = K.grad(lambda u: K.sum(scatter(indices, u)))(updates)
+    np.testing.assert_allclose(
+        K.numpy(gradient), np.full((2, 2), -1.0 if mode == "sub" else 1.0)
+    )
+
+
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_backend_methods_3(backend):
     # repeat
@@ -1930,15 +2315,70 @@ def test_sqrtmh_psd_values(backend, highp):
 
 @pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
 def test_sqrtmh_fixed_rank_gradient(backend, highp):
-    k = tc.backend
+    K = tc.backend
     observable = tc.array_to_tensor(np.diag([1.0, 0.0, 0.0]))
 
     def loss(theta):
-        amplitudes = k.stack([k.cos(theta), k.sin(theta), theta * 0])
-        rho = k.reshape(amplitudes, (3, 1)) @ k.reshape(amplitudes, (1, 3))
-        return k.real(k.trace(k.sqrtmh(k.cast(rho, tc.dtypestr)) @ observable))
+        amplitudes = K.stack([K.cos(theta), K.sin(theta), theta * 0])
+        rho = K.reshape(amplitudes, (3, 1)) @ K.reshape(amplitudes, (1, 3))
+        return K.real(K.trace(K.sqrtmh(K.cast(rho, tc.dtypestr)) @ observable))
 
-    theta = k.convert_to_tensor(np.array(0.3))
-    derivative = k.grad(loss)
-    for evaluate in (derivative, k.jit(derivative)):
-        np.testing.assert_allclose(k.numpy(evaluate(theta)), -np.sin(0.6), atol=1e-7)
+    theta = K.convert_to_tensor(np.array(0.3))
+    derivative = K.grad(loss)
+    for evaluate in (derivative, K.jit(derivative)):
+        np.testing.assert_allclose(K.numpy(evaluate(theta)), -np.sin(0.6), atol=1e-7)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_gather(backend):
+    data = (1 + 1j) * np.arange(24, dtype=np.float32).reshape(2, 3, 4)
+    operand = tc.backend.convert_to_tensor(data)
+    for axis, index in [(1, [[2, 0], [2, 1]]), (-1, 2), (0, np.empty((2, 0)))]:
+        indices = tc.backend.convert_to_tensor(np.asarray(index, dtype=np.int32))
+
+        select = partial(tc.backend.gather, axis=axis)
+
+        expected = np.take(data, np.asarray(index, dtype=np.int32), axis=axis)
+        for fn in (select, tc.backend.jit(select)):
+            result = fn(operand, indices)
+            assert result.shape == expected.shape
+            assert result.dtype == operand.dtype
+            assert tc.backend.device(result) == tc.backend.device(operand)
+            np.testing.assert_allclose(tc.backend.numpy(result), expected)
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_gather_vmap_grad(backend):
+    K = tc.backend
+    data = np.arange(24, dtype=np.float32).reshape(2, 3, 4)
+    operand = K.convert_to_tensor(data)
+    for axis in (0, 1):
+        last = data.shape[axis] - 1
+        indices = K.convert_to_tensor(np.array([last, 0, last], dtype=np.int32))
+
+        def loss(x, i, axis=axis):
+            return K.sum(K.gather(x, i, axis=axis))
+
+        weights = np.zeros(data.shape[axis])
+        weights[0], weights[-1] = 1, 2
+        shape = [1, 1, 1]
+        shape[axis] = len(weights)
+        expected = np.broadcast_to(weights.reshape(shape), data.shape)
+        for differentiate in (K.grad, K.value_and_grad):
+            derivative = differentiate(loss)
+            for evaluate in (derivative, K.jit(derivative)):
+                gradient = evaluate(operand, indices)
+                if isinstance(gradient, tuple):
+                    gradient = gradient[1]
+                np.testing.assert_allclose(K.numpy(gradient), expected)
+        vvag = K.vvag(loss, argnums=0, vectorized_argnums=1)
+        for evaluate in (vvag, K.jit(vvag)):
+            _, gradient = evaluate(operand, K.stack([indices, indices]))
+            np.testing.assert_allclose(K.numpy(gradient), 2 * expected)
+
+    def select(x, i):
+        return tc.backend.gather(x, i, axis=0)
+
+    paired = tc.backend.vmap(select, vectorized_argnums=(0, 1))
+    result = tc.backend.jit(paired)(operand, indices[:2])
+    np.testing.assert_allclose(tc.backend.numpy(result), data[[0, 1], [2, 0]])

@@ -5,7 +5,10 @@ tensorcircuit.cloud
     cloud/apis.rst
     cloud/config.rst
     cloud/local.rst
+    cloud/lqcloud.rst
+    cloud/qboson.rst
     cloud/quafu_provider.rst
+    cloud/store.rst
     cloud/tencent.rst
     cloud/tianyan.rst
     cloud/utils.rst

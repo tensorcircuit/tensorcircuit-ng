@@ -5,6 +5,7 @@ import tensorcircuit as tc
 from tensorcircuit.shadows import (
     shadow_bound,
     shadow_snapshots,
+    local_snapshot_states,
     global_shadow_state,
     entropy_shadow,
     renyi_entropy_2,
@@ -110,6 +111,31 @@ def test_ent(backend):
     np.testing.assert_allclose(ent2, exact_ent, atol=0.13)
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
+def test_renyi_entropy_2_pairwise_reference(backend):
+    rng = np.random.default_rng(7)
+    ns, repeat, nq = 3, 6, 5
+    probs = 0.4 * rng.random((ns, 1, nq))
+    snapshots = (rng.random((ns, repeat, nq)) < probs).astype(np.int32)
+    keep = [3, 0, 4]
+
+    tr = 0.0
+    for ss in snapshots[:, :, keep]:
+        for r in range(repeat):
+            for rp in range(repeat):
+                if r != rp:
+                    tr += (-2.0) ** (-np.sum(ss[r] != ss[rp]))
+    tr *= 2 ** len(keep) / (ns * repeat * (repeat - 1))
+
+    ent = renyi_entropy_2(
+        tc.backend.convert_to_tensor(snapshots), subsystem_to_keep=keep
+    )
+    np.testing.assert_allclose(ent, -np.log(tr), atol=1e-10)
+
+    with pytest.raises(ValueError, match="repeat >= 2"):
+        renyi_entropy_2(tc.backend.convert_to_tensor(snapshots[:, :1]))
+
+
 def test_shadow_extra(jaxb):
 
     ps = [1, 2, 3]  # X, Y, Z
@@ -130,7 +156,7 @@ def test_shadow_extra(jaxb):
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_entropy_shadow_dual_and_validation(backend):
-    nq, ns, repeat = 4, 2000, 1
+    nq, ns, repeat = 4, 2000, 2
     c = tc.Circuit(nq)
     c.h(0)
     c.rx(1, theta=0.7)
@@ -269,21 +295,44 @@ def test_global_shadow_state2_matches(jaxb):
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb"), lf("tfb"), lf("torchb")])
 def test_raw_shadow_expectation(backend):
-    k = tc.backend
-    samples = k.convert_to_tensor(
+    K = tc.backend
+    samples = K.convert_to_tensor(
         np.array(
             [[[0, 1, 0]], [[1, 0, 1]], [[0, 1, 0]], [[0, 1, 1]], [[0, 0, 0]]],
             dtype=np.uint8,
         )
     )
     bases = np.array([[1, 3, 2], [1, 2, 2], [3, 1, 2], [1, 1, 2], [1, 2, 2]])
-    observable = k.convert_to_tensor(np.array([1, 0, 2], dtype=np.int32))
+    observable = K.convert_to_tensor(np.array([1, 0, 2], dtype=np.int32))
 
     def evaluate(samples, bases, observable):
         return expectation_ps_shadow(samples, bases, ps=observable, k=2)
 
-    if k.name in ("jax", "tensorflow"):
-        evaluate = k.jit(evaluate)
+    if K.name in ("jax", "tensorflow"):
+        evaluate = K.jit(evaluate)
     for basis in (bases, bases[:, None, :]):
-        actual = evaluate(samples, k.convert_to_tensor(basis), observable)
-        np.testing.assert_allclose([k.numpy(v) for v in actual], [6.0, 0.0], atol=1e-6)
+        actual = evaluate(samples, K.convert_to_tensor(basis), observable)
+        np.testing.assert_allclose([K.numpy(v) for v in actual], [6.0, 0.0], atol=1e-6)
+
+
+def test_pytorch_shadow_subsystem(torchb):
+    snapshots = np.array(
+        [
+            [[0, 0, 0], [0, 1, 0], [0, 0, 0], [1, 1, 0], [1, 0, 0]],
+            [[1, 0, 1], [1, 1, 1], [1, 0, 1], [0, 0, 1], [0, 1, 1]],
+        ],
+        dtype=np.uint8,
+    )
+    selected = snapshots[:, :, [2, 0]]
+    distances = np.sum(selected[:, :, None, :] != selected[:, None, :, :], axis=-1)
+    pairs = ~np.eye(selected.shape[1], dtype=bool)
+    purity = 4 * np.mean(((-0.5) ** distances)[:, pairs])
+    actual = renyi_entropy_2(tc.backend.convert_to_tensor(snapshots), sub=[2, 0])
+    np.testing.assert_allclose(actual, -np.log(purity), atol=1e-12)
+
+    bases = np.array([[1, 2, 3], [3, 1, 2]], dtype=np.int32)
+    states = local_snapshot_states(snapshots, bases)
+    selected_states = local_snapshot_states(snapshots, bases, sub=[2, 0])
+    np.testing.assert_allclose(
+        tc.backend.numpy(selected_states), tc.backend.numpy(states)[:, :, [2, 0]]
+    )

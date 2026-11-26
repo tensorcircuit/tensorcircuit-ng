@@ -163,6 +163,10 @@ class SymbolCircuit(Circuit):
         self._extra_qir: List[Dict[str, Any]] = []
         self._measure_counter = 0
 
+    def replace_mps_inputs(self, mps_inputs: QuOperator) -> None:
+        """Raise NotImplementedError because SymbolCircuit does not support MPS inputs."""
+        raise NotImplementedError("mps_inputs are not yet supported in SymbolCircuit")
+
     # ── gate registration overrides ───────────────────────────────────────────
 
     @staticmethod
@@ -310,6 +314,18 @@ class SymbolCircuit(Circuit):
             diagonal=diagonal,
             ir_dict=ir_dict,
         )
+
+    @backend_numpy
+    def initial_mapping(
+        self,
+        logical_physical_mapping: Dict[int, int],
+        n: Optional[int] = None,
+        circuit_params: Optional[Dict[str, Any]] = None,
+    ) -> "SymbolCircuit":
+        """
+        Remap gates, instructions and the initial state with backend isolation.
+        """
+        return super().initial_mapping(logical_physical_mapping, n, circuit_params)  # type: ignore
 
     @backend_numpy
     def _copy(
@@ -706,7 +722,8 @@ class SymbolCircuit(Circuit):
         self, param_dict: Optional[Dict[sympy.Symbol, Any]] = None
     ) -> Circuit:
         """
-        Convert to a numerical :class:`Circuit` by binding symbolic parameters.
+        Convert to a numerical :class:`Circuit` by binding symbolic parameters,
+        keeping the instructions such as measurements.
 
         :param param_dict: Mapping from sympy Symbol to numerical value.
             Pass ``None`` (or ``{}``) only if the circuit has no free symbols.
@@ -734,7 +751,9 @@ class SymbolCircuit(Circuit):
             split=self.split,
             dim=None if self._d == 2 else self._d,
         )
-        c.append_from_qir(self._bound_qir(param_dict))
+        c.append_from_qir(
+            self._merge_extra_qir(self._bound_qir(param_dict), self._extra_qir)
+        )
         return c
 
     def _bind_value(
@@ -771,13 +790,21 @@ class SymbolCircuit(Circuit):
         return function(*(self._coerce_binding(param_dict[symbol]) for symbol in args))
 
     def _bound_qir(self, param_dict: Dict[sympy.Symbol, Any]) -> List[Dict[str, Any]]:
+        cache: Dict[sympy.Basic, Any] = {}
+
+        def bind_value(k: str, value: Any) -> Any:
+            if not isinstance(value, sympy.Basic):
+                return self._bind_value(k, value, param_dict)
+            if value not in cache:
+                cache[value] = self._bind_value(k, value, param_dict)
+            return cache[value]
+
         bound_qir = []
         for instruction in self._qir:
             bound_instruction = dict(instruction)
             if "parameters" in instruction:
                 bound_instruction["parameters"] = {
-                    k: self._bind_value(k, v, param_dict)
-                    for k, v in instruction["parameters"].items()
+                    k: bind_value(k, v) for k, v in instruction["parameters"].items()
                 }
             bound_qir.append(bound_instruction)
         return bound_qir
@@ -822,7 +849,7 @@ class SymbolCircuit(Circuit):
                     k: substitute(v) for k, v in instruction["parameters"].items()
                 }
             bound_qir.append(bound_instruction)
-        sc.append_from_qir(bound_qir)
+        sc.append_from_qir(self._merge_extra_qir(bound_qir, self._extra_qir))
         return sc
 
     # ── Qiskit translation ────────────────────────────────────────────────────
@@ -847,6 +874,13 @@ class SymbolCircuit(Circuit):
         passed at the gate level (e.g. ``rx(theta)``), not as matrix entries,
         so this is rarely an issue for standard circuit translation.
 
+        :param enable_instruction: whether also export the measurement, reset,
+            barrier and delay instructions, each measurement to the classical bit of its
+            ``record_index``, defaults to False
+        :type enable_instruction: bool, optional
+        :param enable_inputs: whether also export the ``inputs`` state, which is
+            unsupported and raises if ``inputs`` is given, defaults to False
+        :type enable_inputs: bool, optional
         :return: Qiskit ``QuantumCircuit`` with symbolic Parameters.
         :rtype: qiskit.circuit.QuantumCircuit
         """
@@ -857,7 +891,18 @@ class SymbolCircuit(Circuit):
                 "Qiskit is required for to_qiskit(); install with `pip install qiskit`."
             ) from exc
 
-        qc = QuantumCircuit(self._nqubits)
+        if enable_inputs and self.inputs is not None:
+            raise NotImplementedError(
+                "SymbolCircuit.to_qiskit does not support the inputs state"
+            )
+        qir = self.to_qir(enable_instruction=enable_instruction)
+        records = self._measurement_records(qir)
+        if self._extra_qir and enable_instruction:
+            qc = QuantumCircuit(
+                self._nqubits, max([self._nqubits] + [r + 1 for r in records])
+            )
+        else:
+            qc = QuantumCircuit(self._nqubits)
         sym_to_qk: Dict[sympy.Symbol, Parameter] = {}
 
         def _to_qk(expr: Any) -> Any:
@@ -883,14 +928,23 @@ class SymbolCircuit(Circuit):
             val = complex(expr)
             return float(val.real) if val.imag == 0 else val
 
-        for d in self._qir:
+        record = iter(records)
+        for d in qir:
             if d.get("is_channel"):
                 continue
             gate_name = d["name"]
             index = list(d["index"])
             params = d.get("parameters", {})
 
-            if gate_name in (
+            if gate_name == "measure":
+                qc.measure(index[0], next(record))
+            elif gate_name == "reset":
+                qc.reset(index[0])
+            elif gate_name == "barrier":
+                qc.barrier(*index)
+            elif gate_name == "delay":
+                qc.delay(params["duration"], index[0], unit="ns")
+            elif gate_name in (
                 "i",
                 "x",
                 "y",

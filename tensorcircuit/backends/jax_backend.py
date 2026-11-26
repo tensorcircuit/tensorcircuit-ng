@@ -6,12 +6,12 @@ Backend magic inherited from tensornetwork: jax backend
 
 import logging
 from functools import partial
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
 import tensornetwork
-from scipy.sparse import coo_matrix
+from scipy.sparse import coo_matrix, csr_matrix
 from tensornetwork.backends.jax import jax_backend
 
 from .abstract_backend import ExtendedBackend
@@ -129,6 +129,7 @@ def _qr_jax(
     q, r = adaware_qr(tensor)
     if non_negative_diagonal:
         phases = jnp.sign(jnp.diagonal(r))
+        phases = jnp.where(phases == 0, jnp.ones_like(phases), phases)
         q = q * phases
         r = phases.conj()[:, None] * r
     center_dim = q.shape[1]
@@ -155,6 +156,7 @@ def _rq_jax(
     q, r = adaware_qr(jnp.conj(jnp.transpose(tensor)))
     if non_negative_diagonal:
         phases = jnp.sign(jnp.diagonal(r))
+        phases = jnp.where(phases == 0, jnp.ones_like(phases), phases)
         q = q * phases
         r = phases.conj()[:, None] * r
     r, q = jnp.conj(jnp.transpose(r)), jnp.conj(jnp.transpose(q))  # M=r*q at this point
@@ -357,6 +359,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
 
     def numpy(self, a: Tensor) -> Tensor:
         if self.is_sparse(a):
+            if isinstance(a, sparse.BCSR):  # type: ignore
+                return csr_matrix(
+                    (np.array(a.data), np.array(a.indices), np.array(a.indptr)),
+                    shape=a.shape,
+                )
             return coo_matrix(
                 (a.data, (a.indices[:, 0], a.indices[:, 1])), shape=a.shape
             )
@@ -446,6 +453,9 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return jnp.stack(a, axis=axis)
 
+    def unstack(self, a: Tensor, axis: int = 0) -> List[Tensor]:
+        return list(jnp.unstack(a, axis=axis))
+
     def concat(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return jnp.concatenate(a, axis=axis)
 
@@ -511,12 +521,7 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         return jnp.cumsum(a, axis)
 
     def is_tensor(self, a: Any) -> bool:
-        if not isinstance(a, jnp.ndarray):
-            return False
-        # isinstance(np.eye(1), jax.numpy.ndarray) = True!
-        if getattr(a, "_value", None) is not None:
-            return True
-        return False
+        return not isinstance(a, np.ndarray) and isinstance(a, jnp.ndarray)
 
     def solve(self, A: Tensor, b: Tensor, assume_a: str = "gen") -> Tensor:  # type: ignore
         return jsp.linalg.solve(A, b, assume_a=assume_a)
@@ -768,6 +773,9 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     ) -> Tensor:
         return libjax.lax.scan(f, init, xs)
 
+    def gather(self, operand: Tensor, indices: Tensor, axis: int = 0) -> Tensor:
+        return jnp.take(operand, indices, axis=axis)
+
     def scatter(
         self, operand: Tensor, indices: Tensor, updates: Tensor, mode: str = "update"
     ) -> Tensor:
@@ -786,6 +794,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         self, indices: Tensor, values: Tensor, shape: Tensor
     ) -> Tensor:
         return sparse.BCOO((values, indices), shape=shape)  # type: ignore
+
+    def csr_sparse_matrix(
+        self, indptr: Tensor, indices: Tensor, values: Tensor, shape: Tensor
+    ) -> Tensor:
+        return sparse.BCSR((values, indices, indptr), shape=shape)  # type: ignore
 
     def sparse_dense_matmul(
         self,

@@ -25,10 +25,10 @@ from typing import (
 
 import numpy as np
 import tensornetwork as tn
+from scipy.sparse import csr_matrix
 from tensornetwork.network_components import AbstractNode, CopyNode, Edge, Node, connect
 from tensornetwork.network_operations import (
     copy,
-    get_subgraph_dangling,
     remove_node,
 )
 
@@ -36,6 +36,8 @@ from .cons import (
     backend,
     contractor,
     dtypestr,
+    get_backend,
+    get_subgraph_dangling,
     idtypestr,
     npdtype,
     rdtypestr,
@@ -94,6 +96,36 @@ class LinearOperator:
         return self.matvec(vector)
 
 
+def _sparse_matvec_format(operator: Tensor) -> Tensor:
+    """
+    Convert a sparse matrix to the faster matvec format of the current backend.
+    """
+    if backend.name == "tensorflow":
+        # COO is the only sparse format
+        return operator
+    if backend.name == "jax":
+        import jax
+        from jax.experimental.sparse import BCOO, BCSR
+
+        if not isinstance(operator, (BCOO, BCSR)):
+            return operator
+        if isinstance(operator.data, jax.core.Tracer):
+            # the placement is unknown while tracing; use the default platform
+            platform = jax.default_backend()
+        else:
+            platform = backend.device(operator.data).split(":")[0]
+        if platform == "cpu":
+            # jax>=0.10 lowers BCSR matvec to a dedicated CPU kernel, several times
+            # faster than the generic BCOO lowering
+            if isinstance(operator, BCSR):
+                return operator
+            return backend.sparse_csr_from_coo(operator)
+        # on GPU the cuSPARSE BCSR path is much slower than BCOO
+        return operator.to_bcoo() if isinstance(operator, BCSR) else operator
+    # scipy, torch: CSR matvec is several times faster than COO
+    return backend.sparse_csr_from_coo(operator)
+
+
 def aslinearoperator(
     operator: Any, shape: Optional[Sequence[int]] = None, dtype: Any = None
 ) -> LinearOperator:
@@ -138,7 +170,7 @@ def aslinearoperator(
     operator_dtype = dtype if dtype is not None else getattr(operator, "dtype", None)
 
     if backend.is_sparse(operator):
-        sparse_operator = backend.sparse_csr_from_coo(operator)
+        sparse_operator = _sparse_matvec_format(operator)
 
         def sparse_matvec(vector: Tensor) -> Tensor:
             return backend.sparse_dense_matmul(sparse_operator, vector)
@@ -153,13 +185,14 @@ def aslinearoperator(
 
 def get_all_nodes(edges: Iterable[Edge]) -> List[Node]:
     """Return the set of nodes connected to edges."""
-    nodes = []
-    for edge in edges:
-        if edge.node1 is not None and edge.node1 not in nodes:
-            nodes.append(edge.node1)
-        if edge.node2 is not None and edge.node2 not in nodes:
-            nodes.append(edge.node2)
-    return nodes
+    return list(
+        dict.fromkeys(
+            node
+            for edge in edges
+            for node in (edge.node1, edge.node2)
+            if node is not None
+        )
+    )
 
 
 def onehot_d_tensor(_k: Union[int, Tensor], d: int = 2) -> Tensor:
@@ -179,6 +212,23 @@ def onehot_d_tensor(_k: Union[int, Tensor], d: int = 2) -> Tensor:
         _k = backend.convert_to_tensor(_k)
         vec = backend.one_hot(backend.cast(_k, "int32"), d)
     return backend.cast(vec, dtypestr)
+
+
+_LABEL_CODES = np.array([ord(ch) for ch in _ALPHABET], dtype=np.uint32)
+# int8 digit of each code point below 256, -1 for characters out of 0-9A-Za-z
+_LABEL_DIGITS = np.full(256, -1, dtype=np.int8)
+_LABEL_DIGITS[_LABEL_CODES] = np.arange(len(_ALPHABET))
+_LABEL_DIGITS[[ord(ch) for ch in _ALPHABET.lower()]] = np.arange(len(_ALPHABET))
+# labels are encoded in chunks to bound the temporary digit and code arrays
+_LABEL_CHUNK = 2**14
+
+
+def _check_label_dim(dim: int) -> None:
+    if dim > 36:
+        raise NotImplementedError(
+            f"String basis label supports d<=36 (0-9A-Z). Got dim={dim}. "
+            "Use an integer array/tensor of length n instead."
+        )
 
 
 def _decode_basis_label(label: str, n: int, dim: int) -> List[int]:
@@ -201,27 +251,74 @@ def _decode_basis_label(label: str, n: int, dim: int) -> List[int]:
     :raises ValueError: if the label length mismatches ``n``,
                         or contains invalid/out-of-range characters
     """
-    if dim > 36:
-        raise NotImplementedError(
-            f"String basis label supports d<=36 (0-9A-Z). Got dim={dim}. "
-            "Use an integer array/tensor of length n instead."
+    return _decode_basis_labels([label], n, dim)[0].tolist()  # type: ignore
+
+
+def _decode_basis_labels(labels: Sequence[str], n: int, dim: int) -> Tensor:
+    """
+    Vectorized :py:func:`_decode_basis_label` for many labels, case-insensitive.
+
+    :param labels: basis label strings, each of length ``n``
+    :type labels: Sequence[str]
+    :param n: number of sites
+    :type n: int
+    :param dim: local dimension (2 <= dim <= 36)
+    :type dim: int
+    :return: digits in shape ``[len(labels), n]``
+    :rtype: np.ndarray
+    """
+    _check_label_dim(dim)
+    arr = np.asarray(labels, dtype=str).reshape([-1])
+    lengths = np.char.str_len(arr)
+    if np.any(lengths != n):
+        bad = int(lengths[np.argmax(lengths != n)])
+        raise ValueError(f"Basis label length mismatch: expect {n}, got {bad}")
+    width = max(n, 1)
+    codes = arr.astype(f"U{width}", copy=False).view(np.uint32).reshape([-1, width])
+    digits = np.empty([codes.shape[0], n], dtype=np.int8)
+    # column-wise lookups keep the intp index temporaries small
+    for j in range(n):
+        digits[:, j] = np.take(_LABEL_DIGITS, codes[:, j], mode="clip")
+    if np.any(digits < 0):
+        i, j = np.argwhere(digits < 0)[0]
+        raise ValueError(
+            f"Invalid character '{arr[i][j]}' in basis label (allowed 0-9A-Z)."
         )
-    s = label.upper()
-    if len(s) != n:
-        raise ValueError(f"Basis label length mismatch: expect {n}, got {len(s)}")
-    digits = []
-    for ch in s:
-        if ch not in _ALPHABET:
-            raise ValueError(
-                f"Invalid character '{ch}' in basis label (allowed 0-9A-Z)."
-            )
-        v = _ALPHABET.index(ch)
-        if v >= dim:
-            raise ValueError(
-                f"Digit '{ch}' (= {v}) out of range for base-d with dim={dim}."
-            )
-        digits.append(v)
+    if np.any(digits >= dim):
+        i, j = np.argwhere(digits >= dim)[0]
+        raise ValueError(
+            f"Digit '{_ALPHABET[digits[i, j]]}' (= {digits[i, j]}) "
+            f"out of range for base-d with dim={dim}."
+        )
     return digits
+
+
+def _encode_basis_labels(states: Tensor, n: int, dim: int) -> List[str]:
+    """
+    Encode basis states as base-``dim`` label strings (0-9A-Z) on the host.
+
+    :param states: linear basis indices in shape ``[m]``
+        or per-site digits in shape ``[m, n]``
+    :type states: np.ndarray
+    :param n: number of sites
+    :type n: int
+    :param dim: local dimension (2 <= dim <= 36)
+    :type dim: int
+    :return: ``m`` label strings of length ``n``
+    :rtype: List[str]
+    """
+    _check_label_dim(dim)
+    states = np.asarray(states)
+    powers = dim ** np.arange(n - 1, -1, -1, dtype=np.int64)
+    width = max(n, 1)
+    labels: List[str] = []
+    for start in range(0, states.shape[0], _LABEL_CHUNK):
+        block = states[start : start + _LABEL_CHUNK]
+        digits = block if block.ndim == 2 else block[:, None] // powers % dim
+        codes = np.zeros([digits.shape[0], width], dtype=np.uint32)
+        codes[:, :n] = _LABEL_CODES[digits.astype(np.int64)]
+        labels += codes.view(f"U{width}").reshape([-1]).tolist()
+    return labels
 
 
 def _infer_num_sites(D: int, dim: int) -> int:
@@ -436,20 +533,18 @@ def reachable(
     if isinstance(inputs, Edge):
         inputs = [inputs.node1]
 
-    processed_inputs = []
+    processed_inputs: Dict[AbstractNode, None] = {}
     for inp in inputs:
         if isinstance(inp, AbstractNode):
-            if inp not in processed_inputs:
-                processed_inputs.append(inp)
+            processed_inputs[inp] = None
         elif isinstance(inp, Edge):
-            if inp.node1 not in processed_inputs:
-                processed_inputs.append(inp.node1)
+            processed_inputs[inp.node1] = None
         else:
             raise TypeError(
                 f"input to `reachable` has to be an iterable of "
                 f"Nodes or Edges, got {type(inp)} instead."
             )
-    return _reachable(processed_inputs)
+    return _reachable(list(processed_inputs))
 
 
 # Edge ordering convention: out_edges first, in_edges second.
@@ -2222,6 +2317,76 @@ def heisenberg_hamiltonian(
     return PauliStringSum2Dense(ls, weight, numpy=numpy)
 
 
+def Lindblad2PauliStringSum(
+    hamiltonian: Tuple[Sequence[Sequence[int]], Sequence[Tensor]],
+    jumps: Sequence[Tuple[Sequence[Sequence[int]], Sequence[Tensor]]] = (),
+) -> Tuple[List[List[int]], Tensor]:
+    """
+    Translate a Pauli Hamiltonian and jumps into a vectorized Lindbladian.
+
+    Uses row-major vectorization, ``vec(A rho B) = (A ⊗ Bᵀ) vec(rho)``.
+    The returned strings act on 2N qubits: row indices first, then column
+    indices. Structures are processed statically on the host; weights use
+    backend operations and support JIT and differentiation. Duplicate strings
+    are merged.
+    No operator is built; pass the result to :func:`PauliStringSum2MVP`.
+
+    :param hamiltonian: A ``(structures, weights)`` pair. Structures are static
+        N-qubit Pauli strings using 0: I, 1: X, 2: Y, 3: Z; weights are the
+        corresponding Hamiltonian coefficients.
+    :type hamiltonian: Tuple[Sequence[Sequence[int]], Sequence[Tensor]]
+    :param jumps: Each jump is a ``(structures, weights)`` pair. Include the
+        square root of its rate in the weights; for example, amplitude damping
+        uses ``[[1], [2]]`` with weights ``[sqrt(rate)/2, 1j*sqrt(rate)/2]``.
+    :type jumps: Sequence[Tuple[Sequence[Sequence[int]], Sequence[Tensor]]]
+    :raises ValueError: If the Hamiltonian or a jump has a different number of strings and weights.
+    :return: Unique 2N-qubit Pauli strings and their backend weight tensor.
+    :rtype: Tuple[List[List[int]], Tensor]
+    """
+    h_structures, h_weights = hamiltonian
+    if len(h_structures) != len(h_weights) or any(
+        len(structures) != len(weights) for structures, weights in jumps
+    ):
+        raise ValueError(
+            "The Hamiltonian and each jump require one weight per Pauli string."
+        )
+    strings = list(h_structures) + [s for structures, _ in jumps for s in structures]
+    n = len(strings[0]) if strings else 0
+    if any(len(s) != n or any(p not in (0, 1, 2, 3) for p in s) for s in strings):
+        raise ValueError("Pauli strings must have equal lengths and use codes 0–3.")
+    identity = (0,) * n
+    terms: Dict[Tuple[int, ...], Tensor] = {}
+
+    def add(left: Sequence[int], right: Sequence[int], weight: Tensor) -> None:
+        key = tuple(left) + tuple(right)
+        terms[key] = terms.get(key, 0) + weight
+
+    for p, w in zip(h_structures, h_weights):
+        w = backend.convert_to_tensor(w, dtype=dtypestr)
+        add(p, identity, -1j * w)
+        add(identity, p, 1j * (-1) ** tuple(p).count(2) * w)
+
+    # Pauli codes multiply by XOR, with this ordered-product phase table.
+    phases = ((1, 1, 1, 1), (1, 1, 1j, -1j), (1, -1j, 1, 1j), (1, 1j, -1j, 1))
+    for structures, weights in jumps:
+        weights = [backend.convert_to_tensor(w, dtype=dtypestr) for w in weights]
+        for p, a in zip(structures, weights):
+            for q, b in zip(structures, weights):
+                add(p, q, a * backend.conj(b) * (-1) ** tuple(q).count(2))
+                product = tuple(x ^ y for x, y in zip(p, q))
+                phase = reduce(mul, (phases[x][y] for x, y in zip(p, q)), 1)
+                decay = -0.5 * backend.conj(a) * b * phase
+                add(product, identity, decay)
+                add(identity, product, decay * (-1) ** product.count(2))
+
+    coefficients = (
+        backend.stack(list(terms.values()))
+        if terms
+        else backend.zeros((0,), dtype=dtypestr)
+    )
+    return [list(s) for s in terms], coefficients
+
+
 def PauliStringSum2MVP(
     structures: Sequence[Sequence[int]],
     weights: Sequence[float],
@@ -2229,9 +2394,10 @@ def PauliStringSum2MVP(
     """
     Generate a matrix-vector product function for a given Pauli string sum.
     The returned function `mvp(psi)` computes sum(w_i * P_i * psi).
-    This implementation efficiently handles the operation by using backend-agnostic
-    slicing (for X/Y flips) and broadcasting (for Z/Y phases), avoiding explicit
-    matrix construction.
+    Pure Z/I terms are merged into one precomputed diagonal; each remaining term
+    is applied with backend flips (for X/Y) and broadcasting (for Z/Y phases),
+    avoiding explicit matrix construction. Applying flips before phases lets
+    compiled backends reuse flips shared by multiple terms.
 
     :param structures: List of Pauli strings, e.g. [[1, 0, 3], [0, 2, 0]] for X0 Z2 and Y1.
         (0: I, 1: X, 2: Y, 3: Z)
@@ -2257,50 +2423,33 @@ def PauliStringSum2MVP(
 
     n = len(structures[0])
 
-    # Cache TensorFlow module if needed for axis flipping workaround
-    tf_module = None
-    if backend.name == "tensorflow":
-        import tensorflow as tf
-
-        tf_module = tf
-
-    # Pre-process terms into separate lists for type safety
-    term_flip_slices: List[Optional[Tuple[slice, ...]]] = []
+    # Pre-process off-diagonal terms into separate lists for type safety
     term_flip_axes: List[Tuple[int, ...]] = []
     term_mask_indices: List[Tuple[int, ...]] = []
-    term_weights: List[complex] = []
+    term_weights: List[Tensor] = []
+    diagonal_terms: List[int] = []
 
-    for s, w in zip(structures, weights):
+    for i, (s, w) in enumerate(zip(structures, weights)):
         s_arr = np.array(s)
         x_indices = np.where(s_arr == 1)[0].tolist()
         y_indices = np.where(s_arr == 2)[0].tolist()
         z_indices = np.where(s_arr == 3)[0].tolist()
+        if not x_indices and not y_indices:
+            diagonal_terms.append(i)
+            continue
 
-        # Z mask comes from Z terms AND Y terms (Y = i * X * Z)
-        mask_indices = tuple(sorted(z_indices + y_indices))
+        # Apply flips before the Z/Y mask: Y = -i * Z * X.
+        term_mask_indices.append(tuple(sorted(z_indices + y_indices)))
         # Flip axes come from X terms AND Y terms
-        # Sorted order required for TF reshape workaround
-        flip_axes = tuple(sorted(x_indices + y_indices))
-        # Global phase: each Y contributes 1j
-        phase_c = w * (1j) ** len(y_indices)
-
-        # Pre-compute slice object for flipping
-        if flip_axes:
-            sl: List[slice] = [slice(None)] * n
-            for k in flip_axes:
-                sl[k] = slice(None, None, -1)
-            flip_slice: Optional[Tuple[slice, ...]] = tuple(sl)
-        else:
-            flip_slice = None
-
-        term_flip_slices.append(flip_slice)
-        term_flip_axes.append(flip_axes)
-        term_mask_indices.append(mask_indices)
-        term_weights.append(phase_c)
+        term_flip_axes.append(tuple(sorted(x_indices + y_indices)))
+        # Global phase: each Y contributes -1j; weights follow the global dtype
+        term_weights.append(
+            backend.convert_to_tensor(w, dtype=dtypestr) * (-1j) ** len(y_indices)
+        )
 
     # Pre-fuse per-axis Z masks into a single broadcastable mask per term.
-    # Built once at setup (amortized over many mvp calls); stored as backend
-    # tensors so the call path only needs a dtype-aligned broadcast multiply.
+    # Built once at setup (amortized over many mvp calls) in the global dtype,
+    # so the call path is a single broadcast multiply.
     term_fused_masks: List[Optional[Tensor]] = []
     for mask_indices in term_mask_indices:
         if not mask_indices:
@@ -2310,7 +2459,23 @@ def PauliStringSum2MVP(
         for a in mask_indices:
             z_k = np.array([1.0, -1.0]).reshape([1] * a + [2] + [1] * (n - a - 1))
             m = m * z_k
-        term_fused_masks.append(backend.convert_to_tensor(m))
+        # cast on the host: a device-side conversion compiles per mask shape
+        term_fused_masks.append(backend.convert_to_tensor(m.astype(npdtype)))
+
+    # Pure Z/I terms are merged into a single precomputed diagonal in the global
+    # dtype; weights are stacked as backend tensors to keep their autodiff graph.
+    diagonal: Optional[Tensor] = None
+    if diagonal_terms:
+        diag_w = backend.stack(
+            [
+                backend.convert_to_tensor(weights[i], dtype=dtypestr)
+                for i in diagonal_terms
+            ]
+        )
+        _, _, values = _pauli_sum_diagonals(
+            [structures[i] for i in diagonal_terms], diag_w, False
+        )
+        diagonal = backend.reshape(values[0], (2,) * n)
 
     def mvp(psi: Tensor) -> Tensor:
         psi_shape = backend.shape_tuple(psi)
@@ -2320,37 +2485,21 @@ def PauliStringSum2MVP(
             psi_tensor = backend.reshape(psi, (2,) * n)
         else:
             psi_tensor = psi
+        # everything is computed in the global dtype, as the merged diagonal is
+        psi_tensor = backend.cast(psi_tensor, dtypestr)
 
-        dtype = backend.dtype(psi_tensor)
-
-        total_res = backend.zeros_like(psi_tensor)
+        if diagonal is None:
+            total_res = backend.zeros_like(psi_tensor)
+        else:
+            total_res = psi_tensor * diagonal
 
         for i in range(len(term_weights)):
-            term_psi = psi_tensor
+            term_psi = backend.flip(psi_tensor, term_flip_axes[i])
 
-            # 1. Apply fused Z mask via a single broadcast multiply
             fused = term_fused_masks[i]
             if fused is not None:
-                term_psi = term_psi * backend.cast(fused, dtype)
+                term_psi = term_psi * fused
 
-            # 2. Apply flips via slicing
-            flip_slice = term_flip_slices[i]
-            if flip_slice is not None:
-                if tf_module is not None:
-                    # TF workaround: reshape to rank 3, flip, reshape back
-                    curr_psi = term_psi
-                    for axis in term_flip_axes[i]:
-                        pre_shape = 2**axis
-                        post_shape = 2 ** (n - 1 - axis)
-                        curr_psi = tf_module.reshape(
-                            curr_psi, (pre_shape, 2, post_shape)
-                        )
-                        curr_psi = tf_module.reverse(curr_psi, axis=[1])
-                    term_psi = tf_module.reshape(curr_psi, (2,) * n)
-                else:
-                    term_psi = term_psi[flip_slice]
-
-            # 3. Apply weight
             total_res = total_res + (term_psi * term_weights[i])
 
         if is_flat:
@@ -2376,17 +2525,206 @@ def PauliStringSum2Dense(
     :param weight: 1D Tensor, each element corresponds the weight for each Pauli string
         defaults to None (all Pauli strings weight 1.0)
     :type weight: Optional[Sequence[float]], optional
-    :param numpy: default False. If True, return numpy coo
-        else return backend compatible sparse tensor
+    :param numpy: default False. If True, return a numpy array
+        else return a backend tensor
     :type numpy: bool
-    :return: the tensorflow dense matrix
+    :return: the dense matrix
     :rtype: Tensor
     """
-    sparsem = PauliStringSum2COO_numpy(ls, weight)
+    if not numpy and backend.name == "jax":
+        return backend.to_dense(PauliStringSum2COO(ls, weight))
+    dense = _pauli_sum_scipy(ls, weight).toarray()
     if numpy:
-        return sparsem.toarray()
-    sparsem = backend.coo_sparse_matrix_from_numpy(sparsem)
-    return backend.to_dense(sparsem)
+        return dense
+    return backend.convert_to_tensor(dense)
+
+
+# Pauli string sum to matrix. Grouping terms by their X/Y flip mask f gives
+# H = sum_f diag(v_f) X^f, i.e. one stored entry per group per row.
+# ``_pauli_sum_diagonals`` computes (f, v_f); ``_pauli_sum_scipy`` (host) and
+# ``_pauli_sum_sparse`` (dispatch, device assembly) build the sparse matrix used
+# by PauliStringSum2COO / PauliStringSum2CSR / PauliStringSum2Dense.
+
+_PAULI_Y_PHASES = np.array([1, -1j, -1, 1j])
+
+
+def _pauli_parity_signs(b: Any, rows: Tensor, zmask: Any, n: int) -> Tensor:
+    """
+    Integer signs ``(-1)^popcount(rows & zmask)`` on backend ``b`` (XOR folding).
+    """
+    p = b.bitwise_and(rows, zmask)
+    shift = 1
+    while shift < n:
+        p = b.bitwise_xor(p, b.right_shift(p, shift))
+        shift *= 2
+    return 1 - 2 * b.bitwise_and(p, 1)
+
+
+def _pauli_sum_diagonals_jax_kernel(
+    n: int, ngroups: int, dtype: str, group_index: Tensor, zmask: Tensor, coef: Tensor
+) -> Tensor:
+    """
+    Jitted term accumulation of ``_pauli_sum_diagonals`` on jax. It is kept at
+    module level so the jit cache is reused across eager calls.
+    """
+    rows = backend.cast(backend.arange(1 << n), "int32")
+
+    def step(values: Tensor, x: Tuple[Tensor, Tensor, Tensor]) -> Tensor:
+        g, z, c = x
+        term = c * backend.cast(_pauli_parity_signs(backend, rows, z, n), dtype)
+        return backend.scatter(
+            values,
+            backend.reshape(g, [1, 1]),
+            backend.reshape(term, [1, -1]),
+            mode="add",
+        )
+
+    init = backend.zeros([ngroups, 1 << n], dtype=dtype)
+    return backend.scan(step, (group_index, zmask, coef), init)
+
+
+def _pauli_sum_diagonals(
+    ls: Any, weight: Optional[Sequence[float]], host: bool
+) -> Tuple[int, Any, Tensor]:
+    """
+    Decompose a Pauli string sum as ``H = sum_f diag(values[f]) X^flips[f]``.
+    Terms are grouped on the host by flip mask. ``values`` of shape ``[G, 2**n]``
+    in the global dtype is accumulated in numpy if ``host``, else on the active
+    backend: by a jittable and weight-differentiable scan on jax and by an eager
+    loop over terms otherwise.
+
+    :return: ``(n, flips, values)`` with ``flips`` the sorted distinct flip masks
+        as a numpy array
+    :rtype: Tuple[int, Any, Tensor]
+    """
+    if backend.is_tensor(ls):
+        ls = backend.numpy(ls)
+    strings = np.asarray(ls).real.astype(np.int64)
+    n = strings.shape[1]
+    positions = 1 << np.arange(n - 1, -1, -1, dtype=np.int64)
+    flips, group_index = np.unique(
+        ((strings == 1) | (strings == 2)) @ positions, return_inverse=True
+    )
+    group_index = group_index.reshape(-1)
+    zmask = ((strings == 2) | (strings == 3)) @ positions
+    ny = np.sum(strings == 2, axis=1) % 4
+
+    b = get_backend("numpy") if host else backend
+    if weight is None:
+        weight = [1.0] * len(group_index)
+    phases = b.convert_to_tensor(_PAULI_Y_PHASES[ny], dtype=dtypestr)
+    coef = b.convert_to_tensor(weight, dtype=dtypestr) * phases
+    if b.name == "jax":
+        kernel = b.jit(_pauli_sum_diagonals_jax_kernel, static_argnums=(0, 1, 2))
+        values = kernel(
+            n,
+            len(flips),
+            dtypestr,
+            b.convert_to_tensor(group_index.astype(np.int32)),
+            b.convert_to_tensor(zmask.astype(np.int32)),
+            coef,
+        )
+        return n, flips, values
+    rows = b.cast(b.arange(1 << n), "int32" if n < 31 else "int64")
+    acc: List[Any] = [None] * len(flips)
+    for t, g in enumerate(group_index):
+        term = coef[t] * b.cast(
+            _pauli_parity_signs(b, rows, int(zmask[t]), n), dtypestr
+        )
+        acc[g] = term if acc[g] is None else acc[g] + term
+    return n, flips, b.stack(acc)
+
+
+def _pauli_sum_scipy(ls: Any, weight: Optional[Sequence[float]]) -> Any:
+    """
+    Canonical scipy CSR matrix of a Pauli string sum, built on the host with exact
+    zeros removed. A separate function so the dense diagonals are freed before
+    the caller converts the result to a backend format.
+    """
+    if backend.is_tensor(weight):
+        weight = backend.numpy(weight)
+    n, flips, values = _pauli_sum_diagonals(ls, weight, True)
+    dim, ngroups = 1 << n, len(flips)
+    index_dtype = "int32" if dim * ngroups < 2**31 else "int64"
+    rows = np.arange(dim, dtype=index_dtype)
+    m = csr_matrix(
+        (
+            values.T.ravel(),
+            (rows[:, None] ^ flips.astype(index_dtype)[None, :]).ravel(),
+            np.arange(dim + 1, dtype=index_dtype) * ngroups,
+        ),
+        shape=(dim, dim),
+    )
+    # in-place row sort, lighter than the argsort used on device
+    m.sort_indices()
+    m.eliminate_zeros()
+    return m
+
+
+def _pauli_sum_sparse(
+    ls: Sequence[Sequence[int]],
+    weight: Optional[Sequence[float]],
+    numpy: bool,
+    csr: bool,
+) -> Tensor:
+    """
+    Shared implementation of ``PauliStringSum2COO`` and ``PauliStringSum2CSR``.
+
+    - traced ``ls`` (jax): sum of per-term ``PauliString2COO`` matrices, since
+      grouping needs concrete strings;
+    - ``numpy=True``, numpy, tensorflow, cupy: ``_pauli_sum_scipy``, converted
+      to the backend format;
+    - jax, pytorch: assembled on device, keeping exact zeros.
+    """
+    if backend.name == "jax" and not numpy:
+        from jax.core import Tracer
+
+        if any(isinstance(x, Tracer) for x in backend.tree_flatten(ls)[0]):
+            strings = num_to_tensor(ls)
+            weight = [1.0] * strings.shape[0] if weight is None else weight
+            batch_f = backend.vmap(PauliString2COO, vectorized_argnums=(0, 1))
+            rsparse = batch_f(strings, num_to_tensor(weight)).sum(axis=0)
+            return backend.sparse_csr_from_coo(rsparse) if csr else rsparse
+
+    if numpy or backend.name not in ("jax", "pytorch"):
+        m = _pauli_sum_scipy(ls, weight)
+        if not csr:
+            m = m.tocoo()
+        if numpy or backend.name == "numpy":
+            return m
+        if csr:
+            return backend.csr_sparse_matrix_from_numpy(m)
+        return backend.coo_sparse_matrix_from_numpy(m)
+
+    n, flips, values = _pauli_sum_diagonals(ls, weight, False)
+    dim, ngroups = 1 << n, len(flips)
+    index_dtype = "int32" if dim * ngroups < 2**31 else "int64"
+    rows = backend.cast(backend.arange(dim), index_dtype)
+    flips_t = backend.cast(backend.convert_to_tensor(flips), index_dtype)
+    if csr or backend.name == "pytorch":
+        # row-major CSR with sorted columns; for torch, a COO converted from it
+        # is flagged coalesced, which torch sparse matmul needs for its fast path
+        cols = backend.bitwise_xor(
+            backend.reshape(rows, [-1, 1]), backend.reshape(flips_t, [1, -1])
+        )
+        order = backend.cast(backend.argsort(cols, axis=1), index_dtype)
+        flat = backend.reshape(order + backend.reshape(rows, [-1, 1]) * ngroups, [-1])
+        m = backend.csr_sparse_matrix(
+            backend.cast(backend.arange(dim + 1), index_dtype) * ngroups,
+            backend.gather1d(backend.reshape(cols, [-1]), flat),
+            backend.gather1d(backend.reshape(backend.transpose(values), [-1]), flat),
+            (dim, dim),
+        )
+        return m if csr else m.to_sparse_coo()
+    # jax COO stays group-major: row-sorted BCOO matvec is much slower on GPU
+    cols = backend.bitwise_xor(
+        backend.reshape(rows, [1, -1]), backend.reshape(flips_t, [-1, 1])
+    )
+    rows = backend.tile(backend.reshape(rows, [1, -1]), [ngroups, 1])
+    indices = backend.stack(
+        [backend.reshape(rows, [-1]), backend.reshape(cols, [-1])], axis=1
+    )
+    return backend.coo_sparse_matrix(indices, backend.reshape(values, [-1]), (dim, dim))
 
 
 def PauliStringSum2COO(
@@ -2404,11 +2742,24 @@ def PauliStringSum2COO(
     :param weight: 1D Tensor, each element corresponds the weight for each Pauli string
         defaults to None (all Pauli strings weight 1.0)
     :type weight: Optional[Sequence[float]], optional
-    :param numpy: default False. If True, return numpy coo
+    :param numpy: default False. If True, return scipy coo
         else return backend compatible sparse tensor
     :type numpy: bool
-    :return: the scipy coo sparse matrix
+    :return: the COO sparse matrix
     :rtype: Tensor
+
+    .. note::
+        Host-built matrices (``numpy=True`` and the numpy, tensorflow and cupy
+        backends) are in canonical row-major order with explicit zeros removed.
+        The jax and pytorch backends assemble the matrix on device: it stores
+        one entry per distinct X/Y flip pattern per row, keeping exact
+        cancellations as explicit zeros. With jax, both construction paths are
+        jittable and differentiable with respect to ``weight``: concrete ``ls``
+        is grouped on the host as above, while a traced ``ls`` sums one matrix
+        per term, which is faster to rebuild inside ``jit`` but stores one entry
+        per term per row and is slower for matvec. With pytorch, the matrix is
+        built on the default device and is not differentiable with respect to
+        ``weight``.
 
     .. note::
         For structured operators beyond qubit Pauli strings, see `TenCirPauli
@@ -2416,66 +2767,43 @@ def PauliStringSum2COO(
         includes fermionic, bosonic, qudit, and hybrid operators, with sparse
         and matrix-free targets.
     """
-    # numpy version is 3* faster!
-
-    nterms = len(ls)
-    if weight is None:
-        weight = [1.0] * nterms
-    weight = num_to_tensor(weight)
-    ls = num_to_tensor(ls)
-    global PauliString2COO_jit
-    if backend.name not in PauliString2COO_jit:
-        PauliString2COO_jit[backend.name] = backend.jit(
-            PauliString2COO, jit_compile=True
-        )
-    if backend.name == "jax" and not numpy:
-        # Use vmap to generate batched BCOO and then sum reduction
-        # This keeps everything in JAX/tracers and avoids backend.numpy()
-        batch_f = backend.vmap(
-            PauliString2COO_jit[backend.name], vectorized_argnums=(0, 1)
-        )
-        rsparses = batch_f(ls, weight)
-        rsparse = rsparses.sum(axis=0)  # Sum over the batch dimension (terms)
-
-    else:
-        rsparses = [
-            backend.numpy(PauliString2COO_jit[backend.name](ls[i], weight[i]))  # type: ignore
-            for i in range(nterms)
-        ]
-        rsparse = _dc_sum(rsparses)
-    # auto transformed into csr format!!
-    if (backend.is_tensor(rsparse) or backend.is_sparse(rsparse)) and not hasattr(
-        rsparse, "tocoo"
-    ):
-        if numpy:
-            return backend.numpy(rsparse)
-        return rsparse
-
-    rsparse = rsparse.tocoo()
-    if numpy:
-        return rsparse
-    return backend.coo_sparse_matrix_from_numpy(rsparse)
-
-
-def _dc_sum(l: List[Any]) -> Any:
-    """
-    For the sparse sum, the speed is determined by the non zero terms,
-    so the DC way to do the sum can indeed bring some speed advantage (several times)
-
-    :param l: list of sparse matrices to sum elementwise
-    :type l: List[Any]
-    :return: the elementwise sum of the matrices, computed via divide-and-conquer
-        recursion for sparse-matrix efficiency
-    :rtype: Any
-    """
-    n = len(l)
-    if n > 2:
-        return _dc_sum(l[: n // 2]) + _dc_sum(l[n // 2 :])
-    else:
-        return sum(l)
+    return _pauli_sum_sparse(ls, weight, numpy, csr=False)
 
 
 PauliStringSum2COO_numpy = partial(PauliStringSum2COO, numpy=True)
+
+
+def PauliStringSum2CSR(
+    ls: Sequence[Sequence[int]],
+    weight: Optional[Sequence[float]] = None,
+    numpy: bool = False,
+) -> Tensor:
+    """
+    Generate CSR sparse matrix from Pauli string sum.
+    Works with any backend; set ``numpy=True`` to obtain a ``scipy`` CSR matrix.
+    TensorFlow has no CSR format, so a COO ``tf.SparseTensor`` is returned with a warning.
+
+    :param ls: 2D Tensor, each row is for a Pauli string,
+        e.g. [1, 0, 0, 3, 2] is for :math:`X_0Z_3Y_4`
+    :type ls: Sequence[Sequence[int]]
+    :param weight: 1D Tensor, each element corresponds the weight for each Pauli string
+        defaults to None (all Pauli strings weight 1.0)
+    :type weight: Optional[Sequence[float]], optional
+    :param numpy: default False. If True, return scipy csr
+        else return backend compatible sparse tensor
+    :type numpy: bool
+    :return: the CSR sparse matrix
+    :rtype: Tensor
+    """
+    if backend.name == "tensorflow" and not numpy:
+        warnings.warn(
+            "TensorFlow has no CSR sparse format; returning a COO SparseTensor."
+        )
+        return _pauli_sum_sparse(ls, weight, numpy, csr=False)
+    return _pauli_sum_sparse(ls, weight, numpy, csr=True)
+
+
+PauliStringSum2CSR_numpy = partial(PauliStringSum2CSR, numpy=True)
 
 
 def PauliStringSum2COO_tf(
@@ -2546,9 +2874,6 @@ def PauliString2COO(l: Sequence[int], weight: Optional[float] = None) -> Tensor:
     return ps2coo_core(idx_x, idx_y, idx_z, weight, n)
 
 
-PauliString2COO_jit = {"numpy": PauliString2COO}
-
-
 def ps2coo_core(
     idx_x: Tensor, idx_y: Tensor, idx_z: Tensor, weight: Tensor, nqubits: int
 ) -> Tuple[Tensor, Tensor]:
@@ -2556,19 +2881,14 @@ def ps2coo_core(
     idx1 = num_to_tensor(backend.arange(s), dtype=idtypestr)
     idx2 = (idx1 ^ idx_x) ^ (idx_y)
     indices = backend.transpose(backend.stack([idx1, idx2]))
-    tmp = idx1 & (idx_y | idx_z)
-    e = idx1 * 0
+    signs = _pauli_parity_signs(backend, idx1, idx_y | idx_z, nqubits)
     ny = 0
     for i in range(nqubits):
-        # if tmp[i] is power of 2 (non zero), then e[i] = 1
-        e ^= backend.right_shift(tmp, i) & 0b1
         # how many 1 contained in idx_y
         ny += backend.right_shift(idx_y, i) & 0b1
     ny = backend.mod(ny, 4)
     values = (
-        num_to_tensor(1 - 2 * e)
-        * ((num_to_tensor(-1.0j) ** num_to_tensor(ny)))
-        * weight
+        num_to_tensor(signs) * ((num_to_tensor(-1.0j) ** num_to_tensor(ny))) * weight
     )
     return backend.coo_sparse_matrix(indices=indices, values=values, shape=(s, s))  # type: ignore
 
@@ -2593,10 +2913,13 @@ def count_s2d(
     :rtype: Tensor
     """
     dim = 2 if dim is None else dim
+    # ``mode="add"``: jittable ``sample2count`` pads with index -1 and count 0,
+    # which must not overwrite the last entry
     return backend.scatter(
         backend.cast(backend.zeros([dim**n]), srepr[1].dtype),
         backend.reshape(srepr[0], [-1, 1]),
         srepr[1],
+        mode="add",
     )
 
 
@@ -2606,7 +2929,7 @@ counts_v2t = count_s2d
 def count_d2s(drepr: Tensor, eps: float = 1e-7) -> Tuple[Tensor, Tensor]:
     """
     measurement shots results, dense representation to sparse tuple representation
-    non-jittable due to the non fixed return shape
+    The output length depends on input values, so this function is not JIT-compatible.
     count_tuple to count_vector
 
     :Example:
@@ -2621,17 +2944,12 @@ def count_d2s(drepr: Tensor, eps: float = 1e-7) -> Tuple[Tensor, Tensor]:
     :return: (indices, values) of entries with absolute value greater than eps
     :rtype: Tuple[Tensor, Tensor]
     """
-    # unjittable since the return shape is not fixed
-    # tf.boolean_mask is better but no jax counterpart
-    xl = []
-    cl = []
-    for i, j in enumerate(drepr):
-        if backend.abs(j) > eps:
-            xl.append(i)
-            cl.append(j)
-    xl = backend.convert_to_tensor(xl)
-    cl = backend.stack(cl)
-    return xl, cl
+    drepr = backend.convert_to_tensor(drepr)
+    mask = backend.abs(drepr) > eps
+    indices = backend.where(mask)[0]
+    if backend.name == "tensorflow":
+        indices = backend.cast(indices, "int32")
+    return indices, drepr[mask]
 
 
 count_t2v = count_d2s
@@ -2736,15 +3054,10 @@ def count_vector2dict(
     dim = 2 if dim is None else dim
     b = which_backend(count)
     values = b.numpy(count).tolist()
-    out_int = {i: values[i] for i in range(dim**n)}
     if key == "int":
-        return out_int
-    else:
-        out_str = {}
-        for k, v in out_int.items():
-            kn = np.base_repr(k, base=dim).zfill(n)
-            out_str[kn] = v
-        return out_str
+        return dict(enumerate(values))
+    labels = _encode_basis_labels(np.arange(dim**n), n, dim)
+    return dict(zip(labels, values))
 
 
 def count_tuple2dict(
@@ -2770,12 +3083,9 @@ def count_tuple2dict(
     out_int = {i: j for i, j in zip(indices, values) if i >= 0}
     if key == "int":
         return out_int
-    else:
-        out_str = {}
-        for k, v in out_int.items():
-            kn = np.base_repr(k, base=dim).zfill(n)
-            out_str[kn] = v
-        return out_str
+    index = np.array(list(out_int), dtype=np.int64)
+    labels = _encode_basis_labels(index, n, dim)
+    return dict(zip(labels, out_int.values()))
 
 
 @partial(arg_alias, alias_dict={"counts": ["shots"], "format": ["format_"]})
@@ -2906,7 +3216,8 @@ def sample2all(
     :type n: int
     :param format: see :py:func:`tensorcircuit.quantum.measurement_results`, defaults to "count_vector"
     :type format: str, optional
-    :param jittable: only applicable to count transformation in jax backend, defaults to False
+    :param jittable: if True, jax backend returns ``count_tuple`` padded to the fixed size ``d**n``
+        so that it can be jitted, defaults to False; ``count_vector`` is always jittable
     :type jittable: bool, optional
     :param dim: local dimension (2 for qubit; >2 for qudit), defaults to 2
     :type dim: Optional[int]
@@ -2922,29 +3233,36 @@ def sample2all(
         if format == "sample_bin":
             return sample
         if format == "count_dict_bin":
-            binary_strings = ["".join(map(str, shot)) for shot in sample]
-            return dict(Counter(binary_strings))
+            labels = _encode_basis_labels(backend.numpy(sample), n, dim)
+            return dict(Counter(labels))
         raise ValueError(f"n={n} is too large for measurement representaion: {format}")
 
     if len(backend.shape_tuple(sample)) == 1:
+        if format == "sample_bin":
+            return sample_int2bin(sample, n, dim=dim)
         sample_int = sample
-        sample_bin = sample_int2bin(sample, n, dim=dim)
     elif len(backend.shape_tuple(sample)) == 2:
+        if format == "sample_bin":
+            return sample
         sample_int = sample_bin2int(sample, n, dim=dim)
-        sample_bin = sample
     else:
         raise ValueError("unrecognized tensor shape for sample")
 
     if format == "sample_int":
         return sample_int
-    elif format == "sample_bin":
-        return sample_bin
+    elif format == "count_vector":
+        # the backend default integer dtype, as the counts of ``sample2count``
+        count_dtype = backend.dtype(backend.arange(1))
+        return backend.scatter(
+            backend.zeros([dim**n], dtype=count_dtype),
+            backend.reshape(sample_int, [-1, 1]),
+            backend.ones_like(sample_int, dtype=count_dtype),
+            mode="add",
+        )
     else:
         count_tuple = sample2count(sample_int, n, jittable=jittable, dim=dim)
         if format == "count_tuple":
             return count_tuple
-        elif format == "count_vector":
-            return count_s2d(count_tuple, n, dim=dim)
         elif format == "count_dict_bin":
             return count_tuple2dict(count_tuple, n, key="bin", dim=dim)
         elif format == "count_dict_int":

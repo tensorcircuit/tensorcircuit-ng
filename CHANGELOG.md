@@ -2,27 +2,161 @@
 
 ## Unreleased
 
+### Added
+
+- Add backend methods `unstack` and `unstack_scalars`; splitting parameters once with `unstack_scalars` instead of indexing them at every gate can accelerate JAX jit compilation.
+
+## v1.11.0
+
 ### Changed
 
-- Apply local readout calibration inverses as tensor products without materializing a dense calibration matrix.
-- Preserve the MPS tensor network and physical site dimensions when exporting states as `QuVector`, avoiding full wavefunctions for local reduced states and MPO expectations.
-- Avoid allocating a full identity matrix when constructing NumPy one-hot vectors and respect the configured real dtype.
-- Reduce JAX SVD backward memory and computation for rectangular matrices by avoiding full-size projection matrices.
-- Import Qiskit initialization states by reversing tensor axes instead of allocating a dense permutation matrix.
-- Compute second-order Rényi entropy directly from dense matrix entries, avoiding a cubic-cost matrix product.
-- Evaluate Krylov time correlations and bilinear resolvents in the projected space without materializing full state batches.
-- Compute classical-shadow Pauli expectations directly from raw measurement snapshots without constructing local density matrices.
-- Compute finite-shot correlations from selected sample bits without materializing a complete bit matrix.
+- **Migration:** cloud `set_token` keeps tokens in the current process unless `cached=True`. Tokens are looked up from `set_token`, then `TC_TOKEN_<PROVIDER>`, then the auth file; the generic `TC_TOKEN` is no longer read.
+
+- **Migration:** paid cloud submissions are sent once instead of retried, raising `tc.cloud.utils.SubmissionUnknown` if the tasks may have been accepted and `SubmissionRejected` if rejected.
+
+- **Migration:** the `local` cloud provider returns only the measured bits, like hardware providers.
+
+- **Migration:** cloud provider modules are imported on first use, so use `import tensorcircuit.cloud.tencent` before `tc.cloud.tencent`. Provider APIs that are not implemented raise `NotImplementedError`.
+
+- **Migration:** `cloud.wrapper.batch_expectation_ps` mitigates readout errors with the device properties of the measured qubits by default; `readout_cals="system"` runs the calibration circuits on each call instead of caching them on the device.
+
+- `cloud.wrapper.batch_expectation_ps` greedily groups qubit-wise commuting Pauli strings and measures each group with one circuit, e.g. two circuits instead of one per term for an Ising Hamiltonian; `shots` now counts per group.
+
+- Compute pure-state entanglement entropy, mutual information and anti-flatness on the smaller subsystem, which slightly changes entropy values.
+
+- `aslinearoperator` keeps JAX sparse matrices as BCOO on accelerators.
+
+- Mark `tensorcircuit.results.qem` and the CuPy backend as experimental with `tc.utils.ExperimentalWarning`.
+
+- Generic `jacfwd`, `jacrev` and `hessian` differentiate only the selected arguments; TensorFlow `jvp` returns zero tangents instead of `None` for disconnected outputs.
 
 ### Added
 
-- Support qudit density-matrix simulation with `tc.DMCircuit(n, dim=d)` for `d > 2`, including explicit single- and multi-site `unitary` gates and Kraus channels via `apply_general_kraus`.
+- Add `DMCircuit2.apply_superoperator` to apply a channel given as a superoperator.
+
+- Add `tc.timeevol.mesolve` for differentiable Lindblad evolution of dense density matrices on JAX with diffrax, including Hermitian `LinearOperator` Hamiltonians and user-defined vectorized generators through `mode="raw"`. Add `tc.quantum.Lindblad2PauliStringSum` to translate Pauli Hamiltonians and jumps, each represented as `(structures, weights)`, for use with `PauliStringSum2MVP`. The diffrax ODE solvers also accept `dtmax` to bound the internal step size and `jump_ts` for known discontinuities.
+
+- Add `delay_instruction(*index, duration, unit="ns")` for idling qubits, stored in nanoseconds, with no effect on simulation. `to_qiskit` and `from_qiskit` convert it from and to the qiskit `Delay` in SI units; a `Delay` in `dt` is skipped with a warning. `to_openqasm` raises on delays, since OpenQASM 2 cannot hold their unit. The `lqcloud` provider sends it as the native `delay`, and `properties_to_target` supports it.
+
+- `to_qir(enable_instruction=True)` returns the gates and instructions in time order, which `from_qir`, `append_from_qir` and `qir2qiskit` accept.
+
+- Add the LQCloud (逻辑比特) cloud provider `lqcloud`, compiling circuits locally to native gates, with native batch submission and `batch_expectation_ps`; install the `lqcloud` SDK separately.
+
+- Add the Qboson (玻色量子) cloud provider `qboson`, running Ising problems `source=J` or `source={"J": J, "h": h}` on the coherent Ising machine `qboson::cim` and returning low energy spin configurations as bitstrings; install the `kaiwu` SDK separately.
+
+- Add noise aware layout by default for the `lqcloud` provider and `batch_expectation_ps`, via `compiler.qiskit_compiler.properties_to_target` and `DefaultCompiler(properties=...)`; qubits and couplers of unknown errors are not used.
+
+- Add mid-circuit and repeated measurements and resets to the `lqcloud` provider, each measurement to its own classical bit, the measured qubit going on without reset unless a `reset_instruction` is given, with `x21` added after the two-state readout; pass other SDK options, e.g. `dynamic_decoupling`, by `run_options`.
+
+- Add `qiskit_compile` and `DefaultCompiler` of a `SymbolCircuit` with free symbols into a `SymbolCircuit` on the compiled qubits, the symbols kept in the compiled gates, so that a variational circuit is compiled once, e.g. with the noise aware `target` of a device, and each binding by `to_circuit` is submitted with `compiling=False` on the same qubits.
+
+- Add `params` and `info` to `cloud.wrapper.batch_expectation_ps`: a `SymbolCircuit` is compiled once and bound by each of `params`, all submitted together, e.g. for the parameter shift gradient, and a circuit compiled beforehand with its `info` is not compiled again, keeping its layout over the iterations of a variational algorithm. `qiskit2tc` binds qiskit parameters to sympy symbols with `circuit_constructor=SymbolCircuit`, and `properties_to_target` compiles to the `native_gates` of the properties by default. See `examples/cloud_parameter_shift_vqe.py`.
+
+- Add `variants` to `cloud.wrapper.batch_expectation_ps`, expanding each measurement circuit into variants submitted in one batch, with the results on the last axes; with `device=None` and the compiled circuit's `info`, the same variants are simulated exactly. Add the error mitigation methods `Twirl`, `CDR`, `Fold` and `Chain` in `results.qem.mitigators` for it, each with `expand` and `combine(values, ideal)`, e.g. twirling and rescaling each Pauli string by training circuits with perturbed `rz` angles. `rc_circuit` accepts a seeded `rng`.
+
+- Add `Circuit.sample_measurements` and `DMCircuit.sample_measurements` for the records of all measurement instructions. `sample_detector`, `detector_probabilities` and `sample_measurements` support gates, noise and measurements after a `measure_instruction` without reset, the measured qubit staying in the measured state. Measurement records follow the order of the measurement instructions in all sampling modes, not the classical bits `record_index` from `from_qiskit`.
+
+- Add the readout flip probability `p` of `measure_instruction` and `mr_instruction` in detector and measurement sampling, flipping only the record; `stim2tc` keeps the flip probabilities of stim measurements, e.g. `M(0.01)`, which were dropped.
+
+- Add the opt-in local cloud task store `tc.cloud.store.TaskStore`, recording each submission from intent to result and recovering uncertain submissions by `bind`.
+
+- Add provider-independent cloud metadata in `task.details()["tensorcircuit"]`, including the `positional_logical_mapping` to physical qubits for `ReadoutMit`.
+
+- Add JAX-native TNALG MPS gate programs, sharing JIT executables across structures, batched by `stack_gate_programs` and exported to `MPSCircuit`.
+
+- Add `compiler.linear_route` for permutation-aware routing on a qubit chain, and the `remove_barriers` option of `qiskit_compile`.
+
+- Add `MPSCircuit.get_fidelity()` for the weight retained by MPS truncations.
+
+- Add `tc.templates.diagonal` for differentiable, JIT/vmap-friendly Pauli and Z-polynomial diagonals.
+
+- Add `U1Operator.mvp` for matrix-free Pauli string sums in a U(1) subspace.
+
+- Add backend `gather` and `csr_sparse_matrix`, and `PauliStringSum2CSR`.
+
+- Support qudit density-matrix simulation with `tc.DMCircuit(n, dim=d)`.
+
+- Add `cache_size` and `clear_cache()` to the contraction path cache of `OMEOptimizer`.
 
 ### Fixed
 
-- Return `numpy.ndarray` instead of `numpy.matrix` from the NumPy backend `to_dense` and `PauliStringSum2Dense(..., numpy=True)`, so elementwise products and reshapes on dense results follow array semantics.
-- Compute fidelity reliably for positive semidefinite states and preserve first-order matrix square-root responses on fixed-rank paths. `sqrtmh` now clips negative eigenvalues regardless of the retained `psd` argument.
-- Preserve double precision for Python scalar inputs of `time_correlation`, `resolvent_bilinear`, and `zero_temperature_greens_function`, and for `convert_to_tensor(..., dtype=...)` on the PyTorch backend.
+- `PyTorchBackend.dtype` spells the dtype via `str(a.dtype)` instead of `a.dtype.__str__()`, so reading the backend dtype no longer graph-breaks `torch.compile` rounds.
+
+- Depolarizing and thermal relaxation channels work under jit and autodiff with tensor parameters.
+
+- `thermalrelaxationchannel(..., "ByChoi")` keeps small nonzero excited-state populations.
+
+- `DMCircuit2` channels on negative qubit indices act correctly.
+
+- QR/RQ gradients are no longer suppressed when a diagonal entry of R is below the regularization threshold, which also fixes affected MPS gradients. The threshold is now `1e-6` in single precision and stays `1e-8` in double precision.
+
+- `qem.rc_circuit` keeps measurement instructions, and its circuits export to qiskit >= 1.0.
+
+- Measurement, reset and barrier instructions are kept in order by `copy`, `append`, `prepend`, `initial_mapping` and `qem` rebuilds, with the measurements of an appended circuit recorded after the existing classical bits and absolute detector indices shifted accordingly; this also fixes measurements lost by `from_qiskit` with composite gates. Detector lookbacks count the preceding measurements rather than classical bits, and `circuit_to_zx` orders the instructions of a `Circuit` as elsewhere.
+
+- `cloud.wrapper.batch_expectation_ps` returns a real weighted sum for exact simulation with `ws`, as on a device, instead of a complex one.
+
+- `qiskit_compile` keeps the `inputs` state.
+
+- `Circuit.from_qiskit` preserves qubit order when importing a `HamiltonianGate` with an asymmetric generator.
+
+- `SymbolCircuit.to_circuit` and `bind` keep the measure, reset and barrier instructions, which `SymbolCircuit.to_qiskit(enable_instruction=True)` now exports; `to_qiskit(enable_inputs=True)` raises for an `inputs` state instead of dropping it.
+
+- `Circuit.from_qiskit` binds parameter expressions of named `Parameter`s, e.g. `rz(2 * a + 0.3)`, which raised `AttributeError`, also on qiskit 2.
+
+- `Circuit.detector_probabilities` and detector sampling with `allow_state=True` keep the `inputs` state when the circuit has mid-circuit or repeated measurements, resets, noise or readout flips.
+
+- The `local` cloud provider returns counts from mid-circuit measurements on qubit `Circuit` inputs, including resets and readout flips. Unwritten classical bits are zero, repeated writes use the last result, and batch submissions honor per-circuit shot counts.
+
+- `Circuit.to_json` / `from_json` keep noise channels, diagonal and custom-named gates, measure / reset / barrier instructions and the circuit size; the JSON layout changes accordingly.
+
+- `Circuit.from_qsim_file` interprets the mixing angle of `fs` and `fsim` gates in radians.
+
+- Hide proxy credentials in cloud debug logs; Tencent `resubmit_task` returns a task bound to its device.
+
+- Result bits follow the `record_index` (classical bit) of measure instructions instead of their order, in `get_positional_logical_mapping`, `qiskit_compile` and the qiskit / OpenQASM translation.
+
+- `Circuit.from_openqasm(..., keep_measure_order=True)` preserves measurements between gates and raises `ValueError` if two measurements write to the same classical bit.
+
+- Fix MPS truncation fidelity estimates, per-gate split overrides and `max_truncation_err`, and underflow in MPS measurement.
+
+- Fix biased `probability_sample` for large float32 distributions (about 30% total variation at 24 qubits); external `status` may have shape `[shots, 2]` for the new two-level sampling.
+
+- Fix correlated TensorFlow random streams for adjacent integer seeds.
+
+- Fix finite-shot `count_vector` on JAX with `jittable=True`, `sample_bin` for int64 on TensorFlow and qudits on PyTorch, and `count_dict_bin` keys for large systems; result format conversions now share one implementation (ideas from #232, #237, #238 and #242).
+
+- Fix contracting hyperedge networks with several open legs or no tensor, e.g., `Circuit.matrix()` with an idle qubit.
+
+- Fix generic `jacfwd`, `jacrev` and `hessian` for negative `argnums`, and `jacrev` for outputs of different sizes.
+
+- Fix PyTorch Jacobian and Hessian transforms, entropy gradients, complex SVD, int32 scatter indices under vmap, `PauliStringSum2COO`, `PauliStringSum2MVP` and 1D `sparse_dense_matmul`.
+
+- Fix `experimental.qng(..., mode="rev")` on TensorFlow and PyTorch.
+
+- Recognize traced JAX arrays in backend `is_tensor`.
+
+- TensorFlow backend `grad` and its variants return dense tensors instead of `IndexedSlices`.
+
+- NumPy backend `to_dense` and `PauliStringSum2Dense(..., numpy=True)` return `ndarray` instead of `matrix`; NumPy one-hot vectors respect the configured dtype.
+
+- Pauli propagation uses the gate matrices recorded in the circuit, so renamed and inverted gates propagate correctly, and `apply_gate` accepts aliases such as `cx`.
+
+- Preserve two-qubit depolarizing noise when sampling Stim detector trajectories.
+
+- The ZX converter maps X to Y and Y to X for Stim's `H_XY` gate.
+
+- Compute fidelity reliably for positive semidefinite states; `sqrtmh` always clips negative eigenvalues.
+
+- Preserve double precision of Python scalar inputs in `time_correlation`, `resolvent_bilinear`, `zero_temperature_greens_function` and PyTorch `convert_to_tensor`.
+
+- Remove the bias of `shadows.renyi_entropy_2` by excluding same-shot pairs; `repeat >= 2` is now required.
+
+- Fix `spectral.fft_spectrum` for single-precision time grids and inside `tf.function`.
+
+- Reduce memory of Qiskit translation of initial states and controlled unitaries, readout error mitigation, MPS `QuVector` export, JAX SVD backward and Krylov time correlations by avoiding dense intermediates.
+
+- Speed up MPS sampling, Pauli string sum matrices and `U1Circuit.expectation_pss`, Clifford gates in `SparsePauliPropagationEngine`, classical-shadow expectations and finite-shot correlations, truncated free energies and Rényi entropies, and `QuOperator` network checks.
 
 ## v1.10.0
 

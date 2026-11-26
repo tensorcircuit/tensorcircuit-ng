@@ -296,6 +296,62 @@ def test_dmcircuit_inverse():
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+def test_dmcircuit2_superoperator(backend, highp):
+    def f(theta, p):
+        c = tc.DMCircuit2(2)
+        c.h(0)
+        c.rx(1, theta=theta)
+        c.cnot(0, 1)
+        c.apply_general_kraus(tc.channels.isotropicdepolarizingchannel(p, 2), 0, 1)
+        return c.densitymatrix()
+
+    def g(theta, p):
+        # rx on qubit 1 and the cnot composed with the channel into one superoperator
+        u = tc.backend.reshapem(tc.gates.cnot().tensor) @ tc.backend.kron(
+            tc.backend.eye(2), tc.gates.rx_gate(theta).tensor
+        )
+        kraus = tc.channels.isotropicdepolarizingchannel(p, 2)
+        s = tc.channels.kraus_to_super_gate(kraus) @ tc.channels.kraus_to_super_gate(
+            [tc.gates.Gate(u)]
+        )
+        c = tc.DMCircuit2(2)
+        c.h(0)
+        c.apply_superoperator(s, 0, 1)
+        return c.densitymatrix()
+
+    def g_reversed(theta):
+        # legs follow the order of index
+        u = tc.backend.kron(tc.gates.rx_gate(theta).tensor, tc.backend.eye(2))
+        c = tc.DMCircuit2(2)
+        c.h(0)
+        c.apply_superoperator(tc.channels.kraus_to_super_gate([tc.gates.Gate(u)]), 1, 0)
+        c.cnot(0, 1)
+        c.apply_general_kraus(tc.channels.isotropicdepolarizingchannel(p, 2), 0, 1)
+        return c.densitymatrix()
+
+    theta = tc.backend.convert_to_tensor(0.7)
+    p = tc.backend.convert_to_tensor(0.1)
+    np.testing.assert_allclose(tc.backend.jit(g)(theta, p), f(theta, p), atol=1e-8)
+    np.testing.assert_allclose(g_reversed(theta), f(theta, p), atol=1e-8)
+
+    def negative_index(theta, superop):
+        c = tc.DMCircuit2(2)
+        c.h(1)
+        if superop:
+            s = tc.channels.kraus_to_super_gate([tc.gates.rz_gate(theta)])
+            c.apply_superoperator(s, -1)
+        else:
+            c.rz(-1, theta=theta)
+        return c.densitymatrix()
+
+    np.testing.assert_allclose(
+        tc.backend.jit(lambda t: negative_index(t, True))(theta),
+        negative_index(theta, False),
+        atol=1e-8,
+    )
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
 def test_perfect_sampling_with_status(backend):
     n = 3
 

@@ -152,6 +152,9 @@ def qng(
             jac = backend.jacrev(f)(params)
             jac = backend.cast(jac, dtypestr)  # incase input is real
             # may have R->C issue for rev mode, which we obtain a real Jacobian
+            if backend.name != "jax":
+                # tf and torch vjp return the conjugate Jacobian
+                jac = backend.conj(jac)
         jac = backend.transpose(jac)
         if kernel == "qng":
 

@@ -4,6 +4,7 @@ FiniteMPS from tensornetwork with bug fixed
 
 # pylint: disable=invalid-name
 
+from functools import partial
 from typing import Any, Optional, List, Sequence
 
 import numpy as np
@@ -177,6 +178,8 @@ class FiniteMPS(tn.FiniteMPS):  # type: ignore
     def copy(self) -> "FiniteMPS":
         tensors = [backend.copy(item) for item in self.tensors]
         result = FiniteMPS(tensors, backend=self.backend, canonicalize=False)
+        result.qr = partial(self.backend.qr, pivot_axis=2)
+        result.rq = partial(self.backend.rq, pivot_axis=1)
         result.center_position = self.center_position
         return result
 

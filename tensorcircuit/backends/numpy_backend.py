@@ -5,14 +5,14 @@ Backend magic inherited from tensornetwork: numpy backend
 # pylint: disable=invalid-name
 
 import logging
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
 import tensornetwork
 from scipy.linalg import expm, solve, schur
 from scipy.special import softmax, expit, ive, jv
-from scipy.sparse import coo_matrix, issparse
+from scipy.sparse import coo_matrix, csr_matrix, issparse
 from scipy.sparse.linalg import lobpcg, LinearOperator
 from tensornetwork.backends.numpy import numpy_backend
 from .abstract_backend import ExtendedBackend
@@ -193,6 +193,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
 
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return np.stack(a, axis=axis)
+
+    def unstack(self, a: Tensor, axis: int = 0) -> List[Tensor]:
+        return list(np.moveaxis(a, axis, 0))
 
     def concat(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return np.concatenate(a, axis=axis)
@@ -429,6 +432,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
             shape = (shape,)
         return g.choice(a, size=shape, replace=True, p=p)
 
+    def gather(self, operand: Tensor, indices: Tensor, axis: int = 0) -> Tensor:
+        return np.take(operand, indices, axis=axis)
+
     def scatter(
         self, operand: Tensor, indices: Tensor, updates: Tensor, mode: str = "update"
     ) -> Tensor:
@@ -457,6 +463,11 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         self, indices: Tensor, values: Tensor, shape: Tensor
     ) -> Tensor:
         return coo_matrix((values, (indices[:, 0], indices[:, 1])), shape=shape)
+
+    def csr_sparse_matrix(
+        self, indptr: Tensor, indices: Tensor, values: Tensor, shape: Tensor
+    ) -> Tensor:
+        return csr_matrix((values, indices, indptr), shape=shape)
 
     def sparse_dense_matmul(
         self,
@@ -556,6 +567,7 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
         )
         if isinstance(vectorized_argnums, int):
             vectorized_argnums = (vectorized_argnums,)
+        vectorized_argnums = tuple(sorted(vectorized_argnums))
 
         def wrapper(*args: Any, **kws: Any) -> Tensor:
             results = []

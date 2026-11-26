@@ -51,6 +51,33 @@ def test_dep(backend):
     for c1, c2 in zip(cs, cs2):
         np.testing.assert_allclose(c1.tensor, c2.tensor)
 
+    with pytest.raises(ValueError):
+        tc.channels.generaldepolarizingchannel(0.5, 1)
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_dep_tensor_strength(backend):
+    def f(p):
+        c = tc.DMCircuit(2)
+        c.h(0)
+        c.cnot(0, 1)
+        c.apply_general_kraus(tc.channels.isotropicdepolarizingchannel(p, 2), [(0, 1)])
+        c.apply_general_kraus(
+            tc.channels.generaldepolarizingchannel([p / 3, 0.0, p / 6], 1), [(1,)]
+        )
+        return tc.backend.real(c.expectation_ps(x=[0, 1]))
+
+    v, g = tc.backend.jit(tc.backend.value_and_grad(f))(
+        tc.backend.convert_to_tensor(0.3)
+    )
+    # <XX> = (1 - 16p/15) (1 - p/3) for the two channels above
+    np.testing.assert_allclose(v, 0.68 * 0.9, atol=1e-5)
+    np.testing.assert_allclose(g, -16 / 15 * 0.9 - 0.68 / 3, atol=1e-5)
+
+    # the identity weight of a Python number stays exact at the fully depolarizing end
+    cs = tc.channels.isotropicdepolarizingchannel(1.0, 2)
+    np.testing.assert_allclose(tc.backend.numpy(cs[0].tensor), 0, atol=1e-6)
+
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_rep_transformation(backend):
@@ -110,6 +137,45 @@ def test_thermal(backend):
     supop2 = tc.channels.kraus_to_super(kraus)
 
     np.testing.assert_allclose(supop1, supop2, atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+def test_thermal_jit_grad(backend, highp):
+    def f(t1, t2, t, method):
+        c = tc.DMCircuit(1)
+        c.h(0)
+        kraus = tc.channels.thermalrelaxationchannel(t1, t2, t, method, 0)
+        c.apply_general_kraus(kraus, [(0,)])
+        return tc.backend.real(c.expectation_ps(x=[0]) + c.expectation_ps(z=[0]))
+
+    t = tc.backend.convert_to_tensor(3.0)
+    # ByKraus with zero excited-state population used to give a nan gradient
+    g1 = tc.backend.grad(lambda t: f(50.0, 30.0, t, "ByKraus"))(t)
+    g2 = tc.backend.grad(lambda t: f(50.0, 30.0, t, "ByChoi"))(t)
+    np.testing.assert_allclose(g1, g2, atol=1e-8)
+
+    # AUTO is jitable with tensor T1, T2 on either side of T1 = T2
+    auto = tc.backend.jit(lambda t1, t2: f(t1, t2, t, "AUTO"))
+    for t1, t2 in [(50.0, 30.0), (30.0, 50.0)]:
+        np.testing.assert_allclose(
+            auto(tc.backend.convert_to_tensor(t1), tc.backend.convert_to_tensor(t2)),
+            f(t1, t2, t, "AUTO"),
+            atol=1e-8,
+        )
+
+    # a small nonzero excited-state population keeps the |0> -> |1> transition
+    def excite(t1, t2):
+        c = tc.DMCircuit(1)
+        kraus = tc.channels.thermalrelaxationchannel(t1, t2, 3.0, "AUTO", 0.0005)
+        c.apply_general_kraus(kraus, [(0,)])
+        rho = c.densitymatrix()
+        return tc.backend.real(rho[1, 1]), tc.backend.real(rho[0, 0] + rho[1, 1])
+
+    p1, tr = tc.backend.jit(excite)(
+        tc.backend.convert_to_tensor(50.0), tc.backend.convert_to_tensor(30.0)
+    )
+    np.testing.assert_allclose(p1, 0.0005 * (1 - np.exp(-3 / 50)), atol=1e-10)
+    np.testing.assert_allclose(tr, 1.0, atol=1e-10)
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])

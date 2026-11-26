@@ -39,17 +39,20 @@ def heisenberg_energy(params, u1=False):
         for i in range(0, n, 4):
             c.x(i)
 
+    # split once instead of slicing params at every gate, which slows down jit
+    thetas = tc.backend.unstack_scalars(params)
+
     # Ansatz: layers of RZZ + RZ + iSWAP (U1-conserving gates)
     for layer in range(nlayers):
         # RZZ gates
         for i in range(n - 1):
-            c.rzz(i, i + 1, theta=params[layer, i, 0])
+            c.rzz(i, i + 1, theta=thetas[layer, i, 0])
         # RZ gates
         for i in range(n):
-            c.rz(i, theta=params[layer, i, 1])
+            c.rz(i, theta=thetas[layer, i, 1])
         # SWAP-like entangling (iswap)
         for i in range(layer % 2, n - 1, 2):
-            c.iswap(i, i + 1, theta=params[layer, i, 2])
+            c.iswap(i, i + 1, theta=thetas[layer, i, 2])
 
     # Compute Heisenberg energy using expectation_ps
     energy = 0.0
@@ -124,7 +127,9 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"Qubits: {n}, Particles: {k}, Layers: {nlayers}")
     print(f"Circuit dim: 2^{n} = {2**n}")
-    print(f"U1Circuit dim: C({n},{k}) = {U1Circuit(n, k=k, filled=[0])._dim}")
+    print(
+        f"U1Circuit dim: C({n},{k}) = {U1Circuit(n, k=k, filled=list(range(0, n, 4)))._dim}"
+    )
 
     # Initialize parameters
     np.random.seed(42)

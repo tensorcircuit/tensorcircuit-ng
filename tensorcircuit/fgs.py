@@ -993,7 +993,11 @@ class FGSSimulator:
             a tuple containing the outcome and the probabilities is returned.
         :rtype: Tensor
         """
-        p0 = backend.real(self.get_cmatrix()[ind, ind])
+        if self.cmatrix is None:
+            row = self.alpha[ind, :]
+            p0 = backend.real(backend.sum(row * backend.conj(row)))
+        else:
+            p0 = backend.real(self.cmatrix[ind, ind])
         prob = backend.convert_to_tensor([p0, 1 - p0])
         status = backend.convert_to_tensor(status)
         status = backend.cast(status, rdtypestr)

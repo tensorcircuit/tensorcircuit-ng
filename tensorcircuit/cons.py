@@ -7,11 +7,22 @@ Constants and setups
 import logging
 import sys
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from contextlib import contextmanager
 from functools import partial, reduce, wraps, lru_cache
 from operator import mul
-from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Set, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+)
 
 import numpy as np
 import opt_einsum
@@ -21,7 +32,6 @@ from networkx.utils import UnionFind
 
 from .backends.numpy_backend import NumpyBackend
 from .backends import get_backend
-from .simplify import _multi_remove
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +75,26 @@ def _get_edge_stable_key(edge: tn.Edge) -> Tuple[int, int, int, int]:
     return (id1, ax1, id2, ax2)
 
 
-def sorted_edges(edges: Iterator[tn.Edge]) -> List[tn.Edge]:
+def sorted_edges(edges: Iterable[tn.Edge]) -> List[tn.Edge]:
     return sorted(edges, key=_get_edge_stable_key)
+
+
+def get_subgraph_dangling(nodes: Iterable[tn.AbstractNode]) -> Set[tn.Edge]:
+    """
+    Linear-time replacement of ``tn.get_subgraph_dangling``: return edges that
+    are dangling or connect ``nodes`` to nodes outside of the collection.
+    """
+    nodes_set = set(nodes)
+    output = set()
+    for node in nodes_set:
+        for edge in node.edges:
+            if (
+                edge.is_dangling()
+                or edge.node1 not in nodes_set
+                or edge.node2 not in nodes_set
+            ):
+                output.add(edge)
+    return output
 
 
 package_name = "tensorcircuit"
@@ -403,7 +431,7 @@ def experimental_contractor(
                     _sizen(new_node, is_log=True),
                 )
                 nodes[i] = new_node
-                nodes = _multi_remove(nodes, [i + 1])
+                del nodes[i + 1]
                 i += 1
 
     logger.info("length of remaining nodes after dq fusion: %s" % len(nodes))
@@ -411,7 +439,7 @@ def experimental_contractor(
 
     while len(nodes) > 1:
         new_node = tn.contract_between(nodes[-1], nodes[-2], allow_outer_product=True)
-        nodes = _multi_remove(nodes, [len(nodes) - 2, len(nodes) - 1])
+        del nodes[-2:]
         nodes.append(new_node)
         logger.debug(_sizen(new_node, is_log=True))
         total_size += _sizen(new_node)
@@ -448,7 +476,7 @@ def plain_contractor(
 
     while len(nodes) > 1:
         new_node = tn.contract_between(nodes[-1], nodes[-2], allow_outer_product=True)
-        nodes = _multi_remove(nodes, [len(nodes) - 2, len(nodes) - 1])
+        del nodes[-2:]
         nodes.append(new_node)
         im_size = _sizen(new_node, is_log=True)
         logger.debug(im_size)
@@ -529,16 +557,37 @@ def _extract_topology(
         input_sets.append("".join(node_symbols))
         raw_tensors.append(node.tensor)
 
-    dangling_edges = sorted_edges(tn.get_subgraph_dangling(nodes))
-    output_set = []
+    dangling_edges = sorted_edges(get_subgraph_dangling(nodes))
+    # rank-2 deltas below keep the network dtype; a network of CopyNodes only
+    # takes the dtype declared by its CopyNodes
+    dtype = None
+    if raw_tensors:
+        dtype = raw_tensors[0].dtype
+    elif copy_nodes:
+        dtype = np.result_type(*[n.copy_node_dtype for n in copy_nodes]).name
+    input_symbols = set("".join(input_sets))
+    open_sizes = {}
+    output_set: List[str] = []
     for edge in dangling_edges:
         root = uf[edge]
         if root not in mapping_dict:
             mapping_dict[root] = get_symbol(symbol_counter)
             symbol_counter += 1
-        output_set.append(mapping_dict[root])
+        symbol = mapping_dict[root]
+        if symbol in output_set or symbol not in input_symbols:
+            # einsum cannot write a diagonal (``i->ii``) or create an index
+            # (``->i``), so tie this open leg to its hyperedge by a rank-2 delta
+            open_symbol = get_symbol(symbol_counter)
+            symbol_counter += 1
+            input_sets.append(symbol + open_symbol)
+            raw_tensors.append(backend.eye(edge.dimension, dtype=dtype))
+            input_symbols.add(symbol)
+            open_sizes[open_symbol] = edge.dimension
+            symbol = open_symbol
+        output_set.append(symbol)
 
     size_dict = {symbol: root.dimension for root, symbol in mapping_dict.items()}
+    size_dict.update(open_sizes)
     return (
         raw_tensors,
         input_sets,
@@ -657,6 +706,10 @@ class OMEOptimizer:
     ``omeco`` stays an optional dependency and is imported lazily only when this
     adapter is actually used.
 
+    Retain up to ``cache_size`` paths in least-recently-used order; zero disables
+    caching. The optimizer is fixed for this adapter's lifetime; create a new
+    adapter or call ``set_contractor`` again to change it.
+
     Example:
 
     >>> import omeco
@@ -664,8 +717,23 @@ class OMEOptimizer:
     >>> tc.set_contractor("custom", optimizer=opt, preprocessing=True)
     """
 
-    def __init__(self, optimizer: Optional[Any] = None):
-        self.optimizer = optimizer
+    def __init__(self, optimizer: Optional[Any] = None, cache_size: int = 128):
+        if cache_size < 0:
+            raise ValueError("cache_size must be nonnegative.")
+        self._optimizer = optimizer
+        self._cache_size = cache_size
+        self._path_cache: OrderedDict[Tuple[Any, ...], Tuple[Tuple[int, int], ...]] = (
+            OrderedDict()
+        )
+
+    @property
+    def optimizer(self) -> Optional[Any]:
+        """The optimizer fixed for this adapter's lifetime."""
+        return self._optimizer
+
+    def clear_cache(self) -> None:
+        """Release all retained contraction paths."""
+        self._path_cache.clear()
 
     def __call__(
         self,
@@ -684,11 +752,25 @@ class OMEOptimizer:
         inputs, output, sizes = _normalize_omeco_topology(
             input_sets, output_set, size_dict
         )
+        key = (
+            tuple(tuple(term) for term in inputs),
+            tuple(output),
+            tuple(sizes[i] for i in range(len(sizes))),
+        )
+        cached = self._path_cache.get(key)
+        if cached is not None:
+            self._path_cache.move_to_end(key)
+            return list(cached)
         if self.optimizer is None:
             tree = omeco.optimize_code(inputs, output, sizes)
         else:
             tree = omeco.optimize_code(inputs, output, sizes, self.optimizer)
-        return _omeco_tree_to_path(tree.to_dict(), len(inputs))
+        path = _omeco_tree_to_path(tree.to_dict(), len(inputs))
+        if self._cache_size:
+            self._path_cache[key] = tuple(path)
+            if len(self._path_cache) > self._cache_size:
+                self._path_cache.popitem(last=False)
+        return path
 
 
 def _wrap_omeco_optimizer(optimizer: Any) -> Any:
@@ -742,7 +824,7 @@ def _algebraic_base_contraction(
     final_node = tn.Node(final_raw_tensor, backend=be)
 
     # Resolve dangling edges in the same order as in _extract_topology
-    dangling_edges = sorted_edges(tn.get_subgraph_dangling(nodes))
+    dangling_edges = sorted_edges(get_subgraph_dangling(nodes))
 
     # Update the edges to point to the new final_node
     nodes_set = set(nodes)
@@ -790,7 +872,7 @@ def _get_path_cache_friendly(
 
     input_sets = [list([mapping_dict[id(e)] for e in node.edges]) for node in nodes_new]
     output_set = list(
-        [mapping_dict[id(e)] for e in sorted_edges(tn.get_subgraph_dangling(nodes_new))]
+        [mapping_dict[id(e)] for e in sorted_edges(get_subgraph_dangling(nodes_new))]
     )
     size_dict = {mapping_dict[id(edge)]: edge.dimension for edge in all_edges_sorted}
     logger.debug("input_sets: %s" % input_sets)
@@ -881,7 +963,7 @@ def _base(
 
     if not ignore_edge_order:
         if output_edge_order is None:
-            output_edge_order = list(tn.get_subgraph_dangling(nodes))
+            output_edge_order = list(get_subgraph_dangling(nodes))
             if len(output_edge_order) > 1:
                 raise ValueError(
                     "The final node after contraction has more than "
@@ -889,7 +971,7 @@ def _base(
                     "has to be provided."
                 )
 
-        if set(output_edge_order) != tn.get_subgraph_dangling(nodes):
+        if set(output_edge_order) != get_subgraph_dangling(nodes):
             raise ValueError(
                 "output edges are not equal to the remaining "
                 "non-contracted edges of the final node."
@@ -910,11 +992,13 @@ def _base(
     # ORIGINAL EXECUTION PATH (100% Backward Compatible)
     # ==========================================
 
+    nodes = list(nodes)
     for edge in edges:
         if not edge.is_disabled:  # if its disabled we already contracted it
             if edge.is_trace():
                 idx = [i for i, n in enumerate(nodes) if id(n) == id(edge.node1)]
-                nodes = _multi_remove(nodes, idx)
+                for i in reversed(idx):
+                    del nodes[i]
                 nodes.append(tn.contract_parallel(edge))
 
     if len(nodes) == 1:
@@ -946,8 +1030,9 @@ def _base(
             new_node = pseudo_contract_between(nodes[a], nodes[b])
         else:
             new_node = tn.contract_between(nodes[a], nodes[b], allow_outer_product=True)
+        del nodes[max(a, b)]
+        del nodes[min(a, b)]
         nodes.append(new_node)
-        nodes = _multi_remove(nodes, [a, b])
 
         logger.debug(_sizen(new_node, is_log=True))
         total_size += _sizen(new_node)

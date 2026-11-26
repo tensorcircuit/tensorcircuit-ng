@@ -4,8 +4,9 @@ This directory stores short, durable notes for future development. Read this ind
 
 ## What belongs here
 
+- This memory serves people developing on or using TensorCircuit: development conventions, interface contracts, and the basic performance choices needed for a reasonably efficient implementation. A useful test: without this note, would a general developer fail to reach a basic efficient solution or find the software hard to use?
 - Keep repo-specific lessons that are easy to forget and expensive to rediscover.
-- Prefer stable design rules, API invariants, and recurring backend pitfalls over one-off debugging logs.
+- Prefer stable design rules, API invariants, and recurring backend pitfalls over one-off debugging logs. Leave out machine-specific findings, measured numbers, and extreme tuning.
 - Update an existing topic file when possible. Create a new file only if the lesson does not fit the current taxonomy.
 
 ## Memory map
@@ -15,7 +16,7 @@ This directory stores short, durable notes for future development. Read this ind
 - `contraction_and_benchmarking.md`: Algebraic contraction invariants, path search and slicing semantics, gradient checkpointing of contraction trees, and contraction benchmark interpretation.
 - `autodiff_and_stochastic.md`: Complex AD conventions, gradient debugging workflow, stochastic-gradient rules, and real-loss requirements.
 - `circuit_models_and_api.md`: Circuit hierarchy, inverse semantics, analog evolution inversion, and QIR reconstruction rules.
-- `simulation_patterns.md`: U(1) subspace work, qudit/sparse-model guidance, and Heisenberg-style operator evolution.
+- `simulation_patterns.md`: U(1) subspace work, qudit/sparse-model guidance, Heisenberg-style operator evolution, and light-cone batching for many-term objectives.
 - `symbolic_and_translation.md`: `SymbolCircuit` construction rules, SymPy-to-JAX lambdify usage, and translation/interoperability boundaries.
 - `noise_and_qec.md`: Noise API behavior, readout-error conventions, detector sampling, and QEC post-selection patterns.
 

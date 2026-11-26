@@ -1,0 +1,29 @@
+title: "Detection of Mpemba Effect through Observables in Open Quantum Systems"
+arxiv_id: "2512.02709"
+url: "https://arxiv.org/abs/2512.02709"
+year: 2026
+authors:
+  - Pitambar Bagui
+  - Arijit Chatterjee
+  - Bijay Kumar Agarwalla
+tags:
+  - many-body-physics
+  - open-quantum-system
+tc_features:
+  - analog
+  - pauli-operator
+  - jit
+backend: jax
+hardware_requirements:
+  gpu: false
+  min_memory: "2 GB"
+card_title: "Figure 1 · Detecting the quantum Mpemba effect"
+summary: "In a dephasing lattice, the edge reveals faster relaxation of a localized particle while the center misses the slowest decay mode."
+description: "Figure 1(a–d) of Phys. Rev. B 114, 014311 (2026) at the original nine sites. A four-qubit binary encoding lets raw-mode mesolve evolve the full Lindblad equation with a matrix-free Pauli generator. A second mesolve integrates the effective nearest-neighbor walk."
+outputs:
+  - target: "Figure 1(a–d) · Entropy and local occupations"
+    path: outputs/result.png
+    script: main.py
+  - target: "Figure 1 · Time series"
+    path: outputs/curves.npz
+    script: main.py

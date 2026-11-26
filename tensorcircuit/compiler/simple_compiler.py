@@ -100,9 +100,31 @@ def _get_matrix(qir_item: Dict[str, Any], to_numpy: bool = True) -> Any:
         op = qir_item["gatef"](**qir_item["parameters"])
     if isinstance(op, QuOperator):
         m = op.eval_matrix()
+    elif isinstance(op.tensor, np.ndarray) and op.tensor.dtype == object:
+        # the sympy numbers of a ``SymbolCircuit`` gate without free symbols
+        m = np.array(op.tensor, dtype=complex)
+        return m.reshape([int(round(np.sqrt(m.size)))] * 2)
     else:
         m = backend.reshapem(op.tensor)
     return backend.numpy(m) if to_numpy else m
+
+
+def _symbolic(qir_item: Dict[str, Any]) -> bool:
+    # whether the gate has free symbols, which is never pruned
+    return any(
+        getattr(v, "free_symbols", None)
+        for v in qir_item.get("parameters", {}).values()
+    )
+
+
+def _is_identity(qir_item: Dict[str, Any], rtol: float, atol: float) -> bool:
+    if _symbolic(qir_item):
+        return False
+    m = _get_matrix(qir_item)
+    # upto a phase
+    return np.allclose(  # type: ignore
+        m / (m[0, 0] + 1e-8), np.eye(m.shape[0]), rtol=rtol, atol=atol
+    )
 
 
 def prune(
@@ -120,12 +142,7 @@ def prune(
     if output in ["tc", "circuit"]:
         c: Any = type(circuit)(**circuit.circuit_param)  # type: ignore
         for d in qir:
-            m = _get_matrix(d)
-
-            if not np.allclose(
-                m / (m[0, 0] + 1e-8), np.eye(m.shape[0]), rtol=rtol, atol=atol
-            ):
-                # upto a phase
+            if not _is_identity(d, rtol, atol):
                 if "parameters" not in d:
                     c.apply_general_gate_delayed(d["gatef"], d["name"], mpo=d["mpo"])(
                         c, *d["index"], split=d["split"]
@@ -137,17 +154,7 @@ def prune(
         return c
 
     elif output in ["qir"]:
-        nqir = []
-        for d in qir:
-            m = _get_matrix(d)
-
-            if not np.allclose(
-                m / (m[0, 0] + 1e-8), np.eye(m.shape[0]), rtol=rtol, atol=atol
-            ):
-                nqir.append(d)
-                # upto a phase
-
-        return nqir
+        return [d for d in qir if not _is_identity(d, rtol, atol)]
 
 
 # upto global phase
@@ -183,9 +190,10 @@ default_merge_rules = {
 
 def _find_next(qir: List[Dict[str, Any]], i: int) -> Optional[int]:
     index = qir[i]["index"]
-    for j, item in enumerate(qir[i + 1 :]):
+    for j in range(i + 1, len(qir)):
+        item = qir[j]
         if item["index"] == index:
-            return j + i + 1
+            return j
         for ind in item["index"]:
             if ind in index:
                 return None
@@ -324,8 +332,6 @@ def simple_compile(
         qir = prune(qir, **compiled_options)
         len1 = len(qir)
 
-    c = type(circuit).from_qir(qir, circuit.circuit_param)
-
-    for d in circuit._extra_qir:
-        c._extra_qir.append({**d, "pos": len(qir)})
+    # the instructions are all after the gates
+    c = type(circuit).from_qir(qir + circuit._extra_qir, circuit.circuit_param)
     return (c, info)

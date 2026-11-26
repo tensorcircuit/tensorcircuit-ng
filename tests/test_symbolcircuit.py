@@ -76,6 +76,16 @@ def test_init(SymbolCircuit):
     assert sc._qir == []
 
 
+def test_replace_mps_inputs_rejected(npb, SymbolCircuit):
+    sc = SymbolCircuit(1, inputs=np.array([0, 1], dtype=object))
+    mps_inputs = tc.Circuit(1).quvector()
+
+    with pytest.raises(NotImplementedError, match="mps_inputs.*SymbolCircuit"):
+        sc.replace_mps_inputs(mps_inputs)
+
+    assert sc.amplitude("1") == 1
+
+
 # ── fixed gates ────────────────────────────────────────────────────────────────
 
 
@@ -702,6 +712,49 @@ def test_to_qiskit_state_matches(SymbolCircuit, sym):
     assert np.allclose(tc_state, qk_state, atol=1e-6)
 
 
+def test_instructions_kept_by_to_qiskit_and_to_circuit(SymbolCircuit, sym):
+    pytest.importorskip("qiskit")
+    theta = sym["theta"]
+
+    def build(cls, angle):
+        c = cls(3)
+        c.rx(0, theta=angle)
+        c.cnot(0, 1)
+        c.measure_instruction(1)
+        c.reset_instruction(1)
+        c.barrier_instruction(0, 1, 2)
+        c.measure_instruction(2)
+        c.measure_instruction(0)
+        return c
+
+    def ops(qc):
+        return [
+            (
+                inst.operation.name,
+                [qc.find_bit(q).index for q in inst.qubits],
+                [qc.find_bit(b).index for b in inst.clbits],
+            )
+            for inst in qc.data
+        ]
+
+    sc = build(SymbolCircuit, theta)
+    expected = ops(build(tc.Circuit, 0.3).to_qiskit(enable_instruction=True))
+    assert ops(sc.to_qiskit(enable_instruction=True)) == expected
+    assert "measure" not in {op[0] for op in ops(sc.to_qiskit())}
+    bound = sc.to_circuit({theta: 0.3})
+    assert ops(bound.to_qiskit(enable_instruction=True)) == expected
+    assert bound.get_positional_logical_mapping() == {0: 1, 1: 2, 2: 0}
+    assert sc.bind({theta: 0.3})._extra_qir == sc._extra_qir
+
+
+def test_to_qiskit_rejects_inputs(SymbolCircuit, sym):
+    pytest.importorskip("qiskit")
+    sc = SymbolCircuit(1, inputs=np.array([0, 1]))
+    sc.rx(0, theta=sym["theta"])
+    with pytest.raises(NotImplementedError, match="inputs"):
+        sc.to_qiskit(enable_inputs=True)
+
+
 # ── multi-qubit / multi-symbol circuits ───────────────────────────────────────
 
 
@@ -1317,14 +1370,16 @@ def test_to_circuit_lambdifies_nonlinear_expression_with_jax_ad(
     theta = sym["theta"]
     sc = SymbolCircuit(1)
     sc.rx(0, theta=sympy.sin(theta))
+    sc.rx(0, theta=sympy.sin(theta))
 
     def loss(value):
         circuit = sc.to_circuit({theta: value})
         return tc.backend.real(circuit.expectation_ps(z=[0]))
 
+    np.testing.assert_allclose(loss(0.1), np.cos(2 * np.sin(0.1)), atol=1e-6)
     value, gradient = tc.backend.jit(tc.backend.value_and_grad(loss))(0.4)
-    expected_value = np.cos(np.sin(0.4))
-    expected_gradient = -np.sin(np.sin(0.4)) * np.cos(0.4)
+    expected_value = np.cos(2 * np.sin(0.4))
+    expected_gradient = -2 * np.sin(2 * np.sin(0.4)) * np.cos(0.4)
     np.testing.assert_allclose(value, expected_value, atol=1e-6, rtol=0.0)
     np.testing.assert_allclose(gradient, expected_gradient, atol=1e-6, rtol=0.0)
 
@@ -1377,12 +1432,11 @@ def test_bind_with_fixed_and_variable_gates(SymbolCircuit: Any, sym: Any) -> Non
     assert sc2.gate_count() == 2
 
 
-def test_bind_propagates_inputs(SymbolCircuit: Any, sym: Any) -> None:
+def test_bind_propagates_inputs(SymbolCircuit: Any, sym: Any, jaxb: Any) -> None:
     """bind() must propagate ``inputs``."""
     theta = sym["theta"]
 
-    inputs = np.zeros(4, dtype=complex)
-    inputs[3] = 1.0
+    inputs = np.array([0, 0, 1, 0], dtype=object)
 
     sc = SymbolCircuit(2, inputs=inputs)
     sc.rx(0, theta=theta)
@@ -1394,6 +1448,13 @@ def test_bind_propagates_inputs(SymbolCircuit: Any, sym: Any) -> None:
     assert sc2.inputs is not None
     bound = sc2.expectation_ps(z=[0])
     assert sympy.simplify(bound + 1) == 0
+
+    mapped = sc.initial_mapping({0: 2, 1: 0}, n=3)
+    np.testing.assert_allclose(
+        tc.backend.numpy(mapped.to_circuit({theta: 0.0}).state()),
+        [0, 1, 0, 0, 0, 0, 0, 0],
+        atol=1e-6,
+    )
 
 
 # -- to_qiskit coverage (various gate branches) --------------------------------

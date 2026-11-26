@@ -473,6 +473,86 @@ The methods integrate the time-dependent Schrödinger equation using JAX's ODE s
     3. Local evolution requires dense Hamiltonian matrices and is suitable for subsystems with few qubits.
     4. Both methods support callback functions to compute observables during evolution without storing all state vectors.
 
+**Lindblad master equation**
+
+``tc.timeevol.mesolve`` evolves a dense density matrix under a Hamiltonian and collapse operators on the JAX backend with ``diffrax`` installed. It uses the same time grid, callback convention, and diffrax solver options as ``ode_evol_global``. The example below computes the excited-state population of a decaying qubit for several decay rates.
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+
+    K = tc.set_backend("jax")
+    excited = K.convert_to_tensor([[0., 0.], [0., 1.]])
+    hamiltonian = K.zeros_like(excited)
+    lowering = K.convert_to_tensor([[0., 1.], [0., 0.]])
+
+    @K.jit
+    def population(gamma):
+        return tc.timeevol.mesolve(
+            hamiltonian=hamiltonian,
+            rho0=excited,
+            times=[0., 0.5, 1.],
+            c_ops=[gamma**0.5 * lowering],
+            callback=lambda rho: K.real(rho[1, 1]),
+        )  # exp(-gamma * t) at each output time
+
+    for gamma in (0.2, 0.4, 0.8):
+        print(gamma, population(gamma))
+
+Hamiltonians and collapse operators can also be functions of the form ``op(t, *args)``, with ``args`` passed after ``callback``. For a narrow smooth pulse, use an upper bound such as ``dtmax=pulse_width / 10`` to resolve its shape. For a square pulse, pass its known switching times as ``jump_ts=[t_on, t_off]`` so that an integration step does not cross either discontinuity.
+
+Hamiltonians may be dense matrices or Hermitian ``LinearOperator`` objects.
+A time-dependent ``hamiltonian(t, *args)`` may return either representation
+or an MVP function ``mvp(vector)``. For a static MVP, pass
+``aslinearoperator(mvp, shape=(D, D))``. Matrix-free Hamiltonians must be Hermitian.
+Sparse Hamiltonians built with ``aslinearoperator(PauliStringSum2COO(...))``
+also support JIT and gradients with respect to the Pauli coefficients.
+
+For a custom generator, use ``mesolve(rhs, rho0, times, mode="raw")``.
+The signature is ``rhs(vec_rho, t, *args)``: it takes and returns a flat
+vector in row-major order, ``vec_rho = K.reshape(rho, [-1])``. For N qubits,
+the first N qubit axes index rows and the last N index columns. The returned
+states and callback inputs remain matrices. Raw mode uses the same solver
+options as the default mode; include all dynamics in ``rhs`` and omit ``c_ops``.
+
+``tc.quantum.Lindblad2PauliStringSum`` translates a Hamiltonian and jumps
+written as Pauli sums into the corresponding 2N-qubit generator. The Hamiltonian
+and each jump use the same ``(structures, weights)`` representation. It merges
+duplicate strings and returns structures and weights, which can be passed to
+``PauliStringSum2MVP`` without constructing a matrix. For example, this
+self-contained calculation evolves two qubits under :math:`X_0 + X_1` with
+independent amplitude damping, using :math:`\sigma^- = (X + iY)/2`:
+
+.. code-block:: python
+
+    import tensorcircuit as tc
+
+    K = tc.set_backend("jax")
+    tc.set_dtype("complex128")
+    excited = K.convert_to_tensor([[0., 0.], [0., 1.]])
+    jumps = [
+        ([[1, 0], [2, 0]], [0.2**0.5 / 2, 1j * 0.2**0.5 / 2]),
+        ([[0, 1], [0, 2]], [0.4**0.5 / 2, 1j * 0.4**0.5 / 2]),
+    ]
+    structures, weights = tc.quantum.Lindblad2PauliStringSum(
+        ([[1, 0], [0, 1]], [1., 1.]), jumps=jumps
+    )
+    lmvp = tc.quantum.PauliStringSum2MVP(structures, weights)
+    states = tc.timeevol.mesolve(
+        lambda r, t: lmvp(r), K.kron(excited, excited), [0., 0.5, 1.], mode="raw"
+    )
+
+For time-dependent coefficients, call the translator and construct the MVP
+inside ``rhs`` from weights evaluated at ``t``. Keep the structures static;
+weight calculations then remain JIT-compatible and differentiable with respect
+to drive amplitudes or rates. Use ``complex128`` for widely separated rates
+or Hamiltonian coefficients.
+
+For smooth, nonstiff evolution at tight tolerances (for example,
+``rtol <= 1e-10``), try ``solver="Dopri8"``. Its higher order can reduce
+the cost of reaching a given accuracy. Select tolerances using the error
+against a converged reference for the states or observables of interest.
+
 **Comparison of Time Evolution Methods:**
 
 +--------------------------+----------------+------------------+------------------+------------------+

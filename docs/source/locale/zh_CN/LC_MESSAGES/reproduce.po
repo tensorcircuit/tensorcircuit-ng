@@ -1,0 +1,108 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2020-2026, TensorCircuit-NG Development Team. Created by
+# Shi-Xin Zhang.
+# This file is distributed under the same license as the tensorcircuit-ng
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: tensorcircuit-ng \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-24 15:38+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../source/reproduce.rst:2
+msgid "Executable Research Hub"
+msgstr "可执行研究枢纽"
+
+#: ../../source/reproduce.rst:4
+msgid "From published quantum knowledge to executable research infrastructure."
+msgstr "从已发表的量子知识到可执行的研究基础设施。"
+
+#: ../../source/reproduce.rst:6
+msgid ""
+"The `Executable Research Hub <reproduce/index.html>`_ is the literature-"
+"to-artifact layer of TensorCircuit-NG's agentic research stack. It "
+"collects published quantum computing methods that have been translated "
+"into runnable, metadata-rich, and independently inspectable "
+"TensorCircuit-NG research artifacts."
+msgstr ""
+"`可执行研究枢纽 <reproduce/index.html>`_ 是 TensorCircuit-NG "
+"智能体研究栈中的文献到产物层。它收集已被转化为可运行、带丰富元数据且可独立检查的 TensorCircuit-NG 研究成果的已发表量子计算方法。"
+
+#: ../../source/reproduce.rst:10
+msgid "Open the Reproduce Papers Gallery"
+msgstr "打开论文复现画廊"
+
+#: ../../source/reproduce.rst:14
+msgid "Explore runnable paper reproductions."
+msgstr "探索可运行的论文复现。"
+
+#: ../../source/reproduce.rst:17
+msgid "What each artifact contains"
+msgstr "每个产物包含什么"
+
+#: ../../source/reproduce.rst:19
+msgid ""
+"Each entry is organized around a published paper and documents the target"
+" figure or result, implementation script, TensorCircuit-NG APIs, backend,"
+" hardware requirements, scaling strategy, and generated output. The "
+"gallery is designed for inspection and execution: read the paper, inspect"
+" the implementation, and run the artifact yourself."
+msgstr ""
+"每个条目围绕一篇已发表论文组织，记录目标图或结果、实现脚本、所用 TensorCircuit-NG "
+"API、后端、硬件需求、扩展策略以及生成的输出。画廊是为检查和执行而设计的：阅读论文、查看实现，并亲自运行该产物。"
+
+#: ../../source/reproduce.rst:21
+msgid ""
+"These are independent reimplementations rather than author-endorsed "
+"replications. Many entries are deliberately scaled down for local "
+"execution, and each entry records its simplifications and scope. They "
+"should be treated as executable illustrations and benchmark artifacts, "
+"not as claims that reproduce every detail of the original study."
+msgstr "这些是独立重实现，而非作者认可的复刻。许多条目为便于本地执行而有意缩小规模，每个条目都记录了其简化之处和范围。它们应被视为可执行的示例和基准产物，而不是对原始研究每个细节都能复现的声明。"
+
+#: ../../source/reproduce.rst:24
+msgid "How it fits the agentic research stack"
+msgstr "它如何融入智能体研究栈"
+
+#: ../../source/reproduce.rst:26
+msgid ""
+"The Hub represents one stage of the broader TensorCircuit-NG research "
+"loop:"
+msgstr "该枢纽代表更广泛的 TensorCircuit-NG 研究闭环中的一个阶段："
+
+#: ../../source/reproduce.rst:33
+msgid ""
+"The `Agentic Quantum Research guide <agentic.html>`_ describes the "
+"broader workflows for algorithm discovery, performance optimization, "
+"framework translation, code review, and scientific communication."
+msgstr "`智能体量子研究指南 <agentic.html>`_ 介绍了算法发现、性能优化、框架转换、代码审查和科学交流等更广泛的工作流。"
+
+#: ../../source/reproduce.rst:36
+msgid "Contribute an artifact"
+msgstr "贡献一个产物"
+
+#: ../../source/reproduce.rst:38
+msgid ""
+"To contribute a new entry, choose a paper, follow the conventions in "
+"`examples/reproduce_papers <https://github.com/tensorcircuit"
+"/tensorcircuit-ng/tree/master/examples/reproduce_papers>`_, document the "
+"reproduction strategy in ``meta.yaml``, generate the declared outputs, "
+"and open a pull request."
+msgstr ""
+"要贡献新条目，请选择一篇论文，遵循 `examples/reproduce_papers "
+"<https://github.com/tensorcircuit/tensorcircuit-"
+"ng/tree/master/examples/reproduce_papers>`_ 中的约定，在 ``meta.yaml`` "
+"中记录复现策略，生成声明的输出，并提交 pull request。"
+

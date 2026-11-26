@@ -171,6 +171,15 @@ TensorCircuit-NG provides several specialized alternatives:
 *   **MPO Expectation**: Use :py:func:`tensorcircuit.templates.measurements.mpo_expectation` for systems where the operator is represented as a Matrix Product Operator (MPO).
 *   **MVP (Matrix-Vector Product)**: For even larger systems where the Hamiltonian cannot be explicitly stored, use Matrix-Vector Product functions like :py:func:`tensorcircuit.quantum.PauliStringSum2MVP` to evaluate expectations without constructing the full matrix.
 
+How can I run circuits on real quantum hardware?
+------------------------------------------------
+
+Use :py:mod:`tensorcircuit.cloud`, which submits ``tc.Circuit`` objects to the QPUs of several cloud providers through the same interface: ``tencent``, ``tianyan`` and ``lqcloud``, plus a ``local`` provider that runs the tasks by numerical simulation on the local machine, for testing the workflow without hardware. Device names are given as ``"<provider>::<device>"``, and the API token of each provider is set by ``tc.cloud.apis.set_token(token, provider=...)`` or the ``TC_TOKEN_<PROVIDER>`` environment variable.
+
+For most applications, :py:func:`tensorcircuit.cloud.wrapper.batch_expectation_ps` is all you need: it compiles the circuit for the device, measures the Pauli strings in grouped and batched circuits and corrects readout errors, and with ``device=None`` returns the exact values by simulation instead. See :doc:`tutorials/lqcloud_qpu_workflow` for an end-to-end example with noise-aware compilation, the local task store and a parameter-shift VQE on hardware.
+
+The ``qboson`` provider runs Ising problems instead of circuits on the coherent Ising machine of Qboson (玻色量子): submit the coupling matrix ``J``, or ``{"J": J, "h": h}`` with fields, as ``source`` to ``"qboson::cim"``, and get low energy spin configurations as bitstrings, see :py:func:`tensorcircuit.cloud.qboson.submit_task` for the energy and bit conventions.
+
 Can I apply quantum operation based on previous classical measurement results?
 ----------------------------------------------------------------------------------------------------
 

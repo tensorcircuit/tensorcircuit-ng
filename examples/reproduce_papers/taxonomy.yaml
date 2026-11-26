@@ -43,6 +43,9 @@ tags:
   many-body-physics:
     label: "Many-Body Physics"
     aliases: ["condensed matter", "spin chain", "quantum dynamics"]
+  open-quantum-system:
+    label: "Open Quantum Systems"
+    aliases: ["Lindblad dynamics", "dissipative dynamics"]
   floquet-dynamics:
     label: "Floquet Dynamics"
     aliases: ["time crystal", "periodic driving", "DTC"]

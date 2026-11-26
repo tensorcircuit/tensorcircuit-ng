@@ -8,6 +8,13 @@ from sphinx.directives.other import TocTree
 # adpoted from https://stackoverflow.com/a/46600038
 
 
+def _normalize_language(language):
+    language = language.lower().replace("_", "-")
+    if language == "zh":
+        return "zh-cn"
+    return language
+
+
 def setup(app):
     app.add_directive("toctree-filt", TocTreeFilt)
     return {"version": "1.0.0"}
@@ -32,12 +39,12 @@ class TocTreeFilt(TocTree):
     # out any filter prefixes that we want but obviously don't want the
     # prefix to mess up the file name.
     def filter_entries(self, entries):
-        excl = [self.state.document.settings.env.config.language]
+        excl = [_normalize_language(self.state.document.settings.env.config.language)]
         filtered = []
         for e in entries:
             m = self.hasPat.match(e)
             if m != None:
-                if not m.groups()[0] in excl:
+                if _normalize_language(m.groups()[0]) not in excl:
                     filtered.append(m.groups()[1])
             else:
                 filtered.append(e)

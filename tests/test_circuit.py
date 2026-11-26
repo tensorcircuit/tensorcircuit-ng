@@ -714,22 +714,27 @@ def test_circuit_add_demo():
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
 def test_replace_mps_inputs_invalidates_expectation_cache(backend):
-    c = tc.Circuit(1)
+    c = tc.Circuit(1, inputs=tc.array_to_tensor([1, 0]))
     np.testing.assert_allclose(c.expectation_ps(z=[0]), 1)
-    source = tc.Circuit(1)
-    source.x(0)
-    c.replace_mps_inputs(source.quvector())
+    source = tc.Circuit(1, inputs=tc.array_to_tensor([0, 1])).quvector()
+    c.replace_mps_inputs(source)
+    source.out_edges[0].node1.tensor = tc.array_to_tensor([1, 0])
     np.testing.assert_allclose(c.expectation_ps(z=[0]), -1)
+    np.testing.assert_allclose(c.copy().state(), [0, 1])
+    c.measure_instruction(0)
+    np.testing.assert_allclose(c.sample_measurements(shots=3, seed=21), np.ones((3, 1)))
 
 
-def test_circuit_replace_inputs():
+@pytest.mark.parametrize("circuit_type", [tc.Circuit, tc.DMCircuit])
+def test_circuit_replace_inputs(npb, circuit_type):
     n = 3
-    c = tc.Circuit(n, inputs=np.zeros([2**n]))
+    c = circuit_type(n, inputs=np.zeros([2**n]))
     for i in range(n):
         c.H(i)
     evenstate = np.ones([2**n])
     evenstate /= np.linalg.norm(evenstate)
     c.replace_inputs(evenstate)
+    np.testing.assert_allclose(c.copy().state(), c.state(), atol=1e-6)
     for i in range(n):
         np.testing.assert_allclose(c.expectation_ps(z=[i]), 1.0, atol=1e-5)
 
@@ -741,6 +746,28 @@ def test_circuit_matrix(backend):
     c.cnot(0, 1)
     np.testing.assert_allclose(c.matrix()[3], np.array([0.0, 0.0, 0.0, 1.0]), atol=1e-5)
     np.testing.assert_allclose(c.state(), np.array([0, 1.0, 0, 0]), atol=1e-5)
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_circuit_matrix_idle_wire_and_diagonal(backend):
+    x = np.array([[0, 1.0], [1.0, 0]])
+    c = tc.Circuit(2)
+    c.x(0)
+    np.testing.assert_allclose(c.matrix(), np.kron(x, np.eye(2)), atol=1e-5)
+    np.testing.assert_allclose(
+        c.quoperator().eval_matrix(), np.kron(x, np.eye(2)), atol=1e-5
+    )
+    m = tc.Circuit(2).matrix()
+    assert m.dtype == c.state().dtype
+    np.testing.assert_allclose(m, np.eye(4), atol=1e-5)
+
+    diag = np.array([1.0, 1j])
+    c = tc.Circuit(2)
+    c.x(0)
+    c.diagonal(1, diag=tc.backend.convert_to_tensor(diag.astype(tc.dtypestr)))
+    m = c.matrix()
+    assert m.dtype == c.state().dtype
+    np.testing.assert_allclose(m, np.kron(x, np.diag(diag)), atol=1e-5)
 
 
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
@@ -1236,6 +1263,7 @@ def test_qir2qiskit(backend):
     c.x(2)
     c.y(2)
     c.z(2)
+    c.i(2)
     c.wroot(3)
     c.cnot(0, 1)
     c.cy(0, 1)
@@ -1313,8 +1341,7 @@ def test_qiskit2tc():
     qisc = QuantumCircuit(n)
     for i in range(n):
         qisc.h(i)
-    zz = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
-    exp_op = qi.Operator(zz)
+    exp_op = qi.Operator(qi.Pauli("XZ"))
     for i in range(n):
         gate = HamiltonianGate(exp_op, time=np.random.uniform())
         qisc.append(gate, [i, (i + 1) % n])
@@ -1335,6 +1362,7 @@ def test_qiskit2tc():
     qisc.x(3)
     qisc.y(3)
     qisc.z(3)
+    qisc.id(3)
     qisc.cu(
         5.868768495722669, 2.24809352294186, 3.59102783505607, 2.0223650288392, 1, 3
     )
@@ -1449,6 +1477,36 @@ def test_qiskit2tc_parameterized(backend):
                 {ansatz3_param: tc.backend.convert_to_tensor(0.618)}
             )
             assert not np.isnan(grad[ansatz3_param])
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("jaxb")])
+def test_qiskit2tc_parameter_expressions(backend):
+    qiskit = pytest.importorskip("qiskit")
+    import sympy
+    from qiskit.circuit import Parameter
+
+    a, b = Parameter("a"), Parameter("b[0]")
+    qc = qiskit.QuantumCircuit(2)
+    qc.rx(2 * a + 0.3, 0)
+    qc.cx(0, 1)
+    qc.rz(a - b, 1)
+    qc.ry(b, 1)
+    c = tc.Circuit.from_qiskit(qc, binding_params={a: 0.5, b: -0.2})
+    ref = tc.Circuit(2)
+    ref.rx(0, theta=1.3)
+    ref.cx(0, 1)
+    ref.rz(1, theta=0.7)
+    ref.ry(1, theta=-0.2)
+    np.testing.assert_allclose(c.state(), ref.state(), atol=1e-5)
+    # parameters bound to symbols give a SymbolCircuit
+    x, y = sympy.symbols("x y", real=True)
+    sc = tc.translation.qiskit2tc(
+        qc, 2, circuit_constructor=tc.SymbolCircuit, binding_params={a: x, b: y}
+    )
+    assert sc.free_symbols() == {x, y}
+    np.testing.assert_allclose(
+        sc.to_circuit({x: 0.5, y: -0.2}).state(), ref.state(), atol=1e-5
+    )
 
 
 @pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb")])
@@ -1752,6 +1810,29 @@ def test_circuit_to_json(backend):
     np.testing.assert_allclose(c.state(), c2.state(), atol=1e-5)
 
 
+@pytest.mark.parametrize("simplified", [False, True])
+def test_circuit_to_json_full_instructions(simplified):
+    c = tc.DMCircuit(3)
+    c.h(0)
+    c.diagonal(0, 2, diag=np.array([1, 1j, -1, 1]))
+    c.any(1, 2, unitary=tc.gates._swap_matrix, name="myswap")
+    c.measure_instruction(1)
+    c.depolarizing(1, px=0.1, py=0.05, pz=0.0)
+    c.reset_instruction(0)
+    c.measure_instruction(1)
+    c2 = tc.DMCircuit.from_json(c.to_json(simplified=simplified))
+    assert [d["name"] for d in c2.to_qir()] == [
+        "h",
+        "diagonal",
+        "myswap",
+        "depolarizing",
+    ]
+    assert c2._extra_qir == c._extra_qir
+    np.testing.assert_allclose(c.state(), c2.state(), atol=1e-5)
+    c2.measure_instruction(2)
+    assert c2._extra_qir[-1]["record_index"] == 2
+
+
 def test_gate_count():
     c = tc.Circuit(3)
     c.x(0)
@@ -1807,6 +1888,57 @@ measure q[0] -> c[0];"""
     # that ordering in the internal circuit state.
     assert measures_default == [1, 0]
     assert measures_ordered == [1, 0]
+    # positions follow the classical bits rather than the instruction order
+    assert c.get_positional_logical_mapping() == {0: 0, 1: 1}
+
+
+def test_from_qasm_interleaved_measurements(npb):
+    pytest.importorskip("qiskit")
+    qasm = """OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[1];
+creg first[1];
+creg second[1];
+x q[0];
+measure q[0] -> second[0];
+x q[0];
+measure q[0] -> first[0];"""
+    c = tc.Circuit.from_openqasm(qasm, keep_measure_order=True)
+    np.testing.assert_array_equal(c.sample_measurements(shots=1), [[1, 0]])
+    assert [m["record_index"] for m in c._extra_qir] == [1, 0]
+
+
+def test_from_qasm_rejects_duplicate_measurement_bit():
+    pytest.importorskip("qiskit")
+    qasm = """OPENQASM 2.0;
+qreg q[2];
+creg c[2];
+measure q -> c;
+measure q[0] -> c[1];"""
+    with pytest.raises(
+        ValueError, match="Multiple measurements write to classical bit 1"
+    ):
+        tc.Circuit.from_openqasm(qasm, keep_measure_order=True)
+
+
+def test_measure_records_follow_classical_bits():
+    qiskit = pytest.importorskip("qiskit")
+    qc = qiskit.QuantumCircuit(2, 4)
+    qc.x(0)
+    qc.measure(0, 2)
+    qc.measure(1, 0)
+    qc.measure(0, 1)
+    c = tc.Circuit.from_qiskit(qc)
+    assert c.get_positional_logical_mapping() == {0: 1, 1: 0, 2: 0}
+    c.measure_instruction(1)
+    assert c.get_positional_logical_mapping() == {0: 1, 1: 0, 2: 0, 3: 1}
+    qc2 = c.to_qiskit(enable_instruction=True)
+    assert qc2.num_clbits == 4
+    assert [
+        (qc2.find_bit(i.qubits[0]).index, qc2.find_bit(i.clbits[0]).index)
+        for i in qc2.data
+        if i.operation.name == "measure"
+    ] == [(0, 2), (1, 0), (0, 1), (1, 3)]
 
 
 def test_initial_mapping():
@@ -1824,6 +1956,10 @@ def test_initial_mapping():
         c.expectation_ps(z=[1]), c1.expectation_ps(z=[2]), atol=1e-5
     )
     assert c1._extra_qir[0]["index"][0] == 0
+    c1.measure_instruction(1)
+    assert [d["record_index"] for d in c1._extra_qir] == [0, 1]
+    c1.detector_instruction([-1])
+    assert c1.initial_mapping({0: 1, 1: 2, 2: 0})._extra_qir[-1]["index"] == [-1]
 
     c2 = c1.initial_mapping({1: 0, 2: 1, 0: 2})
     np.testing.assert_allclose(
@@ -1835,6 +1971,164 @@ def test_initial_mapping():
         c.expectation_ps(z=[1]), c3.expectation_ps(z=[7]), atol=1e-5
     )
     print(c3.draw())
+
+
+def test_initial_mapping_preserves_inputs(npb):
+    psi = tc.array_to_tensor([1, 2j, -1, 3]) / np.sqrt(15)
+    c = tc.Circuit(2, inputs=psi)
+    c.ry(0, theta=0.3)
+    state = tc.backend.numpy(c.state())
+    np.testing.assert_allclose(
+        c.initial_mapping({0: 0, 1: 1}).state(), state, atol=1e-6
+    )
+    mapped = c.initial_mapping({0: 2, 1: 0}, n=3)
+    expected = [state[0], state[2], 0, 0, state[1], state[3], 0, 0]
+    np.testing.assert_allclose(mapped.state(), expected, atol=1e-6)
+    np.testing.assert_allclose(mapped.copy().state(), expected, atol=1e-6)
+    np.testing.assert_allclose(c.state(), state, atol=1e-6)
+    pytest.importorskip("qiskit")
+    exported = tc.Circuit.from_qiskit(mapped.to_qiskit(enable_inputs=True))
+    np.testing.assert_allclose(exported.state(), expected, atol=1e-6)
+
+
+@pytest.mark.parametrize("input_key", ["mps_inputs", "tensors"])
+def test_initial_mapping_requires_explicit_mps_layout(npb, input_key):
+    tensors = [np.reshape([0, 1], (1, 2, 1)), np.reshape([1, 0], (1, 2, 1))]
+    if input_key == "mps_inputs":
+        params = {"mps_inputs": tc.Circuit(2, tensors=tensors).quvector()}
+    else:
+        params = {"tensors": tensors}
+    c = tc.Circuit(2, **params)
+    c.x(0)
+    layout = {0: 1, 1: 0}
+    with pytest.raises(ValueError, match="target layout via circuit_params"):
+        c.initial_mapping(layout)
+
+    mapped = c.initial_mapping(layout, circuit_params=params)
+    np.testing.assert_allclose(mapped.state(), [0, 0, 0, 1])
+
+
+def test_initial_mapping_rejects_operator_inputs(npb):
+    c = tc.Circuit(2, inputs=np.eye(4))
+    with pytest.raises(ValueError, match="matrix/operator inputs"):
+        c.initial_mapping({0: 1, 1: 0})
+
+
+def test_compose_keeps_instructions():
+    def sequence(c):
+        return [
+            (d["name"], list(d["index"]), d.get("record_index"))
+            for d in c.to_qir(enable_instruction=True)
+        ]
+
+    a = tc.Circuit(2)
+    a.h(0)
+    a.measure_instruction(0)
+    a.reset_instruction(0)
+    a.cnot(0, 1)
+    a.measure_instruction(1)
+    assert sequence(a.copy()) == sequence(a)
+
+    b = tc.Circuit(1)
+    b.x(0)
+    b.measure_instruction(0)
+    c = a.copy()
+    c.append(b, indices=[1])
+    assert sequence(c) == sequence(a) + [("x", [1], None), ("measure", [1], 2)]
+    c.measure_instruction(0)
+    assert c._extra_qir[-1]["record_index"] == 3
+
+    c = a.copy()
+    c.prepend(b)
+    assert sequence(c) == [("x", [0], None), ("measure", [0], 0)] + [
+        (name, index, None if r is None else r + 1) for name, index, r in sequence(a)
+    ]
+
+
+def test_qir_with_instructions():
+    measure = {"index": [0], "name": "measure", "gatef": "measure", "instruction": True}
+    c = tc.Circuit.from_json({"nqubits": 1, "qir": [], "extra_qir": [measure]})
+    c.x(0)
+    c.measure_instruction(0)
+    c.detector_instruction([0, 1])
+    qir = c.to_qir(enable_instruction=True)
+    assert [d["name"] for d in qir] == ["measure", "x", "measure", "detector"]
+    c2 = tc.Circuit.from_qir(qir)
+    assert c2._nqubits == 1
+    records = [d.get("record_index") for d in c2.copy().to_qir(enable_instruction=True)]
+    assert records == [0, None, 1, None]
+    tick = tc.Circuit.from_qir([{"name": "tick", "instruction": True}])
+    assert tick._nqubits == 1
+    assert tick.initial_mapping({0: 0})._extra_qir[0]["name"] == "tick"
+    qiskit = pytest.importorskip("qiskit")
+    qc = tc.translation.qir2qiskit([measure] + qir[1:3], 1)
+    assert isinstance(qc, qiskit.QuantumCircuit)
+    measured = [qc.find_bit(i.clbits[0]).index for i in qc.data if i.clbits]
+    assert measured == [0, 1]
+
+
+def test_qiskit2tc_composite_keeps_measurements():
+    qiskit = pytest.importorskip("qiskit")
+    sub = qiskit.QuantumCircuit(1)
+    sub.h(0)
+    qc = qiskit.QuantumCircuit(2, 2)
+    qc.measure(0, 1)
+    qc.append(sub.to_gate(), [1])
+    qc.measure(1, 0)
+    c = tc.Circuit.from_qiskit(qc)
+    assert c.get_positional_logical_mapping() == {0: 1, 1: 0}
+
+
+def test_delay_instruction_units_and_qiskit():
+    def durations(c):
+        return [
+            (d["index"], d["parameters"]["duration"])
+            for d in c.to_qir(enable_instruction=True)
+            if d["name"] == "delay"
+        ]
+
+    c = tc.Circuit(2)
+    c.h(0)
+    c.cz(0, 1)
+    c.delay_instruction(0, 1, duration=40)
+    c.cz(0, 1)
+    c.delay_instruction(1, duration=1.5, unit="us")
+    expected = [([0], 40.0), ([1], 40.0), ([1], 1500.0)]
+    assert durations(c) == expected
+    with pytest.raises(ValueError, match="dt"):
+        c.delay_instruction(0, duration=10, unit="dt")
+    # identity in simulation, and dropped by inverse like the other instructions
+    np.testing.assert_allclose(
+        c.state(), np.array([1, 0, 1, 0]) / np.sqrt(2), atol=1e-6
+    )
+    measured = c.copy()
+    measured.measure_instruction(0)
+    measured.detector_instruction([0])
+    np.testing.assert_allclose(measured.detector_probabilities(), [0.5, 0.5], atol=1e-6)
+    assert c.inverse()._extra_qir == []
+    # OpenQASM 2 has no unit, so qiskit would read the delays back in dt
+    with pytest.raises(ValueError, match="OpenQASM 2"):
+        c.to_openqasm()
+
+    qiskit = pytest.importorskip("qiskit")
+    qc = c.to_qiskit(enable_instruction=True)
+    assert [
+        (i.operation.duration, i.operation.unit)
+        for i in qc.data
+        if i.operation.name == "delay"
+    ] == [(40.0, "ns"), (40.0, "ns"), (1500.0, "ns")]
+    # qiskit >= 2 converts the delays to seconds, and keeps the gates across them
+    compiled = qiskit.transpile(
+        qc, basis_gates=["rz", "sx", "cz"], optimization_level=2
+    )
+    c2 = tc.Circuit.from_qiskit(compiled)
+    assert durations(c2) == expected and c2.gate_count("cz") == 2
+
+    qc = qiskit.QuantumCircuit(1)
+    qc.delay(25, 0, unit="ms")
+    # in the default unit dt, without a duration in nanoseconds
+    qc.delay(100, 0)
+    assert durations(tc.Circuit.from_qiskit(qc)) == [([0], 2.5e7)]
 
 
 def test_get_positional_logical_mapping():
@@ -2566,6 +2860,44 @@ def test_qsim_roundtrip(backend, tmp_path):
     m = tc.backend.numpy(c.matrix())
     np.testing.assert_allclose(m @ m.conj().T, np.eye(4), atol=1e-5)
 
+    qsim_path.write_text("2\n0 fs 0 1 0.4 0.2")
+    fs = tc.Circuit.from_qsim_file(str(qsim_path))
+    np.testing.assert_allclose(fs.matrix()[2, 1], -1j * np.sin(0.4), atol=1e-6)
+
     # unknown gate name raises NotImplementedError (fail-fast contract).
     with pytest.raises(NotImplementedError):
         tc.Circuit._apply_qsim(tc.Circuit(2), ["2", "0 bogus 0"])
+
+
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_qiskit_export_complex_inputs_and_control(backend, highp):
+    qi = pytest.importorskip("qiskit.quantum_info")
+    rng = np.random.default_rng(45)
+    inputs = rng.normal(size=16) + 1j * rng.normal(size=16)
+    inputs /= np.linalg.norm(inputs)
+    matrix = rng.normal(size=(4, 4)) + 1j * rng.normal(size=(4, 4))
+    unitary, _ = np.linalg.qr(matrix)
+    c = tc.Circuit(4, inputs=tc.backend.convert_to_tensor(inputs))
+    c.multicontrol(3, 1, 0, ctrl=[0], unitary=tc.backend.convert_to_tensor(unitary))
+    c.rx(2, theta=0.31)
+    actual = qi.Statevector(c.to_qiskit(enable_inputs=True)).data
+    expected = tc.backend.numpy(c.state()).reshape([2] * 4).transpose().reshape(-1)
+    np.testing.assert_allclose(actual, expected, atol=1e-10)
+
+
+def test_qiskit_export_complex64_initialization(npb, monkeypatch):
+    qi = pytest.importorskip("qiskit.quantum_info")
+    qiskit = pytest.importorskip("qiskit")
+    initialize = qiskit.QuantumCircuit.initialize
+
+    def checked_initialize(self, params, *args, **kwargs):
+        assert params.dtype == np.complex128
+        return initialize(self, params, *args, **kwargs)
+
+    monkeypatch.setattr(qiskit.QuantumCircuit, "initialize", checked_initialize)
+    n = 12
+    inputs = np.tile([1, 1j, -1, -1j], 2 ** (n - 2)).astype(np.complex64) / 64
+    circuit = tc.Circuit(n, inputs=inputs)
+    exported = circuit.to_qiskit(enable_inputs=True)
+    expected = inputs.reshape([2] * n).transpose().reshape(-1)
+    np.testing.assert_allclose(qi.Statevector(exported).data, expected, atol=1e-10)
