@@ -7,7 +7,7 @@ Backend magic inherited from tensornetwork: pytorch backend
 import logging
 from typing import Any, Callable, Optional, Sequence, Tuple, Union
 from operator import mul
-from functools import reduce, partial
+from functools import reduce
 
 from scipy.sparse import coo_matrix, csr_matrix
 import tensornetwork
@@ -932,31 +932,27 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
         vectorized_argnums: Union[int, Sequence[int]] = 0,
         has_aux: bool = False,
     ) -> Callable[..., Tuple[Any, Any]]:
-        # [WIP], not a consistent impl compared to tf and jax backend, but pytorch backend is not fully supported anyway
         if isinstance(vectorized_argnums, int):
             vectorized_argnums = (vectorized_argnums,)
 
-        def wrapper(
-            *args: Any, **kws: Any
-        ) -> Tuple[Tensor, Union[Tensor, Tuple[Tensor, ...]]]:
-            jf = self.value_and_grad(f, argnums=argnums, has_aux=has_aux)
-            jf = self.vmap(jf, vectorized_argnums=vectorized_argnums)
-            vs, gs = jf(*args, **kws)
+        def wrapper(*args: Any, **kws: Any) -> Any:
+            vf = self.vmap(f, vectorized_argnums=vectorized_argnums)
 
-            if isinstance(argnums, int):
-                argnums_list = [argnums]
-                gs = [gs]
-            else:
-                argnums_list = argnums  # type: ignore
-                gs = list(gs)
-            for i, (j, g) in enumerate(zip(argnums_list, gs)):
-                if j not in vectorized_argnums:  # type: ignore
-                    gs[i] = self.tree_map(partial(torchlib.sum, dim=0), g)
-            if isinstance(argnums, int):
-                gs = gs[0]
-            else:
-                gs = tuple(gs)
+            def loss_and_payload(*vargs: Any, **vkws: Any) -> Any:
+                out = vf(*vargs, **vkws)
+                if has_aux:
+                    vs, aux = out
+                else:
+                    # grad_and_value unwraps aux leaves and rejects None
+                    vs, aux = out, ()
+                return torchlib.sum(vs), (vs, aux)
 
+            gavf = torchlib.func.grad_and_value(
+                loss_and_payload, argnums=argnums, has_aux=True
+            )
+            gs, (_, (vs, aux)) = gavf(*args, **kws)
+            if has_aux:
+                return (vs, aux), gs
             return vs, gs
 
         return wrapper

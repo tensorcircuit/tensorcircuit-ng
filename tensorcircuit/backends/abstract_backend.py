@@ -2699,7 +2699,7 @@ class ExtendedBackend:
         (vargs[0], args[1], args[2], ...), where vagrs[0] has one extra dimension than args[0] in the first axis
         and consistent with args[0] in shape for remaining dimensions, i.e. shape(vargs[0]) = [batch] + shape(args[0]).
         (We only cover cases where ``vectorized_argnums`` defaults to 0 here for demonstration).
-        VVAG(f) returns a tuple as a value tensor with shape [batch, 1] and a gradient tuple with shape:
+        VVAG(f) returns a tuple as a value tensor with shape [batch] and a gradient tuple with shape:
         ([batch]+shape(args[argnum]) for argnum in argnums). The gradient for argnums=k is defined as
 
         .. math::

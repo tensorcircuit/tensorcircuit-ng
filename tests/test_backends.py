@@ -1214,7 +1214,7 @@ def test_vvag(backend):
     np.testing.assert_allclose(g11 / batch, g01, atol=1e-4)
 
 
-@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb")])
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_vvag_dict(backend):
     def dict_plus(x, y):
         a = x["a"]
@@ -1458,7 +1458,7 @@ def test_jac_tall(backend, mode):
     np.testing.assert_allclose(jacf(x), np.ones([5, 3]), atol=1e-5)
 
 
-@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb")])
+@pytest.mark.parametrize("backend", [lf("jaxb"), lf("tfb"), lf("torchb")])
 def test_vvag_has_aux(backend):
     def f(x):
         y = tc.backend.sum(x)
