@@ -52,6 +52,49 @@
     "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2026_qutrit_time_crystal"
   },
   {
+    "slug": "2026_mpemba_observables",
+    "title": "Detection of Mpemba Effect through Observables in Open Quantum Systems",
+    "card_title": "Figure 1 · Detecting the quantum Mpemba effect",
+    "summary": "In a dephasing lattice, the edge reveals faster relaxation of a localized particle while the center misses the slowest decay mode.",
+    "description": "Figure 1(a–d) of Phys. Rev. B 114, 014311 (2026) at the original nine sites. A four-qubit binary encoding lets raw-mode mesolve evolve the full Lindblad equation with a matrix-free Pauli generator. A second mesolve integrates the effective nearest-neighbor walk.",
+    "authors": [
+      "Pitambar Bagui",
+      "Arijit Chatterjee",
+      "Bijay Kumar Agarwalla"
+    ],
+    "contributor": "qingyunqian",
+    "year": 2026,
+    "arxiv_id": "2512.02709",
+    "url": "https://arxiv.org/abs/2512.02709",
+    "tags": [
+      "many-body-physics",
+      "open-quantum-system"
+    ],
+    "tc_features": [
+      "analog",
+      "pauli-operator",
+      "jit"
+    ],
+    "backend": "jax",
+    "hardware": {
+      "gpu": false,
+      "min_memory": "2 GB"
+    },
+    "figures": [
+      {
+        "target": "Figure 1(a–d) · Entropy and local occupations",
+        "source": "outputs/result.png",
+        "figure": "figures/2026_mpemba_observables__result.webp",
+        "thumb": "thumbs/2026_mpemba_observables__result.webp",
+        "script": "main.py"
+      }
+    ],
+    "artifacts": [
+      "outputs/curves.npz"
+    ],
+    "code_url": "https://github.com/tensorcircuit/tensorcircuit-ng/tree/master/examples/reproduce_papers/2026_mpemba_observables"
+  },
+  {
     "slug": "2026_diff_qec_surface",
     "title": "Differentiable Maximum Likelihood Noise Estimation for Quantum Error Correction",
     "card_title": "Noise estimation convergence",
