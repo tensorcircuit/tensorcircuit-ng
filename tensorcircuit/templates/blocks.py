@@ -172,7 +172,7 @@ def example_block(
     else:
         split_conf = None
     n = c._nqubits
-    param = backend.reshape(param, [2 * nlayers, n])
+    param = backend.unstack_scalars(backend.reshape(param, [2 * nlayers, n]))
     for i in range(n):
         c.H(i)
     for j in range(nlayers):

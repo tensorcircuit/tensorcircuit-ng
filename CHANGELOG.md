@@ -6,6 +6,10 @@
 
 - Add backend methods `unstack` and `unstack_scalars`; splitting parameters once with `unstack_scalars` instead of indexing them at every gate can accelerate JAX jit compilation.
 
+### Fixed
+
+- Speed up JAX gradient compilation for the layered example circuit template.
+
 ## v1.11.0
 
 ### Changed
