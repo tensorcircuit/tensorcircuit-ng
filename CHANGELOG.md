@@ -6,6 +6,10 @@
 
 - Add backend methods `unstack` and `unstack_scalars`; splitting parameters once with `unstack_scalars` instead of indexing them at every gate can accelerate JAX jit compilation.
 
+### Fixed
+
+- Speed up differentiation of Pauli propagation initial states with trainable weights.
+
 ## v1.11.0
 
 ### Changed
