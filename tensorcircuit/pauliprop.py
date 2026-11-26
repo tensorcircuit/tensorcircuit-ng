@@ -273,7 +273,7 @@ class PauliPropagationEngine:
             )
             if backend.is_tensor(weights):
                 positions = backend.convert_to_tensor(
-                    np.array(source_indices, dtype=np.int32)
+                    np.array(source_indices, dtype=np.int32), dtype="int32"
                 )
                 updates = backend.gather1d(weights, positions)
             else:
