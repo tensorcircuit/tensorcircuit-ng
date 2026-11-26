@@ -6,7 +6,7 @@ Backend magic inherited from tensornetwork: jax backend
 
 import logging
 from functools import partial
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -452,6 +452,9 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
 
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return jnp.stack(a, axis=axis)
+
+    def unstack(self, a: Tensor, axis: int = 0) -> List[Tensor]:
+        return list(jnp.unstack(a, axis=axis))
 
     def concat(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return jnp.concatenate(a, axis=axis)

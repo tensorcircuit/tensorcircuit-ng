@@ -162,6 +162,44 @@ def test_flip(backend):
         tc.backend.flip(tc.backend.convert_to_tensor(a), (0, -10))
 
 
+@pytest.mark.parametrize("backend", [lf("npb"), lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_unstack(backend):
+    a = np.arange(24, dtype=np.float32).reshape([2, 3, 4])
+    parts = tc.backend.unstack(tc.backend.convert_to_tensor(a), axis=1)
+    assert len(parts) == 3
+    for i, part in enumerate(parts):
+        np.testing.assert_allclose(tc.backend.numpy(part), a[:, i])
+    thetas = tc.backend.unstack_scalars(tc.backend.convert_to_tensor(a))
+    np.testing.assert_allclose(tc.backend.numpy(thetas[1, 2, 3]), a[1, 2, 3])
+    assert len(tc.backend.unstack_scalars(tc.backend.convert_to_tensor(a[0, 0]))) == 4
+
+
+@pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
+def test_unstack_scalars_grad(backend):
+    def f(params):
+        thetas = tc.backend.unstack_scalars(params)
+        c = tc.Circuit(2)
+        c.rx(0, theta=thetas[0, 1])
+        c.rzz(0, 1, theta=thetas[1, 0])
+        c.rx(1, theta=thetas[1, 1])
+        return tc.backend.real(c.expectation_ps(z=[0]) + c.expectation_ps(y=[1]))
+
+    def f_ref(params):
+        c = tc.Circuit(2)
+        c.rx(0, theta=params[0, 1])
+        c.rzz(0, 1, theta=params[1, 0])
+        c.rx(1, theta=params[1, 1])
+        return tc.backend.real(c.expectation_ps(z=[0]) + c.expectation_ps(y=[1]))
+
+    params = tc.backend.convert_to_tensor(
+        np.array([[0.1, 0.2], [0.3, 0.4]], dtype=np.float32)
+    )
+    v, g = tc.backend.jit(tc.backend.value_and_grad(f))(params)
+    v_ref, g_ref = tc.backend.value_and_grad(f_ref)(params)
+    np.testing.assert_allclose(v, v_ref, atol=1e-5)
+    np.testing.assert_allclose(g, g_ref, atol=1e-5)
+
+
 def test_sparse_numpy_requires_grad(torchb):
     import torch
 

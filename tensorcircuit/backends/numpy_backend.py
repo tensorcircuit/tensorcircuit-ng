@@ -5,7 +5,7 @@ Backend magic inherited from tensornetwork: numpy backend
 # pylint: disable=invalid-name
 
 import logging
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -193,6 +193,9 @@ class NumpyBackend(numpy_backend.NumPyBackend, ExtendedBackend):  # type: ignore
 
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return np.stack(a, axis=axis)
+
+    def unstack(self, a: Tensor, axis: int = 0) -> List[Tensor]:
+        return list(np.moveaxis(a, axis, 0))
 
     def concat(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return np.concatenate(a, axis=axis)

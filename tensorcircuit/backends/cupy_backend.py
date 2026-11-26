@@ -11,7 +11,7 @@ CuPy backend. Not in the tensornetwork package and highly experimental.
 # pylint: disable=invalid-name
 
 import logging
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -211,6 +211,9 @@ class CuPyBackend(tnbackend, ExtendedBackend):  # type: ignore
 
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return cp.stack(a, axis=axis)
+
+    def unstack(self, a: Tensor, axis: int = 0) -> List[Tensor]:
+        return list(cp.moveaxis(a, axis, 0))
 
     def concat(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return cp.concatenate(a, axis=axis)

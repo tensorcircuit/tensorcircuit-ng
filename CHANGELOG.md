@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Add backend methods `unstack` and `unstack_scalars`; splitting parameters once with `unstack_scalars` instead of indexing them at every gate can accelerate JAX jit compilation.
+
 ## v1.11.0
 
 ### Changed

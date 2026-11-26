@@ -7,7 +7,17 @@ Backend magic inherited from tensornetwork: abstract backend
 from collections import OrderedDict, defaultdict
 from functools import reduce, partial
 from operator import mul
-from typing import Any, Callable, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 import math
 import numpy as np
@@ -871,6 +881,52 @@ class ExtendedBackend:
         raise NotImplementedError(
             "Backend '{}' has not implemented `stack`.".format(self.name)
         )
+
+    def unstack(self: Any, a: Tensor, axis: int = 0) -> List[Tensor]:
+        """
+        Split tensor ``a`` along ``axis`` into a list of tensors with that axis
+        removed, the inverse of :py:meth:`stack`.
+
+        :param a: tensor with rank at least one
+        :type a: Tensor
+        :param axis: the unstack axis, defaults to 0
+        :type axis: int, optional
+        :return: list of ``a.shape[axis]`` tensors
+        :rtype: List[Tensor]
+        """
+        raise NotImplementedError(
+            "Backend '{}' has not implemented `unstack`.".format(self.name)
+        )
+
+    def unstack_scalars(
+        self: Any, a: Tensor
+    ) -> Union[List[Tensor], Dict[Tuple[int, ...], Tensor]]:
+        """
+        Split tensor ``a`` into its scalar elements with a single op.
+
+        Use it at the top of a differentiated and jitted function instead of
+        reading ``params[k]`` at every gate: on the JAX backend, each such read
+        adds a slice whose gradient XLA assembles slowly, so compile time grows
+        roughly quadratically with the number of reads.
+
+        :Example:
+
+        >>> params = tc.backend.ones([2, 3, 2])
+        >>> thetas = tc.backend.unstack_scalars(params)
+        >>> c = tc.Circuit(3)
+        >>> c.rzz(0, 1, theta=thetas[1, 0, 0])
+
+        :param a: tensor with rank at least one and a static shape
+        :type a: Tensor
+        :return: list of scalars for a one-dimensional ``a``, otherwise a dict
+            from index tuples to scalars, so that ``result[i, j]`` equals ``a[i, j]``
+        :rtype: Union[List[Tensor], Dict[Tuple[int, ...], Tensor]]
+        """
+        shape = tuple(a.shape)
+        scalars = self.unstack(self.reshape(a, [-1]))
+        if len(shape) == 1:
+            return scalars  # type: ignore
+        return dict(zip(np.ndindex(*shape), scalars))
 
     def concat(self: Any, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         """

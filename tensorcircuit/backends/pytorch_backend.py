@@ -5,7 +5,7 @@ Backend magic inherited from tensornetwork: pytorch backend
 # pylint: disable=invalid-name
 
 import logging
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 from operator import mul
 from functools import reduce, partial
 
@@ -521,6 +521,9 @@ class PyTorchBackend(pytorch_backend.PyTorchBackend, ExtendedBackend):  # type: 
 
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return torchlib.stack(a, dim=axis)
+
+    def unstack(self, a: Tensor, axis: int = 0) -> List[Tensor]:
+        return list(torchlib.unbind(a, dim=axis))
 
     def concat(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return torchlib.cat(a, dim=axis)

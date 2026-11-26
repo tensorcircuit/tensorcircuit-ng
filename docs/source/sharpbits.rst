@@ -188,6 +188,38 @@ If the shape is not consistent, one can convert the shape by ``tc.backend.reshap
 If the device is not consistent, one can move the tensor between devices by ``tc.backend.device_move``.
 
 
+
+Indexing a flat parameter array at every gate
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+On the JAX backend, reading a one-dimensional parameter array element by element at every gate makes the XLA compilation of the gradient grow roughly quadratically with the number of reads, while tracing and the compiled function's runtime stay the same.
+Each ``params[k]`` is a slice; in reverse mode its gradient is padded back to a full-length zero vector and all these vectors are summed, and XLA fuses this assembly into one very large kernel.
+With a few hundred parameters the first call of ``jit(grad(f))`` can take minutes instead of about a second.
+
+.. code-block:: python
+
+    K = tc.set_backend("jax")
+    n, nparams = 12, 200
+
+    def slow(params):
+        c = tc.Circuit(n)
+        for k in range(nparams):
+            c.rx(k % n, theta=params[k])  # one slice per gate
+        return K.real(c.expectation_ps(z=[0]))
+
+    def fast(params):
+        thetas = K.unstack_scalars(params)  # split once
+        c = tc.Circuit(n)
+        for k in range(nparams):
+            c.rx(k % n, theta=thetas[k])  # plain Python indexing
+        return K.real(c.expectation_ps(z=[0]))
+
+Split the array once at the top of the function with ``K.unstack_scalars(params)`` and index the result instead of ``params``.
+For a multi-dimensional array, it returns a dict keyed by index tuples, so ``thetas[l, i, 0]`` reads just like ``params[l, i, 0]``.
+The values and gradients are identical; only the compile time changes.
+Inside a ``scan`` body the same rule applies to the per-layer slice.
+
+
 AD Consistency
 ---------------------
 

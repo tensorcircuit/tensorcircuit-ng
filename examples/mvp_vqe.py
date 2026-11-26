@@ -19,11 +19,13 @@ j, h = 1.0, -1.0
 
 
 def ansatz(param, n, nlayers):
+    # split once instead of slicing param at every gate, which slows down jit
+    thetas = tc.backend.unstack_scalars(param)
     c = tc.Circuit(n)
     for i in range(nlayers):
         for j in range(n):
-            c.rx(j, theta=param[i, j, 0])
-            c.rz(j, theta=param[i, j, 1])
+            c.rx(j, theta=thetas[i, j, 0])
+            c.rz(j, theta=thetas[i, j, 1])
         for j in range(n - 1):
             c.cnot(j, j + 1)
     return c

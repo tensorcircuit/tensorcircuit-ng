@@ -8,7 +8,7 @@ import os
 import re
 from functools import reduce, partial
 from operator import mul
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 from scipy.sparse import coo_matrix
 import tensornetwork
@@ -638,6 +638,9 @@ class TensorFlowBackend(tensorflow_backend.TensorFlowBackend, ExtendedBackend): 
 
     def stack(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return tf.stack(a, axis=axis)
+
+    def unstack(self, a: Tensor, axis: int = 0) -> List[Tensor]:
+        return tf.unstack(a, axis=axis)  # type: ignore
 
     def clip(self, a: Tensor, a_min: Tensor, a_max: Tensor) -> Tensor:
         return tf.clip_by_value(a, a_min, a_max)
