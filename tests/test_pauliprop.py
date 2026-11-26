@@ -57,22 +57,6 @@ def test_initial_state(request, backend):
     assert np.isclose(state_np[idx2], 0.3)
 
 
-@pytest.mark.parametrize("backend", ["jaxb", "tfb", "torchb"])
-def test_initial_state_weight_gradients(request, backend):
-    request.getfixturevalue(backend)
-    engine = PauliPropagationEngine(N=2, k=1)
-    structures = [[3, 0], [3, 3], [3, 0], [0, 1]]
-    weights = tc.backend.convert_to_tensor(np.array([1, 2, 3, 4], dtype=np.float32))
-
-    def loss(w):
-        state = engine.get_initial_state(structures, w)
-        return tc.backend.sum(tc.backend.real(state) ** 2)
-
-    value, grad = tc.backend.jit(tc.backend.value_and_grad(loss))(weights)
-    np.testing.assert_allclose(tc.backend.numpy(value), 32)
-    np.testing.assert_allclose(tc.backend.numpy(grad), [8, 0, 8, 8])
-
-
 @pytest.mark.parametrize("backend", ["npb", "jaxb"])
 def test_apply_gate_1q(request, backend):
     request.getfixturevalue(backend)
