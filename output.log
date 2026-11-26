@@ -1,0 +1,28 @@
+optax not installed, `optimizer` from jax backend cannot work
+Generating Mackey-Glass sequence (K1=100, K2=300, K3_max=15)
+
+--- Starting simulation for alpha = 0.4 ---
+  W = 1.00.. | avg l_c = 15.00
+  W = 3.80.. | avg l_c = 15.00
+  W = 6.60.. | avg l_c = 15.00
+  W = 9.40.. | avg l_c = 8.50
+  W = 12.20.. | avg l_c = 8.50
+  W = 15.00.. | avg l_c = 14.50
+
+--- Starting simulation for alpha = 0.8 ---
+  W = 1.00.. | avg l_c = 8.50
+  W = 3.80.. | avg l_c = 8.00
+  W = 6.60.. | avg l_c = 8.50
+  W = 9.40.. | avg l_c = 8.50
+  W = 12.20.. | avg l_c = 8.50
+  W = 15.00.. | avg l_c = 8.50
+
+--- Starting simulation for alpha = 1.2 ---
+  W = 1.00.. | avg l_c = 8.50
+  W = 3.80.. | avg l_c = 8.50
+  W = 6.60.. | avg l_c = 14.00
+  W = 9.40.. | avg l_c = 8.50
+  W = 12.20.. | avg l_c = 15.00
+  W = 15.00.. | avg l_c = 15.00
+
+Saved plot to /app/examples/reproduce_papers/2021_reservoir_learning/outputs/result.png
