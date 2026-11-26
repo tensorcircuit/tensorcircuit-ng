@@ -1,0 +1,46 @@
+title: "Neural-network quantum state tomography"
+arxiv_id: "1703.05334"
+url: "https://arxiv.org/abs/1703.05334"
+year: 2018
+authors:
+  - "Giacomo Torlai"
+  - "Guglielmo Mazzola"
+  - "Juan Carrasquilla"
+  - "Matthias Troyer"
+  - "Roger Melko"
+  - "Giuseppe Carleo"
+tags:
+  - "quantum-machine-learning"
+  - "generative-model"
+tc_features:
+  - "mps-circuit"
+  - "sampling"
+  - "jit"
+  - "vmap"
+backend: "jax"
+hardware_requirements:
+  gpu: false
+  min_memory: "4 GB (recommended)"
+card_title: "Figure 1 · W-state tomography"
+summary: "At 20 qubits, finite-shot RBMs estimate W-state populations and learn relative phases from Z, XX, and XY measurements."
+description: >-
+  Reproduces the 20-qubit W-state experiments in Figure 1 with three seeds.
+  A bond-two MPS produces 50, 1,000, and 20,000 nested Z-basis shots for the
+  positive state and 6,400 shots per basis across 39 bases for the random-phase
+  state. Unrestricted RBMs learn amplitudes with block Gibbs SGD and phases
+  with a damped empirical natural gradient. The phase fit and Z-only control
+  share the same amplitude fit. The figures report absolute overlap,
+  unconditional single-excitation probabilities, and relative phases.
+outputs:
+  - target: "Figure 1: overlap, populations, and measurement-basis comparison"
+    path: outputs/result.png
+    script: main.py
+  - target: "Figure 1: relative-phase reconstruction"
+    path: outputs/phases.png
+    script: main.py
+  - target: "Per-seed overlaps, populations, and phases"
+    path: outputs/metrics.json
+    script: main.py
+  - target: "Simulated measurements and fitted parameters"
+    path: outputs/raw_data.npz
+    script: main.py
