@@ -86,8 +86,8 @@ def main():
     # 3. Define VQE Loss Function
 
     def vqe_loss(params):
-        # Translate Qiskit circuit to TensorCircuit
-        c = tc.translation.qiskit2tc(ansatz, n=n, binding_params=params)
+        # Split the angles once so reverse-mode AD assembles one parameter gradient.
+        c = tc.translation.qiskit2tc(ansatz, n=n, binding_params=K.unstack(params))
 
         # Calculate Energy using operator_expectation
         e = tc.templates.measurements.operator_expectation(c, h_scipy_sparse)
