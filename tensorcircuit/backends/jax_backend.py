@@ -520,6 +520,11 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
     def cumsum(self, a: Tensor, axis: Optional[int] = None) -> Tensor:
         return jnp.cumsum(a, axis)
 
+    @staticmethod
+    def is_tracer(a: Any) -> bool:
+        """Return whether a JAX transformation is tracing this value."""
+        return isinstance(a, libjax.core.Tracer)
+
     def is_tensor(self, a: Any) -> bool:
         return not isinstance(a, np.ndarray) and isinstance(a, jnp.ndarray)
 

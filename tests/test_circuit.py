@@ -2180,6 +2180,27 @@ def test_fancy_circuit_indexing(backend):
     assert c.gate_count("rxx") == 3
 
 
+def test_fancy_indexing_angle_gradients(jaxb):
+    def loss(theta, batched):
+        c = tc.Circuit(3)
+        if batched:
+            c.ry(range(3), theta=theta)
+            c.rzz([0, 1, 2], [1, 2], theta=theta[:2])
+        else:
+            for i in range(3):
+                c.ry(i, theta=theta[i])
+            for i in range(2):
+                c.rzz(i, i + 1, theta=theta[i])
+        return tc.backend.real(c.expectation_ps(x=[1]))
+
+    theta = tc.backend.convert_to_tensor(np.array([0.1, 0.3, -0.4], np.float32))
+    fn = tc.backend.jit(tc.backend.value_and_grad(loss), static_argnums=1)
+    value, grad = fn(theta, True)
+    ref_value, ref_grad = fn(theta, False)
+    np.testing.assert_allclose(value, ref_value, atol=1e-6)
+    np.testing.assert_allclose(grad, ref_grad, atol=1e-6)
+
+
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("npb")])
 def test_general_kraus(backend):
     c = tc.Circuit(2)

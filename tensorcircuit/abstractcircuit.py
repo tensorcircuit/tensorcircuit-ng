@@ -23,6 +23,7 @@ import numpy as np
 import tensornetwork as tn
 
 from . import gates
+from .backends.jax_backend import JaxBackend
 from .cons import backend, dtypestr
 from .quantum import QuOperator
 from .interfaces.tensortrans import tensor_to_numpy
@@ -172,10 +173,20 @@ class AbstractCircuit:
                 },
             )
 
-        def apply_list(self: "AbstractCircuit", *index: int, **vars: Any) -> None:
+        def apply_list(self: "AbstractCircuit", *index: Any, **vars: Any) -> None:
             if isinstance(index[0], int):
                 apply(self, *index, **vars)
             elif is_sequence(index[0]) or isinstance(index[0], range):
+                if isinstance(backend, JaxBackend) and all(
+                    isinstance(wires, (list, tuple, range)) for wires in index
+                ):
+                    count = min(len(wires) for wires in index)
+                    if count > 1:
+                        # Split traced angles together for reverse-mode AD.
+                        # Eager indexing avoids compiling a split for each length.
+                        for key, value in vars.items():
+                            if backend.is_tracer(value) and value.shape == (count,):
+                                vars[key] = backend.unstack(value)
                 for i, ind in enumerate(zip(*index)):
                     nvars = {}
                     for k, v in vars.items():
