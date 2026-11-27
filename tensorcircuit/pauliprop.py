@@ -252,11 +252,10 @@ class PauliPropagationEngine:
         """
         structures = np.array(structures)
         indices = []
-        updates = []
+        source_indices = []
 
         for i in range(len(weights)):
             term = structures[i]
-            w = weights[i]
             qubits = tuple(np.where(term != 0)[0])
             if len(qubits) > self.k:
                 continue
@@ -264,7 +263,7 @@ class PauliPropagationEngine:
             s = (qubits, codes)
             if s in self.string_to_idx:
                 indices.append([self.string_to_idx[s]])
-                updates.append(w)
+                source_indices.append(i)
 
         # Flat state vector + 1 for SINK
         state = backend.zeros((self.dim + 1,), dtype="complex64")
@@ -272,7 +271,14 @@ class PauliPropagationEngine:
             indices_tensor = backend.convert_to_tensor(
                 np.array(indices, dtype=np.int32), dtype="int32"
             )
-            updates_tensor = backend.cast(backend.stack(updates), "complex64")
+            if backend.is_tensor(weights):
+                positions = backend.convert_to_tensor(
+                    np.array(source_indices, dtype=np.int32), dtype="int32"
+                )
+                updates = backend.gather1d(weights, positions)
+            else:
+                updates = backend.stack([weights[i] for i in source_indices])
+            updates_tensor = backend.cast(updates, "complex64")
             state = backend.scatter(state, indices_tensor, updates_tensor, mode="add")
 
         return state
