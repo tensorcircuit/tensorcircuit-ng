@@ -216,7 +216,7 @@ With a few hundred parameters the first call of ``jit(grad(f))`` can take minute
 
 Split the array once at the top of the function with ``K.unstack_scalars(params)`` and index the result instead of ``params``.
 It returns a NumPy object array of backend scalars with the shape of ``params``, so ``thetas[l, i, 0]``, ``thetas[l]`` and ``thetas[:, i, 0]`` read just like indexing ``params``; a partial index gives an object array rather than a tensor.
-The values and gradients are identical; only the compile time changes.
+The split preserves values and gradients. In JAX eager mode it can increase the first-call cost for a new shape.
 Inside a ``scan`` body the same rule applies to the per-layer slice.
 
 
