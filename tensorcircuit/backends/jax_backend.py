@@ -454,7 +454,10 @@ class JaxBackend(jax_backend.JaxBackend, ExtendedBackend):  # type: ignore
         return jnp.stack(a, axis=axis)
 
     def unstack(self, a: Tensor, axis: int = 0) -> List[Tensor]:
-        return list(jnp.unstack(a, axis=axis))
+        unstack = getattr(jnp, "unstack", None)
+        if unstack is None:
+            return list(jnp.moveaxis(a, axis, 0))
+        return list(unstack(a, axis=axis))
 
     def concat(self, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         return jnp.concatenate(a, axis=axis)

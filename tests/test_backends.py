@@ -174,6 +174,15 @@ def test_unstack(backend):
     assert len(tc.backend.unstack_scalars(tc.backend.convert_to_tensor(a[0, 0]))) == 4
 
 
+def test_jax_unstack_without_native_support(jaxb, monkeypatch):
+    import jax.numpy as jnp
+
+    monkeypatch.delattr(jnp, "unstack", raising=False)
+    a = np.arange(6, dtype=np.float32).reshape(2, 3)
+    parts = tc.backend.jit(lambda x: tc.backend.unstack(x, axis=-1))(jnp.asarray(a))
+    np.testing.assert_allclose(parts, a.T)
+
+
 @pytest.mark.parametrize("backend", [lf("tfb"), lf("jaxb"), lf("torchb")])
 def test_unstack_scalars_grad(backend):
     def f(params):
