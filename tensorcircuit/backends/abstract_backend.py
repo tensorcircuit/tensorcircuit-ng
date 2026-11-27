@@ -7,17 +7,7 @@ Backend magic inherited from tensornetwork: abstract backend
 from collections import OrderedDict, defaultdict
 from functools import reduce, partial
 from operator import mul
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-)
+from typing import Any, Callable, Iterator, List, Optional, Sequence, Tuple, Union
 
 import math
 import numpy as np
@@ -898,9 +888,7 @@ class ExtendedBackend:
             "Backend '{}' has not implemented `unstack`.".format(self.name)
         )
 
-    def unstack_scalars(
-        self: Any, a: Tensor
-    ) -> Union[List[Tensor], Dict[Tuple[int, ...], Tensor]]:
+    def unstack_scalars(self: Any, a: Tensor) -> np.ndarray:  # type: ignore[type-arg]
         """
         Split tensor ``a`` into its scalar elements with a single op.
 
@@ -909,24 +897,31 @@ class ExtendedBackend:
         adds a slice whose gradient XLA assembles slowly, so compile time grows
         roughly quadratically with the number of reads.
 
+        The result is a NumPy object array with the shape of ``a`` whose entries
+        are the backend scalars, so full indices, partial indices, slices and
+        iteration all read like they do on ``a``. A partial index such as
+        ``result[i, j]`` gives a NumPy object array, not a backend tensor; pass
+        it to :py:meth:`stack` as ``list(result[i, j])`` if a tensor is needed.
+
         :Example:
 
         >>> params = tc.backend.ones([2, 3, 2])
         >>> thetas = tc.backend.unstack_scalars(params)
         >>> c = tc.Circuit(3)
         >>> c.rzz(0, 1, theta=thetas[1, 0, 0])
+        >>> for j, theta in enumerate(thetas[0, :, 1]):
+        ...     c.rx(j, theta=theta)
 
         :param a: tensor with rank at least one and a static shape
         :type a: Tensor
-        :return: list of scalars for a one-dimensional ``a``, otherwise a dict
-            from index tuples to scalars, so that ``result[i, j]`` equals ``a[i, j]``
-        :rtype: Union[List[Tensor], Dict[Tuple[int, ...], Tensor]]
+        :return: object array of backend scalars with the same shape as ``a``
+        :rtype: np.ndarray
         """
-        shape = tuple(a.shape)
         scalars = self.unstack(self.reshape(a, [-1]))
-        if len(shape) == 1:
-            return scalars  # type: ignore
-        return dict(zip(np.ndindex(*shape), scalars))
+        result = np.empty(len(scalars), dtype=object)
+        for k, scalar in enumerate(scalars):
+            result[k] = scalar
+        return result.reshape(tuple(a.shape))
 
     def concat(self: Any, a: Sequence[Tensor], axis: int = 0) -> Tensor:
         """

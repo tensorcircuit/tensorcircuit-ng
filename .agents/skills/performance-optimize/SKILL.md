@@ -32,7 +32,7 @@ Consider the following optimizations, but treat them as hypotheses to be tested:
 - **Split Flat Parameters Once**: Never read a flat parameter array element by element at each gate (`c.rx(i, theta=params[k])` for many `k`) inside a function that is differentiated and jitted. Each `params[k]` is a slice whose transpose pads the scalar gradient back to a full-length zero vector; the `pad`/`add_any` chain over all P reads is fused by XLA into one huge root fusion, and the first-call compile time grows roughly quadratically in P while tracing, lowering and steady-state runtime stay unchanged. With a few hundred parameters this alone can turn a sub-second compile into minutes. Split once at the top instead and index the result, which emits no array op per gate:
   ```python
   def loss(params):  # params has shape (layers, k)
-      thetas = tc.backend.unstack_scalars(params)  # dict keyed by index tuples; list for 1D
+      thetas = tc.backend.unstack_scalars(params)  # object array of scalars, indexed and sliced like params
       c = tc.Circuit(n)
       for l in range(layers):
           for k, (i, j) in enumerate(pairs):
