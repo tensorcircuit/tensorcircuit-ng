@@ -170,7 +170,10 @@ def test_unstack(backend):
     for i, part in enumerate(parts):
         np.testing.assert_allclose(tc.backend.numpy(part), a[:, i])
     thetas = tc.backend.unstack_scalars(tc.backend.convert_to_tensor(a))
+    assert thetas.shape == a.shape
     np.testing.assert_allclose(tc.backend.numpy(thetas[1, 2, 3]), a[1, 2, 3])
+    np.testing.assert_allclose(tc.backend.stack(list(thetas[1, 2])), a[1, 2])
+    np.testing.assert_allclose(tc.backend.stack(list(thetas[:, 1, 2])), a[:, 1, 2])
     assert len(tc.backend.unstack_scalars(tc.backend.convert_to_tensor(a[0, 0]))) == 4
 
 
@@ -189,8 +192,9 @@ def test_unstack_scalars_grad(backend):
         thetas = tc.backend.unstack_scalars(params)
         c = tc.Circuit(2)
         c.rx(0, theta=thetas[0, 1])
-        c.rzz(0, 1, theta=thetas[1, 0])
-        c.rx(1, theta=thetas[1, 1])
+        row = thetas[1]
+        c.rzz(0, 1, theta=row[0])
+        c.rx(1, theta=row[1])
         return tc.backend.real(c.expectation_ps(z=[0]) + c.expectation_ps(y=[1]))
 
     def f_ref(params):

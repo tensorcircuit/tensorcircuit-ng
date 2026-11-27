@@ -215,7 +215,7 @@ With a few hundred parameters the first call of ``jit(grad(f))`` can take minute
         return K.real(c.expectation_ps(z=[0]))
 
 Split the array once at the top of the function with ``K.unstack_scalars(params)`` and index the result instead of ``params``.
-For a multi-dimensional array, it returns a dict keyed by index tuples, so ``thetas[l, i, 0]`` reads just like ``params[l, i, 0]``.
+It returns a NumPy object array of backend scalars with the shape of ``params``, so ``thetas[l, i, 0]``, ``thetas[l]`` and ``thetas[:, i, 0]`` read just like indexing ``params``; a partial index gives an object array rather than a tensor.
 The values and gradients are identical; only the compile time changes.
 Inside a ``scan`` body the same rule applies to the per-layer slice.
 
