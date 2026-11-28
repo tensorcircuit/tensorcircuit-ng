@@ -28,6 +28,7 @@ def singlet_init(circuit):  # assert n % 2 == 0
 
 
 def vqe_forward(param):
+    param = K.unstack_scalars(param)
     c = tc.Circuit(n * m)
     c = singlet_init(c)
     for i in range(nlayers):
