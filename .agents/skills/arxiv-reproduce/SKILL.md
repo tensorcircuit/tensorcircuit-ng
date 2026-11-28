@@ -88,6 +88,7 @@ rules or the gallery build fails fast on your entry:
   - Import `tensorcircuit` as the main framework and set the high-performance backend (e.g., `import tensorcircuit as tc; tc.set_backend("jax")`).
   - **Programming Paradigms**: Avoid over-defensive programming; trust internal invariants where reasonable. Use `try...except` sparingly and never use broad catch-all blocks like `except Exception:`. Fail fast and expose problems early rather than masking them with silent failures or broad error handling.
   - Write the mathematical models, quantum circuits, or tensor network operations (like MPS/DMRG contractions).
+  - Keep `main.py` focused on running the reproduction. Put any standalone checks or validation of the results in a separate `verify.py` next to it, not inside `main.py`.
   - Save all generated plots (using `matplotlib`) directly to the `outputs/` directory (e.g., `outputs/result.png`).
   - Robust Output Paths: The script MUST NOT rely on the terminal's current working directory (CWD) for saving files. You must use pathlib or os.path relative to the script's location (__file__) to dynamically resolve the outputs/ directory.
 
